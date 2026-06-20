@@ -54,11 +54,17 @@ export function App() {
   }, []);
 
   const reload = useCallback(async () => {
-    // 検索語があれば意味検索、無ければ kind 絞り込みで一覧（更新順）
-    const list = q.trim()
-      ? await api.searchSemantic(q.trim())
-      : await api.listNeta({ kind: kindFilter || undefined });
-    setItems(list);
+    const query = q.trim();
+    if (!query) {
+      setItems(await api.listNeta({ kind: kindFilter || undefined }));
+      return;
+    }
+    try {
+      setItems(await api.searchSemantic(query)); // 意味検索
+    } catch {
+      // 検索サービス不通なら LIKE 絞り込みに退避（出先/オフラインで無音にしない）
+      setItems(await api.listNeta({ q: query }));
+    }
   }, [kindFilter, q]);
 
   useEffect(() => {
