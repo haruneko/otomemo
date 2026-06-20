@@ -98,6 +98,23 @@ main {
     max-height: none;
     height: 100%;
   }
+  /* #60 スマホはChatを全画面化。dvh＋interactive-widget=resizes-content で
+     キーボード出現時に高さが縮み、入力欄が下端に残りログだけスクロールする。
+     backdrop の中央寄せ/paddingがズレを生むので Chat時だけ無効化。 */
+  .dialog-backdrop:has(.dialog.chat) {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  .dialog.chat {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    padding: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
 }
 .app-head {
   display: flex;
