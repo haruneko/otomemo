@@ -8,6 +8,7 @@ export interface Note {
   dur: number;
   vel?: number;
   syllable?: string; // 歌詞の音節割当（design #16）。今はデータ枠のみ。
+  drum?: boolean; // GMドラム＝打楽器シンセで鳴らす（melodic synthだと低すぎて聞こえない）
 }
 
 const CHORD_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -110,7 +111,7 @@ export function rhythmOf(content: unknown): RhythmContent {
 
 export function rhythmToNotes(r: RhythmContent): Note[] {
   return r.lanes.flatMap((l) =>
-    l.hits.map((step) => ({ pitch: l.midi, start: step / 4, dur: 0.25 })),
+    l.hits.map((step) => ({ pitch: l.midi, start: step / 4, dur: 0.25, drum: true })),
   );
 }
 
@@ -170,14 +171,28 @@ export async function playNotes(notes: Note[], bpm = 120): Promise<void> {
   const Tone = await import("tone");
   await Tone.start();
   const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+  // 簡易ドラムキット：低音(キック/タム)=膜シンセ、それ以外(スネア/ハット)=ノイズ
+  const membrane = new Tone.MembraneSynth().toDestination();
+  const noise = new Tone.NoiseSynth({
+    envelope: { attack: 0.001, decay: 0.12, sustain: 0 },
+  }).toDestination();
   const t0 = Tone.now();
   const spb = 60 / bpm;
   for (const n of notes) {
-    synth.triggerAttackRelease(
-      Tone.Frequency(n.pitch, "midi").toNote(),
-      n.dur * spb,
-      t0 + n.start * spb,
-      (n.vel ?? 100) / 127,
-    );
+    const t = t0 + n.start * spb;
+    if (n.drum) {
+      if (n.pitch <= 41) {
+        membrane.triggerAttackRelease(Tone.Frequency(n.pitch, "midi").toFrequency(), 0.15, t);
+      } else {
+        noise.triggerAttackRelease(0.05, t);
+      }
+    } else {
+      synth.triggerAttackRelease(
+        Tone.Frequency(n.pitch, "midi").toNote(),
+        n.dur * spb,
+        t,
+        (n.vel ?? 100) / 127,
+      );
+    }
   }
 }

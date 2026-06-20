@@ -58,8 +58,8 @@ describe("music", () => {
   it("expands a rhythm lane's hits to drum notes (step/4 = beat)", () => {
     const notes = rhythmToNotes({ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4] }] });
     expect(notes).toEqual([
-      { pitch: 36, start: 0, dur: 0.25 },
-      { pitch: 36, start: 1, dur: 0.25 },
+      { pitch: 36, start: 0, dur: 0.25, drum: true },
+      { pitch: 36, start: 1, dur: 0.25, drum: true },
     ]);
   });
 
