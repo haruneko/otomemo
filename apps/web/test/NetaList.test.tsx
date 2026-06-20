@@ -3,13 +3,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { createJob, getJob, createNeta, link } = vi.hoisted(() => ({
+const { createJob, getJob, createNeta, link, placeChild } = vi.hoisted(() => ({
   createJob: vi.fn(),
   getJob: vi.fn(),
   createNeta: vi.fn(),
   link: vi.fn(),
+  placeChild: vi.fn(),
 }));
-vi.mock("../src/api", () => ({ api: { createJob, getJob, createNeta, link } }));
+vi.mock("../src/api", () => ({ api: { createJob, getJob, createNeta, link, placeChild } }));
 
 import { NetaList, NetaCard } from "../src/components/NetaList";
 
@@ -69,6 +70,18 @@ describe("NetaList", () => {
     expect(createNeta).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "melody", from_job: "j1" }),
     );
+  });
+
+  it("generates a full set (全体) into a section", async () => {
+    createJob.mockResolvedValue({ id: "j1", status: "queued" });
+    getJob.mockResolvedValue({ id: "j1", status: "done", result: { content: {} }, error: null });
+    createNeta.mockResolvedValue({ id: "s1" });
+    placeChild.mockResolvedValue({ ok: true });
+    render(<NetaCard neta={mk({ id: "x", text: "夜" })} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "生成 ▾" }));
+    await userEvent.click(screen.getByRole("button", { name: "全体" }));
+    await waitFor(() => expect(placeChild).toHaveBeenCalledTimes(3));
+    expect(createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "section" }));
   });
 
   it("壁打ち opens the chat for that neta (relocated from inline panel)", async () => {

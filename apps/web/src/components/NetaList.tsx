@@ -16,28 +16,57 @@ export function NetaCard({
   const [gen, setGen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
 
-  async function generate(kind: "melody" | "chord_progression" | "rhythm") {
+  const intentOf = {
+    melody: "gen_melody",
+    chord_progression: "gen_chord",
+    rhythm: "gen_rhythm",
+  } as const;
+  const ctx = () => neta.title ?? neta.text ?? "";
+
+  async function pollContent(jobId: string): Promise<unknown> {
+    for (let i = 0; i < 60; i++) {
+      const j = await api.getJob(jobId);
+      if (j.status === "done") return (j.result as { content?: unknown } | null)?.content;
+      if (j.status === "failed") return undefined;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    return undefined;
+  }
+
+  async function generate(kind: keyof typeof intentOf) {
     setGenOpen(false);
     setGen(true);
     try {
-      const intent =
-        kind === "melody" ? "gen_melody" : kind === "chord_progression" ? "gen_chord" : "gen_rhythm";
       const job = await api.createJob({
-        intent,
+        intent: intentOf[kind],
         target_neta_id: neta.id,
-        params: { context: neta.title ?? neta.text ?? "" },
+        params: { context: ctx() },
       });
-      for (let i = 0; i < 60; i++) {
-        const j = await api.getJob(job.id);
-        if (j.status === "done") {
-          const content = (j.result as { content?: unknown } | null)?.content;
-          await api.createNeta({ kind, title: neta.title ?? "案", content, from_job: job.id });
-          onChanged?.();
-          return;
-        }
-        if (j.status === "failed") return;
-        await new Promise((r) => setTimeout(r, 1500));
+      const content = await pollContent(job.id);
+      await api.createNeta({ kind, title: neta.title ?? "案", content, from_job: job.id });
+      onChanged?.();
+    } finally {
+      setGen(false);
+    }
+  }
+
+  // 全体作例：メロ+コード+リズムを生成して section に composeする
+  async function generateSection() {
+    setGenOpen(false);
+    setGen(true);
+    try {
+      const section = await api.createNeta({ kind: "section", title: `${ctx() || "作例"} 一式` });
+      for (const kind of ["melody", "chord_progression", "rhythm"] as const) {
+        const job = await api.createJob({
+          intent: intentOf[kind],
+          target_neta_id: neta.id,
+          params: { context: ctx() },
+        });
+        const content = await pollContent(job.id);
+        const child = await api.createNeta({ kind, title: kind, content, from_job: job.id });
+        await api.placeChild(section.id, child.id, 0, 0).catch(() => {});
       }
+      onChanged?.();
     } finally {
       setGen(false);
     }
@@ -85,6 +114,9 @@ export function NetaCard({
             </button>
             <button className="bs-btn" onClick={() => generate("rhythm")}>
               リズム
+            </button>
+            <button className="bs-btn" onClick={generateSection}>
+              全体
             </button>
           </>
         ) : (
