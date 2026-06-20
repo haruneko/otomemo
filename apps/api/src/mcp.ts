@@ -121,6 +121,19 @@ export function buildMcpServer(core: Core): McpServer {
   );
 
   server.registerTool(
+    "remove_child",
+    {
+      title: "配置を外す",
+      description: "親から子ネタの配置を外す。position 指定で1インスタンス、省略で全インスタンス。",
+      inputSchema: { parent: z.string(), child: z.string(), position: z.number().optional() },
+    },
+    async ({ parent, child, position }) => {
+      core.removeChild(parent, child, position);
+      return ok({ ok: true });
+    },
+  );
+
+  server.registerTool(
     "get_composition",
     { title: "合成ツリー取得", description: "id の合成ツリーを再帰取得", inputSchema: { id: z.string() } },
     async ({ id }) => {
@@ -143,6 +156,19 @@ export function buildMcpServer(core: Core): McpServer {
   );
 
   server.registerTool(
+    "unlink",
+    {
+      title: "関連を外す",
+      description: "ネタ間の関連辺（related など）を外す",
+      inputSchema: { from: z.string(), to: z.string(), type: z.string().default("related") },
+    },
+    async ({ from, to, type }) => {
+      core.unlink(from, to, type);
+      return ok({ ok: true });
+    },
+  );
+
+  server.registerTool(
     "get_relations",
     { title: "関連取得", description: "id から張られた関連一覧", inputSchema: { id: z.string() } },
     async ({ id }) => ok(core.getRelations(id)),
@@ -154,10 +180,21 @@ export function buildMcpServer(core: Core): McpServer {
       title: "ジョブを投げる",
       description: "対象＋意図で非同期ジョブを積む（ワーカーが処理、結果は get_job で受け取る）。",
       inputSchema: {
+        // ワーカーが実際に処理できる intent のみを enum で強制（無効intentで死にジョブを作らない）
         intent: z
-          .string()
+          .enum([
+            "gen_melody",
+            "gen_chord",
+            "gen_rhythm",
+            "brainstorm",
+            "suggest",
+            "mora_count",
+            "research",
+            "plan",
+            "echo",
+          ])
           .describe(
-            "意図：mora_count / brainstorm / suggest / gen_melody / gen_chord / gen_rhythm / research / plan / echo",
+            "意図: gen_melody/gen_chord/gen_rhythm=生成, brainstorm=壁打ち, suggest=改善案, mora_count=モーラ数, research=参考調査, plan=おまかせ(小タスクへ分解), echo=疎通確認",
           ),
         target_neta_id: z.string().optional(),
         instruction: z.string().optional(),

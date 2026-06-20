@@ -52,4 +52,30 @@ describe("mcp tool layer", () => {
     expect(job.status).toBe("queued");
     expect(job.intent).toBe("mora_count");
   });
+
+  it("place_child x2 then remove_child by position (#44)", async () => {
+    const { client, core } = await connect();
+    const sec = JSON.parse(
+      textOf(await client.callTool({ name: "create_neta", arguments: { kind: "section", title: "S" } })),
+    );
+    const mel = JSON.parse(
+      textOf(await client.callTool({ name: "create_neta", arguments: { kind: "melody", title: "m" } })),
+    );
+    await client.callTool({ name: "place_child", arguments: { parent: sec.id, child: mel.id, position: 0 } });
+    await client.callTool({ name: "place_child", arguments: { parent: sec.id, child: mel.id, position: 4 } });
+    await client.callTool({ name: "remove_child", arguments: { parent: sec.id, child: mel.id, position: 0 } });
+    expect(core.getComposition(sec.id)!.children.map((c) => c.position)).toEqual([4]);
+  });
+
+  it("rejects an invalid create_job intent via enum (#44)", async () => {
+    const { client } = await connect();
+    let errored = false;
+    try {
+      const res = await client.callTool({ name: "create_job", arguments: { intent: "nonsense" } });
+      errored = Boolean((res as { isError?: boolean }).isError);
+    } catch {
+      errored = true;
+    }
+    expect(errored).toBe(true);
+  });
 });
