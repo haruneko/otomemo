@@ -43,6 +43,16 @@ describe("NetaDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("shows a piano roll for melody and saves notes", async () => {
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("pitch-60-beat-0"));
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }] });
+  });
+
   it("deletes after confirm", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const onChanged = vi.fn();

@@ -10,8 +10,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@tonejs/midi": "^2.0.28",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tone": "^15.0.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

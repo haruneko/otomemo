@@ -1,0 +1,37 @@
+import type { Note } from "../music";
+
+const LOW = 60; // C4
+const HIGH = 83; // B5
+const BEATS = 16; // 4小節(4/4)
+
+export function PianoRoll({ notes, onChange }: { notes: Note[]; onChange: (n: Note[]) => void }) {
+  const pitches: number[] = [];
+  for (let p = HIGH; p >= LOW; p--) pitches.push(p);
+
+  const has = (p: number, b: number) => notes.some((n) => n.pitch === p && n.start === b);
+  function toggle(p: number, b: number) {
+    if (has(p, b)) onChange(notes.filter((n) => !(n.pitch === p && n.start === b)));
+    else onChange([...notes, { pitch: p, start: b, dur: 1 }]);
+  }
+
+  return (
+    <div className="proll" role="grid" aria-label="piano-roll">
+      {pitches.map((p) => (
+        <div className="proll-row" key={p} role="row">
+          {Array.from({ length: BEATS }, (_, b) => (
+            <button
+              key={b}
+              type="button"
+              role="gridcell"
+              aria-label={`pitch-${p}-beat-${b}`}
+              className={
+                "proll-cell" + (has(p, b) ? " on" : "") + (p % 12 === 0 ? " octave" : "")
+              }
+              onClick={() => toggle(p, b)}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}

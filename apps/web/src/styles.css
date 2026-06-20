@@ -161,6 +161,45 @@ article header {
   padding: 8px;
   font: inherit;
 }
+.melody-editor {
+  display: grid;
+  gap: 8px;
+}
+.proll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #15171b;
+}
+.proll-row {
+  display: flex;
+}
+.proll-cell {
+  width: 22px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 1px solid #24272e;
+  background: #1b1e23;
+  padding: 0;
+  cursor: pointer;
+}
+.proll-cell.octave {
+  border-bottom: 1px solid #3a3f49;
+}
+.proll-cell.on {
+  background: var(--accent);
+}
+.melody-actions {
+  display: flex;
+  gap: 8px;
+}
+.melody-actions button {
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
 .dialog-actions {
   display: flex;
   gap: 8px;

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { api, type Neta } from "../api";
+import { PianoRoll } from "./PianoRoll";
+import { notesOf, playNotes, downloadMidi, type Note } from "../music";
 
 export function NetaDialog({
   neta,
@@ -13,7 +15,9 @@ export function NetaDialog({
   const [title, setTitle] = useState(neta.title ?? "");
   const [text, setText] = useState(neta.text ?? "");
   const [tags, setTags] = useState(neta.tags.join(" "));
+  const [notes, setNotes] = useState<Note[]>(notesOf(neta.content));
   const [busy, setBusy] = useState(false);
+  const isMelody = neta.kind === "melody";
 
   async function save() {
     setBusy(true);
@@ -25,6 +29,7 @@ export function NetaDialog({
           .split(/[,\s]+/)
           .map((t) => t.trim())
           .filter(Boolean),
+        ...(isMelody ? { content: { notes } } : {}),
       });
       onChanged?.();
       onClose();
@@ -74,6 +79,22 @@ export function NetaDialog({
           value={tags}
           onChange={(e) => setTags(e.target.value)}
         />
+        {isMelody && (
+          <div className="melody-editor">
+            <PianoRoll notes={notes} onChange={setNotes} />
+            <div className="melody-actions">
+              <button type="button" onClick={() => void playNotes(notes)}>
+                ▶ 再生
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadMidi(notes, `${neta.title ?? "sketch"}.mid`)}
+              >
+                MIDI書き出し
+              </button>
+            </div>
+          </div>
+        )}
         <div className="dialog-actions">
           <button className="danger" onClick={remove} disabled={busy}>
             削除
