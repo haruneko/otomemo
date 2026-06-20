@@ -75,8 +75,22 @@ main {
   .workspace {
     grid-template-columns: 1fr;
   }
-  .mainpane {
-    min-height: 60vh;
+  /* ネタを開いてないときはメインペーン(空)を出さず、ネタ帳だけ表示 */
+  .mainpane:has(.mainpane-empty) {
+    display: none;
+  }
+  /* 編集中はメインペーンを全画面に（ネタ帳の下に埋もれない／戻るで閉じる） */
+  .mainpane:has(.mainpane-editor) {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .mainpane:has(.mainpane-editor) .mainpane-editor {
+    max-height: none;
+    height: 100%;
   }
 }
 .app-head {
@@ -147,7 +161,7 @@ button:disabled {
 }
 section[aria-label="neta-list"] {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
   gap: 10px;
 }
 article[aria-label="neta-card"] {
@@ -427,6 +441,9 @@ article header {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+.editor-bar .spacer {
+  flex: 1;
 }
 .editor-bar .meta {
   font-size: 0.8rem;
@@ -753,6 +770,7 @@ article .tag {
 }
 .bs-tools {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   margin-top: 8px;
