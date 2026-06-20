@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
 import { usePlayhead } from "../usePlayhead";
@@ -28,7 +28,7 @@ function LaneCell({
     />
   );
 }
-import { notesForContent, playNotes, downloadMidi, type Note } from "../music";
+import { notesForContent, playNotes, downloadMidi, type Note, type PlaybackHandle } from "../music";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/リズムの3レーン×小節 で組む。
 // レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
@@ -73,7 +73,9 @@ export function SectionEditor({
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
   const BPB = beatsPerBar(meter ?? neta.meter); // 1小節の拍数（#51・編集中はprop優先）
   const TOTAL = BARS * BPB;
-  const { beat, start: startPlayhead } = usePlayhead(); // #49
+  const { lineRef, start: startPlayhead, stop: stopPlayhead } = usePlayhead(); // #49/#58
+  const playRef = useRef<PlaybackHandle | null>(null);
+  const [playing, setPlaying] = useState(false);
 
   const load = useCallback(async () => {
     const tree = await api.getComposition(neta.id);
@@ -125,18 +127,34 @@ export function SectionEditor({
     });
   }
 
-  function playComposite() {
+  // #57 再生/停止トグル。停止＝位置保持ではなく合成は頭出し（短いので毎回頭から聴く）。
+  async function togglePlay() {
+    if (playing) {
+      playRef.current?.stop();
+      stopPlayhead();
+      setPlaying(false);
+      return;
+    }
     const notes = composite();
-    const dur = notes.length ? Math.max(...notes.map((n) => n.start + n.dur)) : 0;
-    void playNotes(notes, tempo);
-    if (dur > 0) startPlayhead(dur, tempo);
+    if (!notes.length) return;
+    playRef.current = await playNotes(notes, tempo, {
+      onEnd: () => {
+        setPlaying(false);
+        stopPlayhead();
+      },
+    });
+    setPlaying(true);
+    void startPlayhead(TOTAL, tempo); // グリッド全体(TOTAL拍)を尺に
   }
+
+  // 別ネタへ切替/アンマウントで鳴りっぱなしを止める
+  useEffect(() => () => playRef.current?.stop(), []);
 
   return (
     <div className="section-editor">
       <div className="section-actions">
-        <button type="button" onClick={playComposite}>
-          ▶ 合成再生
+        <button type="button" onClick={() => void togglePlay()} aria-pressed={playing}>
+          {playing ? "■ 停止" : "▶ 合成再生"}
         </button>
         <button
           type="button"
@@ -147,13 +165,7 @@ export function SectionEditor({
       </div>
 
       <div className="lanes" aria-label="timeline">
-        {beat !== null && (
-          <div
-            className="playhead"
-            aria-hidden="true"
-            style={{ left: `calc(44px + ${Math.min(beat, TOTAL) / TOTAL} * (100% - 44px))` }}
-          />
-        )}
+        <div className="playhead" aria-hidden="true" ref={lineRef} />
         <div className="lane-ruler">
           <div className="lane-label" />
           <div className="ruler-bars">

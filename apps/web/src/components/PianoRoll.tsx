@@ -1,5 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Ref } from "react";
 import type { Note } from "../music";
+
+const CELL_PX = 12; // .proll-cell の幅。1拍=SUBDIV*CELL_PX で playhead を px 配置（横スクロール追従）。
+const KEY_PX = 40; // .proll-key の幅
 
 const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const noteName = (p: number) => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
@@ -24,10 +27,12 @@ export function PianoRoll({
   notes,
   onChange,
   beats = 16,
+  playheadRef,
 }: {
   notes: Note[];
   onChange: (n: Note[]) => void;
   beats?: number;
+  playheadRef?: Ref<HTMLDivElement>; // #58 再生プレイヘッド（--ph 比率を ref 直書き）
 }) {
   const [noteLen, setNoteLen] = useState(1);
 
@@ -77,6 +82,13 @@ export function PianoRoll({
         ))}
       </div>
       <div className="proll" role="grid" aria-label="piano-roll">
+        {/* #58 プレイヘッド：コンテンツ座標(px)で配置＝横スクロールに追従。span*SUBDIV*CELL_PX が小節域幅。 */}
+        <div
+          className="proll-playhead"
+          aria-hidden="true"
+          ref={playheadRef}
+          style={{ left: `calc(${KEY_PX}px + var(--ph, 0) * ${span * SUBDIV * CELL_PX}px)` }}
+        />
         {pitches.map((p) => (
           <div className="proll-row" key={p} role="row">
             <div className={"proll-key" + (isBlack(p) ? " black" : " white")} aria-hidden="true">

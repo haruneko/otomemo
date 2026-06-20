@@ -3,12 +3,23 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { updateNeta, deleteNeta, getRelations } = vi.hoisted(() => ({
+const { updateNeta, deleteNeta, getRelations, playNotes, phStart, phStop } = vi.hoisted(() => ({
   updateNeta: vi.fn().mockResolvedValue({}),
   deleteNeta: vi.fn().mockResolvedValue({ deleted: true }),
   getRelations: vi.fn().mockResolvedValue([]),
+  playNotes: vi.fn(),
+  phStart: vi.fn(),
+  phStop: vi.fn(),
 }));
 vi.mock("../src/api", () => ({ api: { updateNeta, deleteNeta, getRelations } }));
+// Tone を読み込まないよう usePlayhead と playNotes だけ差し替え（他の music エクスポートは実物）
+vi.mock("../src/usePlayhead", () => ({
+  usePlayhead: () => ({ lineRef: { current: null }, start: phStart, stop: phStop }),
+}));
+vi.mock("../src/music", async (orig) => ({
+  ...(await orig<typeof import("../src/music")>()),
+  playNotes,
+}));
 
 import { NetaDialog } from "../src/components/NetaDialog";
 
@@ -59,6 +70,23 @@ describe("NetaDialog", () => {
     expect(patch.key).toBe(9);
     expect(patch.tempo).toBe(140);
     expect(patch.bars).toBe(4); // 既定16拍 = 4小節
+  });
+
+  it("toggles play↔stop and drives the playhead (#57/#58)", async () => {
+    playNotes.mockResolvedValue({ stop: vi.fn(), pause: vi.fn(), resume: vi.fn() });
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("cell-60-0")); // ノートを1つ置く
+
+    await userEvent.click(screen.getByRole("button", { name: "▶ 再生" }));
+    await waitFor(() => expect(playNotes).toHaveBeenCalled());
+    expect(phStart).toHaveBeenCalled(); // プレイヘッド開始
+    // ボタンが停止に変わる
+    expect(await screen.findByRole("button", { name: "■ 停止" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "■ 停止" }));
+    expect(phStop).toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "▶ 再生" })).toBeInTheDocument();
   });
 
   it("edits a chord progression and saves content.chords", async () => {

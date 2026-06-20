@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type Neta } from "../api";
 import { moraLines } from "../lyrics";
+import { usePlayhead } from "../usePlayhead";
 import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
 import { ChordEditor } from "./ChordEditor";
@@ -19,6 +20,7 @@ import {
   type Note,
   type ChordEntry,
   type RhythmContent,
+  type PlaybackHandle,
 } from "../music";
 
 const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -58,6 +60,30 @@ export function NetaDialog({
   const isMusic = isMelody || isChord || isRhythm;
   // ソロ編集は見た目=実音（WYSIWYG）＝トランスポーズしない。調支配は合成(SectionEditor)側。
   const playable = isMelody ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
+
+  // #57/#58 再生/停止トグル＋プレイヘッド。melody ロールは span 尺で赤線が走る。
+  const { lineRef, start: startPlayhead, stop: stopPlayhead } = usePlayhead();
+  const playRef = useRef<PlaybackHandle | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const span = Math.max(len, ...playable.map((n) => Math.ceil(n.start + n.dur)));
+  async function togglePlay() {
+    if (playing) {
+      playRef.current?.stop();
+      stopPlayhead();
+      setPlaying(false);
+      return;
+    }
+    if (!playable.length) return;
+    playRef.current = await playNotes(playable, tempo, {
+      onEnd: () => {
+        setPlaying(false);
+        stopPlayhead();
+      },
+    });
+    setPlaying(true);
+    void startPlayhead(span, tempo);
+  }
+  useEffect(() => () => playRef.current?.stop(), []);
 
   // 連関（このネタから生成/関連したネタ）を表示
   useEffect(() => {
@@ -193,8 +219,8 @@ export function NetaDialog({
         )}
         {isMusic && (
           <>
-            <button type="button" onClick={() => void playNotes(playable, tempo)}>
-              ▶ 再生
+            <button type="button" onClick={() => void togglePlay()} aria-pressed={playing}>
+              {playing ? "■ 停止" : "▶ 再生"}
             </button>
             <button
               type="button"
@@ -256,7 +282,7 @@ export function NetaDialog({
               </button>
             </div>
             {melodyView === "roll" ? (
-              <PianoRoll notes={notes} onChange={setNotes} beats={len} />
+              <PianoRoll notes={notes} onChange={setNotes} beats={len} playheadRef={lineRef} />
             ) : (
               <StepPad notes={notes} onChange={setNotes} />
             )}

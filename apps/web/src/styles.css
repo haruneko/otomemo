@@ -763,10 +763,13 @@ article header {
   top: 6px;
   bottom: 6px;
   width: 2px;
-  background: #fff;
-  opacity: 0.75;
+  /* #58 再生位置ガイドは赤。--ph(0..1) を ref で毎フレーム直書き（再レンダ無し）。 */
+  background: #ff5a5a;
+  opacity: 0.9;
   pointer-events: none;
   z-index: 5;
+  display: none; /* start() で block にする */
+  left: calc(44px + var(--ph, 0) * (100% - 44px));
 }
 .lane-ruler,
 .lane {
@@ -963,6 +966,18 @@ article header {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #15171b;
+  position: relative; /* #58 プレイヘッドの基準（コンテンツと一緒にスクロール） */
+}
+.proll-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff5a5a;
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 3;
+  display: none; /* start() で block */
 }
 .proll-row {
   display: flex;
