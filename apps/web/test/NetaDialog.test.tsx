@@ -69,6 +69,16 @@ describe("NetaDialog", () => {
     expect(patch.content).toEqual({ chords: [{ root: "C", quality: "", start: 0, dur: 4 }] });
   });
 
+  it("edits a rhythm and saves content.rhythm", async () => {
+    const r: Neta = { ...neta, kind: "rhythm", text: null, content: null };
+    render(<NetaDialog neta={r} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("hit-Kick-0"));
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content.rhythm.lanes[0]).toEqual({ name: "Kick", midi: 36, hits: [0] });
+  });
+
   it("deletes after confirm", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const onChanged = vi.fn();

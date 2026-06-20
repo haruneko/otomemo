@@ -66,6 +66,38 @@ export function chordsToNotes(chords: ChordEntry[]): Note[] {
   );
 }
 
+// --- リズム（rhythm）。GMドラムのステップグリッド。1ステップ=16分音符（拍=step/4） ---
+export interface RhythmLane {
+  name: string;
+  midi: number; // GMドラム番号（移調しない）
+  hits: number[]; // ステップindex（0..steps-1）
+}
+export interface RhythmContent {
+  steps: number;
+  lanes: RhythmLane[];
+}
+
+export const DRUMS: { name: string; midi: number }[] = [
+  { name: "Kick", midi: 36 },
+  { name: "Snare", midi: 38 },
+  { name: "HiHat", midi: 42 },
+  { name: "OpenHat", midi: 46 },
+  { name: "Clap", midi: 39 },
+  { name: "Tom", midi: 45 },
+];
+
+export function rhythmOf(content: unknown): RhythmContent {
+  const r = (content as { rhythm?: RhythmContent } | null)?.rhythm;
+  if (r && Array.isArray(r.lanes)) return r;
+  return { steps: 16, lanes: DRUMS.map((d) => ({ ...d, hits: [] })) };
+}
+
+export function rhythmToNotes(r: RhythmContent): Note[] {
+  return r.lanes.flatMap((l) =>
+    l.hits.map((step) => ({ pitch: l.midi, start: step / 4, dur: 0.25 })),
+  );
+}
+
 export function notesToMidi(notes: Note[], bpm = 120): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);

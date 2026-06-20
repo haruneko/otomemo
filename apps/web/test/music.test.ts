@@ -7,6 +7,7 @@ import {
   transpose,
   chordToMidi,
   chordsToNotes,
+  rhythmToNotes,
   type Note,
 } from "../src/music";
 
@@ -51,6 +52,14 @@ describe("music", () => {
     const notes = chordsToNotes([{ root: "C", quality: "", start: 0, dur: 4 }]);
     expect(notes).toHaveLength(3);
     expect(notes.every((n) => n.start === 0 && n.dur === 4)).toBe(true);
+  });
+
+  it("expands a rhythm lane's hits to drum notes (step/4 = beat)", () => {
+    const notes = rhythmToNotes({ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4] }] });
+    expect(notes).toEqual([
+      { pitch: 36, start: 0, dur: 0.25 },
+      { pitch: 36, start: 1, dur: 0.25 },
+    ]);
   });
 
   it("notesOf extracts notes or empty", () => {

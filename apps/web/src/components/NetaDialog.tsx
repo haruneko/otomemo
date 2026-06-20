@@ -2,15 +2,19 @@ import { useState } from "react";
 import { api, type Neta } from "../api";
 import { PianoRoll } from "./PianoRoll";
 import { ChordEditor } from "./ChordEditor";
+import { RhythmEditor } from "./RhythmEditor";
 import {
   notesOf,
   chordsOf,
   chordsToNotes,
+  rhythmOf,
+  rhythmToNotes,
   playNotes,
   downloadMidi,
   transpose,
   type Note,
   type ChordEntry,
+  type RhythmContent,
 } from "../music";
 
 const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -29,13 +33,16 @@ export function NetaDialog({
   const [tags, setTags] = useState(neta.tags.join(" "));
   const [notes, setNotes] = useState<Note[]>(notesOf(neta.content));
   const [chords, setChords] = useState<ChordEntry[]>(chordsOf(neta.content));
+  const [rhythm, setRhythm] = useState<RhythmContent>(rhythmOf(neta.content));
   const [key, setKey] = useState<number>(neta.key ?? 0);
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [busy, setBusy] = useState(false);
   const isMelody = neta.kind === "melody";
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
-  const isMusic = isMelody || isChord;
-  const playable = isMelody ? notes : chordsToNotes(chords);
+  const isRhythm = neta.kind === "rhythm";
+  const isMusic = isMelody || isChord || isRhythm;
+  const playable = isMelody ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
+  const playKey = isRhythm ? 0 : key; // ドラムは移調しない
 
   async function save() {
     setBusy(true);
@@ -51,7 +58,9 @@ export function NetaDialog({
           ? { content: { notes }, key, tempo }
           : isChord
             ? { content: { chords }, key, tempo }
-            : {}),
+            : isRhythm
+              ? { content: { rhythm }, tempo }
+              : {}),
       });
       onChanged?.();
       onClose();
@@ -87,16 +96,18 @@ export function NetaDialog({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
-          <label className="meta">
-            調
-            <select aria-label="key" value={key} onChange={(e) => setKey(Number(e.target.value))}>
-              {KEY_NAMES.map((nm, i) => (
-                <option key={i} value={i}>
-                  {nm}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!isRhythm && (
+            <label className="meta">
+              調
+              <select aria-label="key" value={key} onChange={(e) => setKey(Number(e.target.value))}>
+                {KEY_NAMES.map((nm, i) => (
+                  <option key={i} value={i}>
+                    {nm}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="meta">
             ♩
             <input
@@ -108,13 +119,13 @@ export function NetaDialog({
               onChange={(e) => setTempo(Number(e.target.value))}
             />
           </label>
-          <button type="button" onClick={() => void playNotes(transpose(playable, key), tempo)}>
+          <button type="button" onClick={() => void playNotes(transpose(playable, playKey), tempo)}>
             ▶ 再生
           </button>
           <button
             type="button"
             onClick={() =>
-              downloadMidi(transpose(playable, key), `${neta.title ?? "sketch"}.mid`, tempo)
+              downloadMidi(transpose(playable, playKey), `${neta.title ?? "sketch"}.mid`, tempo)
             }
           >
             MIDI
@@ -136,8 +147,10 @@ export function NetaDialog({
         <div className="editor-body">
           {isMelody ? (
             <PianoRoll notes={notes} onChange={setNotes} />
-          ) : (
+          ) : isChord ? (
             <ChordEditor chords={chords} onChange={setChords} />
+          ) : (
+            <RhythmEditor rhythm={rhythm} onChange={setRhythm} />
           )}
         </div>
       </div>

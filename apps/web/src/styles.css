@@ -338,6 +338,38 @@ article header {
   border-radius: 6px;
   padding: 2px 8px;
 }
+.rhythm-editor {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  overflow-x: auto;
+}
+.rhythm-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.rhythm-name {
+  width: 56px;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.rhythm-cell {
+  width: 20px;
+  height: 18px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: #1b1e23;
+  border: 1px solid #24272e;
+  border-radius: 3px;
+}
+.rhythm-cell.beat {
+  border-left: 2px solid #3a3f49;
+}
+.rhythm-cell.on {
+  background: var(--accent);
+}
 .editor-bar select,
 .editor-bar input[type="number"] {
   background: #1b1e23;
