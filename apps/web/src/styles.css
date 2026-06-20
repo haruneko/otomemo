@@ -76,8 +76,9 @@ main {
   .workspace {
     grid-template-columns: 1fr;
   }
-  /* モバイルはカードを1列（2列だと右が画面外にはみ出す） */
-  section[aria-label="neta-list"] {
+  /* モバイルはカードを1列（2列だと右が画面外にはみ出す）。
+     基底ルールが後方にあるので .notebook で詳細度を上げて勝たせる（@media は詳細度を上げない） */
+  .notebook section[aria-label="neta-list"] {
     grid-template-columns: 1fr;
   }
   /* ネタを開いてないときはメインペーン(空)を出さず、ネタ帳だけ表示 */
@@ -167,8 +168,14 @@ button:disabled {
 }
 .filters {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
+}
+.filters input,
+.filters select {
+  flex: 1;
+  min-width: 0; /* 長い種類名(chord_progression)でセレクトが画面外へ伸びるのを防ぐ */
 }
 section[aria-label="neta-list"] {
   display: grid;
