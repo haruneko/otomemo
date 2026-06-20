@@ -9,7 +9,16 @@ import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
 
-const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "section", "song"];
+const FILTER_KINDS = [
+  "lyric",
+  "melody",
+  "chord",
+  "chord_progression",
+  "rhythm",
+  "theme",
+  "section",
+  "song",
+];
 
 export function App() {
   const [items, setItems] = useState<Neta[]>([]);

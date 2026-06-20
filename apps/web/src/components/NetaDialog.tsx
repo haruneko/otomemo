@@ -174,6 +174,13 @@ export function NetaDialog({
           value={tags}
           onChange={(e) => setTags(e.target.value)}
         />
+        <input
+          aria-label="mood"
+          className="editor-tags"
+          placeholder="ムード（任意・例：切ない/疾走）"
+          value={mood}
+          onChange={(e) => setMood(e.target.value)}
+        />
         <div className="editor-body">
           {isMelody ? (
             <PianoRoll notes={notes} onChange={setNotes} beats={len} />

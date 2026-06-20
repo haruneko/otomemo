@@ -43,6 +43,7 @@ export function NetaCard({
         params: { context: ctx() },
       });
       const content = await pollContent(job.id);
+      if (content == null) return; // 失敗/タイムアウト：空ネタを作らない（トレイに失敗が出る）
       await api.createNeta({ kind, title: neta.title ?? "案", content, from_job: job.id });
       onChanged?.();
     } finally {
@@ -63,6 +64,7 @@ export function NetaCard({
           params: { context: ctx() },
         });
         const content = await pollContent(job.id);
+        if (content == null) continue; // 失敗の子は作らない
         const child = await api.createNeta({ kind, title: kind, content, from_job: job.id });
         await api.placeChild(section.id, child.id, 0, 0).catch(() => {});
       }
