@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Neta } from "../api";
 import { PianoRoll } from "./PianoRoll";
 import { ChordEditor } from "./ChordEditor";
@@ -38,6 +38,7 @@ export function NetaDialog({
   const [key, setKey] = useState<number>(neta.key ?? 0);
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [busy, setBusy] = useState(false);
+  const [rels, setRels] = useState<{ type: string; neta: Neta | null }[]>([]);
   const isMelody = neta.kind === "melody";
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
   const isRhythm = neta.kind === "rhythm";
@@ -45,6 +46,19 @@ export function NetaDialog({
   const isMusic = isMelody || isChord || isRhythm;
   const playable = isMelody ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
   const playKey = isRhythm ? 0 : key; // ドラムは移調しない
+
+  // 連関（このネタから生成/関連したネタ）を表示
+  useEffect(() => {
+    let on = true;
+    void Promise.resolve(api.getRelations?.(neta.id))
+      .then((r) => {
+        if (on && r) setRels(r);
+      })
+      .catch(() => {});
+    return () => {
+      on = false;
+    };
+  }, [neta.id]);
 
   async function save() {
     setBusy(true);
@@ -200,6 +214,19 @@ export function NetaDialog({
           value={tags}
           onChange={(e) => setTags(e.target.value)}
         />
+        {rels.length > 0 && (
+          <div className="relations">
+            <span className="rel-label">関連</span>
+            {rels.map(
+              (r, i) =>
+                r.neta && (
+                  <span key={i} className="rel-item">
+                    {r.neta.kind}: {(r.neta.title ?? r.neta.text ?? "(無題)").slice(0, 16)}
+                  </span>
+                ),
+            )}
+          </div>
+        )}
         <div className="dialog-actions">
           <button className="danger" onClick={remove} disabled={busy}>
             削除

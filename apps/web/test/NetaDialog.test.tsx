@@ -3,11 +3,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { updateNeta, deleteNeta } = vi.hoisted(() => ({
+const { updateNeta, deleteNeta, getRelations } = vi.hoisted(() => ({
   updateNeta: vi.fn().mockResolvedValue({}),
   deleteNeta: vi.fn().mockResolvedValue({ deleted: true }),
+  getRelations: vi.fn().mockResolvedValue([]),
 }));
-vi.mock("../src/api", () => ({ api: { updateNeta, deleteNeta } }));
+vi.mock("../src/api", () => ({ api: { updateNeta, deleteNeta, getRelations } }));
 
 import { NetaDialog } from "../src/components/NetaDialog";
 
@@ -77,6 +78,14 @@ describe("NetaDialog", () => {
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content.rhythm.lanes[0]).toEqual({ name: "Kick", midi: 36, hits: [0] });
+  });
+
+  it("shows related neta (連関)", async () => {
+    getRelations.mockResolvedValueOnce([
+      { type: "result", neta: { ...neta, id: "m1", kind: "melody", title: "メロ案", text: null } },
+    ]);
+    render(<NetaDialog neta={neta} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(await screen.findByText(/melody: メロ案/)).toBeInTheDocument();
   });
 
   it("deletes after confirm", async () => {

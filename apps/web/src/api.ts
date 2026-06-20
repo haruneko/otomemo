@@ -122,6 +122,9 @@ export const api = {
       body: JSON.stringify({ from, to, type }),
     }),
 
+  getRelations: (id: string) =>
+    http<{ type: string; neta: Neta | null }[]>(`/neta/${id}/relations`),
+
   getComposition: (id: string) => http<CompositionNode>(`/neta/${id}/composition`),
 
   placeChild: (parent: string, child: string, position = 0, ord = 0) =>

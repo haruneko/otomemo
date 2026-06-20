@@ -87,7 +87,7 @@ export function buildHttp(core: Core): FastifyInstance {
 
   app.get("/neta/:id/relations", async (req) => {
     const { id } = req.params as { id: string };
-    return core.getRelations(id);
+    return core.getRelations(id).map((r) => ({ type: r.type, neta: core.getNeta(r.to) }));
   });
 
   app.post("/compose", async (req, reply) => {

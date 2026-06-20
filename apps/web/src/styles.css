@@ -257,6 +257,22 @@ article header {
   display: grid;
   gap: 8px;
 }
+.relations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.rel-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.rel-item {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 .editor-full {
   position: fixed;
   inset: 0;
