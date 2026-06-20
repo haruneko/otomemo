@@ -19,6 +19,12 @@ export function notesOf(content: unknown): Note[] {
   return [];
 }
 
+// C基準保存（design #16）。再生/書き出し時に実調へ移調する（key=ピッチクラス 0=C..11=B）。
+export function transpose(notes: Note[], semitones: number): Note[] {
+  if (!semitones) return notes;
+  return notes.map((n) => ({ ...n, pitch: n.pitch + semitones }));
+}
+
 export function notesToMidi(notes: Note[], bpm = 120): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);

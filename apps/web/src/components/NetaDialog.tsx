@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { api, type Neta } from "../api";
 import { PianoRoll } from "./PianoRoll";
-import { notesOf, playNotes, downloadMidi, type Note } from "../music";
+import { notesOf, playNotes, downloadMidi, transpose, type Note } from "../music";
+
+const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 export function NetaDialog({
   neta,
@@ -16,6 +18,8 @@ export function NetaDialog({
   const [text, setText] = useState(neta.text ?? "");
   const [tags, setTags] = useState(neta.tags.join(" "));
   const [notes, setNotes] = useState<Note[]>(notesOf(neta.content));
+  const [key, setKey] = useState<number>(neta.key ?? 0);
+  const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [busy, setBusy] = useState(false);
   const isMelody = neta.kind === "melody";
 
@@ -29,7 +33,7 @@ export function NetaDialog({
           .split(/[,\s]+/)
           .map((t) => t.trim())
           .filter(Boolean),
-        ...(isMelody ? { content: { notes } } : {}),
+        ...(isMelody ? { content: { notes }, key, tempo } : {}),
       });
       onChanged?.();
       onClose();
@@ -81,14 +85,43 @@ export function NetaDialog({
         />
         {isMelody && (
           <div className="melody-editor">
+            <div className="melody-meta">
+              <label>
+                調
+                <select
+                  aria-label="key"
+                  value={key}
+                  onChange={(e) => setKey(Number(e.target.value))}
+                >
+                  {KEY_NAMES.map((nm, i) => (
+                    <option key={i} value={i}>
+                      {nm}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                テンポ
+                <input
+                  aria-label="tempo"
+                  type="number"
+                  min={20}
+                  max={300}
+                  value={tempo}
+                  onChange={(e) => setTempo(Number(e.target.value))}
+                />
+              </label>
+            </div>
             <PianoRoll notes={notes} onChange={setNotes} />
             <div className="melody-actions">
-              <button type="button" onClick={() => void playNotes(notes)}>
+              <button type="button" onClick={() => void playNotes(transpose(notes, key), tempo)}>
                 ▶ 再生
               </button>
               <button
                 type="button"
-                onClick={() => downloadMidi(notes, `${neta.title ?? "sketch"}.mid`)}
+                onClick={() =>
+                  downloadMidi(transpose(notes, key), `${neta.title ?? "sketch"}.mid`, tempo)
+                }
               >
                 MIDI書き出し
               </button>

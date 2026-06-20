@@ -47,10 +47,16 @@ describe("NetaDialog", () => {
     const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByLabelText("pitch-60-beat-0"));
+    await userEvent.selectOptions(screen.getByLabelText("key"), "9");
+    const tempoInput = screen.getByLabelText("tempo");
+    await userEvent.clear(tempoInput);
+    await userEvent.type(tempoInput, "140");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }] });
+    expect(patch.key).toBe(9);
+    expect(patch.tempo).toBe(140);
   });
 
   it("deletes after confirm", async () => {

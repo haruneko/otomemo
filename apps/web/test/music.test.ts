@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Midi } from "@tonejs/midi";
-import { notesToMidi, notesOf, midiToNotes, type Note } from "../src/music";
+import { notesToMidi, notesOf, midiToNotes, transpose, type Note } from "../src/music";
 
 describe("music", () => {
   it("encodes notes into parseable MIDI", () => {
@@ -27,6 +27,11 @@ describe("music", () => {
     expect(notes.length).toBe(2);
     expect(notes[0]!.pitch).toBe(60);
     expect(notes[1]!.start).toBeCloseTo(2, 1);
+  });
+
+  it("transposes C-base notes by semitones (key offset)", () => {
+    expect(transpose([{ pitch: 60, start: 0, dur: 1 }], 9)[0]!.pitch).toBe(69);
+    expect(transpose([{ pitch: 60, start: 0, dur: 1 }], 0)[0]!.pitch).toBe(60);
   });
 
   it("notesOf extracts notes or empty", () => {
