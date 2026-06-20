@@ -8,6 +8,7 @@ vi.mock("../src/api", () => ({
     listNeta: vi.fn().mockResolvedValue([]),
     createNeta: vi.fn(),
     facets: vi.fn().mockResolvedValue({ kind: [], mood: [], meter: [], key: [], tags: [] }),
+    listJobs: vi.fn().mockResolvedValue([]),
   },
 }));
 

@@ -176,6 +176,60 @@ article header {
   border-bottom: 1px solid var(--line);
   padding-bottom: 6px;
 }
+.dialog.tray {
+  width: min(560px, 100%);
+}
+.tray-list {
+  display: grid;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.tray-job {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--line);
+  padding: 4px 0;
+}
+.tray-intent {
+  font-weight: 600;
+}
+.tray-status {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #2b2f36;
+  color: var(--muted);
+}
+.tray-status.done {
+  color: #2bb789;
+}
+.tray-status.failed {
+  color: #e0533f;
+}
+.tray-status.running,
+.tray-status.queued {
+  color: #e0a33c;
+}
+.tray-peek {
+  color: var(--muted);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge {
+  background: #e0533f;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 0.6rem;
+  padding: 0 5px;
+  margin-left: 1px;
+  vertical-align: super;
+}
 .chat-mode {
   display: flex;
   gap: 4px;

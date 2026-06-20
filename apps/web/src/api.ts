@@ -116,6 +116,9 @@ export const api = {
 
   getJob: (id: string) => http<Job>(`/job/${id}`),
 
+  listJobs: (q: { status?: string } = {}) =>
+    http<Job[]>(`/jobs${q.status ? `?status=${encodeURIComponent(q.status)}` : ""}`),
+
   link: (from: string, to: string, type = "related") =>
     http<{ ok: boolean }>("/relation", {
       method: "POST",
@@ -151,4 +154,5 @@ export interface Job {
   status: string;
   result: { suggestions?: string } | Record<string, unknown> | null;
   error: string | null;
+  created?: string;
 }

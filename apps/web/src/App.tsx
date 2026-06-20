@@ -6,6 +6,7 @@ import { NetaList } from "./components/NetaList";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { midiToNotes } from "./music";
 import { Chat } from "./components/Chat";
+import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
 
 const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "section", "song"];
@@ -17,11 +18,19 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Neta | undefined>(undefined);
+  const [trayOpen, setTrayOpen] = useState(false);
+  const [doneCount, setDoneCount] = useState(0);
 
   const openChat = (target?: Neta) => {
     setChatTarget(target);
     setChatOpen(true);
   };
+
+  function openTray() {
+    setTrayOpen(true);
+    localStorage.setItem("cm-tray-seen", String(Date.now()));
+    setDoneCount(0);
+  }
 
   useEffect(() => {
     applyColors(loadColors());
@@ -51,6 +60,22 @@ export function App() {
     return () => window.removeEventListener("online", doFlush);
   }, [reload]);
 
+  // 受け取りトレイの通知バッジ：前回見て以降に done になったジョブ数
+  useEffect(() => {
+    const tick = () => {
+      void api
+        .listJobs({ status: "done" })
+        .then((js) => {
+          const seen = Number(localStorage.getItem("cm-tray-seen") ?? 0);
+          setDoneCount(js.filter((j) => new Date(j.created ?? 0).getTime() > seen).length);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const t = setInterval(tick, 15000);
+    return () => clearInterval(t);
+  }, []);
+
   return (
     <main>
       <div className="app-head">
@@ -76,6 +101,9 @@ export function App() {
               }}
             />
           </label>
+          <button className="gear" aria-label="tray" onClick={openTray}>
+            📥{doneCount > 0 && <span className="badge">{doneCount}</span>}
+          </button>
           <button className="gear" aria-label="chat" onClick={() => openChat()}>
             💬
           </button>
@@ -116,6 +144,7 @@ export function App() {
           onChanged={() => void reload()}
         />
       )}
+      {trayOpen && <Tray onClose={() => setTrayOpen(false)} />}
       {settingsOpen && (
         <div className="dialog-backdrop" onClick={() => setSettingsOpen(false)}>
           <div
