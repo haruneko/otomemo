@@ -6,6 +6,7 @@ import { NetaList } from "./components/NetaList";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { midiToNotes } from "./music";
 import { Chat } from "./components/Chat";
+import { flushOutbox } from "./outbox";
 
 const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "song"];
 
@@ -30,6 +31,18 @@ export function App() {
 
   useEffect(() => {
     reload().catch(() => {});
+  }, [reload]);
+
+  // オフライン退避分をオンライン復帰時に同期
+  useEffect(() => {
+    const doFlush = () => {
+      void flushOutbox().then((n) => {
+        if (n) void reload();
+      });
+    };
+    doFlush();
+    window.addEventListener("online", doFlush);
+    return () => window.removeEventListener("online", doFlush);
   }, [reload]);
 
   return (

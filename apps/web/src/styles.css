@@ -89,6 +89,10 @@ button:disabled {
   opacity: 0.5;
   cursor: default;
 }
+.offline-note {
+  font-size: 0.75rem;
+  color: #e0a33c;
+}
 .filters {
   display: flex;
   gap: 8px;

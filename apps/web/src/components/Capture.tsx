@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { api, KINDS, type Neta } from "../api";
+import { queueNeta } from "../outbox";
 
 // 摩擦ゼロの捕獲（要件）。本文1個＋kind＋任意タグ＋「放り込む」。
 const TEXT_KINDS = new Set(["lyric", "theme", "knowledge", "other"]);
@@ -9,6 +10,7 @@ export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
   const [body, setBody] = useState("");
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
+  const [offline, setOffline] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -23,10 +25,16 @@ export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
       const input = TEXT_KINDS.has(kind)
         ? { kind, text: body.trim(), tags: tagList }
         : { kind, title: body.trim(), tags: tagList };
-      const n = await api.createNeta(input);
+      try {
+        const n = await api.createNeta(input);
+        onCreated?.(n);
+      } catch {
+        // オフライン等：捕獲を取りこぼさず outbox に退避
+        queueNeta(input);
+        setOffline(true);
+      }
       setBody("");
       setTags("");
-      onCreated?.(n);
     } finally {
       setBusy(false);
     }
@@ -56,6 +64,7 @@ export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
       <button type="submit" disabled={busy || !body.trim()}>
         放り込む
       </button>
+      {offline && <span className="offline-note">オフライン：端末に退避（復帰時に同期）</span>}
     </form>
   );
 }
