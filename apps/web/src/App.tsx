@@ -122,9 +122,6 @@ export function App() {
           <button className="gear" aria-label="tray" title="受け取りトレイ" onClick={openTray}>
             📥{doneCount > 0 && <span className="badge">{doneCount}</span>}
           </button>
-          <button className="gear" aria-label="chat" title="相談（Chat）" onClick={() => openChat()}>
-            💬
-          </button>
           <button
             className="gear"
             aria-label="settings"
@@ -229,6 +226,16 @@ export function App() {
           )}
         </section>
       </div>
+      {!chatOpen && (
+        <button
+          className="chat-bubble"
+          aria-label="chat"
+          title="相談（Chat）"
+          onClick={() => openChat()}
+        >
+          💬
+        </button>
+      )}
       {chatOpen && (
         <Chat
           target={chatTarget}

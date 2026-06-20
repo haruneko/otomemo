@@ -217,6 +217,25 @@ article header {
   color: #fff;
   border-color: var(--accent);
 }
+.chat-bubble {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 1.4rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  z-index: 40; /* 編集中の全画面メインペーン(z30)より上に浮かせる */
+}
+.chat-bubble:hover {
+  filter: brightness(1.1);
+}
+
 .dialog-backdrop {
   position: fixed;
   inset: 0;

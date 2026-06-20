@@ -48,6 +48,16 @@ test("tap a card opens the editor in the main pane and 戻る returns (mobile)",
   await expect(page.getByLabel("edit-neta")).toHaveCount(0);
 });
 
+test("chat bubble (bottom-right) opens the chat dialog (mobile)", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  const bubble = page.locator("button.chat-bubble");
+  await expect(bubble).toBeVisible();
+  await bubble.click();
+  await expect(page.getByLabel("chat-input")).toBeVisible();
+});
+
 test("section editor shows the 3-lane timeline without overflow (mobile)", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
