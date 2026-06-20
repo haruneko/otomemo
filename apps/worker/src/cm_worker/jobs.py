@@ -153,10 +153,23 @@ def handle_gen_melody(params: dict) -> dict:
     return {"content": {"notes": notes}}
 
 
+def handle_research(params: dict) -> dict:
+    """研究/情報収集（docs/design.md 意図カタログ）。claude -p で調べて要点をまとめる。"""
+    topic = params.get("topic") or params.get("context") or ""
+    instruction = params.get("instruction") or f"「{topic}」について作曲/DTMの観点で要点を調べてまとめる。"
+    prompt = (
+        "DTM/作曲のリサーチャーとして、必要なら web を使って調べ、要点を簡潔にまとめる。\n"
+        "箇条書き中心、出典があれば付す。\n\n"
+        f"# テーマ\n{topic}\n\n# 依頼\n{instruction}"
+    )
+    return {"summary": claude_prompt(prompt, timeout=180)}
+
+
 HANDLERS: dict[str, Callable[[dict], dict]] = {
     "mora_count": handle_mora_count,
     "echo": handle_echo,
     "brainstorm": handle_brainstorm,
     "suggest": handle_suggest,
     "gen_melody": handle_gen_melody,
+    "research": handle_research,
 }

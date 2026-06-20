@@ -114,3 +114,11 @@ def test_gen_melody_handles_garbage(monkeypatch):
 
     monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: "メロはこちら（JSONなし）")
     assert jobs.handle_gen_melody({"context": "x"})["content"]["notes"] == []
+
+
+def test_research_returns_summary(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180: "- 要点1\n- 要点2")
+    res = jobs.handle_research({"topic": "シューゲイザーのギター音作り"})
+    assert "要点1" in res["summary"]
