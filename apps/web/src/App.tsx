@@ -69,6 +69,31 @@ export function App() {
     ? items.filter((n) => (n.mood ?? "").toLowerCase().includes(moodFilter.trim().toLowerCase()))
     : items;
 
+  // #10: 過去資産の一括取込（複数ファイル）
+  async function importMidi(files: FileList | null) {
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      const { notes } = midiToNotes(await file.arrayBuffer());
+      await api.createNeta({
+        kind: "melody",
+        title: file.name.replace(/\.midi?$/i, ""),
+        content: { notes },
+      });
+    }
+    await reload();
+  }
+  async function importLyrics(files: FileList | null) {
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      const parts = (await file.text())
+        .split(/\n\s*\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const p of parts) await api.createNeta({ kind: "lyric", text: p });
+    }
+    await reload();
+  }
+
   const openChat = (target?: Neta) => {
     setChatTarget(target);
     setChatOpen(true);
@@ -178,18 +203,11 @@ export function App() {
               <input
                 type="file"
                 accept=".mid,.midi"
+                multiple
                 hidden
                 onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const { notes } = midiToNotes(await file.arrayBuffer());
-                  await api.createNeta({
-                    kind: "melody",
-                    title: file.name.replace(/\.midi?$/i, ""),
-                    content: { notes },
-                  });
+                  await importMidi(e.target.files);
                   e.target.value = "";
-                  await reload();
                 }}
               />
             </label>
@@ -198,17 +216,11 @@ export function App() {
               <input
                 type="file"
                 accept=".txt,text/plain"
+                multiple
                 hidden
                 onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const parts = (await file.text())
-                    .split(/\n\s*\n/)
-                    .map((s) => s.trim())
-                    .filter(Boolean);
-                  for (const p of parts) await api.createNeta({ kind: "lyric", text: p });
+                  await importLyrics(e.target.files);
                   e.target.value = "";
-                  await reload();
                 }}
               />
             </label>
