@@ -1084,6 +1084,42 @@ article .tag {
   white-space: pre-wrap;
 }
 
+/* #9 参考曲カード（Chat 調べるモード） */
+.ref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ref-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+}
+.ref-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ref-head strong {
+  font-size: 0.84rem;
+}
+.ref-artist {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.ref-why,
+.ref-points {
+  font-size: 0.78rem;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+.ref-points {
+  color: var(--muted);
+}
+
 /* kind→色（Okabe-Ito由来・DAW慣習準拠・色覚安全）。color-research agent #色 */
 article[data-kind="rhythm"] { --k: var(--k-rhythm); }
 article[data-kind="melody"] { --k: var(--k-melody); }

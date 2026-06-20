@@ -120,6 +120,35 @@ export class Core {
       this.createNeta({ kind: kindOf[r.intent]!, title: kindOf[r.intent]!, content, from_job: r.id });
       n += 1;
     }
+
+    // #9 参考曲エージェント：research の結果（references 非空）を reference ネタとして回収。
+    // gen_* と同じガード（parent有り＝plan子は即時／単独は120s未受領で回収）で二重作成を防ぐ。
+    const refRows = this.db
+      .prepare(
+        `SELECT j.id, j.result_summary AS result
+         FROM job j
+         WHERE j.status='done' AND j.intent='research'
+           AND (j.parent_job_id IS NOT NULL OR j.updated < ?)
+           AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
+      )
+      .all(staleBefore) as { id: string; result: string | null }[];
+    for (const r of refRows) {
+      let parsed: { summary?: string; references?: unknown[] };
+      try {
+        parsed = JSON.parse(r.result ?? "{}") as { summary?: string; references?: unknown[] };
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(parsed.references) || parsed.references.length === 0) continue;
+      this.createNeta({
+        kind: "reference",
+        title: "参考曲",
+        text: parsed.summary ?? "",
+        content: { summary: parsed.summary ?? "", references: parsed.references },
+        from_job: r.id,
+      });
+      n += 1;
+    }
     return n;
   }
 

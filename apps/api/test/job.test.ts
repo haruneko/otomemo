@@ -80,6 +80,35 @@ describe("job queue (producer side)", () => {
     expect(c.reapResults()).toBe(0);
   });
 
+  it("reaps research with references into a reference neta (#9)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('jr', 'research', '{}', 'done', 'plan1', ?, '', '')`,
+    ).run(
+      JSON.stringify({
+        summary: "夜系の要点",
+        references: [{ title: "曲A", artist: "X", why: "進行が近い", points: "IVm" }],
+      }),
+    );
+    expect(c.reapResults()).toBe(1);
+    const refs = c.listNeta({ kind: "reference" });
+    expect(refs.length).toBe(1);
+    expect((refs[0].content as { references: unknown[] }).references.length).toBe(1);
+    expect(c.reapResults()).toBe(0); // 冪等
+  });
+
+  it("does not reap research with empty references (#9)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('jr0', 'research', '{}', 'done', 'plan1', ?, '', '')`,
+    ).run(JSON.stringify({ summary: "テキストのみ", references: [] }));
+    expect(c.reapResults()).toBe(0);
+  });
+
   it("enqueues via HTTP", async () => {
     const app: FastifyInstance = buildHttp(core);
     await app.ready();

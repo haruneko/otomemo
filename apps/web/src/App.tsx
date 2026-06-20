@@ -28,6 +28,8 @@ const FILTER_KINDS = [
   "theme",
   "section",
   "song",
+  "reference",
+  "knowledge",
 ];
 
 export function App() {

@@ -95,6 +95,33 @@ def test_suggest_fallback_on_non_json(monkeypatch):
     assert res["options"][0]["body"] == "JSONじゃない返答"
 
 
+def test_research_parses_references(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=120: (
+            '{"summary":"夜系の要点","references":['
+            '{"title":"曲A","artist":"X","why":"進行が近い","points":"IVmで翳り"},'
+            '{"title":"曲B","artist":"Y","why":"質感","points":"低BPM"}]}'
+        ),
+    )
+    res = jobs.handle_research({"topic": "夜の曲"})
+    assert res["summary"] == "夜系の要点"
+    assert [r["title"] for r in res["references"]] == ["曲A", "曲B"]
+    assert res["references"][0]["points"] == "IVmで翳り"
+
+
+def test_research_fallback_on_non_json(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: "JSONじゃない調査メモ")
+    res = jobs.handle_research({"topic": "x"})
+    assert res["summary"] == "JSONじゃない調査メモ"
+    assert res["references"] == []
+
+
 def test_gen_melody_parses_notes(monkeypatch):
     import cm_worker.jobs as jobs
 

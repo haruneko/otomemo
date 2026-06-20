@@ -287,15 +287,36 @@ def handle_gen_rhythm(params: dict) -> dict:
 
 
 def handle_research(params: dict) -> dict:
-    """研究/情報収集（docs/design.md 意図カタログ）。claude -p で調べて要点をまとめる。"""
+    """参考曲エージェント / 情報収集（docs/design.md #9・line 226）。
+    テーマ→参考曲を構造化（title/artist/why/points）＋全体要約。必要なら web を使う。
+    返り値 {summary, references[]}：summary は Chat/Tray の peek 互換、references はネタ化用。"""
     topic = params.get("topic") or params.get("context") or ""
-    instruction = params.get("instruction") or f"「{topic}」について作曲/DTMの観点で要点を調べてまとめる。"
+    instruction = params.get("instruction") or f"「{topic}」の参考になる曲を挙げ、作曲面の学びをまとめる。"
     prompt = (
-        "DTM/作曲のリサーチャーとして、必要なら web を使って調べ、要点を簡潔にまとめる。\n"
-        "箇条書き中心、出典があれば付す。\n\n"
+        "DTM/作曲のリサーチャーとして、必要なら web を使って調べる。\n"
+        "テーマに対する参考曲を挙げ、各曲の作曲的な学び（コード進行/リズム/構成/音色など）を簡潔にまとめる。\n"
+        '出力は JSON のみ：{"summary":"全体の要点（数行）",'
+        '"references":[{"title":"曲名","artist":"アーティスト","why":"なぜ参考になるか","points":"作曲的ポイント"}]}\n'
+        "references は2〜5曲。前置き/説明/コードフェンス禁止、JSONのみ。\n\n"
         f"# テーマ\n{topic}\n\n# 依頼\n{instruction}"
     )
-    return {"summary": claude_prompt(prompt, timeout=180)}
+    text = claude_prompt(prompt, timeout=180)
+    try:
+        data = _extract_json(text)
+        summary = str(data.get("summary", "")).strip()
+        references = [
+            {
+                "title": str(r["title"])[:120],
+                "artist": str(r.get("artist", "")),
+                "why": str(r.get("why", "")),
+                "points": str(r.get("points", "")),
+            }
+            for r in (data.get("references") or [])
+            if isinstance(r, dict) and r.get("title")
+        ]
+    except Exception:  # noqa: BLE001
+        summary, references = text.strip(), []
+    return {"summary": summary or text.strip(), "references": references}
 
 
 def handle_plan(params: dict) -> dict:

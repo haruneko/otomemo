@@ -5,10 +5,17 @@ interface Opt {
   title: string;
   body: string;
 }
+interface Ref {
+  title: string;
+  artist?: string;
+  why?: string;
+  points?: string;
+}
 interface Msg {
   role: "user" | "ai";
   text?: string;
   options?: Opt[];
+  references?: Ref[];
   jobId?: string;
   saveable?: string;
 }
@@ -50,8 +57,13 @@ export function Chat({
         const j = await api.getJob(job.id);
         if (j.status === "done") {
           if (mode === "research") {
-            const summary = (j.result as { summary?: string } | null)?.summary ?? "";
-            setMsgs((m) => [...m, { role: "ai", text: summary, saveable: summary }]);
+            const r = j.result as { summary?: string; references?: Ref[] } | null;
+            const summary = r?.summary ?? "";
+            const references = Array.isArray(r?.references) ? r!.references : [];
+            setMsgs((m) => [
+              ...m,
+              { role: "ai", text: summary, saveable: summary, references, jobId: job.id },
+            ]);
           } else if (mode === "plan") {
             const plan = (j.result as { plan?: string } | null)?.plan ?? "計画しました";
             setMsgs((m) => [
@@ -107,6 +119,20 @@ export function Chat({
     setMsgs((m) => [...m, { role: "ai", text: "知見として保存しました" }]);
   }
 
+  // #9 参考曲を1曲だけ reference ネタとして保存
+  async function saveRef(r: Ref, jobId?: string) {
+    const body = [r.why, r.points].filter(Boolean).join("\n");
+    await api.createNeta({
+      kind: "reference",
+      title: r.artist ? `${r.title} / ${r.artist}` : r.title,
+      text: body,
+      content: { references: [r] },
+      from_job: jobId,
+    });
+    onChanged?.();
+    setMsgs((m) => [...m, { role: "ai", text: `参考曲「${r.title}」を保存しました` }]);
+  }
+
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div className="dialog chat" role="dialog" aria-label="chat" onClick={(e) => e.stopPropagation()}>
@@ -157,6 +183,28 @@ export function Chat({
                       <strong>{o.title || "案"}</strong>
                       <span>{o.body}</span>
                     </button>
+                  ))}
+                </div>
+              )}
+              {m.references && m.references.length > 0 && (
+                <div className="ref-list">
+                  {m.references.map((r, k) => (
+                    <div key={k} className="ref-card">
+                      <div className="ref-head">
+                        <strong>{r.title}</strong>
+                        {r.artist && <span className="ref-artist">{r.artist}</span>}
+                      </div>
+                      {r.why && <p className="ref-why">{r.why}</p>}
+                      {r.points && <p className="ref-points">{r.points}</p>}
+                      <button
+                        type="button"
+                        className="bs-btn"
+                        aria-label={`save-ref-${k}`}
+                        onClick={() => void saveRef(r, m.jobId)}
+                      >
+                        参考曲を保存
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}

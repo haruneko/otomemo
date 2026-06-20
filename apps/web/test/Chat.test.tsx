@@ -37,4 +37,36 @@ describe("Chat", () => {
     });
     expect(onChanged).toHaveBeenCalled();
   });
+
+  it("research mode shows reference songs and saves one as a reference neta (#9)", async () => {
+    createJob.mockResolvedValue({ id: "jr", status: "queued" });
+    getJob.mockResolvedValue({
+      status: "done",
+      result: {
+        summary: "夜系の要点",
+        references: [{ title: "曲A", artist: "X", why: "進行が近い", points: "IVmで翳り" }],
+      },
+      error: null,
+    });
+    createNeta.mockResolvedValue({ id: "r1" });
+    const onChanged = vi.fn();
+
+    render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
+    // research モードに切替
+    await userEvent.click(screen.getByRole("button", { name: "調べる" }));
+    await userEvent.type(screen.getByLabelText("chat-input"), "夜の曲");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    await waitFor(() => expect(screen.getByText("曲A")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByLabelText("save-ref-0"));
+    await waitFor(() => expect(createNeta).toHaveBeenCalled());
+    expect(createNeta).toHaveBeenCalledWith({
+      kind: "reference",
+      title: "曲A / X",
+      text: "進行が近い\nIVmで翳り",
+      content: { references: [{ title: "曲A", artist: "X", why: "進行が近い", points: "IVmで翳り" }] },
+      from_job: "jr",
+    });
+    expect(onChanged).toHaveBeenCalled();
+  });
 });
