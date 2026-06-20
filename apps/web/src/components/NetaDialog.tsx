@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Neta } from "../api";
+import { moraLines } from "../lyrics";
 import { PianoRoll } from "./PianoRoll";
 import { ChordEditor } from "./ChordEditor";
 import { RhythmEditor } from "./RhythmEditor";
@@ -218,6 +219,16 @@ export function NetaDialog({
           onChange={(e) => setTitle(e.target.value)}
         />
         <textarea aria-label="text" rows={8} value={text} onChange={(e) => setText(e.target.value)} />
+        {neta.kind === "lyric" && text.trim() && (
+          <div className="mora-panel" aria-label="mora">
+            {moraLines(text).map((m, i) => (
+              <div key={i} className="mora-line">
+                <span className="mora-count">{m.count}</span>
+                <span className="mora-text">{m.line || "　"}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <input
           aria-label="tags"
           placeholder="タグ（スペース区切り）"
