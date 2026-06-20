@@ -46,6 +46,34 @@ CREATE TABLE IF NOT EXISTS relation_edge (
   type    TEXT NOT NULL DEFAULT 'related',
   PRIMARY KEY (from_id, to_id, type)
 );
+
+-- 投げた仕事（docs/design.md #16）。TSが積み、Pythonワーカーが消費。
+CREATE TABLE IF NOT EXISTS job (
+  id             TEXT PRIMARY KEY,
+  target_neta_id TEXT,
+  level          TEXT NOT NULL DEFAULT 'atomic',
+  intent         TEXT NOT NULL,
+  instruction    TEXT,
+  params         TEXT,
+  status         TEXT NOT NULL DEFAULT 'queued',
+  priority       INTEGER NOT NULL DEFAULT 0,
+  progress       TEXT,
+  notify_level   TEXT,
+  parent_job_id  TEXT,
+  question       TEXT,
+  result_summary TEXT,
+  error          TEXT,
+  created        TEXT NOT NULL,
+  updated        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_job_status ON job(status);
+CREATE TABLE IF NOT EXISTS job_result (
+  job_id  TEXT NOT NULL REFERENCES job(id) ON DELETE CASCADE,
+  neta_id TEXT REFERENCES neta(id) ON DELETE CASCADE,
+  ord     INTEGER NOT NULL DEFAULT 0,
+  role    TEXT,
+  data    TEXT
+);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {

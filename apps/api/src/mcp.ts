@@ -148,5 +148,40 @@ export function buildMcpServer(core: Core): McpServer {
     async ({ id }) => ok(core.getRelations(id)),
   );
 
+  server.registerTool(
+    "create_job",
+    {
+      title: "ジョブを投げる",
+      description: "対象＋意図で非同期ジョブを積む（ワーカーが処理、結果は get_job で受け取る）。",
+      inputSchema: {
+        intent: z.string().describe("実現済みの意図：mora_count / echo（順次追加）"),
+        target_neta_id: z.string().optional(),
+        instruction: z.string().optional(),
+        params: z.unknown().optional(),
+        priority: z.number().int().optional(),
+      },
+    },
+    async (args) => ok(core.enqueueJob(args)),
+  );
+
+  server.registerTool(
+    "get_job",
+    { title: "ジョブ取得", description: "id で状態・結果を取得", inputSchema: { id: z.string() } },
+    async ({ id }) => {
+      const j = core.getJob(id);
+      return j ? ok(j) : err("not found");
+    },
+  );
+
+  server.registerTool(
+    "list_jobs",
+    {
+      title: "ジョブ一覧",
+      description: "status/target で絞り込み",
+      inputSchema: { status: z.string().optional(), target: z.string().optional() },
+    },
+    async (args) => ok(core.listJobs(args)),
+  );
+
   return server;
 }

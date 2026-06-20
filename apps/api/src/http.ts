@@ -16,6 +16,16 @@ const netaInput = z.object({
   tags: z.array(z.string()).optional(),
 });
 
+const jobInput = z.object({
+  intent: z.string().min(1),
+  target_neta_id: z.string().nullish(),
+  instruction: z.string().nullish(),
+  params: z.unknown().optional(),
+  level: z.string().optional(),
+  priority: z.number().int().optional(),
+  notify_level: z.string().nullish(),
+});
+
 /** 低次元データAPI（docs/design.md #15/#16）。PWAの主窓口。 */
 export function buildHttp(core: Core): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -97,6 +107,25 @@ export function buildHttp(core: Core): FastifyInstance {
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
     core.link(p.data.from, p.data.to, p.data.type);
     return { ok: true };
+  });
+
+  // --- ジョブ（投げて→受け取る）---
+  app.post("/job", async (req, reply) => {
+    const p = jobInput.safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    return core.enqueueJob(p.data);
+  });
+
+  app.get("/jobs", async (req) => {
+    const q = req.query as Record<string, string | undefined>;
+    return core.listJobs({ status: q.status, target: q.target });
+  });
+
+  app.get("/job/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const j = core.getJob(id);
+    if (!j) return reply.code(404).send({ error: "not found" });
+    return j;
   });
 
   return app;

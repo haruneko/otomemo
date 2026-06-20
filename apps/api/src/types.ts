@@ -68,3 +68,39 @@ export interface Relation {
   to: string;
   type: string;
 }
+
+export interface JobInput {
+  intent: string;
+  target_neta_id?: string | null;
+  instruction?: string | null;
+  params?: unknown;
+  level?: string;
+  priority?: number;
+  notify_level?: string | null;
+}
+
+export interface Job {
+  id: string;
+  target_neta_id: string | null;
+  level: string;
+  intent: string;
+  instruction: string | null;
+  params: unknown | null;
+  status: string;
+  priority: number;
+  progress: string | null;
+  notify_level: string | null;
+  parent_job_id: string | null;
+  question: string | null;
+  /** parsed result_summary */
+  result: unknown | null;
+  error: string | null;
+  created: string;
+  updated: string;
+}
+
+export interface JobQuery {
+  status?: string;
+  target?: string;
+  limit?: number;
+}

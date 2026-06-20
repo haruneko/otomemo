@@ -41,4 +41,15 @@ describe("mcp tool layer", () => {
     const byTag = await client.callTool({ name: "list_neta", arguments: { tags: ["サビ"] } });
     expect(JSON.parse(textOf(byTag)).length).toBe(1);
   });
+
+  it("throws a job via create_job", async () => {
+    const { client } = await connect();
+    const r = await client.callTool({
+      name: "create_job",
+      arguments: { intent: "mora_count", params: { text: "よる" } },
+    });
+    const job = JSON.parse(textOf(r));
+    expect(job.status).toBe("queued");
+    expect(job.intent).toBe("mora_count");
+  });
 });

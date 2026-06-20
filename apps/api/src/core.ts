@@ -8,6 +8,9 @@ import type {
   Facets,
   CompositionNode,
   Relation,
+  Job,
+  JobInput,
+  JobQuery,
 } from "./types";
 
 const now = (): string => new Date().toISOString();
@@ -201,6 +204,73 @@ export class Core {
     return this.db
       .prepare(`SELECT to_id AS "to", type FROM relation_edge WHERE from_id = ? ORDER BY type, to_id`)
       .all(id) as Relation[];
+  }
+
+  // --- ジョブ（投げて→進めて→受け取る。生産側）---
+
+  enqueueJob(input: JobInput): Job {
+    const id = randomUUID();
+    const ts = now();
+    this.db
+      .prepare(
+        `INSERT INTO job (id, target_neta_id, level, intent, instruction, params, status, priority, notify_level, created, updated)
+         VALUES (@id, @target, @level, @intent, @instruction, @params, 'queued', @priority, @notify, @created, @updated)`,
+      )
+      .run({
+        id,
+        target: input.target_neta_id ?? null,
+        level: input.level ?? "atomic",
+        intent: input.intent,
+        instruction: input.instruction ?? null,
+        params: input.params == null ? null : JSON.stringify(input.params),
+        priority: input.priority ?? 0,
+        notify: input.notify_level ?? null,
+        created: ts,
+        updated: ts,
+      });
+    return this.getJob(id)!;
+  }
+
+  getJob(id: string): Job | null {
+    const row = this.db.prepare(`SELECT * FROM job WHERE id = ?`).get(id) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? this.rowToJob(row) : null;
+  }
+
+  listJobs(q: JobQuery = {}): Job[] {
+    const where: string[] = [];
+    const params: Record<string, unknown> = {};
+    if (q.status) (where.push(`status = @status`), (params.status = q.status));
+    if (q.target) (where.push(`target_neta_id = @target`), (params.target = q.target));
+    params.limit = q.limit ?? 100;
+    const sql = `SELECT * FROM job ${
+      where.length ? "WHERE " + where.join(" AND ") : ""
+    } ORDER BY created DESC LIMIT @limit`;
+    return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map((r) =>
+      this.rowToJob(r),
+    );
+  }
+
+  private rowToJob(row: Record<string, unknown>): Job {
+    return {
+      id: row.id as string,
+      target_neta_id: (row.target_neta_id as string) ?? null,
+      level: row.level as string,
+      intent: row.intent as string,
+      instruction: (row.instruction as string) ?? null,
+      params: row.params == null ? null : JSON.parse(row.params as string),
+      status: row.status as string,
+      priority: row.priority as number,
+      progress: (row.progress as string) ?? null,
+      notify_level: (row.notify_level as string) ?? null,
+      parent_job_id: (row.parent_job_id as string) ?? null,
+      question: (row.question as string) ?? null,
+      result: row.result_summary == null ? null : JSON.parse(row.result_summary as string),
+      error: (row.error as string) ?? null,
+      created: row.created as string,
+      updated: row.updated as string,
+    };
   }
 
   private rowToNeta(row: Record<string, unknown>): Neta {
