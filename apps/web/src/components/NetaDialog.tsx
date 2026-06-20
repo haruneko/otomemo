@@ -37,6 +37,10 @@ export function NetaDialog({
   const [rhythm, setRhythm] = useState<RhythmContent>(rhythmOf(neta.content));
   const [key, setKey] = useState<number>(neta.key ?? 0);
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
+  const [mood, setMood] = useState(neta.mood ?? "");
+  const [len, setLen] = useState(() =>
+    Math.max(16, (neta.bars ?? 0) * 4, ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
+  );
   const [busy, setBusy] = useState(false);
   const [rels, setRels] = useState<{ type: string; neta: Neta | null }[]>([]);
   const isMelody = neta.kind === "melody";
@@ -70,8 +74,9 @@ export function NetaDialog({
           .split(/[,\s]+/)
           .map((t) => t.trim())
           .filter(Boolean),
+        mood: mood.trim() || null,
         ...(isMelody
-          ? { content: { notes }, key, tempo }
+          ? { content: { notes }, key, tempo, bars: Math.ceil(len / 4) }
           : isChord
             ? { content: { chords }, key, tempo }
             : isRhythm
@@ -126,6 +131,11 @@ export function NetaDialog({
               </select>
             </label>
           )}
+          {isMelody && (
+            <button type="button" onClick={() => setLen(len + 4)}>
+              ＋4拍
+            </button>
+          )}
           <label className="meta">
             ♩
             <input
@@ -171,7 +181,7 @@ export function NetaDialog({
         />
         <div className="editor-body">
           {isMelody ? (
-            <PianoRoll notes={notes} onChange={setNotes} />
+            <PianoRoll notes={notes} onChange={setNotes} beats={len} />
           ) : isChord ? (
             <ChordEditor chords={chords} onChange={setChords} />
           ) : isRhythm ? (
@@ -213,6 +223,12 @@ export function NetaDialog({
           placeholder="タグ（スペース区切り）"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
+        />
+        <input
+          aria-label="mood"
+          placeholder="ムード（任意・例：切ない/疾走）"
+          value={mood}
+          onChange={(e) => setMood(e.target.value)}
         />
         {rels.length > 0 && (
           <div className="relations">

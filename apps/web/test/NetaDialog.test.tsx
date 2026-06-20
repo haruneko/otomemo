@@ -58,6 +58,7 @@ describe("NetaDialog", () => {
     expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }] });
     expect(patch.key).toBe(9);
     expect(patch.tempo).toBe(140);
+    expect(patch.bars).toBe(4); // 既定16拍 = 4小節
   });
 
   it("edits a chord progression and saves content.chords", async () => {

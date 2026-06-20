@@ -47,6 +47,7 @@ export interface NetaPatch {
   content?: unknown;
   key?: number | null;
   tempo?: number | null;
+  bars?: number | null;
   mood?: string | null;
   tags?: string[];
 }
