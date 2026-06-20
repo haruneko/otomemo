@@ -55,7 +55,7 @@ describe("NetaDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
-    expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }] });
+    expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }], program: 0 }); // #47
     expect(patch.key).toBe(9);
     expect(patch.tempo).toBe(140);
     expect(patch.bars).toBe(4); // 既定16拍 = 4小節
@@ -68,7 +68,7 @@ describe("NetaDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
-    expect(patch.content).toEqual({ chords: [{ root: 0, quality: "", start: 0, dur: 4 }] });
+    expect(patch.content).toEqual({ chords: [{ root: 0, quality: "", start: 0, dur: 4 }], program: 0 }); // #47
   });
 
   it("edits a rhythm and saves content.rhythm", async () => {

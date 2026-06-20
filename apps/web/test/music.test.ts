@@ -76,4 +76,14 @@ describe("music", () => {
     expect(notesOf(null)).toEqual([]);
     expect(notesOf("x")).toEqual([]);
   });
+
+  it("writes the GM program to the MIDI track (#47)", () => {
+    const midi = new Midi(notesToMidi([{ pitch: 60, start: 0, dur: 1 }], 120, null, 24));
+    expect(midi.tracks[0]!.instrument.number).toBe(24);
+  });
+
+  it("puts drums on channel 10 (#47)", () => {
+    const midi = new Midi(notesToMidi([{ pitch: 36, start: 0, dur: 1, drum: true }], 120));
+    expect(midi.tracks[0]!.channel).toBe(9);
+  });
 });

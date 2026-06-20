@@ -13,6 +13,7 @@ import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
 import { ThemeSettings } from "./settings/ThemeSettings";
+import { SoundFontSettings } from "./settings/SoundFontSettings";
 import { midiToNotes } from "./music";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
@@ -304,6 +305,7 @@ export function App() {
               </button>
             </header>
             <ThemeSettings />
+            <SoundFontSettings />
           </div>
         </div>
       )}

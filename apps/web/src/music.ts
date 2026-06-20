@@ -131,12 +131,45 @@ function meterPair(meter?: string | null): [number, number] | null {
   return n > 0 && d > 0 ? [n, d] : null;
 }
 
-export function notesToMidi(notes: Note[], bpm = 120, meter?: string | null): Uint8Array {
+// #47: GM音色。content.program(0-127) を MIDI トラックの楽器に反映＝書き出しが実音色に一致。
+export const GM_INSTRUMENTS: { value: number; label: string }[] = [
+  { value: 0, label: "ピアノ" },
+  { value: 4, label: "エレピ" },
+  { value: 24, label: "ナイロンギター" },
+  { value: 26, label: "ジャズギター" },
+  { value: 30, label: "ディストーションギター" },
+  { value: 32, label: "アコースティックベース" },
+  { value: 33, label: "フィンガーベース" },
+  { value: 38, label: "シンセベース" },
+  { value: 48, label: "ストリングス" },
+  { value: 56, label: "トランペット" },
+  { value: 65, label: "アルトサックス" },
+  { value: 73, label: "フルート" },
+  { value: 80, label: "シンセリード" },
+  { value: 88, label: "シンセパッド" },
+];
+
+export function programOf(content: unknown): number | undefined {
+  if (content && typeof content === "object" && "program" in content) {
+    const p = (content as { program?: unknown }).program;
+    if (typeof p === "number") return p;
+  }
+  return undefined;
+}
+
+export function notesToMidi(
+  notes: Note[],
+  bpm = 120,
+  meter?: string | null,
+  program?: number,
+): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);
   const ts = meterPair(meter); // #51: 拍子記号をMIDIヘッダへ（音価は秒絶対なので不変）
   if (ts) midi.header.timeSignatures.push({ ticks: 0, timeSignature: ts });
   const track = midi.addTrack();
+  if (notes.some((n) => n.drum)) track.channel = 9; // GMドラム=ch10
+  else if (program !== undefined) track.instrument.number = program;
   const spb = 60 / bpm;
   for (const n of notes) {
     track.addNote({
@@ -171,8 +204,11 @@ export function downloadMidi(
   filename = "sketch.mid",
   bpm = 120,
   meter?: string | null,
+  program?: number,
 ): void {
-  const blob = new Blob([notesToMidi(notes, bpm, meter) as BlobPart], { type: "audio/midi" });
+  const blob = new Blob([notesToMidi(notes, bpm, meter, program) as BlobPart], {
+    type: "audio/midi",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

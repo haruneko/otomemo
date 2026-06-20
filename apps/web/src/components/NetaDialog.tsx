@@ -13,6 +13,8 @@ import {
   rhythmToNotes,
   playNotes,
   downloadMidi,
+  programOf,
+  GM_INSTRUMENTS,
   type Note,
   type ChordEntry,
   type RhythmContent,
@@ -40,6 +42,7 @@ export function NetaDialog({
   const [key, setKey] = useState<number>(neta.key ?? 0);
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
+  const [program, setProgram] = useState<number>(programOf(neta.content) ?? 0); // #47 GM音色
   const [mood, setMood] = useState(neta.mood ?? "");
   const [len, setLen] = useState(() =>
     Math.max(16, (neta.bars ?? 0) * 4, ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
@@ -79,9 +82,9 @@ export function NetaDialog({
           .filter(Boolean),
         mood: mood.trim() || null,
         ...(isMelody
-          ? { content: { notes }, key, tempo, bars: Math.ceil(len / 4) }
+          ? { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) }
           : isChord
-            ? { content: { chords }, key, tempo }
+            ? { content: { chords, program }, key, tempo }
             : isRhythm
               ? { content: { rhythm }, tempo }
               : isContainer
@@ -170,6 +173,22 @@ export function NetaDialog({
             </select>
           </label>
         )}
+        {(isMelody || isChord) && (
+          <label className="meta">
+            音色
+            <select
+              aria-label="program"
+              value={program}
+              onChange={(e) => setProgram(Number(e.target.value))}
+            >
+              {GM_INSTRUMENTS.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {isMusic && (
           <>
             <button type="button" onClick={() => void playNotes(playable, tempo)}>
@@ -177,7 +196,15 @@ export function NetaDialog({
             </button>
             <button
               type="button"
-              onClick={() => downloadMidi(playable, `${neta.title ?? "sketch"}.mid`, tempo)}
+              onClick={() =>
+                downloadMidi(
+                  playable,
+                  `${neta.title ?? "sketch"}.mid`,
+                  tempo,
+                  null,
+                  isRhythm ? undefined : program,
+                )
+              }
             >
               MIDI
             </button>
