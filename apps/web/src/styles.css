@@ -362,6 +362,7 @@ article header {
   flex-direction: column;
   gap: 8px;
   padding: 10px;
+  overflow: hidden; /* 内側(.proll/.editor-body)が横スクロール。画面外にはみ出させない */
 }
 .editor-bar {
   display: flex;
@@ -397,6 +398,7 @@ article header {
 .editor-body {
   flex: 1;
   min-height: 0;
+  min-width: 0; /* flex子が内容幅で膨らまず、内側スクロールに収まる */
   overflow: auto;
 }
 .chord-editor {
@@ -476,6 +478,7 @@ article header {
   display: grid;
   gap: 8px;
   align-content: start;
+  min-width: 0;
 }
 .section-actions {
   display: flex;
@@ -512,6 +515,7 @@ article header {
 .section-child {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   background: #1b1e23;
   border: 1px solid var(--line);
@@ -588,6 +592,7 @@ article header {
 .proll-wrap {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 .proll-tools {
   display: flex;
