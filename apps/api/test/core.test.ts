@@ -91,6 +91,20 @@ describe("edges: compose (DAG) + relation", () => {
     expect(secNode.node.children[0]!.node.neta.id).toBe(mel.id);
   });
 
+  it("places the same child at multiple positions and removes one instance (#54)", () => {
+    const sec = core.createNeta({ kind: "section", title: "S" });
+    const mel = core.createNeta({ kind: "melody", title: "m" });
+    core.placeChild(sec.id, mel.id, 0, 0);
+    core.placeChild(sec.id, mel.id, 4, 1); // 同じ子を別位置に反復配置
+    let tree = core.getComposition(sec.id)!;
+    expect(tree.children.length).toBe(2);
+    expect(tree.children.map((c) => c.position).sort((a, b) => a - b)).toEqual([0, 4]);
+    core.removeChild(sec.id, mel.id, 0); // @0 だけ解除
+    tree = core.getComposition(sec.id)!;
+    expect(tree.children.length).toBe(1);
+    expect(tree.children[0]!.position).toBe(4);
+  });
+
   it("links and unlinks relations", () => {
     const a = core.createNeta({ kind: "theme", title: "a" });
     const b = core.createNeta({ kind: "lyric", title: "b" });

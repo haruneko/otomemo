@@ -30,13 +30,14 @@ CREATE TABLE IF NOT EXISTS neta_tag (
   PRIMARY KEY (neta_id, tag_id)
 );
 
--- 合成（入れ子・DAG）：子は複数の親で使い回せる
+-- 合成（入れ子・DAG）：子は複数の親で使い回せる。
+-- PKに position を含め、同じ子を別位置に反復配置できる（#54）。
 CREATE TABLE IF NOT EXISTS compose_edge (
   parent_id TEXT NOT NULL REFERENCES neta(id) ON DELETE CASCADE,
   child_id  TEXT NOT NULL REFERENCES neta(id) ON DELETE CASCADE,
   position  REAL    NOT NULL DEFAULT 0,
   ord       INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (parent_id, child_id)
+  PRIMARY KEY (parent_id, child_id, position)
 );
 
 -- 関連（意図的に張ったもののみ。似てる連関は保存せず検索で計算＝S3）
@@ -81,5 +82,34 @@ export function openDb(path = ":memory:"): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+// 既存DBのスキーマ進化（CREATE TABLE IF NOT EXISTS では変わらない箇所）。
+function migrate(db: Database.Database): void {
+  // #54: compose_edge の旧PK (parent_id, child_id) → (parent_id, child_id, position) へ再構築。
+  // SQLiteはPK変更不可なので新テーブルを作って移し替える（既存辺は無損失）。
+  const row = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='compose_edge'`)
+    .get() as { sql: string } | undefined;
+  if (row && !/parent_id\s*,\s*child_id\s*,\s*position/i.test(row.sql)) {
+    db.pragma("foreign_keys = OFF");
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE compose_edge_new (
+          parent_id TEXT NOT NULL REFERENCES neta(id) ON DELETE CASCADE,
+          child_id  TEXT NOT NULL REFERENCES neta(id) ON DELETE CASCADE,
+          position  REAL    NOT NULL DEFAULT 0,
+          ord       INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (parent_id, child_id, position)
+        );
+        INSERT INTO compose_edge_new (parent_id, child_id, position, ord)
+          SELECT parent_id, child_id, position, ord FROM compose_edge;
+        DROP TABLE compose_edge;
+        ALTER TABLE compose_edge_new RENAME TO compose_edge;
+      `);
+    })();
+    db.pragma("foreign_keys = ON");
+  }
 }

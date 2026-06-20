@@ -52,8 +52,8 @@ export function SectionEditor({
 
   async function openPicker(lane: Lane, position: number) {
     const all = await api.listNeta({});
-    const have = new Set(children.map((c) => c.node.neta.id));
-    const cands = all.filter((n) => inLane(lane, n.kind) && n.id !== neta.id && !have.has(n.id));
+    // #54: 既配置のネタも候補に出す（同じネタを別位置へ反復配置できる）。自分自身だけ除外。
+    const cands = all.filter((n) => inLane(lane, n.kind) && n.id !== neta.id);
     setPq("");
     setPicker({ lane, position, cands });
   }
@@ -64,8 +64,8 @@ export function SectionEditor({
     await load();
     onChanged?.();
   }
-  async function remove(childId: string) {
-    await api.removeChild(neta.id, childId);
+  async function remove(childId: string, position?: number) {
+    await api.removeChild(neta.id, childId, position);
     await load();
     onChanged?.();
   }
@@ -122,11 +122,11 @@ export function SectionEditor({
               ))}
               {laneChildren(lane).map((c) => (
                 <button
-                  key={c.node.neta.id}
+                  key={`${c.node.neta.id}@${c.position}`}
                   type="button"
                   className="lane-block"
                   data-kind={c.node.neta.kind}
-                  aria-label={`block-${c.node.neta.id}`}
+                  aria-label={`block-${c.node.neta.id}@${c.position}`}
                   title={`${c.node.neta.title ?? c.node.neta.text ?? ""} @${c.position}拍 — タップで外す`}
                   style={{
                     left: `${(c.position / TOTAL) * 100}%`,
@@ -134,7 +134,7 @@ export function SectionEditor({
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    void remove(c.node.neta.id);
+                    void remove(c.node.neta.id, c.position);
                   }}
                 >
                   {(c.node.neta.title ?? c.node.neta.text ?? "").slice(0, 8)}
@@ -150,12 +150,12 @@ export function SectionEditor({
         <div className="section-others">
           <span className="muted">その他：</span>
           {others.map((c) => (
-            <span key={c.node.neta.id} className="rel-item">
+            <span key={`${c.node.neta.id}@${c.position}`} className="rel-item">
               {c.node.neta.kind} @{c.position}
               <button
                 type="button"
-                aria-label={`remove-${c.node.neta.id}`}
-                onClick={() => void remove(c.node.neta.id)}
+                aria-label={`remove-${c.node.neta.id}@${c.position}`}
+                onClick={() => void remove(c.node.neta.id, c.position)}
               >
                 ✕
               </button>

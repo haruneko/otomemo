@@ -39,9 +39,9 @@ describe("SectionEditor (3-lane timeline)", () => {
     });
     removeChild.mockResolvedValue({ ok: true });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-c1");
-    await userEvent.click(screen.getByLabelText("block-c1"));
-    expect(removeChild).toHaveBeenCalledWith("s1", "c1");
+    await screen.findByLabelText("block-c1@0");
+    await userEvent.click(screen.getByLabelText("block-c1@0"));
+    expect(removeChild).toHaveBeenCalledWith("s1", "c1", 0); // #54: 位置指定で1インスタンス解除
   });
 
   it("taps a melody-lane cell to place a neta at that bar (position = bar*4)", async () => {

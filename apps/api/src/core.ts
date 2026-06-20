@@ -227,18 +227,26 @@ export class Core {
   }
 
   placeChild(parentId: string, childId: string, position = 0, ord = 0): void {
+    // #54: 同じ子を別位置に複数置ける。同位置への再配置は冪等（ord を更新）。
     this.db
       .prepare(
         `INSERT INTO compose_edge (parent_id, child_id, position, ord) VALUES (?, ?, ?, ?)
-         ON CONFLICT(parent_id, child_id) DO UPDATE SET position = excluded.position, ord = excluded.ord`,
+         ON CONFLICT(parent_id, child_id, position) DO UPDATE SET ord = excluded.ord`,
       )
       .run(parentId, childId, position, ord);
   }
 
-  removeChild(parentId: string, childId: string): void {
-    this.db
-      .prepare(`DELETE FROM compose_edge WHERE parent_id = ? AND child_id = ?`)
-      .run(parentId, childId);
+  // position 指定で1インスタンスのみ解除。未指定なら (parent,child) の全インスタンス。
+  removeChild(parentId: string, childId: string, position?: number): void {
+    if (position === undefined) {
+      this.db
+        .prepare(`DELETE FROM compose_edge WHERE parent_id = ? AND child_id = ?`)
+        .run(parentId, childId);
+    } else {
+      this.db
+        .prepare(`DELETE FROM compose_edge WHERE parent_id = ? AND child_id = ? AND position = ?`)
+        .run(parentId, childId, position);
+    }
   }
 
   /** 合成ツリーを再帰取得（DAGなので訪問済みガードでサイクル防止）。 */

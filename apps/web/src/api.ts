@@ -137,10 +137,10 @@ export const api = {
       body: JSON.stringify({ parent, child, position, ord }),
     }),
 
-  removeChild: (parent: string, child: string) =>
+  removeChild: (parent: string, child: string, position?: number) =>
     http<{ ok: boolean }>("/compose/remove", {
       method: "POST",
-      body: JSON.stringify({ parent, child }),
+      body: JSON.stringify({ parent, child, position }),
     }),
 };
 

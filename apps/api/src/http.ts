@@ -105,9 +105,11 @@ export function buildHttp(core: Core): FastifyInstance {
   });
 
   app.post("/compose/remove", async (req, reply) => {
-    const p = z.object({ parent: z.string(), child: z.string() }).safeParse(req.body);
+    const p = z
+      .object({ parent: z.string(), child: z.string(), position: z.number().optional() })
+      .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
-    core.removeChild(p.data.parent, p.data.child);
+    core.removeChild(p.data.parent, p.data.child, p.data.position);
     return { ok: true };
   });
 
