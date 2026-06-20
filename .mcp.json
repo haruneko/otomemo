@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "creative-manager": {
+      "command": "pnpm",
+      "args": ["-s", "--filter", "@cm/api", "exec", "tsx", "src/mcp-stdio.ts"],
+      "env": {
+        "CM_DB": "/home/shuraba_p/projects/creative_manager/data/cm.sqlite"
+      }
+    }
+  }
+}
