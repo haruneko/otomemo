@@ -89,6 +89,15 @@ describe("NetaDialog", () => {
     expect(await screen.findByText(/melody: メロ案/)).toBeInTheDocument();
   });
 
+  it("remounts with fresh state when the keyed neta changes (no stale swap)", () => {
+    const a: Neta = { ...neta, id: "a", kind: "lyric", title: "AAA", text: null };
+    const b: Neta = { ...neta, id: "b", kind: "lyric", title: "BBB", text: null };
+    const { rerender } = render(<NetaDialog key={a.id} neta={a} onClose={vi.fn()} />);
+    expect((screen.getByLabelText("title") as HTMLInputElement).value).toBe("AAA");
+    rerender(<NetaDialog key={b.id} neta={b} onClose={vi.fn()} />);
+    expect((screen.getByLabelText("title") as HTMLInputElement).value).toBe("BBB");
+  });
+
   it("deletes after confirm", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const onChanged = vi.fn();

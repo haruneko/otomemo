@@ -175,15 +175,6 @@ article header {
   align-items: center;
   gap: 6px;
 }
-.edit-btn {
-  background: none;
-  border: 0;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 0 4px;
-  font-size: 1rem;
-  line-height: 1;
-}
 .dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -353,10 +344,6 @@ article header {
   border-radius: 8px;
   padding: 8px;
   font: inherit;
-}
-.melody-editor {
-  display: grid;
-  gap: 8px;
 }
 .mora-panel {
   display: grid;
@@ -745,46 +732,6 @@ article header {
 }
 .proll-cell.beat {
   border-left: 1px solid #3a3f49;
-}
-.melody-actions {
-  display: flex;
-  gap: 8px;
-}
-.melody-actions button {
-  background: #2b2f36;
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px 12px;
-}
-.dialog-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.dialog-actions .spacer {
-  flex: 1;
-}
-.dialog-actions .primary {
-  background: var(--accent);
-  color: #fff;
-  border: 0;
-  border-radius: 8px;
-  padding: 8px 14px;
-}
-.dialog-actions .danger {
-  background: #b3402f;
-  color: #fff;
-  border: 0;
-  border-radius: 8px;
-  padding: 8px 14px;
-}
-.dialog-actions button:not(.primary):not(.danger) {
-  background: #2b2f36;
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 14px;
 }
 article .kind {
   font-weight: 600;

@@ -210,6 +210,7 @@ export function App() {
         <section className="mainpane" aria-label="mainpane">
           {active ? (
             <NetaDialog
+              key={active.id} /* ネタを切り替えたら作り直して内部状態を新ネタで初期化 */
               neta={active}
               onClose={() => setActive(null)}
               onChanged={() => void reload()}

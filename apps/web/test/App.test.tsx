@@ -29,6 +29,14 @@ describe("App", () => {
     expect(screen.getByLabelText("mainpane")).toBeInTheDocument();
   });
 
+  it("toggles the notebook rail open/closed", async () => {
+    render(<App />);
+    const rail = screen.getByLabelText("notebook");
+    expect(rail.className).not.toContain("closed");
+    await userEvent.click(screen.getByLabelText("toggle-rail"));
+    expect(rail.className).toContain("closed");
+  });
+
   it("opens the settings dialog with theme colors", async () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "settings" }));
