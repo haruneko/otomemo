@@ -29,7 +29,7 @@ export function ChordEditor({
   function add() {
     const last = chords[chords.length - 1];
     const start = last ? last.start + last.dur : 0;
-    onChange([...chords, { root: "C", quality: "", start, dur: 4 }]);
+    onChange([...chords, { root: 0, quality: "", start, dur: 4 }]);
   }
   function remove(i: number) {
     onChange(chords.filter((_, k) => k !== i));
@@ -41,16 +41,16 @@ export function ChordEditor({
       {chords.map((c, i) => (
         <div className="chord-row" key={i}>
           <span className="chord-sym">
-            {c.root}
+            {ROOTS[c.root]}
             {c.quality}
           </span>
           <select
             aria-label={`root-${i}`}
             value={c.root}
-            onChange={(e) => update(i, { root: e.target.value })}
+            onChange={(e) => update(i, { root: Number(e.target.value) })}
           >
-            {ROOTS.map((r) => (
-              <option key={r} value={r}>
+            {ROOTS.map((r, idx) => (
+              <option key={idx} value={idx}>
                 {r}
               </option>
             ))}

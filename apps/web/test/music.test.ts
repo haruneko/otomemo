@@ -50,7 +50,7 @@ describe("music", () => {
   });
 
   it("expands chords to overlapping notes at each start/dur", () => {
-    const notes = chordsToNotes([{ root: "C", quality: "", start: 0, dur: 4 }]);
+    const notes = chordsToNotes([{ root: 0, quality: "", start: 0, dur: 4 }]);
     expect(notes).toHaveLength(3);
     expect(notes.every((n) => n.start === 0 && n.dur === 4)).toBe(true);
   });

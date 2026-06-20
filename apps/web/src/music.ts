@@ -7,7 +7,10 @@ export interface Note {
   start: number;
   dur: number;
   vel?: number;
+  syllable?: string; // 歌詞の音節割当（design #16）。今はデータ枠のみ。
 }
+
+const CHORD_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 export interface MelodyContent {
   notes: Note[];
@@ -28,7 +31,7 @@ export function transpose(notes: Note[], semitones: number): Note[] {
 
 // --- コード（chord / chord_progression）。C基準で記号保存し、再生時に音符へ展開＋移調 ---
 export interface ChordEntry {
-  root: string; // "C".."B"（ピッチクラス）
+  root: number; // 0–11 ピッチクラス（C基準、design #16）
   quality: string; // ""(major) / "m" / "7" / "maj7" / "m7" / "dim" ...
   start: number; // 拍
   dur: number; // 拍
@@ -36,7 +39,16 @@ export interface ChordEntry {
 
 export function chordsOf(content: unknown): ChordEntry[] {
   const c = content as { chords?: unknown } | null;
-  return c && Array.isArray(c.chords) ? (c.chords as ChordEntry[]) : [];
+  if (!c || !Array.isArray(c.chords)) return [];
+  // 旧データ（root が "C".."B" 文字列）を 0–11 へ移行
+  return (c.chords as { root: number | string; quality?: string; start: number; dur: number }[]).map(
+    (ch) => ({
+      root: typeof ch.root === "number" ? ch.root : Math.max(0, CHORD_NAMES.indexOf(ch.root)),
+      quality: ch.quality ?? "",
+      start: ch.start,
+      dur: ch.dur,
+    }),
+  );
 }
 
 // コード記号（例 "Cm7"）→ midi 番号（octave 基準・昇順に積む）
@@ -62,7 +74,11 @@ export function chordToMidi(sym: string, octave = 4): number[] {
 // コード列を、各コードの start/dur に重ねたノート列へ（再生/MIDIはメロと同じ経路）
 export function chordsToNotes(chords: ChordEntry[]): Note[] {
   return chords.flatMap((c) =>
-    chordToMidi(c.root + c.quality).map((pitch) => ({ pitch, start: c.start, dur: c.dur })),
+    chordToMidi((CHORD_NAMES[c.root] ?? "C") + c.quality).map((pitch) => ({
+      pitch,
+      start: c.start,
+      dur: c.dur,
+    })),
   );
 }
 

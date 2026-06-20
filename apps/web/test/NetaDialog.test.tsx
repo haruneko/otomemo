@@ -68,7 +68,7 @@ describe("NetaDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
-    expect(patch.content).toEqual({ chords: [{ root: "C", quality: "", start: 0, dur: 4 }] });
+    expect(patch.content).toEqual({ chords: [{ root: 0, quality: "", start: 0, dur: 4 }] });
   });
 
   it("edits a rhythm and saves content.rhythm", async () => {
