@@ -20,6 +20,19 @@ const now = (): string => new Date().toISOString();
  * 操作コア（docs/design.md #20 ツールカタログ）。
  * これが HTTP API ＝ MCP ツール ＝ 実装すべき操作の集合。
  */
+function hasMusic(content: unknown): boolean {
+  const c = content as {
+    notes?: unknown[];
+    chords?: unknown[];
+    rhythm?: { lanes?: { hits?: unknown[] }[] };
+  } | null;
+  if (!c) return false;
+  if (Array.isArray(c.notes)) return c.notes.length > 0;
+  if (Array.isArray(c.chords)) return c.chords.length > 0;
+  if (c.rhythm?.lanes) return c.rhythm.lanes.some((l) => (l.hits?.length ?? 0) > 0);
+  return false;
+}
+
 export class Core {
   constructor(private db: Database.Database) {}
 
@@ -70,6 +83,40 @@ export class Core {
     return this.db
       .prepare(`SELECT neta_id, role FROM job_result WHERE job_id = ? ORDER BY ord`)
       .all(jobId) as JobResult[];
+  }
+
+  /**
+   * 非同期で進んだ生成ジョブ（plan の子など、クライアントが受け取っていないもの）の結果をネタ化する。
+   * done の gen_* で job_result がまだ無く、中身があるものを createNeta(from_job) する＝
+   * job_result＋対象への relation が張られ「投げて放置→受け取る」が成立（design 原則3）。
+   */
+  reapResults(): number {
+    const kindOf: Record<string, string> = {
+      gen_melody: "melody",
+      gen_chord: "chord_progression",
+      gen_rhythm: "rhythm",
+    };
+    const rows = this.db
+      .prepare(
+        `SELECT j.id, j.intent, j.result_summary AS result, j.target_neta_id AS target
+         FROM job j
+         WHERE j.status='done' AND j.intent IN ('gen_melody','gen_chord','gen_rhythm')
+           AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
+      )
+      .all() as { id: string; intent: string; result: string | null; target: string | null }[];
+    let n = 0;
+    for (const r of rows) {
+      let content: unknown;
+      try {
+        content = (JSON.parse(r.result ?? "{}") as { content?: unknown }).content;
+      } catch {
+        continue;
+      }
+      if (!hasMusic(content)) continue;
+      this.createNeta({ kind: kindOf[r.intent]!, title: kindOf[r.intent]!, content, from_job: r.id });
+      n += 1;
+    }
+    return n;
   }
 
   getNeta(id: string): Neta | null {

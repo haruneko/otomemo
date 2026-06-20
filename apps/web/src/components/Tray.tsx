@@ -6,8 +6,10 @@ function peek(j: Job): string {
   const r = j.result as Record<string, unknown> | null;
   if (!r) return j.error ? `失敗: ${j.error}` : "";
   if (typeof r.summary === "string") return r.summary.slice(0, 80);
+  if (typeof r.plan === "string") return r.plan;
+  if (Array.isArray(r.subtasks)) return `${r.subtasks.length}個のタスクに分解`;
   if (Array.isArray(r.options) && r.options[0]) return String((r.options[0] as { title?: string }).title ?? "");
-  if (r.content) return "（生成結果）";
+  if (r.content) return "（生成結果→ネタ化されました）";
   if (typeof r.suggestions === "string") return r.suggestions.slice(0, 80);
   return "";
 }

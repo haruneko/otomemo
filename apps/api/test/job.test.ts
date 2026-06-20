@@ -34,6 +34,31 @@ describe("job queue (producer side)", () => {
     expect(core.getRelations(target.id)).toEqual([{ to: result.id, type: "result" }]);
   });
 
+  it("reaps async gen results into neta (background 受け取り)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    const target = c.createNeta({ kind: "lyric", text: "夜" });
+    // plan の子のように、クライアント未受領の done な gen_melody（job_result 無し）
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, target_neta_id, result_summary, created, updated)
+       VALUES ('jm', 'gen_melody', '{}', 'done', ?, ?, '', '')`,
+    ).run(target.id, JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }));
+    expect(c.reapResults()).toBe(1);
+    expect(c.getJobResults("jm").length).toBe(1);
+    expect(c.getRelations(target.id).some((r) => r.type === "result")).toBe(true);
+    expect(c.reapResults()).toBe(0); // 冪等：2回目は何もしない
+  });
+
+  it("does not reap empty gen results", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('je', 'gen_chord', '{}', 'done', ?, '', '')`,
+    ).run(JSON.stringify({ content: { chords: [] } }));
+    expect(c.reapResults()).toBe(0);
+  });
+
   it("enqueues via HTTP", async () => {
     const app: FastifyInstance = buildHttp(core);
     await app.ready();

@@ -19,3 +19,13 @@ app
     console.error(err);
     process.exit(1);
   });
+
+// 受け取り：非同期で進んだ生成（おまかせ/plan の子など）の結果をネタ化する常駐ループ
+setInterval(() => {
+  try {
+    const n = core.reapResults();
+    if (n > 0) console.log(`reaped ${n} async generation result(s) into neta`);
+  } catch (e) {
+    console.error("reap error", e);
+  }
+}, 5000).unref();
