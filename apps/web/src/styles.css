@@ -160,7 +160,15 @@ article header {
 .dialog.chat {
   width: min(560px, 100%);
   height: min(80vh, 640px);
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-target {
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
 }
 .chat-mode {
   display: flex;
@@ -181,6 +189,8 @@ article header {
   border-color: var(--accent);
 }
 .chat-log {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: grid;
   gap: 10px;

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { api } from "../api";
+import { useEffect, useRef, useState } from "react";
+import { api, type Neta } from "../api";
 
 interface Opt {
   title: string;
@@ -14,24 +14,35 @@ interface Msg {
 }
 type Mode = "suggest" | "research";
 
-// プロジェクト全体への相談（docs/design.md #19/#20 Chat）。
-// 壁打ち：suggest → 案を提示 → 選ぶとネタ化。調べる：research → 要約 → 知見ネタ化。
-export function Chat({ onChanged, onClose }: { onChanged?: () => void; onClose: () => void }) {
+// 相談（docs/design.md #19/#20）。target 付きで開くと「このネタについての相談」になり、
+// 最初の提案を自動で出す。案は Chat 上で選んでネタ化（from_job で対象に紐づく）。
+export function Chat({
+  target,
+  onChanged,
+  onClose,
+}: {
+  target?: Neta;
+  onChanged?: () => void;
+  onClose: () => void;
+}) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("suggest");
   const [busy, setBusy] = useState(false);
+  const started = useRef(false);
 
-  async function send() {
-    const text = input.trim();
-    if (!text || busy) return;
-    setInput("");
+  const targetLabel = target ? (target.title ?? target.text ?? "(無題)") : null;
+
+  async function run(text: string) {
     setMsgs((m) => [...m, { role: "user", text }]);
     setBusy(true);
     try {
       const intent = mode === "research" ? "research" : "suggest";
-      const params = mode === "research" ? { topic: text } : { context: "", instruction: text };
-      const job = await api.createJob({ intent, params });
+      const params =
+        mode === "research"
+          ? { topic: text }
+          : { context: target ? (target.title ?? target.text ?? "") : "", instruction: text };
+      const job = await api.createJob({ intent, target_neta_id: target?.id, params });
       for (let i = 0; i < 80; i++) {
         const j = await api.getJob(job.id);
         if (j.status === "done") {
@@ -55,8 +66,28 @@ export function Chat({ onChanged, onClose }: { onChanged?: () => void; onClose: 
     }
   }
 
+  async function send() {
+    const text = input.trim();
+    if (!text || busy) return;
+    setInput("");
+    await run(text);
+  }
+
+  // 対象付きで開いたら最初の提案を自動で出す
+  useEffect(() => {
+    if (target && !started.current) {
+      started.current = true;
+      void run("この内容を発展させる方向性の案を出して");
+    }
+  }, [target]);
+
   async function pick(o: Opt, jobId?: string) {
-    await api.createNeta({ kind: "other", title: o.title || undefined, text: o.body, from_job: jobId });
+    await api.createNeta({
+      kind: target?.kind ?? "other",
+      title: o.title || undefined,
+      text: o.body,
+      from_job: jobId,
+    });
     onChanged?.();
     setMsgs((m) => [...m, { role: "ai", text: `「${o.title || "案"}」をネタ化しました` }]);
   }
@@ -83,12 +114,11 @@ export function Chat({ onChanged, onClose }: { onChanged?: () => void; onClose: 
             ✕
           </button>
         </header>
+        {targetLabel && <div className="chat-target">「{targetLabel.slice(0, 30)}」についての相談</div>}
         <div className="chat-log">
           {msgs.length === 0 && (
             <p className="muted">
-              {mode === "research"
-                ? "調べたいことを入力（例：シューゲイザーのギター音作り）"
-                : "ざっくり投げてください（例：明るい疾走感のサビのコード進行）"}
+              {mode === "research" ? "調べたいことを入力" : "ざっくり投げてください"}
             </p>
           )}
           {msgs.map((m, i) => (
@@ -102,7 +132,12 @@ export function Chat({ onChanged, onClose }: { onChanged?: () => void; onClose: 
               {m.options && (
                 <div className="bs-options">
                   {m.options.map((o, k) => (
-                    <button key={k} type="button" className="bs-option" onClick={() => pick(o, m.jobId)}>
+                    <button
+                      key={k}
+                      type="button"
+                      className="bs-option"
+                      onClick={() => void pick(o, m.jobId)}
+                    >
                       <strong>{o.title || "案"}</strong>
                       <span>{o.body}</span>
                     </button>

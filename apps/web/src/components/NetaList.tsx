@@ -2,69 +2,27 @@ import { useState } from "react";
 import { api, type Neta } from "../api";
 import { NetaDialog } from "./NetaDialog";
 
-interface Opt {
-  title: string;
-  body: string;
-}
-type BS =
-  | { state: "idle" }
-  | { state: "running" }
-  | { state: "options"; options: Opt[]; jobId: string }
-  | { state: "error"; text: string };
-
-export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => void }) {
+export function NetaCard({
+  neta,
+  onChanged,
+  onChat,
+}: {
+  neta: Neta;
+  onChanged?: () => void;
+  onChat?: (neta: Neta) => void;
+}) {
   const label = neta.title ?? neta.text ?? "(無題)";
-  const [bs, setBs] = useState<BS>({ state: "idle" });
-  const [instruction, setInstruction] = useState("");
   const [editing, setEditing] = useState(false);
   const [gen, setGen] = useState(false);
-
-  async function suggest() {
-    setBs({ state: "running" });
-    try {
-      const params: { context: string; instruction?: string } = {
-        context: neta.title ?? neta.text ?? "",
-      };
-      if (instruction.trim()) params.instruction = instruction.trim();
-      const job = await api.createJob({ intent: "suggest", target_neta_id: neta.id, params });
-      for (let i = 0; i < 60; i++) {
-        const j = await api.getJob(job.id);
-        if (j.status === "done") {
-          const options = ((j.result as { options?: Opt[] } | null)?.options ?? []).filter(Boolean);
-          setBs({ state: "options", options, jobId: job.id });
-          return;
-        }
-        if (j.status === "failed") {
-          setBs({ state: "error", text: j.error ?? "失敗しました" });
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-      setBs({ state: "error", text: "タイムアウト" });
-    } catch (e) {
-      setBs({ state: "error", text: String(e) });
-    }
-  }
-
-  async function choose(o: Opt, jobId: string) {
-    await api.createNeta({
-      kind: neta.kind,
-      title: o.title || undefined,
-      text: o.body,
-      from_job: jobId,
-    });
-    setBs({ state: "idle" });
-    onChanged?.();
-  }
 
   async function genMelody() {
     setGen(true);
     try {
-      const params: { context: string; instruction?: string } = {
-        context: neta.title ?? neta.text ?? "",
-      };
-      if (instruction.trim()) params.instruction = instruction.trim();
-      const job = await api.createJob({ intent: "gen_melody", target_neta_id: neta.id, params });
+      const job = await api.createJob({
+        intent: "gen_melody",
+        target_neta_id: neta.id,
+        params: { context: neta.title ?? neta.text ?? "" },
+      });
       for (let i = 0; i < 60; i++) {
         const j = await api.getJob(job.id);
         if (j.status === "done") {
@@ -108,31 +66,13 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
         </footer>
       )}
       <div className="bs-tools">
-        <input
-          className="bs-instr"
-          aria-label="direction"
-          placeholder="方向（任意）：明るく / サビ展開…"
-          value={instruction}
-          onChange={(e) => setInstruction(e.target.value)}
-        />
-        <button className="bs-btn" onClick={suggest} disabled={bs.state === "running"}>
-          {bs.state === "running" ? "考え中…" : "壁打ち"}
+        <button className="bs-btn" onClick={() => onChat?.(neta)}>
+          壁打ち
         </button>
         <button className="bs-btn" onClick={genMelody} disabled={gen}>
           {gen ? "生成中…" : "メロ生成"}
         </button>
       </div>
-      {bs.state === "error" && <pre className="bs-result">{bs.text}</pre>}
-      {bs.state === "options" && (
-        <div className="bs-options" aria-label="suggestions">
-          {bs.options.map((o, i) => (
-            <button key={i} type="button" className="bs-option" onClick={() => choose(o, bs.jobId)}>
-              <strong>{o.title || "案"}</strong>
-              <span>{o.body}</span>
-            </button>
-          ))}
-        </div>
-      )}
       {editing && (
         <NetaDialog neta={neta} onClose={() => setEditing(false)} onChanged={onChanged} />
       )}
@@ -140,12 +80,20 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
   );
 }
 
-export function NetaList({ items, onChanged }: { items: Neta[]; onChanged?: () => void }) {
+export function NetaList({
+  items,
+  onChanged,
+  onChat,
+}: {
+  items: Neta[];
+  onChanged?: () => void;
+  onChat?: (neta: Neta) => void;
+}) {
   if (items.length === 0) return <p>まだネタがありません。</p>;
   return (
     <section aria-label="neta-list">
       {items.map((n) => (
-        <NetaCard key={n.id} neta={n} onChanged={onChanged} />
+        <NetaCard key={n.id} neta={n} onChanged={onChanged} onChat={onChat} />
       ))}
     </section>
   );

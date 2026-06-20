@@ -50,30 +50,10 @@ describe("NetaList", () => {
     expect(screen.getByText("まだネタがありません。")).toBeInTheDocument();
   });
 
-  it("壁打ち shows selectable options; choosing one creates a neta", async () => {
-    createJob.mockResolvedValue({ id: "j1", status: "queued" });
-    getJob.mockResolvedValue({
-      id: "j1",
-      status: "done",
-      result: { options: [{ title: "案A", body: "ほんぶんA" }] },
-      error: null,
-    });
-    createNeta.mockResolvedValue({ id: "new1", kind: "lyric" });
-    link.mockResolvedValue({ ok: true });
-    const onChanged = vi.fn();
-
-    render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} onChanged={onChanged} />);
+  it("壁打ち opens the chat for that neta (relocated from inline panel)", async () => {
+    const onChat = vi.fn();
+    render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} onChat={onChat} />);
     await userEvent.click(screen.getByRole("button", { name: "壁打ち" }));
-    await waitFor(() => expect(screen.getByText("案A")).toBeInTheDocument());
-
-    await userEvent.click(screen.getByText("案A"));
-    await waitFor(() => expect(createNeta).toHaveBeenCalled());
-    expect(createNeta).toHaveBeenCalledWith({
-      kind: "lyric",
-      title: "案A",
-      text: "ほんぶんA",
-      from_job: "j1",
-    });
-    expect(onChanged).toHaveBeenCalled();
+    expect(onChat).toHaveBeenCalledWith(expect.objectContaining({ id: "x" }));
   });
 });
