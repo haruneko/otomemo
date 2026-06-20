@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { Midi } from "@tonejs/midi";
-import { notesToMidi, notesOf, midiToNotes, transpose, type Note } from "../src/music";
+import {
+  notesToMidi,
+  notesOf,
+  midiToNotes,
+  transpose,
+  chordToMidi,
+  chordsToNotes,
+  type Note,
+} from "../src/music";
 
 describe("music", () => {
   it("encodes notes into parseable MIDI", () => {
@@ -32,6 +40,17 @@ describe("music", () => {
   it("transposes C-base notes by semitones (key offset)", () => {
     expect(transpose([{ pitch: 60, start: 0, dur: 1 }], 9)[0]!.pitch).toBe(69);
     expect(transpose([{ pitch: 60, start: 0, dur: 1 }], 0)[0]!.pitch).toBe(60);
+  });
+
+  it("expands a chord symbol to ascending midi notes (C-base)", () => {
+    expect(chordToMidi("C")).toEqual([60, 64, 67]); // C E G at octave 4
+    expect(chordToMidi("Am")).toEqual([69, 72, 76]); // A C E ascending
+  });
+
+  it("expands chords to overlapping notes at each start/dur", () => {
+    const notes = chordsToNotes([{ root: "C", quality: "", start: 0, dur: 4 }]);
+    expect(notes).toHaveLength(3);
+    expect(notes.every((n) => n.start === 0 && n.dur === 4)).toBe(true);
   });
 
   it("notesOf extracts notes or empty", () => {

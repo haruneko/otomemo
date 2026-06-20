@@ -1,4 +1,5 @@
 import { Midi } from "@tonejs/midi";
+import { Chord as TonalChord, Note as TonalNote } from "tonal";
 
 // 音楽的中身（docs/design.md #16）。pitch は C基準のMIDI番号、start/dur は拍。
 export interface Note {
@@ -23,6 +24,46 @@ export function notesOf(content: unknown): Note[] {
 export function transpose(notes: Note[], semitones: number): Note[] {
   if (!semitones) return notes;
   return notes.map((n) => ({ ...n, pitch: n.pitch + semitones }));
+}
+
+// --- コード（chord / chord_progression）。C基準で記号保存し、再生時に音符へ展開＋移調 ---
+export interface ChordEntry {
+  root: string; // "C".."B"（ピッチクラス）
+  quality: string; // ""(major) / "m" / "7" / "maj7" / "m7" / "dim" ...
+  start: number; // 拍
+  dur: number; // 拍
+}
+
+export function chordsOf(content: unknown): ChordEntry[] {
+  const c = content as { chords?: unknown } | null;
+  return c && Array.isArray(c.chords) ? (c.chords as ChordEntry[]) : [];
+}
+
+// コード記号（例 "Cm7"）→ midi 番号（octave 基準・昇順に積む）
+export function chordToMidi(sym: string, octave = 4): number[] {
+  const pcs = TonalChord.get(sym).notes;
+  let oct = octave;
+  let prev = -Infinity;
+  const out: number[] = [];
+  for (const pc of pcs) {
+    let m = TonalNote.midi(`${pc}${oct}`);
+    if (m == null) continue;
+    if (m <= prev) {
+      oct += 1;
+      m = TonalNote.midi(`${pc}${oct}`);
+      if (m == null) continue;
+    }
+    prev = m;
+    out.push(m);
+  }
+  return out;
+}
+
+// コード列を、各コードの start/dur に重ねたノート列へ（再生/MIDIはメロと同じ経路）
+export function chordsToNotes(chords: ChordEntry[]): Note[] {
+  return chords.flatMap((c) =>
+    chordToMidi(c.root + c.quality).map((pitch) => ({ pitch, start: c.start, dur: c.dur })),
+  );
 }
 
 export function notesToMidi(notes: Note[], bpm = 120): Uint8Array {

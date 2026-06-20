@@ -297,6 +297,47 @@ article header {
   min-height: 0;
   overflow: auto;
 }
+.chord-editor {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.chord-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chord-sym {
+  font-weight: 600;
+  min-width: 48px;
+}
+.chord-row label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.chord-row select,
+.chord-row input {
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px;
+  font: inherit;
+}
+.chord-row input[type="number"] {
+  width: 52px;
+}
+.chord-row button {
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
 .editor-bar select,
 .editor-bar input[type="number"] {
   background: #1b1e23;

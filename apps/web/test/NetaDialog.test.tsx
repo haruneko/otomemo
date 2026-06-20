@@ -59,6 +59,16 @@ describe("NetaDialog", () => {
     expect(patch.tempo).toBe(140);
   });
 
+  it("edits a chord progression and saves content.chords", async () => {
+    const cp: Neta = { ...neta, kind: "chord_progression", text: null, content: null };
+    render(<NetaDialog neta={cp} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "＋コード" }));
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content).toEqual({ chords: [{ root: "C", quality: "", start: 0, dur: 4 }] });
+  });
+
   it("deletes after confirm", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const onChanged = vi.fn();

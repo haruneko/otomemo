@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { api, type Neta } from "../api";
 import { PianoRoll } from "./PianoRoll";
-import { notesOf, playNotes, downloadMidi, transpose, type Note } from "../music";
+import { ChordEditor } from "./ChordEditor";
+import {
+  notesOf,
+  chordsOf,
+  chordsToNotes,
+  playNotes,
+  downloadMidi,
+  transpose,
+  type Note,
+  type ChordEntry,
+} from "../music";
 
 const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -18,10 +28,14 @@ export function NetaDialog({
   const [text, setText] = useState(neta.text ?? "");
   const [tags, setTags] = useState(neta.tags.join(" "));
   const [notes, setNotes] = useState<Note[]>(notesOf(neta.content));
+  const [chords, setChords] = useState<ChordEntry[]>(chordsOf(neta.content));
   const [key, setKey] = useState<number>(neta.key ?? 0);
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [busy, setBusy] = useState(false);
   const isMelody = neta.kind === "melody";
+  const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
+  const isMusic = isMelody || isChord;
+  const playable = isMelody ? notes : chordsToNotes(chords);
 
   async function save() {
     setBusy(true);
@@ -33,7 +47,11 @@ export function NetaDialog({
           .split(/[,\s]+/)
           .map((t) => t.trim())
           .filter(Boolean),
-        ...(isMelody ? { content: { notes }, key, tempo } : {}),
+        ...(isMelody
+          ? { content: { notes }, key, tempo }
+          : isChord
+            ? { content: { chords }, key, tempo }
+            : {}),
       });
       onChanged?.();
       onClose();
@@ -55,7 +73,7 @@ export function NetaDialog({
   }
 
   // 音楽の編集は面が要るので全画面オーバーレイ（design.md GUI #19 の決定）
-  if (isMelody) {
+  if (isMusic) {
     return (
       <div className="editor-full" role="dialog" aria-label="edit-neta">
         <div className="editor-bar">
@@ -90,12 +108,14 @@ export function NetaDialog({
               onChange={(e) => setTempo(Number(e.target.value))}
             />
           </label>
-          <button type="button" onClick={() => void playNotes(transpose(notes, key), tempo)}>
+          <button type="button" onClick={() => void playNotes(transpose(playable, key), tempo)}>
             ▶ 再生
           </button>
           <button
             type="button"
-            onClick={() => downloadMidi(transpose(notes, key), `${neta.title ?? "sketch"}.mid`, tempo)}
+            onClick={() =>
+              downloadMidi(transpose(playable, key), `${neta.title ?? "sketch"}.mid`, tempo)
+            }
           >
             MIDI
           </button>
@@ -114,7 +134,11 @@ export function NetaDialog({
           onChange={(e) => setTags(e.target.value)}
         />
         <div className="editor-body">
-          <PianoRoll notes={notes} onChange={setNotes} />
+          {isMelody ? (
+            <PianoRoll notes={notes} onChange={setNotes} />
+          ) : (
+            <ChordEditor chords={chords} onChange={setChords} />
+          )}
         </div>
       </div>
     );
