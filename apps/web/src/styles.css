@@ -260,6 +260,28 @@ article header {
 .proll-row {
   display: flex;
 }
+.proll-key {
+  width: 40px;
+  height: 14px;
+  flex: 0 0 auto;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  font-size: 8px;
+  line-height: 14px;
+  text-align: right;
+  padding-right: 3px;
+  border: 1px solid #24272e;
+  user-select: none;
+}
+.proll-key.white {
+  background: #d7dae0;
+  color: #2a2d33;
+}
+.proll-key.black {
+  background: #2a2d33;
+  color: #9aa0aa;
+}
 .proll-cell {
   width: 22px;
   height: 14px;
