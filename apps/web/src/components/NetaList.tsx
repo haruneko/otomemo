@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
 import { MiniRoll } from "./MiniRoll";
+import { playNotes, notesForContent } from "../music";
+
+const MUSIC_KINDS = ["melody", "chord", "chord_progression", "rhythm"];
 
 export function NetaCard({
   neta,
@@ -120,6 +123,16 @@ export function NetaCard({
         )}
       </div>
       <div className="bs-tools">
+        {MUSIC_KINDS.includes(neta.kind) && (
+          <button
+            className="bs-btn"
+            aria-label={`play-${neta.id}`}
+            title="このネタを単独再生（C基準そのまま）"
+            onClick={() => void playNotes(notesForContent(neta.kind, neta.content), neta.tempo ?? 120)}
+          >
+            ▶
+          </button>
+        )}
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
           壁打ち
         </button>

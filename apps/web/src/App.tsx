@@ -32,6 +32,7 @@ const FILTER_KINDS = [
 export function App() {
   const [items, setItems] = useState<Neta[]>([]);
   const [kindFilter, setKindFilter] = useState("");
+  const [moodFilter, setMoodFilter] = useState("");
   const [q, setQ] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -61,6 +62,11 @@ export function App() {
     await reload();
     setActive(s); // メインペーンで開く
   }
+
+  // #46: mood でのクライアント側絞り込み（取得済みリストに対して）
+  const shownItems = moodFilter.trim()
+    ? items.filter((n) => (n.mood ?? "").toLowerCase().includes(moodFilter.trim().toLowerCase()))
+    : items;
 
   const openChat = (target?: Neta) => {
     setChatTarget(target);
@@ -228,9 +234,15 @@ export function App() {
                 </option>
               ))}
             </select>
+            <input
+              aria-label="mood-filter"
+              placeholder="mood で絞る…"
+              value={moodFilter}
+              onChange={(e) => setMoodFilter(e.target.value)}
+            />
           </div>
           <NetaList
-            items={items}
+            items={shownItems}
             onChanged={() => void reload()}
             onChat={openChat}
             onOpen={setActive}
