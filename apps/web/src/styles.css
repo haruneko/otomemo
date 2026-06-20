@@ -6,6 +6,17 @@
   --fg: #e6e8ec;
   --muted: #9aa0aa;
   --accent: #3a6df0;
+
+  --k-rhythm: #e8533f;
+  --k-melody: #4fa8e0;
+  --k-chord: #7c6ce0;
+  --k-chord_progression: #b7a0f0;
+  --k-lyric: #f0c544;
+  --k-theme: #2bb789;
+  --k-section: #e08a3c;
+  --k-song: #d98cc4;
+  --k-knowledge: #8a93a6;
+  --k-other: #6b7280;
 }
 * {
   box-sizing: border-box;
@@ -89,6 +100,11 @@ article .kind {
 article .body {
   margin: 6px 0;
   white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 article .tag {
   font-size: 0.75rem;
@@ -97,13 +113,41 @@ article .tag {
 }
 
 /* kind→色（Okabe-Ito由来・DAW慣習準拠・色覚安全）。color-research agent #色 */
-article[data-kind="rhythm"] { --k: #e8533f; }
-article[data-kind="melody"] { --k: #4fa8e0; }
-article[data-kind="chord"] { --k: #7c6ce0; }
-article[data-kind="chord_progression"] { --k: #b7a0f0; }
-article[data-kind="lyric"] { --k: #f0c544; }
-article[data-kind="theme"] { --k: #2bb789; }
-article[data-kind="section"] { --k: #e08a3c; }
-article[data-kind="song"] { --k: #d98cc4; }
-article[data-kind="knowledge"] { --k: #8a93a6; }
-article[data-kind="other"] { --k: #6b7280; }
+article[data-kind="rhythm"] { --k: var(--k-rhythm); }
+article[data-kind="melody"] { --k: var(--k-melody); }
+article[data-kind="chord"] { --k: var(--k-chord); }
+article[data-kind="chord_progression"] { --k: var(--k-chord_progression); }
+article[data-kind="lyric"] { --k: var(--k-lyric); }
+article[data-kind="theme"] { --k: var(--k-theme); }
+article[data-kind="section"] { --k: var(--k-section); }
+article[data-kind="song"] { --k: var(--k-song); }
+article[data-kind="knowledge"] { --k: var(--k-knowledge); }
+article[data-kind="other"] { --k: var(--k-other); }
+
+details.theme {
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+details.theme summary {
+  cursor: pointer;
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+}
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.theme-row input[type="color"] {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+}

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Neta } from "./api";
+import { applyColors, loadColors } from "./theme";
 import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
+import { ThemeSettings } from "./components/ThemeSettings";
 
 const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "song"];
 
@@ -9,6 +11,10 @@ export function App() {
   const [items, setItems] = useState<Neta[]>([]);
   const [kindFilter, setKindFilter] = useState("");
   const [q, setQ] = useState("");
+
+  useEffect(() => {
+    applyColors(loadColors());
+  }, []);
 
   const reload = useCallback(async () => {
     const list = await api.listNeta({ kind: kindFilter || undefined, q: q || undefined });
@@ -43,6 +49,7 @@ export function App() {
           ))}
         </select>
       </div>
+      <ThemeSettings />
       <NetaList items={items} />
     </main>
   );
