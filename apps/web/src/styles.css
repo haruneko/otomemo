@@ -488,6 +488,23 @@ article header {
   border-radius: 8px;
   padding: 6px 12px;
 }
+.section-timeline {
+  position: relative;
+  height: 28px;
+  background: #15171b;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.tl-bar {
+  position: absolute;
+  top: 4px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 3px;
+  opacity: 0.85;
+  min-width: 3px;
+}
 .section-children {
   display: grid;
   gap: 6px;

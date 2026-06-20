@@ -55,8 +55,14 @@ export function SectionEditor({
   }
 
   async function setPos(childId: string, pos: number) {
-    await api.placeChild(neta.id, childId, pos, 0);
+    const ch = children.find((c) => c.node.neta.id === childId);
+    await api.placeChild(neta.id, childId, pos, ch?.ord ?? 0); // ord を保持（潰さない）
     await load();
+  }
+
+  function childDur(c: CompositionNode["children"][number]): number {
+    const ns = notesForContent(c.node.neta.kind, c.node.neta.content);
+    return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : 4;
   }
 
   function composite(): Note[] {
@@ -67,6 +73,8 @@ export function SectionEditor({
       })),
     );
   }
+
+  const total = Math.max(8, ...children.map((c) => c.position + childDur(c)));
 
   return (
     <div className="section-editor">
@@ -83,6 +91,22 @@ export function SectionEditor({
           MIDI
         </button>
       </div>
+      {children.length > 0 && (
+        <div className="section-timeline" aria-label="timeline">
+          {children.map((c) => (
+            <div
+              key={c.node.neta.id}
+              className="tl-bar"
+              data-kind={c.node.neta.kind}
+              style={{
+                left: `${(c.position / total) * 100}%`,
+                width: `${(childDur(c) / total) * 100}%`,
+              }}
+              title={`${c.node.neta.kind} @${c.position}拍`}
+            />
+          ))}
+        </div>
+      )}
       <div className="section-children">
         {children.length === 0 && <p className="muted">子ネタを検索して追加</p>}
         {children.map((c) => (

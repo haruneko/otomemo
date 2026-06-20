@@ -3,6 +3,7 @@ import { api, type Neta } from "./api";
 import { applyColors, loadColors } from "./theme";
 import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
+import { NetaDialog } from "./components/NetaDialog";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { midiToNotes } from "./music";
 import { Chat } from "./components/Chat";
@@ -29,6 +30,13 @@ export function App() {
   const [chatTarget, setChatTarget] = useState<Neta | undefined>(undefined);
   const [trayOpen, setTrayOpen] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
+  const [editing, setEditing] = useState<Neta | null>(null);
+
+  async function newSong() {
+    const s = await api.createNeta({ kind: "section", title: "新しい曲" });
+    await reload();
+    setEditing(s); // 配置メインペーン（SectionEditor）を直接開く
+  }
 
   const openChat = (target?: Neta) => {
     setChatTarget(target);
@@ -110,6 +118,9 @@ export function App() {
               }}
             />
           </label>
+          <button className="import-btn" onClick={() => void newSong()}>
+            ＋曲を組む
+          </button>
           <label className="import-btn">
             歌詞取込
             <input
@@ -173,6 +184,13 @@ export function App() {
         />
       )}
       {trayOpen && <Tray onClose={() => setTrayOpen(false)} />}
+      {editing && (
+        <NetaDialog
+          neta={editing}
+          onClose={() => setEditing(null)}
+          onChanged={() => void reload()}
+        />
+      )}
       {settingsOpen && (
         <div className="dialog-backdrop" onClick={() => setSettingsOpen(false)}>
           <div
