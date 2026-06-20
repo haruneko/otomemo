@@ -14,6 +14,7 @@ const netaInput = z.object({
   bars: z.number().int().nullish(),
   mood: z.string().nullish(),
   tags: z.array(z.string()).optional(),
+  from_job: z.string().nullish(),
 });
 
 // 意味検索のPython窓口（docs/design.md #16）。localhost のみ、外に露出しない。

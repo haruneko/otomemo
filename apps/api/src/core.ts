@@ -11,6 +11,7 @@ import type {
   Job,
   JobInput,
   JobQuery,
+  JobResult,
 } from "./types";
 
 const now = (): string => new Date().toISOString();
@@ -46,7 +47,29 @@ export class Core {
         updated: ts,
       });
     for (const t of input.tags ?? []) this.addTag(id, t);
+    if (input.from_job) this.recordJobResult(input.from_job, id);
     return this.getNeta(id)!;
+  }
+
+  /** ジョブの結果として作られた neta を job_result に記録し、ジョブの対象へ relation を張る（design #16/原則3）。 */
+  private recordJobResult(jobId: string, netaId: string): void {
+    const ord =
+      (this.db.prepare(`SELECT COUNT(*) c FROM job_result WHERE job_id = ?`).get(jobId) as {
+        c: number;
+      }).c;
+    this.db
+      .prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, ?, ?, 'result')`)
+      .run(jobId, netaId, ord);
+    const job = this.db.prepare(`SELECT target_neta_id FROM job WHERE id = ?`).get(jobId) as
+      | { target_neta_id: string | null }
+      | undefined;
+    if (job?.target_neta_id) this.link(job.target_neta_id, netaId, "result");
+  }
+
+  getJobResults(jobId: string): JobResult[] {
+    return this.db
+      .prepare(`SELECT neta_id, role FROM job_result WHERE job_id = ? ORDER BY ord`)
+      .all(jobId) as JobResult[];
   }
 
   getNeta(id: string): Neta | null {

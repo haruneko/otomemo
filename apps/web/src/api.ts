@@ -37,6 +37,8 @@ export interface NetaInput {
   text?: string;
   content?: unknown;
   tags?: string[];
+  /** どのジョブの結果か。指定すると job_result 記録＋ジョブ対象へ relation。 */
+  from_job?: string;
 }
 
 export interface NetaPatch {

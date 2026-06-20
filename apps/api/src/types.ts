@@ -33,6 +33,13 @@ export interface NetaInput {
   bars?: number | null;
   mood?: string | null;
   tags?: string[];
+  /** このネタがどのジョブの結果か。指定すると job_result に記録し、ジョブの対象へ relation を張る。 */
+  from_job?: string | null;
+}
+
+export interface JobResult {
+  neta_id: string;
+  role: string;
 }
 
 export type NetaPatch = Partial<NetaInput>;

@@ -68,7 +68,12 @@ describe("NetaList", () => {
 
     await userEvent.click(screen.getByText("案A"));
     await waitFor(() => expect(createNeta).toHaveBeenCalled());
-    expect(createNeta).toHaveBeenCalledWith({ kind: "lyric", title: "案A", text: "ほんぶんA" });
+    expect(createNeta).toHaveBeenCalledWith({
+      kind: "lyric",
+      title: "案A",
+      text: "ほんぶんA",
+      from_job: "j1",
+    });
     expect(onChanged).toHaveBeenCalled();
   });
 });

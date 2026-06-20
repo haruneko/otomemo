@@ -29,6 +29,12 @@ describe("Chat", () => {
 
     await userEvent.click(screen.getByText("案A"));
     await waitFor(() => expect(createNeta).toHaveBeenCalled());
+    expect(createNeta).toHaveBeenCalledWith({
+      kind: "other",
+      title: "案A",
+      text: "ほんぶん",
+      from_job: "j1",
+    });
     expect(onChanged).toHaveBeenCalled();
   });
 });

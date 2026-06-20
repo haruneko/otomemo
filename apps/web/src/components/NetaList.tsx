@@ -9,7 +9,7 @@ interface Opt {
 type BS =
   | { state: "idle" }
   | { state: "running" }
-  | { state: "options"; options: Opt[] }
+  | { state: "options"; options: Opt[]; jobId: string }
   | { state: "error"; text: string };
 
 export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => void }) {
@@ -31,7 +31,7 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
         const j = await api.getJob(job.id);
         if (j.status === "done") {
           const options = ((j.result as { options?: Opt[] } | null)?.options ?? []).filter(Boolean);
-          setBs({ state: "options", options });
+          setBs({ state: "options", options, jobId: job.id });
           return;
         }
         if (j.status === "failed") {
@@ -46,13 +46,13 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
     }
   }
 
-  async function choose(o: Opt) {
-    const created = await api.createNeta({
+  async function choose(o: Opt, jobId: string) {
+    await api.createNeta({
       kind: neta.kind,
       title: o.title || undefined,
       text: o.body,
+      from_job: jobId,
     });
-    await api.link(neta.id, created.id, "suggestion").catch(() => {});
     setBs({ state: "idle" });
     onChanged?.();
   }
@@ -69,12 +69,12 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
         const j = await api.getJob(job.id);
         if (j.status === "done") {
           const content = (j.result as { content?: unknown } | null)?.content;
-          const created = await api.createNeta({
+          await api.createNeta({
             kind: "melody",
             title: neta.title ?? "メロ案",
             content,
+            from_job: job.id,
           });
-          await api.link(neta.id, created.id, "generated").catch(() => {});
           onChanged?.();
           return;
         }
@@ -126,7 +126,7 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
       {bs.state === "options" && (
         <div className="bs-options" aria-label="suggestions">
           {bs.options.map((o, i) => (
-            <button key={i} type="button" className="bs-option" onClick={() => choose(o)}>
+            <button key={i} type="button" className="bs-option" onClick={() => choose(o, bs.jobId)}>
               <strong>{o.title || "案"}</strong>
               <span>{o.body}</span>
             </button>

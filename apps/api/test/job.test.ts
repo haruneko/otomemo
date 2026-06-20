@@ -26,6 +26,14 @@ describe("job queue (producer side)", () => {
     expect(core.listJobs({ status: "done" }).length).toBe(0);
   });
 
+  it("records job_result and links to target when from_job is given", () => {
+    const target = core.createNeta({ kind: "lyric", text: "夜" });
+    const job = core.enqueueJob({ intent: "suggest", target_neta_id: target.id });
+    const result = core.createNeta({ kind: "other", text: "案A", from_job: job.id });
+    expect(core.getJobResults(job.id)).toEqual([{ neta_id: result.id, role: "result" }]);
+    expect(core.getRelations(target.id)).toEqual([{ to: result.id, type: "result" }]);
+  });
+
   it("enqueues via HTTP", async () => {
     const app: FastifyInstance = buildHttp(core);
     await app.ready();

@@ -9,6 +9,7 @@ interface Msg {
   role: "user" | "ai";
   text?: string;
   options?: Opt[];
+  jobId?: string;
   saveable?: string;
 }
 type Mode = "suggest" | "research";
@@ -39,7 +40,7 @@ export function Chat({ onChanged, onClose }: { onChanged?: () => void; onClose: 
             setMsgs((m) => [...m, { role: "ai", text: summary, saveable: summary }]);
           } else {
             const options = (j.result as { options?: Opt[] } | null)?.options ?? [];
-            setMsgs((m) => [...m, { role: "ai", options }]);
+            setMsgs((m) => [...m, { role: "ai", options, jobId: job.id }]);
           }
           return;
         }
@@ -54,8 +55,8 @@ export function Chat({ onChanged, onClose }: { onChanged?: () => void; onClose: 
     }
   }
 
-  async function pick(o: Opt) {
-    await api.createNeta({ kind: "other", title: o.title || undefined, text: o.body });
+  async function pick(o: Opt, jobId?: string) {
+    await api.createNeta({ kind: "other", title: o.title || undefined, text: o.body, from_job: jobId });
     onChanged?.();
     setMsgs((m) => [...m, { role: "ai", text: `「${o.title || "案"}」をネタ化しました` }]);
   }
@@ -101,7 +102,7 @@ export function Chat({ onChanged, onClose }: { onChanged?: () => void; onClose: 
               {m.options && (
                 <div className="bs-options">
                   {m.options.map((o, k) => (
-                    <button key={k} type="button" className="bs-option" onClick={() => pick(o)}>
+                    <button key={k} type="button" className="bs-option" onClick={() => pick(o, m.jobId)}>
                       <strong>{o.title || "案"}</strong>
                       <span>{o.body}</span>
                     </button>
