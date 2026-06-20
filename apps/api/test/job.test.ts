@@ -40,8 +40,8 @@ describe("job queue (producer side)", () => {
     const target = c.createNeta({ kind: "lyric", text: "夜" });
     // plan の子のように、クライアント未受領の done な gen_melody（job_result 無し）
     db.prepare(
-      `INSERT INTO job (id, intent, params, status, target_neta_id, result_summary, created, updated)
-       VALUES ('jm', 'gen_melody', '{}', 'done', ?, ?, '', '')`,
+      `INSERT INTO job (id, intent, params, status, parent_job_id, target_neta_id, result_summary, created, updated)
+       VALUES ('jm', 'gen_melody', '{}', 'done', 'plan1', ?, ?, '', '')`,
     ).run(target.id, JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }));
     expect(c.reapResults()).toBe(1);
     expect(c.getJobResults("jm").length).toBe(1);
@@ -49,12 +49,23 @@ describe("job queue (producer side)", () => {
     expect(c.reapResults()).toBe(0); // 冪等：2回目は何もしない
   });
 
+  it("does not reap synchronous (non-plan) gen jobs — those self-materialize", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    // parent_job_id 無し = クライアント(NetaCard)が自分でネタ化する同期ジョブ → reaper は触らない
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('js', 'gen_melody', '{}', 'done', ?, '', '')`,
+    ).run(JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }));
+    expect(c.reapResults()).toBe(0);
+  });
+
   it("does not reap empty gen results", () => {
     const db = openDb(":memory:");
     const c = new Core(db);
     db.prepare(
-      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
-       VALUES ('je', 'gen_chord', '{}', 'done', ?, '', '')`,
+      `INSERT INTO job (id, intent, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('je', 'gen_chord', '{}', 'done', 'plan1', ?, '', '')`,
     ).run(JSON.stringify({ content: { chords: [] } }));
     expect(c.reapResults()).toBe(0);
   });

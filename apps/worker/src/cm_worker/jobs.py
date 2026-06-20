@@ -207,6 +207,27 @@ def _style_block(kind: str, context: str) -> str:
     return f"\n# あなたの過去の作風（参考。真似しすぎない）\n{body}\n"
 
 
+_PC = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def _root_pc(r) -> int:
+    """コードのrootを 0–11 ピッチクラスへ（design #16 正準）。"C#"/"Db" 等も解釈。"""
+    if isinstance(r, (int, float)):
+        return int(r) % 12
+    s = str(r).strip()
+    if not s:
+        return 0
+    pc = _PC.get(s[0].upper(), 0)
+    for ch in s[1:]:
+        if ch in "#＃♯":
+            pc += 1
+        elif ch in "bｂ♭":
+            pc -= 1
+        else:
+            break
+    return pc % 12
+
+
 def handle_gen_chord(params: dict) -> dict:
     """コード進行生成。C基準の記号(root+quality)・拍のJSONをClaudeに吐かせる。"""
     context = params.get("context", "")
@@ -223,7 +244,7 @@ def handle_gen_chord(params: dict) -> dict:
         data = _extract_json(text)
         chords = [
             {
-                "root": str(c["root"]),
+                "root": _root_pc(c["root"]),
                 "quality": str(c.get("quality", "")),
                 "start": float(c["start"]),
                 "dur": float(c["dur"]),

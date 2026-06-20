@@ -128,7 +128,8 @@ def test_gen_chord_parses_chords(monkeypatch):
     )
     chords = jobs.handle_gen_chord({"context": "x"})["content"]["chords"]
     assert len(chords) == 2
-    assert chords[0] == {"root": "C", "quality": "", "start": 0.0, "dur": 4.0}
+    assert chords[0] == {"root": 0, "quality": "", "start": 0.0, "dur": 4.0}  # "C" -> 0
+    assert chords[1]["root"] == 9  # "A" -> 9
 
 
 def test_gen_rhythm_parses_lanes(monkeypatch):
@@ -156,13 +157,20 @@ def test_plan_decomposes_and_enqueues_children(tmp_path, monkeypatch):
         '{"intent":"plan","params":{}}]}',  # 自己再帰や未知は弾かれる
     )
     conn = connect(str(tmp_path / "t.sqlite"))
-    _enqueue(conn, "plan", {"instruction": "夜の歌を作って"})
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO job (id, intent, params, status, target_neta_id, created, updated) "
+        "VALUES ('j1','plan','{}','queued','t1',?,?)",
+        (now, now),
+    )
+    conn.commit()
     assert run_once(conn) == 1
     assert conn.execute("SELECT status FROM job WHERE id='j1'").fetchone()["status"] == "done"
     kids = conn.execute(
-        "SELECT intent FROM job WHERE parent_job_id='j1' ORDER BY intent"
+        "SELECT intent, target_neta_id FROM job WHERE parent_job_id='j1' ORDER BY intent"
     ).fetchall()
     assert [k["intent"] for k in kids] == ["gen_chord", "gen_rhythm"]
+    assert all(k["target_neta_id"] == "t1" for k in kids)  # 対象を引き継ぐ（浮かない）
 
 
 def test_research_returns_summary(monkeypatch):

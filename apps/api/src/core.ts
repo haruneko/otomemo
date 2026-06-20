@@ -86,9 +86,10 @@ export class Core {
   }
 
   /**
-   * 非同期で進んだ生成ジョブ（plan の子など、クライアントが受け取っていないもの）の結果をネタ化する。
-   * done の gen_* で job_result がまだ無く、中身があるものを createNeta(from_job) する＝
-   * job_result＋対象への relation が張られ「投げて放置→受け取る」が成立（design 原則3）。
+   * 非同期で進んだ生成ジョブ（plan の子 = parent_job_id 有り）の結果をネタ化する。
+   * 同期パス（NetaCard の generate）は自分で createNeta(from_job) するので、二重作成を避けるため
+   * ここでは plan 子のみ対象。done の gen_* で job_result がまだ無く中身があるものを
+   * createNeta(from_job) ＝ job_result＋対象への relation が張られ「投げて放置→受け取る」が成立。
    */
   reapResults(): number {
     const kindOf: Record<string, string> = {
@@ -101,6 +102,7 @@ export class Core {
         `SELECT j.id, j.intent, j.result_summary AS result, j.target_neta_id AS target
          FROM job j
          WHERE j.status='done' AND j.intent IN ('gen_melody','gen_chord','gen_rhythm')
+           AND j.parent_job_id IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
       )
       .all() as { id: string; intent: string; result: string | null; target: string | null }[];
