@@ -97,9 +97,13 @@ main {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap; /* 狭い画面で右側のボタン群が折返す（横はみ出し防止） */
+  gap: 8px;
 }
 h1 {
   font-size: 1.1rem;
+  min-width: 0;
+  flex: 1;
 }
 .gear {
   background: none;
@@ -187,6 +191,8 @@ article header {
 .head-right {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 .dialog-backdrop {
