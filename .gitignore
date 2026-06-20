@@ -18,3 +18,7 @@ __pycache__/
 
 .DS_Store
 data/backups/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/e2e/__screenshots__/
+apps/web/.cache/
