@@ -121,7 +121,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ from, to, type }),
     }),
+
+  getComposition: (id: string) => http<CompositionNode>(`/neta/${id}/composition`),
+
+  placeChild: (parent: string, child: string, position = 0, ord = 0) =>
+    http<{ ok: boolean }>("/compose", {
+      method: "POST",
+      body: JSON.stringify({ parent, child, position, ord }),
+    }),
+
+  removeChild: (parent: string, child: string) =>
+    http<{ ok: boolean }>("/compose/remove", {
+      method: "POST",
+      body: JSON.stringify({ parent, child }),
+    }),
 };
+
+export interface CompositionNode {
+  neta: Neta;
+  children: { position: number; ord: number; node: CompositionNode }[];
+}
 
 export interface Job {
   id: string;

@@ -104,6 +104,13 @@ export function buildHttp(core: Core): FastifyInstance {
     return { ok: true };
   });
 
+  app.post("/compose/remove", async (req, reply) => {
+    const p = z.object({ parent: z.string(), child: z.string() }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    core.removeChild(p.data.parent, p.data.child);
+    return { ok: true };
+  });
+
   app.post("/relation", async (req, reply) => {
     const p = z
       .object({ from: z.string(), to: z.string(), type: z.string().default("related") })

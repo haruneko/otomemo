@@ -3,6 +3,7 @@ import { api, type Neta } from "../api";
 import { PianoRoll } from "./PianoRoll";
 import { ChordEditor } from "./ChordEditor";
 import { RhythmEditor } from "./RhythmEditor";
+import { SectionEditor } from "./SectionEditor";
 import {
   notesOf,
   chordsOf,
@@ -40,6 +41,7 @@ export function NetaDialog({
   const isMelody = neta.kind === "melody";
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
   const isRhythm = neta.kind === "rhythm";
+  const isContainer = neta.kind === "section" || neta.kind === "song";
   const isMusic = isMelody || isChord || isRhythm;
   const playable = isMelody ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
   const playKey = isRhythm ? 0 : key; // ドラムは移調しない
@@ -60,7 +62,9 @@ export function NetaDialog({
             ? { content: { chords }, key, tempo }
             : isRhythm
               ? { content: { rhythm }, tempo }
-              : {}),
+              : isContainer
+                ? { key, tempo }
+                : {}),
       });
       onChanged?.();
       onClose();
@@ -82,7 +86,7 @@ export function NetaDialog({
   }
 
   // 音楽の編集は面が要るので全画面オーバーレイ（design.md GUI #19 の決定）
-  if (isMusic) {
+  if (isMusic || isContainer) {
     return (
       <div className="editor-full" role="dialog" aria-label="edit-neta">
         <div className="editor-bar">
@@ -119,17 +123,24 @@ export function NetaDialog({
               onChange={(e) => setTempo(Number(e.target.value))}
             />
           </label>
-          <button type="button" onClick={() => void playNotes(transpose(playable, playKey), tempo)}>
-            ▶ 再生
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              downloadMidi(transpose(playable, playKey), `${neta.title ?? "sketch"}.mid`, tempo)
-            }
-          >
-            MIDI
-          </button>
+          {isMusic && (
+            <>
+              <button
+                type="button"
+                onClick={() => void playNotes(transpose(playable, playKey), tempo)}
+              >
+                ▶ 再生
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  downloadMidi(transpose(playable, playKey), `${neta.title ?? "sketch"}.mid`, tempo)
+                }
+              >
+                MIDI
+              </button>
+            </>
+          )}
           <button className="danger" onClick={remove} disabled={busy}>
             削除
           </button>
@@ -149,8 +160,10 @@ export function NetaDialog({
             <PianoRoll notes={notes} onChange={setNotes} />
           ) : isChord ? (
             <ChordEditor chords={chords} onChange={setChords} />
-          ) : (
+          ) : isRhythm ? (
             <RhythmEditor rhythm={rhythm} onChange={setRhythm} />
+          ) : (
+            <SectionEditor neta={neta} keyPc={key} tempo={tempo} onChanged={onChanged} />
           )}
         </div>
       </div>

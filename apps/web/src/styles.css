@@ -370,6 +370,74 @@ article header {
 .rhythm-cell.on {
   background: var(--accent);
 }
+.section-editor {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.section-actions {
+  display: flex;
+  gap: 8px;
+}
+.section-actions button {
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+.section-children {
+  display: grid;
+  gap: 6px;
+}
+.section-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.section-child-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.section-child label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.section-child input {
+  width: 52px;
+  background: #15171b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px;
+}
+.section-child button,
+.section-matches button {
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.section-matches {
+  display: grid;
+  gap: 4px;
+}
+.section-matches button {
+  text-align: left;
+  background: #1b1e23;
+  font-size: 0.8rem;
+}
 .editor-bar select,
 .editor-bar input[type="number"] {
   background: #1b1e23;

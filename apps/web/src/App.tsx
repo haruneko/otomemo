@@ -8,7 +8,7 @@ import { midiToNotes } from "./music";
 import { Chat } from "./components/Chat";
 import { flushOutbox } from "./outbox";
 
-const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "song"];
+const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "section", "song"];
 
 export function App() {
   const [items, setItems] = useState<Neta[]>([]);

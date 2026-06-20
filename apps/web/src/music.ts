@@ -98,6 +98,14 @@ export function rhythmToNotes(r: RhythmContent): Note[] {
   );
 }
 
+// neta の種類別に content をノート列へ（合成再生で使う共通変換）
+export function notesForContent(kind: string, content: unknown): Note[] {
+  if (kind === "melody") return notesOf(content);
+  if (kind === "chord" || kind === "chord_progression") return chordsToNotes(chordsOf(content));
+  if (kind === "rhythm") return rhythmToNotes(rhythmOf(content));
+  return [];
+}
+
 export function notesToMidi(notes: Note[], bpm = 120): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);

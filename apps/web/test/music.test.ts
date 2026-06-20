@@ -8,6 +8,7 @@ import {
   chordToMidi,
   chordsToNotes,
   rhythmToNotes,
+  notesForContent,
   type Note,
 } from "../src/music";
 
@@ -60,6 +61,14 @@ describe("music", () => {
       { pitch: 36, start: 0, dur: 0.25 },
       { pitch: 36, start: 1, dur: 0.25 },
     ]);
+  });
+
+  it("notesForContent dispatches by kind", () => {
+    expect(notesForContent("melody", { notes: [{ pitch: 60, start: 0, dur: 1 }] })).toHaveLength(1);
+    expect(
+      notesForContent("rhythm", { rhythm: { steps: 16, lanes: [{ name: "K", midi: 36, hits: [0] }] } }),
+    ).toHaveLength(1);
+    expect(notesForContent("lyric", null)).toEqual([]);
   });
 
   it("notesOf extracts notes or empty", () => {
