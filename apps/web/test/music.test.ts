@@ -9,6 +9,9 @@ import {
   chordsToNotes,
   rhythmToNotes,
   notesForContent,
+  scheduleTimes,
+  totalSec,
+  loopRange,
   type Note,
 } from "../src/music";
 
@@ -85,5 +88,43 @@ describe("music", () => {
   it("puts drums on channel 10 (#47)", () => {
     const midi = new Midi(notesToMidi([{ pitch: 36, start: 0, dur: 1, drum: true }], 120));
     expect(midi.tracks[0]!.channel).toBe(9);
+  });
+
+  // #57① Transport化：スケジュール時刻の純関数（音は鳴らさず算出だけ検証）
+  describe("playback scheduling (#57)", () => {
+    it("maps beats to Transport seconds (beat=quarter=1.0, spb=60/bpm)", () => {
+      const ev = scheduleTimes([{ pitch: 60, start: 2, dur: 1, vel: 64 }], 120);
+      expect(ev[0]!.time).toBeCloseTo(1.0); // 2拍 * 0.5s
+      expect(ev[0]!.voice).toBe("poly");
+      expect(ev[0]!.durSec).toBeCloseTo(0.5); // 1拍 * 0.5s
+      expect(ev[0]!.vel).toBeCloseTo(64 / 127);
+    });
+
+    it("routes drums to membrane(<=41)/noise with fixed durations", () => {
+      const ev = scheduleTimes(
+        [
+          { pitch: 36, start: 0, dur: 1, drum: true }, // kick
+          { pitch: 42, start: 1, dur: 1, drum: true }, // hat
+        ],
+        120,
+      );
+      expect(ev[0]).toMatchObject({ voice: "membrane", durSec: 0.15 });
+      expect(ev[1]).toMatchObject({ voice: "noise", durSec: 0.05 });
+    });
+
+    it("defaults velocity to 100/127 when missing", () => {
+      expect(scheduleTimes([{ pitch: 60, start: 0, dur: 1 }], 120)[0]!.vel).toBeCloseTo(100 / 127);
+    });
+
+    it("totalSec is the end of the last note (drums are point events)", () => {
+      expect(totalSec([{ pitch: 60, start: 0, dur: 2 }], 120)).toBeCloseTo(1.0); // 2拍*0.5
+      expect(totalSec([{ pitch: 36, start: 4, dur: 1, drum: true }], 120)).toBeCloseTo(2.0); // start4拍のみ
+    });
+
+    it("loopRange defaults to 0..total, honors explicit beats", () => {
+      const notes = [{ pitch: 60, start: 0, dur: 4 }];
+      expect(loopRange(notes, 120)).toEqual({ start: 0, end: 2.0 });
+      expect(loopRange(notes, 120, { startBeat: 2, endBeat: 6 })).toEqual({ start: 1.0, end: 3.0 });
+    });
   });
 });

@@ -217,33 +217,150 @@ export function downloadMidi(
   URL.revokeObjectURL(url);
 }
 
-// Tone.js は再生時のみ動的import（jsdom/テストで読み込まない）。
-export async function playNotes(notes: Note[], bpm = 120): Promise<void> {
-  const Tone = await import("tone");
-  await Tone.start();
-  const synth = new Tone.PolySynth(Tone.Synth).toDestination();
-  // 簡易ドラムキット：低音(キック/タム)=膜シンセ、それ以外(スネア/ハット)=ノイズ
-  const membrane = new Tone.MembraneSynth().toDestination();
-  const noise = new Tone.NoiseSynth({
-    envelope: { attack: 0.001, decay: 0.12, sustain: 0 },
-  }).toDestination();
-  const t0 = Tone.now();
+// --- 再生スケジュールの純関数（Tone非依存・テスト可能, #57/#58 ①）---
+// ドラムは pitch<=41=膜シンセ(固定長0.15)/他=ノイズ(0.05)、メロ/コードはPolySynth。
+export type Voice = "membrane" | "noise" | "poly";
+
+export interface ScheduledNote {
+  time: number; // Transport 上の発音時刻（秒, beat=四分=1.0基準）
+  durSec: number; // 発音長（秒）。膜=0.15 / ノイズ=0.05 / poly=n.dur*spb
+  voice: Voice;
+  pitch: number;
+  vel: number; // 0..1
+}
+
+const MEMBRANE_DUR = 0.15;
+const NOISE_DUR = 0.05;
+
+/** notes を Transport 上の発音イベント列へ（純粋・現キット定数を踏襲）。 */
+export function scheduleTimes(notes: Note[], bpm = 120): ScheduledNote[] {
   const spb = 60 / bpm;
-  for (const n of notes) {
-    const t = t0 + n.start * spb;
+  return notes.map((n) => {
+    const time = n.start * spb;
+    const vel = (n.vel ?? 100) / 127;
     if (n.drum) {
-      if (n.pitch <= 41) {
-        membrane.triggerAttackRelease(Tone.Frequency(n.pitch, "midi").toFrequency(), 0.15, t);
-      } else {
-        noise.triggerAttackRelease(0.05, t);
-      }
-    } else {
-      synth.triggerAttackRelease(
-        Tone.Frequency(n.pitch, "midi").toNote(),
-        n.dur * spb,
-        t,
-        (n.vel ?? 100) / 127,
-      );
+      const voice: Voice = n.pitch <= 41 ? "membrane" : "noise";
+      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel };
+    }
+    return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel };
+  });
+}
+
+/** 全体の尺（秒）＝最後の発音の終わりまで。終端 scheduleOnce 用。 */
+export function totalSec(notes: Note[], bpm = 120): number {
+  const spb = 60 / bpm;
+  let end = 0;
+  for (const n of notes) end = Math.max(end, (n.start + (n.drum ? 0 : n.dur)) * spb);
+  return end;
+}
+
+/** ループ区間（秒）。未指定は 0〜全尺。 */
+export function loopRange(
+  notes: Note[],
+  bpm: number,
+  loop?: { startBeat: number; endBeat: number },
+): { start: number; end: number } {
+  const spb = 60 / bpm;
+  if (loop) return { start: loop.startBeat * spb, end: loop.endBeat * spb };
+  return { start: 0, end: totalSec(notes, bpm) };
+}
+
+export interface PlaybackHandle {
+  pause(): void;
+  resume(): void;
+  stop(): void;
+}
+
+interface PlayOpts {
+  loop?: { startBeat: number; endBeat: number };
+  onEnd?: () => void;
+}
+
+// 単一再生：グローバル Transport を奪い合うので、現在の音源を1組だけ保持し再利用/破棄。
+type Kit = { poly: any; membrane: any; noise: any };
+let currentKit: Kit | null = null;
+
+function disposeKit() {
+  if (!currentKit) return;
+  for (const v of [currentKit.poly, currentKit.membrane, currentKit.noise]) {
+    try {
+      v.dispose();
+    } catch {
+      /* already disposed */
     }
   }
+  currentKit = null;
+}
+
+// Tone.js は再生時のみ動的import（jsdom/テストで読み込まない）。
+// #57①: Tone.Transport ベース。戻り値 Handle で pause/resume/stop（②でUI配線）。
+// 既存呼び出し元は `void playNotes(notes, tempo)` のままでも従来通り鳴る（後方互換）。
+export async function playNotes(
+  notes: Note[],
+  bpm = 120,
+  opts: PlayOpts = {},
+): Promise<PlaybackHandle> {
+  const Tone = await import("tone");
+  await Tone.start();
+  const transport = Tone.getTransport();
+
+  // 前回再生を破棄＝単一再生（二重再生バグ解消）。未発火スケジュールも消える。
+  transport.stop();
+  transport.cancel(0);
+  disposeKit();
+
+  const kit: Kit = {
+    poly: new Tone.PolySynth(Tone.Synth).toDestination(),
+    membrane: new Tone.MembraneSynth().toDestination(),
+    noise: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.12, sustain: 0 } }).toDestination(),
+  };
+  currentKit = kit;
+
+  transport.bpm.value = bpm;
+  for (const ev of scheduleTimes(notes, bpm)) {
+    transport.schedule((time) => {
+      if (ev.voice === "membrane") {
+        kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
+      } else if (ev.voice === "noise") {
+        kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
+      } else {
+        kit.poly.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toNote(), ev.durSec, time, ev.vel);
+      }
+    }, ev.time);
+  }
+
+  let stopped = false;
+  const handle: PlaybackHandle = {
+    pause: () => {
+      if (!stopped) transport.pause();
+    },
+    resume: () => {
+      if (!stopped) transport.start();
+    },
+    stop: () => {
+      if (stopped) return; // 冪等
+      stopped = true;
+      transport.stop();
+      transport.cancel(0);
+      transport.loop = false;
+      disposeKit();
+    },
+  };
+
+  const range = loopRange(notes, bpm, opts.loop);
+  if (opts.loop) {
+    transport.loop = true;
+    transport.loopStart = range.start;
+    transport.loopEnd = range.end;
+  } else {
+    transport.loop = false;
+    // 非ループ時のみ終端で自動停止。
+    transport.scheduleOnce(() => {
+      opts.onEnd?.();
+      handle.stop();
+    }, totalSec(notes, bpm));
+  }
+
+  transport.start();
+  return handle;
 }
