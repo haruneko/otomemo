@@ -145,6 +145,26 @@ def test_gen_rhythm_parses_lanes(monkeypatch):
     assert rhythm["lanes"][0] == {"name": "Kick", "midi": 36, "hits": [0, 4, 8, 12]}
 
 
+def test_plan_decomposes_and_enqueues_children(tmp_path, monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=120: '{"subtasks":[{"intent":"gen_chord","params":{"context":"夜の歌"}},'
+        '{"intent":"gen_rhythm","params":{"context":"夜の歌"}},'
+        '{"intent":"plan","params":{}}]}',  # 自己再帰や未知は弾かれる
+    )
+    conn = connect(str(tmp_path / "t.sqlite"))
+    _enqueue(conn, "plan", {"instruction": "夜の歌を作って"})
+    assert run_once(conn) == 1
+    assert conn.execute("SELECT status FROM job WHERE id='j1'").fetchone()["status"] == "done"
+    kids = conn.execute(
+        "SELECT intent FROM job WHERE parent_job_id='j1' ORDER BY intent"
+    ).fetchall()
+    assert [k["intent"] for k in kids] == ["gen_chord", "gen_rhythm"]
+
+
 def test_research_returns_summary(monkeypatch):
     import cm_worker.jobs as jobs
 

@@ -7,6 +7,7 @@ TS が job を積み（生産者）、ここが消費する（producer/consumer 
 import json
 import sqlite3
 import time
+import uuid
 from datetime import datetime, timezone
 
 from .jobs import HANDLERS
@@ -14,6 +15,34 @@ from .jobs import HANDLERS
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _enqueue_children(conn: sqlite3.Connection, parent_id: str, subtasks: list) -> int:
+    """plan の結果から子ジョブを queued で積む（見てない間も進む）。次以降のループで消化される。"""
+    n = 0
+    for st in subtasks:
+        if not isinstance(st, dict):
+            continue
+        intent = str(st.get("intent", ""))
+        if intent not in HANDLERS or intent == "plan":
+            continue
+        conn.execute(
+            "INSERT INTO job (id, intent, params, status, level, parent_job_id, priority, created, updated) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                str(uuid.uuid4()),
+                intent,
+                json.dumps(st.get("params") or {}, ensure_ascii=False),
+                "queued",
+                "atomic",
+                parent_id,
+                0,
+                _now(),
+                _now(),
+            ),
+        )
+        n += 1
+    return n
 
 
 def run_once(conn: sqlite3.Connection) -> int:
@@ -38,6 +67,8 @@ def run_once(conn: sqlite3.Connection) -> int:
             "UPDATE job SET status='done', result_summary=?, progress=NULL, updated=? WHERE id=?",
             (json.dumps(result, ensure_ascii=False), _now(), job_id),
         )
+        if row["intent"] == "plan" and isinstance(result.get("subtasks"), list):
+            _enqueue_children(conn, job_id, result["subtasks"])
     except Exception as e:  # noqa: BLE001
         conn.execute(
             "UPDATE job SET status='failed', error=?, updated=? WHERE id=?",

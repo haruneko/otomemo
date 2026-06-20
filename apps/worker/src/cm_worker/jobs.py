@@ -277,6 +277,25 @@ def handle_research(params: dict) -> dict:
     return {"summary": claude_prompt(prompt, timeout=180)}
 
 
+def handle_plan(params: dict) -> dict:
+    """おまかせ（plan）。依頼を実行可能な小タスク(intent)へ分解する。子ジョブは worker が enqueue する。"""
+    request = params.get("instruction") or params.get("context") or ""
+    prompt = (
+        "あなたは作曲アシスタントのプランナー。依頼を実行可能な小タスクに分解する。\n"
+        "使える intent: gen_melody / gen_chord / gen_rhythm / suggest / research\n"
+        '出力は JSON のみ：{"subtasks":[{"intent":"...","params":{"context":"...","instruction":"..."}}]}\n'
+        "2〜5個・各 params.context に対象内容・instruction に具体指示。JSONのみ。\n\n"
+        f"# 依頼\n{request}"
+    )
+    text = claude_prompt(prompt)
+    try:
+        subs = _extract_json(text).get("subtasks") or []
+        subtasks = [s for s in subs if isinstance(s, dict) and "intent" in s]
+    except Exception:  # noqa: BLE001
+        subtasks = []
+    return {"subtasks": subtasks, "plan": f"{len(subtasks)}個のタスクに分解しました"}
+
+
 HANDLERS: dict[str, Callable[[dict], dict]] = {
     "mora_count": handle_mora_count,
     "echo": handle_echo,
@@ -286,4 +305,5 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_chord": handle_gen_chord,
     "gen_rhythm": handle_gen_rhythm,
     "research": handle_research,
+    "plan": handle_plan,
 }

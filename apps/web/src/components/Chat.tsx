@@ -12,7 +12,7 @@ interface Msg {
   jobId?: string;
   saveable?: string;
 }
-type Mode = "suggest" | "research";
+type Mode = "suggest" | "research" | "plan";
 
 // 相談（docs/design.md #19/#20）。target 付きで開くと「このネタについての相談」になり、
 // 最初の提案を自動で出す。案は Chat 上で選んでネタ化（from_job で対象に紐づく）。
@@ -37,11 +37,14 @@ export function Chat({
     setMsgs((m) => [...m, { role: "user", text }]);
     setBusy(true);
     try {
-      const intent = mode === "research" ? "research" : "suggest";
+      const intent = mode === "research" ? "research" : mode === "plan" ? "plan" : "suggest";
+      const ctx = target ? (target.title ?? target.text ?? "") : "";
       const params =
         mode === "research"
           ? { topic: text }
-          : { context: target ? (target.title ?? target.text ?? "") : "", instruction: text };
+          : mode === "plan"
+            ? { instruction: text, context: ctx }
+            : { context: ctx, instruction: text };
       const job = await api.createJob({ intent, target_neta_id: target?.id, params });
       for (let i = 0; i < 80; i++) {
         const j = await api.getJob(job.id);
@@ -49,6 +52,12 @@ export function Chat({
           if (mode === "research") {
             const summary = (j.result as { summary?: string } | null)?.summary ?? "";
             setMsgs((m) => [...m, { role: "ai", text: summary, saveable: summary }]);
+          } else if (mode === "plan") {
+            const plan = (j.result as { plan?: string } | null)?.plan ?? "計画しました";
+            setMsgs((m) => [
+              ...m,
+              { role: "ai", text: `${plan}（結果は受け取りトレイ 📥 に届きます）` },
+            ]);
           } else {
             const options = (j.result as { options?: Opt[] } | null)?.options ?? [];
             setMsgs((m) => [...m, { role: "ai", options, jobId: job.id }]);
@@ -109,6 +118,9 @@ export function Chat({
             <button className={mode === "research" ? "on" : ""} onClick={() => setMode("research")}>
               調べる
             </button>
+            <button className={mode === "plan" ? "on" : ""} onClick={() => setMode("plan")}>
+              おまかせ
+            </button>
           </div>
           <button aria-label="close" onClick={onClose}>
             ✕
@@ -118,7 +130,11 @@ export function Chat({
         <div className="chat-log">
           {msgs.length === 0 && (
             <p className="muted">
-              {mode === "research" ? "調べたいことを入力" : "ざっくり投げてください"}
+              {mode === "research"
+                ? "調べたいことを入力"
+                : mode === "plan"
+                  ? "おまかせで投げる（例：夜の曲のサビを一式そろえて）"
+                  : "ざっくり投げてください"}
             </p>
           )}
           {msgs.map((m, i) => (
