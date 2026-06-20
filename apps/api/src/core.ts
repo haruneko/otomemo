@@ -320,6 +320,33 @@ export class Core {
     return row ? this.rowToJob(row) : null;
   }
 
+  // #45: ジョブが人に質問して待つ（status=waiting＋question）。
+  askQuestion(jobId: string, question: string): Job | null {
+    this.db
+      .prepare(`UPDATE job SET status='waiting', question=@q, updated=@u WHERE id=@id`)
+      .run({ id: jobId, q: question, u: now() });
+    return this.getJob(jobId);
+  }
+
+  // #45: 待機中ジョブへの回答。回答を載せた継続ジョブを積み、元ジョブを done にする。
+  answerJob(jobId: string, answer: string): Job | null {
+    const orig = this.getJob(jobId);
+    if (!orig) return null;
+    const cont = this.enqueueJob({
+      intent: orig.intent,
+      target_neta_id: orig.target_neta_id ?? undefined,
+      instruction: `${orig.instruction ?? ""}\n[回答] ${answer}`.trim(),
+      notify_level: orig.notify_level ?? undefined,
+    });
+    this.db
+      .prepare(`UPDATE job SET parent_job_id=@p, updated=@u WHERE id=@id`)
+      .run({ id: cont.id, p: jobId, u: now() });
+    this.db
+      .prepare(`UPDATE job SET status='done', updated=@u WHERE id=@id`)
+      .run({ id: jobId, u: now() });
+    return this.getJob(cont.id);
+  }
+
   listJobs(q: JobQuery = {}): Job[] {
     const where: string[] = [];
     const params: Record<string, unknown> = {};

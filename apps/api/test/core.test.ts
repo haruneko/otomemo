@@ -114,3 +114,18 @@ describe("edges: compose (DAG) + relation", () => {
     expect(core.getRelations(a.id)).toEqual([]);
   });
 });
+
+describe("jobs: waiting / answer (#45)", () => {
+  it("askQuestion → waiting, answerJob enqueues a continuation and closes original", () => {
+    const j = core.enqueueJob({ intent: "suggest", instruction: "歌詞案" });
+    core.askQuestion(j.id, "テンポは？");
+    expect(core.getJob(j.id)!.status).toBe("waiting");
+    expect(core.getJob(j.id)!.question).toBe("テンポは？");
+
+    const cont = core.answerJob(j.id, "120くらい")!;
+    expect(cont.parent_job_id).toBe(j.id);
+    expect(cont.status).toBe("queued");
+    expect(cont.instruction).toContain("120くらい");
+    expect(core.getJob(j.id)!.status).toBe("done"); // 元ジョブは完了
+  });
+});

@@ -16,13 +16,24 @@ function peek(j: Job): string {
 
 export function Tray({ onClose }: { onClose: () => void }) {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
-  useEffect(() => {
+  const reload = () =>
     api
       .listJobs()
       .then(setJobs)
       .catch(() => {});
+  useEffect(() => {
+    void reload();
   }, []);
+
+  async function answer(id: string) {
+    const a = (answers[id] ?? "").trim();
+    if (!a) return;
+    await api.answerJob(id, a); // #45: 継続ジョブが積まれる
+    setAnswers((m) => ({ ...m, [id]: "" }));
+    await reload();
+  }
 
   return (
     <div className="dialog-backdrop" onClick={onClose}>
@@ -36,10 +47,25 @@ export function Tray({ onClose }: { onClose: () => void }) {
         <div className="tray-list">
           {jobs.length === 0 && <p className="muted">ジョブはまだありません</p>}
           {jobs.map((j) => (
-            <div key={j.id} className="tray-job">
+            <div key={j.id} className={"tray-job" + (j.status === "waiting" ? " waiting" : "")}>
               <span className="tray-intent">{j.intent}</span>
               <span className={"tray-status " + j.status}>{j.status}</span>
+              {j.notify_level && <span className="tray-notify">{j.notify_level}</span>}
               <span className="tray-peek">{peek(j)}</span>
+              {j.status === "waiting" && j.question && (
+                <div className="tray-question">
+                  <p>{j.question}</p>
+                  <input
+                    aria-label={`answer-${j.id}`}
+                    value={answers[j.id] ?? ""}
+                    onChange={(e) => setAnswers((m) => ({ ...m, [j.id]: e.target.value }))}
+                    placeholder="回答…"
+                  />
+                  <button className="primary" onClick={() => void answer(j.id)}>
+                    回答
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

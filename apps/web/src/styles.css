@@ -325,11 +325,36 @@ article header {
 }
 .tray-job {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: baseline;
   font-size: 0.82rem;
   border-bottom: 1px solid var(--line);
   padding: 4px 0;
+}
+.tray-job.waiting {
+  border-left: 3px solid var(--accent);
+  padding-left: 6px;
+}
+.tray-notify {
+  font-size: 0.7rem;
+  color: var(--accent);
+}
+.tray-question {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+.tray-question p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.tray-question input {
+  flex: 1;
+  min-width: 0;
 }
 .tray-intent {
   font-weight: 600;

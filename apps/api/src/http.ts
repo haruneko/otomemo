@@ -141,6 +141,26 @@ export function buildHttp(core: Core): FastifyInstance {
     return j;
   });
 
+  // #45: ジョブが人に質問して待つ
+  app.post("/job/:id/ask", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ question: z.string() }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    const j = core.askQuestion(id, p.data.question);
+    if (!j) return reply.code(404).send({ error: "not found" });
+    return j;
+  });
+
+  // #45: 待機中ジョブへの回答（継続ジョブを積む）
+  app.post("/job/:id/answer", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ answer: z.string() }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    const cont = core.answerJob(id, p.data.answer);
+    if (!cont) return reply.code(404).send({ error: "not found" });
+    return cont;
+  });
+
   // 意味検索：Python検索サービスへproxy → neta を hydrate して順序維持で返す
   app.get("/search", async (req, reply) => {
     const { q, k } = req.query as { q?: string; k?: string };
