@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
+import { usePlayhead } from "../usePlayhead";
 
 // レーンの1セル＝ドロップ先（#52②c）。kind が合えばカードを落として配置。
 function LaneCell({
@@ -72,6 +73,7 @@ export function SectionEditor({
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
   const BPB = beatsPerBar(meter ?? neta.meter); // 1小節の拍数（#51・編集中はprop優先）
   const TOTAL = BARS * BPB;
+  const { beat, start: startPlayhead } = usePlayhead(); // #49
 
   const load = useCallback(async () => {
     const tree = await api.getComposition(neta.id);
@@ -123,10 +125,17 @@ export function SectionEditor({
     });
   }
 
+  function playComposite() {
+    const notes = composite();
+    const dur = notes.length ? Math.max(...notes.map((n) => n.start + n.dur)) : 0;
+    void playNotes(notes, tempo);
+    if (dur > 0) startPlayhead(dur, tempo);
+  }
+
   return (
     <div className="section-editor">
       <div className="section-actions">
-        <button type="button" onClick={() => void playNotes(composite(), tempo)}>
+        <button type="button" onClick={playComposite}>
           ▶ 合成再生
         </button>
         <button
@@ -138,6 +147,13 @@ export function SectionEditor({
       </div>
 
       <div className="lanes" aria-label="timeline">
+        {beat !== null && (
+          <div
+            className="playhead"
+            aria-hidden="true"
+            style={{ left: `calc(44px + ${Math.min(beat, TOTAL) / TOTAL} * (100% - 44px))` }}
+          />
+        )}
         <div className="lane-ruler">
           <div className="lane-label" />
           <div className="ruler-bars">

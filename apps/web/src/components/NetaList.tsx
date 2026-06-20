@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
+import { MiniRoll } from "./MiniRoll";
 
 export function NetaCard({
   neta,
@@ -107,6 +108,7 @@ export function NetaCard({
           <code className="id">{neta.id.slice(0, 8)}</code>
         </header>
         <div className="body">{label}</div>
+        <MiniRoll neta={neta} />
         {neta.tags.length > 0 && (
           <footer>
             {neta.tags.map((t) => (
