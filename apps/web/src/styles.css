@@ -102,7 +102,6 @@ main {
 .app-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 h1 {
@@ -205,6 +204,7 @@ article header {
 .head-right {
   display: flex;
   align-items: center;
+  margin-left: auto; /* ☰ ♪ は左に固定、操作アイコンは常に右（PC/スマホで位置を一致） */
   gap: 6px;
 }
 .notebook-actions {

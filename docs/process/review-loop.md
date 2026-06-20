@@ -46,7 +46,7 @@
 ## 受け入れの層（今回の実走で判明＝重要）
 UIは「コードが正しい」と「実機で正しく見える」が別レイヤー。実際 stage① で、コードAcceptorは2巡ACCEPTしたのにスマホ実機で横スクロール／2列カード／ヘッダ崩れが残った（原因の一つは `@media` のソース順バグ＝jsdomでは検出不能）。よって受け入れを3層にする：
 1. **コードAcceptor（サブエージェント・別コンテキスト）**：spec/コード/テストで判定。網羅性も監査。**ただし実レンダリング/レスポンシブ/横スクロールは見えない（jsdom）。**
-2. **ヘッドレス実機近似（Playwright）**：複数viewport（スマホ~390px / タブレット / PC）でアプリを起動し、機械判定：
+2. **ヘッドレス実機近似（Playwright）**：**Acceptor（受け入れエージェント）がこれを叩く**＝`pnpm --filter @cm/web test:e2e` を実行し、結果＋スクショ（`apps/web/e2e/__screenshots__/`）を確認して受け入れ判定に含める（日本語表示は `scripts/setup-fonts.sh` で NotoSansCJK 導入済み前提）。複数viewport（スマホ~390px / タブレット / PC）でアプリを起動し、機械判定：
    - **横スクロール無し**：`document.documentElement.scrollWidth <= window.innerWidth`（各viewportで）。
    - 主要フロー：カードtap→メインペーンに編集が出る／← 戻るで一覧へ／＋曲を組む／フィルタ。
    - **スクショ**を成果物に残す（人のレビュー用）。
