@@ -111,14 +111,30 @@ article .tag {
   color: var(--muted);
   margin-right: 6px;
 }
-.bs-btn {
+.bs-tools {
+  display: flex;
+  gap: 6px;
+  align-items: center;
   margin-top: 8px;
+}
+.bs-instr {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.bs-btn {
   font-size: 0.8rem;
   padding: 4px 10px;
   background: #2b2f36;
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 6px;
+  white-space: nowrap;
 }
 .bs-result {
   margin: 8px 0 0;

@@ -14,15 +14,16 @@ type BS =
 export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => void }) {
   const label = neta.title ?? neta.text ?? "(無題)";
   const [bs, setBs] = useState<BS>({ state: "idle" });
+  const [instruction, setInstruction] = useState("");
 
   async function suggest() {
     setBs({ state: "running" });
     try {
-      const job = await api.createJob({
-        intent: "suggest",
-        target_neta_id: neta.id,
-        params: { context: neta.title ?? neta.text ?? "" },
-      });
+      const params: { context: string; instruction?: string } = {
+        context: neta.title ?? neta.text ?? "",
+      };
+      if (instruction.trim()) params.instruction = instruction.trim();
+      const job = await api.createJob({ intent: "suggest", target_neta_id: neta.id, params });
       for (let i = 0; i < 60; i++) {
         const j = await api.getJob(job.id);
         if (j.status === "done") {
@@ -69,9 +70,18 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
           ))}
         </footer>
       )}
-      <button className="bs-btn" onClick={suggest} disabled={bs.state === "running"}>
-        {bs.state === "running" ? "考え中…" : "壁打ち"}
-      </button>
+      <div className="bs-tools">
+        <input
+          className="bs-instr"
+          aria-label="direction"
+          placeholder="方向（任意）：明るく / サビ展開…"
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+        />
+        <button className="bs-btn" onClick={suggest} disabled={bs.state === "running"}>
+          {bs.state === "running" ? "考え中…" : "壁打ち"}
+        </button>
+      </div>
       {bs.state === "error" && <pre className="bs-result">{bs.text}</pre>}
       {bs.state === "options" && (
         <div className="bs-options" aria-label="suggestions">
