@@ -111,6 +111,26 @@ article .tag {
   color: var(--muted);
   margin-right: 6px;
 }
+.bs-btn {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.bs-result {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow: auto;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
 
 /* kind→色（Okabe-Ito由来・DAW慣習準拠・色覚安全）。color-research agent #色 */
 article[data-kind="rhythm"] { --k: var(--k-rhythm); }

@@ -80,4 +80,17 @@ export const api = {
 
   searchSemantic: (q: string, k = 20) =>
     http<(Neta & { score: number })[]>(`/search?q=${encodeURIComponent(q)}&k=${k}`),
+
+  createJob: (input: { intent: string; target_neta_id?: string; params?: unknown }) =>
+    http<Job>("/job", { method: "POST", body: JSON.stringify(input) }),
+
+  getJob: (id: string) => http<Job>(`/job/${id}`),
 };
+
+export interface Job {
+  id: string;
+  intent: string;
+  status: string;
+  result: { suggestions?: string } | Record<string, unknown> | null;
+  error: string | null;
+}
