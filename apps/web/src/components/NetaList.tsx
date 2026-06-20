@@ -14,12 +14,16 @@ export function NetaCard({
   const label = neta.title ?? neta.text ?? "(無題)";
   const [editing, setEditing] = useState(false);
   const [gen, setGen] = useState(false);
+  const [genOpen, setGenOpen] = useState(false);
 
-  async function genMelody() {
+  async function generate(kind: "melody" | "chord_progression" | "rhythm") {
+    setGenOpen(false);
     setGen(true);
     try {
+      const intent =
+        kind === "melody" ? "gen_melody" : kind === "chord_progression" ? "gen_chord" : "gen_rhythm";
       const job = await api.createJob({
-        intent: "gen_melody",
+        intent,
         target_neta_id: neta.id,
         params: { context: neta.title ?? neta.text ?? "" },
       });
@@ -27,12 +31,7 @@ export function NetaCard({
         const j = await api.getJob(job.id);
         if (j.status === "done") {
           const content = (j.result as { content?: unknown } | null)?.content;
-          await api.createNeta({
-            kind: "melody",
-            title: neta.title ?? "メロ案",
-            content,
-            from_job: job.id,
-          });
+          await api.createNeta({ kind, title: neta.title ?? "案", content, from_job: job.id });
           onChanged?.();
           return;
         }
@@ -74,9 +73,25 @@ export function NetaCard({
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
           壁打ち
         </button>
-        <button className="bs-btn" onClick={genMelody} disabled={gen}>
-          {gen ? "生成中…" : "メロ生成"}
-        </button>
+        {gen ? (
+          <span className="bs-btn">生成中…</span>
+        ) : genOpen ? (
+          <>
+            <button className="bs-btn" onClick={() => generate("melody")}>
+              メロ
+            </button>
+            <button className="bs-btn" onClick={() => generate("chord_progression")}>
+              コード
+            </button>
+            <button className="bs-btn" onClick={() => generate("rhythm")}>
+              リズム
+            </button>
+          </>
+        ) : (
+          <button className="bs-btn" onClick={() => setGenOpen(true)}>
+            生成 ▾
+          </button>
+        )}
       </div>
       {editing && (
         <NetaDialog neta={neta} onClose={() => setEditing(false)} onChanged={onChanged} />

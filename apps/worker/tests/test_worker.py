@@ -116,6 +116,35 @@ def test_gen_melody_handles_garbage(monkeypatch):
     assert jobs.handle_gen_melody({"context": "x"})["content"]["notes"] == []
 
 
+def test_gen_chord_parses_chords(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "_style_block", lambda kind, ctx: "")
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=120: '{"chords":[{"root":"C","quality":"","start":0,"dur":4},'
+        '{"root":"A","quality":"m","start":4,"dur":4}]}',
+    )
+    chords = jobs.handle_gen_chord({"context": "x"})["content"]["chords"]
+    assert len(chords) == 2
+    assert chords[0] == {"root": "C", "quality": "", "start": 0.0, "dur": 4.0}
+
+
+def test_gen_rhythm_parses_lanes(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "_style_block", lambda kind, ctx: "")
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=120: '{"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}',
+    )
+    rhythm = jobs.handle_gen_rhythm({"context": "x"})["content"]["rhythm"]
+    assert rhythm["steps"] == 16
+    assert rhythm["lanes"][0] == {"name": "Kick", "midi": 36, "hits": [0, 4, 8, 12]}
+
+
 def test_research_returns_summary(monkeypatch):
     import cm_worker.jobs as jobs
 
