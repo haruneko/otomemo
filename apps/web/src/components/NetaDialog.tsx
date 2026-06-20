@@ -54,6 +54,73 @@ export function NetaDialog({
     }
   }
 
+  // 音楽の編集は面が要るので全画面オーバーレイ（design.md GUI #19 の決定）
+  if (isMelody) {
+    return (
+      <div className="editor-full" role="dialog" aria-label="edit-neta">
+        <div className="editor-bar">
+          <button className="back" onClick={onClose} aria-label="close">
+            ← 戻る
+          </button>
+          <input
+            aria-label="title"
+            className="editor-title"
+            placeholder="タイトル"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+          <label className="meta">
+            調
+            <select aria-label="key" value={key} onChange={(e) => setKey(Number(e.target.value))}>
+              {KEY_NAMES.map((nm, i) => (
+                <option key={i} value={i}>
+                  {nm}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="meta">
+            ♩
+            <input
+              aria-label="tempo"
+              type="number"
+              min={20}
+              max={300}
+              value={tempo}
+              onChange={(e) => setTempo(Number(e.target.value))}
+            />
+          </label>
+          <button type="button" onClick={() => void playNotes(transpose(notes, key), tempo)}>
+            ▶ 再生
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadMidi(transpose(notes, key), `${neta.title ?? "sketch"}.mid`, tempo)}
+          >
+            MIDI
+          </button>
+          <button className="danger" onClick={remove} disabled={busy}>
+            削除
+          </button>
+          <button className="primary" onClick={save} disabled={busy}>
+            保存
+          </button>
+        </div>
+        <input
+          aria-label="tags"
+          className="editor-tags"
+          placeholder="タグ（スペース区切り）"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+        />
+        <div className="editor-body">
+          <PianoRoll notes={notes} onChange={setNotes} />
+        </div>
+      </div>
+    );
+  }
+
+  // 軽い編集（歌詞・テーマ等のテキスト）は中央ダイアログ
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div
@@ -83,51 +150,6 @@ export function NetaDialog({
           value={tags}
           onChange={(e) => setTags(e.target.value)}
         />
-        {isMelody && (
-          <div className="melody-editor">
-            <div className="melody-meta">
-              <label>
-                調
-                <select
-                  aria-label="key"
-                  value={key}
-                  onChange={(e) => setKey(Number(e.target.value))}
-                >
-                  {KEY_NAMES.map((nm, i) => (
-                    <option key={i} value={i}>
-                      {nm}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                テンポ
-                <input
-                  aria-label="tempo"
-                  type="number"
-                  min={20}
-                  max={300}
-                  value={tempo}
-                  onChange={(e) => setTempo(Number(e.target.value))}
-                />
-              </label>
-            </div>
-            <PianoRoll notes={notes} onChange={setNotes} />
-            <div className="melody-actions">
-              <button type="button" onClick={() => void playNotes(transpose(notes, key), tempo)}>
-                ▶ 再生
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  downloadMidi(transpose(notes, key), `${neta.title ?? "sketch"}.mid`, tempo)
-                }
-              >
-                MIDI書き出し
-              </button>
-            </div>
-          </div>
-        )}
         <div className="dialog-actions">
           <button className="danger" onClick={remove} disabled={busy}>
             削除

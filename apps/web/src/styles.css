@@ -251,6 +251,80 @@ article header {
   display: grid;
   gap: 8px;
 }
+.editor-full {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+.editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.editor-bar .meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.editor-title {
+  flex: 1;
+  min-width: 140px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+.editor-tags {
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+.editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.editor-bar select,
+.editor-bar input[type="number"] {
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px;
+  font: inherit;
+  width: 64px;
+}
+.editor-bar button {
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.editor-bar button.primary {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+}
+.editor-bar button.danger {
+  background: #b3402f;
+  color: #fff;
+  border: 0;
+}
 .proll {
   overflow-x: auto;
   border: 1px solid var(--line);
