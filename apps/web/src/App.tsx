@@ -115,50 +115,10 @@ export function App() {
         >
           ☰
         </button>
-        <h1>creative_manager</h1>
+        <h1 className="logo" aria-label="creative_manager" title="creative_manager">
+          ♪
+        </h1>
         <div className="head-right">
-          <label className="import-btn">
-            MIDI取込
-            <input
-              type="file"
-              accept=".mid,.midi"
-              hidden
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const { notes } = midiToNotes(await file.arrayBuffer());
-                await api.createNeta({
-                  kind: "melody",
-                  title: file.name.replace(/\.midi?$/i, ""),
-                  content: { notes },
-                });
-                e.target.value = "";
-                await reload();
-              }}
-            />
-          </label>
-          <button className="import-btn" onClick={() => void newSong()}>
-            ＋曲を組む
-          </button>
-          <label className="import-btn">
-            歌詞取込
-            <input
-              type="file"
-              accept=".txt,text/plain"
-              hidden
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const parts = (await file.text())
-                  .split(/\n\s*\n/)
-                  .map((s) => s.trim())
-                  .filter(Boolean);
-                for (const p of parts) await api.createNeta({ kind: "lyric", text: p });
-                e.target.value = "";
-                await reload();
-              }}
-            />
-          </label>
           <button className="gear" aria-label="tray" title="受け取りトレイ" onClick={openTray}>
             📥{doneCount > 0 && <span className="badge">{doneCount}</span>}
           </button>
@@ -177,6 +137,50 @@ export function App() {
       </div>
       <div className="workspace">
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
+          <div className="notebook-actions">
+            <button className="import-btn accent" onClick={() => void newSong()}>
+              ＋曲を組む
+            </button>
+            <label className="import-btn">
+              MIDI取込
+              <input
+                type="file"
+                accept=".mid,.midi"
+                hidden
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const { notes } = midiToNotes(await file.arrayBuffer());
+                  await api.createNeta({
+                    kind: "melody",
+                    title: file.name.replace(/\.midi?$/i, ""),
+                    content: { notes },
+                  });
+                  e.target.value = "";
+                  await reload();
+                }}
+              />
+            </label>
+            <label className="import-btn">
+              歌詞取込
+              <input
+                type="file"
+                accept=".txt,text/plain"
+                hidden
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const parts = (await file.text())
+                    .split(/\n\s*\n/)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  for (const p of parts) await api.createNeta({ kind: "lyric", text: p });
+                  e.target.value = "";
+                  await reload();
+                }}
+              />
+            </label>
+          </div>
           <Capture onCreated={() => void reload()} />
           <div className="filters">
             <input
