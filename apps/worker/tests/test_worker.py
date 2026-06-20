@@ -43,3 +43,23 @@ def test_unknown_intent_marks_failed(tmp_path):
     row = conn.execute("SELECT status, error FROM job WHERE id='j1'").fetchone()
     assert row["status"] == "failed"
     assert "no handler" in row["error"]
+
+
+def test_brainstorm_handler(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "claude_prompt", lambda prompt, timeout=120: "- 案A\n- 案B")
+    res = jobs.handle_brainstorm({"context": "夜を駆ける歌詞", "instruction": "明るくして"})
+    assert "案A" in res["suggestions"]
+
+
+def test_run_once_brainstorm(tmp_path, monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "claude_prompt", lambda prompt, timeout=120: "提案テキスト")
+    conn = connect(str(tmp_path / "t.sqlite"))
+    _enqueue(conn, "brainstorm", {"context": "夜の歌", "instruction": "壁打ち"})
+    assert run_once(conn) == 1
+    row = conn.execute("SELECT status, result_summary FROM job WHERE id='j1'").fetchone()
+    assert row["status"] == "done"
+    assert json.loads(row["result_summary"])["suggestions"] == "提案テキスト"
