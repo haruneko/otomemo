@@ -1,0 +1,109 @@
+:root {
+  color-scheme: dark;
+  --bg: #16181c;
+  --card: #22252b;
+  --line: #33373f;
+  --fg: #e6e8ec;
+  --muted: #9aa0aa;
+  --accent: #3a6df0;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+}
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+}
+h1 {
+  font-size: 1.1rem;
+}
+form[aria-label="capture"] {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+form textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+form select,
+form input,
+form textarea,
+.filters select,
+.filters input {
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+button {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+section[aria-label="neta-list"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+article[aria-label="neta-card"] {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--k, var(--muted));
+  border-radius: 10px;
+  padding: 10px;
+}
+article header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+article .kind {
+  font-weight: 600;
+  color: var(--k, var(--fg));
+}
+article .body {
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
+article .tag {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+/* kind→色（Okabe-Ito由来・DAW慣習準拠・色覚安全）。color-research agent #色 */
+article[data-kind="rhythm"] { --k: #e8533f; }
+article[data-kind="melody"] { --k: #4fa8e0; }
+article[data-kind="chord"] { --k: #7c6ce0; }
+article[data-kind="chord_progression"] { --k: #b7a0f0; }
+article[data-kind="lyric"] { --k: #f0c544; }
+article[data-kind="theme"] { --k: #2bb789; }
+article[data-kind="section"] { --k: #e08a3c; }
+article[data-kind="song"] { --k: #d98cc4; }
+article[data-kind="knowledge"] { --k: #8a93a6; }
+article[data-kind="other"] { --k: #6b7280; }
