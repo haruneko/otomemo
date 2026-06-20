@@ -93,3 +93,24 @@ def test_suggest_fallback_on_non_json(monkeypatch):
     res = jobs.handle_suggest({"context": "x"})
     assert len(res["options"]) == 1
     assert res["options"][0]["body"] == "JSONじゃない返答"
+
+
+def test_gen_melody_parses_notes(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=120: '{"notes":[{"pitch":60,"start":0,"dur":1},{"pitch":64,"start":1,"dur":0.5}]}',
+    )
+    res = jobs.handle_gen_melody({"context": "夜の歌"})
+    notes = res["content"]["notes"]
+    assert len(notes) == 2
+    assert notes[0] == {"pitch": 60, "start": 0.0, "dur": 1.0}
+
+
+def test_gen_melody_handles_garbage(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: "メロはこちら（JSONなし）")
+    assert jobs.handle_gen_melody({"context": "x"})["content"]["notes"] == []

@@ -114,9 +114,49 @@ def handle_suggest(params: dict) -> dict:
     return {"options": options}
 
 
+def _extract_notes(text: str) -> list[dict]:
+    """Claude出力から {"notes":[{pitch,start,dur}]} を頑健に取り出す。"""
+    raw = text.strip()
+    m = re.search(r"```(?:json)?\s*(.*?)```", raw, re.S)
+    if m:
+        raw = m.group(1).strip()
+    s, e = raw.find("{"), raw.rfind("}")
+    if s != -1 and e != -1 and e > s:
+        raw = raw[s : e + 1]
+    data = json.loads(raw)
+    notes = data.get("notes") if isinstance(data, dict) else None
+    out: list[dict] = []
+    for n in notes or []:
+        if isinstance(n, dict) and {"pitch", "start", "dur"} <= n.keys():
+            out.append(
+                {"pitch": int(n["pitch"]), "start": float(n["start"]), "dur": float(n["dur"])}
+            )
+    return out
+
+
+def handle_gen_melody(params: dict) -> dict:
+    """メロディ生成（Stage1, docs/design.md #12）。Cメジャー基準・拍・GMノートのJSONをClaudeに吐かせる。"""
+    context = params.get("context", "")
+    instruction = params.get("instruction") or "この内容に合う8〜16拍の単旋律メロディ。"
+    prompt = (
+        "作曲家として、対象に合うメロディを作る。\n"
+        '出力は JSON オブジェクトのみ：'
+        '{"notes":[{"pitch":整数(C基準MIDI番号 60=C4), "start":拍(0始まりfloat), "dur":拍(float)}]}\n'
+        "ハ長調(Cメジャー)基準・単旋律・8〜16拍。前置き/説明/コードフェンス禁止、JSONのみ。\n\n"
+        f"# 対象\n{context}\n\n# 依頼\n{instruction}"
+    )
+    text = claude_prompt(prompt)
+    try:
+        notes = _extract_notes(text)
+    except Exception:  # noqa: BLE001
+        notes = []
+    return {"content": {"notes": notes}}
+
+
 HANDLERS: dict[str, Callable[[dict], dict]] = {
     "mora_count": handle_mora_count,
     "echo": handle_echo,
     "brainstorm": handle_brainstorm,
     "suggest": handle_suggest,
+    "gen_melody": handle_gen_melody,
 }

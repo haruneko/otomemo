@@ -35,6 +35,7 @@ export interface NetaInput {
   kind: string;
   title?: string;
   text?: string;
+  content?: unknown;
   tags?: string[];
 }
 

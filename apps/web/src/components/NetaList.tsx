@@ -17,6 +17,7 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
   const [bs, setBs] = useState<BS>({ state: "idle" });
   const [instruction, setInstruction] = useState("");
   const [editing, setEditing] = useState(false);
+  const [gen, setGen] = useState(false);
 
   async function suggest() {
     setBs({ state: "running" });
@@ -56,6 +57,35 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
     onChanged?.();
   }
 
+  async function genMelody() {
+    setGen(true);
+    try {
+      const params: { context: string; instruction?: string } = {
+        context: neta.title ?? neta.text ?? "",
+      };
+      if (instruction.trim()) params.instruction = instruction.trim();
+      const job = await api.createJob({ intent: "gen_melody", target_neta_id: neta.id, params });
+      for (let i = 0; i < 60; i++) {
+        const j = await api.getJob(job.id);
+        if (j.status === "done") {
+          const content = (j.result as { content?: unknown } | null)?.content;
+          const created = await api.createNeta({
+            kind: "melody",
+            title: neta.title ?? "メロ案",
+            content,
+          });
+          await api.link(neta.id, created.id, "generated").catch(() => {});
+          onChanged?.();
+          return;
+        }
+        if (j.status === "failed") return;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    } finally {
+      setGen(false);
+    }
+  }
+
   return (
     <article aria-label="neta-card" data-kind={neta.kind}>
       <header>
@@ -87,6 +117,9 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
         />
         <button className="bs-btn" onClick={suggest} disabled={bs.state === "running"}>
           {bs.state === "running" ? "考え中…" : "壁打ち"}
+        </button>
+        <button className="bs-btn" onClick={genMelody} disabled={gen}>
+          {gen ? "生成中…" : "メロ生成"}
         </button>
       </div>
       {bs.state === "error" && <pre className="bs-result">{bs.text}</pre>}
