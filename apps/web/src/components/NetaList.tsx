@@ -24,7 +24,8 @@ export function NetaCard({
   const ctx = () => neta.title ?? neta.text ?? "";
 
   async function pollContent(jobId: string): Promise<unknown> {
-    for (let i = 0; i < 60; i++) {
+    // worker の claude_prompt timeout(120s)を超えるまで待つ（落ちても api 側 reaper が拾う）
+    for (let i = 0; i < 90; i++) {
       const j = await api.getJob(jobId);
       if (j.status === "done") return (j.result as { content?: unknown } | null)?.content;
       if (j.status === "failed") return undefined;

@@ -33,6 +33,13 @@ def _note_name(p: int) -> str:
     return f"{_NAMES[p % 12]}{p // 12 - 1}"
 
 
+def _root_label(r) -> str:
+    """コードrootを検索用の音名に（0–11整数→"C".."B"／旧文字列はそのまま）。"""
+    if isinstance(r, (int, float)):
+        return _NAMES[int(r) % 12]
+    return str(r)
+
+
 def _content_text(kind: str, content: str | None) -> str:
     """音楽netaの content を検索可能な文字列にする（メロ→音名 / コード→記号 / リズム→パターン）。"""
     if not content:
@@ -45,7 +52,7 @@ def _content_text(kind: str, content: str | None) -> str:
         return " ".join(_note_name(int(n["pitch"])) for n in c.get("notes") or [] if "pitch" in n)
     if kind in ("chord", "chord_progression"):
         return " ".join(
-            f"{ch.get('root', '')}{ch.get('quality', '')}" for ch in c.get("chords") or []
+            f"{_root_label(ch.get('root', ''))}{ch.get('quality', '')}" for ch in c.get("chords") or []
         )
     if kind == "rhythm":
         r = c.get("rhythm") or {}

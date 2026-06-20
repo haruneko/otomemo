@@ -49,15 +49,25 @@ describe("job queue (producer side)", () => {
     expect(c.reapResults()).toBe(0); // 冪等：2回目は何もしない
   });
 
-  it("does not reap synchronous (non-plan) gen jobs — those self-materialize", () => {
+  it("does not reap a FRESH synchronous (non-plan) gen job — client self-materializes", () => {
     const db = openDb(":memory:");
     const c = new Core(db);
-    // parent_job_id 無し = クライアント(NetaCard)が自分でネタ化する同期ジョブ → reaper は触らない
+    const fresh = new Date().toISOString();
     db.prepare(
       `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
-       VALUES ('js', 'gen_melody', '{}', 'done', ?, '', '')`,
-    ).run(JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }));
+       VALUES ('js', 'gen_melody', '{}', 'done', ?, '', ?)`,
+    ).run(JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }), fresh);
     expect(c.reapResults()).toBe(0);
+  });
+
+  it("reaps a STALE parentless gen job — client never materialized it (no leak)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jstale', 'gen_melody', '{}', 'done', ?, '', '2000-01-01T00:00:00.000Z')`,
+    ).run(JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }));
+    expect(c.reapResults()).toBe(1);
   });
 
   it("does not reap empty gen results", () => {

@@ -86,10 +86,11 @@ export class Core {
   }
 
   /**
-   * 非同期で進んだ生成ジョブ（plan の子 = parent_job_id 有り）の結果をネタ化する。
-   * 同期パス（NetaCard の generate）は自分で createNeta(from_job) するので、二重作成を避けるため
-   * ここでは plan 子のみ対象。done の gen_* で job_result がまだ無く中身があるものを
-   * createNeta(from_job) ＝ job_result＋対象への relation が張られ「投げて放置→受け取る」が成立。
+   * 生成ジョブの結果をネタ化する（done の gen_* で job_result がまだ無く中身があるもの）。
+   * - plan の子（parent_job_id 有り）：即ネタ化（クライアントが受け取らないので）。
+   * - 親なし（NetaCard の同期生成）：通常はクライアントが createNeta(from_job) で受け取るので触らない。
+   *   ただし一定時間(120s)経っても未受領なら、クライアントが落ちた等とみなし回収（漏れ防止）。
+   * これで二重作成のレースを避けつつ「投げて放置→受け取る」の取りこぼしも無くす。
    */
   reapResults(): number {
     const kindOf: Record<string, string> = {
@@ -97,15 +98,16 @@ export class Core {
       gen_chord: "chord_progression",
       gen_rhythm: "rhythm",
     };
+    const staleBefore = new Date(Date.now() - 120_000).toISOString();
     const rows = this.db
       .prepare(
-        `SELECT j.id, j.intent, j.result_summary AS result, j.target_neta_id AS target
+        `SELECT j.id, j.intent, j.result_summary AS result
          FROM job j
          WHERE j.status='done' AND j.intent IN ('gen_melody','gen_chord','gen_rhythm')
-           AND j.parent_job_id IS NOT NULL
+           AND (j.parent_job_id IS NOT NULL OR j.updated < ?)
            AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
       )
-      .all() as { id: string; intent: string; result: string | null; target: string | null }[];
+      .all(staleBefore) as { id: string; intent: string; result: string | null }[];
     let n = 0;
     for (const r of rows) {
       let content: unknown;

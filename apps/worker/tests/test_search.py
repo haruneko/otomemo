@@ -73,6 +73,9 @@ def test_content_text_makes_music_searchable():
     assert "Am" in _content_text(
         "chord_progression", '{"chords":[{"root":"A","quality":"m","start":0,"dur":4}]}'
     )
+    # 0–11整数root（正準）も音名でインデックスされる
+    assert "C" in _content_text("chord_progression", '{"chords":[{"root":0,"quality":""}]}')
+    assert "Am" in _content_text("chord_progression", '{"chords":[{"root":9,"quality":"m"}]}')
     assert "Kick:x.x." in _content_text(
         "rhythm", '{"rhythm":{"steps":4,"lanes":[{"name":"Kick","midi":36,"hits":[0,2]}]}}'
     )
