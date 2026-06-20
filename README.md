@@ -45,6 +45,12 @@ pnpm -r test                            # TS（api + web）
 uv run --directory apps/worker pytest   # Python worker
 ```
 
+## バックアップ（データ消えない）
+```sh
+CM_DB=$PWD/data/cm.sqlite ./scripts/backup.sh   # data/backups/ に世代コピー（既定14世代）
+# cron 例（毎時）:  0 * * * * CM_DB=/abs/path/data/cm.sqlite /abs/path/scripts/backup.sh
+```
+
 ## 設計の芯
 - すべては「ネタ」＝再帰的に入れ子（DAG）。tempo/拍子/調は section/song が所有、音楽要素は **C基準保存＋トランスポーズ**。
 - 生成は単一ツールに固定せず `claude -p` を起点（Stage1）。意味検索はブルートフォース cosine（規模的に十分）。
