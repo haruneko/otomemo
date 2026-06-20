@@ -223,6 +223,44 @@ article[aria-label="neta-card"].dragging {
 .mini-roll rect {
   fill: var(--k, var(--accent));
 }
+.input-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.input-toggle button {
+  font-size: 0.78rem;
+  padding: 3px 10px;
+}
+.input-toggle button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.step-pad {
+  display: grid;
+  gap: 2px;
+  overflow: auto;
+  max-height: 56vh;
+}
+.step-row {
+  display: flex;
+  gap: 2px;
+}
+.step-cell {
+  flex: 0 0 20px;
+  height: 18px;
+  border: 1px solid #2a2d33;
+  background: #1b1e23;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.step-cell.beat {
+  border-left: 2px solid #3a3f49;
+}
+.step-cell.on {
+  background: var(--k-melody, var(--accent));
+}
 .lane-cell.over {
   background: var(--accent);
   opacity: 0.7; /* ドロップ可の強調 */

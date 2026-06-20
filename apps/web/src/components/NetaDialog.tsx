@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Neta } from "../api";
 import { moraLines } from "../lyrics";
 import { PianoRoll } from "./PianoRoll";
+import { StepPad } from "./StepPad";
 import { ChordEditor } from "./ChordEditor";
 import { RhythmEditor } from "./RhythmEditor";
 import { SectionEditor } from "./SectionEditor";
@@ -43,6 +44,7 @@ export function NetaDialog({
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
   const [program, setProgram] = useState<number>(programOf(neta.content) ?? 0); // #47 GM音色
+  const [melodyView, setMelodyView] = useState<"roll" | "pad">("roll"); // #35 ロール/パッド
   const [mood, setMood] = useState(neta.mood ?? "");
   const [len, setLen] = useState(() =>
     Math.max(16, (neta.bars ?? 0) * 4, ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
@@ -236,7 +238,29 @@ export function NetaDialog({
       </div>
       <div className="editor-body">
         {isMelody ? (
-          <PianoRoll notes={notes} onChange={setNotes} beats={len} />
+          <div className="melody-input">
+            <div className="input-toggle">
+              <button
+                type="button"
+                className={melodyView === "roll" ? "on" : ""}
+                onClick={() => setMelodyView("roll")}
+              >
+                ロール
+              </button>
+              <button
+                type="button"
+                className={melodyView === "pad" ? "on" : ""}
+                onClick={() => setMelodyView("pad")}
+              >
+                パッド
+              </button>
+            </div>
+            {melodyView === "roll" ? (
+              <PianoRoll notes={notes} onChange={setNotes} beats={len} />
+            ) : (
+              <StepPad notes={notes} onChange={setNotes} />
+            )}
+          </div>
         ) : isChord ? (
           <ChordEditor chords={chords} onChange={setChords} />
         ) : isRhythm ? (
