@@ -51,7 +51,7 @@ export function App() {
           ))}
         </select>
       </div>
-      <NetaList items={items} />
+      <NetaList items={items} onChanged={() => void reload()} />
     </main>
   );
 }

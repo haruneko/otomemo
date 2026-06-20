@@ -63,3 +63,33 @@ def test_run_once_brainstorm(tmp_path, monkeypatch):
     row = conn.execute("SELECT status, result_summary FROM job WHERE id='j1'").fetchone()
     assert row["status"] == "done"
     assert json.loads(row["result_summary"])["suggestions"] == "提案テキスト"
+
+
+def test_suggest_parses_json_options(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=120: '[{"title":"案1","body":"ほんぶん1"},{"title":"案2","body":"b2"}]',
+    )
+    res = jobs.handle_suggest({"context": "夜", "instruction": "x"})
+    assert [o["title"] for o in res["options"]] == ["案1", "案2"]
+
+
+def test_suggest_strips_code_fence(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs, "claude_prompt", lambda p, timeout=120: '```json\n[{"title":"a","body":"b"}]\n```'
+    )
+    assert jobs.handle_suggest({"context": "x"})["options"][0]["title"] == "a"
+
+
+def test_suggest_fallback_on_non_json(monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: "JSONじゃない返答")
+    res = jobs.handle_suggest({"context": "x"})
+    assert len(res["options"]) == 1
+    assert res["options"][0]["body"] == "JSONじゃない返答"

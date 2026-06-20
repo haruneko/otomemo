@@ -131,6 +131,33 @@ article .tag {
   border-radius: 6px;
   padding: 8px;
 }
+.bs-options {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.bs-option {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.bs-option:hover {
+  border-color: var(--accent);
+}
+.bs-option strong {
+  font-size: 0.82rem;
+}
+.bs-option span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
 
 /* kind→色（Okabe-Ito由来・DAW慣習準拠・色覚安全）。color-research agent #色 */
 article[data-kind="rhythm"] { --k: var(--k-rhythm); }

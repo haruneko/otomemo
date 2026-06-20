@@ -85,6 +85,12 @@ export const api = {
     http<Job>("/job", { method: "POST", body: JSON.stringify(input) }),
 
   getJob: (id: string) => http<Job>(`/job/${id}`),
+
+  link: (from: string, to: string, type = "related") =>
+    http<{ ok: boolean }>("/relation", {
+      method: "POST",
+      body: JSON.stringify({ from, to, type }),
+    }),
 };
 
 export interface Job {

@@ -7,7 +7,9 @@
 将来: embed / analyze_mp3 / generate_* / research / collect / plan ...
 """
 
+import json
 import os
+import re
 import shutil
 import subprocess
 from typing import Callable
@@ -74,8 +76,47 @@ def handle_brainstorm(params: dict) -> dict:
     return {"suggestions": claude_prompt(prompt)}
 
 
+def _extract_options(text: str) -> list[dict]:
+    """Claudeの出力から JSON 配列 [{title, body}] を頑健に取り出す。"""
+    raw = text.strip()
+    m = re.search(r"```(?:json)?\s*(.*?)```", raw, re.S)
+    if m:
+        raw = m.group(1).strip()
+    s, e = raw.find("["), raw.rfind("]")
+    if s != -1 and e != -1 and e > s:
+        raw = raw[s : e + 1]
+    data = json.loads(raw)
+    out: list[dict] = []
+    for o in data if isinstance(data, list) else []:
+        if isinstance(o, dict):
+            out.append({"title": str(o.get("title", ""))[:80], "body": str(o.get("body", ""))})
+    return out
+
+
+def handle_suggest(params: dict) -> dict:
+    """壁打ち（構造化）。案を JSON 配列で返し、UIで選択可能にする。"""
+    context = params.get("context", "")
+    instruction = params.get("instruction") or "この対象を発展させる案を出す。"
+    n = int(params.get("n", 3))
+    prompt = (
+        "作曲の壁打ち相手として、対象の発展案を出す。\n"
+        f'出力は JSON 配列のみ。各要素は {{"title": 短い見出し, "body": 本文}}。{n}個。\n'
+        "前置き・説明・コードフェンスは付けず、JSON配列だけを返すこと。\n\n"
+        f"# 対象\n{context}\n\n# 依頼\n{instruction}"
+    )
+    text = claude_prompt(prompt)
+    try:
+        options = _extract_options(text)
+    except Exception:  # noqa: BLE001
+        options = []
+    if not options:
+        options = [{"title": "提案", "body": text}]
+    return {"options": options}
+
+
 HANDLERS: dict[str, Callable[[dict], dict]] = {
     "mora_count": handle_mora_count,
     "echo": handle_echo,
     "brainstorm": handle_brainstorm,
+    "suggest": handle_suggest,
 }

@@ -3,11 +3,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { createJob, getJob } = vi.hoisted(() => ({
+const { createJob, getJob, createNeta, link } = vi.hoisted(() => ({
   createJob: vi.fn(),
   getJob: vi.fn(),
+  createNeta: vi.fn(),
+  link: vi.fn(),
 }));
-vi.mock("../src/api", () => ({ api: { createJob, getJob } }));
+vi.mock("../src/api", () => ({ api: { createJob, getJob, createNeta, link } }));
 
 import { NetaList, NetaCard } from "../src/components/NetaList";
 
@@ -48,21 +50,25 @@ describe("NetaList", () => {
     expect(screen.getByText("まだネタがありません。")).toBeInTheDocument();
   });
 
-  it("throws a brainstorm job and shows the result", async () => {
+  it("壁打ち shows selectable options; choosing one creates a neta", async () => {
     createJob.mockResolvedValue({ id: "j1", status: "queued" });
     getJob.mockResolvedValue({
       id: "j1",
       status: "done",
-      result: { suggestions: "- 案A\n- 案B" },
+      result: { options: [{ title: "案A", body: "ほんぶんA" }] },
       error: null,
     });
-    render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} />);
+    createNeta.mockResolvedValue({ id: "new1", kind: "lyric" });
+    link.mockResolvedValue({ ok: true });
+    const onChanged = vi.fn();
+
+    render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} onChanged={onChanged} />);
     await userEvent.click(screen.getByRole("button", { name: "壁打ち" }));
-    await waitFor(() => expect(screen.getByText(/案A/)).toBeInTheDocument());
-    expect(createJob).toHaveBeenCalledWith({
-      intent: "brainstorm",
-      target_neta_id: "x",
-      params: { context: "夜を駆ける" },
-    });
+    await waitFor(() => expect(screen.getByText("案A")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByText("案A"));
+    await waitFor(() => expect(createNeta).toHaveBeenCalled());
+    expect(createNeta).toHaveBeenCalledWith({ kind: "lyric", title: "案A", text: "ほんぶんA" });
+    expect(onChanged).toHaveBeenCalled();
   });
 });
