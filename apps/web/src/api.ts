@@ -38,6 +38,14 @@ export interface NetaInput {
   tags?: string[];
 }
 
+export interface NetaPatch {
+  title?: string | null;
+  text?: string | null;
+  content?: unknown;
+  mood?: string | null;
+  tags?: string[];
+}
+
 export interface Facets {
   kind: string[];
   mood: string[];
@@ -65,6 +73,12 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   createNeta: (input: NetaInput) =>
     http<Neta>("/neta", { method: "POST", body: JSON.stringify(input) }),
+
+  updateNeta: (id: string, patch: NetaPatch) =>
+    http<Neta>(`/neta/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+
+  deleteNeta: (id: string) =>
+    http<{ deleted: boolean }>(`/neta/${id}`, { method: "DELETE" }),
 
   listNeta: (q: ListQuery = {}) => {
     const p = new URLSearchParams();

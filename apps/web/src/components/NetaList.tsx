@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, type Neta } from "../api";
+import { NetaDialog } from "./NetaDialog";
 
 interface Opt {
   title: string;
@@ -15,6 +16,7 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
   const label = neta.title ?? neta.text ?? "(無題)";
   const [bs, setBs] = useState<BS>({ state: "idle" });
   const [instruction, setInstruction] = useState("");
+  const [editing, setEditing] = useState(false);
 
   async function suggest() {
     setBs({ state: "running" });
@@ -58,7 +60,12 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
     <article aria-label="neta-card" data-kind={neta.kind}>
       <header>
         <span className="kind">{neta.kind}</span>
-        <code className="id">{neta.id.slice(0, 8)}</code>
+        <div className="head-right">
+          <code className="id">{neta.id.slice(0, 8)}</code>
+          <button className="edit-btn" aria-label="edit" onClick={() => setEditing(true)}>
+            ⋯
+          </button>
+        </div>
       </header>
       <div className="body">{label}</div>
       {neta.tags.length > 0 && (
@@ -92,6 +99,9 @@ export function NetaCard({ neta, onChanged }: { neta: Neta; onChanged?: () => vo
             </button>
           ))}
         </div>
+      )}
+      {editing && (
+        <NetaDialog neta={neta} onClose={() => setEditing(false)} onChanged={onChanged} />
       )}
     </article>
   );
