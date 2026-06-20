@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
-import { usePlayhead } from "../usePlayhead";
+import { useTransport } from "../useTransport";
+import { TransportBar } from "./TransportBar";
 
 // レーンの1セル＝ドロップ先（#52②c）。kind が合えばカードを落として配置。
 function LaneCell({
@@ -28,7 +29,7 @@ function LaneCell({
     />
   );
 }
-import { notesForContent, playNotes, downloadMidi, type Note, type PlaybackHandle } from "../music";
+import { notesForContent, downloadMidi, type Note } from "../music";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/リズムの3レーン×小節 で組む。
 // レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
@@ -73,9 +74,8 @@ export function SectionEditor({
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
   const BPB = beatsPerBar(meter ?? neta.meter); // 1小節の拍数（#51・編集中はprop優先）
   const TOTAL = BARS * BPB;
-  const { lineRef, start: startPlayhead, stop: stopPlayhead } = usePlayhead(); // #49/#58
-  const playRef = useRef<PlaybackHandle | null>(null);
-  const [playing, setPlaying] = useState(false);
+  // #49/#58/#59 トランスポート。合成結果を再生／プレイヘッドは TOTAL(グリッド全体)尺・拍子BPB。
+  const tp = useTransport(() => composite(), tempo, { scaleBeats: TOTAL, bpb: BPB });
 
   const load = useCallback(async () => {
     const tree = await api.getComposition(neta.id);
@@ -127,35 +127,9 @@ export function SectionEditor({
     });
   }
 
-  // #57 再生/停止トグル。停止＝位置保持ではなく合成は頭出し（短いので毎回頭から聴く）。
-  async function togglePlay() {
-    if (playing) {
-      playRef.current?.stop();
-      stopPlayhead();
-      setPlaying(false);
-      return;
-    }
-    const notes = composite();
-    if (!notes.length) return;
-    playRef.current = await playNotes(notes, tempo, {
-      onEnd: () => {
-        setPlaying(false);
-        stopPlayhead();
-      },
-    });
-    setPlaying(true);
-    void startPlayhead(TOTAL, tempo); // グリッド全体(TOTAL拍)を尺に
-  }
-
-  // 別ネタへ切替/アンマウントで鳴りっぱなしを止める
-  useEffect(() => () => playRef.current?.stop(), []);
-
   return (
     <div className="section-editor">
       <div className="section-actions">
-        <button type="button" onClick={() => void togglePlay()} aria-pressed={playing}>
-          {playing ? "■ 停止" : "▶ 合成再生"}
-        </button>
         <button
           type="button"
           onClick={() => downloadMidi(composite(), `${neta.title ?? "section"}.mid`, tempo, neta.meter)}
@@ -165,7 +139,7 @@ export function SectionEditor({
       </div>
 
       <div className="lanes" aria-label="timeline">
-        <div className="playhead" aria-hidden="true" ref={lineRef} />
+        <div className="playhead" aria-hidden="true" ref={tp.lineRef} />
         <div className="lane-ruler">
           <div className="lane-label" />
           <div className="ruler-bars">
@@ -279,6 +253,14 @@ export function SectionEditor({
           </div>
         </div>
       )}
+      <TransportBar
+        state={tp.state}
+        loopOn={tp.loopOn}
+        timeRef={tp.timeRef}
+        onPlayPause={tp.playPause}
+        onRewind={tp.rewind}
+        onToggleLoop={tp.toggleLoop}
+      />
     </div>
   );
 }

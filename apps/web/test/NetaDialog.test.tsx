@@ -14,7 +14,12 @@ const { updateNeta, deleteNeta, getRelations, playNotes, phStart, phStop } = vi.
 vi.mock("../src/api", () => ({ api: { updateNeta, deleteNeta, getRelations } }));
 // Tone を読み込まないよう usePlayhead と playNotes だけ差し替え（他の music エクスポートは実物）
 vi.mock("../src/usePlayhead", () => ({
-  usePlayhead: () => ({ lineRef: { current: null }, start: phStart, stop: phStop }),
+  usePlayhead: () => ({
+    lineRef: { current: null },
+    timeRef: { current: null },
+    start: phStart,
+    stop: phStop,
+  }),
 }));
 vi.mock("../src/music", async (orig) => ({
   ...(await orig<typeof import("../src/music")>()),
@@ -72,21 +77,44 @@ describe("NetaDialog", () => {
     expect(patch.bars).toBe(4); // 既定16拍 = 4小節
   });
 
-  it("toggles play↔stop and drives the playhead (#57/#58)", async () => {
-    playNotes.mockResolvedValue({ stop: vi.fn(), pause: vi.fn(), resume: vi.fn() });
+  it("transport: play→pause→rewind drives playhead (#57/#58/#59)", async () => {
+    const pause = vi.fn();
+    const stop = vi.fn();
+    playNotes.mockResolvedValue({ stop, pause, resume: vi.fn() });
     const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByLabelText("cell-60-0")); // ノートを1つ置く
 
-    await userEvent.click(screen.getByRole("button", { name: "▶ 再生" }));
+    const pp = screen.getByLabelText("play-pause");
+    await userEvent.click(pp); // stopped → playing
     await waitFor(() => expect(playNotes).toHaveBeenCalled());
-    expect(phStart).toHaveBeenCalled(); // プレイヘッド開始
-    // ボタンが停止に変わる
-    expect(await screen.findByRole("button", { name: "■ 停止" })).toBeInTheDocument();
+    expect(phStart).toHaveBeenCalled();
+    await waitFor(() => expect(pp).toHaveAttribute("aria-pressed", "true"));
 
-    await userEvent.click(screen.getByRole("button", { name: "■ 停止" }));
+    await userEvent.click(pp); // playing → paused（位置保持）
+    expect(pause).toHaveBeenCalled();
+    expect(pp).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(screen.getByLabelText("rewind")); // 頭出し→stopped
+    expect(stop).toHaveBeenCalled();
     expect(phStop).toHaveBeenCalled();
-    expect(await screen.findByRole("button", { name: "▶ 再生" })).toBeInTheDocument();
+  });
+
+  it("transport: loop toggle restarts playback while playing (#59)", async () => {
+    playNotes.mockClear(); // 前テストの呼び出し回数をリセット
+    playNotes.mockResolvedValue({ stop: vi.fn(), pause: vi.fn(), resume: vi.fn() });
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("cell-60-0"));
+
+    await userEvent.click(screen.getByLabelText("play-pause"));
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(1));
+    const loop = screen.getByLabelText("loop");
+    await userEvent.click(loop); // 再生中のループON→鳴らし直し
+    await waitFor(() => expect(loop).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(2));
+    // 2回目はループ指定で呼ばれる
+    expect(playNotes.mock.calls[1]![2].loop).toEqual({ startBeat: 0, endBeat: 1 });
   });
 
   it("edits a chord progression and saves content.chords", async () => {

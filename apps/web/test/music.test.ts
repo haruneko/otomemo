@@ -12,6 +12,7 @@ import {
   scheduleTimes,
   totalSec,
   loopRange,
+  barBeat,
   type Note,
 } from "../src/music";
 
@@ -125,6 +126,15 @@ describe("music", () => {
       const notes = [{ pitch: 60, start: 0, dur: 4 }];
       expect(loopRange(notes, 120)).toEqual({ start: 0, end: 2.0 });
       expect(loopRange(notes, 120, { startBeat: 2, endBeat: 6 })).toEqual({ start: 1.0, end: 3.0 });
+    });
+
+    it("barBeat formats beat as bar:beat (1始まり, 拍子で割る) (#59)", () => {
+      expect(barBeat(0, 4)).toBe("1:1");
+      expect(barBeat(3, 4)).toBe("1:4");
+      expect(barBeat(4, 4)).toBe("2:1");
+      expect(barBeat(7.5, 4)).toBe("2:4"); // 小数拍は切り捨て
+      expect(barBeat(3, 3)).toBe("2:1"); // 3/4
+      expect(barBeat(-1, 4)).toBe("1:1"); // 負はclamp
     });
   });
 });

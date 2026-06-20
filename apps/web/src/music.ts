@@ -265,6 +265,15 @@ export function loopRange(
   return { start: 0, end: totalSec(notes, bpm) };
 }
 
+/** 拍位置を「小節:拍」表記へ（#59 トランスポート時間表示）。bpb=1小節の拍数。 */
+export function barBeat(beat: number, bpb: number): string {
+  if (bpb <= 0) return "1:1";
+  const b = Math.max(0, beat);
+  const bar = Math.floor(b / bpb) + 1;
+  const inBar = Math.floor(b % bpb) + 1;
+  return `${bar}:${inBar}`;
+}
+
 export interface PlaybackHandle {
   pause(): void;
   resume(): void;

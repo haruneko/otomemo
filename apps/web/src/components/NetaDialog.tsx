@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Neta } from "../api";
 import { moraLines } from "../lyrics";
-import { usePlayhead } from "../usePlayhead";
+import { useTransport } from "../useTransport";
+import { TransportBar } from "./TransportBar";
 import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
 import { ChordEditor } from "./ChordEditor";
@@ -13,14 +14,12 @@ import {
   chordsToNotes,
   rhythmOf,
   rhythmToNotes,
-  playNotes,
   downloadMidi,
   programOf,
   GM_INSTRUMENTS,
   type Note,
   type ChordEntry,
   type RhythmContent,
-  type PlaybackHandle,
 } from "../music";
 
 const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -61,29 +60,10 @@ export function NetaDialog({
   // ソロ編集は見た目=実音（WYSIWYG）＝トランスポーズしない。調支配は合成(SectionEditor)側。
   const playable = isMelody ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
 
-  // #57/#58 再生/停止トグル＋プレイヘッド。melody ロールは span 尺で赤線が走る。
-  const { lineRef, start: startPlayhead, stop: stopPlayhead } = usePlayhead();
-  const playRef = useRef<PlaybackHandle | null>(null);
-  const [playing, setPlaying] = useState(false);
+  // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。
+  // melody ロールは span 尺で赤線が走る。単体エディタは拍子を持たない＝小節は4拍既定。
   const span = Math.max(len, ...playable.map((n) => Math.ceil(n.start + n.dur)));
-  async function togglePlay() {
-    if (playing) {
-      playRef.current?.stop();
-      stopPlayhead();
-      setPlaying(false);
-      return;
-    }
-    if (!playable.length) return;
-    playRef.current = await playNotes(playable, tempo, {
-      onEnd: () => {
-        setPlaying(false);
-        stopPlayhead();
-      },
-    });
-    setPlaying(true);
-    void startPlayhead(span, tempo);
-  }
-  useEffect(() => () => playRef.current?.stop(), []);
+  const tp = useTransport(() => playable, tempo, { scaleBeats: span, bpb: 4 });
 
   // 連関（このネタから生成/関連したネタ）を表示
   useEffect(() => {
@@ -218,25 +198,20 @@ export function NetaDialog({
           </label>
         )}
         {isMusic && (
-          <>
-            <button type="button" onClick={() => void togglePlay()} aria-pressed={playing}>
-              {playing ? "■ 停止" : "▶ 再生"}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                downloadMidi(
-                  playable,
-                  `${neta.title ?? "sketch"}.mid`,
-                  tempo,
-                  null,
-                  isRhythm ? undefined : program,
-                )
-              }
-            >
-              MIDI
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() =>
+              downloadMidi(
+                playable,
+                `${neta.title ?? "sketch"}.mid`,
+                tempo,
+                null,
+                isRhythm ? undefined : program,
+              )
+            }
+          >
+            MIDI
+          </button>
         )}
         <span className="spacer" />
         <button className="danger" onClick={remove} disabled={busy}>
@@ -282,7 +257,7 @@ export function NetaDialog({
               </button>
             </div>
             {melodyView === "roll" ? (
-              <PianoRoll notes={notes} onChange={setNotes} beats={len} playheadRef={lineRef} />
+              <PianoRoll notes={notes} onChange={setNotes} beats={len} playheadRef={tp.lineRef} />
             ) : (
               <StepPad notes={notes} onChange={setNotes} />
             )}
@@ -320,6 +295,16 @@ export function NetaDialog({
           </div>
         )}
       </div>
+      {isMusic && (
+        <TransportBar
+          state={tp.state}
+          loopOn={tp.loopOn}
+          timeRef={tp.timeRef}
+          onPlayPause={tp.playPause}
+          onRewind={tp.rewind}
+          onToggleLoop={tp.toggleLoop}
+        />
+      )}
       {rels.length > 0 && (
         <div className="relations">
           <span className="rel-label">関連</span>
