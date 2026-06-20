@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("../src/api", () => ({
   KINDS: ["lyric", "melody"],
@@ -19,5 +20,12 @@ describe("App", () => {
     await waitFor(() =>
       expect(screen.getByText("まだネタがありません。")).toBeInTheDocument(),
     );
+  });
+
+  it("opens the settings dialog with theme colors", async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole("button", { name: "settings" }));
+    expect(screen.getByRole("dialog", { name: "settings" })).toBeInTheDocument();
+    expect(screen.getByText("テーマ（色）")).toBeInTheDocument();
   });
 });

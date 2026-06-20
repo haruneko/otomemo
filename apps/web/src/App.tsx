@@ -3,6 +3,7 @@ import { api, type Neta } from "./api";
 import { applyColors, loadColors } from "./theme";
 import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
+import { ThemeSettings } from "./settings/ThemeSettings";
 
 const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "song"];
 
@@ -10,6 +11,7 @@ export function App() {
   const [items, setItems] = useState<Neta[]>([]);
   const [kindFilter, setKindFilter] = useState("");
   const [q, setQ] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     applyColors(loadColors());
@@ -29,7 +31,12 @@ export function App() {
 
   return (
     <main>
-      <h1>creative_manager</h1>
+      <div className="app-head">
+        <h1>creative_manager</h1>
+        <button className="gear" aria-label="settings" onClick={() => setSettingsOpen(true)}>
+          ⚙
+        </button>
+      </div>
       <Capture onCreated={() => void reload()} />
       <div className="filters">
         <input
@@ -52,6 +59,24 @@ export function App() {
         </select>
       </div>
       <NetaList items={items} onChanged={() => void reload()} />
+      {settingsOpen && (
+        <div className="dialog-backdrop" onClick={() => setSettingsOpen(false)}>
+          <div
+            className="dialog"
+            role="dialog"
+            aria-label="settings"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header>
+              <span>設定</span>
+              <button aria-label="close" onClick={() => setSettingsOpen(false)}>
+                ✕
+              </button>
+            </header>
+            <ThemeSettings />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
