@@ -30,6 +30,7 @@ export function SectionEditor({
 }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [picker, setPicker] = useState<{ lane: Lane; position: number; cands: Neta[] } | null>(null);
+  const [pq, setPq] = useState(""); // ピッカーの絞り込み
 
   const load = useCallback(async () => {
     const tree = await api.getComposition(neta.id);
@@ -53,6 +54,7 @@ export function SectionEditor({
     const all = await api.listNeta({});
     const have = new Set(children.map((c) => c.node.neta.id));
     const cands = all.filter((n) => inLane(lane, n.kind) && n.id !== neta.id && !have.has(n.id));
+    setPq("");
     setPicker({ lane, position, cands });
   }
   async function placeAt(child: Neta) {
@@ -130,7 +132,10 @@ export function SectionEditor({
                     left: `${(c.position / TOTAL) * 100}%`,
                     width: `${(Math.min(childDur(c), TOTAL - c.position) / TOTAL) * 100}%`,
                   }}
-                  onClick={() => void remove(c.node.neta.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void remove(c.node.neta.id);
+                  }}
                 >
                   {(c.node.neta.title ?? c.node.neta.text ?? "").slice(0, 8)}
                 </button>
@@ -175,15 +180,31 @@ export function SectionEditor({
                 ✕
               </button>
             </header>
+            <input
+              aria-label="picker-search"
+              className="editor-tags"
+              placeholder="絞り込み…"
+              value={pq}
+              onChange={(e) => setPq(e.target.value)}
+            />
             <div className="picker-list">
-              {picker.cands.length === 0 && (
-                <p className="muted">置ける{picker.lane.label}のネタがありません</p>
-              )}
-              {picker.cands.map((n) => (
-                <button key={n.id} type="button" className="bs-option" onClick={() => void placeAt(n)}>
-                  <strong>{n.title ?? n.text ?? "(無題)"}</strong>
-                </button>
-              ))}
+              {(() => {
+                const list = picker.cands.filter((n) =>
+                  (n.title ?? n.text ?? "").toLowerCase().includes(pq.toLowerCase()),
+                );
+                if (list.length === 0)
+                  return <p className="muted">置ける{picker.lane.label}のネタがありません</p>;
+                return list.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    className="bs-option"
+                    onClick={() => void placeAt(n)}
+                  >
+                    <strong>{n.title ?? n.text ?? "(無題)"}</strong>
+                  </button>
+                ));
+              })()}
             </div>
           </div>
         </div>
