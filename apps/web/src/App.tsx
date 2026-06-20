@@ -5,6 +5,7 @@ import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { midiToNotes } from "./music";
+import { Chat } from "./components/Chat";
 
 const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "song"];
 
@@ -13,6 +14,7 @@ export function App() {
   const [kindFilter, setKindFilter] = useState("");
   const [q, setQ] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     applyColors(loadColors());
@@ -55,6 +57,9 @@ export function App() {
               }}
             />
           </label>
+          <button className="gear" aria-label="chat" onClick={() => setChatOpen(true)}>
+            💬
+          </button>
           <button className="gear" aria-label="settings" onClick={() => setSettingsOpen(true)}>
             ⚙
           </button>
@@ -82,6 +87,7 @@ export function App() {
         </select>
       </div>
       <NetaList items={items} onChanged={() => void reload()} />
+      {chatOpen && <Chat onClose={() => setChatOpen(false)} onChanged={() => void reload()} />}
       {settingsOpen && (
         <div className="dialog-backdrop" onClick={() => setSettingsOpen(false)}>
           <div
