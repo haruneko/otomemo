@@ -13,7 +13,6 @@ import {
   rhythmToNotes,
   playNotes,
   downloadMidi,
-  transpose,
   type Note,
   type ChordEntry,
   type RhythmContent,
@@ -49,8 +48,8 @@ export function NetaDialog({
   const isRhythm = neta.kind === "rhythm";
   const isContainer = neta.kind === "section" || neta.kind === "song";
   const isMusic = isMelody || isChord || isRhythm;
+  // ソロ編集は見た目=実音（WYSIWYG）＝トランスポーズしない。調支配は合成(SectionEditor)側。
   const playable = isMelody ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
-  const playKey = isRhythm ? 0 : key; // ドラムは移調しない
 
   // 連関（このネタから生成/関連したネタ）を表示
   useEffect(() => {
@@ -150,17 +149,12 @@ export function NetaDialog({
           </label>
           {isMusic && (
             <>
-              <button
-                type="button"
-                onClick={() => void playNotes(transpose(playable, playKey), tempo)}
-              >
+              <button type="button" onClick={() => void playNotes(playable, tempo)}>
                 ▶ 再生
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  downloadMidi(transpose(playable, playKey), `${neta.title ?? "sketch"}.mid`, tempo)
-                }
+                onClick={() => downloadMidi(playable, `${neta.title ?? "sketch"}.mid`, tempo)}
               >
                 MIDI
               </button>

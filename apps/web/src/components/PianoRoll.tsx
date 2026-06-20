@@ -1,12 +1,25 @@
+import { useMemo, useState } from "react";
 import type { Note } from "../music";
-
-const LOW = 60; // C4
-const HIGH = 83; // B5
 
 const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const noteName = (p: number) => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
 const isBlack = (p: number) => NAMES[p % 12]!.includes("#");
 
+const DEFAULT_LOW = 60; // C4
+const DEFAULT_HIGH = 83; // B5
+const SUBDIV = 4; // 1拍を16分まで刻む
+
+// 音長ツール（拍）。velocity編集は後回し（一律100）。
+const LENGTHS = [
+  { label: "16", v: 0.25 },
+  { label: "8", v: 0.5 },
+  { label: "4", v: 1 },
+  { label: "2", v: 2 },
+  { label: "1", v: 4 },
+];
+
+// 見た目=実音のピアノロール：音域は content に追従、ノートは実 start/dur のバーで忠実表示。
+// セルクリックで配置（同位置は置換）、ノートバークリックで削除。
 export function PianoRoll({
   notes,
   onChange,
@@ -16,36 +29,80 @@ export function PianoRoll({
   onChange: (n: Note[]) => void;
   beats?: number;
 }) {
-  const pitches: number[] = [];
-  for (let p = HIGH; p >= LOW; p--) pitches.push(p);
+  const [noteLen, setNoteLen] = useState(1);
 
-  const has = (p: number, b: number) => notes.some((n) => n.pitch === p && n.start === b);
-  function toggle(p: number, b: number) {
-    if (has(p, b)) onChange(notes.filter((n) => !(n.pitch === p && n.start === b)));
-    else onChange([...notes, { pitch: p, start: b, dur: 1 }]);
+  const pitches = useMemo(() => {
+    const lo = Math.min(DEFAULT_LOW, ...notes.map((n) => n.pitch));
+    const hi = Math.max(DEFAULT_HIGH, ...notes.map((n) => n.pitch));
+    const arr: number[] = [];
+    for (let p = hi; p >= lo; p--) arr.push(p);
+    return arr;
+  }, [notes]);
+  const steps = beats * SUBDIV;
+
+  function addAt(pitch: number, step: number) {
+    const start = step / SUBDIV;
+    const rest = notes.filter((n) => !(n.pitch === pitch && Math.abs(n.start - start) < 1e-6));
+    onChange([...rest, { pitch, start, dur: noteLen }]);
+  }
+  function removeNote(target: Note) {
+    onChange(notes.filter((n) => n !== target));
   }
 
   return (
-    <div className="proll" role="grid" aria-label="piano-roll">
-      {pitches.map((p) => (
-        <div className="proll-row" key={p} role="row">
-          <div className={"proll-key" + (isBlack(p) ? " black" : " white")} aria-hidden="true">
-            {noteName(p)}
+    <div className="proll-wrap">
+      <div className="proll-tools">
+        <span>音長(分)</span>
+        {LENGTHS.map((l) => (
+          <button
+            key={l.v}
+            type="button"
+            className={"len" + (noteLen === l.v ? " on" : "")}
+            onClick={() => setNoteLen(l.v)}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+      <div className="proll" role="grid" aria-label="piano-roll">
+        {pitches.map((p) => (
+          <div className="proll-row" key={p} role="row">
+            <div className={"proll-key" + (isBlack(p) ? " black" : " white")} aria-hidden="true">
+              {noteName(p)}
+            </div>
+            <div className="proll-lane">
+              {Array.from({ length: steps }, (_, s) => (
+                <button
+                  key={s}
+                  type="button"
+                  aria-label={`cell-${p}-${s}`}
+                  className={"proll-cell" + (s % SUBDIV === 0 ? " beat" : "")}
+                  onClick={() => addAt(p, s)}
+                />
+              ))}
+              {notes
+                .filter((n) => n.pitch === p)
+                .map((n, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`note-${p}-${n.start}`}
+                    className="proll-note"
+                    style={{
+                      left: `${(n.start / beats) * 100}%`,
+                      width: `${(n.dur / beats) * 100}%`,
+                    }}
+                    title={`${noteName(p)} ${n.start}拍 +${n.dur}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeNote(n);
+                    }}
+                  />
+                ))}
+            </div>
           </div>
-          {Array.from({ length: beats }, (_, b) => (
-            <button
-              key={b}
-              type="button"
-              role="gridcell"
-              aria-label={`pitch-${p}-beat-${b}`}
-              className={
-                "proll-cell" + (has(p, b) ? " on" : "") + (p % 12 === 0 ? " octave" : "")
-              }
-              onClick={() => toggle(p, b)}
-            />
-          ))}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

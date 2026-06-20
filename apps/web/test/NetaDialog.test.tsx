@@ -47,7 +47,7 @@ describe("NetaDialog", () => {
   it("shows a piano roll for melody and saves notes", async () => {
     const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
-    await userEvent.click(screen.getByLabelText("pitch-60-beat-0"));
+    await userEvent.click(screen.getByLabelText("cell-60-0"));
     await userEvent.selectOptions(screen.getByLabelText("key"), "9");
     const tempoInput = screen.getByLabelText("tempo");
     await userEvent.clear(tempoInput);

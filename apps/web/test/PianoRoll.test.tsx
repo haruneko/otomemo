@@ -4,11 +4,18 @@ import userEvent from "@testing-library/user-event";
 import { PianoRoll } from "../src/components/PianoRoll";
 
 describe("PianoRoll", () => {
-  it("adds a note on cell click", async () => {
+  it("adds a note on cell click (default length = 1 beat)", async () => {
     const onChange = vi.fn();
     render(<PianoRoll notes={[]} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("pitch-60-beat-0"));
+    await userEvent.click(screen.getByLabelText("cell-60-0"));
     expect(onChange).toHaveBeenCalledWith([{ pitch: 60, start: 0, dur: 1 }]);
+  });
+
+  it("removes a note when clicking its bar", async () => {
+    const onChange = vi.fn();
+    render(<PianoRoll notes={[{ pitch: 60, start: 0, dur: 1 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("note-60-0"));
+    expect(onChange).toHaveBeenCalledWith([]);
   });
 
   it("labels rows with a fixed piano keyboard (note names)", () => {
@@ -17,10 +24,9 @@ describe("PianoRoll", () => {
     expect(screen.getByText("C5")).toBeInTheDocument();
   });
 
-  it("removes a note when toggling an existing cell", async () => {
-    const onChange = vi.fn();
-    render(<PianoRoll notes={[{ pitch: 60, start: 0, dur: 1 }]} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("pitch-60-beat-0"));
-    expect(onChange).toHaveBeenCalledWith([]);
+  it("shows out-of-range and sub-beat notes faithfully (see = play)", () => {
+    render(<PianoRoll notes={[{ pitch: 88, start: 1.5, dur: 0.5 }]} onChange={vi.fn()} />);
+    // pitch 88 is above the default C4-B5 window; it must still be visible
+    expect(screen.getByLabelText("note-88-1.5")).toBeInTheDocument();
   });
 });
