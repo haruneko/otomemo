@@ -6,6 +6,7 @@
 - encoder を差し替え可能にしてテスト時はモデル不要。
 """
 
+import json
 import os
 import sqlite3
 
@@ -25,8 +26,48 @@ CREATE TABLE IF NOT EXISTS neta_embedding (
 """
 
 
+_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def _note_name(p: int) -> str:
+    return f"{_NAMES[p % 12]}{p // 12 - 1}"
+
+
+def _content_text(kind: str, content: str | None) -> str:
+    """音楽netaの content を検索可能な文字列にする（メロ→音名 / コード→記号 / リズム→パターン）。"""
+    if not content:
+        return ""
+    try:
+        c = json.loads(content)
+    except Exception:  # noqa: BLE001
+        return ""
+    if kind == "melody":
+        return " ".join(_note_name(int(n["pitch"])) for n in c.get("notes") or [] if "pitch" in n)
+    if kind in ("chord", "chord_progression"):
+        return " ".join(
+            f"{ch.get('root', '')}{ch.get('quality', '')}" for ch in c.get("chords") or []
+        )
+    if kind == "rhythm":
+        r = c.get("rhythm") or {}
+        steps = int(r.get("steps", 16))
+        out = []
+        for la in r.get("lanes") or []:
+            hits = set(la.get("hits") or [])
+            pat = "".join("x" if s in hits else "." for s in range(steps))
+            if "x" in pat:
+                out.append(f"{la.get('name', '')}:{pat}")
+        return " ".join(out)
+    return ""
+
+
 def _text_of(row: sqlite3.Row) -> str:
-    parts = [row["kind"], row["title"], row["text"], row["mood"]]
+    parts = [
+        row["kind"],
+        row["title"],
+        row["text"],
+        row["mood"],
+        _content_text(row["kind"], row["content"]),
+    ]
     joined = " ".join(p for p in parts if p)
     return joined or (row["kind"] or "")
 
@@ -60,7 +101,7 @@ class SearchIndex:
         conn.executescript(EMBED_SCHEMA)
         rows = conn.execute(
             """
-            SELECT n.id, n.kind, n.title, n.text, n.mood, n.updated
+            SELECT n.id, n.kind, n.title, n.text, n.mood, n.content, n.updated
             FROM neta n LEFT JOIN neta_embedding e ON e.neta_id = n.id
             WHERE e.neta_id IS NULL OR e.updated != n.updated
             """

@@ -66,6 +66,18 @@ def test_search_caches_and_reuses(tmp_path):
     assert n == 3
 
 
+def test_content_text_makes_music_searchable():
+    from cm_worker.search import _content_text
+
+    assert "C4" in _content_text("melody", '{"notes":[{"pitch":60,"start":0,"dur":1}]}')
+    assert "Am" in _content_text(
+        "chord_progression", '{"chords":[{"root":"A","quality":"m","start":0,"dur":4}]}'
+    )
+    assert "Kick:x.x." in _content_text(
+        "rhythm", '{"rhythm":{"steps":4,"lanes":[{"name":"Kick","midi":36,"hits":[0,2]}]}}'
+    )
+
+
 def test_search_empty(tmp_path):
     db = str(tmp_path / "t.sqlite")
     conn = connect(db)
