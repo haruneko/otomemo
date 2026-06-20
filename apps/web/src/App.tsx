@@ -101,6 +101,25 @@ export function App() {
               }}
             />
           </label>
+          <label className="import-btn">
+            歌詞取込
+            <input
+              type="file"
+              accept=".txt,text/plain"
+              hidden
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const parts = (await file.text())
+                  .split(/\n\s*\n/)
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+                for (const p of parts) await api.createNeta({ kind: "lyric", text: p });
+                e.target.value = "";
+                await reload();
+              }}
+            />
+          </label>
           <button className="gear" aria-label="tray" onClick={openTray}>
             📥{doneCount > 0 && <span className="badge">{doneCount}</span>}
           </button>
