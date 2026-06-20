@@ -1,4 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { api, type Neta } from "./api";
 import { applyColors, loadColors } from "./theme";
 import { Capture } from "./components/Capture";
@@ -32,6 +40,21 @@ export function App() {
   const [doneCount, setDoneCount] = useState(0);
   const [active, setActive] = useState<Neta | null>(null);
   const [railOpen, setRailOpen] = useState(true);
+  const [composeSignal, setComposeSignal] = useState(0); // D&D配置でSectionEditorを再読込
+
+  // ドラッグは5px動かしてから開始＝カードのクリック(開く)と両立（#52②c）
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  async function onDragEnd(e: DragEndEvent) {
+    const dragged = e.active.data.current?.neta as Neta | undefined;
+    const drop = e.over?.data.current as { kinds?: readonly string[]; position?: number } | undefined;
+    if (!dragged || !drop?.kinds || drop.position === undefined) return;
+    if (!active || (active.kind !== "section" && active.kind !== "song")) return; // 開いてるのがsectionの時だけ
+    if (!drop.kinds.includes(dragged.kind)) return; // レーンのkindに合わなければ無視
+    await api.placeChild(active.id, dragged.id, drop.position, 0);
+    setComposeSignal((v) => v + 1);
+    void reload();
+  }
 
   async function newSong() {
     const s = await api.createNeta({ kind: "section", title: "新しい曲" });
@@ -132,7 +155,12 @@ export function App() {
           </button>
         </div>
       </div>
-      <div className="workspace">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragEnd={(e) => void onDragEnd(e)}
+      >
+        <div className="workspace">
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
           <div className="notebook-actions">
             <button className="import-btn accent" onClick={() => void newSong()}>
@@ -213,6 +241,7 @@ export function App() {
             <NetaDialog
               key={active.id} /* ネタを切り替えたら作り直して内部状態を新ネタで初期化 */
               neta={active}
+              reloadSignal={composeSignal}
               onClose={() => setActive(null)}
               onChanged={() => void reload()}
             />
@@ -225,7 +254,8 @@ export function App() {
             </div>
           )}
         </section>
-      </div>
+        </div>
+      </DndContext>
       {!chatOpen && (
         <button
           className="chat-bubble"

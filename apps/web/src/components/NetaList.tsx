@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
 
 export function NetaCard({
@@ -15,6 +16,11 @@ export function NetaCard({
   const label = neta.title ?? neta.text ?? "(無題)";
   const [gen, setGen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
+  // #52②c: ネタ帳カードをセクションのレーンへドラッグ配置（PC）。ハンドルだけドラッグ可。
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `card-${neta.id}`,
+    data: { neta },
+  });
 
   const intentOf = {
     melody: "gen_melody",
@@ -76,7 +82,17 @@ export function NetaCard({
   }
 
   return (
-    <article aria-label="neta-card" data-kind={neta.kind}>
+    <article aria-label="neta-card" data-kind={neta.kind} className={isDragging ? "dragging" : ""}>
+      <button
+        ref={setNodeRef}
+        {...listeners}
+        {...attributes}
+        className="drag-handle"
+        aria-label={`drag-${neta.id}`}
+        title="ドラッグでセクションのレーンへ置く（PC）"
+      >
+        ⠿
+      </button>
       <div
         className="card-main"
         role="button"

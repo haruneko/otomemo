@@ -1,5 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
+import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
+
+// レーンの1セル＝ドロップ先（#52②c）。kind が合えばカードを落として配置。
+function LaneCell({
+  laneKey,
+  kinds,
+  bar,
+  position,
+  onTap,
+}: {
+  laneKey: string;
+  kinds: readonly string[];
+  bar: number;
+  position: number;
+  onTap: (position: number) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `cell-${laneKey}-${bar}`, data: { kinds, position } });
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      className={"lane-cell" + (isOver ? " over" : "")}
+      aria-label={`place-${laneKey}-${bar}`}
+      onClick={() => onTap(position)}
+    />
+  );
+}
 import { notesForContent, playNotes, downloadMidi, type Note } from "../music";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/リズムの3レーン×小節 で組む。
@@ -30,12 +57,14 @@ export function SectionEditor({
   keyPc,
   tempo,
   meter,
+  reloadSignal,
   onChanged,
 }: {
   neta: Neta;
   keyPc: number;
   tempo: number;
   meter?: string; // 編集中ライブ反映用（未指定は neta.meter）
+  reloadSignal?: number; // 外部(D&D配置)からの再読込トリガ
   onChanged?: () => void;
 }) {
   const [children, setChildren] = useState<Child[]>([]);
@@ -50,7 +79,7 @@ export function SectionEditor({
   }, [neta.id]);
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadSignal]);
 
   const inLane = (lane: Lane, kind: string) => (lane.kinds as readonly string[]).includes(kind);
   const laneOf = (kind: string) => LANES.find((l) => inLane(l, kind));
@@ -124,12 +153,13 @@ export function SectionEditor({
             <div className="lane-label">{lane.label}</div>
             <div className="lane-track">
               {Array.from({ length: BARS }, (_, b) => (
-                <button
+                <LaneCell
                   key={b}
-                  type="button"
-                  className="lane-cell"
-                  aria-label={`place-${lane.key}-${b}`}
-                  onClick={() => void openPicker(lane, b * BPB)}
+                  laneKey={lane.key}
+                  kinds={lane.kinds}
+                  bar={b}
+                  position={b * BPB}
+                  onTap={(pos) => void openPicker(lane, pos)}
                 />
               ))}
               {laneChildren(lane).map((c) => (

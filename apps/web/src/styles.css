@@ -187,6 +187,34 @@ article[aria-label="neta-card"] {
   border-left: 4px solid var(--k, var(--muted));
   border-radius: 10px;
   padding: 10px;
+  position: relative;
+}
+article[aria-label="neta-card"].dragging {
+  opacity: 0.5;
+}
+.drag-handle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 2px 3px;
+  touch-action: none; /* dnd-kit の pointer ドラッグ用 */
+  z-index: 3;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.card-main header {
+  padding-right: 20px; /* ドラッグハンドルと id の重なり回避 */
+}
+.lane-cell.over {
+  background: var(--accent);
+  opacity: 0.7; /* ドロップ可の強調 */
 }
 .card-main {
   cursor: pointer;

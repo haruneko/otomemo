@@ -24,10 +24,12 @@ export function NetaDialog({
   neta,
   onClose,
   onChanged,
+  reloadSignal,
 }: {
   neta: Neta;
   onClose: () => void;
   onChanged?: () => void;
+  reloadSignal?: number; // D&D配置などの外部更新でSectionEditorを再読込
 }) {
   const [title, setTitle] = useState(neta.title ?? "");
   const [text, setText] = useState(neta.text ?? "");
@@ -213,7 +215,14 @@ export function NetaDialog({
         ) : isRhythm ? (
           <RhythmEditor rhythm={rhythm} onChange={setRhythm} />
         ) : isContainer ? (
-          <SectionEditor neta={neta} keyPc={key} tempo={tempo} meter={meter} onChanged={onChanged} />
+          <SectionEditor
+            neta={neta}
+            keyPc={key}
+            tempo={tempo}
+            meter={meter}
+            reloadSignal={reloadSignal}
+            onChanged={onChanged}
+          />
         ) : (
           <div className="text-editor">
             <textarea
