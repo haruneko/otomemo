@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { api, KINDS, type Neta } from "../api";
+import { api, KINDS, ApiError, type Neta } from "../api";
 import { queueNeta } from "../outbox";
 
 // 摩擦ゼロの捕獲（要件）。本文1個＋kind＋任意タグ＋「放り込む」。
@@ -11,11 +11,14 @@ export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!body.trim() || busy) return;
     setBusy(true);
+    setOffline(false);
+    setErr(null);
     try {
       const tagList = tags
         .split(/[,\s]+/)
@@ -28,13 +31,20 @@ export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
       try {
         const n = await api.createNeta(input);
         onCreated?.(n);
-      } catch {
-        // オフライン等：捕獲を取りこぼさず outbox に退避
-        queueNeta(input);
-        setOffline(true);
+        setBody("");
+        setTags("");
+      } catch (e) {
+        if (e instanceof ApiError) {
+          // サーバがエラーを返した（不正な入力等）。退避すると永久に失敗するので退避しない。
+          setErr(`保存に失敗しました（${e.status}）`);
+        } else {
+          // ネットワーク不達：捕獲を取りこぼさず outbox に退避
+          queueNeta(input);
+          setOffline(true);
+          setBody("");
+          setTags("");
+        }
       }
-      setBody("");
-      setTags("");
     } finally {
       setBusy(false);
     }
@@ -65,6 +75,7 @@ export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
         放り込む
       </button>
       {offline && <span className="offline-note">オフライン：端末に退避（復帰時に同期）</span>}
+      {err && <span className="offline-note">{err}</span>}
     </form>
   );
 }

@@ -64,12 +64,23 @@ export interface ListQuery {
   tags?: string[];
 }
 
+// サーバが応答したがエラー(4xx/5xx)。ネットワーク不達(fetch自体のreject)とは区別する。
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    body: string,
+  ) {
+    super(`${status} ${body}`);
+    this.name = "ApiError";
+  }
+}
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "content-type": "application/json" },
     ...init,
   });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, await res.text());
   return (await res.json()) as T;
 }
 
