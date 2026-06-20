@@ -16,7 +16,10 @@ export function App() {
   }, []);
 
   const reload = useCallback(async () => {
-    const list = await api.listNeta({ kind: kindFilter || undefined, q: q || undefined });
+    // 検索語があれば意味検索、無ければ kind 絞り込みで一覧（更新順）
+    const list = q.trim()
+      ? await api.searchSemantic(q.trim())
+      : await api.listNeta({ kind: kindFilter || undefined });
     setItems(list);
   }, [kindFilter, q]);
 

@@ -16,6 +16,9 @@ const netaInput = z.object({
   tags: z.array(z.string()).optional(),
 });
 
+// 意味検索のPython窓口（docs/design.md #16）。localhost のみ、外に露出しない。
+const SEARCH_URL = process.env.CM_SEARCH_URL ?? "http://127.0.0.1:8788";
+
 const jobInput = z.object({
   intent: z.string().min(1),
   target_neta_id: z.string().nullish(),
@@ -126,6 +129,26 @@ export function buildHttp(core: Core): FastifyInstance {
     const j = core.getJob(id);
     if (!j) return reply.code(404).send({ error: "not found" });
     return j;
+  });
+
+  // 意味検索：Python検索サービスへproxy → neta を hydrate して順序維持で返す
+  app.get("/search", async (req, reply) => {
+    const { q, k } = req.query as { q?: string; k?: string };
+    if (!q) return [];
+    let hits: { neta_id: string; score: number }[];
+    try {
+      const res = await fetch(`${SEARCH_URL}/search?q=${encodeURIComponent(q)}&k=${k ?? 20}`);
+      if (!res.ok) return reply.code(502).send({ error: "search backend error" });
+      hits = (await res.json()) as { neta_id: string; score: number }[];
+    } catch {
+      return reply.code(503).send({ error: "search backend unavailable" });
+    }
+    return hits
+      .map((h) => {
+        const n = core.getNeta(h.neta_id);
+        return n ? { ...n, score: h.score } : null;
+      })
+      .filter((n): n is NonNullable<typeof n> => n !== null);
   });
 
   return app;

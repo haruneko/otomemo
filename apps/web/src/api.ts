@@ -77,4 +77,7 @@ export const api = {
   },
 
   facets: () => http<Facets>("/facets"),
+
+  searchSemantic: (q: string, k = 20) =>
+    http<(Neta & { score: number })[]>(`/search?q=${encodeURIComponent(q)}&k=${k}`),
 };

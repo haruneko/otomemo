@@ -3,10 +3,16 @@ name = "cm-worker"
 version = "0.0.0"
 description = "creative_manager Python worker (analysis, embeddings, generation, planner)"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "sentence-transformers>=3.3",
+    "numpy>=2",
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+]
 
 [project.scripts]
 cm-worker = "cm_worker.main:main"
+cm-search = "cm_worker.serve:run"
 
 [build-system]
 requires = ["hatchling"]
