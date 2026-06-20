@@ -46,25 +46,30 @@ export function NetaCard({
 
   return (
     <article aria-label="neta-card" data-kind={neta.kind}>
-      <header>
-        <span className="kind">{neta.kind}</span>
-        <div className="head-right">
+      <div
+        className="card-main"
+        role="button"
+        tabIndex={0}
+        onClick={() => setEditing(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") setEditing(true);
+        }}
+      >
+        <header>
+          <span className="kind">{neta.kind}</span>
           <code className="id">{neta.id.slice(0, 8)}</code>
-          <button className="edit-btn" aria-label="edit" onClick={() => setEditing(true)}>
-            ⋯
-          </button>
-        </div>
-      </header>
-      <div className="body">{label}</div>
-      {neta.tags.length > 0 && (
-        <footer>
-          {neta.tags.map((t) => (
-            <span key={t} className="tag">
-              #{t}
-            </span>
-          ))}
-        </footer>
-      )}
+        </header>
+        <div className="body">{label}</div>
+        {neta.tags.length > 0 && (
+          <footer>
+            {neta.tags.map((t) => (
+              <span key={t} className="tag">
+                #{t}
+              </span>
+            ))}
+          </footer>
+        )}
+      </div>
       <div className="bs-tools">
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
           壁打ち

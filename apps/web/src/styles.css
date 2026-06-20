@@ -110,6 +110,12 @@ article[aria-label="neta-card"] {
   border-radius: 10px;
   padding: 10px;
 }
+.card-main {
+  cursor: pointer;
+}
+.card-main:hover {
+  opacity: 0.92;
+}
 article header {
   display: flex;
   justify-content: space-between;

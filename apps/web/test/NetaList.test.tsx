@@ -50,6 +50,12 @@ describe("NetaList", () => {
     expect(screen.getByText("まだネタがありません。")).toBeInTheDocument();
   });
 
+  it("opens the editor when the card body is clicked (not the ⋯)", async () => {
+    render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} />);
+    await userEvent.click(screen.getByText("夜を駆ける"));
+    expect(screen.getByLabelText("edit-neta")).toBeInTheDocument();
+  });
+
   it("壁打ち opens the chat for that neta (relocated from inline panel)", async () => {
     const onChat = vi.fn();
     render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} onChat={onChat} />);
