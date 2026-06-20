@@ -11,8 +11,16 @@ const LANES = [
   { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
 ] as const;
 const BARS = 8;
-const BPB = 4; // 4/4 の1小節=4拍
-const TOTAL = BARS * BPB;
+
+// #51: 拍子(meter "n/d")から1小節の拍数を導出。beat=四分=1.0 基準で num*4/den。
+// 4/4→4.0、6/8→3.0、3/4→3.0。未指定/不正は 4/4。
+export function beatsPerBar(meter: string | null | undefined): number {
+  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
+  if (!m) return 4;
+  const num = Number(m[1]);
+  const den = Number(m[2]);
+  return num > 0 && den > 0 ? (num * 4) / den : 4;
+}
 
 type Lane = (typeof LANES)[number];
 type Child = CompositionNode["children"][number];
@@ -21,16 +29,20 @@ export function SectionEditor({
   neta,
   keyPc,
   tempo,
+  meter,
   onChanged,
 }: {
   neta: Neta;
   keyPc: number;
   tempo: number;
+  meter?: string; // 編集中ライブ反映用（未指定は neta.meter）
   onChanged?: () => void;
 }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [picker, setPicker] = useState<{ lane: Lane; position: number; cands: Neta[] } | null>(null);
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
+  const BPB = beatsPerBar(meter ?? neta.meter); // 1小節の拍数（#51・編集中はprop優先）
+  const TOTAL = BARS * BPB;
 
   const load = useCallback(async () => {
     const tree = await api.getComposition(neta.id);
@@ -90,7 +102,7 @@ export function SectionEditor({
         </button>
         <button
           type="button"
-          onClick={() => downloadMidi(composite(), `${neta.title ?? "section"}.mid`, tempo)}
+          onClick={() => downloadMidi(composite(), `${neta.title ?? "section"}.mid`, tempo, neta.meter)}
         >
           MIDI
         </button>

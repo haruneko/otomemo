@@ -11,7 +11,7 @@ const { getComposition, listNeta, placeChild, removeChild } = vi.hoisted(() => (
 }));
 vi.mock("../src/api", () => ({ api: { getComposition, listNeta, placeChild, removeChild } }));
 
-import { SectionEditor } from "../src/components/SectionEditor";
+import { SectionEditor, beatsPerBar } from "../src/components/SectionEditor";
 
 const mk = (id: string, kind: string, over: Partial<Neta> = {}): Neta => ({
   id,
@@ -53,5 +53,27 @@ describe("SectionEditor (3-lane timeline)", () => {
     await waitFor(() => expect(screen.getByText("メロ素材")).toBeInTheDocument());
     await userEvent.click(screen.getByText("メロ素材"));
     expect(placeChild).toHaveBeenCalledWith("s1", "c2", 4, 0);
+  });
+
+  it("sizes bars by meter — 6/8 bar1 = position 3 (#51)", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section", { meter: "6/8" }), children: [] });
+    listNeta.mockResolvedValue([mk("c2", "melody", { title: "M" })]);
+    placeChild.mockResolvedValue({ ok: true });
+    render(<SectionEditor neta={mk("s1", "section", { meter: "6/8" })} keyPc={0} tempo={120} />);
+    await userEvent.click(screen.getByLabelText("place-melody-1")); // 2小節目 = position 3 (6/8)
+    await waitFor(() => expect(screen.getByText("M")).toBeInTheDocument());
+    await userEvent.click(screen.getByText("M"));
+    expect(placeChild).toHaveBeenCalledWith("s1", "c2", 3, 0);
+  });
+});
+
+describe("beatsPerBar (#51)", () => {
+  it("derives quarter-beats per bar from meter", () => {
+    expect(beatsPerBar("4/4")).toBe(4);
+    expect(beatsPerBar("6/8")).toBe(3);
+    expect(beatsPerBar("3/4")).toBe(3);
+    expect(beatsPerBar("2/2")).toBe(4);
+    expect(beatsPerBar(null)).toBe(4);
+    expect(beatsPerBar("garbage")).toBe(4);
   });
 });

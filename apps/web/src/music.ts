@@ -123,9 +123,19 @@ export function notesForContent(kind: string, content: unknown): Note[] {
   return [];
 }
 
-export function notesToMidi(notes: Note[], bpm = 120): Uint8Array {
+function meterPair(meter?: string | null): [number, number] | null {
+  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
+  if (!m) return null;
+  const n = Number(m[1]);
+  const d = Number(m[2]);
+  return n > 0 && d > 0 ? [n, d] : null;
+}
+
+export function notesToMidi(notes: Note[], bpm = 120, meter?: string | null): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);
+  const ts = meterPair(meter); // #51: 拍子記号をMIDIヘッダへ（音価は秒絶対なので不変）
+  if (ts) midi.header.timeSignatures.push({ ticks: 0, timeSignature: ts });
   const track = midi.addTrack();
   const spb = 60 / bpm;
   for (const n of notes) {
@@ -156,8 +166,13 @@ export function midiToNotes(buf: ArrayBuffer | Uint8Array): { notes: Note[]; bpm
   return { notes, bpm };
 }
 
-export function downloadMidi(notes: Note[], filename = "sketch.mid", bpm = 120): void {
-  const blob = new Blob([notesToMidi(notes, bpm) as BlobPart], { type: "audio/midi" });
+export function downloadMidi(
+  notes: Note[],
+  filename = "sketch.mid",
+  bpm = 120,
+  meter?: string | null,
+): void {
+  const blob = new Blob([notesToMidi(notes, bpm, meter) as BlobPart], { type: "audio/midi" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

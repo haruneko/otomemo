@@ -37,6 +37,7 @@ export function NetaDialog({
   const [rhythm, setRhythm] = useState<RhythmContent>(rhythmOf(neta.content));
   const [key, setKey] = useState<number>(neta.key ?? 0);
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
+  const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
   const [mood, setMood] = useState(neta.mood ?? "");
   const [len, setLen] = useState(() =>
     Math.max(16, (neta.bars ?? 0) * 4, ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
@@ -82,7 +83,7 @@ export function NetaDialog({
             : isRhythm
               ? { content: { rhythm }, tempo }
               : isContainer
-                ? { key, tempo }
+                ? { key, tempo, meter }
                 : {}),
       });
       onChanged?.();
@@ -155,6 +156,18 @@ export function NetaDialog({
             />
           </label>
         )}
+        {isContainer && (
+          <label className="meta">
+            拍子
+            <select aria-label="meter" value={meter} onChange={(e) => setMeter(e.target.value)}>
+              {["4/4", "3/4", "6/8", "2/4", "5/4", "12/8"].map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {isMusic && (
           <>
             <button type="button" onClick={() => void playNotes(playable, tempo)}>
@@ -200,7 +213,7 @@ export function NetaDialog({
         ) : isRhythm ? (
           <RhythmEditor rhythm={rhythm} onChange={setRhythm} />
         ) : isContainer ? (
-          <SectionEditor neta={neta} keyPc={key} tempo={tempo} onChanged={onChanged} />
+          <SectionEditor neta={neta} keyPc={key} tempo={tempo} meter={meter} onChanged={onChanged} />
         ) : (
           <div className="text-editor">
             <textarea
