@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Neta } from "./api";
 import { applyColors, loadColors } from "./theme";
 import { Capture } from "./components/Capture";
@@ -77,7 +77,8 @@ export function App() {
     return () => window.removeEventListener("online", doFlush);
   }, [reload]);
 
-  // 受け取りトレイの通知バッジ：前回見て以降に done になったジョブ数
+  // 受け取りトレイの通知バッジ＋一覧の自動更新（reap されたネタを出す）
+  const lastDone = useRef(-1);
   useEffect(() => {
     const tick = () => {
       void api
@@ -85,13 +86,16 @@ export function App() {
         .then((js) => {
           const seen = Number(localStorage.getItem("cm-tray-seen") ?? 0);
           setDoneCount(js.filter((j) => new Date(j.created ?? 0).getTime() > seen).length);
+          // 新しく完了したジョブ（裏で reap されたネタ含む）があれば一覧を再読込
+          if (lastDone.current >= 0 && js.length > lastDone.current) void reload();
+          lastDone.current = js.length;
         })
         .catch(() => {});
     };
     tick();
     const t = setInterval(tick, 15000);
     return () => clearInterval(t);
-  }, []);
+  }, [reload]);
 
   return (
     <main>

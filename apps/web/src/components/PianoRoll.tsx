@@ -38,12 +38,24 @@ export function PianoRoll({
     for (let p = hi; p >= lo; p--) arr.push(p);
     return arr;
   }, [notes]);
-  const steps = beats * SUBDIV;
+  // 表示尺は content に追従（生成/取込で beats を超える音もはみ出さない）
+  const span = useMemo(
+    () => Math.max(beats, ...notes.map((n) => Math.ceil(n.start + n.dur))),
+    [beats, notes],
+  );
+  const steps = span * SUBDIV;
 
   function addAt(pitch: number, step: number) {
     const start = step / SUBDIV;
-    const rest = notes.filter((n) => !(n.pitch === pitch && Math.abs(n.start - start) < 1e-6));
-    onChange([...rest, { pitch, start, dur: noteLen }]);
+    // クリック位置を覆う同ピッチの既存ノートがあれば消す（小数startのAI/MIDIノートも編集できる）
+    const covering = notes.find(
+      (n) => n.pitch === pitch && n.start <= start + 1e-9 && start < n.start + n.dur - 1e-9,
+    );
+    if (covering) {
+      onChange(notes.filter((n) => n !== covering));
+      return;
+    }
+    onChange([...notes, { pitch, start, dur: noteLen }]);
   }
   function removeNote(target: Note) {
     onChange(notes.filter((n) => n !== target));
@@ -89,8 +101,8 @@ export function PianoRoll({
                     aria-label={`note-${p}-${n.start}`}
                     className="proll-note"
                     style={{
-                      left: `${(n.start / beats) * 100}%`,
-                      width: `${(n.dur / beats) * 100}%`,
+                      left: `${(n.start / span) * 100}%`,
+                      width: `${(n.dur / span) * 100}%`,
                     }}
                     title={`${noteName(p)} ${n.start}拍 +${n.dur}`}
                     onClick={(e) => {

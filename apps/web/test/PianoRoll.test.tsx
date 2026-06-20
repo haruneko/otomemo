@@ -18,6 +18,14 @@ describe("PianoRoll", () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
+  it("removes a covering note when clicking its cell (edits off-grid notes)", async () => {
+    const onChange = vi.fn();
+    render(<PianoRoll notes={[{ pitch: 60, start: 0, dur: 2 }]} onChange={onChange} />);
+    // cell-60-4 = step 4 = beat 1, inside the note span [0,2) -> toggles it off
+    await userEvent.click(screen.getByLabelText("cell-60-4"));
+    expect(onChange).toHaveBeenCalledWith([]);
+  });
+
   it("labels rows with a fixed piano keyboard (note names)", () => {
     render(<PianoRoll notes={[]} onChange={vi.fn()} />);
     expect(screen.getByText("C4")).toBeInTheDocument();

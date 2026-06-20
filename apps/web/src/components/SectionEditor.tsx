@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Neta, type CompositionNode } from "../api";
-import { notesForContent, transpose, playNotes, downloadMidi, type Note } from "../music";
+import { notesForContent, playNotes, downloadMidi, type Note } from "../music";
 
 // つなぎ込み（design #19 配置タイムライン）。section/song に子を時間配置し、合成して鳴らす。
 // 調/テンポは section が支配（design #14）。子の content を位置オフセットで合成。
@@ -65,13 +65,16 @@ export function SectionEditor({
     return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : 4;
   }
 
+  // 合成：子を section の調へ移調＋位置オフセット。ただし rhythm(GMドラム)は移調しない。
   function composite(): Note[] {
-    return children.flatMap((c) =>
-      notesForContent(c.node.neta.kind, c.node.neta.content).map((n) => ({
+    return children.flatMap((c) => {
+      const isRhythm = c.node.neta.kind === "rhythm";
+      return notesForContent(c.node.neta.kind, c.node.neta.content).map((n) => ({
         ...n,
+        pitch: isRhythm ? n.pitch : n.pitch + keyPc,
         start: n.start + c.position,
-      })),
-    );
+      }));
+    });
   }
 
   const total = Math.max(8, ...children.map((c) => c.position + childDur(c)));
@@ -79,14 +82,12 @@ export function SectionEditor({
   return (
     <div className="section-editor">
       <div className="section-actions">
-        <button type="button" onClick={() => void playNotes(transpose(composite(), keyPc), tempo)}>
+        <button type="button" onClick={() => void playNotes(composite(), tempo)}>
           ▶ 合成再生
         </button>
         <button
           type="button"
-          onClick={() =>
-            downloadMidi(transpose(composite(), keyPc), `${neta.title ?? "section"}.mid`, tempo)
-          }
+          onClick={() => downloadMidi(composite(), `${neta.title ?? "section"}.mid`, tempo)}
         >
           MIDI
         </button>
