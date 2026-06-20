@@ -23,6 +23,12 @@ describe("App", () => {
     );
   });
 
+  it("renders the 2-pane workspace (notebook rail + main pane)", () => {
+    render(<App />);
+    expect(screen.getByLabelText("notebook")).toBeInTheDocument();
+    expect(screen.getByLabelText("mainpane")).toBeInTheDocument();
+  });
+
   it("opens the settings dialog with theme colors", async () => {
     render(<App />);
     await userEvent.click(screen.getByRole("button", { name: "settings" }));

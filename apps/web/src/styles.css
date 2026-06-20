@@ -28,9 +28,56 @@ body {
   font-family: system-ui, sans-serif;
 }
 main {
-  max-width: 760px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 16px;
+}
+/* 2ペーン・ワークスペース（design #19）：ネタ帳レール＋メインペーン。狭い画面は1カラム */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.notebook {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.notebook.closed {
+  display: none;
+}
+.mainpane {
+  min-width: 0;
+  min-height: 72vh;
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+.mainpane-empty {
+  margin: auto;
+  text-align: center;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  color: var(--muted);
+}
+.mainpane-empty .primary {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 16px;
+}
+@media (max-width: 820px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .mainpane {
+    min-height: 60vh;
+  }
 }
 .app-head {
   display: flex;
@@ -353,16 +400,40 @@ article header {
   border: 1px solid var(--line);
   border-radius: 6px;
 }
-.editor-full {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  background: var(--bg);
+.mainpane-editor {
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  overflow: hidden; /* 内側(.proll/.editor-body)が横スクロール。画面外にはみ出させない */
+  max-height: 84vh;
+  overflow: hidden; /* 内側(.proll/.editor-body)が横スクロール。外に漏らさない */
+}
+.editor-meta-row {
+  display: flex;
+  gap: 6px;
+}
+.editor-meta-row .editor-tags {
+  flex: 1;
+  min-width: 0;
+}
+.text-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+.text-editor textarea {
+  flex: 1;
+  min-height: 200px;
+  resize: vertical;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
 }
 .editor-bar {
   display: flex;

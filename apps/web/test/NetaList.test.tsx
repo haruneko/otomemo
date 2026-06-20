@@ -51,10 +51,11 @@ describe("NetaList", () => {
     expect(screen.getByText("まだネタがありません。")).toBeInTheDocument();
   });
 
-  it("opens the editor when the card body is clicked (not the ⋯)", async () => {
-    render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} />);
+  it("opens the neta in the main pane when the card body is clicked", async () => {
+    const onOpen = vi.fn();
+    render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} onOpen={onOpen} />);
     await userEvent.click(screen.getByText("夜を駆ける"));
-    expect(screen.getByLabelText("edit-neta")).toBeInTheDocument();
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "x" }));
   });
 
   it("generates from the 生成 menu (melody) and creates a linked neta", async () => {

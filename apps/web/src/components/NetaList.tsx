@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { api, type Neta } from "../api";
-import { NetaDialog } from "./NetaDialog";
 
 export function NetaCard({
   neta,
   onChanged,
   onChat,
+  onOpen,
 }: {
   neta: Neta;
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
+  onOpen?: (neta: Neta) => void;
 }) {
   const label = neta.title ?? neta.text ?? "(無題)";
-  const [editing, setEditing] = useState(false);
   const [gen, setGen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
 
@@ -81,9 +81,9 @@ export function NetaCard({
         className="card-main"
         role="button"
         tabIndex={0}
-        onClick={() => setEditing(true)}
+        onClick={() => onOpen?.(neta)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") setEditing(true);
+          if (e.key === "Enter") onOpen?.(neta);
         }}
       >
         <header>
@@ -128,9 +128,6 @@ export function NetaCard({
           </button>
         )}
       </div>
-      {editing && (
-        <NetaDialog neta={neta} onClose={() => setEditing(false)} onChanged={onChanged} />
-      )}
     </article>
   );
 }
@@ -139,16 +136,18 @@ export function NetaList({
   items,
   onChanged,
   onChat,
+  onOpen,
 }: {
   items: Neta[];
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
+  onOpen?: (neta: Neta) => void;
 }) {
   if (items.length === 0) return <p>まだネタがありません。</p>;
   return (
     <section aria-label="neta-list">
       {items.map((n) => (
-        <NetaCard key={n.id} neta={n} onChanged={onChanged} onChat={onChat} />
+        <NetaCard key={n.id} neta={n} onChanged={onChanged} onChat={onChat} onOpen={onOpen} />
       ))}
     </section>
   );

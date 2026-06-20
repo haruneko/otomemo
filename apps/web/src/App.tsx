@@ -30,12 +30,13 @@ export function App() {
   const [chatTarget, setChatTarget] = useState<Neta | undefined>(undefined);
   const [trayOpen, setTrayOpen] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
-  const [editing, setEditing] = useState<Neta | null>(null);
+  const [active, setActive] = useState<Neta | null>(null);
+  const [railOpen, setRailOpen] = useState(true);
 
   async function newSong() {
     const s = await api.createNeta({ kind: "section", title: "新しい曲" });
     await reload();
-    setEditing(s); // 配置メインペーン（SectionEditor）を直接開く
+    setActive(s); // メインペーンで開く
   }
 
   const openChat = (target?: Neta) => {
@@ -106,6 +107,14 @@ export function App() {
   return (
     <main>
       <div className="app-head">
+        <button
+          className="gear"
+          aria-label="toggle-rail"
+          title="ネタ帳の開閉"
+          onClick={() => setRailOpen((v) => !v)}
+        >
+          ☰
+        </button>
         <h1>creative_manager</h1>
         <div className="head-right">
           <label className="import-btn">
@@ -166,30 +175,55 @@ export function App() {
           </button>
         </div>
       </div>
-      <Capture onCreated={() => void reload()} />
-      <div className="filters">
-        <input
-          aria-label="search"
-          placeholder="検索…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <select
-          aria-label="kind-filter"
-          value={kindFilter}
-          disabled={!!q.trim()}
-          title={q.trim() ? "検索中は種類フィルタは無効" : "種類で絞る"}
-          onChange={(e) => setKindFilter(e.target.value)}
-        >
-          <option value="">すべて</option>
-          {FILTER_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
+      <div className="workspace">
+        <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
+          <Capture onCreated={() => void reload()} />
+          <div className="filters">
+            <input
+              aria-label="search"
+              placeholder="検索…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <select
+              aria-label="kind-filter"
+              value={kindFilter}
+              disabled={!!q.trim()}
+              title={q.trim() ? "検索中は種類フィルタは無効" : "種類で絞る"}
+              onChange={(e) => setKindFilter(e.target.value)}
+            >
+              <option value="">すべて</option>
+              {FILTER_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          </div>
+          <NetaList
+            items={items}
+            onChanged={() => void reload()}
+            onChat={openChat}
+            onOpen={setActive}
+          />
+        </aside>
+        <section className="mainpane" aria-label="mainpane">
+          {active ? (
+            <NetaDialog
+              neta={active}
+              onClose={() => setActive(null)}
+              onChanged={() => void reload()}
+            />
+          ) : (
+            <div className="mainpane-empty">
+              <p className="muted">ネタを選ぶとここで編集できます。または曲を組む。</p>
+              <button className="primary" onClick={() => void newSong()}>
+                ＋曲を組む
+              </button>
+            </div>
+          )}
+        </section>
       </div>
-      <NetaList items={items} onChanged={() => void reload()} onChat={openChat} />
       {chatOpen && (
         <Chat
           target={chatTarget}
@@ -201,13 +235,6 @@ export function App() {
         />
       )}
       {trayOpen && <Tray onClose={() => setTrayOpen(false)} />}
-      {editing && (
-        <NetaDialog
-          neta={editing}
-          onClose={() => setEditing(null)}
-          onChanged={() => void reload()}
-        />
-      )}
       {settingsOpen && (
         <div className="dialog-backdrop" onClick={() => setSettingsOpen(false)}>
           <div

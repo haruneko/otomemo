@@ -104,38 +104,45 @@ export function NetaDialog({
     }
   }
 
-  // 音楽の編集は面が要るので全画面オーバーレイ（design.md GUI #19 の決定）
-  if (isMusic || isContainer) {
-    return (
-      <div className="editor-full" role="dialog" aria-label="edit-neta">
-        <div className="editor-bar">
-          <button className="back" onClick={onClose} aria-label="close">
-            ← 戻る
+  // メインペーンの中身として描画（design #19：選択中netaの種類で中身が入れ替わる）。
+  // 旧：音楽=全画面オーバーレイ／テキスト=中央モーダル → 1つのペーン内容に統一。
+  const showKey = (isMusic || isContainer) && !isRhythm; // 調（rhythm以外の音楽/section）
+  const showMeta = isMusic || isContainer; // テンポ
+
+  return (
+    <div className="mainpane-editor" role="dialog" aria-label="edit-neta">
+      <div className="editor-bar">
+        <button className="back" onClick={onClose} aria-label="close">
+          ← 戻る
+        </button>
+        <span className="kind" data-kind={neta.kind}>
+          {neta.kind}
+        </span>
+        <input
+          aria-label="title"
+          className="editor-title"
+          placeholder="タイトル"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        {showKey && (
+          <label className="meta">
+            調
+            <select aria-label="key" value={key} onChange={(e) => setKey(Number(e.target.value))}>
+              {KEY_NAMES.map((nm, i) => (
+                <option key={i} value={i}>
+                  {nm}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {isMelody && (
+          <button type="button" onClick={() => setLen(len + 4)}>
+            ＋4拍
           </button>
-          <input
-            aria-label="title"
-            className="editor-title"
-            placeholder="タイトル"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          {!isRhythm && (
-            <label className="meta">
-              調
-              <select aria-label="key" value={key} onChange={(e) => setKey(Number(e.target.value))}>
-                {KEY_NAMES.map((nm, i) => (
-                  <option key={i} value={i}>
-                    {nm}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {isMelody && (
-            <button type="button" onClick={() => setLen(len + 4)}>
-              ＋4拍
-            </button>
-          )}
+        )}
+        {showMeta && (
           <label className="meta">
             ♩
             <input
@@ -147,127 +154,86 @@ export function NetaDialog({
               onChange={(e) => setTempo(Number(e.target.value))}
             />
           </label>
-          {isMusic && (
-            <>
-              <button type="button" onClick={() => void playNotes(playable, tempo)}>
-                ▶ 再生
-              </button>
-              <button
-                type="button"
-                onClick={() => downloadMidi(playable, `${neta.title ?? "sketch"}.mid`, tempo)}
-              >
-                MIDI
-              </button>
-            </>
-          )}
-          <button className="danger" onClick={remove} disabled={busy}>
-            削除
-          </button>
-          <button className="primary" onClick={save} disabled={busy}>
-            保存
-          </button>
-        </div>
-        <input
-          aria-label="tags"
-          className="editor-tags"
-          placeholder="タグ（スペース区切り）"
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-        />
-        <input
-          aria-label="mood"
-          className="editor-tags"
-          placeholder="ムード（任意・例：切ない/疾走）"
-          value={mood}
-          onChange={(e) => setMood(e.target.value)}
-        />
-        <div className="editor-body">
-          {isMelody ? (
-            <PianoRoll notes={notes} onChange={setNotes} beats={len} />
-          ) : isChord ? (
-            <ChordEditor chords={chords} onChange={setChords} />
-          ) : isRhythm ? (
-            <RhythmEditor rhythm={rhythm} onChange={setRhythm} />
-          ) : (
-            <SectionEditor neta={neta} keyPc={key} tempo={tempo} onChanged={onChanged} />
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // 軽い編集（歌詞・テーマ等のテキスト）は中央ダイアログ
-  return (
-    <div className="dialog-backdrop" onClick={onClose}>
-      <div
-        className="dialog"
-        role="dialog"
-        aria-label="edit-neta"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header>
-          <span className="kind" data-kind={neta.kind}>
-            {neta.kind}
-          </span>
-          <button onClick={onClose} aria-label="close">
-            ✕
-          </button>
-        </header>
-        <input
-          aria-label="title"
-          placeholder="タイトル"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <textarea aria-label="text" rows={8} value={text} onChange={(e) => setText(e.target.value)} />
-        {neta.kind === "lyric" && text.trim() && (
-          <div className="mora-panel" aria-label="mora">
-            {moraLines(text).map((m, i) => (
-              <div key={i} className="mora-line">
-                <span className="mora-count">{m.count}</span>
-                <span className="mora-text">{m.line || "　"}</span>
-              </div>
-            ))}
-          </div>
         )}
+        {isMusic && (
+          <>
+            <button type="button" onClick={() => void playNotes(playable, tempo)}>
+              ▶ 再生
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadMidi(playable, `${neta.title ?? "sketch"}.mid`, tempo)}
+            >
+              MIDI
+            </button>
+          </>
+        )}
+        <span className="spacer" />
+        <button className="danger" onClick={remove} disabled={busy}>
+          削除
+        </button>
+        <button className="primary" onClick={save} disabled={busy}>
+          保存
+        </button>
+      </div>
+      <div className="editor-meta-row">
         <input
           aria-label="tags"
+          className="editor-tags"
           placeholder="タグ（スペース区切り）"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
         />
         <input
           aria-label="mood"
+          className="editor-tags"
           placeholder="ムード（任意・例：切ない/疾走）"
           value={mood}
           onChange={(e) => setMood(e.target.value)}
         />
-        {rels.length > 0 && (
-          <div className="relations">
-            <span className="rel-label">関連</span>
-            {rels.map(
-              (r, i) =>
-                r.neta && (
-                  <span key={i} className="rel-item">
-                    {r.neta.kind}: {(r.neta.title ?? r.neta.text ?? "(無題)").slice(0, 16)}
-                  </span>
-                ),
+      </div>
+      <div className="editor-body">
+        {isMelody ? (
+          <PianoRoll notes={notes} onChange={setNotes} beats={len} />
+        ) : isChord ? (
+          <ChordEditor chords={chords} onChange={setChords} />
+        ) : isRhythm ? (
+          <RhythmEditor rhythm={rhythm} onChange={setRhythm} />
+        ) : isContainer ? (
+          <SectionEditor neta={neta} keyPc={key} tempo={tempo} onChanged={onChanged} />
+        ) : (
+          <div className="text-editor">
+            <textarea
+              aria-label="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+            {neta.kind === "lyric" && text.trim() && (
+              <div className="mora-panel" aria-label="mora">
+                {moraLines(text).map((m, i) => (
+                  <div key={i} className="mora-line">
+                    <span className="mora-count">{m.count}</span>
+                    <span className="mora-text">{m.line || "　"}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
-        <div className="dialog-actions">
-          <button className="danger" onClick={remove} disabled={busy}>
-            削除
-          </button>
-          <span className="spacer" />
-          <button onClick={onClose} disabled={busy}>
-            閉じる
-          </button>
-          <button className="primary" onClick={save} disabled={busy}>
-            保存
-          </button>
-        </div>
       </div>
+      {rels.length > 0 && (
+        <div className="relations">
+          <span className="rel-label">関連</span>
+          {rels.map(
+            (r, i) =>
+              r.neta && (
+                <span key={i} className="rel-item">
+                  {r.neta.kind}: {(r.neta.title ?? r.neta.text ?? "(無題)").slice(0, 16)}
+                </span>
+              ),
+          )}
+        </div>
+      )}
     </div>
   );
 }
