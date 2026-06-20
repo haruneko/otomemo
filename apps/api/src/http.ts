@@ -34,6 +34,16 @@ const jobInput = z.object({
 export function buildHttp(core: Core): FastifyInstance {
   const app = Fastify({ logger: false });
 
+  // #36 公開制御：CM_TOKEN を設定したときだけ x-cm-token 必須（未設定=LAN内開放のまま）。
+  // 未発表素材を外から覗かれないための任意ゲート。
+  app.addHook("onRequest", async (req, reply) => {
+    const required = process.env.CM_TOKEN;
+    if (!required) return;
+    if (req.headers["x-cm-token"] !== required) {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
+  });
+
   app.post("/neta", async (req, reply) => {
     const p = netaInput.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });

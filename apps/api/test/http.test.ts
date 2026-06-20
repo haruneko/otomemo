@@ -48,3 +48,25 @@ describe("http data API", () => {
     expect(tree.json().children.length).toBe(1);
   });
 });
+
+describe("http auth gate (#36)", () => {
+  it("blocks without token when CM_TOKEN is set, allows with it", async () => {
+    const prev = process.env.CM_TOKEN;
+    process.env.CM_TOKEN = "secret";
+    try {
+      const gated = buildHttp(new Core(openDb(":memory:")));
+      await gated.ready();
+      const no = await gated.inject({ method: "GET", url: "/neta" });
+      expect(no.statusCode).toBe(401);
+      const yes = await gated.inject({
+        method: "GET",
+        url: "/neta",
+        headers: { "x-cm-token": "secret" },
+      });
+      expect(yes.statusCode).toBe(200);
+    } finally {
+      if (prev === undefined) delete process.env.CM_TOKEN;
+      else process.env.CM_TOKEN = prev;
+    }
+  });
+});
