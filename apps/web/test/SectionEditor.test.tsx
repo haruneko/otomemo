@@ -31,27 +31,27 @@ const mk = (id: string, kind: string, over: Partial<Neta> = {}): Neta => ({
   ...over,
 });
 
-describe("SectionEditor", () => {
-  it("loads children and removes one", async () => {
+describe("SectionEditor (3-lane timeline)", () => {
+  it("shows a placed child on its lane and removes it on tap", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
-      children: [{ position: 0, ord: 0, node: { neta: mk("c1", "melody"), children: [] } }],
+      children: [{ position: 0, ord: 0, node: { neta: mk("c1", "melody", { title: "メロ案" }), children: [] } }],
     });
     removeChild.mockResolvedValue({ ok: true });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("remove-c1");
-    await userEvent.click(screen.getByLabelText("remove-c1"));
+    await screen.findByLabelText("block-c1");
+    await userEvent.click(screen.getByLabelText("block-c1"));
     expect(removeChild).toHaveBeenCalledWith("s1", "c1");
   });
 
-  it("searches and adds a child at the end", async () => {
+  it("taps a melody-lane cell to place a neta at that bar (position = bar*4)", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
-    listNeta.mockResolvedValue([mk("c2", "chord", { title: "Am" })]);
+    listNeta.mockResolvedValue([mk("c2", "melody", { title: "メロ素材" })]);
     placeChild.mockResolvedValue({ ok: true });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await userEvent.type(screen.getByLabelText("add-child"), "Am");
-    await waitFor(() => expect(screen.getByText(/Am/)).toBeInTheDocument());
-    await userEvent.click(screen.getByText(/Am/));
-    expect(placeChild).toHaveBeenCalledWith("s1", "c2", 0, 0);
+    await userEvent.click(screen.getByLabelText("place-melody-1")); // 2小節目 = position 4
+    await waitFor(() => expect(screen.getByText("メロ素材")).toBeInTheDocument());
+    await userEvent.click(screen.getByText("メロ素材"));
+    expect(placeChild).toHaveBeenCalledWith("s1", "c2", 4, 0);
   });
 });

@@ -47,3 +47,22 @@ test("tap a card opens the editor in the main pane and 戻る returns (mobile)",
   await page.locator("button.back").click(); // ← 戻る（aria-labelはclose）
   await expect(page.getByLabel("edit-neta")).toHaveCount(0);
 });
+
+test("section editor shows the 3-lane timeline without overflow (mobile)", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  const sectionCard = page
+    .locator('article[aria-label="neta-card"]')
+    .filter({ has: page.locator('.kind:text-is("section")') })
+    .first();
+  if ((await sectionCard.count()) === 0) test.skip(true, "no section neta to open");
+  await sectionCard.locator(".card-main").click();
+  await expect(page.getByLabel("timeline")).toBeVisible();
+  await page.screenshot({ path: "e2e/__screenshots__/section-mobile.png", fullPage: true });
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(scrollWidth, "セクション編集で横スクロール").toBeLessThanOrEqual(clientWidth + 1);
+});

@@ -611,6 +611,97 @@ article header {
   opacity: 0.85;
   min-width: 3px;
 }
+.lanes {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+  overflow-x: auto;
+}
+.lane-ruler,
+.lane {
+  display: flex;
+  align-items: stretch;
+}
+.lane-label {
+  flex: 0 0 44px;
+  width: 44px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+}
+.ruler-bars {
+  flex: 1;
+  display: flex;
+}
+.bar-num {
+  flex: 1;
+  text-align: center;
+  font-size: 0.62rem;
+  color: var(--muted);
+  border-left: 1px solid #2a2d33;
+}
+.lane-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  height: 30px;
+}
+.lane-cell {
+  flex: 1;
+  border-left: 1px solid #2a2d33;
+  background: #1b1e23;
+  padding: 0;
+  cursor: pointer;
+}
+.lane-cell:hover {
+  background: #24272e;
+}
+.lane-block {
+  position: absolute;
+  top: 2px;
+  height: 26px;
+  min-width: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.66rem;
+  line-height: 24px;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0 4px;
+  z-index: 2;
+  cursor: pointer;
+  background: var(--accent);
+}
+.lane-block[data-kind="melody"] {
+  background: var(--k-melody);
+}
+.lane-block[data-kind="chord"],
+.lane-block[data-kind="chord_progression"] {
+  background: var(--k-chord);
+}
+.lane-block[data-kind="rhythm"] {
+  background: var(--k-rhythm);
+}
+.lanes-hint {
+  font-size: 0.72rem;
+}
+.section-others {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.picker-list {
+  display: grid;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
 .section-children {
   display: grid;
   gap: 6px;
