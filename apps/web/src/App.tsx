@@ -4,6 +4,7 @@ import { applyColors, loadColors } from "./theme";
 import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
 import { ThemeSettings } from "./settings/ThemeSettings";
+import { midiToNotes } from "./music";
 
 const FILTER_KINDS = ["lyric", "melody", "chord", "rhythm", "theme", "song"];
 
@@ -33,9 +34,31 @@ export function App() {
     <main>
       <div className="app-head">
         <h1>creative_manager</h1>
-        <button className="gear" aria-label="settings" onClick={() => setSettingsOpen(true)}>
-          ⚙
-        </button>
+        <div className="head-right">
+          <label className="import-btn">
+            MIDI取込
+            <input
+              type="file"
+              accept=".mid,.midi"
+              hidden
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const { notes } = midiToNotes(await file.arrayBuffer());
+                await api.createNeta({
+                  kind: "melody",
+                  title: file.name.replace(/\.midi?$/i, ""),
+                  content: { notes },
+                });
+                e.target.value = "";
+                await reload();
+              }}
+            />
+          </label>
+          <button className="gear" aria-label="settings" onClick={() => setSettingsOpen(true)}>
+            ⚙
+          </button>
+        </div>
       </div>
       <Capture onCreated={() => void reload()} />
       <div className="filters">

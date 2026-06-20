@@ -35,6 +35,23 @@ export function notesToMidi(notes: Note[], bpm = 120): Uint8Array {
   return midi.toArray();
 }
 
+export function midiToNotes(buf: ArrayBuffer | Uint8Array): { notes: Note[]; bpm: number } {
+  const midi = new Midi(buf as ArrayBuffer);
+  const bpm = midi.header.tempos[0]?.bpm ?? 120;
+  const spb = 60 / bpm;
+  const all = midi.tracks.flatMap((t) => t.notes);
+  const minTime = all.length ? Math.min(...all.map((n) => n.time)) : 0;
+  const notes: Note[] = all
+    .map((n) => ({
+      pitch: n.midi,
+      start: (n.time - minTime) / spb,
+      dur: n.duration / spb,
+      vel: Math.round(n.velocity * 127),
+    }))
+    .sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+  return { notes, bpm };
+}
+
 export function downloadMidi(notes: Note[], filename = "sketch.mid", bpm = 120): void {
   const blob = new Blob([notesToMidi(notes, bpm) as BlobPart], { type: "audio/midi" });
   const url = URL.createObjectURL(blob);

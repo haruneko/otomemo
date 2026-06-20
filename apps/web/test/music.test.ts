@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Midi } from "@tonejs/midi";
-import { notesToMidi, notesOf, type Note } from "../src/music";
+import { notesToMidi, notesOf, midiToNotes, type Note } from "../src/music";
 
 describe("music", () => {
   it("encodes notes into parseable MIDI", () => {
@@ -13,6 +13,20 @@ describe("music", () => {
     const back = new Midi(bytes);
     expect(back.tracks[0]!.notes.length).toBe(2);
     expect(back.tracks[0]!.notes[0]!.midi).toBe(60);
+  });
+
+  it("round-trips notes through MIDI import", () => {
+    const bytes = notesToMidi(
+      [
+        { pitch: 60, start: 0, dur: 1 },
+        { pitch: 67, start: 2, dur: 0.5 },
+      ],
+      120,
+    );
+    const { notes } = midiToNotes(bytes);
+    expect(notes.length).toBe(2);
+    expect(notes[0]!.pitch).toBe(60);
+    expect(notes[1]!.start).toBeCloseTo(2, 1);
   });
 
   it("notesOf extracts notes or empty", () => {
