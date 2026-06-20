@@ -140,13 +140,18 @@ export function App() {
               }}
             />
           </label>
-          <button className="gear" aria-label="tray" onClick={openTray}>
+          <button className="gear" aria-label="tray" title="受け取りトレイ" onClick={openTray}>
             📥{doneCount > 0 && <span className="badge">{doneCount}</span>}
           </button>
-          <button className="gear" aria-label="chat" onClick={() => openChat()}>
+          <button className="gear" aria-label="chat" title="相談（Chat）" onClick={() => openChat()}>
             💬
           </button>
-          <button className="gear" aria-label="settings" onClick={() => setSettingsOpen(true)}>
+          <button
+            className="gear"
+            aria-label="settings"
+            title="設定"
+            onClick={() => setSettingsOpen(true)}
+          >
             ⚙
           </button>
         </div>
@@ -162,6 +167,8 @@ export function App() {
         <select
           aria-label="kind-filter"
           value={kindFilter}
+          disabled={!!q.trim()}
+          title={q.trim() ? "検索中は種類フィルタは無効" : "種類で絞る"}
           onChange={(e) => setKindFilter(e.target.value)}
         >
           <option value="">すべて</option>

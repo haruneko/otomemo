@@ -154,7 +154,11 @@ export function buildMcpServer(core: Core): McpServer {
       title: "ジョブを投げる",
       description: "対象＋意図で非同期ジョブを積む（ワーカーが処理、結果は get_job で受け取る）。",
       inputSchema: {
-        intent: z.string().describe("実現済みの意図：mora_count / echo（順次追加）"),
+        intent: z
+          .string()
+          .describe(
+            "意図：mora_count / brainstorm / suggest / gen_melody / gen_chord / gen_rhythm / research / plan / echo",
+          ),
         target_neta_id: z.string().optional(),
         instruction: z.string().optional(),
         params: z.unknown().optional(),
@@ -162,6 +166,16 @@ export function buildMcpServer(core: Core): McpServer {
       },
     },
     async (args) => ok(core.enqueueJob(args)),
+  );
+
+  server.registerTool(
+    "get_job_results",
+    {
+      title: "ジョブ結果のネタ",
+      description: "ジョブが生んだネタ(job_result)の一覧を返す。",
+      inputSchema: { job_id: z.string() },
+    },
+    async ({ job_id }) => ok(core.getJobResults(job_id)),
   );
 
   server.registerTool(
