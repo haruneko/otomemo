@@ -92,6 +92,35 @@
 | 作業代行 | 実作業を担う | **#12依存（生成の質）** |
 - **executable な intent の集合は、上の実現性が解けるにつれて確定**（特に #12/#13）。カタログ（理想）は今確定、実行可能列挙はまだ凍結しない。
 
+### 生成リクエストモデル（枠＋動作＋構造）(#85)
+要件「頼み方：枠を指定して動作を頼む」を契約へ落とす方針。生成を**単発intent**から**枠付き・構造を返す**へ一般化する。現状の gen_melody/gen_chord/gen_rhythm はこの退化形（枠なし・1フラットネタ）。
+
+**(A) リクエストの構造**（自由文を plan が解釈して組む。または下記パネルで人が埋める）:
+- **frame（枠／全て任意。省略時は延長として汲む。ただし指定したら最後まで効く）**：`{key?, meter?, tempo?, bars?, mood?, style?}`
+- **verb（動作）**：make（作る）/ fetch（取ってくる＝抽出）/ transform（変換＝6/8化・移調）/ modify（修正）/ assemble（組み立てる＝section化）/ research→make（調べてから作る・連鎖）
+- **target**：melody | chord_progression | rhythm | lyric | section …
+- **count**：N（「✕個」）
+- **condition（何に合わせるか）**：`{fit_to:[neta_id], by:"syllable"|"harmony"|…}`（例2=歌詞の音数、例5=コード進行に合わせる）
+- **structure（まとめ方）**：flat | pair | section
+
+**(B) 枠を最後まで効かせる（S1＝核・最小スライス）**:
+- gen_* / plan の params に `frame` を載せ、プロンプトが反映（content は C基準維持・拍子/調/小節の枠で作る）。
+- **reapResults が生成ネタに frame を付与**：atomic断片は key/meter/tempo/bars を**ヒント**として持つ（#14 の「断片はヒント、section/songが配置の権威」と整合）。section を生成する場合は section が権威として frame を持つ。
+- これで「6/8と言ったら 6/8 で返る」（今の最大の穴を塞ぐ）。
+
+**(C) 構造を返す（S2）**:
+- ジョブ結果を `{items:[{kind, content, frame…, label?}], edges:[{type:"compose"|"relation", from, to, position?}]}` に拡張（from/to は items の index）。
+- reapResults：items→ネタ化（frame付与）、edges→compose_edge / relation_edge。これで「コード＋メロのペア」「4バリエーション＝4 section」を**一括 materialize**。現行の単一ネタ結果は items 1件の特殊形。
+
+**(D) 二つの入口（S3＝導線・両方持つ）**:
+- **文章（既定）**：自由文→ consult/plan が (A) の構造へ解釈。
+- **パネル（AIが必要と判断したら出す）**：解釈に自信が無い/枠が欠ける時、Claude が**構造化フォームを要求**＝既存「ジョブが人に質問して待つ(#45 status=waiting+question)」を、テキスト質問でなく**フォーム質問**（拍子/調/BPM/個数/対象/まとめ方）へ拡張。人が埋めて answer→継続ジョブ。両方あることで人とAIの語彙が揃う。
+
+**(E) 方向確認（S3＝賢さの上積み・任意）**:
+- バッチや重い生成の前に、**まず1個だけサンプルを作る**（or 近い既存ネタを提示）→「この方向でいい？」を waiting/answer で確認→承認で本生成、却下/微修正で枠を直して再投擲。安く方向を当ててから量産。既存の二相(plan→子)＋waiting/answer に乗るので**実現性は高い**。
+
+**段階**：S1 枠の通し（数値の枠＝まず6/8が効く）→ S2 構造を返す（items+edges）→ S3 二入口＋方向確認。**契約変更につき** design→design-acceptor→実装→impl-acceptor の順で進める。
+
 ### ジョブ表
 - `job`(id, target_neta_id[null可], level[plan/atomic], intent[意図カタログ参照], instruction[自然言語], params[JSON], status[queued/running/waiting/done/failed/canceled], priority, progress, notify_level[null=全体設定継承], parent_job_id[null可], question[null可], result_summary, error, 時刻)
 - `job_result`(job_id, neta_id, order, role[primary/reference])
