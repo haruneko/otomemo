@@ -6,6 +6,9 @@ import { buildHttp } from "./http";
 
 const dbPath = process.env.CM_DB ?? "./data/cm.sqlite";
 const port = Number(process.env.PORT ?? 8787);
+// 到達は Tailscale tailnet 限定（design #18）。既定 localhost＝LANにもネットにも晒さない。
+// 外へは `tailscale serve 8787`(tailnet限定) で出す。LAN直開放したい時だけ CM_HOST=0.0.0.0。
+const host = process.env.CM_HOST ?? "127.0.0.1";
 
 if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
 
@@ -28,8 +31,8 @@ async function start() {
     });
     console.log(`serving web from ${webDist}`);
   }
-  const addr = await app.listen({ host: "0.0.0.0", port });
-  console.log(`cm api listening on ${addr} (db: ${dbPath})`);
+  const addr = await app.listen({ host, port });
+  console.log(`cm api listening on ${addr} (db: ${dbPath}, host: ${host})`);
 }
 
 start().catch((err) => {
