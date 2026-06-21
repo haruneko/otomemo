@@ -240,7 +240,7 @@ export class Core {
     const structRows = this.db
       .prepare(
         `SELECT j.id, j.params, j.result_summary AS result FROM job j
-         WHERE j.status='done' AND j.intent IN ('gen_variations','fetch','transform','gen_lyric')
+         WHERE j.status='done' AND j.intent IN ('gen_variations','gen_chords_rule','fetch','transform','gen_lyric')
            AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
       )
       .all() as { id: string; params: string | null; result: string | null }[];

@@ -16,6 +16,8 @@ import shutil
 import subprocess
 from typing import Callable
 
+from .music import analyze_fit, gen_chords  # #86 記号エンジン（判定＋ルール生成）
+
 # 小書き（拗音などを直前のかなに結合して1モーラにする）
 _SMALL = set("ァィゥェォャュョヮぁぃぅぇぉゃゅょゎ")
 
@@ -428,6 +430,15 @@ def handle_gen_variations(params: dict) -> dict:
             part_idx.append(len(items) - 1)
         if not part_idx:
             continue
+        # #86 検品：コード+メロが揃ったら analyze_fit を melody item の meta に同梱（content は汚さない）
+        by_kind = {items[pi]["kind"]: pi for pi in part_idx}
+        if "chord_progression" in by_kind and "melody" in by_kind:
+            mi, ci = by_kind["melody"], by_kind["chord_progression"]
+            fr = params.get("frame") if isinstance(params.get("frame"), dict) else {}
+            fit = analyze_fit(
+                items[mi]["content"]["notes"], items[ci]["content"]["chords"], key=fr.get("key")
+            )
+            items[mi]["meta"] = {"fit": fit}
         if structure == "section":
             sec_i = len(items)
             items.append({"kind": "section", "label": label})  # container（content無し）
@@ -438,6 +449,12 @@ def handle_gen_variations(params: dict) -> dict:
                 for b in range(a + 1, len(part_idx)):
                     edges.append({"type": "relation", "from": part_idx[a], "to": part_idx[b]})
     return {"items": items, "edges": edges}
+
+
+def handle_gen_chords_rule(params: dict) -> dict:
+    """#86 ルールベースのコード進行生成（機能和声・Claude非依存・決定的）。frame で長短/拍長/小節。
+    返りは #85 items 形。Claude案(gen_chord)と判定器(analyze_progression)で比較するための"ルール案"。"""
+    return gen_chords(params.get("frame"), seed=params.get("seed"))
 
 
 def handle_gen_lyric(params: dict) -> dict:
@@ -791,6 +808,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_chord": handle_gen_chord,
     "gen_rhythm": handle_gen_rhythm,
     "gen_variations": handle_gen_variations,
+    "gen_chords_rule": handle_gen_chords_rule,
     "gen_lyric": handle_gen_lyric,
     "fetch": handle_fetch,
     "transform": handle_transform,

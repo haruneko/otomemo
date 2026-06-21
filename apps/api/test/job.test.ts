@@ -179,6 +179,22 @@ describe("job queue (producer side)", () => {
     expect(c.getRelations(mel[0].id).length).toBe(0); // edge は張られない
   });
 
+  it("reaps gen_chords_rule (rule-based) into a chord_progression neta (#86)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jcr', 'gen_chords_rule', '{}', 'done', ?, '', '')`,
+    ).run(
+      JSON.stringify({
+        items: [{ kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] }, label: "ルール" }],
+        edges: [],
+      }),
+    );
+    expect(c.reapResults()).toBe(1);
+    expect(c.listNeta({ kind: "chord_progression" }).length).toBe(1);
+  });
+
   it("reaps gen_lyric items as lyric netas carrying text (#85 S2c)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

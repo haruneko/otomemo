@@ -211,6 +211,41 @@ def test_gen_variations_builds_items_and_edges(monkeypatch):
     assert len(comp) == 4  # 2 section × 2 part
 
 
+def test_gen_chords_rule_handler():
+    # #86 ルールベースのコード生成（Claude不要・items形）
+    import cm_worker.jobs as jobs
+
+    res = jobs.handle_gen_chords_rule({"frame": {"bars": 4, "mood": "切ない"}, "seed": 1})
+    assert res["items"][0]["kind"] == "chord_progression"
+    assert res["items"][0]["content"]["chords"][0]["quality"] == "m"  # マイナー
+
+
+def test_gen_variations_attaches_fit_analysis(monkeypatch):
+    # #86 コード+メロが揃ったら analyze_fit を melody item の meta に同梱
+    import json as _json
+
+    import cm_worker.jobs as jobs
+
+    payload = _json.dumps(
+        {
+            "variations": [
+                {
+                    "label": "案A",
+                    "chords": [{"root": "C", "quality": "", "start": 0, "dur": 4}],
+                    "notes": [{"pitch": 60, "start": 0, "dur": 1}, {"pitch": 64, "start": 1, "dur": 1}],
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180: payload)
+    res = jobs.handle_gen_variations(
+        {"count": 1, "kinds": ["chord_progression", "melody"], "structure": "pair", "frame": {"key": 0}}
+    )
+    mel = next(it for it in res["items"] if it["kind"] == "melody")
+    assert "meta" in mel and "fit" in mel["meta"]
+    assert mel["meta"]["fit"]["in_chord_rate"] == 1.0  # C,E は C コードトーン
+
+
 def test_gen_variations_flat_single_kind(monkeypatch):
     # 単一kind・structure既定=flat ＝ edge なし
     import json as _json
