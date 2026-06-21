@@ -366,14 +366,22 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - 漢字の同形異音は自動読みを正としない＝Chat/編集でユーザー上書き可。連母音(えい→ええ等)は発話モーラ数を正、歌唱実現は表示オプション。
 - ピッチアクセントは extract_fullcontext でほぼ無料で取れるが v1 は不要（韻律フィットを作る時に追加）。
 
-## #12 ノート生成エンジン（調査完了・段階決定）
-一発で「自作と差し替え可能」を満たす単一ツールは無い。段階建て：
-- **Stage0（AI無し・既に#16で規定）**：music21 で transpose/humanize/検証/MIDI取込分割。全段の土台。
-- **Stage1（最初に出す）**：**Claudeが本スキーマ（C基準・拍・GM）を直接emit**する MCP `generate_melody/chords/rhythm` ツール。スタイルは#6検索で近い過去素材を few-shot、出力は **music21 でルール検証＋自動補修**。→ 部分生成/壁打ち/作例 が今すぐ動く（Claudeのみ外部呼び＝制約OK）。コード・構成・歌詞整合は強い、メロの表情は serviceable 止まりと正直に。
-- **Stage2（伸ばす）**：**Anticipatory Music Transformer（AMT, Stanford, 780M, Apache2.0, MIDI/GM native, infilling/伴奏）** を Python ワーカーに CPU量子化で載せ、**非同期ジョブ**で。Claudeが弱い所（伴奏・infill・メロ表情）を担当。AMT MIDI→content は Stage0 importer で。
-- **Stage3（任意・データ次第）**：MIDIが貯まったら AMT に LoRA。今は教師データ薄すぎ＝過学習なので保留。フル fine-tune は無し。
-- 役割分担：**Claude=構成/コード/歌詞整合/司令塔、AMT=表情あるメロ・伴奏、music21/ルール=正しさ/transpose/humanize**。一本に固定せず、**スキーマが契約**で各エンジンが #20 ツール層の裏に差さる。
-- 780M iGPUは当てにしない（ROCm限定的）→ CPU＋量子化前提。32GBで余裕。音声生成系（Magenta RT等）は modality 違いで除外。
+## #12 ノート生成エンジン（調査完了・段階決定／#86で改訂）
+一発で「自作と差し替え可能」を満たす単一ツールは無い。段階建て。詳細サーベイ＝`docs/research/2026-06-21-generation-methods.md`。
+
+**役割分担（芯・#86確定）**：**Claude＝ふわっとした言葉→構造化リクエストの翻訳（ディスパッチ）＋判定結果を読む批評**（最大1回／任意・**音符に触らない**）。**記号エンジン（music21＋ルール）＝音符づくり（生成）＋当てはまり判定**（常に・決定的・~10ms・タダ）。研究的にも LLM は和声理解が欠落＝メロ生成はルールベース未満なので、**Claudeに音符を委ねない**。「判定（合ってるか・良し悪し）できること」が**提案の前提**。
+
+- **Stage0（AI無し・#16で規定）**：music21 で transpose/humanize/検証/MIDI取込分割。全段の土台。
+- **Stage1（最初に出す＝#86で改訂）**：**ルールベース生成＋判定**を `cm-music`（worker内 Python 純関数モジュール, music21＋numpy, 単一の真実）で。
+  - **判定**：`analyze_fit(melody, chords, key?)`＝拍重み在和音率＋非和声音分類（**コード既知**なので和声推定の最難関を踏まない）。`detect_key`(KS/TKP)・`analyze_progression`(roman/機能)。
+  - **生成**：`gen_chords`(機能和声ルール)・`gen_melody`(コードトーン拘束＋輪郭＋マルコフ)・`gen_bass`/`gen_drums`(ルール/GMテンプレ)。作風＝few-shot(自作注入)→RAG。
+  - **配線＝口1（worker直呼び）**：`handle_consult`/`gen_*` が cm-music を直呼び。**Chatも worker処理なので handler経由で music21に届く（MCP不要）**。ディスパッチ2経路：自由文Chat→Claude解釈→job ／ パネル/createJob→直（生成本体はどちらもルール）。
+  - **旧Stage1「Claudeが直接emit」は撤回**。Claudeは解釈と批評のみ。Claude案の生成は即廃止せず、**判定器で「ルール vs Claude」を実測してから移管**（上位を腐らせない）。
+- **Stage2（agentic＝口2/MCP・P2）**：cm-music を**常駐HTTPサービス**化→**HTTP-MCP**で `claude -p`／外部Claude が agentic にツールを叩く（「作る→点検→補正→再点検」をClaudeが多段で回す）。**永続サービスでコールドスタート回避**（既存 cm-search 同期HTTPと一貫）。**stdio MCPの毎回spawnは却下**。生成→ネタ化の縫合は既存 reap が持つので、音楽MCPは**read-only分析＋生成content返却に限定**（データ書込はさせない）。
+- **Stage3（伸ばす・隔離DL）**：Anticipatory Music Transformer(small/medium, Apache2.0, infilling)でメロ補完、GrooVAEでドラムhumanize、Basic Pitchでmp3採譜→作風特徴量。**別venv/Dockerで隔離**し worker本体(music21)を汚さない。AMT MIDI→content は Stage0 importer で。
+- **Stage4（任意・データ次第）**：作風寄せ＝少データでは**State Tuning（本体凍結・状態ベクトルのみ最適化）が LoRA 超え**（研究）。LoRA/フル fine-tune は過学習で保留。
+- **8060S/ローカルLLMは不採用**：Claude Max前提＋**from-scratch学習はデータ律速（ハードでは解けない）**。音声生成系（Magenta RT等）は modality 違いで除外。
+- **スキーマが契約**で各エンジンが裏に差さる（不変）。
 
 ## #19 GUI 実装ライブラリ（調査完了・決定）
 - 大前提：musical content は**自作の厳格JSON**（MIDI/MusicXMLでない）。よって**4つの編集面は大半が自作**、ライブラリは"縁"を助けるだけ。
