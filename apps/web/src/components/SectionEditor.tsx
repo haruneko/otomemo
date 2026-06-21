@@ -323,10 +323,21 @@ export function SectionEditor({
                   <button
                     key={n.id}
                     type="button"
-                    className="bs-option"
+                    className="picker-item"
+                    data-kind={n.kind}
                     onClick={() => void placeAt(n)}
                   >
-                    <strong>{n.title ?? n.text ?? "(無題)"}</strong>
+                    <div className="picker-item-roll">
+                      <MiniRoll neta={n} />
+                    </div>
+                    <div className="picker-item-meta">
+                      <strong>{n.title ?? n.text ?? "(無題)"}</strong>
+                      <span className="muted">
+                        {n.kind}
+                        {n.mood ? ` · ${n.mood}` : ""}
+                        {n.key != null ? ` · ${["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][n.key]}` : ""}
+                      </span>
+                    </div>
                   </button>
                 ));
               })()}

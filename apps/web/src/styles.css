@@ -1029,6 +1029,60 @@ body:has(.dialog-backdrop) .chat-bubble {
   max-height: 50vh;
   overflow-y: auto;
 }
+/* #55 ピッカーの候補をネタ帳カード風に：概形(MiniRoll)＋種類/mood/keyで見て選べる */
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem;
+  background: #1b1e23;
+  border: 1px solid #2a2d33;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  color: inherit;
+}
+.picker-item:hover {
+  background: #24272e;
+}
+.picker-item[data-kind="melody"] {
+  border-left-color: var(--k-melody);
+}
+.picker-item[data-kind="chord"],
+.picker-item[data-kind="chord_progression"] {
+  border-left-color: var(--k-chord);
+}
+.picker-item[data-kind="rhythm"] {
+  border-left-color: var(--k-rhythm);
+}
+.picker-item-roll {
+  flex: 0 0 auto;
+  width: 84px;
+  height: 34px;
+  background: #14161a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.picker-item-roll .mini-roll {
+  width: 100%;
+  height: 100%;
+}
+.picker-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.picker-item-meta strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.picker-item-meta .muted {
+  font-size: 0.72rem;
+}
 .section-children {
   display: grid;
   gap: 6px;
