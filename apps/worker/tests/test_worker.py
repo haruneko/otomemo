@@ -111,6 +111,38 @@ def test_gen_chord_prompt_includes_frame(monkeypatch):
     assert "拍子=6/8" in captured["p"]
 
 
+def test_resolve_fit_context_lyric_mora(tmp_path):
+    # #85 S2b 歌詞ネタ→ condition で音数(モーラ)に解決
+    import uuid
+
+    from cm_worker.db import connect
+    from cm_worker.worker import _resolve_fit_context
+
+    conn = connect(str(tmp_path / "t.sqlite"))
+    # neta 表は TS API 所有なので worker DB には無い。テスト用に最小列だけ用意。
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS neta (id TEXT PRIMARY KEY, kind TEXT, content TEXT, text TEXT, created TEXT, updated TEXT)"
+    )
+    nid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO neta (id, kind, text, created, updated) VALUES (?,?,?,?,?)",
+        (nid, "lyric", "はしる\nきみと\n", "t", "t"),
+    )
+    conn.commit()
+    p = _resolve_fit_context(conn, {"condition": {"fit_to": [nid], "by": "syllable"}})
+    assert p["fit_context"]["mora_counts"] == [3, 3]
+    # condition 無しは素通り
+    assert _resolve_fit_context(conn, {"context": "x"}) == {"context": "x"}
+
+
+def test_fit_block_renders_and_empty():
+    import cm_worker.jobs as jobs
+
+    s = jobs._fit_block({"fit_context": {"mora_counts": [3, 3], "chords": [{"root": "C"}]}})
+    assert "音数" in s and "コード進行" in s
+    assert jobs._fit_block({}) == ""
+
+
 def test_gen_variations_builds_items_and_edges(monkeypatch):
     # #85 S2a 1回でN個・各々コード+メロ→ section に compose
     import json as _json

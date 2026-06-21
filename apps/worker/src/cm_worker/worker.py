@@ -10,11 +10,46 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from .jobs import HANDLERS
+from .jobs import HANDLERS, split_mora
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _resolve_fit_context(conn: sqlite3.Connection, params: dict) -> dict:
+    """#85 S2b condition.fit_to を展開済み fit_context へ解決（worker=生産者側でDBを読む）。
+    handler は純粋でなくてよい（_style_block も既にDB読む）が、合わせる相手の解決はここに集約し、
+    handler は fit_context だけ見れば条件を満たせる。歌詞→音数(モーラ)、コード→chords、メロ→notes。"""
+    cond = params.get("condition")
+    if not isinstance(cond, dict):
+        return params
+    fit_to = cond.get("fit_to")
+    by = cond.get("by")
+    if not isinstance(fit_to, list) or not fit_to:
+        return params
+    ctx: dict = {}
+    for nid in fit_to:
+        row = conn.execute(
+            "SELECT kind, content, text FROM neta WHERE id=?", (str(nid),)
+        ).fetchone()
+        if row is None:
+            continue
+        try:
+            content = json.loads(row["content"]) if row["content"] else {}
+        except Exception:  # noqa: BLE001
+            content = {}
+        if (by == "syllable" or row["kind"] == "lyric") and row["text"]:
+            lines = [ln for ln in row["text"].splitlines() if ln.strip()]
+            ctx.setdefault("mora_counts", []).extend(len(split_mora(ln)) for ln in lines)
+            ctx["lyric"] = row["text"]
+        elif (by == "harmony" or row["kind"] == "chord_progression") and isinstance(
+            content.get("chords"), list
+        ):
+            ctx["chords"] = content["chords"]
+        elif row["kind"] == "melody" and isinstance(content.get("notes"), list):
+            ctx["notes"] = content["notes"]
+    return {**params, "fit_context": ctx} if ctx else params
 
 
 def _enqueue_children(
@@ -67,6 +102,7 @@ def run_once(conn: sqlite3.Connection) -> int:
         if handler is None:
             raise ValueError(f"no handler for intent: {row['intent']}")
         params = json.loads(row["params"]) if row["params"] else {}
+        params = _resolve_fit_context(conn, params)  # #85 S2b 合わせる相手を展開
         result = handler(params)
         conn.execute(
             "UPDATE job SET status='done', result_summary=?, progress=NULL, updated=? WHERE id=?",

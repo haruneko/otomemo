@@ -150,6 +150,7 @@ def handle_gen_melody(params: dict) -> dict:
         '{"notes":[{"pitch":整数(C基準MIDI番号 60=C4), "start":拍(0始まりfloat), "dur":拍(float)}]}\n'
         "ハ長調(Cメジャー)基準・単旋律・8〜16拍。前置き/説明/コードフェンス禁止、JSONのみ。\n"
         f"{_frame_block(params)}"
+        f"{_fit_block(params)}"
         f"{_style_block('melody', context)}"
         f"\n# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
@@ -238,6 +239,25 @@ def _frame_block(params: dict) -> str:
     if not parts:
         return ""
     return "# 枠（必ず守る）\n" + " / ".join(parts) + "\n"
+
+
+def _fit_block(params: dict) -> str:
+    """#85 S2b 合わせる相手(fit_context)をプロンプトへ。worker が解決済みなので handler はこれを尊重するだけ。"""
+    fc = params.get("fit_context")
+    if not isinstance(fc, dict):
+        return ""
+    parts = []
+    if fc.get("mora_counts"):
+        parts.append(f"各フレーズの音数(モーラ)={fc['mora_counts']} に合わせて音符の数を決める")
+    if fc.get("lyric"):
+        parts.append(f"歌詞:\n{fc['lyric']}")
+    if fc.get("chords"):
+        parts.append(f"このコード進行に合うように: {json.dumps(fc['chords'], ensure_ascii=False)}")
+    if fc.get("notes"):
+        parts.append(f"このメロディに合うように: {json.dumps(fc['notes'], ensure_ascii=False)}")
+    if not parts:
+        return ""
+    return "# 合わせる相手（必ず尊重）\n" + "\n".join(parts) + "\n"
 
 
 _PC = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
@@ -383,6 +403,7 @@ def handle_gen_variations(params: dict) -> dict:
         f"{fitline}ハ長調(C)基準・拍ベース。前置き/説明/コードフェンス禁止、JSONのみ。\n"
         '出力は JSON のみ：{"variations":[{"label":"短い見出し",' + ",".join(field_desc) + "}]}\n"
         f"{_frame_block(params)}"
+        f"{_fit_block(params)}"
         f"{_style_block(kinds[0], context)}"
         f"\n# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
