@@ -61,6 +61,13 @@ export interface Asset {
   created: string;
 }
 
+export interface SongOverlay {
+  neta_id: string;
+  stage: string | null;
+  next_action: string | null;
+  updated: string;
+}
+
 export interface Schedule {
   id: string;
   neta_id: string | null;
@@ -146,6 +153,14 @@ export const api = {
     http<Asset[]>(`/assets${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`),
   deleteAsset: (id: string) => http<{ deleted: boolean }>(`/asset/${id}`, { method: "DELETE" }),
   assetUrl: (id: string) => `${BASE}/asset/${id}`,
+
+  // #83 song overlay（段階／次の一手）＋ neta_asset（資産紐付け）
+  getSong: (id: string) => http<SongOverlay>(`/neta/${id}/song`).catch(() => null),
+  updateSong: (id: string, patch: { stage?: string | null; next_action?: string | null }) =>
+    http<SongOverlay>(`/neta/${id}/song`, { method: "PATCH", body: JSON.stringify(patch) }),
+  getNetaAssets: (id: string) => http<(Asset & { role: string })[]>(`/neta/${id}/assets`),
+  linkAsset: (id: string, asset_id: string, role: "source" | "attachment" | "render" = "attachment") =>
+    http<{ ok: boolean }>(`/neta/${id}/assets`, { method: "POST", body: JSON.stringify({ asset_id, role }) }),
 
   // #80 proactive 定期スケジューラ（継続研究/収集を見てない間に進める）
   listSchedules: (netaId?: string) =>
