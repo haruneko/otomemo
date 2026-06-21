@@ -130,6 +130,37 @@ describe("job queue (producer side)", () => {
     expect(c.listNeta({ kind: "reference" }).length).toBe(1);
   });
 
+  it("reaps import_midi tracks into melody/rhythm netas (#81)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jm2', 'import_midi', '{}', 'done', ?, '', '')`,
+    ).run(
+      JSON.stringify({
+        tracks: [
+          { kind: "melody", title: "song - Track1", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } },
+          { kind: "rhythm", title: "song - ドラム", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } },
+        ],
+      }),
+    );
+    expect(c.reapResults()).toBe(2);
+    expect(c.listNeta({ kind: "melody" }).some((n) => n.title === "song - Track1")).toBe(true);
+    expect(c.listNeta({ kind: "rhythm" }).length).toBe(1);
+    expect(c.reapResults()).toBe(0); // 冪等
+  });
+
+  it("import_midi with empty tracks does not leak re-reaps (#81)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jm3', 'import_midi', '{}', 'done', ?, '', '')`,
+    ).run(JSON.stringify({ tracks: [] }));
+    expect(c.reapResults()).toBe(0);
+    expect(c.reapResults()).toBe(0); // 空マーカーで再reapしない
+  });
+
   it("does not reap research with empty references (#9)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

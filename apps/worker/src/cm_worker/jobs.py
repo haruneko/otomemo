@@ -7,6 +7,8 @@
 将来: embed / analyze_mp3 / generate_* / research / collect / plan ...
 """
 
+import base64
+import io
 import json
 import os
 import re
@@ -365,6 +367,89 @@ def handle_collect(params: dict) -> dict:
     return {"summary": summary or text.strip(), "references": references}
 
 
+# GM ch10 ドラム番号 → レーン名（#81 取り込み rhythm 用）
+_GM_DRUM = {
+    35: "Kick", 36: "Kick", 37: "RimShot", 38: "Snare", 39: "Clap", 40: "Snare",
+    41: "Tom", 43: "Tom", 45: "Tom", 47: "Tom", 48: "Tom", 50: "Tom",
+    42: "HiHat", 44: "PedalHat", 46: "OpenHat", 49: "Crash", 57: "Crash", 51: "Ride", 53: "Ride",
+}
+
+
+def _track_notes_by_channel(track, tpb: int) -> dict:
+    """1トラックの note_on/off を channel ごとの {pitch,start,dur,vel}(beats基準) に分解。"""
+    by_ch: dict[int, list[dict]] = {}
+    t = 0
+    ongoing: dict[tuple[int, int], tuple[int, int]] = {}
+    for msg in track:
+        t += msg.time
+        if msg.type == "note_on" and msg.velocity > 0:
+            ongoing[(msg.channel, msg.note)] = (t, msg.velocity)
+        elif msg.type == "note_off" or (msg.type == "note_on" and msg.velocity == 0):
+            ch = getattr(msg, "channel", 0)
+            st = ongoing.pop((ch, msg.note), None)
+            if st is not None:
+                start_tick, vel = st
+                by_ch.setdefault(ch, []).append(
+                    {
+                        "pitch": msg.note,
+                        "start": round(start_tick / tpb, 3),
+                        "dur": round(max(1, t - start_tick) / tpb, 3),
+                        "vel": vel,
+                    }
+                )
+    return by_ch
+
+
+def _drum_rhythm(notes: list[dict]) -> dict:
+    """ドラムnote列 → rhythm content（pitchごとにlane、hitsは16分step）。"""
+    lanes: dict[int, dict] = {}
+    max_step = 0
+    for n in notes:
+        step = round(n["start"] * 4)
+        max_step = max(max_step, step)
+        lanes.setdefault(
+            n["pitch"], {"name": _GM_DRUM.get(n["pitch"], f"Drum{n['pitch']}"), "midi": n["pitch"], "hits": set()}
+        )["hits"].add(step)
+    steps = max(16, ((max_step // 16) + 1) * 16)
+    return {
+        "rhythm": {
+            "steps": steps,
+            "lanes": [
+                {"name": l["name"], "midi": l["midi"], "hits": sorted(l["hits"])}
+                for l in sorted(lanes.values(), key=lambda x: -x["midi"])
+            ],
+        }
+    }
+
+
+def handle_import_midi(params: dict) -> dict:
+    """MIDIをトラック×チャンネルで分割し melody/rhythm ネタの素材に（design#16）。
+    params: {midi_b64, filename}。返り {tracks:[{kind,title,content}]}。
+    ch10(0-index 9)=ドラム→rhythm、他=melody。コード進行の自動検出は後回し。"""
+    import mido
+
+    b64 = params.get("midi_b64") or ""
+    fname = (params.get("filename") or "midi").rsplit("/", 1)[-1]
+    base = re.sub(r"\.midi?$", "", fname, flags=re.I) or "midi"
+    try:
+        mid = mido.MidiFile(file=io.BytesIO(base64.b64decode(b64)))
+    except Exception:  # noqa: BLE001
+        return {"tracks": []}
+    tpb = mid.ticks_per_beat or 480
+    out: list[dict] = []
+    for idx, track in enumerate(mid.tracks):
+        tname = track.name.strip() if getattr(track, "name", "") else ""
+        for ch, notes in _track_notes_by_channel(track, tpb).items():
+            if not notes:
+                continue
+            label = tname or f"Track{idx + 1}"
+            if ch == 9:
+                out.append({"kind": "rhythm", "title": f"{base} - {tname or 'ドラム'}", "content": _drum_rhythm(notes)})
+            else:
+                out.append({"kind": "melody", "title": f"{base} - {label}", "content": {"notes": notes[:1000]}})
+    return {"tracks": out[:24]}
+
+
 _CONSULT_FALLBACK = "うまく汲み取れませんでした。もう少し具体的に教えてください。"
 _CONSULT_CONTENT = {
     "melody": lambda d: {"notes": _validate_notes(d)},
@@ -478,6 +563,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_rhythm": handle_gen_rhythm,
     "research": handle_research,
     "collect": handle_collect,
+    "import_midi": handle_import_midi,
     "plan": handle_plan,
     "consult": handle_consult,
 }

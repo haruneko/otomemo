@@ -169,6 +169,42 @@ export class Core {
       });
       n += 1;
     }
+
+    // #81 MIDI取り込み：done の import_midi の result.tracks を melody/rhythm ネタに分割materialize。
+    // web は自分でネタ化しない（投げて受け取る）ので stale ガード無しで即回収。
+    const midiRows = this.db
+      .prepare(
+        `SELECT j.id, j.result_summary AS result FROM job j
+         WHERE j.status='done' AND j.intent='import_midi'
+           AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
+      )
+      .all() as { id: string; result: string | null }[];
+    for (const r of midiRows) {
+      let tracks: { kind?: string; title?: string; content?: unknown }[] = [];
+      try {
+        tracks = (JSON.parse(r.result ?? "{}") as { tracks?: typeof tracks }).tracks ?? [];
+      } catch {
+        tracks = [];
+      }
+      let made = false;
+      for (const t of tracks) {
+        if (!t || !t.kind || !hasMusic(t.content)) continue;
+        this.createNeta({
+          kind: t.kind,
+          title: t.title ?? "取り込み",
+          content: t.content,
+          from_job: r.id,
+        });
+        made = true;
+        n += 1;
+      }
+      // 何も作れなくても再reapしないよう空マーカーを記録（二重処理防止）。
+      if (!made) {
+        this.db
+          .prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`)
+          .run(r.id);
+      }
+    }
     return n;
   }
 

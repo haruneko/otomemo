@@ -14,7 +14,7 @@ import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
-import { midiToNotes, prewarmSoundFont } from "./music";
+import { prewarmSoundFont } from "./music";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
@@ -72,17 +72,40 @@ export function App() {
     : items;
 
   // #10: 過去資産の一括取込（複数ファイル）
+  // #81 MIDIはworker(mido)でトラック×チャンネル分割→melody/rhythmネタ化。
+  // base64でジョブに載せ、workerが分割→reaperがネタ化。jobのdoneを待って一覧へ反映。
+  const [importing, setImporting] = useState(false);
   async function importMidi(files: FileList | null) {
     if (!files) return;
-    for (const file of Array.from(files)) {
-      const { notes } = midiToNotes(await file.arrayBuffer());
-      await api.createNeta({
-        kind: "melody",
-        title: file.name.replace(/\.midi?$/i, ""),
-        content: { notes },
-      });
+    setImporting(true);
+    try {
+      const ids: string[] = [];
+      for (const file of Array.from(files)) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let bin = "";
+        for (const b of bytes) bin += String.fromCharCode(b);
+        const job = await api.createJob({
+          intent: "import_midi",
+          params: { midi_b64: btoa(bin), filename: file.name },
+        });
+        ids.push(job.id);
+      }
+      // 分割→reaper反映を待つ（mido は速い・reaperは5s間隔）。最大~12s、毎秒reload。
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        await reload();
+        const st = await Promise.all(
+          ids.map((id) => api.getJob(id).then((j) => j.status).catch(() => "")),
+        );
+        if (st.every((s) => s === "done" || s === "failed")) {
+          await new Promise((r) => setTimeout(r, 600));
+          await reload();
+          break;
+        }
+      }
+    } finally {
+      setImporting(false);
     }
-    await reload();
   }
   async function importLyrics(files: FileList | null) {
     if (!files) return;
@@ -209,12 +232,13 @@ export function App() {
               ＋曲を組む
             </button>
             <label className="import-btn">
-              MIDI取込
+              {importing ? "取り込み中…" : "MIDI取込"}
               <input
                 type="file"
                 accept=".mid,.midi"
                 multiple
                 hidden
+                disabled={importing}
                 onChange={async (e) => {
                   await importMidi(e.target.files);
                   e.target.value = "";

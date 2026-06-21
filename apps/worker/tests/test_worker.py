@@ -104,6 +104,47 @@ def test_collect_parses_summary_and_references(monkeypatch):
     assert [r["title"] for r in res["references"]] == ["IVM7→IIIm7", "裏拍ハット"]
 
 
+def test_import_midi_splits_tracks_and_drums():
+    # #81 MIDIをトラック×チャンネルで melody/rhythm に分割
+    import base64
+    import io
+
+    import mido
+
+    import cm_worker.jobs as jobs
+
+    mid = mido.MidiFile(ticks_per_beat=480)
+    mel = mido.MidiTrack()
+    mid.tracks.append(mel)
+    mel.append(mido.Message("note_on", note=60, velocity=100, time=0, channel=0))
+    mel.append(mido.Message("note_off", note=60, velocity=0, time=480, channel=0))
+    mel.append(mido.Message("note_on", note=64, velocity=90, time=0, channel=0))
+    mel.append(mido.Message("note_off", note=64, velocity=0, time=480, channel=0))
+    dr = mido.MidiTrack()
+    mid.tracks.append(dr)
+    dr.append(mido.Message("note_on", note=36, velocity=100, time=0, channel=9))
+    dr.append(mido.Message("note_off", note=36, velocity=0, time=120, channel=9))
+    buf = io.BytesIO()
+    mid.save(file=buf)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+
+    res = jobs.handle_import_midi({"midi_b64": b64, "filename": "song.mid"})
+    kinds = [t["kind"] for t in res["tracks"]]
+    assert "melody" in kinds and "rhythm" in kinds
+    mel_t = next(t for t in res["tracks"] if t["kind"] == "melody")
+    assert [n["pitch"] for n in mel_t["content"]["notes"]] == [60, 64]
+    assert mel_t["content"]["notes"][1]["start"] == 1.0  # 2音目は1拍目から
+    dr_t = next(t for t in res["tracks"] if t["kind"] == "rhythm")
+    assert dr_t["content"]["rhythm"]["lanes"][0]["midi"] == 36
+    assert "song" in dr_t["title"]
+
+
+def test_import_midi_bad_data_returns_empty():
+    import cm_worker.jobs as jobs
+
+    assert jobs.handle_import_midi({"midi_b64": "not-base64-!!", "filename": "x"})["tracks"] == []
+
+
 def test_collect_registered_and_runs(tmp_path, monkeypatch):
     # HANDLERS に collect があり run_once で消化される
     import cm_worker.jobs as jobs
