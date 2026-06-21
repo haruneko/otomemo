@@ -389,6 +389,18 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **8060S/ローカルLLMは不採用**：Claude Max前提＋**from-scratch学習はデータ律速（ハードでは解けない）**。音声生成系（Magenta RT等）は modality 違いで除外。
 - **スキーマが契約**で各エンジンが裏に差さる（不変）。
 
+### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
+**入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
+
+- **なぜ HTTP（stdioでない）**：cm-music は music21 を import＝**初期化が重い**。stdio MCP は `claude -p` 起動ごとに別プロセスを spawn＝毎回コールドスタートで激重。→ **常駐 HTTP サービス**（既存 cm-search と同じ「常駐Python・claude/TSが叩く」パターン＝design L64 の追認済み内部窓口と同レーン）。import は常駐で1回。
+- **構成**：新プロセス **`cm-music-mcp`**（worker パッケージのエントリ、`cm_worker.music` を import）。**MCP over HTTP**（mcp Python SDK / FastMCP の streamable-HTTP）で localhost に公開（外に出さない＝#36 同様）。
+- **公開ツール（read-only・DB書込なし）**：分析＝`analyze_fit`/`detect_key`/`analyze_progression`、生成＝`gen_chords`/`gen_melody`/`gen_pair_rule`。**厳密 inputSchema** で param を強制（揺れの根治）。
+- **claude -p 接続**：worker の `claude_prompt`（consult等）に `--mcp-config <cm-music>` ＋ `--allowedTools` を付け、in-app Chat の Claude が agentic にツールを叩く。外部 Claude Desktop も同 MCP に接続可。
+- **materialize は既存のまま（縫合は1箇所＝reap に集約）**：MCPツールは**音楽データを返すだけ**でネタ化しない。Claude はツールで推敲した最終 content を consult 結果として返し、**既存 reap がネタ化**（MCPに書込権を持たせない＝サーバ跨ぎの原子性問題を回避）。
+- **後退ゼロ**：口1（dispatch）は残す（MCP不通でも動く）。ロバスト化（param揺れ吸収）も保険として残す。
+- **段階**：S2a＝cm-music-mcp サービスを立てツール公開（MCPクライアントから叩けることを確認）→ S2b＝consult の claude_prompt に --mcp-config 配線（Chatがagenticに使う）→ S2c＝外部Desktop接続手順（任意）。
+- **要検証リスク**：①~~claude CLI が HTTP MCP を解せるか~~ → **解消**：`claude mcp add --transport http <url>`／`--mcp-config` で **HTTP MCP をネイティブ対応**（実機確認済）。②agentic ループのコスト/レイテンシ（重い時は口1へフォールバック）。③FastMCP/mcp SDK を worker 依存に追加。④`claude -p`（print/非対話）で MCP ツール使用が動くか（--mcp-config＋--allowedTools／--permission-mode）は S2b 着手時に実機確認。
+
 ## #19 GUI 実装ライブラリ（調査完了・決定）
 - 大前提：musical content は**自作の厳格JSON**（MIDI/MusicXMLでない）。よって**4つの編集面は大半が自作**、ライブラリは"縁"を助けるだけ。
 - **カードグリッド**：**TanStack Table v8**（headless・ファセット）＋Tailwindカード＋**@dnd-kit**（ドラッグで合成）。gotcha：タップ再生 vs ドラッグ合成の判別（dnd-kit の activation constraint）。
