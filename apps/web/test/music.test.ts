@@ -181,7 +181,8 @@ describe("music", () => {
       const drumKits = new Map([[36, { sampler: kick, note: 38 }]]);
       playEvent({ time: 0, durSec: 0.15, voice: "membrane", pitch: 36, vel: 0.8 }, 2, null, kit, Tone, drumKits);
       playEvent({ time: 0, durSec: 0.05, voice: "noise", pitch: 38, vel: 0.8 }, 3, null, kit, Tone, drumKits);
-      expect(kick.start).toHaveBeenCalledWith({ note: 38, time: 2, duration: 0.15, velocity: 102 });
+      // 打楽器はワンショット＝duration を渡さない（loopによる多重発音を防ぐ）
+      expect(kick.start).toHaveBeenCalledWith({ note: 38, time: 2, velocity: 102 });
       expect(kit.membrane.triggerAttackRelease).not.toHaveBeenCalled(); // kickはSF2へ
       expect(kit.noise.triggerAttackRelease).toHaveBeenCalled(); // snareは簡易へ
     });
