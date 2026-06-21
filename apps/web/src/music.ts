@@ -527,15 +527,21 @@ export function drumNameFor(pitch: number, names: string[]): string | null {
   return null;
 }
 
-// 楽器の sample 原音高(originalPitch)。これで鳴らすとピッチシフト0＝録音そのままの自然な音。
-function instrumentRoot(name: string): number {
+// #55b/#79 ドラム楽器を「どのnoteで鳴らすか」。
+// 楽器がGM番号に該当する keyRange ゾーンを持てば**そのGM note**で（Hi-Hats=42閉/46開、
+// Toms=各キーで音程差 等、キットの意図どおり）。持たない（単一サンプル/keyRange無）なら
+// **原音高(originalPitch)** で自然に（Kick/Snare等）。
+function drumNoteFor(name: string, gmPitch: number): number {
   const insts: any[] = sfParsed?.instruments ?? [];
   const inst = insts.find((i) => (i.header?.name ?? i.name) === name);
+  let root = 60;
   for (const z of inst?.zones ?? []) {
+    const kr = z?.keyRange;
+    if (kr && gmPitch >= kr.lo && gmPitch <= kr.hi) return gmPitch; // 該当ゾーンあり
     const op = z?.sample?.header?.originalPitch;
-    if (typeof op === "number" && op > 0 && op < 128) return op;
+    if (typeof op === "number" && op > 0 && op < 128) root = op;
   }
-  return 60;
+  return root;
 }
 
 // ドラム1種をロード（楽器名キャッシュ）。失敗時 null＝その音は簡易キットにフォールバック。
@@ -554,7 +560,6 @@ async function loadDrumSampler(name: string, Tone: any): Promise<any | null> {
   }
 }
 
-const TOM_PITCHES = [41, 43, 45, 47, 48, 50];
 export type DrumVoice = { sampler: any; note: number };
 
 // 再生に出てくるドラム音(pitch)→ {sampler, 鳴らすnote}。ドラムは原音高で鳴らすと自然。
@@ -568,11 +573,9 @@ async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, Dr
     if (!name) continue;
     const s = await loadDrumSampler(name, Tone);
     if (!s) continue;
-    const root = instrumentRoot(name);
-    // 単音ドラムは原音高で自然に。トムは root 中心に音程差（41=低→50=高）。
-    const note = TOM_PITCHES.includes(p) ? root + (p - 47) : root;
+    const note = drumNoteFor(name, p); // ゾーン該当→GM note / 無→原音高
     map.set(p, { sampler: s, note });
-    dbg("drum", p, "->", name, "@note", note, "(root", root, ")");
+    dbg("drum", p, "->", name, "@note", note);
   }
   return map;
 }
