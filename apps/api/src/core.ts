@@ -141,13 +141,13 @@ export class Core {
       n += 1;
     }
 
-    // #9 参考曲エージェント：research の結果（references 非空）を reference ネタとして回収。
-    // gen_* と同じガード（parent有り＝plan子は即時／単独は120s未受領で回収）で二重作成を防ぐ。
+    // #9/#82 参考曲・収集エージェント：research/collect の結果（references 非空）を reference
+    // ネタとして回収。gen_* と同じガード（parent有り＝plan子は即時／単独は120s未受領で回収）。
     const refRows = this.db
       .prepare(
         `SELECT j.id, j.result_summary AS result
          FROM job j
-         WHERE j.status='done' AND j.intent='research'
+         WHERE j.status='done' AND j.intent IN ('research','collect')
            AND (j.parent_job_id IS NOT NULL OR j.updated < ?)
            AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
       )

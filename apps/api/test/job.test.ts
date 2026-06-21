@@ -114,6 +114,22 @@ describe("job queue (producer side)", () => {
     expect(c.reapResults()).toBe(0); // 冪等
   });
 
+  it("reaps collect with references into a reference neta too (#82)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('jc', 'collect', '{}', 'done', 'plan1', ?, '', '')`,
+    ).run(
+      JSON.stringify({
+        summary: "断片",
+        references: [{ title: "IVM7→IIIm7", why: "切ない", points: "Aメロ頭" }],
+      }),
+    );
+    expect(c.reapResults()).toBe(1);
+    expect(c.listNeta({ kind: "reference" }).length).toBe(1);
+  });
+
   it("does not reap research with empty references (#9)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

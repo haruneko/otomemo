@@ -332,6 +332,39 @@ def handle_research(params: dict) -> dict:
     return {"summary": summary or text.strip(), "references": references}
 
 
+def handle_collect(params: dict) -> dict:
+    """情報収集（#82・design#16 の「収集」）。research が「参考曲を調べる」のに対し、collect は
+    テーマに沿って**試せる断片/アイデア**（コード進行例・リズム・歌詞フレーズ・音色/技法）を集める。
+    出力は research と同じ {summary, references[]}＝reapResults が reference ネタとして回収する。"""
+    topic = params.get("topic") or params.get("context") or ""
+    instruction = params.get("instruction") or f"「{topic}」で試せる断片・アイデアを集める。"
+    prompt = (
+        "DTM/作曲のアシスタントとして、必要なら web を使い、テーマに沿って**すぐ試せる断片や"
+        "アイデア**を集める（コード進行例・リズムパターン・歌詞フレーズ・音色や技法のヒント等）。\n"
+        '出力は JSON のみ：{"summary":"集めた要点（数行）",'
+        '"references":[{"title":"アイデア名","artist":"","why":"なぜ使えるか","points":"使い方/具体"}]}\n'
+        "references は3〜6件。前置き/説明/コードフェンス禁止、JSONのみ。\n\n"
+        f"# テーマ\n{topic}\n\n# 依頼\n{instruction}"
+    )
+    text = claude_prompt(prompt, timeout=180)
+    try:
+        data = _extract_json(text)
+        summary = str(data.get("summary", "")).strip()
+        references = [
+            {
+                "title": str(r["title"])[:120],
+                "artist": str(r.get("artist", "")),
+                "why": str(r.get("why", "")),
+                "points": str(r.get("points", "")),
+            }
+            for r in (data.get("references") or [])
+            if isinstance(r, dict) and r.get("title")
+        ]
+    except Exception:  # noqa: BLE001
+        summary, references = text.strip(), []
+    return {"summary": summary or text.strip(), "references": references}
+
+
 _CONSULT_FALLBACK = "うまく汲み取れませんでした。もう少し具体的に教えてください。"
 _CONSULT_CONTENT = {
     "melody": lambda d: {"notes": _validate_notes(d)},
@@ -366,7 +399,7 @@ def handle_consult(params: dict) -> dict:
         '    chord_progression: {"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"dim"or"sus4","start":拍float,"dur":拍float}]}（ハ長調基準）\n'
         '    rhythm: {"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}（GMドラム）\n'
         "- 一式そろえる等の多段依頼 → "
-        '{"type":"plan","subtasks":[{"intent":"gen_melody|gen_chord|gen_rhythm|research","params":{"context":"...","instruction":"..."}}]}（2〜5個）\n'
+        '{"type":"plan","subtasks":[{"intent":"gen_melody|gen_chord|gen_rhythm|research|collect","params":{"context":"...","instruction":"..."}}]}（2〜5個）\n'
         "判断基準：作って/生成して＝content、案・アイデア請求＝options、まとめて一式＝plan、それ以外＝chat。\n\n"
         f"# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
@@ -416,7 +449,12 @@ def handle_plan(params: dict) -> dict:
     request = params.get("instruction") or params.get("context") or ""
     prompt = (
         "あなたは作曲アシスタントのプランナー。依頼を実行可能な小タスクに分解する。\n"
-        "使える intent: gen_melody / gen_chord / gen_rhythm / suggest / research\n"
+        "使える intent と用途:\n"
+        "- research: テーマの参考曲を調べて学びをまとめる（作る前の下調べ）\n"
+        "- collect: 試せる断片/アイデア（コード進行例・リズム・歌詞フレーズ等）を集める\n"
+        "- gen_melody / gen_chord / gen_rhythm: メロ/コード/リズムを生成する\n"
+        "- suggest: 既存内容への改善案を出す\n"
+        "必要なら『調べてから作る』のように順に並べてよい（例: research → gen_melody）。\n"
         '出力は JSON のみ：{"subtasks":[{"intent":"...","params":{"context":"...","instruction":"..."}}]}\n'
         "2〜5個・各 params.context に対象内容・instruction に具体指示。JSONのみ。\n\n"
         f"# 依頼\n{request}"
@@ -439,6 +477,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_chord": handle_gen_chord,
     "gen_rhythm": handle_gen_rhythm,
     "research": handle_research,
+    "collect": handle_collect,
     "plan": handle_plan,
     "consult": handle_consult,
 }

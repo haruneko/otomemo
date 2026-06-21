@@ -86,6 +86,40 @@ def test_suggest_strips_code_fence(monkeypatch):
     assert jobs.handle_suggest({"context": "x"})["options"][0]["title"] == "a"
 
 
+def test_collect_parses_summary_and_references(monkeypatch):
+    # #82 collect は research と同じ {summary, references[]} を返す（reapが reference化）
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=120: (
+            '{"summary":"夜の街の断片","references":['
+            '{"title":"IVM7→IIIm7","why":"切ない","points":"Aメロ頭で"},'
+            '{"title":"裏拍ハット","why":"疾走感","points":"16分"}]}'
+        ),
+    )
+    res = jobs.handle_collect({"topic": "夜の街"})
+    assert res["summary"] == "夜の街の断片"
+    assert [r["title"] for r in res["references"]] == ["IVM7→IIIm7", "裏拍ハット"]
+
+
+def test_collect_registered_and_runs(tmp_path, monkeypatch):
+    # HANDLERS に collect があり run_once で消化される
+    import cm_worker.jobs as jobs
+
+    assert "collect" in jobs.HANDLERS
+    monkeypatch.setattr(
+        jobs, "claude_prompt", lambda p, timeout=120: '{"summary":"s","references":[{"title":"t"}]}'
+    )
+    conn = connect(str(tmp_path / "t.sqlite"))
+    _enqueue(conn, "collect", {"topic": "x"})
+    assert run_once(conn) == 1
+    row = conn.execute("SELECT status, result_summary FROM job WHERE id='j1'").fetchone()
+    assert row[0] == "done"
+    assert "references" in row[1]
+
+
 def test_suggest_fallback_on_non_json(monkeypatch):
     import cm_worker.jobs as jobs
 
