@@ -340,9 +340,9 @@ export function playEvent(
     const ds = drumKits?.get(ev.pitch);
     if (ds) {
       dbg("note pitch", ev.pitch, "via sf2-drum @", ds.note);
-      // 打楽器はワンショット（duration を渡さない＝loopさせない）。duration を渡すと
-      // SF2サンプルの loop 点でその間ループし「1発が複数回」鳴る。
-      ds.sampler.start({ note: ds.note, time, velocity: Math.round(ev.vel * 127) });
+      // 打楽器はワンショット＝loop を明示OFF。SF2のキック等は loop点を持ち、loop有のまま
+      // duration を渡すと「1発が複数回」、duration無だと鳴り続ける。loop:false で1回だけ。
+      ds.sampler.start({ note: ds.note, time, velocity: Math.round(ev.vel * 127), loop: false });
     } else if (ev.voice === "membrane") {
       dbg("note pitch", ev.pitch, "via kit.membrane");
       kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
