@@ -509,26 +509,21 @@ article header {
   gap: 6px;
   margin-top: 4px;
 }
-/* #69 考え中インジケータ（…のアニメ） */
+/* #69 考え中インジケータ。content アニメはブラウザ差で静止し得るので opacity パルスで確実に動かす。 */
 .chat-text.thinking {
   font-style: italic;
+  animation: chat-thinking 1.2s ease-in-out infinite;
 }
 .chat-text.thinking .dots::after {
   content: "…";
-  animation: chat-dots 1.2s steps(4, end) infinite;
 }
-@keyframes chat-dots {
-  0% {
-    content: "";
-  }
-  25% {
-    content: "・";
+@keyframes chat-thinking {
+  0%,
+  100% {
+    opacity: 0.45;
   }
   50% {
-    content: "・・";
-  }
-  75% {
-    content: "・・・";
+    opacity: 1;
   }
 }
 .chat-input {
