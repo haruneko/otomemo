@@ -313,6 +313,45 @@ def test_mcp_args_gated_by_env(monkeypatch):
     assert "mcp__cm-music__analyze_fit" in allowed and "mcp__cm-music__gen_chords" in allowed
 
 
+def test_mcp_args_neta_read_only(monkeypatch):
+    # #102 S1：CM_MCP_URL があれば creative-manager の read-only ネタツールを agentic に追加。
+    # 書込ツール(update/delete/place_child/link 等)は **絶対に** allowedTools に入れない（承認前にDBを変えない）。
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", None)
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", None)
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_ARGS", None)
+    assert jobs._mcp_args() == []  # どちらも無ければ後退ゼロ
+
+    # neta だけ設定（music 無し）でも read-only ツールが付く（stdio spawn）
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", "pnpm")
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_ARGS", '["--filter","@cm/api","mcp"]')
+    args = jobs._mcp_args()
+    cfg = args[args.index("--mcp-config") + 1]
+    assert "creative-manager" in cfg
+    import json as _json
+    parsed = _json.loads(cfg)
+    cm = parsed["mcpServers"]["creative-manager"]
+    assert cm["command"] == "pnpm" and cm["args"] == ["--filter", "@cm/api", "mcp"]
+    allowed = args[args.index("--allowedTools") + 1]
+    # read-only は入る
+    for t in ("list_neta", "get_neta", "facets", "get_composition", "get_relations"):
+        assert f"mcp__creative-manager__{t}" in allowed, t
+    # 書込は1つも入らない（read-only原則・承認制の構造保証）
+    for t in ("create_neta", "update_neta", "delete_neta", "place_child",
+              "remove_child", "link", "unlink", "update_song"):
+        assert f"mcp__creative-manager__{t}" not in allowed, t
+
+    # 両方設定なら両サーバ＋両ツール群
+    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", "http://127.0.0.1:8790/mcp")
+    args = jobs._mcp_args()
+    cfg = args[args.index("--mcp-config") + 1]
+    assert "cm-music" in cfg and "creative-manager" in cfg
+    allowed = args[args.index("--allowedTools") + 1]
+    assert "mcp__cm-music__gen_chords" in allowed
+    assert "mcp__creative-manager__get_neta" in allowed
+
+
 def test_handle_consult_agentic_items_preserves_index(monkeypatch):
     # #86 S2b agentic：不正itemが先頭でも edge の index がズレない（compactしない）
     import cm_worker.jobs as jobs
@@ -328,6 +367,42 @@ def test_handle_consult_agentic_items_preserves_index(monkeypatch):
     assert res["type"] == "items"
     assert len(res["items"]) == 3  # 不正item(空dict)も残して index 保存
     assert res["edges"][0]["from"] == 2 and res["edges"][0]["to"] == 1  # section→chord がズレない
+
+
+def test_handle_consult_proposals_validates_and_drops(monkeypatch):
+    # #102 S2：既存ネタの変異は type:proposals で返す（提案＝適用ではない）。
+    # 不正 proposal は要素ごと落とし、残りは活かす。op/target_id/args を検証。
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", "pnpm")  # 読取面ON
+    payload = (
+        '{"type":"proposals","summary":"3件の提案",'
+        '"proposals":['
+        '{"op":"fit_to","target_id":"n1","args":{"content":{"notes":[{"pitch":60,"start":0,"dur":1}]}},"rationale":"外し音を補正"},'  # 有効
+        '{"op":"place_child","target_id":"n2","args":{"parent_id":"s1","position":0}},'  # 有効
+        '{"op":"frobnicate","target_id":"n3","args":{}},'  # 無効 op→落とす
+        '{"op":"delete","args":{}},'  # target_id 欠落→落とす
+        '{"op":"link","target_id":"n4","args":{"to_id":"n5","type":"ref"}}'  # 有効
+        ']}'
+    )
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120, **kw: payload)
+    res = jobs.handle_consult({"instruction": "n1をコードに合わせて直して、n2をs1に置いて"})
+    assert res["type"] == "proposals"
+    ops = [p["op"] for p in res["proposals"]]
+    assert ops == ["fit_to", "place_child", "link"]  # 無効2件は除去・順序保持
+    assert res["proposals"][0]["target_id"] == "n1"
+    assert res["summary"] == "3件の提案"
+
+
+def test_handle_consult_proposals_all_invalid_falls_back_to_chat(monkeypatch):
+    # #102 S2：全 proposal が不正なら会話を壊さず chat フォールバック（#43同型）。
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", "pnpm")
+    payload = '{"type":"proposals","proposals":[{"op":"bogus","target_id":"x"},{"op":"delete"}]}'
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120, **kw: payload)
+    res = jobs.handle_consult({"instruction": "全部消して"})
+    assert res["type"] == "chat" and res["text"]
 
 
 def test_handle_consult_dispatch_without_env(monkeypatch):

@@ -68,18 +68,40 @@ _MUSIC_TOOLS = [
     "gen_chords", "gen_melody", "fit_to_chords", "melody_similarity", "find_similar",
 ]
 
+# #102 S1 creative-manager MCP（既存ネタの読取面）。cold-start 無し＝常駐させず claude -p が
+# stdio で spawn（既存 apps/api/src/mcp-stdio.ts を再利用）。CM_MCP_STDIO_CMD が spawn コマンド、
+# CM_MCP_STDIO_ARGS が JSON 配列の引数。CM_DB は環境継承で本番DBを指す。未設定なら従来挙動（後退ゼロ）。
+CM_MCP_STDIO_CMD = os.environ.get("CM_MCP_STDIO_CMD")
+CM_MCP_STDIO_ARGS = os.environ.get("CM_MCP_STDIO_ARGS")
+# read-only のみ公開（検索/読取）。**書込ツール(create/update/delete/place_child/link 等)は
+# 意図的に除外**＝Claude に書込口を与えない。変異は proposals→承認→TS core で1箇所適用（#102）。
+_NETA_READ_TOOLS = [
+    "list_neta", "get_neta", "facets", "get_composition", "get_relations",
+]
+
 
 def _mcp_args() -> list[str]:
-    """#86 S2b：cm-music-mcp を claude -p に接続する引数（CM_MUSIC_MCP_URL がある時だけ）。
-    --max-turns で agentic ループを打ち切り（暴発・遅延の上限。env で調整可）。"""
-    if not CM_MUSIC_MCP_URL:
+    """#86 S2b / #102 S1：agentic Chat の claude -p に MCP サーバを接続する引数。
+    cm-music(CM_MUSIC_MCP_URL=HTTP常駐) と creative-manager read-only(CM_MCP_STDIO_CMD=stdio spawn)
+    を env がある分だけ載せる。どちらも無ければ [] ＝後退ゼロ。--max-turns で agentic ループを打ち切る。"""
+    servers: dict[str, dict] = {}
+    allowed: list[str] = []
+    if CM_MUSIC_MCP_URL:
+        servers["cm-music"] = {"type": "http", "url": CM_MUSIC_MCP_URL}
+        allowed += [f"mcp__cm-music__{t}" for t in _MUSIC_TOOLS]
+    if CM_MCP_STDIO_CMD:
+        servers["creative-manager"] = {
+            "command": CM_MCP_STDIO_CMD,
+            "args": json.loads(CM_MCP_STDIO_ARGS) if CM_MCP_STDIO_ARGS else [],
+        }
+        allowed += [f"mcp__creative-manager__{t}" for t in _NETA_READ_TOOLS]
+    if not servers:
         return []
-    cfg = json.dumps({"mcpServers": {"cm-music": {"type": "http", "url": CM_MUSIC_MCP_URL}}})
-    allowed = ",".join(f"mcp__cm-music__{t}" for t in _MUSIC_TOOLS)
+    cfg = json.dumps({"mcpServers": servers})
     max_turns = os.environ.get("CM_AGENTIC_MAX_TURNS", "8")
     return [
         "--mcp-config", cfg,
-        "--allowedTools", allowed,
+        "--allowedTools", ",".join(allowed),
         "--permission-mode", "bypassPermissions",
         "--max-turns", max_turns,
     ]
@@ -844,12 +866,54 @@ def hasmusic_or_text(item: dict) -> bool:
     return bool(isinstance(item.get("text"), str) and item.get("text", "").strip())
 
 
+# #102 S2 既存ネタの変異提案（proposals）。**提案であって適用ではない**＝適用は承認後に web→既存HTTP
+# 書込が1箇所で担う。worker は形だけ検証して返す（DBは読まない／書かない）。op ごとの必須 args：
+_PROPOSAL_OPS = {
+    "update_content": ("content",),  # args.content（新content）
+    "transform": (),                  # args（移調/拍子等のパラメータ or 結果content）
+    "fit_to": (),                     # args（補正パラメータ or 結果content）
+    "place_child": ("parent_id",),    # 対象を parent の子として配置
+    "remove_child": ("parent_id",),   # 対象を parent から外す
+    "link": ("to_id",),               # 対象→to_id を関連付け
+    "unlink": ("to_id",),             # 対象→to_id の関連を外す
+    "delete": (),                     # 対象を削除（args 不要）
+}
+
+
+def _validate_proposals(raw: list) -> list[dict]:
+    """proposal の配列を検証し、有効な要素だけを順序保持で返す（#43同型・要素ごとに落とす）。
+    各要素は {op, target_id, args, rationale}。op 未知／target_id 欠落／必須 args 欠落は除外。"""
+    out: list[dict] = []
+    for p in raw if isinstance(raw, list) else []:
+        if not isinstance(p, dict):
+            continue
+        op = p.get("op")
+        required = _PROPOSAL_OPS.get(op)
+        if required is None:  # 未知 op
+            continue
+        target_id = p.get("target_id")
+        if not (isinstance(target_id, (str, int)) and str(target_id).strip()):
+            continue  # target_id 必須
+        args = p.get("args") if isinstance(p.get("args"), dict) else {}
+        if any(not args.get(k) for k in required):  # 必須 args 欠落
+            continue
+        out.append({
+            "op": op,
+            "target_id": str(target_id),
+            "args": args,
+            "rationale": str(p.get("rationale", "")),
+        })
+    return out
+
+
 def handle_consult(params: dict) -> dict:
     """相談（#61 統合）。Claudeに「会話/発展案/生成/多段」を判断させ判別ユニオンを返す。
     壁打ち(suggest)＋おまかせ(plan)を畳んだ Chat の単一窓口。空/不正は chat フォールバック。"""
     context = params.get("context", "")
     instruction = params.get("instruction") or "この内容について相談に乗って。"
-    agentic = bool(CM_MUSIC_MCP_URL)  # cm-music ツールが使えるか（#86 S2b）
+    agentic = bool(CM_MUSIC_MCP_URL)  # cm-music ツール(生成/分析)が使えるか（#86 S2b）
+    neta_read = bool(CM_MCP_STDIO_CMD)  # creative-manager read-only ツールで既存ネタを読めるか（#102 S1）
+    tools = agentic or neta_read      # MCP を claude -p に載せるか（どちらかでも有れば載せる）
     # #routing A：楽曲生成は【特定 vs 汎用】を先に見分ける。
     # 特定(名前/参照/旋法/様式)はルールに渡さず Claude の知識でコードを書き起こす（ルールはダイアトニック
     # 度数表だけで丸の内のE7/Gm7等の非ダイアトニックを原理的に出せない）。汎用(枠だけ)はルールへ。
@@ -879,17 +943,31 @@ def handle_consult(params: dict) -> dict:
             '{"type":"plan","subtasks":[{"intent":"gen_pair_rule|gen_chords_rule|gen_lyric|fetch|transform|research|collect","params":{"frame":{...},"count":N,"parts":[...]}}]}'
             "（汎用の音符生成はルール gen_pair_rule 優先）\n"
         )
+    # #102 S1：既存ネタを読む手段。read-only ツール(検索/読取)のみ＝在庫を踏まえて答えられる。
+    # 書込は出来ない（変異は後続 S2 の proposals で承認制）。
+    neta_block = (
+        "- 既存ネタについて聞かれた／今ある素材を踏まえて答えたい → "
+        "creative-manager のツールで読める（list_neta=一覧, get_neta=中身, facets=検索の軸, "
+        "get_composition=曲の構成, get_relations=関連）。**読むだけ**（ツールでの書込は不可）。\n"
+        "- 既存ネタを**直す/配置する/関連づける/削除する**よう頼まれた → ツールで対象を読んで特定し、"
+        "**変更は提案として返す**（その場では適用しない＝ユーザーが承認してから反映）：\n"
+        '  {"type":"proposals","summary":"何をするかの要約","proposals":[{"op":..., "target_id":"対象ネタID", "args":{...}, "rationale":"理由"}]}\n'
+        "  op と args：update_content{content:新content} / transform{...移調や拍子のパラメータ} / "
+        "fit_to{...コードに合わせる補正} / place_child{parent_id,position} / remove_child{parent_id} / "
+        "link{to_id,type} / unlink{to_id,type} / delete{}。target_id は read ツールで得た実在IDを使う。\n"
+    )
     prompt = (
         "あなたは作曲アシスタント。ユーザーの発言に応じ、次のいずれか1つだけを JSON で返す"
         "（前置き・説明・コードフェンス禁止、JSONのみ）。\n"
         '- 会話・助言・壁打ち → {"type":"chat","text":"..."}\n'
         '- 発展案を複数 → {"type":"options","options":[{"title":"見出し","body":"本文"}]}（2〜4個）\n'
         f"{music_block}"
+        f"{neta_block if neta_read else ''}"
         "判断基準：作って/生成して＝楽曲（特定/名前/旋法/様式なら自分で書く・汎用枠だけならルール）、"
         "案・アイデア請求＝options、それ以外＝chat。\n\n"
         f"# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
-    text = claude_prompt(prompt, timeout=240 if agentic else 120, tools=agentic)
+    text = claude_prompt(prompt, timeout=240 if tools else 120, tools=tools)
     try:
         data = _extract_json(text)
     except Exception:  # noqa: BLE001
@@ -923,6 +1001,12 @@ def handle_consult(params: dict) -> dict:
             for it in items
         )
         return {"type": "items", "items": items, "edges": edges} if has_real else {"type": "chat", "text": _CONSULT_FALLBACK}
+    if t == "proposals":
+        # #102 S2 既存ネタの変異提案。検証して返すだけ（承認＝web、適用＝既存HTTP書込が1箇所）。
+        props = _validate_proposals(data.get("proposals"))
+        if not props:
+            return {"type": "chat", "text": _CONSULT_FALLBACK}
+        return {"type": "proposals", "summary": str(data.get("summary", "")), "proposals": props}
     if t == "content":
         nk = data.get("neta_kind")
         builder = _CONSULT_CONTENT.get(nk)

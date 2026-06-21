@@ -10,6 +10,7 @@
 #   CM_HOST    … API バインド先。tailnet/LAN から届かせるなら **Tailscale IP** か 0.0.0.0（既定 127.0.0.1=ローカルのみ）
 #   CM_TOKEN   … 設定すると API に x-cm-token 必須の簡易認証（tailnet 限定なら通常不要）
 #   CM_MUSIC_MCP_URL/PORT … agentic Chat 用 cm-music-mcp の URL/ポート（既定 8790・worker に配線）
+#   CM_MCP_STDIO_CMD/ARGS … agentic Chat の既存ネタ読取(creative-manager MCP)を claude -p が stdio spawn する起動コマンド/引数（#102 S1・既定 pnpm --filter @cm/api mcp）
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -18,6 +19,10 @@ export CM_HOST="${CM_HOST:-127.0.0.1}"
 export CM_MUSIC_MCP_PORT="${CM_MUSIC_MCP_PORT:-8790}"
 # cm-music-mcp の URL（worker はこれを見て agentic Chat で音楽ツールを使う。未起動なら dispatch にフォールバック）
 export CM_MUSIC_MCP_URL="${CM_MUSIC_MCP_URL:-http://127.0.0.1:${CM_MUSIC_MCP_PORT}/mcp}"
+# #102 S1 creative-manager MCP（既存ネタの読取面）。cold-start 無し＝常駐させず claude -p が stdio で spawn。
+# read-only のみ公開（書込ツールは worker 側 _NETA_READ_TOOLS で除外＝Claude に書込口なし）。CM_DB は環境継承で本番DBを指す。
+export CM_MCP_STDIO_CMD="${CM_MCP_STDIO_CMD:-pnpm}"
+export CM_MCP_STDIO_ARGS="${CM_MCP_STDIO_ARGS:-[\"--filter\",\"@cm/api\",\"mcp\"]}"
 mkdir -p "$ROOT/logs"
 
 # 二重起動防止：既存の自分のプロセスだけ落としてから上げる（再実行で重複しない）。
