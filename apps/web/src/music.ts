@@ -608,14 +608,20 @@ async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, Dr
   const map = new Map<number, DrumVoice>();
   if (!sfInstrumentNames.length) return map;
   const pitches = [...new Set(notes.filter((n) => n.drum).map((n) => n.pitch))];
-  for (const p of pitches) {
-    const name = drumNameFor(p, sfInstrumentNames);
-    if (!name) continue;
-    const s = await loadDrumSampler(name, Tone);
-    if (!s) continue;
-    const note = drumNoteFor(name, p); // ゾーン該当→GM note / 無→原音高
-    map.set(p, { sampler: s, note });
-    dbg("drum", p, "->", name, "@note", note);
+  // #84 S0: ドラムサンプラのロードを並列化（直列awaitで初回再生が1〜2.5s重い問題を緩和）。
+  const loaded = await Promise.all(
+    pitches.map(async (p) => {
+      const name = drumNameFor(p, sfInstrumentNames);
+      if (!name) return null;
+      const s = await loadDrumSampler(name, Tone);
+      if (!s) return null;
+      return { p, name, sampler: s, note: drumNoteFor(name, p) };
+    }),
+  );
+  for (const r of loaded) {
+    if (!r) continue;
+    map.set(r.p, { sampler: r.sampler, note: r.note });
+    dbg("drum", r.p, "->", r.name, "@note", r.note);
   }
   return map;
 }

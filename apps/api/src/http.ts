@@ -258,6 +258,8 @@ export function buildHttp(core: Core): FastifyInstance {
     if (!a) return reply.code(404).send({ error: "not found" });
     reply.header("content-type", a.mime ?? "application/octet-stream");
     if (a.size != null) reply.header("content-length", String(a.size));
+    // #84 S0: asset は id 不変（内容も不変）→ ブラウザに長期キャッシュさせ 32MB の再fetchを排除。
+    reply.header("cache-control", "public, max-age=31536000, immutable");
     return reply.send(createReadStream(a.path));
   });
 
