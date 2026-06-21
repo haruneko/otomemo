@@ -19,8 +19,9 @@ const netaInput = z.object({
 
 // 意味検索のPython窓口（docs/design.md #16）。localhost のみ、外に露出しない。
 const SEARCH_URL = process.env.CM_SEARCH_URL ?? "http://127.0.0.1:8788";
-// #65 意味hitの spread較正ゲート閾値。コーパス成長で動く前提で env 外出し。
-const SEM_MIN_REL = Number(process.env.CM_SEM_MIN_REL ?? 0.05);
+// #65 意味hitの spread較正ゲート閾値。実機コーパス実測で 0.07（無意味top rel≈0.061 を弾き
+// 実クエリtop≈0.112 を残す）。コーパス成長で最適点が動く前提で env 外出し＋回帰スイープ。
+const SEM_MIN_REL = Number(process.env.CM_SEM_MIN_REL ?? 0.07);
 
 const jobInput = z.object({
   intent: z.string().min(1),
