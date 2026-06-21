@@ -564,7 +564,7 @@ def handle_gen_pair_rule(params: dict) -> dict:
             elif part == "bass":
                 bn = gen_bass(frame, chords=chords, seed=s)["items"][0]["content"]["notes"]
                 fit = analyze_fit(bn, chords, key=frame.get("key"))
-                items.append({"kind": "melody", "content": {"notes": bn}, "label": f"{label}ベース", "meta": {"fit": fit}})
+                items.append({"kind": "bass", "content": {"notes": bn}, "label": f"{label}ベース", "meta": {"fit": fit}})
             elif part == "drums":
                 dr = gen_drums(frame, seed=s)["items"][0]["content"]["rhythm"]
                 items.append({"kind": "rhythm", "content": {"rhythm": dr}, "label": f"{label}ドラム"})

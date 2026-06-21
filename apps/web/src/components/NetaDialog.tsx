@@ -137,7 +137,7 @@ export function NetaDialog({
           .map((t) => t.trim())
           .filter(Boolean),
         mood: mood.trim() || null,
-        ...(isMelody
+        ...(isMelody || isBass
           ? { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) }
           : isChord
             ? { content: { chords, program }, key, tempo }

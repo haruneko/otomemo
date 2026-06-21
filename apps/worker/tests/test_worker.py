@@ -294,7 +294,7 @@ def test_gen_pair_rule_full_arrangement():
     )
     kinds = [it["kind"] for it in res["items"]]
     assert kinds.count("chord_progression") == 1 and kinds.count("rhythm") == 1
-    assert kinds.count("melody") == 2  # メロ＋ベース(どちらもnotes=melody kind)
+    assert kinds.count("melody") == 1 and kinds.count("bass") == 1  # メロとベースは別kind(#bass S1)
     assert kinds.count("section") == 1
     # section に 4パーツ(chord/melody/bass/drums)が compose
     assert len([e for e in res["edges"] if e["type"] == "compose"]) == 4
