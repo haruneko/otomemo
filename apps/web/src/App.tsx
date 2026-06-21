@@ -15,6 +15,7 @@ import { NetaDialog } from "./components/NetaDialog";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
+import { parseMusicXml } from "./musicxml";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
@@ -103,6 +104,30 @@ export function App() {
           break;
         }
       }
+    } finally {
+      setImporting(false);
+    }
+  }
+  // #56 楽譜(MusicXML)取込：ローカルで解析→melodyネタ化（worker不要）。
+  async function importScore(files: FileList | null) {
+    if (!files) return;
+    setImporting(true);
+    try {
+      for (const file of Array.from(files)) {
+        try {
+          const notes = parseMusicXml(await file.text());
+          if (notes.length) {
+            await api.createNeta({
+              kind: "melody",
+              title: file.name.replace(/\.(musicxml|xml)$/i, ""),
+              content: { notes },
+            });
+          }
+        } catch {
+          /* 1ファイルの失敗で全体を止めない */
+        }
+      }
+      await reload();
     } finally {
       setImporting(false);
     }
@@ -241,6 +266,20 @@ export function App() {
                 disabled={importing}
                 onChange={async (e) => {
                   await importMidi(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <label className="import-btn">
+              楽譜取込
+              <input
+                type="file"
+                accept=".musicxml,.xml"
+                multiple
+                hidden
+                disabled={importing}
+                onChange={async (e) => {
+                  await importScore(e.target.files);
                   e.target.value = "";
                 }}
               />
