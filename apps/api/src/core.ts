@@ -590,6 +590,68 @@ export class Core {
     }
     return n;
   }
+
+  // --- chat（#70 Chat履歴の永続化。thread=対象neta id or 'global'）---
+  addChatMessage(input: {
+    thread: string;
+    role: string;
+    kind?: string | null;
+    text?: string | null;
+    data?: unknown;
+  }): ChatMessage {
+    const id = randomUUID();
+    const ts = now();
+    this.db
+      .prepare(
+        `INSERT INTO chat_message (id, thread, role, kind, text, data, created)
+         VALUES (@id, @thread, @role, @kind, @text, @data, @created)`,
+      )
+      .run({
+        id,
+        thread: input.thread,
+        role: input.role,
+        kind: input.kind ?? null,
+        text: input.text ?? null,
+        data: input.data == null ? null : JSON.stringify(input.data),
+        created: ts,
+      });
+    return rowToChatMessage(
+      this.db.prepare(`SELECT * FROM chat_message WHERE id = ?`).get(id) as Record<string, unknown>,
+    );
+  }
+
+  listChatMessages(thread: string, limit = 200): ChatMessage[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM chat_message WHERE thread = ? ORDER BY created, rowid LIMIT ?`)
+      .all(thread, limit) as Record<string, unknown>[];
+    return rows.map(rowToChatMessage);
+  }
+
+  clearChatThread(thread: string): void {
+    this.db.prepare(`DELETE FROM chat_message WHERE thread = ?`).run(thread);
+  }
+}
+
+export interface ChatMessage {
+  id: string;
+  thread: string;
+  role: string;
+  kind: string | null;
+  text: string | null;
+  data: unknown;
+  created: string;
+}
+
+function rowToChatMessage(row: Record<string, unknown>): ChatMessage {
+  return {
+    id: row.id as string,
+    thread: row.thread as string,
+    role: row.role as string,
+    kind: (row.kind as string) ?? null,
+    text: (row.text as string) ?? null,
+    data: row.data == null ? null : JSON.parse(row.data as string),
+    created: row.created as string,
+  };
 }
 
 export interface Schedule {

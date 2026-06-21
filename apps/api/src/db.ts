@@ -98,6 +98,18 @@ CREATE TABLE IF NOT EXISTS schedule (
   created   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_schedule_due ON schedule(enabled, next_run);
+
+-- #70 Chat履歴の永続化。thread = 対象neta id ／ 'global'。data=JSON(構造化ペイロード)。
+CREATE TABLE IF NOT EXISTS chat_message (
+  id      TEXT PRIMARY KEY,
+  thread  TEXT NOT NULL,
+  role    TEXT NOT NULL,
+  kind    TEXT,
+  text    TEXT,
+  data    TEXT,
+  created TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_thread ON chat_message(thread, created);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {
