@@ -309,13 +309,26 @@ interface PlayOpts {
 type Kit = { poly: any; membrane: any; noise: any };
 let currentKit: Kit | null = null;
 
-// 1音の発音ディスパッチ（テスト可能に切り出し）。ドラムは簡易キット、旋律は SF2 があれば
-// それ、無ければ poly シンセ。SF2 は absolute time(秒)・velocity 0..127。
-export function playEvent(ev: ScheduledNote, time: number, sf: any, kit: Kit, Tone: any): void {
-  if (ev.voice === "membrane") {
-    kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
-  } else if (ev.voice === "noise") {
-    kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
+// 1音の発音ディスパッチ（テスト可能に切り出し）。
+// ドラム: SF2にマッチ楽器があればそれ、無ければ簡易キット(membrane/noise)。
+// 旋律: SF2があればそれ、無ければ poly シンセ。SF2 は absolute time(秒)・velocity 0..127。
+export function playEvent(
+  ev: ScheduledNote,
+  time: number,
+  sf: any,
+  kit: Kit,
+  Tone: any,
+  drumKits?: Map<number, any>,
+): void {
+  if (ev.voice === "membrane" || ev.voice === "noise") {
+    const ds = drumKits?.get(ev.pitch);
+    if (ds) {
+      ds.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
+    } else if (ev.voice === "membrane") {
+      kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
+    } else {
+      kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
+    }
   } else if (sf) {
     sf.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
   } else {
@@ -335,28 +348,60 @@ function disposeKit() {
   currentKit = null;
 }
 
-// #55a SF2実再生（smplr）。選択中SoundFontのURLを外から設定。null/失敗時は簡易シンセに
+// #55a/#55b SF2実再生（smplr）。選択中SoundFontのURLを外から設定。null/失敗時は簡易シンセに
 // フォールバック（後退ゼロ）。Tone と AudioContext を共有して Transport.seconds と同期。
 let activeSfUrl: string | null = null;
-let sfSampler: any = null;
+let sfSampler: any = null; // 旋律用（1楽器ロード済み）
 let sfLoadedUrl: string | null = null;
 let sfLoading = false;
 let sfLastError: string | null = null; // #55a 診断用：直近のロード失敗理由
 let sfInstrumentCount = 0;
+let sfInstrumentNames: string[] = []; // #55b ドラム楽器名の探索に使う
+// パース済みSF2を url で共有（旋律＋各ドラムsamplerが再パースしないように）。
+let sfParsed: any = null;
+let sfParsedUrl: string | null = null;
+// #55b ドラムは GM 統合キットが無いため、GM番号→楽器名で個別samplerをロードしキャッシュ。
+const sfDrumCache = new Map<string, any>(); // 楽器名 → drum sampler
+let sfCtx: any = null; // 共有 AudioContext（Tone.rawContext）
+
+function resetSfCaches(): void {
+  sfSampler = null;
+  sfLoadedUrl = null;
+  sfLastError = null;
+  sfInstrumentCount = 0;
+  sfInstrumentNames = [];
+  sfParsed = null;
+  sfParsedUrl = null;
+  sfDrumCache.clear();
+}
 
 export function setActiveSoundFont(url: string | null): void {
   if (url !== activeSfUrl) {
     activeSfUrl = url;
-    sfSampler = null;
-    sfLoadedUrl = null;
-    sfLastError = null;
-    sfInstrumentCount = 0;
+    resetSfCaches();
   }
 }
 
 // soundfont2 のUMD/ESM差を吸収（named/default どちらでも SoundFont2 クラスを取り出す）。
 function resolveSF2Ctor(mod: any): any {
   return mod?.SoundFont2 ?? mod?.default?.SoundFont2 ?? mod?.default ?? mod;
+}
+
+// SF2 を1個生成。createSoundfont は url 単位でパース結果をキャッシュ＝再パースしない。
+async function makeSampler(url: string, Tone: any): Promise<any> {
+  const [smplr, sf2mod] = await Promise.all([import("smplr"), import("soundfont2")]);
+  const Soundfont2 = (smplr as any).Soundfont2;
+  const SoundFont2 = resolveSF2Ctor(sf2mod);
+  sfCtx = Tone.getContext().rawContext;
+  return Soundfont2(sfCtx, {
+    url,
+    createSoundfont: (data: Uint8Array) => {
+      if (sfParsedUrl === url && sfParsed) return sfParsed;
+      sfParsed = new SoundFont2(data);
+      sfParsedUrl = url;
+      return sfParsed;
+    },
+  });
 }
 
 async function ensureSoundFont(Tone: any): Promise<any | null> {
@@ -366,17 +411,11 @@ async function ensureSoundFont(Tone: any): Promise<any | null> {
   if (sfLoading) return null; // ロード中の再生は今回フォールバック（次回から鳴る）
   sfLoading = true;
   try {
-    const [smplr, sf2mod] = await Promise.all([import("smplr"), import("soundfont2")]);
-    const Soundfont2 = (smplr as any).Soundfont2;
-    const SoundFont2 = resolveSF2Ctor(sf2mod);
-    const ctx = Tone.getContext().rawContext;
-    const sampler = Soundfont2(ctx, {
-      url,
-      createSoundfont: (data: Uint8Array) => new SoundFont2(data),
-    });
+    const sampler = await makeSampler(url, Tone);
     await sampler.ready;
     const names: string[] = sampler.instrumentNames ?? [];
     sfInstrumentCount = names.length;
+    sfInstrumentNames = names;
     // 旋律楽器を優先（ドラム/percussion以外）。無ければ先頭。
     const melodic = names.find((n) => !/drum|perc|kit/i.test(n)) ?? names[0];
     if (melodic) await sampler.loadInstrument(melodic);
@@ -394,6 +433,56 @@ async function ensureSoundFont(Tone: any): Promise<any | null> {
   } finally {
     sfLoading = false;
   }
+}
+
+// #55b GM打楽器番号 → SF2楽器名（GeneralUser GS等GM SF2向けベストエフォート）。
+export function drumNameFor(pitch: number, names: string[]): string | null {
+  let res: RegExp[];
+  if (pitch <= 36) res = [/kick|bass drum/i];
+  else if (pitch === 37) res = [/side ?stick|rim/i, /snare/i];
+  else if (pitch === 38 || pitch === 40) res = [/snare/i];
+  else if (pitch === 39) res = [/clap|hand/i, /snare/i];
+  else if ([41, 43, 45, 47, 48, 50].includes(pitch)) res = [/tom/i];
+  else if (pitch === 42 || pitch === 44) res = [/closed.*hat|hi-?hat|hat/i];
+  else if (pitch === 46) res = [/open.*hat|hi-?hat|hat/i];
+  else if ([49, 52, 55, 57].includes(pitch)) res = [/crash|splash|china|cymbal/i];
+  else if ([51, 53, 59].includes(pitch)) res = [/ride/i, /cymbal/i];
+  else res = [/perc/i, /drum/i];
+  for (const re of res) {
+    const hit = names.find((n) => re.test(n));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// ドラム1種をロード（楽器名キャッシュ）。失敗時 null＝その音は簡易キットにフォールバック。
+async function loadDrumSampler(name: string, Tone: any): Promise<any | null> {
+  if (!activeSfUrl) return null;
+  if (sfDrumCache.has(name)) return sfDrumCache.get(name);
+  try {
+    const s = await makeSampler(activeSfUrl, Tone);
+    await s.ready;
+    await s.loadInstrument(name);
+    sfDrumCache.set(name, s);
+    return s;
+  } catch (e) {
+    console.error("[SoundFont] drum load failed:", name, e);
+    return null;
+  }
+}
+
+// 再生に出てくるドラム音(pitch)それぞれに対応する drum sampler を用意（pitch→sampler）。
+async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, any>> {
+  const map = new Map<number, any>();
+  if (!sfInstrumentNames.length) return map;
+  const pitches = [...new Set(notes.filter((n) => n.drum).map((n) => n.pitch))];
+  for (const p of pitches) {
+    const name = drumNameFor(p, sfInstrumentNames);
+    if (!name) continue;
+    const s = await loadDrumSampler(name, Tone);
+    if (s) map.set(p, s);
+  }
+  return map;
 }
 
 // 設定画面からの読込テスト（成功すればキャッシュも温まる）。ユーザー操作内で呼ぶこと（Tone.start）。
@@ -426,8 +515,10 @@ export async function playNotes(
   transport.cancel(0);
   disposeKit();
 
-  // SF2 が選択・ロード済みなら旋律(poly)はそれで鳴らす。ドラムは簡易キット、SF2無しは全部キット。
+  // SF2 が選択・ロード済みなら旋律はそれで鳴らす。ドラムは SF2 にマッチ楽器があればそれ、
+  // 無ければ簡易キット。SF2 無しは全部キット（後退ゼロ）。
   const sf = await ensureSoundFont(Tone);
+  const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number, any>();
 
   const kit: Kit = {
     poly: new Tone.PolySynth(Tone.Synth).toDestination(),
@@ -438,7 +529,7 @@ export async function playNotes(
 
   transport.bpm.value = bpm;
   for (const ev of scheduleTimes(notes, bpm)) {
-    transport.schedule((time: number) => playEvent(ev, time, sf, kit, Tone), ev.time);
+    transport.schedule((time: number) => playEvent(ev, time, sf, kit, Tone, drumKits), ev.time);
   }
 
   let stopped = false;
@@ -458,6 +549,7 @@ export async function playNotes(
       disposeKit();
       try {
         sf?.stop(); // SF2 の鳴っている音も止める（尾を切る。サンプラ自体は再利用のため破棄しない）
+        for (const ds of drumKits.values()) ds.stop?.();
       } catch {
         /* noop */
       }

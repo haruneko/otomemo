@@ -164,7 +164,7 @@ describe("music", () => {
       expect(kit.poly.triggerAttackRelease).toHaveBeenCalled();
     });
 
-    it("drums always use the kit regardless of SF2", () => {
+    it("drums fall back to the simple kit when no SF2 drum sampler matches", () => {
       const kit = mkKit();
       const sf = { start: vi.fn() };
       playEvent({ time: 0, durSec: 0.15, voice: "membrane", pitch: 36, vel: 0.8 }, 0, sf, kit, Tone);
@@ -172,6 +172,41 @@ describe("music", () => {
       expect(kit.membrane.triggerAttackRelease).toHaveBeenCalled();
       expect(kit.noise.triggerAttackRelease).toHaveBeenCalled();
       expect(sf.start).not.toHaveBeenCalled();
+    });
+
+    it("#55b drums use the matched SF2 drum sampler (by pitch) when available", () => {
+      const kit = mkKit();
+      const kick = { start: vi.fn() };
+      const drumKits = new Map<number, { start: ReturnType<typeof vi.fn> }>([[36, kick]]);
+      // kick(36) はマッチ → SF2 ドラム sampler。snare(38) は未マッチ → 簡易キット。
+      playEvent({ time: 0, durSec: 0.15, voice: "membrane", pitch: 36, vel: 0.8 }, 2, null, kit, Tone, drumKits);
+      playEvent({ time: 0, durSec: 0.05, voice: "noise", pitch: 38, vel: 0.8 }, 3, null, kit, Tone, drumKits);
+      expect(kick.start).toHaveBeenCalledWith({ note: 36, time: 2, duration: 0.15, velocity: 102 });
+      expect(kit.membrane.triggerAttackRelease).not.toHaveBeenCalled(); // kickはSF2へ
+      expect(kit.noise.triggerAttackRelease).toHaveBeenCalled(); // snareは簡易へ
+    });
+  });
+
+  describe("drumNameFor (#55b GM番号→楽器名)", () => {
+    const names = [
+      "Concert Bass Drum",
+      "Jazz Snare 1",
+      "Orchestra Hi-Hats",
+      "Brushed Toms_1",
+      "Orchestral Ride",
+      "Grand Piano",
+    ];
+    it("maps kick/snare/hihat/tom/ride to drum-like instrument names", async () => {
+      const { drumNameFor } = await import("../src/music");
+      expect(drumNameFor(36, names)).toBe("Concert Bass Drum");
+      expect(drumNameFor(38, names)).toBe("Jazz Snare 1");
+      expect(drumNameFor(42, names)).toBe("Orchestra Hi-Hats");
+      expect(drumNameFor(45, names)).toBe("Brushed Toms_1");
+      expect(drumNameFor(51, names)).toBe("Orchestral Ride");
+    });
+    it("returns null when nothing matches", async () => {
+      const { drumNameFor } = await import("../src/music");
+      expect(drumNameFor(36, ["Grand Piano", "Violin"])).toBeNull();
     });
   });
 });
