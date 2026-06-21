@@ -675,6 +675,70 @@ export class Core {
     return this.db.prepare(`DELETE FROM asset WHERE id=?`).run(id).changes > 0;
   }
 
+  // --- song（#83 曲の箱 overlay：neta[kind=song] と 1:1。段階／次の一手）---
+  updateSong(
+    netaId: string,
+    patch: { stage?: string | null; next_action?: string | null },
+  ): { neta_id: string; stage: string | null; next_action: string | null; updated: string } | null {
+    if (!this.getNeta(netaId)) return null;
+    const cur = this.getSong(netaId);
+    const stage = patch.stage !== undefined ? patch.stage : (cur?.stage ?? null);
+    const next_action =
+      patch.next_action !== undefined ? patch.next_action : (cur?.next_action ?? null);
+    this.db
+      .prepare(
+        `INSERT INTO song (neta_id, stage, next_action, updated) VALUES (@n,@s,@a,@u)
+         ON CONFLICT(neta_id) DO UPDATE SET stage=@s, next_action=@a, updated=@u`,
+      )
+      .run({ n: netaId, s: stage, a: next_action, u: now() });
+    return this.getSong(netaId);
+  }
+
+  getSong(
+    netaId: string,
+  ): { neta_id: string; stage: string | null; next_action: string | null; updated: string } | null {
+    const row = this.db.prepare(`SELECT * FROM song WHERE neta_id=?`).get(netaId) as
+      | Record<string, unknown>
+      | undefined;
+    return row
+      ? {
+          neta_id: row.neta_id as string,
+          stage: (row.stage as string) ?? null,
+          next_action: (row.next_action as string) ?? null,
+          updated: row.updated as string,
+        }
+      : null;
+  }
+
+  // --- neta_asset（#83 ネタ↔資産の紐付け：role=source/attachment/render）---
+  linkAsset(netaId: string, assetId: string, role = "attachment"): boolean {
+    if (!this.getNeta(netaId) || !this.getAsset(assetId)) return false;
+    this.db
+      .prepare(
+        `INSERT INTO neta_asset (neta_id, asset_id, role, created) VALUES (?,?,?,?)
+         ON CONFLICT(neta_id, asset_id, role) DO NOTHING`,
+      )
+      .run(netaId, assetId, role, now());
+    return true;
+  }
+
+  unlinkAsset(netaId: string, assetId: string, role?: string): boolean {
+    const sql = role
+      ? this.db.prepare(`DELETE FROM neta_asset WHERE neta_id=? AND asset_id=? AND role=?`).run(netaId, assetId, role)
+      : this.db.prepare(`DELETE FROM neta_asset WHERE neta_id=? AND asset_id=?`).run(netaId, assetId);
+    return sql.changes > 0;
+  }
+
+  getNetaAssets(netaId: string): (Asset & { role: string })[] {
+    const rows = this.db
+      .prepare(
+        `SELECT a.*, na.role AS na_role FROM neta_asset na JOIN asset a ON a.id = na.asset_id
+         WHERE na.neta_id=? ORDER BY na.created DESC`,
+      )
+      .all(netaId) as Record<string, unknown>[];
+    return rows.map((r) => ({ ...rowToAsset(r), role: r.na_role as string }));
+  }
+
   // --- schedule（#80 proactive: 見てない間に継続研究/収集を進める）---
   addSchedule(input: {
     neta_id?: string | null;

@@ -153,3 +153,30 @@ describe("jobs: waiting / answer (#45)", () => {
     expect(cont.instruction).toContain("明るく");
   });
 });
+
+describe("song overlay + neta_asset (#83)", () => {
+  it("updateSong upserts stage/next_action with partial update", () => {
+    const s = core.createNeta({ kind: "song", title: "曲A" });
+    expect(core.getSong(s.id)).toBeNull();
+    const up = core.updateSong(s.id, { stage: "アレンジ", next_action: "サビ作る" });
+    expect(up?.stage).toBe("アレンジ");
+    expect(up?.next_action).toBe("サビ作る");
+    const up2 = core.updateSong(s.id, { next_action: "2番" }); // stage は保持
+    expect(up2?.stage).toBe("アレンジ");
+    expect(up2?.next_action).toBe("2番");
+    expect(core.updateSong("nope", { stage: "x" })).toBeNull();
+  });
+
+  it("linkAsset/getNetaAssets/unlinkAsset carry role", () => {
+    const n = core.createNeta({ kind: "melody" });
+    const a = core.addAsset({ kind: "midi", path: "/x.mid", name: "x" });
+    expect(core.linkAsset(n.id, a.id, "source")).toBe(true);
+    const list = core.getNetaAssets(n.id);
+    expect(list.length).toBe(1);
+    expect(list[0].role).toBe("source");
+    expect(list[0].kind).toBe("midi");
+    expect(core.linkAsset(n.id, "nope", "source")).toBe(false); // 無い資産は false
+    expect(core.unlinkAsset(n.id, a.id, "source")).toBe(true);
+    expect(core.getNetaAssets(n.id).length).toBe(0);
+  });
+});

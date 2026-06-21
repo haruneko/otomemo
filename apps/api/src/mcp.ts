@@ -216,6 +216,48 @@ export function buildMcpServer(core: Core): McpServer {
   );
 
   server.registerTool(
+    "update_song",
+    {
+      title: "曲の段階を更新",
+      description: "曲(kind=song)の stage（段階）／next_action（次の一手）を更新する。",
+      inputSchema: {
+        id: z.string(),
+        stage: z.string().nullable().optional(),
+        next_action: z.string().nullable().optional(),
+      },
+    },
+    async ({ id, ...patch }) => {
+      const s = core.updateSong(id, patch);
+      return s ? ok(s) : err("neta not found");
+    },
+  );
+
+  server.registerTool(
+    "link_asset",
+    {
+      title: "資産をネタに紐付け",
+      description: "asset（mp3/midi/render等）をネタに role（source=分解元/attachment=添付/render=音源）で紐付け。",
+      inputSchema: {
+        neta_id: z.string(),
+        asset_id: z.string(),
+        role: z.enum(["source", "attachment", "render"]).default("attachment"),
+      },
+    },
+    async ({ neta_id, asset_id, role }) =>
+      core.linkAsset(neta_id, asset_id, role) ? ok({ ok: true }) : err("neta or asset not found"),
+  );
+
+  server.registerTool(
+    "get_neta_assets",
+    {
+      title: "ネタの資産一覧",
+      description: "ネタに紐付いた資産（role 付き）を返す。",
+      inputSchema: { id: z.string() },
+    },
+    async ({ id }) => ok(core.getNetaAssets(id)),
+  );
+
+  server.registerTool(
     "get_job_results",
     {
       title: "ジョブ結果のネタ",

@@ -86,6 +86,20 @@ CREATE TABLE IF NOT EXISTS asset (
   created TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_asset_kind ON asset(kind);
+CREATE TABLE IF NOT EXISTS song (
+  neta_id     TEXT PRIMARY KEY REFERENCES neta(id) ON DELETE CASCADE,
+  stage       TEXT,
+  next_action TEXT,
+  updated     TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS neta_asset (
+  neta_id  TEXT NOT NULL REFERENCES neta(id) ON DELETE CASCADE,
+  asset_id TEXT NOT NULL REFERENCES asset(id) ON DELETE CASCADE,
+  role     TEXT NOT NULL DEFAULT 'attachment',
+  created  TEXT NOT NULL,
+  PRIMARY KEY (neta_id, asset_id, role)
+);
+CREATE INDEX IF NOT EXISTS idx_neta_asset_neta ON neta_asset(neta_id);
 CREATE TABLE IF NOT EXISTS schedule (
   id        TEXT PRIMARY KEY,
   neta_id   TEXT REFERENCES neta(id) ON DELETE CASCADE,

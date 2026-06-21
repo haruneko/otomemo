@@ -34,7 +34,7 @@
 | 92 | #86類似度 | **melody_similarity**(音程列・移調不変)＋find_similar(過去メロ探索)。作風寄せ/重複の土台 | research R2 | cm-music→MCP/handler→test | impl | ✅ (移調不変実証) |
 | 93 | #85方向確認 | バッチ前に1案だけ作り「この方向でいい?」→承認(frame/count引継)で残数本生成 | design#85(E) | worker(_propose→waiting)＋既存answerJob | impl | ✅ (confirm=true) |
 | 84 | ドラム | ✅S4 ベロシティ層(ハット控えめ・既存ネタも一括適正化)。🟡Standard 1 を1 SmplrPreset集約=音質検証要で保留 | design#84 | music.ts(DRUM_VEL)＋gen_drums | impl | 🟡 velocity済 |
-| 83 | スキーマ | **song(stage/next_action)・neta_asset(role)** テーブル欠落(設計#14と乖離) | design#14 | db.ts→core→http→test | design+impl | ⬜ |
+| 83 | スキーマ | ✅song(stage/next_action)・neta_asset(role) テーブル＋core/HTTP/MCP。元MIDI紐付け配線は後続 | design#14 | db.ts→core→http→mcp→test | impl | ✅ |
 | -  | #86移管 | **ルール vs Claude を判定器で実測** → 生成を全面ルール移管するか判断 | design#12 | 実測スクリプト(analyze_fitで比較) | — | ⬜ |
 | 55 | #47後続 | song箱UI・SF2再生パリティ・section多トラックMIDI書出 | — | 縦スライス | impl | ⬜ |
 | 56 | #35後続 | **楽譜入力・音声(ハミング→音高)・添付拡張**（大・要調査） | 要件L116-119 | 調査→設計→実装 | design+impl | ⬜ |

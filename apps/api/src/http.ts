@@ -272,6 +272,37 @@ export function buildHttp(core: Core): FastifyInstance {
     return { deleted: core.deleteAsset(id) };
   });
 
+  // --- song overlay（#83 段階／次の一手）＋ neta_asset（資産紐付け role）---
+  app.get("/neta/:id/song", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const s = core.getSong(id);
+    return s ?? reply.code(404).send({ error: "no song" });
+  });
+  app.patch("/neta/:id/song", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ stage: z.string().nullish(), next_action: z.string().nullish() }).parse(req.body);
+    const s = core.updateSong(id, p);
+    return s ?? reply.code(404).send({ error: "neta not found" });
+  });
+  app.get("/neta/:id/assets", async (req) => {
+    const { id } = req.params as { id: string };
+    return core.getNetaAssets(id);
+  });
+  app.post("/neta/:id/assets", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z
+      .object({ asset_id: z.string(), role: z.enum(["source", "attachment", "render"]).default("attachment") })
+      .parse(req.body);
+    return core.linkAsset(id, p.asset_id, p.role)
+      ? { ok: true }
+      : reply.code(404).send({ error: "neta or asset not found" });
+  });
+  app.delete("/neta/:id/assets/:assetId", async (req) => {
+    const { id, assetId } = req.params as { id: string; assetId: string };
+    const role = (req.query as { role?: string }).role;
+    return { unlinked: core.unlinkAsset(id, assetId, role) };
+  });
+
   // --- schedule（#80 proactive: 継続研究/収集を見てない間に進める）---
   app.post("/schedule", async (req, reply) => {
     const p = z
