@@ -55,6 +55,31 @@ def test_search_ranks_semantically(tmp_path):
     assert ids[-1] == "c"  # 経理は最下位
 
 
+def test_search_rel_is_spread_from_floor(tmp_path):
+    # #65 spread較正：各hitに rel=score-floor(集合の最小sim) が付く。
+    db = str(tmp_path / "t.sqlite")
+    conn = connect(db)
+    _seed(conn)
+    conn.close()
+    hits = SearchIndex(db, encoder=_fake_encoder).search("夜に走る", k=3)
+    assert {"neta_id", "score", "rel"} <= hits[0].keys()
+    floor = min(h["score"] for h in hits)  # k=3=全件なので top-k の最小=集合min=floor
+    for h in hits:
+        assert abs(h["rel"] - (h["score"] - floor)) < 1e-6
+    assert min(h["rel"] for h in hits) == 0.0  # 最下位は floor 自身＝rel 0
+
+
+def test_search_nonsense_query_has_flat_rel(tmp_path):
+    # #65 無意味クエリ(語彙に当たらない)＝全員横並び→rel が小さく、TS側ゲートで落ちる。
+    db = str(tmp_path / "t.sqlite")
+    conn = connect(db)
+    _seed(conn)
+    conn.close()
+    hits = SearchIndex(db, encoder=_fake_encoder).search("天気予報", k=3)  # 夜/走/経理 を含まない
+    assert hits  # k件は返るが…
+    assert all(h["rel"] == 0.0 for h in hits)  # rel は全員0＝該当なし相当（ゲートで除外される）
+
+
 def test_search_caches_and_reuses(tmp_path):
     db = str(tmp_path / "t.sqlite")
     conn = connect(db)

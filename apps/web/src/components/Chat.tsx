@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Neta } from "../api";
-import { playNotes, notesForContent } from "../music";
-
-const MUSIC_KINDS = ["melody", "chord_progression", "rhythm"];
+import { playNotes, notesForContent, MUSIC_KINDS } from "../music";
 
 interface Opt {
   title: string;

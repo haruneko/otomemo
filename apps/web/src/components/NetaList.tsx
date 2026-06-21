@@ -2,9 +2,8 @@ import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
 import { MiniRoll } from "./MiniRoll";
-import { playNotes, notesForContent, compositeNotes } from "../music";
+import { playNotes, notesForContent, compositeNotes, MUSIC_KINDS } from "../music";
 
-const MUSIC_KINDS = ["melody", "chord", "chord_progression", "rhythm"];
 const CONTAINER_KINDS = ["section", "song"];
 
 // #65 検索結果の一致種別→質的ラベル（スコア数値は出さない）
