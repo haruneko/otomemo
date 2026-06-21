@@ -164,6 +164,36 @@ describe("Chat", () => {
     expect(await screen.findByText(/却下しました/)).toBeInTheDocument();
   });
 
+  it("proposals: unlink approve calls unlink; content-less transform is not auto-appliable (#102 S3)", async () => {
+    createJob.mockResolvedValue({ id: "jz", status: "queued" });
+    getJob.mockResolvedValue({
+      status: "done",
+      result: {
+        type: "proposals",
+        proposals: [
+          { op: "unlink", target_id: "n1", args: { to_id: "n2", type: "ref" } },
+          { op: "transform", target_id: "n3", args: { by: -2 } }, // content 無し＝自動適用不可
+        ],
+      },
+      error: null,
+    });
+    getNeta.mockResolvedValue({ id: "x", kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, key: 0 });
+    unlink.mockResolvedValue({ ok: true });
+
+    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "n1とn2の関連を外して、n3を2度下げて");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    await waitFor(() => expect(screen.getAllByLabelText("proposal").length).toBe(2));
+    const approves = screen.getAllByLabelText("approve");
+    // content 無し transform は承認ボタン無効＝自動適用不可
+    expect(approves[1]).toBeDisabled();
+    expect(screen.getByText(/自動適用は未対応/)).toBeInTheDocument();
+    // unlink は承認で api.unlink 呼出
+    await userEvent.click(approves[0]!);
+    await waitFor(() => expect(unlink).toHaveBeenCalledWith("n1", "n2", "ref"));
+  });
+
   it("consult: content → creates a proper-kind neta, no other (#61), with open link (#68)", async () => {
     createJob.mockResolvedValue({ id: "jc", status: "queued" });
     getJob.mockResolvedValue({

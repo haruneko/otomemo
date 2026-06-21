@@ -394,6 +394,26 @@ def test_handle_consult_proposals_validates_and_drops(monkeypatch):
     assert res["summary"] == "3件の提案"
 
 
+def test_handle_consult_proposals_normalizes_content(monkeypatch):
+    # #102 変異 content は生成経路と同じ正規化に通す（素通し禁止）。空 content の提案は落とす。
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", "pnpm")
+    payload = (
+        '{"type":"proposals","proposals":['
+        '{"op":"update_content","target_id":"n1","args":{"content":{"notes":[{"pitch":"60","start":"0","dur":"2"}]}}},'  # 文字列→数値に正規化
+        '{"op":"update_content","target_id":"n2","args":{"content":{"notes":[]}}}'  # 空→落とす
+        ']}'
+    )
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120, **kw: payload)
+    res = jobs.handle_consult({"instruction": "n1の音を直して"})
+    assert res["type"] == "proposals"
+    assert len(res["proposals"]) == 1  # 空 content の n2 は除去
+    note = res["proposals"][0]["args"]["content"]["notes"][0]
+    assert note["pitch"] == 60 and isinstance(note["pitch"], int)  # "60"→60
+    assert note["dur"] == 2.0  # "2"→2.0（生成経路と同じ整形）
+
+
 def test_handle_consult_proposals_all_invalid_falls_back_to_chat(monkeypatch):
     # #102 S2：全 proposal が不正なら会話を壊さず chat フォールバック（#43同型）。
     import cm_worker.jobs as jobs

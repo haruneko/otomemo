@@ -880,9 +880,31 @@ _PROPOSAL_OPS = {
 }
 
 
+_CONTENT_OPS = ("update_content", "transform", "fit_to")
+
+
+def _normalize_proposal_content(content):
+    """変異 content を生成経路と同じ検証/正規化に通す（#102・design「素通しで updateNeta へ
+    直行しない」）。content の形(notes/chords/rhythm)で判別し _validate_* を流用。音楽形なのに
+    中身が空＝不正は None。非音楽(lyric text 等)はそのまま。"""
+    if not isinstance(content, dict):
+        return None
+    if "notes" in content:
+        notes = _validate_notes(content)
+        return {"notes": notes} if notes else None
+    if "chords" in content:
+        chords = _validate_chords(content)
+        return {"chords": chords} if chords else None
+    if "rhythm" in content:
+        rhythm = _validate_rhythm(content)
+        return {"rhythm": rhythm} if rhythm.get("lanes") else None
+    return content  # 非音楽 content は素通し可（lyric の text 更新等）
+
+
 def _validate_proposals(raw: list) -> list[dict]:
     """proposal の配列を検証し、有効な要素だけを順序保持で返す（#43同型・要素ごとに落とす）。
-    各要素は {op, target_id, args, rationale}。op 未知／target_id 欠落／必須 args 欠落は除外。"""
+    各要素は {op, target_id, args, rationale}。op 未知／target_id 欠落／必須 args 欠落は除外。
+    content系 op の args.content は生成経路と同じ正規化に通す（不正な content の提案は落とす）。"""
     out: list[dict] = []
     for p in raw if isinstance(raw, list) else []:
         if not isinstance(p, dict):
@@ -897,6 +919,13 @@ def _validate_proposals(raw: list) -> list[dict]:
         args = p.get("args") if isinstance(p.get("args"), dict) else {}
         if any(not args.get(k) for k in required):  # 必須 args 欠落
             continue
+        # content系：content があれば正規化を通す。update_content は content 必須なので
+        # 正規化失敗＝提案ごと落とす。transform/fit_to は content 任意（無ければ承認後にルールで適用）。
+        if op in _CONTENT_OPS and "content" in args:
+            norm = _normalize_proposal_content(args.get("content"))
+            if norm is None:
+                continue  # 不正 content の提案は落とす
+            args = {**args, "content": norm}
         out.append({
             "op": op,
             "target_id": str(target_id),
