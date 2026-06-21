@@ -341,13 +341,22 @@ let activeSfUrl: string | null = null;
 let sfSampler: any = null;
 let sfLoadedUrl: string | null = null;
 let sfLoading = false;
+let sfLastError: string | null = null; // #55a 診断用：直近のロード失敗理由
+let sfInstrumentCount = 0;
 
 export function setActiveSoundFont(url: string | null): void {
   if (url !== activeSfUrl) {
     activeSfUrl = url;
     sfSampler = null;
     sfLoadedUrl = null;
+    sfLastError = null;
+    sfInstrumentCount = 0;
   }
+}
+
+// soundfont2 のUMD/ESM差を吸収（named/default どちらでも SoundFont2 クラスを取り出す）。
+function resolveSF2Ctor(mod: any): any {
+  return mod?.SoundFont2 ?? mod?.default?.SoundFont2 ?? mod?.default ?? mod;
 }
 
 async function ensureSoundFont(Tone: any): Promise<any | null> {
@@ -357,10 +366,9 @@ async function ensureSoundFont(Tone: any): Promise<any | null> {
   if (sfLoading) return null; // ロード中の再生は今回フォールバック（次回から鳴る）
   sfLoading = true;
   try {
-    const [{ Soundfont2 }, { SoundFont2 }] = await Promise.all([
-      import("smplr"),
-      import("soundfont2"),
-    ]);
+    const [smplr, sf2mod] = await Promise.all([import("smplr"), import("soundfont2")]);
+    const Soundfont2 = (smplr as any).Soundfont2;
+    const SoundFont2 = resolveSF2Ctor(sf2mod);
     const ctx = Tone.getContext().rawContext;
     const sampler = Soundfont2(ctx, {
       url,
@@ -368,19 +376,37 @@ async function ensureSoundFont(Tone: any): Promise<any | null> {
     });
     await sampler.ready;
     const names: string[] = sampler.instrumentNames ?? [];
+    sfInstrumentCount = names.length;
     // 旋律楽器を優先（ドラム/percussion以外）。無ければ先頭。
     const melodic = names.find((n) => !/drum|perc|kit/i.test(n)) ?? names[0];
     if (melodic) await sampler.loadInstrument(melodic);
     sfSampler = sampler;
     sfLoadedUrl = url;
+    sfLastError = null;
     return sampler;
-  } catch {
+  } catch (e) {
+    sfLastError = e instanceof Error ? e.message || String(e) : String(e);
+    // 失敗理由はブラウザコンソールにも出す（診断用）。再生は簡易シンセにフォールバック。
+    console.error("[SoundFont] load failed:", e);
     sfSampler = null;
     sfLoadedUrl = null;
     return null;
   } finally {
     sfLoading = false;
   }
+}
+
+// 設定画面からの読込テスト（成功すればキャッシュも温まる）。ユーザー操作内で呼ぶこと（Tone.start）。
+export async function probeSoundFont(): Promise<{
+  ok: boolean;
+  instruments: number;
+  error: string | null;
+}> {
+  if (!activeSfUrl) return { ok: false, instruments: 0, error: "未選択" };
+  const Tone = await import("tone");
+  await Tone.start();
+  const sf = await ensureSoundFont(Tone);
+  return { ok: !!sf, instruments: sfInstrumentCount, error: sfLastError };
 }
 
 // Tone.js は再生時のみ動的import（jsdom/テストで読み込まない）。

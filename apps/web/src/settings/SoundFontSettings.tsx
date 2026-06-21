@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Asset } from "../api";
-import { setActiveSoundFont } from "../music";
+import { setActiveSoundFont, probeSoundFont } from "../music";
 
 // #77: SoundFont(GM音色)をアップロードしてサーバ asset に保存し、全体で1個を選ぶ。
 // 直リンクURLは廃止（行儀＋privacy）。localStorage には選択中 asset id のみ。
@@ -19,6 +19,17 @@ export function SoundFontSettings() {
   const [selected, setSelected] = useState<string | null>(loadSoundFontId());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [status, setStatus] = useState<string>("");
+
+  async function test() {
+    setStatus("読込中…");
+    try {
+      const r = await probeSoundFont();
+      setStatus(r.ok ? `✓ 読込OK（${r.instruments}楽器）。再生に使用中。` : `✗ 読込失敗: ${r.error}`);
+    } catch (e) {
+      setStatus(`✗ 読込失敗: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 
   async function reload() {
     try {
@@ -87,6 +98,14 @@ export function SoundFontSettings() {
         />
       </label>
       {err && <p className="muted sf-err">{err}</p>}
+      {selected && (
+        <div className="sf-actions">
+          <button type="button" className="bs-btn" aria-label="sf-test" onClick={() => void test()}>
+            音源をテスト
+          </button>
+          {status && <span className="muted">{status}</span>}
+        </div>
+      )}
       <ul className="sf-list">
         {assets.length === 0 && <li className="muted">まだ音源がありません</li>}
         {assets.map((a) => (
