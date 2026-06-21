@@ -19,6 +19,8 @@ const netaInput = z.object({
 
 // 意味検索のPython窓口（docs/design.md #16）。localhost のみ、外に露出しない。
 const SEARCH_URL = process.env.CM_SEARCH_URL ?? "http://127.0.0.1:8788";
+// #65 意味hitの spread較正ゲート閾値。コーパス成長で動く前提で env 外出し。
+const SEM_MIN_REL = Number(process.env.CM_SEM_MIN_REL ?? 0.05);
 
 const jobInput = z.object({
   intent: z.string().min(1),
@@ -171,24 +173,42 @@ export function buildHttp(core: Core): FastifyInstance {
     return cont;
   });
 
-  // 意味検索：Python検索サービスへproxy → neta を hydrate して順序維持で返す
-  app.get("/search", async (req, reply) => {
+  // #65 ハイブリッド検索：キーワード一致(LIKE) ∪ 意味(spread較正ゲート)。
+  // exact 優先で並べ matchType を付与。両系統0件なら []（＝フロントで「該当なし」）。
+  // 意味(Python)不通でもキーワードは返す（堅牢）。スコア数値は返さない（人に無意味）。
+  app.get("/search", async (req) => {
     const { q, k } = req.query as { q?: string; k?: string };
     if (!q) return [];
-    let hits: { neta_id: string; score: number }[];
+    const limit = k ? Number(k) : 20;
+
+    // キーワード一致＝確実な真。日本語1〜2文字も拾える。
+    const keyword = core.listNeta({ q, limit });
+    const kwIds = new Set(keyword.map((n) => n.id));
+
+    // 意味：rel(=score-floor)が閾値未満の弱いhitは落とす（無意味クエリ＝全員横並びを排除）。
+    const semIds = new Set<string>();
+    const semantic: NonNullable<ReturnType<typeof core.getNeta>>[] = [];
     try {
-      const res = await fetch(`${SEARCH_URL}/search?q=${encodeURIComponent(q)}&k=${k ?? 20}`);
-      if (!res.ok) return reply.code(502).send({ error: "search backend error" });
-      hits = (await res.json()) as { neta_id: string; score: number }[];
+      const res = await fetch(`${SEARCH_URL}/search?q=${encodeURIComponent(q)}&k=${limit}`);
+      if (res.ok) {
+        const hits = (await res.json()) as { neta_id: string; score: number; rel?: number }[];
+        for (const h of hits) {
+          if ((h.rel ?? 0) < SEM_MIN_REL) continue;
+          const n = core.getNeta(h.neta_id);
+          if (n) {
+            semantic.push(n);
+            semIds.add(n.id);
+          }
+        }
+      }
     } catch {
-      return reply.code(503).send({ error: "search backend unavailable" });
+      // 意味検索が落ちていてもキーワードだけで返す
     }
-    return hits
-      .map((h) => {
-        const n = core.getNeta(h.neta_id);
-        return n ? { ...n, score: h.score } : null;
-      })
-      .filter((n): n is NonNullable<typeof n> => n !== null);
+
+    return [
+      ...keyword.map((n) => ({ ...n, matchType: semIds.has(n.id) ? "both" : "exact" })),
+      ...semantic.filter((n) => !kwIds.has(n.id)).map((n) => ({ ...n, matchType: "semantic" })),
+    ];
   });
 
   return app;

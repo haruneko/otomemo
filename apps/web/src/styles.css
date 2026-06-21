@@ -1113,6 +1113,22 @@ article header {
 .proll-cell.beat {
   border-left: 1px solid #3a3f49;
 }
+/* #65 検索の一致種別バッジ（一致=実線/近い=点線・淡色） */
+.match-badge {
+  font-size: 0.62rem;
+  padding: 0 5px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.match-badge.exact,
+.match-badge.both {
+  background: var(--accent);
+  color: #fff;
+}
+.match-badge.semantic {
+  border: 1px dashed var(--muted);
+  color: var(--muted);
+}
 article .kind {
   font-weight: 600;
   color: var(--k, var(--fg));

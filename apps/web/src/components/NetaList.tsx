@@ -6,13 +6,16 @@ import { playNotes, notesForContent } from "../music";
 
 const MUSIC_KINDS = ["melody", "chord", "chord_progression", "rhythm"];
 
+// #65 検索結果の一致種別→質的ラベル（スコア数値は出さない）
+const MATCH_LABEL: Record<string, string> = { exact: "一致", both: "一致", semantic: "近い" };
+
 export function NetaCard({
   neta,
   onChanged,
   onChat,
   onOpen,
 }: {
-  neta: Neta;
+  neta: Neta & { matchType?: string };
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
@@ -108,6 +111,9 @@ export function NetaCard({
       >
         <header>
           <span className="kind">{neta.kind}</span>
+          {neta.matchType && MATCH_LABEL[neta.matchType] && (
+            <span className={"match-badge " + neta.matchType}>{MATCH_LABEL[neta.matchType]}</span>
+          )}
           <code className="id">{neta.id.slice(0, 8)}</code>
         </header>
         <div className="body">{label}</div>
@@ -168,13 +174,15 @@ export function NetaList({
   onChanged,
   onChat,
   onOpen,
+  emptyText = "まだネタがありません。",
 }: {
-  items: Neta[];
+  items: (Neta & { matchType?: string })[];
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
+  emptyText?: string;
 }) {
-  if (items.length === 0) return <p>まだネタがありません。</p>;
+  if (items.length === 0) return <p className="muted">{emptyText}</p>;
   return (
     <section aria-label="neta-list">
       {items.map((n) => (

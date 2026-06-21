@@ -112,8 +112,9 @@ export const api = {
 
   facets: () => http<Facets>("/facets"),
 
-  searchSemantic: (q: string, k = 20) =>
-    http<(Neta & { score: number })[]>(`/search?q=${encodeURIComponent(q)}&k=${k}`),
+  // #65 ハイブリッド検索（キーワード一致 ∪ 意味[較正ゲート]）。matchType: exact|semantic|both。
+  search: (q: string, k = 20) =>
+    http<(Neta & { matchType?: string })[]>(`/search?q=${encodeURIComponent(q)}&k=${k}`),
 
   createJob: (input: { intent: string; target_neta_id?: string; params?: unknown }) =>
     http<Job>("/job", { method: "POST", body: JSON.stringify(input) }),

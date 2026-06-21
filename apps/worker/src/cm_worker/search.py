@@ -136,9 +136,18 @@ class SearchIndex:
             mat = np.stack([np.frombuffer(r["vec"], dtype=np.float32) for r in rows])
             qv = self._encode([QPREFIX + q])[0]
             sims = mat @ qv
+            # #65 spread較正：候補集合の下限を floor とし rel=score-floor を付す。
+            # anisotropy の「下駄」(クエリ非依存にほぼ一定)をキャンセルし、
+            # TS側が rel≥CM_SEM_MIN_REL でゲート＝無意味クエリ(全員横並び)を落とせる。
+            floor = float(sims.min())
             order = np.argsort(-sims)[: max(k, 0)]
             return [
-                {"neta_id": rows[i]["neta_id"], "score": float(sims[i])} for i in order
+                {
+                    "neta_id": rows[i]["neta_id"],
+                    "score": float(sims[i]),
+                    "rel": float(sims[i]) - floor,
+                }
+                for i in order
             ]
         finally:
             conn.close()

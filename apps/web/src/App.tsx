@@ -33,7 +33,7 @@ const FILTER_KINDS = [
 ];
 
 export function App() {
-  const [items, setItems] = useState<Neta[]>([]);
+  const [items, setItems] = useState<(Neta & { matchType?: string })[]>([]);
   const [kindFilter, setKindFilter] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
   const [q, setQ] = useState("");
@@ -118,9 +118,9 @@ export function App() {
       return;
     }
     try {
-      setItems(await api.searchSemantic(query)); // 意味検索
+      setItems(await api.search(query)); // #65 ハイブリッド検索（一致∪意味・該当なしが出る）
     } catch {
-      // 検索サービス不通なら LIKE 絞り込みに退避（出先/オフラインで無音にしない）
+      // API自体が不通なら LIKE 絞り込みに退避（出先/オフラインで無音にしない）
       setItems(await api.listNeta({ q: query }));
     }
   }, [kindFilter, q]);
@@ -261,6 +261,11 @@ export function App() {
             onChanged={() => void reload()}
             onChat={openChat}
             onOpen={setActive}
+            emptyText={
+              q.trim() || moodFilter.trim()
+                ? `「${(q.trim() || moodFilter.trim()).slice(0, 20)}」に一致するネタはありません`
+                : undefined
+            }
           />
         </aside>
         <section className="mainpane" aria-label="mainpane">
