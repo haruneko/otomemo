@@ -773,7 +773,9 @@ def handle_consult(params: dict) -> dict:
         '    chord_progression: {"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"dim"or"sus4","start":拍float,"dur":拍float}]}（ハ長調基準）\n'
         '    rhythm: {"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}（GMドラム）\n'
         "- 一式そろえる等の多段依頼 → "
-        '{"type":"plan","subtasks":[{"intent":"gen_melody|gen_chord|gen_rhythm|gen_variations|research|collect","params":{"context":"...","instruction":"..."}}]}（2〜5個。N種類/ペアは gen_variations 1つで）\n'
+        '{"type":"plan","subtasks":[{"intent":"gen_pair_rule|gen_chords_rule|gen_lyric|fetch|transform|research|collect","params":{"frame":{...},"count":N,"parts":[...]}}]}\n'
+        "（音符生成はルールベース優先：『コードに合うメロ/一式/N案』は gen_pair_rule 1つ。"
+        "Claude生成 gen_* は当てはまり保証が無いので基本使わない）\n"
         "判断基準：作って/生成して＝content、案・アイデア請求＝options、まとめて一式＝plan、それ以外＝chat。\n\n"
         f"# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
@@ -826,16 +828,19 @@ def handle_plan(params: dict) -> dict:
         "使える intent と用途:\n"
         "- research: テーマの参考曲を調べて学びをまとめる（作る前の下調べ）\n"
         "- collect: 試せる断片/アイデア（コード進行例・リズム・歌詞フレーズ等）を集める\n"
-        "- gen_melody / gen_chord / gen_rhythm: メロ/コード/リズムを1つ生成する\n"
-        "- gen_variations: 枠付きで**N種類のバリエーションを一括**生成（『6/8でコード進行を4種、各々に合うメロも』等）。"
-        'params に count(個数)/kinds(["chord_progression","melody"]等)/structure("section"|"pair"|"flat")/frame{meter,key,tempo,bars,mood}\n'
+        "■ 音符を作る生成は**ルールベースを優先**（音楽的な当てはまり・調・コードが保証される）:\n"
+        "- gen_pair_rule: ルールのみで**コード進行＋それに合うパーツ(メロ/ベース/ドラム)を一式**生成。"
+        'params: count(案の数)/parts(["melody"],["melody","bass","drums"]等)/structure("section"|"pair")/frame{meter,key,bars,mood}。'
+        "『コードに合うメロ』『一式/セクションのラフ』『N案』はこれ1つ。\n"
+        "- gen_chords_rule: ルールのみでコード進行（機能和声）。frame{meter,key,bars,mood}\n"
         "- gen_lyric: 歌詞を作る（params.count／歌詞に合わせるなら condition）\n"
         "- fetch: 参考曲などからコード進行/メロを取ってくる（params.target）\n"
         "- transform: 既存ネタを移調/拍子替え（決定的・params.condition.fit_to＋frame）\n"
-        "- suggest: 既存内容への改善案を出す\n"
+        "- suggest: 既存内容への改善案を出す ／ research/collect: 下調べ/収集\n"
+        "（gen_melody/gen_chord/gen_rhythm/gen_variations は Claude生成で当てはまり保証が無いので、"
+        "音楽生成は基本ルールベース(gen_pair_rule/gen_chords_rule)を選ぶ。）\n"
         "既存ネタに『合わせる/修正/変換』なら params.condition={fit_to:[netaのid], by:'syllable'|'harmony'} を付ける。\n"
-        "『N種類』『それぞれに合う』『ペア/セット』なら gen_variations を1つ使うのが最適（個別 gen_* を並べない）。\n"
-        "必要なら『調べてから作る』のように順に並べてよい（例: research → gen_variations）。\n"
+        "必要なら『調べてから作る』のように順に並べてよい（例: research → gen_pair_rule）。\n"
         '出力は JSON のみ：{"subtasks":[{"intent":"...","params":{"context":"...","instruction":"..."}}]}\n'
         "2〜5個・各 params.context に対象内容・instruction に具体指示。JSONのみ。\n\n"
         f"# 依頼\n{request}"
