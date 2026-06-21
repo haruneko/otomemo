@@ -596,6 +596,9 @@ export function playEvent(
     dbg("note pitch", ev.pitch, "via sf2-melodic prog", ev.program ?? defaultProg);
     inst.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
   } else {
+    // SF2 未ロード時の純シンセ・フォールバック（後退ゼロ＝必ず鳴る）。診断ログを出して
+    // 「フォールバックでも送る音高は入力と一致」を SF2 非依存に検証可能にする（#103）。
+    dbg("note pitch", ev.pitch, "via poly-fallback");
     kit.poly.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toNote(), ev.durSec, time, ev.vel);
   }
 }
