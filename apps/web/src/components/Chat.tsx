@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Neta, type ChatMessage, type ChatThread } from "../api";
+import { api, type Neta, type ChatMessage, type ChatThread, type JobOutcome } from "../api";
 import { playNotes, notesForContent, MUSIC_KINDS } from "../music";
 
 interface Opt {
@@ -50,6 +50,8 @@ export function Chat({
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
+  const alive = useRef(true); // ワーカー待ちは長いので、閉じた後に setState しないためのガード
+  useEffect(() => () => void (alive.current = false), []);
   // 複数会話セッション（フリーChatのみ。Claude/ChatGPT風に作って切替/見返す）。
   const [sessionId, setSessionId] = useState(() =>
     target ? "" : (localStorage.getItem("cm-chat-session") ?? "global"),
@@ -146,6 +148,54 @@ export function Chat({
     }
   }
 
+  // ディスパッチ後もこのチャットで完了を待つ（受信箱お任せをやめる）。jobOutcome を
+  // settled になるまでポーリングし、reap interval(5s) がネタ化するまで少し猶予して返す。
+  // 待ち中は busy のまま＝入力ロック（「待ち中は話せなくてよい」要望どおり）。
+  async function waitForJob(jobId: string): Promise<JobOutcome | null> {
+    let last: JobOutcome | null = null;
+    let settledAt = -1;
+    for (let i = 0; i < 200 && alive.current; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      let o: JobOutcome;
+      try {
+        o = await api.jobOutcome(jobId);
+      } catch {
+        continue; // ネットワーク揺れは次tickで再試行
+      }
+      last = o;
+      if (o.settled) {
+        if (settledAt < 0) settledAt = i;
+        // 終端後、reap がネタ化するのを最大 ~6tick(≈9s) 待つ。ネタが出たら即返す。
+        if (o.neta.length > 0 || o.failed > 0 || i - settledAt >= 6) return o;
+      } else {
+        settledAt = -1;
+      }
+    }
+    return last;
+  }
+
+  // ワーカー待ちの決着をチャットに反映：できたネタをインライン表示（開く/試聴）。
+  function finishWait(o: JobOutcome | null) {
+    if (!alive.current) return;
+    if (!o) {
+      pushMsg({ role: "ai", text: "完了の確認がタイムアウトしました（受け取りトレイ 📥 をご確認ください）" });
+      return;
+    }
+    onChanged?.();
+    if (o.neta.length === 0) {
+      pushMsg({
+        role: "ai",
+        text: o.failed > 0 ? "生成に失敗しました" : "結果はできましたが表示できるネタがありません（トレイ 📥）",
+      });
+      return;
+    }
+    pushMsg({
+      role: "ai",
+      text: `${o.neta.length}個できました${o.failed > 0 ? `（${o.failed}件は失敗）` : ""}`,
+    });
+    for (const n of o.neta) pushMsg({ role: "ai", neta: n });
+  }
+
   // #61 consult の判別ユニオン: chat / options / content(生成→正しいkindでネタ化) / plan
   async function handleConsult(result: unknown, jobId: string) {
     const r = result as {
@@ -160,20 +210,19 @@ export function Chat({
     if (r?.type === "options") {
       pushMsg({ role: "ai", options: r.options ?? [], jobId });
     } else if (r?.type === "items") {
-      // #86 S2b agentic：ツールで作った一式。materialize は server(reap)が担うので一覧/トレイに出る。
-      const n = Array.isArray(r.items) ? r.items.filter((it) => (it as { kind?: string }).kind !== "section").length : 0;
-      pushMsg({ role: "ai", text: `${n}個のパーツを作りました（一覧 / トレイ 📥 に届きます）` });
-      onChanged?.();
+      // #86 S2b agentic：ツールで作った一式。materialize は server(reap)が担う。
+      // 受信箱お任せにせず、このチャットで reap 完了を待ってネタをインライン表示する。
+      pushMsg({ role: "ai", text: "パーツを仕上げています…" });
+      finishWait(await waitForJob(jobId));
     } else if (r?.type === "content" && r.neta_kind) {
       const neta = await api.createNeta({ kind: r.neta_kind, content: r.content, from_job: jobId });
       onChanged?.();
       const label = KIND_LABEL[r.neta_kind] ?? r.neta_kind;
       pushMsg({ role: "ai", text: `「${label}」を作りました`, neta });
     } else if (r?.type === "plan") {
-      pushMsg({
-        role: "ai",
-        text: `${r.plan ?? "分解しました"}（結果は受け取りトレイ 📥 に届きます）`,
-      });
+      // おまかせ＝子ジョブに分解。受信箱お任せにせず、このチャットで子の完了まで待つ。
+      pushMsg({ role: "ai", text: `${r.plan ?? "分解しました"}（仕上げています…）` });
+      finishWait(await waitForJob(jobId));
     } else {
       const t = r?.text ?? "";
       pushMsg({ role: "ai", text: t, saveable: t || undefined });
@@ -403,8 +452,9 @@ export function Chat({
         <div className="chat-input">
           <input
             aria-label="chat-input"
-            placeholder={mode === "research" ? "調べる…" : "相談を入力…"}
+            placeholder={busy ? "ワーカーの完了を待っています…" : mode === "research" ? "調べる…" : "相談を入力…"}
             value={input}
+            disabled={busy} // 待ち中はこのチャットをロック（要望どおり）
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") void send();

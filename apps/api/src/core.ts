@@ -12,6 +12,7 @@ import type {
   JobInput,
   JobQuery,
   JobResult,
+  JobOutcome,
 } from "./types";
 
 const now = (): string => new Date().toISOString();
@@ -125,6 +126,41 @@ export class Core {
     return this.db
       .prepare(`SELECT neta_id, role FROM job_result WHERE job_id = ? ORDER BY ord`)
       .all(jobId) as JobResult[];
+  }
+
+  /**
+   * ジョブとその子ジョブ全体の決着を返す（Chat がディスパッチ後もそのチャットで完了を待てるように）。
+   * settled = 自分＋子が全て終端(done/failed)。neta = 自分＋子の job_result から集めた生成ネタ。
+   * plan の子（parent_job_id=自分）と、items を reap した自分自身、の両方を1度に拾える。
+   */
+  jobOutcome(jobId: string): JobOutcome {
+    const ids = [jobId];
+    const children = this.db
+      .prepare(`SELECT id FROM job WHERE parent_job_id = ? ORDER BY created`)
+      .all(jobId) as { id: string }[];
+    for (const ch of children) ids.push(ch.id);
+
+    const jobs: { id: string; intent: string; status: string }[] = [];
+    let failed = 0;
+    let pending = 0;
+    for (const id of ids) {
+      const j = this.getJob(id);
+      if (!j) continue;
+      jobs.push({ id: j.id, intent: j.intent, status: j.status });
+      if (j.status === "failed") failed++;
+      else if (j.status !== "done") pending++;
+    }
+    const neta: Neta[] = [];
+    const seen = new Set<string>();
+    for (const id of ids) {
+      for (const r of this.getJobResults(id)) {
+        if (r.neta_id && !seen.has(r.neta_id)) {
+          const n = this.getNeta(r.neta_id);
+          if (n) (neta.push(n), seen.add(r.neta_id));
+        }
+      }
+    }
+    return { settled: pending === 0, failed, jobs, neta };
   }
 
   /**

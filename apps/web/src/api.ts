@@ -181,6 +181,9 @@ export const api = {
 
   getJob: (id: string) => http<Job>(`/job/${id}`),
 
+  // ジョブ＋子ジョブの決着（Chat がディスパッチ後もそのチャットで完了を待つため）。
+  jobOutcome: (id: string) => http<JobOutcome>(`/job/${id}/outcome`),
+
   listJobs: (q: { status?: string } = {}) =>
     http<Job[]>(`/jobs${q.status ? `?status=${encodeURIComponent(q.status)}` : ""}`),
 
@@ -265,4 +268,11 @@ export interface Job {
   question?: string | null;
   parent_job_id?: string | null;
   created?: string;
+}
+
+export interface JobOutcome {
+  settled: boolean;
+  failed: number;
+  jobs: { id: string; intent: string; status: string }[];
+  neta: Neta[];
 }

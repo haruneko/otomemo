@@ -170,6 +170,12 @@ export function buildHttp(core: Core): FastifyInstance {
     return j;
   });
 
+  // Chat がディスパッチ後もそのチャットで完了を待てるよう、ジョブ＋子ジョブの決着を返す。
+  app.get("/job/:id/outcome", async (req) => {
+    const { id } = req.params as { id: string };
+    return core.jobOutcome(id);
+  });
+
   // #45: ジョブが人に質問して待つ
   app.post("/job/:id/ask", async (req, reply) => {
     const { id } = req.params as { id: string };

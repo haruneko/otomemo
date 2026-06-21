@@ -39,14 +39,15 @@
 | 55 | #47後続 | ✅song箱UI(段階/次の一手)・✅section多トラックMIDI書出(lane別)。⬜SF2再生パリティ(音質検証要) | — | 縦スライス | impl | 🟡 残:SF2パリティ |
 | 56 | #35後続 | ✅楽譜入力(MusicXML)・✅音声(ハミング→音高 自己相関ACF＋録音UI)。⬜添付拡張(scope曖昧) | 要件L116-119 | musicxml.ts/pitch.ts/HummingRecorder | impl | 🟡 残:添付拡張 |
 | -  | チャット | ✅複数会話セッション（Claude/ChatGPT風）：☰一覧/＋新規/切替/冒頭プレビュー。thread使い回し・スキーマ変更なし | #19 | listChatThreads＋Chat UI | impl | ✅ |
+| -  | チャット | ✅Chatがワーカー完了をその場で待つ(受信箱お任せ廃止)。plan/items を job/:id/outcome でポーリング→できたネタをインライン表示。待ち中は入力ロック。api76/web111緑 | #19/#61 | core.jobOutcome＋GET /job/:id/outcome＋Chat.tsx waitForJob | impl | ✅ |
 | -  | UX | ✅配置ネタにMiniRoll概形＋ラベル(セクション/曲ペーンでネタ帳と見え方を統一・スマホ可読) | #55 | SectionEditor | impl | ✅ |
-| -  | 到達/認証 | ✅設計確定(design#18/#36: Tailscale tailnet限定・アプリ側PW無し・ネット層が境界)。✅単一オリジン配信＋localhostバインド(CM_HOST既定127.0.0.1)＋docs/deploy.md。残: ユーザがTailscale serve設定(初回のみ) | 設計#18/#36 | main.ts＋deploy.md | impl | 🟡 コード済/Tailscale設定待ち |
+| -  | 到達/認証 | ✅設計確定(design#18/#36: Tailscale tailnet限定・アプリ側PW無し・ネット層が境界)。✅単一オリジン配信＋localhostバインド(CM_HOST既定127.0.0.1)＋docs/deploy.md。✅Tailscale接続確認済(2026-06-22 ユーザ確認) | 設計#18/#36 | main.ts＋deploy.md | impl | ✅ |
 | 96 | ベース | ✅bass kind 2モード(絶対=低ピアノロール／相対=度数レーン×ステップ)。相対は帯E1〜D#2にルート置き度数はルートから上、音長選択、既定フィンガーベース | design#14 | music.ts/BassStepEditor/NetaDialog | impl | ✅ |
 | -  | 振り分けA | ✅consult を【特定(名前/旋法/様式)→Claude知識 vs 汎用→ルール】に分岐(止血)。丸の内→FM7-E7-Am7-Gm7-C7実証 | design「振り分けA」/research | jobs.py handle_consult | — | ✅止血 |
 | -  | 合成音色 | ✅section/song 再生でパート毎の音色を保つ(per-program 旋律サンプラー) | design#14音色 | music.ts compositeNotes/playNotes | impl | ✅ |
 | 97 | bug整合 | ✅生成ネタ削除での reap 蘇生を恒久対策(deleteNeta が job_result.neta_id を NULL 化) | design job_result | core.ts | impl | ✅ |
 | 98 | 進行DB | 名前付き進行DB(丸の内/カノン/小室/王道4536…を度数列で確定realize)＝Aの本命上積み | design「振り分けA」 | cm-music named_progressions | impl | ⬜ |
-| 102 | Chat操作 | Chatが既存ネタを検索/読取/編集/変形/配置/連関/削除(全変更は承認制＋前後プレビュー＋再生)。MCP配線 | 設計予定 | design→acceptor→実装 | design+impl | 🔵 設計中 |
+| 102 | Chat操作 | Chatが既存ネタを検索/読取/編集/変形/配置/連関/削除(全変更は承認制＋前後プレビュー＋再生)。MCP配線 | design#102(受理: 骨子ACCEPT・REVISE5点反映済) | ✅読取面S1→✅提案契約S2→承認UI S3 | design+impl | 🟡 S1/S2済(worker契約・92緑)・次=S3承認UI(web) |
 | 22 | AI探索 | 広くAIツール探索（別立て・要調査） | — | research | — | ⬜ |
 
 ---

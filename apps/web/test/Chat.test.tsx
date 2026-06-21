@@ -2,17 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { createJob, getJob, createNeta, listChatMessages, addChatMessage, clearChatThread } =
+const { createJob, getJob, jobOutcome, createNeta, listChatMessages, addChatMessage, clearChatThread } =
   vi.hoisted(() => ({
     createJob: vi.fn(),
     getJob: vi.fn(),
+    jobOutcome: vi.fn(),
     createNeta: vi.fn(),
     listChatMessages: vi.fn(),
     addChatMessage: vi.fn(),
     clearChatThread: vi.fn(),
   }));
 vi.mock("../src/api", () => ({
-  api: { createJob, getJob, createNeta, listChatMessages, addChatMessage, clearChatThread },
+  api: { createJob, getJob, jobOutcome, createNeta, listChatMessages, addChatMessage, clearChatThread },
 }));
 
 import { Chat } from "../src/components/Chat";
@@ -47,6 +48,33 @@ describe("Chat", () => {
       text: "ほんぶん",
       from_job: "j1",
     });
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("plan: waits for the worker in-chat and shows produced neta inline (not just inbox)", async () => {
+    createJob.mockResolvedValue({ id: "jp", status: "queued" });
+    getJob.mockResolvedValue({
+      status: "done",
+      result: { type: "plan", subtasks: [{ intent: "gen_pair_rule" }], plan: "1個に分解しました" },
+      error: null,
+    });
+    // ディスパッチ後、このチャットで完了を待つ＝jobOutcome をポーリングし、できたネタを表示。
+    jobOutcome.mockResolvedValue({
+      settled: true,
+      failed: 0,
+      jobs: [{ id: "jp", intent: "consult", status: "done" }],
+      neta: [{ id: "m1", kind: "melody", content: { notes: [] } }],
+    });
+    const onChanged = vi.fn();
+
+    render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "一式そろえて");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    // チャット内で待って、できたネタ（開く）が出る
+    await waitFor(() => expect(jobOutcome).toHaveBeenCalledWith("jp"), { timeout: 4000 });
+    expect(await screen.findByText(/1個できました/, undefined, { timeout: 4000 })).toBeInTheDocument();
+    expect(screen.getByLabelText("open-neta")).toBeInTheDocument();
     expect(onChanged).toHaveBeenCalled();
   });
 

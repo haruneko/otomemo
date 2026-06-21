@@ -364,6 +364,73 @@ describe("job queue (producer side)", () => {
     expect(c.reapResults()).toBe(0);
   });
 
+  it("jobOutcome: settled only when all descendants terminal, collects neta from self+children", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    const target = c.createNeta({ kind: "lyric", text: "夜" });
+    // 親=plan を返した consult。子2つ（gen_chord/gen_melody, parent_job_id=親）。
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, target_neta_id, result_summary, created, updated)
+       VALUES ('parent', 'consult', '{}', 'done', ?, ?, '', '')`,
+    ).run(target.id, JSON.stringify({ type: "plan", subtasks: [{}, {}] }));
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, target_neta_id, result_summary, created, updated)
+       VALUES ('c1', 'gen_chord', '{}', 'done', 'parent', ?, ?, '', '')`,
+    ).run(target.id, JSON.stringify({ content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }));
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, target_neta_id, created, updated)
+       VALUES ('c2', 'gen_melody', '{}', 'queued', 'parent', ?, '', '')`,
+    ).run(target.id);
+
+    // c2 はまだ queued ＝未終端 → settled=false
+    let o = c.jobOutcome("parent");
+    expect(o.settled).toBe(false);
+    expect(o.jobs.length).toBe(3); // self + 2 children
+    expect(o.failed).toBe(0);
+
+    // c2 を done に。reap で c1/c2 をネタ化。
+    db.prepare(`UPDATE job SET status='done', result_summary=? WHERE id='c2'`).run(
+      JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }),
+    );
+    c.reapResults();
+    o = c.jobOutcome("parent");
+    expect(o.settled).toBe(true);
+    expect(o.neta.length).toBe(2); // chord + melody
+    const kinds = o.neta.map((n) => n.kind).sort();
+    expect(kinds).toEqual(["chord_progression", "melody"]);
+  });
+
+  it("jobOutcome: counts a failed child and stays settled", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('p2', 'consult', '{}', 'done', '{}', '', '')`,
+    ).run();
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, error, created, updated)
+       VALUES ('cf', 'gen_chord', '{}', 'failed', 'p2', 'boom', '', '')`,
+    ).run();
+    const o = c.jobOutcome("p2");
+    expect(o.settled).toBe(true);
+    expect(o.failed).toBe(1);
+    expect(o.neta.length).toBe(0);
+  });
+
+  it("GET /job/:id/outcome returns settled + neta", async () => {
+    const app: FastifyInstance = buildHttp(core);
+    await app.ready();
+    const db = (core as unknown as { db: import("better-sqlite3").Database }).db;
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('po', 'consult', '{}', 'done', ?, '', '')`,
+    ).run(JSON.stringify({ type: "items" }));
+    const r = await app.inject({ method: "GET", url: "/job/po/outcome" });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().settled).toBe(true);
+    expect(Array.isArray(r.json().neta)).toBe(true);
+  });
+
   it("enqueues via HTTP", async () => {
     const app: FastifyInstance = buildHttp(core);
     await app.ready();

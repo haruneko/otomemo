@@ -42,6 +42,14 @@ export interface JobResult {
   role: string;
 }
 
+/** ジョブとその子ジョブ全体の決着（Chat がワーカー完了を待つための一覧・#Chat待ち UX）。 */
+export interface JobOutcome {
+  settled: boolean; // 自分＋子ジョブが全て終端(done/failed)
+  failed: number; // 失敗した子孫数
+  jobs: { id: string; intent: string; status: string }[]; // 自分＋子（status 監視用）
+  neta: Neta[]; // 自分＋子の job_result から集めた生成ネタ
+}
+
 export type NetaPatch = Partial<NetaInput>;
 
 export interface ListQuery {
