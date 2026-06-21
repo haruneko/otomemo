@@ -49,6 +49,8 @@ def _resolve_fit_context(conn: sqlite3.Connection, params: dict) -> dict:
             ctx["chords"] = content["chords"]
         elif row["kind"] == "melody" and isinstance(content.get("notes"), list):
             ctx["notes"] = content["notes"]
+        elif row["kind"] == "rhythm" and isinstance(content.get("rhythm"), dict):
+            ctx["rhythm"] = content["rhythm"]
     return {**params, "fit_context": ctx} if ctx else params
 
 

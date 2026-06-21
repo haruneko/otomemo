@@ -240,12 +240,12 @@ export class Core {
     const structRows = this.db
       .prepare(
         `SELECT j.id, j.params, j.result_summary AS result FROM job j
-         WHERE j.status='done' AND j.intent='gen_variations'
+         WHERE j.status='done' AND j.intent IN ('gen_variations','fetch','transform','gen_lyric')
            AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
       )
       .all() as { id: string; params: string | null; result: string | null }[];
     for (const r of structRows) {
-      type Item = { kind?: string; content?: unknown; label?: string; frame?: unknown };
+      type Item = { kind?: string; content?: unknown; text?: string; label?: string; frame?: unknown };
       type Edge = { type?: string; from?: number; to?: number; position?: number };
       let items: Item[] = [];
       let edges: Edge[] = [];
@@ -263,7 +263,9 @@ export class Core {
       for (const it of items) {
         const kind = it?.kind;
         const isContainer = kind != null && containerKind.has(kind);
-        if (!kind || (!isContainer && !hasMusic(it.content))) {
+        const hasText = typeof it?.text === "string" && it.text.trim() !== "";
+        // container(中身は edges)／音楽 content ／テキスト(歌詞等) のいずれかが在れば materialize。
+        if (!kind || (!isContainer && !hasMusic(it.content) && !hasText)) {
           idMap.push(null); // index を保持して詰めない（edge の参照を壊さない）
           continue;
         }
@@ -271,6 +273,7 @@ export class Core {
           kind,
           title: it.label ?? "案",
           content: it.content ?? null,
+          text: it.text ?? null,
           from_job: r.id,
           ...jobFrame,
           ...frameVals(it.frame), // item 個別 frame が上書き

@@ -111,6 +111,41 @@ def test_gen_chord_prompt_includes_frame(monkeypatch):
     assert "拍子=6/8" in captured["p"]
 
 
+def test_gen_lyric_items(monkeypatch):
+    # #85 S2c 歌詞生成 → lyric items（text）
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs, "claude_prompt", lambda p, timeout=120: '{"lyrics":["夜を駆ける\\n君と","朝が来る"]}'
+    )
+    res = jobs.handle_gen_lyric({"count": 2})
+    assert [it["kind"] for it in res["items"]] == ["lyric", "lyric"]
+    assert res["items"][0]["text"].startswith("夜を駆ける")
+
+
+def test_fetch_extracts_chords(monkeypatch):
+    # #85 S2c 取ってくる → コード進行 content を吐く（research と違う）
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=180: '{"items":[{"label":"サビ","chords":[{"root":"C","quality":"","start":0,"dur":4}]}]}',
+    )
+    res = jobs.handle_fetch({"target": "chord_progression", "context": "あの曲"})
+    assert res["items"][0]["kind"] == "chord_progression"
+    assert res["items"][0]["content"]["chords"]
+
+
+def test_transform_copies_content_deterministic():
+    # #85 S2c 変換は決定的（Claude不要）。content は C基準のまま、移調/拍子は frame ヒント
+    import cm_worker.jobs as jobs
+
+    res = jobs.handle_transform({"fit_context": {"notes": [{"pitch": 60, "start": 0, "dur": 1}]}})
+    assert res["items"][0]["kind"] == "melody"
+    assert res["items"][0]["content"]["notes"][0]["pitch"] == 60
+
+
 def test_resolve_fit_context_lyric_mora(tmp_path):
     # #85 S2b 歌詞ネタ→ condition で音数(モーラ)に解決
     import uuid

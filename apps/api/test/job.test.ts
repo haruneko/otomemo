@@ -179,6 +179,35 @@ describe("job queue (producer side)", () => {
     expect(c.getRelations(mel[0].id).length).toBe(0); // edge は張られない
   });
 
+  it("reaps gen_lyric items as lyric netas carrying text (#85 S2c)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jl', 'gen_lyric', '{}', 'done', ?, '', '')`,
+    ).run(JSON.stringify({ items: [{ kind: "lyric", text: "夜を駆ける", label: "夜" }], edges: [] }));
+    expect(c.reapResults()).toBe(1);
+    const ly = c.listNeta({ kind: "lyric" });
+    expect(ly.length).toBe(1);
+    expect(ly[0].text).toBe("夜を駆ける");
+  });
+
+  it("reaps transform variant with new frame, content unchanged (#85 S2c)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jt', 'transform', ?, 'done', ?, '', '')`,
+    ).run(
+      JSON.stringify({ frame: { meter: "6/8" } }),
+      JSON.stringify({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, label: "変換" }], edges: [] }),
+    );
+    expect(c.reapResults()).toBe(1);
+    const m = c.listNeta({ kind: "melody" })[0];
+    expect(m.meter).toBe("6/8"); // 拍子は frame ヒントで付与
+    expect((m.content as { notes: { pitch: number }[] }).notes[0].pitch).toBe(60); // C基準のまま
+  });
+
   it("reaps gen with frame from params onto the neta as hints (#85 S1)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

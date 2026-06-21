@@ -440,6 +440,89 @@ def handle_gen_variations(params: dict) -> dict:
     return {"items": items, "edges": edges}
 
 
+def handle_gen_lyric(params: dict) -> dict:
+    """#85 S2c 歌詞生成。fit_context.mora_counts があれば音数に合わせる。frame.mood で雰囲気。
+    返り {items:[{kind:"lyric", text, label}]}（count 案）。"""
+    try:
+        count = max(1, min(8, int(params.get("count") or 1)))
+    except Exception:  # noqa: BLE001
+        count = 1
+    context = params.get("context", "")
+    instruction = params.get("instruction") or "テーマに合う歌詞。"
+    prompt = (
+        f"作詞家として、対象に合う歌詞を**{count}案**作る。\n"
+        '出力は JSON のみ：{"lyrics":["歌詞案1（改行可）","歌詞案2"]}\n'
+        "前置き/説明/コードフェンス禁止、JSONのみ。\n"
+        f"{_frame_block(params)}"
+        f"{_fit_block(params)}"
+        f"\n# 対象\n{context}\n\n# 依頼\n{instruction}"
+    )
+    text = claude_prompt(prompt)
+    try:
+        lyrics = _extract_json(text).get("lyrics") or []
+    except Exception:  # noqa: BLE001
+        lyrics = []
+    items = [
+        {"kind": "lyric", "text": ly, "label": (ly.splitlines()[0][:24] if ly.strip() else "歌詞案")}
+        for ly in lyrics[:count]
+        if isinstance(ly, str) and ly.strip()
+    ]
+    return {"items": items, "edges": []}
+
+
+def handle_fetch(params: dict) -> dict:
+    """#85 S2c 取ってくる（抽出）。参考(曲名/特徴/説明)から、その特徴的な部分を楽曲 content として
+    推定し書き起こす（research の参考曲リストと違い content そのものを吐く）。返り {items}。"""
+    target = params.get("target") or "chord_progression"
+    context = params.get("context", "")
+    is_mel = target == "melody"
+    instruction = params.get("instruction") or (
+        "この曲の象徴的なメロを推定して。" if is_mel else "この曲のコード進行を推定して。"
+    )
+    fmt = (
+        '{"items":[{"label":"...","notes":[{"pitch":整数(C基準60=C4),"start":拍,"dur":拍}]}]}'
+        if is_mel
+        else '{"items":[{"label":"...","chords":[{"root":"C".."B","quality":"...","start":拍,"dur":拍}]}]}'
+    )
+    kind = "melody" if is_mel else "chord_progression"
+    prompt = (
+        f"DTM/作曲のアシスタントとして、参考から特徴的な{'メロディ' if is_mel else 'コード進行'}を"
+        "**ハ長調(C)基準・拍ベース**で推定し書き起こす。\n"
+        f"出力は JSON のみ：{fmt}\n前置き/説明/コードフェンス禁止、JSONのみ。\n"
+        f"{_frame_block(params)}"
+        f"\n# 参考\n{context}\n\n# 依頼\n{instruction}"
+    )
+    text = claude_prompt(prompt, timeout=180)
+    try:
+        raw = _extract_json(text).get("items") or []
+    except Exception:  # noqa: BLE001
+        raw = []
+    items = []
+    for it in raw:
+        if not isinstance(it, dict):
+            continue
+        content = _variation_content(kind, it)
+        if content is None:
+            continue
+        items.append({"kind": kind, "content": content, "label": str(it.get("label") or "抽出")[:24]})
+    return {"items": items, "edges": []}
+
+
+def handle_transform(params: dict) -> dict:
+    """#85 S2c 変換（移調・拍子替え）＝AI不要の決定的処理。content は C基準保存なので、移調/拍子は
+    frame（ヒント）の付け替えで表現する。元ネタ(fit_context)を写し、reapResults が job.params.frame を
+    新ヒントとして付与する。返り {items:[{kind, content}]}（frame は reap が付ける）。"""
+    fc = params.get("fit_context") or {}
+    items = []
+    if isinstance(fc.get("chords"), list) and fc["chords"]:
+        items.append({"kind": "chord_progression", "content": {"chords": fc["chords"]}, "label": "変換"})
+    if isinstance(fc.get("notes"), list) and fc["notes"]:
+        items.append({"kind": "melody", "content": {"notes": fc["notes"]}, "label": "変換"})
+    if isinstance(fc.get("rhythm"), dict) and fc["rhythm"].get("lanes"):
+        items.append({"kind": "rhythm", "content": {"rhythm": fc["rhythm"]}, "label": "変換"})
+    return {"items": items, "edges": []}
+
+
 def handle_research(params: dict) -> dict:
     """参考曲エージェント / 情報収集（docs/design.md #9・line 226）。
     テーマ→参考曲を構造化（title/artist/why/points）＋全体要約。必要なら web を使う。
@@ -679,7 +762,11 @@ def handle_plan(params: dict) -> dict:
         "- gen_melody / gen_chord / gen_rhythm: メロ/コード/リズムを1つ生成する\n"
         "- gen_variations: 枠付きで**N種類のバリエーションを一括**生成（『6/8でコード進行を4種、各々に合うメロも』等）。"
         'params に count(個数)/kinds(["chord_progression","melody"]等)/structure("section"|"pair"|"flat")/frame{meter,key,tempo,bars,mood}\n'
+        "- gen_lyric: 歌詞を作る（params.count／歌詞に合わせるなら condition）\n"
+        "- fetch: 参考曲などからコード進行/メロを取ってくる（params.target）\n"
+        "- transform: 既存ネタを移調/拍子替え（決定的・params.condition.fit_to＋frame）\n"
         "- suggest: 既存内容への改善案を出す\n"
+        "既存ネタに『合わせる/修正/変換』なら params.condition={fit_to:[netaのid], by:'syllable'|'harmony'} を付ける。\n"
         "『N種類』『それぞれに合う』『ペア/セット』なら gen_variations を1つ使うのが最適（個別 gen_* を並べない）。\n"
         "必要なら『調べてから作る』のように順に並べてよい（例: research → gen_variations）。\n"
         '出力は JSON のみ：{"subtasks":[{"intent":"...","params":{"context":"...","instruction":"..."}}]}\n'
@@ -704,6 +791,9 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_chord": handle_gen_chord,
     "gen_rhythm": handle_gen_rhythm,
     "gen_variations": handle_gen_variations,
+    "gen_lyric": handle_gen_lyric,
+    "fetch": handle_fetch,
+    "transform": handle_transform,
     "research": handle_research,
     "collect": handle_collect,
     "import_midi": handle_import_midi,
