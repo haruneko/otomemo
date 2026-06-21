@@ -24,10 +24,30 @@ MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10]
 KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
-def chord_pcs(root: int, quality: str) -> set[int]:
-    """コードの構成ピッチクラス集合（0-11）。未知 quality はトライアド扱い。"""
+_PC_BY_NAME = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def norm_root(root) -> int:
+    """root を 0-11 ピッチクラスへ。int はそのまま、"C#"/"Db" 等の名前も解釈（堅牢化）。"""
+    if isinstance(root, (int, float)):
+        return int(root) % 12
+    s = str(root).strip()
+    if not s:
+        return 0
+    base = _PC_BY_NAME.get(s[0].upper(), 0)
+    for ch in s[1:]:
+        if ch in ("#", "♯"):
+            base += 1
+        elif ch in ("b", "♭"):
+            base -= 1
+    return base % 12
+
+
+def chord_pcs(root, quality: str) -> set[int]:
+    """コードの構成ピッチクラス集合（0-11）。root は int(0-11) or 音名。未知 quality はトライアド扱い。"""
+    r = norm_root(root)
     ivals = QUALITY_INTERVALS.get(str(quality), [0, 4, 7])
-    return {(int(root) + i) % 12 for i in ivals}
+    return {(r + i) % 12 for i in ivals}
 
 
 def scale_pcs(key: int, mode: str = "major") -> set[int]:

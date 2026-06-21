@@ -77,3 +77,25 @@ def test_gen_chords_deterministic_with_seed():
     a = gen_chords({"bars": 6}, seed=42)
     b = gen_chords({"bars": 6}, seed=42)
     assert a == b
+
+
+def test_gen_chords_starts_and_ends_on_tonic_seed_independent():
+    # seedに依らず開始・終止が主和音(度数1=root0)・全ダイアトニック
+    diatonic = {0, 2, 4, 5, 7, 9, 11}
+    for s in range(20):
+        chords = gen_chords({"bars": 4}, seed=s)["items"][0]["content"]["chords"]
+        assert chords[0]["root"] == 0 and chords[-1]["root"] == 0
+        assert all(c["root"] in diatonic for c in chords)
+
+
+def test_gen_chords_bars_clamped():
+    assert len(gen_chords({"bars": 0})["items"][0]["content"]["chords"]) == 1
+    assert len(gen_chords({"bars": 100})["items"][0]["content"]["chords"]) == 16
+    assert len(gen_chords({"bars": -3})["items"][0]["content"]["chords"]) == 1
+
+
+def test_analyze_fit_accepts_string_root():
+    # root が音名("C")でも落ちず正しく判定（堅牢化）
+    mel = [{"pitch": 60, "start": 0, "dur": 1}, {"pitch": 64, "start": 1, "dur": 1}]
+    r = analyze_fit(mel, [{"root": "C", "quality": "", "start": 0, "dur": 2}], key=0)
+    assert r["in_chord_rate"] == 1.0

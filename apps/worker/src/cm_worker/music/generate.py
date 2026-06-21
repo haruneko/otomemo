@@ -35,10 +35,12 @@ def gen_chords(frame: dict | None = None, seed: int | None = None) -> dict:
     mood = str(frame.get("mood") or "")
     minor = any(h in mood.lower() or h in mood for h in _MINOR_HINT)
     table = _DIATONIC_MINOR if minor else _DIATONIC_MAJOR
+    b = frame.get("bars")
     try:
-        bars = max(1, min(16, int(frame.get("bars") or 4)))
+        bars = int(b) if isinstance(b, (int, float)) else 4
     except Exception:  # noqa: BLE001
         bars = 4
+    bars = max(1, min(16, bars))  # 不正・範囲外は 1..16 に丸め（0/負も1へ・一貫）
     bpb = _beats_per_bar(frame.get("meter"))
 
     # 機能マルコフで度数列を作る（T始まり・T終わり）
@@ -52,8 +54,9 @@ def gen_chords(frame: dict | None = None, seed: int | None = None) -> dict:
         cands = _FUNC_DEGREES[f]
         # 主要度数を出やすく（先頭重み）
         degrees.append(rng.choices(cands, weights=[3, 2, 1][: len(cands)], k=1)[0])
+    degrees[0] = 1  # 開始は主和音(I/i)
     if bars >= 2:
-        degrees[-1] = 1  # 終止は主和音(I/i)で解決
+        degrees[-1] = 1  # 終止も主和音(I/i)で解決
 
     chords = []
     for i, deg in enumerate(degrees):
