@@ -220,6 +220,19 @@ def test_gen_chords_rule_handler():
     assert res["items"][0]["content"]["chords"][0]["quality"] == "m"  # マイナー
 
 
+def test_handle_fit_to_chords():
+    # #91 補正ハンドラ：melody/chords を受けて補正済み melody items を返す
+    import cm_worker.jobs as jobs
+
+    res = jobs.handle_fit_to_chords(
+        {"melody": [{"pitch": 61, "start": 0, "dur": 1}], "chords": [{"root": 0, "quality": "", "start": 0, "dur": 1}]}
+    )
+    assert res["items"][0]["kind"] == "melody"
+    # fit_context 経由でも動く
+    res2 = jobs.handle_fit_to_chords({"fit_context": {"notes": [{"pitch": 61, "start": 0, "dur": 1}], "chords": [{"root": 0, "quality": "", "start": 0, "dur": 1}]}})
+    assert res2["items"][0]["kind"] == "melody"
+
+
 def test_gen_pair_rule_builds_fitting_pairs():
     # #86 ルールのみでコード+合うメロのペアをcount個・当てはまり保証
     import cm_worker.jobs as jobs

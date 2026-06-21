@@ -16,8 +16,9 @@ import shutil
 import subprocess
 from typing import Callable
 
-from .music import (  # #86 記号エンジン（判定＋ルール生成）
+from .music import (  # #86 記号エンジン（判定＋ルール生成＋補正）
     analyze_fit,
+    fit_to_chords,
     gen_bass,
     gen_chords,
     gen_drums,
@@ -61,7 +62,7 @@ def handle_echo(params: dict) -> dict:
 CLAUDE_BIN = os.environ.get("CM_CLAUDE_BIN", "claude")
 # #86 S2b cm-music-mcp の URL（env で配線）。未設定なら従来通り MCP 無し＝後退ゼロ。
 CM_MUSIC_MCP_URL = os.environ.get("CM_MUSIC_MCP_URL")
-_MUSIC_TOOLS = ["analyze_fit", "detect_key", "analyze_progression", "gen_chords", "gen_melody"]
+_MUSIC_TOOLS = ["analyze_fit", "detect_key", "analyze_progression", "gen_chords", "gen_melody", "fit_to_chords"]
 
 
 def _mcp_args() -> list[str]:
@@ -482,6 +483,16 @@ def handle_gen_chords_rule(params: dict) -> dict:
     """#86 ルールベースのコード進行生成（機能和声・Claude非依存・決定的）。frame で長短/拍長/小節。
     返りは #85 items 形。Claude案(gen_chord)と判定器(analyze_progression)で比較するための"ルール案"。"""
     return gen_chords(params.get("frame"), seed=params.get("seed"))
+
+
+def handle_fit_to_chords(params: dict) -> dict:
+    """#86後続 補正。外し音をコードに合わせて直す（決定的）。melody/chords は params 直接 or
+    condition.fit_to 解決済みの fit_context（notes/chords）から。返り #85 items 形。"""
+    fc = params.get("fit_context") if isinstance(params.get("fit_context"), dict) else {}
+    melody = params.get("melody") or fc.get("notes") or []
+    chords = params.get("chords") or fc.get("chords") or []
+    frame = params.get("frame") if isinstance(params.get("frame"), dict) else {}
+    return fit_to_chords(melody, chords, key=frame.get("key"))
 
 
 def handle_gen_pair_rule(params: dict) -> dict:
@@ -922,6 +933,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_variations": handle_gen_variations,
     "gen_chords_rule": handle_gen_chords_rule,
     "gen_pair_rule": handle_gen_pair_rule,
+    "fit_to_chords": handle_fit_to_chords,
     "gen_lyric": handle_gen_lyric,
     "fetch": handle_fetch,
     "transform": handle_transform,

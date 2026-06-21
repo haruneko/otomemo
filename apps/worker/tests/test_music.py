@@ -152,6 +152,25 @@ def test_gen_bass_fits_chords_low_register():
     assert analyze_fit(notes, chords, key=0)["in_chord_rate"] >= 0.8
 
 
+def test_fit_to_chords_snaps_other_keeps_passing():
+    # #91 補正：other(正当でない外し音)はコードトーンへ、経過は残す、スコア改善
+    from cm_worker.music import fit_to_chords
+
+    mel = [
+        {"pitch": 60, "start": 0, "dur": 1},
+        {"pitch": 62, "start": 1, "dur": 1},  # D = 経過
+        {"pitch": 64, "start": 2, "dur": 1},
+        {"pitch": 61, "start": 3, "dur": 1},  # C# = other（要補正）
+    ]
+    ch = [{"root": 0, "quality": "", "start": 0, "dur": 4}]
+    res = fit_to_chords(mel, ch, key=0)
+    notes = res["items"][0]["content"]["notes"]
+    assert notes[1]["pitch"] == 62  # 経過は残す
+    assert notes[3]["pitch"] != 61 and notes[3]["pitch"] % 12 in {0, 4, 7}  # other→コードトーン
+    meta = res["items"][0]["meta"]
+    assert meta["fit"]["score"] > meta["fit_before"]  # 改善
+
+
 def test_gen_drums_valid_pattern():
     g = gen_drums({}, seed=1)
     r = g["items"][0]["content"]["rhythm"]

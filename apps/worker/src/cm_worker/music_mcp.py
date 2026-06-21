@@ -50,6 +50,14 @@ def gen_melody(frame: dict | None = None, chords: list[dict] | None = None, seed
     return music.gen_melody(frame, chords, seed)
 
 
+@mcp.tool()
+def fit_to_chords(melody: list[dict], chords: list[dict], key: int | None = None) -> dict:
+    """メロの『外し音』をコードに合わせて直す（決定的補正）。正当でない非和声音だけを最寄りコード
+    トーンへスナップし、経過/刺繍/掛留・コードトーンは残す。返り #85 items 形（補正済み melody＋
+    meta.fit_before/fit）。「コードに合うように直して」のときに使う。"""
+    return music.fit_to_chords(melody, chords, key)
+
+
 def run() -> None:  # pragma: no cover
     mcp.run(transport="streamable-http")
 

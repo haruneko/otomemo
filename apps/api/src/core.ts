@@ -258,7 +258,7 @@ export class Core {
       .prepare(
         `SELECT j.id, j.params, j.result_summary AS result FROM job j
          WHERE j.status='done'
-           AND ( j.intent IN ('gen_variations','gen_chords_rule','gen_pair_rule','fetch','transform','gen_lyric')
+           AND ( j.intent IN ('gen_variations','gen_chords_rule','gen_pair_rule','fit_to_chords','fetch','transform','gen_lyric')
                  OR (j.intent='consult' AND json_extract(j.result_summary,'$.type')='items') )
            AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
       )

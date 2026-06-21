@@ -189,6 +189,7 @@ export function buildMcpServer(core: Core): McpServer {
             "gen_variations",
             "gen_chords_rule",
             "gen_pair_rule",
+            "fit_to_chords",
             "gen_lyric",
             "fetch",
             "transform",
