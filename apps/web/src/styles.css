@@ -44,6 +44,7 @@ main {
   min-width: 0;
   display: grid;
   gap: 12px;
+  padding-bottom: 80px; /* #67 最下カードが右下チャットバブルの下に潜らないよう余白 */
 }
 .notebook.closed {
   display: none;
@@ -151,7 +152,11 @@ h1 {
 }
 .sf-pick {
   flex: 1;
+  min-width: 0; /* #67 狭幅で長いファイル名がはみ出さないよう省略 */
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   background: #2b2f36;
   color: var(--fg);
   border: 1px solid var(--line);
@@ -349,6 +354,10 @@ article header {
 }
 .chat-bubble:hover {
   filter: brightness(1.1);
+}
+/* #67 ダイアログ（設定/トレイ/Chat自身）表示中はバブルが被るので隠す（全幅で）。 */
+body:has(.dialog-backdrop) .chat-bubble {
+  display: none;
 }
 @media (max-width: 820px) {
   /* #67 モバイルで編集中は全画面エディタ＋下端トランスポートにバブルが被るので隠す
