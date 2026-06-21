@@ -268,5 +268,36 @@ export function buildHttp(core: Core): FastifyInstance {
     return { deleted: core.deleteAsset(id) };
   });
 
+  // --- schedule（#80 proactive: 継続研究/収集を見てない間に進める）---
+  app.post("/schedule", async (req, reply) => {
+    const p = z
+      .object({
+        neta_id: z.string().nullish(),
+        intent: z.enum(["research", "collect"]).default("research"),
+        params: z.unknown().optional(),
+        every_sec: z.number().int().min(60).default(21600), // 既定6h、最短1分
+      })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    return core.addSchedule(p.data);
+  });
+
+  app.get("/schedules", async (req) => {
+    const q = req.query as { neta_id?: string };
+    return core.listSchedules(q.neta_id);
+  });
+
+  app.patch("/schedule/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ enabled: z.boolean() }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    return { ok: core.setScheduleEnabled(id, p.data.enabled) };
+  });
+
+  app.delete("/schedule/:id", async (req) => {
+    const { id } = req.params as { id: string };
+    return { deleted: core.deleteSchedule(id) };
+  });
+
   return app;
 }

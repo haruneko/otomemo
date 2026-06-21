@@ -504,6 +504,118 @@ export class Core {
   deleteAsset(id: string): boolean {
     return this.db.prepare(`DELETE FROM asset WHERE id=?`).run(id).changes > 0;
   }
+
+  // --- schedule（#80 proactive: 見てない間に継続研究/収集を進める）---
+  addSchedule(input: {
+    neta_id?: string | null;
+    intent: string;
+    params?: unknown;
+    every_sec: number;
+  }): Schedule {
+    const id = randomUUID();
+    const ts = now();
+    this.db
+      .prepare(
+        `INSERT INTO schedule (id,neta_id,intent,params,every_sec,enabled,last_run,next_run,created)
+         VALUES (@id,@neta_id,@intent,@params,@every_sec,1,NULL,@next,@created)`,
+      )
+      .run({
+        id,
+        neta_id: input.neta_id ?? null,
+        intent: input.intent,
+        params: input.params == null ? null : JSON.stringify(input.params),
+        every_sec: input.every_sec,
+        next: ts, // next_run=now＝次 tick で初回を即実行（UX：登録したら進み始める）
+        created: ts,
+      });
+    return this.getSchedule(id)!;
+  }
+
+  getSchedule(id: string): Schedule | null {
+    const row = this.db.prepare(`SELECT * FROM schedule WHERE id=?`).get(id) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? rowToSchedule(row) : null;
+  }
+
+  listSchedules(netaId?: string): Schedule[] {
+    const rows = (
+      netaId
+        ? this.db.prepare(`SELECT * FROM schedule WHERE neta_id=? ORDER BY created DESC`).all(netaId)
+        : this.db.prepare(`SELECT * FROM schedule ORDER BY created DESC`).all()
+    ) as Record<string, unknown>[];
+    return rows.map(rowToSchedule);
+  }
+
+  setScheduleEnabled(id: string, enabled: boolean): boolean {
+    return (
+      this.db.prepare(`UPDATE schedule SET enabled=? WHERE id=?`).run(enabled ? 1 : 0, id).changes > 0
+    );
+  }
+
+  deleteSchedule(id: string): boolean {
+    return this.db.prepare(`DELETE FROM schedule WHERE id=?`).run(id).changes > 0;
+  }
+
+  // 期日が来た schedule に research/collect ジョブを積む（main の reap interval から呼ぶ）。
+  // spam防止：同 schedule の未消化(queued/running)ジョブがあるものは飛ばす。
+  tickSchedules(): number {
+    const ts = now();
+    const due = this.db
+      .prepare(
+        `SELECT * FROM schedule s
+         WHERE s.enabled=1 AND s.next_run <= ?
+           AND NOT EXISTS (
+             SELECT 1 FROM job j
+             WHERE j.status IN ('queued','running')
+               AND json_extract(j.params,'$.schedule_id') = s.id
+           )`,
+      )
+      .all(ts) as Record<string, unknown>[];
+    let n = 0;
+    for (const s of due) {
+      const sc = rowToSchedule(s);
+      const neta = sc.neta_id ? this.getNeta(sc.neta_id) : null;
+      const theme = neta ? (neta.title ?? neta.text ?? "") : "";
+      this.enqueueJob({
+        intent: sc.intent,
+        target_neta_id: sc.neta_id ?? undefined,
+        instruction: theme || undefined,
+        params: { ...(sc.params as Record<string, unknown> | null), schedule_id: sc.id },
+        notify_level: "quiet",
+      });
+      const next = new Date(Date.now() + sc.every_sec * 1000).toISOString();
+      this.db.prepare(`UPDATE schedule SET last_run=?, next_run=? WHERE id=?`).run(ts, next, sc.id);
+      n += 1;
+    }
+    return n;
+  }
+}
+
+export interface Schedule {
+  id: string;
+  neta_id: string | null;
+  intent: string;
+  params: unknown;
+  every_sec: number;
+  enabled: boolean;
+  last_run: string | null;
+  next_run: string;
+  created: string;
+}
+
+function rowToSchedule(row: Record<string, unknown>): Schedule {
+  return {
+    id: row.id as string,
+    neta_id: (row.neta_id as string) ?? null,
+    intent: row.intent as string,
+    params: row.params == null ? null : JSON.parse(row.params as string),
+    every_sec: row.every_sec as number,
+    enabled: !!row.enabled,
+    last_run: (row.last_run as string) ?? null,
+    next_run: row.next_run as string,
+    created: row.created as string,
+  };
 }
 
 export interface Asset {

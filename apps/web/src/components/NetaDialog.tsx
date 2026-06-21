@@ -53,6 +53,7 @@ export function NetaDialog({
   );
   const [busy, setBusy] = useState(false);
   const [rels, setRels] = useState<{ type: string; neta: Neta | null }[]>([]);
+  const [schedId, setSchedId] = useState<string | null>(null); // #80 継続調査スケジュール
   const isMelody = neta.kind === "melody";
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
   const isRhythm = neta.kind === "rhythm";
@@ -98,6 +99,31 @@ export function NetaDialog({
       on = false;
     };
   }, [neta.id]);
+
+  // #80 テキスト系ネタは「継続して調べる」テーマになりうる（見てない間に research を回す）
+  const isThemeable = !isMusic && !isContainer;
+  useEffect(() => {
+    if (!isThemeable) return;
+    let on = true;
+    void Promise.resolve(api.listSchedules?.(neta.id))
+      .then((ss) => {
+        if (on && ss) setSchedId(ss.find((s) => s.intent === "research" && s.enabled)?.id ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      on = false;
+    };
+  }, [neta.id, isThemeable]);
+
+  async function toggleSchedule() {
+    if (schedId) {
+      await api.deleteSchedule(schedId).catch(() => {});
+      setSchedId(null);
+    } else {
+      const s = await api.addSchedule({ neta_id: neta.id, intent: "research" });
+      setSchedId(s.id);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -225,6 +251,17 @@ export function NetaDialog({
             }
           >
             MIDI
+          </button>
+        )}
+        {isThemeable && (
+          <button
+            type="button"
+            className={schedId ? "primary" : ""}
+            aria-label="continuous-research"
+            title="このテーマを見てない間も継続して調べ、参考をトレイに溜める"
+            onClick={() => void toggleSchedule()}
+          >
+            {schedId ? "🔁 継続調査中" : "🔁 継続して調べる"}
           </button>
         )}
         <span className="spacer" />

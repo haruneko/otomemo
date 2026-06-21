@@ -86,6 +86,18 @@ CREATE TABLE IF NOT EXISTS asset (
   created TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_asset_kind ON asset(kind);
+CREATE TABLE IF NOT EXISTS schedule (
+  id        TEXT PRIMARY KEY,
+  neta_id   TEXT REFERENCES neta(id) ON DELETE CASCADE,
+  intent    TEXT NOT NULL,
+  params    TEXT,
+  every_sec INTEGER NOT NULL,
+  enabled   INTEGER NOT NULL DEFAULT 1,
+  last_run  TEXT,
+  next_run  TEXT NOT NULL,
+  created   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_schedule_due ON schedule(enabled, next_run);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {

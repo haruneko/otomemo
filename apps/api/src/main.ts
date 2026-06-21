@@ -20,12 +20,19 @@ app
     process.exit(1);
   });
 
-// 受け取り：非同期で進んだ生成（おまかせ/plan の子など）の結果をネタ化する常駐ループ
+// 受け取り：非同期で進んだ生成（おまかせ/plan の子など）の結果をネタ化する常駐ループ。
+// #80 同じ interval で schedule の期日チェック（生産者=TS、Pythonは純消費者のまま）。
 setInterval(() => {
   try {
     const n = core.reapResults();
     if (n > 0) console.log(`reaped ${n} async generation result(s) into neta`);
   } catch (e) {
     console.error("reap error", e);
+  }
+  try {
+    const s = core.tickSchedules();
+    if (s > 0) console.log(`scheduled ${s} job(s) from continuous research`);
+  } catch (e) {
+    console.error("schedule tick error", e);
   }
 }, 5000).unref();

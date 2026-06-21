@@ -61,6 +61,17 @@ export interface Asset {
   created: string;
 }
 
+export interface Schedule {
+  id: string;
+  neta_id: string | null;
+  intent: string;
+  every_sec: number;
+  enabled: boolean;
+  last_run: string | null;
+  next_run: string;
+  created: string;
+}
+
 export interface Facets {
   kind: string[];
   mood: string[];
@@ -135,6 +146,14 @@ export const api = {
     http<Asset[]>(`/assets${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`),
   deleteAsset: (id: string) => http<{ deleted: boolean }>(`/asset/${id}`, { method: "DELETE" }),
   assetUrl: (id: string) => `${BASE}/asset/${id}`,
+
+  // #80 proactive 定期スケジューラ（継続研究/収集を見てない間に進める）
+  listSchedules: (netaId?: string) =>
+    http<Schedule[]>(`/schedules${netaId ? `?neta_id=${encodeURIComponent(netaId)}` : ""}`),
+  addSchedule: (input: { neta_id?: string; intent?: "research" | "collect"; every_sec?: number }) =>
+    http<Schedule>("/schedule", { method: "POST", body: JSON.stringify(input) }),
+  deleteSchedule: (id: string) =>
+    http<{ deleted: boolean }>(`/schedule/${id}`, { method: "DELETE" }),
 
   // #65 ハイブリッド検索（キーワード一致 ∪ 意味[較正ゲート]）。matchType: exact|semantic|both。
   search: (q: string, k = 20) =>
