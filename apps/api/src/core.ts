@@ -98,16 +98,31 @@ export class Core {
       gen_chord: "chord_progression",
       gen_rhythm: "rhythm",
     };
+    // #67 生成ネタの表示名：指示文があればそれ、無ければ種類の日本語ラベル（生kindを出さない）。
+    const labelOf: Record<string, string> = {
+      gen_melody: "メロ案",
+      gen_chord: "コード案",
+      gen_rhythm: "リズム案",
+    };
+    const genTitle = (intent: string, instruction: string | null): string => {
+      const first = (instruction ?? "").trim().split(/\r?\n/)[0]?.trim() ?? "";
+      return first ? first.slice(0, 24) : (labelOf[intent] ?? "案");
+    };
     const staleBefore = new Date(Date.now() - 120_000).toISOString();
     const rows = this.db
       .prepare(
-        `SELECT j.id, j.intent, j.result_summary AS result
+        `SELECT j.id, j.intent, j.instruction, j.result_summary AS result
          FROM job j
          WHERE j.status='done' AND j.intent IN ('gen_melody','gen_chord','gen_rhythm')
            AND (j.parent_job_id IS NOT NULL OR j.updated < ?)
            AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
       )
-      .all(staleBefore) as { id: string; intent: string; result: string | null }[];
+      .all(staleBefore) as {
+      id: string;
+      intent: string;
+      instruction: string | null;
+      result: string | null;
+    }[];
     let n = 0;
     for (const r of rows) {
       let content: unknown;
@@ -117,7 +132,12 @@ export class Core {
         continue;
       }
       if (!hasMusic(content)) continue;
-      this.createNeta({ kind: kindOf[r.intent]!, title: kindOf[r.intent]!, content, from_job: r.id });
+      this.createNeta({
+        kind: kindOf[r.intent]!,
+        title: genTitle(r.intent, r.instruction),
+        content,
+        from_job: r.id,
+      });
       n += 1;
     }
 

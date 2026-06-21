@@ -46,7 +46,22 @@ describe("job queue (producer side)", () => {
     expect(c.reapResults()).toBe(1);
     expect(c.getJobResults("jm").length).toBe(1);
     expect(c.getRelations(target.id).some((r) => r.type === "result")).toBe(true);
+    // #67 生成ネタの表示名は生kind("melody")でなく日本語ラベル/指示文
+    const made = c.getJobResults("jm").map((r) => c.getNeta(r.neta_id!));
+    expect(made[0]?.title).toBe("メロ案");
     expect(c.reapResults()).toBe(0); // 冪等：2回目は何もしない
+  });
+
+  it("reaped neta title uses the job instruction when present (#67)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, instruction, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('ji', 'gen_chord', '切ないAメロ進行', '{}', 'done', 'plan1', ?, '', '')`,
+    ).run(JSON.stringify({ content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }));
+    expect(c.reapResults()).toBe(1);
+    const nid = c.getJobResults("ji")[0]!.neta_id!;
+    expect(c.getNeta(nid)?.title).toBe("切ないAメロ進行");
   });
 
   it("does not reap a FRESH synchronous (non-plan) gen job — client self-materializes", () => {
