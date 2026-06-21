@@ -16,6 +16,7 @@ import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
 import { parseMusicXml } from "./musicxml";
+import { HummingRecorder } from "./components/HummingRecorder";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
@@ -284,6 +285,7 @@ export function App() {
                 }}
               />
             </label>
+            <HummingRecorder onCreated={() => void reload()} />
             <label className="import-btn">
               歌詞取込
               <input
