@@ -36,6 +36,7 @@ import {
   downloadMultitrackMidi,
   type Note,
 } from "../music";
+import { MiniRoll } from "./MiniRoll";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/リズムの3レーン×小節 で組む。
 // レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
@@ -258,7 +259,10 @@ export function SectionEditor({
                     void remove(c.node.neta.id, c.position);
                   }}
                 >
-                  {(c.node.neta.title ?? c.node.neta.text ?? "").slice(0, 8)}
+                  <MiniRoll neta={c.node.neta} />
+                  <span className="lane-block-label">
+                    {c.node.neta.title ?? c.node.neta.text ?? c.node.neta.kind}
+                  </span>
                 </button>
               ))}
             </div>
