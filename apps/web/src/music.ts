@@ -334,13 +334,13 @@ export function playEvent(
   sf: any,
   kit: Kit,
   Tone: any,
-  drumKits?: Map<number, any>,
+  drumKits?: Map<number, DrumVoice>,
 ): void {
   if (ev.voice === "membrane" || ev.voice === "noise") {
     const ds = drumKits?.get(ev.pitch);
     if (ds) {
-      dbg("note pitch", ev.pitch, "via sf2-drum");
-      ds.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
+      dbg("note pitch", ev.pitch, "via sf2-drum @", ds.note);
+      ds.sampler.start({ note: ds.note, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
     } else if (ev.voice === "membrane") {
       dbg("note pitch", ev.pitch, "via kit.membrane");
       kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
@@ -498,24 +498,42 @@ async function ensureSoundFont(Tone: any, program = 0): Promise<any | null> {
   return sfSampler;
 }
 
-// #55b GM打楽器番号 → SF2楽器名（GeneralUser GS等GM SF2向けベストエフォート）。
+// #55b GM打楽器番号 → SF2楽器名。GM Standard キット名("Standard Kick" 等)を優先し、
+// 無ければ汎用パターン。smplr は GM統合キットを露出しないので個別楽器を拾う。
 export function drumNameFor(pitch: number, names: string[]): string | null {
   let res: RegExp[];
-  if (pitch <= 36) res = [/kick|bass drum/i];
-  else if (pitch === 37) res = [/side ?stick|rim/i, /snare/i];
-  else if (pitch === 38 || pitch === 40) res = [/snare/i];
-  else if (pitch === 39) res = [/clap|hand/i, /snare/i];
-  else if ([41, 43, 45, 47, 48, 50].includes(pitch)) res = [/tom/i];
-  else if (pitch === 42 || pitch === 44) res = [/closed.*hat|hi-?hat|hat/i];
-  else if (pitch === 46) res = [/open.*hat|hi-?hat|hat/i];
-  else if ([49, 52, 55, 57].includes(pitch)) res = [/crash|splash|china|cymbal/i];
-  else if ([51, 53, 59].includes(pitch)) res = [/ride/i, /cymbal/i];
+  if (pitch <= 36) res = [/standard kick/i, /\bkick\b/i, /bass drum/i];
+  else if (pitch === 37) res = [/rim ?shot/i, /side ?stick/i, /snare/i];
+  else if (pitch === 40) res = [/standard snare 2/i, /electric snare/i, /snare/i];
+  else if (pitch === 38) res = [/standard snare 1/i, /standard snare/i, /snare/i];
+  else if (pitch === 39) res = [/hand ?clap/i, /clap/i, /snare/i];
+  else if ([41, 43, 45, 47, 48, 50].includes(pitch)) res = [/standard tom/i, /\btom/i];
+  else if (pitch === 42 || pitch === 44) res = [/hi-?hat/i];
+  else if (pitch === 46) res = [/open.*hi-?hat/i, /hi-?hat/i];
+  else if (pitch === 49 || pitch === 57) res = [/crash cymbal/i, /^crash/i, /splash/i];
+  else if (pitch === 55) res = [/splash/i, /crash cymbal/i];
+  else if (pitch === 52) res = [/china|reverse/i, /crash cymbal/i];
+  else if (pitch === 53) res = [/ride bell/i, /ride/i];
+  else if (pitch === 51 || pitch === 59) res = [/ride cymbal/i, /ride/i];
+  else if (pitch === 56) res = [/cow ?bell/i];
+  else if (pitch === 54) res = [/tambourine/i];
   else res = [/perc/i, /drum/i];
   for (const re of res) {
     const hit = names.find((n) => re.test(n));
     if (hit) return hit;
   }
   return null;
+}
+
+// 楽器の sample 原音高(originalPitch)。これで鳴らすとピッチシフト0＝録音そのままの自然な音。
+function instrumentRoot(name: string): number {
+  const insts: any[] = sfParsed?.instruments ?? [];
+  const inst = insts.find((i) => (i.header?.name ?? i.name) === name);
+  for (const z of inst?.zones ?? []) {
+    const op = z?.sample?.header?.originalPitch;
+    if (typeof op === "number" && op > 0 && op < 128) return op;
+  }
+  return 60;
 }
 
 // ドラム1種をロード（楽器名キャッシュ）。失敗時 null＝その音は簡易キットにフォールバック。
@@ -534,16 +552,25 @@ async function loadDrumSampler(name: string, Tone: any): Promise<any | null> {
   }
 }
 
-// 再生に出てくるドラム音(pitch)それぞれに対応する drum sampler を用意（pitch→sampler）。
-async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, any>> {
-  const map = new Map<number, any>();
+const TOM_PITCHES = [41, 43, 45, 47, 48, 50];
+export type DrumVoice = { sampler: any; note: number };
+
+// 再生に出てくるドラム音(pitch)→ {sampler, 鳴らすnote}。ドラムは原音高で鳴らすと自然。
+// トムだけ音程差が要るので root を中心に GM番号で上下させる。
+async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, DrumVoice>> {
+  const map = new Map<number, DrumVoice>();
   if (!sfInstrumentNames.length) return map;
   const pitches = [...new Set(notes.filter((n) => n.drum).map((n) => n.pitch))];
   for (const p of pitches) {
     const name = drumNameFor(p, sfInstrumentNames);
     if (!name) continue;
     const s = await loadDrumSampler(name, Tone);
-    if (s) map.set(p, s);
+    if (!s) continue;
+    const root = instrumentRoot(name);
+    // 単音ドラムは原音高で自然に。トムは root 中心に音程差（41=低→50=高）。
+    const note = TOM_PITCHES.includes(p) ? root + (p - 47) : root;
+    map.set(p, { sampler: s, note });
+    dbg("drum", p, "->", name, "@note", note, "(root", root, ")");
   }
   return map;
 }
@@ -581,7 +608,7 @@ export async function playNotes(
   // SF2 が選択・ロード済みなら旋律はそれで鳴らす。ドラムは SF2 にマッチ楽器があればそれ、
   // 無ければ簡易キット。SF2 無しは全部キット（後退ゼロ）。
   const sf = await ensureSoundFont(Tone, opts.program ?? 0);
-  const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number, any>();
+  const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number, DrumVoice>();
   dbg(
     "playNotes engine=",
     sf ? "sf2" : "fallback-synth",
@@ -624,7 +651,7 @@ export async function playNotes(
       disposeKit();
       try {
         sf?.stop(); // SF2 の鳴っている音も止める（尾を切る。サンプラ自体は再利用のため破棄しない）
-        for (const ds of drumKits.values()) ds.stop?.();
+        for (const ds of drumKits.values()) ds.sampler?.stop?.();
       } catch {
         /* noop */
       }

@@ -174,14 +174,14 @@ describe("music", () => {
       expect(sf.start).not.toHaveBeenCalled();
     });
 
-    it("#55b drums use the matched SF2 drum sampler (by pitch) when available", () => {
+    it("#55b drums use the matched SF2 drum sampler at its root note when available", () => {
       const kit = mkKit();
       const kick = { start: vi.fn() };
-      const drumKits = new Map<number, { start: ReturnType<typeof vi.fn> }>([[36, kick]]);
-      // kick(36) はマッチ → SF2 ドラム sampler。snare(38) は未マッチ → 簡易キット。
+      // kick(36)→samplerをroot音(38)で鳴らす。snare(38)は未マッチ→簡易キット。
+      const drumKits = new Map([[36, { sampler: kick, note: 38 }]]);
       playEvent({ time: 0, durSec: 0.15, voice: "membrane", pitch: 36, vel: 0.8 }, 2, null, kit, Tone, drumKits);
       playEvent({ time: 0, durSec: 0.05, voice: "noise", pitch: 38, vel: 0.8 }, 3, null, kit, Tone, drumKits);
-      expect(kick.start).toHaveBeenCalledWith({ note: 36, time: 2, duration: 0.15, velocity: 102 });
+      expect(kick.start).toHaveBeenCalledWith({ note: 38, time: 2, duration: 0.15, velocity: 102 });
       expect(kit.membrane.triggerAttackRelease).not.toHaveBeenCalled(); // kickはSF2へ
       expect(kit.noise.triggerAttackRelease).toHaveBeenCalled(); // snareは簡易へ
     });

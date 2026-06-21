@@ -1,8 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
 import { MiniRoll } from "./MiniRoll";
-import { playNotes, notesForContent, compositeNotes, MUSIC_KINDS } from "../music";
+import {
+  playNotes,
+  notesForContent,
+  compositeNotes,
+  programOf,
+  MUSIC_KINDS,
+  type Note,
+  type PlaybackHandle,
+} from "../music";
 
 const CONTAINER_KINDS = ["section", "song"];
 
@@ -36,12 +44,34 @@ export function NetaCard({
   } as const;
   const ctx = () => neta.title ?? neta.text ?? "";
 
-  // #73 section/song を合成してプレビュー再生（子をsection調へ移調＋位置オフセット）
-  async function playSection() {
+  // 再生/停止トグル（#73+停止）。playNotes は単一Transportなので別ネタ再生で自動停止。
+  const [playing, setPlaying] = useState(false);
+  const handleRef = useRef<PlaybackHandle | null>(null);
+  useEffect(() => () => handleRef.current?.stop(), []); // アンマウントで止める
+
+  async function toggle(getNotes: () => Note[] | Promise<Note[]>, program?: number) {
+    if (playing) {
+      handleRef.current?.stop();
+      handleRef.current = null;
+      setPlaying(false);
+      return;
+    }
+    const notes = await getNotes();
+    if (!notes.length) return;
+    setPlaying(true);
+    handleRef.current = await playNotes(notes, neta.tempo ?? 120, {
+      program,
+      onEnd: () => {
+        setPlaying(false);
+        handleRef.current = null;
+      },
+    });
+  }
+
+  // #73 section/song を合成（子をsection調へ移調＋位置オフセット）
+  async function sectionNotes(): Promise<Note[]> {
     const tree = await api.getComposition(neta.id).catch(() => null);
-    if (!tree) return;
-    const notes = compositeNotes(tree.children, neta.key ?? 0);
-    if (notes.length) void playNotes(notes, neta.tempo ?? 120);
+    return tree ? compositeNotes(tree.children, neta.key ?? 0) : [];
   }
 
   async function pollContent(jobId: string): Promise<unknown> {
@@ -141,20 +171,25 @@ export function NetaCard({
           <button
             className="bs-btn"
             aria-label={`play-${neta.id}`}
-            title="このネタを単独再生（C基準そのまま）"
-            onClick={() => void playNotes(notesForContent(neta.kind, neta.content), neta.tempo ?? 120)}
+            title={playing ? "停止" : "このネタを単独再生（C基準そのまま）"}
+            onClick={() =>
+              void toggle(
+                () => notesForContent(neta.kind, neta.content),
+                neta.kind === "rhythm" ? undefined : (programOf(neta.content) ?? 0),
+              )
+            }
           >
-            ▶
+            {playing ? "⏹" : "▶"}
           </button>
         )}
         {CONTAINER_KINDS.includes(neta.kind) && (
           <button
             className="bs-btn"
             aria-label={`play-${neta.id}`}
-            title="合成プレビュー再生"
-            onClick={() => void playSection()}
+            title={playing ? "停止" : "合成プレビュー再生"}
+            onClick={() => void toggle(sectionNotes)}
           >
-            ▶
+            {playing ? "⏹" : "▶"}
           </button>
         )}
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
