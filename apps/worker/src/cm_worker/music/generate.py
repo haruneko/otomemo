@@ -6,7 +6,7 @@ C基準で生成（design #14：chord も C基準保存・調はヒント）。f
 
 import random
 
-from .theory import chord_pcs, scale_pcs
+from .theory import chord_pcs, norm_root, scale_pcs
 
 # 度数 → (ルートpc, quality)。C基準（key=0）。
 _DIATONIC_MAJOR = {1: (0, ""), 2: (2, "m"), 3: (4, "m"), 4: (5, ""), 5: (7, ""), 6: (9, "m"), 7: (11, "dim")}
@@ -114,3 +114,43 @@ def gen_melody(frame: dict | None = None, chords=None, seed: int | None = None) 
 
     label = (mood + "メロ").strip() if mood else "メロディ"
     return {"items": [{"kind": "melody", "content": {"notes": notes}, "label": label[:24]}], "edges": []}
+
+
+def gen_bass(frame: dict | None = None, chords=None, seed: int | None = None) -> dict:
+    """#86 ルールベースのベースライン。強拍=コードのルート、弱拍=5度（C2基準・低域）。
+    コードに合うことを保証（root/5th はコードトーン）。melody kind で返す（notes content）。"""
+    frame = frame or {}
+    b = frame.get("bars")
+    bars = max(1, min(16, int(b))) if isinstance(b, (int, float)) and b else 4
+    bpb = _beats_per_bar(frame.get("meter"))
+    total = max(1, int(round(bars * bpb)))
+    per_bar = max(1, int(round(bpb)))
+    notes = []
+    for beat in range(total):
+        ch = _chord_at(float(beat), chords)
+        root = norm_root(ch.get("root", 0)) if ch else 0
+        pc = root if (beat % per_bar == 0) else (root + 7) % 12  # 強拍ルート / 弱拍5度
+        notes.append({"pitch": 36 + pc, "start": float(beat), "dur": 1.0})  # C2(36)基準の低域
+    return {"items": [{"kind": "melody", "content": {"notes": notes}, "label": "ベース"}], "edges": []}
+
+
+# GMドラム番号
+_GM = {"Kick": 36, "Snare": 38, "HiHat": 42, "OpenHat": 46}
+
+
+def gen_drums(frame: dict | None = None, seed: int | None = None) -> dict:
+    """#86 ルールベースのドラム（GMバックビート＋seedで小変化）。16ステップ1小節パターン。
+    返り {items:[{kind:"rhythm", content:{rhythm:{steps,lanes}}}]}。"""
+    frame = frame or {}
+    rng = random.Random(seed)
+    kick = {0, 8}
+    snare = {4, 12}
+    hihat = {0, 2, 4, 6, 8, 10, 12, 14}  # 8分ハット
+    # 小変化：キックを1つ足す（裏拍）／たまにオープンハット
+    kick.add(rng.choice([6, 10, 11, 14]))
+    lanes = [
+        {"name": "Kick", "midi": _GM["Kick"], "hits": sorted(kick)},
+        {"name": "Snare", "midi": _GM["Snare"], "hits": sorted(snare)},
+        {"name": "HiHat", "midi": _GM["HiHat"], "hits": sorted(hihat)},
+    ]
+    return {"items": [{"kind": "rhythm", "content": {"rhythm": {"steps": 16, "lanes": lanes}}, "label": "ドラム"}], "edges": []}

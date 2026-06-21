@@ -16,7 +16,13 @@ import shutil
 import subprocess
 from typing import Callable
 
-from .music import analyze_fit, gen_chords, gen_melody  # #86 記号エンジン（判定＋ルール生成）
+from .music import (  # #86 記号エンジン（判定＋ルール生成）
+    analyze_fit,
+    gen_bass,
+    gen_chords,
+    gen_drums,
+    gen_melody,
+)
 
 # 小書き（拗音などを直前のかなに結合して1モーラにする）
 _SMALL = set("ァィゥェォャュョヮぁぃぅぇぉゃゅょゎ")
@@ -458,13 +464,15 @@ def handle_gen_chords_rule(params: dict) -> dict:
 
 
 def handle_gen_pair_rule(params: dict) -> dict:
-    """#86 ルールのみで「コード進行＋それに合うメロ」のペアを count 個（Claude非依存・即時・当てはまり保証）。
-    gen_chords→gen_melody(そのコードに拘束)→analyze_fit を melody.meta に同梱。返り #85 items 形。"""
+    """#86 ルールのみで「コード進行＋伴奏パーツ(メロ/ベース/ドラム)」を count 案（Claude非依存・即時・
+    当てはまり保証）。コードを土台に各パーツを拘束生成し、メロ/ベースは analyze_fit を meta に同梱。
+    params.parts（既定["melody"]）で要素を選ぶ。返り #85 items 形。"""
     frame = params.get("frame") if isinstance(params.get("frame"), dict) else {}
     try:
         count = max(1, min(8, int(params.get("count") or 1)))
     except Exception:  # noqa: BLE001
         count = 1
+    parts = [p for p in (params.get("parts") or ["melody"]) if p in ("melody", "bass", "drums")] or ["melody"]
     structure = params.get("structure") or "section"
     seed = params.get("seed")
     items: list[dict] = []
@@ -472,20 +480,30 @@ def handle_gen_pair_rule(params: dict) -> dict:
     for i in range(count):
         s = (seed + i) if isinstance(seed, int) else None
         chords = gen_chords(frame, seed=s)["items"][0]["content"]["chords"]
-        notes = gen_melody(frame, chords=chords, seed=s)["items"][0]["content"]["notes"]
-        fit = analyze_fit(notes, chords, key=frame.get("key"))
         label = f"案{i + 1}"
-        ci = len(items)
+        part_idx = [len(items)]
         items.append({"kind": "chord_progression", "content": {"chords": chords}, "label": label})
-        mi = len(items)
-        items.append({"kind": "melody", "content": {"notes": notes}, "label": label, "meta": {"fit": fit}})
+        for part in parts:
+            part_idx.append(len(items))
+            if part == "melody":
+                notes = gen_melody(frame, chords=chords, seed=s)["items"][0]["content"]["notes"]
+                fit = analyze_fit(notes, chords, key=frame.get("key"))
+                items.append({"kind": "melody", "content": {"notes": notes}, "label": label, "meta": {"fit": fit}})
+            elif part == "bass":
+                bn = gen_bass(frame, chords=chords, seed=s)["items"][0]["content"]["notes"]
+                fit = analyze_fit(bn, chords, key=frame.get("key"))
+                items.append({"kind": "melody", "content": {"notes": bn}, "label": f"{label}ベース", "meta": {"fit": fit}})
+            elif part == "drums":
+                dr = gen_drums(frame, seed=s)["items"][0]["content"]["rhythm"]
+                items.append({"kind": "rhythm", "content": {"rhythm": dr}, "label": f"{label}ドラム"})
         if structure == "section":
             si = len(items)
             items.append({"kind": "section", "label": label})
-            edges.append({"type": "compose", "from": si, "to": ci, "position": 0})
-            edges.append({"type": "compose", "from": si, "to": mi, "position": 1})
-        else:
-            edges.append({"type": "relation", "from": ci, "to": mi})
+            for pos, pi in enumerate(part_idx):
+                edges.append({"type": "compose", "from": si, "to": pi, "position": pos})
+        else:  # pair：コードと各パーツを related で結ぶ
+            for pi in part_idx[1:]:
+                edges.append({"type": "relation", "from": part_idx[0], "to": pi})
     return {"items": items, "edges": edges}
 
 

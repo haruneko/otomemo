@@ -231,7 +231,22 @@ def test_gen_pair_rule_builds_fitting_pairs():
     assert kinds.count("chord_progression") == 2 and kinds.count("melody") == 2 and kinds.count("section") == 2
     mels = [it for it in res["items"] if it["kind"] == "melody"]
     assert all("fit" in m["meta"] and m["meta"]["fit"]["score"] >= 0.6 for m in mels)  # 当てはまり保証
-    assert len([e for e in res["edges"] if e["type"] == "compose"]) == 4  # 2 section × 2 part
+    assert len([e for e in res["edges"] if e["type"] == "compose"]) == 4  # 2 section × (chord+melody)
+
+
+def test_gen_pair_rule_full_arrangement():
+    # #86 parts でベース・ドラムも一式（ルールのみで1セクションのラフ）
+    import cm_worker.jobs as jobs
+
+    res = jobs.handle_gen_pair_rule(
+        {"count": 1, "parts": ["melody", "bass", "drums"], "frame": {"bars": 4}, "seed": 3}
+    )
+    kinds = [it["kind"] for it in res["items"]]
+    assert kinds.count("chord_progression") == 1 and kinds.count("rhythm") == 1
+    assert kinds.count("melody") == 2  # メロ＋ベース(どちらもnotes=melody kind)
+    assert kinds.count("section") == 1
+    # section に 4パーツ(chord/melody/bass/drums)が compose
+    assert len([e for e in res["edges"] if e["type"] == "compose"]) == 4
 
 
 def test_gen_variations_attaches_fit_analysis(monkeypatch):

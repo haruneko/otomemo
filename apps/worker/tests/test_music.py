@@ -1,6 +1,14 @@
 """cm-music（#86）ユニットテスト：判定とルール生成（決定的・契約）。"""
 
-from cm_worker.music import analyze_fit, analyze_progression, detect_key, gen_chords, gen_melody
+from cm_worker.music import (
+    analyze_fit,
+    analyze_progression,
+    detect_key,
+    gen_bass,
+    gen_chords,
+    gen_drums,
+    gen_melody,
+)
 
 
 def test_analyze_fit_in_chord_and_nct():
@@ -117,3 +125,21 @@ def test_gen_melody_fits_given_chords():
 
 def test_gen_melody_deterministic():
     assert gen_melody({"bars": 2}, seed=1) == gen_melody({"bars": 2}, seed=1)
+
+
+def test_gen_bass_fits_chords_low_register():
+    chords = gen_chords({"bars": 4}, seed=5)["items"][0]["content"]["chords"]
+    notes = gen_bass({"bars": 4}, chords=chords, seed=5)["items"][0]["content"]["notes"]
+    assert all(36 <= n["pitch"] <= 48 for n in notes)  # 低域
+    # root/5th はコードトーン → 当てはまり高い
+    assert analyze_fit(notes, chords, key=0)["in_chord_rate"] >= 0.8
+
+
+def test_gen_drums_valid_pattern():
+    g = gen_drums({}, seed=1)
+    r = g["items"][0]["content"]["rhythm"]
+    assert g["items"][0]["kind"] == "rhythm" and r["steps"] == 16
+    names = {la["name"] for la in r["lanes"]}
+    assert {"Kick", "Snare", "HiHat"} <= names
+    assert 4 in next(la["hits"] for la in r["lanes"] if la["name"] == "Snare")  # バックビート
+    assert gen_drums({}, seed=1) == gen_drums({}, seed=1)  # 決定的
