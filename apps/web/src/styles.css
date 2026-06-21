@@ -56,6 +56,12 @@ main {
   border-radius: 12px;
   background: var(--card);
   overflow: hidden;
+  /* #64 ネタ帳が長くても編集ペーンを視界に留める（非stickyだと文書上端に固定され画面外へ）。
+     モバイルは下の @media で position:fixed が上書き。 */
+  position: sticky;
+  top: 12px;
+  align-self: start;
+  max-height: calc(100vh - 24px);
 }
 .mainpane-empty {
   margin: auto;
