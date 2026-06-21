@@ -179,6 +179,31 @@ describe("job queue (producer side)", () => {
     expect(c.getRelations(mel[0].id).length).toBe(0); // edge は張られない
   });
 
+  it("reaps gen_pair_rule into chord+melody under a section (#86)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jpr', 'gen_pair_rule', '{}', 'done', ?, '', '')`,
+    ).run(
+      JSON.stringify({
+        items: [
+          { kind: "chord_progression", content: { chords: [{ root: 0, quality: "m", start: 0, dur: 4 }] }, label: "案1" },
+          { kind: "melody", content: { notes: [{ pitch: 72, start: 0, dur: 1 }] }, label: "案1", meta: { fit: { score: 0.9 } } },
+          { kind: "section", label: "案1" },
+        ],
+        edges: [
+          { type: "compose", from: 2, to: 0, position: 0 },
+          { type: "compose", from: 2, to: 1, position: 1 },
+        ],
+      }),
+    );
+    expect(c.reapResults()).toBe(3);
+    const sec = c.listNeta({ kind: "section" });
+    expect(sec.length).toBe(1);
+    expect(c.getComposition(sec[0].id).children.length).toBe(2);
+  });
+
   it("reaps gen_chords_rule (rule-based) into a chord_progression neta (#86)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

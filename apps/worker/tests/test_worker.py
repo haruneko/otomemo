@@ -220,6 +220,20 @@ def test_gen_chords_rule_handler():
     assert res["items"][0]["content"]["chords"][0]["quality"] == "m"  # マイナー
 
 
+def test_gen_pair_rule_builds_fitting_pairs():
+    # #86 ルールのみでコード+合うメロのペアをcount個・当てはまり保証
+    import cm_worker.jobs as jobs
+
+    res = jobs.handle_gen_pair_rule(
+        {"count": 2, "structure": "section", "frame": {"bars": 4, "mood": "切ない"}, "seed": 7}
+    )
+    kinds = [it["kind"] for it in res["items"]]
+    assert kinds.count("chord_progression") == 2 and kinds.count("melody") == 2 and kinds.count("section") == 2
+    mels = [it for it in res["items"] if it["kind"] == "melody"]
+    assert all("fit" in m["meta"] and m["meta"]["fit"]["score"] >= 0.6 for m in mels)  # 当てはまり保証
+    assert len([e for e in res["edges"] if e["type"] == "compose"]) == 4  # 2 section × 2 part
+
+
 def test_gen_variations_attaches_fit_analysis(monkeypatch):
     # #86 コード+メロが揃ったら analyze_fit を melody item の meta に同梱
     import json as _json

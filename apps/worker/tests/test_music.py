@@ -1,6 +1,6 @@
 """cm-music（#86）ユニットテスト：判定とルール生成（決定的・契約）。"""
 
-from cm_worker.music import analyze_fit, analyze_progression, detect_key, gen_chords
+from cm_worker.music import analyze_fit, analyze_progression, detect_key, gen_chords, gen_melody
 
 
 def test_analyze_fit_in_chord_and_nct():
@@ -99,3 +99,21 @@ def test_analyze_fit_accepts_string_root():
     mel = [{"pitch": 60, "start": 0, "dur": 1}, {"pitch": 64, "start": 1, "dur": 1}]
     r = analyze_fit(mel, [{"root": "C", "quality": "", "start": 0, "dur": 2}], key=0)
     assert r["in_chord_rate"] == 1.0
+
+
+def test_gen_melody_fits_given_chords():
+    # #86 ルールメロは渡したコードに"合う"ことを保証＝analyze_fit が高スコア
+    g = gen_chords({"bars": 4}, seed=7)
+    chords = g["items"][0]["content"]["chords"]
+    m = gen_melody({"bars": 4}, chords=chords, seed=7)
+    notes = m["items"][0]["content"]["notes"]
+    assert m["items"][0]["kind"] == "melody" and len(notes) == 16  # 4小節×4拍
+    fit = analyze_fit(notes, chords, key=0)
+    assert fit["in_chord_rate"] >= 0.6   # 拍頭コードトーン拘束で高い当てはまり
+    assert fit["score"] >= 0.6
+    # 全音スケール内（外し音ゼロ）
+    assert fit["scale_outside_rate"] == 0.0
+
+
+def test_gen_melody_deterministic():
+    assert gen_melody({"bars": 2}, seed=1) == gen_melody({"bars": 2}, seed=1)

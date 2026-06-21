@@ -16,7 +16,7 @@ import shutil
 import subprocess
 from typing import Callable
 
-from .music import analyze_fit, gen_chords  # #86 記号エンジン（判定＋ルール生成）
+from .music import analyze_fit, gen_chords, gen_melody  # #86 記号エンジン（判定＋ルール生成）
 
 # 小書き（拗音などを直前のかなに結合して1モーラにする）
 _SMALL = set("ァィゥェォャュョヮぁぃぅぇぉゃゅょゎ")
@@ -457,6 +457,38 @@ def handle_gen_chords_rule(params: dict) -> dict:
     return gen_chords(params.get("frame"), seed=params.get("seed"))
 
 
+def handle_gen_pair_rule(params: dict) -> dict:
+    """#86 ルールのみで「コード進行＋それに合うメロ」のペアを count 個（Claude非依存・即時・当てはまり保証）。
+    gen_chords→gen_melody(そのコードに拘束)→analyze_fit を melody.meta に同梱。返り #85 items 形。"""
+    frame = params.get("frame") if isinstance(params.get("frame"), dict) else {}
+    try:
+        count = max(1, min(8, int(params.get("count") or 1)))
+    except Exception:  # noqa: BLE001
+        count = 1
+    structure = params.get("structure") or "section"
+    seed = params.get("seed")
+    items: list[dict] = []
+    edges: list[dict] = []
+    for i in range(count):
+        s = (seed + i) if isinstance(seed, int) else None
+        chords = gen_chords(frame, seed=s)["items"][0]["content"]["chords"]
+        notes = gen_melody(frame, chords=chords, seed=s)["items"][0]["content"]["notes"]
+        fit = analyze_fit(notes, chords, key=frame.get("key"))
+        label = f"案{i + 1}"
+        ci = len(items)
+        items.append({"kind": "chord_progression", "content": {"chords": chords}, "label": label})
+        mi = len(items)
+        items.append({"kind": "melody", "content": {"notes": notes}, "label": label, "meta": {"fit": fit}})
+        if structure == "section":
+            si = len(items)
+            items.append({"kind": "section", "label": label})
+            edges.append({"type": "compose", "from": si, "to": ci, "position": 0})
+            edges.append({"type": "compose", "from": si, "to": mi, "position": 1})
+        else:
+            edges.append({"type": "relation", "from": ci, "to": mi})
+    return {"items": items, "edges": edges}
+
+
 def handle_gen_lyric(params: dict) -> dict:
     """#85 S2c 歌詞生成。fit_context.mora_counts があれば音数に合わせる。frame.mood で雰囲気。
     返り {items:[{kind:"lyric", text, label}]}（count 案）。"""
@@ -809,6 +841,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_rhythm": handle_gen_rhythm,
     "gen_variations": handle_gen_variations,
     "gen_chords_rule": handle_gen_chords_rule,
+    "gen_pair_rule": handle_gen_pair_rule,
     "gen_lyric": handle_gen_lyric,
     "fetch": handle_fetch,
     "transform": handle_transform,

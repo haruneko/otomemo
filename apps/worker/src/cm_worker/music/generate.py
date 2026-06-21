@@ -6,6 +6,8 @@ C基準で生成（design #14：chord も C基準保存・調はヒント）。f
 
 import random
 
+from .theory import chord_pcs, scale_pcs
+
 # 度数 → (ルートpc, quality)。C基準（key=0）。
 _DIATONIC_MAJOR = {1: (0, ""), 2: (2, "m"), 3: (4, "m"), 4: (5, ""), 5: (7, ""), 6: (9, "m"), 7: (11, "dim")}
 _DIATONIC_MINOR = {1: (0, "m"), 2: (2, "dim"), 3: (3, ""), 4: (5, "m"), 5: (7, "7"), 6: (8, ""), 7: (10, "")}
@@ -69,3 +71,46 @@ def gen_chords(frame: dict | None = None, seed: int | None = None) -> dict:
 
     label = (mood + "コード進行").strip() if mood else ("マイナーの進行" if minor else "コード進行")
     return {"items": [{"kind": "chord_progression", "content": {"chords": chords}, "label": label[:24]}], "edges": []}
+
+
+def _chord_at(t: float, chords):
+    for c in chords or []:
+        s = float(c.get("start", 0))
+        d = float(c.get("dur", 0))
+        if s <= t < s + d:
+            return c
+    return None
+
+
+def gen_melody(frame: dict | None = None, chords=None, seed: int | None = None) -> dict:
+    """#86 ルールベースのメロディ生成。コードトーン拘束＝拍頭はコードトーン、間はスケール音で
+    順次つなぐ（コードに合うことを"保証"）。chords を渡せばそれに合わせる。C基準。返り #85 items 形。"""
+    frame = frame or {}
+    rng = random.Random(seed)
+    mood = str(frame.get("mood") or "")
+    minor = any(h in mood.lower() or h in mood for h in _MINOR_HINT)
+    scale = scale_pcs(0, "minor" if minor else "major")
+    b = frame.get("bars")
+    bars = max(1, min(16, int(b))) if isinstance(b, (int, float)) and b else 4
+    bpb = _beats_per_bar(frame.get("meter"))
+    total = max(1, int(round(bars * bpb)))
+
+    notes = []
+    prev = 72  # C5 付近から
+    for beat in range(total):
+        t = float(beat)
+        ch = _chord_at(t, chords)
+        downbeat = (beat % max(1, int(round(bpb)))) == 0
+        if ch is not None and (downbeat or rng.random() < 0.7):
+            allowed = chord_pcs(ch.get("root", 0), ch.get("quality", ""))  # 拍頭/大半はコードトーン
+        else:
+            allowed = scale  # 間はスケール音（経過/刺繍）
+        cands = [p for p in range(prev - 7, prev + 8) if 60 <= p <= 84 and p % 12 in allowed]
+        if not cands:
+            cands = [p for p in range(60, 85) if p % 12 in allowed] or [prev]
+        weights = [1.0 / (1 + abs(p - prev)) for p in cands]  # 小さい音程を優先（順次進行）
+        prev = rng.choices(cands, weights=weights, k=1)[0]
+        notes.append({"pitch": prev, "start": t, "dur": 1.0})
+
+    label = (mood + "メロ").strip() if mood else "メロディ"
+    return {"items": [{"kind": "melody", "content": {"notes": notes}, "label": label[:24]}], "edges": []}

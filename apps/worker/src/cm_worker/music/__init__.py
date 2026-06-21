@@ -8,6 +8,6 @@ chord=[{root(0-11),quality,start,dur}]。戻りは #85 の items 形に合わせ
 """
 
 from .analyze import analyze_fit, detect_key, analyze_progression
-from .generate import gen_chords
+from .generate import gen_chords, gen_melody
 
-__all__ = ["analyze_fit", "detect_key", "analyze_progression", "gen_chords"]
+__all__ = ["analyze_fit", "detect_key", "analyze_progression", "gen_chords", "gen_melody"]
