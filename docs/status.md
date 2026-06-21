@@ -22,7 +22,7 @@
 | AI生成 枠＋動作＋構造 #85 | 🟡 | ✅枠(6/8効く)、gen_variations(N個・items+edges)、condition(音数/コード)、verb(fetch/transform/gen_lyric)、文章＋パネル導線。✅方向確認(confirm) |
 | 音楽理論層 #86 | 🟡 | ✅判定(analyze_fit/detect_key/analyze_progression)、ルール生成(chords/melody/bass/drums/pair)、Chat入口(dispatch・実機)、正規化層、MCPサービス(S2a実機)、agentic Chat(S2b 受入済)。✅補正(fit_to_chords)・✅類似度・✅ルール基線実測 |
 | 情報収集 | ✅ | research/collect・参考曲・継続研究 #9 |
-| 非機能 | 🟡 | ✅認証(CM_TOKEN)・localhost専有・出先/家。⬜バックアップ、⬜常駐サービスの自動起動/プロセス管理が弱い |
+| 非機能 | 🟡 | ✅認証(CM_TOKEN)・✅**単一オリジン配信(apiがwebも配信=外は1ポート)**・到達手順(docs/deploy.md: WSL2 mirrored＋Tailscale private)。⬜実際のTailscale設定(ユーザ側)・⬜バックアップ・⬜自動起動 |
 
 ---
 
@@ -40,6 +40,7 @@
 | 56 | #35後続 | ✅楽譜入力(MusicXML)・✅音声(ハミング→音高 自己相関ACF＋録音UI)。⬜添付拡張(scope曖昧) | 要件L116-119 | musicxml.ts/pitch.ts/HummingRecorder | impl | 🟡 残:添付拡張 |
 | -  | チャット | ✅複数会話セッション（Claude/ChatGPT風）：☰一覧/＋新規/切替/冒頭プレビュー。thread使い回し・スキーマ変更なし | #19 | listChatThreads＋Chat UI | impl | ✅ |
 | -  | UX | ✅配置ネタにMiniRoll概形＋ラベル(セクション/曲ペーンでネタ帳と見え方を統一・スマホ可読) | #55 | SectionEditor | impl | ✅ |
+| -  | 到達 | ✅単一オリジン配信＋docs/deploy.md(出先スマホ←Tailscale)。残: ユーザがWSL2 mirrored＋Tailscale serveを設定 | 設計#36 | main.ts(@fastify/static)＋guide | impl | 🟡 コード済/設定待ち |
 | 22 | AI探索 | 広くAIツール探索（別立て・要調査） | — | research | — | ⬜ |
 
 ---

@@ -1,5 +1,6 @@
 // 低次元データAPI（TS, docs/design.md #16）のクライアント。
-const BASE = (import.meta.env.VITE_API as string | undefined) ?? "/api";
+// dev は vite proxy 経由(/api→:8787)。本番ビルドは api が同一オリジンで配信する(ルート直叩き)。
+const BASE = (import.meta.env.VITE_API as string | undefined) ?? (import.meta.env.PROD ? "" : "/api");
 
 export const KINDS = [
   "lyric",
