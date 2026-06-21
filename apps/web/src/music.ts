@@ -349,6 +349,7 @@ export function playEvent(
         velocity: Math.round(ev.vel * 127),
         loop: false,
         detune: ds.detune,
+        ...(ds.stopId ? { stopId: ds.stopId } : {}), // #84 S3: 同 exclusiveClass を相互チョーク
       });
     } else if (ev.voice === "membrane") {
       dbg("note pitch", ev.pitch, "via kit.membrane");
@@ -594,25 +595,34 @@ function zoneGen(zone: any, id: number): number | undefined {
   return g && typeof g.value === "number" ? g.value : undefined;
 }
 
-// ドラムGM番号 → {鳴らすnote, detune}。
+// ドラムGM番号 → {鳴らすnote, detune, stopId}。
 // keyRangeゾーン(hihat閉42/開46, tom各キー 等)＝GM noteで叩き detune でキット意図ピッチへ補正。
 // keyRange無し(kick/snare＝単一/velocity層)＝原音高で自然に（現挙動維持）。
-function drumVoiceFor(name: string, gmPitch: number): { note: number; detune: number } {
+// stopId: exclusiveClass(57) があれば同群を相互チョーク（オープンHHをクローズHHが止める #84 S3）。
+function drumVoiceFor(
+  name: string,
+  gmPitch: number,
+): { note: number; detune: number; stopId?: string } {
   const insts: any[] = sfParsed?.instruments ?? [];
   const inst = insts.find((i) => (i.header?.name ?? i.name) === name);
   const zones: any[] = inst?.zones ?? [];
   const kz = zones.find((z) => z?.keyRange && gmPitch >= z.keyRange.lo && gmPitch <= z.keyRange.hi);
+  const exclusiveOf = (z: any): string | undefined => {
+    const ec = zoneGen(z, 57);
+    return ec ? `excl-${ec}` : undefined; // 同 exclusiveClass は同 stopId＝新打が前を止める
+  };
   if (kz) {
     const op = kz.sample?.header?.originalPitch ?? 60;
     const root = zoneGen(kz, 58) ?? op; // overridingRootKey
     return {
       note: gmPitch,
       detune: drumDetune(op, root, zoneGen(kz, 51) ?? 0, zoneGen(kz, 52) ?? 0),
+      stopId: exclusiveOf(kz),
     };
   }
   const z0 = zones.find((z) => z?.sample) ?? zones[0];
   const op = z0?.sample?.header?.originalPitch ?? 60;
-  return { note: op, detune: 0 };
+  return { note: op, detune: 0, stopId: exclusiveOf(z0) };
 }
 
 // ドラム1種をロード（楽器名キャッシュ）。失敗時 null＝その音は簡易キットにフォールバック。
@@ -631,7 +641,7 @@ async function loadDrumSampler(name: string, Tone: any): Promise<any | null> {
   }
 }
 
-export type DrumVoice = { sampler: any; note: number; detune: number };
+export type DrumVoice = { sampler: any; note: number; detune: number; stopId?: string };
 
 // 再生に出てくるドラム音(pitch)→ {sampler, 鳴らすnote}。ドラムは原音高で鳴らすと自然。
 // トムだけ音程差が要るので root を中心に GM番号で上下させる。
@@ -646,14 +656,14 @@ async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, Dr
       if (!name) return null;
       const s = await loadDrumSampler(name, Tone);
       if (!s) return null;
-      const v = drumVoiceFor(name, p); // #84 S2: note＋ピッチ補正detune
-      return { p, name, sampler: s, note: v.note, detune: v.detune };
+      const v = drumVoiceFor(name, p); // #84 S2/S3: note＋ピッチ補正detune＋choke stopId
+      return { p, name, sampler: s, note: v.note, detune: v.detune, stopId: v.stopId };
     }),
   );
   for (const r of loaded) {
     if (!r) continue;
-    map.set(r.p, { sampler: r.sampler, note: r.note, detune: r.detune });
-    dbg("drum", r.p, "->", r.name, "@note", r.note, "detune", r.detune);
+    map.set(r.p, { sampler: r.sampler, note: r.note, detune: r.detune, stopId: r.stopId });
+    dbg("drum", r.p, "->", r.name, "@note", r.note, "detune", r.detune, "stopId", r.stopId);
   }
   return map;
 }
