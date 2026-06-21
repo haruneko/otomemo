@@ -151,6 +151,15 @@ export function buildHttp(core: Core): FastifyInstance {
     return { ok: true };
   });
 
+  app.post("/relation/remove", async (req, reply) => {
+    const p = z
+      .object({ from: z.string(), to: z.string(), type: z.string().default("related") })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    core.unlink(p.data.from, p.data.to, p.data.type);
+    return { ok: true };
+  });
+
   // --- ジョブ（投げて→受け取る）---
   app.post("/job", async (req, reply) => {
     const p = jobInput.safeParse(req.body);

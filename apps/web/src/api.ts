@@ -191,8 +191,16 @@ export const api = {
   answerJob: (id: string, answer: string | Record<string, unknown>) =>
     http<Job>(`/job/${id}/answer`, { method: "POST", body: JSON.stringify({ answer }) }),
 
+  getNeta: (id: string) => http<Neta>(`/neta/${id}`),
+
   link: (from: string, to: string, type = "related") =>
     http<{ ok: boolean }>("/relation", {
+      method: "POST",
+      body: JSON.stringify({ from, to, type }),
+    }),
+
+  unlink: (from: string, to: string, type = "related") =>
+    http<{ ok: boolean }>("/relation/remove", {
       method: "POST",
       body: JSON.stringify({ from, to, type }),
     }),

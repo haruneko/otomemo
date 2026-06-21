@@ -47,7 +47,7 @@
 | -  | 合成音色 | ✅section/song 再生でパート毎の音色を保つ(per-program 旋律サンプラー) | design#14音色 | music.ts compositeNotes/playNotes | impl | ✅ |
 | 97 | bug整合 | ✅生成ネタ削除での reap 蘇生を恒久対策(deleteNeta が job_result.neta_id を NULL 化) | design job_result | core.ts | impl | ✅ |
 | 98 | 進行DB | 名前付き進行DB(丸の内/カノン/小室/王道4536…を度数列で確定realize)＝Aの本命上積み | design「振り分けA」 | cm-music named_progressions | impl | ⬜ |
-| 102 | Chat操作 | Chatが既存ネタを検索/読取/編集/変形/配置/連関/削除(全変更は承認制＋前後プレビュー＋再生)。MCP配線 | design#102(受理: 骨子ACCEPT・REVISE5点反映済) | ✅読取面S1→✅提案契約S2→承認UI S3 | design+impl | 🟡 S1/S2済(worker契約・92緑)・次=S3承認UI(web) |
+| 102 | Chat操作 | Chatが既存ネタを検索/読取/編集/変形/配置/連関/削除(全変更は承認制＋前後プレビュー＋再生)。MCP配線 | design#102(受理: 骨子ACCEPT・REVISE5点反映済) | ✅S1読取面→✅S2提案契約→✅S3承認UI | design+impl | 🟡 S1/S2/S3実装済(worker92/api77/web113緑)・残=impl-acceptor＋transform自動適用(S4)・実機 |
 | 22 | AI探索 | 広くAIツール探索（別立て・要調査） | — | research | — | ⬜ |
 
 ---

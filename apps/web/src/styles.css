@@ -633,6 +633,57 @@ body:has(.dialog-backdrop) .chat-bubble {
   gap: 6px;
   margin-top: 4px;
 }
+/* #102 S3 変異提案の承認カード（変更前後プレビュー＋原本/提案 再生）。 */
+.proposals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.proposals-summary {
+  font-weight: 600;
+}
+.proposal-card {
+  border: 1px solid var(--line, #d0d0d0);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface, #fafafa);
+}
+.proposal-card.done {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+.proposal-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.proposal-why,
+.proposal-desc {
+  margin: 4px 0;
+  font-size: 0.9em;
+}
+.proposal-note {
+  font-size: 0.8em;
+  margin: 4px 0 0;
+}
+.proposal-diff {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.proposal-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+.proposal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
 /* #69 考え中インジケータ。content アニメはブラウザ差で静止し得るので opacity パルスで確実に動かす。 */
 .chat-text.thinking {
   font-style: italic;

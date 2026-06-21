@@ -2,18 +2,29 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { createJob, getJob, jobOutcome, createNeta, listChatMessages, addChatMessage, clearChatThread } =
-  vi.hoisted(() => ({
-    createJob: vi.fn(),
-    getJob: vi.fn(),
-    jobOutcome: vi.fn(),
-    createNeta: vi.fn(),
-    listChatMessages: vi.fn(),
-    addChatMessage: vi.fn(),
-    clearChatThread: vi.fn(),
-  }));
+const {
+  createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
+  link, unlink, listChatMessages, addChatMessage, clearChatThread,
+} = vi.hoisted(() => ({
+  createJob: vi.fn(),
+  getJob: vi.fn(),
+  jobOutcome: vi.fn(),
+  createNeta: vi.fn(),
+  getNeta: vi.fn(),
+  updateNeta: vi.fn(),
+  placeChild: vi.fn(),
+  deleteNeta: vi.fn(),
+  link: vi.fn(),
+  unlink: vi.fn(),
+  listChatMessages: vi.fn(),
+  addChatMessage: vi.fn(),
+  clearChatThread: vi.fn(),
+}));
 vi.mock("../src/api", () => ({
-  api: { createJob, getJob, jobOutcome, createNeta, listChatMessages, addChatMessage, clearChatThread },
+  api: {
+    createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
+    link, unlink, listChatMessages, addChatMessage, clearChatThread,
+  },
 }));
 
 import { Chat } from "../src/components/Chat";
@@ -76,6 +87,81 @@ describe("Chat", () => {
     expect(await screen.findByText(/1個できました/, undefined, { timeout: 4000 })).toBeInTheDocument();
     expect(screen.getByLabelText("open-neta")).toBeInTheDocument();
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("proposals: shows approval card with before/after, approve applies content edit (#102 S3)", async () => {
+    createJob.mockResolvedValue({ id: "jx", status: "queued" });
+    getJob.mockResolvedValue({
+      status: "done",
+      result: {
+        type: "proposals",
+        summary: "メロを直す提案",
+        proposals: [
+          {
+            op: "update_content",
+            target_id: "m1",
+            args: { content: { notes: [{ pitch: 67, start: 0, dur: 1 }] } },
+            rationale: "外し音を補正",
+          },
+        ],
+      },
+      error: null,
+    });
+    getNeta.mockResolvedValue({
+      id: "m1",
+      kind: "melody",
+      content: { notes: [{ pitch: 60, start: 0, dur: 1 }] },
+      key: 0,
+      tempo: 120,
+    });
+    updateNeta.mockResolvedValue({ id: "m1" });
+    const onChanged = vi.fn();
+
+    render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "m1をコードに合わせて直して");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    // 承認カード＋原本/提案の再生ボタンが出る（適用はまだ）
+    await waitFor(() => expect(screen.getByLabelText("proposal")).toBeInTheDocument());
+    expect(screen.getByLabelText("play-before")).toBeInTheDocument();
+    expect(screen.getByLabelText("play-after")).toBeInTheDocument();
+    expect(updateNeta).not.toHaveBeenCalled();
+
+    // 承認 → updateNeta が呼ばれて適用
+    await userEvent.click(screen.getByLabelText("approve"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("m1", { content: { notes: [{ pitch: 67, start: 0, dur: 1 }] } }));
+    expect(onChanged).toHaveBeenCalled();
+    expect(await screen.findByText(/適用しました/)).toBeInTheDocument();
+  });
+
+  it("proposals: place_child approve calls placeChild; reject applies nothing (#102 S3)", async () => {
+    createJob.mockResolvedValue({ id: "jy", status: "queued" });
+    getJob.mockResolvedValue({
+      status: "done",
+      result: {
+        type: "proposals",
+        proposals: [
+          { op: "place_child", target_id: "n2", args: { parent_id: "s1", position: 0 } },
+          { op: "delete", target_id: "n3" },
+        ],
+      },
+      error: null,
+    });
+    getNeta.mockResolvedValue({ id: "x", kind: "other", text: "ネタ", content: {} });
+    placeChild.mockResolvedValue({ ok: true });
+
+    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "n2をs1に置いて、n3は消して");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    await waitFor(() => expect(screen.getAllByLabelText("proposal").length).toBe(2));
+    const approves = screen.getAllByLabelText("approve");
+    const rejects = screen.getAllByLabelText("reject");
+    await userEvent.click(approves[0]!); // place_child を承認
+    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("s1", "n2", 0));
+    await userEvent.click(rejects[1]!); // delete を却下
+    expect(deleteNeta).not.toHaveBeenCalled();
+    expect(await screen.findByText(/却下しました/)).toBeInTheDocument();
   });
 
   it("consult: content → creates a proper-kind neta, no other (#61), with open link (#68)", async () => {

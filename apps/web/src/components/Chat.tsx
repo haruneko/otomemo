@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Neta, type ChatMessage, type ChatThread, type JobOutcome } from "../api";
 import { playNotes, notesForContent, MUSIC_KINDS } from "../music";
+import { MiniRoll } from "./MiniRoll";
 
 interface Opt {
   title: string;
@@ -12,6 +13,13 @@ interface Ref {
   why?: string;
   points?: string;
 }
+// #102 S3 既存ネタの変異提案（承認制）。op/target_id/args は worker の判別ユニオンと一致。
+interface Proposal {
+  op: string;
+  target_id: string;
+  args?: Record<string, unknown>;
+  rationale?: string;
+}
 interface Msg {
   role: "user" | "ai";
   text?: string;
@@ -20,8 +28,134 @@ interface Msg {
   jobId?: string;
   saveable?: string;
   neta?: Neta; // #68 作成したネタ（開く/試聴リンク用）
+  proposals?: Proposal[]; // #102 S3 変異提案（承認カード）
+  summary?: string; // #102 S3 提案群の要約
 }
 type Mode = "consult" | "research";
+
+// #102 S3 変異 op の表示名
+const OP_LABEL: Record<string, string> = {
+  update_content: "中身を直す",
+  transform: "変形する",
+  fit_to: "コードに合わせる",
+  place_child: "配置する",
+  remove_child: "配置から外す",
+  link: "関連づける",
+  unlink: "関連を外す",
+  delete: "削除する",
+};
+
+// 構造系 proposal を1行で説明（content を持たない op 用）。
+function describeStructural(op: string, a: Record<string, unknown>): string {
+  switch (op) {
+    case "place_child":
+      return `「${String(a.parent_id ?? "?")}」の子として配置（位置 ${Number(a.position ?? 0)}）`;
+    case "remove_child":
+      return `「${String(a.parent_id ?? "?")}」の配置から外す`;
+    case "link":
+      return `「${String(a.to_id ?? "?")}」と関連づける（${String(a.type ?? "related")}）`;
+    case "unlink":
+      return `「${String(a.to_id ?? "?")}」との関連を外す`;
+    case "delete":
+      return "このネタを削除する（取り消せません）";
+    default:
+      return "";
+  }
+}
+
+// #102 S3 承認カード。変更前後をプレビューし、原本 vs 提案を再生して聴いてから承認/却下。
+// 適用は承認時のみ＝既存 HTTP 書込（TS core 1箇所）を呼ぶ。書込は agentic では起きない。
+function ProposalCard({ p, onApply }: { p: Proposal; onApply: (p: Proposal) => Promise<void> }) {
+  const [before, setBefore] = useState<Neta | null>(null);
+  const [state, setState] = useState<"idle" | "applying" | "applied" | "rejected">("idle");
+  useEffect(() => {
+    let on = true;
+    void api
+      .getNeta(p.target_id)
+      .then((n) => on && setBefore(n))
+      .catch(() => {});
+    return () => void (on = false);
+  }, [p.target_id]);
+
+  const a = p.args ?? {};
+  const afterContent = a.content; // content系のみ（無ければ構造系 or 適用未対応）
+  const isMusic = !!before && MUSIC_KINDS.includes(before.kind);
+  const label = OP_LABEL[p.op] ?? p.op;
+  const targetName = before ? (before.title ?? before.text ?? before.kind) : p.target_id;
+
+  const canApply =
+    p.op === "delete"
+      ? true
+      : ["update_content", "transform", "fit_to"].includes(p.op)
+        ? !!afterContent
+        : p.op === "place_child" || p.op === "remove_child"
+          ? !!a.parent_id
+          : p.op === "link" || p.op === "unlink"
+            ? !!a.to_id
+            : false;
+
+  function play(content: unknown) {
+    if (!before) return;
+    void playNotes(notesForContent(before.kind, content, { key: before.key ?? 0 }), before.tempo ?? 120);
+  }
+
+  if (state === "applied") return <div className="proposal-card done">✅ {label}：適用しました</div>;
+  if (state === "rejected") return <div className="proposal-card done muted">却下しました（{label}）</div>;
+
+  return (
+    <div className="proposal-card" aria-label="proposal">
+      <div className="proposal-head">
+        <strong>{label}</strong>
+        <span className="muted">{String(targetName).slice(0, 24)}</span>
+      </div>
+      {p.rationale && <p className="proposal-why">{p.rationale}</p>}
+      {!afterContent && <p className="proposal-desc">{describeStructural(p.op, a)}</p>}
+      {isMusic && (
+        <div className="proposal-diff">
+          <div className="proposal-side">
+            <span className="muted">原本</span>
+            {before && <MiniRoll neta={before} />}
+            <button type="button" className="bs-btn" aria-label="play-before" onClick={() => play(before!.content)}>
+              ▶ 原本
+            </button>
+          </div>
+          {!!afterContent && before && (
+            <div className="proposal-side">
+              <span className="muted">提案</span>
+              <MiniRoll neta={{ ...before, content: afterContent } as Neta} />
+              <button type="button" className="bs-btn" aria-label="play-after" onClick={() => play(afterContent)}>
+                ▶ 提案
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="proposal-actions">
+        <button
+          type="button"
+          className="primary"
+          aria-label="approve"
+          disabled={!canApply || state === "applying"}
+          onClick={async () => {
+            setState("applying");
+            try {
+              await onApply(p);
+              setState("applied");
+            } catch {
+              setState("idle");
+            }
+          }}
+        >
+          {state === "applying" ? "…" : "承認"}
+        </button>
+        <button type="button" className="bs-btn" aria-label="reject" onClick={() => setState("rejected")}>
+          却下
+        </button>
+      </div>
+      {!canApply && <p className="muted proposal-note">この提案の自動適用は未対応です（変形の適用は後続）。</p>}
+    </div>
+  );
+}
 
 // consult/content の neta_kind 表示名
 const KIND_LABEL: Record<string, string> = {
@@ -69,13 +203,15 @@ export function Chat({
   function persistMsg(m: Msg) {
     const { role, text, ...rest } = m;
     const data = Object.keys(rest).length ? rest : undefined;
-    const kind = m.options
-      ? "options"
-      : m.references
-        ? "research"
-        : m.neta
-          ? "content"
-          : "chat";
+    const kind = m.proposals
+      ? "proposals"
+      : m.options
+        ? "options"
+        : m.references
+          ? "research"
+          : m.neta
+            ? "content"
+            : "chat";
     void api.addChatMessage(thread, { role, kind, text: text ?? null, data }).catch(() => {});
   }
   // 保存しつつ画面にも積む（送受信の両方でこれを使う）。
@@ -206,8 +342,18 @@ export function Chat({
       content?: unknown;
       plan?: string;
       items?: unknown[];
+      proposals?: Proposal[];
+      summary?: string;
     } | null;
-    if (r?.type === "options") {
+    if (r?.type === "proposals") {
+      // #102 S3 既存ネタの変異提案。**適用せず承認カードを出す**（承認で初めて書込）。
+      const props = Array.isArray(r.proposals) ? r.proposals : [];
+      if (props.length === 0) {
+        pushMsg({ role: "ai", text: "提案を作れませんでした。もう少し具体的だと提案できます。" });
+      } else {
+        pushMsg({ role: "ai", proposals: props, summary: r.summary, jobId });
+      }
+    } else if (r?.type === "options") {
       pushMsg({ role: "ai", options: r.options ?? [], jobId });
     } else if (r?.type === "items") {
       // #86 S2b agentic：ツールで作った一式。materialize は server(reap)が担う。
@@ -253,6 +399,34 @@ export function Chat({
     });
     onChanged?.();
     pushMsg({ role: "ai", text: `「${o.title || "案"}」をネタ化しました`, neta });
+  }
+
+  // #102 S3 承認時の適用＝既存 HTTP 書込を op ごとに呼ぶ（TS core 1箇所）。
+  async function applyProposal(p: Proposal) {
+    const a = p.args ?? {};
+    switch (p.op) {
+      case "update_content":
+      case "transform":
+      case "fit_to":
+        if (a.content) await api.updateNeta(p.target_id, { content: a.content });
+        break;
+      case "place_child":
+        await api.placeChild(String(a.parent_id), p.target_id, Number(a.position ?? 0));
+        break;
+      case "remove_child":
+        await api.removeChild(String(a.parent_id), p.target_id);
+        break;
+      case "link":
+        await api.link(p.target_id, String(a.to_id), a.type ? String(a.type) : undefined);
+        break;
+      case "unlink":
+        await api.unlink(p.target_id, String(a.to_id), a.type ? String(a.type) : undefined);
+        break;
+      case "delete":
+        await api.deleteNeta(p.target_id);
+        break;
+    }
+    onChanged?.();
   }
 
   // #68 ネタを開く＝Chatを閉じて編集画面へ
@@ -375,6 +549,14 @@ export function Chat({
           {msgs.map((m, i) => (
             <div key={i} className={"chat-msg " + m.role}>
               {m.text && <div className="chat-text">{m.text}</div>}
+              {m.proposals && (
+                <div className="proposals">
+                  {m.summary && <div className="chat-text proposals-summary">{m.summary}</div>}
+                  {m.proposals.map((p, k) => (
+                    <ProposalCard key={k} p={p} onApply={applyProposal} />
+                  ))}
+                </div>
+              )}
               {m.saveable && (
                 <button type="button" className="bs-btn" onClick={() => void saveKnowledge(m.saveable!)}>
                   知見化

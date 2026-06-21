@@ -69,4 +69,17 @@ describe("http auth gate (#36)", () => {
       else process.env.CM_TOKEN = prev;
     }
   });
+
+  it("links then unlinks a relation via HTTP (#102 S3 承認適用)", async () => {
+    const a = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", title: "a" } })).json();
+    const b = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", title: "b" } })).json();
+    const ln = await app.inject({ method: "POST", url: "/relation", payload: { from: a.id, to: b.id, type: "ref" } });
+    expect(ln.statusCode).toBe(200);
+    let rel = (await app.inject({ method: "GET", url: `/neta/${a.id}/relations` })).json();
+    expect(rel.length).toBe(1);
+    const un = await app.inject({ method: "POST", url: "/relation/remove", payload: { from: a.id, to: b.id, type: "ref" } });
+    expect(un.statusCode).toBe(200);
+    rel = (await app.inject({ method: "GET", url: `/neta/${a.id}/relations` })).json();
+    expect(rel.length).toBe(0);
+  });
 });
