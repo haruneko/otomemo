@@ -333,7 +333,12 @@ export function scheduleTimes(notes: Note[], bpm = 120): ScheduledNote[] {
 export function totalSec(notes: Note[], bpm = 120): number {
   const spb = 60 / bpm;
   let end = 0;
-  for (const n of notes) end = Math.max(end, (n.start + (n.drum ? 0 : n.dur)) * spb);
+  for (const n of notes) {
+    // ドラムは長さ0だが音は鳴る。ショット再生でこの終端=stopなので、最後の打の開始ちょうどだと
+    // 発火前に止まり最後の音(例:最後の16分)が消える。発音長(膜/ノイズ・scheduleTimesと同値)を尾に足す。
+    const tail = n.drum ? (n.pitch <= 41 ? MEMBRANE_DUR : NOISE_DUR) : n.dur * spb;
+    end = Math.max(end, n.start * spb + tail);
+  }
   return end;
 }
 

@@ -152,9 +152,12 @@ describe("music", () => {
       expect(scheduleTimes([{ pitch: 60, start: 0, dur: 1 }], 120)[0]!.vel).toBeCloseTo(100 / 127);
     });
 
-    it("totalSec is the end of the last note (drums are point events)", () => {
+    it("totalSec ends past the last note; drums add their sound tail (ショット最後の打を切らない)", () => {
       expect(totalSec([{ pitch: 60, start: 0, dur: 2 }], 120)).toBeCloseTo(1.0); // 2拍*0.5
-      expect(totalSec([{ pitch: 36, start: 4, dur: 1, drum: true }], 120)).toBeCloseTo(2.0); // start4拍のみ
+      // ドラムは start だけだと最後の打が発火前に止まる→発音長(膜0.15)を尾に足す
+      expect(totalSec([{ pitch: 36, start: 4, dur: 1, drum: true }], 120)).toBeCloseTo(2.0 + 0.15);
+      // ハット等(noise系 pitch>41)は 0.05
+      expect(totalSec([{ pitch: 42, start: 4, dur: 1, drum: true }], 120)).toBeCloseTo(2.0 + 0.05);
     });
 
     it("loopRange defaults to 0..total, honors explicit beats", () => {
