@@ -167,7 +167,8 @@ export const api = {
   listJobs: (q: { status?: string } = {}) =>
     http<Job[]>(`/jobs${q.status ? `?status=${encodeURIComponent(q.status)}` : ""}`),
 
-  answerJob: (id: string, answer: string) =>
+  // #85 S3: 文字列回答 or 構造化(フォーム)回答。構造化は枠(frame)へ畳まれる。
+  answerJob: (id: string, answer: string | Record<string, unknown>) =>
     http<Job>(`/job/${id}/answer`, { method: "POST", body: JSON.stringify({ answer }) }),
 
   link: (from: string, to: string, type = "related") =>

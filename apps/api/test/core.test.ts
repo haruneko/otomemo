@@ -128,4 +128,27 @@ describe("jobs: waiting / answer (#45)", () => {
     expect(cont.instruction).toContain("120くらい");
     expect(core.getJob(j.id)!.status).toBe("done"); // 元ジョブは完了
   });
+
+  it("answerJob carries orig params and folds a form answer into frame (#85 S3)", () => {
+    const j = core.enqueueJob({
+      intent: "gen_variations",
+      params: { count: 4, kinds: ["chord_progression", "melody"], frame: { mood: "切ない" } },
+    });
+    core.askQuestion(j.id, '{"kind":"form","fields":[{"key":"meter","label":"拍子"}]}');
+    const cont = core.answerJob(j.id, { meter: "6/8" })!;
+    expect(cont.intent).toBe("gen_variations");
+    const p = cont.params as { count: number; kinds: string[]; frame: { meter: string; mood: string } };
+    expect(p.count).toBe(4); // 枠/個数を引き継ぐ
+    expect(p.kinds).toEqual(["chord_progression", "melody"]);
+    expect(p.frame.meter).toBe("6/8"); // フォーム回答→frame
+    expect(p.frame.mood).toBe("切ない"); // 既存 frame を保持
+  });
+
+  it("answerJob string answer still preserves params (#85 S3)", () => {
+    const j = core.enqueueJob({ intent: "gen_chord", instruction: "作って", params: { frame: { meter: "6/8" } } });
+    core.askQuestion(j.id, "どんな感じ?");
+    const cont = core.answerJob(j.id, "明るく")!;
+    expect((cont.params as { frame: { meter: string } }).frame.meter).toBe("6/8");
+    expect(cont.instruction).toContain("明るく");
+  });
 });

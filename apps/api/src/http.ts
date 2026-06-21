@@ -180,10 +180,12 @@ export function buildHttp(core: Core): FastifyInstance {
     return j;
   });
 
-  // #45: 待機中ジョブへの回答（継続ジョブを積む）
+  // #45/#85 S3: 待機中ジョブへの回答（継続ジョブを積む）。文字列 or 構造化(フォーム)回答。
   app.post("/job/:id/answer", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const p = z.object({ answer: z.string() }).safeParse(req.body);
+    const p = z
+      .object({ answer: z.union([z.string(), z.record(z.unknown())]) })
+      .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
     const cont = core.answerJob(id, p.data.answer);
     if (!cont) return reply.code(404).send({ error: "not found" });

@@ -14,9 +14,23 @@ function peek(j: Job): string {
   return "";
 }
 
+// #85 S3: AI が枠を聞き返すときの構造化フォーム。question が JSON フォームなら入力欄で答える。
+type FormField = { key: string; label?: string; type?: string; placeholder?: string };
+function parseForm(q: string): FormField[] | null {
+  try {
+    const o = JSON.parse(q) as { kind?: string; fields?: FormField[] };
+    if (o && o.kind === "form" && Array.isArray(o.fields)) return o.fields;
+  } catch {
+    /* 普通のテキスト質問 */
+  }
+  return null;
+}
+const NUMERIC_KEYS = new Set(["tempo", "bars", "count", "key"]);
+
 export function Tray({ onClose }: { onClose: () => void }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [forms, setForms] = useState<Record<string, Record<string, string>>>({});
 
   const reload = () =>
     api
@@ -32,6 +46,19 @@ export function Tray({ onClose }: { onClose: () => void }) {
     if (!a) return;
     await api.answerJob(id, a); // #45: 継続ジョブが積まれる
     setAnswers((m) => ({ ...m, [id]: "" }));
+    await reload();
+  }
+
+  async function answerForm(id: string) {
+    const f = forms[id] ?? {};
+    const payload: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(f)) {
+      const s = v.trim();
+      if (!s) continue;
+      payload[k] = NUMERIC_KEYS.has(k) && !Number.isNaN(Number(s)) ? Number(s) : s;
+    }
+    await api.answerJob(id, payload); // #85 S3: 構造化回答→枠(frame)へ
+    setForms((m) => ({ ...m, [id]: {} }));
     await reload();
   }
 
@@ -52,20 +79,49 @@ export function Tray({ onClose }: { onClose: () => void }) {
               <span className={"tray-status " + j.status}>{j.status}</span>
               {j.notify_level && <span className="tray-notify">{j.notify_level}</span>}
               <span className="tray-peek">{peek(j)}</span>
-              {j.status === "waiting" && j.question && (
-                <div className="tray-question">
-                  <p>{j.question}</p>
-                  <input
-                    aria-label={`answer-${j.id}`}
-                    value={answers[j.id] ?? ""}
-                    onChange={(e) => setAnswers((m) => ({ ...m, [j.id]: e.target.value }))}
-                    placeholder="回答…"
-                  />
-                  <button className="primary" onClick={() => void answer(j.id)}>
-                    回答
-                  </button>
-                </div>
-              )}
+              {j.status === "waiting" && j.question && (() => {
+                const fields = parseForm(j.question);
+                if (fields) {
+                  return (
+                    <div className="tray-question tray-form">
+                      <p>枠を教えてください</p>
+                      {fields.map((fld) => (
+                        <label key={fld.key} className="tray-form-field">
+                          <span>{fld.label ?? fld.key}</span>
+                          <input
+                            aria-label={`form-${j.id}-${fld.key}`}
+                            value={forms[j.id]?.[fld.key] ?? ""}
+                            placeholder={fld.placeholder ?? ""}
+                            onChange={(e) =>
+                              setForms((m) => ({
+                                ...m,
+                                [j.id]: { ...(m[j.id] ?? {}), [fld.key]: e.target.value },
+                              }))
+                            }
+                          />
+                        </label>
+                      ))}
+                      <button className="primary" onClick={() => void answerForm(j.id)}>
+                        この枠で進める
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="tray-question">
+                    <p>{j.question}</p>
+                    <input
+                      aria-label={`answer-${j.id}`}
+                      value={answers[j.id] ?? ""}
+                      onChange={(e) => setAnswers((m) => ({ ...m, [j.id]: e.target.value }))}
+                      placeholder="回答…"
+                    />
+                    <button className="primary" onClick={() => void answer(j.id)}>
+                      回答
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </div>

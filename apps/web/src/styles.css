@@ -502,6 +502,26 @@ body:has(.dialog-backdrop) .chat-bubble {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+/* #85 S3 枠を聞き返す構造化フォーム */
+.tray-form {
+  flex-basis: 100%;
+  display: grid;
+  gap: 6px;
+}
+.tray-form-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+.tray-form-field span {
+  min-width: 64px;
+  color: var(--muted);
+}
+.tray-form-field input {
+  flex: 1;
+  min-width: 0;
+}
 .badge {
   background: #e0533f;
   color: #fff;

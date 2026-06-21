@@ -503,14 +503,31 @@ export class Core {
     return this.getJob(jobId);
   }
 
-  // #45: 待機中ジョブへの回答。回答を載せた継続ジョブを積み、元ジョブを done にする。
-  answerJob(jobId: string, answer: string): Job | null {
+  // #45/#85 S3: 待機中ジョブへの回答。回答を載せた継続ジョブを積み、元ジョブを done にする。
+  // 元 params（frame/count/condition）を必ず引き継ぐ（#85 指摘6：枠を消さない）。
+  // 構造化回答（フォーム＝Record）は frame へ畳む（#85 指摘5）。文字列回答は instruction へ。
+  answerJob(jobId: string, answer: string | Record<string, unknown>): Job | null {
     const orig = this.getJob(jobId);
     if (!orig) return null;
+    const baseParams: Record<string, unknown> =
+      orig.params && typeof orig.params === "object"
+        ? { ...(orig.params as Record<string, unknown>) }
+        : {};
+    let instruction = orig.instruction ?? "";
+    if (typeof answer === "string") {
+      instruction = `${instruction}\n[回答] ${answer}`.trim();
+    } else {
+      const prevFrame =
+        baseParams.frame && typeof baseParams.frame === "object"
+          ? (baseParams.frame as Record<string, unknown>)
+          : {};
+      baseParams.frame = { ...prevFrame, ...answer }; // フォーム回答を枠へ上書きマージ
+    }
     const cont = this.enqueueJob({
       intent: orig.intent,
       target_neta_id: orig.target_neta_id ?? undefined,
-      instruction: `${orig.instruction ?? ""}\n[回答] ${answer}`.trim(),
+      instruction: instruction || undefined,
+      params: Object.keys(baseParams).length ? baseParams : undefined,
       notify_level: orig.notify_level ?? undefined,
     });
     this.db
