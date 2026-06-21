@@ -79,10 +79,13 @@ export class ApiError extends Error {
 }
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "content-type": "application/json" },
-    ...init,
-  });
+  // ボディがある時だけ content-type を付ける。空ボディ(DELETE等)に application/json を
+  // 付けると Fastify が FST_ERR_CTP_EMPTY_JSON_BODY で 400 を返す（#63 削除できないの真因）。
+  const headers = new Headers(init?.headers);
+  if (init?.body != null && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+  const res = await fetch(`${BASE}${path}`, { ...init, headers });
   if (!res.ok) throw new ApiError(res.status, await res.text());
   return (await res.json()) as T;
 }
