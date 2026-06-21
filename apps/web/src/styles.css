@@ -9,6 +9,7 @@
 
   --k-rhythm: #e8533f;
   --k-melody: #4fa8e0;
+  --k-bass: #2fa6b0;
   --k-chord: #7c6ce0;
   --k-chord_progression: #b7a0f0;
   --k-lyric: #f0c544;
@@ -1007,6 +1008,9 @@ body:has(.dialog-backdrop) .chat-bubble {
 .lane-block[data-kind="melody"] {
   background: var(--k-melody);
 }
+.lane-block[data-kind="bass"] {
+  background: var(--k-bass);
+}
 .lane-block[data-kind="chord"],
 .lane-block[data-kind="chord_progression"] {
   background: var(--k-chord);
@@ -1049,6 +1053,9 @@ body:has(.dialog-backdrop) .chat-bubble {
 }
 .picker-item[data-kind="melody"] {
   border-left-color: var(--k-melody);
+}
+.picker-item[data-kind="bass"] {
+  border-left-color: var(--k-bass);
 }
 .picker-item[data-kind="chord"],
 .picker-item[data-kind="chord_progression"] {
@@ -1400,6 +1407,7 @@ article .tag {
 /* kind→色（Okabe-Ito由来・DAW慣習準拠・色覚安全）。color-research agent #色 */
 article[data-kind="rhythm"] { --k: var(--k-rhythm); }
 article[data-kind="melody"] { --k: var(--k-melody); }
+article[data-kind="bass"] { --k: var(--k-bass); }
 article[data-kind="chord"] { --k: var(--k-chord); }
 article[data-kind="chord_progression"] { --k: var(--k-chord_progression); }
 article[data-kind="lyric"] { --k: var(--k-lyric); }

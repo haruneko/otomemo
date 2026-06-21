@@ -5,6 +5,7 @@ const BASE = (import.meta.env.VITE_API as string | undefined) ?? (import.meta.en
 export const KINDS = [
   "lyric",
   "melody",
+  "bass",
   "chord",
   "chord_progression",
   "rhythm",

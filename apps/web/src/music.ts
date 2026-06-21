@@ -138,10 +138,11 @@ export function rhythmToNotes(r: RhythmContent): Note[] {
 
 // neta の種類別に content をノート列へ（合成再生で使う共通変換）
 // 単独再生・試聴できる音楽 kind（定数ドリフト防止のため1か所に集約）。
-export const MUSIC_KINDS = ["melody", "chord", "chord_progression", "rhythm"];
+export const MUSIC_KINDS = ["melody", "bass", "chord", "chord_progression", "rhythm"];
 
 export function notesForContent(kind: string, content: unknown): Note[] {
-  if (kind === "melody") return notesOf(content);
+  // bass 絶対モードは melody と同型(notes)。相対モード(mode:"relative")の解決は #bass S2。
+  if (kind === "melody" || kind === "bass") return notesOf(content);
   if (kind === "chord" || kind === "chord_progression") return chordsToNotes(chordsOf(content));
   if (kind === "rhythm") return rhythmToNotes(rhythmOf(content));
   return [];

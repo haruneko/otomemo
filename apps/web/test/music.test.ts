@@ -104,6 +104,10 @@ describe("music", () => {
 
   it("notesForContent dispatches by kind", () => {
     expect(notesForContent("melody", { notes: [{ pitch: 60, start: 0, dur: 1 }] })).toHaveLength(1);
+    // #bass 絶対モードは melody と同型(notes)
+    expect(notesForContent("bass", { notes: [{ pitch: 31, start: 0, dur: 1 }] })).toEqual([
+      { pitch: 31, start: 0, dur: 1 },
+    ]);
     expect(
       notesForContent("rhythm", { rhythm: { steps: 16, lanes: [{ name: "K", midi: 36, hits: [0] }] } }),
     ).toHaveLength(1);

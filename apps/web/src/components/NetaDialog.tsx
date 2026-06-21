@@ -55,12 +55,13 @@ export function NetaDialog({
   const [rels, setRels] = useState<{ type: string; neta: Neta | null }[]>([]);
   const [schedId, setSchedId] = useState<string | null>(null); // #80 継続調査スケジュール
   const isMelody = neta.kind === "melody";
+  const isBass = neta.kind === "bass"; // #bass S1 絶対モード＝melodyと同型・低域ピアノロール
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
   const isRhythm = neta.kind === "rhythm";
   const isContainer = neta.kind === "section" || neta.kind === "song";
-  const isMusic = isMelody || isChord || isRhythm;
+  const isMusic = isMelody || isBass || isChord || isRhythm;
   // ソロ編集は見た目=実音（WYSIWYG）＝トランスポーズしない。調支配は合成(SectionEditor)側。
-  const playable = isMelody ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
+  const playable = isMelody || isBass ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
 
   // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。
   // melody ロールは span 尺で赤線が走る。単体エディタは拍子を持たない＝小節は4拍既定。
@@ -289,7 +290,7 @@ export function NetaDialog({
         />
       </div>
       <div className="editor-body">
-        {isMelody ? (
+        {isMelody || isBass ? (
           <div className="melody-input">
             <div className="input-toggle">
               <button
@@ -312,6 +313,8 @@ export function NetaDialog({
                 notes={notes}
                 onChange={setNotes}
                 beats={len}
+                low={isBass ? 28 : undefined}
+                high={isBass ? 55 : undefined}
                 playheadRef={tp.lineRef}
                 scrollerRef={tp.scrollerRef}
               />

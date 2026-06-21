@@ -146,7 +146,9 @@ def test_gen_melody_deterministic():
 
 def test_gen_bass_fits_chords_low_register():
     chords = gen_chords({"bars": 4}, seed=5)["items"][0]["content"]["chords"]
-    notes = gen_bass({"bars": 4}, chords=chords, seed=5)["items"][0]["content"]["notes"]
+    res = gen_bass({"bars": 4}, chords=chords, seed=5)
+    assert res["items"][0]["kind"] == "bass"  # #bass 絶対モード(notes)を bass kind で返す
+    notes = res["items"][0]["content"]["notes"]
     assert all(36 <= n["pitch"] <= 48 for n in notes)  # 低域
     # root/5th はコードトーン → 当てはまり高い
     assert analyze_fit(notes, chords, key=0)["in_chord_rate"] >= 0.8

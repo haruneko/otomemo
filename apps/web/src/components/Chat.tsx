@@ -26,6 +26,7 @@ type Mode = "consult" | "research";
 // consult/content の neta_kind 表示名
 const KIND_LABEL: Record<string, string> = {
   melody: "メロディ",
+  bass: "ベース",
   chord_progression: "コード進行",
   rhythm: "リズム",
 };

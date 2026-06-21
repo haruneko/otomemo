@@ -24,6 +24,7 @@ import { flushOutbox } from "./outbox";
 const FILTER_KINDS = [
   "lyric",
   "melody",
+  "bass",
   "chord",
   "chord_progression",
   "rhythm",

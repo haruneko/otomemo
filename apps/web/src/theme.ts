@@ -2,6 +2,7 @@
 export const KINDS_COLORED = [
   "rhythm",
   "melody",
+  "bass",
   "chord",
   "chord_progression",
   "lyric",
@@ -16,6 +17,7 @@ export type ColorKind = (typeof KINDS_COLORED)[number];
 export const DEFAULT_COLORS: Record<ColorKind, string> = {
   rhythm: "#e8533f",
   melody: "#4fa8e0",
+  bass: "#2fa6b0",
   chord: "#7c6ce0",
   chord_progression: "#b7a0f0",
   lyric: "#f0c544",

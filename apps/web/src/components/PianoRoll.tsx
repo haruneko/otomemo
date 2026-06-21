@@ -29,22 +29,26 @@ export function PianoRoll({
   beats = 16,
   playheadRef,
   scrollerRef,
+  low = DEFAULT_LOW,
+  high = DEFAULT_HIGH,
 }: {
   notes: Note[];
   onChange: (n: Note[]) => void;
   beats?: number;
   playheadRef?: Ref<HTMLDivElement>; // #58 再生プレイヘッド（--phb 生beatを ref直書き）
   scrollerRef?: Ref<HTMLDivElement>; // #74 追従スクロール対象（.proll）
+  low?: number; // 既定で見せる最低音（bass は E1=28 など低域既定）
+  high?: number; // 既定で見せる最高音
 }) {
   const [noteLen, setNoteLen] = useState(1);
 
   const pitches = useMemo(() => {
-    const lo = Math.min(DEFAULT_LOW, ...notes.map((n) => n.pitch));
-    const hi = Math.max(DEFAULT_HIGH, ...notes.map((n) => n.pitch));
+    const lo = Math.min(low, ...notes.map((n) => n.pitch));
+    const hi = Math.max(high, ...notes.map((n) => n.pitch));
     const arr: number[] = [];
     for (let p = hi; p >= lo; p--) arr.push(p);
     return arr;
-  }, [notes]);
+  }, [notes, low, high]);
   // 表示尺は content に追従（生成/取込で beats を超える音もはみ出さない）
   const span = useMemo(
     () => Math.max(beats, ...notes.map((n) => Math.ceil(n.start + n.dur))),

@@ -119,7 +119,7 @@ def gen_melody(frame: dict | None = None, chords=None, seed: int | None = None) 
 
 def gen_bass(frame: dict | None = None, chords=None, seed: int | None = None) -> dict:
     """#86 ルールベースのベースライン。強拍=コードのルート、弱拍=5度（C2基準・低域）。
-    コードに合うことを保証（root/5th はコードトーン）。melody kind で返す（notes content）。"""
+    コードに合うことを保証（root/5th はコードトーン）。**bass kind**(絶対モード=notes content)で返す。"""
     frame = normalize_frame(frame)
     b = frame.get("bars")
     bars = max(1, min(16, int(b))) if isinstance(b, (int, float)) and b else 4
@@ -132,7 +132,7 @@ def gen_bass(frame: dict | None = None, chords=None, seed: int | None = None) ->
         root = norm_root(ch.get("root", 0)) if ch else 0
         pc = root if (beat % per_bar == 0) else (root + 7) % 12  # 強拍ルート / 弱拍5度
         notes.append({"pitch": 36 + pc, "start": float(beat), "dur": 1.0})  # C2(36)基準の低域
-    return {"items": [{"kind": "melody", "content": {"notes": notes}, "label": "ベース"}], "edges": []}
+    return {"items": [{"kind": "bass", "content": {"notes": notes}, "label": "ベース"}], "edges": []}
 
 
 # GMドラム番号
