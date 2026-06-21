@@ -386,6 +386,7 @@ let sfParsedUrl: string | null = null;
 // #55b ドラムは GM 統合キットが無いため、GM番号→楽器名で個別samplerをロードしキャッシュ。
 const sfDrumCache = new Map<string, any>(); // 楽器名 → drum sampler
 let sfCtx: any = null; // 共有 AudioContext（Tone.rawContext）
+let sfGmDrumMap: Map<number, string> | null = null; // #55e bank128/preset0 の権威 GM ドラムマップ
 
 function resetSfCaches(): void {
   sfSampler = null;
@@ -394,6 +395,7 @@ function resetSfCaches(): void {
   sfInstrumentCount = 0;
   sfInstrumentNames = [];
   sfCurrentInstrument = null;
+  sfGmDrumMap = null;
   sfParsed = null;
   sfParsedUrl = null;
   sfDrumCache.clear();
@@ -500,9 +502,42 @@ async function ensureSoundFont(Tone: any, program = 0): Promise<any | null> {
   return sfSampler;
 }
 
-// #55b GM打楽器番号 → SF2楽器名。GM Standard キット名("Standard Kick" 等)を優先し、
-// 無ければ汎用パターン。smplr は GM統合キットを露出しないので個別楽器を拾う。
+// #55e 権威 GM ドラムマップ：SF2 の bank128/preset0("Standard"キット)のゾーンから
+// GM番号→楽器名 を引く。プリセットzoneに明示keyRangeがあればそれ(kick36→Standard Kick3等)、
+// 無ければそのzone楽器の内部ゾーンがその番号を含むか(Hi-Hats=42/46, Toms=41-50 等)。
+function krOfZone(z: any): { lo: number; hi: number } | undefined {
+  return z?.keyRange ?? z?.generators?.["43"]?.range;
+}
+function buildGmDrumMap(): Map<number, string> {
+  const map = new Map<number, string>();
+  const presets: any[] = sfParsed?.presets ?? [];
+  const std = presets.find((p) => presetBank(p) === 128 && presetNum(p) === 0);
+  if (!std) return map;
+  const instCovers = (inst: any, k: number) =>
+    (inst?.zones ?? []).some((iz: any) => {
+      const r = krOfZone(iz);
+      return r && k >= r.lo && k <= r.hi;
+    });
+  for (let k = 27; k <= 87; k++) {
+    for (const z of std.zones ?? []) {
+      const inm = z.instrument?.header?.name;
+      if (!inm) continue;
+      const pkr = krOfZone(z);
+      if (pkr ? k >= pkr.lo && k <= pkr.hi : instCovers(z.instrument, k)) {
+        map.set(k, inm);
+        break;
+      }
+    }
+  }
+  return map;
+}
+
+// GM打楽器番号 → SF2楽器名。まず権威マップ(Standardキット)、無ければ名前ヒューリスティック
+// （Standardプリセットの無いSF2向けフォールバック）。
 export function drumNameFor(pitch: number, names: string[]): string | null {
+  if (!sfGmDrumMap && sfParsed) sfGmDrumMap = buildGmDrumMap();
+  const fromKit = sfGmDrumMap?.get(pitch);
+  if (fromKit && names.includes(fromKit)) return fromKit;
   let res: RegExp[];
   if (pitch <= 36) res = [/standard kick/i, /\bkick\b/i, /bass drum/i];
   else if (pitch === 37) res = [/rim ?shot/i, /side ?stick/i, /snare/i];
