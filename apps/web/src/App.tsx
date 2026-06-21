@@ -301,6 +301,7 @@ export function App() {
             setChatTarget(undefined);
           }}
           onChanged={() => void reload()}
+          onOpenNeta={(n) => setActive(n)} // #68 Chatからネタを開く
         />
       )}
       {trayOpen && <Tray onClose={() => setTrayOpen(false)} />}

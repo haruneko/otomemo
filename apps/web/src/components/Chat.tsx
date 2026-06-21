@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Neta } from "../api";
+import { playNotes, notesForContent } from "../music";
+
+const MUSIC_KINDS = ["melody", "chord_progression", "rhythm"];
 
 interface Opt {
   title: string;
@@ -18,6 +21,7 @@ interface Msg {
   references?: Ref[];
   jobId?: string;
   saveable?: string;
+  neta?: Neta; // #68 作成したネタ（開く/試聴リンク用）
 }
 type Mode = "consult" | "research";
 
@@ -34,10 +38,12 @@ export function Chat({
   target,
   onChanged,
   onClose,
+  onOpenNeta,
 }: {
   target?: Neta;
   onChanged?: () => void;
   onClose: () => void;
+  onOpenNeta?: (neta: Neta) => void; // #68 ネタを開く（Chatは閉じる）
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -98,10 +104,10 @@ export function Chat({
     if (r?.type === "options") {
       setMsgs((m) => [...m, { role: "ai", options: r.options ?? [], jobId }]);
     } else if (r?.type === "content" && r.neta_kind) {
-      await api.createNeta({ kind: r.neta_kind, content: r.content, from_job: jobId });
+      const neta = await api.createNeta({ kind: r.neta_kind, content: r.content, from_job: jobId });
       onChanged?.();
       const label = KIND_LABEL[r.neta_kind] ?? r.neta_kind;
-      setMsgs((m) => [...m, { role: "ai", text: `「${label}」を作りました（ネタ帳に追加）` }]);
+      setMsgs((m) => [...m, { role: "ai", text: `「${label}」を作りました`, neta }]);
     } else if (r?.type === "plan") {
       setMsgs((m) => [
         ...m,
@@ -129,14 +135,24 @@ export function Chat({
   }, [target]);
 
   async function pick(o: Opt, jobId?: string) {
-    await api.createNeta({
+    const neta = await api.createNeta({
       kind: target?.kind ?? "knowledge", // #61 other 廃止（無targetは知見として）
       title: o.title || undefined,
       text: o.body,
       from_job: jobId,
     });
     onChanged?.();
-    setMsgs((m) => [...m, { role: "ai", text: `「${o.title || "案"}」をネタ化しました` }]);
+    setMsgs((m) => [...m, { role: "ai", text: `「${o.title || "案"}」をネタ化しました`, neta }]);
+  }
+
+  // #68 ネタを開く＝Chatを閉じて編集画面へ
+  function openNeta(neta: Neta) {
+    onOpenNeta?.(neta);
+    onClose();
+  }
+  // #68 試聴プレビュー（音楽kindのみ）
+  function preview(neta: Neta) {
+    void playNotes(notesForContent(neta.kind, neta.content), neta.tempo ?? 120);
   }
 
   async function saveKnowledge(text: string) {
@@ -229,8 +245,37 @@ export function Chat({
                   ))}
                 </div>
               )}
+              {m.neta && (
+                <div className="chat-neta-actions">
+                  <button
+                    type="button"
+                    className="bs-btn"
+                    aria-label="open-neta"
+                    onClick={() => openNeta(m.neta!)}
+                  >
+                    ✎ 開く
+                  </button>
+                  {MUSIC_KINDS.includes(m.neta.kind) && (
+                    <button
+                      type="button"
+                      className="bs-btn"
+                      aria-label="preview-neta"
+                      onClick={() => preview(m.neta!)}
+                    >
+                      ▶ 試聴
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
+          {busy && (
+            <div className="chat-msg ai" aria-label="thinking">
+              <div className="chat-text thinking">
+                考え中<span className="dots" aria-hidden="true" />
+              </div>
+            </div>
+          )}
         </div>
         <div className="chat-input">
           <input
