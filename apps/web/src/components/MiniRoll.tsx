@@ -3,7 +3,8 @@ import type { Neta } from "../api";
 
 // #48: カードにメロ/コード/リズムの概形（小さなピアノロール）を出す。音楽以外は何も描かない。
 export function MiniRoll({ neta }: { neta: Neta }) {
-  const notes = notesForContent(neta.kind, neta.content);
+  // 相対bass は単体プレビュー＝neta の key を tonic に解決（#bass S2）。
+  const notes = notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 });
   if (!notes.length) return null;
   const W = 160;
   const H = 30;

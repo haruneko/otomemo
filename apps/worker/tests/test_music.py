@@ -3,6 +3,7 @@
 from cm_worker.music import (
     analyze_fit,
     analyze_progression,
+    band,
     detect_key,
     gen_bass,
     gen_chords,
@@ -195,3 +196,108 @@ def test_gen_drums_valid_pattern():
     assert {"Kick", "Snare", "HiHat"} <= names
     assert 4 in next(la["hits"] for la in r["lanes"] if la["name"] == "Snare")  # バックビート
     assert gen_drums({}, seed=1) == gen_drums({}, seed=1)  # 決定的
+
+
+# ---- #bass S2 相対モードの解決エンジン（design「ベース kind=bass・2モード」より） ----
+
+def test_band_places_pc_into_E1_register():
+    # band(pc)=28+((pc-4)%12)。E1(28)..D#2(39) 帯の代表音へ。
+    from cm_worker.music import band
+
+    assert band(4) == 28   # E → E1（床）
+    assert band(0) == 36   # C → C2
+    assert band(7) == 31   # G → G1
+    assert band(3) == 39   # D# → D#2（帯の上端）
+    assert band(5) == 29   # F → F1
+    # どの pc でも 28..39 帯に収まる
+    assert all(28 <= band(pc) <= 39 for pc in range(12))
+
+
+def test_resolve_relative_bass_root_fifth_octave_on_C_major():
+    # C調 I=C（コード無し→tonic を I とみなす）。R→36, 5→31(G1), 8→48
+    from cm_worker.music import resolve_relative_bass
+
+    pattern = [
+        {"step": 0, "degree": "R", "dur": 1},
+        {"step": 1, "degree": "5", "dur": 1},
+        {"step": 2, "degree": "8", "dur": 1},
+    ]
+    notes = resolve_relative_bass(pattern, chords=None, key=0)
+    assert [n["pitch"] for n in notes] == [36, 31, 48]  # C2 / G1 / C3(ルート帯+12)
+
+
+def test_resolve_relative_bass_third_seventh_from_chord_quality():
+    # コード G7 上：R→band(7)=31, 3→band(11=B)=35, 7→band(5=F)=29
+    from cm_worker.music import resolve_relative_bass
+
+    pattern = [
+        {"step": 0, "degree": "R", "dur": 1},
+        {"step": 1, "degree": "3", "dur": 1},
+        {"step": 2, "degree": "7", "dur": 1},
+    ]
+    chords = [{"root": 7, "quality": "7", "start": 0, "dur": 4}]
+    notes = resolve_relative_bass(pattern, chords, key=0)
+    assert [n["pitch"] for n in notes] == [31, 35, 29]
+
+
+def test_resolve_relative_bass_minor_third():
+    # Am 上の 3度は短3度（C, pc=0）→ band(0)=36
+    from cm_worker.music import resolve_relative_bass
+
+    pattern = [{"step": 0, "degree": "3", "dur": 1}]
+    chords = [{"root": 9, "quality": "m", "start": 0, "dur": 4}]
+    notes = resolve_relative_bass(pattern, chords, key=0)
+    assert notes[0]["pitch"] == band(0)  # C → 36
+
+
+def test_resolve_relative_bass_approach_chromatic_to_next_root():
+    # approach=次の解決ルートへ半音で寄せる（歩くベース）。
+    # C(0) のあと G(7) のルートへ寄せる：G帯=band(7)=31 の半音下=30（近い方）。
+    from cm_worker.music import band, resolve_relative_bass
+
+    pattern = [
+        {"step": 0, "degree": "R", "dur": 1},
+        {"step": 1, "degree": "approach", "dur": 1},
+    ]
+    chords = [
+        {"root": 0, "quality": "", "start": 0, "dur": 1},
+        {"root": 7, "quality": "", "start": 1, "dur": 1},
+    ]
+    notes = resolve_relative_bass(pattern, chords, key=0)
+    assert notes[0]["pitch"] == band(0)  # C2=36
+    # 次ルート G の帯代表=31、半音上下(30/32)の近い方＝approach 前の音(36)に近い 32 ではなく
+    # 解決先(31)へ"寄せる"半音＝31±1 のうち直前音に近い側 → 32
+    assert notes[1]["pitch"] in (30, 32)
+
+
+def test_resolve_relative_bass_no_chord_uses_key_tonic():
+    # chords 空 → key の tonic を I コードとみなす（単体プレビュー）。key=2(D) → R=band(2)=38
+    from cm_worker.music import band, resolve_relative_bass
+
+    notes = resolve_relative_bass([{"step": 0, "degree": "R", "dur": 2}], chords=None, key=2)
+    assert notes[0]["pitch"] == band(2)
+    assert notes[0]["start"] == 0.0 and notes[0]["dur"] == 0.5  # step→拍（1step=16分=0.25拍）×2
+
+
+def test_resolve_relative_bass_step_timing_quarter_grid():
+    # step→拍：1step=16分=0.25拍。dur は step 数。
+    from cm_worker.music import resolve_relative_bass
+
+    pattern = [{"step": 4, "degree": "R", "dur": 4}]  # 2拍目頭から1拍
+    notes = resolve_relative_bass(pattern, chords=None, key=0)
+    assert notes[0]["start"] == 1.0 and notes[0]["dur"] == 1.0
+
+
+def test_resolve_relative_bass_floor_not_below_28():
+    # 床(28)より下は出さない。approach が 27 になるケースは床へクランプ or 1oct上げ。
+    from cm_worker.music import resolve_relative_bass
+
+    notes = resolve_relative_bass([{"step": 0, "degree": "R", "dur": 1}], chords=None, key=4)  # E→band=28（床ちょうど）
+    assert all(n["pitch"] >= 28 for n in notes)
+
+
+def test_resolve_relative_bass_empty_safe():
+    from cm_worker.music import resolve_relative_bass
+
+    assert resolve_relative_bass([], None, key=0) == []
+    assert resolve_relative_bass(None, None, key=0) == []

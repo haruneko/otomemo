@@ -174,7 +174,8 @@ export function NetaCard({
             title={playing ? "停止" : "このネタを単独再生（C基準そのまま）"}
             onClick={() =>
               void toggle(
-                () => notesForContent(neta.kind, neta.content),
+                // 相対bass は neta の key を tonic に解決（#bass S2）。
+                () => notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }),
                 neta.kind === "rhythm" ? undefined : (programOf(neta.content) ?? 0),
               )
             }

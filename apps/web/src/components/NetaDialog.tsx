@@ -6,6 +6,7 @@ import { TransportBar } from "./TransportBar";
 import { NumberField } from "./NumberField";
 import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
+import { BassStepEditor } from "./BassStepEditor";
 import { ChordEditor } from "./ChordEditor";
 import { RhythmEditor } from "./RhythmEditor";
 import { SectionEditor } from "./SectionEditor";
@@ -18,9 +19,12 @@ import {
   downloadMidi,
   programOf,
   GM_INSTRUMENTS,
+  isRelativeBass,
+  resolveRelativeBass,
   type Note,
   type ChordEntry,
   type RhythmContent,
+  type BassStep,
 } from "../music";
 
 const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -47,6 +51,13 @@ export function NetaDialog({
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
   const [program, setProgram] = useState<number>(programOf(neta.content) ?? 0); // #47 GM音色
   const [melodyView, setMelodyView] = useState<"roll" | "pad">("roll"); // #35 ロール/パッド
+  // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
+  const [bassMode, setBassMode] = useState<"absolute" | "relative">(
+    isRelativeBass(neta.content) ? "relative" : "absolute",
+  );
+  const [bassPattern, setBassPattern] = useState<BassStep[]>(
+    isRelativeBass(neta.content) ? neta.content.pattern : [],
+  );
   const [mood, setMood] = useState(neta.mood ?? "");
   const [len, setLen] = useState(() =>
     Math.max(16, (neta.bars ?? 0) * 4, ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
@@ -60,8 +71,16 @@ export function NetaDialog({
   const isRhythm = neta.kind === "rhythm";
   const isContainer = neta.kind === "section" || neta.kind === "song";
   const isMusic = isMelody || isBass || isChord || isRhythm;
+  const isRelBass = isBass && bassMode === "relative"; // #bass S2 相対モード
   // ソロ編集は見た目=実音（WYSIWYG）＝トランスポーズしない。調支配は合成(SectionEditor)側。
-  const playable = isMelody || isBass ? notes : isChord ? chordsToNotes(chords) : rhythmToNotes(rhythm);
+  // 相対bass は単体プレビュー＝調(key)を tonic に度数解決して鳴らす（実音高）。
+  const playable = isRelBass
+    ? resolveRelativeBass(bassPattern, [], key)
+    : isMelody || isBass
+      ? notes
+      : isChord
+        ? chordsToNotes(chords)
+        : rhythmToNotes(rhythm);
 
   // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。
   // melody ロールは span 尺で赤線が走る。単体エディタは拍子を持たない＝小節は4拍既定。
@@ -137,7 +156,15 @@ export function NetaDialog({
           .map((t) => t.trim())
           .filter(Boolean),
         mood: mood.trim() || null,
-        ...(isMelody || isBass
+        ...(isRelBass
+          ? {
+              // #bass S2 相対モード：度数パターンを保存（再生時にコード/調で解決）。
+              content: { mode: "relative", steps: 16, pattern: bassPattern, program },
+              key,
+              tempo,
+              bars: 1,
+            }
+          : isMelody || isBass
           ? { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) }
           : isChord
             ? { content: { chords, program }, key, tempo }
@@ -292,39 +319,69 @@ export function NetaDialog({
       <div className="editor-body">
         {isMelody || isBass ? (
           <div className="melody-input">
-            <div className="input-toggle">
-              <button
-                type="button"
-                className={melodyView === "roll" ? "on" : ""}
-                onClick={() => setMelodyView("roll")}
-              >
-                ロール
-              </button>
-              <button
-                type="button"
-                className={melodyView === "pad" ? "on" : ""}
-                onClick={() => setMelodyView("pad")}
-              >
-                パッド
-              </button>
-            </div>
-            {melodyView === "roll" ? (
-              <PianoRoll
-                notes={notes}
-                onChange={setNotes}
-                beats={len}
-                low={isBass ? 28 : undefined}
-                high={isBass ? 55 : undefined}
+            {/* #bass S2: bass は 絶対(ピアノロール)/相対(度数グリッド) をモード切替 */}
+            {isBass && (
+              <div className="input-toggle">
+                <button
+                  type="button"
+                  className={bassMode === "absolute" ? "on" : ""}
+                  onClick={() => setBassMode("absolute")}
+                >
+                  絶対
+                </button>
+                <button
+                  type="button"
+                  className={bassMode === "relative" ? "on" : ""}
+                  onClick={() => setBassMode("relative")}
+                >
+                  相対
+                </button>
+              </div>
+            )}
+            {isRelBass ? (
+              <BassStepEditor
+                pattern={bassPattern}
+                onChange={setBassPattern}
                 playheadRef={tp.lineRef}
                 scrollerRef={tp.scrollerRef}
               />
             ) : (
-              <StepPad
-                notes={notes}
-                onChange={setNotes}
-                playheadRef={tp.lineRef}
-                scrollerRef={tp.scrollerRef}
-              />
+              <>
+                <div className="input-toggle">
+                  <button
+                    type="button"
+                    className={melodyView === "roll" ? "on" : ""}
+                    onClick={() => setMelodyView("roll")}
+                  >
+                    ロール
+                  </button>
+                  <button
+                    type="button"
+                    className={melodyView === "pad" ? "on" : ""}
+                    onClick={() => setMelodyView("pad")}
+                  >
+                    パッド
+                  </button>
+                </div>
+                {melodyView === "roll" ? (
+                  <PianoRoll
+                    notes={notes}
+                    onChange={setNotes}
+                    beats={len}
+                    low={isBass ? 28 : undefined}
+                    high={isBass ? 55 : undefined}
+                    playheadRef={tp.lineRef}
+                    scrollerRef={tp.scrollerRef}
+                  />
+                ) : (
+                  <StepPad
+                    notes={notes}
+                    onChange={setNotes}
+                    playheadRef={tp.lineRef}
+                    scrollerRef={tp.scrollerRef}
+                  />
+                )}
+              </>
             )}
           </div>
         ) : isChord ? (

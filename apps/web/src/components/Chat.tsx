@@ -213,7 +213,8 @@ export function Chat({
   }
   // #68 試聴プレビュー（音楽kindのみ）
   function preview(neta: Neta) {
-    void playNotes(notesForContent(neta.kind, neta.content), neta.tempo ?? 120);
+    // 相対bass は neta の key を tonic に解決して試聴（#bass S2）。
+    void playNotes(notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }), neta.tempo ?? 120);
   }
 
   async function saveKnowledge(text: string) {

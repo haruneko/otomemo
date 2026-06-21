@@ -136,12 +136,144 @@ export function rhythmToNotes(r: RhythmContent): Note[] {
   );
 }
 
+// --- ベース kind の相対モード（#bass S2, design「ベース kind=bass・2モード」） ---
+// 度数をコードに当てて再生時に解決する依存型コンテンツ。worker の bass.py と同じ契約を移植。
+export type BassDegree = "R" | "3" | "5" | "7" | "8" | "approach";
+export interface BassStep {
+  step: number; // ステップindex（1step=16分=0.25拍）
+  degree: BassDegree;
+  dur: number; // step 数
+}
+export interface RelativeBassContent {
+  mode: "relative";
+  steps: number;
+  pattern: BassStep[];
+  preview_chords?: ChordEntry[]; // 単体プレビュー用の任意コード列（無ければ key の tonic）
+  program?: number;
+}
+
+const BASS_FLOOR = 28; // E1（エレキ4弦ベースの最低音）
+const BASS_STEP_TO_BEAT = 0.25; // 1step=16分=0.25拍
+
+// コード品質 → ルートからの半音インターバル（worker theory.QUALITY_INTERVALS と一致）。
+const QUALITY_INTERVALS: Record<string, number[]> = {
+  "": [0, 4, 7],
+  maj: [0, 4, 7],
+  m: [0, 3, 7],
+  min: [0, 3, 7],
+  "7": [0, 4, 7, 10],
+  maj7: [0, 4, 7, 11],
+  m7: [0, 3, 7, 10],
+  dim: [0, 3, 6],
+  m7b5: [0, 3, 6, 10],
+  aug: [0, 4, 8],
+  sus4: [0, 5, 7],
+  sus2: [0, 2, 7],
+  "6": [0, 4, 7, 9],
+  m6: [0, 3, 7, 9],
+};
+const DEGREE_CHORD_INDEX: Record<string, number> = { "3": 1, "5": 2, "7": 3 };
+
+// ピッチクラス(0-11)を最低オクターブ帯 E1..D#2(28..39) の代表音 MIDI へ。
+// band(pc)=28+((pc-4) mod 12)。E(4)→28（床）, C(0)→36, G(7)→31。
+export function band(pc: number): number {
+  return BASS_FLOOR + (((Math.round(pc) - 4) % 12) + 12) % 12;
+}
+
+export function isRelativeBass(content: unknown): content is RelativeBassContent {
+  return (
+    !!content &&
+    typeof content === "object" &&
+    (content as { mode?: unknown }).mode === "relative" &&
+    Array.isArray((content as { pattern?: unknown }).pattern)
+  );
+}
+
+function bassChordAt(t: number, chords: ChordEntry[]): ChordEntry | null {
+  for (const c of chords) if (c.start <= t && t < c.start + c.dur) return c;
+  return null;
+}
+
+function degreePc(degree: string, root: number, quality: string): number {
+  if (degree === "R" || degree === "8") return root;
+  const idx = DEGREE_CHORD_INDEX[degree];
+  if (idx === undefined) return root; // 未知度数はルート扱い（安全）
+  const ivals = QUALITY_INTERVALS[quality] ?? [0, 4, 7];
+  if (idx < ivals.length) return ((root + ivals[idx]!) % 12 + 12) % 12;
+  // コードに該当度数が無い（トライアドの7度等）→ 在和音から近いトーンへ
+  const pcs = [...new Set(ivals.map((i) => ((root + i) % 12 + 12) % 12))].sort((a, b) => a - b);
+  return pcs[Math.min(idx, pcs.length - 1)]!;
+}
+
+// approach 用：歩くベースが向かう「次の解決ルート」pc（次のコードチェンジ優先）。
+function nextRootPc(entries: BassStep[], i: number, chords: ChordEntry[], key: number): number {
+  const t = entries[i]!.step * BASS_STEP_TO_BEAT;
+  const cur = bassChordAt(t, chords);
+  const curRoot = cur ? ((cur.root % 12) + 12) % 12 : ((key % 12) + 12) % 12;
+  for (const c of [...chords].sort((a, b) => a.start - b.start)) {
+    const r = ((c.root % 12) + 12) % 12;
+    if (c.start > t && r !== curRoot) return r;
+  }
+  if (i + 1 < entries.length) {
+    const nc = bassChordAt(entries[i + 1]!.step * BASS_STEP_TO_BEAT, chords);
+    if (nc) return ((nc.root % 12) + 12) % 12;
+  }
+  return curRoot;
+}
+
+// 相対ベースの pattern をコード(or key の tonic)に当てて実音高 notes へ解決（worker と同契約）。
+// chords が空なら key の tonic を I コードとみなす（単体プレビュー）。床(28)未満は出さない。
+export function resolveRelativeBass(
+  pattern: BassStep[],
+  chords: ChordEntry[] = [],
+  key = 0,
+): Note[] {
+  if (!pattern?.length) return [];
+  const k = ((key % 12) + 12) % 12;
+  const entries = [...pattern].sort((a, b) => a.step - b.step);
+  const notes: Note[] = [];
+  let prevPitch: number | null = null;
+  entries.forEach((e, i) => {
+    const start = Math.round(e.step * BASS_STEP_TO_BEAT * 1000) / 1000;
+    const dur = Math.round((e.dur ?? 1) * BASS_STEP_TO_BEAT * 1000) / 1000;
+    const ch = bassChordAt(start, chords);
+    const root = ch ? ((ch.root % 12) + 12) % 12 : k;
+    const quality = ch ? ch.quality : "";
+    let pitch: number;
+    if (e.degree === "approach") {
+      const target = band(nextRootPc(entries, i, chords, k));
+      const up = target + 1;
+      const down = target - 1;
+      const ref = prevPitch ?? target;
+      pitch = Math.abs(up - ref) <= Math.abs(down - ref) ? up : down;
+    } else {
+      pitch = band(degreePc(e.degree, root, quality));
+      if (e.degree === "8") pitch += 12;
+    }
+    while (pitch < BASS_FLOOR) pitch += 12; // 床(28)より下は出さない
+    notes.push({ pitch, start, dur });
+    prevPitch = pitch;
+  });
+  return notes;
+}
+
 // neta の種類別に content をノート列へ（合成再生で使う共通変換）
 // 単独再生・試聴できる音楽 kind（定数ドリフト防止のため1か所に集約）。
 export const MUSIC_KINDS = ["melody", "bass", "chord", "chord_progression", "rhythm"];
 
-export function notesForContent(kind: string, content: unknown): Note[] {
-  // bass 絶対モードは melody と同型(notes)。相対モード(mode:"relative")の解決は #bass S2。
+// 相対bass の解決文脈。section ではコードレーンの chords、単体では neta の key/preview_chords。
+export interface BassContext {
+  key?: number;
+  chords?: ChordEntry[];
+}
+
+export function notesForContent(kind: string, content: unknown, ctx?: BassContext): Note[] {
+  if (kind === "bass" && isRelativeBass(content)) {
+    // 相対モード：コードに当てて実音高へ解決。chords が無ければ preview_chords→key の tonic。
+    const chords = ctx?.chords ?? content.preview_chords ?? [];
+    return resolveRelativeBass(content.pattern, chords, ctx?.key ?? 0);
+  }
+  // bass 絶対モードは melody と同型(notes)。
   if (kind === "melody" || kind === "bass") return notesOf(content);
   if (kind === "chord" || kind === "chord_progression") return chordsToNotes(chordsOf(content));
   if (kind === "rhythm") return rhythmToNotes(rhythmOf(content));
@@ -155,9 +287,29 @@ export interface CompositeChild {
   node: { neta: { kind: string; content: unknown } };
 }
 export function compositeNotes(children: CompositeChild[], keyPc: number): Note[] {
+  // #bass S2: 相対bass の子は section のコードレーンに当てて解決する（コードが無ければ key）。
+  // コードを section 位置・調へ展開（chord kind は C基準保存なので keyPc を足す）。
+  const sectionChords: ChordEntry[] = children.flatMap((c) => {
+    const k = c.node.neta.kind;
+    if (k !== "chord" && k !== "chord_progression") return [];
+    return chordsOf(c.node.neta.content).map((ch) => ({
+      ...ch,
+      root: ((ch.root + keyPc) % 12 + 12) % 12,
+      start: ch.start + c.position,
+    }));
+  });
   return children.flatMap((c) => {
-    const isRhythm = c.node.neta.kind === "rhythm";
-    return notesForContent(c.node.neta.kind, c.node.neta.content).map((n) => ({
+    const kind = c.node.neta.kind;
+    const isRhythm = kind === "rhythm";
+    if (kind === "bass" && isRelativeBass(c.node.neta.content)) {
+      // 相対bass：section の調・コードで解決済み実音高なので、ここでは移調しない（position だけ）。
+      const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
+      return notesForContent(kind, c.node.neta.content, { key: keyPc, chords }).map((n) => ({
+        ...n,
+        start: n.start + c.position,
+      }));
+    }
+    return notesForContent(kind, c.node.neta.content).map((n) => ({
       ...n,
       pitch: isRhythm ? n.pitch : n.pitch + keyPc,
       start: n.start + c.position,

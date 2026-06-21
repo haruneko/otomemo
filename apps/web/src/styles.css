@@ -305,6 +305,26 @@ article[aria-label="neta-card"].dragging {
 .step-cell.on {
   background: var(--k-melody, var(--accent));
 }
+/* #bass S2 相対度数グリッド：度数ラベルを出す幅広セル＋bass色 */
+.bass-step {
+  display: grid;
+  gap: 2px;
+  overflow: auto;
+  position: relative; /* #74 プレイヘッド基準 */
+}
+.step-cell.deg {
+  flex: 0 0 30px;
+  height: 30px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e6e8ec;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.step-cell.deg.on {
+  background: var(--k-bass);
+}
 .lane-cell.over {
   background: var(--accent);
   opacity: 0.7; /* ドロップ可の強調 */

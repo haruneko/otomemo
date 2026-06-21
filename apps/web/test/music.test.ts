@@ -10,6 +10,9 @@ import {
   chordsToNotes,
   rhythmToNotes,
   notesForContent,
+  band,
+  resolveRelativeBass,
+  compositeNotes,
   scheduleTimes,
   totalSec,
   loopRange,
@@ -112,6 +115,99 @@ describe("music", () => {
       notesForContent("rhythm", { rhythm: { steps: 16, lanes: [{ name: "K", midi: 36, hits: [0] }] } }),
     ).toHaveLength(1);
     expect(notesForContent("lyric", null)).toEqual([]);
+  });
+
+  // #bass S2 相対モード：度数→コード解決（worker bass.py と同契約を web に移植）
+  describe("relative bass (#bass S2)", () => {
+    it("band places pc into E1..D#2 register", () => {
+      expect(band(4)).toBe(28); // E → E1（床）
+      expect(band(0)).toBe(36); // C → C2
+      expect(band(7)).toBe(31); // G → G1
+      expect(band(3)).toBe(39); // D# → D#2（上端）
+      for (let pc = 0; pc < 12; pc++) {
+        expect(band(pc)).toBeGreaterThanOrEqual(28);
+        expect(band(pc)).toBeLessThanOrEqual(39);
+      }
+    });
+
+    it("resolves R/5/8 on C tonic (no chords → key tonic)", () => {
+      const notes = resolveRelativeBass(
+        [
+          { step: 0, degree: "R", dur: 1 },
+          { step: 1, degree: "5", dur: 1 },
+          { step: 2, degree: "8", dur: 1 },
+        ],
+        [],
+        0,
+      );
+      expect(notes.map((n) => n.pitch)).toEqual([36, 31, 48]); // C2 / G1 / C3
+      // 1step=16分=0.25拍
+      expect(notes[0]!.start).toBe(0);
+      expect(notes[1]!.start).toBe(0.25);
+    });
+
+    it("resolves 3rd/7th from chord quality (G7)", () => {
+      const notes = resolveRelativeBass(
+        [
+          { step: 0, degree: "R", dur: 1 },
+          { step: 1, degree: "3", dur: 1 },
+          { step: 2, degree: "7", dur: 1 },
+        ],
+        [{ root: 7, quality: "7", start: 0, dur: 4 }],
+        0,
+      );
+      expect(notes.map((n) => n.pitch)).toEqual([31, 35, 29]); // G1 / B1 / F1
+    });
+
+    it("minor 3rd is short third (Am → C)", () => {
+      const notes = resolveRelativeBass([{ step: 0, degree: "3", dur: 1 }], [{ root: 9, quality: "m", start: 0, dur: 4 }], 0);
+      expect(notes[0]!.pitch).toBe(band(0)); // C → 36
+    });
+
+    it("approach walks a half-step toward the next chord root", () => {
+      const notes = resolveRelativeBass(
+        [
+          { step: 0, degree: "R", dur: 4 },
+          { step: 4, degree: "approach", dur: 4 },
+        ],
+        [
+          { root: 0, quality: "", start: 0, dur: 1 },
+          { root: 7, quality: "", start: 2, dur: 2 }, // 次コード G → ルート band(7)=31
+        ],
+        0,
+      );
+      // 31±1（30/32）のうち直前音(36)に近い側＝32
+      expect([30, 32]).toContain(notes[1]!.pitch);
+    });
+
+    it("never emits below the E1 floor (28)", () => {
+      const notes = resolveRelativeBass([{ step: 0, degree: "R", dur: 1 }], [], 4); // E→28
+      expect(notes.every((n) => n.pitch >= 28)).toBe(true);
+    });
+
+    it("notesForContent resolves relative bass (single preview uses key tonic)", () => {
+      const content = { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }] };
+      expect(notesForContent("bass", content, { key: 0 })).toEqual([{ pitch: 36, start: 0, dur: 1 }]);
+      // preview_chords があればそれで鳴らす
+      const withChords = { ...content, preview_chords: [{ root: 7, quality: "", start: 0, dur: 4 }] };
+      expect(notesForContent("bass", withChords)[0]!.pitch).toBe(31); // G1
+    });
+
+    it("compositeNotes resolves relative bass against the section chord lane", () => {
+      const children = [
+        {
+          position: 0,
+          node: { neta: { kind: "chord_progression", content: { chords: [{ root: 7, quality: "", start: 0, dur: 4 }] } } },
+        },
+        {
+          position: 0,
+          node: { neta: { kind: "bass", content: { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }] } } },
+        },
+      ];
+      const notes = compositeNotes(children, 0);
+      // section コードレーンの G に当たり band(7)=31（相対bassは移調しない＝解決済み実音高）
+      expect(notes.find((n) => n.pitch === 31)).toBeTruthy();
+    });
   });
 
   it("notesOf extracts notes or empty", () => {
