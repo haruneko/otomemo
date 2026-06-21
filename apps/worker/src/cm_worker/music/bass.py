@@ -3,12 +3,12 @@
 相対ベース＝度数をコードに当てて再生時に解決する依存型コンテンツ。
 content: {mode:"relative", steps:N, pattern:[{step, degree, dur(step数)}]}。
 語彙 degree ∈ {R, 3, 5, 7, 8, approach}（これ以上増やさない）。
-オクターブは自動（選ばせない）＝エレキ4弦ベース準拠。最低音 E1(MIDI 28)、
-最低オクターブ帯 E1..D#2(MIDI 28..39)。各度数の pc をこの帯の代表音へ＝band(pc)。
-解決後は melody と同じ notes 形（実音高で解決済み）になり、同じ経路で鳴る。
+オクターブは自動（選ばせない）＝エレキ4弦ベース準拠。最低音 E1(MIDI 28)、帯 E1..D#2(28..39)は
+**ルート音の置き場**。`root_pitch=band(root_pc)`、**他の度数は root_pitch + ルートからの音程**（5度=+7 等）
+＝度数はルートから上に積む。解決後は melody と同じ notes 形（実音高）になり、同じ経路で鳴る。
 """
 
-from .theory import QUALITY_INTERVALS, chord_pcs, norm_root
+from .theory import QUALITY_INTERVALS, norm_root
 
 BASS_FLOOR = 28          # E1（エレキ4弦ベースの最低音）
 _STEP_TO_BEAT = 0.25     # 1step=16分=0.25拍
@@ -33,20 +33,22 @@ def _chord_at(t: float, chords):
     return None
 
 
-def _degree_pc(degree: str, root: int, quality: str) -> int | None:
-    """度数→ピッチクラス。R=ルート、3/5/7=コードトーン（quality から）、8=ルート。
-    approach は文脈依存なのでここでは扱わない（None を返す対象外）。"""
-    if degree in ("R", "8"):
-        return root
+def _degree_interval(degree: str, quality: str) -> int:
+    """度数→**ルートからの音程(半音・上向き)**。R=0、8=オクターブ(12)、3/5/7=コードの音程(quality依存)。
+    ＝度数はルートから上に積む（5度がルートより下にならない）。approach は文脈依存で別扱い。"""
+    if degree == "R":
+        return 0
+    if degree == "8":
+        return 12
     idx = _DEGREE_CHORD_INDEX.get(degree)
     if idx is None:
-        return root  # 未知度数はルート扱い（安全）
+        return 0  # 未知度数はルート扱い（安全）
     ivals = QUALITY_INTERVALS.get(str(quality), [0, 4, 7])
     if idx < len(ivals):
-        return (root + ivals[idx]) % 12
-    # コードに該当度数が無い（トライアドの7度など）→ 在和音から近いトーンへフォールバック
-    pcs = sorted(chord_pcs(root, quality))
-    return pcs[min(idx, len(pcs) - 1)]
+        return ivals[idx]
+    if degree == "7":
+        return 10  # トライアドに7度が無い → 短7度を既定
+    return 0
 
 
 def _next_root_pc(entries, i: int, chords, key: int) -> int:
@@ -94,18 +96,16 @@ def resolve_relative_bass(pattern, chords=None, key: int | None = None):
         root = norm_root(ch.get("root", 0)) if ch is not None else k
         quality = str(ch.get("quality", "")) if ch is not None else ""
 
+        root_pitch = band(root)  # ルート音を E1..D#2 帯へ（帯はルートの置き場）
         if degree == "approach":
-            target_pc = _next_root_pc(entries, i, chords, k)
-            target = band(target_pc)
+            target = band(_next_root_pc(entries, i, chords, k))  # 次のルート配置
             up, down = target + 1, target - 1
             ref = prev_pitch if prev_pitch is not None else target
             # 解決先へ半音で寄せる＝target±1 のうち直前音に近い側
             pitch = up if abs(up - ref) <= abs(down - ref) else down
         else:
-            pc = _degree_pc(degree, root, quality)
-            pitch = band(pc)
-            if degree == "8":
-                pitch += 12
+            # 度数はルートから上に積む（5度=root+7 等。5度がルートより下にならない）
+            pitch = root_pitch + _degree_interval(degree, quality)
 
         # 床(28)より下は出さない（approach の半音下などをオクターブ上げで救済）
         while pitch < BASS_FLOOR:

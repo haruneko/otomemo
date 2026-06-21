@@ -194,15 +194,17 @@ function bassChordAt(t: number, chords: ChordEntry[]): ChordEntry | null {
   return null;
 }
 
-function degreePc(degree: string, root: number, quality: string): number {
-  if (degree === "R" || degree === "8") return root;
+// 度数→**ルートからの音程(半音・上向き)**。R=0, 8=12, 3/5/7=コードの音程(quality依存)。
+// ＝度数はルートから上に積む（5度がルートより下にならない）。worker bass._degree_interval と同契約。
+function degreeInterval(degree: string, quality: string): number {
+  if (degree === "R") return 0;
+  if (degree === "8") return 12;
   const idx = DEGREE_CHORD_INDEX[degree];
-  if (idx === undefined) return root; // 未知度数はルート扱い（安全）
+  if (idx === undefined) return 0; // 未知度数はルート扱い（安全）
   const ivals = QUALITY_INTERVALS[quality] ?? [0, 4, 7];
-  if (idx < ivals.length) return ((root + ivals[idx]!) % 12 + 12) % 12;
-  // コードに該当度数が無い（トライアドの7度等）→ 在和音から近いトーンへ
-  const pcs = [...new Set(ivals.map((i) => ((root + i) % 12 + 12) % 12))].sort((a, b) => a - b);
-  return pcs[Math.min(idx, pcs.length - 1)]!;
+  if (idx < ivals.length) return ivals[idx]!;
+  if (degree === "7") return 10; // トライアドに7度が無い → 短7度を既定
+  return 0;
 }
 
 // approach 用：歩くベースが向かう「次の解決ルート」pc（次のコードチェンジ優先）。
@@ -239,6 +241,7 @@ export function resolveRelativeBass(
     const ch = bassChordAt(start, chords);
     const root = ch ? ((ch.root % 12) + 12) % 12 : k;
     const quality = ch ? ch.quality : "";
+    const rootPitch = band(root); // ルート音を E1..D#2 帯へ（帯はルートの置き場）
     let pitch: number;
     if (e.degree === "approach") {
       const target = band(nextRootPc(entries, i, chords, k));
@@ -247,10 +250,10 @@ export function resolveRelativeBass(
       const ref = prevPitch ?? target;
       pitch = Math.abs(up - ref) <= Math.abs(down - ref) ? up : down;
     } else {
-      pitch = band(degreePc(e.degree, root, quality));
-      if (e.degree === "8") pitch += 12;
+      // 度数はルートから上に積む（5度=root+7 等。5度がルートより下にならない）
+      pitch = rootPitch + degreeInterval(e.degree, quality);
     }
-    while (pitch < BASS_FLOOR) pitch += 12; // 床(28)より下は出さない
+    while (pitch < BASS_FLOOR) pitch += 12; // 床(28)より下は出さない（approach 救済）
     notes.push({ pitch, start, dur });
     prevPitch = pitch;
   });

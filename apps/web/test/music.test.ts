@@ -140,7 +140,7 @@ describe("music", () => {
         [],
         0,
       );
-      expect(notes.map((n) => n.pitch)).toEqual([36, 31, 48]); // C2 / G1 / C3
+      expect(notes.map((n) => n.pitch)).toEqual([36, 43, 48]); // C2 / G2(root+7) / C3(root+12)
       // 1step=16分=0.25拍
       expect(notes[0]!.start).toBe(0);
       expect(notes[1]!.start).toBe(0.25);
@@ -156,7 +156,7 @@ describe("music", () => {
         [{ root: 7, quality: "7", start: 0, dur: 4 }],
         0,
       );
-      expect(notes.map((n) => n.pitch)).toEqual([31, 35, 29]); // G1 / B1 / F1
+      expect(notes.map((n) => n.pitch)).toEqual([31, 35, 41]); // G1 / B1(root+4) / F2(root+10) 度数はルートから上
     });
 
     it("minor 3rd is short third (Am → C)", () => {

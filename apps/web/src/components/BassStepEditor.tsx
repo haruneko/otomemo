@@ -1,21 +1,26 @@
-import { type Ref } from "react";
+import { useState, type Ref } from "react";
 import type { BassDegree, BassStep } from "../music";
 
-// #bass S2: 相対ベースの度数ステップエディタ（半リズムパート）。
-// 各ステップで degree をサイクル(R→3→5→7→8→approach→off)。dur は1step（後で伸長機能を足せる）。
-// 度数をコードに当てて再生時に解決＝ここは「何度を打つか」だけを編集する（オクターブは自動）。
+// #bass S2: 相対ベースの度数エディタ（半リズムパート）。
+// **度数レーン**(行=R/3/5/7/8/approach)×**ステップ**(列)。各ステップはモノフォニック＝1度数だけ。
+// セルをタップでそのレーン×ステップに置く（同ステップの他レーンは消える）。音長は長さツールで選ぶ。
+// 度数はコード/調に当てて再生時に解決＝ここは「何度を・いつ・どれだけ」だけ編集（オクターブは自動）。
 const STEPS = 16; // 1小節（1step=16分）
 const BEAT_PX = 88; // 1拍=4step。StepPad と同じプレイヘッド係数。
-// off→R→3→5→7→8→approach→off のサイクル（語彙はこれ以上増やさない／design）。
-const CYCLE: (BassDegree | null)[] = [null, "R", "3", "5", "7", "8", "approach"];
-const LABEL: Record<string, string> = {
-  R: "R",
-  "3": "3",
-  "5": "5",
-  "7": "7",
-  "8": "8",
-  approach: "→", // approach=次の解決ルートへ半音で寄せる（歩く）
-};
+const LANES: { d: BassDegree; label: string }[] = [
+  { d: "R", label: "R" },
+  { d: "3", label: "3" },
+  { d: "5", label: "5" },
+  { d: "7", label: "7" },
+  { d: "8", label: "8" },
+  { d: "approach", label: "→" }, // approach=次の解決ルートへ半音で寄せる（歩く）
+];
+// 音長（step数）。1=16分 / 2=8分 / 4=4分。
+const LENGTHS = [
+  { label: "16", v: 1 },
+  { label: "8", v: 2 },
+  { label: "4", v: 4 },
+];
 
 export function BassStepEditor({
   pattern,
@@ -28,40 +33,72 @@ export function BassStepEditor({
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
-  const degreeAt = (step: number): BassDegree | null =>
-    pattern.find((p) => p.step === step)?.degree ?? null;
+  const [len, setLen] = useState(2); // 既定 8分
 
-  function cycle(step: number) {
-    const cur = degreeAt(step);
-    const next = CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length] ?? null;
+  const startAt = (lane: BassDegree, step: number) =>
+    pattern.find((p) => p.step === step && p.degree === lane);
+  // このレーンで step を覆っている音（start < step < start+dur）＝サステイン表示用
+  const sustainAt = (lane: BassDegree, step: number) =>
+    pattern.some((p) => p.degree === lane && p.step < step && step < p.step + (p.dur || 1));
+
+  function toggle(lane: BassDegree, step: number) {
+    if (startAt(lane, step)) {
+      // 同じ所をタップ＝消す
+      onChange(pattern.filter((p) => !(p.step === step && p.degree === lane)));
+      return;
+    }
+    // モノフォニック：同ステップ始まりの音を消してから置く
     const rest = pattern.filter((p) => p.step !== step);
-    onChange(next === null ? rest : [...rest, { step, degree: next, dur: 1 }].sort((a, b) => a.step - b.step));
+    onChange([...rest, { step, degree: lane, dur: len }].sort((a, b) => a.step - b.step));
   }
 
   return (
-    <div className="bass-step" role="grid" aria-label="bass-step" ref={scrollerRef}>
-      <div
-        className="proll-playhead"
-        aria-hidden="true"
-        ref={playheadRef}
-        style={{ left: `calc(var(--phb, 0) * ${BEAT_PX}px)` }}
-      />
-      <div className="step-row" role="row">
-        {Array.from({ length: STEPS }, (_, s) => {
-          const d = degreeAt(s);
-          return (
-            <button
-              key={s}
-              type="button"
-              aria-label={`bass-${s}`}
-              aria-pressed={d !== null}
-              className={"step-cell deg" + (d !== null ? " on" : "") + (s % 4 === 0 ? " beat" : "")}
-              onClick={() => cycle(s)}
-            >
-              {d !== null ? LABEL[d] : ""}
-            </button>
-          );
-        })}
+    <div className="bass-step">
+      <div className="bass-lens">
+        音長
+        {LENGTHS.map((l) => (
+          <button
+            key={l.v}
+            type="button"
+            className={len === l.v ? "on" : ""}
+            onClick={() => setLen(l.v)}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+      <div className="bass-grid" role="grid" aria-label="bass-step" ref={scrollerRef}>
+        <div
+          className="proll-playhead"
+          aria-hidden="true"
+          ref={playheadRef}
+          style={{ left: `calc(40px + var(--phb, 0) * ${BEAT_PX}px)` }}
+        />
+        {LANES.map((lane) => (
+          <div className="bass-lane" role="row" key={lane.d}>
+            <div className="bass-lane-label">{lane.label}</div>
+            {Array.from({ length: STEPS }, (_, s) => {
+              const on = !!startAt(lane.d, s);
+              const sus = sustainAt(lane.d, s);
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  aria-label={`bass-${lane.d}-${s}`}
+                  aria-pressed={on}
+                  className={
+                    "step-cell deg" +
+                    (on ? " on" : sus ? " sustain" : "") +
+                    (s % 4 === 0 ? " beat" : "")
+                  }
+                  onClick={() => toggle(lane.d, s)}
+                >
+                  {on ? lane.label : ""}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );

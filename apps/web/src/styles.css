@@ -308,13 +308,44 @@ article[aria-label="neta-card"].dragging {
 /* #bass S2 相対度数グリッド：度数ラベルを出す幅広セル＋bass色 */
 .bass-step {
   display: grid;
+  gap: 6px;
+}
+.bass-lens {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.bass-lens button {
+  font-size: 0.74rem;
+  padding: 2px 9px;
+}
+.bass-lens button.on {
+  background: var(--k-bass);
+  color: #fff;
+}
+.bass-grid {
+  display: grid;
   gap: 2px;
   overflow: auto;
-  position: relative; /* #74 プレイヘッド基準 */
+  position: relative; /* プレイヘッド基準 */
+}
+.bass-lane {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.bass-lane-label {
+  flex: 0 0 38px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--k-bass);
 }
 .step-cell.deg {
-  flex: 0 0 30px;
-  height: 30px;
+  flex: 0 0 28px;
+  height: 26px;
   font-size: 12px;
   font-weight: 600;
   color: #e6e8ec;
@@ -324,6 +355,9 @@ article[aria-label="neta-card"].dragging {
 }
 .step-cell.deg.on {
   background: var(--k-bass);
+}
+.step-cell.deg.sustain {
+  background: color-mix(in srgb, var(--k-bass) 38%, transparent); /* 音長の伸び（薄色） */
 }
 .lane-cell.over {
   background: var(--accent);

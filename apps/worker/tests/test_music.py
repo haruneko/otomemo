@@ -223,11 +223,12 @@ def test_resolve_relative_bass_root_fifth_octave_on_C_major():
         {"step": 2, "degree": "8", "dur": 1},
     ]
     notes = resolve_relative_bass(pattern, chords=None, key=0)
-    assert [n["pitch"] for n in notes] == [36, 31, 48]  # C2 / G1 / C3(ルート帯+12)
+    # 度数はルートから上（修正）：root=C2(36), 5=root+7=43(G2), 8=root+12=48(C3)
+    assert [n["pitch"] for n in notes] == [36, 43, 48]
 
 
 def test_resolve_relative_bass_third_seventh_from_chord_quality():
-    # コード G7 上：R→band(7)=31, 3→band(11=B)=35, 7→band(5=F)=29
+    # コード G7 上（度数はルートから上）：root=band(7)=31(G1), 3=root+4=35(B1/長3度), 7=root+10=41(F2/短7度)
     from cm_worker.music import resolve_relative_bass
 
     pattern = [
@@ -237,7 +238,7 @@ def test_resolve_relative_bass_third_seventh_from_chord_quality():
     ]
     chords = [{"root": 7, "quality": "7", "start": 0, "dur": 4}]
     notes = resolve_relative_bass(pattern, chords, key=0)
-    assert [n["pitch"] for n in notes] == [31, 35, 29]
+    assert [n["pitch"] for n in notes] == [31, 35, 41]
 
 
 def test_resolve_relative_bass_minor_third():
