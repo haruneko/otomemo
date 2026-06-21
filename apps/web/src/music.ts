@@ -123,6 +123,23 @@ export function notesForContent(kind: string, content: unknown): Note[] {
   return [];
 }
 
+// 合成（section/song）：子を section の調へ移調（rhythm除く）＋位置オフセット。
+// SectionEditor と ネタ帳カードの section再生(#73) で共有。
+export interface CompositeChild {
+  position: number;
+  node: { neta: { kind: string; content: unknown } };
+}
+export function compositeNotes(children: CompositeChild[], keyPc: number): Note[] {
+  return children.flatMap((c) => {
+    const isRhythm = c.node.neta.kind === "rhythm";
+    return notesForContent(c.node.neta.kind, c.node.neta.content).map((n) => ({
+      ...n,
+      pitch: isRhythm ? n.pitch : n.pitch + keyPc,
+      start: n.start + c.position,
+    }));
+  });
+}
+
 function meterPair(meter?: string | null): [number, number] | null {
   const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
   if (!m) return null;

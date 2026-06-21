@@ -29,7 +29,7 @@ function LaneCell({
     />
   );
 }
-import { notesForContent, downloadMidi, type Note } from "../music";
+import { notesForContent, compositeNotes, downloadMidi, type Note } from "../music";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/リズムの3レーン×小節 で組む。
 // レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
@@ -115,16 +115,9 @@ export function SectionEditor({
     onChanged?.();
   }
 
-  // 合成：子を section の調へ移調（rhythm除く）＋位置オフセット
+  // 合成：子を section の調へ移調（rhythm除く）＋位置オフセット（共有: compositeNotes）
   function composite(): Note[] {
-    return children.flatMap((c) => {
-      const isRhythm = c.node.neta.kind === "rhythm";
-      return notesForContent(c.node.neta.kind, c.node.neta.content).map((n) => ({
-        ...n,
-        pitch: isRhythm ? n.pitch : n.pitch + keyPc,
-        start: n.start + c.position,
-      }));
-    });
+    return compositeNotes(children, keyPc);
   }
 
   return (

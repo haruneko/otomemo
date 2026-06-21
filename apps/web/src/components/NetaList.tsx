@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
 import { MiniRoll } from "./MiniRoll";
-import { playNotes, notesForContent } from "../music";
+import { playNotes, notesForContent, compositeNotes } from "../music";
 
 const MUSIC_KINDS = ["melody", "chord", "chord_progression", "rhythm"];
+const CONTAINER_KINDS = ["section", "song"];
 
 // #65 検索結果の一致種別→質的ラベル（スコア数値は出さない）
 const MATCH_LABEL: Record<string, string> = { exact: "一致", both: "一致", semantic: "近い" };
@@ -35,6 +36,14 @@ export function NetaCard({
     rhythm: "gen_rhythm",
   } as const;
   const ctx = () => neta.title ?? neta.text ?? "";
+
+  // #73 section/song を合成してプレビュー再生（子をsection調へ移調＋位置オフセット）
+  async function playSection() {
+    const tree = await api.getComposition(neta.id).catch(() => null);
+    if (!tree) return;
+    const notes = compositeNotes(tree.children, neta.key ?? 0);
+    if (notes.length) void playNotes(notes, neta.tempo ?? 120);
+  }
 
   async function pollContent(jobId: string): Promise<unknown> {
     // worker の claude_prompt timeout(120s)を超えるまで待つ（落ちても api 側 reaper が拾う）
@@ -139,8 +148,18 @@ export function NetaCard({
             ▶
           </button>
         )}
+        {CONTAINER_KINDS.includes(neta.kind) && (
+          <button
+            className="bs-btn"
+            aria-label={`play-${neta.id}`}
+            title="合成プレビュー再生"
+            onClick={() => void playSection()}
+          >
+            ▶
+          </button>
+        )}
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
-          壁打ち
+          相談
         </button>
         {gen ? (
           <span className="bs-btn">生成中…</span>

@@ -85,10 +85,15 @@ describe("NetaList", () => {
     expect(createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "section" }));
   });
 
-  it("壁打ち opens the chat for that neta (relocated from inline panel)", async () => {
+  it("相談 opens the chat for that neta (relocated from inline panel)", async () => {
     const onChat = vi.fn();
     render(<NetaCard neta={mk({ id: "x", text: "夜を駆ける" })} onChat={onChat} />);
-    await userEvent.click(screen.getByRole("button", { name: "壁打ち" }));
+    await userEvent.click(screen.getByRole("button", { name: "相談" }));
     expect(onChat).toHaveBeenCalledWith(expect.objectContaining({ id: "x" }));
+  });
+
+  it("section card has a composite play button (#73)", () => {
+    render(<NetaCard neta={mk({ id: "s1", kind: "section", title: "曲A" })} />);
+    expect(screen.getByLabelText("play-s1")).toBeInTheDocument();
   });
 });
