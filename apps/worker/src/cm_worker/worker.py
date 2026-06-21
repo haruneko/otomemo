@@ -116,6 +116,20 @@ def run_once(conn: sqlite3.Connection) -> int:
         )
         if is_plan and isinstance(result.get("subtasks"), list):
             _enqueue_children(conn, job_id, result["subtasks"], row["target_neta_id"])
+        # #93 方向確認：handler が _propose を返したら「承認待ち」ジョブを積む（1案はこのジョブで
+        # materialize 済み。承認で answerJob が残りを継続）。
+        prop = result.get("_propose") if isinstance(result, dict) else None
+        if isinstance(prop, dict) and prop.get("intent") in HANDLERS:
+            conn.execute(
+                "INSERT INTO job (id, intent, params, status, level, parent_job_id, target_neta_id, "
+                "question, priority, created, updated) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    str(uuid.uuid4()), prop["intent"],
+                    json.dumps(prop.get("params") or {}, ensure_ascii=False),
+                    "waiting", "atomic", job_id, row["target_neta_id"],
+                    str(prop.get("ask") or "この方向でいい？"), 0, _now(), _now(),
+                ),
+            )
     except Exception as e:  # noqa: BLE001
         conn.execute(
             "UPDATE job SET status='failed', error=?, updated=? WHERE id=?",

@@ -220,6 +220,32 @@ def test_gen_chords_rule_handler():
     assert res["items"][0]["content"]["chords"][0]["quality"] == "m"  # マイナー
 
 
+def test_gen_pair_rule_confirm_proposes_rest():
+    # #93 方向確認：confirm かつ複数案 → 1案だけ作り _propose で残りを承認待ちに
+    import cm_worker.jobs as jobs
+
+    res = jobs.handle_gen_pair_rule({"count": 4, "confirm": True, "frame": {"bars": 4}, "seed": 1})
+    assert len([it for it in res["items"] if it["kind"] == "section"]) == 1  # 1案のみ
+    prop = res["_propose"]
+    assert prop["intent"] == "gen_pair_rule"
+    assert prop["params"]["count"] == 3 and prop["params"]["confirm"] is False
+
+
+def test_run_once_propose_enqueues_waiting(tmp_path):
+    # #93 _propose を返すと「承認待ち」ジョブが積まれる（承認で answerJob が残りを継続）
+    conn = connect(str(tmp_path / "t.sqlite"))
+    _enqueue(conn, "gen_pair_rule", {"count": 3, "confirm": True, "frame": {"bars": 4}, "seed": 1})
+    run_once(conn)
+    assert conn.execute("SELECT status FROM job WHERE id='j1'").fetchone()["status"] == "done"  # 1案は確定
+    w = conn.execute(
+        "SELECT intent, question, parent_job_id, params FROM job WHERE status='waiting'"
+    ).fetchone()
+    assert w["intent"] == "gen_pair_rule" and w["parent_job_id"] == "j1"
+    assert "残り2案" in w["question"]
+    p = json.loads(w["params"])
+    assert p["count"] == 2 and p["confirm"] is False
+
+
 def test_handle_find_similar_with_candidates():
     # #92 候補を渡せば近い順に返す（DB無しでも動く）
     import cm_worker.jobs as jobs

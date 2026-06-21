@@ -19,7 +19,7 @@
 | ドラム再生 | 🟡 | ✅速度(prewarm)/音高(detune)/チョーク(stopId) #84 S0-S3。⬜S4 velocity(ハイハット音量) |
 | DAW往復・過去資産 | 🟡 | ✅MIDI書出、MIDI取込(worker分割 melody/rhythm #81)、歌詞取込。⬜コード自動検出、mp3整理、ABILITY往復は基本のみ |
 | 投げて受け取る | ✅ | ジョブ→worker→reap→トレイ、plan分解・継続・通知強度・waiting/question #45、定期スケジューラ #80、フォーム質問パネル #85S3 |
-| AI生成 枠＋動作＋構造 #85 | 🟡 | ✅枠(6/8効く)、gen_variations(N個・items+edges)、condition(音数/コード)、verb(fetch/transform/gen_lyric)、文章＋パネル導線。⬜方向確認サンプル(E) |
+| AI生成 枠＋動作＋構造 #85 | 🟡 | ✅枠(6/8効く)、gen_variations(N個・items+edges)、condition(音数/コード)、verb(fetch/transform/gen_lyric)、文章＋パネル導線。✅方向確認(confirm) |
 | 音楽理論層 #86 | 🟡 | ✅判定(analyze_fit/detect_key/analyze_progression)、ルール生成(chords/melody/bass/drums/pair)、Chat入口(dispatch・実機)、正規化層、MCPサービス(S2a実機)、agentic Chat(S2b 受入済)。⬜補正・類似度・ルールvsClaude実測 |
 | 情報収集 | ✅ | research/collect・参考曲・継続研究 #9 |
 | 非機能 | 🟡 | ✅認証(CM_TOKEN)・localhost専有・出先/家。⬜バックアップ、⬜常駐サービスの自動起動/プロセス管理が弱い |
@@ -32,7 +32,7 @@
 |---|---|---|---|---|---|---|
 | 91 | #86補正 | **fit_to_chords**：other型(正当でない)外し音を最寄りコードトーンへスナップ。経過/刺繍/掛留は残す | design#12 Stage1 | cm-music関数→MCP/handler→reap→test | impl | ✅ (score 0.61→0.84実証) |
 | 92 | #86類似度 | **melody_similarity**(音程列・移調不変)＋find_similar(過去メロ探索)。作風寄せ/重複の土台 | research R2 | cm-music→MCP/handler→test | impl | ✅ (移調不変実証) |
-| 93 | #85方向確認 | バッチ前に1案だけ作り「この方向でいい?」→承認(frame/count引継)で残数本生成 | design#85(E) | worker(askQuestion/answerJob)→test | impl | ⬜ |
+| 93 | #85方向確認 | バッチ前に1案だけ作り「この方向でいい?」→承認(frame/count引継)で残数本生成 | design#85(E) | worker(_propose→waiting)＋既存answerJob | impl | ✅ (confirm=true) |
 | 84 | ドラム | **S4 ハイハット音量(velocity層)** ＋ Standard 1 を1 SmplrPresetに集約 | design#84 | music.ts | impl(実機) | ⬜ |
 | 83 | スキーマ | **song(stage/next_action)・neta_asset(role)** テーブル欠落(設計#14と乖離) | design#14 | db.ts→core→http→test | design+impl | ⬜ |
 | -  | #86移管 | **ルール vs Claude を判定器で実測** → 生成を全面ルール移管するか判断 | design#12 | 実測スクリプト(analyze_fitで比較) | — | ⬜ |

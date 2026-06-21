@@ -544,9 +544,12 @@ def handle_gen_pair_rule(params: dict) -> dict:
     parts = [p for p in (params.get("parts") or ["melody"]) if p in ("melody", "bass", "drums")] or ["melody"]
     structure = params.get("structure") or "section"
     seed = params.get("seed")
+    # #93 方向確認：confirm かつ複数案なら、まず1案だけ作り、残りは承認待ちに回す
+    confirm = bool(params.get("confirm")) and count > 1
+    gen_count = 1 if confirm else count
     items: list[dict] = []
     edges: list[dict] = []
-    for i in range(count):
+    for i in range(gen_count):
         s = (seed + i) if isinstance(seed, int) else None
         chords = gen_chords(frame, seed=s)["items"][0]["content"]["chords"]
         label = f"案{i + 1}"
@@ -573,7 +576,14 @@ def handle_gen_pair_rule(params: dict) -> dict:
         else:  # pair：コードと各パーツを related で結ぶ
             for pi in part_idx[1:]:
                 edges.append({"type": "relation", "from": part_idx[0], "to": pi})
-    return {"items": items, "edges": edges}
+    out = {"items": items, "edges": edges}
+    if confirm:
+        # 1案はこのジョブで materialize 済み。残り count-1 案を承認待ちに（承認で answerJob が継続）。
+        rest = dict(params)
+        rest.update({"count": count - 1, "confirm": False, "seed": (seed + 1) if isinstance(seed, int) else None})
+        out["_propose"] = {"ask": f"この方向でいい？（承認で残り{count - 1}案を作ります）",
+                           "intent": "gen_pair_rule", "params": rest}
+    return out
 
 
 def handle_gen_lyric(params: dict) -> dict:
@@ -936,7 +946,9 @@ def handle_plan(params: dict) -> dict:
         "■ 音符を作る生成は**ルールベースを優先**（音楽的な当てはまり・調・コードが保証される）:\n"
         "- gen_pair_rule: ルールのみで**コード進行＋それに合うパーツ(メロ/ベース/ドラム)を一式**生成。"
         'params: count(案の数)/parts(["melody"],["melody","bass","drums"]等)/structure("section"|"pair")/frame{meter,key,bars,mood}。'
-        "『コードに合うメロ』『一式/セクションのラフ』『N案』はこれ1つ。\n"
+        "『コードに合うメロ』『一式/セクションのラフ』『N案』はこれ1つ。"
+        "ユーザーが方向を決めかねている/たくさん作る前に確認したそうなら params.confirm=true "
+        "（まず1案だけ作って『この方向でいい?』と聞き、承認で残りを作る）。\n"
         "- gen_chords_rule: ルールのみでコード進行（機能和声）。frame{meter,key,bars,mood}\n"
         "- gen_lyric: 歌詞を作る（params.count／歌詞に合わせるなら condition）\n"
         "- fetch: 参考曲などからコード進行/メロを取ってくる（params.target）\n"
