@@ -111,6 +111,54 @@ def test_gen_chord_prompt_includes_frame(monkeypatch):
     assert "拍子=6/8" in captured["p"]
 
 
+def test_gen_variations_builds_items_and_edges(monkeypatch):
+    # #85 S2a 1回でN個・各々コード+メロ→ section に compose
+    import json as _json
+
+    import cm_worker.jobs as jobs
+
+    payload = _json.dumps(
+        {
+            "variations": [
+                {
+                    "label": "案A",
+                    "chords": [{"root": "C", "quality": "", "start": 0, "dur": 4}],
+                    "notes": [{"pitch": 60, "start": 0, "dur": 1}],
+                },
+                {
+                    "label": "案B",
+                    "chords": [{"root": "A", "quality": "m", "start": 0, "dur": 4}],
+                    "notes": [{"pitch": 64, "start": 0, "dur": 1}],
+                },
+            ]
+        }
+    )
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180: payload)
+    res = jobs.handle_gen_variations(
+        {"count": 2, "kinds": ["chord_progression", "melody"], "structure": "section"}
+    )
+    kinds = [it["kind"] for it in res["items"]]
+    assert kinds.count("section") == 2
+    assert kinds.count("chord_progression") == 2 and kinds.count("melody") == 2
+    comp = [e for e in res["edges"] if e["type"] == "compose"]
+    assert len(comp) == 4  # 2 section × 2 part
+
+
+def test_gen_variations_flat_single_kind(monkeypatch):
+    # 単一kind・structure既定=flat ＝ edge なし
+    import json as _json
+
+    import cm_worker.jobs as jobs
+
+    payload = _json.dumps(
+        {"variations": [{"label": f"案{i}", "chords": [{"root": "C", "quality": "", "start": 0, "dur": 4}]} for i in range(3)]}
+    )
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180: payload)
+    res = jobs.handle_gen_variations({"count": 3, "kinds": ["chord_progression"]})
+    assert len([it for it in res["items"] if it["kind"] == "chord_progression"]) == 3
+    assert res["edges"] == []
+
+
 def test_collect_parses_summary_and_references(monkeypatch):
     # #82 collect は research と同じ {summary, references[]} を返す（reapが reference化）
     import cm_worker.jobs as jobs

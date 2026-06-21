@@ -186,6 +186,7 @@ export function buildMcpServer(core: Core): McpServer {
             "gen_melody",
             "gen_chord",
             "gen_rhythm",
+            "gen_variations",
             "brainstorm",
             "suggest",
             "mora_count",
@@ -196,7 +197,7 @@ export function buildMcpServer(core: Core): McpServer {
             "echo",
           ])
           .describe(
-            "意図: gen_melody/gen_chord/gen_rhythm=生成, brainstorm=壁打ち, suggest=改善案, mora_count=モーラ数, research=参考調査, collect=断片/アイデア収集, plan=おまかせ(小タスクへ分解), consult=相談(会話/案/生成/多段を自動判別), echo=疎通確認",
+            "意図: gen_melody/gen_chord/gen_rhythm=単体生成, gen_variations=枠付きでN種類を一括(params: count/kinds/structure/frame), brainstorm=壁打ち, suggest=改善案, mora_count=モーラ数, research=参考調査, collect=断片/アイデア収集, plan=おまかせ(小タスクへ分解), consult=相談(会話/案/生成/多段を自動判別), echo=疎通確認",
           ),
         target_neta_id: z.string().optional(),
         instruction: z.string().optional(),

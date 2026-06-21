@@ -38,23 +38,24 @@ function hasMusic(content: unknown): boolean {
  * 断片に付ける key/meter/tempo/bars/mood は #14 の「ヒント」（配置時は section/song が権威）。
  * 型に合うものだけ拾い、未指定は付けない（既存の null 既定を壊さない）。
  */
-function frameOf(
-  paramsJson: string | null,
-): Partial<Pick<NetaInput, "key" | "meter" | "tempo" | "bars" | "mood">> {
-  let frame: Record<string, unknown> | undefined;
+type FrameVals = Partial<Pick<NetaInput, "key" | "meter" | "tempo" | "bars" | "mood">>;
+function frameVals(frame: unknown): FrameVals {
+  if (!frame || typeof frame !== "object") return {};
+  const f = frame as Record<string, unknown>;
+  const out: FrameVals = {};
+  if (typeof f.key === "number" && f.key >= 0 && f.key <= 11) out.key = f.key;
+  if (typeof f.meter === "string" && f.meter) out.meter = f.meter;
+  if (typeof f.tempo === "number" && f.tempo > 0) out.tempo = f.tempo;
+  if (typeof f.bars === "number" && f.bars > 0) out.bars = Math.round(f.bars);
+  if (typeof f.mood === "string" && f.mood) out.mood = f.mood;
+  return out;
+}
+function frameOf(paramsJson: string | null): FrameVals {
   try {
-    frame = (JSON.parse(paramsJson ?? "{}") as { frame?: Record<string, unknown> }).frame;
+    return frameVals((JSON.parse(paramsJson ?? "{}") as { frame?: unknown }).frame);
   } catch {
     return {};
   }
-  if (!frame || typeof frame !== "object") return {};
-  const out: Partial<Pick<NetaInput, "key" | "meter" | "tempo" | "bars" | "mood">> = {};
-  if (typeof frame.key === "number" && frame.key >= 0 && frame.key <= 11) out.key = frame.key;
-  if (typeof frame.meter === "string" && frame.meter) out.meter = frame.meter;
-  if (typeof frame.tempo === "number" && frame.tempo > 0) out.tempo = frame.tempo;
-  if (typeof frame.bars === "number" && frame.bars > 0) out.bars = Math.round(frame.bars);
-  if (typeof frame.mood === "string" && frame.mood) out.mood = frame.mood;
-  return out;
 }
 
 export class Core {
@@ -225,6 +226,66 @@ export class Core {
         n += 1;
       }
       // 何も作れなくても再reapしないよう空マーカーを記録（二重処理防止）。
+      if (!made) {
+        this.db
+          .prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`)
+          .run(r.id);
+      }
+    }
+
+    // #85 S2a 構造化生成（gen_variations）：done の {items, edges} を一括 materialize。
+    // items を配列順にネタ化し idx→neta_id を作る。container(section/song)は hasMusic 対象外で
+    // null化しない。edges は両端が非null の時だけ compose_edge/relation_edge を張る（指摘2）。
+    const containerKind = new Set(["section", "song"]);
+    const structRows = this.db
+      .prepare(
+        `SELECT j.id, j.params, j.result_summary AS result FROM job j
+         WHERE j.status='done' AND j.intent='gen_variations'
+           AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
+      )
+      .all() as { id: string; params: string | null; result: string | null }[];
+    for (const r of structRows) {
+      type Item = { kind?: string; content?: unknown; label?: string; frame?: unknown };
+      type Edge = { type?: string; from?: number; to?: number; position?: number };
+      let items: Item[] = [];
+      let edges: Edge[] = [];
+      try {
+        const p = JSON.parse(r.result ?? "{}") as { items?: Item[]; edges?: Edge[] };
+        items = Array.isArray(p.items) ? p.items : [];
+        edges = Array.isArray(p.edges) ? p.edges : [];
+      } catch {
+        items = [];
+        edges = [];
+      }
+      const jobFrame = frameOf(r.params);
+      const idMap: (string | null)[] = [];
+      let made = false;
+      for (const it of items) {
+        const kind = it?.kind;
+        const isContainer = kind != null && containerKind.has(kind);
+        if (!kind || (!isContainer && !hasMusic(it.content))) {
+          idMap.push(null); // index を保持して詰めない（edge の参照を壊さない）
+          continue;
+        }
+        const neta = this.createNeta({
+          kind,
+          title: it.label ?? "案",
+          content: it.content ?? null,
+          from_job: r.id,
+          ...jobFrame,
+          ...frameVals(it.frame), // item 個別 frame が上書き
+        });
+        idMap.push(neta.id);
+        made = true;
+        n += 1;
+      }
+      for (const e of edges) {
+        const from = typeof e?.from === "number" ? idMap[e.from] : null;
+        const to = typeof e?.to === "number" ? idMap[e.to] : null;
+        if (!from || !to) continue;
+        if (e.type === "compose") this.placeChild(from, to, e.position ?? 0, e.position ?? 0);
+        else this.link(from, to, "related");
+      }
       if (!made) {
         this.db
           .prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`)

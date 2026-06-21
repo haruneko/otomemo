@@ -330,6 +330,95 @@ def _validate_rhythm(data: dict) -> dict:
     return {"steps": int(r.get("steps", 16)), "lanes": lanes}
 
 
+def _variation_content(kind: str, v: dict):
+    """1バリエーション dict から kind の content を組む（既存バリデータ再利用）。空なら None。"""
+    try:
+        if kind == "chord_progression":
+            ch = _validate_chords(v)
+            return {"chords": ch} if ch else None
+        if kind == "melody":
+            no = _validate_notes(v)
+            return {"notes": no} if no else None
+        if kind == "rhythm":
+            r = _validate_rhythm(v)
+            return {"rhythm": r} if r.get("lanes") else None
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def handle_gen_variations(params: dict) -> dict:
+    """#85 S2a 構造を返す生成。1回の呼び出しで count 個のバリエーションを作り、各々が kinds の
+    パーツ(コード/メロ/リズム)を持つ。structure(flat/pair/section)で items+edges へ組む。
+    コード+メロは**同一呼び出しで噛み合わせる**（条件付けの基本形）。
+    返り {items:[{kind,content,label}], edges:[{type,from,to,position?}]}。"""
+    try:
+        count = max(1, min(8, int(params.get("count") or 1)))
+    except Exception:  # noqa: BLE001
+        count = 1
+    kinds = [
+        k for k in (params.get("kinds") or ["chord_progression"])
+        if k in ("chord_progression", "melody", "rhythm")
+    ] or ["chord_progression"]
+    structure = params.get("structure") or ("section" if len(kinds) > 1 else "flat")
+    context = params.get("context", "")
+    instruction = params.get("instruction") or ""
+
+    field_desc = []
+    if "chord_progression" in kinds:
+        field_desc.append(
+            '"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"dim"or"sus4","start":拍,"dur":拍}]'
+        )
+    if "melody" in kinds:
+        field_desc.append('"notes":[{"pitch":整数(C基準60=C4),"start":拍,"dur":拍}]')
+    if "rhythm" in kinds:
+        field_desc.append('"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}')
+    fitline = (
+        "各バリエーション内のコードとメロは互いに噛み合わせること。"
+        if {"chord_progression", "melody"} <= set(kinds)
+        else ""
+    )
+    prompt = (
+        f"作曲家として、対象に合う**{count}種類**のバリエーションを作る。各バリエーションは下記パーツを持つ。\n"
+        f"{fitline}ハ長調(C)基準・拍ベース。前置き/説明/コードフェンス禁止、JSONのみ。\n"
+        '出力は JSON のみ：{"variations":[{"label":"短い見出し",' + ",".join(field_desc) + "}]}\n"
+        f"{_frame_block(params)}"
+        f"{_style_block(kinds[0], context)}"
+        f"\n# 対象\n{context}\n\n# 依頼\n{instruction}"
+    )
+    text = claude_prompt(prompt, timeout=180)
+    try:
+        variations = _extract_json(text).get("variations") or []
+    except Exception:  # noqa: BLE001
+        variations = []
+
+    items: list[dict] = []
+    edges: list[dict] = []
+    for v in variations[:count]:
+        if not isinstance(v, dict):
+            continue
+        label = str(v.get("label") or "案")[:24]
+        part_idx = []
+        for k in kinds:
+            content = _variation_content(k, v)
+            if content is None:
+                continue
+            items.append({"kind": k, "content": content, "label": label})
+            part_idx.append(len(items) - 1)
+        if not part_idx:
+            continue
+        if structure == "section":
+            sec_i = len(items)
+            items.append({"kind": "section", "label": label})  # container（content無し）
+            for ord_, pi in enumerate(part_idx):
+                edges.append({"type": "compose", "from": sec_i, "to": pi, "position": ord_})
+        elif structure == "pair":
+            for a in range(len(part_idx)):
+                for b in range(a + 1, len(part_idx)):
+                    edges.append({"type": "relation", "from": part_idx[a], "to": part_idx[b]})
+    return {"items": items, "edges": edges}
+
+
 def handle_research(params: dict) -> dict:
     """参考曲エージェント / 情報収集（docs/design.md #9・line 226）。
     テーマ→参考曲を構造化（title/artist/why/points）＋全体要約。必要なら web を使う。
@@ -513,7 +602,7 @@ def handle_consult(params: dict) -> dict:
         '    chord_progression: {"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"dim"or"sus4","start":拍float,"dur":拍float}]}（ハ長調基準）\n'
         '    rhythm: {"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}（GMドラム）\n'
         "- 一式そろえる等の多段依頼 → "
-        '{"type":"plan","subtasks":[{"intent":"gen_melody|gen_chord|gen_rhythm|research|collect","params":{"context":"...","instruction":"..."}}]}（2〜5個）\n'
+        '{"type":"plan","subtasks":[{"intent":"gen_melody|gen_chord|gen_rhythm|gen_variations|research|collect","params":{"context":"...","instruction":"..."}}]}（2〜5個。N種類/ペアは gen_variations 1つで）\n'
         "判断基準：作って/生成して＝content、案・アイデア請求＝options、まとめて一式＝plan、それ以外＝chat。\n\n"
         f"# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
@@ -566,9 +655,12 @@ def handle_plan(params: dict) -> dict:
         "使える intent と用途:\n"
         "- research: テーマの参考曲を調べて学びをまとめる（作る前の下調べ）\n"
         "- collect: 試せる断片/アイデア（コード進行例・リズム・歌詞フレーズ等）を集める\n"
-        "- gen_melody / gen_chord / gen_rhythm: メロ/コード/リズムを生成する\n"
+        "- gen_melody / gen_chord / gen_rhythm: メロ/コード/リズムを1つ生成する\n"
+        "- gen_variations: 枠付きで**N種類のバリエーションを一括**生成（『6/8でコード進行を4種、各々に合うメロも』等）。"
+        'params に count(個数)/kinds(["chord_progression","melody"]等)/structure("section"|"pair"|"flat")/frame{meter,key,tempo,bars,mood}\n'
         "- suggest: 既存内容への改善案を出す\n"
-        "必要なら『調べてから作る』のように順に並べてよい（例: research → gen_melody）。\n"
+        "『N種類』『それぞれに合う』『ペア/セット』なら gen_variations を1つ使うのが最適（個別 gen_* を並べない）。\n"
+        "必要なら『調べてから作る』のように順に並べてよい（例: research → gen_variations）。\n"
         '出力は JSON のみ：{"subtasks":[{"intent":"...","params":{"context":"...","instruction":"..."}}]}\n'
         "2〜5個・各 params.context に対象内容・instruction に具体指示。JSONのみ。\n\n"
         f"# 依頼\n{request}"
@@ -590,6 +682,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_melody": handle_gen_melody,
     "gen_chord": handle_gen_chord,
     "gen_rhythm": handle_gen_rhythm,
+    "gen_variations": handle_gen_variations,
     "research": handle_research,
     "collect": handle_collect,
     "import_midi": handle_import_midi,

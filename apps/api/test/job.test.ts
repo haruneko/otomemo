@@ -130,6 +130,55 @@ describe("job queue (producer side)", () => {
     expect(c.listNeta({ kind: "reference" }).length).toBe(1);
   });
 
+  it("reaps gen_variations into netas with compose edges + frame on container (#85 S2a)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jv', 'gen_variations', ?, 'done', ?, '', '')`,
+    ).run(
+      JSON.stringify({ frame: { meter: "6/8", tempo: 120 } }),
+      JSON.stringify({
+        items: [
+          { kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] }, label: "案A" },
+          { kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, label: "案A" },
+          { kind: "section", label: "案A" },
+        ],
+        edges: [
+          { type: "compose", from: 2, to: 0, position: 0 },
+          { type: "compose", from: 2, to: 1, position: 1 },
+        ],
+      }),
+    );
+    expect(c.reapResults()).toBe(3);
+    const secs = c.listNeta({ kind: "section" });
+    expect(secs.length).toBe(1);
+    expect(secs[0].meter).toBe("6/8"); // container にも frame
+    expect(c.getComposition(secs[0].id).children.length).toBe(2); // chord + melody が子
+    expect(c.reapResults()).toBe(0); // 冪等
+  });
+
+  it("gen_variations drops edges touching empty items but keeps the rest (#85 S2a)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jv2', 'gen_variations', '{}', 'done', ?, '', '')`,
+    ).run(
+      JSON.stringify({
+        items: [
+          { kind: "chord_progression", content: { chords: [] }, label: "空" }, // 空→null(idx0)
+          { kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, label: "有" }, // idx1
+        ],
+        edges: [{ type: "relation", from: 0, to: 1 }], // from=null → 捨てる
+      }),
+    );
+    expect(c.reapResults()).toBe(1); // melody だけ
+    const mel = c.listNeta({ kind: "melody" });
+    expect(mel.length).toBe(1);
+    expect(c.getRelations(mel[0].id).length).toBe(0); // edge は張られない
+  });
+
   it("reaps gen with frame from params onto the neta as hints (#85 S1)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);
