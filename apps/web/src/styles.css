@@ -322,7 +322,7 @@ article[aria-label="neta-card"].dragging {
   padding: 2px 9px;
 }
 .bass-lens button.on {
-  background: var(--k-bass);
+  background: var(--k-melody); /* 他エディタと同じ active 色 */
   color: #fff;
 }
 .bass-grid {
@@ -340,8 +340,8 @@ article[aria-label="neta-card"].dragging {
   flex: 0 0 38px;
   text-align: center;
   font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--k-bass);
+  font-weight: 600;
+  color: var(--muted); /* 他エディタと同じ控えめなラベル色 */
 }
 .step-cell.deg {
   flex: 0 0 28px;
@@ -354,10 +354,10 @@ article[aria-label="neta-card"].dragging {
   justify-content: center;
 }
 .step-cell.deg.on {
-  background: var(--k-bass);
+  background: var(--k-melody); /* 他エディタ(StepPad/リズム)と同じ active 色 */
 }
 .step-cell.deg.sustain {
-  background: color-mix(in srgb, var(--k-bass) 38%, transparent); /* 音長の伸び（薄色） */
+  background: color-mix(in srgb, var(--k-melody) 34%, transparent); /* 音長の伸び（薄色） */
 }
 .lane-cell.over {
   background: var(--accent);

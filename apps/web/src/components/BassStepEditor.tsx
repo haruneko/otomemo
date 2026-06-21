@@ -7,12 +7,13 @@ import type { BassDegree, BassStep } from "../music";
 // 度数はコード/調に当てて再生時に解決＝ここは「何度を・いつ・どれだけ」だけ編集（オクターブは自動）。
 const STEPS = 16; // 1小節（1step=16分）
 const BEAT_PX = 88; // 1拍=4step。StepPad と同じプレイヘッド係数。
+// 上ほど高い度数（ピアノロールと同じ向き）：上から 8/7/5/3/R、approach は最下段。
 const LANES: { d: BassDegree; label: string }[] = [
-  { d: "R", label: "R" },
-  { d: "3", label: "3" },
-  { d: "5", label: "5" },
-  { d: "7", label: "7" },
   { d: "8", label: "8" },
+  { d: "7", label: "7" },
+  { d: "5", label: "5" },
+  { d: "3", label: "3" },
+  { d: "R", label: "R" },
   { d: "approach", label: "→" }, // approach=次の解決ルートへ半音で寄せる（歩く）
 ];
 // 音長（step数）。1=16分 / 2=8分 / 4=4分。

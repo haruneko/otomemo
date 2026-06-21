@@ -49,7 +49,9 @@ export function NetaDialog({
   const [key, setKey] = useState<number>(neta.key ?? 0);
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
-  const [program, setProgram] = useState<number>(programOf(neta.content) ?? 0); // #47 GM音色
+  const [program, setProgram] = useState<number>(
+    programOf(neta.content) ?? (neta.kind === "bass" ? 33 : 0), // #47 GM音色（bassは既定フィンガーベース）
+  );
   const [melodyView, setMelodyView] = useState<"roll" | "pad">("roll"); // #35 ロール/パッド
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
   const [bassMode, setBassMode] = useState<"absolute" | "relative">(
@@ -249,7 +251,7 @@ export function NetaDialog({
             </select>
           </label>
         )}
-        {(isMelody || isChord) && (
+        {(isMelody || isBass || isChord) && (
           <label className="meta">
             音色
             <select

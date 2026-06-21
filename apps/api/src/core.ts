@@ -353,6 +353,10 @@ export class Core {
   }
 
   deleteNeta(id: string): boolean {
+    // #97 reap蘇生防止：job_result.neta_id は ON DELETE CASCADE。そのまま消すと job_result 行が
+    // 道連れで消え、reap の冪等チェック(NOT EXISTS job_result)が崩れて生成ネタが復活する。
+    // 参照を先に NULL にして行を残す＝reap は「回収済み」と見続ける（NULL先消しで cascade も不発）。
+    this.db.prepare(`UPDATE job_result SET neta_id = NULL WHERE neta_id = ?`).run(id);
     return this.db.prepare(`DELETE FROM neta WHERE id = ?`).run(id).changes > 0;
   }
 

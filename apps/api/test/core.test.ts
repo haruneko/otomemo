@@ -197,3 +197,19 @@ describe("chat sessions: 複数会話の一覧", () => {
     expect(abc.count).toBe(2);
   });
 });
+
+describe("deleteNeta は reap を蘇生させない (#97)", () => {
+  it("削除しても job_result 行は残る(neta_id NULL)＝reap が再生成しない", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    const n = c.createNeta({ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } });
+    // reap が作った想定の done ジョブ＋job_result
+    db.prepare(`INSERT INTO job (id,intent,status,created,updated) VALUES ('j97','gen_pair_rule','done','','')`).run();
+    db.prepare(`INSERT INTO job_result (job_id, neta_id, ord) VALUES ('j97', ?, 0)`).run(n.id);
+    expect(c.deleteNeta(n.id)).toBe(true);
+    // ネタは消えるが job_result 行は残る＝reap の NOT EXISTS が依然 false（蘇生しない）
+    const rows = db.prepare(`SELECT neta_id FROM job_result WHERE job_id='j97'`).all() as { neta_id: string | null }[];
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.neta_id).toBeNull();
+  });
+});
