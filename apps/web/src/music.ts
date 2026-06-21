@@ -399,6 +399,7 @@ function resetSfCaches(): void {
   sfParsed = null;
   sfParsedUrl = null;
   sfDrumCache.clear();
+  prewarmDone = false; // SF2が変わったら先読みもやり直し
 }
 
 const presetBank = (p: any): number => p?.header?.bank ?? p?.bank ?? 0;
@@ -624,6 +625,28 @@ async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, Dr
     dbg("drum", r.p, "->", r.name, "@note", r.note);
   }
   return map;
+}
+
+// #84 先読み：再生クリックより前（最初のユーザー操作時）に旋律＋標準ドラムを裏でロードして
+// キャッシュを温める。初回再生で 885ms 待たされる問題を解消（warm は ~1ms）。
+// AudioContext は呼び出し元のジェスチャ内で Tone.start 済みである必要がある。冪等。
+let prewarmDone = false;
+const COMMON_DRUMS = [36, 38, 42, 46, 41, 45, 48, 49, 51, 39, 37]; // kick/snare/hh/tom/crash/ride/clap/rim
+export async function prewarmSoundFont(): Promise<void> {
+  if (prewarmDone || !activeSfUrl) return;
+  prewarmDone = true;
+  try {
+    const Tone = await import("tone");
+    await Tone.start();
+    await ensureSoundFont(Tone, 0); // 旋律(ピアノ)サンプラ
+    await prepareDrumKits(
+      COMMON_DRUMS.map((p) => ({ pitch: p, start: 0, dur: 0.25, drum: true })),
+      Tone,
+    );
+    dbg("prewarm done");
+  } catch {
+    prewarmDone = false; // 失敗時は次の機会に再試行
+  }
 }
 
 // 設定画面からの読込テスト（成功すればキャッシュも温まる）。ユーザー操作内で呼ぶこと（Tone.start）。

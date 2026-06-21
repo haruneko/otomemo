@@ -14,7 +14,7 @@ import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
-import { midiToNotes } from "./music";
+import { midiToNotes, prewarmSoundFont } from "./music";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
@@ -112,6 +112,11 @@ export function App() {
     // #55a/#55c 選択中SoundFontを再生に反映（設定を開かなくても効く）。
     // 消えた/古いidは最新へ自己修復（永久フォールバック防止）。
     void initSoundFont();
+    // #84 最初のユーザー操作で旋律＋標準ドラムを裏で先読み＝初回再生の885ms待ちを解消。
+    // 冪等（成功後はno-op）。suspended ctx でも decode/キャッシュは進む。
+    const onFirst = () => void prewarmSoundFont();
+    window.addEventListener("pointerdown", onFirst);
+    return () => window.removeEventListener("pointerdown", onFirst);
   }, []);
 
   const reload = useCallback(async () => {
