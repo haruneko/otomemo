@@ -16,8 +16,9 @@ import shutil
 import subprocess
 from typing import Callable
 
-from .music import (  # #86 記号エンジン（判定＋ルール生成＋補正）
+from .music import (  # #86 記号エンジン（判定＋ルール生成＋補正＋類似度）
     analyze_fit,
+    find_similar,
     fit_to_chords,
     gen_bass,
     gen_chords,
@@ -62,7 +63,10 @@ def handle_echo(params: dict) -> dict:
 CLAUDE_BIN = os.environ.get("CM_CLAUDE_BIN", "claude")
 # #86 S2b cm-music-mcp の URL（env で配線）。未設定なら従来通り MCP 無し＝後退ゼロ。
 CM_MUSIC_MCP_URL = os.environ.get("CM_MUSIC_MCP_URL")
-_MUSIC_TOOLS = ["analyze_fit", "detect_key", "analyze_progression", "gen_chords", "gen_melody", "fit_to_chords"]
+_MUSIC_TOOLS = [
+    "analyze_fit", "detect_key", "analyze_progression",
+    "gen_chords", "gen_melody", "fit_to_chords", "melody_similarity", "find_similar",
+]
 
 
 def _mcp_args() -> list[str]:
@@ -483,6 +487,39 @@ def handle_gen_chords_rule(params: dict) -> dict:
     """#86 ルールベースのコード進行生成（機能和声・Claude非依存・決定的）。frame で長短/拍長/小節。
     返りは #85 items 形。Claude案(gen_chord)と判定器(analyze_progression)で比較するための"ルール案"。"""
     return gen_chords(params.get("frame"), seed=params.get("seed"))
+
+
+def handle_find_similar(params: dict) -> dict:
+    """#92 これに近い過去メロを探す（記号類似・移調不変）。target=params.melody or fit_context.notes。
+    候補は params.candidates、無ければ DB の melody ネタ（最大200・自分は除く）。返り {similar:[{id,label,similarity}]}。"""
+    fc = params.get("fit_context") if isinstance(params.get("fit_context"), dict) else {}
+    target = params.get("melody") or fc.get("notes") or []
+    candidates = params.get("candidates")
+    if candidates is None:
+        candidates = []
+        db = os.environ.get("CM_DB")
+        self_id = params.get("target_neta_id")
+        if db:
+            try:
+                from .db import connect
+
+                conn = connect(db)
+                rows = conn.execute(
+                    "SELECT id, title, content FROM neta WHERE kind='melody' LIMIT 200"
+                ).fetchall()
+                for r in rows:
+                    if r["id"] == self_id:
+                        continue
+                    try:
+                        c = json.loads(r["content"]) if r["content"] else {}
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if c.get("notes"):
+                        candidates.append({"id": r["id"], "label": r["title"], "notes": c["notes"]})
+                conn.close()
+            except Exception:  # noqa: BLE001
+                candidates = []
+    return {"similar": find_similar(target, candidates, top=int(params.get("top") or 5))}
 
 
 def handle_fit_to_chords(params: dict) -> dict:
@@ -934,6 +971,7 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_chords_rule": handle_gen_chords_rule,
     "gen_pair_rule": handle_gen_pair_rule,
     "fit_to_chords": handle_fit_to_chords,
+    "find_similar": handle_find_similar,
     "gen_lyric": handle_gen_lyric,
     "fetch": handle_fetch,
     "transform": handle_transform,

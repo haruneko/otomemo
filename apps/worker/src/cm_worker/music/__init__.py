@@ -11,9 +11,11 @@ from .analyze import analyze_fit, detect_key, analyze_progression
 from .correct import fit_to_chords
 from .generate import gen_chords, gen_melody, gen_bass, gen_drums
 from .normalize import normalize_frame, normalize_chords
+from .similar import melody_similarity, find_similar
 
 __all__ = [
     "analyze_fit", "detect_key", "analyze_progression", "fit_to_chords",
     "gen_chords", "gen_melody", "gen_bass", "gen_drums",
     "normalize_frame", "normalize_chords",
+    "melody_similarity", "find_similar",
 ]

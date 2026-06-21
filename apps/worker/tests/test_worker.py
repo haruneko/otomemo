@@ -220,6 +220,18 @@ def test_gen_chords_rule_handler():
     assert res["items"][0]["content"]["chords"][0]["quality"] == "m"  # マイナー
 
 
+def test_handle_find_similar_with_candidates():
+    # #92 候補を渡せば近い順に返す（DB無しでも動く）
+    import cm_worker.jobs as jobs
+
+    a = [{"pitch": p, "start": i, "dur": 1} for i, p in enumerate([60, 62, 64, 65])]
+    transposed = [{"pitch": n["pitch"] + 5, "start": n["start"], "dur": 1} for n in a]
+    res = jobs.handle_find_similar(
+        {"melody": a, "candidates": [{"id": "x", "notes": [{"pitch": 60, "start": 0, "dur": 1}]}, {"id": "y", "notes": transposed}]}
+    )
+    assert res["similar"][0]["id"] == "y"
+
+
 def test_handle_fit_to_chords():
     # #91 補正ハンドラ：melody/chords を受けて補正済み melody items を返す
     import cm_worker.jobs as jobs

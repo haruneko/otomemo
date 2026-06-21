@@ -152,6 +152,20 @@ def test_gen_bass_fits_chords_low_register():
     assert analyze_fit(notes, chords, key=0)["in_chord_rate"] >= 0.8
 
 
+def test_melody_similarity_transposition_invariant():
+    # #92 移調不変・同型1.0・別物低
+    from cm_worker.music import find_similar, melody_similarity
+
+    a = [{"pitch": p, "start": i, "dur": 1} for i, p in enumerate([60, 62, 64, 65])]
+    transposed = [{"pitch": n["pitch"] + 5, "start": n["start"], "dur": 1} for n in a]
+    diff = [{"pitch": p, "start": i, "dur": 1} for i, p in enumerate([60, 67, 59, 72])]
+    assert melody_similarity(a, a) == 1.0
+    assert melody_similarity(a, transposed) == 1.0  # 移調不変
+    assert melody_similarity(a, diff) < 0.5
+    ranked = find_similar(a, [{"id": "x", "notes": diff}, {"id": "y", "notes": transposed}], top=2)
+    assert ranked[0]["id"] == "y"  # 近い順
+
+
 def test_fit_to_chords_snaps_other_keeps_passing():
     # #91 補正：other(正当でない外し音)はコードトーンへ、経過は残す、スコア改善
     from cm_worker.music import fit_to_chords

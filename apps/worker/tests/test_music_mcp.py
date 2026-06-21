@@ -8,7 +8,10 @@ def test_mcp_tools_registered():
 
     tools = asyncio.run(music_mcp.mcp.list_tools())
     names = {t.name for t in tools}
-    assert {"analyze_fit", "detect_key", "analyze_progression", "gen_chords", "gen_melody", "fit_to_chords"} <= names
+    assert {
+        "analyze_fit", "detect_key", "analyze_progression",
+        "gen_chords", "gen_melody", "fit_to_chords", "melody_similarity", "find_similar",
+    } <= names
 
 
 def test_mcp_inputschema_strict_key_integer():

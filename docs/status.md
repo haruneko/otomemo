@@ -31,7 +31,7 @@
 | # | 領域 | 内容 | 関連設計 | 段取り | acceptor | 状態 |
 |---|---|---|---|---|---|---|
 | 91 | #86補正 | **fit_to_chords**：other型(正当でない)外し音を最寄りコードトーンへスナップ。経過/刺繍/掛留は残す | design#12 Stage1 | cm-music関数→MCP/handler→reap→test | impl | ✅ (score 0.61→0.84実証) |
-| 92 | #86類似度 | **melody_similarity**(輪郭/区間n-gram→Mongeau-Sankoff)＋find_similar。作風寄せ/重複の土台 | research R2 | cm-music→MCP/HTTP→test | impl | ⬜ |
+| 92 | #86類似度 | **melody_similarity**(音程列・移調不変)＋find_similar(過去メロ探索)。作風寄せ/重複の土台 | research R2 | cm-music→MCP/handler→test | impl | ✅ (移調不変実証) |
 | 93 | #85方向確認 | バッチ前に1案だけ作り「この方向でいい?」→承認(frame/count引継)で残数本生成 | design#85(E) | worker(askQuestion/answerJob)→test | impl | ⬜ |
 | 84 | ドラム | **S4 ハイハット音量(velocity層)** ＋ Standard 1 を1 SmplrPresetに集約 | design#84 | music.ts | impl(実機) | ⬜ |
 | 83 | スキーマ | **song(stage/next_action)・neta_asset(role)** テーブル欠落(設計#14と乖離) | design#14 | db.ts→core→http→test | design+impl | ⬜ |

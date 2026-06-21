@@ -51,6 +51,20 @@ def gen_melody(frame: dict | None = None, chords: list[dict] | None = None, seed
 
 
 @mcp.tool()
+def melody_similarity(a: list[dict], b: list[dict]) -> float:
+    """2つのメロディの類似度 0..1（音程列ベースで移調不変。1=同型）。a,b=[{pitch,start,dur}]。
+    「これに近い？」「作風が近い？」の判断に。"""
+    return music.melody_similarity(a, b)
+
+
+@mcp.tool()
+def find_similar(target: list[dict], candidates: list[dict], top: int = 5) -> dict:
+    """target に近い順に候補メロを返す。candidates=[{id?,label?,notes:[...]}]。
+    返り {similar:[{id?,label?,similarity}]}。「これに似た過去メロ」探索に。"""
+    return {"similar": music.find_similar(target, candidates, top)}
+
+
+@mcp.tool()
 def fit_to_chords(melody: list[dict], chords: list[dict], key: int | None = None) -> dict:
     """メロの『外し音』をコードに合わせて直す（決定的補正）。正当でない非和声音だけを最寄りコード
     トーンへスナップし、経過/刺繍/掛留・コードトーンは残す。返り #85 items 形（補正済み melody＋
