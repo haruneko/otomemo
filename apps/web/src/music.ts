@@ -303,11 +303,27 @@ export interface PlaybackHandle {
 interface PlayOpts {
   loop?: { startBeat: number; endBeat: number };
   onEnd?: () => void;
+  program?: number; // #55c SF2旋律の音色（GM program）。未指定は0（ピアノ）。
 }
 
 // 単一再生：グローバル Transport を奪い合うので、現在の音源を1組だけ保持し再利用/破棄。
 type Kit = { poly: any; membrane: any; noise: any };
 let currentKit: Kit | null = null;
+
+// 再生の診断ログ。localStorage 'cm.debugAudio'='1' か window.__cmAudioDebug で有効（既定OFF）。
+function audioDbgOn(): boolean {
+  try {
+    return (
+      (globalThis as any).__cmAudioDebug === true ||
+      globalThis.localStorage?.getItem("cm.debugAudio") === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+function dbg(...args: unknown[]): void {
+  if (audioDbgOn()) console.log("[CMAUDIO]", ...args);
+}
 
 // 1音の発音ディスパッチ（テスト可能に切り出し）。
 // ドラム: SF2にマッチ楽器があればそれ、無ければ簡易キット(membrane/noise)。
@@ -323,13 +339,17 @@ export function playEvent(
   if (ev.voice === "membrane" || ev.voice === "noise") {
     const ds = drumKits?.get(ev.pitch);
     if (ds) {
+      dbg("note pitch", ev.pitch, "via sf2-drum");
       ds.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
     } else if (ev.voice === "membrane") {
+      dbg("note pitch", ev.pitch, "via kit.membrane");
       kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
     } else {
+      dbg("note pitch", ev.pitch, "via kit.noise");
       kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
     }
   } else if (sf) {
+    dbg("note pitch", ev.pitch, "via sf2-melodic");
     sf.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
   } else {
     kit.poly.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toNote(), ev.durSec, time, ev.vel);
@@ -357,6 +377,7 @@ let sfLoading = false;
 let sfLastError: string | null = null; // #55a 診断用：直近のロード失敗理由
 let sfInstrumentCount = 0;
 let sfInstrumentNames: string[] = []; // #55b ドラム楽器名の探索に使う
+let sfCurrentInstrument: string | null = null; // #55c 旋律samplerに現在ロード済みの楽器名
 // パース済みSF2を url で共有（旋律＋各ドラムsamplerが再パースしないように）。
 let sfParsed: any = null;
 let sfParsedUrl: string | null = null;
@@ -370,9 +391,45 @@ function resetSfCaches(): void {
   sfLastError = null;
   sfInstrumentCount = 0;
   sfInstrumentNames = [];
+  sfCurrentInstrument = null;
   sfParsed = null;
   sfParsedUrl = null;
   sfDrumCache.clear();
+}
+
+const presetBank = (p: any): number => p?.header?.bank ?? p?.bank ?? 0;
+const presetNum = (p: any): number => p?.header?.preset ?? p?.preset ?? 0;
+const presetName = (p: any): string | undefined => p?.header?.name ?? p?.name;
+
+// #55c GM program(0-127) → SF2 旋律楽器名。bank0/preset=program のプリセットが参照する
+// instrument 名を返す（instrumentNames に在るもの）。無ければ null。
+function gmInstrumentName(program: number): string | null {
+  const presets: any[] = sfParsed?.presets ?? [];
+  const p = presets.find((x) => presetBank(x) === 0 && presetNum(x) === program);
+  if (!p) return null;
+  // プリセット名が instrument 名と一致すればそれ（GeneralUser GS等は概ね一致）。
+  const pn = presetName(p);
+  if (pn && sfInstrumentNames.includes(pn)) return pn;
+  // でなければ zone が参照する instrument 名（最初の非グローバル）。
+  for (const z of p.zones ?? []) {
+    const inm = z?.instrument?.header?.name;
+    if (inm && sfInstrumentNames.includes(inm)) return inm;
+  }
+  return null;
+}
+
+// 旋律 sampler に program 相当の楽器をロード（切替時のみ）。program楽器が見つからなければ
+// 非ドラムの先頭にフォールバック。
+async function setMelodicInstrument(sampler: any, program: number): Promise<void> {
+  const want =
+    gmInstrumentName(program) ??
+    sfInstrumentNames.find((n) => !/drum|perc|kit|standard|room|power|jazz|brush|orch/i.test(n)) ??
+    sfInstrumentNames[0];
+  if (want && want !== sfCurrentInstrument) {
+    await sampler.loadInstrument(want);
+    sfCurrentInstrument = want;
+    dbg("melodic instrument <-", want, "(program", program, ")");
+  }
 }
 
 export function setActiveSoundFont(url: string | null): void {
@@ -404,35 +461,41 @@ async function makeSampler(url: string, Tone: any): Promise<any> {
   });
 }
 
-async function ensureSoundFont(Tone: any): Promise<any | null> {
+async function ensureSoundFont(Tone: any, program = 0): Promise<any | null> {
   const url = activeSfUrl;
   if (!url) return null;
-  if (sfLoadedUrl === url && sfSampler) return sfSampler;
-  if (sfLoading) return null; // ロード中の再生は今回フォールバック（次回から鳴る）
-  sfLoading = true;
-  try {
-    const sampler = await makeSampler(url, Tone);
-    await sampler.ready;
-    const names: string[] = sampler.instrumentNames ?? [];
-    sfInstrumentCount = names.length;
-    sfInstrumentNames = names;
-    // 旋律楽器を優先（ドラム/percussion以外）。無ければ先頭。
-    const melodic = names.find((n) => !/drum|perc|kit/i.test(n)) ?? names[0];
-    if (melodic) await sampler.loadInstrument(melodic);
-    sfSampler = sampler;
-    sfLoadedUrl = url;
-    sfLastError = null;
-    return sampler;
-  } catch (e) {
-    sfLastError = e instanceof Error ? e.message || String(e) : String(e);
-    // 失敗理由はブラウザコンソールにも出す（診断用）。再生は簡易シンセにフォールバック。
-    console.error("[SoundFont] load failed:", e);
-    sfSampler = null;
-    sfLoadedUrl = null;
-    return null;
-  } finally {
-    sfLoading = false;
+  // 未ロードならロード（ロード中は今回フォールバック＝次回から鳴る）。
+  if (!(sfLoadedUrl === url && sfSampler)) {
+    if (sfLoading) return null;
+    sfLoading = true;
+    try {
+      const sampler = await makeSampler(url, Tone);
+      await sampler.ready;
+      sfInstrumentNames = sampler.instrumentNames ?? [];
+      sfInstrumentCount = sfInstrumentNames.length;
+      sfCurrentInstrument = null;
+      sfSampler = sampler;
+      sfLoadedUrl = url;
+      sfLastError = null;
+    } catch (e) {
+      sfLastError = e instanceof Error ? e.message || String(e) : String(e);
+      console.error("[SoundFont] load failed:", e);
+      sfSampler = null;
+      sfLoadedUrl = null;
+      return null;
+    } finally {
+      sfLoading = false;
+    }
   }
+  // ネタの音色(program)に合わせて旋律楽器を切替（毎回・差分のみ実ロード）。
+  if (sfSampler) {
+    try {
+      await setMelodicInstrument(sfSampler, program);
+    } catch (e) {
+      console.error("[SoundFont] instrument switch failed:", e);
+    }
+  }
+  return sfSampler;
 }
 
 // #55b GM打楽器番号 → SF2楽器名（GeneralUser GS等GM SF2向けベストエフォート）。
@@ -517,8 +580,20 @@ export async function playNotes(
 
   // SF2 が選択・ロード済みなら旋律はそれで鳴らす。ドラムは SF2 にマッチ楽器があればそれ、
   // 無ければ簡易キット。SF2 無しは全部キット（後退ゼロ）。
-  const sf = await ensureSoundFont(Tone);
+  const sf = await ensureSoundFont(Tone, opts.program ?? 0);
   const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number, any>();
+  dbg(
+    "playNotes engine=",
+    sf ? "sf2" : "fallback-synth",
+    "activeSfUrl=",
+    activeSfUrl ? "set" : "null",
+    "sfLastError=",
+    sfLastError,
+    "notes=",
+    notes.length,
+    "drumKits=",
+    [...drumKits.keys()].join(","),
+  );
 
   const kit: Kit = {
     poly: new Tone.PolySynth(Tone.Synth).toDestination(),

@@ -13,9 +13,8 @@ import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
 import { ThemeSettings } from "./settings/ThemeSettings";
-import { SoundFontSettings } from "./settings/SoundFontSettings";
-import { midiToNotes, setActiveSoundFont } from "./music";
-import { loadSoundFontId } from "./settings/SoundFontSettings";
+import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
+import { midiToNotes } from "./music";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
@@ -110,9 +109,9 @@ export function App() {
 
   useEffect(() => {
     applyColors(loadColors());
-    // #55a 選択中SoundFontを再生に反映（設定を開かなくても効く）
-    const sfId = loadSoundFontId();
-    if (sfId) setActiveSoundFont(api.assetUrl(sfId));
+    // #55a/#55c 選択中SoundFontを再生に反映（設定を開かなくても効く）。
+    // 消えた/古いidは最新へ自己修復（永久フォールバック防止）。
+    void initSoundFont();
   }, []);
 
   const reload = useCallback(async () => {

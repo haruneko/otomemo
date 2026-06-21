@@ -64,7 +64,12 @@ export function NetaDialog({
   // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。
   // melody ロールは span 尺で赤線が走る。単体エディタは拍子を持たない＝小節は4拍既定。
   const span = Math.max(len, ...playable.map((n) => Math.ceil(n.start + n.dur)));
-  const tp = useTransport(() => playable, tempo, { scaleBeats: span, bpb: 4 });
+  // #55c rhythm はドラム＝program無関係。melody/chord はネタの音色を SF2 旋律に反映。
+  const tp = useTransport(() => playable, tempo, {
+    scaleBeats: span,
+    bpb: 4,
+    program: isRhythm ? undefined : program,
+  });
 
   // Space=再生/停止（design #58/#59）。入力中は無効。音楽ネタのときだけ。
   useEffect(() => {

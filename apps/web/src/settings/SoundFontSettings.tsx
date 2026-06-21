@@ -14,6 +14,30 @@ export function loadSoundFontId(): string | null {
   }
 }
 
+// 選択を保存＋再生に反映（null=解除）。App起動の自己修復・設定の選択で共用。
+export function applySoundFontSelection(id: string | null): void {
+  if (id) {
+    localStorage.setItem(KEY, id);
+    setActiveSoundFont(api.assetUrl(id));
+  } else {
+    localStorage.removeItem(KEY);
+    setActiveSoundFont(null);
+  }
+}
+
+// 起動時：保存中のidがサーバに在れば使い、無ければ最新を採用（消えたSF2の永久フォールバック防止）。
+// オフライン等で一覧が取れなければ保存値をそのまま使う。
+export async function initSoundFont(): Promise<void> {
+  const stored = loadSoundFontId();
+  try {
+    const list = await api.listAssets("soundfont");
+    const valid = list.find((a) => a.id === stored) ?? list[0] ?? null;
+    applySoundFontSelection(valid ? valid.id : null);
+  } catch {
+    if (stored) setActiveSoundFont(api.assetUrl(stored));
+  }
+}
+
 export function SoundFontSettings() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selected, setSelected] = useState<string | null>(loadSoundFontId());
@@ -47,9 +71,8 @@ export function SoundFontSettings() {
   }, []);
 
   function select(id: string) {
-    localStorage.setItem(KEY, id);
     setSelected(id);
-    setActiveSoundFont(api.assetUrl(id)); // #55a 再生に反映
+    applySoundFontSelection(id); // #55a 保存＋再生に反映
   }
 
   async function upload(file: File | null) {

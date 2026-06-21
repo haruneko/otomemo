@@ -10,7 +10,7 @@ export type TransportState = "stopped" | "playing" | "paused";
 export function useTransport(
   getNotes: () => Note[],
   bpm: number,
-  opts: { scaleBeats: number; bpb?: number },
+  opts: { scaleBeats: number; bpb?: number; program?: number },
 ) {
   const { lineRef, timeRef, scrollerRef, beatRef, start: startPh, stop: stopPh } = usePlayhead();
   const handle = useRef<PlaybackHandle | null>(null);
@@ -18,8 +18,8 @@ export function useTransport(
   const [loopOn, setLoopOn] = useState(false);
 
   // 最新値を ref に退避＝コールバックを安定化（stale closure 回避）。
-  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4 });
-  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4 };
+  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0 });
+  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0 };
 
   const begin = useCallback(
     async (loop: boolean) => {
@@ -29,6 +29,7 @@ export function useTransport(
       const total = notes.reduce((m, n) => Math.max(m, n.start + n.dur), 0);
       handle.current = await playNotes(notes, c.bpm, {
         loop: loop ? { startBeat: 0, endBeat: total } : undefined,
+        program: c.program,
         onEnd: () => {
           setState("stopped");
           stopPh();
