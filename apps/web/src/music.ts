@@ -384,7 +384,7 @@ export function notesToMidi(
   return midi.toArray();
 }
 
-// #55 多トラック書出：レーン(メロ/コード/リズム)を別トラックに分けて1ファイルへ。
+// #55 多トラック書出：レーン(メロ/コード/ベース/リズム)を別トラックに分けて1ファイルへ。
 // DAW で開くとトラックが分かれる。drum トラックは ch10。
 export interface MidiTrackSpec {
   notes: Note[];

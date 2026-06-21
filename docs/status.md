@@ -41,6 +41,12 @@
 | -  | チャット | ✅複数会話セッション（Claude/ChatGPT風）：☰一覧/＋新規/切替/冒頭プレビュー。thread使い回し・スキーマ変更なし | #19 | listChatThreads＋Chat UI | impl | ✅ |
 | -  | UX | ✅配置ネタにMiniRoll概形＋ラベル(セクション/曲ペーンでネタ帳と見え方を統一・スマホ可読) | #55 | SectionEditor | impl | ✅ |
 | -  | 到達/認証 | ✅設計確定(design#18/#36: Tailscale tailnet限定・アプリ側PW無し・ネット層が境界)。✅単一オリジン配信＋localhostバインド(CM_HOST既定127.0.0.1)＋docs/deploy.md。残: ユーザがTailscale serve設定(初回のみ) | 設計#18/#36 | main.ts＋deploy.md | impl | 🟡 コード済/Tailscale設定待ち |
+| 96 | ベース | ✅bass kind 2モード(絶対=低ピアノロール／相対=度数レーン×ステップ)。相対は帯E1〜D#2にルート置き度数はルートから上、音長選択、既定フィンガーベース | design#14 | music.ts/BassStepEditor/NetaDialog | impl | ✅ |
+| -  | 振り分けA | ✅consult を【特定(名前/旋法/様式)→Claude知識 vs 汎用→ルール】に分岐(止血)。丸の内→FM7-E7-Am7-Gm7-C7実証 | design「振り分けA」/research | jobs.py handle_consult | — | ✅止血 |
+| -  | 合成音色 | ✅section/song 再生でパート毎の音色を保つ(per-program 旋律サンプラー) | design#14音色 | music.ts compositeNotes/playNotes | impl | ✅ |
+| 97 | bug整合 | ✅生成ネタ削除での reap 蘇生を恒久対策(deleteNeta が job_result.neta_id を NULL 化) | design job_result | core.ts | impl | ✅ |
+| 98 | 進行DB | 名前付き進行DB(丸の内/カノン/小室/王道4536…を度数列で確定realize)＝Aの本命上積み | design「振り分けA」 | cm-music named_progressions | impl | ⬜ |
+| 102 | Chat操作 | Chatが既存ネタを検索/読取/編集/変形/配置/連関/削除(全変更は承認制＋前後プレビュー＋再生)。MCP配線 | 設計予定 | design→acceptor→実装 | design+impl | 🔵 設計中 |
 | 22 | AI探索 | 広くAIツール探索（別立て・要調査） | — | research | — | ⬜ |
 
 ---

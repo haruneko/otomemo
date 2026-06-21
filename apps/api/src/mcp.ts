@@ -21,11 +21,11 @@ export function buildMcpServer(core: Core): McpServer {
     "create_neta",
     {
       title: "ネタを作成（捕獲）",
-      description: "ネタ（歌詞/メロ/コード/リズム/テーマ/曲など）を作成する。",
+      description: "ネタ（歌詞/メロ/コード/ベース/リズム/テーマ/曲など）を作成する。",
       inputSchema: {
         kind: z
           .string()
-          .describe("melody/chord/chord_progression/rhythm/lyric/theme/section/song/knowledge/other"),
+          .describe("melody/chord/chord_progression/bass/rhythm/lyric/theme/section/song/knowledge/other"),
         title: z.string().optional(),
         text: z.string().optional().describe("歌詞・自由文"),
         content: z.unknown().optional().describe("音楽的中身(JSON, Cキー基準)"),

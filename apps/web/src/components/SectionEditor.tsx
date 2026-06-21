@@ -38,7 +38,7 @@ import {
 } from "../music";
 import { MiniRoll } from "./MiniRoll";
 
-// 配置タイムライン（design #19）。section/song を メロ/コード/リズムの3レーン×小節 で組む。
+// 配置タイムライン（design #19）。section/song を メロ/コード/ベース/リズムの4レーン×小節 で組む。
 // レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
 // 調/テンポは section が支配。rhythm(ドラム)は移調しない。
 const LANES = [
@@ -187,7 +187,7 @@ export function SectionEditor({
   function composite(): Note[] {
     return compositeNotes(children, keyPc);
   }
-  // #55 多トラック書出：レーン(メロ/コード/リズム)別に1トラックずつ。空レーンは省く。
+  // #55 多トラック書出：レーン(メロ/コード/ベース/リズム)別に1トラックずつ。空レーンは省く。
   function laneTracks() {
     return LANES.map((lane) => ({
       name: lane.label,
@@ -208,7 +208,7 @@ export function SectionEditor({
         </button>
         <button
           type="button"
-          title="メロ/コード/リズムを別トラックに分けて書き出す"
+          title="メロ/コード/ベース/リズムを別トラックに分けて書き出す"
           onClick={() =>
             downloadMultitrackMidi(laneTracks(), `${neta.title ?? "section"}-tracks.mid`, tempo, neta.meter)
           }
