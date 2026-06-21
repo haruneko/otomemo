@@ -532,12 +532,17 @@ function buildGmDrumMap(): Map<number, string> {
   return map;
 }
 
-// GM打楽器番号 → SF2楽器名。まず権威マップ(Standardキット)、無ければ名前ヒューリスティック
-// （Standardプリセットの無いSF2向けフォールバック）。
+// GM打楽器番号 → SF2楽器名。
+// #55f バスドラ(35/36)・スネア(38/40)は**ヒューリスティック優先**（前バージョンの音色が好評。
+//   権威マップだと Standard Kick 3@38 になり評価が下がったため、Standard Kick 1@root を維持）。
+// それ以外(hihat/tom/crash/ride/perc 等)は **権威マップ(Standardキット)優先**。
 export function drumNameFor(pitch: number, names: string[]): string | null {
-  if (!sfGmDrumMap && sfParsed) sfGmDrumMap = buildGmDrumMap();
-  const fromKit = sfGmDrumMap?.get(pitch);
-  if (fromKit && names.includes(fromKit)) return fromKit;
+  const kickOrSnare = pitch <= 36 || pitch === 38 || pitch === 40;
+  if (!kickOrSnare && sfParsed) {
+    if (!sfGmDrumMap) sfGmDrumMap = buildGmDrumMap();
+    const fromKit = sfGmDrumMap.get(pitch);
+    if (fromKit && names.includes(fromKit)) return fromKit;
+  }
   let res: RegExp[];
   if (pitch <= 36) res = [/standard kick/i, /\bkick\b/i, /bass drum/i];
   else if (pitch === 37) res = [/rim ?shot/i, /side ?stick/i, /snare/i];
