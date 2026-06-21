@@ -5,8 +5,14 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
-  use: { baseURL: "http://localhost:5173" },
-  reporter: [["list"]],
+  // 失敗時の手掛かりを残す（test-plan §2）：HTMLレポート＋trace/screenshot/video。
+  reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
+  use: {
+    baseURL: "http://localhost:5173",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    video: "retain-on-failure",
+  },
   webServer: {
     command: "pnpm dev",
     url: "http://localhost:5173",
