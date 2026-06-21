@@ -33,6 +33,7 @@ CM_DB=$DB pnpm --filter @cm/api start                         # API   :8787
 pnpm --filter @cm/web dev                                     # Web   :5173 (/api→8787)
 CM_DB=$DB uv run --directory apps/worker cm-worker            # ジョブワーカー（常駐）
 CM_DB=$DB uv run --directory apps/worker cm-search            # 意味検索 :8788
+uv run --directory apps/worker cm-music-mcp                   # 音楽MCP :8790 (#86 agentic Chat)
 ```
 スマホ等からは `http://<箱のIP>:5173`。WSL2 mirrored の場合、Windows の Hyper‑V ファイア
 ウォールで 5173/8787 の inbound 許可が必要（`allow-creative-manager.cmd` 同梱）。

@@ -179,6 +179,34 @@ describe("job queue (producer side)", () => {
     expect(c.getRelations(mel[0].id).length).toBe(0); // edge は張られない
   });
 
+  it("reaps agentic consult (type:items) into netas, ignores type:chat (#86 S2b)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    // agentic consult＝ツール推敲済みの items 結果 → reap が materialize（縫合をreapに統一）
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jca', 'consult', '{}', 'done', ?, '', '')`,
+    ).run(
+      JSON.stringify({
+        type: "items",
+        items: [
+          { kind: "chord_progression", content: { chords: [{ root: 0, quality: "m", start: 0, dur: 4 }] }, label: "案" },
+          { kind: "melody", content: { notes: [{ pitch: 72, start: 0, dur: 1 }] }, label: "案" },
+        ],
+        edges: [{ type: "relation", from: 0, to: 1 }],
+      }),
+    );
+    // 普通の chat consult は reap 対象外
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jcc', 'consult', '{}', 'done', ?, '', '')`,
+    ).run(JSON.stringify({ type: "chat", text: "やあ" }));
+    expect(c.reapResults()).toBe(2); // items の2ネタだけ
+    expect(c.listNeta({ kind: "chord_progression" }).length).toBe(1);
+    expect(c.listNeta({ kind: "melody" }).length).toBe(1);
+    expect(c.reapResults()).toBe(0); // 冪等・chat は触らない
+  });
+
   it("reaps gen_pair_rule into chord+melody under a section (#86)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

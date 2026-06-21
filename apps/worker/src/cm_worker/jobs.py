@@ -59,13 +59,27 @@ def handle_echo(params: dict) -> dict:
 
 
 CLAUDE_BIN = os.environ.get("CM_CLAUDE_BIN", "claude")
+# #86 S2b cm-music-mcp の URL（env で配線）。未設定なら従来通り MCP 無し＝後退ゼロ。
+CM_MUSIC_MCP_URL = os.environ.get("CM_MUSIC_MCP_URL")
+_MUSIC_TOOLS = ["analyze_fit", "detect_key", "analyze_progression", "gen_chords", "gen_melody"]
 
 
-def claude_prompt(prompt: str, timeout: int = 120) -> str:
-    """`claude -p`（print/非対話モード）をsubprocessで叩く。Max認証を流用＝APIキー不要。"""
+def _mcp_args() -> list[str]:
+    """#86 S2b：cm-music-mcp を claude -p に接続する引数（CM_MUSIC_MCP_URL がある時だけ）。"""
+    if not CM_MUSIC_MCP_URL:
+        return []
+    cfg = json.dumps({"mcpServers": {"cm-music": {"type": "http", "url": CM_MUSIC_MCP_URL}}})
+    allowed = ",".join(f"mcp__cm-music__{t}" for t in _MUSIC_TOOLS)
+    return ["--mcp-config", cfg, "--allowedTools", allowed, "--permission-mode", "bypassPermissions"]
+
+
+def claude_prompt(prompt: str, timeout: int = 120, tools: bool = False) -> str:
+    """`claude -p`（print/非対話モード）をsubprocessで叩く。Max認証を流用＝APIキー不要。
+    tools=True かつ CM_MUSIC_MCP_URL があれば cm-music ツールを agentic に使える（#86 S2b）。"""
     binary = shutil.which(CLAUDE_BIN) or CLAUDE_BIN
+    args = [binary, "-p", prompt] + (_mcp_args() if tools else [])
     proc = subprocess.run(
-        [binary, "-p", prompt],
+        args,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -757,29 +771,47 @@ def _consult_nonempty(neta_kind: str, content: dict) -> bool:
     return False
 
 
+def hasmusic_or_text(item: dict) -> bool:
+    """#86 S2b agentic item が中身を持つか（音楽content か text）。container はこの判定外。"""
+    c = item.get("content") if isinstance(item.get("content"), dict) else {}
+    if c.get("notes") or c.get("chords") or (c.get("rhythm") or {}).get("lanes"):
+        return True
+    return bool(isinstance(item.get("text"), str) and item.get("text", "").strip())
+
+
 def handle_consult(params: dict) -> dict:
     """相談（#61 統合）。Claudeに「会話/発展案/生成/多段」を判断させ判別ユニオンを返す。
     壁打ち(suggest)＋おまかせ(plan)を畳んだ Chat の単一窓口。空/不正は chat フォールバック。"""
     context = params.get("context", "")
     instruction = params.get("instruction") or "この内容について相談に乗って。"
+    agentic = bool(CM_MUSIC_MCP_URL)  # cm-music ツールが使えるか（#86 S2b）
+    if agentic:
+        # agentic：音符は自分で作らず cm-music ツールを使い、点検→補正して items で返す
+        music_block = (
+            "- 楽曲を作る（メロ/コード/一式/N案/『コードに合うメロ』等）→ **cm-music のMCPツールを必ず使う**"
+            "（自分で音符JSONを書かない）。手順：gen_chords でコード→そのコードで gen_melody→"
+            "analyze_fit で当てはまりを点検→低ければ作り直す→（要れば section にまとめる）。"
+            '最終結果を {"type":"items","items":[{"kind":"chord_progression|melody|rhythm|section",'
+            '"content":ツールが返したcontentそのまま,"label":"短い見出し"}],'
+            '"edges":[{"type":"compose","from":sectionのindex,"to":子のindex,"position":数}]} で返す。\n'
+            "  ツールに渡す frame の key は整数(0-11)、meter は\"6/8\"等の文字列。\n"
+        )
+    else:
+        music_block = (
+            "- 楽曲を作る → "
+            '{"type":"plan","subtasks":[{"intent":"gen_pair_rule|gen_chords_rule|gen_lyric|fetch|transform|research|collect","params":{"frame":{...},"count":N,"parts":[...]}}]}'
+            "（音符生成はルールベース gen_pair_rule 優先）\n"
+        )
     prompt = (
         "あなたは作曲アシスタント。ユーザーの発言に応じ、次のいずれか1つだけを JSON で返す"
         "（前置き・説明・コードフェンス禁止、JSONのみ）。\n"
         '- 会話・助言・壁打ち → {"type":"chat","text":"..."}\n'
         '- 発展案を複数 → {"type":"options","options":[{"title":"見出し","body":"本文"}]}（2〜4個）\n'
-        "- 楽曲要素を作る（メロ/コード/リズムを作って等）→ "
-        '{"type":"content","neta_kind":"melody|chord_progression|rhythm","content": その種類のJSON}\n'
-        '    melody: {"notes":[{"pitch":整数(60=C4),"start":拍float,"dur":拍float}]}（ハ長調基準・単旋律）\n'
-        '    chord_progression: {"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"dim"or"sus4","start":拍float,"dur":拍float}]}（ハ長調基準）\n'
-        '    rhythm: {"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}（GMドラム）\n'
-        "- 一式そろえる等の多段依頼 → "
-        '{"type":"plan","subtasks":[{"intent":"gen_pair_rule|gen_chords_rule|gen_lyric|fetch|transform|research|collect","params":{"frame":{...},"count":N,"parts":[...]}}]}\n'
-        "（音符生成はルールベース優先：『コードに合うメロ/一式/N案』は gen_pair_rule 1つ。"
-        "Claude生成 gen_* は当てはまり保証が無いので基本使わない）\n"
-        "判断基準：作って/生成して＝content、案・アイデア請求＝options、まとめて一式＝plan、それ以外＝chat。\n\n"
+        f"{music_block}"
+        "判断基準：作って/生成して＝楽曲、案・アイデア請求＝options、それ以外＝chat。\n\n"
         f"# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
-    text = claude_prompt(prompt)
+    text = claude_prompt(prompt, timeout=240 if agentic else 120, tools=agentic)
     try:
         data = _extract_json(text)
     except Exception:  # noqa: BLE001
@@ -795,6 +827,21 @@ def handle_consult(params: dict) -> dict:
             if isinstance(o, dict)
         ]
         return {"type": "options", "options": opts} if opts else {"type": "chat", "text": _CONSULT_FALLBACK}
+    if t == "items":
+        # #86 S2b agentic：ツールで推敲した一式。kind＋(music content or text) のある item と、両端 int の edge のみ通す。
+        raw_items = data.get("items") if isinstance(data.get("items"), list) else []
+        items = [
+            it for it in raw_items
+            if isinstance(it, dict) and it.get("kind")
+            and (it.get("kind") in ("section", "song") or hasmusic_or_text(it))
+        ]
+        edges = [
+            {"type": str(e.get("type", "relation")), "from": int(e["from"]), "to": int(e["to"]),
+             **({"position": e["position"]} if isinstance(e.get("position"), (int, float)) else {})}
+            for e in (data.get("edges") or [])
+            if isinstance(e, dict) and isinstance(e.get("from"), int) and isinstance(e.get("to"), int)
+        ]
+        return {"type": "items", "items": items, "edges": edges} if items else {"type": "chat", "text": _CONSULT_FALLBACK}
     if t == "content":
         nk = data.get("neta_kind")
         builder = _CONSULT_CONTENT.get(nk)

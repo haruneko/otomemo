@@ -48,7 +48,7 @@ def test_unknown_intent_marks_failed(tmp_path):
 def test_brainstorm_handler(monkeypatch):
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "claude_prompt", lambda prompt, timeout=120: "- 案A\n- 案B")
+    monkeypatch.setattr(jobs, "claude_prompt", lambda prompt, timeout=120, **kw: "- 案A\n- 案B")
     res = jobs.handle_brainstorm({"context": "夜を駆ける歌詞", "instruction": "明るくして"})
     assert "案A" in res["suggestions"]
 
@@ -56,7 +56,7 @@ def test_brainstorm_handler(monkeypatch):
 def test_run_once_brainstorm(tmp_path, monkeypatch):
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "claude_prompt", lambda prompt, timeout=120: "提案テキスト")
+    monkeypatch.setattr(jobs, "claude_prompt", lambda prompt, timeout=120, **kw: "提案テキスト")
     conn = connect(str(tmp_path / "t.sqlite"))
     _enqueue(conn, "brainstorm", {"context": "夜の歌", "instruction": "壁打ち"})
     assert run_once(conn) == 1
@@ -71,7 +71,7 @@ def test_suggest_parses_json_options(monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=120: '[{"title":"案1","body":"ほんぶん1"},{"title":"案2","body":"b2"}]',
+        lambda p, timeout=120, **kw: '[{"title":"案1","body":"ほんぶん1"},{"title":"案2","body":"b2"}]',
     )
     res = jobs.handle_suggest({"context": "夜", "instruction": "x"})
     assert [o["title"] for o in res["options"]] == ["案1", "案2"]
@@ -81,7 +81,7 @@ def test_suggest_strips_code_fence(monkeypatch):
     import cm_worker.jobs as jobs
 
     monkeypatch.setattr(
-        jobs, "claude_prompt", lambda p, timeout=120: '```json\n[{"title":"a","body":"b"}]\n```'
+        jobs, "claude_prompt", lambda p, timeout=120, **kw: '```json\n[{"title":"a","body":"b"}]\n```'
     )
     assert jobs.handle_suggest({"context": "x"})["options"][0]["title"] == "a"
 
@@ -116,7 +116,7 @@ def test_gen_lyric_items(monkeypatch):
     import cm_worker.jobs as jobs
 
     monkeypatch.setattr(
-        jobs, "claude_prompt", lambda p, timeout=120: '{"lyrics":["夜を駆ける\\n君と","朝が来る"]}'
+        jobs, "claude_prompt", lambda p, timeout=120, **kw: '{"lyrics":["夜を駆ける\\n君と","朝が来る"]}'
     )
     res = jobs.handle_gen_lyric({"count": 2})
     assert [it["kind"] for it in res["items"]] == ["lyric", "lyric"]
@@ -130,7 +130,7 @@ def test_fetch_extracts_chords(monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=180: '{"items":[{"label":"サビ","chords":[{"root":"C","quality":"","start":0,"dur":4}]}]}',
+        lambda p, timeout=180, **kw: '{"items":[{"label":"サビ","chords":[{"root":"C","quality":"","start":0,"dur":4}]}]}',
     )
     res = jobs.handle_fetch({"target": "chord_progression", "context": "あの曲"})
     assert res["items"][0]["kind"] == "chord_progression"
@@ -200,7 +200,7 @@ def test_gen_variations_builds_items_and_edges(monkeypatch):
             ]
         }
     )
-    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180: payload)
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180, **kw: payload)
     res = jobs.handle_gen_variations(
         {"count": 2, "kinds": ["chord_progression", "melody"], "structure": "section"}
     )
@@ -279,7 +279,7 @@ def test_gen_variations_attaches_fit_analysis(monkeypatch):
             ]
         }
     )
-    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180: payload)
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180, **kw: payload)
     res = jobs.handle_gen_variations(
         {"count": 1, "kinds": ["chord_progression", "melody"], "structure": "pair", "frame": {"key": 0}}
     )
@@ -297,7 +297,7 @@ def test_gen_variations_flat_single_kind(monkeypatch):
     payload = _json.dumps(
         {"variations": [{"label": f"案{i}", "chords": [{"root": "C", "quality": "", "start": 0, "dur": 4}]} for i in range(3)]}
     )
-    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180: payload)
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180, **kw: payload)
     res = jobs.handle_gen_variations({"count": 3, "kinds": ["chord_progression"]})
     assert len([it for it in res["items"] if it["kind"] == "chord_progression"]) == 3
     assert res["edges"] == []
@@ -310,7 +310,7 @@ def test_collect_parses_summary_and_references(monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=120: (
+        lambda p, timeout=120, **kw: (
             '{"summary":"夜の街の断片","references":['
             '{"title":"IVM7→IIIm7","why":"切ない","points":"Aメロ頭で"},'
             '{"title":"裏拍ハット","why":"疾走感","points":"16分"}]}'
@@ -368,7 +368,7 @@ def test_collect_registered_and_runs(tmp_path, monkeypatch):
 
     assert "collect" in jobs.HANDLERS
     monkeypatch.setattr(
-        jobs, "claude_prompt", lambda p, timeout=120: '{"summary":"s","references":[{"title":"t"}]}'
+        jobs, "claude_prompt", lambda p, timeout=120, **kw: '{"summary":"s","references":[{"title":"t"}]}'
     )
     conn = connect(str(tmp_path / "t.sqlite"))
     _enqueue(conn, "collect", {"topic": "x"})
@@ -381,7 +381,7 @@ def test_collect_registered_and_runs(tmp_path, monkeypatch):
 def test_suggest_fallback_on_non_json(monkeypatch):
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: "JSONじゃない返答")
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120, **kw: "JSONじゃない返答")
     res = jobs.handle_suggest({"context": "x"})
     assert len(res["options"]) == 1
     assert res["options"][0]["body"] == "JSONじゃない返答"
@@ -393,7 +393,7 @@ def test_research_parses_references(monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=120: (
+        lambda p, timeout=120, **kw: (
             '{"summary":"夜系の要点","references":['
             '{"title":"曲A","artist":"X","why":"進行が近い","points":"IVmで翳り"},'
             '{"title":"曲B","artist":"Y","why":"質感","points":"低BPM"}]}'
@@ -408,7 +408,7 @@ def test_research_parses_references(monkeypatch):
 def test_research_fallback_on_non_json(monkeypatch):
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: "JSONじゃない調査メモ")
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120, **kw: "JSONじゃない調査メモ")
     res = jobs.handle_research({"topic": "x"})
     assert res["summary"] == "JSONじゃない調査メモ"
     assert res["references"] == []
@@ -420,7 +420,7 @@ def test_gen_melody_parses_notes(monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=120: '{"notes":[{"pitch":60,"start":0,"dur":1},{"pitch":64,"start":1,"dur":0.5}]}',
+        lambda p, timeout=120, **kw: '{"notes":[{"pitch":60,"start":0,"dur":1},{"pitch":64,"start":1,"dur":0.5}]}',
     )
     res = jobs.handle_gen_melody({"context": "夜の歌"})
     notes = res["content"]["notes"]
@@ -431,7 +431,7 @@ def test_gen_melody_parses_notes(monkeypatch):
 def test_gen_melody_handles_garbage(monkeypatch):
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: "メロはこちら（JSONなし）")
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120, **kw: "メロはこちら（JSONなし）")
     assert jobs.handle_gen_melody({"context": "x"})["content"]["notes"] == []
 
 
@@ -442,7 +442,7 @@ def test_gen_chord_parses_chords(monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=120: '{"chords":[{"root":"C","quality":"","start":0,"dur":4},'
+        lambda p, timeout=120, **kw: '{"chords":[{"root":"C","quality":"","start":0,"dur":4},'
         '{"root":"A","quality":"m","start":4,"dur":4}]}',
     )
     chords = jobs.handle_gen_chord({"context": "x"})["content"]["chords"]
@@ -458,7 +458,7 @@ def test_gen_rhythm_parses_lanes(monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=120: '{"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}',
+        lambda p, timeout=120, **kw: '{"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}',
     )
     rhythm = jobs.handle_gen_rhythm({"context": "x"})["content"]["rhythm"]
     assert rhythm["steps"] == 16
@@ -471,7 +471,7 @@ def test_plan_decomposes_and_enqueues_children(tmp_path, monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=120: '{"subtasks":[{"intent":"gen_chord","params":{"context":"夜の歌"}},'
+        lambda p, timeout=120, **kw: '{"subtasks":[{"intent":"gen_chord","params":{"context":"夜の歌"}},'
         '{"intent":"gen_rhythm","params":{"context":"夜の歌"}},'
         '{"intent":"plan","params":{}}]}',  # 自己再帰や未知は弾かれる
     )
@@ -495,7 +495,7 @@ def test_plan_decomposes_and_enqueues_children(tmp_path, monkeypatch):
 def _consult(monkeypatch, reply: str):
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: reply)
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120, **kw: reply)
     return jobs.handle_consult({"context": "夜の曲", "instruction": "x"})
 
 
@@ -556,7 +556,7 @@ def test_run_once_consult_plan_enqueues_children(tmp_path, monkeypatch):
     monkeypatch.setattr(
         jobs,
         "claude_prompt",
-        lambda p, timeout=120: '{"type":"plan","subtasks":[{"intent":"gen_rhythm","params":{"context":"夜"}}]}',
+        lambda p, timeout=120, **kw: '{"type":"plan","subtasks":[{"intent":"gen_rhythm","params":{"context":"夜"}}]}',
     )
     conn = connect(str(tmp_path / "c.sqlite"))
     now = datetime.now(timezone.utc).isoformat()
@@ -575,6 +575,6 @@ def test_run_once_consult_plan_enqueues_children(tmp_path, monkeypatch):
 def test_research_returns_summary(monkeypatch):
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180: "- 要点1\n- 要点2")
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=180, **kw: "- 要点1\n- 要点2")
     res = jobs.handle_research({"topic": "シューゲイザーのギター音作り"})
     assert "要点1" in res["summary"]

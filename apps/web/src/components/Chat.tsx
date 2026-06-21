@@ -144,9 +144,15 @@ export function Chat({
       neta_kind?: string;
       content?: unknown;
       plan?: string;
+      items?: unknown[];
     } | null;
     if (r?.type === "options") {
       pushMsg({ role: "ai", options: r.options ?? [], jobId });
+    } else if (r?.type === "items") {
+      // #86 S2b agentic：ツールで作った一式。materialize は server(reap)が担うので一覧/トレイに出る。
+      const n = Array.isArray(r.items) ? r.items.filter((it) => (it as { kind?: string }).kind !== "section").length : 0;
+      pushMsg({ role: "ai", text: `${n}個のパーツを作りました（一覧 / トレイ 📥 に届きます）` });
+      onChanged?.();
     } else if (r?.type === "content" && r.neta_kind) {
       const neta = await api.createNeta({ kind: r.neta_kind, content: r.content, from_job: jobId });
       onChanged?.();
