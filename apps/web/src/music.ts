@@ -309,6 +309,20 @@ interface PlayOpts {
 type Kit = { poly: any; membrane: any; noise: any };
 let currentKit: Kit | null = null;
 
+// 1音の発音ディスパッチ（テスト可能に切り出し）。ドラムは簡易キット、旋律は SF2 があれば
+// それ、無ければ poly シンセ。SF2 は absolute time(秒)・velocity 0..127。
+export function playEvent(ev: ScheduledNote, time: number, sf: any, kit: Kit, Tone: any): void {
+  if (ev.voice === "membrane") {
+    kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
+  } else if (ev.voice === "noise") {
+    kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
+  } else if (sf) {
+    sf.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
+  } else {
+    kit.poly.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toNote(), ev.durSec, time, ev.vel);
+  }
+}
+
 function disposeKit() {
   if (!currentKit) return;
   for (const v of [currentKit.poly, currentKit.membrane, currentKit.noise]) {
@@ -319,6 +333,54 @@ function disposeKit() {
     }
   }
   currentKit = null;
+}
+
+// #55a SF2実再生（smplr）。選択中SoundFontのURLを外から設定。null/失敗時は簡易シンセに
+// フォールバック（後退ゼロ）。Tone と AudioContext を共有して Transport.seconds と同期。
+let activeSfUrl: string | null = null;
+let sfSampler: any = null;
+let sfLoadedUrl: string | null = null;
+let sfLoading = false;
+
+export function setActiveSoundFont(url: string | null): void {
+  if (url !== activeSfUrl) {
+    activeSfUrl = url;
+    sfSampler = null;
+    sfLoadedUrl = null;
+  }
+}
+
+async function ensureSoundFont(Tone: any): Promise<any | null> {
+  const url = activeSfUrl;
+  if (!url) return null;
+  if (sfLoadedUrl === url && sfSampler) return sfSampler;
+  if (sfLoading) return null; // ロード中の再生は今回フォールバック（次回から鳴る）
+  sfLoading = true;
+  try {
+    const [{ Soundfont2 }, { SoundFont2 }] = await Promise.all([
+      import("smplr"),
+      import("soundfont2"),
+    ]);
+    const ctx = Tone.getContext().rawContext;
+    const sampler = Soundfont2(ctx, {
+      url,
+      createSoundfont: (data: Uint8Array) => new SoundFont2(data),
+    });
+    await sampler.ready;
+    const names: string[] = sampler.instrumentNames ?? [];
+    // 旋律楽器を優先（ドラム/percussion以外）。無ければ先頭。
+    const melodic = names.find((n) => !/drum|perc|kit/i.test(n)) ?? names[0];
+    if (melodic) await sampler.loadInstrument(melodic);
+    sfSampler = sampler;
+    sfLoadedUrl = url;
+    return sampler;
+  } catch {
+    sfSampler = null;
+    sfLoadedUrl = null;
+    return null;
+  } finally {
+    sfLoading = false;
+  }
 }
 
 // Tone.js は再生時のみ動的import（jsdom/テストで読み込まない）。
@@ -338,6 +400,9 @@ export async function playNotes(
   transport.cancel(0);
   disposeKit();
 
+  // SF2 が選択・ロード済みなら旋律(poly)はそれで鳴らす。ドラムは簡易キット、SF2無しは全部キット。
+  const sf = await ensureSoundFont(Tone);
+
   const kit: Kit = {
     poly: new Tone.PolySynth(Tone.Synth).toDestination(),
     membrane: new Tone.MembraneSynth().toDestination(),
@@ -347,15 +412,7 @@ export async function playNotes(
 
   transport.bpm.value = bpm;
   for (const ev of scheduleTimes(notes, bpm)) {
-    transport.schedule((time) => {
-      if (ev.voice === "membrane") {
-        kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
-      } else if (ev.voice === "noise") {
-        kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
-      } else {
-        kit.poly.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toNote(), ev.durSec, time, ev.vel);
-      }
-    }, ev.time);
+    transport.schedule((time: number) => playEvent(ev, time, sf, kit, Tone), ev.time);
   }
 
   let stopped = false;
@@ -373,6 +430,11 @@ export async function playNotes(
       transport.cancel(0);
       transport.loop = false;
       disposeKit();
+      try {
+        sf?.stop(); // SF2 の鳴っている音も止める（尾を切る。サンプラ自体は再利用のため破棄しない）
+      } catch {
+        /* noop */
+      }
     },
   };
 

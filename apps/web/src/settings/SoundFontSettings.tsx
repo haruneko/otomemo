@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Asset } from "../api";
+import { setActiveSoundFont } from "../music";
 
 // #77: SoundFont(GM音色)をアップロードしてサーバ asset に保存し、全体で1個を選ぶ。
 // 直リンクURLは廃止（行儀＋privacy）。localStorage には選択中 asset id のみ。
@@ -37,6 +38,7 @@ export function SoundFontSettings() {
   function select(id: string) {
     localStorage.setItem(KEY, id);
     setSelected(id);
+    setActiveSoundFont(api.assetUrl(id)); // #55a 再生に反映
   }
 
   async function upload(file: File | null) {
@@ -59,6 +61,7 @@ export function SoundFontSettings() {
     if (selected === id) {
       localStorage.removeItem(KEY);
       setSelected(null);
+      setActiveSoundFont(null); // 簡易シンセに戻る
     }
     await reload();
   }

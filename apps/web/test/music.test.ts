@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Midi } from "@tonejs/midi";
 import {
   notesToMidi,
@@ -13,6 +13,7 @@ import {
   totalSec,
   loopRange,
   barBeat,
+  playEvent,
   type Note,
 } from "../src/music";
 
@@ -135,6 +136,42 @@ describe("music", () => {
       expect(barBeat(7.5, 4)).toBe("2:4"); // 小数拍は切り捨て
       expect(barBeat(3, 3)).toBe("2:1"); // 3/4
       expect(barBeat(-1, 4)).toBe("1:1"); // 負はclamp
+    });
+  });
+
+  // #55a SF2分岐：旋律はSF2があればそれ、無ければシンセ。ドラムは常にキット。
+  describe("playEvent SF2 routing (#55a)", () => {
+    const Tone = {
+      Frequency: (p: number) => ({ toFrequency: () => p, toNote: () => `n${p}` }),
+    };
+    const mkKit = () => ({
+      poly: { triggerAttackRelease: vi.fn() },
+      membrane: { triggerAttackRelease: vi.fn() },
+      noise: { triggerAttackRelease: vi.fn() },
+    });
+
+    it("melodic note uses SF2 (absolute time, vel 0..127) when loaded", () => {
+      const kit = mkKit();
+      const sf = { start: vi.fn() };
+      playEvent({ time: 0, durSec: 0.5, voice: "poly", pitch: 60, vel: 0.5 }, 1.0, sf, kit, Tone);
+      expect(sf.start).toHaveBeenCalledWith({ note: 60, time: 1.0, duration: 0.5, velocity: 64 });
+      expect(kit.poly.triggerAttackRelease).not.toHaveBeenCalled();
+    });
+
+    it("melodic note falls back to poly synth without SF2", () => {
+      const kit = mkKit();
+      playEvent({ time: 0, durSec: 0.5, voice: "poly", pitch: 60, vel: 0.5 }, 1.0, null, kit, Tone);
+      expect(kit.poly.triggerAttackRelease).toHaveBeenCalled();
+    });
+
+    it("drums always use the kit regardless of SF2", () => {
+      const kit = mkKit();
+      const sf = { start: vi.fn() };
+      playEvent({ time: 0, durSec: 0.15, voice: "membrane", pitch: 36, vel: 0.8 }, 0, sf, kit, Tone);
+      playEvent({ time: 0, durSec: 0.05, voice: "noise", pitch: 42, vel: 0.8 }, 0, sf, kit, Tone);
+      expect(kit.membrane.triggerAttackRelease).toHaveBeenCalled();
+      expect(kit.noise.triggerAttackRelease).toHaveBeenCalled();
+      expect(sf.start).not.toHaveBeenCalled();
     });
   });
 });
