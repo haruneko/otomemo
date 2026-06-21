@@ -223,6 +223,48 @@ export function notesToMidi(
   return midi.toArray();
 }
 
+// #55 多トラック書出：レーン(メロ/コード/リズム)を別トラックに分けて1ファイルへ。
+// DAW で開くとトラックが分かれる。drum トラックは ch10。
+export interface MidiTrackSpec {
+  notes: Note[];
+  program?: number;
+  drum?: boolean;
+  name?: string;
+}
+export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null): Uint8Array {
+  const midi = new Midi();
+  midi.header.setTempo(bpm);
+  const ts = meterPair(meter);
+  if (ts) midi.header.timeSignatures.push({ ticks: 0, timeSignature: ts });
+  const spb = 60 / bpm;
+  for (const t of tracks) {
+    if (!t.notes.length) continue;
+    const track = midi.addTrack();
+    if (t.name) track.name = t.name;
+    if (t.drum) track.channel = 9;
+    else if (t.program !== undefined) track.instrument.number = t.program;
+    for (const n of t.notes) {
+      track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
+    }
+  }
+  return midi.toArray();
+}
+
+export function downloadMultitrackMidi(
+  tracks: MidiTrackSpec[],
+  filename = "section.mid",
+  bpm = 120,
+  meter?: string | null,
+): void {
+  const blob = new Blob([tracksToMidi(tracks, bpm, meter) as BlobPart], { type: "audio/midi" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function midiToNotes(buf: ArrayBuffer | Uint8Array): { notes: Note[]; bpm: number } {
   const midi = new Midi(buf as ArrayBuffer);
   const bpm = midi.header.tempos[0]?.bpm ?? 120;

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { Midi } from "@tonejs/midi";
 import {
   notesToMidi,
+  tracksToMidi,
   notesOf,
   midiToNotes,
   transpose,
@@ -82,6 +83,23 @@ describe("music", () => {
     const hatLoud = notes.find((n) => n.pitch === 42 && n.start === 0.5)!;
     expect(hat.vel).toBeLessThan(kick.vel!); // ハットは控えめ
     expect(hatLoud.vel).toBe(90); // lane.vel 指定が効く
+  });
+
+  it("#55 tracksToMidi makes one track per non-empty lane, drum on ch10", () => {
+    const buf = tracksToMidi(
+      [
+        { name: "メロ", notes: [{ pitch: 60, start: 0, dur: 1 }] },
+        { name: "リズム", notes: [{ pitch: 36, start: 0, dur: 0.25, drum: true }], drum: true },
+        { name: "空", notes: [] }, // 空レーンは省かれる
+      ],
+      120,
+      "4/4",
+    );
+    const midi = new Midi(buf);
+    expect(midi.tracks.length).toBe(2);
+    const drum = midi.tracks.find((t) => t.channel === 9);
+    expect(drum).toBeTruthy();
+    expect(drum!.notes[0]?.midi).toBe(36);
   });
 
   it("notesForContent dispatches by kind", () => {

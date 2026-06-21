@@ -36,7 +36,7 @@
 | 84 | ドラム | ✅S4 ベロシティ層(ハット控えめ・既存ネタも一括適正化)。🟡Standard 1 を1 SmplrPreset集約=音質検証要で保留 | design#84 | music.ts(DRUM_VEL)＋gen_drums | impl | 🟡 velocity済 |
 | 83 | スキーマ | ✅song(stage/next_action)・neta_asset(role) テーブル＋core/HTTP/MCP。元MIDI紐付け配線は後続 | design#14 | db.ts→core→http→mcp→test | impl | ✅ |
 | -  | #86移管 | ✅ルール基線実測(メロscore平均0.884・<0.6は0.7%)→ルール優先を裏付け。Claude比較はharness(--claude)で任意 | design#12 | scripts/measure_gen.py | — | ✅ |
-| 55 | #47後続 | ✅song箱UI(段階/次の一手)。⬜SF2再生パリティ(音質検証要)・⬜section多トラックMIDI書出 | — | 縦スライス | impl | 🟡 song箱UI済 |
+| 55 | #47後続 | ✅song箱UI(段階/次の一手)・✅section多トラックMIDI書出(lane別)。⬜SF2再生パリティ(音質検証要) | — | 縦スライス | impl | 🟡 残:SF2パリティ |
 | 56 | #35後続 | **楽譜入力・音声(ハミング→音高)・添付拡張**（大・要調査） | 要件L116-119 | 調査→設計→実装 | design+impl | ⬜ |
 | 22 | AI探索 | 広くAIツール探索（別立て・要調査） | — | research | — | ⬜ |
 | -  | #86 S2c | 外部 Claude Desktop 接続（localhost専有で保留・やるなら CM_TOKEN ゲート） | design#12 Stage2 | — | — | ⬜保留 |

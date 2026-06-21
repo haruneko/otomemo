@@ -29,7 +29,13 @@ function LaneCell({
     />
   );
 }
-import { notesForContent, compositeNotes, downloadMidi, type Note } from "../music";
+import {
+  notesForContent,
+  compositeNotes,
+  downloadMidi,
+  downloadMultitrackMidi,
+  type Note,
+} from "../music";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/リズムの3レーン×小節 で組む。
 // レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
@@ -179,6 +185,14 @@ export function SectionEditor({
   function composite(): Note[] {
     return compositeNotes(children, keyPc);
   }
+  // #55 多トラック書出：レーン(メロ/コード/リズム)別に1トラックずつ。空レーンは省く。
+  function laneTracks() {
+    return LANES.map((lane) => ({
+      name: lane.label,
+      notes: compositeNotes(laneChildren(lane), keyPc),
+      drum: lane.key === "rhythm",
+    })).filter((t) => t.notes.length);
+  }
 
   return (
     <div className="section-editor">
@@ -189,6 +203,15 @@ export function SectionEditor({
           onClick={() => downloadMidi(composite(), `${neta.title ?? "section"}.mid`, tempo, neta.meter)}
         >
           MIDI
+        </button>
+        <button
+          type="button"
+          title="メロ/コード/リズムを別トラックに分けて書き出す"
+          onClick={() =>
+            downloadMultitrackMidi(laneTracks(), `${neta.title ?? "section"}-tracks.mid`, tempo, neta.meter)
+          }
+        >
+          MIDI(分割)
         </button>
       </div>
 
