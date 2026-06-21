@@ -149,9 +149,10 @@ def gen_drums(frame: dict | None = None, seed: int | None = None) -> dict:
     hihat = {0, 2, 4, 6, 8, 10, 12, 14}  # 8分ハット
     # 小変化：キックを1つ足す（裏拍）／たまにオープンハット
     kick.add(rng.choice([6, 10, 11, 14]))
+    # #84 S4 レーン既定ベロシティ＝ハットは打数多く煩いので控えめ（音量バランス）
     lanes = [
-        {"name": "Kick", "midi": _GM["Kick"], "hits": sorted(kick)},
-        {"name": "Snare", "midi": _GM["Snare"], "hits": sorted(snare)},
-        {"name": "HiHat", "midi": _GM["HiHat"], "hits": sorted(hihat)},
+        {"name": "Kick", "midi": _GM["Kick"], "hits": sorted(kick), "vel": 115},
+        {"name": "Snare", "midi": _GM["Snare"], "hits": sorted(snare), "vel": 105},
+        {"name": "HiHat", "midi": _GM["HiHat"], "hits": sorted(hihat), "vel": 55},
     ]
     return {"items": [{"kind": "rhythm", "content": {"rhythm": {"steps": 16, "lanes": lanes}}, "label": "ドラム"}], "edges": []}

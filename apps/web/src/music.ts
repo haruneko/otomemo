@@ -88,7 +88,22 @@ export interface RhythmLane {
   name: string;
   midi: number; // GMドラム番号（移調しない）
   hits: number[]; // ステップindex（0..steps-1）
+  vel?: number; // #84 S4 レーン既定ベロシティ(0..127)。未指定は DRUM_VEL の GM 既定
 }
+
+// #84 S4 GMドラム別の既定ベロシティ。ハイハットは打数が多く煩いので控えめ＝音量バランス。
+// lane.vel 未指定の既存リズムネタにもこれが効く（再生成不要で一括適正化）。
+export const DRUM_VEL: Record<number, number> = {
+  36: 115, // Kick
+  38: 105, // Snare
+  39: 100, // Clap
+  42: 55, // HiHat（控えめ）
+  44: 50, // Pedal HiHat
+  45: 100, // Tom
+  46: 70, // OpenHat
+};
+export const drumVel = (midi: number, vel?: number): number =>
+  vel ?? DRUM_VEL[midi] ?? 100;
 export interface RhythmContent {
   steps: number;
   lanes: RhythmLane[];
@@ -111,7 +126,13 @@ export function rhythmOf(content: unknown): RhythmContent {
 
 export function rhythmToNotes(r: RhythmContent): Note[] {
   return r.lanes.flatMap((l) =>
-    l.hits.map((step) => ({ pitch: l.midi, start: step / 4, dur: 0.25, drum: true })),
+    l.hits.map((step) => ({
+      pitch: l.midi,
+      start: step / 4,
+      dur: 0.25,
+      drum: true,
+      vel: drumVel(l.midi, l.vel), // #84 S4 レーン/GM既定ベロシティ
+    })),
   );
 }
 

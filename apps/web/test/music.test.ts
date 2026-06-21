@@ -63,9 +63,25 @@ describe("music", () => {
   it("expands a rhythm lane's hits to drum notes (step/4 = beat)", () => {
     const notes = rhythmToNotes({ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4] }] });
     expect(notes).toEqual([
-      { pitch: 36, start: 0, dur: 0.25, drum: true },
-      { pitch: 36, start: 1, dur: 0.25, drum: true },
+      { pitch: 36, start: 0, dur: 0.25, drum: true, vel: 115 },
+      { pitch: 36, start: 1, dur: 0.25, drum: true, vel: 115 },
     ]);
+  });
+
+  it("#84 S4 hihat is quieter than kick by default velocity; lane.vel overrides", () => {
+    const notes = rhythmToNotes({
+      steps: 16,
+      lanes: [
+        { name: "Kick", midi: 36, hits: [0] },
+        { name: "HiHat", midi: 42, hits: [0] },
+        { name: "HiHat", midi: 42, hits: [2], vel: 90 }, // 明示vel が優先
+      ],
+    });
+    const kick = notes.find((n) => n.pitch === 36)!;
+    const hat = notes.find((n) => n.pitch === 42 && n.start === 0)!;
+    const hatLoud = notes.find((n) => n.pitch === 42 && n.start === 0.5)!;
+    expect(hat.vel).toBeLessThan(kick.vel!); // ハットは控えめ
+    expect(hatLoud.vel).toBe(90); // lane.vel 指定が効く
   });
 
   it("notesForContent dispatches by kind", () => {
