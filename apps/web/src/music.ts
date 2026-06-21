@@ -339,10 +339,17 @@ export function playEvent(
   if (ev.voice === "membrane" || ev.voice === "noise") {
     const ds = drumKits?.get(ev.pitch);
     if (ds) {
-      dbg("note pitch", ev.pitch, "via sf2-drum @", ds.note);
+      dbg("note pitch", ev.pitch, "via sf2-drum @", ds.note, "detune", ds.detune);
       // 打楽器はワンショット＝loop を明示OFF。SF2のキック等は loop点を持ち、loop有のまま
       // duration を渡すと「1発が複数回」、duration無だと鳴り続ける。loop:false で1回だけ。
-      ds.sampler.start({ note: ds.note, time, velocity: Math.round(ev.vel * 127), loop: false });
+      // detune(cents)で smplr の originalPitch 基準を overridingRootKey 基準へ補正(#84 S2)。
+      ds.sampler.start({
+        note: ds.note,
+        time,
+        velocity: Math.round(ev.vel * 127),
+        loop: false,
+        detune: ds.detune,
+      });
     } else if (ev.voice === "membrane") {
       dbg("note pitch", ev.pitch, "via kit.membrane");
       kit.membrane.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toFrequency(), ev.durSec, time, ev.vel);
@@ -568,21 +575,44 @@ export function drumNameFor(pitch: number, names: string[]): string | null {
   return null;
 }
 
-// #55b/#79 ドラム楽器を「どのnoteで鳴らすか」。
-// 楽器がGM番号に該当する keyRange ゾーンを持てば**そのGM note**で（Hi-Hats=42閉/46開、
-// Toms=各キーで音程差 等、キットの意図どおり）。持たない（単一サンプル/keyRange無）なら
-// **原音高(originalPitch)** で自然に（Kick/Snare等）。
-function drumNoteFor(name: string, gmPitch: number): number {
+// #84 S2 ピッチ補正の純計算。smplr は region.pitch=originalPitch で鳴らす（overridingRootKey
+// を無視）→ keyRangeゾーンのドラム(hihat/tom)を GM note で叩くと (note-originalPitch) ぶんズレる。
+// 実効ピッチをキット意図(=root基準＋tune)に合わせる detune(cents)を返す:
+//   effective = (note - originalPitch)*100 + detune  を (note - root)*100 + tune にしたい
+//   → detune = (originalPitch - root)*100 + tune
+export function drumDetune(
+  originalPitch: number,
+  root: number,
+  coarseTune = 0,
+  fineTune = 0,
+): number {
+  return (originalPitch - root) * 100 + coarseTune * 100 + fineTune;
+}
+
+function zoneGen(zone: any, id: number): number | undefined {
+  const g = zone?.generators?.[String(id)];
+  return g && typeof g.value === "number" ? g.value : undefined;
+}
+
+// ドラムGM番号 → {鳴らすnote, detune}。
+// keyRangeゾーン(hihat閉42/開46, tom各キー 等)＝GM noteで叩き detune でキット意図ピッチへ補正。
+// keyRange無し(kick/snare＝単一/velocity層)＝原音高で自然に（現挙動維持）。
+function drumVoiceFor(name: string, gmPitch: number): { note: number; detune: number } {
   const insts: any[] = sfParsed?.instruments ?? [];
   const inst = insts.find((i) => (i.header?.name ?? i.name) === name);
-  let root = 60;
-  for (const z of inst?.zones ?? []) {
-    const kr = z?.keyRange;
-    if (kr && gmPitch >= kr.lo && gmPitch <= kr.hi) return gmPitch; // 該当ゾーンあり
-    const op = z?.sample?.header?.originalPitch;
-    if (typeof op === "number" && op > 0 && op < 128) root = op;
+  const zones: any[] = inst?.zones ?? [];
+  const kz = zones.find((z) => z?.keyRange && gmPitch >= z.keyRange.lo && gmPitch <= z.keyRange.hi);
+  if (kz) {
+    const op = kz.sample?.header?.originalPitch ?? 60;
+    const root = zoneGen(kz, 58) ?? op; // overridingRootKey
+    return {
+      note: gmPitch,
+      detune: drumDetune(op, root, zoneGen(kz, 51) ?? 0, zoneGen(kz, 52) ?? 0),
+    };
   }
-  return root;
+  const z0 = zones.find((z) => z?.sample) ?? zones[0];
+  const op = z0?.sample?.header?.originalPitch ?? 60;
+  return { note: op, detune: 0 };
 }
 
 // ドラム1種をロード（楽器名キャッシュ）。失敗時 null＝その音は簡易キットにフォールバック。
@@ -601,7 +631,7 @@ async function loadDrumSampler(name: string, Tone: any): Promise<any | null> {
   }
 }
 
-export type DrumVoice = { sampler: any; note: number };
+export type DrumVoice = { sampler: any; note: number; detune: number };
 
 // 再生に出てくるドラム音(pitch)→ {sampler, 鳴らすnote}。ドラムは原音高で鳴らすと自然。
 // トムだけ音程差が要るので root を中心に GM番号で上下させる。
@@ -616,13 +646,14 @@ async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, Dr
       if (!name) return null;
       const s = await loadDrumSampler(name, Tone);
       if (!s) return null;
-      return { p, name, sampler: s, note: drumNoteFor(name, p) };
+      const v = drumVoiceFor(name, p); // #84 S2: note＋ピッチ補正detune
+      return { p, name, sampler: s, note: v.note, detune: v.detune };
     }),
   );
   for (const r of loaded) {
     if (!r) continue;
-    map.set(r.p, { sampler: r.sampler, note: r.note });
-    dbg("drum", r.p, "->", r.name, "@note", r.note);
+    map.set(r.p, { sampler: r.sampler, note: r.note, detune: r.detune });
+    dbg("drum", r.p, "->", r.name, "@note", r.note, "detune", r.detune);
   }
   return map;
 }

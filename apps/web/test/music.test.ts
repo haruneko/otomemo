@@ -174,17 +174,25 @@ describe("music", () => {
       expect(sf.start).not.toHaveBeenCalled();
     });
 
-    it("#55b drums use the matched SF2 drum sampler at its root note when available", () => {
+    it("#55b/#84 drums use the matched SF2 drum sampler at note＋detune when available", () => {
       const kit = mkKit();
       const kick = { start: vi.fn() };
-      // kick(36)→samplerをroot音(38)で鳴らす。snare(38)は未マッチ→簡易キット。
-      const drumKits = new Map([[36, { sampler: kick, note: 38 }]]);
+      // kick(36)→sampler note38＋detune0。snare(38)は未マッチ→簡易キット。
+      const drumKits = new Map([[36, { sampler: kick, note: 38, detune: 0 }]]);
       playEvent({ time: 0, durSec: 0.15, voice: "membrane", pitch: 36, vel: 0.8 }, 2, null, kit, Tone, drumKits);
       playEvent({ time: 0, durSec: 0.05, voice: "noise", pitch: 38, vel: 0.8 }, 3, null, kit, Tone, drumKits);
-      // 打楽器はワンショット＝loop:false（SF2サンプルのloop点による多重発音/鳴り続けを防ぐ）
-      expect(kick.start).toHaveBeenCalledWith({ note: 38, time: 2, velocity: 102, loop: false });
+      // 打楽器はワンショット＝loop:false＋ピッチ補正 detune
+      expect(kick.start).toHaveBeenCalledWith({ note: 38, time: 2, velocity: 102, loop: false, detune: 0 });
       expect(kit.membrane.triggerAttackRelease).not.toHaveBeenCalled(); // kickはSF2へ
       expect(kit.noise.triggerAttackRelease).toHaveBeenCalled(); // snareは簡易へ
+    });
+
+    it("drumDetune compensates originalPitch→root (#84 S2)", async () => {
+      const { drumDetune } = await import("../src/music");
+      expect(drumDetune(60, 42)).toBe(1800); // HH閉: 60→42 で +1800cents → 実効0
+      expect(drumDetune(60, 46)).toBe(1400); // HH開
+      expect(drumDetune(60, 60)).toBe(0); // override無し（kick/snareは現状維持）
+      expect(drumDetune(60, 53, 11, -46)).toBe(700 + 1100 - 46); // coarse/fineTune加味
     });
   });
 
