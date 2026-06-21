@@ -20,7 +20,7 @@
 | DAW往復・過去資産 | 🟡 | ✅MIDI書出、MIDI取込(worker分割 melody/rhythm #81)、歌詞取込。⬜コード自動検出、mp3整理、ABILITY往復は基本のみ |
 | 投げて受け取る | ✅ | ジョブ→worker→reap→トレイ、plan分解・継続・通知強度・waiting/question #45、定期スケジューラ #80、フォーム質問パネル #85S3 |
 | AI生成 枠＋動作＋構造 #85 | 🟡 | ✅枠(6/8効く)、gen_variations(N個・items+edges)、condition(音数/コード)、verb(fetch/transform/gen_lyric)、文章＋パネル導線。✅方向確認(confirm) |
-| 音楽理論層 #86 | 🟡 | ✅判定(analyze_fit/detect_key/analyze_progression)、ルール生成(chords/melody/bass/drums/pair)、Chat入口(dispatch・実機)、正規化層、MCPサービス(S2a実機)、agentic Chat(S2b 受入済)。⬜補正・類似度・ルールvsClaude実測 |
+| 音楽理論層 #86 | 🟡 | ✅判定(analyze_fit/detect_key/analyze_progression)、ルール生成(chords/melody/bass/drums/pair)、Chat入口(dispatch・実機)、正規化層、MCPサービス(S2a実機)、agentic Chat(S2b 受入済)。✅補正(fit_to_chords)・✅類似度・✅ルール基線実測 |
 | 情報収集 | ✅ | research/collect・参考曲・継続研究 #9 |
 | 非機能 | 🟡 | ✅認証(CM_TOKEN)・localhost専有・出先/家。⬜バックアップ、⬜常駐サービスの自動起動/プロセス管理が弱い |
 
@@ -35,7 +35,7 @@
 | 93 | #85方向確認 | バッチ前に1案だけ作り「この方向でいい?」→承認(frame/count引継)で残数本生成 | design#85(E) | worker(_propose→waiting)＋既存answerJob | impl | ✅ (confirm=true) |
 | 84 | ドラム | ✅S4 ベロシティ層(ハット控えめ・既存ネタも一括適正化)。🟡Standard 1 を1 SmplrPreset集約=音質検証要で保留 | design#84 | music.ts(DRUM_VEL)＋gen_drums | impl | 🟡 velocity済 |
 | 83 | スキーマ | ✅song(stage/next_action)・neta_asset(role) テーブル＋core/HTTP/MCP。元MIDI紐付け配線は後続 | design#14 | db.ts→core→http→mcp→test | impl | ✅ |
-| -  | #86移管 | **ルール vs Claude を判定器で実測** → 生成を全面ルール移管するか判断 | design#12 | 実測スクリプト(analyze_fitで比較) | — | ⬜ |
+| -  | #86移管 | ✅ルール基線実測(メロscore平均0.884・<0.6は0.7%)→ルール優先を裏付け。Claude比較はharness(--claude)で任意 | design#12 | scripts/measure_gen.py | — | ✅ |
 | 55 | #47後続 | song箱UI・SF2再生パリティ・section多トラックMIDI書出 | — | 縦スライス | impl | ⬜ |
 | 56 | #35後続 | **楽譜入力・音声(ハミング→音高)・添付拡張**（大・要調査） | 要件L116-119 | 調査→設計→実装 | design+impl | ⬜ |
 | 22 | AI探索 | 広くAIツール探索（別立て・要調査） | — | research | — | ⬜ |
