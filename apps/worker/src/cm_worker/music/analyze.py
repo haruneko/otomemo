@@ -4,7 +4,7 @@ analyze_fit は純Python（高速・~0.01ms）。detect_key / analyze_progressio
 コードは入力で既知（content の root/quality）なので、和声推定の最難関を踏まない。
 """
 
-from .theory import KEY_NAMES, MAJOR_SCALE, MINOR_SCALE, chord_pcs, scale_pcs
+from .theory import KEY_NAMES, MAJOR_SCALE, MINOR_SCALE, chord_pcs, norm_root, scale_pcs
 
 
 def _on_beat(start: float) -> bool:
@@ -61,7 +61,7 @@ def analyze_fit(melody: list[dict], chords: list[dict], key: int | None = None) 
         return {"in_chord_rate": 0.0, "non_chord_tones": [], "scale_outside_rate": 0.0, "score": 0.0, "issues": []}
 
     det = detect_key(notes)
-    key_pc = det["key"] if key is None else int(key)
+    key_pc = det["key"] if key is None else norm_root(key)  # "C" 等の文字列keyも許容
     mode = det["mode"]
     sc = scale_pcs(key_pc, mode)
 

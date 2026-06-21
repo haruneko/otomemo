@@ -47,7 +47,7 @@ def gen_chords(frame: dict | None = None, seed: int | None = None) -> dict:
     except Exception:  # noqa: BLE001
         bars = 4
     bars = max(1, min(16, bars))  # 不正・範囲外は 1..16 に丸め（0/負も1へ・一貫）
-    bpb = _beats_per_bar(frame.get("meter"))
+    bpb = _beats_per_bar(frame.get("meter") or frame.get("time_signature"))
 
     # 機能マルコフで度数列を作る（T始まり・T終わり）
     funcs = ["T"]
@@ -92,7 +92,7 @@ def gen_melody(frame: dict | None = None, chords=None, seed: int | None = None) 
     scale = scale_pcs(0, "minor" if minor else "major")
     b = frame.get("bars")
     bars = max(1, min(16, int(b))) if isinstance(b, (int, float)) and b else 4
-    bpb = _beats_per_bar(frame.get("meter"))
+    bpb = _beats_per_bar(frame.get("meter") or frame.get("time_signature"))
     total = max(1, int(round(bars * bpb)))
 
     notes = []
@@ -122,7 +122,7 @@ def gen_bass(frame: dict | None = None, chords=None, seed: int | None = None) ->
     frame = frame or {}
     b = frame.get("bars")
     bars = max(1, min(16, int(b))) if isinstance(b, (int, float)) and b else 4
-    bpb = _beats_per_bar(frame.get("meter"))
+    bpb = _beats_per_bar(frame.get("meter") or frame.get("time_signature"))
     total = max(1, int(round(bars * bpb)))
     per_bar = max(1, int(round(bpb)))
     notes = []

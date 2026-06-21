@@ -39,12 +39,29 @@ function hasMusic(content: unknown): boolean {
  * 型に合うものだけ拾い、未指定は付けない（既存の null 既定を壊さない）。
  */
 type FrameVals = Partial<Pick<NetaInput, "key" | "meter" | "tempo" | "bars" | "mood">>;
+// 音名→ピッチクラス（Claudeが key を "C"/"Am" 等の文字列で渡す揺れを吸収）。
+const KEY_NAME_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+function keyToPc(k: unknown): number | undefined {
+  if (typeof k === "number" && k >= 0 && k <= 11) return k;
+  if (typeof k === "string" && k) {
+    let pc = KEY_NAME_PC[k[0]!.toUpperCase()];
+    if (pc === undefined) return undefined;
+    for (const ch of k.slice(1)) {
+      if (ch === "#" || ch === "♯") pc += 1;
+      else if (ch === "b" || ch === "♭") pc -= 1;
+    }
+    return ((pc % 12) + 12) % 12;
+  }
+  return undefined;
+}
 function frameVals(frame: unknown): FrameVals {
   if (!frame || typeof frame !== "object") return {};
   const f = frame as Record<string, unknown>;
   const out: FrameVals = {};
-  if (typeof f.key === "number" && f.key >= 0 && f.key <= 11) out.key = f.key;
-  if (typeof f.meter === "string" && f.meter) out.meter = f.meter;
+  const k = keyToPc(f.key);
+  if (k !== undefined) out.key = k;
+  const meter = f.meter ?? f.time_signature; // time_signature 別名も許容
+  if (typeof meter === "string" && meter) out.meter = meter;
   if (typeof f.tempo === "number" && f.tempo > 0) out.tempo = f.tempo;
   if (typeof f.bars === "number" && f.bars > 0) out.bars = Math.round(f.bars);
   if (typeof f.mood === "string" && f.mood) out.mood = f.mood;

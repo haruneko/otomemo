@@ -268,6 +268,22 @@ describe("job queue (producer side)", () => {
     expect(cp.mood).toBe("切ない");
   });
 
+  it("reaps gen with string key / time_signature alias onto neta hints (#86 robust)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('jrk', 'gen_chord', ?, 'done', 'plan1', ?, '', '')`,
+    ).run(
+      JSON.stringify({ frame: { key: "A", time_signature: "6/8" } }), // Claudeの揺れ
+      JSON.stringify({ content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }),
+    );
+    expect(c.reapResults()).toBe(1);
+    const cp = c.listNeta({ kind: "chord_progression" })[0];
+    expect(cp.key).toBe(9); // "A" → 9
+    expect(cp.meter).toBe("6/8"); // time_signature → meter
+  });
+
   it("reaps gen without frame leaves hints null (#85 S1 後退ゼロ)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

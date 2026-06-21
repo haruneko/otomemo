@@ -249,6 +249,19 @@ def test_gen_pair_rule_full_arrangement():
     assert len([e for e in res["edges"] if e["type"] == "compose"]) == 4
 
 
+def test_gen_pair_rule_robust_to_claude_param_drift():
+    # #86 Claudeが渡すparamsの揺れ（key="C"文字列・time_signature・parts名）でも落ちず効く
+    import cm_worker.jobs as jobs
+
+    res = jobs.handle_gen_pair_rule(
+        {"frame": {"time_signature": "6/8", "mood": "切ない", "key": "C"}, "count": 1, "parts": ["chord_progression", "melody"]}
+    )
+    ch = next(it for it in res["items"] if it["kind"] == "chord_progression")
+    assert ch["content"]["chords"][0]["dur"] == 3.0  # time_signature 経由で 6/8 が効く
+    mel = next(it for it in res["items"] if it["kind"] == "melody")
+    assert mel["meta"]["fit"]["score"] > 0  # key="C" 文字列でも落ちない
+
+
 def test_gen_variations_attaches_fit_analysis(monkeypatch):
     # #86 コード+メロが揃ったら analyze_fit を melody item の meta に同梱
     import json as _json
