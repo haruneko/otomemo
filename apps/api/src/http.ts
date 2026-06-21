@@ -301,5 +301,31 @@ export function buildHttp(core: Core): FastifyInstance {
     return { deleted: core.deleteSchedule(id) };
   });
 
+  // --- chat（#70 Chat履歴の永続化。thread=対象neta id or 'global'）---
+  const chatMessageInput = z.object({
+    role: z.string().min(1),
+    kind: z.string().nullish(),
+    text: z.string().nullish(),
+    data: z.unknown().optional(),
+  });
+
+  app.get("/chat/:thread/messages", async (req) => {
+    const { thread } = req.params as { thread: string };
+    return core.listChatMessages(thread);
+  });
+
+  app.post("/chat/:thread/message", async (req, reply) => {
+    const { thread } = req.params as { thread: string };
+    const p = chatMessageInput.safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    return core.addChatMessage({ thread, ...p.data });
+  });
+
+  app.delete("/chat/:thread/messages", async (req) => {
+    const { thread } = req.params as { thread: string };
+    core.clearChatThread(thread);
+    return { cleared: true };
+  });
+
   return app;
 }

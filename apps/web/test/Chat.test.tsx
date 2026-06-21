@@ -1,17 +1,29 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { createJob, getJob, createNeta } = vi.hoisted(() => ({
-  createJob: vi.fn(),
-  getJob: vi.fn(),
-  createNeta: vi.fn(),
+const { createJob, getJob, createNeta, listChatMessages, addChatMessage, clearChatThread } =
+  vi.hoisted(() => ({
+    createJob: vi.fn(),
+    getJob: vi.fn(),
+    createNeta: vi.fn(),
+    listChatMessages: vi.fn(),
+    addChatMessage: vi.fn(),
+    clearChatThread: vi.fn(),
+  }));
+vi.mock("../src/api", () => ({
+  api: { createJob, getJob, createNeta, listChatMessages, addChatMessage, clearChatThread },
 }));
-vi.mock("../src/api", () => ({ api: { createJob, getJob, createNeta } }));
 
 import { Chat } from "../src/components/Chat";
 
 describe("Chat", () => {
+  beforeEach(() => {
+    // #70 既定：履歴は空、保存はスタブ成功（既存テストの挙動を保つ）。
+    listChatMessages.mockResolvedValue([]);
+    addChatMessage.mockResolvedValue({ id: "m" });
+    clearChatThread.mockResolvedValue({ cleared: true });
+  });
   it("consult: shows options, picks one → knowledge neta (not other) (#61)", async () => {
     createJob.mockResolvedValue({ id: "j1", status: "queued" });
     getJob.mockResolvedValue({
@@ -106,5 +118,32 @@ describe("Chat", () => {
       from_job: "jr",
     });
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("#70 restores persisted messages on open", async () => {
+    listChatMessages.mockResolvedValue([
+      { id: "1", thread: "global", role: "user", kind: "chat", text: "前の質問", data: null },
+      { id: "2", thread: "global", role: "ai", kind: "chat", text: "前の回答", data: null },
+    ]);
+    render(<Chat onClose={vi.fn()} />);
+    expect(await screen.findByText("前の質問")).toBeInTheDocument();
+    expect(await screen.findByText("前の回答")).toBeInTheDocument();
+    expect(listChatMessages).toHaveBeenCalledWith("global");
+  });
+
+  it("#70 persists the user message when sending", async () => {
+    listChatMessages.mockResolvedValue([]);
+    createJob.mockResolvedValue({ id: "j1", status: "queued" });
+    getJob.mockResolvedValue({ status: "done", result: { type: "chat", text: "ok" }, error: null });
+
+    render(<Chat onClose={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "こんにちは");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    await waitFor(() =>
+      expect(addChatMessage).toHaveBeenCalledWith(
+        "global",
+        expect.objectContaining({ role: "user", text: "こんにちは" }),
+      ),
+    );
   });
 });

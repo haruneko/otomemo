@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Neta } from "../api";
+import { api, type Neta, type ChatMessage } from "../api";
 import { playNotes, notesForContent, MUSIC_KINDS } from "../music";
 
 interface Opt {
@@ -47,12 +47,61 @@ export function Chat({
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("consult");
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
 
   const targetLabel = target ? (target.title ?? target.text ?? "(無題)") : null;
 
+  // #70 スレッド＝対象ネタ id（無ければ汎用 'global'）。
+  const thread = target?.id ?? "global";
+
+  // #70 永続化（後退ゼロ）：保存に失敗してもメモリだけで従来どおり動く。
+  // 構造化ペイロード（options/references/neta/jobId/saveable）は data へ畳む。
+  function persistMsg(m: Msg) {
+    const { role, text, ...rest } = m;
+    const data = Object.keys(rest).length ? rest : undefined;
+    const kind = m.options
+      ? "options"
+      : m.references
+        ? "research"
+        : m.neta
+          ? "content"
+          : "chat";
+    void api.addChatMessage(thread, { role, kind, text: text ?? null, data }).catch(() => {});
+  }
+  // 保存しつつ画面にも積む（送受信の両方でこれを使う）。
+  function pushMsg(m: Msg) {
+    setMsgs((prev) => [...prev, m]);
+    persistMsg(m);
+  }
+
+  // #70 開いたとき該当スレッドの履歴を復元（失敗＝空のまま＝従来挙動）。
+  useEffect(() => {
+    let alive = true;
+    void api
+      .listChatMessages(thread)
+      .then((rows: ChatMessage[]) => {
+        if (!alive || rows.length === 0) return;
+        setMsgs(
+          rows.map((r) => ({
+            role: r.role === "user" ? "user" : "ai",
+            text: r.text ?? undefined,
+            ...((r.data as Partial<Msg>) ?? {}),
+          })),
+        );
+        started.current = true; // 復元したら自動初回提案は出さない（二重防止）
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [thread]);
+
   async function run(text: string) {
-    setMsgs((m) => [...m, { role: "user", text }]);
+    pushMsg({ role: "user", text });
     setBusy(true);
     try {
       const ctx = target ? (target.title ?? target.text ?? "") : "";
@@ -69,17 +118,14 @@ export function Chat({
             const r = j.result as { summary?: string; references?: Ref[] } | null;
             const summary = r?.summary ?? "";
             const references = Array.isArray(r?.references) ? r!.references : [];
-            setMsgs((m) => [
-              ...m,
-              { role: "ai", text: summary, saveable: summary, references, jobId: job.id },
-            ]);
+            pushMsg({ role: "ai", text: summary, saveable: summary, references, jobId: job.id });
           } else {
             await handleConsult(j.result, job.id); // #61 判別ユニオン
           }
           return;
         }
         if (j.status === "failed") {
-          setMsgs((m) => [...m, { role: "ai", text: j.error ?? "失敗しました" }]);
+          pushMsg({ role: "ai", text: j.error ?? "失敗しました" });
           return;
         }
         await new Promise((r) => setTimeout(r, 1500));
@@ -100,20 +146,20 @@ export function Chat({
       plan?: string;
     } | null;
     if (r?.type === "options") {
-      setMsgs((m) => [...m, { role: "ai", options: r.options ?? [], jobId }]);
+      pushMsg({ role: "ai", options: r.options ?? [], jobId });
     } else if (r?.type === "content" && r.neta_kind) {
       const neta = await api.createNeta({ kind: r.neta_kind, content: r.content, from_job: jobId });
       onChanged?.();
       const label = KIND_LABEL[r.neta_kind] ?? r.neta_kind;
-      setMsgs((m) => [...m, { role: "ai", text: `「${label}」を作りました`, neta }]);
+      pushMsg({ role: "ai", text: `「${label}」を作りました`, neta });
     } else if (r?.type === "plan") {
-      setMsgs((m) => [
-        ...m,
-        { role: "ai", text: `${r.plan ?? "分解しました"}（結果は受け取りトレイ 📥 に届きます）` },
-      ]);
+      pushMsg({
+        role: "ai",
+        text: `${r.plan ?? "分解しました"}（結果は受け取りトレイ 📥 に届きます）`,
+      });
     } else {
       const t = r?.text ?? "";
-      setMsgs((m) => [...m, { role: "ai", text: t, saveable: t || undefined }]);
+      pushMsg({ role: "ai", text: t, saveable: t || undefined });
     }
   }
 
@@ -126,11 +172,11 @@ export function Chat({
 
   // 対象付きで開いたら最初の提案を自動で出す
   useEffect(() => {
-    if (target && !started.current) {
+    if (loaded && target && !started.current) {
       started.current = true;
       void run("この内容を発展させる方向性の案を出して");
     }
-  }, [target]);
+  }, [target, loaded]);
 
   async function pick(o: Opt, jobId?: string) {
     const neta = await api.createNeta({
@@ -140,7 +186,7 @@ export function Chat({
       from_job: jobId,
     });
     onChanged?.();
-    setMsgs((m) => [...m, { role: "ai", text: `「${o.title || "案"}」をネタ化しました`, neta }]);
+    pushMsg({ role: "ai", text: `「${o.title || "案"}」をネタ化しました`, neta });
   }
 
   // #68 ネタを開く＝Chatを閉じて編集画面へ
@@ -156,7 +202,7 @@ export function Chat({
   async function saveKnowledge(text: string) {
     await api.createNeta({ kind: "knowledge", text });
     onChanged?.();
-    setMsgs((m) => [...m, { role: "ai", text: "知見として保存しました" }]);
+    pushMsg({ role: "ai", text: "知見として保存しました" });
   }
 
   // #9 参考曲を1曲だけ reference ネタとして保存
@@ -170,7 +216,13 @@ export function Chat({
       from_job: jobId,
     });
     onChanged?.();
-    setMsgs((m) => [...m, { role: "ai", text: `参考曲「${r.title}」を保存しました` }]);
+    pushMsg({ role: "ai", text: `参考曲「${r.title}」を保存しました` });
+  }
+
+  // #70 履歴クリア（サーバ＋画面）。失敗してもメモリだけクリア＝従来挙動。
+  function clearHistory() {
+    setMsgs([]);
+    void api.clearChatThread(thread).catch(() => {});
   }
 
   return (
@@ -185,9 +237,14 @@ export function Chat({
               調べる
             </button>
           </div>
-          <button aria-label="close" onClick={onClose}>
-            ✕
-          </button>
+          <div className="chat-actions">
+            <button aria-label="clear-history" title="履歴を消す" onClick={clearHistory}>
+              🗑
+            </button>
+            <button aria-label="close" onClick={onClose}>
+              ✕
+            </button>
+          </div>
         </header>
         {targetLabel && <div className="chat-target">「{targetLabel.slice(0, 30)}」についての相談</div>}
         <div className="chat-log">

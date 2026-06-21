@@ -192,7 +192,37 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ parent, child, position }),
     }),
+
+  // #70 Chat履歴の永続化（thread=対象ネタ id or 'global'）。保存/復元/クリア。
+  listChatMessages: (thread: string) =>
+    http<ChatMessage[]>(`/chat/${encodeURIComponent(thread)}/messages`),
+  addChatMessage: (thread: string, msg: ChatMessageInput) =>
+    http<ChatMessage>(`/chat/${encodeURIComponent(thread)}/message`, {
+      method: "POST",
+      body: JSON.stringify(msg),
+    }),
+  clearChatThread: (thread: string) =>
+    http<{ cleared: boolean }>(`/chat/${encodeURIComponent(thread)}/messages`, {
+      method: "DELETE",
+    }),
 };
+
+export interface ChatMessageInput {
+  role: string;
+  kind?: string | null;
+  text?: string | null;
+  data?: unknown;
+}
+
+export interface ChatMessage {
+  id: string;
+  thread: string;
+  role: string;
+  kind: string | null;
+  text: string | null;
+  data: unknown;
+  created: string;
+}
 
 export interface CompositionNode {
   neta: Neta;
