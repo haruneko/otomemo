@@ -93,33 +93,63 @@
 - **executable な intent の集合は、上の実現性が解けるにつれて確定**（特に #12/#13）。カタログ（理想）は今確定、実行可能列挙はまだ凍結しない。
 
 ### 生成リクエストモデル（枠＋動作＋構造）(#85)
-要件「頼み方：枠を指定して動作を頼む」を契約へ落とす方針。生成を**単発intent**から**枠付き・構造を返す**へ一般化する。現状の gen_melody/gen_chord/gen_rhythm はこの退化形（枠なし・1フラットネタ）。
+要件「頼み方：枠を指定して動作を頼む」を契約へ落とす方針。生成を**単発intent**から**枠付き・構造を返す**へ一般化する。現状の gen_melody/gen_chord/gen_rhythm はこの退化形（枠なし・items 1件の特殊形）。
+> design-acceptor 2巡を反映：1巡目の重大指摘1〜7＋2巡目の新穴（handler非純粋の前提訂正・section container例外・fetch/transform実体・gen_lyric/連鎖の隠れ穴）を反映済み。各所に「※指摘N／2巡目」で対応を示す。
 
-**(A) リクエストの構造**（自由文を plan が解釈して組む。または下記パネルで人が埋める）:
-- **frame（枠／全て任意。省略時は延長として汲む。ただし指定したら最後まで効く）**：`{key?, meter?, tempo?, bars?, mood?, style?}`
-- **verb（動作）**：make（作る）/ fetch（取ってくる＝抽出）/ transform（変換＝6/8化・移調）/ modify（修正）/ assemble（組み立てる＝section化）/ research→make（調べてから作る・連鎖）
+**(A) リクエストの構造**（自由文を plan/consult が解釈して組む。または下記パネルで人が埋める）:
+- **frame（枠／全て任意。省略時は延長として汲む。指定したら最後まで効く）**：`{key?, meter?, tempo?, bars?, mood?, style?}`
+- **verb（動作）**：make / fetch（抽出）/ transform（6/8化・移調）/ modify（修正）/ assemble（section化）/ research→make（連鎖）
 - **target**：melody | chord_progression | rhythm | lyric | section …
-- **count**：N（「✕個」）
-- **condition（何に合わせるか）**：`{fit_to:[neta_id], by:"syllable"|"harmony"|…}`（例2=歌詞の音数、例5=コード進行に合わせる）
+- **count**：N（「✕個」）。**上限 N≤8**（reapの暴発防止 ※軽微指摘）。
+- **condition（何に合わせるか）**：`{fit_to:[neta_id], by:"syllable"|"harmony"|…}`（例2=歌詞の音数、例5=コード進行）
 - **structure（まとめ方）**：flat | pair | section
 
+**入口での解釈（※軽微指摘）**：consult の判別ユニオンに新 type `generate` を足し、`{type:"generate", request:(A)}` を返す（既存 chat/options/content/plan と並ぶ）。plan は複数 verb/kind を混ぜる時の親として残す。
+
 **(B) 枠を最後まで効かせる（S1＝核・最小スライス）**:
-- gen_* / plan の params に `frame` を載せ、プロンプトが反映（content は C基準維持・拍子/調/小節の枠で作る）。
-- **reapResults が生成ネタに frame を付与**：atomic断片は key/meter/tempo/bars を**ヒント**として持つ（#14 の「断片はヒント、section/songが配置の権威」と整合）。section を生成する場合は section が権威として frame を持つ。
+- atomic 生成ジョブの params に `frame` を載せ、プロンプトが反映（content は C基準維持・拍子/調/小節の枠で作る）。
+- **reapResults が生成ネタに frame を付与**：atomic断片は key/meter/tempo/bars を**ヒント**として持つ（#14「断片はヒント、配置時は section/song が権威」と整合。frame付与はヒント保存なので衝突しない）。section を生成する場合は section が権威として frame を持つ。
+- **`frame.style` は保存しない（※指摘7）**：neta に style カラムは足さない（design 原則「スキーマ変更は高い」）。style は**プロンプトにのみ効く**＝既存 `_style_block`/`_style_examples`(jobs.py) の few-shot に渡し、検索クエリ/フィルタの誘導に使う。
 - これで「6/8と言ったら 6/8 で返る」（今の最大の穴を塞ぐ）。
 
+**(B') count と分解の役割分担（※指摘3）**：
+- **count=N は 1 つの atomic 生成ジョブが items を N 件返す**（既定）。gen_* の戻り値を `{content}` 単一から **`{items:[…]}`** へ進化（`{content}` は items 1件の後方互換として受ける）。
+- **plan 分解は「異なる kind/verb を混ぜる時だけ」**（例：research→make、コード＋メロのペア生成で kind が分かれる場合）。同種 N 個は plan を挟まず1ジョブ＝items。曖昧併存を解消。
+
 **(C) 構造を返す（S2）**:
-- ジョブ結果を `{items:[{kind, content, frame…, label?}], edges:[{type:"compose"|"relation", from, to, position?}]}` に拡張（from/to は items の index）。
-- reapResults：items→ネタ化（frame付与）、edges→compose_edge / relation_edge。これで「コード＋メロのペア」「4バリエーション＝4 section」を**一括 materialize**。現行の単一ネタ結果は items 1件の特殊形。
+- ジョブ結果を `{items:[{kind, content, frame…, label?}], edges:[{type:"compose"|"relation", from, to, position?}]}` に拡張（from/to は items の **index**）。
+- **対応表・順序・部分失敗（※指摘2）**：reapResults は items を**配列順**に materialize しつつ `idx→neta_id` 配列を作る。`hasMusic` 偽の**生成 item**（メロ/コード等で中身空）は **null を残して index を保存**（詰めない）。edges は**両端が非null の時だけ** compose_edge/relation_edge を張る（片端 null は捨てる）。
+- **structure→edge 対応（※軽微＋2巡目新穴2）**：`pair`→`relation_edge('related')`。`section`→**section コンテナ item を items に明示的に含める**（kind:"section"・content 空でよい）。**section/song など container kind は hasMusic 判定の対象外＝null 化しない**（中身を持たない親なので例外）。各構成要素へ `compose_edge(section→child, position)`。flat は edge なし。index は全 item（container 含む）に materialize 前に確定。
+- 現行の単一ネタ結果は items 1件・edges 空の特殊形（後退ゼロ）。
+
+**(C') condition 解決層（※指摘1・2巡目新穴1で前提訂正）**:
+- 訂正：handler は純粋ではない。既に `_style_block`/`_style_examples`(jobs.py) が `connect()` で DB を開き neta.content を読んでいる（作風 few-shot）。よって「誰が詰めるか」問題は**worker 側の解決に一本化**できる（TS/worker 二箇所分割は過剰だった）。
+- **fit_to の解決は worker 一本**：`fit_to` には neta_id だけを渡す。worker が**ジョブ消化の入口で**（`_style_block` と同じ DB 経路で）fit_to neta の content を読み、`params.fit_context` に展開してから handler を呼ぶ。同期 Chat 経路も同じ worker 解決に乗る（TS 側展開は不要＝退化）。
+- 展開形 `fit_context`：`by:"syllable"`→`{syllables:[…]}`（worker の split_mora 活用）、`by:"harmony"`→`{chords:[…]}`、メロ修正→`{notes:[…]}`。**handler は fit_context だけ見れば合わせられる**。
+- **連鎖（research→make ※2巡目隠れ穴）**：前段 research の結果(references/summary)を、後段 make 子の `params.context`/`fit_context` に worker(`_enqueue_children`)が焼く。＝「調べた内容を踏まえて作る」の配線をここで明記。
+
+**(C'') verb の振り分け（※指摘4・2巡目新穴3で実体訂正）**:
+- **transform**（6/8化・移調）＝AI不要の**決定的処理**。ただし**現状そのコードは無い＝新規に書く**（移調は再生時の C→key 変換ロジックが music.ts にあるが、neta content を別調/別拍子の**変種として確定**する関数は未実装）。meter 変更は主に meter ヒントの付け替え＋必要なら小節割りの再配置。元ネタは残し結果は変種 neta（DAG）。場所は worker か TS の決定的モジュール（実装時に確定）。
+- **fetch**（参考曲等から「コード進行を取ってくる」）＝**research とは別の新ハンドラ**。handle_research の戻りは references リスト→reference ネタ化で、**楽曲 content を吐かない**。fetch は `{items:[{kind:"chord_progression", content:{chords}}]}` を吐く専用ハンドラを新設（必要なら fetch→transform の連鎖で 6/8 化）。
+- **modify**（既存修正）＝対象 content を `fit_context`(C') に焼き込む Claude ハンドラ。結果は変種 neta（元を残す）。
+- **歌詞生成（※2巡目隠れ穴）**：target=lyric は現状ハンドラが無い。`gen_lyric`（mora 制約付き）を新設対象として S2/S3 に積む。
 
 **(D) 二つの入口（S3＝導線・両方持つ）**:
-- **文章（既定）**：自由文→ consult/plan が (A) の構造へ解釈。
-- **パネル（AIが必要と判断したら出す）**：解釈に自信が無い/枠が欠ける時、Claude が**構造化フォームを要求**＝既存「ジョブが人に質問して待つ(#45 status=waiting+question)」を、テキスト質問でなく**フォーム質問**（拍子/調/BPM/個数/対象/まとめ方）へ拡張。人が埋めて answer→継続ジョブ。両方あることで人とAIの語彙が揃う。
+- **文章（既定）**：自由文→ consult が `type:"generate"` で (A) を返す。
+- **パネル（AIが必要と判断したら出す ※指摘5）**：解釈に自信が無い/枠が欠ける時、Claude が**構造化フォームを要求**。既存 `job.question`(TEXT) に **JSON 文字列**を入れる＝`{kind:"form", fields:[{key:"meter",label,type,options?}]}`（カラム変更不要＝安い）。`answerJob` の署名を `answer: string | Record<string,unknown>` へ拡張し、**構造回答を frame に畳んで継続ジョブの params に載せる**。
 
-**(E) 方向確認（S3＝賢さの上積み・任意）**:
-- バッチや重い生成の前に、**まず1個だけサンプルを作る**（or 近い既存ネタを提示）→「この方向でいい？」を waiting/answer で確認→承認で本生成、却下/微修正で枠を直して再投擲。安く方向を当ててから量産。既存の二相(plan→子)＋waiting/answer に乗るので**実現性は高い**。
+**(E) 方向確認（S3＝賢さの上積み・任意 ※指摘6）**:
+- バッチ前に**まず1個サンプル**（or 近い既存ネタ提示）→ waiting+question で「この方向でいい？」→承認で本生成。
+- **answerJob は orig.params を引き継ぐよう拡張が必要**（現状 intent/target/instruction しか継がず frame/count/condition が消える＝「実現性高い」は誤りだった）。承認フローでは **frame/condition を保持し count を残数に差し替え**て継続ジョブを積む。
 
-**段階**：S1 枠の通し（数値の枠＝まず6/8が効く）→ S2 構造を返す（items+edges）→ S3 二入口＋方向確認。**契約変更につき** design→design-acceptor→実装→impl-acceptor の順で進める。
+**段階**（2巡目を受け S2 を分割）：
+- **S1**：枠の通し（数値の枠＝まず6/8が効く）。make 単体・items 1件・condition 不要。styleはprompt限定(指摘7)。これだけで「6/8と言ったら効く」が閉じる。
+- **S2a**：構造を返す（items 複数＋edges＋指摘2の対応表・container 例外）。同種 N個・pair・section。
+- **S2b**：condition 解決層 (C')＝fit_context を worker で解決（歌詞音数 by:syllable／コードに合わせ by:harmony／modify）。S2a と独立に着手可。
+- **S2c**：verb 拡張（fetch 新ハンドラ／transform 決定的処理／gen_lyric）。
+- **S3**：二入口（文章＋パネル＝指摘5）＋方向確認（指摘6 の answerJob params 引き継ぎ）。
+
+**契約変更につき** design→design-acceptor→実装→impl-acceptor。
 
 ### ジョブ表
 - `job`(id, target_neta_id[null可], level[plan/atomic], intent[意図カタログ参照], instruction[自然言語], params[JSON], status[queued/running/waiting/done/failed/canceled], priority, progress, notify_level[null=全体設定継承], parent_job_id[null可], question[null可], result_summary, error, 時刻)
