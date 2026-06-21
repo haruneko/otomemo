@@ -71,8 +71,9 @@ export function NetaDialog({
     if (!isMusic) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Space") return;
+      // フォーカスが操作要素(入力/ボタン/リンク)にある時はその native 動作を優先（横取りしない）
       const t = e.target as HTMLElement;
-      if (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable) return;
+      if (t.closest?.('input, textarea, select, button, a, [contenteditable="true"]')) return;
       e.preventDefault();
       tp.playPause();
     };

@@ -82,7 +82,7 @@ export function SectionEditor({
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Space") return;
       const t = e.target as HTMLElement;
-      if (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable) return;
+      if (t.closest?.('input, textarea, select, button, a, [contenteditable="true"]')) return;
       e.preventDefault();
       tp.playPause();
     };
