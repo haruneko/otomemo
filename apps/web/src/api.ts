@@ -52,6 +52,15 @@ export interface NetaPatch {
   tags?: string[];
 }
 
+export interface Asset {
+  id: string;
+  kind: string;
+  name: string | null;
+  size: number | null;
+  mime: string | null;
+  created: string;
+}
+
 export interface Facets {
   kind: string[];
   mood: string[];
@@ -111,6 +120,21 @@ export const api = {
   },
 
   facets: () => http<Facets>("/facets"),
+
+  // #77 asset（SoundFont等のファイル資産）。アップロード/一覧/削除/配信URL。
+  uploadAsset: async (file: File, kind = "soundfont") => {
+    const fd = new FormData();
+    fd.append("kind", kind);
+    fd.append("file", file);
+    // FormData は content-type を自分で付けてはいけない（boundary付与をブラウザに任せる）
+    const res = await fetch(`${BASE}/asset`, { method: "POST", body: fd });
+    if (!res.ok) throw new ApiError(res.status, await res.text());
+    return (await res.json()) as Asset;
+  },
+  listAssets: (kind?: string) =>
+    http<Asset[]>(`/assets${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`),
+  deleteAsset: (id: string) => http<{ deleted: boolean }>(`/asset/${id}`, { method: "DELETE" }),
+  assetUrl: (id: string) => `${BASE}/asset/${id}`,
 
   // #65 ハイブリッド検索（キーワード一致 ∪ 意味[較正ゲート]）。matchType: exact|semantic|both。
   search: (q: string, k = 20) =>

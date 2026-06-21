@@ -436,4 +436,76 @@ export class Core {
       updated: row.updated as string,
     };
   }
+
+  // --- asset（#77 SoundFont等のファイル資産。実体は data/assets/、ここはメタ）---
+  addAsset(input: {
+    kind: string;
+    name?: string | null;
+    path: string;
+    size?: number | null;
+    mime?: string | null;
+    meta?: unknown;
+  }): Asset {
+    const id = randomUUID();
+    this.db
+      .prepare(
+        `INSERT INTO asset (id,kind,name,path,size,mime,meta,created)
+         VALUES (@id,@kind,@name,@path,@size,@mime,@meta,@created)`,
+      )
+      .run({
+        id,
+        kind: input.kind,
+        name: input.name ?? null,
+        path: input.path,
+        size: input.size ?? null,
+        mime: input.mime ?? null,
+        meta: input.meta == null ? null : JSON.stringify(input.meta),
+        created: now(),
+      });
+    return this.getAsset(id)!;
+  }
+
+  listAssets(kind?: string): Asset[] {
+    const rows = (
+      kind
+        ? this.db.prepare(`SELECT * FROM asset WHERE kind=? ORDER BY created DESC`).all(kind)
+        : this.db.prepare(`SELECT * FROM asset ORDER BY created DESC`).all()
+    ) as Record<string, unknown>[];
+    return rows.map(rowToAsset);
+  }
+
+  getAsset(id: string): Asset | null {
+    const row = this.db.prepare(`SELECT * FROM asset WHERE id=?`).get(id) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? rowToAsset(row) : null;
+  }
+
+  deleteAsset(id: string): boolean {
+    return this.db.prepare(`DELETE FROM asset WHERE id=?`).run(id).changes > 0;
+  }
+}
+
+export interface Asset {
+  id: string;
+  kind: string;
+  name: string | null;
+  path: string;
+  size: number | null;
+  mime: string | null;
+  meta: unknown;
+  created: string;
+}
+
+function rowToAsset(row: Record<string, unknown>): Asset {
+  return {
+    id: row.id as string,
+    kind: row.kind as string,
+    name: (row.name as string) ?? null,
+    path: row.path as string,
+    size: (row.size as number) ?? null,
+    mime: (row.mime as string) ?? null,
+    meta: row.meta == null ? null : JSON.parse(row.meta as string),
+    created: row.created as string,
+  };
 }

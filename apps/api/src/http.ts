@@ -1,6 +1,19 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import multipart from "@fastify/multipart";
+import { createReadStream, createWriteStream, mkdirSync, statSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Core } from "./core";
+
+// #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
+function assetsDir(): string {
+  return (
+    process.env.CM_ASSETS_DIR ??
+    (process.env.CM_DB ? join(dirname(process.env.CM_DB), "assets") : join("data", "assets"))
+  );
+}
 
 const netaInput = z.object({
   kind: z.string().min(1),
@@ -46,6 +59,9 @@ export function buildHttp(core: Core): FastifyInstance {
       return reply.code(401).send({ error: "unauthorized" });
     }
   });
+
+  // #77 ファイルアップロード（SoundFont等）。上限256MB。
+  app.register(multipart, { limits: { fileSize: 256 * 1024 * 1024 } });
 
   app.post("/neta", async (req, reply) => {
     const p = netaInput.safeParse(req.body);
@@ -210,6 +226,46 @@ export function buildHttp(core: Core): FastifyInstance {
       ...keyword.map((n) => ({ ...n, matchType: semIds.has(n.id) ? "both" : "exact" })),
       ...semantic.filter((n) => !kwIds.has(n.id)).map((n) => ({ ...n, matchType: "semantic" })),
     ];
+  });
+
+  // --- asset（#77 ファイル資産。SoundFont を全体で1個読む等）---
+  app.post("/asset", async (req, reply) => {
+    const part = await req.file();
+    if (!part) return reply.code(400).send({ error: "no file" });
+    const kind = (part.fields.kind as { value?: string } | undefined)?.value ?? "soundfont";
+    const id = randomUUID();
+    const dir = assetsDir();
+    mkdirSync(dir, { recursive: true });
+    const ext = part.filename?.match(/\.[A-Za-z0-9]+$/)?.[0] ?? "";
+    const path = join(dir, `${id}${ext}`);
+    await pipeline(part.file, createWriteStream(path));
+    if (part.file.truncated) {
+      rmSync(path, { force: true });
+      return reply.code(413).send({ error: "file too large" });
+    }
+    const size = statSync(path).size;
+    return core.addAsset({ kind, name: part.filename ?? null, path, size, mime: part.mimetype });
+  });
+
+  app.get("/assets", async (req) => {
+    const q = req.query as { kind?: string };
+    return core.listAssets(q.kind);
+  });
+
+  app.get("/asset/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const a = core.getAsset(id);
+    if (!a) return reply.code(404).send({ error: "not found" });
+    reply.header("content-type", a.mime ?? "application/octet-stream");
+    if (a.size != null) reply.header("content-length", String(a.size));
+    return reply.send(createReadStream(a.path));
+  });
+
+  app.delete("/asset/:id", async (req) => {
+    const { id } = req.params as { id: string };
+    const a = core.getAsset(id);
+    if (a) rmSync(a.path, { force: true });
+    return { deleted: core.deleteAsset(id) };
   });
 
   return app;

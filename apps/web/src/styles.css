@@ -133,6 +133,37 @@ h1 {
   padding: 4px 8px;
   cursor: pointer;
 }
+/* #77 SoundFont 一覧 */
+.sf-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 4px;
+}
+.sf-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sf-item.on {
+  font-weight: 600;
+}
+.sf-pick {
+  flex: 1;
+  text-align: left;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.sf-item.on .sf-pick {
+  border-color: var(--accent);
+}
+.sf-err {
+  color: #e0533f;
+}
 form[aria-label="capture"] {
   display: grid;
   gap: 8px;

@@ -75,6 +75,17 @@ CREATE TABLE IF NOT EXISTS job_result (
   role    TEXT,
   data    TEXT
 );
+CREATE TABLE IF NOT EXISTS asset (
+  id      TEXT PRIMARY KEY,
+  kind    TEXT NOT NULL,
+  name    TEXT,
+  path    TEXT NOT NULL,
+  size    INTEGER,
+  mime    TEXT,
+  meta    TEXT,
+  created TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_asset_kind ON asset(kind);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {
