@@ -65,12 +65,19 @@ _MUSIC_TOOLS = ["analyze_fit", "detect_key", "analyze_progression", "gen_chords"
 
 
 def _mcp_args() -> list[str]:
-    """#86 S2b：cm-music-mcp を claude -p に接続する引数（CM_MUSIC_MCP_URL がある時だけ）。"""
+    """#86 S2b：cm-music-mcp を claude -p に接続する引数（CM_MUSIC_MCP_URL がある時だけ）。
+    --max-turns で agentic ループを打ち切り（暴発・遅延の上限。env で調整可）。"""
     if not CM_MUSIC_MCP_URL:
         return []
     cfg = json.dumps({"mcpServers": {"cm-music": {"type": "http", "url": CM_MUSIC_MCP_URL}}})
     allowed = ",".join(f"mcp__cm-music__{t}" for t in _MUSIC_TOOLS)
-    return ["--mcp-config", cfg, "--allowedTools", allowed, "--permission-mode", "bypassPermissions"]
+    max_turns = os.environ.get("CM_AGENTIC_MAX_TURNS", "8")
+    return [
+        "--mcp-config", cfg,
+        "--allowedTools", allowed,
+        "--permission-mode", "bypassPermissions",
+        "--max-turns", max_turns,
+    ]
 
 
 def claude_prompt(prompt: str, timeout: int = 120, tools: bool = False) -> str:
@@ -828,20 +835,23 @@ def handle_consult(params: dict) -> dict:
         ]
         return {"type": "options", "options": opts} if opts else {"type": "chat", "text": _CONSULT_FALLBACK}
     if t == "items":
-        # #86 S2b agentic：ツールで推敲した一式。kind＋(music content or text) のある item と、両端 int の edge のみ通す。
+        # #86 S2b agentic：ツールで推敲した一式。**items は index を保存（compact しない）**＝
+        # edge の from/to(index) とズレないように。非dict だけ除く。実検証は reap(core.ts)が担う
+        # （無効itemは null-idMap で詰めず index 保持・両端非nullでedge）。
         raw_items = data.get("items") if isinstance(data.get("items"), list) else []
-        items = [
-            it for it in raw_items
-            if isinstance(it, dict) and it.get("kind")
-            and (it.get("kind") in ("section", "song") or hasmusic_or_text(it))
-        ]
+        items = [it if isinstance(it, dict) else {} for it in raw_items]  # 非dict→空dict(reapで弾く)・index保存
         edges = [
             {"type": str(e.get("type", "relation")), "from": int(e["from"]), "to": int(e["to"]),
              **({"position": e["position"]} if isinstance(e.get("position"), (int, float)) else {})}
             for e in (data.get("edges") or [])
             if isinstance(e, dict) and isinstance(e.get("from"), int) and isinstance(e.get("to"), int)
         ]
-        return {"type": "items", "items": items, "edges": edges} if items else {"type": "chat", "text": _CONSULT_FALLBACK}
+        # 中身のある item が1つでもあるか（空dict だけなら chat フォールバック）
+        has_real = any(
+            it.get("kind") and (it.get("kind") in ("section", "song") or hasmusic_or_text(it))
+            for it in items
+        )
+        return {"type": "items", "items": items, "edges": edges} if has_real else {"type": "chat", "text": _CONSULT_FALLBACK}
     if t == "content":
         nk = data.get("neta_kind")
         builder = _CONSULT_CONTENT.get(nk)

@@ -249,6 +249,58 @@ def test_gen_pair_rule_full_arrangement():
     assert len([e for e in res["edges"] if e["type"] == "compose"]) == 4
 
 
+def test_mcp_args_gated_by_env(monkeypatch):
+    # #86 S2b env 無し=MCP引数なし(後退ゼロ)、有り=--mcp-config/--allowedTools/--max-turns
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", None)
+    assert jobs._mcp_args() == []
+    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", "http://127.0.0.1:8790/mcp")
+    args = jobs._mcp_args()
+    assert "--mcp-config" in args and "--max-turns" in args and "--permission-mode" in args
+    allowed = args[args.index("--allowedTools") + 1]
+    assert "mcp__cm-music__analyze_fit" in allowed and "mcp__cm-music__gen_chords" in allowed
+
+
+def test_handle_consult_agentic_items_preserves_index(monkeypatch):
+    # #86 S2b agentic：不正itemが先頭でも edge の index がズレない（compactしない）
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", "http://x")
+    payload = (
+        '{"type":"items","items":[{"bad":1},'
+        '{"kind":"chord_progression","content":{"chords":[{"root":0,"quality":"","start":0,"dur":4}]}},'
+        '{"kind":"section"}],"edges":[{"type":"compose","from":2,"to":1,"position":0}]}'
+    )
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120, **kw: payload)
+    res = jobs.handle_consult({"instruction": "コードに合うメロ"})
+    assert res["type"] == "items"
+    assert len(res["items"]) == 3  # 不正item(空dict)も残して index 保存
+    assert res["edges"][0]["from"] == 2 and res["edges"][0]["to"] == 1  # section→chord がズレない
+
+
+def test_handle_consult_dispatch_without_env(monkeypatch):
+    # env 無し＝従来 dispatch(plan)＝後退ゼロ
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", None)
+    monkeypatch.setattr(
+        jobs, "claude_prompt",
+        lambda p, timeout=120, **kw: '{"type":"plan","subtasks":[{"intent":"gen_pair_rule","params":{}}]}',
+    )
+    res = jobs.handle_consult({"instruction": "コードに合うメロ"})
+    assert res["type"] == "plan"
+
+
+def test_hasmusic_or_text():
+    import cm_worker.jobs as jobs
+
+    assert jobs.hasmusic_or_text({"content": {"chords": [1]}})
+    assert jobs.hasmusic_or_text({"text": "歌詞"})
+    assert not jobs.hasmusic_or_text({"content": {}})
+    assert not jobs.hasmusic_or_text({})
+
+
 def test_gen_pair_rule_robust_to_claude_param_drift():
     # #86 Claudeが渡すparamsの揺れ（key="C"文字列・time_signature・parts名）でも落ちず効く
     import cm_worker.jobs as jobs
