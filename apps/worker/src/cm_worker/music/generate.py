@@ -6,6 +6,7 @@ C基準で生成（design #14：chord も C基準保存・調はヒント）。f
 
 import random
 
+from .normalize import normalize_frame
 from .theory import chord_pcs, norm_root, scale_pcs
 
 # 度数 → (ルートpc, quality)。C基準（key=0）。
@@ -36,7 +37,7 @@ def _beats_per_bar(meter) -> float:
 def gen_chords(frame: dict | None = None, seed: int | None = None) -> dict:
     """機能和声ルールでコード進行を生成。返り #85 items 形：
     {items:[{kind:"chord_progression", content:{chords:[{root,quality,start,dur}]}, label}]}。"""
-    frame = frame or {}
+    frame = normalize_frame(frame)
     rng = random.Random(seed)
     mood = str(frame.get("mood") or "")
     minor = any(h in mood.lower() or h in mood for h in _MINOR_HINT)
@@ -47,7 +48,7 @@ def gen_chords(frame: dict | None = None, seed: int | None = None) -> dict:
     except Exception:  # noqa: BLE001
         bars = 4
     bars = max(1, min(16, bars))  # 不正・範囲外は 1..16 に丸め（0/負も1へ・一貫）
-    bpb = _beats_per_bar(frame.get("meter") or frame.get("time_signature"))
+    bpb = _beats_per_bar(frame.get("meter"))
 
     # 機能マルコフで度数列を作る（T始まり・T終わり）
     funcs = ["T"]
@@ -85,14 +86,14 @@ def _chord_at(t: float, chords):
 def gen_melody(frame: dict | None = None, chords=None, seed: int | None = None) -> dict:
     """#86 ルールベースのメロディ生成。コードトーン拘束＝拍頭はコードトーン、間はスケール音で
     順次つなぐ（コードに合うことを"保証"）。chords を渡せばそれに合わせる。C基準。返り #85 items 形。"""
-    frame = frame or {}
+    frame = normalize_frame(frame)
     rng = random.Random(seed)
     mood = str(frame.get("mood") or "")
     minor = any(h in mood.lower() or h in mood for h in _MINOR_HINT)
     scale = scale_pcs(0, "minor" if minor else "major")
     b = frame.get("bars")
     bars = max(1, min(16, int(b))) if isinstance(b, (int, float)) and b else 4
-    bpb = _beats_per_bar(frame.get("meter") or frame.get("time_signature"))
+    bpb = _beats_per_bar(frame.get("meter"))
     total = max(1, int(round(bars * bpb)))
 
     notes = []
@@ -119,10 +120,10 @@ def gen_melody(frame: dict | None = None, chords=None, seed: int | None = None) 
 def gen_bass(frame: dict | None = None, chords=None, seed: int | None = None) -> dict:
     """#86 ルールベースのベースライン。強拍=コードのルート、弱拍=5度（C2基準・低域）。
     コードに合うことを保証（root/5th はコードトーン）。melody kind で返す（notes content）。"""
-    frame = frame or {}
+    frame = normalize_frame(frame)
     b = frame.get("bars")
     bars = max(1, min(16, int(b))) if isinstance(b, (int, float)) and b else 4
-    bpb = _beats_per_bar(frame.get("meter") or frame.get("time_signature"))
+    bpb = _beats_per_bar(frame.get("meter"))
     total = max(1, int(round(bars * bpb)))
     per_bar = max(1, int(round(bpb)))
     notes = []
@@ -141,7 +142,7 @@ _GM = {"Kick": 36, "Snare": 38, "HiHat": 42, "OpenHat": 46}
 def gen_drums(frame: dict | None = None, seed: int | None = None) -> dict:
     """#86 ルールベースのドラム（GMバックビート＋seedで小変化）。16ステップ1小節パターン。
     返り {items:[{kind:"rhythm", content:{rhythm:{steps,lanes}}}]}。"""
-    frame = frame or {}
+    frame = normalize_frame(frame)
     rng = random.Random(seed)
     kick = {0, 8}
     snare = {4, 12}

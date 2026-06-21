@@ -4,6 +4,7 @@ analyze_fit は純Python（高速・~0.01ms）。detect_key / analyze_progressio
 コードは入力で既知（content の root/quality）なので、和声推定の最難関を踏まない。
 """
 
+from .normalize import normalize_chords
 from .theory import KEY_NAMES, MAJOR_SCALE, MINOR_SCALE, chord_pcs, norm_root, scale_pcs
 
 
@@ -57,6 +58,7 @@ def analyze_fit(melody: list[dict], chords: list[dict], key: int | None = None) 
     """メロが各コードに当てはまっているかを定量化（"提案"の前提）。
     返り {in_chord_rate, non_chord_tones[{type,pos,pitch}], scale_outside_rate, score, issues[]}。"""
     notes = sorted([n for n in (melody or []) if "pitch" in n], key=lambda n: float(n.get("start", 0)))
+    chords = normalize_chords(chords)  # #86 root音名→pc 等の揺れを吸収（口1/口2共通の正規化層）
     if not notes:
         return {"in_chord_rate": 0.0, "non_chord_tones": [], "scale_outside_rate": 0.0, "score": 0.0, "issues": []}
 

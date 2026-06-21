@@ -8,7 +8,24 @@ from cm_worker.music import (
     gen_chords,
     gen_drums,
     gen_melody,
+    normalize_chords,
+    normalize_frame,
 )
+
+
+def test_normalize_frame_absorbs_claude_drift():
+    # #86 口1/口2共通の正規化層：Claudeの揺れ(key="A"/time_signature/bpm/範囲外bars)を吸収
+    f = normalize_frame({"key": "A", "time_signature": "6/8", "bpm": 120, "bars": 99, "mood": "切ない"})
+    assert f["key"] == 9 and f["meter"] == "6/8" and f["tempo"] == 120 and f["bars"] == 16 and f["mood"] == "切ない"
+    assert normalize_frame({"key": "C#"})["key"] == 1
+    assert normalize_frame(None) == {}  # 安全
+    assert "key" not in normalize_frame({"key": "Zzz"})  # 不正は落とす
+
+
+def test_normalize_chords_root_names():
+    cs = normalize_chords([{"root": "C", "quality": "", "start": 0, "dur": 4}, {"root": "A", "quality": "m", "start": 4, "dur": 4}])
+    assert [c["root"] for c in cs] == [0, 9]
+    assert normalize_chords(None) == []
 
 
 def test_analyze_fit_in_chord_and_nct():
