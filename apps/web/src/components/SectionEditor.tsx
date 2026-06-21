@@ -131,7 +131,7 @@ export function SectionEditor({
         </button>
       </div>
 
-      <div className="lanes" aria-label="timeline">
+      <div className="lanes" aria-label="timeline" ref={tp.scrollerRef}>
         <div className="playhead" aria-hidden="true" ref={tp.lineRef} />
         <div className="lane-ruler">
           <div className="lane-label" />

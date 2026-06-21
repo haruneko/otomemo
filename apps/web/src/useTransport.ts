@@ -12,7 +12,7 @@ export function useTransport(
   bpm: number,
   opts: { scaleBeats: number; bpb?: number },
 ) {
-  const { lineRef, timeRef, start: startPh, stop: stopPh } = usePlayhead();
+  const { lineRef, timeRef, scrollerRef, start: startPh, stop: stopPh } = usePlayhead();
   const handle = useRef<PlaybackHandle | null>(null);
   const [state, setState] = useState<TransportState>("stopped");
   const [loopOn, setLoopOn] = useState(false);
@@ -71,5 +71,15 @@ export function useTransport(
   // 別ネタへ切替/アンマウントで鳴りっぱなしを止める
   useEffect(() => () => handle.current?.stop(), []);
 
-  return { state, loopOn, playing: state === "playing", lineRef, timeRef, playPause, rewind, toggleLoop };
+  return {
+    state,
+    loopOn,
+    playing: state === "playing",
+    lineRef,
+    timeRef,
+    scrollerRef,
+    playPause,
+    rewind,
+    toggleLoop,
+  };
 }

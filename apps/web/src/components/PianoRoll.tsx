@@ -28,11 +28,13 @@ export function PianoRoll({
   onChange,
   beats = 16,
   playheadRef,
+  scrollerRef,
 }: {
   notes: Note[];
   onChange: (n: Note[]) => void;
   beats?: number;
-  playheadRef?: Ref<HTMLDivElement>; // #58 再生プレイヘッド（--ph 比率を ref 直書き）
+  playheadRef?: Ref<HTMLDivElement>; // #58 再生プレイヘッド（--phb 生beatを ref直書き）
+  scrollerRef?: Ref<HTMLDivElement>; // #74 追従スクロール対象（.proll）
 }) {
   const [noteLen, setNoteLen] = useState(1);
 
@@ -81,13 +83,13 @@ export function PianoRoll({
           </button>
         ))}
       </div>
-      <div className="proll" role="grid" aria-label="piano-roll">
-        {/* #58 プレイヘッド：コンテンツ座標(px)で配置＝横スクロールに追従。span*SUBDIV*CELL_PX が小節域幅。 */}
+      <div className="proll" role="grid" aria-label="piano-roll" ref={scrollerRef}>
+        {/* #58/#74 プレイヘッド：生beat --phb をコンテンツ座標(px)へ＝横スクロールに追従。1拍=SUBDIV*CELL_PX。 */}
         <div
           className="proll-playhead"
           aria-hidden="true"
           ref={playheadRef}
-          style={{ left: `calc(${KEY_PX}px + var(--ph, 0) * ${span * SUBDIV * CELL_PX}px)` }}
+          style={{ left: `calc(${KEY_PX}px + var(--phb, 0) * ${SUBDIV * CELL_PX}px)` }}
         />
         {pitches.map((p) => (
           <div className="proll-row" key={p} role="row">

@@ -247,6 +247,7 @@ article[aria-label="neta-card"].dragging {
   gap: 2px;
   overflow: auto;
   max-height: 56vh;
+  position: relative; /* #74 プレイヘッド基準 */
 }
 .step-row {
   display: flex;
@@ -725,6 +726,7 @@ article header {
   gap: 4px;
   align-content: start;
   overflow-x: auto;
+  position: relative; /* #74 プレイヘッド基準 */
 }
 .rhythm-row {
   display: flex;

@@ -251,15 +251,31 @@ export function NetaDialog({
               </button>
             </div>
             {melodyView === "roll" ? (
-              <PianoRoll notes={notes} onChange={setNotes} beats={len} playheadRef={tp.lineRef} />
+              <PianoRoll
+                notes={notes}
+                onChange={setNotes}
+                beats={len}
+                playheadRef={tp.lineRef}
+                scrollerRef={tp.scrollerRef}
+              />
             ) : (
-              <StepPad notes={notes} onChange={setNotes} />
+              <StepPad
+                notes={notes}
+                onChange={setNotes}
+                playheadRef={tp.lineRef}
+                scrollerRef={tp.scrollerRef}
+              />
             )}
           </div>
         ) : isChord ? (
           <ChordEditor chords={chords} onChange={setChords} />
         ) : isRhythm ? (
-          <RhythmEditor rhythm={rhythm} onChange={setRhythm} />
+          <RhythmEditor
+            rhythm={rhythm}
+            onChange={setRhythm}
+            playheadRef={tp.lineRef}
+            scrollerRef={tp.scrollerRef}
+          />
         ) : isContainer ? (
           <SectionEditor
             neta={neta}

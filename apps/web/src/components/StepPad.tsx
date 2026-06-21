@@ -1,3 +1,4 @@
+import { type Ref } from "react";
 import type { Note } from "../music";
 
 // #35: パッドステップ入力。Cメジャー2オクターブ × 16ステップ(16分)のグリッドをタップして
@@ -5,10 +6,21 @@ import type { Note } from "../music";
 const SCALE = [84, 83, 81, 79, 77, 76, 74, 72, 71, 69, 67, 65, 64, 62, 60]; // C6..C4 (Cmajor) 上→下
 const STEPS = 16;
 const STEP_DUR = 0.25; // 16分（16ステップ=4拍=1小節）
+const BEAT_PX = 88; // 1拍=4step×(20px cell+2px gap)＝#74 プレイヘッドの px/beat
 
 const stepOf = (start: number) => Math.round(start / STEP_DUR);
 
-export function StepPad({ notes, onChange }: { notes: Note[]; onChange: (n: Note[]) => void }) {
+export function StepPad({
+  notes,
+  onChange,
+  playheadRef,
+  scrollerRef,
+}: {
+  notes: Note[];
+  onChange: (n: Note[]) => void;
+  playheadRef?: Ref<HTMLDivElement>; // #74 再生プレイヘッド
+  scrollerRef?: Ref<HTMLDivElement>;
+}) {
   const has = (pitch: number, step: number) =>
     notes.some((n) => n.pitch === pitch && stepOf(n.start) === step);
 
@@ -21,7 +33,13 @@ export function StepPad({ notes, onChange }: { notes: Note[]; onChange: (n: Note
   }
 
   return (
-    <div className="step-pad" role="grid" aria-label="step-pad">
+    <div className="step-pad" role="grid" aria-label="step-pad" ref={scrollerRef}>
+      <div
+        className="proll-playhead"
+        aria-hidden="true"
+        ref={playheadRef}
+        style={{ left: `calc(var(--phb, 0) * ${BEAT_PX}px)` }}
+      />
       {SCALE.map((pitch) => (
         <div className="step-row" role="row" key={pitch}>
           {Array.from({ length: STEPS }, (_, s) => (
