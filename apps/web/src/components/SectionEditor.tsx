@@ -77,6 +77,19 @@ export function SectionEditor({
   // #49/#58/#59 トランスポート。合成結果を再生／プレイヘッドは TOTAL(グリッド全体)尺・拍子BPB。
   const tp = useTransport(() => composite(), tempo, { scaleBeats: TOTAL, bpb: BPB });
 
+  // Space=合成再生/一時停止（design #59）。入力中は無効。
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      const t = e.target as HTMLElement;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable) return;
+      e.preventDefault();
+      tp.playPause();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tp.playPause]);
+
   const load = useCallback(async () => {
     const tree = await api.getComposition(neta.id);
     setChildren(tree.children);

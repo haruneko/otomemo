@@ -11,6 +11,7 @@ export function usePlayhead() {
   const lineRef = useRef<HTMLDivElement | null>(null);
   const timeRef = useRef<HTMLElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const beatRef = useRef(0); // #76 現在拍（ChordEditor等が低頻度ポーリングで読む。state更新しない）
   const raf = useRef<number | undefined>(undefined);
   const ctx = useRef<{
     scale: number;
@@ -42,6 +43,7 @@ export function usePlayhead() {
     if (raf.current !== undefined) cancelAnimationFrame(raf.current);
     raf.current = undefined;
     ctx.current = null;
+    beatRef.current = 0;
     detach();
     const el = lineRef.current;
     if (el) el.style.display = "none";
@@ -53,6 +55,7 @@ export function usePlayhead() {
     if (!c) return;
     // 負clamp必須：開始直後 seconds<lookAhead で線が左端外へ出るのを防ぐ。
     const beat = (Math.max(0, c.seconds() - c.lookAhead) * c.bpm) / 60;
+    beatRef.current = Math.min(beat, c.scale);
     const el = lineRef.current;
     if (el) {
       el.style.setProperty("--ph", String(c.scale > 0 ? Math.min(beat / c.scale, 1) : 0));
@@ -105,5 +108,5 @@ export function usePlayhead() {
   );
 
   useEffect(() => () => stop(), [stop]);
-  return { lineRef, timeRef, scrollerRef, start, stop };
+  return { lineRef, timeRef, scrollerRef, beatRef, start, stop };
 }

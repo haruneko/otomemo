@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChordEditor } from "../src/components/ChordEditor";
+
+afterEach(() => vi.useRealTimers());
 
 describe("ChordEditor", () => {
   it("adds a chord with ＋コード", async () => {
@@ -27,5 +29,23 @@ describe("ChordEditor", () => {
     );
     await userEvent.click(screen.getByLabelText("remove-chord-0"));
     expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it("highlights the chord under the playhead beat while playing (#76)", () => {
+    vi.useFakeTimers();
+    const chords = [
+      { root: 0, quality: "", start: 0, dur: 4 },
+      { root: 7, quality: "", start: 4, dur: 4 },
+    ];
+    const beatRef = { current: 5 }; // 2つ目のコード(4..8)内
+    const { container } = render(
+      <ChordEditor chords={chords} onChange={() => {}} beatRef={beatRef} playing />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(120);
+    });
+    const rows = container.querySelectorAll(".chord-row");
+    expect(rows[0]!.className).not.toContain("playing");
+    expect(rows[1]!.className).toContain("playing");
   });
 });

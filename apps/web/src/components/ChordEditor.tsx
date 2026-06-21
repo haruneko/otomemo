@@ -1,3 +1,4 @@
+import { useEffect, useState, type RefObject } from "react";
 import { type ChordEntry } from "../music";
 import { NumberField } from "./NumberField";
 
@@ -20,10 +21,28 @@ const QUALITIES = [
 export function ChordEditor({
   chords,
   onChange,
+  beatRef,
+  playing,
 }: {
   chords: ChordEntry[];
   onChange: (c: ChordEntry[]) => void;
+  beatRef?: RefObject<number>; // #76 再生中拍（10Hzでポーリングして行ハイライト）
+  playing?: boolean;
 }) {
+  // #76 再生中のコード行ハイライト（タイムラインでないので赤線でなく行を光らせる）。
+  const [activeIdx, setActiveIdx] = useState(-1);
+  useEffect(() => {
+    if (!playing || !beatRef) {
+      setActiveIdx(-1);
+      return;
+    }
+    const id = setInterval(() => {
+      const b = beatRef.current ?? 0;
+      setActiveIdx(chords.findIndex((c) => c.start <= b && b < c.start + c.dur));
+    }, 100);
+    return () => clearInterval(id);
+  }, [playing, beatRef, chords]);
+
   function update(i: number, patch: Partial<ChordEntry>) {
     onChange(chords.map((c, k) => (k === i ? { ...c, ...patch } : c)));
   }
@@ -40,7 +59,7 @@ export function ChordEditor({
     <div className="chord-editor">
       {chords.length === 0 && <p className="muted">「＋コード」で追加</p>}
       {chords.map((c, i) => (
-        <div className="chord-row" key={i}>
+        <div className={"chord-row" + (i === activeIdx ? " playing" : "")} key={i}>
           <span className="chord-sym">
             {ROOTS[c.root]}
             {c.quality}

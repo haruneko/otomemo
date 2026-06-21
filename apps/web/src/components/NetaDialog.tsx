@@ -66,6 +66,20 @@ export function NetaDialog({
   const span = Math.max(len, ...playable.map((n) => Math.ceil(n.start + n.dur)));
   const tp = useTransport(() => playable, tempo, { scaleBeats: span, bpb: 4 });
 
+  // Space=再生/停止（design #58/#59）。入力中は無効。音楽ネタのときだけ。
+  useEffect(() => {
+    if (!isMusic) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      const t = e.target as HTMLElement;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable) return;
+      e.preventDefault();
+      tp.playPause();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isMusic, tp.playPause]);
+
   // 連関（このネタから生成/関連したネタ）を表示
   useEffect(() => {
     let on = true;
@@ -268,7 +282,7 @@ export function NetaDialog({
             )}
           </div>
         ) : isChord ? (
-          <ChordEditor chords={chords} onChange={setChords} />
+          <ChordEditor chords={chords} onChange={setChords} beatRef={tp.beatRef} playing={tp.playing} />
         ) : isRhythm ? (
           <RhythmEditor
             rhythm={rhythm}
