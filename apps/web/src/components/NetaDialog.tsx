@@ -3,6 +3,7 @@ import { api, type Neta } from "../api";
 import { moraLines } from "../lyrics";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
+import { NumberField } from "./NumberField";
 import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
 import { ChordEditor } from "./ChordEditor";
@@ -159,14 +160,7 @@ export function NetaDialog({
         {showMeta && (
           <label className="meta">
             ♩
-            <input
-              aria-label="tempo"
-              type="number"
-              min={20}
-              max={300}
-              value={tempo}
-              onChange={(e) => setTempo(Number(e.target.value))}
-            />
+            <NumberField aria-label="tempo" min={20} max={300} value={tempo} onChange={setTempo} />
           </label>
         )}
         {isContainer && (

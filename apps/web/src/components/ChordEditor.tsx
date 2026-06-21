@@ -1,4 +1,5 @@
 import { type ChordEntry } from "../music";
+import { NumberField } from "./NumberField";
 
 const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const QUALITIES = [
@@ -68,21 +69,19 @@ export function ChordEditor({
           </select>
           <label>
             開始
-            <input
-              type="number"
+            <NumberField
               aria-label={`start-${i}`}
               value={c.start}
-              onChange={(e) => update(i, { start: Number(e.target.value) })}
+              onChange={(v) => update(i, { start: v })}
             />
           </label>
           <label>
             長さ
-            <input
-              type="number"
+            <NumberField
               min={1}
               aria-label={`dur-${i}`}
               value={c.dur}
-              onChange={(e) => update(i, { dur: Number(e.target.value) })}
+              onChange={(v) => update(i, { dur: v })}
             />
           </label>
           <button type="button" aria-label={`remove-chord-${i}`} onClick={() => remove(i)}>
