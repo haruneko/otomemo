@@ -180,3 +180,20 @@ describe("song overlay + neta_asset (#83)", () => {
     expect(core.getNetaAssets(n.id).length).toBe(0);
   });
 });
+
+describe("chat sessions: 複数会話の一覧", () => {
+  it("listChatThreads lists global+chat:* with preview/count, excludes neta threads", () => {
+    core.addChatMessage({ thread: "global", role: "user", text: "最初の会話" });
+    core.addChatMessage({ thread: "chat:abc", role: "user", text: "二つ目の会話" });
+    core.addChatMessage({ thread: "chat:abc", role: "ai", text: "はい" });
+    core.addChatMessage({ thread: "neta-xyz-id", role: "user", text: "ネタ別" }); // 対象外
+    const ts = core.listChatThreads();
+    const threads = ts.map((t) => t.thread);
+    expect(threads).toContain("global");
+    expect(threads).toContain("chat:abc");
+    expect(threads).not.toContain("neta-xyz-id");
+    const abc = ts.find((t) => t.thread === "chat:abc")!;
+    expect(abc.preview).toBe("二つ目の会話"); // 冒頭のuser発言
+    expect(abc.count).toBe(2);
+  });
+});

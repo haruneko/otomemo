@@ -1464,3 +1464,56 @@ details.theme summary {
   color: #5ad17a;
   font-weight: bold;
 }
+
+/* チャット複数会話セッション（Claude/ChatGPT風の一覧） */
+.chat-sessions {
+  position: absolute;
+  top: 3rem;
+  left: 0.5rem;
+  right: 0.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--panel, #1b1b22);
+  border: 1px solid #2a2d33;
+  border-radius: 8px;
+  padding: 0.5rem;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.chat-sessions-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.chat-sessions-head strong {
+  flex: 1;
+}
+.chat-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 0.5rem;
+  background: #16181d;
+  border: 1px solid #2a2d33;
+  border-radius: 6px;
+  cursor: pointer;
+  color: inherit;
+}
+.chat-session-item.on {
+  border-color: var(--accent);
+}
+.chat-session-item:hover {
+  background: #20242b;
+}
+.chat-session-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-session-item .muted {
+  font-size: 0.7rem;
+}

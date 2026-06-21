@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Neta, type ChatMessage } from "../api";
+import { api, type Neta, type ChatMessage, type ChatThread } from "../api";
 import { playNotes, notesForContent, MUSIC_KINDS } from "../music";
 
 interface Opt {
@@ -49,11 +49,17 @@ export function Chat({
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
+  // 複数会話セッション（フリーChatのみ。Claude/ChatGPT風に作って切替/見返す）。
+  const [sessionId, setSessionId] = useState(() =>
+    target ? "" : (localStorage.getItem("cm-chat-session") ?? "global"),
+  );
+  const [showSessions, setShowSessions] = useState(false);
+  const [sessions, setSessions] = useState<ChatThread[]>([]);
 
   const targetLabel = target ? (target.title ?? target.text ?? "(無題)") : null;
 
-  // #70 スレッド＝対象ネタ id（無ければ汎用 'global'）。
-  const thread = target?.id ?? "global";
+  // #70 スレッド＝対象ネタ id（無ければフリーChatの会話セッションid）。
+  const thread = target?.id ?? sessionId;
 
   // #70 永続化（後退ゼロ）：保存に失敗してもメモリだけで従来どおり動く。
   // 構造化ペイロード（options/references/neta/jobId/saveable）は data へ畳む。
@@ -76,8 +82,12 @@ export function Chat({
   }
 
   // #70 開いたとき該当スレッドの履歴を復元（失敗＝空のまま＝従来挙動）。
+  // セッション切替でも thread が変わり、ここで一旦クリア→復元する。
   useEffect(() => {
     let alive = true;
+    setMsgs([]);
+    started.current = false;
+    setLoaded(false);
     void api
       .listChatMessages(thread)
       .then((rows: ChatMessage[]) => {
@@ -231,6 +241,21 @@ export function Chat({
     void api.clearChatThread(thread).catch(() => {});
   }
 
+  // 会話セッション：一覧を開く／新規作成／切替（フリーChatのみ）。
+  function openSessions() {
+    setShowSessions(true);
+    void api.listChatThreads().then(setSessions).catch(() => {});
+  }
+  function pickSession(id: string) {
+    localStorage.setItem("cm-chat-session", id);
+    setSessionId(id);
+    setShowSessions(false);
+  }
+  function newSession() {
+    const id = "chat:" + (crypto.randomUUID?.() ?? Date.now().toString(36));
+    pickSession(id);
+  }
+
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div className="dialog chat" role="dialog" aria-label="chat" onClick={(e) => e.stopPropagation()}>
@@ -244,6 +269,16 @@ export function Chat({
             </button>
           </div>
           <div className="chat-actions">
+            {!target && (
+              <>
+                <button aria-label="sessions" title="会話一覧" onClick={openSessions}>
+                  ☰
+                </button>
+                <button aria-label="new-session" title="新しい会話" onClick={newSession}>
+                  ＋
+                </button>
+              </>
+            )}
             <button aria-label="clear-history" title="履歴を消す" onClick={clearHistory}>
               🗑
             </button>
@@ -252,6 +287,31 @@ export function Chat({
             </button>
           </div>
         </header>
+        {showSessions && !target && (
+          <div className="chat-sessions" role="dialog" aria-label="chat-sessions">
+            <div className="chat-sessions-head">
+              <strong>会話</strong>
+              <button onClick={newSession}>＋ 新しい会話</button>
+              <button aria-label="close-sessions" onClick={() => setShowSessions(false)}>
+                ✕
+              </button>
+            </div>
+            {sessions.length === 0 && <p className="muted">まだ会話がありません</p>}
+            {sessions.map((s) => (
+              <button
+                key={s.thread}
+                type="button"
+                className={"chat-session-item" + (s.thread === thread ? " on" : "")}
+                onClick={() => pickSession(s.thread)}
+              >
+                <span className="chat-session-title">
+                  {s.preview ?? (s.thread === "global" ? "(最初の会話)" : "(無題の会話)")}
+                </span>
+                <span className="muted">{new Date(s.last).toLocaleString()} · {s.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {targetLabel && <div className="chat-target">「{targetLabel.slice(0, 30)}」についての相談</div>}
         <div className="chat-log">
           {msgs.length === 0 && (

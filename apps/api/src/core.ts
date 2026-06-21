@@ -864,6 +864,28 @@ export class Core {
   clearChatThread(thread: string): void {
     this.db.prepare(`DELETE FROM chat_message WHERE thread = ?`).run(thread);
   }
+
+  // フリーChatの会話セッション一覧（thread='global' か 'chat:*'）。最終時刻・件数・冒頭プレビュー付き。
+  // ネタ別スレッド(thread=neta id)は対象外（ネタから辿るため）。
+  listChatThreads(): { thread: string; last: string; count: number; preview: string | null }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT m.thread AS thread, MAX(m.created) AS last, COUNT(*) AS count,
+           (SELECT x.text FROM chat_message x
+              WHERE x.thread = m.thread AND x.role = 'user' AND x.text IS NOT NULL
+              ORDER BY x.created LIMIT 1) AS preview
+         FROM chat_message m
+         WHERE m.thread = 'global' OR m.thread LIKE 'chat:%'
+         GROUP BY m.thread ORDER BY last DESC`,
+      )
+      .all() as Record<string, unknown>[];
+    return rows.map((r) => ({
+      thread: r.thread as string,
+      last: r.last as string,
+      count: Number(r.count),
+      preview: (r.preview as string) ?? null,
+    }));
+  }
 }
 
 export interface ChatMessage {

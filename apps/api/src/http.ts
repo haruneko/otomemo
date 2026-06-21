@@ -342,6 +342,8 @@ export function buildHttp(core: Core): FastifyInstance {
     data: z.unknown().optional(),
   });
 
+  app.get("/chat/threads", async () => core.listChatThreads());
+
   app.get("/chat/:thread/messages", async (req) => {
     const { thread } = req.params as { thread: string };
     return core.listChatMessages(thread);

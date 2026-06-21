@@ -221,7 +221,15 @@ export const api = {
     http<{ cleared: boolean }>(`/chat/${encodeURIComponent(thread)}/messages`, {
       method: "DELETE",
     }),
+  listChatThreads: () => http<ChatThread[]>(`/chat/threads`),
 };
+
+export interface ChatThread {
+  thread: string;
+  last: string;
+  count: number;
+  preview: string | null;
+}
 
 export interface ChatMessageInput {
   role: string;
