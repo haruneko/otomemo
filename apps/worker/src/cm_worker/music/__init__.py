@@ -12,6 +12,7 @@ from .bass import band, resolve_relative_bass
 from .correct import fit_to_chords
 from .generate import gen_chords, gen_melody, gen_bass, gen_drums
 from .normalize import normalize_frame, normalize_chords
+from .progressions import realize_progression, find_progression, list_progressions
 from .similar import melody_similarity, find_similar
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "band", "resolve_relative_bass",
     "gen_chords", "gen_melody", "gen_bass", "gen_drums",
     "normalize_frame", "normalize_chords",
+    "realize_progression", "find_progression", "list_progressions",
     "melody_similarity", "find_similar",
 ]

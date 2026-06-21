@@ -65,7 +65,8 @@ CLAUDE_BIN = os.environ.get("CM_CLAUDE_BIN", "claude")
 CM_MUSIC_MCP_URL = os.environ.get("CM_MUSIC_MCP_URL")
 _MUSIC_TOOLS = [
     "analyze_fit", "detect_key", "analyze_progression",
-    "gen_chords", "gen_melody", "fit_to_chords", "melody_similarity", "find_similar",
+    "gen_chords", "gen_named_progression", "gen_melody", "fit_to_chords",
+    "melody_similarity", "find_similar",
 ]
 
 # #102 S1 creative-manager MCP（既存ネタの読取面）。cold-start 無し＝常駐させず claude -p が
@@ -958,6 +959,9 @@ def handle_consult(params: dict) -> dict:
         music_block = (
             "- 楽曲を作る → まず【特定か汎用か】を見分ける：\n"
             f"{specific}"
+            "  ◆特定が**名前付き定番進行**（丸の内/カノン/小室/王道4536/ツーファイブ/12小節ブルース 等）なら"
+            "**gen_named_progression(name) を必ず使う**（記憶で書かない＝非ダイアトニックも正確に確定realize）。"
+            "返りが {items:[]} の未知名のときだけ自分の知識で書く。\n"
             "  ◆**汎用/枠だけ/当てはめ**（明るい/切ない/6/8で/N個/このコードに合うメロ/一式 等、固有名なし）→"
             "**cm-music のMCPツールを使う**（gen_chords→gen_melody→analyze_fit で点検→必要なら作り直す）。\n"
             '  いずれも最終結果を {"type":"items","items":[{"kind":"chord_progression|melody|bass|rhythm|section",'

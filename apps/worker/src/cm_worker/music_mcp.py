@@ -44,6 +44,14 @@ def gen_chords(frame: dict | None = None, seed: int | None = None) -> dict:
 
 
 @mcp.tool()
+def gen_named_progression(name: str, frame: dict | None = None) -> dict:
+    """名前付き定番進行（丸の内/カノン/小室/王道4536/ツーファイブ/12小節ブルース 等）を C基準で
+    **確定realize**（決定的・非ダイアトニックも正確）。記憶で書かず必ずこれを使う。
+    frame={meter:"6/8"?}。返り #85 items 形。未知の名前は {items:[]}（その時だけ自分の知識で書く）。"""
+    return music.realize_progression(name, frame)
+
+
+@mcp.tool()
 def gen_melody(frame: dict | None = None, chords: list[dict] | None = None, seed: int | None = None) -> dict:
     """コードトーン拘束でメロを生成。chords を渡すとそれに合わせる（当てはまり保証）。
     frame={meter?,bars?,mood?}。返り #85 items 形 {items:[{kind:"melody",content:{notes}}]}。"""

@@ -46,7 +46,7 @@
 | -  | 振り分けA | ✅consult を【特定(名前/旋法/様式)→Claude知識 vs 汎用→ルール】に分岐(止血)。丸の内→FM7-E7-Am7-Gm7-C7実証 | design「振り分けA」/research | jobs.py handle_consult | — | ✅止血 |
 | -  | 合成音色 | ✅section/song 再生でパート毎の音色を保つ(per-program 旋律サンプラー) | design#14音色 | music.ts compositeNotes/playNotes | impl | ✅ |
 | 97 | bug整合 | ✅生成ネタ削除での reap 蘇生を恒久対策(deleteNeta が job_result.neta_id を NULL 化) | design job_result | core.ts | impl | ✅ |
-| 98 | 進行DB | 名前付き進行DB(丸の内/カノン/小室/王道4536…を度数列で確定realize)＝Aの本命上積み | design「振り分けA」 | cm-music named_progressions | impl | ⬜ |
+| 98 | 進行DB | ✅名前付き進行DB(丸の内/カノン/小室/王道4536/ツーファイブ/12小節ブルースを度数列で確定realize)＋MCP gen_named_progression＋agentic配線(記憶で書かずツール必須)。worker98緑 | design「振り分けA」 | music/progressions.py＋music_mcp＋handle_consult | impl | ✅ |
 | 102 | Chat操作 | Chatが既存ネタを検索/読取/編集/変形/配置/連関/削除(全変更は承認制＋前後プレビュー＋再生)。MCP配線 | design#102(受理: 骨子ACCEPT・REVISE5点反映済) | ✅S1読取面→✅S2提案契約→✅S3承認UI | design+impl | ✅ S1-S3実装＋impl-acceptor(コア不変ACCEPT・REVISE2点解消)。worker93/api/web緑。残=S4(transform承認後ルール適用・一括承認)・実機 |
 | 22 | AI探索 | 広くAIツール探索（別立て・要調査） | — | research | — | ⬜ |
 

@@ -302,3 +302,45 @@ def test_resolve_relative_bass_empty_safe():
 
     assert resolve_relative_bass([], None, key=0) == []
     assert resolve_relative_bass(None, None, key=0) == []
+
+
+# --- #98 名前付き進行DB（C基準・確定realize） ---
+def test_named_progression_marunouchi_exact():
+    # 丸の内進行＝FM7-E7-Am7-Gm7-C7（C基準）。記憶でなく確定realize。
+    from cm_worker.music import realize_progression
+
+    res = realize_progression("丸の内進行", {"meter": "4/4"})
+    chords = res["items"][0]["content"]["chords"]
+    pairs = [(c["root"], c["quality"]) for c in chords]
+    assert pairs == [(5, "maj7"), (4, "7"), (9, "m7"), (7, "m7"), (0, "7")]
+    # 1コード1小節・4/4＝4拍刻み
+    assert chords[0]["start"] == 0.0 and chords[0]["dur"] == 4.0
+    assert chords[1]["start"] == 4.0
+
+
+def test_named_progression_aliases_and_meter():
+    from cm_worker.music import realize_progression
+
+    # 別名（小室/6451）でも引ける。6/8＝1小節3拍。
+    res = realize_progression("6451", {"meter": "6/8"})
+    chords = res["items"][0]["content"]["chords"]
+    pairs = [(c["root"], c["quality"]) for c in chords]
+    assert pairs == [(9, "m"), (5, ""), (7, ""), (0, "")]  # Am-F-G-C
+    assert chords[0]["dur"] == 3.0  # 6/8→3拍
+
+
+def test_named_progression_blues_12bars():
+    from cm_worker.music import realize_progression
+
+    res = realize_progression("12小節ブルース", {"meter": "4/4"})
+    chords = res["items"][0]["content"]["chords"]
+    assert len(chords) == 12
+    assert all(c["quality"] == "7" for c in chords)  # 全部ドミナント7
+    assert chords[4]["root"] == 5  # 5小節目はIV(F)
+
+
+def test_named_progression_unknown_returns_empty():
+    from cm_worker.music import realize_progression, find_progression
+
+    assert find_progression("存在しない適当な名前") is None
+    assert realize_progression("存在しない適当な名前", {}) == {"items": [], "edges": []}
