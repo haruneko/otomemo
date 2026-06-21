@@ -33,6 +33,30 @@ function hasMusic(content: unknown): boolean {
   return false;
 }
 
+/**
+ * #85 S1 枠（frame）抽出：ジョブ params の `frame` を生成ネタに付ける値へ。
+ * 断片に付ける key/meter/tempo/bars/mood は #14 の「ヒント」（配置時は section/song が権威）。
+ * 型に合うものだけ拾い、未指定は付けない（既存の null 既定を壊さない）。
+ */
+function frameOf(
+  paramsJson: string | null,
+): Partial<Pick<NetaInput, "key" | "meter" | "tempo" | "bars" | "mood">> {
+  let frame: Record<string, unknown> | undefined;
+  try {
+    frame = (JSON.parse(paramsJson ?? "{}") as { frame?: Record<string, unknown> }).frame;
+  } catch {
+    return {};
+  }
+  if (!frame || typeof frame !== "object") return {};
+  const out: Partial<Pick<NetaInput, "key" | "meter" | "tempo" | "bars" | "mood">> = {};
+  if (typeof frame.key === "number" && frame.key >= 0 && frame.key <= 11) out.key = frame.key;
+  if (typeof frame.meter === "string" && frame.meter) out.meter = frame.meter;
+  if (typeof frame.tempo === "number" && frame.tempo > 0) out.tempo = frame.tempo;
+  if (typeof frame.bars === "number" && frame.bars > 0) out.bars = Math.round(frame.bars);
+  if (typeof frame.mood === "string" && frame.mood) out.mood = frame.mood;
+  return out;
+}
+
 export class Core {
   constructor(private db: Database.Database) {}
 
@@ -111,7 +135,7 @@ export class Core {
     const staleBefore = new Date(Date.now() - 120_000).toISOString();
     const rows = this.db
       .prepare(
-        `SELECT j.id, j.intent, j.instruction, j.result_summary AS result
+        `SELECT j.id, j.intent, j.instruction, j.params, j.result_summary AS result
          FROM job j
          WHERE j.status='done' AND j.intent IN ('gen_melody','gen_chord','gen_rhythm')
            AND (j.parent_job_id IS NOT NULL OR j.updated < ?)
@@ -121,6 +145,7 @@ export class Core {
       id: string;
       intent: string;
       instruction: string | null;
+      params: string | null;
       result: string | null;
     }[];
     let n = 0;
@@ -137,6 +162,7 @@ export class Core {
         title: genTitle(r.intent, r.instruction),
         content,
         from_job: r.id,
+        ...frameOf(r.params), // #85 S1 枠を生成ネタへ（断片のヒントとして key/meter/tempo/bars）
       });
       n += 1;
     }

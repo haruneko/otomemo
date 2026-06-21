@@ -130,6 +130,36 @@ describe("job queue (producer side)", () => {
     expect(c.listNeta({ kind: "reference" }).length).toBe(1);
   });
 
+  it("reaps gen with frame from params onto the neta as hints (#85 S1)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('jf', 'gen_chord', ?, 'done', 'plan1', ?, '', '')`,
+    ).run(
+      JSON.stringify({ frame: { meter: "6/8", tempo: 120, key: 9, bars: 8, mood: "切ない" } }),
+      JSON.stringify({ content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }),
+    );
+    expect(c.reapResults()).toBe(1);
+    const cp = c.listNeta({ kind: "chord_progression" })[0];
+    expect(cp.meter).toBe("6/8");
+    expect(cp.tempo).toBe(120);
+    expect(cp.key).toBe(9);
+    expect(cp.bars).toBe(8);
+    expect(cp.mood).toBe("切ない");
+  });
+
+  it("reaps gen without frame leaves hints null (#85 S1 後退ゼロ)", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('jf2', 'gen_melody', '{}', 'done', 'plan1', ?, '', '')`,
+    ).run(JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }));
+    expect(c.reapResults()).toBe(1);
+    expect(c.listNeta({ kind: "melody" })[0].meter).toBe(null);
+  });
+
   it("reaps import_midi tracks into melody/rhythm netas (#81)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

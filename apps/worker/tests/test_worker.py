@@ -86,6 +86,31 @@ def test_suggest_strips_code_fence(monkeypatch):
     assert jobs.handle_suggest({"context": "x"})["options"][0]["title"] == "a"
 
 
+def test_frame_block_renders_and_empty():
+    # #85 S1 枠をプロンプト片へ。枠なしは空文字（従来通り）
+    import cm_worker.jobs as jobs
+
+    s = jobs._frame_block({"frame": {"meter": "6/8", "bars": 8, "tempo": 120, "key": 9, "mood": "切ない"}})
+    assert "拍子=6/8" in s and "8小節" in s and "BPM=120" in s and "調=A" in s and "切ない" in s
+    assert jobs._frame_block({}) == ""
+    assert jobs._frame_block({"frame": {}}) == ""
+
+
+def test_gen_chord_prompt_includes_frame(monkeypatch):
+    # frame を渡すと gen のプロンプトに枠が入る（指定したら効く）
+    import cm_worker.jobs as jobs
+
+    captured = {}
+
+    def fake(p, timeout=120):
+        captured["p"] = p
+        return '{"chords":[{"root":"C","quality":"","start":0,"dur":4}]}'
+
+    monkeypatch.setattr(jobs, "claude_prompt", fake)
+    jobs.handle_gen_chord({"context": "夜", "frame": {"meter": "6/8"}})
+    assert "拍子=6/8" in captured["p"]
+
+
 def test_collect_parses_summary_and_references(monkeypatch):
     # #82 collect は research と同じ {summary, references[]} を返す（reapが reference化）
     import cm_worker.jobs as jobs

@@ -149,6 +149,7 @@ def handle_gen_melody(params: dict) -> dict:
         '出力は JSON オブジェクトのみ：'
         '{"notes":[{"pitch":整数(C基準MIDI番号 60=C4), "start":拍(0始まりfloat), "dur":拍(float)}]}\n'
         "ハ長調(Cメジャー)基準・単旋律・8〜16拍。前置き/説明/コードフェンス禁止、JSONのみ。\n"
+        f"{_frame_block(params)}"
         f"{_style_block('melody', context)}"
         f"\n# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
@@ -213,6 +214,32 @@ def _style_block(kind: str, context: str) -> str:
     return f"\n# あなたの過去の作風（参考。真似しすぎない）\n{body}\n"
 
 
+_KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def _frame_block(params: dict) -> str:
+    """#85 S1 枠（frame）をプロンプトへ反映。content は C基準のまま、拍子/長さ/BPM/雰囲気の枠で作らせる。
+    枠が無ければ空文字（従来通り）。指定したら最後まで効かせる（要件「指定したら効く」）。"""
+    f = params.get("frame")
+    if not isinstance(f, dict):
+        return ""
+    parts = []
+    if f.get("meter"):
+        parts.append(f"拍子={f['meter']}")
+    if isinstance(f.get("bars"), (int, float)) and f["bars"] > 0:
+        parts.append(f"長さ={int(f['bars'])}小節")
+    if isinstance(f.get("tempo"), (int, float)) and f["tempo"] > 0:
+        parts.append(f"BPM={int(f['tempo'])}")
+    if f.get("mood"):
+        parts.append(f"雰囲気={f['mood']}")
+    key = f.get("key")
+    if isinstance(key, int) and 0 <= key <= 11:
+        parts.append(f"調={_KEY_NAMES[key]}（ただし出力ノートは C基準のまま）")
+    if not parts:
+        return ""
+    return "# 枠（必ず守る）\n" + " / ".join(parts) + "\n"
+
+
 _PC = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
 
@@ -242,6 +269,7 @@ def handle_gen_chord(params: dict) -> dict:
         "作曲家として、対象に合うコード進行を作る。\n"
         '出力は JSON のみ：{"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"dim"or"sus4","start":拍float,"dur":拍float}]}\n'
         "ハ長調基準・4〜8個・前置き/説明/コードフェンス禁止、JSONのみ。\n"
+        f"{_frame_block(params)}"
         f"{_style_block('chord_progression', context)}"
         f"\n# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
@@ -275,6 +303,7 @@ def handle_gen_rhythm(params: dict) -> dict:
         "作曲家として、対象に合うドラムのリズムを作る。\n"
         '出力は JSON のみ：{"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}\n'
         "GMドラム(Kick36/Snare38/HiHat42/OpenHat46/Clap39/Tom45)・16ステップ(0..15)・JSONのみ。\n"
+        f"{_frame_block(params)}"
         f"{_style_block('rhythm', context)}"
         f"\n# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
