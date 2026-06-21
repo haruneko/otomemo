@@ -208,6 +208,17 @@ describe("music", () => {
       // section コードレーンの G に当たり band(7)=31（相対bassは移調しない＝解決済み実音高）
       expect(notes.find((n) => n.pitch === 31)).toBeTruthy();
     });
+
+    it("compositeNotes carries per-part program (合成再生で音色を保つ)", () => {
+      const children = [
+        { position: 0, node: { neta: { kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }], program: 4 } } } },
+        { position: 0, node: { neta: { kind: "bass", content: { notes: [{ pitch: 31, start: 0, dur: 1 }] } } } },
+      ];
+      const notes = compositeNotes(children, 0);
+      // melody は content.program=4(エレピ)、bass は既定 33(フィンガーベース)
+      expect(notes.find((n) => n.pitch === 60)?.program).toBe(4);
+      expect(notes.find((n) => n.pitch === 31)?.program).toBe(33);
+    });
   });
 
   it("notesOf extracts notes or empty", () => {

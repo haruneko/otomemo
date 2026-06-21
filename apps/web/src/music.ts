@@ -9,6 +9,7 @@ export interface Note {
   vel?: number;
   syllable?: string; // 歌詞の音節割当（design #16）。今はデータ枠のみ。
   drum?: boolean; // GMドラム＝打楽器シンセで鳴らす（melodic synthだと低すぎて聞こえない）
+  program?: number; // #section音色: 合成再生で子(パート)ごとの GM音色を保つ（compositeNotesが付与）
 }
 
 const CHORD_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -304,18 +305,22 @@ export function compositeNotes(children: CompositeChild[], keyPc: number): Note[
   return children.flatMap((c) => {
     const kind = c.node.neta.kind;
     const isRhythm = kind === "rhythm";
+    // パートの音色（GM program）を各音に持たせ、合成再生で子ごとの音色を保つ。bass は既定フィンガーベース。
+    const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : 0));
     if (kind === "bass" && isRelativeBass(c.node.neta.content)) {
       // 相対bass：section の調・コードで解決済み実音高なので、ここでは移調しない（position だけ）。
       const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
       return notesForContent(kind, c.node.neta.content, { key: keyPc, chords }).map((n) => ({
         ...n,
         start: n.start + c.position,
+        program: prog,
       }));
     }
     return notesForContent(kind, c.node.neta.content).map((n) => ({
       ...n,
       pitch: isRhythm ? n.pitch : n.pitch + keyPc,
       start: n.start + c.position,
+      program: prog,
     }));
   });
 }
@@ -466,6 +471,7 @@ export interface ScheduledNote {
   voice: Voice;
   pitch: number;
   vel: number; // 0..1
+  program?: number; // #section音色: per-note の GM音色（合成再生でパート毎に切替）
 }
 
 const MEMBRANE_DUR = 0.15;
@@ -481,7 +487,7 @@ export function scheduleTimes(notes: Note[], bpm = 120): ScheduledNote[] {
       const voice: Voice = n.pitch <= 41 ? "membrane" : "noise";
       return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel };
     }
-    return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel };
+    return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel, program: n.program };
   });
 }
 
@@ -559,6 +565,8 @@ export function playEvent(
   kit: Kit,
   Tone: any,
   drumKits?: Map<number, DrumVoice>,
+  melodicByProg?: Map<number, any>, // #section音色: program毎の旋律 sampler（無ければ sf）
+  defaultProg = 0,
 ): void {
   if (ev.voice === "membrane" || ev.voice === "noise") {
     const ds = drumKits?.get(ev.pitch);
@@ -583,8 +591,10 @@ export function playEvent(
       kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
     }
   } else if (sf) {
-    dbg("note pitch", ev.pitch, "via sf2-melodic");
-    sf.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
+    // #section音色: この音の program に対応する旋律 sampler（無ければ既定 sf）
+    const inst = melodicByProg?.get(ev.program ?? defaultProg) ?? sf;
+    dbg("note pitch", ev.pitch, "via sf2-melodic prog", ev.program ?? defaultProg);
+    inst.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
   } else {
     kit.poly.triggerAttackRelease(Tone.Frequency(ev.pitch, "midi").toNote(), ev.durSec, time, ev.vel);
   }
@@ -631,6 +641,7 @@ function resetSfCaches(): void {
   sfParsed = null;
   sfParsedUrl = null;
   sfDrumCache.clear();
+  sfMelodicCache.clear(); // #section音色: program毎の旋律samplerもSF2変更で破棄
   prewarmDone = false; // SF2が変わったら先読みもやり直し
 }
 
@@ -655,18 +666,58 @@ function gmInstrumentName(program: number): string | null {
   return null;
 }
 
-// 旋律 sampler に program 相当の楽器をロード（切替時のみ）。program楽器が見つからなければ
-// 非ドラムの先頭にフォールバック。
-async function setMelodicInstrument(sampler: any, program: number): Promise<void> {
-  const want =
+// program → 旋律楽器名。program楽器が無ければ非ドラムの先頭へフォールバック。
+function melodicInstrumentName(program: number): string | undefined {
+  return (
     gmInstrumentName(program) ??
     sfInstrumentNames.find((n) => !/drum|perc|kit|standard|room|power|jazz|brush|orch/i.test(n)) ??
-    sfInstrumentNames[0];
+    sfInstrumentNames[0]
+  );
+}
+// 既定の旋律 sampler(sfSampler)に program 相当の楽器をロード（切替時のみ・global guard）。
+async function setMelodicInstrument(sampler: any, program: number): Promise<void> {
+  const want = melodicInstrumentName(program);
   if (want && want !== sfCurrentInstrument) {
     await sampler.loadInstrument(want);
     sfCurrentInstrument = want;
     dbg("melodic instrument <-", want, "(program", program, ")");
   }
+}
+
+// #section音色: 合成再生で**パート毎(program毎)の旋律 sampler** を用意。
+// 既定 program は sfSampler を再利用、他は program 専用 sampler を作りキャッシュ（ドラムcacheと同方式）。
+const sfMelodicCache = new Map<number, any>(); // program → 旋律 sampler
+async function prepareMelodicSamplers(
+  notes: Note[],
+  Tone: any,
+  defaultProg: number,
+  sf: any,
+): Promise<Map<number, any>> {
+  const map = new Map<number, any>();
+  if (!sf || !activeSfUrl) return map;
+  const progs = new Set<number>();
+  for (const n of notes) if (!n.drum) progs.add(n.program ?? defaultProg);
+  for (const prog of progs) {
+    if (prog === defaultProg) {
+      map.set(prog, sf); // 既定は ensureSoundFont 済みの sfSampler
+      continue;
+    }
+    let s = sfMelodicCache.get(prog);
+    if (!s) {
+      try {
+        s = await makeSampler(activeSfUrl, Tone);
+        await s.ready;
+        const want = melodicInstrumentName(prog);
+        if (want) await s.loadInstrument(want);
+        sfMelodicCache.set(prog, s);
+      } catch (e) {
+        dbg("melodic sampler load failed program", prog, e);
+        continue; // 失敗した program は既定sfにフォールバック
+      }
+    }
+    map.set(prog, s);
+  }
+  return map;
 }
 
 export function setActiveSoundFont(url: string | null): void {
@@ -946,8 +997,11 @@ export async function playNotes(
 
   // SF2 が選択・ロード済みなら旋律はそれで鳴らす。ドラムは SF2 にマッチ楽器があればそれ、
   // 無ければ簡易キット。SF2 無しは全部キット（後退ゼロ）。
-  const sf = await ensureSoundFont(Tone, opts.program ?? 0);
+  const defaultProg = opts.program ?? 0;
+  const sf = await ensureSoundFont(Tone, defaultProg);
   const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number, DrumVoice>();
+  // #section音色: パート毎(program毎)の旋律 sampler を用意（合成再生で音色を保つ）
+  const melodicByProg = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<number, any>();
   dbg(
     "playNotes engine=",
     sf ? "sf2" : "fallback-synth",
@@ -970,7 +1024,10 @@ export async function playNotes(
 
   transport.bpm.value = bpm;
   for (const ev of scheduleTimes(notes, bpm)) {
-    transport.schedule((time: number) => playEvent(ev, time, sf, kit, Tone, drumKits), ev.time);
+    transport.schedule(
+      (time: number) => playEvent(ev, time, sf, kit, Tone, drumKits, melodicByProg, defaultProg),
+      ev.time,
+    );
   }
 
   let stopped = false;
@@ -990,6 +1047,7 @@ export async function playNotes(
       disposeKit();
       try {
         sf?.stop(); // SF2 の鳴っている音も止める（尾を切る。サンプラ自体は再利用のため破棄しない）
+        for (const s of melodicByProg.values()) s?.stop?.(); // #section音色: 各パートsamplerも止める
         for (const ds of drumKits.values()) ds.sampler?.stop?.();
       } catch {
         /* noop */
