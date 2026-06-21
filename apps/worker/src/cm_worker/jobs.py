@@ -850,22 +850,34 @@ def handle_consult(params: dict) -> dict:
     context = params.get("context", "")
     instruction = params.get("instruction") or "この内容について相談に乗って。"
     agentic = bool(CM_MUSIC_MCP_URL)  # cm-music ツールが使えるか（#86 S2b）
+    # #routing A：楽曲生成は【特定 vs 汎用】を先に見分ける。
+    # 特定(名前/参照/旋法/様式)はルールに渡さず Claude の知識でコードを書き起こす（ルールはダイアトニック
+    # 度数表だけで丸の内のE7/Gm7等の非ダイアトニックを原理的に出せない）。汎用(枠だけ)はルールへ。
+    specific = (
+        "  ◆**特定/名前/参照/旋法/様式**（丸の内・カノン・小室・王道4536・ツーファイブ・ブルース(12小節)・"
+        "ドリアン/リディアン等の旋法・『〇〇進行』『あの曲っぽい』など固有名や非ダイアトニックを含む）→"
+        "**ルールに渡さず自分の知識で正確に書き起こす**。"
+        '{"type":"content","neta_kind":"chord_progression",'
+        '"content":{"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"m7b5"or"dim"or"sus4","start":拍,"dur":拍}]}}'
+        "（名前どおりの実コードを正確に。例 丸の内進行=FM7-E7-Am7-Gm7-C7）。迷ったら特定扱いで自分が書く。\n"
+    )
     if agentic:
-        # agentic：音符は自分で作らず cm-music ツールを使い、点検→補正して items で返す
         music_block = (
-            "- 楽曲を作る（メロ/コード/一式/N案/『コードに合うメロ』等）→ **cm-music のMCPツールを必ず使う**"
-            "（自分で音符JSONを書かない）。手順：gen_chords でコード→そのコードで gen_melody→"
-            "analyze_fit で当てはまりを点検→低ければ作り直す→（要れば section にまとめる）。"
-            '最終結果を {"type":"items","items":[{"kind":"chord_progression|melody|rhythm|section",'
-            '"content":ツールが返したcontentそのまま,"label":"短い見出し"}],'
-            '"edges":[{"type":"compose","from":sectionのindex,"to":子のindex,"position":数}]} で返す。\n'
-            "  ツールに渡す frame の key は整数(0-11)、meter は\"6/8\"等の文字列。\n"
+            "- 楽曲を作る → まず【特定か汎用か】を見分ける：\n"
+            f"{specific}"
+            "  ◆**汎用/枠だけ/当てはめ**（明るい/切ない/6/8で/N個/このコードに合うメロ/一式 等、固有名なし）→"
+            "**cm-music のMCPツールを使う**（gen_chords→gen_melody→analyze_fit で点検→必要なら作り直す）。\n"
+            '  いずれも最終結果を {"type":"items","items":[{"kind":"chord_progression|melody|bass|rhythm|section",'
+            '"content":...,"label":"短い見出し"}],"edges":[{"type":"compose","from":idx,"to":idx,"position":数}]} で返す'
+            "（特定で自分が書いた進行も analyze_fit で当てはまりを点検して所見を持つ）。frame.key は整数(0-11)。\n"
         )
     else:
         music_block = (
-            "- 楽曲を作る → "
+            "- 楽曲を作る → まず【特定か汎用か】を見分ける：\n"
+            f"{specific}"
+            "  ◆**汎用/枠だけ/当てはめ**（固有名なし・雰囲気＋構造の枠だけ）→ "
             '{"type":"plan","subtasks":[{"intent":"gen_pair_rule|gen_chords_rule|gen_lyric|fetch|transform|research|collect","params":{"frame":{...},"count":N,"parts":[...]}}]}'
-            "（音符生成はルールベース gen_pair_rule 優先）\n"
+            "（汎用の音符生成はルール gen_pair_rule 優先）\n"
         )
     prompt = (
         "あなたは作曲アシスタント。ユーザーの発言に応じ、次のいずれか1つだけを JSON で返す"
@@ -873,7 +885,8 @@ def handle_consult(params: dict) -> dict:
         '- 会話・助言・壁打ち → {"type":"chat","text":"..."}\n'
         '- 発展案を複数 → {"type":"options","options":[{"title":"見出し","body":"本文"}]}（2〜4個）\n'
         f"{music_block}"
-        "判断基準：作って/生成して＝楽曲、案・アイデア請求＝options、それ以外＝chat。\n\n"
+        "判断基準：作って/生成して＝楽曲（特定/名前/旋法/様式なら自分で書く・汎用枠だけならルール）、"
+        "案・アイデア請求＝options、それ以外＝chat。\n\n"
         f"# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
     text = claude_prompt(prompt, timeout=240 if agentic else 120, tools=agentic)

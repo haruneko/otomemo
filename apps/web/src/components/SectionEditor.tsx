@@ -43,8 +43,8 @@ import { MiniRoll } from "./MiniRoll";
 // 調/テンポは section が支配。rhythm(ドラム)は移調しない。
 const LANES = [
   { key: "melody", label: "メロ", kinds: ["melody"] },
-  { key: "bass", label: "ベース", kinds: ["bass"] },
   { key: "chord", label: "コード", kinds: ["chord", "chord_progression"] },
+  { key: "bass", label: "ベース", kinds: ["bass"] },
   { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
 ] as const;
 const BARS = 8;
