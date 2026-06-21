@@ -114,16 +114,8 @@ def handle_suggest(params: dict) -> dict:
     return {"options": options}
 
 
-def _extract_notes(text: str) -> list[dict]:
-    """Claude出力から {"notes":[{pitch,start,dur}]} を頑健に取り出す。"""
-    raw = text.strip()
-    m = re.search(r"```(?:json)?\s*(.*?)```", raw, re.S)
-    if m:
-        raw = m.group(1).strip()
-    s, e = raw.find("{"), raw.rfind("}")
-    if s != -1 and e != -1 and e > s:
-        raw = raw[s : e + 1]
-    data = json.loads(raw)
+def _validate_notes(data: dict) -> list[dict]:
+    """dict（{"notes":[...]}）から notes を整形（#61 consult と handle_gen_melody で共有）。"""
     notes = data.get("notes") if isinstance(data, dict) else None
     out: list[dict] = []
     for n in notes or []:
@@ -132,6 +124,18 @@ def _extract_notes(text: str) -> list[dict]:
                 {"pitch": int(n["pitch"]), "start": float(n["start"]), "dur": float(n["dur"])}
             )
     return out
+
+
+def _extract_notes(text: str) -> list[dict]:
+    """Claude出力テキストから {"notes":[{pitch,start,dur}]} を頑健に取り出す。"""
+    raw = text.strip()
+    m = re.search(r"```(?:json)?\s*(.*?)```", raw, re.S)
+    if m:
+        raw = m.group(1).strip()
+    s, e = raw.find("{"), raw.rfind("}")
+    if s != -1 and e != -1 and e > s:
+        raw = raw[s : e + 1]
+    return _validate_notes(json.loads(raw))
 
 
 def handle_gen_melody(params: dict) -> dict:
@@ -241,20 +245,24 @@ def handle_gen_chord(params: dict) -> dict:
     )
     text = claude_prompt(prompt)
     try:
-        data = _extract_json(text)
-        chords = [
-            {
-                "root": _root_pc(c["root"]),
-                "quality": str(c.get("quality", "")),
-                "start": float(c["start"]),
-                "dur": float(c["dur"]),
-            }
-            for c in (data.get("chords") or [])
-            if isinstance(c, dict) and {"root", "start", "dur"} <= c.keys()
-        ]
+        chords = _validate_chords(_extract_json(text))
     except Exception:  # noqa: BLE001
         chords = []
     return {"content": {"chords": chords}}
+
+
+def _validate_chords(data: dict) -> list[dict]:
+    """dict（{"chords":[...]}）から chords を C基準で整形（#61 consult と handle_gen_chord で共有）。"""
+    return [
+        {
+            "root": _root_pc(c["root"]),
+            "quality": str(c.get("quality", "")),
+            "start": float(c["start"]),
+            "dur": float(c["dur"]),
+        }
+        for c in (data.get("chords") or [])
+        if isinstance(c, dict) and {"root", "start", "dur"} <= c.keys()
+    ]
 
 
 def handle_gen_rhythm(params: dict) -> dict:
@@ -270,20 +278,25 @@ def handle_gen_rhythm(params: dict) -> dict:
     )
     text = claude_prompt(prompt)
     try:
-        r = _extract_json(text).get("rhythm") or {}
-        lanes = [
-            {
-                "name": str(la["name"]),
-                "midi": int(la["midi"]),
-                "hits": [int(h) for h in (la.get("hits") or []) if isinstance(h, (int, float))],
-            }
-            for la in (r.get("lanes") or [])
-            if isinstance(la, dict) and "name" in la and "midi" in la
-        ]
-        rhythm = {"steps": int(r.get("steps", 16)), "lanes": lanes}
+        rhythm = _validate_rhythm(_extract_json(text))
     except Exception:  # noqa: BLE001
         rhythm = {"steps": 16, "lanes": []}
     return {"content": {"rhythm": rhythm}}
+
+
+def _validate_rhythm(data: dict) -> dict:
+    """dict（{"rhythm":{steps,lanes}}）から rhythm を整形（#61 consult と handle_gen_rhythm で共有）。"""
+    r = (data.get("rhythm") if isinstance(data, dict) else None) or {}
+    lanes = [
+        {
+            "name": str(la["name"]),
+            "midi": int(la["midi"]),
+            "hits": [int(h) for h in (la.get("hits") or []) if isinstance(h, (int, float))],
+        }
+        for la in (r.get("lanes") or [])
+        if isinstance(la, dict) and "name" in la and "midi" in la
+    ]
+    return {"steps": int(r.get("steps", 16)), "lanes": lanes}
 
 
 def handle_research(params: dict) -> dict:
@@ -319,6 +332,85 @@ def handle_research(params: dict) -> dict:
     return {"summary": summary or text.strip(), "references": references}
 
 
+_CONSULT_FALLBACK = "うまく汲み取れませんでした。もう少し具体的に教えてください。"
+_CONSULT_CONTENT = {
+    "melody": lambda d: {"notes": _validate_notes(d)},
+    "chord_progression": lambda d: {"chords": _validate_chords(d)},
+    "rhythm": lambda d: {"rhythm": _validate_rhythm(d)},
+}
+
+
+def _consult_nonempty(neta_kind: str, content: dict) -> bool:
+    if neta_kind == "melody":
+        return bool(content.get("notes"))
+    if neta_kind == "chord_progression":
+        return bool(content.get("chords"))
+    if neta_kind == "rhythm":
+        return bool(content.get("rhythm", {}).get("lanes"))
+    return False
+
+
+def handle_consult(params: dict) -> dict:
+    """相談（#61 統合）。Claudeに「会話/発展案/生成/多段」を判断させ判別ユニオンを返す。
+    壁打ち(suggest)＋おまかせ(plan)を畳んだ Chat の単一窓口。空/不正は chat フォールバック。"""
+    context = params.get("context", "")
+    instruction = params.get("instruction") or "この内容について相談に乗って。"
+    prompt = (
+        "あなたは作曲アシスタント。ユーザーの発言に応じ、次のいずれか1つだけを JSON で返す"
+        "（前置き・説明・コードフェンス禁止、JSONのみ）。\n"
+        '- 会話・助言・壁打ち → {"type":"chat","text":"..."}\n'
+        '- 発展案を複数 → {"type":"options","options":[{"title":"見出し","body":"本文"}]}（2〜4個）\n'
+        "- 楽曲要素を作る（メロ/コード/リズムを作って等）→ "
+        '{"type":"content","neta_kind":"melody|chord_progression|rhythm","content": その種類のJSON}\n'
+        '    melody: {"notes":[{"pitch":整数(60=C4),"start":拍float,"dur":拍float}]}（ハ長調基準・単旋律）\n'
+        '    chord_progression: {"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"dim"or"sus4","start":拍float,"dur":拍float}]}（ハ長調基準）\n'
+        '    rhythm: {"rhythm":{"steps":16,"lanes":[{"name":"Kick","midi":36,"hits":[0,4,8,12]}]}}（GMドラム）\n'
+        "- 一式そろえる等の多段依頼 → "
+        '{"type":"plan","subtasks":[{"intent":"gen_melody|gen_chord|gen_rhythm|research","params":{"context":"...","instruction":"..."}}]}（2〜5個）\n'
+        "判断基準：作って/生成して＝content、案・アイデア請求＝options、まとめて一式＝plan、それ以外＝chat。\n\n"
+        f"# 対象\n{context}\n\n# 依頼\n{instruction}"
+    )
+    text = claude_prompt(prompt)
+    try:
+        data = _extract_json(text)
+    except Exception:  # noqa: BLE001
+        return {"type": "chat", "text": text.strip()}  # 非JSON＝そのまま会話
+
+    t = data.get("type") if isinstance(data, dict) else None
+    if t == "chat":
+        return {"type": "chat", "text": str(data.get("text", "")).strip() or _CONSULT_FALLBACK}
+    if t == "options":
+        opts = [
+            {"title": str(o.get("title", ""))[:80], "body": str(o.get("body", ""))}
+            for o in (data.get("options") or [])
+            if isinstance(o, dict)
+        ]
+        return {"type": "options", "options": opts} if opts else {"type": "chat", "text": _CONSULT_FALLBACK}
+    if t == "content":
+        nk = data.get("neta_kind")
+        builder = _CONSULT_CONTENT.get(nk)
+        if builder:
+            try:
+                content = builder(data.get("content") or {})
+            except Exception:  # noqa: BLE001
+                content = {}
+            if _consult_nonempty(nk, content):
+                return {"type": "content", "neta_kind": nk, "content": content}
+        return {"type": "chat", "text": _CONSULT_FALLBACK}
+    if t == "plan":
+        subs = [
+            s
+            for s in (data.get("subtasks") or [])
+            if isinstance(s, dict) and s.get("intent") and s.get("intent") != "consult"
+        ]
+        return (
+            {"type": "plan", "subtasks": subs, "plan": f"{len(subs)}個のタスクに分解しました"}
+            if subs
+            else {"type": "chat", "text": _CONSULT_FALLBACK}
+        )
+    return {"type": "chat", "text": _CONSULT_FALLBACK}  # type 不明
+
+
 def handle_plan(params: dict) -> dict:
     """おまかせ（plan）。依頼を実行可能な小タスク(intent)へ分解する。子ジョブは worker が enqueue する。"""
     request = params.get("instruction") or params.get("context") or ""
@@ -348,4 +440,5 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "gen_rhythm": handle_gen_rhythm,
     "research": handle_research,
     "plan": handle_plan,
+    "consult": handle_consult,
 }

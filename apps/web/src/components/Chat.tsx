@@ -19,7 +19,14 @@ interface Msg {
   jobId?: string;
   saveable?: string;
 }
-type Mode = "suggest" | "research" | "plan";
+type Mode = "consult" | "research";
+
+// consult/content の neta_kind 表示名
+const KIND_LABEL: Record<string, string> = {
+  melody: "メロディ",
+  chord_progression: "コード進行",
+  rhythm: "リズム",
+};
 
 // 相談（docs/design.md #19/#20）。target 付きで開くと「このネタについての相談」になり、
 // 最初の提案を自動で出す。案は Chat 上で選んでネタ化（from_job で対象に紐づく）。
@@ -34,7 +41,7 @@ export function Chat({
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<Mode>("suggest");
+  const [mode, setMode] = useState<Mode>("consult");
   const [busy, setBusy] = useState(false);
   const started = useRef(false);
 
@@ -44,14 +51,12 @@ export function Chat({
     setMsgs((m) => [...m, { role: "user", text }]);
     setBusy(true);
     try {
-      const intent = mode === "research" ? "research" : mode === "plan" ? "plan" : "suggest";
       const ctx = target ? (target.title ?? target.text ?? "") : "";
+      const intent = mode === "research" ? "research" : "consult";
       const params =
         mode === "research"
           ? { topic: text }
-          : mode === "plan"
-            ? { instruction: text, context: ctx }
-            : { context: ctx, instruction: text };
+          : { context: ctx, instruction: text, target_kind: target?.kind };
       const job = await api.createJob({ intent, target_neta_id: target?.id, params });
       for (let i = 0; i < 80; i++) {
         const j = await api.getJob(job.id);
@@ -64,15 +69,8 @@ export function Chat({
               ...m,
               { role: "ai", text: summary, saveable: summary, references, jobId: job.id },
             ]);
-          } else if (mode === "plan") {
-            const plan = (j.result as { plan?: string } | null)?.plan ?? "計画しました";
-            setMsgs((m) => [
-              ...m,
-              { role: "ai", text: `${plan}（結果は受け取りトレイ 📥 に届きます）` },
-            ]);
           } else {
-            const options = (j.result as { options?: Opt[] } | null)?.options ?? [];
-            setMsgs((m) => [...m, { role: "ai", options, jobId: job.id }]);
+            await handleConsult(j.result, job.id); // #61 判別ユニオン
           }
           return;
         }
@@ -84,6 +82,34 @@ export function Chat({
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  // #61 consult の判別ユニオン: chat / options / content(生成→正しいkindでネタ化) / plan
+  async function handleConsult(result: unknown, jobId: string) {
+    const r = result as {
+      type?: string;
+      text?: string;
+      options?: Opt[];
+      neta_kind?: string;
+      content?: unknown;
+      plan?: string;
+    } | null;
+    if (r?.type === "options") {
+      setMsgs((m) => [...m, { role: "ai", options: r.options ?? [], jobId }]);
+    } else if (r?.type === "content" && r.neta_kind) {
+      await api.createNeta({ kind: r.neta_kind, content: r.content, from_job: jobId });
+      onChanged?.();
+      const label = KIND_LABEL[r.neta_kind] ?? r.neta_kind;
+      setMsgs((m) => [...m, { role: "ai", text: `「${label}」を作りました（ネタ帳に追加）` }]);
+    } else if (r?.type === "plan") {
+      setMsgs((m) => [
+        ...m,
+        { role: "ai", text: `${r.plan ?? "分解しました"}（結果は受け取りトレイ 📥 に届きます）` },
+      ]);
+    } else {
+      const t = r?.text ?? "";
+      setMsgs((m) => [...m, { role: "ai", text: t, saveable: t || undefined }]);
     }
   }
 
@@ -104,7 +130,7 @@ export function Chat({
 
   async function pick(o: Opt, jobId?: string) {
     await api.createNeta({
-      kind: target?.kind ?? "other",
+      kind: target?.kind ?? "knowledge", // #61 other 廃止（無targetは知見として）
       title: o.title || undefined,
       text: o.body,
       from_job: jobId,
@@ -138,14 +164,11 @@ export function Chat({
       <div className="dialog chat" role="dialog" aria-label="chat" onClick={(e) => e.stopPropagation()}>
         <header>
           <div className="chat-mode">
-            <button className={mode === "suggest" ? "on" : ""} onClick={() => setMode("suggest")}>
-              壁打ち
+            <button className={mode === "consult" ? "on" : ""} onClick={() => setMode("consult")}>
+              相談
             </button>
             <button className={mode === "research" ? "on" : ""} onClick={() => setMode("research")}>
               調べる
-            </button>
-            <button className={mode === "plan" ? "on" : ""} onClick={() => setMode("plan")}>
-              おまかせ
             </button>
           </div>
           <button aria-label="close" onClick={onClose}>
@@ -157,10 +180,8 @@ export function Chat({
           {msgs.length === 0 && (
             <p className="muted">
               {mode === "research"
-                ? "調べたいことを入力"
-                : mode === "plan"
-                  ? "おまかせで投げる（例：夜の曲のサビを一式そろえて）"
-                  : "ざっくり投げてください"}
+                ? "調べたいことを入力（参考曲・手法など）"
+                : "相談・発展・「コード進行作って」「一式そろえて」など何でも"}
             </p>
           )}
           {msgs.map((m, i) => (

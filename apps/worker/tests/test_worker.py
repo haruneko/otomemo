@@ -200,6 +200,86 @@ def test_plan_decomposes_and_enqueues_children(tmp_path, monkeypatch):
     assert all(k["target_neta_id"] == "t1" for k in kids)  # 対象を引き継ぐ（浮かない）
 
 
+def _consult(monkeypatch, reply: str):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(jobs, "claude_prompt", lambda p, timeout=120: reply)
+    return jobs.handle_consult({"context": "夜の曲", "instruction": "x"})
+
+
+def test_consult_chat(monkeypatch):
+    res = _consult(monkeypatch, '{"type":"chat","text":"いいと思う"}')
+    assert res == {"type": "chat", "text": "いいと思う"}
+
+
+def test_consult_non_json_is_chat(monkeypatch):
+    res = _consult(monkeypatch, "JSONじゃない普通の返答")
+    assert res["type"] == "chat" and res["text"] == "JSONじゃない普通の返答"
+
+
+def test_consult_options(monkeypatch):
+    res = _consult(monkeypatch, '{"type":"options","options":[{"title":"案A","body":"b"}]}')
+    assert res["type"] == "options" and res["options"][0]["title"] == "案A"
+
+
+def test_consult_content_chord(monkeypatch):
+    res = _consult(
+        monkeypatch,
+        '{"type":"content","neta_kind":"chord_progression","content":'
+        '{"chords":[{"root":"C","quality":"","start":0,"dur":4}]}}',
+    )
+    assert res["type"] == "content" and res["neta_kind"] == "chord_progression"
+    assert res["content"]["chords"][0] == {"root": 0, "quality": "", "start": 0.0, "dur": 4.0}
+
+
+def test_consult_content_melody(monkeypatch):
+    res = _consult(
+        monkeypatch,
+        '{"type":"content","neta_kind":"melody","content":{"notes":[{"pitch":60,"start":0,"dur":1}]}}',
+    )
+    assert res["type"] == "content" and res["neta_kind"] == "melody"
+    assert res["content"]["notes"][0]["pitch"] == 60
+
+
+def test_consult_empty_content_falls_back_to_chat(monkeypatch):
+    res = _consult(
+        monkeypatch,
+        '{"type":"content","neta_kind":"melody","content":{"notes":[]}}',
+    )
+    assert res["type"] == "chat"  # 空は作らない（#43同型）
+
+
+def test_consult_plan_filters_self_recursion(monkeypatch):
+    res = _consult(
+        monkeypatch,
+        '{"type":"plan","subtasks":[{"intent":"gen_chord","params":{}},{"intent":"consult","params":{}}]}',
+    )
+    assert res["type"] == "plan"
+    assert [s["intent"] for s in res["subtasks"]] == ["gen_chord"]  # consult は弾く
+
+
+def test_run_once_consult_plan_enqueues_children(tmp_path, monkeypatch):
+    import cm_worker.jobs as jobs
+
+    monkeypatch.setattr(
+        jobs,
+        "claude_prompt",
+        lambda p, timeout=120: '{"type":"plan","subtasks":[{"intent":"gen_rhythm","params":{"context":"夜"}}]}',
+    )
+    conn = connect(str(tmp_path / "c.sqlite"))
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO job (id, intent, params, status, target_neta_id, created, updated) "
+        "VALUES ('jc','consult','{}','queued','t9',?,?)",
+        (now, now),
+    )
+    conn.commit()
+    assert run_once(conn) == 1
+    kids = conn.execute("SELECT intent, target_neta_id FROM job WHERE parent_job_id='jc'").fetchall()
+    assert [k["intent"] for k in kids] == ["gen_rhythm"]
+    assert kids[0]["target_neta_id"] == "t9"
+
+
 def test_research_returns_summary(monkeypatch):
     import cm_worker.jobs as jobs
 

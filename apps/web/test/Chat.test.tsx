@@ -12,30 +12,57 @@ vi.mock("../src/api", () => ({ api: { createJob, getJob, createNeta } }));
 import { Chat } from "../src/components/Chat";
 
 describe("Chat", () => {
-  it("sends, shows options, and picks one to create a neta", async () => {
+  it("consult: shows options, picks one → knowledge neta (not other) (#61)", async () => {
     createJob.mockResolvedValue({ id: "j1", status: "queued" });
     getJob.mockResolvedValue({
       status: "done",
-      result: { options: [{ title: "案A", body: "ほんぶん" }] },
+      result: { type: "options", options: [{ title: "案A", body: "ほんぶん" }] },
       error: null,
     });
     createNeta.mockResolvedValue({ id: "n1" });
     const onChanged = vi.fn();
 
     render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
-    await userEvent.type(screen.getByLabelText("chat-input"), "明るいサビのコード進行");
+    await userEvent.type(screen.getByLabelText("chat-input"), "発展案ちょうだい");
     await userEvent.click(screen.getByRole("button", { name: "送信" }));
     await waitFor(() => expect(screen.getByText("案A")).toBeInTheDocument());
 
     await userEvent.click(screen.getByText("案A"));
     await waitFor(() => expect(createNeta).toHaveBeenCalled());
     expect(createNeta).toHaveBeenCalledWith({
-      kind: "other",
+      kind: "knowledge", // #61 無targetは other ではなく knowledge
       title: "案A",
       text: "ほんぶん",
       from_job: "j1",
     });
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("consult: content → creates a proper-kind neta, no other (#61)", async () => {
+    createJob.mockResolvedValue({ id: "jc", status: "queued" });
+    getJob.mockResolvedValue({
+      status: "done",
+      result: {
+        type: "content",
+        neta_kind: "chord_progression",
+        content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] },
+      },
+      error: null,
+    });
+    createNeta.mockResolvedValue({ id: "c1" });
+    const onChanged = vi.fn();
+
+    render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "コード進行作って");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    await waitFor(() => expect(createNeta).toHaveBeenCalled());
+    expect(createNeta).toHaveBeenCalledWith({
+      kind: "chord_progression",
+      content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] },
+      from_job: "jc",
+    });
+    expect(onChanged).toHaveBeenCalled();
+    expect(await screen.findByText(/「コード進行」を作りました/)).toBeInTheDocument();
   });
 
   it("research mode shows reference songs and saves one as a reference neta (#9)", async () => {

@@ -27,7 +27,8 @@ def _enqueue_children(
         if not isinstance(st, dict):
             continue
         intent = str(st.get("intent", ""))
-        if intent not in HANDLERS or intent == "plan":
+        # plan/consult を子に積ませない（自己再帰・無限ループ防止 #33/#61）
+        if intent not in HANDLERS or intent in ("plan", "consult"):
             continue
         conn.execute(
             "INSERT INTO job (id, intent, params, status, level, parent_job_id, target_neta_id, "
@@ -71,7 +72,11 @@ def run_once(conn: sqlite3.Connection) -> int:
             "UPDATE job SET status='done', result_summary=?, progress=NULL, updated=? WHERE id=?",
             (json.dumps(result, ensure_ascii=False), _now(), job_id),
         )
-        if row["intent"] == "plan" and isinstance(result.get("subtasks"), list):
+        # plan、または consult が type=plan を返したとき、子ジョブを積む（#61）
+        is_plan = row["intent"] == "plan" or (
+            row["intent"] == "consult" and result.get("type") == "plan"
+        )
+        if is_plan and isinstance(result.get("subtasks"), list):
             _enqueue_children(conn, job_id, result["subtasks"], row["target_neta_id"])
     except Exception as e:  # noqa: BLE001
         conn.execute(
