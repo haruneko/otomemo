@@ -135,12 +135,13 @@ describe("jobs: waiting / answer (#45)", () => {
       params: { count: 4, kinds: ["chord_progression", "melody"], frame: { mood: "切ない" } },
     });
     core.askQuestion(j.id, '{"kind":"form","fields":[{"key":"meter","label":"拍子"}]}');
-    const cont = core.answerJob(j.id, { meter: "6/8" })!;
+    // フォームが meter(枠)＋count(トップレベル)を返す
+    const cont = core.answerJob(j.id, { meter: "6/8", count: 3 })!;
     expect(cont.intent).toBe("gen_variations");
     const p = cont.params as { count: number; kinds: string[]; frame: { meter: string; mood: string } };
-    expect(p.count).toBe(4); // 枠/個数を引き継ぐ
-    expect(p.kinds).toEqual(["chord_progression", "melody"]);
-    expect(p.frame.meter).toBe("6/8"); // フォーム回答→frame
+    expect(p.count).toBe(3); // count はトップレベルへ（worker が読む場所）＝上書き
+    expect(p.kinds).toEqual(["chord_progression", "melody"]); // 引き継ぎ
+    expect(p.frame.meter).toBe("6/8"); // meter は frame へ
     expect(p.frame.mood).toBe("切ない"); // 既存 frame を保持
   });
 

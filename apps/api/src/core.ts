@@ -517,11 +517,19 @@ export class Core {
     if (typeof answer === "string") {
       instruction = `${instruction}\n[回答] ${answer}`.trim();
     } else {
+      // フォーム回答を畳む。count/kinds/structure/condition は params トップレベル（worker が
+      // そこを読む）、それ以外（meter/key/tempo/bars/mood…）は frame へ上書きマージ。
+      const topLevel = new Set(["count", "kinds", "structure", "condition", "target"]);
       const prevFrame =
         baseParams.frame && typeof baseParams.frame === "object"
           ? (baseParams.frame as Record<string, unknown>)
           : {};
-      baseParams.frame = { ...prevFrame, ...answer }; // フォーム回答を枠へ上書きマージ
+      const framePart: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(answer)) {
+        if (topLevel.has(k)) baseParams[k] = v;
+        else framePart[k] = v;
+      }
+      baseParams.frame = { ...prevFrame, ...framePart };
     }
     const cont = this.enqueueJob({
       intent: orig.intent,
