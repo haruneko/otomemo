@@ -28,7 +28,7 @@
 
 ## 2. 残タスク（管理対象・着手順）
 
-| 分離 | scope | **project/library 分離**：neta.scope(project既定/library)。ネタ帳=project(5件・デクラッタ済)、連想retrieval=library(314件)、ピッカーはall+library配置時に自動コピー。copy/scope API済・本番移行済(取込314→library・自作5はproject)。残=ライブラリ閲覧タブ(NetaList)/複製UI/copy_neta MCPツール。要件L152は「library=連想元コーパス」で整合 | design「プロジェクト/ライブラリ分離」 | S1 core/DB→S2 MCP→S3 UI | design+impl | 🟡 S1＋配線＋ピッカー済(api164/web116緑)・残=閲覧タブ/MCP copy |
+| 分離 | scope | **project/library 分離**：neta.scope(project既定/library)。ネタ帳=project(5・デクラッタ)、連想retrieval=library(314)、検索はscope:all横断(取込も名前で引ける)、ピッカーall+library配置で自動コピー。**S3 UI=「プロジェクト/ライブラリ」タブ＋カード操作(＋プロジェクトへ/複製/ライブラリへ=自作を連想元に)**。**S2 MCP=create/list_netaにscope露出＋copy_neta(deep)/set_scope**(agentic許可はread-only維持・#102不変)。本番移行済・要件L152は「library=連想元コーパス」で整合 | design「プロジェクト/ライブラリ分離」 | S1→S2→S3 | design+impl | ✅ S1-S3＋セルフチェック修正(H1/H2/M1/L1)完了・ライブ稼働(api165/web116緑)。残=#102 S4(copy提案)・コーパス品質(M3) |
 
 | # | 領域 | 内容 | 関連設計 | 段取り | acceptor | 状態 |
 |---|---|---|---|---|---|---|
