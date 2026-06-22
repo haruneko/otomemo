@@ -1,14 +1,6 @@
 // 連想エンジン S1（design.md「連想エンジン」）：度数化／調推定(上位2・決め打たない)／進行の似ている度合い。
 // framework非依存・依存なし・決定的（ゴールデンテスト可）。web は workspace 経由で共用する想定。
-import {
-  type Chord,
-  type Degree,
-  type KeyCandidate,
-  chordPcs,
-  normRoot,
-  KS_MAJOR,
-  KS_MINOR,
-} from "./theory";
+import { type Chord, type Degree, type KeyCandidate, chordPcs, normRoot, rankKeys } from "./theory";
 
 export type { Chord, Degree, KeyCandidate };
 // S2 機能/カデンツ解析（function.ts は toDegrees/detectKeyFromChords を呼ぶ＝呼び出し時参照で循環OK）。
@@ -22,6 +14,8 @@ export * from "./substitute";
 export * from "./emotion";
 // 説明・命名（機能解析＋名前あての束ね）。
 export * from "./explain";
+// メロ×コードの当てはまり判定＋外し音補正（土台v・メロが変→直す/ハモ付けの足場）。
+export * from "./fit";
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {
@@ -32,27 +26,10 @@ export function toDegrees(chords: Chord[], key: number): Degree[] {
   }));
 }
 
-function pearson(a: number[], b: number[]): number {
-  const n = a.length;
-  const ma = a.reduce((s, x) => s + x, 0) / n;
-  const mb = b.reduce((s, x) => s + x, 0) / n;
-  let num = 0;
-  let da = 0;
-  let db = 0;
-  for (let i = 0; i < n; i++) {
-    const xa = a[i]! - ma;
-    const xb = b[i]! - mb;
-    num += xa * xb;
-    da += xa * xa;
-    db += xb * xb;
-  }
-  return da === 0 || db === 0 ? 0 : num / Math.sqrt(da * db);
-}
-
 /**
  * コード列 → 調の候補をスコア降順で上位 top件（既定2）。Krumhansl-Schmuckler 相関。
  * 調は relative major/minor 等で本質的に曖昧なので**1個に決め打たず複数候補を返す**（要件）。
- * 各コードを構成音pcに展開し dur 重み＋ルート加点で pcヒストグラム→24調プロファイルと相関。
+ * 各コードを構成音pcに展開し dur 重み＋ルート加点で pcヒストグラム→24調プロファイルと相関（rankKeys）。
  */
 export function detectKeyFromChords(chords: Chord[], top = 2): KeyCandidate[] {
   const hist = new Array(12).fill(0) as number[];
@@ -62,16 +39,7 @@ export function detectKeyFromChords(chords: Chord[], top = 2): KeyCandidate[] {
     const rb = normRoot(c.root);
     hist[rb] = (hist[rb] ?? 0) + w; // 調中心の手がかり＝ルートに加点
   }
-  if (hist.every((x) => x === 0)) return [{ key: 0, mode: "major", score: 0 }];
-  const cands: KeyCandidate[] = [];
-  for (let key = 0; key < 12; key++) {
-    const majProf = hist.map((_, p) => KS_MAJOR[((p - key) % 12 + 12) % 12]!);
-    const minProf = hist.map((_, p) => KS_MINOR[((p - key) % 12 + 12) % 12]!);
-    cands.push({ key, mode: "major", score: pearson(hist, majProf) });
-    cands.push({ key, mode: "minor", score: pearson(hist, minProf) });
-  }
-  cands.sort((a, b) => b.score - a.score);
-  return cands.slice(0, Math.max(1, top));
+  return rankKeys(hist, top);
 }
 
 // 2つの度数の置換コスト（0=同一 … ~1.5=度数も品質も別）。度数=半音circular距離(上限2)を0..1、品質不一致+0.5。
