@@ -9,6 +9,7 @@ import {
   emotionShift,
   toDegrees,
   harmonize,
+  nextChordCandidates,
 } from "./music";
 
 // コード進行の共通 inputSchema（content.chords 形＝{root:0-11 or 音名, quality, start?, dur?}）。
@@ -187,6 +188,25 @@ export function buildMcpServer(core: Core): McpServer {
       },
     },
     async ({ melody, key, mode, barBeats }) => ok(harmonize(melody, key, { mode, barBeats })),
+  );
+
+  server.registerTool(
+    "next_chord",
+    {
+      title: "次のコード候補（継続）",
+      description:
+        "進行(chords)の最後から、機能(T/S/D)的に次に来やすいコード候補を実コードで返す。「次は？/サビへ緊張を作る」に。候補から選ぶのは人/Claude。",
+      inputSchema: {
+        chords: chordsSchema,
+        key: z.number().int().min(0).max(11),
+        mode: z.enum(["major", "minor"]).optional(),
+      },
+    },
+    async ({ chords, key, mode }) => {
+      const degs = toDegrees(chords, key);
+      const cands = nextChordCandidates(degs, { mode });
+      return ok(cands.map((c) => ({ ...c, root: (c.degree + key) % 12 })));
+    },
   );
 
   server.registerTool(
