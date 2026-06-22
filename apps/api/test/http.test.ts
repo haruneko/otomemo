@@ -70,6 +70,19 @@ describe("http auth gate (#36)", () => {
     }
   });
 
+  it("GET /neta は scope で出し分け（project既定/library/all）＋copy", async () => {
+    await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", title: "作業" } });
+    const lib = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "chord_progression", title: "取込", scope: "library" } })).json();
+    expect((await app.inject({ method: "GET", url: "/neta" })).json().length).toBe(1); // 既定project
+    expect((await app.inject({ method: "GET", url: "/neta?scope=library" })).json().length).toBe(1);
+    expect((await app.inject({ method: "GET", url: "/neta?scope=all" })).json().length).toBe(2);
+    // copy: library→project
+    const copy = await app.inject({ method: "POST", url: `/neta/${lib.id}/copy` });
+    expect(copy.statusCode).toBe(200);
+    expect(copy.json().scope).toBe("project");
+    expect((await app.inject({ method: "GET", url: "/neta" })).json().length).toBe(2); // copyがproject側に増えた
+  });
+
   it("links then unlinks a relation via HTTP (#102 S3 承認適用)", async () => {
     const a = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", title: "a" } })).json();
     const b = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", title: "b" } })).json();

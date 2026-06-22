@@ -26,6 +26,7 @@ const netaInput = z.object({
   meter: z.string().nullish(),
   bars: z.number().int().nullish(),
   mood: z.string().nullish(),
+  scope: z.enum(["project", "library"]).optional(),
   tags: z.array(z.string()).optional(),
   from_job: z.string().nullish(),
 });
@@ -79,6 +80,7 @@ export function buildHttp(core: Core): FastifyInstance {
       key: q.key !== undefined ? Number(q.key) : undefined,
       tags: q.tags ? q.tags.split(",").filter(Boolean) : undefined,
       q: q.q,
+      scope: q.scope as "project" | "library" | "all" | undefined,
       limit: q.limit ? Number(q.limit) : undefined,
       offset: q.offset ? Number(q.offset) : undefined,
     });
