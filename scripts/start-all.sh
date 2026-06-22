@@ -1,21 +1,40 @@
 #!/usr/bin/env bash
 # 常時起動機向け：API(watch)・Web・ワーカー・検索・cm-music-mcp をまとめて起動（#36 自動起動）。
 # **再実行で安全**＝先に既存を落としてから上げる（野良プロセス乱立を防ぐ idempotent 起動）。
-# 使い方の例：
-#   - WSL の ~/.profile か crontab の @reboot から `bash scripts/start-all.sh`
-#   - もしくは systemd --user（下のユニット例参照）
+#
+# 使い方（再起動はこの2種類。どちらも冪等＝何回叩いても重複しない）：
+#   bash scripts/start-all.sh           … リビルド無し＝速い再起動（コード未変更のとき）
+#   bash scripts/start-all.sh --build   … web を再ビルドしてから再起動（コードを変えたとき／Tailscale配信に反映）
+#     ※ Tailscale 経由で見えるのは web の **ビルド済み(dist)** なので、変更を出先に出すなら --build。
+#   - WSL の ~/.profile か crontab の @reboot から呼ぶ／systemd --user（下のユニット例）でもOK。
+#
+# CM_HOST は **Tailscale IP を自動検出**して既定にする（出先から届く・tailnet限定）。
+# 検出できなければ 127.0.0.1（ローカルのみ）。env で明示すればそれを優先（例 CM_HOST=0.0.0.0 でLAN開放）。
 #
 # 環境変数（任意・上書き可）：
 #   CM_DB      … SQLite パス（既定 data/cm.sqlite）
-#   CM_HOST    … API バインド先。tailnet/LAN から届かせるなら **Tailscale IP** か 0.0.0.0（既定 127.0.0.1=ローカルのみ）
+#   CM_HOST    … API バインド先（既定＝検出した Tailscale IP or 127.0.0.1）
 #   CM_TOKEN   … 設定すると API に x-cm-token 必須の簡易認証（tailnet 限定なら通常不要）
 #   CM_MUSIC_MCP_URL/PORT … agentic Chat 用 cm-music-mcp の URL/ポート（既定 8790・worker に配線）
 #   CM_MCP_STDIO_CMD/ARGS … agentic Chat の既存ネタ読取(creative-manager MCP)を claude -p が stdio spawn する起動コマンド/引数（#102 S1・既定 pnpm --filter @cm/api mcp）
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+# --build フラグ：web を先に再ビルド（失敗したら set -e で中断＝現行サーバは落とさない）。
+DO_BUILD=0
+for arg in "$@"; do
+  [ "$arg" = "--build" ] && DO_BUILD=1
+done
+if [ "$DO_BUILD" = 1 ]; then
+  echo "rebuilding web (dist)…"
+  pnpm --filter @cm/web build
+fi
+
+# Tailscale IP 自動検出（tailnet CGNAT 100.64.0.0/10 のアドレス）。無ければローカルのみ。
+_TS_IP="$(ip -4 -o addr 2>/dev/null | grep -oE '100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]+\.[0-9]+' | head -1 || true)"
 export CM_DB="${CM_DB:-$ROOT/data/cm.sqlite}"
-export CM_HOST="${CM_HOST:-127.0.0.1}"
+export CM_HOST="${CM_HOST:-${_TS_IP:-127.0.0.1}}"
 export CM_MUSIC_MCP_PORT="${CM_MUSIC_MCP_PORT:-8790}"
 # cm-music-mcp の URL（worker はこれを見て agentic Chat で音楽ツールを使う。未起動なら dispatch にフォールバック）
 export CM_MUSIC_MCP_URL="${CM_MUSIC_MCP_URL:-http://127.0.0.1:${CM_MUSIC_MCP_PORT}/mcp}"
@@ -41,8 +60,9 @@ nohup pnpm --filter @cm/web dev >"$ROOT/logs/web.log" 2>&1 &
 ( cd apps/worker && nohup uv run cm-worker    >"$ROOT/logs/worker.log"    2>&1 & ) || true
 ( cd apps/worker && nohup uv run cm-search    >"$ROOT/logs/search.log"    2>&1 & ) || true
 
-echo "started api/web/worker/search/music-mcp."
-echo "  db=$CM_DB  host=$CM_HOST  mcp=$CM_MUSIC_MCP_URL  logs=$ROOT/logs"
+echo "started api/web/worker/search/music-mcp.$([ "$DO_BUILD" = 1 ] && echo ' (web rebuilt)')"
+echo "  db=$CM_DB  host=$CM_HOST  logs=$ROOT/logs"
+echo "  → アクセス: http://$CM_HOST:8787/  （単一オリジン＝api が web も配信）"
 
 # --- systemd --user ユニット例（~/.config/systemd/user/creative-manager.service）---
 # [Unit]
