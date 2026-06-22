@@ -164,6 +164,37 @@ describe("Chat", () => {
     expect(await screen.findByText(/却下しました/)).toBeInTheDocument();
   });
 
+  it("proposals: 'approve all' applies every appliable proposal at once (#102 S4)", async () => {
+    createJob.mockResolvedValue({ id: "jb", status: "queued" });
+    getJob.mockResolvedValue({
+      status: "done",
+      result: {
+        type: "proposals",
+        summary: "2件まとめて",
+        proposals: [
+          { op: "place_child", target_id: "n1", args: { parent_id: "s1", position: 0 } },
+          { op: "link", target_id: "n2", args: { to_id: "n3", type: "ref" } },
+        ],
+      },
+      error: null,
+    });
+    getNeta.mockResolvedValue({ id: "x", kind: "other", text: "ネタ", content: {} });
+    placeChild.mockResolvedValue({ ok: true });
+    link.mockResolvedValue({ ok: true });
+
+    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "まとめて配置と関連を");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    // 適用可能が2件＝「すべて承認」が出る
+    await waitFor(() => expect(screen.getByLabelText("approve-all")).toBeInTheDocument());
+    await userEvent.click(screen.getByLabelText("approve-all"));
+    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("s1", "n1", 0));
+    await waitFor(() => expect(link).toHaveBeenCalledWith("n2", "n3", "ref"));
+    // 両方とも「適用しました」になる
+    await waitFor(() => expect(screen.getAllByText(/適用しました/).length).toBe(2));
+  });
+
   it("proposals: unlink approve calls unlink; content-less transform is not auto-appliable (#102 S3)", async () => {
     createJob.mockResolvedValue({ id: "jz", status: "queued" });
     getJob.mockResolvedValue({

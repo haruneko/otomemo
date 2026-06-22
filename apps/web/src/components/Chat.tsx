@@ -63,11 +63,33 @@ function describeStructural(op: string, a: Record<string, unknown>): string {
   }
 }
 
-// #102 S3 承認カード。変更前後をプレビューし、原本 vs 提案を再生して聴いてから承認/却下。
+// 提案が自動適用可能か（proposal 単体から純粋に決まる＝一括承認のフィルタにも使う）。
+// content系は args.content が要る（変形の承認後ルール適用は後続 S4）。構造系は必須 args で判定。
+function canApplyProposal(p: Proposal): boolean {
+  const a = p.args ?? {};
+  if (p.op === "delete") return true;
+  if (["update_content", "transform", "fit_to"].includes(p.op)) return !!a.content;
+  if (p.op === "place_child" || p.op === "remove_child") return !!a.parent_id;
+  if (p.op === "link" || p.op === "unlink") return !!a.to_id;
+  return false;
+}
+
+type PStatus = "idle" | "applying" | "applied" | "rejected";
+
+// #102 S3 承認カード（controlled）。変更前後をプレビューし、原本 vs 提案を再生して聴いてから承認/却下。
 // 適用は承認時のみ＝既存 HTTP 書込（TS core 1箇所）を呼ぶ。書込は agentic では起きない。
-function ProposalCard({ p, onApply }: { p: Proposal; onApply: (p: Proposal) => Promise<void> }) {
+function ProposalCard({
+  p,
+  status,
+  onApprove,
+  onReject,
+}: {
+  p: Proposal;
+  status: PStatus;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
   const [before, setBefore] = useState<Neta | null>(null);
-  const [state, setState] = useState<"idle" | "applying" | "applied" | "rejected">("idle");
   useEffect(() => {
     let on = true;
     void api
@@ -82,25 +104,15 @@ function ProposalCard({ p, onApply }: { p: Proposal; onApply: (p: Proposal) => P
   const isMusic = !!before && MUSIC_KINDS.includes(before.kind);
   const label = OP_LABEL[p.op] ?? p.op;
   const targetName = before ? (before.title ?? before.text ?? before.kind) : p.target_id;
-
-  const canApply =
-    p.op === "delete"
-      ? true
-      : ["update_content", "transform", "fit_to"].includes(p.op)
-        ? !!afterContent
-        : p.op === "place_child" || p.op === "remove_child"
-          ? !!a.parent_id
-          : p.op === "link" || p.op === "unlink"
-            ? !!a.to_id
-            : false;
+  const canApply = canApplyProposal(p);
 
   function play(content: unknown) {
     if (!before) return;
     void playNotes(notesForContent(before.kind, content, { key: before.key ?? 0 }), before.tempo ?? 120);
   }
 
-  if (state === "applied") return <div className="proposal-card done">✅ {label}：適用しました</div>;
-  if (state === "rejected") return <div className="proposal-card done muted">却下しました（{label}）</div>;
+  if (status === "applied") return <div className="proposal-card done">✅ {label}：適用しました</div>;
+  if (status === "rejected") return <div className="proposal-card done muted">却下しました（{label}）</div>;
 
   return (
     <div className="proposal-card" aria-label="proposal">
@@ -135,24 +147,70 @@ function ProposalCard({ p, onApply }: { p: Proposal; onApply: (p: Proposal) => P
           type="button"
           className="primary"
           aria-label="approve"
-          disabled={!canApply || state === "applying"}
-          onClick={async () => {
-            setState("applying");
-            try {
-              await onApply(p);
-              setState("applied");
-            } catch {
-              setState("idle");
-            }
-          }}
+          disabled={!canApply || status === "applying"}
+          onClick={onApprove}
         >
-          {state === "applying" ? "…" : "承認"}
+          {status === "applying" ? "…" : "承認"}
         </button>
-        <button type="button" className="bs-btn" aria-label="reject" onClick={() => setState("rejected")}>
+        <button type="button" className="bs-btn" aria-label="reject" onClick={onReject}>
           却下
         </button>
       </div>
       {!canApply && <p className="muted proposal-note">この提案の自動適用は未対応です（変形の適用は後続）。</p>}
+    </div>
+  );
+}
+
+// #102 S4 提案グループ。複数提案の状態を束ね、「すべて承認」で適用可能な未処理だけを順に適用。
+function ProposalGroup({
+  proposals,
+  summary,
+  onApply,
+}: {
+  proposals: Proposal[];
+  summary?: string;
+  onApply: (p: Proposal) => Promise<void>;
+}) {
+  const [statuses, setStatuses] = useState<PStatus[]>(() => proposals.map(() => "idle"));
+
+  async function approveAt(i: number) {
+    setStatuses((s) => s.map((v, k) => (k === i ? "applying" : v)));
+    try {
+      await onApply(proposals[i]!);
+      setStatuses((s) => s.map((v, k) => (k === i ? "applied" : v)));
+    } catch {
+      setStatuses((s) => s.map((v, k) => (k === i ? "idle" : v)));
+    }
+  }
+  function rejectAt(i: number) {
+    setStatuses((s) => s.map((v, k) => (k === i ? "rejected" : v)));
+  }
+  async function approveAll() {
+    for (let i = 0; i < proposals.length; i++) {
+      if (statuses[i] === "idle" && canApplyProposal(proposals[i]!)) await approveAt(i);
+    }
+  }
+
+  // 「すべて承認」は、適用可能で未処理の提案が2件以上あるときだけ出す。
+  const pendingAppliable = proposals.filter((p, i) => statuses[i] === "idle" && canApplyProposal(p)).length;
+
+  return (
+    <div className="proposals">
+      {summary && <div className="chat-text proposals-summary">{summary}</div>}
+      {pendingAppliable >= 2 && (
+        <button type="button" className="bs-btn proposal-approve-all" aria-label="approve-all" onClick={() => void approveAll()}>
+          すべて承認（{pendingAppliable}）
+        </button>
+      )}
+      {proposals.map((p, k) => (
+        <ProposalCard
+          key={k}
+          p={p}
+          status={statuses[k] ?? "idle"}
+          onApprove={() => void approveAt(k)}
+          onReject={() => rejectAt(k)}
+        />
+      ))}
     </div>
   );
 }
@@ -550,12 +608,7 @@ export function Chat({
             <div key={i} className={"chat-msg " + m.role}>
               {m.text && <div className="chat-text">{m.text}</div>}
               {m.proposals && (
-                <div className="proposals">
-                  {m.summary && <div className="chat-text proposals-summary">{m.summary}</div>}
-                  {m.proposals.map((p, k) => (
-                    <ProposalCard key={k} p={p} onApply={applyProposal} />
-                  ))}
-                </div>
+                <ProposalGroup proposals={m.proposals} summary={m.summary} onApply={applyProposal} />
               )}
               {m.saveable && (
                 <button type="button" className="bs-btn" onClick={() => void saveKnowledge(m.saveable!)}>

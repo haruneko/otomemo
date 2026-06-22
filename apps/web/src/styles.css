@@ -684,6 +684,10 @@ body:has(.dialog-backdrop) .chat-bubble {
   gap: 8px;
   margin-top: 6px;
 }
+.proposal-approve-all {
+  align-self: flex-start;
+  font-weight: 600;
+}
 /* #69 考え中インジケータ。content アニメはブラウザ差で静止し得るので opacity パルスで確実に動かす。 */
 .chat-text.thinking {
   font-style: italic;
