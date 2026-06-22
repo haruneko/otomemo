@@ -82,7 +82,8 @@ wait_port() { # host, port, name, secs : TCP listen を待つ（MCP等 GET で2x
   done
   echo "  ✗ $n が ${t}s で listen せず — logs/ を確認"; return 1
 }
-wait_http "http://127.0.0.1:8787/facets" "api(:8787)" 40 || { echo "起動失敗: api が応答しません"; exit 1; }
+# api は CM_HOST(既定=Tailscale IP)にバインド＝そのホストで叩く(127.0.0.1は拒否される)。
+wait_http "http://${CM_HOST}:8787/facets" "api(:8787 @${CM_HOST})" 45 || { echo "起動失敗: api が応答しません"; exit 1; }
 wait_port 127.0.0.1 8788 "cm-search(:8788)" 20 || echo "  (cm-search 未listen=意味検索は LIKE 退避・後退ゼロ)"
 wait_port 127.0.0.1 "$CM_MUSIC_MCP_PORT" "cm-music-mcp(:${CM_MUSIC_MCP_PORT})" 20 || echo "  (cm-music-mcp 未listen=agentic は dispatch にフォールバック)"
 
