@@ -65,7 +65,12 @@ def find_progression(name) -> tuple[str, dict] | None:
     for canon, entry in NAMED_PROGRESSIONS.items():
         for alias in [canon, *entry["aliases"]]:
             a = _norm_query(alias)
-            if a and (a in q or q in a):
+            if not a:
+                continue
+            # a in q：エイリアスがクエリに含まれる（「丸の内進行で」等）＝安全。
+            # q in a：クエリがエイリアスの一部（短い別名表記）＝**3文字以上のときだけ**許可。
+            # でないと "ii"/"12"/"45" 等の極短クエリが別進行に誤マッチする。
+            if a == q or a in q or (len(q) >= 3 and q in a):
                 return canon, entry
     return None
 

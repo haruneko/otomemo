@@ -429,6 +429,9 @@ describe("job queue (producer side)", () => {
     expect(r.statusCode).toBe(200);
     expect(r.json().settled).toBe(true);
     expect(Array.isArray(r.json().neta)).toBe(true);
+    // 無効idは settled:true でなく 404（存在しないジョブを「決着済み」と誤らない）
+    const miss = await app.inject({ method: "GET", url: "/job/does-not-exist/outcome" });
+    expect(miss.statusCode).toBe(404);
   });
 
   it("enqueues via HTTP", async () => {

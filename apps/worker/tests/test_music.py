@@ -344,3 +344,14 @@ def test_named_progression_unknown_returns_empty():
 
     assert find_progression("存在しない適当な名前") is None
     assert realize_progression("存在しない適当な名前", {}) == {"items": [], "edges": []}
+
+
+def test_named_progression_short_query_no_false_match():
+    # 極短クエリ(2文字以下)はエイリアスの部分一致で誤realizeしない（"ii"/"12"/"45"）。
+    from cm_worker.music import find_progression
+
+    for q in ("ii", "12", "45", "64", "1", "5"):
+        assert find_progression(q) is None, q
+    # 3文字以上の正当な別名表記は引ける（"251"=ツーファイブ・"two"=JtToU=丸の内）。
+    assert find_progression("251")[0] == "ツーファイブ"
+    assert find_progression("two")[0] == "丸の内"

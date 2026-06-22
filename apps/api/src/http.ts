@@ -180,8 +180,9 @@ export function buildHttp(core: Core): FastifyInstance {
   });
 
   // Chat がディスパッチ後もそのチャットで完了を待てるよう、ジョブ＋子ジョブの決着を返す。
-  app.get("/job/:id/outcome", async (req) => {
+  app.get("/job/:id/outcome", async (req, reply) => {
     const { id } = req.params as { id: string };
+    if (!core.getJob(id)) return reply.code(404).send({ error: "not found" }); // 無効idで settled:true を返さない
     return core.jobOutcome(id);
   });
 
