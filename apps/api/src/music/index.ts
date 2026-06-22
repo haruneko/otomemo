@@ -16,6 +16,8 @@ export * from "./emotion";
 export * from "./explain";
 // メロ×コードの当てはまり判定＋外し音補正（土台v・メロが変→直す/ハモ付けの足場）。
 export * from "./fit";
+// ハモ付け（メロ→合うコード候補）。
+export * from "./harmonize";
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {

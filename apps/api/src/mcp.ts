@@ -8,6 +8,7 @@ import {
   substitutesOf,
   emotionShift,
   toDegrees,
+  harmonize,
 } from "./music";
 
 // コード進行の共通 inputSchema（content.chords 形＝{root:0-11 or 音名, quality, start?, dur?}）。
@@ -168,6 +169,24 @@ export function buildMcpServer(core: Core): McpServer {
       const deg = toDegrees([chord], 0)[0]!; // 感情シフトはルート不変＝key不要（degree=root として渡す）
       return ok(emotionShift(deg, dir).map((s) => ({ ...s, root: s.degree })));
     },
+  );
+
+  server.registerTool(
+    "harmonize",
+    {
+      title: "メロにコードを当てる（ハモ付け）",
+      description:
+        "メロディ(notes)に合うコード候補を小節ごとに上位で返す。「このメロに合うコードを何案か」に。候補から選ぶのは人/Claude（質はDB蓄積で向上）。",
+      inputSchema: {
+        melody: z
+          .array(z.object({ pitch: z.number(), start: z.number().optional(), dur: z.number().optional() }))
+          .describe("メロディのノート列（C基準MIDI番号）"),
+        key: z.number().int().min(0).max(11),
+        mode: z.enum(["major", "minor"]).optional(),
+        barBeats: z.number().optional().describe("1小節の拍数（既定4）"),
+      },
+    },
+    async ({ melody, key, mode, barBeats }) => ok(harmonize(melody, key, { mode, barBeats })),
   );
 
   server.registerTool(
