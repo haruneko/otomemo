@@ -11,6 +11,8 @@ import {
 } from "./theory";
 
 export type { Chord, Degree, KeyCandidate };
+// S2 機能/カデンツ解析（function.ts は toDegrees/detectKeyFromChords を呼ぶ＝呼び出し時参照で循環OK）。
+export * from "./function";
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {
