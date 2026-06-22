@@ -49,7 +49,11 @@ describe("U-FRET 取込", () => {
     expect(progs.length).toBeGreaterThanOrEqual(1);
     const p = progs[0];
     expect(p.key).toBe(0); // C基準保存（neta.key=0・rootは度数）
+    expect(p.meter).toBe("4/4");
     expect(p.content.chords.every((c) => c.root >= 0 && c.root < 12)).toBe(true);
+    // timing＝一律2拍/コード（1拍ベタ並べを是正・U-FRETは実リズム持たない）
+    expect(p.content.chords[0]).toMatchObject({ start: 0, dur: 2 });
+    if (p.content.chords[1]) expect(p.content.chords[1]).toMatchObject({ start: 2, dur: 2 });
     // 移調しても相対関係は保つ：B→A#m の半音差(-1)が度数差にも保たれる
     expect(((p.content.chords[0].root - p.content.chords[1].root) % 12 + 12) % 12).toBe(1);
     expect(p.tags).toContain("テスト");

@@ -10,9 +10,15 @@ export type ProgressionInput = {
   title: string;
   key: number; // 0＝C基準保存
   mode: "major" | "minor";
+  meter: string;
   content: { chords: { root: number; quality: string; start: number; dur: number }[]; source: SongMeta };
   tags: string[];
 };
+
+// U-FRET は実際の和声リズムを持たない（歌詞に対するコード位置のみ）。1拍ベタ並べは曲としてレアで不自然。
+// 通例は2〜4拍/コード → 一番ニュートラルな **2拍/コード** をスキーマティック既定に（後で変更可）。
+// timing は表示/試聴用のキャンバスで、連想・距離・名前あては列しか見ない（timing非依存）。
+const CHORD_BEATS = 2;
 
 /** <title>「曲名 / アーティスト ギターコード… - U-FRET」から曲名を取り出す。取れねば空。 */
 export function extractSongTitle(html: string): string {
@@ -87,8 +93,13 @@ export function songToProgressions(html: string, meta: SongMeta): ProgressionInp
   loops.forEach((loop, idx) => {
     const det = detectKeyFromChords(loop, 1)[0]!;
     const key = det.key;
-    // C基準へ移調して保存（design「C基準保存」）。neta.key=0。
-    const cChords = loop.map((c, i) => ({ root: ((c.root - key) % 12 + 12) % 12, quality: c.quality, start: i, dur: 1 }));
+    // C基準へ移調して保存（design「C基準保存」）。neta.key=0。一律 CHORD_BEATS 拍/コードで並べる。
+    const cChords = loop.map((c, i) => ({
+      root: ((c.root - key) % 12 + 12) % 12,
+      quality: c.quality,
+      start: i * CHORD_BEATS,
+      dur: CHORD_BEATS,
+    }));
     // 「取込」＝コーパス由来（手作りネタと区別しネタ帳が埋もれないように）。
     const tags = ["取込", meta.popular ? "定番" : "", meta.artist, det.mode === "minor" ? "切ない" : "明るい"].filter(Boolean);
     out.push({
@@ -96,6 +107,7 @@ export function songToProgressions(html: string, meta: SongMeta): ProgressionInp
       title: `${meta.artist} - ${meta.song}${loops.length > 1 ? ` (loop${idx + 1})` : ""}`,
       key: 0,
       mode: det.mode,
+      meter: "4/4",
       content: { chords: cChords, source: meta },
       tags,
     });
