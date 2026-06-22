@@ -12,6 +12,7 @@ import {
   nextChordCandidates,
 } from "./music";
 import { findProgressions } from "./progression-search";
+import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
 
 // コード進行の共通 inputSchema（content.chords 形＝{root:0-11 or 音名, quality, start?, dur?}）。
 const chordsSchema = z
@@ -45,22 +46,7 @@ export function buildMcpServer(core: Core): McpServer {
     {
       title: "ネタを作成（捕獲）",
       description: "ネタ（歌詞/メロ/コード/ベース/リズム/テーマ/曲など）を作成する。",
-      inputSchema: {
-        kind: z
-          .string()
-          .describe("melody/chord/chord_progression/bass/rhythm/lyric/theme/section/song/knowledge/other"),
-        title: z.string().optional(),
-        text: z.string().optional().describe("歌詞・自由文"),
-        content: z.unknown().optional().describe("音楽的中身(JSON, Cキー基準)"),
-        key: z.number().int().min(0).max(11).optional(),
-        mode: z.string().optional(),
-        tempo: z.number().optional(),
-        meter: z.string().optional(),
-        bars: z.number().int().optional(),
-        mood: z.string().optional(),
-        scope: z.enum(["project", "library"]).optional().describe("既定project。連想元コーパスは library"),
-        tags: z.array(z.string()).optional(),
-      },
+      inputSchema: netaInputShape, // SSOT(schemas.ts)＝http/型と共有
     },
     async (args) => ok(core.createNeta(args)),
   );
@@ -70,18 +56,7 @@ export function buildMcpServer(core: Core): McpServer {
     {
       title: "ネタ検索（ファセット）",
       description: "kind/mood/key/meter/tags/q で絞り込み一覧。scope 既定 project（ユーザー作業ネタ）。library=連想元コーパス、all=両方。意味検索は後日。",
-      inputSchema: {
-        kind: z.string().optional(),
-        mode: z.string().optional(),
-        meter: z.string().optional(),
-        mood: z.string().optional(),
-        key: z.number().int().optional(),
-        scope: z.enum(["project", "library", "all"]).optional().describe("既定project。library=取込/連想元コーパス。all=両方"),
-        tags: z.array(z.string()).optional(),
-        q: z.string().optional().describe("title/text 部分一致"),
-        limit: z.number().int().optional(),
-        offset: z.number().int().optional(),
-      },
+      inputSchema: listQueryShape, // SSOT(schemas.ts)
     },
     async (args) => ok(core.listNeta(args)),
   );
@@ -98,7 +73,7 @@ export function buildMcpServer(core: Core): McpServer {
     {
       title: "ネタを複製（library→project）",
       description: "id のネタを複製。library の連想元を project にコピーして使う／任意ネタの複製に。section は子も deep copy。元は不変。",
-      inputSchema: { id: z.string(), scope: z.enum(["project", "library"]).optional().describe("既定project") },
+      inputSchema: { id: z.string(), scope: scopeEnum.optional().describe("既定project") },
     },
     async ({ id, scope }) => {
       const n = core.copyNeta(id, scope ?? "project");
@@ -112,7 +87,7 @@ export function buildMcpServer(core: Core): McpServer {
     {
       title: "ネタの scope を切替",
       description: "ネタを project↔library に移す。自作の進行/曲を library に移す＝連想の素材にする。",
-      inputSchema: { id: z.string(), scope: z.enum(["project", "library"]) },
+      inputSchema: { id: z.string(), scope: scopeEnum },
     },
     async ({ id, scope }) => {
       const n = core.setScope(id, scope);

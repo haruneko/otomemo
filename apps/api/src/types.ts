@@ -23,22 +23,8 @@ export interface Neta {
   updated: string;
 }
 
-export interface NetaInput {
-  kind: string;
-  title?: string | null;
-  content?: unknown;
-  text?: string | null;
-  key?: number | null;
-  mode?: string | null;
-  tempo?: number | null;
-  meter?: string | null;
-  bars?: number | null;
-  mood?: string | null;
-  scope?: "project" | "library"; // 既定 project
-  tags?: string[];
-  /** このネタがどのジョブの結果か。指定すると job_result に記録し、ジョブの対象へ relation を張る。 */
-  from_job?: string | null;
-}
+// NetaInput / ListQuery は zod の SSOT(schemas.ts)から導出（手書き重複を排す・design「アーキ是正 決定2」）。
+export type { NetaInput, ListQuery } from "./schemas";
 
 export interface JobResult {
   neta_id: string;
@@ -53,23 +39,8 @@ export interface JobOutcome {
   neta: Neta[]; // 自分＋子の job_result から集めた生成ネタ
 }
 
-export type NetaPatch = Partial<NetaInput>;
-
-export interface ListQuery {
-  kind?: string;
-  mode?: string;
-  meter?: string;
-  mood?: string;
-  key?: number;
-  /** project（既定で省略時 project のみ）/ library / all（両方）。 */
-  scope?: "project" | "library" | "all";
-  /** すべて一致するタグ。 */
-  tags?: string[];
-  /** title/text への部分一致（意味検索は S3）。 */
-  q?: string;
-  limit?: number;
-  offset?: number;
-}
+import type { NetaInput as _NetaInput } from "./schemas";
+export type NetaPatch = Partial<_NetaInput>;
 
 export interface Facets {
   kind: string[];

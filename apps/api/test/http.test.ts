@@ -76,6 +76,8 @@ describe("http auth gate (#36)", () => {
     expect((await app.inject({ method: "GET", url: "/neta" })).json().length).toBe(1); // 既定project
     expect((await app.inject({ method: "GET", url: "/neta?scope=library" })).json().length).toBe(1);
     expect((await app.inject({ method: "GET", url: "/neta?scope=all" })).json().length).toBe(2);
+    // 無効scopeは素通しせず既定(project)へ（旧: 無検証キャストで where scope='garbage' になっていた）
+    expect((await app.inject({ method: "GET", url: "/neta?scope=garbage" })).json().length).toBe(1);
     // copy: library→project
     const copy = await app.inject({ method: "POST", url: `/neta/${lib.id}/copy` });
     expect(copy.statusCode).toBe(200);

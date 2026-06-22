@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Core } from "./core";
+import { netaInputSchema, netaPatchSchema, jobInputSchema, scopeEnum, scopeQueryEnum } from "./schemas";
 
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
 function assetsDir(): string {
@@ -15,37 +16,13 @@ function assetsDir(): string {
   );
 }
 
-const netaInput = z.object({
-  kind: z.string().min(1),
-  title: z.string().nullish(),
-  content: z.unknown().optional(),
-  text: z.string().nullish(),
-  key: z.number().int().min(0).max(11).nullish(),
-  mode: z.string().nullish(),
-  tempo: z.number().nullish(),
-  meter: z.string().nullish(),
-  bars: z.number().int().nullish(),
-  mood: z.string().nullish(),
-  scope: z.enum(["project", "library"]).optional(),
-  tags: z.array(z.string()).optional(),
-  from_job: z.string().nullish(),
-});
+// neta/job 入力スキーマは SSOT(schemas.ts)から import（http/mcp/型で共有・三重定義を排す）。
 
 // 意味検索のPython窓口（docs/design.md #16）。localhost のみ、外に露出しない。
 const SEARCH_URL = process.env.CM_SEARCH_URL ?? "http://127.0.0.1:8788";
 // #65 意味hitの spread較正ゲート閾値。実機コーパス実測で 0.07（無意味top rel≈0.061 を弾き
 // 実クエリtop≈0.112 を残す）。コーパス成長で最適点が動く前提で env 外出し＋回帰スイープ。
 const SEM_MIN_REL = Number(process.env.CM_SEM_MIN_REL ?? 0.07);
-
-const jobInput = z.object({
-  intent: z.string().min(1),
-  target_neta_id: z.string().nullish(),
-  instruction: z.string().nullish(),
-  params: z.unknown().optional(),
-  level: z.string().optional(),
-  priority: z.number().int().optional(),
-  notify_level: z.string().nullish(),
-});
 
 /** 低次元データAPI（docs/design.md #15/#16）。PWAの主窓口。 */
 export function buildHttp(core: Core): FastifyInstance {
@@ -65,7 +42,7 @@ export function buildHttp(core: Core): FastifyInstance {
   app.register(multipart, { limits: { fileSize: 256 * 1024 * 1024 } });
 
   app.post("/neta", async (req, reply) => {
-    const p = netaInput.safeParse(req.body);
+    const p = netaInputSchema.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
     return core.createNeta(p.data);
   });
@@ -80,7 +57,8 @@ export function buildHttp(core: Core): FastifyInstance {
       key: q.key !== undefined ? Number(q.key) : undefined,
       tags: q.tags ? q.tags.split(",").filter(Boolean) : undefined,
       q: q.q,
-      scope: q.scope as "project" | "library" | "all" | undefined,
+      scope: scopeQueryEnum.optional().catch(undefined).parse(q.scope), // 無効値は素通しせず undefined(既定project)へ
+
       limit: q.limit ? Number(q.limit) : undefined,
       offset: q.offset ? Number(q.offset) : undefined,
     });
@@ -97,7 +75,7 @@ export function buildHttp(core: Core): FastifyInstance {
 
   app.patch("/neta/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const p = netaInput.partial().safeParse(req.body);
+    const p = netaPatchSchema.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
     const n = core.updateNeta(id, p.data);
     if (!n) return reply.code(404).send({ error: "not found" });
@@ -120,7 +98,7 @@ export function buildHttp(core: Core): FastifyInstance {
   // scope 切替（自作を連想元へ＝library に移す等）。
   app.post("/neta/:id/scope", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const p = z.object({ scope: z.enum(["project", "library"]) }).safeParse(req.body);
+    const p = z.object({ scope: scopeEnum }).safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
     const n = core.setScope(id, p.data.scope);
     if (!n) return reply.code(404).send({ error: "not found" });
@@ -186,7 +164,7 @@ export function buildHttp(core: Core): FastifyInstance {
 
   // --- ジョブ（投げて→受け取る）---
   app.post("/job", async (req, reply) => {
-    const p = jobInput.safeParse(req.body);
+    const p = jobInputSchema.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
     return core.enqueueJob(p.data);
   });
