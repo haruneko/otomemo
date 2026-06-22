@@ -16,6 +16,10 @@ export * from "./function";
 // 名前あて＋名前付き進行DB。
 export * from "./progressions";
 export * from "./identify";
+// 代替コード。
+export * from "./substitute";
+// 感情シフト（単体コード）。
+export * from "./emotion";
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {
