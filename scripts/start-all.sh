@@ -64,6 +64,28 @@ echo "started api/web/worker/search/music-mcp.$([ "$DO_BUILD" = 1 ] && echo ' (w
 echo "  db=$CM_DB  host=$CM_HOST  logs=$ROOT/logs"
 echo "  → アクセス: http://$CM_HOST:8787/  （単一オリジン＝api が web も配信）"
 
+# --- 疎通スモーク：上がったつもりで上がってない状態を検知（docs/design アーキ是正 決定4）---
+# api(:8787) は必須＝listen 待ち、ダメなら非0終了。search/music-mcp は best-effort 警告（後退ゼロ）。
+wait_http() { # url, name, secs : HTTP で 2xx を待つ（実際に応答することを確認）
+  local u="$1" n="$2" t="${3:-30}" i=0
+  while [ "$i" -lt "$t" ]; do
+    if curl -sf -o /dev/null "$u" 2>/dev/null; then echo "  ✓ $n"; return 0; fi
+    sleep 1; i=$((i+1))
+  done
+  echo "  ✗ $n が ${t}s で応答せず ($u) — logs/ を確認"; return 1
+}
+wait_port() { # host, port, name, secs : TCP listen を待つ（MCP等 GET で2xxを返さない物用）
+  local h="$1" p="$2" n="$3" t="${4:-20}" i=0
+  while [ "$i" -lt "$t" ]; do
+    if (exec 3<>"/dev/tcp/$h/$p") 2>/dev/null; then exec 3>&- 3<&-; echo "  ✓ $n"; return 0; fi
+    sleep 1; i=$((i+1))
+  done
+  echo "  ✗ $n が ${t}s で listen せず — logs/ を確認"; return 1
+}
+wait_http "http://127.0.0.1:8787/facets" "api(:8787)" 40 || { echo "起動失敗: api が応答しません"; exit 1; }
+wait_port 127.0.0.1 8788 "cm-search(:8788)" 20 || echo "  (cm-search 未listen=意味検索は LIKE 退避・後退ゼロ)"
+wait_port 127.0.0.1 "$CM_MUSIC_MCP_PORT" "cm-music-mcp(:${CM_MUSIC_MCP_PORT})" 20 || echo "  (cm-music-mcp 未listen=agentic は dispatch にフォールバック)"
+
 # --- systemd --user ユニット例（~/.config/systemd/user/creative-manager.service）---
 # [Unit]
 # Description=creative_manager

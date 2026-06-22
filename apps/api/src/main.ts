@@ -4,7 +4,9 @@ import { openDb } from "./db";
 import { Core } from "./core";
 import { buildHttp } from "./http";
 
-const dbPath = process.env.CM_DB ?? "./data/cm.sqlite";
+// CM_DB 未指定なら **リポジトリルートの data/cm.sqlite を絶対パスで**（cwd 依存で apps/api/data 等に
+// rogue DB を作る事故を断つ・docs/design「アーキ是正 決定4」）。import.meta.dirname=apps/api/src。
+const dbPath = process.env.CM_DB ?? join(import.meta.dirname, "../../../data/cm.sqlite");
 const port = Number(process.env.PORT ?? 8787);
 // 到達は Tailscale tailnet 限定（design #18）。既定 localhost＝LANにもネットにも晒さない。
 // 外へは `tailscale serve 8787`(tailnet限定) で出す。LAN直開放したい時だけ CM_HOST=0.0.0.0。

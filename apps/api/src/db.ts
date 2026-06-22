@@ -130,6 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_thread ON chat_message(thread, created);
 export function openDb(path = ":memory:"): Database.Database {
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000"); // WAL 単一ライター競合(api reap/tick × worker × search)を即例外でなく待たせる
   db.pragma("foreign_keys = ON");
   db.exec(SCHEMA);
   migrate(db);

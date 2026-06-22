@@ -101,6 +101,7 @@ class SearchIndex:
         c = sqlite3.connect(self.db_path)
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA journal_mode=WAL")
+        c.execute("PRAGMA busy_timeout=5000")  # WAL 単一ライター競合を即例外でなく待たせる
         c.executescript(EMBED_SCHEMA)
         return c
 
