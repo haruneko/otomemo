@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseChordSymbol } from "../src/music/chordname";
-import { extractUfretLines, linesToChords, extractLoops, songToProgressions } from "../src/ingest-ufret";
+import { extractUfretLines, linesToChords, extractLoops, songToProgressions, extractSongTitle } from "../src/ingest-ufret";
 
 describe("parseChordSymbol（コード名→root/quality）", () => {
   const cases: [string, number, string][] = [
@@ -25,6 +25,10 @@ const FIXTURE = `<script>ufret_chord_datas = ${JSON.stringify([
 ])};</script>`;
 
 describe("U-FRET 取込", () => {
+  it("extractSongTitle：<title>から曲名（/ の前）", () => {
+    expect(extractSongTitle("<title>プールサイド / NUMBER GIRL  ギターコード - U-FRET</title>")).toBe("プールサイド");
+    expect(extractSongTitle("no title")).toBe("");
+  });
   it("extractUfretLines：配列を取り出す", () => {
     expect(extractUfretLines(FIXTURE).length).toBe(3);
   });

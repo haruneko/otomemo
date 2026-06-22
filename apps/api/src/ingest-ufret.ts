@@ -14,6 +14,13 @@ export type ProgressionInput = {
   tags: string[];
 };
 
+/** <title>「曲名 / アーティスト ギターコード… - U-FRET」から曲名を取り出す。取れねば空。 */
+export function extractSongTitle(html: string): string {
+  const m = html.match(/<title>([^<]*)<\/title>/);
+  if (!m) return "";
+  return m[1]!.split("/")[0]!.replace(/\s+/g, " ").trim();
+}
+
 /** HTML から ufret_chord_datas 配列（行文字列）を取り出す。無ければ []。 */
 export function extractUfretLines(html: string): string[] {
   const m = html.match(/ufret_chord_datas\s*=\s*(\[[\s\S]*?\])\s*;/);
@@ -82,7 +89,8 @@ export function songToProgressions(html: string, meta: SongMeta): ProgressionInp
     const key = det.key;
     // C基準へ移調して保存（design「C基準保存」）。neta.key=0。
     const cChords = loop.map((c, i) => ({ root: ((c.root - key) % 12 + 12) % 12, quality: c.quality, start: i, dur: 1 }));
-    const tags = [meta.popular ? "定番" : "", meta.artist, det.mode === "minor" ? "切ない" : "明るい"].filter(Boolean);
+    // 「取込」＝コーパス由来（手作りネタと区別しネタ帳が埋もれないように）。
+    const tags = ["取込", meta.popular ? "定番" : "", meta.artist, det.mode === "minor" ? "切ない" : "明るい"].filter(Boolean);
     out.push({
       kind: "chord_progression",
       title: `${meta.artist} - ${meta.song}${loops.length > 1 ? ` (loop${idx + 1})` : ""}`,
