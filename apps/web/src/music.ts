@@ -289,7 +289,7 @@ export function notesForContent(kind: string, content: unknown, ctx?: BassContex
 // SectionEditor と ネタ帳カードの section再生(#73) で共有。
 export interface CompositeChild {
   position: number;
-  node: { neta: { kind: string; content: unknown } };
+  node: { neta: { kind: string; content: unknown; key?: number | null }; children?: CompositeChild[] };
 }
 export function compositeNotes(children: CompositeChild[], keyPc: number): Note[] {
   // #bass S2: 相対bass の子は section のコードレーンに当てて解決する（コードが無ければ key）。
@@ -305,6 +305,11 @@ export function compositeNotes(children: CompositeChild[], keyPc: number): Note[
   });
   return children.flatMap((c) => {
     const kind = c.node.neta.kind;
+    // ネストした section/song は、その子を**自分の調で再帰合成**して位置オフセット（#15）。
+    if (kind === "section" || kind === "song") {
+      const subKey = ((c.node.neta.key ?? keyPc) % 12 + 12) % 12;
+      return compositeNotes(c.node.children ?? [], subKey).map((n) => ({ ...n, start: n.start + c.position }));
+    }
     const isRhythm = kind === "rhythm";
     // パートの音色（GM program）を各音に持たせ、合成再生で子ごとの音色を保つ。bass は既定フィンガーベース。
     const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : 0));

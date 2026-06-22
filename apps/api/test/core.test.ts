@@ -91,6 +91,15 @@ describe("edges: compose (DAG) + relation", () => {
     expect(secNode.node.children[0]!.node.neta.id).toBe(mel.id);
   });
 
+  it("section をネストできる（section in section）が循環は禁止", () => {
+    const a = core.createNeta({ kind: "section", title: "A" });
+    const b = core.createNeta({ kind: "section", title: "B" });
+    core.placeChild(a.id, b.id, 0, 0); // A の中に B（ネストOK）
+    expect(core.getComposition(a.id)!.children[0]!.node.neta.id).toBe(b.id);
+    expect(() => core.placeChild(a.id, a.id)).toThrow(); // 自分自身
+    expect(() => core.placeChild(b.id, a.id)).toThrow(); // B⊃A は循環（A⊃B 既存）
+  });
+
   it("places the same child at multiple positions and removes one instance (#54)", () => {
     const sec = core.createNeta({ kind: "section", title: "S" });
     const mel = core.createNeta({ kind: "melody", title: "m" });

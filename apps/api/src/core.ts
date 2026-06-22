@@ -341,8 +341,13 @@ export class Core {
         const from = typeof e?.from === "number" ? idMap[e.from] : null;
         const to = typeof e?.to === "number" ? idMap[e.to] : null;
         if (!from || !to) continue;
-        if (e.type === "compose") this.placeChild(from, to, e.position ?? 0, e.position ?? 0);
-        else this.link(from, to, "related");
+        if (e.type === "compose") {
+          try {
+            this.placeChild(from, to, e.position ?? 0, e.position ?? 0);
+          } catch {
+            /* 循環等は無視（reap を止めない） */
+          }
+        } else this.link(from, to, "related");
       }
       if (!made) {
         this.db
@@ -460,7 +465,24 @@ export class Core {
     };
   }
 
+  // 合成の子孫 id 集合（compose_edge を BFS）。循環判定用。
+  private descendantIds(id: string): Set<string> {
+    const out = new Set<string>();
+    const stack = [id];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      const rows = this.db
+        .prepare(`SELECT child_id FROM compose_edge WHERE parent_id = ?`)
+        .all(cur) as { child_id: string }[];
+      for (const r of rows) if (!out.has(r.child_id)) (out.add(r.child_id), stack.push(r.child_id));
+    }
+    return out;
+  }
+
   placeChild(parentId: string, childId: string, position = 0, ord = 0): void {
+    // section に section を入れる等のネストを許すが、**循環は禁止**（自分自身／子孫を親に置けない）。
+    if (childId === parentId) throw new Error("自分自身は子にできない");
+    if (this.descendantIds(childId).has(parentId)) throw new Error("循環になる配置はできない");
     // #54: 同じ子を別位置に複数置ける。同位置への再配置は冪等（ord を更新）。
     this.db
       .prepare(

@@ -46,6 +46,7 @@ const LANES = [
   { key: "chord", label: "コード", kinds: ["chord", "chord_progression"] },
   { key: "bass", label: "ベース", kinds: ["bass"] },
   { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
+  { key: "section", label: "セクション", kinds: ["section"] }, // #15 section をネスト配置
 ] as const;
 const BARS = 8;
 
@@ -172,7 +173,13 @@ export function SectionEditor({
   }
   async function placeAt(child: Neta) {
     if (!picker) return;
-    await api.placeChild(neta.id, child.id, picker.position, children.length);
+    try {
+      await api.placeChild(neta.id, child.id, picker.position, children.length);
+    } catch {
+      // section ネストで循環になる配置は core が拒否（400）→ そっと無視（配置しない）
+      setPicker(null);
+      return;
+    }
     setPicker(null);
     await load();
     onChanged?.();

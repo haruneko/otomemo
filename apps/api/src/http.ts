@@ -129,7 +129,11 @@ export function buildHttp(core: Core): FastifyInstance {
       })
       .safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
-    core.placeChild(p.data.parent, p.data.child, p.data.position, p.data.ord);
+    try {
+      core.placeChild(p.data.parent, p.data.child, p.data.position, p.data.ord);
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message }); // 循環/自己配置
+    }
     return { ok: true };
   });
 

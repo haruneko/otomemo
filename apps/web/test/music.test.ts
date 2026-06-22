@@ -219,6 +219,26 @@ describe("music", () => {
       expect(notes.find((n) => n.pitch === 60)?.program).toBe(4);
       expect(notes.find((n) => n.pitch === 31)?.program).toBe(33);
     });
+
+    it("ネストした section を再帰合成する（#15・子の調＋位置オフセット）", () => {
+      // 親 section(key=0) に サブ section(key=2) を position=4 で配置。サブは C基準メロ(pitch60)を持つ。
+      const children = [
+        {
+          position: 4,
+          node: {
+            neta: { kind: "section", content: {}, key: 2 },
+            children: [
+              { position: 0, node: { neta: { kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } } } },
+            ],
+          },
+        },
+      ];
+      const notes = compositeNotes(children, 0);
+      // サブの調key=2でメロが+2移調(60→62)、親内 position=4 で start が+4
+      expect(notes.length).toBe(1);
+      expect(notes[0].pitch).toBe(62);
+      expect(notes[0].start).toBe(4);
+    });
   });
 
   it("notesOf extracts notes or empty", () => {
