@@ -95,4 +95,24 @@ describe("mcp tool layer", () => {
     const an = await client.callTool({ name: "analyze_progression", arguments: { chords: canon, key: 0, mode: "major" } });
     expect(JSON.parse(textOf(an)).degrees[0].function).toBe("T");
   });
+
+  it("explain / substitute_chord / emotion_shift も read-only 公開", async () => {
+    const { client } = await connect();
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    for (const t of ["explain_progression", "substitute_chord", "emotion_shift"]) expect(names).toContain(t);
+
+    // 代替：V7(root7) の裏コード bII7(root1) が出る
+    const sub = await client.callTool({
+      name: "substitute_chord",
+      arguments: { chord: { root: 7, quality: "7" }, key: 0 },
+    });
+    expect(JSON.parse(textOf(sub)).some((s: { root: number; kind: string }) => s.root === 1 && s.kind === "tritone_sub")).toBe(true);
+
+    // 感情：C(root0) を darker→Cm(root0,m)
+    const emo = await client.callTool({
+      name: "emotion_shift",
+      arguments: { chord: { root: 0, quality: "" }, dir: "darker" },
+    });
+    expect(JSON.parse(textOf(emo))[0]).toMatchObject({ root: 0, quality: "m" });
+  });
 });

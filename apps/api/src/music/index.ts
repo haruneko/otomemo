@@ -20,6 +20,8 @@ export * from "./identify";
 export * from "./substitute";
 // 感情シフト（単体コード）。
 export * from "./emotion";
+// 説明・命名（機能解析＋名前あての束ね）。
+export * from "./explain";
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {

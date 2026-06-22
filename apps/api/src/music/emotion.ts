@@ -11,7 +11,7 @@ const DARKER: Record<string, { q: string; why: string }> = {
   maj7: { q: "m7", why: "短調化（メジャー7th→マイナー7th）" },
   "7": { q: "m7", why: "短調化（ドミナント→マイナー7th）" },
   "6": { q: "m", why: "短調化" },
-  sus4: { q: "m", why: "サスを短三度へ解決＝короткに切なく" },
+  sus4: { q: "m", why: "サスを短三度へ解決＝切なく" },
   sus2: { q: "m", why: "短調化" },
   aug: { q: "m", why: "短調化" },
   m: { q: "m7", why: "7thを足して翳りを深く" },

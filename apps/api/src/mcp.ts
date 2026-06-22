@@ -1,7 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Core } from "./core";
-import { identifyProgression, analyzeProgression } from "./music";
+import {
+  identifyProgression,
+  analyzeProgression,
+  explainProgression,
+  substitutesOf,
+  emotionShift,
+  toDegrees,
+} from "./music";
 
 // コード進行の共通 inputSchema（content.chords 形＝{root:0-11 or 音名, quality, start?, dur?}）。
 const chordsSchema = z
@@ -114,6 +121,53 @@ export function buildMcpServer(core: Core): McpServer {
       },
     },
     async ({ chords, key, mode }) => ok(analyzeProgression(chords, { key, mode })),
+  );
+
+  server.registerTool(
+    "explain_progression",
+    {
+      title: "進行の説明・命名",
+      description:
+        "コード進行の『事実』（調・名前あて・度数/機能(T/S/D)・終止）を束ねて返す。Claudeはこれを読んで『なぜ切ない/構造』を言葉にする。理論を知らなくても分かる。",
+      inputSchema: { chords: chordsSchema, key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional() },
+    },
+    async ({ chords, key, mode }) => ok(explainProgression(chords, { key, mode })),
+  );
+
+  const oneChord = z.object({ root: z.union([z.number(), z.string()]), quality: z.string().optional() });
+  server.registerTool(
+    "substitute_chord",
+    {
+      title: "コードの代替候補",
+      description:
+        "進行中の1コードの代替候補（機能代理/相対/裏コード/同主調借用、next 指定でセカンダリードミナント）を返す。「3つ目の代替は？/ベタすぎる→ひねって」に。",
+      inputSchema: {
+        chord: oneChord,
+        key: z.number().int().min(0).max(11),
+        mode: z.enum(["major", "minor"]).optional(),
+        next: oneChord.optional().describe("次のコード（セカンダリードミナント用）"),
+      },
+    },
+    async ({ chord, key, mode, next }) => {
+      const deg = toDegrees([chord], key)[0]!;
+      const nextDeg = next ? toDegrees([next], key)[0] : undefined;
+      const subs = substitutesOf(deg, { mode, next: nextDeg });
+      // 度数→実音ルート(0-11)も添える（Chatが実コードで提示できるよう）。
+      return ok(subs.map((s) => ({ ...s, root: (s.degree + key) % 12 })));
+    },
+  );
+
+  server.registerTool(
+    "emotion_shift",
+    {
+      title: "コードの感情シフト",
+      description: "1コードを『もっと切なく(darker)/明るく(brighter)』に。ルートは変えず品質だけ。",
+      inputSchema: { chord: oneChord, dir: z.enum(["darker", "brighter"]) },
+    },
+    async ({ chord, dir }) => {
+      const deg = toDegrees([chord], 0)[0]!; // 感情シフトはルート不変＝key不要（degree=root として渡す）
+      return ok(emotionShift(deg, dir).map((s) => ({ ...s, root: s.degree })));
+    },
   );
 
   server.registerTool(

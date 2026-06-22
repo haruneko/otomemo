@@ -78,8 +78,8 @@ CM_MCP_STDIO_ARGS = os.environ.get("CM_MCP_STDIO_ARGS")
 # 意図的に除外**＝Claude に書込口を与えない。変異は proposals→承認→TS core で1箇所適用（#102）。
 _NETA_READ_TOOLS = [
     "list_neta", "get_neta", "facets", "get_composition", "get_relations",
-    # 連想エンジン（read-only・#20）。「これ何進行？/なぜ」に agentic Chat が答えるための手。
-    "identify_progression", "analyze_progression",
+    # 連想エンジン（read-only・#20）。「これ何進行？/なぜ/代替/もっと切なく」に agentic Chat が答えるための手。
+    "identify_progression", "analyze_progression", "explain_progression", "substitute_chord", "emotion_shift",
 ]
 
 
@@ -984,6 +984,10 @@ def handle_consult(params: dict) -> dict:
         "- 既存ネタについて聞かれた／今ある素材を踏まえて答えたい → "
         "creative-manager のツールで読める（list_neta=一覧, get_neta=中身, facets=検索の軸, "
         "get_composition=曲の構成, get_relations=関連）。**読むだけ**（ツールでの書込は不可）。\n"
+        "- コード進行について『これ何進行?／なぜ切ない・構造は?／○番目の代替は?／このコードもっと切なく・明るく』"
+        "→ identify_progression（名前あて）/ explain_progression（度数・機能・終止の事実→君が「なぜ」を語る）/ "
+        "substitute_chord（代替候補・実コードで）/ emotion_shift（単体の感情シフト）。**決定的に正しい候補が返る**ので"
+        "それを元に選ぶ・説明する（自分で音を捏造しない）。\n"
         "- 既存ネタを**直す/配置する/関連づける/削除する**よう頼まれた → ツールで対象を読んで特定し、"
         "**変更は提案として返す**（その場では適用しない＝ユーザーが承認してから反映）：\n"
         '  {"type":"proposals","summary":"何をするかの要約","proposals":[{"op":..., "target_id":"対象ネタID", "args":{...}, "rationale":"理由"}]}\n'
