@@ -107,6 +107,24 @@ export function buildHttp(core: Core): FastifyInstance {
     return { deleted: core.deleteNeta(id) };
   });
 
+  // ライブラリ→プロジェクトにコピー（複製汎用にも）。元は不変・新規 project ネタを返す。
+  app.post("/neta/:id/copy", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const n = core.copyNeta(id);
+    if (!n) return reply.code(404).send({ error: "not found" });
+    return n;
+  });
+
+  // scope 切替（自作を連想元へ＝library に移す等）。
+  app.post("/neta/:id/scope", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ scope: z.enum(["project", "library"]) }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    const n = core.setScope(id, p.data.scope);
+    if (!n) return reply.code(404).send({ error: "not found" });
+    return n;
+  });
+
   app.get("/neta/:id/composition", async (req, reply) => {
     const { id } = req.params as { id: string };
     const t = core.getComposition(id);

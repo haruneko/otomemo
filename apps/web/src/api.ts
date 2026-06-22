@@ -28,6 +28,7 @@ export interface Neta {
   meter: string | null;
   bars: number | null;
   mood: string | null;
+  scope?: "project" | "library"; // サーバは常に返す（テストの部分リテラル許容のため任意）
   tags: string[];
   created: string;
   updated: string;
@@ -95,6 +96,7 @@ export interface ListQuery {
   q?: string;
   tags?: string[];
   limit?: number;
+  scope?: "project" | "library" | "all";
 }
 
 // サーバが応答したがエラー(4xx/5xx)。ネットワーク不達(fetch自体のreject)とは区別する。
@@ -130,6 +132,12 @@ export const api = {
   deleteNeta: (id: string) =>
     http<{ deleted: boolean }>(`/neta/${id}`, { method: "DELETE" }),
 
+  // ライブラリ→プロジェクトにコピー（複製汎用にも）。新規 project ネタが返る。
+  copyNeta: (id: string) => http<Neta>(`/neta/${id}/copy`, { method: "POST" }),
+  // scope 切替（自作を連想元へ＝library に移す等）。
+  setScope: (id: string, scope: "project" | "library") =>
+    http<Neta>(`/neta/${id}/scope`, { method: "POST", body: JSON.stringify({ scope }) }),
+
   listNeta: (q: ListQuery = {}) => {
     const p = new URLSearchParams();
     if (q.kind) p.set("kind", q.kind);
@@ -137,6 +145,7 @@ export const api = {
     if (q.q) p.set("q", q.q);
     if (q.tags?.length) p.set("tags", q.tags.join(","));
     if (q.limit !== undefined) p.set("limit", String(q.limit));
+    if (q.scope) p.set("scope", q.scope);
     const qs = p.toString();
     return http<Neta[]>(`/neta${qs ? `?${qs}` : ""}`);
   },

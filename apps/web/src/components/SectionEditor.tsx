@@ -165,15 +165,17 @@ export function SectionEditor({
   }
 
   async function openPicker(lane: Lane, position: number) {
-    // 全件ロード（件数制限で椎名林檎等が溢れていた）。種別(lane)は picker 内で切替できる。
-    const all = await api.listNeta({ limit: 2000 });
+    // project＋library 両方を候補に（library=連想元コーパス・椎名林檎等）。種別は picker 内で切替。
+    const all = await api.listNeta({ scope: "all", limit: 2000 });
     setPq("");
     setPicker({ lane, position, all });
   }
   async function placeAt(child: Neta) {
     if (!picker) return;
     try {
-      await api.placeChild(neta.id, child.id, picker.position, children.length);
+      // ライブラリ項目は project にコピーしてから配置（元コーパスを汚さない・編集はコピー側）。
+      const target = child.scope === "library" ? await api.copyNeta(child.id) : child;
+      await api.placeChild(neta.id, target.id, picker.position, children.length);
     } catch {
       // section ネストで循環になる配置は core が拒否（400）→ そっと無視（配置しない）
       setPicker(null);
