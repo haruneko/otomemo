@@ -29,13 +29,10 @@ export function RhythmEditor({
     onChange({ ...rhythm, lanes });
   }
 
-  // 小節数（1〜4）。縮めるとき範囲外の hit は捨てる。1小節=16ステップ。
+  // 小節数（1〜4）。1小節=16ステップ。縮小は**非破壊**（範囲外hitは描画しないだけで保持・melodyと同じ）。
   const bars = Math.max(1, Math.round(rhythm.steps / 16));
   function setBars(n: number) {
-    const next = Math.max(1, Math.min(4, n));
-    const steps = next * 16;
-    const lanes = rhythm.lanes.map((l) => ({ ...l, hits: l.hits.filter((s) => s < steps) }));
-    onChange({ ...rhythm, steps, lanes });
+    onChange({ ...rhythm, steps: Math.max(1, Math.min(4, n)) * 16 });
   }
 
   return (

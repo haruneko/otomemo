@@ -40,12 +40,8 @@ export function BassStepEditor({
 }) {
   const [len, setLen] = useState(2); // 既定 8分
   const bars = Math.max(1, Math.round(steps / 16));
-  // 小節数を変える：縮めるとき範囲外の音は捨てる。
-  const setBars = (n: number) => {
-    const s = Math.max(1, Math.min(4, n)) * 16;
-    onChange(pattern.filter((p) => p.step < s));
-    onStepsChange(s);
-  };
+  // 小節数を変える：縮小は**非破壊**（範囲外の音は描画しないだけで保持・melodyと同じ）。
+  const setBars = (n: number) => onStepsChange(Math.max(1, Math.min(4, n)) * 16);
 
   const startAt = (lane: BassDegree, step: number) =>
     pattern.find((p) => p.step === step && p.degree === lane);

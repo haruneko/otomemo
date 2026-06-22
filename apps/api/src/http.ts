@@ -241,7 +241,7 @@ export function buildHttp(core: Core): FastifyInstance {
     const limit = k ? Number(k) : 20;
 
     // キーワード一致＝確実な真。日本語1〜2文字も拾える。
-    const keyword = core.listNeta({ q, limit });
+    const keyword = core.listNeta({ q, scope: "all", limit }); // 検索は project＋library 横断（取込コーパスも名前で引ける）
     const kwIds = new Set(keyword.map((n) => n.id));
 
     // 意味：rel(=score-floor)が閾値未満の弱いhitは落とす（無意味クエリ＝全員横並びを排除）。

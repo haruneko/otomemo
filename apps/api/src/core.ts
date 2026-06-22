@@ -108,24 +108,41 @@ export class Core {
     return this.getNeta(id)!;
   }
 
-  /** ネタを複製（既定 project へ）。library を使うとき＝project にコピー（元は不変）。汎用の duplicate にも。 */
+  /** ネタを複製（既定 project へ・子孫も deep copy）。library を使う＝project にコピー（元は不変）。
+   * section/song は子(compose_edge)も再帰コピー。同じ子の使い回し(#54)はメモで1コピー＝関係を保つ。 */
   copyNeta(id: string, scope: "project" | "library" = "project"): Neta | null {
-    const src = this.getNeta(id);
-    if (!src) return null;
-    return this.createNeta({
-      kind: src.kind,
-      title: src.title,
-      content: src.content,
-      text: src.text,
-      key: src.key,
-      mode: src.mode,
-      tempo: src.tempo,
-      meter: src.meter,
-      bars: src.bars,
-      mood: src.mood,
-      scope,
-      tags: src.tags.filter((t) => t !== "取込"), // ライブラリ由来マーカーは引き継がない
-    });
+    const memo = new Map<string, string>(); // 元id→コピーid（共有childは1回・循環も安全に止まる）
+    const copyRec = (srcId: string): string | null => {
+      const cached = memo.get(srcId);
+      if (cached) return cached;
+      const src = this.getNeta(srcId);
+      if (!src) return null;
+      const made = this.createNeta({
+        kind: src.kind,
+        title: src.title,
+        content: src.content,
+        text: src.text,
+        key: src.key,
+        mode: src.mode,
+        tempo: src.tempo,
+        meter: src.meter,
+        bars: src.bars,
+        mood: src.mood,
+        scope,
+        tags: src.tags.filter((t) => t !== "取込"), // ライブラリ由来マーカーは引き継がない
+      });
+      memo.set(srcId, made.id);
+      const edges = this.db
+        .prepare(`SELECT child_id, position, ord FROM compose_edge WHERE parent_id = ? ORDER BY ord, position`)
+        .all(srcId) as { child_id: string; position: number; ord: number }[];
+      for (const e of edges) {
+        const childNew = copyRec(e.child_id);
+        if (childNew) this.placeChild(made.id, childNew, e.position, e.ord);
+      }
+      return made.id;
+    };
+    const newId = copyRec(id);
+    return newId ? this.getNeta(newId) : null;
   }
 
   /** ネタの scope を切替（自作を連想元にする＝library へ移す等）。 */

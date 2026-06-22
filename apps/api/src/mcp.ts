@@ -58,6 +58,7 @@ export function buildMcpServer(core: Core): McpServer {
         meter: z.string().optional(),
         bars: z.number().int().optional(),
         mood: z.string().optional(),
+        scope: z.enum(["project", "library"]).optional().describe("既定project。連想元コーパスは library"),
         tags: z.array(z.string()).optional(),
       },
     },
@@ -68,13 +69,14 @@ export function buildMcpServer(core: Core): McpServer {
     "list_neta",
     {
       title: "ネタ検索（ファセット）",
-      description: "kind/mood/key/meter/tags/q で絞り込み一覧。意味検索は後日。",
+      description: "kind/mood/key/meter/tags/q で絞り込み一覧。scope 既定 project（ユーザー作業ネタ）。library=連想元コーパス、all=両方。意味検索は後日。",
       inputSchema: {
         kind: z.string().optional(),
         mode: z.string().optional(),
         meter: z.string().optional(),
         mood: z.string().optional(),
         key: z.number().int().optional(),
+        scope: z.enum(["project", "library", "all"]).optional().describe("既定project。library=取込/連想元コーパス。all=両方"),
         tags: z.array(z.string()).optional(),
         q: z.string().optional().describe("title/text 部分一致"),
         limit: z.number().int().optional(),

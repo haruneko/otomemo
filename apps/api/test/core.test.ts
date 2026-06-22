@@ -100,6 +100,20 @@ describe("scope: project / library 分離", () => {
     expect(core.setScope(p.id, "library")!.scope).toBe("library");
     expect(core.listNeta({ scope: "library" }).some((n) => n.id === p.id)).toBe(true);
   });
+  it("copyNeta は section の子も deep copy（M1・空シェルにならない）", () => {
+    const sec = core.createNeta({ kind: "section", title: "S", scope: "library" });
+    const mel = core.createNeta({ kind: "melody", title: "m", scope: "library" });
+    core.placeChild(sec.id, mel.id, 0, 0);
+    core.placeChild(sec.id, mel.id, 4, 1); // 同じ子を2位置（#54）
+    const copy = core.copyNeta(sec.id)!;
+    const tree = core.getComposition(copy.id)!;
+    expect(copy.scope).toBe("project");
+    expect(tree.children.length).toBe(2); // 子が付いてくる
+    const childIds = new Set(tree.children.map((c) => c.node.neta.id));
+    expect(childIds.size).toBe(1); // 共有childは1コピー（関係保持）
+    expect([...childIds][0]).not.toBe(mel.id); // 子もコピー（元 mel ではない）
+    expect(core.getNeta(mel.id)!.scope).toBe("library"); // 元は不変
+  });
 });
 
 describe("edges: compose (DAG) + relation", () => {
