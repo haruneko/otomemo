@@ -25,11 +25,13 @@ function hasMusic(content: unknown): boolean {
   const c = content as {
     notes?: unknown[];
     chords?: unknown[];
+    pattern?: unknown[]; // 相対bass(mode:"relative")は notes/chords を持たず度数 pattern を持つ
     rhythm?: { lanes?: { hits?: unknown[] }[] };
   } | null;
   if (!c) return false;
   if (Array.isArray(c.notes)) return c.notes.length > 0;
   if (Array.isArray(c.chords)) return c.chords.length > 0;
+  if (Array.isArray(c.pattern)) return c.pattern.length > 0; // 相対bass を reap で落とさない
   if (c.rhythm?.lanes) return c.rhythm.lanes.some((l) => (l.hits?.length ?? 0) > 0);
   return false;
 }
@@ -82,29 +84,33 @@ export class Core {
   createNeta(input: NetaInput): Neta {
     const id = randomUUID();
     const ts = now();
-    this.db
-      .prepare(
-        `INSERT INTO neta (id, kind, title, content, text, "key", mode, tempo, meter, bars, mood, scope, created, updated)
-         VALUES (@id, @kind, @title, @content, @text, @key, @mode, @tempo, @meter, @bars, @mood, @scope, @created, @updated)`,
-      )
-      .run({
-        id,
-        kind: input.kind,
-        title: input.title ?? null,
-        content: input.content == null ? null : JSON.stringify(input.content),
-        text: input.text ?? null,
-        key: input.key ?? null,
-        mode: input.mode ?? null,
-        tempo: input.tempo ?? null,
-        meter: input.meter ?? null,
-        bars: input.bars ?? null,
-        mood: input.mood ?? null,
-        scope: input.scope ?? "project", // 既定 project（新規キャプチャ/生成は作業ネタ）
-        created: ts,
-        updated: ts,
-      });
-    for (const t of input.tags ?? []) this.addTag(id, t);
-    if (input.from_job) this.recordJobResult(input.from_job, id);
+    // 原子化：neta 行＋タグ＋job_result マーカーを1トランザクションに（部分失敗で「マーカー無しネタ」が
+    // 残り次の reap が重複生成する事故を断つ・design「アーキ是正 決定3」）。
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO neta (id, kind, title, content, text, "key", mode, tempo, meter, bars, mood, scope, created, updated)
+           VALUES (@id, @kind, @title, @content, @text, @key, @mode, @tempo, @meter, @bars, @mood, @scope, @created, @updated)`,
+        )
+        .run({
+          id,
+          kind: input.kind,
+          title: input.title ?? null,
+          content: input.content == null ? null : JSON.stringify(input.content),
+          text: input.text ?? null,
+          key: input.key ?? null,
+          mode: input.mode ?? null,
+          tempo: input.tempo ?? null,
+          meter: input.meter ?? null,
+          bars: input.bars ?? null,
+          mood: input.mood ?? null,
+          scope: input.scope ?? "project", // 既定 project（新規キャプチャ/生成は作業ネタ）
+          created: ts,
+          updated: ts,
+        });
+      for (const t of input.tags ?? []) this.addTag(id, t);
+      if (input.from_job) this.recordJobResult(input.from_job, id);
+    })();
     return this.getNeta(id)!;
   }
 
@@ -358,46 +364,56 @@ export class Core {
         edges = [];
       }
       const jobFrame = frameOf(r.params);
-      const idMap: (string | null)[] = [];
-      let made = false;
-      for (const it of items) {
-        const kind = it?.kind;
-        const isContainer = kind != null && containerKind.has(kind);
-        const hasText = typeof it?.text === "string" && it.text.trim() !== "";
-        // container(中身は edges)／音楽 content ／テキスト(歌詞等) のいずれかが在れば materialize。
-        if (!kind || (!isContainer && !hasMusic(it.content) && !hasText)) {
-          idMap.push(null); // index を保持して詰めない（edge の参照を壊さない）
-          continue;
-        }
-        const neta = this.createNeta({
-          kind,
-          title: it.label ?? "案",
-          content: it.content ?? null,
-          text: it.text ?? null,
-          from_job: r.id,
-          ...jobFrame,
-          ...frameVals(it.frame), // item 個別 frame が上書き
-        });
-        idMap.push(neta.id);
-        made = true;
-        n += 1;
-      }
-      for (const e of edges) {
-        const from = typeof e?.from === "number" ? idMap[e.from] : null;
-        const to = typeof e?.to === "number" ? idMap[e.to] : null;
-        if (!from || !to) continue;
-        if (e.type === "compose") {
-          try {
-            this.placeChild(from, to, e.position ?? 0, e.position ?? 0);
-          } catch {
-            /* 循環等は無視（reap を止めない） */
+      // ジョブ単位トランザクション：items を作りながら idMap を組む途中で失敗しても、この job の
+      // ネタ生成・辺・マーカーを丸ごとロールバック（壊れた idMap で edge が刺さる/部分生成を断つ）。
+      // try で1 job の失敗が reap 全体(=他job)を止めないように（poison job 隔離）。次tickで再試行。
+      let localMade = 0;
+      try {
+        this.db.transaction(() => {
+          localMade = 0;
+          const idMap: (string | null)[] = [];
+          for (const it of items) {
+            const kind = it?.kind;
+            const isContainer = kind != null && containerKind.has(kind);
+            const hasText = typeof it?.text === "string" && it.text.trim() !== "";
+            // container(中身は edges)／音楽 content ／テキスト(歌詞等) のいずれかが在れば materialize。
+            if (!kind || (!isContainer && !hasMusic(it.content) && !hasText)) {
+              idMap.push(null); // index を保持して詰めない（edge の参照を壊さない）
+              continue;
+            }
+            const neta = this.createNeta({
+              kind,
+              title: it.label ?? "案",
+              content: it.content ?? null,
+              text: it.text ?? null,
+              from_job: r.id,
+              ...jobFrame,
+              ...frameVals(it.frame), // item 個別 frame が上書き
+            });
+            idMap.push(neta.id);
+            localMade += 1;
           }
-        } else this.link(from, to, "related");
-      }
-      if (!made) {
-        this.db
-          .prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`)
-          .run(r.id);
+          for (const e of edges) {
+            const from = typeof e?.from === "number" ? idMap[e.from] : null;
+            const to = typeof e?.to === "number" ? idMap[e.to] : null;
+            if (!from || !to) continue;
+            if (e.type === "compose") {
+              try {
+                this.placeChild(from, to, e.position ?? 0, e.position ?? 0);
+              } catch {
+                /* 循環等は無視（reap を止めない） */
+              }
+            } else this.link(from, to, "related");
+          }
+          if (localMade === 0) {
+            this.db
+              .prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`)
+              .run(r.id);
+          }
+        })();
+        n += localMade;
+      } catch {
+        /* この job はロールバック済。job_result 未挿入なので次tickで再試行（部分状態を残さない）。 */
       }
     }
     return n;
@@ -494,11 +510,13 @@ export class Core {
     );
   }
 
-  facets(): Facets {
+  // facets は既定で project（ネタ帳=project と一致させる。library 値が混じると UI で0件選択肢が出る）。
+  facets(scope: "project" | "library" | "all" = "project"): Facets {
+    const scopeSql = scope === "all" ? "" : ` AND scope = '${scope}'`;
     const distinct = (col: string): unknown[] =>
       (
         this.db
-          .prepare(`SELECT DISTINCT ${col} AS v FROM neta WHERE ${col} IS NOT NULL ORDER BY v`)
+          .prepare(`SELECT DISTINCT ${col} AS v FROM neta WHERE ${col} IS NOT NULL${scopeSql} ORDER BY v`)
           .all() as { v: unknown }[]
       ).map((r) => r.v);
     return {

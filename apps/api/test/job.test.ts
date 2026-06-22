@@ -158,6 +158,31 @@ describe("job queue (producer side)", () => {
     expect(c.reapResults()).toBe(0); // 冪等
   });
 
+  it("reap は相対bass(pattern・notes/chords無し)を落とさない（hasMusic pattern・S3）", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, result_summary, created, updated)
+       VALUES ('jb', 'gen_pair_rule', '{}', 'done', ?, '', '')`,
+    ).run(
+      JSON.stringify({
+        items: [
+          { kind: "bass", content: { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }] }, label: "ベース案" },
+        ],
+        edges: [],
+      }),
+    );
+    expect(c.reapResults()).toBe(1); // pattern を見るので materialize される（旧hasMusicは0で落としていた）
+    expect(c.listNeta({ kind: "bass" }).length).toBe(1);
+  });
+
+  it("facets は既定 project（library 値を混ぜない・S3）", () => {
+    core.createNeta({ kind: "melody", mood: "作業", scope: "project" });
+    core.createNeta({ kind: "chord_progression", mood: "取込専用", scope: "library" });
+    expect(core.facets().mood).toEqual(["作業"]); // 既定=project
+    expect(core.facets("all").mood.sort()).toEqual(["作業", "取込専用"]);
+  });
+
   it("gen_variations drops edges touching empty items but keeps the rest (#85 S2a)", () => {
     const db = openDb(":memory:");
     const c = new Core(db);
