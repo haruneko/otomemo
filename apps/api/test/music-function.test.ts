@@ -46,6 +46,31 @@ describe("cadenceOf（終止の型）", () => {
   });
 });
 
+describe("マイナー調・非ダイア・境界（S2 acceptor 指摘の穴埋め）", () => {
+  it("マイナー：i/bIII/bVI=T, ii/iv=S, v/bVII=D", () => {
+    expect(functionOf(0, "minor")).toBe("T");
+    expect(functionOf(3, "minor")).toBe("T");
+    expect(functionOf(8, "minor")).toBe("T");
+    expect(functionOf(5, "minor")).toBe("S");
+    expect(functionOf(7, "minor")).toBe("D");
+    expect(functionOf(10, "minor")).toBe("D");
+  });
+  it("マイナー authentic（v→i）と deceptive（V→bVI）", () => {
+    const deg = (xs: [number, string][]) => xs.map(([degree, quality]) => ({ degree, quality }));
+    expect(cadenceOf(deg([[5, ""], [7, "m"], [0, "m"]]), "minor").type).toBe("authentic");
+    expect(cadenceOf(deg([[5, ""], [7, ""], [8, ""]]), "minor").type).toBe("deceptive");
+  });
+  it("非ダイア roman（#IV・dim=°）", () => {
+    expect(romanOf({ degree: 6, quality: "" }, "major")).toBe("#IV");
+    expect(romanOf({ degree: 2, quality: "dim" }, "major")).toBe("ii°");
+  });
+  it("空/1和音は安全（カデンツ none・解析は空 degrees）", () => {
+    expect(cadenceOf([], "major").type).toBe("none");
+    expect(analyzeProgression([]).degrees.length).toBe(0);
+    expect(analyzeProgression([{ root: 0, quality: "" }]).degrees.length).toBe(1);
+  });
+});
+
 describe("analyzeProgression（束ねる・調未指定なら推定）", () => {
   const CANON = [
     { root: 0, quality: "" }, { root: 7, quality: "" }, { root: 9, quality: "m" }, { root: 4, quality: "m" },

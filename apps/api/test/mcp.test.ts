@@ -78,4 +78,21 @@ describe("mcp tool layer", () => {
     }
     expect(errored).toBe(true);
   });
+
+  it("identify_progression / analyze_progression を read-only ツールとして公開（連想エンジン）", async () => {
+    const { client } = await connect();
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).toContain("identify_progression");
+    expect(names).toContain("analyze_progression");
+
+    const canon = [
+      { root: 0, quality: "" }, { root: 7, quality: "" }, { root: 9, quality: "m" }, { root: 4, quality: "m" },
+      { root: 5, quality: "" }, { root: 0, quality: "" }, { root: 5, quality: "" }, { root: 7, quality: "" },
+    ];
+    const id = await client.callTool({ name: "identify_progression", arguments: { chords: canon, key: 0 } });
+    expect(JSON.parse(textOf(id))[0].name).toBe("カノン");
+
+    const an = await client.callTool({ name: "analyze_progression", arguments: { chords: canon, key: 0, mode: "major" } });
+    expect(JSON.parse(textOf(an)).degrees[0].function).toBe("T");
+  });
 });

@@ -78,6 +78,8 @@ CM_MCP_STDIO_ARGS = os.environ.get("CM_MCP_STDIO_ARGS")
 # 意図的に除外**＝Claude に書込口を与えない。変異は proposals→承認→TS core で1箇所適用（#102）。
 _NETA_READ_TOOLS = [
     "list_neta", "get_neta", "facets", "get_composition", "get_relations",
+    # 連想エンジン（read-only・#20）。「これ何進行？/なぜ」に agentic Chat が答えるための手。
+    "identify_progression", "analyze_progression",
 ]
 
 

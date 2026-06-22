@@ -1,6 +1,19 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Core } from "./core";
+import { identifyProgression, analyzeProgression } from "./music";
+
+// コード進行の共通 inputSchema（content.chords 形＝{root:0-11 or 音名, quality, start?, dur?}）。
+const chordsSchema = z
+  .array(
+    z.object({
+      root: z.union([z.number(), z.string()]),
+      quality: z.string().optional(),
+      start: z.number().optional(),
+      dur: z.number().optional(),
+    }),
+  )
+  .describe("コード進行（C基準・content.chords 形）");
 
 const ok = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -74,6 +87,33 @@ export function buildMcpServer(core: Core): McpServer {
       const n = core.getNeta(id);
       return n ? ok(n) : err("not found");
     },
+  );
+
+  // 連想エンジン（read-only・#20 ドメインTSをMCP公開）。agentic Chat が「これ何進行？/なぜ」に答える。
+  server.registerTool(
+    "identify_progression",
+    {
+      title: "進行の名前あて",
+      description:
+        "コード進行が定番進行（丸の内/カノン/小室/王道/ツーファイブ/ブルース）のどれに近いかを近い順に返す。回転・移調に強い。調未指定なら推定。「これ何進行？」に。",
+      inputSchema: { chords: chordsSchema, key: z.number().int().min(0).max(11).optional() },
+    },
+    async ({ chords, key }) => ok(identifyProgression(chords, key !== undefined ? { key } : {})),
+  );
+
+  server.registerTool(
+    "analyze_progression",
+    {
+      title: "進行の機能解析",
+      description:
+        "コード進行を 度数・ローマ数字・機能(T/S/D)・終止(カデンツ) で解析。「なぜそう聞こえる/構造」を語る材料。調未指定なら推定。",
+      inputSchema: {
+        chords: chordsSchema,
+        key: z.number().int().min(0).max(11).optional(),
+        mode: z.enum(["major", "minor"]).optional(),
+      },
+    },
+    async ({ chords, key, mode }) => ok(analyzeProgression(chords, { key, mode })),
   );
 
   server.registerTool(
