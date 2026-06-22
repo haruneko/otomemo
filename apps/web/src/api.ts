@@ -94,6 +94,7 @@ export interface ListQuery {
   mood?: string;
   q?: string;
   tags?: string[];
+  limit?: number;
 }
 
 // サーバが応答したがエラー(4xx/5xx)。ネットワーク不達(fetch自体のreject)とは区別する。
@@ -135,6 +136,7 @@ export const api = {
     if (q.mood) p.set("mood", q.mood);
     if (q.q) p.set("q", q.q);
     if (q.tags?.length) p.set("tags", q.tags.join(","));
+    if (q.limit !== undefined) p.set("limit", String(q.limit));
     const qs = p.toString();
     return http<Neta[]>(`/neta${qs ? `?${qs}` : ""}`);
   },

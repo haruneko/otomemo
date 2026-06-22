@@ -126,7 +126,7 @@ export function SectionEditor({
   onChanged?: () => void;
 }) {
   const [children, setChildren] = useState<Child[]>([]);
-  const [picker, setPicker] = useState<{ lane: Lane; position: number; cands: Neta[] } | null>(null);
+  const [picker, setPicker] = useState<{ lane: Lane; position: number; all: Neta[] } | null>(null);
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
   const BPB = beatsPerBar(meter ?? neta.meter); // 1小節の拍数（#51・編集中はprop優先）
   const TOTAL = BARS * BPB;
@@ -165,11 +165,10 @@ export function SectionEditor({
   }
 
   async function openPicker(lane: Lane, position: number) {
-    const all = await api.listNeta({});
-    // #54: 既配置のネタも候補に出す（同じネタを別位置へ反復配置できる）。自分自身だけ除外。
-    const cands = all.filter((n) => inLane(lane, n.kind) && n.id !== neta.id);
+    // 全件ロード（件数制限で椎名林檎等が溢れていた）。種別(lane)は picker 内で切替できる。
+    const all = await api.listNeta({ limit: 2000 });
     setPq("");
-    setPicker({ lane, position, cands });
+    setPicker({ lane, position, all });
   }
   async function placeAt(child: Neta) {
     if (!picker) return;
@@ -306,24 +305,40 @@ export function SectionEditor({
             onClick={(e) => e.stopPropagation()}
           >
             <header>
-              <span>
-                {picker.lane.label}を {picker.position / BPB + 1} 小節目に置く
-              </span>
+              <span>{picker.position / BPB + 1} 小節目に置く</span>
               <button aria-label="close" onClick={() => setPicker(null)}>
                 ✕
               </button>
             </header>
+            {/* 種別を選ぶ（セクション or パート＝メロ/コード/ベース/リズム）。 */}
+            <div className="picker-kinds">
+              {LANES.map((l) => (
+                <button
+                  key={l.key}
+                  type="button"
+                  aria-label={`picker-kind-${l.key}`}
+                  className={l.key === picker.lane.key ? "on" : ""}
+                  onClick={() => setPicker((p) => (p ? { ...p, lane: l } : p))}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
             <input
               aria-label="picker-search"
               className="editor-tags"
-              placeholder="絞り込み…"
+              placeholder="絞り込み…（曲名・アーティスト）"
               value={pq}
               onChange={(e) => setPq(e.target.value)}
             />
             <div className="picker-list">
               {(() => {
-                const list = picker.cands.filter((n) =>
-                  (n.title ?? n.text ?? "").toLowerCase().includes(pq.toLowerCase()),
+                const q = pq.toLowerCase();
+                const list = picker.all.filter(
+                  (n) =>
+                    inLane(picker.lane, n.kind) &&
+                    n.id !== neta.id &&
+                    (n.title ?? n.text ?? "").toLowerCase().includes(q),
                 );
                 if (list.length === 0)
                   return <p className="muted">置ける{picker.lane.label}のネタがありません</p>;

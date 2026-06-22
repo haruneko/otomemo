@@ -1148,6 +1148,19 @@ body:has(.dialog-backdrop) .chat-bubble {
   gap: 6px;
   align-items: center;
 }
+.picker-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.picker-kinds button {
+  flex: 1 1 auto;
+  min-width: 56px;
+}
+.picker-kinds button.on {
+  background: var(--accent);
+}
 .picker-list {
   display: grid;
   gap: 6px;
