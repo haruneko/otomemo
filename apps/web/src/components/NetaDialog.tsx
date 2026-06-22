@@ -9,6 +9,7 @@ import { StepPad } from "./StepPad";
 import { BassStepEditor } from "./BassStepEditor";
 import { ChordEditor } from "./ChordEditor";
 import { RhythmEditor } from "./RhythmEditor";
+import { BarsControl } from "./BarsControl";
 import { SectionEditor } from "./SectionEditor";
 import {
   notesOf,
@@ -60,6 +61,9 @@ export function NetaDialog({
   const [bassPattern, setBassPattern] = useState<BassStep[]>(
     isRelativeBass(neta.content) ? neta.content.pattern : [],
   );
+  const [bassSteps, setBassSteps] = useState<number>(() =>
+    isRelativeBass(neta.content) ? (neta.content.steps ?? 32) : 32,
+  ); // 相対ベースの小節数（16step=1小節）。既定2小節。
   const [mood, setMood] = useState(neta.mood ?? "");
   const [len, setLen] = useState(() =>
     Math.max(16, (neta.bars ?? 0) * 4, ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
@@ -161,10 +165,10 @@ export function NetaDialog({
         ...(isRelBass
           ? {
               // #bass S2 相対モード：度数パターンを保存（再生時にコード/調で解決）。
-              content: { mode: "relative", steps: 16, pattern: bassPattern, program },
+              content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program },
               key,
               tempo,
-              bars: 1,
+              bars: Math.max(1, Math.round(bassSteps / 16)),
             }
           : isMelody || isBass
           ? { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) }
@@ -344,6 +348,8 @@ export function NetaDialog({
               <BassStepEditor
                 pattern={bassPattern}
                 onChange={setBassPattern}
+                steps={bassSteps}
+                onStepsChange={setBassSteps}
                 playheadRef={tp.lineRef}
                 scrollerRef={tp.scrollerRef}
               />
@@ -366,6 +372,12 @@ export function NetaDialog({
                   </button>
                 </div>
                 {melodyView === "roll" ? (
+                  <>
+                  <BarsControl
+                    bars={Math.max(1, Math.round(len / 4))}
+                    max={Math.max(4, Math.ceil(len / 4))}
+                    onChange={(n) => setLen(n * 4)}
+                  />
                   <PianoRoll
                     notes={notes}
                     onChange={setNotes}
@@ -375,6 +387,7 @@ export function NetaDialog({
                     playheadRef={tp.lineRef}
                     scrollerRef={tp.scrollerRef}
                   />
+                  </>
                 ) : (
                   <StepPad
                     notes={notes}

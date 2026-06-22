@@ -1,5 +1,6 @@
 import { type Ref } from "react";
 import { type RhythmContent } from "../music";
+import { BarsControl } from "./BarsControl";
 
 const NAME_PX = 58; // rhythm-name(56) + gap(2)
 const BEAT_PX = 88; // 1拍=4step×22 ＝#74 プレイヘッドの px/beat
@@ -39,16 +40,7 @@ export function RhythmEditor({
 
   return (
     <div className="rhythm-editor" ref={scrollerRef}>
-      <div className="rhythm-bars">
-        <span className="muted">小節</span>
-        <button type="button" aria-label="bars-dec" disabled={bars <= 1} onClick={() => setBars(bars - 1)}>
-          −
-        </button>
-        <span aria-label="bars-count">{bars}</span>
-        <button type="button" aria-label="bars-inc" disabled={bars >= 4} onClick={() => setBars(bars + 1)}>
-          ＋
-        </button>
-      </div>
+      <BarsControl bars={bars} max={4} onChange={setBars} />
       <div
         className="proll-playhead"
         aria-hidden="true"

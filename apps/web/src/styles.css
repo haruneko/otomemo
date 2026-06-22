@@ -941,13 +941,13 @@ body:has(.dialog-backdrop) .chat-bubble {
 .rhythm-cell.on {
   background: var(--accent);
 }
-.rhythm-bars {
+.bars-control {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
 }
-.rhythm-bars button {
+.bars-control button {
   min-width: 28px;
 }
 .section-editor {

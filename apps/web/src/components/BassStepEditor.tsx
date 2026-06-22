@@ -1,12 +1,12 @@
 import { useState, type Ref } from "react";
 import type { BassDegree, BassStep } from "../music";
+import { BarsControl } from "./BarsControl";
 
 // #bass S2: 相対ベースの度数エディタ（半リズムパート）。
 // **度数レーン**(行=R/3/5/7/8/approach)×**ステップ**(列)。各ステップはモノフォニック＝1度数だけ。
 // セルをタップでそのレーン×ステップに置く（同ステップの他レーンは消える）。音長は長さツールで選ぶ。
 // 度数はコード/調に当てて再生時に解決＝ここは「何度を・いつ・どれだけ」だけ編集（オクターブは自動）。
-const STEPS = 16; // 1小節（1step=16分）
-const BEAT_PX = 88; // 1拍=4step。StepPad と同じプレイヘッド係数。
+const BEAT_PX = 88; // 1拍=4step。StepPad と同じプレイヘッド係数。1小節=16step。
 // 上ほど高い度数（ピアノロールと同じ向き）：上から 8/7/5/3/R、approach は最下段。
 const LANES: { d: BassDegree; label: string }[] = [
   { d: "8", label: "8" },
@@ -26,15 +26,26 @@ const LENGTHS = [
 export function BassStepEditor({
   pattern,
   onChange,
+  steps,
+  onStepsChange,
   playheadRef,
   scrollerRef,
 }: {
   pattern: BassStep[];
   onChange: (p: BassStep[]) => void;
+  steps: number;
+  onStepsChange: (steps: number) => void;
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
   const [len, setLen] = useState(2); // 既定 8分
+  const bars = Math.max(1, Math.round(steps / 16));
+  // 小節数を変える：縮めるとき範囲外の音は捨てる。
+  const setBars = (n: number) => {
+    const s = Math.max(1, Math.min(4, n)) * 16;
+    onChange(pattern.filter((p) => p.step < s));
+    onStepsChange(s);
+  };
 
   const startAt = (lane: BassDegree, step: number) =>
     pattern.find((p) => p.step === step && p.degree === lane);
@@ -55,6 +66,7 @@ export function BassStepEditor({
 
   return (
     <div className="bass-step">
+      <BarsControl bars={bars} max={4} onChange={setBars} />
       <div className="bass-lens">
         音長
         {LENGTHS.map((l) => (
@@ -78,7 +90,7 @@ export function BassStepEditor({
         {LANES.map((lane) => (
           <div className="bass-lane" role="row" key={lane.d}>
             <div className="bass-lane-label">{lane.label}</div>
-            {Array.from({ length: STEPS }, (_, s) => {
+            {Array.from({ length: steps }, (_, s) => {
               const on = !!startAt(lane.d, s);
               const sus = sustainAt(lane.d, s);
               return (
