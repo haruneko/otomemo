@@ -122,7 +122,8 @@ export const DRUMS: { name: string; midi: number }[] = [
 export function rhythmOf(content: unknown): RhythmContent {
   const r = (content as { rhythm?: RhythmContent } | null)?.rhythm;
   if (r && Array.isArray(r.lanes)) return r;
-  return { steps: 16, lanes: DRUMS.map((d) => ({ ...d, hits: [] })) };
+  return { steps: 32, lanes: DRUMS.map((d) => ({ ...d, hits: [] })) }; // 既定2小節（最低2小節欲しい）
+
 }
 
 export function rhythmToNotes(r: RhythmContent): Note[] {

@@ -28,8 +28,27 @@ export function RhythmEditor({
     onChange({ ...rhythm, lanes });
   }
 
+  // 小節数（1〜4）。縮めるとき範囲外の hit は捨てる。1小節=16ステップ。
+  const bars = Math.max(1, Math.round(rhythm.steps / 16));
+  function setBars(n: number) {
+    const next = Math.max(1, Math.min(4, n));
+    const steps = next * 16;
+    const lanes = rhythm.lanes.map((l) => ({ ...l, hits: l.hits.filter((s) => s < steps) }));
+    onChange({ ...rhythm, steps, lanes });
+  }
+
   return (
     <div className="rhythm-editor" ref={scrollerRef}>
+      <div className="rhythm-bars">
+        <span className="muted">小節</span>
+        <button type="button" aria-label="bars-dec" disabled={bars <= 1} onClick={() => setBars(bars - 1)}>
+          −
+        </button>
+        <span aria-label="bars-count">{bars}</span>
+        <button type="button" aria-label="bars-inc" disabled={bars >= 4} onClick={() => setBars(bars + 1)}>
+          ＋
+        </button>
+      </div>
       <div
         className="proll-playhead"
         aria-hidden="true"
@@ -45,7 +64,9 @@ export function RhythmEditor({
               type="button"
               aria-label={`hit-${l.name}-${s}`}
               className={
-                "rhythm-cell" + (l.hits.includes(s) ? " on" : "") + (s % 4 === 0 ? " beat" : "")
+                "rhythm-cell" +
+                (l.hits.includes(s) ? " on" : "") +
+                (s % 16 === 0 ? " bar" : s % 4 === 0 ? " beat" : "")
               }
               onClick={() => toggle(li, s)}
             />

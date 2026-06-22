@@ -935,8 +935,20 @@ body:has(.dialog-backdrop) .chat-bubble {
 .rhythm-cell.beat {
   border-left: 2px solid #3a3f49;
 }
+.rhythm-cell.bar {
+  border-left: 3px solid #5b6270; /* 小節頭は強め */
+}
 .rhythm-cell.on {
   background: var(--accent);
+}
+.rhythm-bars {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.rhythm-bars button {
+  min-width: 28px;
 }
 .section-editor {
   display: grid;
