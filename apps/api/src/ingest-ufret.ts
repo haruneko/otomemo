@@ -93,12 +93,14 @@ export function songToProgressions(html: string, meta: SongMeta): ProgressionInp
   loops.forEach((loop, idx) => {
     const det = detectKeyFromChords(loop, 1)[0]!;
     const key = det.key;
-    // C基準へ移調して保存（design「C基準保存」）。neta.key=0。一律 CHORD_BEATS 拍/コードで並べる。
+    // C基準へ移調して保存（design「C基準保存」）。neta.key=0。各コード CHORD_BEATS(2)拍。
+    // ただしコード数が奇数なら最後を4拍に伸ばし、合計を小節(4拍)の切れ目に着地させる(2+2+4=8=2小節)。
+    const odd = loop.length % 2 === 1;
     const cChords = loop.map((c, i) => ({
       root: ((c.root - key) % 12 + 12) % 12,
       quality: c.quality,
       start: i * CHORD_BEATS,
-      dur: CHORD_BEATS,
+      dur: odd && i === loop.length - 1 ? CHORD_BEATS * 2 : CHORD_BEATS,
     }));
     // 「取込」＝コーパス由来（手作りネタと区別しネタ帳が埋もれないように）。
     const tags = ["取込", meta.popular ? "定番" : "", meta.artist, det.mode === "minor" ? "切ない" : "明るい"].filter(Boolean);
