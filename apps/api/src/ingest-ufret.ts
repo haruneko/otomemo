@@ -11,6 +11,7 @@ export type ProgressionInput = {
   key: number; // 0＝C基準保存
   mode: "major" | "minor";
   meter: string;
+  scope: "library"; // 取込は連想元コーパス＝ライブラリ
   content: { chords: { root: number; quality: string; start: number; dur: number }[]; source: SongMeta };
   tags: string[];
 };
@@ -110,6 +111,7 @@ export function songToProgressions(html: string, meta: SongMeta): ProgressionInp
       key: 0,
       mode: det.mode,
       meter: "4/4",
+      scope: "library",
       content: { chords: cChords, source: meta },
       tags,
     });

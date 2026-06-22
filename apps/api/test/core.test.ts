@@ -76,6 +76,32 @@ describe("faceted list / facets", () => {
   });
 });
 
+describe("scope: project / library 分離", () => {
+  it("既定は project・listNeta は project だけ／library/all で出し分け", () => {
+    const p = core.createNeta({ kind: "melody", title: "作業" }); // 既定 project
+    const l = core.createNeta({ kind: "chord_progression", title: "取込", scope: "library" });
+    expect(p.scope).toBe("project");
+    expect(l.scope).toBe("library");
+    expect(core.listNeta({}).map((n) => n.id)).toEqual([p.id]); // 既定=project のみ
+    expect(core.listNeta({ scope: "library" }).map((n) => n.id)).toEqual([l.id]);
+    expect(core.listNeta({ scope: "all" }).length).toBe(2);
+  });
+  it("copyNeta：library を project にコピー（独立・元不変・取込タグは引き継がない）", () => {
+    const l = core.createNeta({ kind: "chord_progression", title: "元", scope: "library", content: { chords: [{ root: 0, quality: "" }] }, tags: ["取込", "明るい"] });
+    const c = core.copyNeta(l.id)!;
+    expect(c.scope).toBe("project");
+    expect(c.id).not.toBe(l.id);
+    expect(c.content).toEqual(l.content);
+    expect(c.tags).toEqual(["明るい"]); // 取込 は落ちる
+    expect(core.getNeta(l.id)!.scope).toBe("library"); // 元は不変
+  });
+  it("setScope：project↔library 切替（自作を連想元へ）", () => {
+    const p = core.createNeta({ kind: "chord_progression", title: "自作" });
+    expect(core.setScope(p.id, "library")!.scope).toBe("library");
+    expect(core.listNeta({ scope: "library" }).some((n) => n.id === p.id)).toBe(true);
+  });
+});
+
 describe("edges: compose (DAG) + relation", () => {
   it("builds a composition tree with a reused child", () => {
     const song = core.createNeta({ kind: "song", title: "曲" });

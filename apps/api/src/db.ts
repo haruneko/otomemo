@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS neta (
   meter   TEXT,
   bars    INTEGER,
   mood    TEXT,
+  scope   TEXT NOT NULL DEFAULT 'project',
   created TEXT NOT NULL,
   updated TEXT NOT NULL
 );
@@ -137,6 +138,11 @@ export function openDb(path = ":memory:"): Database.Database {
 
 // 既存DBのスキーマ進化（CREATE TABLE IF NOT EXISTS では変わらない箇所）。
 function migrate(db: Database.Database): void {
+  // project/library 分離：既存 neta に scope 列を増設（既定 project＝既存は全部 project に）。
+  const cols = db.prepare(`PRAGMA table_info(neta)`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === "scope")) {
+    db.exec(`ALTER TABLE neta ADD COLUMN scope TEXT NOT NULL DEFAULT 'project'`);
+  }
   // #54: compose_edge の旧PK (parent_id, child_id) → (parent_id, child_id, position) へ再構築。
   // SQLiteはPK変更不可なので新テーブルを作って移し替える（既存辺は無損失）。
   const row = db

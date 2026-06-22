@@ -84,8 +84,8 @@ export class Core {
     const ts = now();
     this.db
       .prepare(
-        `INSERT INTO neta (id, kind, title, content, text, "key", mode, tempo, meter, bars, mood, created, updated)
-         VALUES (@id, @kind, @title, @content, @text, @key, @mode, @tempo, @meter, @bars, @mood, @created, @updated)`,
+        `INSERT INTO neta (id, kind, title, content, text, "key", mode, tempo, meter, bars, mood, scope, created, updated)
+         VALUES (@id, @kind, @title, @content, @text, @key, @mode, @tempo, @meter, @bars, @mood, @scope, @created, @updated)`,
       )
       .run({
         id,
@@ -99,12 +99,40 @@ export class Core {
         meter: input.meter ?? null,
         bars: input.bars ?? null,
         mood: input.mood ?? null,
+        scope: input.scope ?? "project", // 既定 project（新規キャプチャ/生成は作業ネタ）
         created: ts,
         updated: ts,
       });
     for (const t of input.tags ?? []) this.addTag(id, t);
     if (input.from_job) this.recordJobResult(input.from_job, id);
     return this.getNeta(id)!;
+  }
+
+  /** ネタを複製（既定 project へ）。library を使うとき＝project にコピー（元は不変）。汎用の duplicate にも。 */
+  copyNeta(id: string, scope: "project" | "library" = "project"): Neta | null {
+    const src = this.getNeta(id);
+    if (!src) return null;
+    return this.createNeta({
+      kind: src.kind,
+      title: src.title,
+      content: src.content,
+      text: src.text,
+      key: src.key,
+      mode: src.mode,
+      tempo: src.tempo,
+      meter: src.meter,
+      bars: src.bars,
+      mood: src.mood,
+      scope,
+      tags: src.tags.filter((t) => t !== "取込"), // ライブラリ由来マーカーは引き継がない
+    });
+  }
+
+  /** ネタの scope を切替（自作を連想元にする＝library へ移す等）。 */
+  setScope(id: string, scope: "project" | "library"): Neta | null {
+    if (!this.getNeta(id)) return null;
+    this.db.prepare(`UPDATE neta SET scope = ?, updated = ? WHERE id = ?`).run(scope, now(), id);
+    return this.getNeta(id);
   }
 
   /** ジョブの結果として作られた neta を job_result に記録し、ジョブの対象へ relation を張る（design #16/原則3）。 */
@@ -422,6 +450,8 @@ export class Core {
   listNeta(q: ListQuery = {}): Neta[] {
     const where: string[] = [];
     const params: Record<string, unknown> = {};
+    // scope 既定 project（ネタ帳は作業ネタを見る）。library/all は明示。
+    if (q.scope !== "all") (where.push(`n.scope = @scope`), (params.scope = q.scope ?? "project"));
     if (q.kind) (where.push(`n.kind = @kind`), (params.kind = q.kind));
     if (q.mode) (where.push(`n.mode = @mode`), (params.mode = q.mode));
     if (q.meter) (where.push(`n.meter = @meter`), (params.meter = q.meter));
@@ -683,6 +713,7 @@ export class Core {
       meter: (row.meter as string) ?? null,
       bars: (row.bars as number) ?? null,
       mood: (row.mood as string) ?? null,
+      scope: (row.scope as "project" | "library") ?? "project",
       tags,
       created: row.created as string,
       updated: row.updated as string,

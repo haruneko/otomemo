@@ -13,7 +13,8 @@ const POPULAR = new Set(["ヒット", "定番"]);
 /** 進行コーパスから連想で引く。tags 指定時は1つ以上一致で足切り(OR)、like 指定時は度数列の構造類似、
  * 人気度タグで微加点。score 降順で上位。該当が弱ければ素直に弱いまま返す（捏造しない）。 */
 export function findProgressions(core: Core, query: ProgQuery): ProgHit[] {
-  const all: Neta[] = core.listNeta({ kind: "chord_progression", limit: 1000 });
+  // 連想は「ライブラリ」（連想元コーパス）から引く（作業中ネタは混ぜない・design）。
+  const all: Neta[] = core.listNeta({ kind: "chord_progression", scope: "library", limit: 5000 });
   const wantTags = query.tags ?? [];
   const likeDeg = query.like ? toDegrees(query.like.chords, query.like.key ?? 0) : null;
   const hits: ProgHit[] = [];

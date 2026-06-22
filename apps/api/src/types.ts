@@ -16,6 +16,8 @@ export interface Neta {
   meter: string | null;
   bars: number | null;
   mood: string | null;
+  /** project=ユーザーの作業ネタ（既定）/ library=連想元コーパス（取込・過去作・参考曲）。 */
+  scope: "project" | "library";
   tags: string[];
   created: string;
   updated: string;
@@ -32,6 +34,7 @@ export interface NetaInput {
   meter?: string | null;
   bars?: number | null;
   mood?: string | null;
+  scope?: "project" | "library"; // 既定 project
   tags?: string[];
   /** このネタがどのジョブの結果か。指定すると job_result に記録し、ジョブの対象へ relation を張る。 */
   from_job?: string | null;
@@ -58,6 +61,8 @@ export interface ListQuery {
   meter?: string;
   mood?: string;
   key?: number;
+  /** project（既定で省略時 project のみ）/ library / all（両方）。 */
+  scope?: "project" | "library" | "all";
   /** すべて一致するタグ。 */
   tags?: string[];
   /** title/text への部分一致（意味検索は S3）。 */
