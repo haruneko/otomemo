@@ -1,18 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
+import { MUSIC_KINDS, CONTAINER_KINDS } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
 import {
   playNotes,
   notesForContent,
   compositeNotes,
   programOf,
-  MUSIC_KINDS,
   type Note,
   type PlaybackHandle,
 } from "../music";
 
-const CONTAINER_KINDS = ["section", "song"];
 
 // #65 検索結果の一致種別→質的ラベル（スコア数値は出さない）
 const MATCH_LABEL: Record<string, string> = { exact: "一致", both: "一致", semantic: "近い" };

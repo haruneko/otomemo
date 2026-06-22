@@ -8,6 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { api, type Neta } from "./api";
+import { FILTER_KINDS } from "./kinds";
 import { applyColors, loadColors } from "./theme";
 import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
@@ -21,19 +22,6 @@ import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
 
-const FILTER_KINDS = [
-  "lyric",
-  "melody",
-  "bass",
-  "chord",
-  "chord_progression",
-  "rhythm",
-  "theme",
-  "section",
-  "song",
-  "reference",
-  "knowledge",
-];
 
 export function App() {
   const [items, setItems] = useState<(Neta & { matchType?: string })[]>([]);

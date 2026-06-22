@@ -2,19 +2,7 @@
 // dev は vite proxy 経由(/api→:8787)。本番ビルドは api が同一オリジンで配信する(ルート直叩き)。
 const BASE = (import.meta.env.VITE_API as string | undefined) ?? (import.meta.env.PROD ? "" : "/api");
 
-export const KINDS = [
-  "lyric",
-  "melody",
-  "bass",
-  "chord",
-  "chord_progression",
-  "rhythm",
-  "theme",
-  "section",
-  "song",
-  "knowledge",
-  "other",
-] as const;
+export { KINDS } from "./kinds"; // SSOT＝kinds.ts（後方互換で api からも再公開）
 
 export interface Neta {
   id: string;
@@ -44,14 +32,19 @@ export interface NetaInput {
   from_job?: string;
 }
 
+// サーバ types.ts(NetaPatch=Partial<NetaInput>) と一致させる。mode/meter/scope が欠けていて
+// NetaDialog が型に無い meter を送っていた（アーキ是正 S1）。
 export interface NetaPatch {
   title?: string | null;
   text?: string | null;
   content?: unknown;
   key?: number | null;
+  mode?: string | null;
   tempo?: number | null;
+  meter?: string | null;
   bars?: number | null;
   mood?: string | null;
+  scope?: "project" | "library";
   tags?: string[];
 }
 

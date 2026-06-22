@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { api, KINDS, ApiError, type Neta } from "../api";
+import { api, ApiError, type Neta } from "../api";
+import { KINDS, TEXT_KINDS } from "../kinds";
 import { queueNeta } from "../outbox";
 
 // 摩擦ゼロの捕獲（要件）。本文1個＋kind＋任意タグ＋「放り込む」。
-const TEXT_KINDS = new Set(["lyric", "theme", "knowledge", "other"]);
 
 export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
   const [kind, setKind] = useState<string>("lyric");

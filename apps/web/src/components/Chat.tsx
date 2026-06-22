@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Neta, type ChatMessage, type ChatThread, type JobOutcome } from "../api";
-import { playNotes, notesForContent, MUSIC_KINDS } from "../music";
+import { playNotes, notesForContent } from "../music";
+import { MUSIC_KINDS, KIND_LABEL } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
 
 interface Opt {
@@ -216,12 +217,6 @@ function ProposalGroup({
 }
 
 // consult/content の neta_kind 表示名
-const KIND_LABEL: Record<string, string> = {
-  melody: "メロディ",
-  bass: "ベース",
-  chord_progression: "コード進行",
-  rhythm: "リズム",
-};
 
 // 相談（docs/design.md #19/#20）。target 付きで開くと「このネタについての相談」になり、
 // 最初の提案を自動で出す。案は Chat 上で選んでネタ化（from_job で対象に紐づく）。

@@ -263,8 +263,7 @@ export function resolveRelativeBass(
 }
 
 // neta の種類別に content をノート列へ（合成再生で使う共通変換）
-// 単独再生・試聴できる音楽 kind（定数ドリフト防止のため1か所に集約）。
-export const MUSIC_KINDS = ["melody", "bass", "chord", "chord_progression", "rhythm"];
+export { MUSIC_KINDS } from "./kinds"; // SSOT＝kinds.ts（後方互換で music からも再公開）
 
 // 相対bass の解決文脈。section ではコードレーンの chords、単体では neta の key/preview_chords。
 export interface BassContext {
