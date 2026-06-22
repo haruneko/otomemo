@@ -236,8 +236,8 @@ describe("music", () => {
       const notes = compositeNotes(children, 0);
       // サブの調key=2でメロが+2移調(60→62)、親内 position=4 で start が+4
       expect(notes.length).toBe(1);
-      expect(notes[0].pitch).toBe(62);
-      expect(notes[0].start).toBe(4);
+      expect(notes[0]!.pitch).toBe(62);
+      expect(notes[0]!.start).toBe(4);
     });
   });
 
