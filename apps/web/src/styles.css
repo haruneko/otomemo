@@ -208,6 +208,24 @@ button:disabled {
   font-size: 0.75rem;
   color: #e0a33c;
 }
+.scope-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+.scope-tabs button {
+  flex: 1;
+  padding: 6px 8px;
+  background: #1b1e23;
+  border: 1px solid #2a2e36;
+  border-radius: 6px;
+  color: var(--muted, #9aa0ab);
+}
+.scope-tabs button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
 .filters {
   display: flex;
   flex-wrap: wrap;

@@ -37,6 +37,7 @@ const FILTER_KINDS = [
 
 export function App() {
   const [items, setItems] = useState<(Neta & { matchType?: string })[]>([]);
+  const [scope, setScope] = useState<"project" | "library">("project"); // プロジェクト/ライブラリ タブ
   const [kindFilter, setKindFilter] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
   const [q, setQ] = useState("");
@@ -171,6 +172,13 @@ export function App() {
 
   const reload = useCallback(async () => {
     const query = q.trim();
+    // ライブラリ＝連想元コーパスの閲覧（filter のみ・意味検索は project 側）。
+    if (scope === "library") {
+      setItems(
+        await api.listNeta({ scope: "library", kind: kindFilter || undefined, q: query || undefined, limit: 2000 }),
+      );
+      return;
+    }
     if (!query) {
       setItems(await api.listNeta({ kind: kindFilter || undefined }));
       return;
@@ -181,7 +189,7 @@ export function App() {
       // API自体が不通なら LIKE 絞り込みに退避（出先/オフラインで無音にしない）
       setItems(await api.listNeta({ q: query }));
     }
-  }, [kindFilter, q]);
+  }, [kindFilter, q, scope]);
 
   useEffect(() => {
     reload().catch(() => {});
@@ -302,6 +310,24 @@ export function App() {
             </label>
           </div>
           <Capture onCreated={() => void reload()} />
+          <div className="scope-tabs" role="tablist" aria-label="scope">
+            <button
+              role="tab"
+              aria-label="scope-project"
+              className={scope === "project" ? "on" : ""}
+              onClick={() => setScope("project")}
+            >
+              プロジェクト
+            </button>
+            <button
+              role="tab"
+              aria-label="scope-library"
+              className={scope === "library" ? "on" : ""}
+              onClick={() => setScope("library")}
+            >
+              ライブラリ（連想元）
+            </button>
+          </div>
           <div className="filters">
             <input
               aria-label="search"
@@ -332,6 +358,7 @@ export function App() {
           </div>
           <NetaList
             items={shownItems}
+            scope={scope}
             onChanged={() => void reload()}
             onChat={openChat}
             onOpen={setActive}

@@ -92,6 +92,34 @@ export function buildMcpServer(core: Core): McpServer {
     async () => ok(core.facets()),
   );
 
+  // library→project コピー（複製汎用にも）。元は不変・子孫も deep copy。新規 project ネタを返す。
+  server.registerTool(
+    "copy_neta",
+    {
+      title: "ネタを複製（library→project）",
+      description: "id のネタを複製。library の連想元を project にコピーして使う／任意ネタの複製に。section は子も deep copy。元は不変。",
+      inputSchema: { id: z.string(), scope: z.enum(["project", "library"]).optional().describe("既定project") },
+    },
+    async ({ id, scope }) => {
+      const n = core.copyNeta(id, scope ?? "project");
+      return n ? ok(n) : err("not found");
+    },
+  );
+
+  // scope 切替（自作を連想元へ＝library に移す等）。
+  server.registerTool(
+    "set_scope",
+    {
+      title: "ネタの scope を切替",
+      description: "ネタを project↔library に移す。自作の進行/曲を library に移す＝連想の素材にする。",
+      inputSchema: { id: z.string(), scope: z.enum(["project", "library"]) },
+    },
+    async ({ id, scope }) => {
+      const n = core.setScope(id, scope);
+      return n ? ok(n) : err("not found");
+    },
+  );
+
   server.registerTool(
     "get_neta",
     { title: "ネタ取得", description: "id でネタを取得", inputSchema: { id: z.string() } },

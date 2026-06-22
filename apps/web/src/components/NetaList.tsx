@@ -19,11 +19,13 @@ const MATCH_LABEL: Record<string, string> = { exact: "一致", both: "一致", s
 
 export function NetaCard({
   neta,
+  scope = "project",
   onChanged,
   onChat,
   onOpen,
 }: {
   neta: Neta & { matchType?: string };
+  scope?: "project" | "library";
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
@@ -196,6 +198,41 @@ export function NetaCard({
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
           相談
         </button>
+        {scope === "library" ? (
+          <button
+            className="bs-btn"
+            title="このライブラリ進行をプロジェクトにコピー（編集可・元は不変）"
+            onClick={async () => {
+              await api.copyNeta(neta.id);
+              onChanged?.();
+            }}
+          >
+            ＋プロジェクトへ
+          </button>
+        ) : (
+          <>
+            <button
+              className="bs-btn"
+              title="複製（バリエーションの素体に）"
+              onClick={async () => {
+                await api.copyNeta(neta.id);
+                onChanged?.();
+              }}
+            >
+              複製
+            </button>
+            <button
+              className="bs-btn"
+              title="ライブラリ（連想元）へ移す＝この曲/進行を連想の素材にする"
+              onClick={async () => {
+                await api.setScope(neta.id, "library");
+                onChanged?.();
+              }}
+            >
+              ライブラリへ
+            </button>
+          </>
+        )}
         {gen ? (
           <span className="bs-btn">生成中…</span>
         ) : genOpen ? (
@@ -225,12 +262,14 @@ export function NetaCard({
 
 export function NetaList({
   items,
+  scope = "project",
   onChanged,
   onChat,
   onOpen,
   emptyText = "まだネタがありません。",
 }: {
   items: (Neta & { matchType?: string })[];
+  scope?: "project" | "library";
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
@@ -240,7 +279,7 @@ export function NetaList({
   return (
     <section aria-label="neta-list">
       {items.map((n) => (
-        <NetaCard key={n.id} neta={n} onChanged={onChanged} onChat={onChat} onOpen={onOpen} />
+        <NetaCard key={n.id} neta={n} scope={scope} onChanged={onChanged} onChat={onChat} onOpen={onOpen} />
       ))}
     </section>
   );
