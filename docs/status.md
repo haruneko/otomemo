@@ -30,6 +30,7 @@
 
 | # | 領域 | 内容 | 関連設計 | 段取り | acceptor | 状態 |
 |---|---|---|---|---|---|---|
+| 連想 | エンジン | **連想エンジン**(コード進行/度数/連想)を要件→設計→S1へ。要件/設計とも独立acceptor ACCEPT。**S1実装済**=apps/api/src/music(度数化/調推定上位N/進行距離・移調不変・データ不要・TS) impl-acceptor ACCEPT・api87+12緑 | requirements「連想で…」/design「連想エンジン」/research 5本 | 要件→設計→S1(度数化+類似)→S2機能解析→S3 DB+タグ→… | design+impl | 🟡 S1済・次=S2機能/カデンツ解析(TS) |
 | 91 | #86補正 | **fit_to_chords**：other型(正当でない)外し音を最寄りコードトーンへスナップ。経過/刺繍/掛留は残す | design#12 Stage1 | cm-music関数→MCP/handler→reap→test | impl | ✅ (score 0.61→0.84実証) |
 | 92 | #86類似度 | **melody_similarity**(音程列・移調不変)＋find_similar(過去メロ探索)。作風寄せ/重複の土台 | research R2 | cm-music→MCP/handler→test | impl | ✅ (移調不変実証) |
 | 93 | #85方向確認 | バッチ前に1案だけ作り「この方向でいい?」→承認(frame/count引継)で残数本生成 | design#85(E) | worker(_propose→waiting)＋既存answerJob | impl | ✅ (confirm=true) |
