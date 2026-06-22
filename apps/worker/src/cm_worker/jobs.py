@@ -80,7 +80,7 @@ _NETA_READ_TOOLS = [
     "list_neta", "get_neta", "facets", "get_composition", "get_relations",
     # 連想エンジン（read-only・#20）。「これ何進行？/なぜ/代替/もっと切なく」に agentic Chat が答えるための手。
     "identify_progression", "analyze_progression", "explain_progression", "substitute_chord", "emotion_shift",
-    "harmonize", "next_chord",
+    "harmonize", "next_chord", "find_progressions",
 ]
 
 

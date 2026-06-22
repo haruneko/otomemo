@@ -11,6 +11,7 @@ import {
   harmonize,
   nextChordCandidates,
 } from "./music";
+import { findProgressions } from "./progression-search";
 
 // コード進行の共通 inputSchema（content.chords 形＝{root:0-11 or 音名, quality, start?, dur?}）。
 const chordsSchema = z
@@ -207,6 +208,23 @@ export function buildMcpServer(core: Core): McpServer {
       const cands = nextChordCandidates(degs, { mode });
       return ok(cands.map((c) => ({ ...c, root: (c.degree + key) % 12 })));
     },
+  );
+
+  server.registerTool(
+    "find_progressions",
+    {
+      title: "進行を連想で引く",
+      description:
+        "蓄積した進行コーパス(ネタ)から、タグ(切ない/明るい/サビ向き/アーティスト名 等)や似た進行で引く。「切ない進行/〇〇っぽいの ある？」に。該当が弱ければ弱いまま返す(捏造しない)。",
+      inputSchema: {
+        tags: z.array(z.string()).optional().describe("基本タグ語彙（明暗/強度/ジャンル/セクション/アーティスト/人気度）"),
+        like: chordsSchema.optional().describe("この進行に似たものを探す"),
+        likeKey: z.number().int().min(0).max(11).optional(),
+        limit: z.number().int().optional(),
+      },
+    },
+    async ({ tags, like, likeKey, limit }) =>
+      ok(findProgressions(core, { tags, like: like ? { chords: like, key: likeKey } : undefined, limit })),
   );
 
   server.registerTool(
