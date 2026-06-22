@@ -28,6 +28,8 @@
 
 ## 2. 残タスク（管理対象・着手順）
 
+| 分離 | scope | **project/library 分離**：neta.scope(project既定/library)。ネタ帳=project(5件・デクラッタ済)、連想retrieval=library(314件)、ピッカーはall+library配置時に自動コピー。copy/scope API済・本番移行済(取込314→library・自作5はproject)。残=ライブラリ閲覧タブ(NetaList)/複製UI/copy_neta MCPツール。要件L152は「library=連想元コーパス」で整合 | design「プロジェクト/ライブラリ分離」 | S1 core/DB→S2 MCP→S3 UI | design+impl | 🟡 S1＋配線＋ピッカー済(api164/web116緑)・残=閲覧タブ/MCP copy |
+
 | # | 領域 | 内容 | 関連設計 | 段取り | acceptor | 状態 |
 |---|---|---|---|---|---|---|
 | 連想 | エンジン | **連想エンジン**(コード進行/度数/連想)を要件→設計→実装。要件/設計とも独立acceptor ACCEPT。**S1度数化/調推定/進行距離・S2機能/カデンツ解析・名前あて・代替・感情シフト・説明 実装済**(apps/api/src/music・TS・データ不要・各impl-acceptor ACCEPT)。**ユーザー露出**=creative-manager MCPに read-only 5ツール(identify/analyze/explain/substitute/emotion)＋agentic許可＝Chatが「これ何進行?/なぜ/代替/もっと切なく」に実コードで答える。api122/worker99緑 | requirements「連想で…」/design「連想エンジン」/research 5本 | ✅S1/S2/名前あて/代替/感情/説明/ハモ付け/継続/retrieval＋進行コーパス仕入れ。MCP8本露出 | design+impl | ✅ 一通り完了。コーパス=U-FRETから10アーティスト(Mr.Children/椎名林檎/BUMP/ラルク/YOASOBI/Mrs.GREEN APPLE/志方あきこ/King Gnu/米津玄師/Vaundy)×〜10曲→**315進行**を度数列+タグ(「取込」で手作りと区別)+出典でneta化・本番稼働中。残=タグ精緻化/品質改善は運用で |
