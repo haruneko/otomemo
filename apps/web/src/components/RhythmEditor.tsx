@@ -1,5 +1,5 @@
 import { type Ref } from "react";
-import { type RhythmContent } from "../music";
+import { type RhythmContent, DRUM_LABEL } from "../music";
 import { BarsControl } from "./BarsControl";
 
 const NAME_PX = 58; // rhythm-name(56) + gap(2)
@@ -59,7 +59,7 @@ export function RhythmEditor({
       />
       {rhythm.lanes.map((l, li) => (
         <div className="rhythm-row" key={l.name}>
-          <span className="rhythm-name">{l.name}</span>
+          <span className="rhythm-name">{DRUM_LABEL[l.name] ?? l.name}</span>
           {Array.from({ length: rhythm.steps }, (_, s) => (
             <button
               key={s}

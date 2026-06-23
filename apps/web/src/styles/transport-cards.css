@@ -322,7 +322,9 @@
   font-size: 0.8rem;
 }
 .editor-bar select,
-.editor-bar input[type="number"] {
+.editor-bar input[type="number"],
+.editor-attrs select,
+.editor-attrs input[type="number"] {
   background: #1b1e23;
   color: var(--fg);
   border: 1px solid var(--line);
@@ -331,7 +333,8 @@
   font: inherit;
   width: 64px;
 }
-.editor-bar button {
+.editor-bar button,
+.editor-attrs button {
   font-size: 0.85rem;
   padding: 6px 10px;
   background: #2b2f36;

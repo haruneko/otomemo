@@ -133,6 +133,18 @@ export const DRUMS: { name: string; midi: number }[] = [
   { name: "Tom", midi: 45 },
 ];
 
+// ドラム行の表示ラベル（日本語）。**データ名(英語キー)は content/aria/音声マッピングで保持**し、
+// UI 表示だけ日本語化（section レーン名と言語を統一）。未知名はそのまま英語フォールバック。
+export const DRUM_LABEL: Record<string, string> = {
+  Kick: "キック",
+  Snare: "スネア",
+  HiHat: "ハイハット",
+  OpenHat: "オープンHH",
+  Clap: "クラップ",
+  Tom: "タム",
+  "Pedal HiHat": "ペダルHH",
+};
+
 export function rhythmOf(content: unknown): RhythmContent {
   const r = (content as { rhythm?: RhythmContent } | null)?.rhythm;
   if (r && Array.isArray(r.lanes)) return r;

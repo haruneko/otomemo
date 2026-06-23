@@ -193,16 +193,29 @@
 .editor-bar .spacer {
   flex: 1;
 }
-.editor-bar .meta {
+.editor-bar .meta,
+.editor-attrs .meta {
   font-size: 0.8rem;
   color: var(--muted);
   display: flex;
   align-items: center;
   gap: 4px;
 }
+/* 属性行（調/長短/拍子/テンポ/音色/アクション）。保存・削除はヘッダ行に固定で、ここは自由に折返す。 */
+.editor-attrs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap; /* 削除と保存は分離させない */
+}
 .editor-title {
   flex: 1;
-  min-width: 140px;
+  min-width: 80px; /* スマホで縮んで 削除/保存 を1行目に収める（押し出して段ズレしない） */
   background: #1b1e23;
   color: var(--fg);
   border: 1px solid var(--line);

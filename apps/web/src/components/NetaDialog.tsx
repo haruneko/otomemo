@@ -232,6 +232,19 @@ export function NetaDialog({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
+        {/* 保存/削除は常に右端固定・2つで1グループ＝スマホでも分離せず一緒に右上へ収まる。 */}
+        <span className="spacer" />
+        <span className="editor-actions">
+          <button className="danger" onClick={remove} disabled={busy}>
+            削除
+          </button>
+          <button className="primary" onClick={save} disabled={busy}>
+            保存
+          </button>
+        </span>
+      </div>
+      {/* 属性行：調→長短→拍子→テンポ→音色→アクション の統一順。非該当kindはその枠を出さないだけ。 */}
+      <div className="editor-attrs">
         {showKey && (
           <label className="meta">
             調
@@ -248,17 +261,6 @@ export function NetaDialog({
             </select>
           </label>
         )}
-        {isMelody && (
-          <button type="button" onClick={() => setLen(len + 4)}>
-            ＋4拍
-          </button>
-        )}
-        {showMeta && (
-          <label className="meta">
-            ♩
-            <NumberField aria-label="tempo" min={20} max={300} value={tempo} onChange={setTempo} />
-          </label>
-        )}
         {isContainer && (
           <label className="meta">
             拍子
@@ -269,6 +271,12 @@ export function NetaDialog({
                 </option>
               ))}
             </select>
+          </label>
+        )}
+        {showMeta && (
+          <label className="meta">
+            ♩
+            <NumberField aria-label="tempo" min={20} max={300} value={tempo} onChange={setTempo} />
           </label>
         )}
         {(isMelody || isBass || isChordPat) && (
@@ -286,6 +294,11 @@ export function NetaDialog({
               ))}
             </select>
           </label>
+        )}
+        {isMelody && (
+          <button type="button" onClick={() => setLen(len + 4)}>
+            ＋4拍
+          </button>
         )}
         {isMusic && (
           <button
@@ -314,13 +327,6 @@ export function NetaDialog({
             {schedId ? "🔁 継続調査中" : "🔁 継続して調べる"}
           </button>
         )}
-        <span className="spacer" />
-        <button className="danger" onClick={remove} disabled={busy}>
-          削除
-        </button>
-        <button className="primary" onClick={save} disabled={busy}>
-          保存
-        </button>
       </div>
       <div className="editor-meta-row">
         <input
