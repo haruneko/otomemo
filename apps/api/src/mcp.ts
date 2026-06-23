@@ -14,6 +14,12 @@ import {
   genMelody,
   genBass,
   genDrums,
+  analyzeFit,
+  fitToChords,
+  detectKeyFromNotes,
+  melodySimilarity,
+  findSimilar,
+  genNamedProgression,
 } from "./music";
 import { findProgressions } from "./progression-search";
 import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
@@ -475,6 +481,39 @@ export function buildMcpServer(core: Core): McpServer {
     "gen_drums",
     { title: "ドラムを生成", description: "GMバックビート（16ステップ1小節・seedで小変化）。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
     async ({ frame, seed }) => ok(genDrums(frame, seed)),
+  );
+  server.registerTool(
+    "gen_named_progression",
+    { title: "名前付き進行を生成", description: "丸の内/カノン/小室/王道/ツーファイブ/ブルース等を確定realize（別名・表記揺れ可・C基準）。未知は空。", inputSchema: { name: z.string(), frame: frameSchema } },
+    async ({ name, frame }) => ok(genNamedProgression(name, frame)),
+  );
+
+  // 当てはまり判定/補正/調推定/類似（cm-music-mcp の analysis を TS に集約＝S2 でcm-music廃止）。
+  const notesSchema = z.array(z.object({ pitch: z.number(), start: z.number().optional(), dur: z.number().optional() }));
+  server.registerTool(
+    "analyze_fit",
+    { title: "メロのコード当てはまり", description: "メロが各コードにどれだけ合うか（コードトーン/スケール/外し）を判定。", inputSchema: { melody: notesSchema, chords: chordsSchema, key: z.number().int().min(0).max(11).optional() } },
+    async ({ melody, chords, key }) => ok(analyzeFit(melody, chords, key)),
+  );
+  server.registerTool(
+    "fit_to_chords",
+    { title: "外し音をコードトーンへ補正", description: "正当でない外し音を最寄りコードトーンへスナップ（経過/刺繍/掛留は残す）。", inputSchema: { melody: notesSchema, chords: chordsSchema, key: z.number().int().min(0).max(11).optional() } },
+    async ({ melody, chords, key }) => ok(fitToChords(melody, chords, key)),
+  );
+  server.registerTool(
+    "detect_key",
+    { title: "メロから調推定", description: "ノート列から調(0-11)とmode(major/minor)を推定（Krumhansl相関）。", inputSchema: { notes: notesSchema } },
+    async ({ notes }) => ok(detectKeyFromNotes(notes)),
+  );
+  server.registerTool(
+    "melody_similarity",
+    { title: "メロ類似度", description: "2メロの類似度0..1（音程列・移調不変）。", inputSchema: { a: notesSchema, b: notesSchema } },
+    async ({ a, b }) => ok(melodySimilarity(a, b)),
+  );
+  server.registerTool(
+    "find_similar",
+    { title: "近いメロを探す", description: "target に近い順に候補メロを返す。", inputSchema: { target: notesSchema, candidates: z.array(z.object({ id: z.string().optional(), label: z.string().optional(), notes: notesSchema })), top: z.number().int().optional() } },
+    async ({ target, candidates, top }) => ok(findSimilar(target, candidates, top)),
   );
 
   return server;
