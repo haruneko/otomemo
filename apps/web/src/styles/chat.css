@@ -326,3 +326,19 @@
   display: flex;
   gap: 8px;
 }
+
+/* ワーカー待ちの進捗＋キャンセル（待ち UX 改善）。止まってる不安と拘束を解消。 */
+.chat-wait { display: flex; flex-direction: column; gap: 6px; }
+.chat-wait .wait-sec { opacity: 0.6; font-size: 0.85em; }
+.wait-bar { height: 4px; background: #2a2e36; border-radius: 2px; overflow: hidden; }
+.wait-bar-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
+.wait-cancel {
+  align-self: flex-start;
+  font-size: 0.85em;
+  padding: 4px 10px;
+  background: #1b1e23;
+  border: 1px solid #2a2e36;
+  border-radius: 6px;
+  color: var(--muted, #9aa0ab);
+}
+.wait-cancel:hover { color: #fff; border-color: var(--accent); }

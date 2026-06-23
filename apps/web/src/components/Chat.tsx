@@ -236,6 +236,9 @@ export function Chat({
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("consult");
   const [busy, setBusy] = useState(false);
+  // 待ち中の進捗（subtask 完了/総数・経過秒）。null=非ワーカー待ち。UX：止まってる不安を解消。
+  const [waitInfo, setWaitInfo] = useState<{ done: number; total: number; sec: number } | null>(null);
+  const cancelWait = useRef(false); // 「待たずに戻る」で立てる＝waitForJob を打ち切り入力を解放（裏で続行）。
   const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
   const alive = useAlive(); // ワーカー待ちは長い＝閉じた後に setState しないためのガード（poll.ts 共通）
@@ -343,7 +346,10 @@ export function Chat({
   async function waitForJob(jobId: string): Promise<JobOutcome | null> {
     let last: JobOutcome | null = null;
     let settledAt = -1;
+    cancelWait.current = false;
+    setWaitInfo({ done: 0, total: 1, sec: 0 });
     for (let i = 0; i < 200 && alive.current; i++) {
+      if (cancelWait.current) return null; // 「待たずに戻る」＝裏で続行・トレイで受け取る
       await new Promise((r) => setTimeout(r, 1500));
       let o: JobOutcome;
       try {
@@ -352,6 +358,10 @@ export function Chat({
         continue; // ネットワーク揺れは次tickで再試行
       }
       last = o;
+      // 進捗を可視化：subtask の 完了(done+failed)/総数 ＋ 経過秒。「止まってる不安」を解消。
+      const total = Math.max(1, o.jobs.length);
+      const done = o.jobs.filter((j) => j.status === "done" || j.status === "failed").length;
+      if (alive.current) setWaitInfo({ done, total, sec: Math.round((i + 1) * 1.5) });
       if (o.settled) {
         if (settledAt < 0) settledAt = i;
         // 終端後、reap がネタ化するのを最大 ~6tick(≈9s) 待つ。ネタが出たら即返す。
@@ -365,7 +375,14 @@ export function Chat({
 
   // ワーカー待ちの決着をチャットに反映：できたネタをインライン表示（開く/試聴）。
   function finishWait(o: JobOutcome | null) {
+    setWaitInfo(null); // 進捗表示を消す
     if (!alive.current) return;
+    if (cancelWait.current) {
+      // 「待たずに戻る」で抜けた：ジョブは裏で続行→できたらトレイ📥に届く。
+      pushMsg({ role: "ai", text: "バックグラウンドで続けています。できたら受け取りトレイ 📥 に届きます。" });
+      cancelWait.current = false;
+      return;
+    }
     if (!o) {
       pushMsg({ role: "ai", text: "完了の確認がタイムアウトしました（受け取りトレイ 📥 をご確認ください）" });
       return;
@@ -673,16 +690,39 @@ export function Chat({
           ))}
           {busy && (
             <div className="chat-msg ai" aria-label="thinking">
-              <div className="chat-text thinking">
-                考え中<span className="dots" aria-hidden="true" />
-              </div>
+              {waitInfo ? (
+                // ワーカー待ち：進捗(完了/総数・経過秒)＋「待たずに戻る」。止まってる不安と拘束を解消。
+                <div className="chat-wait">
+                  <div className="chat-text thinking">
+                    仕上げています{waitInfo.total > 1 ? ` ${waitInfo.done}/${waitInfo.total}` : ""}
+                    <span className="dots" aria-hidden="true" />
+                    <span className="wait-sec"> {waitInfo.sec}s</span>
+                  </div>
+                  {waitInfo.total > 1 && (
+                    <div className="wait-bar" aria-hidden="true">
+                      <div className="wait-bar-fill" style={{ width: `${(waitInfo.done / waitInfo.total) * 100}%` }} />
+                    </div>
+                  )}
+                  <button
+                    className="wait-cancel"
+                    aria-label="stop-waiting"
+                    onClick={() => (cancelWait.current = true)}
+                  >
+                    待たずに戻る（裏で続行）
+                  </button>
+                </div>
+              ) : (
+                <div className="chat-text thinking">
+                  考え中<span className="dots" aria-hidden="true" />
+                </div>
+              )}
             </div>
           )}
         </div>
         <div className="chat-input">
           <input
             aria-label="chat-input"
-            placeholder={busy ? "ワーカーの完了を待っています…" : mode === "research" ? "調べる…" : "相談を入力…"}
+            placeholder={busy ? "待ち中（待たずに戻れます）…" : mode === "research" ? "調べる…" : "相談を入力…"}
             value={input}
             disabled={busy} // 待ち中はこのチャットをロック（要望どおり）
             onChange={(e) => setInput(e.target.value)}
