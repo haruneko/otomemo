@@ -70,6 +70,18 @@ describe("http auth gate (#36)", () => {
     }
   });
 
+  it("POST /music/:op は TS 生成/分析に委譲（worker dispatch の委譲先・S2）", async () => {
+    const ch = await app.inject({ method: "POST", url: "/music/gen_chords", payload: { frame: { bars: 4, meter: "4/4" } } });
+    expect(ch.statusCode).toBe(200);
+    const chords = ch.json().items[0].content.chords;
+    expect(chords.length).toBe(4);
+    expect(chords[0].root).toBe(0); // T始まり
+    const fit = await app.inject({ method: "POST", url: "/music/analyze_fit", payload: { melody: [{ pitch: 60, start: 0, dur: 1 }], chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } });
+    expect(fit.json()).toHaveProperty("score");
+    const bad = await app.inject({ method: "POST", url: "/music/nope", payload: {} });
+    expect(bad.statusCode).toBe(404);
+  });
+
   it("GET /health はトークン不要で jobs 統計を返す（S4）", async () => {
     const prev = process.env.CM_TOKEN;
     process.env.CM_TOKEN = "secret";

@@ -17,15 +17,51 @@ import signal
 import subprocess
 from typing import Callable
 
-from .music import (  # #86 記号エンジン（判定＋ルール生成＋補正＋類似度）
-    analyze_fit,
-    find_similar,
-    fit_to_chords,
-    gen_bass,
-    gen_chords,
-    gen_drums,
-    gen_melody,
-)
+# 音楽ドメイン（生成/判定/補正/類似）は **TS 一本化**（アーキ是正 S2）。worker は api の /music/:op に
+# 委譲する＝Python に二重実装しない。呼び出し側は従来の関数名のまま（in-process→HTTP に差し替え）。
+from urllib.request import Request as _Request, urlopen as _urlopen
+
+_CM_API_URL = os.environ.get("CM_API_URL") or f"http://{os.environ.get('CM_HOST') or '127.0.0.1'}:8787"
+
+
+def _music(op: str, payload: dict):
+    """api の TS 音楽エンジンに委譲（決定的記号エンジン）。None の引数は送らない（既定に委ねる）。"""
+    body = json.dumps({k: v for k, v in payload.items() if v is not None}).encode()
+    headers = {"Content-Type": "application/json"}
+    tok = os.environ.get("CM_TOKEN")
+    if tok:
+        headers["x-cm-token"] = tok
+    req = _Request(f"{_CM_API_URL}/music/{op}", data=body, headers=headers, method="POST")
+    with _urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+
+def gen_chords(frame=None, seed=None) -> dict:
+    return _music("gen_chords", {"frame": frame, "seed": seed})
+
+
+def gen_melody(frame=None, chords=None, seed=None) -> dict:
+    return _music("gen_melody", {"frame": frame, "chords": chords, "seed": seed})
+
+
+def gen_bass(frame=None, chords=None, seed=None) -> dict:
+    return _music("gen_bass", {"frame": frame, "chords": chords})
+
+
+def gen_drums(frame=None, seed=None) -> dict:
+    return _music("gen_drums", {"frame": frame, "seed": seed})
+
+
+def analyze_fit(melody, chords, key=None) -> dict:
+    return _music("analyze_fit", {"melody": melody, "chords": chords, "key": key})
+
+
+def fit_to_chords(melody, chords, key=None) -> dict:
+    return _music("fit_to_chords", {"melody": melody, "chords": chords, "key": key})
+
+
+def find_similar(target, candidates, top=5):
+    return _music("find_similar", {"target": target, "candidates": candidates, "top": top})
 
 # 小書き（拗音などを直前のかなに結合して1モーラにする）
 _SMALL = set("ァィゥェォャュョヮぁぃぅぇぉゃゅょゎ")

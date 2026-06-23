@@ -7,6 +7,18 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Core } from "./core";
 import { netaInputSchema, netaPatchSchema, jobInputSchema, scopeEnum, scopeQueryEnum } from "./schemas";
+import {
+  genChords,
+  genMelody,
+  genBass,
+  genDrums,
+  genNamedProgression,
+  analyzeFit,
+  fitToChords,
+  detectKeyFromNotes,
+  melodySimilarity,
+  findSimilar,
+} from "./music";
 
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
 function assetsDir(): string {
@@ -89,6 +101,26 @@ export function buildHttp(core: Core): FastifyInstance {
   });
 
   app.get("/facets", async () => core.facets());
+
+  // 音楽ドメイン（生成/分析）の内部HTTP窓口。worker(Python)の dispatch がここを叩いて TS の決定的記号
+  // エンジンに委譲（音楽ドメインTS一本化＝アーキ是正 S2。Python に生成/分析を二重実装しない）。
+  app.post("/music/:op", async (req, reply) => {
+    const { op } = req.params as { op: string };
+    const b = (req.body ?? {}) as Record<string, any>;
+    switch (op) {
+      case "gen_chords": return genChords(b.frame, b.seed);
+      case "gen_melody": return genMelody(b.frame, b.chords, b.seed);
+      case "gen_bass": return genBass(b.frame, b.chords);
+      case "gen_drums": return genDrums(b.frame, b.seed);
+      case "gen_named_progression": return genNamedProgression(b.name, b.frame);
+      case "analyze_fit": return analyzeFit(b.melody, b.chords, b.key);
+      case "fit_to_chords": return fitToChords(b.melody, b.chords, b.key);
+      case "detect_key": return detectKeyFromNotes(b.notes);
+      case "melody_similarity": return { similarity: melodySimilarity(b.a, b.b) };
+      case "find_similar": return findSimilar(b.target, b.candidates, b.top);
+      default: return reply.code(404).send({ error: `unknown music op: ${op}` });
+    }
+  });
 
   app.get("/neta/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
