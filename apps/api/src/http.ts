@@ -112,24 +112,32 @@ export function buildHttp(core: Core): FastifyInstance {
   app.post("/music/:op", async (req, reply) => {
     const { op } = req.params as { op: string };
     const b = (req.body ?? {}) as Record<string, any>;
-    switch (op) {
-      case "gen_chords": return genChords(b.frame, b.seed);
-      case "gen_melody": return genMelody(b.frame, b.chords, b.seed);
-      case "gen_bass": return genBass(b.frame, b.chords);
-      case "gen_drums": return genDrums(b.frame, b.seed);
-      case "gen_named_progression": return genNamedProgression(b.name, b.frame);
-      case "analyze_fit": return analyzeFit(b.melody, b.chords, b.key);
-      case "fit_to_chords": return fitToChords(b.melody, b.chords, b.key);
-      case "detect_key": return detectKeyFromNotes(b.notes);
-      case "melody_similarity": return { similarity: melodySimilarity(b.a, b.b) };
-      case "find_similar": return findSimilar(b.target, b.candidates, b.top);
-      // 連想エンジン（MCP と同じ機能を HTTP からも・web UI/programmatic 用）。
-      case "identify_progression": return identifyProgression(b.chords, b.key !== undefined ? { key: b.key } : {});
-      case "analyze_progression": return analyzeProgression(b.chords, { key: b.key, mode: b.mode });
-      case "explain_progression": return explainProgression(b.chords, { key: b.key, mode: b.mode });
-      case "harmonize": return harmonize(b.melody, b.key ?? 0, { mode: b.mode, barBeats: b.barBeats });
-      case "find_progressions": return findProgressions(core, { tags: b.tags, like: b.like, limit: b.limit });
-      default: return reply.code(404).send({ error: `unknown music op: ${op}` });
+    // 入力正規化：melody/chords は「生配列」でも「{notes}/{chords}」でも受ける（生成物をそのまま検証に
+    // 回せるように・dogfood P1）。不正は空配列＝関数は落ちない。さらに try/catch で 500 でなく 400 に。
+    const asNotes = (x: any): any[] => (Array.isArray(x) ? x : Array.isArray(x?.notes) ? x.notes : []);
+    const asChords = (x: any): any[] => (Array.isArray(x) ? x : Array.isArray(x?.chords) ? x.chords : []);
+    try {
+      switch (op) {
+        case "gen_chords": return genChords(b.frame, b.seed);
+        case "gen_melody": return genMelody(b.frame, asChords(b.chords), b.seed);
+        case "gen_bass": return genBass(b.frame, asChords(b.chords));
+        case "gen_drums": return genDrums(b.frame, b.seed);
+        case "gen_named_progression": return genNamedProgression(b.name, b.frame);
+        case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
+        case "fit_to_chords": return fitToChords(asNotes(b.melody), asChords(b.chords), b.key);
+        case "detect_key": return detectKeyFromNotes(asNotes(b.notes ?? b.melody));
+        case "melody_similarity": return { similarity: melodySimilarity(asNotes(b.a), asNotes(b.b)) };
+        case "find_similar": return findSimilar(asNotes(b.target), b.candidates, b.top);
+        // 連想エンジン（MCP と同じ機能を HTTP からも・web UI/programmatic 用）。
+        case "identify_progression": return identifyProgression(asChords(b.chords), b.key !== undefined ? { key: b.key } : {});
+        case "analyze_progression": return analyzeProgression(asChords(b.chords), { key: b.key, mode: b.mode });
+        case "explain_progression": return explainProgression(asChords(b.chords), { key: b.key, mode: b.mode });
+        case "harmonize": return harmonize(asNotes(b.melody), b.key ?? 0, { mode: b.mode, barBeats: b.barBeats });
+        case "find_progressions": return findProgressions(core, { tags: b.tags, like: b.like, limit: b.limit });
+        default: return reply.code(404).send({ error: `unknown music op: ${op}` });
+      }
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message }); // 不正入力は 500 でなく 400
     }
   });
 

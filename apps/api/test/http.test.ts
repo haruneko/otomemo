@@ -80,6 +80,10 @@ describe("http auth gate (#36)", () => {
     expect(fit.json()).toHaveProperty("score");
     const bad = await app.inject({ method: "POST", url: "/music/nope", payload: {} });
     expect(bad.statusCode).toBe(404);
+    // dogfood P1: melody を {notes} で渡しても 500 でなく動く（生成物をそのまま検証に回せる）
+    const wrapped = await app.inject({ method: "POST", url: "/music/analyze_fit", payload: { melody: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, chords: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } } });
+    expect(wrapped.statusCode).toBe(200);
+    expect(wrapped.json()).toHaveProperty("score");
   });
 
   it("GET /health はトークン不要で jobs 統計を返す（S4）", async () => {
