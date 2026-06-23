@@ -101,7 +101,7 @@ export function NetaDialog({
   const tp = useTransport(() => playable, tempo, {
     scaleBeats: span,
     bpb: 4,
-    program: isRhythm ? undefined : program,
+    program: isRhythm ? undefined : isChord ? 48 : program, // コード進行は抽象＝固定GM49(strings)・選択不可(CP1)
   });
 
   // Space=再生/停止（design #58/#59）。入力中は無効。音楽ネタのときだけ。
@@ -163,7 +163,7 @@ export function NetaDialog({
       // #bass S2 相対モード：度数パターンを保存（再生時にコード/調で解決）。
       return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, tempo, bars: Math.max(1, Math.round(bassSteps / 16)) };
     if (isMelody || isBass) return { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) };
-    if (isChord) return { content: { chords, program }, key, tempo };
+    if (isChord) return { content: { chords }, key, tempo }; // 進行は抽象＝program持たない(CP1)
     if (isRhythm) return { content: { rhythm }, tempo };
     if (isContainer) return { key, tempo, meter };
     return {};
@@ -257,7 +257,7 @@ export function NetaDialog({
             </select>
           </label>
         )}
-        {(isMelody || isBass || isChord) && (
+        {(isMelody || isBass) && (
           <label className="meta">
             音色
             <select
@@ -282,7 +282,7 @@ export function NetaDialog({
                 `${neta.title ?? "sketch"}.mid`,
                 tempo,
                 null,
-                isRhythm ? undefined : program,
+                isRhythm ? undefined : isChord ? 48 : program, // 進行は固定GM49(CP1)
               )
             }
           >
