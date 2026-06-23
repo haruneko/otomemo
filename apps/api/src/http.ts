@@ -174,6 +174,20 @@ export function buildHttp(core: Core): FastifyInstance {
     return { section: core.getNeta(section.id), composition: core.getComposition(section.id) };
   });
 
+  // メロ連想 retrieval（S4c）：notes か neta id を渡すと、scope(既定 library) の近いメロを返す。
+  // 「このメロ前のとかぶってない？」＝重複検出・連想の入口。
+  app.post("/melody/neighbors", async (req, reply) => {
+    const b = (req.body ?? {}) as { notes?: any; id?: string; scope?: "project" | "library" | "all"; top?: number };
+    const coerce = (x: any): any[] => (Array.isArray(x) ? x : Array.isArray(x?.notes) ? x.notes : []);
+    let notes = coerce(b.notes);
+    if (notes.length === 0 && b.id) {
+      const n = core.getNeta(b.id);
+      notes = coerce((n?.content as { notes?: any } | null)?.notes);
+    }
+    if (notes.length === 0) return reply.code(400).send({ error: "notes or id required" });
+    return { neighbors: core.similarMelodies(notes, b.scope ?? "library", b.top ?? 5, b.id) };
+  });
+
   app.get("/neta/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const n = core.getNeta(id);

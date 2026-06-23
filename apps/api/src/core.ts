@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { reapResults } from "./reaper";
 import { tickSchedules } from "./scheduler";
+import { findSimilar } from "./music/similarity";
 
 const now = (): string => new Date().toISOString();
 
@@ -262,6 +263,26 @@ export class Core {
     return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map((r) =>
       this.rowToNeta(r),
     );
+  }
+
+  /** メロ連想（S4c・spec§6）：scope（既定 library＝連想元）の melody を候補に、多層類似で近い順に。
+   * 「このメロ、前のとかぶってない/似てる？」＝重複検出・連想の入口。 */
+  similarMelodies(
+    notes: { pitch: number; start?: number; dur?: number }[],
+    scope: "project" | "library" | "all" = "library",
+    top = 5,
+    excludeId?: string,
+  ): { id?: string; label?: string; similarity: number }[] {
+    const mels = this.listNeta({ kind: "melody", scope, limit: 500 });
+    const candidates = mels
+      .filter((n) => n.id !== excludeId)
+      .map((n) => ({
+        id: n.id,
+        label: n.title ?? undefined,
+        notes: ((n.content as { notes?: { pitch: number; start?: number; dur?: number }[] } | null)?.notes ?? []),
+      }))
+      .filter((c) => c.notes.length > 0);
+    return findSimilar(notes, candidates, top, true); // 多層（音程＋リズム＋輪郭）
   }
 
   // facets は既定で project（ネタ帳=project と一致させる。library 値が混じると UI で0件選択肢が出る）。
