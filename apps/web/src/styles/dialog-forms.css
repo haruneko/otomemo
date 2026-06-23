@@ -20,6 +20,16 @@ body:has(.dialog-backdrop) .chat-bubble {
   justify-content: center;
   padding: 16px;
   z-index: 10;
+  overscroll-behavior: contain; /* スクロールの連鎖を止める */
+}
+/* ダイアログ(Chat等)表示中は背景(ネタ帳)スクロールを固定＋スクローラの連鎖を内側で閉じる
+   ＝Chat上スクロールが背後のネタ帳に抜ける問題（特にスマホ）を防ぐ。 */
+body:has(.dialog-backdrop) {
+  overflow: hidden;
+}
+.dialog,
+.chat-log {
+  overscroll-behavior: contain;
 }
 .dialog {
   background: var(--card);

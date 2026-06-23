@@ -240,6 +240,7 @@ export function Chat({
   const [waitInfo, setWaitInfo] = useState<{ done: number; total: number; sec: number } | null>(null);
   const cancelWait = useRef(false); // 「待たずに戻る」で立てる＝waitForJob を打ち切り入力を解放（裏で続行）。
   const [thinkSec, setThinkSec] = useState(0); // 「考え中」(分解前 planning)の経過秒＝沈黙の不安を解消。
+  const [inflight, setInflight] = useState(0); // 裏で実行中のジョブ数（リロードで待ち状態が消えても可視化）。
   const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
   const alive = useAlive(); // ワーカー待ちは長い＝閉じた後に setState しないためのガード（poll.ts 共通）
@@ -251,6 +252,31 @@ export function Chat({
     const t = setInterval(() => setThinkSec((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [busy]);
+
+  // 待ち中にリロードすると待ち状態(busy/waitInfo)が消える。実行中ジョブを定期確認してバナー表示＝
+  // 「まだ動いてるのか不明」をなくす。0に戻ったら一覧を更新（結果が reap されてトレイ📥/ネタ帳へ）。
+  useEffect(() => {
+    let on = true;
+    let prev = 0;
+    const check = async () => {
+      try {
+        const [q, r] = await Promise.all([api.listJobs({ status: "queued" }), api.listJobs({ status: "running" })]);
+        if (!on) return;
+        const n = q.length + r.length;
+        if (prev > 0 && n === 0) onChanged?.(); // 実行中→0：結果が届いた→ネタ帳/トレイ更新
+        prev = n;
+        setInflight(n);
+      } catch {
+        /* ネットワーク揺れは無視 */
+      }
+    };
+    void check();
+    const t = setInterval(check, 4000);
+    return () => {
+      on = false;
+      clearInterval(t);
+    };
+  }, [onChanged]);
   // 複数会話セッション（フリーChatのみ。Claude/ChatGPT風に作って切替/見返す）。
   const [sessionId, setSessionId] = useState(() =>
     target ? "" : (localStorage.getItem("cm-chat-session") ?? "global"),
@@ -617,6 +643,12 @@ export function Chat({
           </div>
         )}
         {targetLabel && <div className="chat-target">「{targetLabel.slice(0, 30)}」についての相談</div>}
+        {/* リロード等で待ち状態が消えても、裏で動いてるジョブを可視化（待ちか不明をなくす）。 */}
+        {inflight > 0 && !busy && (
+          <div className="chat-inflight" aria-label="inflight">
+            🔄 {inflight}件 実行中…（できたら受け取りトレイ 📥 とネタ帳に届きます）
+          </div>
+        )}
         <div className="chat-log">
           {msgs.length === 0 && (
             <p className="muted">
