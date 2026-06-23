@@ -237,11 +237,12 @@
 **問題**：`chord_progression`（和声＝抽象）が `program`（音色）を持つのは概念の混線。**和声=何か** と **楽器がどう鳴らすか** を分ける。
 - **`chord_progression` は抽象**：音色を持たない／選べない。プレビューは**固定の中立音色（GM 49 String Ensemble）**で鳴らせるが選択不可。合成では「コード楽器パターン」が実際の伴奏を担う。
 - **新 kind「コード楽器パターン（chord_pattern）」**＝**進行に解決する相対型**（相対ベースの和音版＝姉妹）。section のコード進行に合成時解決・自前の音色・複数重ねOK（ピアノ/ギター等）。content：
-  - `{ mode:"strum"|"arp", voicing:{ tones:("R"|"3"|"5"|"7")[], openClose:"open"|"close", octave:number }, steps:N, hits:number[] }`
+  - `{ mode:"strum"|"arp", voicing:{ tones:("R"|"3"|"5"|"7")[], openClose:"open"|"close", octave:number }, steps:N, hits:{step,dur}[] }`（dur=step数＝各音の長さを指定。旧 number[] も後方互換で受ける）
   - **mode**：strum＝各 hit で和音ブロック／arp＝各 hit で選択構成音を1つずつ巡回。
   - **voicing**：構成音(R/3/5/7 から選ぶ)・open/close・高さ(octave)。＝**スケッチ範囲（やりすぎてシーケンサーにしない）**。
   - resolve：各 hit の時刻のコードを取り、voicing で実音へ（strum=同時／arp=巡回）。
-- **段階(CP)**：CP1 進行を抽象化(音色固定49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(契約TDD) → CP3 エディタ(リズムグリッド＋voicing) → CP4 生成＋/gen/section 配線 → CP5 合成/再生/MIDI(パート毎 program・複数)。
+- **段階(CP)＝✅実装済(2026-06-23)**：CP1 進行を抽象化(音色固定GM49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(music.ts) → CP3 エディタ(ChordPatternEditor＝hitsグリッド＋長さツール＋voicing＋voicing MiniRoll) → CP4 `genChordPattern`＋/gen/section 配線 → CP5 compositeNotes で section 進行に解決(パート毎 program・複数可)。api/web 緑。
+- **コード入力/section UX（CV・✅実装済）**：ChordEditor＝start自動フロー(順番)・長さボタン・ピアノロール表示・合計尺。SectionEditor＝レーン層モデル順(進行→メロ→コード楽器→ベース→リズム→section)・**占有セルのみ配置不可**(別小節は自由)。トグル/構成音の選択色＝OFF地色付与で是正(E2E)。
 
 ### 再生
 - section/song：メインペーンに**トランスポート（全体再生）パネル**。
@@ -474,7 +475,7 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **弱起**（拍子別・既存 pickup=負start を生成側でも）／**滑り込み文法**（倚音=強拍へ跳躍入り→下行歩進解決・掛留=保留→強拍不協→下行解決・経過/刺繍は弱拍で歩進解決＝**孤立跳躍NCTゼロ**を生成時保証）／**素直⇔表情ノブ**（mood連動＋耳で較正・既定控えめ）／カデンツ生成（句境界フラグ→前楽節末=半終止感・終止=主音）。
 - **連想(S4/5)は別トラック**（エッセンス抽出→違うメロ・著作権は抽象層のみ・LCS上限）。
 **スコープ境界（要件line160と整合・2026-06-23 緩和）**：借用する種カウンターポイントの非和声音解決則は**単旋律のポップス的処理**として軽く使う。多声の対位法/声部進行は**強く制約しない**＝厳密理論で縛らない。ただし**将来どこかで軽く取り込む余地は残す**（過度な制約で壊さない＝拡張点として開けておく）。
-**段階（縦スライス・TDD）**：**S1**＝拍子(4/4+6/8)＋弱起＋句末息継ぎ＋カデンツ着地＋度数内部モデル（degree.ts）→ **S2**＝頂点アーチ＋跳躍後反行＋**滑り込み(10.4)** → **S3**＝句機能変奏＋非和声音役割化 → **S4**＝多層 melodySimilarity＋メロ重複/類似retrieval → **S5**＝エッセンス→違うメロ＋メロコーパス。受け入れ基準＝spec §7（seed固定 property）。波及は `generate.ts`＋新 `degree.ts` のみ（保存/UI/再生/DB不変）。
+**段階（縦スライス・TDD）＝✅実装済(2026-06-23・メロコーパスのデータ投入を除く)**：**S1**＝拍子(4/4+6/8)＋弱起＋句末息継ぎ＋カデンツ着地＋度数内部モデル（degree.ts/meter.ts/skeleton.ts）→ **S2**＝頂点アーチ(≈0.62)＋跳躍後反行＋**滑り込み(倚音・10.4)＋素直⇔表情ノブ** → **S3**＝句機能で位置駆動の変奏＋弱拍の経過/刺繍 → **S4**＝melodyEssence＋多層 melodySimilarity＋similarMelodies retrieval(/melody/neighbors) → **S5**＝genFromEssence(エッセンス→違うメロ)＋normalizeToC。受け入れ基準＝spec §7（seed固定 property・api/web緑）。**6/8はベース/ドラムも揃え済**。残＝メロコーパスのデータ収集(要ユーザー・#13対応物)。
 
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。

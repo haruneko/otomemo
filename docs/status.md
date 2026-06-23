@@ -1,6 +1,6 @@
 # creative_manager 進捗・管理表（living）
 
-最終更新: 2026-06-21
+最終更新: 2026-06-23
 
 このファイルが**残タスクの正準**。頭の中／揮発タスクで管理しない。着手・完了でここを更新する。
 凡例: ✅完了 / 🟡部分・留保 / ⬜未着手。acceptor列: design=design-acceptor要 / impl=impl-acceptor要 / —=不要。
@@ -20,9 +20,12 @@
 | DAW往復・過去資産 | 🟡 | ✅MIDI書出、MIDI取込(worker分割 melody/rhythm #81)、歌詞取込。⬜コード自動検出、mp3整理、ABILITY往復は基本のみ |
 | 投げて受け取る | ✅ | ジョブ→worker→reap→トレイ、plan分解・継続・通知強度・waiting/question #45、定期スケジューラ #80、フォーム質問パネル #85S3 |
 | AI生成 枠＋動作＋構造 #85 | 🟡 | ✅枠(6/8効く)、gen_variations(N個・items+edges)、condition(音数/コード)、verb(fetch/transform/gen_lyric)、文章＋パネル導線。✅方向確認(confirm) |
-| 音楽理論層 #86 | 🟡 | ✅判定(analyze_fit/detect_key/analyze_progression)、ルール生成(chords/melody/bass/drums/pair)、Chat入口(dispatch・実機)、正規化層、MCPサービス(S2a実機)、agentic Chat(S2b 受入済)。✅補正(fit_to_chords)・✅類似度・✅ルール基線実測 |
+| 音楽理論層 #86 | 🟡 | ✅判定(analyze_fit/detect_key/analyze_progression)、ルール生成(chords/melody/bass/drums/pair)、Chat入口(dispatch・実機)、正規化層、agentic Chat。✅補正(fit_to_chords)・✅類似度・✅ルール基線実測。**生成はTS `apps/api/src/music` 一本化**(cm-music-mcp廃止・S2是正) |
+| メロ生成 高度化 | ✅ | **S1-S3**(骨格優先=フレーズ/句末息継ぎ/カデンツ着地/頂点アーチ≈0.62/滑り込み倚音/弱拍経過刺繍/位置駆動変奏・6/8ネイティブ・弱起・度数内部モデル degree.ts/meter.ts/skeleton.ts)＋**S4-S5連想**(melodyEssence/多層melodySimilarity/similarMelodies retrieval/genFromEssence=エッセンス→違うメロ/normalizeToC)。研究=docs/research/melody-generation.md。残=メロコーパスのデータ収集 |
+| コード実現層 | ✅ | **進行=抽象**(音色固定GM49・選択不可)＋**新kind chord_pattern**(strum/arp・voicing R/3/5/7・open/close・高さ・各音の長さ{step,dur}・自前音色)＝進行に解決する相対型の和音版(CP1-5)。/gen/section に配線・複数重ね可 |
+| コード入力/section UX | ✅ | ChordEditor(start自動フロー・長さボタン・ピアノロール表示・合計尺)・section レーン層モデル順(進行→メロ→コード楽器→ベース→リズム)＋**占有セルのみ配置不可**・相対ベースのつんのめり(アンティシペーション)解決・トグル/構成音の選択色是正(E2E) |
 | 情報収集 | ✅ | research/collect・参考曲・継続研究 #9 |
-| 非機能 | 🟡 | ✅認証(CM_TOKEN)・✅**到達=Tailscale tailnet限定(design確定)**・単一オリジン配信＋localhostバインド・docs/deploy.md。⬜Tailscale serve設定(ユーザ側・初回のみ)・⬜バックアップ・⬜自動起動 |
+| 非機能 | 🟡 | ✅認証(CM_TOKEN)・✅**到達=Tailscale tailnet限定**・単一オリジン配信＋localhostバインド・✅**自動起動(systemd)＋バックアップ(timer)**(S4)。⬜Tailscale serve設定(ユーザ側・初回のみ) |
 
 ---
 
@@ -33,6 +36,8 @@
 | # | 領域 | 内容 | 関連設計 | 段取り | acceptor | 状態 |
 |---|---|---|---|---|---|---|
 | 連想 | エンジン | **連想エンジン**(コード進行/度数/連想)を要件→設計→実装。要件/設計とも独立acceptor ACCEPT。**S1度数化/調推定/進行距離・S2機能/カデンツ解析・名前あて・代替・感情シフト・説明 実装済**(apps/api/src/music・TS・データ不要・各impl-acceptor ACCEPT)。**ユーザー露出**=creative-manager MCPに read-only 5ツール(identify/analyze/explain/substitute/emotion)＋agentic許可＝Chatが「これ何進行?/なぜ/代替/もっと切なく」に実コードで答える。api122/worker99緑 | requirements「連想で…」/design「連想エンジン」/research 5本 | ✅S1/S2/名前あて/代替/感情/説明/ハモ付け/継続/retrieval＋進行コーパス仕入れ。MCP8本露出 | design+impl | ✅ 一通り完了。コーパス=U-FRETから10アーティスト(Mr.Children/椎名林檎/BUMP/ラルク/YOASOBI/Mrs.GREEN APPLE/志方あきこ/King Gnu/米津玄師/Vaundy)×〜10曲→**315進行**を度数列+タグ(「取込」で手作りと区別)+出典でneta化・本番稼働中。残=タグ精緻化/品質改善は運用で |
+| メロ連想 | データ | **メロコーパスのデータ収集**(Hooktheory型・メロ+コードを度数/抽象層のみ・著作権セーフ)＝基盤(melodyEssence/類似/retrieval/genFromEssence/normalizeToC)は実装済、実データ投入が要ユーザー(#13コード仕入れの対応物) | research melody-generation.md §5 | 情報源選定→正規化→library投入 | — | ⬜ 基盤済・データ未 |
+| UX磨き | 低 | E2E発見の低優先：トランスポート絵文字(⏮🔁📥)が□(フォント差・実機要確認/SVG化候補)・意味検索が無一致でも「近い」を返す(ヒント文)・スマホで mood 入力右端見切れ/section全画面後の薄カード覗き | E2E(2026-06-23) | — | — | ⬜ |
 | 91 | #86補正 | **fit_to_chords**：other型(正当でない)外し音を最寄りコードトーンへスナップ。経過/刺繍/掛留は残す | design#12 Stage1 | cm-music関数→MCP/handler→reap→test | impl | ✅ (score 0.61→0.84実証) |
 | 92 | #86類似度 | **melody_similarity**(音程列・移調不変)＋find_similar(過去メロ探索)。作風寄せ/重複の土台 | research R2 | cm-music→MCP/handler→test | impl | ✅ (移調不変実証) |
 | 93 | #85方向確認 | バッチ前に1案だけ作り「この方向でいい?」→承認(frame/count引継)で残数本生成 | design#85(E) | worker(_propose→waiting)＋既存answerJob | impl | ✅ (confirm=true) |
@@ -59,9 +64,9 @@
 
 - **agentic Chat(#86 S2b) の full-loop が遅い**：claude -p の多段ツール使用で数分。`--max-turns`(既定8・env `CM_AGENTIC_MAX_TURNS`)で上限化済み。要チューニング（重い時は dispatch にフォールバック）。MCP tool-use 自体は S2a で実機実証(roots 0,5,10,0)。
 - **アーキ是正(2026-06-23・4監査→確定 design参照)＝S0-S5 完了**：S0止血/S1契約SSOT(schemas.ts・kindレジストリ)/S2音楽ドメインTS一本化(生成TS化・cm-music-mcp廃止**5→4**・Python domain削除・worker は/music委譲)/S3 core層分離(reaper/scheduler・reap原子化)/S4 systemd化(+health/backup timer/公開ガード)/S5フロント分割(music.ts→audio.ts／poll.ts でジョブ待ち統合＋アンマウントガード／NetaDialog→KindEditorBody＋save平坦化／styles.css→6ファイル)。**S0-S5 完了**。api181/web116/worker62緑・4プロセス稼働・全push済。
-- **常駐サービスの起動/プロセス管理が弱い**：worker / api(tsx watch) / cm-search(:8788) / cm-music-mcp(:8790) を手起動。スモークは入った(S0)が **supervisor/自動再起動は未**＝systemd化(S4・#24)で対応予定。
-- **バックアップ**：`scripts/backup.sh`(sqlite backup API・世代14・data/backups/)は**実在**するが**自動実行が未**（cron/systemd timer 無し＝手動）。S4 で timer 化。
-- **agentic を使う前提**：worker に `CM_MUSIC_MCP_URL=http://127.0.0.1:8790/mcp` を渡し cm-music-mcp を起動。未設定なら Chat は dispatch 経路（ルール生成・実機実証済）にフォールバック＝後退ゼロ。
+- **常駐サービス＝✅systemd化済(S4)**：`deploy/systemd/` の cm-api/cm-worker/cm-search.service で自動再起動。**3プロセス**(api:8787 単一オリジン＋音楽ドメインTS `/music`／worker ヘッドレス／cm-search:8788)。**cm-music-mcp(:8790)は廃止**(S2)。
+- **バックアップ＝✅自動化済(S4)**：`cm-backup.timer`＋`scripts/backup.sh`(sqlite backup API・世代14・data/backups/)。
+- **agentic Chat の音楽ツール＝api `/music` HTTP 経由**(cm-music-mcp廃止・S2)。worker は生成/判定を api に委譲。到達不可時は dispatch 経路（ルール生成）にフォールバック＝後退ゼロ。
 - **生成はルール優先・Claudeは音符に触らない**（#86確定）：Claude=言葉→構造化リクエストの翻訳＋判定読み、記号エンジン=音符づくり＋当てはまり判定。
 
 ---
