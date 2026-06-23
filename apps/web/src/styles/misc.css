@@ -59,6 +59,11 @@ article .tag {
   border-radius: 6px;
   white-space: nowrap;
 }
+.bs-btn.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+} /* トグル ON（付点 等） */
 .bs-result {
   margin: 8px 0 0;
   font-size: 0.78rem;

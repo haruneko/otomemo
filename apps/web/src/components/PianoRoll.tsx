@@ -43,6 +43,7 @@ export function PianoRoll({
   high?: number; // 既定で見せる最高音
 }) {
   const [noteLen, setNoteLen] = useState(1);
+  const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
 
   const pitches = useMemo(() => {
     const lo = Math.min(low, ...notes.map((n) => n.pitch));
@@ -75,7 +76,7 @@ export function PianoRoll({
       onChange(notes.filter((n) => n !== covering));
       return;
     }
-    onChange([...notes, { pitch, start, dur: noteLen }]);
+    onChange([...notes, { pitch, start, dur: dotted ? noteLen * 1.5 : noteLen }]);
   }
   function removeNote(target: Note) {
     onChange(notes.filter((n) => n !== target));
@@ -95,6 +96,16 @@ export function PianoRoll({
             {l.label}
           </button>
         ))}
+        {/* 付点：選択音価を1.5倍（例 四分→付点四分=1.5拍）。6/8 の付点四分ビートにも対応。 */}
+        <button
+          type="button"
+          className={"len dot" + (dotted ? " on" : "")}
+          aria-label="dotted"
+          title="付点（×1.5）"
+          onClick={() => setDotted((d) => !d)}
+        >
+          ．
+        </button>
       </div>
       <div className="proll" role="grid" aria-label="piano-roll" ref={scrollerRef}>
         {/* #58/#74 プレイヘッド：生beat --phb をコンテンツ座標(px)へ＝横スクロールに追従。1拍=SUBDIV*CELL_PX。 */}

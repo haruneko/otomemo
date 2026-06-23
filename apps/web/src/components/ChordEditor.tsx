@@ -47,6 +47,8 @@ export function ChordEditor({
   playing?: boolean;
 }) {
   const [activeIdx, setActiveIdx] = useState(-1);
+  const [dotted, setDotted] = useState(false); // 付点：長さボタンを ×1.5（1拍→1.5＝6/8ビート、2拍→3＝6/8小節）
+  const durFor = (v: number) => (dotted ? v * 1.5 : v);
   useEffect(() => {
     if (!playing || !beatRef) {
       setActiveIdx(-1);
@@ -100,7 +102,7 @@ export function ChordEditor({
           </select>
           <div className="chord-len" aria-label={`len-${i}`}>
             {LENGTHS.map((l) => (
-              <button key={l.v} type="button" className={"len" + (c.dur === l.v ? " on" : "")} aria-label={`len-${i}-${l.v}`} onClick={() => update(i, { dur: l.v })}>
+              <button key={l.v} type="button" className={"len" + (c.dur === durFor(l.v) ? " on" : "")} aria-label={`len-${i}-${l.v}`} onClick={() => update(i, { dur: durFor(l.v) })}>
                 {l.label}
               </button>
             ))}
@@ -110,6 +112,17 @@ export function ChordEditor({
       ))}
       <div className="chord-foot">
         <button type="button" className="bs-btn" onClick={add}>＋コード</button>
+        {/* 付点：以降クリックする長さボタンを ×1.5（6/8 の付点四分=1.5拍・付点二分=3拍に対応）。 */}
+        <button
+          type="button"
+          className={"bs-btn" + (dotted ? " on" : "")}
+          aria-label="dotted"
+          aria-pressed={dotted}
+          title="付点（長さ×1.5・6/8対応）"
+          onClick={() => setDotted((d) => !d)}
+        >
+          付点．
+        </button>
         {chords.length > 0 && (
           <span className="muted chord-total">計 {chords.reduce((s, c) => s + c.dur, 0)}拍（{Math.round((chords.reduce((s, c) => s + c.dur, 0) / 4) * 10) / 10}小節）</span>
         )}

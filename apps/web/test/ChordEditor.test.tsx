@@ -50,6 +50,21 @@ describe("ChordEditor", () => {
     ]);
   });
 
+  it("付点ONで長さボタンが×1.5（1拍→1.5＝6/8の付点四分・#2）", async () => {
+    const onChange = vi.fn();
+    render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("dotted")); // 付点 ON
+    await userEvent.click(screen.getByLabelText("len-0-1")); // 1拍 ボタン
+    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 1.5 }]);
+  });
+
+  it("付点OFFは従来どおり（1拍=1）", async () => {
+    const onChange = vi.fn();
+    render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("len-0-1"));
+    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 1 }]);
+  });
+
   it("highlights the chord under the playhead beat while playing (#76)", () => {
     vi.useFakeTimers();
     const chords = [
