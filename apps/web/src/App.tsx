@@ -404,7 +404,20 @@ export function App() {
           onOpenNeta={(n) => setActive(n)} // #68 Chatからネタを開く
         />
       )}
-      {trayOpen && <Tray onClose={() => setTrayOpen(false)} />}
+      {trayOpen && (
+        <Tray
+          onClose={() => setTrayOpen(false)}
+          onOpenNeta={(n) => {
+            setTrayOpen(false);
+            setActive(n); // できたネタを開く
+          }}
+          onOpenChat={(targetId) => {
+            setTrayOpen(false);
+            if (targetId) void api.getNeta(targetId).then((n) => openChat(n ?? undefined)).catch(() => openChat());
+            else openChat();
+          }}
+        />
+      )}
       {settingsOpen && (
         <div className="dialog-backdrop" onClick={() => setSettingsOpen(false)}>
           <div

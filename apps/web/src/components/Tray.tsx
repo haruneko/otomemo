@@ -1,5 +1,21 @@
 import { useEffect, useState } from "react";
-import { api, type Job } from "../api";
+import { api, type Job, type Neta } from "../api";
+
+// 何のジョブか分かる日本語ラベル（生 intent を出さない・fb-1）。
+const INTENT_LABEL: Record<string, string> = {
+  consult: "相談", research: "調べる", collect: "収集", brainstorm: "壁打ち",
+  gen_melody: "メロ生成", gen_chord: "コード生成", gen_rhythm: "リズム生成",
+  gen_pair_rule: "一式生成", gen_chords_rule: "コード生成", gen_variations: "案出し",
+  fit_to_chords: "コードに合わせる", transform: "変形", gen_lyric: "歌詞生成", import_midi: "MIDI取込",
+};
+const intentLabel = (i: string): string => INTENT_LABEL[i] ?? i;
+// 依頼文（何を頼んだか）。instruction → params.instruction/topic/context の順。
+function asked(j: Job): string {
+  const p = (j.params ?? {}) as Record<string, unknown>;
+  const s = j.instruction || (p.instruction as string) || (p.topic as string) || (p.context as string) || "";
+  return String(s).slice(0, 60);
+}
+const fromChat = (j: Job): boolean => !!(j.params as Record<string, unknown> | null)?.chat_thread;
 
 // 受け取りトレイ（design「投げて→進めて→受け取る」の受け取り面）。最近のジョブと結果の覗き見。
 function peek(j: Job): string {
@@ -27,15 +43,40 @@ function parseForm(q: string): FormField[] | null {
 }
 const NUMERIC_KEYS = new Set(["tempo", "bars", "count", "key"]);
 
-export function Tray({ onClose }: { onClose: () => void }) {
+export function Tray({
+  onClose,
+  onOpenNeta,
+  onOpenChat,
+}: {
+  onClose: () => void;
+  onOpenNeta?: (n: Neta) => void; // できたネタを開く
+  onOpenChat?: (targetId?: string) => void; // 由来のチャットを開く
+}) {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [results, setResults] = useState<Record<string, Neta[]>>({}); // jobId→できたネタ
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [forms, setForms] = useState<Record<string, Record<string, string>>>({});
 
   const reload = () =>
     api
       .listJobs()
-      .then(setJobs)
+      .then(async (js) => {
+        setJobs(js);
+        // done ジョブの「できたネタ」を取得（何ができたか＝カードで見せる・タップで開く）。
+        const done = js.filter((j) => j.status === "done").slice(0, 20);
+        const map: Record<string, Neta[]> = {};
+        await Promise.all(
+          done.map((j) =>
+            api
+              .jobOutcome(j.id)
+              .then((o) => {
+                if (o.neta.length) map[j.id] = o.neta;
+              })
+              .catch(() => {}),
+          ),
+        );
+        setResults(map);
+      })
       .catch(() => {});
   useEffect(() => {
     void reload();
@@ -75,10 +116,29 @@ export function Tray({ onClose }: { onClose: () => void }) {
           {jobs.length === 0 && <p className="muted">ジョブはまだありません</p>}
           {jobs.map((j) => (
             <div key={j.id} className={"tray-job" + (j.status === "waiting" ? " waiting" : "")}>
-              <span className="tray-intent">{j.intent}</span>
-              <span className={"tray-status " + j.status}>{j.status}</span>
-              {j.notify_level && <span className="tray-notify">{j.notify_level}</span>}
-              <span className="tray-peek">{peek(j)}</span>
+              <div className="tray-head">
+                <span className="tray-intent">{intentLabel(j.intent)}</span>
+                {fromChat(j) && (
+                  <button className="tray-chip" aria-label="open-chat" title="このチャットを開く" onClick={() => onOpenChat?.(j.target_neta_id ?? undefined)}>
+                    💬 チャット
+                  </button>
+                )}
+                <span className={"tray-status " + j.status}>{j.status}</span>
+                {j.notify_level && <span className="tray-notify">{j.notify_level}</span>}
+              </div>
+              {asked(j) && <div className="tray-asked">「{asked(j)}」</div>}
+              {/* 何ができたか＝ネタをカードで（タップで開く）。 */}
+              {(results[j.id] ?? []).length > 0 && (
+                <div className="tray-results">
+                  {results[j.id]!.map((n) => (
+                    <button key={n.id} className="tray-result" aria-label="open-result" onClick={() => onOpenNeta?.(n)}>
+                      <span className="kind" data-kind={n.kind}>{n.kind}</span>
+                      <span className="tray-result-title">{n.title ?? n.text ?? "(無題)"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {results[j.id] === undefined && <span className="tray-peek">{peek(j)}</span>}
               {j.status === "waiting" && j.question && (() => {
                 const fields = parseForm(j.question);
                 if (fields) {

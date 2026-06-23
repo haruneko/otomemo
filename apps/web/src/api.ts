@@ -274,6 +274,9 @@ export interface Job {
   id: string;
   intent: string;
   status: string;
+  instruction?: string | null; // 依頼文（何を頼んだか）
+  params?: Record<string, unknown> | null; // chat_thread / context 等
+  target_neta_id?: string | null;
   result: { suggestions?: string } | Record<string, unknown> | null;
   error: string | null;
   notify_level?: string | null;
