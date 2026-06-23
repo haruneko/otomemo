@@ -149,15 +149,154 @@ function pickFig(rng: Rng, figs: RhyFig[], bias: { busy: number; long: number; r
   return rng.choices(pool, weights);
 }
 
-// 1音の音高を選ぶ：拍頭/コード位置はコードトーン、間はスケールで順次（前音から小さく動く）。
-function pickPitch(rng: Rng, prev: number, allowed: Set<number>, lo: number, hi: number): number {
-  let cands = range(prev - 7, prev + 8).filter((p) => p >= lo && p <= hi && allowed.has(((p % 12) + 12) % 12));
-  if (cands.length === 0) cands = range(lo, hi + 1).filter((p) => allowed.has(((p % 12) + 12) % 12));
-  if (cands.length === 0) cands = [prev];
-  return rng.choices(cands, cands.map((p) => 1 / (1 + Math.abs(p - prev))));
+// スケールを昇順pcの配列に（degree歩幅で辿るため）。ソートして畳み込み回避。
+function scaleArray(scale: Set<number>): number[] {
+  return [...scale].sort((a, b) => a - b);
 }
 
-/** コードトーン拘束＋**リズム図形**のメロディ（拍頭=コードトーン、休符/付点/シンコペ/長音で動く）。 */
+// 与pitch を「スケール上の度数インデックス」へ（最近傍スケール音にスナップ）。
+// 返り {idx, octShift}：idx=scaleArr内の位置、octShift=オクターブの加算半音。
+function toScaleDegree(pitch: number, scaleArr: number[]): { idx: number; oct: number } {
+  const pc = ((pitch % 12) + 12) % 12;
+  let best = 0;
+  let bestD = 99;
+  for (let i = 0; i < scaleArr.length; i++) {
+    const d = Math.min(Math.abs(scaleArr[i]! - pc), 12 - Math.abs(scaleArr[i]! - pc));
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  const oct = Math.floor((pitch - scaleArr[best]!) / 12) * 12;
+  return { idx: best, oct };
+}
+
+// 度数インデックス(+オクターブ)から実pitch を復元。step を足してスケールを上下に辿る。
+function degreeToPitch(idx: number, octBase: number, scaleArr: number[]): number {
+  const n = scaleArr.length;
+  const wrapped = ((idx % n) + n) % n;
+  const octJump = Math.floor(idx / n) * 12;
+  return scaleArr[wrapped]! + octBase + octJump;
+}
+
+// pitch を許可pc集合に最近傍スナップ（拍頭=コードトーン化）。音域clampも。
+function snapTo(pitch: number, allowed: Set<number>, lo: number, hi: number): number {
+  let best = pitch;
+  let bestD = 99;
+  for (let p = pitch - 6; p <= pitch + 6; p++) {
+    if (p < lo || p > hi) continue;
+    if (!allowed.has(((p % 12) + 12) % 12)) continue;
+    const d = Math.abs(p - pitch);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  if (bestD === 99) {
+    // 近傍に無ければ音域全体から探す
+    for (let p = lo; p <= hi; p++) {
+      if (!allowed.has(((p % 12) + 12) % 12)) continue;
+      const d = Math.abs(p - pitch);
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+  }
+  return Math.max(lo, Math.min(hi, best));
+}
+
+// モチーフ：1小節分の (相対start拍, dur拍) 列＋スケール度数コントゥア(各音の開始音からの歩幅)。
+interface Motif {
+  hits: { off: number; dur: number; step: number }[]; // step=モチーフ開始音からのスケール歩幅
+  span: number; // 消費拍数（=1小節）
+}
+
+// モチーフを1つ生成：リズム図形を小節幅まで並べ、各発音にスケール歩幅(コントゥア)を割り当て。
+function buildMotif(rng: Rng, perBar: number, bias: { busy: number; long: number; rest: number }): Motif {
+  const hits: { off: number; dur: number; step: number }[] = [];
+  let beat = 0;
+  let step = 0; // 累積スケール歩幅（開始音=0）
+  while (beat < perBar) {
+    const remain = perBar - beat;
+    const fig = pickFig(rng, MELODY_FIGS, bias, remain >= 2, beat === 0); // 小節頭は必ず発音
+    for (const [off, durRaw] of fig.on) {
+      const t = beat + off;
+      if (t >= perBar) break;
+      const dur = Math.min(durRaw, perBar - t);
+      if (dur <= 0) continue;
+      // コントゥア：開始音(step=0)から順次中心に小さく上下。たまに跳躍。
+      if (hits.length > 0) {
+        const move = rng.choices([-2, -1, 0, 1, 2, 3], [1, 3, 1.2, 3, 1, 0.5]);
+        step += move;
+        step = Math.max(-4, Math.min(6, step)); // 動機の音域を制限（覚えやすさ）
+      }
+      hits.push({ off: t, dur, step });
+    }
+    beat += fig.span;
+  }
+  if (hits.length === 0) hits.push({ off: 0, dur: 1, step: 0 });
+  return { hits, span: perBar };
+}
+
+// モチーフ生成は単発draw だと音数の分散が大きく mood 密度が安定しない。
+// 候補を数本引いて、busy mood なら音数最多／sparse mood なら最少を採用（密度を単調化）。
+// 反復は壊さない（採用された動機を全小節で使い回すのは従来通り）。
+function buildMotifSteered(rng: Rng, perBar: number, bias: { busy: number; long: number; rest: number }): Motif {
+  const cands: Motif[] = [];
+  for (let i = 0; i < 3; i++) cands.push(buildMotif(rng, perBar, bias));
+  const wantBusy = bias.busy >= 1.5;
+  const wantSparse = bias.long >= 1.5;
+  if (wantBusy) return cands.reduce((a, b) => (b.hits.length > a.hits.length ? b : a));
+  if (wantSparse) return cands.reduce((a, b) => (b.hits.length < a.hits.length ? b : a));
+  return cands[0]!; // 既定は最初の draw（決定的）
+}
+
+// バリエーション種：そのまま反復／移高(sequence)／反転／末尾変化。
+type VarKind = "repeat" | "seq_up" | "seq_down" | "invert" | "tail";
+
+// モチーフをある小節に配置：開始音をコードトーンにアンカーし、コントゥアを辿る。
+// 拍頭/コードチェンジはコードトーンにスナップ＝ハモる。variation で軽い変奏。
+function placeMotif(
+  motif: Motif,
+  barBeat: number,
+  total: number,
+  startPitch: number,
+  scaleArr: number[],
+  chords: { root?: number | string; quality?: string; start?: number; dur?: number }[] | undefined,
+  scale: Set<number>,
+  variation: VarKind,
+  lo: number,
+  hi: number,
+): { pitch: number; start: number; dur: number }[] {
+  const out: { pitch: number; start: number; dur: number }[] = [];
+  const base = toScaleDegree(startPitch, scaleArr);
+  const seqShift = variation === "seq_up" ? 1 : variation === "seq_down" ? -1 : 0;
+  const lastIdx = motif.hits.length - 1;
+  for (let i = 0; i < motif.hits.length; i++) {
+    const h = motif.hits[i]!;
+    const t = barBeat + h.off;
+    if (t >= total) break;
+    const dur = Math.min(h.dur, total - t);
+    if (dur <= 0) continue;
+    let step = h.step;
+    if (variation === "invert") step = -step; // 反転：コントゥアを上下逆に
+    if (variation === "tail" && i === lastIdx && lastIdx > 0) step = motif.hits[i - 1]!.step; // 末尾変化：終止を寄せる
+    step += seqShift; // 移高(sequence)：度数を1つ持ち上げ/下げ
+    let pitch = degreeToPitch(base.idx + step, base.oct, scaleArr);
+    // 拍頭・コードチェンジ位置はコードトーンへスナップ（ハモる）。
+    const onBeatHead = Number.isInteger(t);
+    const ch = chordAt(Math.floor(t), chords);
+    const ctPcs = ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
+    const allowed = onBeatHead ? ctPcs : scale;
+    pitch = snapTo(pitch, allowed, lo, hi);
+    out.push({ pitch, start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
+  }
+  return out;
+}
+
+/** モチーフ(動機)ベースのメロディ：短い動機を1つ作り、小節ごとにコードトーンへアンカーして
+ * 反復＋軽い変奏(移高/反転/末尾変化)で置き直す。拍頭=コードトーン・音域60..84・mood密度を維持。 */
 export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
@@ -168,30 +307,44 @@ export function genMelody(
   const mood = f.mood ?? "";
   const minor = isMinorMood(mood);
   const scale = scalePcs(0, minor ? "minor" : "major");
+  const scaleArr = scaleArray(scale);
   const bars = barsOf(f);
   const bpb = beatsPerBar(f.meter);
   const total = Math.max(1, Math.round(bars * bpb));
   const perBar = Math.max(1, Math.round(bpb));
   const bias = densityBias(mood, f.tempo);
+  const lo = 60;
+  const hi = 84;
+
+  // 1) モチーフを1つ生成（seedで決定的・mood密度で音数を単調化）。
+  const motif = buildMotifSteered(rng, perBar, bias);
 
   const notes: { pitch: number; start: number; dur: number }[] = [];
-  let prev = 72;
-  let beat = 0;
-  while (beat < total) {
-    const onBar = beat % perBar === 0;
-    const fig = pickFig(rng, MELODY_FIGS, bias, beat + 2 <= total, onBar); // 小節頭は必ず発音(forceOnset)
-    for (const [off, durRaw] of fig.on) {
-      const t = beat + off;
-      const dur = Math.min(durRaw, total - t); // 末尾はみ出しを抑える
-      if (dur <= 0) continue;
-      const onBeatHead = off === 0;
-      const ch = chordAt(Math.floor(t), chords);
-      const allowed = ch && (onBeatHead || rng.next() < 0.55) ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
-      prev = pickPitch(rng, prev, allowed, 60, 84);
-      notes.push({ pitch: prev, start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
+  let startPitch = 72; // 動機の開始音（前小節の開始音を引き継いで流れを作る）
+
+  for (let bar = 0; bar < bars; bar++) {
+    const barBeat = bar * perBar;
+    if (barBeat >= total) break;
+    // 各小節の開始音は、その小節のコードトーンにアンカー（直近の startPitch に最も近いコードトーン）。
+    const ch = chordAt(barBeat, chords);
+    const anchorPcs = ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
+    startPitch = snapTo(startPitch, anchorPcs, lo, hi);
+
+    // 2/3) バリエーション選択：基本は反復、たまに軽い変奏（反復が分かる程度に抑える）。
+    let variation: VarKind = "repeat";
+    if (bar > 0) {
+      // 70%はそのまま反復、残りを軽い変奏に割り振る（覚えやすさ優先）。
+      variation = rng.choices<VarKind>(
+        ["repeat", "seq_up", "seq_down", "tail", "invert"],
+        [7, 1.2, 1.2, 1, 0.6],
+      );
     }
-    beat += fig.span;
+    const barNotes = placeMotif(motif, barBeat, total, startPitch, scaleArr, chords, scale, variation, lo, hi);
+    for (const n of barNotes) notes.push(n);
+    // 次小節の開始音は今小節の開始音（=確定した最初の音）から引き継ぐ＝動機の連続性。
+    if (barNotes.length > 0) startPitch = barNotes[0]!.pitch;
   }
+
   if (notes.length === 0) notes.push({ pitch: 72, start: 0, dur: 1 }); // 全休は避ける
   const label = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
   return { items: [{ kind: "melody", content: { notes }, label }], edges: [] };
@@ -287,10 +440,4 @@ export function genDrums(frame?: Frame | null, seed?: number | null): GenResult 
     ...(open.length ? [{ name: "OpenHat", midi: GM.OpenHat, hits: open, vel: 70 }] : []),
   ];
   return { items: [{ kind: "rhythm", content: { rhythm: { steps: 16, lanes } }, label: "ドラム" }], edges: [] };
-}
-
-function range(lo: number, hi: number): number[] {
-  const out: number[] = [];
-  for (let i = lo; i < hi; i++) out.push(i);
-  return out;
 }

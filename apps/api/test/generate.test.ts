@@ -42,6 +42,51 @@ describe("genMelody（コードトーン拘束＋リズム図形）", () => {
     const sad = (genMelody({ bars: 4, mood: "切ない" }, ch, 1).items[0]!.content as { notes: unknown[] }).notes.length;
     expect(bright).toBeGreaterThan(sad);
   });
+  it("同一seedで決定的（再現する）", () => {
+    const ch = [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }];
+    const a = genMelody({ bars: 4, meter: "4/4", mood: "明るい" }, ch, 42);
+    const b = genMelody({ bars: 4, meter: "4/4", mood: "明るい" }, ch, 42);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+  it("モチーフ反復：小節をまたいでリズム(dur列)が高い一致率で繰り返す（純乱数なら出ない）", () => {
+    // 1コードで4小節 → 同じ動機が反復されるので、小節ごとの dur 列が高頻度で一致するはず。
+    const ch = [{ root: 0, quality: "", start: 0, dur: 16 }];
+    const notes = (genMelody({ bars: 4, meter: "4/4" }, ch, 5).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    // 小節ごとに dur 列を集める（small=startの小数も含めたリズム指紋）。
+    const fingerprint = (bar: number): string =>
+      notes
+        .filter((n) => n.start >= bar * 4 && n.start < (bar + 1) * 4)
+        .map((n) => `${(n.start % 4).toFixed(2)}:${n.dur.toFixed(2)}`)
+        .join("|");
+    const bars = [0, 1, 2, 3].map(fingerprint);
+    // 基準=最初の小節と一致する小節が複数ある（反復＝記号エンジン特有）。
+    const matches = bars.filter((b) => b === bars[0]).length;
+    expect(matches).toBeGreaterThanOrEqual(2); // 反復が観測できる
+  });
+  it("モチーフ反復：相対音程(コントゥア)も小節をまたいで繰り返す傾向がある", () => {
+    const ch = [{ root: 0, quality: "", start: 0, dur: 16 }];
+    const notes = (genMelody({ bars: 4, meter: "4/4" }, ch, 11).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    const intervals = (bar: number): string =>
+      notes
+        .filter((n) => n.start >= bar * 4 && n.start < (bar + 1) * 4)
+        .map((n) => n.pitch)
+        .reduce<{ prev: number | null; out: string[] }>(
+          (acc, p) => {
+            if (acc.prev !== null) acc.out.push(String(p - acc.prev));
+            acc.prev = p;
+            return acc;
+          },
+          { prev: null, out: [] },
+        )
+        .out.join(",");
+    const bars = [0, 1, 2, 3].map(intervals);
+    const matches = bars.filter((b) => b === bars[0] && b.length > 0).length;
+    expect(matches).toBeGreaterThanOrEqual(2); // コントゥアの反復が観測できる
+  });
 });
 
 describe("genBass（ルート/5度＋リズム）", () => {
