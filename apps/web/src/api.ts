@@ -168,6 +168,13 @@ export const api = {
 
   facets: () => http<Facets>("/facets"),
 
+  // #9 コードから調(key+mode)候補を推定（section/コード進行の調を「宣言」する補助）。
+  detectKeyFromChords: (chords: unknown[]) =>
+    http<{ candidates: { key: number; mode: "major" | "minor"; score: number }[] }>(
+      "/music/detect_key_chords",
+      { method: "POST", body: JSON.stringify({ chords }) },
+    ),
+
   // #77 asset（SoundFont等のファイル資産）。アップロード/一覧/削除/配信URL。
   uploadAsset: async (file: File, kind = "soundfont") => {
     const fd = new FormData();

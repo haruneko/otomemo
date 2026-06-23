@@ -54,6 +54,18 @@ export function NetaDialog({
   const [rhythm, setRhythm] = useState<RhythmContent>(rhythmOf(neta.content));
   const [key, setKey] = useState<number>(neta.key ?? 0);
   const [mode, setMode] = useState<string>(neta.mode ?? "major"); // 長調/短調（調号。メロ配置の相対移調に効く）
+  const [candIdx, setCandIdx] = useState(0); // #9 調推定の候補サイクル位置
+  // #9 コードから調(key+mode)を推定して宣言。クリックで候補を順に切替（Cmaj⇄Am 等の相対も選べる）。
+  async function detectKey() {
+    if (!chords.length) return;
+    const r = await api.detectKeyFromChords(chords).catch(() => null);
+    const cands = r?.candidates ?? [];
+    if (!cands.length) return;
+    const c = cands[candIdx % cands.length]!;
+    setKey(c.key);
+    setMode(c.mode);
+    setCandIdx((candIdx + 1) % cands.length); // 次クリックで次候補
+  }
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
   const [program, setProgram] = useState<number>(
@@ -260,6 +272,16 @@ export function NetaDialog({
               <option value="minor">短調</option>
             </select>
           </label>
+        )}
+        {isChord && chords.length > 0 && (
+          <button
+            type="button"
+            aria-label="detect-key"
+            title="コードから調を推定して設定（クリックで候補=Cmaj/Am 等を順に切替）"
+            onClick={() => void detectKey()}
+          >
+            調を推定
+          </button>
         )}
         {isContainer && (
           <label className="meta">

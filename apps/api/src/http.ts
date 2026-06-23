@@ -18,6 +18,7 @@ import {
   analyzeFit,
   fitToChords,
   detectKeyFromNotes,
+  detectKeyFromChords,
   melodySimilarity,
   findSimilar,
   melodyEssence,
@@ -143,6 +144,8 @@ export function buildHttp(core: Core): FastifyInstance {
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
         case "fit_to_chords": return fitToChords(asNotes(b.melody), asChords(b.chords), b.key);
         case "detect_key": return detectKeyFromNotes(asNotes(b.notes ?? b.melody));
+        // #9 コードから調(key+mode)候補を上位N。section/コード進行の調を「宣言」する補助。
+        case "detect_key_chords": return { candidates: detectKeyFromChords(asChords(b.chords), b.top ?? 3) };
         case "melody_similarity": return { similarity: melodySimilarity(asNotes(b.a), asNotes(b.b)) };
         case "find_similar": return findSimilar(asNotes(b.target), b.candidates, b.top);
         // 連想エンジン（MCP と同じ機能を HTTP からも・web UI/programmatic 用）。

@@ -3,15 +3,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { updateNeta, deleteNeta, getRelations, playNotes, phStart, phStop } = vi.hoisted(() => ({
-  updateNeta: vi.fn().mockResolvedValue({}),
-  deleteNeta: vi.fn().mockResolvedValue({ deleted: true }),
-  getRelations: vi.fn().mockResolvedValue([]),
-  playNotes: vi.fn(),
-  phStart: vi.fn(),
-  phStop: vi.fn(),
-}));
-vi.mock("../src/api", () => ({ api: { updateNeta, deleteNeta, getRelations } }));
+const { updateNeta, deleteNeta, getRelations, detectKeyFromChords, playNotes, phStart, phStop } =
+  vi.hoisted(() => ({
+    updateNeta: vi.fn().mockResolvedValue({}),
+    deleteNeta: vi.fn().mockResolvedValue({ deleted: true }),
+    getRelations: vi.fn().mockResolvedValue([]),
+    detectKeyFromChords: vi.fn(),
+    playNotes: vi.fn(),
+    phStart: vi.fn(),
+    phStop: vi.fn(),
+  }));
+vi.mock("../src/api", () => ({ api: { updateNeta, deleteNeta, getRelations, detectKeyFromChords } }));
 // Tone を読み込まないよう usePlayhead と playNotes だけ差し替え（他の music エクスポートは実物）
 vi.mock("../src/usePlayhead", () => ({
   usePlayhead: () => ({
@@ -127,6 +129,35 @@ describe("NetaDialog", () => {
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content).toEqual({ chords: [{ root: 0, quality: "", start: 0, dur: 4 }] }); // CP1: 進行は抽象＝program持たない
+  });
+
+  it("#9 調を推定：コードから key+mode を設定し、再クリックで候補を切替", async () => {
+    detectKeyFromChords.mockResolvedValue({
+      candidates: [
+        { key: 6, mode: "minor", score: 1 }, // F#m
+        { key: 9, mode: "major", score: 0.8 }, // A
+      ],
+    });
+    const cp: Neta = {
+      ...neta,
+      kind: "chord_progression",
+      text: null,
+      content: { chords: [{ root: 6, quality: "m", start: 0, dur: 4 }] },
+    };
+    render(<NetaDialog neta={cp} onClose={vi.fn()} onChanged={vi.fn()} />);
+    // 1回目：第1候補 F#m を設定
+    await userEvent.click(screen.getByLabelText("detect-key"));
+    await waitFor(() => expect((screen.getByLabelText("key") as HTMLSelectElement).value).toBe("6"));
+    expect((screen.getByLabelText("mode") as HTMLSelectElement).value).toBe("minor");
+    // 2回目：次候補 A(長調) へ切替
+    await userEvent.click(screen.getByLabelText("detect-key"));
+    await waitFor(() => expect((screen.getByLabelText("key") as HTMLSelectElement).value).toBe("9"));
+    expect((screen.getByLabelText("mode") as HTMLSelectElement).value).toBe("major");
+    // 保存パッチに反映
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    expect(updateNeta.mock.calls.at(-1)![1].key).toBe(9);
+    expect(updateNeta.mock.calls.at(-1)![1].mode).toBe("major");
   });
 
   it("edits a rhythm and saves content.rhythm", async () => {

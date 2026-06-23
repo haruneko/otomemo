@@ -47,6 +47,23 @@ describe("http data API", () => {
     const tree = await app.inject({ method: "GET", url: `/neta/${a.id}/composition` });
     expect(tree.json().children.length).toBe(1);
   });
+
+  it("#9 /music/detect_key_chords：コードから調候補(key+mode)を返す", async () => {
+    // C-Am-F-G（C major / A minor の素材）。第1候補は C major か A minor。
+    const r = await app.inject({
+      method: "POST",
+      url: "/music/detect_key_chords",
+      payload: { chords: ["C", "Am", "F", "G"] },
+    });
+    expect(r.statusCode).toBe(200);
+    const cands = r.json().candidates as { key: number; mode: string }[];
+    expect(cands.length).toBeGreaterThan(0);
+    expect(cands[0]).toHaveProperty("key");
+    expect(cands[0]).toHaveProperty("mode");
+    // C major(key0) か その相対 A minor(key9) が上位に来る。
+    const top = cands.slice(0, 3).map((c) => `${c.key}:${c.mode}`);
+    expect(top.some((t) => t === "0:major" || t === "9:minor")).toBe(true);
+  });
 });
 
 describe("http auth gate (#36)", () => {
