@@ -5,6 +5,7 @@ import { chordPcs, normRoot, scalePcs } from "./theory";
 import { planSkeleton } from "./skeleton";
 import { meterInfo } from "./meter";
 import { classifyNCT, isChordTone } from "./degree";
+import { melodyEssence } from "./melodyEssence";
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -603,6 +604,50 @@ function decorateWeak(
       cur.pitch = step(prev, 1); // 静止(同音反復)＝上の刺繍音（離れて戻る）
     }
   }
+}
+
+/** エッセンス→"違うメロ"生成（S5a・北極星・spec§4）：参照メロの**リズム指紋＋輪郭(身振り)**を保ち、
+ * 音高は**コードに沿って再生成**（開始＝コードトーン、輪郭方向へスケールを歩く・拍頭はコードトーンへ）。
+ * ＝「似てるが別物」＝著作権セーフ（抽象層=リズム/輪郭を継ぎ、絶対ピッチ列は作り直す）。決定的(seed)。 */
+export function genFromEssence(
+  refNotes: { pitch: number; start?: number; dur?: number }[],
+  frame?: Frame | null,
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  seed?: number | null,
+): GenResult {
+  const f = normalizeFrame(frame);
+  const ns = [...(refNotes ?? [])]
+    .filter((n) => typeof n.pitch === "number")
+    .sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  if (ns.length === 0) return genMelody(frame, chords, seed); // 参照無し＝通常生成
+  const rng = new Rng(seed ?? 1);
+  const minor = isMinorMood(f.mood ?? "");
+  const scale = scalePcs(0, minor ? "minor" : "major");
+  const scaleArr = scaleArray(scale);
+  const lo = 60;
+  const hi = 84;
+  const e = melodyEssence(ns); // contour（身振り）を継ぐ
+  const ctAt = (t: number): Set<number> => {
+    const ch = chordAt(Math.floor(Math.max(0, t)), chords);
+    return ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
+  };
+  const notes: { pitch: number; start: number; dur: number }[] = [];
+  let pitch = snapTo(72, ctAt(ns[0]!.start ?? 0), lo, hi); // 開始＝コードトーン
+  for (let i = 0; i < ns.length; i++) {
+    const t = ns[i]!.start ?? 0;
+    const dur = ns[i]!.dur ?? 0.5;
+    if (i > 0) {
+      const dir = e.contour[i - 1] ?? 0; // 参照の上下動（身振り）を踏襲
+      const mag = dir === 0 ? 0 : rng.choice([1, 1, 2]); // 歩幅は作り直す＝別の音程に
+      const d = toScaleDegree(pitch, scaleArr);
+      pitch = degreeToPitch(d.idx + dir * mag, d.oct, scaleArr);
+    }
+    if (Number.isInteger(t)) pitch = snapTo(pitch, ctAt(t), lo, hi); // 拍頭はコードトーンへ（ハモる）
+    pitch = Math.max(lo, Math.min(hi, pitch));
+    notes.push({ pitch, start: round3(t), dur: round3(dur) });
+  }
+  const label = (f.mood ? f.mood + "の連想メロ" : "連想メロ").slice(0, 24);
+  return { items: [{ kind: "melody", content: { notes }, label }], edges: [] };
 }
 
 // ベースの図形（メロより落ち着き：四分主体＋たまに8分のルート→5度/オクターブ、長音）。

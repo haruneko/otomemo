@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { genChords, genMelody, genBass, genDrums, normalizeFrame } from "../src/music/generate";
+import { genChords, genMelody, genBass, genDrums, genFromEssence, normalizeFrame } from "../src/music/generate";
 import { chordPcs } from "../src/music/theory";
 
 // 生成は seed 依存乱数＝byte等価ではなく**musicalルール**を property test で担保（design「アーキ是正 決定1」）。
@@ -225,6 +225,30 @@ describe("genMelody 拍子・弱起（S1d）", () => {
   it("pickup 既定0：負start無し（既存挙動不変）", () => {
     const notes = (genMelody({ bars: 2, meter: "4/4" }, ch, 5).items[0]!.content as { notes: { start: number }[] }).notes;
     expect(notes.every((n) => n.start >= 0)).toBe(true);
+  });
+});
+
+describe("genFromEssence エッセンス→違うメロ（S5a・北極星）", () => {
+  const ref = [
+    { pitch: 60, start: 0, dur: 0.5 }, { pitch: 64, start: 0.5, dur: 0.5 },
+    { pitch: 62, start: 1, dur: 0.5 }, { pitch: 67, start: 1.5, dur: 0.5 },
+    { pitch: 65, start: 2, dur: 1 },
+  ];
+  const ch = [{ root: 0, quality: "", start: 0, dur: 8 }];
+  it("リズム指紋(IOI)を継ぐ＝同じノリ", () => {
+    const out = (genFromEssence(ref, { bars: 1 }, ch, 3).items[0]!.content as { notes: { start: number; dur: number }[] }).notes;
+    expect(out.map((n) => n.start)).toEqual(ref.map((n) => n.start)); // オンセット＝同じ
+  });
+  it("輪郭(身振り)を継ぐが、絶対ピッチ列は別物（似て非なる）", () => {
+    const out = (genFromEssence(ref, { bars: 1 }, ch, 3).items[0]!.content as { notes: { pitch: number }[] }).notes;
+    const sign = (a: number[]) => a.slice(1).map((p, i) => Math.sign(p - a[i]!));
+    expect(sign(out.map((n) => n.pitch))).toEqual(sign(ref.map((n) => n.pitch))); // 上下動＝同じ
+    expect(JSON.stringify(out.map((n) => n.pitch))).not.toBe(JSON.stringify(ref.map((n) => n.pitch))); // でも音は別
+  });
+  it("決定的（同seed一致）＋音域内", () => {
+    const a = genFromEssence(ref, { bars: 1 }, ch, 7);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(genFromEssence(ref, { bars: 1 }, ch, 7)));
+    expect((a.items[0]!.content as { notes: { pitch: number }[] }).notes.every((n) => n.pitch >= 60 && n.pitch <= 84)).toBe(true);
   });
 });
 
