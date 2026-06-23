@@ -51,6 +51,14 @@ export function melodyPlacementShift(
   return raw > 6 ? raw - 12 : raw; // 最寄りオクターブ＝メロの音域を崩さない（-5..6）
 }
 
+// コード/ベース絶対の配置移調：**自分の調(key)から section の調へ chromatic 移調**（key-aware）。
+// content の主音=key（root を実音pcで保存・ChordEditor「C基準で root+quality 保存」＝key=0が既定）。
+// 旋法は和音 quality / 音そのものが保持するのでメロのような相対マップは不要（単純な半音移調）。
+// **C基準content(key=0)では従来の +keyPc と一致＝後退ゼロ**。key を持つ(例 F#m進行 key=6)content だけ是正。
+export function harmonyPlacementShift(sectionKeyPc: number, contentKeyPc = 0): number {
+  return (((Math.round(sectionKeyPc) - Math.round(contentKeyPc)) % 12) + 12) % 12;
+}
+
 // --- コード（chord / chord_progression）。C基準で記号保存し、再生時に音符へ展開＋移調 ---
 export interface ChordEntry {
   root: number; // 0–11 ピッチクラス（C基準、design #16）
@@ -404,13 +412,15 @@ export function compositeNotes(
   sectionMode?: string | null,
 ): Note[] {
   // #bass S2: 相対bass の子は section のコードレーンに当てて解決する（コードが無ければ key）。
-  // コードを section 位置・調へ展開（chord kind は C基準保存なので keyPc を足す）。
+  // コードを section 位置・調へ展開。**コード進行の自分の調(key)から section 調へ key-aware 移調**
+  // （key=0 のC基準content では従来の +keyPc と一致）。相対bass/chord_pattern もこの実調コードに当たる。
   const sectionChords: ChordEntry[] = children.flatMap((c) => {
     const k = c.node.neta.kind;
     if (k !== "chord" && k !== "chord_progression") return [];
+    const shift = harmonyPlacementShift(keyPc, c.node.neta.key ?? 0);
     return chordsOf(c.node.neta.content).map((ch) => ({
       ...ch,
-      root: ((ch.root + keyPc) % 12 + 12) % 12,
+      root: ((ch.root + shift) % 12 + 12) % 12,
       start: ch.start + c.position,
     }));
   });
@@ -446,12 +456,13 @@ export function compositeNotes(
         program: prog,
       }));
     }
-    // メロは**旋法を保った相対移調**（短調メロ→section調号の相対短調等。design「メロ配置の調規則」）。
-    // 他（コード等）は section 調へ素直移調。rhythm は移調しない。同旋法/mode不明は keyPc と一致＝後退ゼロ。
+    // メロは**旋法を保った相対移調**（短調メロ→section調号の相対短調等）。コード/ベース絶対は
+    // **自分の調から section 調へ key-aware 半音移調**（F#m進行を二重移調しない）。rhythm は移調しない。
+    // いずれも C基準content(key=0/mode未指定)では従来挙動に一致＝後退ゼロ。
     const shift =
       kind === "melody"
         ? melodyPlacementShift(keyPc, sectionMode, c.node.neta.mode, c.node.neta.key ?? 0)
-        : keyPc;
+        : harmonyPlacementShift(keyPc, c.node.neta.key ?? 0);
     return notesForContent(kind, c.node.neta.content).map((n) => ({
       ...n,
       pitch: isRhythm ? n.pitch : n.pitch + shift,
