@@ -108,7 +108,12 @@ export function ChordEditor({
           <button type="button" aria-label={`remove-chord-${i}`} onClick={() => remove(i)}>✕</button>
         </div>
       ))}
-      <button type="button" className="bs-btn" onClick={add}>＋コード</button>
+      <div className="chord-foot">
+        <button type="button" className="bs-btn" onClick={add}>＋コード</button>
+        {chords.length > 0 && (
+          <span className="muted chord-total">計 {chords.reduce((s, c) => s + c.dur, 0)}拍（{Math.round((chords.reduce((s, c) => s + c.dur, 0) / 4) * 10) / 10}小節）</span>
+        )}
+      </div>
     </div>
   );
 }

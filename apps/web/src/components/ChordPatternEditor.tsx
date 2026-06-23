@@ -1,6 +1,8 @@
 import { type Ref } from "react";
 import { type ChordPatternContent, type ChordTone } from "../music";
 import { BarsControl } from "./BarsControl";
+import { MiniRoll } from "./MiniRoll";
+import type { Neta } from "../api";
 
 const NAME_PX = 58;
 const BEAT_PX = 88;
@@ -41,8 +43,16 @@ export function ChordPatternEditor({
     onChange({ ...pattern, voicing: { ...v, tones: (has ? v.tones.filter((x) => x !== t) : [...v.tones, t]).sort((a, b) => TONES.indexOf(a) - TONES.indexOf(b)) } });
   };
 
+  // voicing の結果（key tonic に解決した積み和音）をピアノロールで可視化（ドッグフード[中]）。
+  const previewNeta = { kind: "chord_pattern", content: pattern, key: 0 } as unknown as Neta;
+
   return (
     <div className="rhythm-editor" ref={scrollerRef}>
+      {pattern.hits.length > 0 && (
+        <div className="chord-roll" aria-label="voicing-roll">
+          <MiniRoll neta={previewNeta} />
+        </div>
+      )}
       <div className="cp-controls">
         <div className="input-toggle">
           <button type="button" className={pattern.mode === "strum" ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "strum" })}>ストラム</button>

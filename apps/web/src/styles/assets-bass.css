@@ -300,3 +300,7 @@ article header {
 .chord-len .len { padding: 2px 6px; font-size: 0.78rem; }
 /* CV3：埋まってる単一パートのセルは置けない（淡色） */
 .lane-cell.locked { opacity: 0.35; cursor: not-allowed; }
+
+/* 長さボタンの選択中ハイライト（ドッグフード[高]・.on のCSS欠落を補う）。 */
+.chord-len .len.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.chord-foot { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
