@@ -23,6 +23,7 @@ export * from "./continuation";
 export * from "./generate";
 export * from "./similarity";
 export * from "./chordname";
+export * from "./melodyEssence";
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {

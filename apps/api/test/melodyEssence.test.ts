@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { melodyEssence, contourSim, rhythmSim, pcSim } from "../src/music/melodyEssence";
+import { melodyEssence, contourSim, rhythmSim, pcSim, normalizeToC } from "../src/music/melodyEssence";
 import { melodySimilarity, melodySimilarityLayered } from "../src/music/similarity";
 
 const N = (pitch: number, start: number, dur = 0.5) => ({ pitch, start, dur });
@@ -47,5 +47,14 @@ describe("多層 melodySimilarity（S4b）", () => {
   it("完全一致は多層でも1", () => {
     const a = [N(60, 0), N(64, 0.5), N(67, 1)];
     expect(melodySimilarityLayered(a, a)).toBeCloseTo(1);
+  });
+});
+
+describe("コーパス正規化 normalizeToC（S5b）", () => {
+  it("調の主音→C(pc0)に移調＝コード度数列と同じC基準規約", () => {
+    const g = [N(67, 0), N(71, 0.5), N(74, 1)]; // G major の G-B-D
+    const c = normalizeToC(g, 7); // key=G(7) → C基準へ
+    expect(c.map((n) => n.pitch)).toEqual([60, 64, 67]); // C-E-G（音程は不変＝相対化のみ）
+    expect(melodyEssence(c).intervals).toEqual(melodyEssence(g).intervals); // 音程列は不変
   });
 });

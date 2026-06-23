@@ -74,3 +74,10 @@ export function pcSim(a: number[], b: number[]): number {
   for (let i = 0; i < 12; i++) inter += Math.min(a[i] ?? 0, b[i] ?? 0);
   return Math.max(0, Math.min(1, inter)); // 両方正規化済＝交差は 0..1
 }
+
+// メロコーパス正規化（S5b・spec§5）：調の主音→C(pc0) になるよう移調＝コード進行コーパスと同じ C基準規約。
+// 著作権はエッセンス層(§3)で担保＝ここは保存/表示の規約合わせ（移調＝相対化）。元 key は別途保持して復元可。
+export function normalizeToC(notes: Note[], key = 0): Note[] {
+  const k = ((Math.trunc(key) % 12) + 12) % 12;
+  return (notes ?? []).map((n) => ({ ...n, pitch: n.pitch - k }));
+}
