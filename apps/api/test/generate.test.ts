@@ -100,6 +100,33 @@ describe("genMelody 骨格（S1c・フレーズ/息継ぎ/カデンツ着地）"
   });
 });
 
+describe("genMelody 弱拍装飾（S3b・経過/刺繍＝コードトーンの周りで踊る）", () => {
+  const ch = [{ root: 0, quality: "", start: 0, dur: 32 }];
+  const gen = (seed: number) =>
+    (genMelody({ bars: 8, meter: "4/4" }, ch, seed).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+  const isCT = (p: number) => [0, 4, 7].includes(((p % 12) + 12) % 12);
+  it("弱拍の非和声音は孤立しない（少なくとも片側は歩進で繋がる＝踊る/解決）", () => {
+    const notes = gen(5).slice().sort((a, b) => a.start - b.start);
+    let weakNct = 0;
+    let connected = 0;
+    for (let i = 1; i < notes.length - 1; i++) {
+      const cur = notes[i]!;
+      if (cur.start < 0 || Number.isInteger(cur.start) || isCT(cur.pitch)) continue; // 弱拍の非和声音のみ
+      if (notes[i + 1]!.start - cur.start > 1 || cur.start - notes[i - 1]!.start > 1) continue;
+      weakNct++;
+      const inStep = Math.abs(cur.pitch - notes[i - 1]!.pitch) <= 2;
+      const outStep = Math.abs(notes[i + 1]!.pitch - cur.pitch) <= 2;
+      if (inStep || outStep) connected++; // 片側でも歩進＝孤立してない（経過/刺繍/倚音/逸音）
+    }
+    if (weakNct >= 3) expect(connected / weakNct).toBeGreaterThanOrEqual(0.7);
+  });
+  it("決定的（同seed一致）", () => {
+    expect(JSON.stringify(gen(5))).toBe(JSON.stringify(gen(5)));
+  });
+});
+
 describe("genMelody 位置駆動の変奏（S3a）", () => {
   const ch = [{ root: 0, quality: "", start: 0, dur: 16 }];
   it("変奏は句機能で決定的（seed非依存に構造が同じ＝乱数でばらさない）＝リズム骨格が一致", () => {

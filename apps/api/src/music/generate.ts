@@ -404,6 +404,9 @@ export function genMelody(
   // 拍0=曲頭の位置は保つ（負start＝前にはみ出す。compositeNotes/再生は既に負start対応）。
   if ((f.pickup ?? 0) > 0 && notes.length > 0) prependPickup(notes, f.pickup!, scaleArr);
 
+  // 弱拍装飾（S3b）：コードトーンの周りで踊る（3度の間=経過/同音=刺繍）。滑り込みより前＝強拍は未変更。
+  decorateWeak(notes, scaleArr, strongSet, perBar, lo, hi);
+
   // 滑り込み（S2b・spec§10.4）：**最後に**強拍へ倚音をもたせ直後の弱拍で下行解決＝もたれ/滑り込み。
   // phrasing 後に置くので解決音が上書きされない。表情ノブ既定は控えめ（sparse=やや多め/busy=少なめ）。
   const expr = typeof f.expression === "number" ? f.expression : bias.long >= 1.5 ? 0.3 : bias.busy >= 1.5 ? 0.15 : 0.2;
@@ -563,6 +566,41 @@ function enforceResolution(
     const next = i < notes.length - 1 ? notes[i + 1]!.pitch : null;
     if (classifyNCT(prev, cur.pitch, next, ch) === "other") {
       cur.pitch = snapTo(cur.pitch, new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")), lo, hi);
+    }
+  }
+}
+
+// 弱拍の装飾（S3b・spec§10.4）：コードトーンの周りで「踊る」。前後の音が3度なら間を**経過音**で埋め、
+// 同音なら**刺繍音**（歩進で離れて戻る）にする＝歩進で解決する正しい非和声音に。強拍/負startは触らない。
+function decorateWeak(
+  notes: { pitch: number; start: number; dur: number }[],
+  scaleArr: number[],
+  strongSet: Set<number>,
+  perBar: number,
+  lo: number,
+  hi: number,
+): void {
+  notes.sort((a, b) => a.start - b.start);
+  const isStrong = (start: number): boolean => {
+    if (start < 0) return false;
+    const pos = Math.round((((start % perBar) + perBar) % perBar) * 1000) / 1000;
+    return Number.isInteger(start) || strongSet.has(pos);
+  };
+  const step = (p: number, dir: number): number => {
+    const d = toScaleDegree(p, scaleArr);
+    return Math.max(lo, Math.min(hi, degreeToPitch(d.idx + dir, d.oct, scaleArr)));
+  };
+  for (let i = 1; i < notes.length - 1; i++) {
+    const cur = notes[i]!;
+    const prev = notes[i - 1]!.pitch;
+    const next = notes[i + 1]!.pitch;
+    if (isStrong(cur.start)) continue; // 強拍(骨格音)は保つ
+    if (notes[i + 1]!.start - cur.start > 1 || cur.start - notes[i - 1]!.start > 1) continue; // 近接のみ（句跨ぎ除外）
+    const d = next - prev;
+    if (Math.abs(d) === 3 || Math.abs(d) === 4) {
+      cur.pitch = step(prev, Math.sign(d)); // 3度の間＝経過音（前から1歩進、次へも1歩進で解決）
+    } else if (d === 0 && prev === cur.pitch) {
+      cur.pitch = step(prev, 1); // 静止(同音反復)＝上の刺繍音（離れて戻る）
     }
   }
 }
