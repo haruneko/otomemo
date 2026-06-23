@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 from typing import Callable
 
@@ -116,15 +117,23 @@ def claude_prompt(prompt: str, timeout: int = 120, tools: bool = False) -> str:
     tools=True かつ CM_MUSIC_MCP_URL があれば cm-music ツールを agentic に使える（#86 S2b）。"""
     binary = shutil.which(CLAUDE_BIN) or CLAUDE_BIN
     args = [binary, "-p", prompt] + (_mcp_args() if tools else [])
-    proc = subprocess.run(
-        args,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
+    # start_new_session=True で子を新プロセスグループのリーダーに＝timeout 時に killpg で claude＋
+    # 孫(MCP stdio = pnpm ... mcp)ごと殺す（孤児プロセス乱立を断つ・design「アーキ是正 決定4」）。
+    proc = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True
     )
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+        proc.communicate()
+        raise
     if proc.returncode != 0:
-        raise RuntimeError(f"claude failed ({proc.returncode}): {proc.stderr.strip()[:300]}")
-    return proc.stdout.strip()
+        raise RuntimeError(f"claude failed ({proc.returncode}): {(err or '').strip()[:300]}")
+    return (out or "").strip()
 
 
 def handle_brainstorm(params: dict) -> dict:

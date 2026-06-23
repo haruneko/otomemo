@@ -693,6 +693,21 @@ export class Core {
     return this.getJob(cont.id);
   }
 
+  // 運用ヘルス（/health 用）：滞留(queued)・実行中・直近失敗・最古queuedの待ち秒。可観測性の最小限。
+  healthStats(): { queued: number; running: number; failed: number; oldestQueuedAgeSec: number | null } {
+    const count = (sql: string): number => (this.db.prepare(sql).get() as { c: number }).c;
+    const queued = count(`SELECT COUNT(*) c FROM job WHERE status='queued'`);
+    const running = count(`SELECT COUNT(*) c FROM job WHERE status='running'`);
+    const failed = count(`SELECT COUNT(*) c FROM job WHERE status='failed'`);
+    const oldest = this.db
+      .prepare(`SELECT created FROM job WHERE status='queued' ORDER BY created ASC LIMIT 1`)
+      .get() as { created: string } | undefined;
+    const oldestQueuedAgeSec = oldest
+      ? Math.max(0, Math.round((Date.now() - new Date(oldest.created).getTime()) / 1000))
+      : null;
+    return { queued, running, failed, oldestQueuedAgeSec };
+  }
+
   listJobs(q: JobQuery = {}): Job[] {
     const where: string[] = [];
     const params: Record<string, unknown> = {};

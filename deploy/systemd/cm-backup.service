@@ -1,0 +1,9 @@
+[Unit]
+Description=creative_manager DB バックアップ（sqlite backup API・世代保持は backup.sh 内）
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/creative_manager
+EnvironmentFile=-%h/.config/creative-manager.env
+Environment=CM_DB=%h/projects/creative_manager/data/cm.sqlite
+ExecStart=/usr/bin/env bash -lc 'exec bash scripts/backup.sh'

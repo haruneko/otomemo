@@ -87,15 +87,6 @@ wait_http "http://${CM_HOST}:8787/facets" "api(:8787 @${CM_HOST})" 45 || { echo 
 wait_port 127.0.0.1 8788 "cm-search(:8788)" 20 || echo "  (cm-search 未listen=意味検索は LIKE 退避・後退ゼロ)"
 wait_port 127.0.0.1 "$CM_MUSIC_MCP_PORT" "cm-music-mcp(:${CM_MUSIC_MCP_PORT})" 20 || echo "  (cm-music-mcp 未listen=agentic は dispatch にフォールバック)"
 
-# --- systemd --user ユニット例（~/.config/systemd/user/creative-manager.service）---
-# [Unit]
-# Description=creative_manager
-# [Service]
-# Type=oneshot
-# RemainAfterExit=yes
-# Environment=CM_HOST=100.x.x.x   # ← 自分の Tailscale IP（出先から届かせる）
-# WorkingDirectory=%h/projects/creative_manager
-# ExecStart=/usr/bin/env bash scripts/start-all.sh
-# [Install]
-# WantedBy=default.target
-#   有効化: systemctl --user enable --now creative-manager ; loginctl enable-linger $USER
+# --- 常駐運用は systemd --user を推奨（自動再起動＋起動順＋日次バックアップ＋journaldログ）---
+#   導入: bash deploy/systemd/install.sh
+#   この start-all.sh は開発・手起動用（systemd と二重起動しないこと）。

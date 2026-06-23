@@ -70,6 +70,22 @@ describe("http auth gate (#36)", () => {
     }
   });
 
+  it("GET /health はトークン不要で jobs 統計を返す（S4）", async () => {
+    const prev = process.env.CM_TOKEN;
+    process.env.CM_TOKEN = "secret";
+    try {
+      const gated = buildHttp(new Core(openDb(":memory:")));
+      await gated.ready();
+      const r = await gated.inject({ method: "GET", url: "/health" }); // トークン無しでも通る
+      expect(r.statusCode).toBe(200);
+      expect(r.json().ok).toBe(true);
+      expect(r.json().jobs).toHaveProperty("queued");
+    } finally {
+      if (prev === undefined) delete process.env.CM_TOKEN;
+      else process.env.CM_TOKEN = prev;
+    }
+  });
+
   it("GET /neta は scope で出し分け（project既定/library/all）＋copy", async () => {
     await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", title: "作業" } });
     const lib = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "chord_progression", title: "取込", scope: "library" } })).json();

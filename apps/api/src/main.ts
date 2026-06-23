@@ -12,6 +12,17 @@ const port = Number(process.env.PORT ?? 8787);
 // 外へは `tailscale serve 8787`(tailnet限定) で出す。LAN直開放したい時だけ CM_HOST=0.0.0.0。
 const host = process.env.CM_HOST ?? "127.0.0.1";
 
+// 公開ガード（design「アーキ是正 決定4」）：LAN直開放(0.0.0.0)でトークン無しは事故＝起動拒否。
+// Tailscale IP 等の非loopbackは tailnet が境界＝設計どおり許容だが、トークン無しは警告。
+const loopback = host === "127.0.0.1" || host === "localhost" || host === "::1";
+if (!loopback && !process.env.CM_TOKEN) {
+  if (host === "0.0.0.0") {
+    console.error("拒否: CM_HOST=0.0.0.0(LAN開放) で CM_TOKEN 未設定は危険。CM_TOKEN を設定して起動してください。");
+    process.exit(1);
+  }
+  console.warn(`警告: CM_HOST=${host}(非loopback) で CM_TOKEN 未設定。Tailscale tailnet 限定前提。LAN/funnel 公開なら CM_TOKEN を設定すべき。`);
+}
+
 if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
 
 const core = new Core(openDb(dbPath));

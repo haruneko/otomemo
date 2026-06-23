@@ -31,11 +31,35 @@ export function buildHttp(core: Core): FastifyInstance {
   // #36 公開制御：CM_TOKEN を設定したときだけ x-cm-token 必須（未設定=LAN内開放のまま）。
   // 未発表素材を外から覗かれないための任意ゲート。
   app.addHook("onRequest", async (req, reply) => {
+    if (req.url === "/health" || req.url.startsWith("/health?")) return; // 監視はトークン不要
     const required = process.env.CM_TOKEN;
     if (!required) return;
     if (req.headers["x-cm-token"] !== required) {
       return reply.code(401).send({ error: "unauthorized" });
     }
+  });
+
+  // 運用ヘルス（systemd/監視用・トークン不要）。queued滞留・失敗数・依存ポート(search/music-mcp)疎通。
+  app.get("/health", async () => {
+    const s = core.healthStats();
+    const reach = async (url: string): Promise<boolean> => {
+      try {
+        const ctrl = AbortSignal.timeout(1500);
+        await fetch(url, { signal: ctrl });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const [search, musicMcp] = await Promise.all([
+      reach(`${SEARCH_URL}/`),
+      process.env.CM_MUSIC_MCP_URL ? reach(process.env.CM_MUSIC_MCP_URL) : Promise.resolve(false),
+    ]);
+    return {
+      ok: true,
+      jobs: s,
+      deps: { "cm-search": search, "cm-music-mcp": musicMcp },
+    };
   });
 
   // #77 ファイルアップロード（SoundFont等）。上限256MB。
