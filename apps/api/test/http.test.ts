@@ -89,6 +89,16 @@ describe("http auth gate (#36)", () => {
     expect(named.json()[0].name).toBe("丸の内");
   });
 
+  it("POST /gen/section は生成→ネタ化→合成を1コールで（dogfood P4）", async () => {
+    const r = await app.inject({ method: "POST", url: "/gen/section", payload: { frame: { bars: 4, mood: "切ない" }, parts: ["chord_progression", "melody", "bass", "rhythm"], seed: 7 } });
+    expect(r.statusCode).toBe(200);
+    const { section, composition } = r.json();
+    expect(section.kind).toBe("section");
+    expect(composition.children.length).toBe(4); // 4パートが section に compose 済
+    const kinds = composition.children.map((c: any) => c.node.neta.kind).sort();
+    expect(kinds).toEqual(["bass", "chord_progression", "melody", "rhythm"]);
+  });
+
   it("GET /health はトークン不要で jobs 統計を返す（S4）", async () => {
     const prev = process.env.CM_TOKEN;
     process.env.CM_TOKEN = "secret";
