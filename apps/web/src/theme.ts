@@ -71,9 +71,9 @@ const vivid = (h: string): string => {
   return rgbToHex(l + (r - l) * 1.4, l + (g - l) * 1.4, l + (b - l) * 1.4);
 };
 const mono = (h: string): string => {
-  const [r, g, b] = hexToRgb(h); // 彩度を落としてモノクロ（明度で見分ける）
+  const [r, g, b] = hexToRgb(h); // 完全グレースケール（kind は明度だけで見分ける＝モノクロ）
   const l = lum(r, g, b);
-  return rgbToHex(l + (r - l) * 0.15, l + (g - l) * 0.15, l + (b - l) * 0.15);
+  return rgbToHex(l, l, l);
 };
 const mapColors = (fn: (h: string) => string): Record<ColorKind, string> =>
   Object.fromEntries(KINDS_COLORED.map((k) => [k, fn(DEFAULT_COLORS[k])])) as Record<ColorKind, string>;
