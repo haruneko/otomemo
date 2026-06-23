@@ -266,7 +266,7 @@ export function NetaDialog({
             </select>
           </label>
         )}
-        {(isMelody || isBass) && (
+        {(isMelody || isBass || isChordPat) && (
           <label className="meta">
             音色
             <select

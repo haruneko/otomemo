@@ -302,9 +302,10 @@ describe("genChordPattern（コード楽器パターン・CP4）", () => {
     const a = genChordPattern({ bars: 2, meter: "4/4" }, 5);
     const it0 = a.items[0]!;
     expect(it0.kind).toBe("chord_pattern");
-    const c = it0.content as { steps: number; hits: number[]; voicing: { tones: string[] }; mode: string };
+    const c = it0.content as { steps: number; hits: { step: number; dur: number }[]; voicing: { tones: string[] }; mode: string };
     expect(c.steps).toBe(32); // 2小節×16
-    expect(c.hits).toEqual([0, 4, 8, 12, 16, 20, 24, 28]); // 既定=拍頭(4step毎)
+    expect(c.hits.map((h) => h.step)).toEqual([0, 4, 8, 12, 16, 20, 24, 28]); // 既定=拍頭(4step毎)
+    expect(c.hits.every((h) => h.dur === 4)).toBe(true); // 各音の長さ＝拍(4step)
     expect(c.voicing.tones).toEqual(["R", "3", "5"]);
     expect(JSON.stringify(a)).toBe(JSON.stringify(genChordPattern({ bars: 2, meter: "4/4" }, 5))); // 決定的
   });

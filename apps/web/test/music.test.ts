@@ -283,7 +283,7 @@ describe("music", () => {
   // #57① Transport化：スケジュール時刻の純関数（音は鳴らさず算出だけ検証）
   describe("chord pattern (CP2・進行に解決する和音版)", () => {
     const cp = (over: Partial<import("../src/music").ChordPatternContent> = {}) => ({
-      mode: "strum" as const, voicing: { tones: ["R", "3", "5"] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0 }, steps: 16, hits: [0, 8], ...over,
+      mode: "strum" as const, voicing: { tones: ["R", "3", "5"] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0 }, steps: 16, hits: [{ step: 0, dur: 8 }, { step: 8, dur: 8 }], ...over,
     });
     it("strum：各 hit でコードを voicing して和音ブロック（C→[48,52,55]）", () => {
       const notes = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
@@ -292,20 +292,20 @@ describe("music", () => {
       expect(notes.filter((n) => n.start === 0).every((n) => n.dur === 2)).toBe(true); // 次hit(step8=2拍)まで
     });
     it("arp：構成音を1つずつ巡回（各 hit 1音）", () => {
-      const notes = resolveChordPattern(cp({ mode: "arp", hits: [0, 4, 8] }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      const notes = resolveChordPattern(cp({ mode: "arp", hits: [{ step: 0, dur: 4 }, { step: 4, dur: 4 }, { step: 8, dur: 4 }] }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
       expect(notes.length).toBe(3); // 3 hit = 3音
       expect(notes.map((n) => n.pitch)).toEqual([48, 52, 55]); // R,3,5 を巡回
     });
     it("コードチェンジに解決（後半は次コード G の voicing）", () => {
       const chords = [{ root: 0, quality: "", start: 0, dur: 2 }, { root: 7, quality: "", start: 2, dur: 2 }];
-      const notes = resolveChordPattern(cp({ hits: [0, 8] }), chords, 0); // step8=2拍=G
+      const notes = resolveChordPattern(cp({ hits: [{ step: 0, dur: 8 }, { step: 8, dur: 8 }] }), chords, 0); // step8=2拍=G
       const atG = notes.filter((n) => n.start === 2).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
       expect(atG).toEqual([2, 7, 11]); // G B D = pc 7,11,2
     });
     it("合成(CP5)：section の進行に解決して鳴る（chord_progression→chord_pattern）", () => {
       const children = [
         { position: 0, node: { neta: { kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }] } } } },
-        { position: 0, node: { neta: { kind: "chord_pattern", content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [0, 16] } } } },
+        { position: 0, node: { neta: { kind: "chord_pattern", content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [{ step: 0, dur: 16 }, { step: 16, dur: 16 }] } } } },
       ];
       const notes = compositeNotes(children, 0);
       const at0 = notes.filter((n) => n.start === 0 && n.program === 0).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);

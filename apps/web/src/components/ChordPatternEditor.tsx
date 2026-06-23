@@ -1,4 +1,4 @@
-import { type Ref } from "react";
+import { useState, type Ref } from "react";
 import { type ChordPatternContent, type ChordTone } from "../music";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
@@ -7,6 +7,12 @@ import type { Neta } from "../api";
 const NAME_PX = 58;
 const BEAT_PX = 88;
 const TONES: ChordTone[] = ["R", "3", "5", "7"];
+const LENGTHS = [
+  { label: "16", v: 1 },
+  { label: "8", v: 2 },
+  { label: "4", v: 4 },
+  { label: "2分", v: 8 },
+];
 
 // 拍子→1小節step数（1step=16分）。4/4=16, 6/8=12, 3/4=12。複合(6/8系)はビート=6step。
 function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
@@ -33,10 +39,15 @@ export function ChordPatternEditor({
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
+  const [len, setLen] = useState(4); // 各音の長さ（step数・既定=四分）
   const v = pattern.voicing;
   const bars = Math.max(1, Math.round(pattern.steps / stepsPerBar));
-  const toggleHit = (s: number) =>
-    onChange({ ...pattern, hits: pattern.hits.includes(s) ? pattern.hits.filter((h) => h !== s) : [...pattern.hits, s].sort((a, b) => a - b) });
+  const startAt = (s: number) => pattern.hits.find((h) => h.step === s);
+  const sustainAt = (s: number) => pattern.hits.some((h) => h.step < s && s < h.step + h.dur);
+  const toggleHit = (s: number) => {
+    if (startAt(s)) onChange({ ...pattern, hits: pattern.hits.filter((h) => h.step !== s) }); // 同所タップ＝消す
+    else onChange({ ...pattern, hits: [...pattern.hits, { step: s, dur: len }].sort((a, b) => a.step - b.step) });
+  };
   const toggleTone = (t: ChordTone) => {
     const has = v.tones.includes(t);
     if (has && v.tones.length <= 1) return; // 最低1音は残す
@@ -74,6 +85,12 @@ export function ChordPatternEditor({
           <span aria-label="octave">{v.octave}</span>
           <button type="button" aria-label="oct-inc" onClick={() => onChange({ ...pattern, voicing: { ...v, octave: Math.min(2, v.octave + 1) } })}>＋</button>
         </div>
+        <div className="cp-tones" aria-label="lengths">
+          <span className="muted">音長</span>
+          {LENGTHS.map((l) => (
+            <button key={l.v} type="button" aria-label={`len-${l.v}`} className={len === l.v ? "len on" : "len"} onClick={() => setLen(l.v)}>{l.label}</button>
+          ))}
+        </div>
         <BarsControl bars={bars} max={4} onChange={(n) => onChange({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
       </div>
       <div
@@ -89,7 +106,7 @@ export function ChordPatternEditor({
             key={s}
             type="button"
             aria-label={`hit-${s}`}
-            className={"rhythm-cell" + (pattern.hits.includes(s) ? " on" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
+            className={"rhythm-cell" + (startAt(s) ? " on" : sustainAt(s) ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
             onClick={() => toggleHit(s)}
           />
         ))}

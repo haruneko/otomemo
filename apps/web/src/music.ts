@@ -271,17 +271,23 @@ export function resolveRelativeBass(
 export type ChordPatternMode = "strum" | "arp";
 export type ChordTone = "R" | "3" | "5" | "7";
 export interface ChordVoicing { tones: ChordTone[]; openClose: "open" | "close"; octave: number }
+export interface ChordHit { step: number; dur: number } // dur=step数（1step=16分）＝各音の長さを指定
 export interface ChordPatternContent {
   mode: ChordPatternMode;
   voicing: ChordVoicing;
   steps: number; // 1step=16分（リズム/相対ベースと同じグリッド）
-  hits: number[]; // 発音する step
+  hits: ChordHit[]; // 発音する step とその長さ
   program?: number; // 自前の音色（ベースのように選べる）
 }
 const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
 
+// hits は {step,dur} が正。旧 number[] も受ける（既定 dur=4step=四分）＝後方互換。
+function normHits(hits: unknown): ChordHit[] {
+  return (Array.isArray(hits) ? hits : []).map((h) => (typeof h === "number" ? { step: h, dur: 4 } : (h as ChordHit)));
+}
+
 export function emptyChordPattern(): ChordPatternContent {
-  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [0, 8, 16, 24] };
+  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
 }
 
 // コードを voicing で実音化：構成音(R/3/5/7)をルートから積み、open は1つおきに+12で広げる（スケッチ範囲）。
@@ -297,15 +303,13 @@ function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
 export function resolveChordPattern(content: ChordPatternContent, chords: ChordEntry[] = [], key = 0): Note[] {
   const mode = content?.mode ?? "strum";
   const v = content?.voicing ?? { tones: ["R", "3", "5"], openClose: "close", octave: 0 };
-  const steps = content?.steps ?? 32;
-  const hits = [...(content?.hits ?? [])].sort((a, b) => a - b);
+  const hits = normHits(content?.hits).sort((a, b) => a.step - b.step);
   const out: Note[] = [];
   let arpIdx = 0;
   for (let h = 0; h < hits.length; h++) {
-    const step = hits[h]!;
+    const step = hits[h]!.step;
     const start = Math.round(step * BASS_STEP_TO_BEAT * 1000) / 1000;
-    const next = hits[h + 1] ?? steps;
-    const dur = Math.round((next - step) * BASS_STEP_TO_BEAT * 1000) / 1000;
+    const dur = Math.round(Math.max(1, hits[h]!.dur) * BASS_STEP_TO_BEAT * 1000) / 1000; // 各音の指定長さ
     if (dur <= 0) continue;
     const ch = bassChordAt(start, chords);
     const root = ch ? ch.root : ((key % 12) + 12) % 12;

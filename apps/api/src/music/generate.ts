@@ -661,8 +661,8 @@ export function genChordPattern(frame?: Frame | null, seed?: number | null): Gen
   const steps = bars * stepsPerBar;
   const bias = densityBias(f.mood ?? "", f.tempo);
   const per = bias.long >= 1.5 ? stepsPerBar : bias.busy >= 1.5 ? 2 : 4; // sparse=小節頭/busy=八分/既定=拍頭
-  const hits: number[] = [];
-  for (let s = 0; s < steps; s += per) hits.push(s);
+  const hits: { step: number; dur: number }[] = [];
+  for (let s = 0; s < steps; s += per) hits.push({ step: s, dur: per }); // 各音は次の発音まで＝つながるコンピング
   const mode = rng.next() < 0.25 ? "arp" : "strum"; // たまにアルペジオ
   const content = { mode, voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps, hits };
   return { items: [{ kind: "chord_pattern", content, label: "コード楽器" }], edges: [] };
