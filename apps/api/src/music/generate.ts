@@ -4,6 +4,7 @@
 import { chordPcs, normRoot, scalePcs } from "./theory";
 import { planSkeleton } from "./skeleton";
 import { meterInfo } from "./meter";
+import { classifyNCT, isChordTone } from "./degree";
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -27,6 +28,7 @@ export interface Frame {
   bars?: number;
   mood?: string;
   pickup?: number; // 弱起（アウフタクト）：拍0の前に置く拍数（0=無し）。
+  expression?: number; // 素直⇔表情ノブ（0..1）：強拍に倚音等の滑り込みを置く頻度。既定は mood で控えめ。
 }
 export interface GenResult {
   items: { kind: string; content: unknown; label: string }[];
@@ -69,6 +71,7 @@ export function normalizeFrame(frame?: Frame | null): Frame {
   if (typeof f.bars === "number") out.bars = Math.max(1, Math.min(16, Math.trunc(f.bars)));
   if (f.mood) out.mood = String(f.mood);
   if (typeof f.pickup === "number" && f.pickup > 0) out.pickup = Math.min(2, f.pickup);
+  if (typeof f.expression === "number") out.expression = Math.max(0, Math.min(1, f.expression));
   return out;
 }
 
@@ -385,6 +388,7 @@ export function genMelody(
 
   // 跳躍後の順次反行（S2a・spec§7-5）：4度以上跳躍の直後の「弱拍」音は逆向き歩進に補正＝ギャップフィル。
   recoverLeaps(notes, scaleArr, strongSet, perBar, lo, hi);
+  enforceResolution(notes, chords, lo, hi); // 孤立NCT掃除（カデンツ着地の前＝カデンツ音は消さない）
 
   // 骨格層（S1c・spec§10.5-10.6）：句末で①カデンツ度数に着地②息継ぎ（末尾を切って休符）。
   // モチーフ反復・拍頭コードトーンは保ったまま、上に「呼吸」を被せる。
@@ -393,6 +397,11 @@ export function genMelody(
   // 弱起（S1d・spec§10.3）：拍0の前に upbeat を前置し、最初のダウンビート音へ歩進で滑り込む。
   // 拍0=曲頭の位置は保つ（負start＝前にはみ出す。compositeNotes/再生は既に負start対応）。
   if ((f.pickup ?? 0) > 0 && notes.length > 0) prependPickup(notes, f.pickup!, scaleArr);
+
+  // 滑り込み（S2b・spec§10.4）：**最後に**強拍へ倚音をもたせ直後の弱拍で下行解決＝もたれ/滑り込み。
+  // phrasing 後に置くので解決音が上書きされない。表情ノブ既定は控えめ（sparse=やや多め/busy=少なめ）。
+  const expr = typeof f.expression === "number" ? f.expression : bias.long >= 1.5 ? 0.3 : bias.busy >= 1.5 ? 0.15 : 0.2;
+  applyExpression(notes, chords, scaleArr, expr, rng, strongSet, perBar, lo, hi);
 
   if (notes.length === 0) notes.push({ pitch: 72, start: 0, dur: 1 }); // 全休は避ける
   const label = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
@@ -492,6 +501,63 @@ function recoverLeaps(
     const dir = leap > 0 ? -1 : 1; // 跳躍と逆向き
     const d = toScaleDegree(notes[i]!.pitch, scaleArr);
     nxt.pitch = Math.max(lo, Math.min(hi, degreeToPitch(d.idx + dir, d.oct, scaleArr)));
+  }
+}
+
+// 滑り込み能動生成（S2b・spec§10.4）：強拍のコードトーンを「1度上の非和声音(倚音)」に差し替え、
+// 直後の弱拍を元のコードトーンへ**下行歩進で解決**＝強拍にもたれて滑り込む表情。頻度＝表情ノブ。
+function applyExpression(
+  notes: { pitch: number; start: number; dur: number }[],
+  chords: { root?: number | string; quality?: string; start?: number; dur?: number }[] | undefined,
+  scaleArr: number[],
+  knob: number,
+  rng: Rng,
+  strongSet: Set<number>,
+  perBar: number,
+  lo: number,
+  hi: number,
+): void {
+  if (knob <= 0) return;
+  notes.sort((a, b) => a.start - b.start);
+  const isStrong = (start: number): boolean => {
+    if (start < 0) return false;
+    const pos = Math.round((((start % perBar) + perBar) % perBar) * 1000) / 1000;
+    return Number.isInteger(start) || strongSet.has(pos);
+  };
+  for (let i = 1; i < notes.length - 1; i++) {
+    const cur = notes[i]!;
+    const next = notes[i + 1]!;
+    if (!isStrong(cur.start) || isStrong(next.start)) continue; // 強拍にもたれ→弱拍で解決
+    const ch = chordAt(Math.floor(cur.start), chords);
+    if (!ch || !isChordTone(cur.pitch, ch)) continue;
+    if (rng.next() >= knob) continue;
+    const ct = cur.pitch;
+    const d = toScaleDegree(ct, scaleArr);
+    const appog = degreeToPitch(d.idx + 1, d.oct, scaleArr); // 1スケール度上＝倚音候補
+    if (appog < lo || appog > hi || isChordTone(appog, ch) || Math.abs(appog - ct) > 2) continue;
+    cur.pitch = appog; // 強拍に非和声音でもたれる
+    next.pitch = ct; // 下行歩進で元のコードトーンへ解決
+  }
+}
+
+// 解決保証（S2b・spec§7-6）：孤立した非和声音(classifyNCT="other"＝跳躍入り跳躍抜け等)を最近傍
+// コードトーンへ寄せて消す＝孤立NCTゼロ。経過/刺繍/倚音/掛留/逸音は解決を伴うので残す。
+function enforceResolution(
+  notes: { pitch: number; start: number; dur: number }[],
+  chords: { root?: number | string; quality?: string; start?: number; dur?: number }[] | undefined,
+  lo: number,
+  hi: number,
+): void {
+  notes.sort((a, b) => a.start - b.start);
+  for (let i = 0; i < notes.length; i++) {
+    const cur = notes[i]!;
+    const ch = chordAt(Math.floor(Math.max(0, cur.start)), chords);
+    if (!ch) continue;
+    const prev = i > 0 ? notes[i - 1]!.pitch : null;
+    const next = i < notes.length - 1 ? notes[i + 1]!.pitch : null;
+    if (classifyNCT(prev, cur.pitch, next, ch) === "other") {
+      cur.pitch = snapTo(cur.pitch, new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")), lo, hi);
+    }
   }
 }
 

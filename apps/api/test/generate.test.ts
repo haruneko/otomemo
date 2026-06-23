@@ -100,6 +100,33 @@ describe("genMelody 骨格（S1c・フレーズ/息継ぎ/カデンツ着地）"
   });
 });
 
+describe("genMelody 滑り込み（S2b・倚音/解決保証/表情ノブ）", () => {
+  const ch = [{ root: 0, quality: "", start: 0, dur: 32 }]; // Cずっと（コードトーン=C/E/G=pc0,4,7）
+  const isCT = (p: number) => [0, 4, 7].includes(((p % 12) + 12) % 12);
+  const gen = (expr: number) =>
+    (genMelody({ bars: 8, meter: "4/4", expression: expr }, ch, 5).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+  it("表情ノブ↑で強拍の滑り込み(非和声音)が増える（素直⇔表情）", () => {
+    const strongNct = (notes: { pitch: number; start: number }[]) =>
+      notes.filter((n) => n.start >= 0 && Number.isInteger(n.start) && !isCT(n.pitch)).length;
+    expect(strongNct(gen(0.9))).toBeGreaterThan(strongNct(gen(0)));
+  });
+  it("滑り込み(強拍NCT)は歩進で解決する（直後の音へ±2半音）＝孤立しない", () => {
+    const notes = gen(0.9).slice().sort((a, b) => a.start - b.start);
+    for (let i = 0; i < notes.length - 1; i++) {
+      const cur = notes[i]!;
+      const next = notes[i + 1]!;
+      if (cur.start < 0 || !Number.isInteger(cur.start) || isCT(cur.pitch)) continue;
+      if (next.start - cur.start > 1) continue; // 句末の間(休符)越えは解決対象外
+      expect(Math.abs(next.pitch - cur.pitch)).toBeLessThanOrEqual(2); // 歩進解決
+    }
+  });
+  it("決定的（同seed一致）", () => {
+    expect(JSON.stringify(gen(0.5))).toBe(JSON.stringify(gen(0.5)));
+  });
+});
+
 describe("genMelody 頂点アーチ・跳躍後反行（S2a）", () => {
   const ch = [{ root: 0, quality: "", start: 0, dur: 32 }];
   it("最高音が後半(≈0.62)に来る＝上行→頂点→下行のアーチ", () => {

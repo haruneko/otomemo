@@ -1,7 +1,10 @@
 // メロ生成の「度数内部モデル」（design #12-M）。保存は絶対ピッチのまま＝ここは genMelody の内部で
 // 「度数(+oct+alter)＋コード文脈→文法で組む→degreeToPitch で絶対ピッチへ描画」するための純関数。
 // #86：音符はルール（決定的）が作る。調非依存（度数）＝要件「調に依存せず流用・比較・差し替え」。
-import { chordPcs, MAJOR_SCALE, MINOR_SCALE, type Chord } from "./theory";
+import { chordPcs, MAJOR_SCALE, MINOR_SCALE } from "./theory";
+
+// コードは root 任意（chordAt 由来の緩い形も受ける）。root 既定=0。
+export type ChordLike = { root?: number | string; quality?: string };
 
 export type Mode = "major" | "minor";
 // degree=1..7（音階度数）、alter=半音変化（0=音階音／+1=半音上＝下位音階音からの#）、octave=相対オクターブ。
@@ -40,16 +43,16 @@ export function degreeToPitch(d: Deg, key = 0, mode: Mode = "major"): number {
 }
 
 // その音がコードトーンか（pitch%12 ∈ chordPcs）。既存 chordPcs を使う＝コード既知前提。
-export function isChordTone(pitch: number, chord: Chord): boolean {
+export function isChordTone(pitch: number, chord: ChordLike): boolean {
   const pc = ((pitch % 12) + 12) % 12;
-  return chordPcs(chord.root, chord.quality ?? "").includes(pc);
+  return chordPcs(chord.root ?? 0, chord.quality ?? "").includes(pc);
 }
 
 export type NctKind = "chord" | "passing" | "neighbor" | "appoggiatura" | "suspension" | "escape" | "other";
 
 // 非和声音の分類（単旋律＝ポップス的処理。多声対位法は対象外＝要件line160）。prev/next は隣接ピッチ(無ければnull)。
 // 「滑り込み」文法の判定＋連想エッセンスE5の材料を兼ねる。歩進=|半音|≤2、跳躍=≥3。
-export function classifyNCT(prev: number | null, cur: number, next: number | null, chord: Chord): NctKind {
+export function classifyNCT(prev: number | null, cur: number, next: number | null, chord: ChordLike): NctKind {
   if (isChordTone(cur, chord)) return "chord";
   const din = prev == null ? null : cur - prev; // 入りの音程
   const dout = next == null ? null : next - cur; // 抜けの音程
