@@ -3,6 +3,7 @@
 // 乱数は seed 付き（Pythonのbyte等価は不可＝MT vs ここ。musicalルールが等価＝property testで担保）。
 import { chordPcs, normRoot, scalePcs } from "./theory";
 import { planSkeleton } from "./skeleton";
+import { meterInfo } from "./meter";
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -25,6 +26,7 @@ export interface Frame {
   tempo?: number;
   bars?: number;
   mood?: string;
+  pickup?: number; // 弱起（アウフタクト）：拍0の前に置く拍数（0=無し）。
 }
 export interface GenResult {
   items: { kind: string; content: unknown; label: string }[];
@@ -66,6 +68,7 @@ export function normalizeFrame(frame?: Frame | null): Frame {
   if (typeof f.tempo === "number" && f.tempo > 0) out.tempo = f.tempo;
   if (typeof f.bars === "number") out.bars = Math.max(1, Math.min(16, Math.trunc(f.bars)));
   if (f.mood) out.mood = String(f.mood);
+  if (typeof f.pickup === "number" && f.pickup > 0) out.pickup = Math.min(2, f.pickup);
   return out;
 }
 
@@ -143,12 +146,22 @@ function densityBias(mood: string, tempo?: number): { busy: number; long: number
   return { busy: 1, long: 1, rest: 1 };
 }
 
-function pickFig(rng: Rng, figs: RhyFig[], bias: { busy: number; long: number; rest: number }, allowMulti: boolean, forceOnset: boolean): RhyFig {
-  const cands = figs.filter((c) => (allowMulti || c.span === 1) && !(forceOnset && (c.rest || c.on.length === 0 || c.on[0]![0] !== 0)));
+function pickFig(rng: Rng, figs: RhyFig[], bias: { busy: number; long: number; rest: number }, remain: number, forceOnset: boolean): RhyFig {
+  const cands = figs.filter((c) => c.span <= remain + 1e-9 && !(forceOnset && (c.rest || c.on.length === 0 || c.on[0]![0] !== 0)));
   const pool = cands.length ? cands : [figs[0]!];
   const weights = pool.map((c) => c.w * (c.busy ? bias.busy : 1) * (c.long ? bias.long : 1) * (c.rest ? bias.rest : 1));
   return rng.choices(pool, weights);
 }
+
+// 6/8 など複合拍子ネイティブのリズム図形（1ビート＝付点四分=1.5四分）。6/8の「長短」のうねりを出す。
+const COMPOUND_FIGS: RhyFig[] = [
+  { on: [[0, 1.5]], span: 1.5, w: 2.2, long: true }, // ♩.（1ビート丸ごと）
+  { on: [[0, 1], [1, 0.5]], span: 1.5, w: 2.6 }, // ♩♪（長短＝6/8基本ノリ）
+  { on: [[0, 0.5], [0.5, 1]], span: 1.5, w: 1.1, busy: true }, // ♪♩（短長）
+  { on: [[0, 0.5], [0.5, 0.5], [1, 0.5]], span: 1.5, w: 1.5, busy: true }, // ♪♪♪（3連八分）
+  { on: [[0, 1]], span: 1.5, w: 0.9 }, // ♩＋八分休符（間）
+  { on: [], span: 1.5, w: 0.7, rest: true }, // 休符（1ビート）
+];
 
 // スケールを昇順pcの配列に（degree歩幅で辿るため）。ソートして畳み込み回避。
 function scaleArray(scale: Set<number>): number[] {
@@ -214,13 +227,13 @@ interface Motif {
 }
 
 // モチーフを1つ生成：リズム図形を小節幅まで並べ、各発音にスケール歩幅(コントゥア)を割り当て。
-function buildMotif(rng: Rng, perBar: number, bias: { busy: number; long: number; rest: number }): Motif {
+function buildMotif(rng: Rng, perBar: number, bias: { busy: number; long: number; rest: number }, figs: RhyFig[] = MELODY_FIGS): Motif {
   const hits: { off: number; dur: number; step: number }[] = [];
   let beat = 0;
   let step = 0; // 累積スケール歩幅（開始音=0）
-  while (beat < perBar) {
+  while (beat < perBar - 1e-9) {
     const remain = perBar - beat;
-    const fig = pickFig(rng, MELODY_FIGS, bias, remain >= 2, beat === 0); // 小節頭は必ず発音
+    const fig = pickFig(rng, figs, bias, remain, beat === 0); // 小節頭は必ず発音
     for (const [off, durRaw] of fig.on) {
       const t = beat + off;
       if (t >= perBar) break;
@@ -243,9 +256,9 @@ function buildMotif(rng: Rng, perBar: number, bias: { busy: number; long: number
 // モチーフ生成は単発draw だと音数の分散が大きく mood 密度が安定しない。
 // 候補を数本引いて、busy mood なら音数最多／sparse mood なら最少を採用（密度を単調化）。
 // 反復は壊さない（採用された動機を全小節で使い回すのは従来通り）。
-function buildMotifSteered(rng: Rng, perBar: number, bias: { busy: number; long: number; rest: number }): Motif {
+function buildMotifSteered(rng: Rng, perBar: number, bias: { busy: number; long: number; rest: number }, figs: RhyFig[] = MELODY_FIGS): Motif {
   const cands: Motif[] = [];
-  for (let i = 0; i < 3; i++) cands.push(buildMotif(rng, perBar, bias));
+  for (let i = 0; i < 3; i++) cands.push(buildMotif(rng, perBar, bias, figs));
   const wantBusy = bias.busy >= 1.5;
   const wantSparse = bias.long >= 1.5;
   if (wantBusy) return cands.reduce((a, b) => (b.hits.length > a.hits.length ? b : a));
@@ -269,6 +282,7 @@ function placeMotif(
   variation: VarKind,
   lo: number,
   hi: number,
+  strongSet: Set<number>, // 小節内の強拍位置（複合拍子で 1.5 等の非整数頭もコードトーンにスナップ）
 ): { pitch: number; start: number; dur: number }[] {
   const out: { pitch: number; start: number; dur: number }[] = [];
   const base = toScaleDegree(startPitch, scaleArr);
@@ -285,8 +299,9 @@ function placeMotif(
     if (variation === "tail" && i === lastIdx && lastIdx > 0) step = motif.hits[i - 1]!.step; // 末尾変化：終止を寄せる
     step += seqShift; // 移高(sequence)：度数を1つ持ち上げ/下げ
     let pitch = degreeToPitch(base.idx + step, base.oct, scaleArr);
-    // 拍頭・コードチェンジ位置はコードトーンへスナップ（ハモる）。
-    const onBeatHead = Number.isInteger(t);
+    // 拍頭・コードチェンジ位置はコードトーンへスナップ（ハモる）。複合拍子は強拍(1.5等)も含める。
+    const posInBar = Math.round((t - barBeat) * 1000) / 1000;
+    const onBeatHead = Number.isInteger(t) || strongSet.has(posInBar);
     const ch = chordAt(Math.floor(t), chords);
     const ctPcs = ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
     const allowed = onBeatHead ? ctPcs : scale;
@@ -310,15 +325,19 @@ export function genMelody(
   const scale = scalePcs(0, minor ? "minor" : "major");
   const scaleArr = scaleArray(scale);
   const bars = barsOf(f);
-  const bpb = beatsPerBar(f.meter);
+  const info = meterInfo(f.meter); // 拍子→拍構造（6/8 一級）
+  const compound = info.grouping === "compound";
+  const figs = compound ? COMPOUND_FIGS : MELODY_FIGS; // 6/8等は複合拍ネイティブの図形
+  const strongSet = new Set(info.strongPositions); // 小節内強拍（複合拍の1.5等もスナップ対象）
+  const bpb = info.beatsPerBar;
   const total = Math.max(1, Math.round(bars * bpb));
-  const perBar = Math.max(1, Math.round(bpb));
+  const perBar = bpb; // 動機の幅＝1小節（複合拍は付点ビート×群でタイル）
   const bias = densityBias(mood, f.tempo);
   const lo = 60;
   const hi = 84;
 
-  // 1) モチーフを1つ生成（seedで決定的・mood密度で音数を単調化）。
-  const motif = buildMotifSteered(rng, perBar, bias);
+  // 1) モチーフを1つ生成（seedで決定的・mood密度で音数を単調化・拍子ネイティブの図形）。
+  const motif = buildMotifSteered(rng, perBar, bias, figs);
 
   const notes: { pitch: number; start: number; dur: number }[] = [];
   let startPitch = 72; // 動機の開始音（前小節の開始音を引き継いで流れを作る）
@@ -340,7 +359,7 @@ export function genMelody(
         [7, 1.2, 1.2, 1, 0.6],
       );
     }
-    const barNotes = placeMotif(motif, barBeat, total, startPitch, scaleArr, chords, scale, variation, lo, hi);
+    const barNotes = placeMotif(motif, barBeat, total, startPitch, scaleArr, chords, scale, variation, lo, hi, strongSet);
     for (const n of barNotes) notes.push(n);
     // 次小節の開始音は今小節の開始音（=確定した最初の音）から引き継ぐ＝動機の連続性。
     if (barNotes.length > 0) startPitch = barNotes[0]!.pitch;
@@ -349,6 +368,10 @@ export function genMelody(
   // 骨格層（S1c・spec§10.5-10.6）：句末で①カデンツ度数に着地②息継ぎ（末尾を切って休符）。
   // モチーフ反復・拍頭コードトーンは保ったまま、上に「呼吸」を被せる。
   applyPhrasing(notes, scaleArr, bias, f.meter, bars, lo, hi);
+
+  // 弱起（S1d・spec§10.3）：拍0の前に upbeat を前置し、最初のダウンビート音へ歩進で滑り込む。
+  // 拍0=曲頭の位置は保つ（負start＝前にはみ出す。compositeNotes/再生は既に負start対応）。
+  if ((f.pickup ?? 0) > 0 && notes.length > 0) prependPickup(notes, f.pickup!, scaleArr);
 
   if (notes.length === 0) notes.push({ pitch: 72, start: 0, dur: 1 }); // 全休は避ける
   const label = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
@@ -412,6 +435,18 @@ function applyPhrasing(
   for (const n of keep) notes.push(n);
 }
 
+// 弱起を前置（破壊的）：最初のダウンビート音の1スケール度下から歩進で滑り込む upbeat を負startで足す。
+function prependPickup(
+  notes: { pitch: number; start: number; dur: number }[],
+  pickup: number,
+  scaleArr: number[],
+): void {
+  const first = notes.reduce((a, b) => (b.start < a.start ? b : a));
+  const deg = toScaleDegree(first.pitch, scaleArr);
+  const below = degreeToPitch(deg.idx - 1, deg.oct, scaleArr); // 1スケール度下＝歩進で滑り込む
+  notes.push({ pitch: below, start: round3(-pickup), dur: round3(pickup) }); // 拍0の前（負start）
+}
+
 // ベースの図形（メロより落ち着き：四分主体＋たまに8分のルート→5度/オクターブ、長音）。
 const BASS_FIGS: RhyFig[] = [
   { on: [[0, 1]], span: 1, w: 3 }, // ♩
@@ -437,7 +472,7 @@ export function genBass(
   let beat = 0;
   while (beat < total) {
     const onBar = beat % perBar === 0;
-    const fig = pickFig(rng, BASS_FIGS, bias, beat + 2 <= total, true); // ベースは毎拍頭から発音
+    const fig = pickFig(rng, BASS_FIGS, bias, total - beat, true); // ベースは毎拍頭から発音
     const ch = chordAt(Math.floor(beat), chords);
     const root = ch ? normRoot(ch.root ?? 0) : 0;
     fig.on.forEach(([off, durRaw], i) => {

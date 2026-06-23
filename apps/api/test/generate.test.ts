@@ -119,6 +119,34 @@ describe("genMelody 骨格（S1c・フレーズ/息継ぎ/カデンツ着地）"
   });
 });
 
+describe("genMelody 拍子・弱起（S1d）", () => {
+  const ch = [{ root: 0, quality: "", start: 0, dur: 24 }];
+  it("6/8：小節長=3拍基準・複合拍ネイティブ（付点ビート1.5に乗る/付点長音が出る）", () => {
+    const notes = (genMelody({ bars: 4, meter: "6/8" }, ch, 5).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    expect(Math.max(...notes.map((n) => n.start + n.dur))).toBeLessThanOrEqual(12 + 1e-6); // 4小節×3拍
+    const posInBar = notes.map((n) => Math.round((n.start % 3) * 100) / 100);
+    expect(posInBar.includes(1.5)).toBe(true); // 第2付点ビート頭に乗る＝複合拍の感触
+    expect(notes.some((n) => Math.abs(n.dur - 1.5) < 1e-6 || Math.abs(n.dur - 1) < 1e-6)).toBe(true); // 付点四分/四分
+  });
+  it("弱起 pickup>0：負startの upbeat が前置され、拍0(ダウンビート)は保たれ、歩進で滑り込む", () => {
+    const notes = (genMelody({ bars: 4, meter: "4/4", pickup: 1 }, ch, 5).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    const pickup = notes.filter((n) => n.start < 0);
+    expect(pickup.length).toBe(1); // 弱起1音
+    expect(pickup[0]!.start).toBe(-1);
+    const downbeat = notes.filter((n) => n.start >= 0).reduce((a, b) => (b.start < a.start ? b : a));
+    expect(downbeat.start).toBe(0); // 拍0は後ろにずれない
+    expect(Math.abs(pickup[0]!.pitch - downbeat.pitch)).toBeLessThanOrEqual(2); // 歩進で滑り込む
+  });
+  it("pickup 既定0：負start無し（既存挙動不変）", () => {
+    const notes = (genMelody({ bars: 2, meter: "4/4" }, ch, 5).items[0]!.content as { notes: { start: number }[] }).notes;
+    expect(notes.every((n) => n.start >= 0)).toBe(true);
+  });
+});
+
 describe("genBass（ルート/5度＋リズム）", () => {
   it("先頭=ルート・低域・リズムあり", () => {
     const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
