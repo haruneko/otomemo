@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Neta } from "../api";
+import { api, type Neta, type NetaPatch } from "../api";
 import { moraLines } from "../lyrics";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
@@ -11,6 +11,7 @@ import { ChordEditor } from "./ChordEditor";
 import { RhythmEditor } from "./RhythmEditor";
 import { BarsControl } from "./BarsControl";
 import { SectionEditor } from "./SectionEditor";
+import { KindEditorBody } from "./KindEditorBody";
 import {
   notesOf,
   chordsOf,
@@ -151,6 +152,18 @@ export function NetaDialog({
     }
   }
 
+  // kind ごとの保存パッチ（旧：5分岐三項ネスト → if-chain で平坦化）。C基準保存・調/拍はヒント。
+  function savePatch(): NetaPatch {
+    if (isRelBass)
+      // #bass S2 相対モード：度数パターンを保存（再生時にコード/調で解決）。
+      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, tempo, bars: Math.max(1, Math.round(bassSteps / 16)) };
+    if (isMelody || isBass) return { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) };
+    if (isChord) return { content: { chords, program }, key, tempo };
+    if (isRhythm) return { content: { rhythm }, tempo };
+    if (isContainer) return { key, tempo, meter };
+    return {};
+  }
+
   async function save() {
     setBusy(true);
     try {
@@ -162,23 +175,7 @@ export function NetaDialog({
           .map((t) => t.trim())
           .filter(Boolean),
         mood: mood.trim() || null,
-        ...(isRelBass
-          ? {
-              // #bass S2 相対モード：度数パターンを保存（再生時にコード/調で解決）。
-              content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program },
-              key,
-              tempo,
-              bars: Math.max(1, Math.round(bassSteps / 16)),
-            }
-          : isMelody || isBass
-          ? { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) }
-          : isChord
-            ? { content: { chords, program }, key, tempo }
-            : isRhythm
-              ? { content: { rhythm }, tempo }
-              : isContainer
-                ? { key, tempo, meter }
-                : {}),
+        ...savePatch(),
       });
       onChanged?.();
       onClose();
@@ -322,121 +319,22 @@ export function NetaDialog({
           onChange={(e) => setMood(e.target.value)}
         />
       </div>
-      <div className="editor-body">
-        {isMelody || isBass ? (
-          <div className="melody-input">
-            {/* #bass S2: bass は 絶対(ピアノロール)/相対(度数グリッド) をモード切替 */}
-            {isBass && (
-              <div className="input-toggle">
-                <button
-                  type="button"
-                  className={bassMode === "absolute" ? "on" : ""}
-                  onClick={() => setBassMode("absolute")}
-                >
-                  絶対
-                </button>
-                <button
-                  type="button"
-                  className={bassMode === "relative" ? "on" : ""}
-                  onClick={() => setBassMode("relative")}
-                >
-                  相対
-                </button>
-              </div>
-            )}
-            {isRelBass ? (
-              <BassStepEditor
-                pattern={bassPattern}
-                onChange={setBassPattern}
-                steps={bassSteps}
-                onStepsChange={setBassSteps}
-                playheadRef={tp.lineRef}
-                scrollerRef={tp.scrollerRef}
-              />
-            ) : (
-              <>
-                <div className="input-toggle">
-                  <button
-                    type="button"
-                    className={melodyView === "roll" ? "on" : ""}
-                    onClick={() => setMelodyView("roll")}
-                  >
-                    ロール
-                  </button>
-                  <button
-                    type="button"
-                    className={melodyView === "pad" ? "on" : ""}
-                    onClick={() => setMelodyView("pad")}
-                  >
-                    パッド
-                  </button>
-                </div>
-                {melodyView === "roll" ? (
-                  <>
-                  <BarsControl
-                    bars={Math.max(1, Math.round(len / 4))}
-                    max={Math.max(4, Math.ceil(len / 4))}
-                    onChange={(n) => setLen(n * 4)}
-                  />
-                  <PianoRoll
-                    notes={notes}
-                    onChange={setNotes}
-                    beats={len}
-                    low={isBass ? 28 : undefined}
-                    high={isBass ? 55 : undefined}
-                    playheadRef={tp.lineRef}
-                    scrollerRef={tp.scrollerRef}
-                  />
-                  </>
-                ) : (
-                  <StepPad
-                    notes={notes}
-                    onChange={setNotes}
-                    playheadRef={tp.lineRef}
-                    scrollerRef={tp.scrollerRef}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        ) : isChord ? (
-          <ChordEditor chords={chords} onChange={setChords} beatRef={tp.beatRef} playing={tp.playing} />
-        ) : isRhythm ? (
-          <RhythmEditor
-            rhythm={rhythm}
-            onChange={setRhythm}
-            playheadRef={tp.lineRef}
-            scrollerRef={tp.scrollerRef}
-          />
-        ) : isContainer ? (
-          <SectionEditor
-            neta={neta}
-            keyPc={key}
-            tempo={tempo}
-            meter={meter}
-            reloadSignal={reloadSignal}
-            onChanged={onChanged}
-          />
-        ) : (
-          <div className="text-editor">
-            <textarea
-              aria-label="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-            {neta.kind === "lyric" && text.trim() && (
-              <div className="mora-panel" aria-label="mora">
-                {moraLines(text).map((m, i) => (
-                  <div key={i} className="mora-line">
-                    <span className="mora-count">{m.count}</span>
-                    <span className="mora-text">{m.line || "　"}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <KindEditorBody
+        neta={neta}
+        flags={{ isMelody, isBass, isChord, isRhythm, isContainer, isRelBass }}
+        notes={notes} setNotes={setNotes}
+        chords={chords} setChords={setChords}
+        rhythm={rhythm} setRhythm={setRhythm}
+        bassPattern={bassPattern} setBassPattern={setBassPattern}
+        bassSteps={bassSteps} setBassSteps={setBassSteps}
+        bassMode={bassMode} setBassMode={setBassMode}
+        melodyView={melodyView} setMelodyView={setMelodyView}
+        len={len} setLen={setLen}
+        text={text} setText={setText}
+        keyPc={key} tempo={tempo} meter={meter}
+        reloadSignal={reloadSignal} onChanged={onChanged}
+        tp={{ lineRef: tp.lineRef, scrollerRef: tp.scrollerRef, beatRef: tp.beatRef, playing: tp.playing }}
+      />
       {isMusic && (
         <TransportBar
           state={tp.state}
