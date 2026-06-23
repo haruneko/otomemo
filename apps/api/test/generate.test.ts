@@ -23,26 +23,35 @@ describe("genChords（機能和声ルール）", () => {
   });
 });
 
-describe("genMelody（コードトーン拘束）", () => {
-  it("拍頭はコードトーン・音数=総拍数", () => {
+describe("genMelody（コードトーン拘束＋リズム図形）", () => {
+  it("拍頭=コードトーン・音域内・リズムに variety（四分縛りでない）", () => {
     const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
-    const { items } = genMelody({ bars: 1, meter: "4/4" }, chords, 5);
-    const notes = (items[0]!.content as { notes: { pitch: number; start: number }[] }).notes;
-    expect(notes.length).toBe(4);
+    const { items } = genMelody({ bars: 2, meter: "4/4" }, chords, 5);
+    const notes = (items[0]!.content as { notes: { pitch: number; start: number; dur: number }[] }).notes;
+    expect(notes.length).toBeGreaterThan(0);
     const tones = new Set(chordPcs(0, "")); // C E G
-    expect(tones.has(((notes[0]!.pitch % 12) + 12) % 12)).toBe(true); // 拍頭=コードトーン
+    expect(tones.has(((notes[0]!.pitch % 12) + 12) % 12)).toBe(true); // 先頭=コードトーン
     expect(notes.every((n) => n.pitch >= 60 && n.pitch <= 84)).toBe(true);
+    expect(notes.every((n) => n.start >= 0 && n.start + n.dur <= 8 + 1e-6)).toBe(true); // 範囲内
+    // 四分(dur=1)以外のリズムが出る（♪/付点/二分/休符）＝四分縛りの解消
+    expect(notes.some((n) => n.dur !== 1)).toBe(true);
+  });
+  it("明るい(busy)は切ない(sparse)より音数が多い（密度がmoodで動く）", () => {
+    const ch = [{ root: 0, quality: "", start: 0, dur: 4 }];
+    const bright = (genMelody({ bars: 4, mood: "明るい" }, ch, 1).items[0]!.content as { notes: unknown[] }).notes.length;
+    const sad = (genMelody({ bars: 4, mood: "切ない" }, ch, 1).items[0]!.content as { notes: unknown[] }).notes.length;
+    expect(bright).toBeGreaterThan(sad);
   });
 });
 
-describe("genBass（強拍ルート/弱拍5度・低域）", () => {
-  it("強拍=ルート、弱拍=5度、C2基準", () => {
+describe("genBass（ルート/5度＋リズム）", () => {
+  it("先頭=ルート・低域・リズムあり", () => {
     const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
-    const { items } = genBass({ bars: 1, meter: "4/4" }, chords);
-    const notes = (items[0]!.content as { notes: { pitch: number }[] }).notes;
-    expect(notes[0]!.pitch).toBe(36); // 強拍=ルート C2
-    expect(notes[1]!.pitch).toBe(36 + 7); // 弱拍=5度 G2
-    expect(notes.every((n) => n.pitch >= 36 && n.pitch < 48)).toBe(true);
+    const notes = (genBass({ bars: 2, meter: "4/4" }, chords).items[0]!.content as { notes: { pitch: number; start: number; dur: number }[] }).notes;
+    expect(notes[0]!.pitch).toBe(36); // 小節頭=ルート C2
+    expect(notes.every((n) => n.pitch >= 36 && n.pitch < 48)).toBe(true); // C2基準低域
+    expect(notes.every((n) => [36, 36 + 7].includes(n.pitch))).toBe(true); // ルート or 5度
+    expect(notes.length).toBeGreaterThan(0);
   });
 });
 

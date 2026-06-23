@@ -119,7 +119,45 @@ function chordAt(t: number, chords?: { root?: number | string; quality?: string;
   return null;
 }
 
-/** コードトーン拘束のメロディ（拍頭=コードトーン、間=スケール音で順次）。返り #85 items 形。 */
+// リズム図形（1拍=四分を基準に、拍内オフセット[off,dur](拍単位)で刻む）。span=消費する拍数。
+// busy=細かい(明るい/速い向き)、long=長音(切ない/遅い向き)、空onは休符。四分縛りを解くための核。
+interface RhyFig { on: [number, number][]; span: number; w: number; busy?: boolean; long?: boolean; rest?: boolean }
+const MELODY_FIGS: RhyFig[] = [
+  { on: [[0, 1]], span: 1, w: 2.5 }, // ♩
+  { on: [[0, 0.5], [0.5, 0.5]], span: 1, w: 2.5, busy: true }, // ♪♪
+  { on: [[0, 0.5], [0.5, 0.25], [0.75, 0.25]], span: 1, w: 1, busy: true }, // ♪♬
+  { on: [[0, 0.25], [0.25, 0.25], [0.5, 0.5]], span: 1, w: 0.8, busy: true }, // ♬♪
+  { on: [[0, 0.75], [0.75, 0.25]], span: 1, w: 1.2 }, // ♪.+16 付点
+  { on: [[0.5, 0.5]], span: 1, w: 0.9 }, // 休符→♪（シンコペ）
+  { on: [[0, 2]], span: 2, w: 1.3, long: true }, // 二分（長音）
+  { on: [], span: 1, w: 0.8, rest: true }, // 休符
+];
+
+// mood/tempo から「密度バイアス」。切ない/遅い=長音・休符寄り、明るい/速い=細分寄り。
+function densityBias(mood: string, tempo?: number): { busy: number; long: number; rest: number } {
+  const sparse = isMinorMood(mood) || /バラード|ballad|遅|slow|静|アンビ|ambient/.test(mood.toLowerCase());
+  const fast = /明る|元気|アップ|upbeat|fast|速|ダンス|dance|ポップ|pop/.test(mood.toLowerCase()) || (tempo ?? 0) >= 130;
+  if (fast) return { busy: 2.0, long: 0.4, rest: 0.6 };
+  if (sparse) return { busy: 0.5, long: 1.8, rest: 1.4 };
+  return { busy: 1, long: 1, rest: 1 };
+}
+
+function pickFig(rng: Rng, figs: RhyFig[], bias: { busy: number; long: number; rest: number }, allowMulti: boolean, forceOnset: boolean): RhyFig {
+  const cands = figs.filter((c) => (allowMulti || c.span === 1) && !(forceOnset && (c.rest || c.on.length === 0 || c.on[0]![0] !== 0)));
+  const pool = cands.length ? cands : [figs[0]!];
+  const weights = pool.map((c) => c.w * (c.busy ? bias.busy : 1) * (c.long ? bias.long : 1) * (c.rest ? bias.rest : 1));
+  return rng.choices(pool, weights);
+}
+
+// 1音の音高を選ぶ：拍頭/コード位置はコードトーン、間はスケールで順次（前音から小さく動く）。
+function pickPitch(rng: Rng, prev: number, allowed: Set<number>, lo: number, hi: number): number {
+  let cands = range(prev - 7, prev + 8).filter((p) => p >= lo && p <= hi && allowed.has(((p % 12) + 12) % 12));
+  if (cands.length === 0) cands = range(lo, hi + 1).filter((p) => allowed.has(((p % 12) + 12) % 12));
+  if (cands.length === 0) cands = [prev];
+  return rng.choices(cands, cands.map((p) => 1 / (1 + Math.abs(p - prev))));
+}
+
+/** コードトーン拘束＋**リズム図形**のメロディ（拍頭=コードトーン、休符/付点/シンコペ/長音で動く）。 */
 export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
@@ -134,46 +172,71 @@ export function genMelody(
   const bpb = beatsPerBar(f.meter);
   const total = Math.max(1, Math.round(bars * bpb));
   const perBar = Math.max(1, Math.round(bpb));
+  const bias = densityBias(mood, f.tempo);
 
   const notes: { pitch: number; start: number; dur: number }[] = [];
   let prev = 72;
-  for (let beat = 0; beat < total; beat++) {
-    const t = beat;
-    const ch = chordAt(t, chords);
-    const downbeat = beat % perBar === 0;
-    const allowed =
-      ch && (downbeat || rng.next() < 0.7)
-        ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? ""))
-        : scale;
-    let cands = range(prev - 7, prev + 8).filter((p) => p >= 60 && p <= 84 && allowed.has(((p % 12) + 12) % 12));
-    if (cands.length === 0)
-      cands = range(60, 85).filter((p) => allowed.has(((p % 12) + 12) % 12));
-    if (cands.length === 0) cands = [prev];
-    const weights = cands.map((p) => 1 / (1 + Math.abs(p - prev)));
-    prev = rng.choices(cands, weights);
-    notes.push({ pitch: prev, start: t, dur: 1 });
+  let beat = 0;
+  while (beat < total) {
+    const onBar = beat % perBar === 0;
+    const fig = pickFig(rng, MELODY_FIGS, bias, beat + 2 <= total, onBar); // 小節頭は必ず発音(forceOnset)
+    for (const [off, durRaw] of fig.on) {
+      const t = beat + off;
+      const dur = Math.min(durRaw, total - t); // 末尾はみ出しを抑える
+      if (dur <= 0) continue;
+      const onBeatHead = off === 0;
+      const ch = chordAt(Math.floor(t), chords);
+      const allowed = ch && (onBeatHead || rng.next() < 0.55) ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
+      prev = pickPitch(rng, prev, allowed, 60, 84);
+      notes.push({ pitch: prev, start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
+    }
+    beat += fig.span;
   }
+  if (notes.length === 0) notes.push({ pitch: 72, start: 0, dur: 1 }); // 全休は避ける
   const label = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
   return { items: [{ kind: "melody", content: { notes }, label }], edges: [] };
 }
 
-/** ベースライン（強拍=ルート、弱拍=5度・C2基準低域）。返り #85 items 形（bass 絶対=notes）。 */
+// ベースの図形（メロより落ち着き：四分主体＋たまに8分のルート→5度/オクターブ、長音）。
+const BASS_FIGS: RhyFig[] = [
+  { on: [[0, 1]], span: 1, w: 3 }, // ♩
+  { on: [[0, 2]], span: 2, w: 1.5, long: true }, // 二分（支え）
+  { on: [[0, 0.5], [0.5, 0.5]], span: 1, w: 1.2, busy: true }, // ♪♪（ルート→5度等）
+  { on: [[0, 0.75], [0.75, 0.25]], span: 1, w: 0.7 }, // 付点（軽い跳ね）
+];
+
+/** ベースライン（強拍=ルート・弱拍=5度/オクターブ）＋**リズム図形**。C2基準低域。 */
 export function genBass(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  seed?: number | null,
 ): GenResult {
   const f = normalizeFrame(frame);
+  const rng = new Rng(seed ?? 42);
   const bars = barsOf(f);
   const bpb = beatsPerBar(f.meter);
   const total = Math.max(1, Math.round(bars * bpb));
   const perBar = Math.max(1, Math.round(bpb));
+  const bias = densityBias(f.mood ?? "", f.tempo);
   const notes: { pitch: number; start: number; dur: number }[] = [];
-  for (let beat = 0; beat < total; beat++) {
-    const ch = chordAt(beat, chords);
+  let beat = 0;
+  while (beat < total) {
+    const onBar = beat % perBar === 0;
+    const fig = pickFig(rng, BASS_FIGS, bias, beat + 2 <= total, true); // ベースは毎拍頭から発音
+    const ch = chordAt(Math.floor(beat), chords);
     const root = ch ? normRoot(ch.root ?? 0) : 0;
-    const pc = beat % perBar === 0 ? root : (root + 7) % 12; // 強拍ルート / 弱拍5度
-    notes.push({ pitch: 36 + pc, start: beat, dur: 1 });
+    fig.on.forEach(([off, durRaw], i) => {
+      const t = beat + off;
+      const dur = Math.min(durRaw, total - t);
+      if (dur <= 0) return;
+      // 拍頭(小節/拍の頭)=ルート、間=5度。たまにオクターブ上で動きを。
+      const fifth = (root + 7) % 12;
+      const pc = off === 0 && (onBar || i === 0) ? root : rng.next() < 0.5 ? fifth : root;
+      notes.push({ pitch: 36 + pc, start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
+    });
+    beat += fig.span;
   }
+  if (notes.length === 0) notes.push({ pitch: 36, start: 0, dur: 1 });
   return { items: [{ kind: "bass", content: { notes }, label: "ベース" }], edges: [] };
 }
 
