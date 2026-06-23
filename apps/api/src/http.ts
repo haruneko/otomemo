@@ -18,7 +18,12 @@ import {
   detectKeyFromNotes,
   melodySimilarity,
   findSimilar,
+  identifyProgression,
+  analyzeProgression,
+  explainProgression,
+  harmonize,
 } from "./music";
+import { findProgressions } from "./progression-search";
 
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
 function assetsDir(): string {
@@ -118,6 +123,12 @@ export function buildHttp(core: Core): FastifyInstance {
       case "detect_key": return detectKeyFromNotes(b.notes);
       case "melody_similarity": return { similarity: melodySimilarity(b.a, b.b) };
       case "find_similar": return findSimilar(b.target, b.candidates, b.top);
+      // 連想エンジン（MCP と同じ機能を HTTP からも・web UI/programmatic 用）。
+      case "identify_progression": return identifyProgression(b.chords, b.key !== undefined ? { key: b.key } : {});
+      case "analyze_progression": return analyzeProgression(b.chords, { key: b.key, mode: b.mode });
+      case "explain_progression": return explainProgression(b.chords, { key: b.key, mode: b.mode });
+      case "harmonize": return harmonize(b.melody, b.key ?? 0, { mode: b.mode, barBeats: b.barBeats });
+      case "find_progressions": return findProgressions(core, { tags: b.tags, like: b.like, limit: b.limit });
       default: return reply.code(404).send({ error: `unknown music op: ${op}` });
     }
   });
