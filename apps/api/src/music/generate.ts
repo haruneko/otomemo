@@ -2,6 +2,7 @@
 // worker(Python)の music/generate.py を忠実移植。Claudeは関与しない（決定的記号エンジン）。
 // 乱数は seed 付き（Pythonのbyte等価は不可＝MT vs ここ。musicalルールが等価＝property testで担保）。
 import { chordPcs, normRoot, scalePcs } from "./theory";
+import { planSkeleton } from "./skeleton";
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -345,9 +346,70 @@ export function genMelody(
     if (barNotes.length > 0) startPitch = barNotes[0]!.pitch;
   }
 
+  // 骨格層（S1c・spec§10.5-10.6）：句末で①カデンツ度数に着地②息継ぎ（末尾を切って休符）。
+  // モチーフ反復・拍頭コードトーンは保ったまま、上に「呼吸」を被せる。
+  applyPhrasing(notes, scaleArr, bias, f.meter, bars, lo, hi);
+
   if (notes.length === 0) notes.push({ pitch: 72, start: 0, dur: 1 }); // 全休は避ける
   const label = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
   return { items: [{ kind: "melody", content: { notes }, label }], edges: [] };
+}
+
+// pitch を「指定ピッチクラス」の最近傍音へ（カデンツ度数への着地）。音域clamp。
+function snapToPc(pitch: number, pc: number, lo: number, hi: number): number {
+  let best = pitch;
+  let bestD = 99;
+  for (let p = lo; p <= hi; p++) {
+    if (((p % 12) + 12) % 12 !== pc) continue;
+    const d = Math.abs(p - pitch);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
+// 句末の息継ぎ長（拍）。period末/最終は長め。mood で sparse 長く・busy 短く。
+function breathLen(strong: boolean, bias: { busy: number; long: number; rest: number }): number {
+  let b = strong ? 1.0 : 0.5;
+  if (bias.long >= 1.5) b *= 1.5; // sparse（切ない/バラード）はより長く呼吸
+  else if (bias.busy >= 1.5) b *= 0.6; // busy（明るい/速い）は短め
+  return b;
+}
+
+// 骨格を音符列に適用（破壊的）：各 phrase の末尾を切って休符＝息継ぎ、最終音をカデンツ度数へ着地。
+function applyPhrasing(
+  notes: { pitch: number; start: number; dur: number }[],
+  scaleArr: number[],
+  bias: { busy: number; long: number; rest: number },
+  meter: string | undefined,
+  bars: number,
+  lo: number,
+  hi: number,
+): void {
+  if (notes.length === 0) return;
+  const phrases = planSkeleton(bars, meter);
+  notes.sort((a, b) => a.start - b.start);
+  const keep: { pitch: number; start: number; dur: number }[] = [];
+  for (const ph of phrases) {
+    const end = ph.startBeat + ph.beats;
+    const cut = end - breathLen(ph.strongBreath, bias); // ここ以降は息継ぎ（無音）にする
+    let inPh = notes.filter((n) => n.start >= ph.startBeat - 1e-6 && n.start < end - 1e-6);
+    if (inPh.length === 0) continue;
+    // 息継ぎ窓（cut以降）に始まる音は落とす。全部落ちるなら先頭1音は残す。
+    let kept = inPh.filter((n) => n.start < cut - 1e-6);
+    if (kept.length === 0) kept = [inPh[0]!];
+    const last = kept[kept.length - 1]!;
+    // 最終音をカデンツ度数(1=主音/5=属音…)のピッチクラスへ着地＝安定音で閉じる。
+    const cadPc = ((scaleArr[(ph.cadenceDegree - 1) % scaleArr.length]! % 12) + 12) % 12;
+    last.pitch = snapToPc(last.pitch, cadPc, lo, hi);
+    // 末尾を cut までに収めて以降を休符に（息継ぎ）。
+    last.dur = Math.max(0.25, Math.min(last.dur, Math.round((cut - last.start) * 1000) / 1000));
+    for (const n of kept) keep.push(n);
+  }
+  notes.length = 0;
+  for (const n of keep) notes.push(n);
 }
 
 // ベースの図形（メロより落ち着き：四分主体＋たまに8分のルート→5度/オクターブ、長音）。

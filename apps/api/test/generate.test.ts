@@ -89,6 +89,36 @@ describe("genMelody（コードトーン拘束＋リズム図形）", () => {
   });
 });
 
+describe("genMelody 骨格（S1c・フレーズ/息継ぎ/カデンツ着地）", () => {
+  const ch = [{ root: 0, quality: "", start: 0, dur: 16 }]; // Cずっと
+  it("各 phrase 末に息継ぎ（休符の間）が空く＝全部 onset で埋まらない", () => {
+    const notes = (genMelody({ bars: 4, meter: "4/4" }, ch, 5).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    for (const [lo, hi] of [[0, 8], [8, 16]] as [number, number][]) {
+      const inPh = notes.filter((n) => n.start >= lo && n.start < hi);
+      const lastEnd = Math.max(...inPh.map((n) => n.start + n.dur));
+      expect(hi - lastEnd).toBeGreaterThan(0.3); // 句末に息継ぎ
+    }
+  });
+  it("カデンツ着地：最終句は主音(pc0)・前楽節末は属音(pc7)へ", () => {
+    const notes = (genMelody({ bars: 4, meter: "4/4" }, ch, 5).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    const lastOf = (lo: number, hi: number) =>
+      notes.filter((n) => n.start >= lo && n.start < hi).sort((a, b) => a.start - b.start).at(-1)!;
+    expect(((lastOf(0, 8).pitch % 12) + 12) % 12).toBe(7); // 前楽節末=属音G
+    expect(((lastOf(8, 16).pitch % 12) + 12) % 12).toBe(0); // 最終=主音C
+  });
+  it("決定的（同seed一致）＋音域内", () => {
+    const a = genMelody({ bars: 4, meter: "4/4" }, ch, 9);
+    const b = genMelody({ bars: 4, meter: "4/4" }, ch, 9);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    const notes = (a.items[0]!.content as { notes: { pitch: number }[] }).notes;
+    expect(notes.every((n) => n.pitch >= 60 && n.pitch <= 84)).toBe(true);
+  });
+});
+
 describe("genBass（ルート/5度＋リズム）", () => {
   it("先頭=ルート・低域・リズムあり", () => {
     const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
