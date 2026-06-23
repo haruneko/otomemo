@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
+import { useAlive, pollJobContent } from "../poll";
 import { MUSIC_KINDS, CONTAINER_KINDS } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
 import {
@@ -48,14 +49,8 @@ export function NetaCard({
   // 再生/停止トグル（#73+停止）。playNotes は単一Transportなので別ネタ再生で自動停止。
   const [playing, setPlaying] = useState(false);
   const handleRef = useRef<PlaybackHandle | null>(null);
-  const alive = useRef(true); // アンマウント後に setState しないためのガード（生成ポーリングは長い）
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-      handleRef.current?.stop();
-    };
-  }, []);
+  const alive = useAlive(); // 生成ポーリングは長い＝アンマウント後 setState を防ぐ（poll.ts 共通）
+  useEffect(() => () => handleRef.current?.stop(), []); // アンマウントで再生停止
 
   async function toggle(getNotes: () => Note[] | Promise<Note[]>, program?: number) {
     if (playing) {
@@ -82,16 +77,8 @@ export function NetaCard({
     return tree ? compositeNotes(tree.children, neta.key ?? 0) : [];
   }
 
-  async function pollContent(jobId: string): Promise<unknown> {
-    // worker の claude_prompt timeout(120s)を超えるまで待つ（落ちても api 側 reaper が拾う）
-    for (let i = 0; i < 90 && alive.current; i++) {
-      const j = await api.getJob(jobId);
-      if (j.status === "done") return (j.result as { content?: unknown } | null)?.content;
-      if (j.status === "failed") return undefined;
-      await new Promise((r) => setTimeout(r, 1500));
-    }
-    return undefined; // タイムアウト or アンマウント
-  }
+  // 生成ジョブの done を待って content を取る（poll.ts 共通・worker timeout超まで待つ／reaper も拾う）
+  const pollContent = (jobId: string) => pollJobContent(jobId, alive);
 
   async function generate(kind: keyof typeof intentOf) {
     setGenOpen(false);

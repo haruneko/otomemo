@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useAlive } from "../poll";
 import { api, type Neta, type ChatMessage, type ChatThread, type JobOutcome } from "../api";
 import { playNotes, notesForContent } from "../music";
 import { MUSIC_KINDS, KIND_LABEL } from "../kinds";
@@ -237,8 +238,7 @@ export function Chat({
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
-  const alive = useRef(true); // ワーカー待ちは長いので、閉じた後に setState しないためのガード
-  useEffect(() => () => void (alive.current = false), []);
+  const alive = useAlive(); // ワーカー待ちは長い＝閉じた後に setState しないためのガード（poll.ts 共通）
   // 複数会話セッション（フリーChatのみ。Claude/ChatGPT風に作って切替/見返す）。
   const [sessionId, setSessionId] = useState(() =>
     target ? "" : (localStorage.getItem("cm-chat-session") ?? "global"),
