@@ -49,3 +49,38 @@ export function applyColors(colors: Record<ColorKind, string>): void {
     document.documentElement.style.setProperty(`--k-${k}`, colors[k]);
   }
 }
+
+// --- カラーテーマ・プリセット（色セットから選ぶ・#12）---
+// 既定パレットを coherent に変換して各プリセットを作る（kind の意味＝色相は保ち、明度/彩度だけ動かす）。
+// 個別の色いじりはプリセット適用後も上書き可能（プリセットは"土台"）。
+function hexToRgb(h: string): [number, number, number] {
+  const m = h.replace("#", "");
+  return [parseInt(m.slice(0, 2), 16), parseInt(m.slice(2, 4), 16), parseInt(m.slice(4, 6), 16)];
+}
+const clamp = (n: number): number => Math.max(0, Math.min(255, Math.round(n)));
+const toHex = (n: number): string => clamp(n).toString(16).padStart(2, "0");
+const rgbToHex = (r: number, g: number, b: number): string => `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+const lum = (r: number, g: number, b: number): number => 0.299 * r + 0.587 * g + 0.114 * b;
+const pastelize = (h: string): string => {
+  const [r, g, b] = hexToRgb(h); // 白に寄せて淡く
+  return rgbToHex(r + (255 - r) * 0.45, g + (255 - g) * 0.45, b + (255 - b) * 0.45);
+};
+const vivid = (h: string): string => {
+  const [r, g, b] = hexToRgb(h); // 灰から離して鮮やかに
+  const l = lum(r, g, b);
+  return rgbToHex(l + (r - l) * 1.4, l + (g - l) * 1.4, l + (b - l) * 1.4);
+};
+const mono = (h: string): string => {
+  const [r, g, b] = hexToRgb(h); // 彩度を落としてモノクロ（明度で見分ける）
+  const l = lum(r, g, b);
+  return rgbToHex(l + (r - l) * 0.15, l + (g - l) * 0.15, l + (b - l) * 0.15);
+};
+const mapColors = (fn: (h: string) => string): Record<ColorKind, string> =>
+  Object.fromEntries(KINDS_COLORED.map((k) => [k, fn(DEFAULT_COLORS[k])])) as Record<ColorKind, string>;
+
+export const THEME_PRESETS: { name: string; colors: Record<ColorKind, string> }[] = [
+  { name: "既定", colors: { ...DEFAULT_COLORS } },
+  { name: "パステル", colors: mapColors(pastelize) },
+  { name: "ビビッド", colors: mapColors(vivid) },
+  { name: "モノクロ", colors: mapColors(mono) },
+];
