@@ -20,6 +20,11 @@ import { findSimilar } from "./music/similarity";
 
 const now = (): string => new Date().toISOString();
 
+// 複数プロジェクト（design「prj: 名前空間タグ」）：プロジェクト所属は `prj:<名前>` タグで表す。
+// 意味タグ(mood/ジャンル)とは別軸＝facets/検索で分離する。
+export const PROJECT_TAG_PREFIX = "prj:";
+export const isProjectTag = (name: string): boolean => name.startsWith(PROJECT_TAG_PREFIX);
+
 // DB の JSON 列は外部書込/部分書込で壊れうる。1行の壊れ JSON で getter/一覧全体が throw するのを防ぐ
 // ＝壊れたら null＋warn（無音にしない・design 決定4／reaper.ts と同方針）。
 function parseJsonColumn(s: unknown, col: string): unknown {
@@ -316,9 +321,16 @@ export class Core {
       mood: distinct("mood") as string[],
       meter: distinct("meter") as string[],
       key: distinct(`"key"`) as number[],
-      tags: (this.db.prepare(`SELECT name FROM tag ORDER BY name`).all() as { name: string }[]).map(
-        (r) => r.name,
-      ),
+      // 全タグを意味タグ（tags）と プロジェクトタグ（prj:）に分離。意味タグは prj: を出さない＝汚さない。
+      ...(() => {
+        const all = (this.db.prepare(`SELECT name FROM tag ORDER BY name`).all() as { name: string }[]).map(
+          (r) => r.name,
+        );
+        return {
+          tags: all.filter((n) => !isProjectTag(n)),
+          projects: all.filter(isProjectTag).map((n) => n.slice(PROJECT_TAG_PREFIX.length)),
+        };
+      })(),
     };
   }
 

@@ -47,7 +47,8 @@ export interface Facets {
   mood: string[];
   meter: string[];
   key: number[];
-  tags: string[];
+  tags: string[]; // 意味タグ（prj: プロジェクトタグは除外）
+  projects: string[]; // プロジェクト名（prj: を剥がしたもの）。複数プロジェクト（design「prj: 名前空間タグ」）
 }
 
 export interface CompositionNode {
