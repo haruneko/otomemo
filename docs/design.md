@@ -283,7 +283,9 @@
 - **配置移調は一意**：メロは**単一調オブジェクト**（メロ編集画面でも調は1つ）。配置位置（先頭小節）の section 調号へ、**メロの旋法を保ったまま**着地：
   - `sectionMajorTonic = (sectionKey + (sectionMode==="minor" ? 3 : 0)) % 12`
   - `landing = (sectionMajorTonic + (melodyMode==="minor" ? 9 : 0)) % 12`（短調メロ→相対短調／長調メロ→長調主音）
-  - content は C基準なので **移調半音 = landing**（あとは音域[60..84]へオクターブ配置）。**メロ自身の `key` は配置では使わず `mode` だけ使う**（`key` は単体再生の調ラベルに降格）。
+  - **【訂正 2026-06-24】メロ content は実音(WYSIWYG・`notesForContent` はメロを key 移調しない)＝主音は `melody.key`**。よって **移調半音 = landing − melody.key**（最寄りオクターブ -5..6 で音域維持）。例：F#m メロ(key=6)を Cmaj へ → landing=A(9)、shift=9−6=+3（F#→A）。
+  - 当初「content は C基準＝移調量=landing・key は使わない」と書いたのは**誤り**（C基準は generate の出力のみ。手描きは実音）。`mode`＝相対/平行の選択、`key`＝主音、の両方を使う。同調(melody.key=着地)は shift=0＝後退ゼロ。
+  - **整合性の前提＝「メロ content の主音 pc = melody.key」**。手描きは成立（実音＋keyを合わせる）。生成は content が C基準(主音0)なので **key も 0 であること**が条件（主 gen 経路は frame.key 未指定＝key=null→0 で OK）。もし生成で key≠0 を付けるなら **materialize 時に content を key へ移調**して実音化し前提を保つ（別タスク）。
   - **ラベル不変**：section を「C」と書こうが「Am」と書こうが短調メロは必ず Am・長調メロは必ず C に着地（同じ調号）。`mode` 不明は major 既定＝**現挙動（`pitch+keyPc`）と一致**＝同旋法は後退ゼロ、異旋法のみ是正。
 - **小節内転調**：本質は「section の調が時間変化」＝将来は*調レーン*（コードレーン同様 位置ごとの key）に一般化可。今は**section が調を1つ宣言で十分**（メロは単一調・跨ぐなら区間ごとに別メロ or 明示当てはめ）。
 - **平行/長調化/コード追従の当てはめ（=別操作）は既定にしない**：欲しければ AI チャット/手動、または既存 `fitToChords`/essence（輪郭+リズム保持で実コードへ再導出）を明示的に一枚重ねる（改善であって正しさには不要）。

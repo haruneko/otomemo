@@ -33,16 +33,22 @@ export function transpose(notes: Note[], semitones: number): Note[] {
 
 // メロ配置の調規則（design「メロ配置の調規則」）：別調のメロを section に置くときの移調半音。
 // メロは単一調オブジェクト。section の調号(主音+旋法)へ**メロの旋法を保ったまま一意移調**する＝
-// 短調メロ→section調号の相対短調・長調メロ→長調主音へ着地。content は C基準なので戻り値＝着地主音pc。
-// mode 不明は major 既定＝従来の `pitch+keyPc` と一致（同旋法は後退ゼロ・異旋法のみ是正）。
+// 短調メロ→section調号の相対短調・長調メロ→長調主音へ着地。
+// **メロ content は実音(WYSIWYG)＝主音は melodyKeyPc**。よって移調量＝着地主音 − メロのkey。
+// 例：F#m メロ(key=6) を Cmaj へ → 着地=A(9)、shift = 9−6 = +3（F#→A）。最寄りオクターブ(-5..6)で
+// メロの音域を保つ。mode/key 未指定は従来の `pitch+keyPc` 相当に縮退（後退ゼロ）。
 export function melodyPlacementShift(
   sectionKeyPc: number,
   sectionMode: string | null | undefined,
   melodyMode: string | null | undefined,
+  melodyKeyPc = 0,
 ): number {
   const k = (((Math.round(sectionKeyPc) % 12) + 12) % 12);
   const sectionMajorTonic = (k + (sectionMode === "minor" ? 3 : 0)) % 12;
-  return (sectionMajorTonic + (melodyMode === "minor" ? 9 : 0)) % 12;
+  const landing = (sectionMajorTonic + (melodyMode === "minor" ? 9 : 0)) % 12;
+  const mk = (((Math.round(melodyKeyPc) % 12) + 12) % 12);
+  const raw = (((landing - mk) % 12) + 12) % 12; // 0..11
+  return raw > 6 ? raw - 12 : raw; // 最寄りオクターブ＝メロの音域を崩さない（-5..6）
 }
 
 // --- コード（chord / chord_progression）。C基準で記号保存し、再生時に音符へ展開＋移調 ---
@@ -443,7 +449,9 @@ export function compositeNotes(
     // メロは**旋法を保った相対移調**（短調メロ→section調号の相対短調等。design「メロ配置の調規則」）。
     // 他（コード等）は section 調へ素直移調。rhythm は移調しない。同旋法/mode不明は keyPc と一致＝後退ゼロ。
     const shift =
-      kind === "melody" ? melodyPlacementShift(keyPc, sectionMode, c.node.neta.mode) : keyPc;
+      kind === "melody"
+        ? melodyPlacementShift(keyPc, sectionMode, c.node.neta.mode, c.node.neta.key ?? 0)
+        : keyPc;
     return notesForContent(kind, c.node.neta.content).map((n) => ({
       ...n,
       pitch: isRhythm ? n.pitch : n.pitch + shift,
