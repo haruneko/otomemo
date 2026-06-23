@@ -650,6 +650,24 @@ export function genFromEssence(
   return { items: [{ kind: "melody", content: { notes }, label }], edges: [] };
 }
 
+/** コード楽器パターン（コンピング/アルペジオ・CP4）：素直な既定パターンを生成（音は出さない＝
+ * content のパターンのみ。実音化は合成側 resolveChordPattern が進行に当てて行う）。決定的(seed)。 */
+export function genChordPattern(frame?: Frame | null, seed?: number | null): GenResult {
+  const f = normalizeFrame(frame);
+  const rng = new Rng(seed ?? 5);
+  const info = meterInfo(f.meter);
+  const bars = barsOf(f);
+  const stepsPerBar = Math.round(info.beatsPerBar * 4); // 16分グリッド：4/4=16, 6/8=12, 3/4=12
+  const steps = bars * stepsPerBar;
+  const bias = densityBias(f.mood ?? "", f.tempo);
+  const per = bias.long >= 1.5 ? stepsPerBar : bias.busy >= 1.5 ? 2 : 4; // sparse=小節頭/busy=八分/既定=拍頭
+  const hits: number[] = [];
+  for (let s = 0; s < steps; s += per) hits.push(s);
+  const mode = rng.next() < 0.25 ? "arp" : "strum"; // たまにアルペジオ
+  const content = { mode, voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps, hits };
+  return { items: [{ kind: "chord_pattern", content, label: "コード楽器" }], edges: [] };
+}
+
 // ベースの図形（メロより落ち着き：四分主体＋たまに8分のルート→5度/オクターブ、長音）。
 const BASS_FIGS: RhyFig[] = [
   { on: [[0, 1]], span: 1, w: 3 }, // ♩

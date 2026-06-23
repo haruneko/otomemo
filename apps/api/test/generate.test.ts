@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { genChords, genMelody, genBass, genDrums, genFromEssence, normalizeFrame } from "../src/music/generate";
+import { genChords, genMelody, genBass, genDrums, genFromEssence, genChordPattern, normalizeFrame } from "../src/music/generate";
 import { chordPcs } from "../src/music/theory";
 
 // 生成は seed 依存乱数＝byte等価ではなく**musicalルール**を property test で担保（design「アーキ是正 決定1」）。
@@ -294,6 +294,23 @@ describe("genDrums（バックビート）", () => {
     expect(kick.hits).toContain(0); // 付点ビート1
     const hat = r.lanes.find((l) => l.name === "HiHat")!;
     expect(hat.hits.every((s) => s % 2 === 0)).toBe(true); // 八分(偶数step)でハット
+  });
+});
+
+describe("genChordPattern（コード楽器パターン・CP4）", () => {
+  it("kind=chord_pattern・steps=bars*16(4/4)・拍頭hits・voicing R/3/5・決定的", () => {
+    const a = genChordPattern({ bars: 2, meter: "4/4" }, 5);
+    const it0 = a.items[0]!;
+    expect(it0.kind).toBe("chord_pattern");
+    const c = it0.content as { steps: number; hits: number[]; voicing: { tones: string[] }; mode: string };
+    expect(c.steps).toBe(32); // 2小節×16
+    expect(c.hits).toEqual([0, 4, 8, 12, 16, 20, 24, 28]); // 既定=拍頭(4step毎)
+    expect(c.voicing.tones).toEqual(["R", "3", "5"]);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(genChordPattern({ bars: 2, meter: "4/4" }, 5))); // 決定的
+  });
+  it("6/8：steps=bars*12", () => {
+    const c = genChordPattern({ bars: 2, meter: "6/8" }, 5).items[0]!.content as { steps: number };
+    expect(c.steps).toBe(24); // 2小節×12
   });
 });
 

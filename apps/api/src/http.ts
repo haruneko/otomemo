@@ -11,6 +11,7 @@ import {
   genChords,
   genMelody,
   genFromEssence,
+  genChordPattern,
   genBass,
   genDrums,
   genNamedProgression,
@@ -137,6 +138,7 @@ export function buildHttp(core: Core): FastifyInstance {
         case "normalize_to_c": return { notes: normalizeToC(asNotes(b.notes ?? b.melody), b.key) };
         case "gen_bass": return genBass(b.frame, asChords(b.chords));
         case "gen_drums": return genDrums(b.frame, b.seed);
+        case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
         case "fit_to_chords": return fitToChords(asNotes(b.melody), asChords(b.chords), b.key);
@@ -163,8 +165,8 @@ export function buildHttp(core: Core): FastifyInstance {
     const frame = b.frame ?? {};
     const key = typeof frame.key === "number" ? frame.key : 0;
     // part 名は素直な別名も受ける（chords→chord_progression, drums→rhythm 等）。指定の揺れで落とさない。
-    const alias: Record<string, string> = { chords: "chord_progression", chord: "chord_progression", drums: "rhythm", drum: "rhythm" };
-    const want = new Set((b.parts ?? ["chord_progression", "melody", "bass", "rhythm"]).map((p) => alias[p] ?? p));
+    const alias: Record<string, string> = { chords: "chord_progression", chord: "chord_progression", drums: "rhythm", drum: "rhythm", comp: "chord_pattern", chords_inst: "chord_pattern" };
+    const want = new Set((b.parts ?? ["chord_progression", "chord_pattern", "melody", "bass", "rhythm"]).map((p) => alias[p] ?? p));
     const tags = ["生成", ...(b.tags ?? [])]; // 呼び出し側 tags も尊重（dogfood 等を付けられる）
     const chords = (genChords(frame, b.seed).items[0]!.content as { chords: any[] }).chords;
     const section = core.createNeta({ kind: "section", title: b.title ?? "生成セクション", key, tempo: frame.tempo, meter: frame.meter, tags });
@@ -174,6 +176,7 @@ export function buildHttp(core: Core): FastifyInstance {
       core.placeChild(section.id, n.id, 0, ord++);
     };
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
+    if (want.has("chord_pattern")) place("chord_pattern", genChordPattern(frame, b.seed).items[0]!.content, "コード楽器");
     if (want.has("melody")) place("melody", genMelody(frame, chords, b.seed).items[0]!.content, "メロ");
     if (want.has("bass")) place("bass", genBass(frame, chords, b.seed).items[0]!.content, "ベース");
     if (want.has("rhythm")) place("rhythm", genDrums(frame, b.seed).items[0]!.content, "ドラム");
