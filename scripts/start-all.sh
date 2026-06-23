@@ -42,6 +42,8 @@ mkdir -p "$ROOT/logs"
 
 # 二重起動防止：既存の自分のプロセスだけ落としてから上げる（再実行で重複しない）。
 pkill -f "tsx.*src/main.ts"   2>/dev/null || true  # api
+pkill -f "@cm/web dev"        2>/dev/null || true  # web(vite dev)＝以前 kill 漏れで野良が積み上がっていた
+pkill -f "apps/web.*vite"     2>/dev/null || true  # 上の pnpm が spawn する vite 子も落とす（孤児防止）
 pkill -f "bin/cm-worker"      2>/dev/null || true  # worker
 pkill -f "bin/cm-search"      2>/dev/null || true  # search
 sleep 1
