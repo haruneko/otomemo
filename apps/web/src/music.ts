@@ -31,32 +31,44 @@ export function transpose(notes: Note[], semitones: number): Note[] {
   return notes.map((n) => ({ ...n, pitch: n.pitch + semitones }));
 }
 
-// メロ配置の調規則（design「メロ配置の調規則」）：別調のメロを section に置くときの移調半音。
-// メロは単一調オブジェクト。section の調号(主音+旋法)へ**メロの旋法を保ったまま一意移調**する＝
-// 短調メロ→section調号の相対短調・長調メロ→長調主音へ着地。
-// **メロ content は実音(WYSIWYG)＝主音は melodyKeyPc**。よって移調量＝着地主音 − メロのkey。
-// 例：F#m メロ(key=6) を Cmaj へ → 着地=A(9)、shift = 9−6 = +3（F#→A）。最寄りオクターブ(-5..6)で
-// メロの音域を保つ。mode/key 未指定は従来の `pitch+keyPc` 相当に縮退（後退ゼロ）。
+// 着地主音pc：content の旋法を保って section の調号へ相対マップ（design「メロ配置の調規則」）。
+// 短調content→section調号の相対短調へ・長調content→長調主音へ。**Cmaj と Am など同じ調号は同じ着地**
+// （label 不変）。これでメロ/コード/ベースが同じ着地に揃う＝短調 section でも食い違わない。
+function placementLanding(
+  sectionKeyPc: number,
+  sectionMode: string | null | undefined,
+  contentMode: string | null | undefined,
+): number {
+  const k = (((Math.round(sectionKeyPc) % 12) + 12) % 12);
+  const sectionMajorTonic = (k + (sectionMode === "minor" ? 3 : 0)) % 12; // section調号の長調主音
+  return (sectionMajorTonic + (contentMode === "minor" ? 9 : 0)) % 12;
+}
+
+// メロ配置の移調半音：実音(WYSIWYG・主音=key)を着地主音へ。最寄りオクターブ(-5..6)で音域維持。
+// 例：F#m メロ(key=6) を Cmaj/Am へ → 着地=A(9)、shift = 9−6 = +3（F#→A）。
 export function melodyPlacementShift(
   sectionKeyPc: number,
   sectionMode: string | null | undefined,
   melodyMode: string | null | undefined,
   melodyKeyPc = 0,
 ): number {
-  const k = (((Math.round(sectionKeyPc) % 12) + 12) % 12);
-  const sectionMajorTonic = (k + (sectionMode === "minor" ? 3 : 0)) % 12;
-  const landing = (sectionMajorTonic + (melodyMode === "minor" ? 9 : 0)) % 12;
+  const landing = placementLanding(sectionKeyPc, sectionMode, melodyMode);
   const mk = (((Math.round(melodyKeyPc) % 12) + 12) % 12);
-  const raw = (((landing - mk) % 12) + 12) % 12; // 0..11
-  return raw > 6 ? raw - 12 : raw; // 最寄りオクターブ＝メロの音域を崩さない（-5..6）
+  const raw = (((landing - mk) % 12) + 12) % 12;
+  return raw > 6 ? raw - 12 : raw; // 最寄りオクターブ＝メロの音域を崩さない
 }
 
-// コード/ベース絶対の配置移調：**自分の調(key)から section の調へ chromatic 移調**（key-aware）。
-// content の主音=key（root を実音pcで保存・ChordEditor「C基準で root+quality 保存」＝key=0が既定）。
-// 旋法は和音 quality / 音そのものが保持するのでメロのような相対マップは不要（単純な半音移調）。
-// **C基準content(key=0)では従来の +keyPc と一致＝後退ゼロ**。key を持つ(例 F#m進行 key=6)content だけ是正。
-export function harmonyPlacementShift(sectionKeyPc: number, contentKeyPc = 0): number {
-  return (((Math.round(sectionKeyPc) - Math.round(contentKeyPc)) % 12) + 12) % 12;
+// コード/ベース絶対の移調半音：**メロと同じ着地ロジック**（mode-relative + key-aware）。レジスタは
+// 上方向(0..11)＝C基準content(key=0/mode major)では従来の +keyPc と一致＝後退ゼロ。旋法は和音 quality /
+// 音そのものが保持。**自分の mode/key を宣言していること**が前提（短調contentは mode=minor を要す）。
+export function harmonyPlacementShift(
+  sectionKeyPc: number,
+  sectionMode: string | null | undefined,
+  contentMode: string | null | undefined,
+  contentKeyPc = 0,
+): number {
+  const landing = placementLanding(sectionKeyPc, sectionMode, contentMode);
+  return (((landing - Math.round(contentKeyPc)) % 12) + 12) % 12; // 0..11
 }
 
 // --- コード（chord / chord_progression）。C基準で記号保存し、再生時に音符へ展開＋移調 ---
@@ -417,7 +429,7 @@ export function compositeNotes(
   const sectionChords: ChordEntry[] = children.flatMap((c) => {
     const k = c.node.neta.kind;
     if (k !== "chord" && k !== "chord_progression") return [];
-    const shift = harmonyPlacementShift(keyPc, c.node.neta.key ?? 0);
+    const shift = harmonyPlacementShift(keyPc, sectionMode, c.node.neta.mode, c.node.neta.key ?? 0);
     return chordsOf(c.node.neta.content).map((ch) => ({
       ...ch,
       root: ((ch.root + shift) % 12 + 12) % 12,
@@ -462,7 +474,7 @@ export function compositeNotes(
     const shift =
       kind === "melody"
         ? melodyPlacementShift(keyPc, sectionMode, c.node.neta.mode, c.node.neta.key ?? 0)
-        : harmonyPlacementShift(keyPc, c.node.neta.key ?? 0);
+        : harmonyPlacementShift(keyPc, sectionMode, c.node.neta.mode, c.node.neta.key ?? 0);
     return notesForContent(kind, c.node.neta.content).map((n) => ({
       ...n,
       pitch: isRhythm ? n.pitch : n.pitch + shift,

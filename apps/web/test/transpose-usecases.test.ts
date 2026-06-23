@@ -33,6 +33,8 @@ const chordsCmin = (): CompositeChild => ({
   node: {
     neta: {
       kind: "chord_progression",
+      key: 0,
+      mode: "minor", // 短調 content は mode を宣言する（mode-relative 移調の前提）
       content: {
         chords: [
           { root: 0, quality: "m", start: 0, dur: 2 },
@@ -181,5 +183,71 @@ describe("★コードの key-aware 移調：実音 root の F#m 進行を secti
   it("UC15 ベース相対は F#m 進行の実調ルートに解決（key-aware の sectionChords）", () => {
     const kids = [chordsFsharpMin(), bassRel()];
     expect(outOfKey(kids, 6, "minor", ["bass"])).toEqual([]); // F#m section でベースが F#/C# 等に
+  });
+});
+
+// ベース絶対（実音 notes・key/mode 宣言）。F#自然短の低域ベース。
+const bassAbs = (pitches: number[], key: number, mode: string): CompositeChild => ({
+  position: 0,
+  node: { neta: { kind: "bass", key, mode, content: { notes: pitches.map((p, i) => ({ pitch: p, start: i, dur: 1 })) } } },
+});
+const Fsharp_bass = [42, 44, 45, 47, 49, 50, 52]; // F#2 G#2 A2 B2 C#3 D3 E3（F#自然短・低域）
+
+describe("★ベースの key-aware 移調（コードと同様か）", () => {
+  it("UC16 ベース絶対 F#m → F#m section：そのまま＝非異音", () => {
+    expect(outOfKey([bassAbs(Fsharp_bass, 6, "minor")], 6, "minor", ["bass"])).toEqual([]);
+  });
+  it("UC17 ベース絶対 F#m → Am section：Am へ移調＝C調号内（非異音）", () => {
+    expect(outOfKey([bassAbs(Fsharp_bass, 6, "minor")], 9, "minor", ["bass"])).toEqual([]);
+  });
+  it("UC18 ベース絶対＋F#mコード＋F#mメロ → F#m section：全部 F#m で揃う", () => {
+    const kids = [chordsFsharpMin(), melody(Fsharp_min_pitches, 6, "minor"), bassAbs(Fsharp_bass, 6, "minor")];
+    expect(outOfKey(kids, 6, "minor")).toEqual([]);
+  });
+  it("UC19 C基準ベース(key=0) → 各section key：従来の +keyPc 同等で非異音（後退ゼロ）", () => {
+    const Cbass = [36, 38, 40, 41, 43, 45, 47]; // C2..B2
+    for (const [k, m] of [[0, "major"], [2, "major"], [9, "minor"]] as const)
+      expect(outOfKey([bassAbs(Cbass, 0, "major")], k, m, ["bass"])).toEqual([]);
+  });
+});
+
+// 入れ子 section：内側 section が自分の調(key+mode)を持つ。子(メロ/コード/ベース)を内側調で合成し位置オフセット。
+const nestedSection = (innerKey: number, innerMode: string, children: CompositeChild[]): CompositeChild => ({
+  position: 0,
+  node: { neta: { kind: "section", key: innerKey, mode: innerMode, content: {} }, children },
+});
+
+describe("★入れ子 section が壊れないか（多調・合成）", () => {
+  it("UC20 外側Cmaj に 内側F#m section(メロ+コード+ベース) を入れる：内側は F#m のまま非異音", () => {
+    const inner = nestedSection(6, "minor", [
+      chordsFsharpMin(),
+      melody(Fsharp_min_pitches, 6, "minor"),
+      bassAbs(Fsharp_bass, 6, "minor"),
+    ]);
+    // 外側 Cmaj(0,major) で合成。内側 F#m の内容は **F#m の調号(=A長調号)内**に収まるべき。
+    const notes = compositeNotes([inner], 0, "major");
+    const innerSig = sig(6, "minor");
+    const bad = [...new Set(notes.map((n) => pc(n.pitch)).filter((p) => !innerSig.has(p)))];
+    expect(bad).toEqual([]); // 内側は内側調のまま＝外側調で二重移調しない
+  });
+
+  it("UC21 内側 section が調未設定なら外側調を継承（Dmaj 継承）", () => {
+    const inner = nestedSection(undefined as unknown as number, undefined as unknown as string, [
+      chordsCmaj(), // C基準コード
+      melody(Cmaj_pitches, 0, "major"),
+    ]);
+    // 外側 Dmaj(2,major)。内側は key 未設定→外側 D を継承し、C基準内容が D へ。
+    const notes = compositeNotes([inner], 2, "major");
+    const bad = [...new Set(notes.map((n) => pc(n.pitch)).filter((p) => !sig(2, "major").has(p)))];
+    expect(bad).toEqual([]);
+  });
+
+  it("UC22 二重入れ子（song > section > 中身）でも各層の調で正しく合成", () => {
+    const innerFsharp = nestedSection(6, "minor", [chordsFsharpMin(), melody(Fsharp_min_pitches, 6, "minor")]);
+    const song = nestedSection(0, "major", [innerFsharp]); // 外側song Cmaj に F#m section
+    const notes = compositeNotes([song], 0, "major");
+    const innerSig = sig(6, "minor");
+    const bad = [...new Set(notes.map((n) => pc(n.pitch)).filter((p) => !innerSig.has(p)))];
+    expect(bad).toEqual([]); // 二段入れ子でも F#m 内容は F#m のまま
   });
 });
