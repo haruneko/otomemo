@@ -1,0 +1,7 @@
+/* styles index：元 styles.css を機能別に分割し**元の順序どおり**@import（カスケード不変・アーキ是正 S5）。 */
+@import "./base.css";
+@import "./assets-bass.css";
+@import "./dialog-forms.css";
+@import "./chat.css";
+@import "./transport-cards.css";
+@import "./misc.css";

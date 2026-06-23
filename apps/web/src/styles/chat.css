@@ -1,0 +1,328 @@
+/* #102 承認カード・#69 考え中・チャット */
+/* #102 S3 変異提案の承認カード（変更前後プレビュー＋原本/提案 再生）。 */
+.proposals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.proposals-summary {
+  font-weight: 600;
+}
+.proposal-card {
+  border: 1px solid var(--line, #d0d0d0);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface, #fafafa);
+}
+.proposal-card.done {
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+.proposal-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.proposal-why,
+.proposal-desc {
+  margin: 4px 0;
+  font-size: 0.9em;
+}
+.proposal-note {
+  font-size: 0.8em;
+  margin: 4px 0 0;
+}
+.proposal-diff {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.proposal-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+.proposal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.proposal-approve-all {
+  align-self: flex-start;
+  font-weight: 600;
+}
+/* #69 考え中インジケータ。content アニメはブラウザ差で静止し得るので opacity パルスで確実に動かす。 */
+.chat-text.thinking {
+  font-style: italic;
+  animation: chat-thinking 1.2s ease-in-out infinite;
+}
+.chat-text.thinking .dots::after {
+  content: "…";
+}
+@keyframes chat-thinking {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.chat-input {
+  display: flex;
+  gap: 6px;
+}
+.chat-input input {
+  flex: 1;
+  min-width: 0;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+.chat-input button {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+}
+.dialog header button {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+}
+.dialog input,
+.dialog textarea {
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+.mora-panel {
+  display: grid;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+}
+.mora-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.82rem;
+}
+.mora-count {
+  min-width: 1.6em;
+  text-align: right;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.mora-text {
+  color: var(--muted);
+  white-space: pre;
+}
+.relations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.rel-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.rel-item {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.mainpane-editor {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  max-height: 84vh;
+  overflow: hidden; /* 内側(.proll/.editor-body)が横スクロール。外に漏らさない */
+}
+.editor-meta-row {
+  display: flex;
+  gap: 6px;
+}
+.editor-meta-row .editor-tags {
+  flex: 1;
+  min-width: 0;
+}
+.text-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+.text-editor textarea {
+  flex: 1;
+  min-height: 200px;
+  resize: vertical;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+.editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.editor-bar .spacer {
+  flex: 1;
+}
+.editor-bar .meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.editor-title {
+  flex: 1;
+  min-width: 140px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+.editor-tags {
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+.editor-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0; /* flex子が内容幅で膨らまず、内側スクロールに収まる */
+  overflow: auto;
+}
+.chord-editor {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.chord-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-left: 3px solid transparent; /* #76 再生中ハイライトの余白 */
+  padding-left: 4px;
+}
+.chord-row.playing {
+  border-left-color: #ff5a5a;
+  background: rgba(255, 90, 90, 0.08);
+}
+.chord-sym {
+  font-weight: 600;
+  min-width: 48px;
+}
+.chord-row label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.chord-row select,
+.chord-row input {
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px;
+  font: inherit;
+}
+.chord-row input[type="number"] {
+  width: 52px;
+}
+.chord-row button {
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.rhythm-editor {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  overflow-x: auto;
+  position: relative; /* #74 プレイヘッド基準 */
+}
+.rhythm-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.rhythm-name {
+  width: 56px;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.rhythm-cell {
+  width: 20px;
+  height: 18px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: #1b1e23;
+  border: 1px solid #24272e;
+  border-radius: 3px;
+}
+.rhythm-cell.beat {
+  border-left: 2px solid #3a3f49;
+}
+.rhythm-cell.bar {
+  border-left: 3px solid #5b6270; /* 小節頭は強め */
+}
+.rhythm-cell.on {
+  background: var(--accent);
+}
+.bars-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.bars-control button {
+  min-width: 28px;
+}
+.section-editor {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+.section-actions {
+  display: flex;
+  gap: 8px;
+}

@@ -1,0 +1,444 @@
+/* #59 トランスポート・#55 配置/ピッカーのカード */
+/* #59 トランスポート（下端固定の最小バー）。タップ標的44px。 */
+.transport {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+  background: var(--card);
+  border-top: 1px solid var(--line);
+  z-index: 6;
+}
+.tp-btn {
+  min-width: 44px;
+  height: 44px;
+  font-size: 1.1rem;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tp-main {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.tp-btn.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.transport-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  color: var(--muted);
+  min-width: 3.2em;
+  text-align: right;
+}
+.section-actions button {
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+.section-timeline {
+  position: relative;
+  height: 28px;
+  background: #15171b;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.tl-bar {
+  position: absolute;
+  top: 4px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 3px;
+  opacity: 0.85;
+  min-width: 3px;
+}
+.lanes {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+  overflow-x: auto;
+  position: relative;
+}
+.playhead {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  /* #58 再生位置ガイドは赤。--ph(0..1) を ref で毎フレーム直書き（再レンダ無し）。 */
+  background: #ff5a5a;
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 5;
+  display: none; /* start() で block にする */
+  left: calc(44px + var(--ph, 0) * (100% - 44px));
+}
+.lane-ruler,
+.lane {
+  display: flex;
+  align-items: stretch;
+}
+.lane-label {
+  flex: 0 0 44px;
+  width: 44px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+}
+.ruler-bars {
+  flex: 1;
+  display: flex;
+}
+.bar-num {
+  flex: 1;
+  text-align: center;
+  font-size: 0.62rem;
+  color: var(--muted);
+  border-left: 1px solid #2a2d33;
+}
+.lane-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  height: 38px; /* #55 lane-block(34px)＋概形が収まる高さ */
+}
+.lane-cell {
+  flex: 1;
+  border-left: 1px solid #2a2d33;
+  background: #1b1e23;
+  padding: 0;
+  cursor: pointer;
+}
+.lane-cell:hover {
+  background: #24272e;
+}
+.lane-block {
+  position: absolute;
+  top: 2px;
+  height: 34px;
+  min-width: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  color: #fff;
+  overflow: hidden;
+  padding: 0;
+  z-index: 2;
+  cursor: pointer;
+  background: var(--accent);
+}
+/* #55 配置ネタもネタ帳と同じ概形(MiniRoll)を背景に敷き、ラベルを上に重ねる＝何のネタか分かる */
+.lane-block .mini-roll {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.lane-block-label {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 2px;
+  font-size: 0.64rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+}
+.lane-block[data-kind="melody"] {
+  background: var(--k-melody);
+}
+.lane-block[data-kind="bass"] {
+  background: var(--k-bass);
+}
+.lane-block[data-kind="chord"],
+.lane-block[data-kind="chord_progression"] {
+  background: var(--k-chord);
+}
+.lane-block[data-kind="rhythm"] {
+  background: var(--k-rhythm);
+}
+.lanes-hint {
+  font-size: 0.72rem;
+}
+.section-others {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.picker-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.picker-kinds button {
+  flex: 1 1 auto;
+  min-width: 56px;
+}
+.picker-kinds button.on {
+  background: var(--accent);
+}
+.picker-list {
+  display: grid;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+/* #55 ピッカーの候補をネタ帳カード風に：概形(MiniRoll)＋種類/mood/keyで見て選べる */
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem;
+  background: #1b1e23;
+  border: 1px solid #2a2d33;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  color: inherit;
+}
+.picker-item:hover {
+  background: #24272e;
+}
+.picker-item[data-kind="melody"] {
+  border-left-color: var(--k-melody);
+}
+.picker-item[data-kind="bass"] {
+  border-left-color: var(--k-bass);
+}
+.picker-item[data-kind="chord"],
+.picker-item[data-kind="chord_progression"] {
+  border-left-color: var(--k-chord);
+}
+.picker-item[data-kind="rhythm"] {
+  border-left-color: var(--k-rhythm);
+}
+.picker-item-roll {
+  flex: 0 0 auto;
+  width: 84px;
+  height: 34px;
+  background: #14161a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.picker-item-roll .mini-roll {
+  width: 100%;
+  height: 100%;
+}
+.picker-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.picker-item-meta strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.picker-item-meta .muted {
+  font-size: 0.72rem;
+}
+.section-children {
+  display: grid;
+  gap: 6px;
+}
+.section-child {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.section-child-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.section-child label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.section-child input {
+  width: 52px;
+  background: #15171b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px;
+}
+.section-child button,
+.section-matches button {
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.section-matches {
+  display: grid;
+  gap: 4px;
+}
+.section-matches button {
+  text-align: left;
+  background: #1b1e23;
+  font-size: 0.8rem;
+}
+.editor-bar select,
+.editor-bar input[type="number"] {
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px;
+  font: inherit;
+  width: 64px;
+}
+.editor-bar button {
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.editor-bar button.primary {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+}
+.editor-bar button.danger {
+  background: #b3402f;
+  color: #fff;
+  border: 0;
+}
+.proll-wrap {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.proll-tools {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.proll-tools .len {
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 0.75rem;
+}
+.proll-tools .len.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.proll {
+  overflow: auto;
+  max-height: 56vh;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #15171b;
+  position: relative; /* #58 プレイヘッドの基準（コンテンツと一緒にスクロール） */
+}
+.proll-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff5a5a;
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 3;
+  display: none; /* start() で block */
+}
+.proll-row {
+  display: flex;
+}
+.proll-lane {
+  display: flex;
+  position: relative;
+}
+.proll-note {
+  position: absolute;
+  top: 1px;
+  height: 12px;
+  min-width: 4px;
+  background: var(--accent);
+  border: 1px solid #6f9bf0;
+  border-radius: 2px;
+  z-index: 2;
+  padding: 0;
+  cursor: pointer;
+}
+.proll-key {
+  width: 40px;
+  height: 14px;
+  flex: 0 0 auto;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  font-size: 8px;
+  line-height: 14px;
+  text-align: right;
+  padding-right: 3px;
+  border: 1px solid #24272e;
+  user-select: none;
+}
+.proll-key.white {
+  background: #d7dae0;
+  color: #2a2d33;
+}
+.proll-key.black {
+  background: #2a2d33;
+  color: #9aa0aa;
+}
+.proll-cell {
+  width: 12px;
+  height: 14px;
+  flex: 0 0 auto;
+  border-right: 1px solid #1e2127;
+  border-bottom: 1px solid #1e2127;
+  background: #1b1e23;
+  padding: 0;
+  cursor: pointer;
+}
+.proll-cell.beat {
+  border-left: 1px solid #3a3f49;
+}

@@ -1,0 +1,257 @@
+/* #65 検索バッジ・#9 参考曲・kind色・#83 段階・会話セッション */
+/* #65 検索の一致種別バッジ（一致=実線/近い=点線・淡色） */
+.match-badge {
+  font-size: 0.62rem;
+  padding: 0 5px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+.match-badge.exact,
+.match-badge.both {
+  background: var(--accent);
+  color: #fff;
+}
+.match-badge.semantic {
+  border: 1px dashed var(--muted);
+  color: var(--muted);
+}
+article .kind {
+  font-weight: 600;
+  color: var(--k, var(--fg));
+}
+article .body {
+  margin: 6px 0;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+article .tag {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-right: 6px;
+}
+.bs-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+.bs-instr {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.bs-btn {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.bs-result {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  max-height: 220px;
+  overflow: auto;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+.bs-options {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.bs-option {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.bs-option:hover {
+  border-color: var(--accent);
+}
+.bs-option strong {
+  font-size: 0.82rem;
+}
+.bs-option span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+/* #9 参考曲カード（Chat 調べるモード） */
+.ref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ref-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+}
+.ref-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ref-head strong {
+  font-size: 0.84rem;
+}
+.ref-artist {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.ref-why,
+.ref-points {
+  font-size: 0.78rem;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+.ref-points {
+  color: var(--muted);
+}
+
+/* kind→色（Okabe-Ito由来・DAW慣習準拠・色覚安全）。color-research agent #色 */
+article[data-kind="rhythm"] { --k: var(--k-rhythm); }
+article[data-kind="melody"] { --k: var(--k-melody); }
+article[data-kind="bass"] { --k: var(--k-bass); }
+article[data-kind="chord"] { --k: var(--k-chord); }
+article[data-kind="chord_progression"] { --k: var(--k-chord_progression); }
+article[data-kind="lyric"] { --k: var(--k-lyric); }
+article[data-kind="theme"] { --k: var(--k-theme); }
+article[data-kind="section"] { --k: var(--k-section); }
+article[data-kind="song"] { --k: var(--k-song); }
+article[data-kind="knowledge"] { --k: var(--k-knowledge); }
+article[data-kind="other"] { --k: var(--k-other); }
+
+details.theme {
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+details.theme summary {
+  cursor: pointer;
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+}
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.theme-row input[type="color"] {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+}
+
+/* #83/#55 曲の段階・次の一手パネル */
+.song-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel, #1b1b22);
+  border-radius: 8px;
+}
+.song-status label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.72rem;
+  opacity: 0.8;
+  gap: 0.2rem;
+  flex: 1 1 12rem;
+}
+.song-status input {
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+}
+.song-status-saved {
+  color: #5ad17a;
+  font-weight: bold;
+}
+
+/* チャット複数会話セッション（Claude/ChatGPT風の一覧） */
+.chat-sessions {
+  position: absolute;
+  top: 3rem;
+  left: 0.5rem;
+  right: 0.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--panel, #1b1b22);
+  border: 1px solid #2a2d33;
+  border-radius: 8px;
+  padding: 0.5rem;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.chat-sessions-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.chat-sessions-head strong {
+  flex: 1;
+}
+.chat-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 0.5rem;
+  background: #16181d;
+  border: 1px solid #2a2d33;
+  border-radius: 6px;
+  cursor: pointer;
+  color: inherit;
+}
+.chat-session-item.on {
+  border-color: var(--accent);
+}
+.chat-session-item:hover {
+  background: #20242b;
+}
+.chat-session-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-session-item .muted {
+  font-size: 0.7rem;
+}
