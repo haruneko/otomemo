@@ -110,7 +110,7 @@ export function genChords(frame?: Frame | null, seed?: number | null): GenResult
   return { items: [{ kind: "chord_progression", content: { chords }, label }], edges: [] };
 }
 
-function chordAt(t: number, chords?: { root?: number; quality?: string; start?: number; dur?: number }[]) {
+function chordAt(t: number, chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[]) {
   for (const c of chords ?? []) {
     const s = Number(c.start ?? 0);
     const d = Number(c.dur ?? 0);
@@ -122,7 +122,7 @@ function chordAt(t: number, chords?: { root?: number; quality?: string; start?: 
 /** コードトーン拘束のメロディ（拍頭=コードトーン、間=スケール音で順次）。返り #85 items 形。 */
 export function genMelody(
   frame?: Frame | null,
-  chords?: { root?: number; quality?: string; start?: number; dur?: number }[],
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
 ): GenResult {
   const f = normalizeFrame(frame);
@@ -160,7 +160,7 @@ export function genMelody(
 /** ベースライン（強拍=ルート、弱拍=5度・C2基準低域）。返り #85 items 形（bass 絶対=notes）。 */
 export function genBass(
   frame?: Frame | null,
-  chords?: { root?: number; quality?: string; start?: number; dur?: number }[],
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
 ): GenResult {
   const f = normalizeFrame(frame);
   const bars = barsOf(f);

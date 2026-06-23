@@ -10,6 +10,10 @@ import {
   toDegrees,
   harmonize,
   nextChordCandidates,
+  genChords,
+  genMelody,
+  genBass,
+  genDrums,
 } from "./music";
 import { findProgressions } from "./progression-search";
 import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
@@ -440,6 +444,37 @@ export function buildMcpServer(core: Core): McpServer {
       inputSchema: { status: z.string().optional(), target: z.string().optional() },
     },
     async (args) => ok(core.listJobs(args)),
+  );
+
+  // 生成（ルールベース・決定的記号エンジン・TS一本化＝cm-music の gen_* を置換）。frame=key/meter/bars/mood。
+  const frameSchema = z
+    .object({
+      key: z.number().int().min(0).max(11).optional(),
+      meter: z.string().optional(),
+      tempo: z.number().optional(),
+      bars: z.number().int().optional(),
+      mood: z.string().optional(),
+    })
+    .optional();
+  server.registerTool(
+    "gen_chords",
+    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・C基準）。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
+    async ({ frame, seed }) => ok(genChords(frame, seed)),
+  );
+  server.registerTool(
+    "gen_melody",
+    { title: "メロディを生成", description: "コードトーン拘束のメロを生成（拍頭=コードトーン）。chords を渡せば合わせる。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional() } },
+    async ({ frame, chords, seed }) => ok(genMelody(frame, chords, seed)),
+  );
+  server.registerTool(
+    "gen_bass",
+    { title: "ベースを生成", description: "強拍ルート/弱拍5度のベースライン（C2基準低域・コードに合う）。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional() } },
+    async ({ frame, chords }) => ok(genBass(frame, chords)),
+  );
+  server.registerTool(
+    "gen_drums",
+    { title: "ドラムを生成", description: "GMバックビート（16ステップ1小節・seedで小変化）。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
+    async ({ frame, seed }) => ok(genDrums(frame, seed)),
   );
 
   return server;
