@@ -447,3 +447,8 @@
 .roll-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .proll-cell.pickup { background: #15171b; }
 .proll-cell.downbeat { border-left: 2px solid var(--accent); }
+
+/* コード楽器パターン エディタ（CP3）：voicing コントロール行。 */
+.cp-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 6px; }
+.cp-tones { display: flex; align-items: center; gap: 4px; }
+.cp-tones .len { min-width: 26px; }

@@ -23,10 +23,14 @@ import {
   GM_INSTRUMENTS,
   isRelativeBass,
   resolveRelativeBass,
+  isChordPattern,
+  resolveChordPattern,
+  emptyChordPattern,
   type Note,
   type ChordEntry,
   type RhythmContent,
   type BassStep,
+  type ChordPatternContent,
 } from "../music";
 
 const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -71,15 +75,17 @@ export function NetaDialog({
   );
   // 弱起（アウフタクト）：拍0の前の lead-in 拍数。既存の負 start を包む値で初期化。
   const [pickup, setPickup] = useState(() => Math.max(0, Math.ceil(-Math.min(0, ...notesOf(neta.content).map((n) => n.start)))));
+  const [chordPat, setChordPat] = useState<ChordPatternContent>(() => (isChordPattern(neta.content) ? neta.content : emptyChordPattern()));
   const [busy, setBusy] = useState(false);
   const [rels, setRels] = useState<{ type: string; neta: Neta | null }[]>([]);
   const [schedId, setSchedId] = useState<string | null>(null); // #80 継続調査スケジュール
   const isMelody = neta.kind === "melody";
   const isBass = neta.kind === "bass"; // #bass S1 絶対モード＝melodyと同型・低域ピアノロール
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
+  const isChordPat = neta.kind === "chord_pattern"; // CP3 コード楽器パターン（進行に解決する相対型）
   const isRhythm = neta.kind === "rhythm";
   const isContainer = neta.kind === "section" || neta.kind === "song";
-  const isMusic = isMelody || isBass || isChord || isRhythm;
+  const isMusic = isMelody || isBass || isChord || isChordPat || isRhythm;
   const isRelBass = isBass && bassMode === "relative"; // #bass S2 相対モード
   // 弱起ぶんの lead-in（指定 pickup と既存の負 start を包む）。ソロ再生はこの分だけ前へずらして鳴らす
   // ＝弱起→ダウンビートの順で聞こえる（PianoRoll も同じ pre で描画）。
@@ -88,11 +94,13 @@ export function NetaDialog({
   // 相対bass は単体プレビュー＝調(key)を tonic に度数解決して鳴らす（実音高）。
   const playable = isRelBass
     ? resolveRelativeBass(bassPattern, [], key)
-    : isMelody || isBass
-      ? notes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る
-      : isChord
-        ? chordsToNotes(chords)
-        : rhythmToNotes(rhythm);
+    : isChordPat
+      ? resolveChordPattern(chordPat, [], key) // 単体プレビュー＝key の tonic コードに解決
+      : isMelody || isBass
+        ? notes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る
+        : isChord
+          ? chordsToNotes(chords)
+          : rhythmToNotes(rhythm);
 
   // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。
   // melody ロールは span 尺で赤線が走る。単体エディタは拍子を持たない＝小節は4拍既定。
@@ -163,6 +171,7 @@ export function NetaDialog({
       // #bass S2 相対モード：度数パターンを保存（再生時にコード/調で解決）。
       return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, tempo, bars: Math.max(1, Math.round(bassSteps / 16)) };
     if (isMelody || isBass) return { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) };
+    if (isChordPat) return { content: { ...chordPat, program }, key, tempo }; // コード楽器＝自前音色
     if (isChord) return { content: { chords }, key, tempo }; // 進行は抽象＝program持たない(CP1)
     if (isRhythm) return { content: { rhythm }, tempo };
     if (isContainer) return { key, tempo, meter };
@@ -326,8 +335,9 @@ export function NetaDialog({
       </div>
       <KindEditorBody
         neta={neta}
-        flags={{ isMelody, isBass, isChord, isRhythm, isContainer, isRelBass }}
+        flags={{ isMelody, isBass, isChord, isChordPat, isRhythm, isContainer, isRelBass }}
         notes={notes} setNotes={setNotes}
+        chordPat={chordPat} setChordPat={setChordPat}
         chords={chords} setChords={setChords}
         rhythm={rhythm} setRhythm={setRhythm}
         bassPattern={bassPattern} setBassPattern={setBassPattern}

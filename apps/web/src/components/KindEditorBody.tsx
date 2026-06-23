@@ -5,18 +5,21 @@ import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
 import { BassStepEditor } from "./BassStepEditor";
 import { ChordEditor } from "./ChordEditor";
+import { ChordPatternEditor } from "./ChordPatternEditor";
 import { RhythmEditor } from "./RhythmEditor";
 import { BarsControl } from "./BarsControl";
 import { SectionEditor } from "./SectionEditor";
 import type { Neta } from "../api";
-import type { Note, ChordEntry, RhythmContent, BassStep } from "../music";
+import type { Note, ChordEntry, RhythmContent, BassStep, ChordPatternContent } from "../music";
 
 export interface KindEditorBodyProps {
   neta: Neta;
-  flags: { isMelody: boolean; isBass: boolean; isChord: boolean; isRhythm: boolean; isContainer: boolean; isRelBass: boolean };
+  flags: { isMelody: boolean; isBass: boolean; isChord: boolean; isChordPat: boolean; isRhythm: boolean; isContainer: boolean; isRelBass: boolean };
   // 状態と setter（親所有）
   notes: Note[];
   setNotes: (n: Note[]) => void;
+  chordPat: ChordPatternContent;
+  setChordPat: (c: ChordPatternContent) => void;
   chords: ChordEntry[];
   setChords: (c: ChordEntry[]) => void;
   rhythm: RhythmContent;
@@ -114,6 +117,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
             </>
           )}
         </div>
+      ) : p.flags.isChordPat ? (
+        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} />
       ) : isRhythm ? (
