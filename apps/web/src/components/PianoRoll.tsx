@@ -105,7 +105,7 @@ export function PianoRoll({
           style={{ left: `calc(${KEY_PX}px + var(--phb, 0) * ${SUBDIV * CELL_PX}px)` }}
         />
         {pitches.map((p) => (
-          <div className="proll-row" key={p} role="row">
+          <div className={"proll-row" + (isBlack(p) ? " black" : " white")} key={p} role="row">
             <div className={"proll-key" + (isBlack(p) ? " black" : " white")} aria-hidden="true">
               {noteName(p)}
             </div>

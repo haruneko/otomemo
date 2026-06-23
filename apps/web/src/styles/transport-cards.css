@@ -452,6 +452,9 @@
 .roll-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .proll-cell.pickup { background: #15171b; }
 .proll-cell.downbeat { border-left: 2px solid var(--accent); }
+/* 黒鍵の行はノート表示域も暗く＝鍵盤の白黒に対応（行の見分け・音名当てが楽に）。白鍵行は既定地色。 */
+.proll-row.black .proll-cell { background: #14171b; }
+.proll-row.black .proll-cell.pickup { background: #0f1115; }
 
 /* コード楽器パターン エディタ（CP3）：voicing コントロール行。 */
 .cp-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 6px; }
