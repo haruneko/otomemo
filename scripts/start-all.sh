@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 常時起動機向け：API(watch)・Web・ワーカー・検索・cm-music-mcp をまとめて起動（#36 自動起動）。
+# 常時起動機向け：API(watch)・Web・ワーカー・検索をまとめて起動（#36 自動起動）。cm-music-mcp はS2で廃止(音楽はTS集約)。
 # **再実行で安全**＝先に既存を落としてから上げる（野良プロセス乱立を防ぐ idempotent 起動）。
 #
 # 使い方（再起動はこの2種類。どちらも冪等＝何回叩いても重複しない）：
@@ -15,7 +15,6 @@
 #   CM_DB      … SQLite パス（既定 data/cm.sqlite）
 #   CM_HOST    … API バインド先（既定＝検出した Tailscale IP or 127.0.0.1）
 #   CM_TOKEN   … 設定すると API に x-cm-token 必須の簡易認証（tailnet 限定なら通常不要）
-#   CM_MUSIC_MCP_URL/PORT … agentic Chat 用 cm-music-mcp の URL/ポート（既定 8790・worker に配線）
 #   CM_MCP_STDIO_CMD/ARGS … agentic Chat の既存ネタ読取(creative-manager MCP)を claude -p が stdio spawn する起動コマンド/引数（#102 S1・既定 pnpm --filter @cm/api mcp）
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -35,9 +34,6 @@ fi
 _TS_IP="$(ip -4 -o addr 2>/dev/null | grep -oE '100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]+\.[0-9]+' | head -1 || true)"
 export CM_DB="${CM_DB:-$ROOT/data/cm.sqlite}"
 export CM_HOST="${CM_HOST:-${_TS_IP:-127.0.0.1}}"
-export CM_MUSIC_MCP_PORT="${CM_MUSIC_MCP_PORT:-8790}"
-# cm-music-mcp の URL（worker はこれを見て agentic Chat で音楽ツールを使う。未起動なら dispatch にフォールバック）
-export CM_MUSIC_MCP_URL="${CM_MUSIC_MCP_URL:-http://127.0.0.1:${CM_MUSIC_MCP_PORT}/mcp}"
 # #102 S1 creative-manager MCP（既存ネタの読取面）。cold-start 無し＝常駐させず claude -p が stdio で spawn。
 # read-only のみ公開（書込ツールは worker 側 _NETA_READ_TOOLS で除外＝Claude に書込口なし）。CM_DB は環境継承で本番DBを指す。
 export CM_MCP_STDIO_CMD="${CM_MCP_STDIO_CMD:-pnpm}"
@@ -48,24 +44,22 @@ mkdir -p "$ROOT/logs"
 pkill -f "tsx.*src/main.ts"   2>/dev/null || true  # api
 pkill -f "bin/cm-worker"      2>/dev/null || true  # worker
 pkill -f "bin/cm-search"      2>/dev/null || true  # search
-pkill -f "bin/cm-music-mcp"   2>/dev/null || true  # music-mcp
 sleep 1
 
 # Node 側（pnpm filter で各 app の dev=watch を起動）
 nohup pnpm --filter @cm/api dev >"$ROOT/logs/api.log" 2>&1 &
 nohup pnpm --filter @cm/web dev >"$ROOT/logs/web.log" 2>&1 &
 
-# Python 側（uv。ある場合のみ・失敗は無視）。cm-music-mcp は worker より先に上げておく。
-( cd apps/worker && nohup uv run cm-music-mcp >"$ROOT/logs/music-mcp.log" 2>&1 & ) || true
+# Python 側（uv。ある場合のみ・失敗は無視）。
 ( cd apps/worker && nohup uv run cm-worker    >"$ROOT/logs/worker.log"    2>&1 & ) || true
 ( cd apps/worker && nohup uv run cm-search    >"$ROOT/logs/search.log"    2>&1 & ) || true
 
-echo "started api/web/worker/search/music-mcp.$([ "$DO_BUILD" = 1 ] && echo ' (web rebuilt)')"
+echo "started api/web/worker/search.$([ "$DO_BUILD" = 1 ] && echo ' (web rebuilt)')"
 echo "  db=$CM_DB  host=$CM_HOST  logs=$ROOT/logs"
 echo "  → アクセス: http://$CM_HOST:8787/  （単一オリジン＝api が web も配信）"
 
 # --- 疎通スモーク：上がったつもりで上がってない状態を検知（docs/design アーキ是正 決定4）---
-# api(:8787) は必須＝listen 待ち、ダメなら非0終了。search/music-mcp は best-effort 警告（後退ゼロ）。
+# api(:8787) は必須＝listen 待ち、ダメなら非0終了。search は best-effort 警告（後退ゼロ）。
 wait_http() { # url, name, secs : HTTP で 2xx を待つ（実際に応答することを確認）
   local u="$1" n="$2" t="${3:-30}" i=0
   while [ "$i" -lt "$t" ]; do
@@ -85,7 +79,6 @@ wait_port() { # host, port, name, secs : TCP listen を待つ（MCP等 GET で2x
 # api は CM_HOST(既定=Tailscale IP)にバインド＝そのホストで叩く(127.0.0.1は拒否される)。
 wait_http "http://${CM_HOST}:8787/facets" "api(:8787 @${CM_HOST})" 45 || { echo "起動失敗: api が応答しません"; exit 1; }
 wait_port 127.0.0.1 8788 "cm-search(:8788)" 20 || echo "  (cm-search 未listen=意味検索は LIKE 退避・後退ゼロ)"
-wait_port 127.0.0.1 "$CM_MUSIC_MCP_PORT" "cm-music-mcp(:${CM_MUSIC_MCP_PORT})" 20 || echo "  (cm-music-mcp 未listen=agentic は dispatch にフォールバック)"
 
 # --- 常駐運用は systemd --user を推奨（自動再起動＋起動順＋日次バックアップ＋journaldログ）---
 #   導入: bash deploy/systemd/install.sh

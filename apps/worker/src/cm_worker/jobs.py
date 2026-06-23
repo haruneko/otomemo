@@ -62,46 +62,39 @@ def handle_echo(params: dict) -> dict:
 
 
 CLAUDE_BIN = os.environ.get("CM_CLAUDE_BIN", "claude")
-# #86 S2b cm-music-mcp の URL（env で配線）。未設定なら従来通り MCP 無し＝後退ゼロ。
-CM_MUSIC_MCP_URL = os.environ.get("CM_MUSIC_MCP_URL")
-_MUSIC_TOOLS = [
-    "analyze_fit", "detect_key", "analyze_progression",
-    "gen_chords", "gen_named_progression", "gen_melody", "fit_to_chords",
-    "melody_similarity", "find_similar",
-]
-
-# #102 S1 creative-manager MCP（既存ネタの読取面）。cold-start 無し＝常駐させず claude -p が
-# stdio で spawn（既存 apps/api/src/mcp-stdio.ts を再利用）。CM_MCP_STDIO_CMD が spawn コマンド、
-# CM_MCP_STDIO_ARGS が JSON 配列の引数。CM_DB は環境継承で本番DBを指す。未設定なら従来挙動（後退ゼロ）。
+# 旧 cm-music-mcp は廃止（アーキ是正 S2＝音楽ドメインTS一本化）。音楽ツールは creative-manager(TS) に集約。
+# 後方互換: CM_MUSIC_MCP_URL が残っていても無視する（参照しない）。
+# #102 S1 creative-manager MCP（既存ネタの読取面＋音楽ドメイン）。cold-start 無し＝claude -p が stdio で spawn。
+# CM_MCP_STDIO_CMD が spawn コマンド、CM_MCP_STDIO_ARGS が JSON 配列の引数。CM_DB は環境継承で本番DB。
 CM_MCP_STDIO_CMD = os.environ.get("CM_MCP_STDIO_CMD")
 CM_MCP_STDIO_ARGS = os.environ.get("CM_MCP_STDIO_ARGS")
-# read-only のみ公開（検索/読取）。**書込ツール(create/update/delete/place_child/link 等)は
-# 意図的に除外**＝Claude に書込口を与えない。変異は proposals→承認→TS core で1箇所適用（#102）。
+# creative-manager の許可ツール。**書込(create/update/delete/place_child/link)は意図的に除外**
+# ＝Claude に書込口を与えない（変異は proposals→承認→TS core で1箇所適用・#102）。
+# 音楽ツール(分析/生成)は純関数＝読取扱いで許可（cm-music の置換）。
 _NETA_READ_TOOLS = [
     "list_neta", "get_neta", "facets", "get_composition", "get_relations",
-    # 連想エンジン（read-only・#20）。「これ何進行？/なぜ/代替/もっと切なく」に agentic Chat が答えるための手。
+    # 連想エンジン（read-only・#20）。
     "identify_progression", "analyze_progression", "explain_progression", "substitute_chord", "emotion_shift",
     "harmonize", "next_chord", "find_progressions",
+    # 当てはまり判定/補正/調推定/類似（旧 cm-music の analysis を TS 集約）。
+    "analyze_fit", "fit_to_chords", "detect_key", "melody_similarity", "find_similar",
+    # 生成（決定的記号エンジン・TS一本化）。
+    "gen_chords", "gen_melody", "gen_bass", "gen_drums", "gen_named_progression",
 ]
 
 
 def _mcp_args() -> list[str]:
-    """#86 S2b / #102 S1：agentic Chat の claude -p に MCP サーバを接続する引数。
-    cm-music(CM_MUSIC_MCP_URL=HTTP常駐) と creative-manager read-only(CM_MCP_STDIO_CMD=stdio spawn)
-    を env がある分だけ載せる。どちらも無ければ [] ＝後退ゼロ。--max-turns で agentic ループを打ち切る。"""
-    servers: dict[str, dict] = {}
-    allowed: list[str] = []
-    if CM_MUSIC_MCP_URL:
-        servers["cm-music"] = {"type": "http", "url": CM_MUSIC_MCP_URL}
-        allowed += [f"mcp__cm-music__{t}" for t in _MUSIC_TOOLS]
-    if CM_MCP_STDIO_CMD:
-        servers["creative-manager"] = {
+    """agentic Chat の claude -p に creative-manager MCP(stdio) を接続する引数（音楽ドメインTS一本化後）。
+    CM_MCP_STDIO_CMD 未設定なら [] ＝後退ゼロ（dispatch にフォールバック）。--max-turns でループ打ち切り。"""
+    if not CM_MCP_STDIO_CMD:
+        return []
+    servers = {
+        "creative-manager": {
             "command": CM_MCP_STDIO_CMD,
             "args": json.loads(CM_MCP_STDIO_ARGS) if CM_MCP_STDIO_ARGS else [],
         }
-        allowed += [f"mcp__creative-manager__{t}" for t in _NETA_READ_TOOLS]
-    if not servers:
-        return []
+    }
+    allowed = [f"mcp__creative-manager__{t}" for t in _NETA_READ_TOOLS]
     cfg = json.dumps({"mcpServers": servers})
     max_turns = os.environ.get("CM_AGENTIC_MAX_TURNS", "8")
     return [
@@ -114,7 +107,7 @@ def _mcp_args() -> list[str]:
 
 def claude_prompt(prompt: str, timeout: int = 120, tools: bool = False) -> str:
     """`claude -p`（print/非対話モード）をsubprocessで叩く。Max認証を流用＝APIキー不要。
-    tools=True かつ CM_MUSIC_MCP_URL があれば cm-music ツールを agentic に使える（#86 S2b）。"""
+    tools=True かつ CM_MCP_STDIO_CMD があれば creative-manager(TS) の音楽/読取ツールを agentic に使える。"""
     binary = shutil.which(CLAUDE_BIN) or CLAUDE_BIN
     args = [binary, "-p", prompt] + (_mcp_args() if tools else [])
     # start_new_session=True で子を新プロセスグループのリーダーに＝timeout 時に killpg で claude＋
@@ -953,7 +946,7 @@ def handle_consult(params: dict) -> dict:
     壁打ち(suggest)＋おまかせ(plan)を畳んだ Chat の単一窓口。空/不正は chat フォールバック。"""
     context = params.get("context", "")
     instruction = params.get("instruction") or "この内容について相談に乗って。"
-    agentic = bool(CM_MUSIC_MCP_URL)  # cm-music ツール(生成/分析)が使えるか（#86 S2b）
+    agentic = bool(CM_MCP_STDIO_CMD)  # creative-manager(TS) の音楽/読取ツールが使えるか（cm-music廃止後）
     neta_read = bool(CM_MCP_STDIO_CMD)  # creative-manager read-only ツールで既存ネタを読めるか（#102 S1）
     tools = agentic or neta_read      # MCP を claude -p に載せるか（どちらかでも有れば載せる）
     # #routing A：楽曲生成は【特定 vs 汎用】を先に見分ける。
@@ -975,7 +968,7 @@ def handle_consult(params: dict) -> dict:
             "**gen_named_progression(name) を必ず使う**（記憶で書かない＝非ダイアトニックも正確に確定realize）。"
             "返りが {items:[]} の未知名のときだけ自分の知識で書く。\n"
             "  ◆**汎用/枠だけ/当てはめ**（明るい/切ない/6/8で/N個/このコードに合うメロ/一式 等、固有名なし）→"
-            "**cm-music のMCPツールを使う**（gen_chords→gen_melody→analyze_fit で点検→必要なら作り直す）。\n"
+            "**creative-manager のMCPツールを使う**（gen_chords→gen_melody→analyze_fit で点検→必要なら作り直す）。\n"
             '  いずれも最終結果を {"type":"items","items":[{"kind":"chord_progression|melody|bass|rhythm|section",'
             '"content":...,"label":"短い見出し"}],"edges":[{"type":"compose","from":idx,"to":idx,"position":数}]} で返す'
             "（特定で自分が書いた進行も analyze_fit で当てはまりを点検して所見を持つ）。frame.key は整数(0-11)。\n"

@@ -301,16 +301,18 @@ def test_gen_pair_rule_full_arrangement():
 
 
 def test_mcp_args_gated_by_env(monkeypatch):
-    # #86 S2b env 無し=MCP引数なし(後退ゼロ)、有り=--mcp-config/--allowedTools/--max-turns
+    # cm-music 廃止後：CM_MCP_STDIO_CMD 無し=MCP引数なし(後退ゼロ)、有り=creative-manager 一本
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", None)
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", None)
     assert jobs._mcp_args() == []
-    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", "http://127.0.0.1:8790/mcp")
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", "pnpm")
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_ARGS", '["--filter","@cm/api","mcp"]')
     args = jobs._mcp_args()
     assert "--mcp-config" in args and "--max-turns" in args and "--permission-mode" in args
     allowed = args[args.index("--allowedTools") + 1]
-    assert "mcp__cm-music__analyze_fit" in allowed and "mcp__cm-music__gen_chords" in allowed
+    # 音楽ツールは creative-manager(TS) に集約（旧 cm-music の置換）
+    assert "mcp__creative-manager__analyze_fit" in allowed and "mcp__creative-manager__gen_chords" in allowed
 
 
 def test_mcp_args_neta_read_only(monkeypatch):
@@ -318,10 +320,9 @@ def test_mcp_args_neta_read_only(monkeypatch):
     # 書込ツール(update/delete/place_child/link 等)は **絶対に** allowedTools に入れない（承認前にDBを変えない）。
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", None)
     monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", None)
     monkeypatch.setattr(jobs, "CM_MCP_STDIO_ARGS", None)
-    assert jobs._mcp_args() == []  # どちらも無ければ後退ゼロ
+    assert jobs._mcp_args() == []  # 無ければ後退ゼロ
 
     # neta だけ設定（music 無し）でも read-only ツールが付く（stdio spawn）
     monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", "pnpm")
@@ -342,21 +343,16 @@ def test_mcp_args_neta_read_only(monkeypatch):
               "remove_child", "link", "unlink", "update_song"):
         assert f"mcp__creative-manager__{t}" not in allowed, t
 
-    # 両方設定なら両サーバ＋両ツール群
-    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", "http://127.0.0.1:8790/mcp")
-    args = jobs._mcp_args()
-    cfg = args[args.index("--mcp-config") + 1]
-    assert "cm-music" in cfg and "creative-manager" in cfg
-    allowed = args[args.index("--allowedTools") + 1]
-    assert "mcp__cm-music__gen_chords" in allowed
-    assert "mcp__creative-manager__get_neta" in allowed
+    # 音楽ツール(分析/生成)も creative-manager に集約（cm-music 廃止＝1サーバ1言語）
+    for t in ("analyze_fit", "fit_to_chords", "detect_key", "gen_chords", "gen_named_progression", "melody_similarity"):
+        assert f"mcp__creative-manager__{t}" in allowed, t
 
 
 def test_handle_consult_agentic_items_preserves_index(monkeypatch):
     # #86 S2b agentic：不正itemが先頭でも edge の index がズレない（compactしない）
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", "http://x")
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", "pnpm")  # agentic ON（creative-manager）
     payload = (
         '{"type":"items","items":[{"bad":1},'
         '{"kind":"chord_progression","content":{"chords":[{"root":0,"quality":"","start":0,"dur":4}]}},'
@@ -429,7 +425,7 @@ def test_handle_consult_dispatch_without_env(monkeypatch):
     # env 無し＝従来 dispatch(plan)＝後退ゼロ
     import cm_worker.jobs as jobs
 
-    monkeypatch.setattr(jobs, "CM_MUSIC_MCP_URL", None)
+    monkeypatch.setattr(jobs, "CM_MCP_STDIO_CMD", None)
     monkeypatch.setattr(
         jobs, "claude_prompt",
         lambda p, timeout=120, **kw: '{"type":"plan","subtasks":[{"intent":"gen_pair_rule","params":{}}]}',

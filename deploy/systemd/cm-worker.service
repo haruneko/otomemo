@@ -1,20 +1,17 @@
 [Unit]
 Description=creative_manager ジョブワーカー (claude -p 消化・reap は api 側)
-# api(DB作成・job表権威)と music-mcp(agentic 音楽ツール)が上がってから。
-After=cm-api.service cm-music-mcp.service
-Wants=cm-api.service cm-music-mcp.service
+# api(DB作成・job表権威)が上がってから。agentic は creative-manager stdio を claude -p が自前 spawn。
+After=cm-api.service
+Wants=cm-api.service
 
 [Service]
 Type=simple
 WorkingDirectory=%h/projects/creative_manager/apps/worker
 EnvironmentFile=-%h/.config/creative-manager.env
 Environment=CM_DB=%h/projects/creative_manager/data/cm.sqlite
-Environment=CM_MUSIC_MCP_URL=http://127.0.0.1:8790/mcp
 Environment=CM_MCP_STDIO_CMD=pnpm
 Environment=CM_MCP_STDIO_ARGS=["--filter","@cm/api","mcp"]
 # worker は CM_DB を直接読む（job表は api と同一FK DDLでブートストラップ可）。HTTP api は不要。
-# music-mcp(:8790)は best-effort 依存＝listen を少し待つ（未起動でも dispatch にフォールバック・後退ゼロ）。
-ExecStartPre=/usr/bin/env bash -lc 'for i in $(seq 1 20); do (exec 3<>/dev/tcp/127.0.0.1/8790) 2>/dev/null && break; sleep 1; done; true'
 ExecStart=/usr/bin/env bash -lc 'exec uv run cm-worker'
 Restart=on-failure
 RestartSec=3
