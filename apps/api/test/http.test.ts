@@ -84,6 +84,9 @@ describe("http auth gate (#36)", () => {
     const wrapped = await app.inject({ method: "POST", url: "/music/analyze_fit", payload: { melody: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, chords: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } } });
     expect(wrapped.statusCode).toBe(200);
     expect(wrapped.json()).toHaveProperty("score");
+    // dogfood P3: コード名文字列で受ける（"FM7" 等・root 0-11 手入力不要）
+    const named = await app.inject({ method: "POST", url: "/music/identify_progression", payload: { chords: ["FM7", "E7", "Am7", "Gm7", "C7"], key: 0 } });
+    expect(named.json()[0].name).toBe("丸の内");
   });
 
   it("GET /health はトークン不要で jobs 統計を返す（S4）", async () => {

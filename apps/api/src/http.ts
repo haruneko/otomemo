@@ -22,6 +22,7 @@ import {
   analyzeProgression,
   explainProgression,
   harmonize,
+  parseChordSymbol,
 } from "./music";
 import { findProgressions } from "./progression-search";
 
@@ -115,7 +116,15 @@ export function buildHttp(core: Core): FastifyInstance {
     // 入力正規化：melody/chords は「生配列」でも「{notes}/{chords}」でも受ける（生成物をそのまま検証に
     // 回せるように・dogfood P1）。不正は空配列＝関数は落ちない。さらに try/catch で 500 でなく 400 に。
     const asNotes = (x: any): any[] => (Array.isArray(x) ? x : Array.isArray(x?.notes) ? x.notes : []);
-    const asChords = (x: any): any[] => (Array.isArray(x) ? x : Array.isArray(x?.chords) ? x.chords : []);
+    // chord は {root,quality} でも **"Cm7" 等の文字列**でも受ける（root 0-11 手入力の辛さ解消・dogfood P3）。
+    const asChords = (x: any): any[] => {
+      const arr = Array.isArray(x) ? x : Array.isArray(x?.chords) ? x.chords : [];
+      return arr.map((c: any, i: number) => {
+        if (typeof c !== "string") return c;
+        const p = parseChordSymbol(c);
+        return p ? { root: p.root, quality: p.quality, start: i, dur: 1 } : null;
+      }).filter(Boolean);
+    };
     try {
       switch (op) {
         case "gen_chords": return genChords(b.frame, b.seed);
