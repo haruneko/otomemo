@@ -20,6 +20,7 @@ export * from "./fit";
 export * from "./harmonize";
 // 継続（次のコード候補）。
 export * from "./continuation";
+export * from "./generate";
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {
