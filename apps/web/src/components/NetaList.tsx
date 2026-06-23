@@ -48,7 +48,14 @@ export function NetaCard({
   // 再生/停止トグル（#73+停止）。playNotes は単一Transportなので別ネタ再生で自動停止。
   const [playing, setPlaying] = useState(false);
   const handleRef = useRef<PlaybackHandle | null>(null);
-  useEffect(() => () => handleRef.current?.stop(), []); // アンマウントで止める
+  const alive = useRef(true); // アンマウント後に setState しないためのガード（生成ポーリングは長い）
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      handleRef.current?.stop();
+    };
+  }, []);
 
   async function toggle(getNotes: () => Note[] | Promise<Note[]>, program?: number) {
     if (playing) {
@@ -77,13 +84,13 @@ export function NetaCard({
 
   async function pollContent(jobId: string): Promise<unknown> {
     // worker の claude_prompt timeout(120s)を超えるまで待つ（落ちても api 側 reaper が拾う）
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 90 && alive.current; i++) {
       const j = await api.getJob(jobId);
       if (j.status === "done") return (j.result as { content?: unknown } | null)?.content;
       if (j.status === "failed") return undefined;
       await new Promise((r) => setTimeout(r, 1500));
     }
-    return undefined;
+    return undefined; // タイムアウト or アンマウント
   }
 
   async function generate(kind: keyof typeof intentOf) {
@@ -96,11 +103,11 @@ export function NetaCard({
         params: { context: ctx() },
       });
       const content = await pollContent(job.id);
-      if (content == null) return; // 失敗/タイムアウト：空ネタを作らない（トレイに失敗が出る）
+      if (content == null || !alive.current) return; // 失敗/タイムアウト/アンマウント：空ネタを作らない
       await api.createNeta({ kind, title: neta.title ?? "案", content, from_job: job.id });
-      onChanged?.();
+      if (alive.current) onChanged?.();
     } finally {
-      setGen(false);
+      if (alive.current) setGen(false);
     }
   }
 
@@ -117,13 +124,13 @@ export function NetaCard({
           params: { context: ctx() },
         });
         const content = await pollContent(job.id);
-        if (content == null) continue; // 失敗の子は作らない
+        if (content == null || !alive.current) continue; // 失敗/アンマウントの子は作らない
         const child = await api.createNeta({ kind, title: kind, content, from_job: job.id });
         await api.placeChild(section.id, child.id, 0, 0).catch(() => {});
       }
-      onChanged?.();
+      if (alive.current) onChanged?.();
     } finally {
-      setGen(false);
+      if (alive.current) setGen(false);
     }
   }
 
