@@ -49,11 +49,26 @@ export function detectKeyFromChords(chords: Chord[], top = 2): KeyCandidate[] {
 }
 
 // 2つの度数の置換コスト（0=同一 … ~1.5=度数も品質も別）。度数=半音circular距離(上限2)を0..1、品質不一致+0.5。
+// quality を「族」へ正規化（3度＋種別）。三和音とその7th拡張は同族＝近い（素描＝トライアドで書いても当たる）。
+function qualityClass(q: string): string {
+  const s = (q || "").toLowerCase();
+  if (s.startsWith("dim") || s.includes("7b5") || s.includes("m7-5")) return "dim";
+  if (s.startsWith("aug") || s.startsWith("+")) return "aug";
+  if (s.startsWith("sus")) return "sus";
+  if (s.startsWith("m") && !s.startsWith("maj")) return "min"; // m/m7/m6/min（短3度）
+  return "maj"; // ""/maj7/7/6/9/add…（長3度）
+}
 function degCost(a: Degree, b: Degree): number {
   const d = Math.abs(a.degree - b.degree) % 12;
   const circ = Math.min(d, 12 - d);
   const dd = a.degree === b.degree ? 0 : Math.min(circ, 2) / 2;
-  const qd = (a.quality || "") === (b.quality || "") ? 0 : 0.5;
+  // quality 不一致：同族（三和音↔7th等・3度が同じ）は軽い、別族（major↔minor↔dim）は重い。
+  const qd =
+    (a.quality || "") === (b.quality || "")
+      ? 0
+      : qualityClass(a.quality || "") === qualityClass(b.quality || "")
+        ? 0.15
+        : 0.5;
   return dd + qd;
 }
 

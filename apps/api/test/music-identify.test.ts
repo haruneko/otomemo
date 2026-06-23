@@ -31,6 +31,11 @@ describe("identifyProgression（名前あて）", () => {
     const up5 = CANON.map((c) => ({ root: (c.root + 5) % 12, quality: c.quality })); // F調へ
     expect(identifyProgression(up5)[0].name).toBe("カノン");
   });
+  it("三和音で書いた王道(F-G-Em-Am)でも王道に当たる（dogfood P2・quality緩照合＋キー候補）", () => {
+    const triad = [{ root: 5, quality: "" }, { root: 7, quality: "" }, { root: 4, quality: "m" }, { root: 9, quality: "m" }];
+    expect(identifyProgression(triad, { key: 0 })[0].name).toBe("王道"); // 7th無しでも小室に化けない
+    expect(identifyProgression(triad)[0].name).toBe("王道"); // 調未指定でも相対短調に飛ばない
+  });
   it("無関係な進行は高類似で当たらない（第1候補でも閾値未満）", () => {
     const weird = [{ root: 1, quality: "dim" }, { root: 6, quality: "aug" }, { root: 11, quality: "sus4" }];
     const r = identifyProgression(weird, { key: 0 });

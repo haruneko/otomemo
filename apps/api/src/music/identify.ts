@@ -23,24 +23,35 @@ function bestRotationSimilarity(user: Degree[], named: Degree[]): number {
 }
 
 /** ユーザーの進行 → 名前付き進行の近い順（既定 top3）。調未指定なら推定して度数化。 */
-export function identifyProgression(
-  chords: Chord[],
-  opts: { key?: number; mode?: "major" | "minor"; top?: number } = {},
-): IdentifyResult[] {
-  let key = opts.key;
-  let mode = opts.mode;
-  if (key === undefined || mode === undefined) {
-    const top = detectKeyFromChords(chords, 1)[0]!;
-    key = key ?? top.key;
-    mode = mode ?? top.mode;
-  }
+function scoreInKey(chords: Chord[], key: number, mode: "major" | "minor", top: number): IdentifyResult[] {
   const user = toDegrees(chords, key);
   const scored = NAMED_PROGRESSIONS.map((p) => ({
     name: p.name,
     similarity: Math.round(bestRotationSimilarity(user, p.degrees) * 1000) / 1000,
-    key: key!,
-    mode: mode!,
+    key,
+    mode,
   }));
   scored.sort((a, b) => b.similarity - a.similarity);
-  return scored.slice(0, Math.max(1, opts.top ?? 3));
+  return scored.slice(0, Math.max(1, top));
+}
+
+export function identifyProgression(
+  chords: Chord[],
+  opts: { key?: number; mode?: "major" | "minor"; top?: number } = {},
+): IdentifyResult[] {
+  const top = Math.max(1, opts.top ?? 3);
+  // 調が両方指定なら確定。そうでなければ**候補(major/相対minor等)を複数試し、最も当たる調を採る**
+  // ＝相対短調に飛んで名前を外す事故を防ぐ（dogfood P2：トライアドの王道が小室に化ける問題）。
+  const candidates =
+    opts.key !== undefined && opts.mode !== undefined
+      ? [{ key: opts.key, mode: opts.mode }]
+      : detectKeyFromChords(chords, 2).map((c) => ({ key: opts.key ?? c.key, mode: opts.mode ?? c.mode }));
+  let best: IdentifyResult[] = [];
+  let bestTop = -1;
+  for (const c of candidates) {
+    const res = scoreInKey(chords, c.key, c.mode, top);
+    const s = res[0]?.similarity ?? 0;
+    if (s > bestTop) (bestTop = s), (best = res);
+  }
+  return best;
 }
