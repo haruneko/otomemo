@@ -31,6 +31,25 @@ describe("ChordEditor", () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
+  it("長さボタンで dur を変え、start は順番から自動フローする（CV1）", async () => {
+    const onChange = vi.fn();
+    render(
+      <ChordEditor
+        chords={[
+          { root: 0, quality: "", start: 0, dur: 4 },
+          { root: 7, quality: "", start: 4, dur: 4 },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getByLabelText("len-0-2")); // 1つ目を2拍に
+    // 1つ目 dur=2 → 2つ目 start は自動で 2 に詰まる（手入力でない）
+    expect(onChange).toHaveBeenCalledWith([
+      { root: 0, quality: "", start: 0, dur: 2 },
+      { root: 7, quality: "", start: 2, dur: 4 },
+    ]);
+  });
+
   it("highlights the chord under the playhead beat while playing (#76)", () => {
     vi.useFakeTimers();
     const chords = [

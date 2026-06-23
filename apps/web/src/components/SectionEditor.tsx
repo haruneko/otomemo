@@ -11,21 +11,24 @@ function LaneCell({
   bar,
   position,
   onTap,
+  disabled,
 }: {
   laneKey: string;
   kinds: readonly string[];
   bar: number;
   position: number;
   onTap: (position: number) => void;
+  disabled?: boolean; // 単一パートが埋まってる＝置けない（CV3）
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `cell-${laneKey}-${bar}`, data: { kinds, position } });
+  const { setNodeRef, isOver } = useDroppable({ id: `cell-${laneKey}-${bar}`, data: { kinds, position }, disabled });
   return (
     <button
       ref={setNodeRef}
       type="button"
-      className={"lane-cell" + (isOver ? " over" : "")}
+      className={"lane-cell" + (isOver ? " over" : "") + (disabled ? " locked" : "")}
       aria-label={`place-${laneKey}-${bar}`}
-      onClick={() => onTap(position)}
+      disabled={disabled}
+      onClick={() => !disabled && onTap(position)}
     />
   );
 }
@@ -41,12 +44,15 @@ import { MiniRoll } from "./MiniRoll";
 // 配置タイムライン（design #19）。section/song を メロ/コード/ベース/リズムの4レーン×小節 で組む。
 // レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
 // 調/テンポは section が支配。rhythm(ドラム)は移調しない。
+// レーン順＝層モデル（進行が一番上→メロ→コード楽器→ベース→リズム→ネスト）。
+// single＝1セクションに1つだけ（埋まってたら追加不可・CV3）。コード楽器/section は複数可。
 const LANES = [
-  { key: "melody", label: "メロ", kinds: ["melody"] },
-  { key: "chord", label: "コード", kinds: ["chord", "chord_progression"] },
-  { key: "bass", label: "ベース", kinds: ["bass"] },
-  { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
-  { key: "section", label: "セクション", kinds: ["section"] }, // #15 section をネスト配置
+  { key: "chord", label: "コード進行", kinds: ["chord", "chord_progression"], single: true },
+  { key: "melody", label: "メロ", kinds: ["melody"], single: true },
+  { key: "chord_pattern", label: "コード楽器", kinds: ["chord_pattern"], single: false },
+  { key: "bass", label: "ベース", kinds: ["bass"], single: true },
+  { key: "rhythm", label: "リズム", kinds: ["rhythm"], single: true },
+  { key: "section", label: "セクション", kinds: ["section"], single: false }, // #15 section をネスト配置
 ] as const;
 const BARS = 8;
 
@@ -164,7 +170,9 @@ export function SectionEditor({
     return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : BPB;
   }
 
+  const laneLocked = (lane: Lane) => lane.single && laneChildren(lane).length > 0; // 単一パートが埋まってる
   async function openPicker(lane: Lane, position: number) {
+    if (laneLocked(lane)) return; // 既に埋まってる単一パートには置かせない（CV3）
     // project＋library 両方を候補に（library=連想元コーパス・椎名林檎等）。種別は picker 内で切替。
     const all = await api.listNeta({ scope: "all", limit: 2000 });
     setPq("");
@@ -248,6 +256,7 @@ export function SectionEditor({
                   kinds={lane.kinds}
                   bar={b}
                   position={b * BPB}
+                  disabled={laneLocked(lane)}
                   onTap={(pos) => void openPicker(lane, pos)}
                 />
               ))}
@@ -320,6 +329,7 @@ export function SectionEditor({
                   type="button"
                   aria-label={`picker-kind-${l.key}`}
                   className={l.key === picker.lane.key ? "on" : ""}
+                  disabled={laneLocked(l)} // 埋まってる単一パートは選べない（CV3）
                   onClick={() => setPicker((p) => (p ? { ...p, lane: l } : p))}
                 >
                   {l.label}

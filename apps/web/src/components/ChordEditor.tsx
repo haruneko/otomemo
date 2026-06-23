@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import { type ChordEntry } from "../music";
-import { NumberField } from "./NumberField";
+import { MiniRoll } from "./MiniRoll";
+import type { Neta } from "../api";
 
 const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const QUALITIES = [
@@ -16,8 +17,24 @@ const QUALITIES = [
   { v: "m6", label: "m6" },
   { v: "9", label: "9" },
 ];
+const LENGTHS = [
+  { v: 1, label: "1拍" },
+  { v: 2, label: "2拍" },
+  { v: 4, label: "1小節" },
+  { v: 8, label: "2小節" },
+];
 
-// コード列の編集（design #19「コード入力（自作＋tonal.js）」）。C基準で root+quality を保存。
+// コードは「順番に並ぶ」＝start は手入力でなく長さから自動フロー（直感的・"よくわからない"を解消）。
+function reflow(chords: ChordEntry[]): ChordEntry[] {
+  let t = 0;
+  return chords.map((c) => {
+    const out = { ...c, start: t };
+    t += c.dur;
+    return out;
+  });
+}
+
+// コード列の編集（design #19）。C基準で root+quality を保存。順番＝進行・長さだけ選ぶ＋ピアノロール表示。
 export function ChordEditor({
   chords,
   onChange,
@@ -26,10 +43,9 @@ export function ChordEditor({
 }: {
   chords: ChordEntry[];
   onChange: (c: ChordEntry[]) => void;
-  beatRef?: RefObject<number>; // #76 再生中拍（10Hzでポーリングして行ハイライト）
+  beatRef?: RefObject<number>;
   playing?: boolean;
 }) {
-  // #76 再生中のコード行ハイライト（タイムラインでないので赤線でなく行を光らせる）。
   const [activeIdx, setActiveIdx] = useState(-1);
   useEffect(() => {
     if (!playing || !beatRef) {
@@ -43,74 +59,56 @@ export function ChordEditor({
     return () => clearInterval(id);
   }, [playing, beatRef, chords]);
 
+  // 変更は必ず reflow（start を順番から再計算）して保存＝start のズレ/手入力を排除。
+  const commit = (cs: ChordEntry[]) => onChange(reflow(cs));
   function update(i: number, patch: Partial<ChordEntry>) {
-    onChange(chords.map((c, k) => (k === i ? { ...c, ...patch } : c)));
+    commit(chords.map((c, k) => (k === i ? { ...c, ...patch } : c)));
   }
   function add() {
-    const last = chords[chords.length - 1];
-    const start = last ? last.start + last.dur : 0;
-    onChange([...chords, { root: 0, quality: "", start, dur: 4 }]);
+    commit([...chords, { root: 0, quality: "", start: 0, dur: 4 }]);
   }
   function remove(i: number) {
-    onChange(chords.filter((_, k) => k !== i));
+    commit(chords.filter((_, k) => k !== i));
   }
+
+  // ピアノロール表示用の合成 neta（読み取り専用の可視化）。
+  const previewNeta = { kind: "chord_progression", content: { chords }, key: 0 } as unknown as Neta;
 
   return (
     <div className="chord-editor">
-      {chords.length === 0 && <p className="muted">「＋コード」で追加</p>}
+      {chords.length > 0 && (
+        <div className="chord-roll" aria-label="chord-roll">
+          <MiniRoll neta={previewNeta} />
+        </div>
+      )}
+      {chords.length === 0 && <p className="muted">「＋コード」で追加（左から順に並びます）</p>}
       {chords.map((c, i) => (
         <div className={"chord-row" + (i === activeIdx ? " playing" : "")} key={i}>
           <span className="chord-sym">
             {ROOTS[c.root]}
             {c.quality}
           </span>
-          <select
-            aria-label={`root-${i}`}
-            value={c.root}
-            onChange={(e) => update(i, { root: Number(e.target.value) })}
-          >
+          <select aria-label={`root-${i}`} value={c.root} onChange={(e) => update(i, { root: Number(e.target.value) })}>
             {ROOTS.map((r, idx) => (
-              <option key={idx} value={idx}>
-                {r}
-              </option>
+              <option key={idx} value={idx}>{r}</option>
             ))}
           </select>
-          <select
-            aria-label={`quality-${i}`}
-            value={c.quality}
-            onChange={(e) => update(i, { quality: e.target.value })}
-          >
+          <select aria-label={`quality-${i}`} value={c.quality} onChange={(e) => update(i, { quality: e.target.value })}>
             {QUALITIES.map((q) => (
-              <option key={q.v} value={q.v}>
-                {q.label}
-              </option>
+              <option key={q.v} value={q.v}>{q.label}</option>
             ))}
           </select>
-          <label>
-            開始
-            <NumberField
-              aria-label={`start-${i}`}
-              value={c.start}
-              onChange={(v) => update(i, { start: v })}
-            />
-          </label>
-          <label>
-            長さ
-            <NumberField
-              min={1}
-              aria-label={`dur-${i}`}
-              value={c.dur}
-              onChange={(v) => update(i, { dur: v })}
-            />
-          </label>
-          <button type="button" aria-label={`remove-chord-${i}`} onClick={() => remove(i)}>
-            ✕
-          </button>
+          <div className="chord-len" aria-label={`len-${i}`}>
+            {LENGTHS.map((l) => (
+              <button key={l.v} type="button" className={"len" + (c.dur === l.v ? " on" : "")} aria-label={`len-${i}-${l.v}`} onClick={() => update(i, { dur: l.v })}>
+                {l.label}
+              </button>
+            ))}
+          </div>
+          <button type="button" aria-label={`remove-chord-${i}`} onClick={() => remove(i)}>✕</button>
         </div>
       ))}
-      <button type="button" className="bs-btn" onClick={add}>
-        ＋コード
-      </button>
+      <button type="button" className="bs-btn" onClick={add}>＋コード</button>
     </div>
   );
 }
