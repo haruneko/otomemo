@@ -69,6 +69,8 @@ export function NetaDialog({
   const [len, setLen] = useState(() =>
     Math.max(16, (neta.bars ?? 0) * 4, ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
   );
+  // 弱起（アウフタクト）：拍0の前の lead-in 拍数。既存の負 start を包む値で初期化。
+  const [pickup, setPickup] = useState(() => Math.max(0, Math.ceil(-Math.min(0, ...notesOf(neta.content).map((n) => n.start)))));
   const [busy, setBusy] = useState(false);
   const [rels, setRels] = useState<{ type: string; neta: Neta | null }[]>([]);
   const [schedId, setSchedId] = useState<string | null>(null); // #80 継続調査スケジュール
@@ -79,12 +81,15 @@ export function NetaDialog({
   const isContainer = neta.kind === "section" || neta.kind === "song";
   const isMusic = isMelody || isBass || isChord || isRhythm;
   const isRelBass = isBass && bassMode === "relative"; // #bass S2 相対モード
+  // 弱起ぶんの lead-in（指定 pickup と既存の負 start を包む）。ソロ再生はこの分だけ前へずらして鳴らす
+  // ＝弱起→ダウンビートの順で聞こえる（PianoRoll も同じ pre で描画）。
+  const pre = Math.max(0, pickup, Math.ceil(-Math.min(0, ...notesOf(neta.content).map((n) => n.start), ...notes.map((n) => n.start))));
   // ソロ編集は見た目=実音（WYSIWYG）＝トランスポーズしない。調支配は合成(SectionEditor)側。
   // 相対bass は単体プレビュー＝調(key)を tonic に度数解決して鳴らす（実音高）。
   const playable = isRelBass
     ? resolveRelativeBass(bassPattern, [], key)
     : isMelody || isBass
-      ? notes
+      ? notes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る
       : isChord
         ? chordsToNotes(chords)
         : rhythmToNotes(rhythm);
@@ -330,6 +335,7 @@ export function NetaDialog({
         bassMode={bassMode} setBassMode={setBassMode}
         melodyView={melodyView} setMelodyView={setMelodyView}
         len={len} setLen={setLen}
+        pickup={pre} setPickup={setPickup}
         text={text} setText={setText}
         keyPc={key} tempo={tempo} meter={meter}
         reloadSignal={reloadSignal} onChanged={onChanged}

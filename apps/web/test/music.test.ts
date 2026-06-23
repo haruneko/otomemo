@@ -220,6 +220,15 @@ describe("music", () => {
       expect(notes.find((n) => n.pitch === 31)?.program).toBe(33);
     });
 
+    it("弱起(負start)の子は position より前に鳴り、拍0=position は保たれる（fb-4）", () => {
+      const children = [
+        { position: 4, node: { neta: { kind: "melody", content: { notes: [{ pitch: 67, start: -1, dur: 1 }, { pitch: 72, start: 0, dur: 1 }] } } } },
+      ];
+      const notes = compositeNotes(children, 0);
+      expect(notes.find((n) => n.pitch === 67)!.start).toBe(3); // 弱起は position(4) の前＝3拍
+      expect(notes.find((n) => n.pitch === 72)!.start).toBe(4); // ダウンビート＝position に保たれる
+    });
+
     it("ネストした section を再帰合成する（#15・子の調＋位置オフセット）", () => {
       // 親 section(key=0) に サブ section(key=2) を position=4 で配置。サブは C基準メロ(pitch60)を持つ。
       const children = [

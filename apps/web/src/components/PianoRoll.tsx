@@ -27,6 +27,7 @@ export function PianoRoll({
   notes,
   onChange,
   beats = 16,
+  pickup = 0,
   playheadRef,
   scrollerRef,
   low = DEFAULT_LOW,
@@ -35,6 +36,7 @@ export function PianoRoll({
   notes: Note[];
   onChange: (n: Note[]) => void;
   beats?: number;
+  pickup?: number; // 弱起（アウフタクト）：拍0の前に置ける lead-in 拍数。負 start の音を扱う。
   playheadRef?: Ref<HTMLDivElement>; // #58 再生プレイヘッド（--phb 生beatを ref直書き）
   scrollerRef?: Ref<HTMLDivElement>; // #74 追従スクロール対象（.proll）
   low?: number; // 既定で見せる最低音（bass は E1=28 など低域既定）
@@ -49,15 +51,22 @@ export function PianoRoll({
     for (let p = hi; p >= lo; p--) arr.push(p);
     return arr;
   }, [notes, low, high]);
-  // 表示尺は content に追従（生成/取込で beats を超える音もはみ出さない）
+  // 弱起ぶんの lead-in（拍0の前）。指定 pickup と既存の負 start を両方包む。拍0=ダウンビートは固定。
+  const pre = useMemo(
+    () => Math.max(0, pickup, Math.ceil(-Math.min(0, ...notes.map((n) => n.start)))),
+    [pickup, notes],
+  );
+  // 表示尺は content に追従（生成/取込で beats を超える音もはみ出さない）＋弱起ぶん左へ。
   const span = useMemo(
     () => Math.max(beats, ...notes.map((n) => Math.ceil(n.start + n.dur))),
     [beats, notes],
   );
-  const steps = span * SUBDIV;
+  const total = pre + span; // 表示する総拍（-pre 〜 span）
+  const steps = total * SUBDIV;
 
   function addAt(pitch: number, step: number) {
-    const start = step / SUBDIV;
+    const start = step / SUBDIV - pre; // 先頭 pre*SUBDIV セルは負拍（弱起）
+
     // クリック位置を覆う同ピッチの既存ノートがあれば消す（小数startのAI/MIDIノートも編集できる）
     const covering = notes.find(
       (n) => n.pitch === pitch && n.start <= start + 1e-9 && start < n.start + n.dur - 1e-9,
@@ -106,7 +115,12 @@ export function PianoRoll({
                   key={s}
                   type="button"
                   aria-label={`cell-${p}-${s}`}
-                  className={"proll-cell" + (s % SUBDIV === 0 ? " beat" : "")}
+                  className={
+                    "proll-cell" +
+                    (s % SUBDIV === 0 ? " beat" : "") +
+                    (s === pre * SUBDIV ? " downbeat" : "") + // 拍0＝ダウンビート（弱起の境目）
+                    (s < pre * SUBDIV ? " pickup" : "")
+                  }
                   onClick={() => addAt(p, s)}
                 />
               ))}
@@ -119,8 +133,8 @@ export function PianoRoll({
                     aria-label={`note-${p}-${n.start}`}
                     className="proll-note"
                     style={{
-                      left: `${(n.start / span) * 100}%`,
-                      width: `${(n.dur / span) * 100}%`,
+                      left: `${((n.start + pre) / total) * 100}%`,
+                      width: `${(n.dur / total) * 100}%`,
                     }}
                     title={`${noteName(p)} ${n.start}拍 +${n.dur}`}
                     onClick={(e) => {

@@ -442,3 +442,8 @@
 .proll-cell.beat {
   border-left: 1px solid #3a3f49;
 }
+
+/* 弱起（アウフタクト）：lead-in セルは淡く、ダウンビート(拍0)に強い境界線。 */
+.roll-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.proll-cell.pickup { background: #15171b; }
+.proll-cell.downbeat { border-left: 2px solid var(--accent); }

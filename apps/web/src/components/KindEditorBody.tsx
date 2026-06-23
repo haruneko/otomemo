@@ -31,6 +31,8 @@ export interface KindEditorBodyProps {
   setMelodyView: (v: "roll" | "pad") => void;
   len: number;
   setLen: (n: number) => void;
+  pickup: number; // 弱起（lead-in拍数）
+  setPickup: (n: number) => void;
   text: string;
   setText: (s: string) => void;
   keyPc: number; // 調（'key' は React 予約 prop なので keyPc）
@@ -81,15 +83,25 @@ export function KindEditorBody(p: KindEditorBodyProps) {
               </div>
               {p.melodyView === "roll" ? (
                 <>
-                  <BarsControl
-                    bars={Math.max(1, Math.round(p.len / 4))}
-                    max={Math.max(4, Math.ceil(p.len / 4))}
-                    onChange={(n) => p.setLen(n * 4)}
-                  />
+                  <div className="roll-controls">
+                    <BarsControl
+                      bars={Math.max(1, Math.round(p.len / 4))}
+                      max={Math.max(4, Math.ceil(p.len / 4))}
+                      onChange={(n) => p.setLen(n * 4)}
+                    />
+                    {/* 弱起（アウフタクト）：拍0の前に lead-in を足す。ダウンビートは位置を保つ。 */}
+                    <div className="bars-control" title="弱起（拍0の前の空き）">
+                      <span className="muted">弱起</span>
+                      <button type="button" aria-label="pickup-dec" disabled={p.pickup <= 0} onClick={() => p.setPickup(Math.max(0, p.pickup - 1))}>−</button>
+                      <span aria-label="pickup-count">{p.pickup}</span>
+                      <button type="button" aria-label="pickup-inc" disabled={p.pickup >= 4} onClick={() => p.setPickup(p.pickup + 1)}>＋</button>
+                    </div>
+                  </div>
                   <PianoRoll
                     notes={p.notes}
                     onChange={p.setNotes}
                     beats={p.len}
+                    pickup={p.pickup}
                     low={isBass ? 28 : undefined}
                     high={isBass ? 55 : undefined}
                     playheadRef={tp.lineRef}
