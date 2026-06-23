@@ -240,7 +240,12 @@ export function resolveRelativeBass(
   entries.forEach((e, i) => {
     const start = Math.round(e.step * BASS_STEP_TO_BEAT * 1000) / 1000;
     const dur = Math.round((e.dur ?? 1) * BASS_STEP_TO_BEAT * 1000) / 1000;
-    const ch = bassChordAt(start, chords);
+    // つんのめり(アンティシペーション)：裏拍始まりでダウンビートを跨いで伸びる音は、跨いだ先の
+    // ダウンビートのコードで相対解決する（例 2拍裏から四分→3拍目表のコード基準）。4/4ロックの押し感。
+    const nextBeat = Math.floor(start + 1e-9) + 1;
+    const offBeat = Math.abs(start - Math.round(start)) > 1e-9;
+    const refBeat = offBeat && nextBeat < start + dur - 1e-9 ? nextBeat : start;
+    const ch = bassChordAt(refBeat, chords);
     const root = ch ? ((ch.root % 12) + 12) % 12 : k;
     const quality = ch ? ch.quality : "";
     const rootPitch = band(root); // ルート音を E1..D#2 帯へ（帯はルートの置き場）

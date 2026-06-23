@@ -185,6 +185,19 @@ describe("music", () => {
       expect(notes.every((n) => n.pitch >= 28)).toBe(true);
     });
 
+    it("つんのめり：裏拍始まりで次のダウンビートを跨ぐ音は、跨いだ先のコードで相対解決", () => {
+      // 2拍裏(step10=2.5拍)から四分(4step=1拍)→3.5拍まで＝3拍目(G)を跨ぐ→Gルート基準。
+      const chords = [
+        { root: 0, quality: "", start: 0, dur: 3 }, // 0..3拍目前 = C
+        { root: 7, quality: "", start: 3, dur: 1 }, // 3拍目 = G
+      ];
+      const anticip = resolveRelativeBass([{ step: 10, degree: "R", dur: 4 }], chords, 0);
+      expect(anticip[0]!.pitch).toBe(band(7)); // G(31)＝跨いだ先のコードで解決（つんのめり）
+      // 対照：拍頭(step8=2拍)始まりは始点のコード C のまま（つんのめらない）
+      const onbeat = resolveRelativeBass([{ step: 8, degree: "R", dur: 4 }], chords, 0);
+      expect(onbeat[0]!.pitch).toBe(band(0)); // C(36)
+    });
+
     it("notesForContent resolves relative bass (single preview uses key tonic)", () => {
       const content = { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }] };
       expect(notesForContent("bass", content, { key: 0 })).toEqual([{ pitch: 36, start: 0, dur: 1 }]);
