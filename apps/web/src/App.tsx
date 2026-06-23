@@ -21,11 +21,19 @@ import { HummingRecorder } from "./components/HummingRecorder";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { flushOutbox } from "./outbox";
+import { projectTag } from "./project";
+
+const ACTIVE_PROJECT_KEY = "cm-active-project";
 
 
 export function App() {
   const [items, setItems] = useState<(Neta & { matchType?: string })[]>([]);
   const [scope, setScope] = useState<"project" | "library">("project"); // プロジェクト/ライブラリ タブ
+  // 複数プロジェクト：アクティブプロジェクト名（""＝すべて）。クライアント状態＝localStorageに永続。
+  const [activeProject, setActiveProject] = useState<string>(
+    () => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? "",
+  );
+  const [projects, setProjects] = useState<string[]>([]); // facets() 由来のプロジェクト名一覧
   const [kindFilter, setKindFilter] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
   const [q, setQ] = useState("");
@@ -41,6 +49,23 @@ export function App() {
   // ドラッグは5px動かしてから開始＝カードのクリック(開く)と両立（#52②c）
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  // アクティブプロジェクトの永続化（端末ローカル状態）。
+  useEffect(() => {
+    if (activeProject) localStorage.setItem(ACTIVE_PROJECT_KEY, activeProject);
+    else localStorage.removeItem(ACTIVE_PROJECT_KEY);
+  }, [activeProject]);
+
+  // プロジェクト一覧（facets の projects＝prj: を剥がした名前）。reload時に追従。
+  const loadProjects = useCallback(() => {
+    api
+      .facets()
+      .then((f) => setProjects(f.projects ?? []))
+      .catch(() => {});
+  }, []);
+
+  // 新規ネタに付けるプロジェクトタグ（アクティブが無ければ無し）。create サイト共通。
+  const projectTags = activeProject ? [projectTag(activeProject)] : [];
+
   async function onDragEnd(e: DragEndEvent) {
     const dragged = e.active.data.current?.neta as Neta | undefined;
     const drop = e.over?.data.current as { kinds?: readonly string[]; position?: number } | undefined;
@@ -53,7 +78,7 @@ export function App() {
   }
 
   async function newSong() {
-    const s = await api.createNeta({ kind: "section", title: "新しい曲" });
+    const s = await api.createNeta({ kind: "section", title: "新しい曲", tags: projectTags });
     await reload();
     setActive(s); // メインペーンで開く
   }
@@ -112,6 +137,7 @@ export function App() {
               kind: "melody",
               title: file.name.replace(/\.(musicxml|xml)$/i, ""),
               content: { notes },
+              tags: projectTags,
             });
           }
         } catch {
@@ -130,7 +156,7 @@ export function App() {
         .split(/\n\s*\n/)
         .map((s) => s.trim())
         .filter(Boolean);
-      for (const p of parts) await api.createNeta({ kind: "lyric", text: p });
+      for (const p of parts) await api.createNeta({ kind: "lyric", text: p, tags: projectTags });
     }
     await reload();
   }
@@ -139,6 +165,15 @@ export function App() {
     setChatTarget(target);
     setChatOpen(true);
   };
+
+  // ＋新規プロジェクト：名前を取り、アクティブにする（以降の新規ネタに prj: が付く）。
+  // 実体はネタに prj: が付いた時点で facets に現れる＝ここでは選択肢にも即時反映しておく。
+  function newProject() {
+    const name = window.prompt("新しいプロジェクト名")?.trim();
+    if (!name) return;
+    setProjects((ps) => (ps.includes(name) ? ps : [...ps, name]));
+    setActiveProject(name);
+  }
 
   function openTray() {
     setTrayOpen(true);
@@ -168,7 +203,13 @@ export function App() {
       return;
     }
     if (!query) {
-      setItems(await api.listNeta({ kind: kindFilter || undefined }));
+      // project ブラウズ：アクティブプロジェクトがあれば prj: タグでAND絞り込み（横断は検索経路）。
+      setItems(
+        await api.listNeta({
+          kind: kindFilter || undefined,
+          tags: activeProject ? [projectTag(activeProject)] : undefined,
+        }),
+      );
       return;
     }
     try {
@@ -177,11 +218,12 @@ export function App() {
       // API自体が不通なら LIKE 絞り込みに退避（出先/オフラインで無音にしない）
       setItems(await api.listNeta({ q: query }));
     }
-  }, [kindFilter, q, scope]);
+  }, [kindFilter, q, scope, activeProject]);
 
   useEffect(() => {
     reload().catch(() => {});
-  }, [reload]);
+    loadProjects(); // 新規プロジェクトのネタができたら一覧(facets)に追従
+  }, [reload, loadProjects]);
 
   // オフライン退避分をオンライン復帰時に同期
   useEffect(() => {
@@ -298,6 +340,7 @@ export function App() {
             </label>
           </div>
           <Capture
+            activeProject={activeProject}
             onCreated={(n) => {
               void reload();
               // 音楽/コンテナ kind は中身が空＝そのままエディタを開く（再タップ不要・スマホUX）。
@@ -322,6 +365,26 @@ export function App() {
               ライブラリ（連想元）
             </button>
           </div>
+          {/* プロジェクト・ピッカー：project スコープ時のみ（library は全プロジェクト共有）。 */}
+          {scope === "project" && (
+            <div className="project-picker">
+              <select
+                aria-label="project"
+                value={activeProject}
+                onChange={(e) => setActiveProject(e.target.value)}
+              >
+                <option value="">すべて</option>
+                {projects.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <button className="import-btn" onClick={newProject}>
+                ＋新規
+              </button>
+            </div>
+          )}
           <div className="filters">
             <input
               aria-label="search"

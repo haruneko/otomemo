@@ -2,10 +2,17 @@ import { useState, type FormEvent } from "react";
 import { api, ApiError, type Neta } from "../api";
 import { KINDS, TEXT_KINDS } from "../kinds";
 import { queueNeta } from "../outbox";
+import { projectTag } from "../project";
 
 // 摩擦ゼロの捕獲（要件）。本文1個＋kind＋任意タグ＋「放り込む」。
 
-export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
+export function Capture({
+  onCreated,
+  activeProject = "",
+}: {
+  onCreated?: (n: Neta) => void;
+  activeProject?: string; // アクティブプロジェクト名（""＝すべて）。新規ネタに prj: を自動付与。
+}) {
   const [kind, setKind] = useState<string>("lyric");
   const [body, setBody] = useState("");
   const [tags, setTags] = useState("");
@@ -24,6 +31,11 @@ export function Capture({ onCreated }: { onCreated?: (n: Neta) => void }) {
         .split(/[,\s]+/)
         .map((t) => t.trim())
         .filter(Boolean);
+      // アクティブプロジェクトがあれば prj: を自動付与（重複は付けない）。
+      if (activeProject) {
+        const pt = projectTag(activeProject);
+        if (!tagList.includes(pt)) tagList.push(pt);
+      }
       // 音楽系は title 扱い（中身=contentはエディタで後付け＝S4）、言葉系は text。
       const input = TEXT_KINDS.has(kind)
         ? { kind, text: body.trim(), tags: tagList }

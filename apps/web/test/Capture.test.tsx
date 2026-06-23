@@ -33,6 +33,19 @@ describe("Capture", () => {
     expect(onCreated).toHaveBeenCalled();
   });
 
+  it("auto-tags new neta with the active project (prj:)", async () => {
+    createNeta.mockResolvedValue({ id: "x", kind: "lyric" });
+    render(<Capture activeProject="みなそこ" />);
+    await userEvent.type(screen.getByLabelText("body"), "夜");
+    await userEvent.type(screen.getByLabelText("tags"), "サビ");
+    await userEvent.click(screen.getByRole("button", { name: "放り込む" }));
+    expect(createNeta).toHaveBeenCalledWith({
+      kind: "lyric",
+      text: "夜",
+      tags: ["サビ", "prj:みなそこ"],
+    });
+  });
+
   it("disables submit when body is empty", () => {
     render(<Capture />);
     expect(screen.getByRole("button", { name: "放り込む" })).toBeDisabled();

@@ -3,6 +3,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { api, type Neta } from "../api";
 import { useAlive, pollJobContent } from "../poll";
 import { MUSIC_KINDS, CONTAINER_KINDS } from "../kinds";
+import { isProjectTag } from "../project";
 import { MiniRoll } from "./MiniRoll";
 import {
   playNotes,
@@ -151,15 +152,19 @@ export function NetaCard({
         </header>
         <div className="body">{label}</div>
         <MiniRoll neta={neta} />
-        {neta.tags.length > 0 && (
-          <footer>
-            {neta.tags.map((t) => (
-              <span key={t} className="tag">
-                #{t}
-              </span>
-            ))}
-          </footer>
-        )}
+        {/* プロジェクト所属(prj:)は別軸＝ピッカーに出すので意味タグのチップ列からは外す */}
+        {(() => {
+          const tags = neta.tags.filter((t) => !isProjectTag(t));
+          return tags.length > 0 ? (
+            <footer>
+              {tags.map((t) => (
+                <span key={t} className="tag">
+                  #{t}
+                </span>
+              ))}
+            </footer>
+          ) : null;
+        })()}
       </div>
       <div className="bs-tools">
         {MUSIC_KINDS.includes(neta.kind) && (

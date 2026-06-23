@@ -80,7 +80,8 @@ export interface Facets {
   mood: string[];
   meter: string[];
   key: number[];
-  tags: string[];
+  tags: string[]; // 意味タグ（prj: 除外済）
+  projects: string[]; // prj: を剥がしたプロジェクト名一覧（複数プロジェクト機能）
 }
 
 export interface ListQuery {

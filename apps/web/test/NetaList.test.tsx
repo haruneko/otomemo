@@ -46,6 +46,12 @@ describe("NetaList", () => {
     expect(screen.getByText("#サビ")).toBeInTheDocument();
   });
 
+  it("hides prj: tags from the semantic tag chips", () => {
+    render(<NetaCard neta={mk({ id: "p", text: "夜", tags: ["サビ", "prj:みなそこ"] })} />);
+    expect(screen.getByText("#サビ")).toBeInTheDocument();
+    expect(screen.queryByText("#prj:みなそこ")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state", () => {
     render(<NetaList items={[]} />);
     expect(screen.getByText("まだネタがありません。")).toBeInTheDocument();
