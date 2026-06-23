@@ -158,6 +158,22 @@ describe("job queue (producer side)", () => {
     expect(c.reapResults()).toBe(0); // 冪等
   });
 
+  it("チャット発(chat_thread)のジョブは reap が結果をそのスレッドへ記録（fb-3・サーバ著者）", () => {
+    const db = openDb(":memory:");
+    const c = new Core(db);
+    db.prepare(
+      `INSERT INTO job (id, intent, params, status, parent_job_id, result_summary, created, updated)
+       VALUES ('jc', 'gen_melody', ?, 'done', 'plan1', ?, '', '')`,
+    ).run(
+      JSON.stringify({ chat_thread: "chat:abc" }),
+      JSON.stringify({ content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }),
+    );
+    expect(c.reapResults()).toBe(1);
+    const msgs = c.listChatMessages("chat:abc");
+    expect(msgs.length).toBe(1); // クライアントが居なくてもサーバがスレッドに残す
+    expect(msgs[0]!.role).toBe("ai");
+    expect((msgs[0]!.data as { neta?: { kind?: string } } | null)?.neta?.kind).toBe("melody"); // ネタ参照を同梱
+  });
   it("reap は相対bass(pattern・notes/chords無し)を落とさない（hasMusic pattern・S3）", () => {
     const db = openDb(":memory:");
     const c = new Core(db);

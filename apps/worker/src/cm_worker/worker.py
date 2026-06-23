@@ -55,10 +55,12 @@ def _resolve_fit_context(conn: sqlite3.Connection, params: dict) -> dict:
 
 
 def _enqueue_children(
-    conn: sqlite3.Connection, parent_id: str, subtasks: list, target: str | None = None
+    conn: sqlite3.Connection, parent_id: str, subtasks: list, target: str | None = None,
+    chat_thread: str | None = None,
 ) -> int:
     """plan の結果から子ジョブを queued で積む（見てない間も進む）。次以降のループで消化される。
-    結果が元の対象に紐づくよう、plan の target_neta_id を子に引き継ぐ（design 原則3）。"""
+    結果が元の対象に紐づくよう、plan の target_neta_id を子に引き継ぐ（design 原則3）。
+    chat_thread があれば子 params に伝播＝子の生成結果もそのチャットへ記録される（fb-3）。"""
     n = 0
     for st in subtasks:
         if not isinstance(st, dict):
@@ -67,13 +69,16 @@ def _enqueue_children(
         # plan/consult を子に積ませない（自己再帰・無限ループ防止 #33/#61）
         if intent not in HANDLERS or intent in ("plan", "consult"):
             continue
+        child_params = dict(st.get("params") or {})
+        if chat_thread:
+            child_params.setdefault("chat_thread", chat_thread)
         conn.execute(
             "INSERT INTO job (id, intent, params, status, level, parent_job_id, target_neta_id, "
             "priority, created, updated) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
                 str(uuid.uuid4()),
                 intent,
-                json.dumps(st.get("params") or {}, ensure_ascii=False),
+                json.dumps(child_params, ensure_ascii=False),
                 "queued",
                 "atomic",
                 parent_id,
@@ -115,7 +120,8 @@ def run_once(conn: sqlite3.Connection) -> int:
             row["intent"] == "consult" and result.get("type") == "plan"
         )
         if is_plan and isinstance(result.get("subtasks"), list):
-            _enqueue_children(conn, job_id, result["subtasks"], row["target_neta_id"])
+            # 親の chat_thread を子へ伝播＝子の生成結果もそのチャットに残る（fb-3）。
+            _enqueue_children(conn, job_id, result["subtasks"], row["target_neta_id"], params.get("chat_thread"))
         # #93 方向確認：handler が _propose を返したら「承認待ち」ジョブを積む（1案はこのジョブで
         # materialize 済み。承認で answerJob が残りを継続）。
         prop = result.get("_propose") if isinstance(result, dict) else None

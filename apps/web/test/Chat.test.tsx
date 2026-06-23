@@ -69,22 +69,29 @@ describe("Chat", () => {
       result: { type: "plan", subtasks: [{ intent: "gen_pair_rule" }], plan: "1個に分解しました" },
       error: null,
     });
-    // ディスパッチ後、このチャットで完了を待つ＝jobOutcome をポーリングし、できたネタを表示。
+    // ディスパッチ後、このチャットで完了を待つ＝jobOutcome をポーリング。fb-3：結果は reaper が
+    // **サーバ側で**スレッドに記録済み＝finishWait の reloadMsgs(listChatMessages) で表示する。
     jobOutcome.mockResolvedValue({
       settled: true,
       failed: 0,
       jobs: [{ id: "jp", intent: "consult", status: "done" }],
       neta: [{ id: "m1", kind: "melody", content: { notes: [] } }],
     });
+    // 1回目=マウントの履歴復元(空)、以降=reloadMsgs がサーバ著者の結果メッセージを返す。
+    listChatMessages.mockReset();
+    listChatMessages.mockResolvedValueOnce([]);
+    listChatMessages.mockResolvedValue([
+      { id: "x", thread: "global", role: "ai", kind: "content", text: "「melody」ができました", data: { neta: { id: "m1", kind: "melody", content: { notes: [] } } }, created: "" },
+    ]);
     const onChanged = vi.fn();
 
     render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
     await userEvent.type(screen.getByLabelText("chat-input"), "一式そろえて");
     await userEvent.click(screen.getByRole("button", { name: "送信" }));
 
-    // チャット内で待って、できたネタ（開く）が出る
+    // チャット内で待って、サーバが記録した結果（開く）が出る
     await waitFor(() => expect(jobOutcome).toHaveBeenCalledWith("jp"), { timeout: 4000 });
-    expect(await screen.findByText(/1個できました/, undefined, { timeout: 4000 })).toBeInTheDocument();
+    expect(await screen.findByText(/ができました/, undefined, { timeout: 4000 })).toBeInTheDocument();
     expect(screen.getByLabelText("open-neta")).toBeInTheDocument();
     expect(onChanged).toHaveBeenCalled();
   });

@@ -311,6 +311,23 @@ export function Chat({
     persistMsg(m);
   }
 
+  // サーバのスレッド履歴から再描画（生成結果は reaper がサーバ側で記録済＝クライアント非依存・fb-3）。
+  async function reloadMsgs() {
+    try {
+      const rows = await api.listChatMessages(thread);
+      if (!alive.current) return;
+      setMsgs(
+        rows.map((r) => ({
+          role: r.role === "user" ? "user" : "ai",
+          text: r.text ?? undefined,
+          ...((r.data as Partial<Msg>) ?? {}),
+        })),
+      );
+    } catch {
+      /* 取得失敗＝現状維持 */
+    }
+  }
+
   // #70 開いたとき該当スレッドの履歴を復元（失敗＝空のまま＝従来挙動）。
   // セッション切替でも thread が変わり、ここで一旦クリア→復元する。
   useEffect(() => {
@@ -346,10 +363,11 @@ export function Chat({
     try {
       const ctx = target ? (target.title ?? target.text ?? "") : "";
       const intent = mode === "research" ? "research" : "consult";
+      // chat_thread を渡す＝生成結果を**サーバ側で**このスレッドに記録（クライアント離脱でも残る・fb-3）。
       const params =
         mode === "research"
-          ? { topic: text }
-          : { context: ctx, instruction: text, target_kind: target?.kind };
+          ? { topic: text, chat_thread: thread }
+          : { context: ctx, instruction: text, target_kind: target?.kind, chat_thread: thread };
       const job = await api.createJob({ intent, target_neta_id: target?.id, params });
       for (let i = 0; i < 80; i++) {
         const j = await api.getJob(job.id);
@@ -409,32 +427,21 @@ export function Chat({
   }
 
   // ワーカー待ちの決着をチャットに反映：できたネタをインライン表示（開く/試聴）。
-  function finishWait(o: JobOutcome | null) {
+  async function finishWait(o: JobOutcome | null) {
     setWaitInfo(null); // 進捗表示を消す
     if (!alive.current) return;
     if (cancelWait.current) {
-      // 「待たずに戻る」で抜けた：ジョブは裏で続行→できたらトレイ📥に届く。
-      pushMsg({ role: "ai", text: "バックグラウンドで続けています。できたら受け取りトレイ 📥 に届きます。" });
       cancelWait.current = false;
+      // 「待たずに戻る」：ジョブは裏で続行→結果はサーバがこのスレッドに記録（次回開いても残る）。
+      pushMsg({ role: "ai", text: "バックグラウンドで続けています。できたらここと受け取りトレイ 📥 に届きます。" });
       return;
     }
-    if (!o) {
-      pushMsg({ role: "ai", text: "完了の確認がタイムアウトしました（受け取りトレイ 📥 をご確認ください）" });
-      return;
-    }
+    // 生成結果は reaper が**サーバ側で**このスレッドに記録済み＝サーバ履歴から再描画（クライアント
+    // 待ち中に離脱/リロードしても結果が必ずチャットに残る・fb-3）。
+    await reloadMsgs();
     onChanged?.();
-    if (o.neta.length === 0) {
-      pushMsg({
-        role: "ai",
-        text: o.failed > 0 ? "生成に失敗しました" : "結果はできましたが表示できるネタがありません（トレイ 📥）",
-      });
-      return;
-    }
-    pushMsg({
-      role: "ai",
-      text: `${o.neta.length}個できました${o.failed > 0 ? `（${o.failed}件は失敗）` : ""}`,
-    });
-    for (const n of o.neta) pushMsg({ role: "ai", neta: n });
+    if (o && o.neta.length === 0 && o.failed > 0) pushMsg({ role: "ai", text: "生成に失敗しました" });
+    else if (!o) pushMsg({ role: "ai", text: "完了確認がタイムアウト（結果は届き次第ここに出ます／トレイ 📥）" });
   }
 
   // #61 consult の判別ユニオン: chat / options / content(生成→正しいkindでネタ化) / plan
@@ -464,7 +471,7 @@ export function Chat({
       // #86 S2b agentic：ツールで作った一式。materialize は server(reap)が担う。
       // 受信箱お任せにせず、このチャットで reap 完了を待ってネタをインライン表示する。
       pushMsg({ role: "ai", text: "パーツを仕上げています…" });
-      finishWait(await waitForJob(jobId));
+      await finishWait(await waitForJob(jobId));
     } else if (r?.type === "content" && r.neta_kind) {
       const neta = await api.createNeta({ kind: r.neta_kind, content: r.content, from_job: jobId });
       onChanged?.();
@@ -473,7 +480,7 @@ export function Chat({
     } else if (r?.type === "plan") {
       // おまかせ＝子ジョブに分解。受信箱お任せにせず、このチャットで子の完了まで待つ。
       pushMsg({ role: "ai", text: `${r.plan ?? "分解しました"}（仕上げています…）` });
-      finishWait(await waitForJob(jobId));
+      await finishWait(await waitForJob(jobId));
     } else {
       const t = r?.text ?? "";
       pushMsg({ role: "ai", text: t, saveable: t || undefined });

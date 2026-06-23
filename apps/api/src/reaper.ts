@@ -2,7 +2,30 @@
 // design「アーキ是正 決定3」＝消費者ロジックを Core(永続/生産)から物理分離し、producer/consumer 境界を可視化。
 // Core の公開操作(createNeta/placeChild/link)＋db を使う。原子性は createNeta 内＋ジョブ単位トランザクション。
 import type { Core } from "./core";
-import type { NetaInput } from "./types";
+import type { Neta, NetaInput } from "./types";
+
+// チャット発のジョブは params.chat_thread を持つ。その場合、生成結果を**サーバ側で**そのスレッドの
+// チャットメッセージとして記録する＝クライアントが待ち中に離脱/リロードしても結果が必ずチャットに残る
+// （整合性をクライアントに依存しない・fb-3）。data はクライアントの Msg 形（neta カード描画）。
+function chatThreadOf(paramsJson: string | null): string | null {
+  try {
+    const t = (JSON.parse(paramsJson ?? "{}") as { chat_thread?: unknown }).chat_thread;
+    return typeof t === "string" && t ? t : null;
+  } catch {
+    return null;
+  }
+}
+function postChatResult(core: Core, paramsJson: string | null, neta: Neta): void {
+  const thread = chatThreadOf(paramsJson);
+  if (!thread) return;
+  core.addChatMessage({
+    thread,
+    role: "ai",
+    kind: "content",
+    text: `「${neta.title ?? neta.kind}」ができました`,
+    data: { neta },
+  });
+}
 
 function hasMusic(content: unknown): boolean {
   const c = content as {
@@ -97,13 +120,14 @@ export function reapResults(core: Core): number {
       continue;
     }
     if (!hasMusic(content)) continue;
-    core.createNeta({
+    const made = core.createNeta({
       kind: kindOf[r.intent]!,
       title: genTitle(r.intent, r.instruction),
       content,
       from_job: r.id,
       ...frameOf(r.params), // #85 S1 枠を生成ネタへ（断片のヒントとして key/meter/tempo/bars）
     });
+    postChatResult(core, r.params, made); // チャット発のジョブなら結果を**サーバ側で**そのスレッドに投稿
     n += 1;
   }
 
@@ -226,6 +250,7 @@ export function reapResults(core: Core): number {
             ...frameVals(it.frame), // item 個別 frame が上書き
           });
           idMap.push(neta.id);
+          postChatResult(core, r.params, neta); // チャット発なら結果をそのスレッドへ（サーバ著者）
           localMade += 1;
         }
         for (const e of edges) {
