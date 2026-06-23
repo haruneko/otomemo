@@ -58,7 +58,7 @@
 ## 3. 既知の留保・技術メモ
 
 - **agentic Chat(#86 S2b) の full-loop が遅い**：claude -p の多段ツール使用で数分。`--max-turns`(既定8・env `CM_AGENTIC_MAX_TURNS`)で上限化済み。要チューニング（重い時は dispatch にフォールバック）。MCP tool-use 自体は S2a で実機実証(roots 0,5,10,0)。
-- **アーキ是正(2026-06-23・4監査→確定 design参照)**：S0止血**済**＝CM_DB絶対パス(main.ts/start-all)・rogue DB(apps/api/data)退避(_quarantine)・全接続busy_timeout=5000・job表DDL権威api一本化(worker FK統一)・start-all listen待ちスモーク。残=S1契約SSOT/S2音楽ドメインTS一本化(cm-music-mcp廃止)/S3 core層分離/S4 systemd化/S5フロント分割（タスク#21-25）。
+- **アーキ是正(2026-06-23・4監査→確定 design参照)**：S0止血/S1契約SSOT(schemas.ts・kindレジストリ)/S2音楽ドメインTS一本化(生成TS化・cm-music-mcp廃止5→4・Python domain削除・worker は/music委譲)/S3 core層分離(reaper/scheduler・reap原子化)/S4 systemd化(+health/backup timer/公開ガード)が**完了**。残=S5フロント分割(#25)。api181/web116/worker62緑。
 - **常駐サービスの起動/プロセス管理が弱い**：worker / api(tsx watch) / cm-search(:8788) / cm-music-mcp(:8790) を手起動。スモークは入った(S0)が **supervisor/自動再起動は未**＝systemd化(S4・#24)で対応予定。
 - **バックアップ**：`scripts/backup.sh`(sqlite backup API・世代14・data/backups/)は**実在**するが**自動実行が未**（cron/systemd timer 無し＝手動）。S4 で timer 化。
 - **agentic を使う前提**：worker に `CM_MUSIC_MCP_URL=http://127.0.0.1:8790/mcp` を渡し cm-music-mcp を起動。未設定なら Chat は dispatch 経路（ルール生成・実機実証済）にフォールバック＝後退ゼロ。
