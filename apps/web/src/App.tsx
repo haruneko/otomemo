@@ -8,7 +8,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { api, type Neta } from "./api";
-import { FILTER_KINDS } from "./kinds";
+import { FILTER_KINDS, MUSIC_KINDS, CONTAINER_KINDS } from "./kinds";
 import { applyColors, loadColors } from "./theme";
 import { Capture } from "./components/Capture";
 import { NetaList } from "./components/NetaList";
@@ -297,7 +297,13 @@ export function App() {
               />
             </label>
           </div>
-          <Capture onCreated={() => void reload()} />
+          <Capture
+            onCreated={(n) => {
+              void reload();
+              // 音楽/コンテナ kind は中身が空＝そのままエディタを開く（再タップ不要・スマホUX）。
+              if (MUSIC_KINDS.includes(n.kind) || CONTAINER_KINDS.includes(n.kind)) setActive(n);
+            }}
+          />
           <div className="scope-tabs" role="tablist" aria-label="scope">
             <button
               role="tab"
