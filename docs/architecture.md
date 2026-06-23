@@ -32,9 +32,9 @@
 - 非同期ジョブ：SQLite上のジョブ表＋Pythonワーカー＋スケジューラ（Redis等の追加インフラ無し）。
 - 音：**Tone.js**（中核：テンポ/小節/スケジューリング/シンセ）＋ smplr/SoundFont（音色）＋ **@tonejs/midi**（MIDI入出力＝ABILITY書き出しも担う）。
 - 楽譜表示：**VexFlow / OpenSheetMusicDisplay**（"できれば"が現実的。楽譜"入力"は別途重い）。
-- 配置（実態 2026-06-22）：K8-Plus の **WSL2(mirrored) 上で tsx/uv で直起動**（Docker 不使用）。api(:8787 単一オリジン＝web も配信)／worker／cm-search(:8788)／cm-music-mcp(:8790)。外は Tailscale serve/IP で tailnet 限定。**自動起動(systemd)は未実装**（手起動・タスク #95）。
+- 配置（実態 2026-06-23・アーキ是正S2/S4後）：K8-Plus の **WSL2(mirrored) 上で tsx/uv 起動**（Docker 不使用）。**3プロセス**：api(:8787 単一オリジン＝web も配信／**音楽ドメインTS＝`/music`**)／worker(ヘッドレス)／cm-search(:8788 意味検索)。**cm-music-mcp(:8790) は廃止**（S2で音楽ドメインをTSへ一本化＝5→4→実質3）。外は Tailscale serve/IP で tailnet 限定。**自動起動＝systemd 化済**（`deploy/systemd/`：cm-api/worker/search＋backup.timer）。
 
 ## 解決済み（旧「未決・要調査」）
-- **ノート生成エンジン**（#12）→ **決定**：Claude非依存の記号エンジン `cm-music`(music21＋ルール)＝当てはまり保証つきの汎用生成＋判定。特定/名前/旋法/様式は Claude 知識へ振り分け(routing A)。詳細は design.md #12/#86。
+- **ノート生成エンジン**（#12）→ **決定＋是正済(S2)**：Claude非依存の記号エンジン＝当てはまり保証つきの汎用生成＋判定。**実装は TypeScript `apps/api/src/music/`（生成・理論・analyze_fit・連想・名前付き進行）に一本化**（旧 Python/music21 の `cm-music` は廃止・music21 依存も除去）。worker は生成/判定を api `/music` HTTP に委譲。agentic Chat も api `/music` を叩く（旧 cm-music-mcp は廃止）。特定/名前/旋法/様式は Claude 知識へ振り分け(routing A)。詳細は design.md #12/#86。
 - 言語・FW・DB・検索基盤（#3）→ 上記「技術選定」で確定。
 - 歌詞のモーラ分析（#13）→ 実装済み（worker `split_mora`）。
