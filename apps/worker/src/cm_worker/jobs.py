@@ -10,12 +10,15 @@
 import base64
 import io
 import json
+import logging
 import os
 import re
 import shutil
 import signal
 import subprocess
 from typing import Callable
+
+log = logging.getLogger(__name__)
 
 # 音楽ドメイン（生成/判定/補正/類似）は **TS 一本化**（アーキ是正 S2）。worker は api の /music/:op に
 # 委譲する＝Python に二重実装しない。呼び出し側は従来の関数名のまま（in-process→HTTP に差し替え）。
@@ -158,7 +161,11 @@ def claude_prompt(prompt: str, timeout: int = 120, tools: bool = False) -> str:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             proc.kill()
-        proc.communicate()
+        # kill 後の後始末も無制限待ちにしない（パイプが詰まると常駐が固まる）。
+        try:
+            proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            log.warning("claude_prompt: process did not exit after kill (pid=%s)", proc.pid)
         raise
     if proc.returncode != 0:
         raise RuntimeError(f"claude failed ({proc.returncode}): {(err or '').strip()[:300]}")
@@ -277,13 +284,14 @@ def _style_examples(kind: str, context: str, k: int = 2) -> list:
     db = os.environ.get("CM_DB")
     if not context or not db:
         return []
+    from urllib.parse import quote
+    from urllib.request import urlopen
+
+    from .db import connect
+
+    base = os.environ.get("CM_SEARCH_URL", "http://127.0.0.1:8788")
+    conn = None
     try:
-        from urllib.parse import quote
-        from urllib.request import urlopen
-
-        from .db import connect
-
-        base = os.environ.get("CM_SEARCH_URL", "http://127.0.0.1:8788")
         with urlopen(f"{base}/search?q={quote(context)}&k=8", timeout=5) as r:
             hits = json.load(r)
         conn = connect(db)
@@ -295,14 +303,17 @@ def _style_examples(kind: str, context: str, k: int = 2) -> list:
             if row and row["kind"] == kind and row["content"]:
                 try:
                     out.append(json.loads(row["content"]))
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception:  # noqa: BLE001  壊れ content は1件だけスキップ（致命でない）
+                    log.warning("style_examples: bad content json (neta=%s)", h.get("neta_id"))
             if len(out) >= k:
                 break
-        conn.close()
         return out
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001  best-effort: 失敗しても [] で続行。ただし無音にしない（#43同型）。
+        log.warning("style_examples failed (few-shot skipped): %s", e)
         return []
+    finally:
+        if conn is not None:
+            conn.close()  # 例外経路でも接続を漏らさない（design 決定4）
 
 
 def _style_block(kind: str, context: str) -> str:

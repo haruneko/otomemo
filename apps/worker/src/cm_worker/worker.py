@@ -5,12 +5,15 @@ TS が job を積み（生産者）、ここが消費する（producer/consumer 
 """
 
 import json
+import logging
 import sqlite3
 import time
 import uuid
 from datetime import datetime, timezone
 
 from .jobs import HANDLERS, split_mora
+
+log = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -136,7 +139,9 @@ def run_once(conn: sqlite3.Connection) -> int:
                     str(prop.get("ask") or "この方向でいい？"), 0, _now(), _now(),
                 ),
             )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001  どんな失敗もjob.errorに残して継続（ループは止めない）。
+        # ただし無音にはしない＝静かな失敗（毎回 failed）を検知できるようログにも出す（traceback付き）。
+        log.warning("job %s (%s) failed: %s", job_id, row["intent"], e, exc_info=True)
         conn.execute(
             "UPDATE job SET status='failed', error=?, updated=? WHERE id=?",
             (str(e), _now(), job_id),

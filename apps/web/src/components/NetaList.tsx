@@ -74,7 +74,7 @@ export function NetaCard({
   // #73 section/song を合成（子をsection調へ移調＋位置オフセット）
   async function sectionNotes(): Promise<Note[]> {
     const tree = await api.getComposition(neta.id).catch(() => null);
-    return tree ? compositeNotes(tree.children, neta.key ?? 0) : [];
+    return tree ? compositeNotes(tree.children, neta.key ?? 0, neta.mode) : [];
   }
 
   // 生成ジョブの done を待って content を取る（poll.ts 共通・worker timeout超まで待つ／reaper も拾う）

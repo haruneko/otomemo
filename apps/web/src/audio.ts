@@ -103,8 +103,8 @@ function disposeKit() {
   for (const v of [currentKit.poly, currentKit.membrane, currentKit.noise]) {
     try {
       v.dispose();
-    } catch {
-      /* already disposed */
+    } catch (e) {
+      dbg("disposeKit: node dispose failed (already disposed?)", e); // 無音にしない（診断ログ）
     }
   }
   currentKit = null;

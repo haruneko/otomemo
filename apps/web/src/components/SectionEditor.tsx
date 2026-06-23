@@ -203,13 +203,13 @@ export function SectionEditor({
 
   // 合成：子を section の調へ移調（rhythm除く）＋位置オフセット（共有: compositeNotes）
   function composite(): Note[] {
-    return compositeNotes(children, keyPc);
+    return compositeNotes(children, keyPc, neta.mode);
   }
   // #55 多トラック書出：レーン(メロ/コード/ベース/リズム)別に1トラックずつ。空レーンは省く。
   function laneTracks() {
     return LANES.map((lane) => ({
       name: lane.label,
-      notes: compositeNotes(laneChildren(lane), keyPc),
+      notes: compositeNotes(laneChildren(lane), keyPc, neta.mode),
       drum: lane.key === "rhythm",
     })).filter((t) => t.notes.length);
   }

@@ -31,6 +31,20 @@ export function transpose(notes: Note[], semitones: number): Note[] {
   return notes.map((n) => ({ ...n, pitch: n.pitch + semitones }));
 }
 
+// メロ配置の調規則（design「メロ配置の調規則」）：別調のメロを section に置くときの移調半音。
+// メロは単一調オブジェクト。section の調号(主音+旋法)へ**メロの旋法を保ったまま一意移調**する＝
+// 短調メロ→section調号の相対短調・長調メロ→長調主音へ着地。content は C基準なので戻り値＝着地主音pc。
+// mode 不明は major 既定＝従来の `pitch+keyPc` と一致（同旋法は後退ゼロ・異旋法のみ是正）。
+export function melodyPlacementShift(
+  sectionKeyPc: number,
+  sectionMode: string | null | undefined,
+  melodyMode: string | null | undefined,
+): number {
+  const k = (((Math.round(sectionKeyPc) % 12) + 12) % 12);
+  const sectionMajorTonic = (k + (sectionMode === "minor" ? 3 : 0)) % 12;
+  return (sectionMajorTonic + (melodyMode === "minor" ? 9 : 0)) % 12;
+}
+
 // --- コード（chord / chord_progression）。C基準で記号保存し、再生時に音符へ展開＋移調 ---
 export interface ChordEntry {
   root: number; // 0–11 ピッチクラス（C基準、design #16）
@@ -360,9 +374,17 @@ export function notesForContent(kind: string, content: unknown, ctx?: BassContex
 // SectionEditor と ネタ帳カードの section再生(#73) で共有。
 export interface CompositeChild {
   position: number;
-  node: { neta: { kind: string; content: unknown; key?: number | null }; children?: CompositeChild[] };
+  node: {
+    neta: { kind: string; content: unknown; key?: number | null; mode?: string | null };
+    children?: CompositeChild[];
+  };
 }
-export function compositeNotes(children: CompositeChild[], keyPc: number): Note[] {
+// sectionMode＝配置先 section の旋法（メロ配置の調規則に使う）。未指定は major 既定＝従来挙動。
+export function compositeNotes(
+  children: CompositeChild[],
+  keyPc: number,
+  sectionMode?: string | null,
+): Note[] {
   // #bass S2: 相対bass の子は section のコードレーンに当てて解決する（コードが無ければ key）。
   // コードを section 位置・調へ展開（chord kind は C基準保存なので keyPc を足す）。
   const sectionChords: ChordEntry[] = children.flatMap((c) => {
@@ -379,7 +401,9 @@ export function compositeNotes(children: CompositeChild[], keyPc: number): Note[
     // ネストした section/song は、その子を**自分の調で再帰合成**して位置オフセット（#15）。
     if (kind === "section" || kind === "song") {
       const subKey = ((c.node.neta.key ?? keyPc) % 12 + 12) % 12;
-      return compositeNotes(c.node.children ?? [], subKey).map((n) => ({ ...n, start: n.start + c.position }));
+      // ネストした section は**自分の調号(key+mode)**で再帰合成（メロ配置規則も内側の調で効く）。
+      const subMode = c.node.neta.mode ?? (c.node.neta.key == null ? sectionMode : null);
+      return compositeNotes(c.node.children ?? [], subKey, subMode).map((n) => ({ ...n, start: n.start + c.position }));
     }
     const isRhythm = kind === "rhythm";
     const isProg = kind === "chord" || kind === "chord_progression";
@@ -404,9 +428,13 @@ export function compositeNotes(children: CompositeChild[], keyPc: number): Note[
         program: prog,
       }));
     }
+    // メロは**旋法を保った相対移調**（短調メロ→section調号の相対短調等。design「メロ配置の調規則」）。
+    // 他（コード等）は section 調へ素直移調。rhythm は移調しない。同旋法/mode不明は keyPc と一致＝後退ゼロ。
+    const shift =
+      kind === "melody" ? melodyPlacementShift(keyPc, sectionMode, c.node.neta.mode) : keyPc;
     return notesForContent(kind, c.node.neta.content).map((n) => ({
       ...n,
-      pitch: isRhythm ? n.pitch : n.pitch + keyPc,
+      pitch: isRhythm ? n.pitch : n.pitch + shift,
       start: n.start + c.position,
       program: prog,
     }));
@@ -499,6 +527,21 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
   return midi.toArray();
 }
 
+// Blob を名前付きでダウンロード。アンカーは DOM に挿入→click→除去（Firefox 互換）し、
+// blob URL の revoke は **遅延**させる（click 直後の同期 revoke は一部ブラウザで DL を
+// キャンセル/空ファイル化する）。両 download 関数の共通処理＝重複排除。
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000); // DL 開始を待ってから解放（リーク防止）
+}
+
 export function downloadMultitrackMidi(
   tracks: MidiTrackSpec[],
   filename = "section.mid",
@@ -506,12 +549,7 @@ export function downloadMultitrackMidi(
   meter?: string | null,
 ): void {
   const blob = new Blob([tracksToMidi(tracks, bpm, meter) as BlobPart], { type: "audio/midi" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  triggerDownload(blob, filename);
 }
 
 export function midiToNotes(buf: ArrayBuffer | Uint8Array): { notes: Note[]; bpm: number } {
@@ -541,12 +579,7 @@ export function downloadMidi(
   const blob = new Blob([notesToMidi(notes, bpm, meter, program) as BlobPart], {
     type: "audio/midi",
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  triggerDownload(blob, filename);
 }
 
 // --- 再生スケジュールの純関数（Tone非依存・テスト可能, #57/#58 ①）---

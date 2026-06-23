@@ -53,6 +53,7 @@ export function NetaDialog({
   const [chords, setChords] = useState<ChordEntry[]>(chordsOf(neta.content));
   const [rhythm, setRhythm] = useState<RhythmContent>(rhythmOf(neta.content));
   const [key, setKey] = useState<number>(neta.key ?? 0);
+  const [mode, setMode] = useState<string>(neta.mode ?? "major"); // 長調/短調（調号。メロ配置の相対移調に効く）
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
   const [program, setProgram] = useState<number>(
@@ -169,12 +170,12 @@ export function NetaDialog({
   function savePatch(): NetaPatch {
     if (isRelBass)
       // #bass S2 相対モード：度数パターンを保存（再生時にコード/調で解決）。
-      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, tempo, bars: Math.max(1, Math.round(bassSteps / 16)) };
-    if (isMelody || isBass) return { content: { notes, program }, key, tempo, bars: Math.ceil(len / 4) };
-    if (isChordPat) return { content: { ...chordPat, program }, key, tempo }; // コード楽器＝自前音色
-    if (isChord) return { content: { chords }, key, tempo }; // 進行は抽象＝program持たない(CP1)
+      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, mode, tempo, bars: Math.max(1, Math.round(bassSteps / 16)) };
+    if (isMelody || isBass) return { content: { notes, program }, key, mode, tempo, bars: Math.ceil(len / 4) };
+    if (isChordPat) return { content: { ...chordPat, program }, key, mode, tempo }; // コード楽器＝自前音色
+    if (isChord) return { content: { chords }, key, mode, tempo }; // 進行は抽象＝program持たない(CP1)
     if (isRhythm) return { content: { rhythm }, tempo };
-    if (isContainer) return { key, tempo, meter };
+    if (isContainer) return { key, mode, tempo, meter };
     return {};
   }
 
@@ -240,6 +241,10 @@ export function NetaDialog({
                   {nm}
                 </option>
               ))}
+            </select>
+            <select aria-label="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="major">長調</option>
+              <option value="minor">短調</option>
             </select>
           </label>
         )}

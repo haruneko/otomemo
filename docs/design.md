@@ -13,6 +13,12 @@
 - Python に残すのは**信号処理のみ**：cm-search（埋め込み）、mp3解析(librosa)、MIDI取込(mido)、pyopenjtalk、Claude プランナー（翻訳役）。
 - 生成（gen_chords/melody/bass/drums/named・fit_to_chords・melody_similarity）の TS 実装を新設し、本番生成経路を TS MCP ツール呼び出しへ切替。**MCP は creative-manager(TS) 1本**に集約（agentic Claude が見るのは1サーバ1言語）。プロセスは 5→4 に。
 - **"追い抜き完了"の定義（これが満たされるまで Python ドメインは消さない）**：①TS生成エンジン完成 ②TS↔Python の**クロス言語ゴールデン一致テスト**が緑（analyze_fit/analyze_progression/detect_key/progressions/相対bass解決）③本番経路が TS 経由に切替済。免罪符化していた「フォークリフトしない＝無期限共存」をこの完了条件で締める。
+- **生成エンジンの不変条件（property test で固定＝分割/改修の安全網）**：乱数は seed で再現的だが byte 等価は約束しない。代わりに次の **musical 不変条件**を `generate.ts` の契約として固定する（#5 分割で挙動を壊さない土台）。
+  - **決定性**：同一 `(frame, chords, seed)` は同一出力（gen_chords/melody/bass/drums/chord_pattern/from_essence 全て）。
+  - **音域**：メロは本体音 `start>=0` を `[60,84]` に収める（オクターブ折り返しは**ピッチクラス保存**＝ハモりを壊さない意図的処理。輪郭保存は**約束しない**）。弱起(pickup)のみ拍0前に負start で1度下にはみ出してよい。ベースは低域。全 pitch は有限整数。
+  - **非空**：どの frame でも各パートは最低1音を返す（全休を出さない）。
+  - **コード**：`genChords` は長さ=bars(1..16)、bars>=2 で I/i 始まり・I/i 終わり、各和音はダイアトニック表内・dur>0。
+  - 入力の頑健化：不正 meter は 4/4、`bars` は 1..16 クランプ（既存 normalizeFrame/meterInfo）。`Rng.choices` は weights が空/非有限でも NaN を出さず末尾要素にフォールバック（決定的）。
 
 ### 決定2：契約の単一情報源（SSOT）化
 - neta/job/scope 等の契約は **zod スキーマを `apps/api/src/schemas.ts` に1本化**し `z.infer` で型導出、http と mcp が import（現状 core型/http zod/mcp zod の三重定義・http listのscope無検証キャストを解消）。
@@ -23,10 +29,17 @@
 - `Core`(1071行) を永続層 Repo 群（Neta/Edge/Job/Asset/Schedule/Chat）へ分割。**reapResults / tickSchedules は独立モジュール**（Reaper/Scheduler・intent→materializer 登録テーブル）へ。design#15「TS=生産者」に対し reap が消費者化している事実を構造で可視化する。
 - **reapResults を `db.transaction` で囲い**、structured(items+edges)/import_midi/空マーカー/部分失敗の回帰テストを TDD で追加（最複雑分岐が無保護・無テストの是正）。bass(relative) が hasMusic/kindOf から漏れ reap で消える疑いをテストで暴く。facets() に scope 対応。
 
+### 神ファイル分割の進め方（2026-06-23・リスク監査→是正）
+3つの巨大ファイルを「上から下へ整合」させつつ縮小する。**テスト安全網を壊さない順序**で割る。
+- **generate.ts(785→712)＝完了**：`Rng`→`rng.ts`、リズム/密度成形(mood分類＋図形＋densityBias＋pickFig)→`rhythm.ts` に抽出。挙動不変は **生成エンジンの不変条件 property test（決定1）** が担保。テスト seam と無関係＝安全。
+- **core.ts(852)＝決定3のRepo分解が本筋（独立スライス）**：Core を Neta/Edge/Job/Asset/Schedule/Chat の Repo へ。**facade(Core)は残し委譲**＝http/mcp の呼出側とテストは無改修で割れる。クラス本体を触るので一括ではなく Repo 単位で TDD。`parseJsonColumn` 等の純ヘルパ抽出は先行可。
+- **jobs.py(1170)＝先に「テスト seam の作り直し」が要る（独立スライス）**：現状 `_music`/`claude_prompt`/`_style_block`/`CM_MCP_STDIO_*` を **`jobs` モジュールグローバルとして約40箇所 monkeypatch** している。ハンドラを別モジュールへ出すと参照解決先がズレてモックが効かなくなる。よって **外部クライアント(music/claude)を引数注入 or 明示 import 経由に変える→テストの patch 先を移す→ハンドラを intent 群でモジュール分割**、の順。順序を守らないと安全網ごと壊れる。
+
 ### 決定4：DB 権威の一本化＋運用堅牢化（systemd）
 - **job/job_result の DDL 権威は api(`db.ts`) のみ**。worker(`db.py`) の `CREATE TABLE job*` は撤去し既存前提に（FK・列を api 版へ統一＝worker版 job_result の FK 欠落で #97 蘇生対策が崩れる地雷を除去）。
 - **CM_DB は絶対パス正規化**（起動スクリプトで1回・全プロセス継承）。rogue DB `apps/api/data/cm.sqlite` を撤去。全接続に `PRAGMA busy_timeout=5000`。
 - **systemd --user** で per-service 化（`Restart=on-failure`・`After/Requires` で起動順・`ExecStartPre` でポート待ち）。`pkill -f`/`nohup &` を置換。`start-all.sh` に listen 待ちスモーク。backup.sh を timer 化。`/health`（queued滞留・直近failed・依存ポート疎通）。
+- **best-effort の失敗は無音にしない**：フォールバック（few-shot/research 等の「空でも壊さない」#43同型）で握り潰す箇所は **`logging.warning` で観測可能**にする（常時失敗＝静かな機能停止を検知するため。制御フローは変えない）。**worker が開いた DB 接続は `finally` で必ず閉じる**（例外時のリーク防止）。`claude -p` の timeout kill 後の `communicate()` にも timeout を付ける（パイプ詰まりでの常駐ハング防止）。
 
 ### 段階（依存順）
 - **S0 止血（低リスク・方針非依存・即）**：CM_DB絶対パス＋rogue撤去／全接続 busy_timeout／job表DDL権威1本化(FK統一)／start-all listen待ちスモーク／status・deploy 陳腐化更新。
@@ -263,6 +276,17 @@
 - **メインペーン（中央・主役）**：いま作業中の対象。section/song＝**4レーン(メロ/コード/ベース/リズム)配置＋トランスポート**、断片＝該当エディタ（melody=ピアノロール等）。選択で中身切替、ドリルインで子へ、戻ると配置へ。
 - **4レーンと compose_edge の整合（#14準拠・スキーマ変更なし）**：`compose_edge` は `position＋ord` のままの**任意子DAG**で、lane列は持たない。レーンは**子の kind から導出**（melody→メロ／chord・chord_progression→コード／bass→ベース／rhythm→リズム）。導出の原則は現 `SectionEditor.composite()` の kind 分岐と同じ（4レーン描画自体は段階②で実装）。theme/knowledge/other 等の leaf はどのレーンも埋めない（配置対象外）。4レーンに収まらない子：**lyric** は独立レーンを作らず melody に `syllable` で流し込む（#16）／**ネストした section/song** はレーン展開せず**1ブロックとして配置**し、ドリルインで内側の4レーンを開く（入れ子編集）。＝「4レーンを埋める」は leaf(メロ/コード/ベース/リズム)の**見せ方**で、任意子DAGを壊さない。
 - **ネタ帳（開閉式の左レール）**：捕獲＋一覧＋検索＝素材。畳める。
+
+### メロ配置の調規則（2026-06-23・設計議論→確定）
+セクションに別調のメロを配置したときの移調を定める。**二重に見える不定性（①コードからは調が一意に決まらない＝2-3候補 ②旋法の扱い）は、実は不定なのは①だけ**。「移調＝曲を保ったまま音高だけ動かす」と決めた瞬間、②は従属する（短調メロの移調先は相対短調に一意。平行=Cm は調号衝突、長調化=C は“移調でなく音の作り変え”＝別操作）。
+- **①の解決＝推論せず宣言**：コードは調を含意するが確定しない（`detectKeyFromChords` が候補を複数返す事実）。よって **section が `key`+`mode` を明示保有**（neta に両フィールドあり）。`detectKeyFromChords` は**初期値の提案役＋2-3候補の切替UI**に格下げ＝1回だけ人/生成が調を決める。
+- **配置移調は一意**：メロは**単一調オブジェクト**（メロ編集画面でも調は1つ）。配置位置（先頭小節）の section 調号へ、**メロの旋法を保ったまま**着地：
+  - `sectionMajorTonic = (sectionKey + (sectionMode==="minor" ? 3 : 0)) % 12`
+  - `landing = (sectionMajorTonic + (melodyMode==="minor" ? 9 : 0)) % 12`（短調メロ→相対短調／長調メロ→長調主音）
+  - content は C基準なので **移調半音 = landing**（あとは音域[60..84]へオクターブ配置）。**メロ自身の `key` は配置では使わず `mode` だけ使う**（`key` は単体再生の調ラベルに降格）。
+  - **ラベル不変**：section を「C」と書こうが「Am」と書こうが短調メロは必ず Am・長調メロは必ず C に着地（同じ調号）。`mode` 不明は major 既定＝**現挙動（`pitch+keyPc`）と一致**＝同旋法は後退ゼロ、異旋法のみ是正。
+- **小節内転調**：本質は「section の調が時間変化」＝将来は*調レーン*（コードレーン同様 位置ごとの key）に一般化可。今は**section が調を1つ宣言で十分**（メロは単一調・跨ぐなら区間ごとに別メロ or 明示当てはめ）。
+- **平行/長調化/コード追従の当てはめ（=別操作）は既定にしない**：欲しければ AI チャット/手動、または既存 `fitToChords`/essence（輪郭+リズム保持で実コードへ再導出）を明示的に一枚重ねる（改善であって正しさには不要）。
 - **Chat（右下の吹き出し→ダイアログ, Notion風）**：相談/投げる。常駐ペーンでなくバブル起動で軽量に。※体験(ペーン/ダイアログ/オーバーレイ)は要再相談。
 - ペーン位置の可動は欲を言えば（後）。
 - **幅で形が変わる**：広い＝メインペーン＋畳めるネタ帳レール（＋Chatバブル）／狭い(スマホ)＝メインペーン全画面・ネタ帳はタブ/シート・Chatバブル。

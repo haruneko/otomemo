@@ -20,6 +20,18 @@ import { findSimilar } from "./music/similarity";
 
 const now = (): string => new Date().toISOString();
 
+// DB の JSON 列は外部書込/部分書込で壊れうる。1行の壊れ JSON で getter/一覧全体が throw するのを防ぐ
+// ＝壊れたら null＋warn（無音にしない・design 決定4／reaper.ts と同方針）。
+function parseJsonColumn(s: unknown, col: string): unknown {
+  if (s == null) return null;
+  try {
+    return JSON.parse(s as string);
+  } catch {
+    console.warn(`[core] malformed JSON in column "${col}" — treated as null`);
+    return null;
+  }
+}
+
 /**
  * 操作コア（docs/design.md #20 ツールカタログ）。
  * これが HTTP API ＝ MCP ツール ＝ 実装すべき操作の集合。
@@ -287,13 +299,18 @@ export class Core {
 
   // facets は既定で project（ネタ帳=project と一致させる。library 値が混じると UI で0件選択肢が出る）。
   facets(scope: "project" | "library" | "all" = "project"): Facets {
-    const scopeSql = scope === "all" ? "" : ` AND scope = '${scope}'`;
-    const distinct = (col: string): unknown[] =>
-      (
-        this.db
-          .prepare(`SELECT DISTINCT ${col} AS v FROM neta WHERE ${col} IS NOT NULL${scopeSql} ORDER BY v`)
-          .all() as { v: unknown }[]
-      ).map((r) => r.v);
+    // 列名は補間するので **allowlist 必須**（将来 facets(userInput) 直呼びでも注入を作らない）。
+    // scope 値は文字列補間でなく **bind パラメータ**で渡す（同上）。
+    const COLS = new Set(["kind", "mood", "meter", '"key"']);
+    const scopeSql = scope === "all" ? "" : " AND scope = @scope";
+    const distinct = (col: string): unknown[] => {
+      if (!COLS.has(col)) throw new Error(`facets: column not allowed: ${col}`);
+      const stmt = this.db.prepare(
+        `SELECT DISTINCT ${col} AS v FROM neta WHERE ${col} IS NOT NULL${scopeSql} ORDER BY v`,
+      );
+      const rows = (scope === "all" ? stmt.all() : stmt.all({ scope })) as { v: unknown }[];
+      return rows.map((r) => r.v);
+    };
     return {
       kind: distinct("kind") as string[],
       mood: distinct("mood") as string[],
@@ -504,14 +521,14 @@ export class Core {
       level: row.level as string,
       intent: row.intent as string,
       instruction: (row.instruction as string) ?? null,
-      params: row.params == null ? null : JSON.parse(row.params as string),
+      params: parseJsonColumn(row.params, "job.params"),
       status: row.status as string,
       priority: row.priority as number,
       progress: (row.progress as string) ?? null,
       notify_level: (row.notify_level as string) ?? null,
       parent_job_id: (row.parent_job_id as string) ?? null,
       question: (row.question as string) ?? null,
-      result: row.result_summary == null ? null : JSON.parse(row.result_summary as string),
+      result: parseJsonColumn(row.result_summary, "job.result_summary"),
       error: (row.error as string) ?? null,
       created: row.created as string,
       updated: row.updated as string,
@@ -530,7 +547,7 @@ export class Core {
       id: row.id as string,
       kind: row.kind as string,
       title: (row.title as string) ?? null,
-      content: row.content == null ? null : JSON.parse(row.content as string),
+      content: parseJsonColumn(row.content, "neta.content"),
       text: (row.text as string) ?? null,
       key: (row.key as number) ?? null,
       mode: (row.mode as string) ?? null,
@@ -796,7 +813,7 @@ function rowToChatMessage(row: Record<string, unknown>): ChatMessage {
     role: row.role as string,
     kind: (row.kind as string) ?? null,
     text: (row.text as string) ?? null,
-    data: row.data == null ? null : JSON.parse(row.data as string),
+    data: parseJsonColumn(row.data, "chat.data"),
     created: row.created as string,
   };
 }
@@ -818,7 +835,7 @@ function rowToSchedule(row: Record<string, unknown>): Schedule {
     id: row.id as string,
     neta_id: (row.neta_id as string) ?? null,
     intent: row.intent as string,
-    params: row.params == null ? null : JSON.parse(row.params as string),
+    params: parseJsonColumn(row.params, "schedule.params"),
     every_sec: row.every_sec as number,
     enabled: !!row.enabled,
     last_run: (row.last_run as string) ?? null,
@@ -846,7 +863,7 @@ function rowToAsset(row: Record<string, unknown>): Asset {
     path: row.path as string,
     size: (row.size as number) ?? null,
     mime: (row.mime as string) ?? null,
-    meta: row.meta == null ? null : JSON.parse(row.meta as string),
+    meta: parseJsonColumn(row.meta, "asset.meta"),
     created: row.created as string,
   };
 }

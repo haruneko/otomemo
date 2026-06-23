@@ -68,6 +68,8 @@
 - **バックアップ＝✅自動化済(S4)**：`cm-backup.timer`＋`scripts/backup.sh`(sqlite backup API・世代14・data/backups/)。
 - **agentic Chat の音楽ツール＝api `/music` HTTP 経由**(cm-music-mcp廃止・S2)。worker は生成/判定を api に委譲。到達不可時は dispatch 経路（ルール生成）にフォールバック＝後退ゼロ。
 - **生成はルール優先・Claudeは音符に触らない**（#86確定）：Claude=言葉→構造化リクエストの翻訳＋判定読み、記号エンジン=音符づくり＋当てはまり判定。
+- **リスク監査リファクタ #1-5 完了（2026-06-23）**：監査の所見は実コードで検証して系統的に補正（過大評価が常態）。#1 worker堅牢化（接続リーク/無音失敗/kill後ハング）・#2 生成不変条件 property test（#5分割の安全網）・#3 api堅牢化（壊れJSON列ガード/facets SQLハードニング）・#4 web堅牢化（DL早期revoke/NetworkError）・#5 generate.ts分割（→rng.ts/rhythm.ts）。api246/web129/worker66緑。詳細 design 決定1/3/4。
+- **神クラス分割（旧#6/#7）の判断＝今はやらない**：jobs.py分割は**見送り**（design決定1でPython側は信号処理に痩せる方針＝伸びない／66テストで安定／分割には約40箇所のmonkeypatch seam作り直しが要りリスクだけ高い）。core.ts分割（design決定3 Repo分解）は**機能追加で同領域を触る時に便乗**で進める（コールドで割る価値は低い）。手順は design「神ファイル分割の進め方」に保存。
 
 ---
 

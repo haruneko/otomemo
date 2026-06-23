@@ -65,6 +65,7 @@ describe("NetaDialog", () => {
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByLabelText("cell-60-0"));
     await userEvent.selectOptions(screen.getByLabelText("key"), "9");
+    await userEvent.selectOptions(screen.getByLabelText("mode"), "minor"); // 長短を選べる（調号）
     const tempoInput = screen.getByLabelText("tempo");
     await userEvent.clear(tempoInput);
     await userEvent.type(tempoInput, "140");
@@ -73,6 +74,7 @@ describe("NetaDialog", () => {
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }], program: 0 }); // #47
     expect(patch.key).toBe(9);
+    expect(patch.mode).toBe("minor"); // A短として保存（メロ配置の相対移調に効く）
     expect(patch.tempo).toBe(140);
     expect(patch.bars).toBe(4); // 既定16拍 = 4小節
   });

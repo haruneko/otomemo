@@ -103,6 +103,18 @@ export class ApiError extends Error {
   }
 }
 
+// ネットワーク不達（サーバ停止/オフライン＝fetch 自体の reject）。ApiError(=サーバが応答した
+// 4xx/5xx) とは別物として扱える型。生の TypeError を表に出さず、どのパスで落ちたか文脈を載せる。
+export class NetworkError extends Error {
+  constructor(
+    public path: string,
+    cause: unknown,
+  ) {
+    super(`network error on ${path}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "NetworkError";
+  }
+}
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   // ボディがある時だけ content-type を付ける。空ボディ(DELETE等)に application/json を
   // 付けると Fastify が FST_ERR_CTP_EMPTY_JSON_BODY で 400 を返す（#63 削除できないの真因）。
@@ -110,9 +122,19 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body != null && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
-  const res = await fetch(`${BASE}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...init, headers });
+  } catch (e) {
+    throw new NetworkError(`${init?.method ?? "GET"} ${path}`, e); // 不達は文脈付きで投げ直す
+  }
   if (!res.ok) throw new ApiError(res.status, await res.text());
-  return (await res.json()) as T;
+  try {
+    return (await res.json()) as T;
+  } catch (e) {
+    // 2xx だが本文が非JSON（HTMLエラーページ等）＝サーバ契約違反。生 SyntaxError を出さない。
+    throw new ApiError(res.status, `invalid JSON from ${path}: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 export const api = {
