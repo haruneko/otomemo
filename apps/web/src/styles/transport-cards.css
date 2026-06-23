@@ -452,3 +452,5 @@
 .cp-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 6px; }
 .cp-tones { display: flex; align-items: center; gap: 4px; }
 .cp-tones .len { min-width: 26px; }
+/* 構成音(R/3/5/7)・長さツールの選択中アクセント（欠落バグ修正＝オンオフで色が変わらない）。 */
+.cp-tones .len.on { background: var(--accent); color: #fff; border-color: var(--accent); }
