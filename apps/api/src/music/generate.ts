@@ -355,6 +355,21 @@ export function genMelody(
     return archBase + archAmp * x;
   };
 
+  // 変奏は句機能で**位置駆動**（S3a・spec§10.5）：後楽節頭=模続(sequence)、句末バー=終止寄せ、他=反復。
+  // ＝lookback でモチーフを明示反復しつつ、楽節の役割で発展させる（乱数でばらさない）。
+  const phrases = planSkeleton(bars, f.meter);
+  const barVar = (bar: number): VarKind => {
+    if (bar === 0) return "repeat"; // basic idea
+    const bBeat = bar * perBar;
+    const ph = phrases.find((p) => bBeat >= p.startBeat - 1e-6 && bBeat < p.startBeat + p.beats - 1e-6);
+    if (!ph) return "repeat";
+    const isFirst = Math.abs(bBeat - ph.startBeat) < 1e-6;
+    const isLast = bBeat + perBar >= ph.startBeat + ph.beats - 1e-6;
+    if (ph.role === "consequent" && isFirst) return "seq_up"; // 後楽節頭＝模続（応答）
+    if (isLast && !isFirst) return "tail"; // 句末バー＝終止へ寄せる
+    return "repeat";
+  };
+
   for (let bar = 0; bar < bars; bar++) {
     const barBeat = bar * perBar;
     if (barBeat >= total) break;
@@ -362,16 +377,7 @@ export function genMelody(
     const ch = chordAt(barBeat, chords);
     const anchorPcs = ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
     const startPitch = snapTo(centerAt(bar), anchorPcs, lo, hi);
-
-    // 2/3) バリエーション選択：基本は反復、たまに軽い変奏（反復が分かる程度に抑える）。
-    let variation: VarKind = "repeat";
-    if (bar > 0) {
-      // 70%はそのまま反復、残りを軽い変奏に割り振る（覚えやすさ優先）。
-      variation = rng.choices<VarKind>(
-        ["repeat", "seq_up", "seq_down", "tail", "invert"],
-        [7, 1.2, 1.2, 1, 0.6],
-      );
-    }
+    const variation = barVar(bar);
     const barNotes = placeMotif(motif, barBeat, total, startPitch, scaleArr, chords, scale, variation, lo, hi, strongSet);
     // アーチ窓に**オクターブ折り返し**で閉じ込める（ピッチクラス保存＝コードトーン性は壊さず、
     // 非頂点小節が頂点を超えない＝最高音が climax 付近に来る）。

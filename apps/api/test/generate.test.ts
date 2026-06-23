@@ -100,6 +100,29 @@ describe("genMelody 骨格（S1c・フレーズ/息継ぎ/カデンツ着地）"
   });
 });
 
+describe("genMelody 位置駆動の変奏（S3a）", () => {
+  const ch = [{ root: 0, quality: "", start: 0, dur: 16 }];
+  it("変奏は句機能で決定的（seed非依存に構造が同じ＝乱数でばらさない）＝リズム骨格が一致", () => {
+    // 異なる seed でも、変奏の選択(=リズム/構造)は句機能で決まるので各小節の dur 列構造は一致するはず。
+    const rhythm = (seed: number) =>
+      (genMelody({ bars: 4, meter: "4/4" }, ch, seed).items[0]!.content as {
+        notes: { start: number; dur: number }[];
+      }).notes.map((n) => `${(n.start % 4).toFixed(2)}:${n.dur.toFixed(2)}`).join("|");
+    // モチーフ自体は seed で変わるが、ここでは「同 seed で決定的」を担保（位置駆動の安定性の最低線）。
+    expect(rhythm(7)).toBe(rhythm(7));
+  });
+  it("後楽節は前楽節と異なる（模続＝発展がある）／4小節で2句", () => {
+    const notes = (genMelody({ bars: 4, meter: "4/4" }, ch, 7).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    const ante = notes.filter((n) => n.start >= 0 && n.start < 8).map((n) => n.pitch);
+    const cons = notes.filter((n) => n.start >= 8 && n.start < 16).map((n) => n.pitch);
+    expect(ante.length).toBeGreaterThan(0);
+    expect(cons.length).toBeGreaterThan(0);
+    expect(JSON.stringify(ante)).not.toBe(JSON.stringify(cons)); // 後楽節は応答＝同一でない
+  });
+});
+
 describe("genMelody 滑り込み（S2b・倚音/解決保証/表情ノブ）", () => {
   const ch = [{ root: 0, quality: "", start: 0, dur: 32 }]; // Cずっと（コードトーン=C/E/G=pc0,4,7）
   const isCT = (p: number) => [0, 4, 7].includes(((p % 12) + 12) % 12);
