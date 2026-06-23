@@ -18,6 +18,7 @@ export const KIND_DEFS: readonly KindDef[] = [
   { key: "bass", label: "ベース", music: true, capturable: true, filterable: true },
   { key: "chord", label: "コード", music: true, capturable: true, filterable: true },
   { key: "chord_progression", label: "コード進行", music: true, capturable: true, filterable: true },
+  { key: "chord_pattern", label: "コード楽器", music: true, capturable: true, filterable: true },
   { key: "rhythm", label: "リズム", music: true, capturable: true, filterable: true },
   { key: "theme", label: "テーマ", text: true, capturable: true, filterable: true },
   { key: "section", label: "セクション", container: true, capturable: true, filterable: true },

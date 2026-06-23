@@ -267,6 +267,64 @@ export function resolveRelativeBass(
   return notes;
 }
 
+// --- コード楽器パターン（chord_pattern・CP2）。進行に解決する相対型の和音版（コンピング/アルペジオ）---
+export type ChordPatternMode = "strum" | "arp";
+export type ChordTone = "R" | "3" | "5" | "7";
+export interface ChordVoicing { tones: ChordTone[]; openClose: "open" | "close"; octave: number }
+export interface ChordPatternContent {
+  mode: ChordPatternMode;
+  voicing: ChordVoicing;
+  steps: number; // 1step=16分（リズム/相対ベースと同じグリッド）
+  hits: number[]; // 発音する step
+  program?: number; // 自前の音色（ベースのように選べる）
+}
+const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
+
+export function emptyChordPattern(): ChordPatternContent {
+  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [0, 8, 16, 24] };
+}
+
+// コードを voicing で実音化：構成音(R/3/5/7)をルートから積み、open は1つおきに+12で広げる（スケッチ範囲）。
+function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
+  const r = (((Math.round(root) % 12) + 12) % 12);
+  const base = CHORD_BASE + (v.octave ?? 0) * 12 + r;
+  const tones = (v.tones?.length ? v.tones : ["R", "3", "5"]).map((t) => base + degreeInterval(t, quality));
+  tones.sort((a, b) => a - b);
+  return v.openClose === "open" ? tones.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : tones;
+}
+
+// コード楽器パターンをコードに当てて実音 notes へ（strum=和音ブロック／arp=構成音を巡回）。相対型＝進行に解決。
+export function resolveChordPattern(content: ChordPatternContent, chords: ChordEntry[] = [], key = 0): Note[] {
+  const mode = content?.mode ?? "strum";
+  const v = content?.voicing ?? { tones: ["R", "3", "5"], openClose: "close", octave: 0 };
+  const steps = content?.steps ?? 32;
+  const hits = [...(content?.hits ?? [])].sort((a, b) => a - b);
+  const out: Note[] = [];
+  let arpIdx = 0;
+  for (let h = 0; h < hits.length; h++) {
+    const step = hits[h]!;
+    const start = Math.round(step * BASS_STEP_TO_BEAT * 1000) / 1000;
+    const next = hits[h + 1] ?? steps;
+    const dur = Math.round((next - step) * BASS_STEP_TO_BEAT * 1000) / 1000;
+    if (dur <= 0) continue;
+    const ch = bassChordAt(start, chords);
+    const root = ch ? ch.root : ((key % 12) + 12) % 12;
+    const quality = ch ? ch.quality : "";
+    const voiced = voiceChord(root, quality, v);
+    if (mode === "arp") {
+      out.push({ pitch: voiced[arpIdx % voiced.length]!, start, dur });
+      arpIdx++;
+    } else {
+      for (const p of voiced) out.push({ pitch: p, start, dur });
+    }
+  }
+  return out;
+}
+
+export function isChordPattern(content: unknown): content is ChordPatternContent {
+  return !!content && typeof content === "object" && "hits" in content && "voicing" in content;
+}
+
 // neta の種類別に content をノート列へ（合成再生で使う共通変換）
 export { MUSIC_KINDS } from "./kinds"; // SSOT＝kinds.ts（後方互換で music からも再公開）
 
@@ -281,6 +339,11 @@ export function notesForContent(kind: string, content: unknown, ctx?: BassContex
     // 相対モード：コードに当てて実音高へ解決。chords が無ければ preview_chords→key の tonic。
     const chords = ctx?.chords ?? content.preview_chords ?? [];
     return resolveRelativeBass(content.pattern, chords, ctx?.key ?? 0);
+  }
+  // コード楽器パターン：進行(or preview)に当てて voicing で実音化（相対型）。
+  if (kind === "chord_pattern" && isChordPattern(content)) {
+    const chords = ctx?.chords ?? (content as ChordPatternContent & { preview_chords?: ChordEntry[] }).preview_chords ?? [];
+    return resolveChordPattern(content, chords, ctx?.key ?? 0);
   }
   // bass 絶対モードは melody と同型(notes)。
   if (kind === "melody" || kind === "bass") return notesOf(content);

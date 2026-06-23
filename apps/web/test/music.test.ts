@@ -12,6 +12,7 @@ import {
   notesForContent,
   band,
   resolveRelativeBass,
+  resolveChordPattern,
   compositeNotes,
   scheduleTimes,
   totalSec,
@@ -280,6 +281,34 @@ describe("music", () => {
   });
 
   // #57① Transport化：スケジュール時刻の純関数（音は鳴らさず算出だけ検証）
+  describe("chord pattern (CP2・進行に解決する和音版)", () => {
+    const cp = (over: Partial<import("../src/music").ChordPatternContent> = {}) => ({
+      mode: "strum" as const, voicing: { tones: ["R", "3", "5"] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0 }, steps: 16, hits: [0, 8], ...over,
+    });
+    it("strum：各 hit でコードを voicing して和音ブロック（C→[48,52,55]）", () => {
+      const notes = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      const atStart = notes.filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b);
+      expect(atStart).toEqual([48, 52, 55]); // C E G（close・octave0）
+      expect(notes.filter((n) => n.start === 0).every((n) => n.dur === 2)).toBe(true); // 次hit(step8=2拍)まで
+    });
+    it("arp：構成音を1つずつ巡回（各 hit 1音）", () => {
+      const notes = resolveChordPattern(cp({ mode: "arp", hits: [0, 4, 8] }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      expect(notes.length).toBe(3); // 3 hit = 3音
+      expect(notes.map((n) => n.pitch)).toEqual([48, 52, 55]); // R,3,5 を巡回
+    });
+    it("コードチェンジに解決（後半は次コード G の voicing）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 2 }, { root: 7, quality: "", start: 2, dur: 2 }];
+      const notes = resolveChordPattern(cp({ hits: [0, 8] }), chords, 0); // step8=2拍=G
+      const atG = notes.filter((n) => n.start === 2).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
+      expect(atG).toEqual([2, 7, 11]); // G B D = pc 7,11,2
+    });
+    it("open は構成音を1つおきに広げる（close と異なる）", () => {
+      const close = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch);
+      const open = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "open", octave: 0 } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b);
+      expect(open).not.toEqual(close.sort((a, b) => a - b)); // 広げる＝別配置
+    });
+  });
+
   describe("playback scheduling (#57)", () => {
     it("maps beats to Transport seconds (beat=quarter=1.0, spb=60/bpm)", () => {
       const ev = scheduleTimes([{ pitch: 60, start: 2, dur: 1, vel: 64 }], 120);
