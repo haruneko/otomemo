@@ -237,6 +237,18 @@ describe("genBass（ルート/5度＋リズム）", () => {
     expect(notes.every((n) => [36, 36 + 7].includes(n.pitch))).toBe(true); // ルート or 5度
     expect(notes.length).toBeGreaterThan(0);
   });
+  it("6/8：複合拍ネイティブ＝付点ビート(0,1.5)頭にルート・小節長3拍", () => {
+    const chords = [{ root: 0, quality: "", start: 0, dur: 12 }];
+    const notes = (genBass({ bars: 4, meter: "6/8" }, chords, 42).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    expect(Math.max(...notes.map((n) => n.start + n.dur))).toBeLessThanOrEqual(12 + 1e-6); // 4小節×3拍
+    const posInBar = [...new Set(notes.map((n) => Math.round((n.start % 3) * 100) / 100))];
+    expect(posInBar.includes(0) && posInBar.includes(1.5)).toBe(true); // 2つの付点ビート頭
+    // 付点ビート頭(0,1.5)はルート
+    const heads = notes.filter((n) => Math.abs(n.start % 1.5) < 1e-6);
+    expect(heads.every((n) => n.pitch === 36)).toBe(true);
+  });
 });
 
 describe("genDrums（バックビート）", () => {

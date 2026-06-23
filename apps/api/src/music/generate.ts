@@ -612,6 +612,12 @@ const BASS_FIGS: RhyFig[] = [
   { on: [[0, 0.5], [0.5, 0.5]], span: 1, w: 1.2, busy: true }, // ♪♪（ルート→5度等）
   { on: [[0, 0.75], [0.75, 0.25]], span: 1, w: 0.7 }, // 付点（軽い跳ね）
 ];
+// 6/8 等の複合拍子ネイティブのベース図形（1ビート＝付点四分=1.5四分・各ビート頭にルート）。
+const COMPOUND_BASS_FIGS: RhyFig[] = [
+  { on: [[0, 1.5]], span: 1.5, w: 3, long: true }, // ♩.（1ビート支え＝6/8の基本）
+  { on: [[0, 1], [1, 0.5]], span: 1.5, w: 1.4 }, // ♩♪（ルート→5度）
+  { on: [[0, 0.5], [0.5, 0.5], [1, 0.5]], span: 1.5, w: 0.8, busy: true }, // 八分3つ（歩き）
+];
 
 /** ベースライン（強拍=ルート・弱拍=5度/オクターブ）＋**リズム図形**。C2基準低域。 */
 export function genBass(
@@ -622,15 +628,17 @@ export function genBass(
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
   const bars = barsOf(f);
-  const bpb = beatsPerBar(f.meter);
+  const info = meterInfo(f.meter); // 6/8 一級（メロと拍子を揃える）
+  const bassFigs = info.grouping === "compound" ? COMPOUND_BASS_FIGS : BASS_FIGS;
+  const bpb = info.beatsPerBar;
   const total = Math.max(1, Math.round(bars * bpb));
-  const perBar = Math.max(1, Math.round(bpb));
+  const perBar = bpb;
   const bias = densityBias(f.mood ?? "", f.tempo);
   const notes: { pitch: number; start: number; dur: number }[] = [];
   let beat = 0;
-  while (beat < total) {
+  while (beat < total - 1e-9) {
     const onBar = beat % perBar === 0;
-    const fig = pickFig(rng, BASS_FIGS, bias, total - beat, true); // ベースは毎拍頭から発音
+    const fig = pickFig(rng, bassFigs, bias, total - beat, true); // ベースは毎拍頭から発音
     const ch = chordAt(Math.floor(beat), chords);
     const root = ch ? normRoot(ch.root ?? 0) : 0;
     fig.on.forEach(([off, durRaw], i) => {
