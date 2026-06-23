@@ -156,10 +156,14 @@ article[aria-label="neta-card"].dragging {
 .input-toggle button {
   font-size: 0.78rem;
   padding: 3px 10px;
+  background: #2b2f36; /* OFF地色（グローバル button=accent を上書き＝ON/OFFが見分く） */
+  color: var(--fg);
+  border: 1px solid var(--line);
 }
 .input-toggle button.on {
   background: var(--accent);
   color: #fff;
+  border-color: var(--accent);
 }
 .step-pad {
   display: grid;
