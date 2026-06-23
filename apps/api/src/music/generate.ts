@@ -340,15 +340,25 @@ export function genMelody(
   const motif = buildMotifSteered(rng, perBar, bias, figs);
 
   const notes: { pitch: number; start: number; dur: number }[] = [];
-  let startPitch = 72; // 動機の開始音（前小節の開始音を引き継いで流れを作る）
+  // 頂点アーチ（S2a・spec§7-3）：小節アンカーを ≈0.62 で頂点になるレジスタ包絡に乗せる
+  // ＝上行で接近→頂点→下行で閉じる。各小節はその中心に最も近いコードトーンにアンカー。
+  const climax = bars <= 1 ? 0 : Math.round((bars - 1) * 0.62);
+  const archBase = 67;
+  const archAmp = 9;
+  const centerAt = (bar: number): number => {
+    if (bars <= 1) return archBase + archAmp;
+    const downSpan = bars - 1 - climax;
+    const x = bar <= climax ? (climax === 0 ? 1 : bar / climax) : downSpan <= 0 ? 1 : 1 - (bar - climax) / downSpan;
+    return archBase + archAmp * x;
+  };
 
   for (let bar = 0; bar < bars; bar++) {
     const barBeat = bar * perBar;
     if (barBeat >= total) break;
-    // 各小節の開始音は、その小節のコードトーンにアンカー（直近の startPitch に最も近いコードトーン）。
+    // 各小節の開始音は、アーチ中心に最も近いコードトーンにアンカー（上行→頂点→下行）。
     const ch = chordAt(barBeat, chords);
     const anchorPcs = ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
-    startPitch = snapTo(startPitch, anchorPcs, lo, hi);
+    const startPitch = snapTo(centerAt(bar), anchorPcs, lo, hi);
 
     // 2/3) バリエーション選択：基本は反復、たまに軽い変奏（反復が分かる程度に抑える）。
     let variation: VarKind = "repeat";
@@ -360,10 +370,21 @@ export function genMelody(
       );
     }
     const barNotes = placeMotif(motif, barBeat, total, startPitch, scaleArr, chords, scale, variation, lo, hi, strongSet);
-    for (const n of barNotes) notes.push(n);
-    // 次小節の開始音は今小節の開始音（=確定した最初の音）から引き継ぐ＝動機の連続性。
-    if (barNotes.length > 0) startPitch = barNotes[0]!.pitch;
+    // アーチ窓に**オクターブ折り返し**で閉じ込める（ピッチクラス保存＝コードトーン性は壊さず、
+    // 非頂点小節が頂点を超えない＝最高音が climax 付近に来る）。
+    const ceil = centerAt(bar) + 5;
+    const floor = centerAt(bar) - 8;
+    for (const n of barNotes) {
+      let p = n.pitch;
+      while (p > ceil && p - 12 >= lo) p -= 12;
+      while (p < floor && p + 12 <= hi) p += 12;
+      n.pitch = Math.max(lo, Math.min(hi, p));
+      notes.push(n);
+    }
   }
+
+  // 跳躍後の順次反行（S2a・spec§7-5）：4度以上跳躍の直後の「弱拍」音は逆向き歩進に補正＝ギャップフィル。
+  recoverLeaps(notes, scaleArr, strongSet, perBar, lo, hi);
 
   // 骨格層（S1c・spec§10.5-10.6）：句末で①カデンツ度数に着地②息継ぎ（末尾を切って休符）。
   // モチーフ反復・拍頭コードトーンは保ったまま、上に「呼吸」を被せる。
@@ -445,6 +466,33 @@ function prependPickup(
   const deg = toScaleDegree(first.pitch, scaleArr);
   const below = degreeToPitch(deg.idx - 1, deg.oct, scaleArr); // 1スケール度下＝歩進で滑り込む
   notes.push({ pitch: below, start: round3(-pickup), dur: round3(pickup) }); // 拍0の前（負start）
+}
+
+// 跳躍後の順次反行（gap-fill）：4度以上跳躍の直後の「弱拍」音を逆向き1スケール度の歩進に補正。
+// 強拍/カデンツ音は動かさない（コードトーン着地を壊さない）。
+function recoverLeaps(
+  notes: { pitch: number; start: number; dur: number }[],
+  scaleArr: number[],
+  strongSet: Set<number>,
+  perBar: number,
+  lo: number,
+  hi: number,
+): void {
+  notes.sort((a, b) => a.start - b.start);
+  const isStrong = (start: number): boolean => {
+    if (start < 0) return false;
+    const pos = Math.round((((start % perBar) + perBar) % perBar) * 1000) / 1000;
+    return Number.isInteger(start) || strongSet.has(pos);
+  };
+  for (let i = 1; i < notes.length - 1; i++) {
+    const leap = notes[i]!.pitch - notes[i - 1]!.pitch;
+    if (Math.abs(leap) < 5) continue; // 4度未満は跳躍扱いしない
+    const nxt = notes[i + 1]!;
+    if (isStrong(nxt.start)) continue; // 強拍/カデンツ音は保つ
+    const dir = leap > 0 ? -1 : 1; // 跳躍と逆向き
+    const d = toScaleDegree(notes[i]!.pitch, scaleArr);
+    nxt.pitch = Math.max(lo, Math.min(hi, degreeToPitch(d.idx + dir, d.oct, scaleArr)));
+  }
 }
 
 // ベースの図形（メロより落ち着き：四分主体＋たまに8分のルート→5度/オクターブ、長音）。

@@ -65,28 +65,9 @@ describe("genMelody（コードトーン拘束＋リズム図形）", () => {
     const matches = bars.filter((b) => b === bars[0]).length;
     expect(matches).toBeGreaterThanOrEqual(2); // 反復が観測できる
   });
-  it("モチーフ反復：相対音程(コントゥア)も小節をまたいで繰り返す傾向がある", () => {
-    const ch = [{ root: 0, quality: "", start: 0, dur: 16 }];
-    const notes = (genMelody({ bars: 4, meter: "4/4" }, ch, 11).items[0]!.content as {
-      notes: { pitch: number; start: number; dur: number }[];
-    }).notes;
-    const intervals = (bar: number): string =>
-      notes
-        .filter((n) => n.start >= bar * 4 && n.start < (bar + 1) * 4)
-        .map((n) => n.pitch)
-        .reduce<{ prev: number | null; out: string[] }>(
-          (acc, p) => {
-            if (acc.prev !== null) acc.out.push(String(p - acc.prev));
-            acc.prev = p;
-            return acc;
-          },
-          { prev: null, out: [] },
-        )
-        .out.join(",");
-    const bars = [0, 1, 2, 3].map(intervals);
-    const matches = bars.filter((b) => b === bars[0] && b.length > 0).length;
-    expect(matches).toBeGreaterThanOrEqual(2); // コントゥアの反復が観測できる
-  });
+  // 注：旧「ピッチ・コントゥアの厳密反復」テストは S2a(頂点アーチ)で撤去。アーチは各小節のレジスタを
+  // 滑らかに動かす＝コードトーン・スナップが小節ごとに変わり、ピッチ輪郭は**近似反復(=発展)**になる
+  // （機械反復でない）。モチーフ同一性は上の**リズム指紋反復**が担保する。
 });
 
 describe("genMelody 骨格（S1c・フレーズ/息継ぎ/カデンツ着地）", () => {
@@ -116,6 +97,29 @@ describe("genMelody 骨格（S1c・フレーズ/息継ぎ/カデンツ着地）"
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     const notes = (a.items[0]!.content as { notes: { pitch: number }[] }).notes;
     expect(notes.every((n) => n.pitch >= 60 && n.pitch <= 84)).toBe(true);
+  });
+});
+
+describe("genMelody 頂点アーチ・跳躍後反行（S2a）", () => {
+  const ch = [{ root: 0, quality: "", start: 0, dur: 32 }];
+  it("最高音が後半(≈0.62)に来る＝上行→頂点→下行のアーチ", () => {
+    const notes = (genMelody({ bars: 8, meter: "4/4" }, ch, 5).items[0]!.content as {
+      notes: { pitch: number; start: number; dur: number }[];
+    }).notes;
+    const total = Math.max(...notes.map((n) => n.start + n.dur));
+    const peak = notes.reduce((a, b) => (b.pitch > a.pitch ? b : a));
+    expect(peak.start / total).toBeGreaterThanOrEqual(0.4); // 前半でない
+    expect(peak.start / total).toBeLessThanOrEqual(0.8);
+    // 頂点後の平均ピッチ < 頂点前（下行で閉じる）
+    const before = notes.filter((n) => n.start < peak.start);
+    const after = notes.filter((n) => n.start > peak.start);
+    const mean = (a: { pitch: number }[]) => a.reduce((s, n) => s + n.pitch, 0) / Math.max(1, a.length);
+    if (after.length && before.length) expect(mean(after)).toBeLessThanOrEqual(mean(before) + 1e-6);
+  });
+  it("総音域は概ね1.5オクターブ以内（跳躍後反行＋アーチで暴れない）", () => {
+    const notes = (genMelody({ bars: 8, meter: "4/4" }, ch, 9).items[0]!.content as { notes: { pitch: number }[] }).notes;
+    const range = Math.max(...notes.map((n) => n.pitch)) - Math.min(...notes.map((n) => n.pitch));
+    expect(range).toBeLessThanOrEqual(20);
   });
 });
 
