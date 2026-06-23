@@ -666,6 +666,22 @@ export function genDrums(frame?: Frame | null, seed?: number | null): GenResult 
   const bias = densityBias(f.mood ?? "", f.tempo);
   const sparse = bias.long >= 1.5; // 切ない/遅い
   const busy = bias.busy >= 1.5; // 明るい/速い
+
+  // 6/8 など複合拍子（1小節=12step＝6八分）：付点ビート(step0,6)を芯に。メロ/ベースと拍子を揃える。
+  if (meterInfo(f.meter).grouping === "compound") {
+    const k = new Set<number>([0, 6]); // 2つの付点ビート頭にキック
+    const sn = new Set<number>([6]); // バックビートは2拍目（付点ビート2）
+    let hat: number[] = [0, 2, 4, 6, 8, 10]; // 八分でハット
+    let hv = 55;
+    if (sparse) { sn.clear(); sn.add(6); k.delete(6); hat = [0, 6]; hv = 45; } // 静かな6/8（ハット付点ビートのみ）
+    else if (busy) { hat = Array.from({ length: 12 }, (_, i) => i); k.add(rng.choice([3, 9])); hv = 42; } // 16分ハット
+    const cl = [
+      { name: "Kick", midi: GM.Kick, hits: [...k].sort((a, b) => a - b), vel: 115 },
+      { name: "Snare", midi: GM.Snare, hits: [...sn].sort((a, b) => a - b), vel: 105 },
+      { name: "HiHat", midi: GM.HiHat, hits: hat, vel: hv },
+    ];
+    return { items: [{ kind: "rhythm", content: { rhythm: { steps: 12, lanes: cl } }, label: "ドラム" }], edges: [] };
+  }
   const kick = new Set<number>([0]);
   const snare = new Set<number>();
   let hihat: number[];

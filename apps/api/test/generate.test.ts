@@ -261,6 +261,16 @@ describe("genDrums（バックビート）", () => {
     const kick = r.lanes.find((l) => l.name === "Kick")!;
     expect(kick.hits).toContain(0); // 表拍キック
   });
+  it("6/8：12ステップ・付点ビート(0,6)キック・八分ハット", () => {
+    const r = (genDrums({ meter: "6/8" }, 2).items[0]!.content as {
+      rhythm: { steps: number; lanes: { name: string; hits: number[] }[] };
+    }).rhythm;
+    expect(r.steps).toBe(12); // 6/8＝12ステップ(6八分)
+    const kick = r.lanes.find((l) => l.name === "Kick")!;
+    expect(kick.hits).toContain(0); // 付点ビート1
+    const hat = r.lanes.find((l) => l.name === "HiHat")!;
+    expect(hat.hits.every((s) => s % 2 === 0)).toBe(true); // 八分(偶数step)でハット
+  });
 });
 
 describe("normalizeFrame", () => {

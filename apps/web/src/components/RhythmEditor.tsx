@@ -6,17 +6,30 @@ const NAME_PX = 58; // rhythm-name(56) + gap(2)
 const BEAT_PX = 88; // 1拍=4step×22 ＝#74 プレイヘッドの px/beat
 
 // リズムのステップグリッド（design #19「リズム step（自作・小）」）。レーン×ステップを on/off。
+// 拍子→1小節のstep数（1step=16分=0.25拍）。4/4=16, 6/8=12, 3/4=12。複合(6/8系)はビート=6step毎。
+function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
+  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
+  const n = m ? Number(m[1]) : 4;
+  const d = m ? Number(m[2]) : 4;
+  const stepsPerBar = n > 0 && d > 0 ? Math.round((n * 16) / d) : 16;
+  const compound = d === 8 && n % 3 === 0 && n >= 6;
+  return { stepsPerBar, beatStep: compound ? 6 : 4 }; // 複合は付点ビート(6step)、単純は四分(4step)
+}
+
 export function RhythmEditor({
   rhythm,
   onChange,
+  meter,
   playheadRef,
   scrollerRef,
 }: {
   rhythm: RhythmContent;
   onChange: (r: RhythmContent) => void;
+  meter?: string; // 拍子（6/8 等で grid を変える）
   playheadRef?: Ref<HTMLDivElement>; // #74 再生プレイヘッド
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
+  const { stepsPerBar, beatStep } = meterSteps(meter);
   function toggle(li: number, step: number) {
     const lanes = rhythm.lanes.map((l, k) => {
       if (k !== li) return l;
@@ -29,10 +42,10 @@ export function RhythmEditor({
     onChange({ ...rhythm, lanes });
   }
 
-  // 小節数（1〜4）。1小節=16ステップ。縮小は**非破壊**（範囲外hitは描画しないだけで保持・melodyと同じ）。
-  const bars = Math.max(1, Math.round(rhythm.steps / 16));
+  // 小節数（1〜4）。1小節=stepsPerBar（拍子依存：4/4=16, 6/8=12）。縮小は**非破壊**。
+  const bars = Math.max(1, Math.round(rhythm.steps / stepsPerBar));
   function setBars(n: number) {
-    onChange({ ...rhythm, steps: Math.max(1, Math.min(4, n)) * 16 });
+    onChange({ ...rhythm, steps: Math.max(1, Math.min(4, n)) * stepsPerBar });
   }
 
   return (
@@ -55,7 +68,7 @@ export function RhythmEditor({
               className={
                 "rhythm-cell" +
                 (l.hits.includes(s) ? " on" : "") +
-                (s % 16 === 0 ? " bar" : s % 4 === 0 ? " beat" : "")
+                (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")
               }
               onClick={() => toggle(li, s)}
             />

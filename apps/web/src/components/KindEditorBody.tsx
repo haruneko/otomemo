@@ -117,7 +117,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} />
       ) : isRhythm ? (
-        <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
+        <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isContainer ? (
         <SectionEditor
           neta={p.neta}
