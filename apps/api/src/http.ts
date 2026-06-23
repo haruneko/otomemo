@@ -153,21 +153,24 @@ export function buildHttp(core: Core): FastifyInstance {
   // gen→compose ワンショット（dogfood P4）：コードを土台に各パートを生成→ネタ化→section に合成、を1コール。
   // 「叩き台を一発で組む」。決定的(seed)。返り＝section ネタ＋合成木。全部 project・tags:["生成"]。
   app.post("/gen/section", async (req) => {
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[] };
     const frame = b.frame ?? {};
-    const parts = b.parts ?? ["chord_progression", "melody", "bass", "rhythm"];
     const key = typeof frame.key === "number" ? frame.key : 0;
+    // part 名は素直な別名も受ける（chords→chord_progression, drums→rhythm 等）。指定の揺れで落とさない。
+    const alias: Record<string, string> = { chords: "chord_progression", chord: "chord_progression", drums: "rhythm", drum: "rhythm" };
+    const want = new Set((b.parts ?? ["chord_progression", "melody", "bass", "rhythm"]).map((p) => alias[p] ?? p));
+    const tags = ["生成", ...(b.tags ?? [])]; // 呼び出し側 tags も尊重（dogfood 等を付けられる）
     const chords = (genChords(frame, b.seed).items[0]!.content as { chords: any[] }).chords;
-    const section = core.createNeta({ kind: "section", title: b.title ?? "生成セクション", key, tempo: frame.tempo, meter: frame.meter, tags: ["生成"] });
+    const section = core.createNeta({ kind: "section", title: b.title ?? "生成セクション", key, tempo: frame.tempo, meter: frame.meter, tags });
     let ord = 0;
     const place = (kind: string, content: unknown, label?: string) => {
-      const n = core.createNeta({ kind, title: label ?? kind, content, key, tempo: frame.tempo, scope: "project", tags: ["生成"] });
+      const n = core.createNeta({ kind, title: label ?? kind, content, key, tempo: frame.tempo, scope: "project", tags });
       core.placeChild(section.id, n.id, 0, ord++);
     };
-    if (parts.includes("chord_progression")) place("chord_progression", { chords }, "コード");
-    if (parts.includes("melody")) place("melody", genMelody(frame, chords, b.seed).items[0]!.content, "メロ");
-    if (parts.includes("bass")) place("bass", genBass(frame, chords).items[0]!.content, "ベース");
-    if (parts.includes("rhythm")) place("rhythm", genDrums(frame, b.seed).items[0]!.content, "ドラム");
+    if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
+    if (want.has("melody")) place("melody", genMelody(frame, chords, b.seed).items[0]!.content, "メロ");
+    if (want.has("bass")) place("bass", genBass(frame, chords, b.seed).items[0]!.content, "ベース");
+    if (want.has("rhythm")) place("rhythm", genDrums(frame, b.seed).items[0]!.content, "ドラム");
     return { section: core.getNeta(section.id), composition: core.getComposition(section.id) };
   });
 

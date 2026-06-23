@@ -242,18 +242,49 @@ export function genBass(
 
 const GM = { Kick: 36, Snare: 38, HiHat: 42, OpenHat: 46 };
 
-/** GMバックビート＋seed で小変化（16ステップ1小節）。返り #85 items 形（rhythm）。 */
+/** GMドラム（16ステップ1小節）を **mood/tempo/seed で可変**生成。切ない=ハーフタイム/疎、
+ * 明るい/速い=16分ハット・キック増、既定=8ビート。返り #85 items 形（rhythm）。 */
 export function genDrums(frame?: Frame | null, seed?: number | null): GenResult {
-  normalizeFrame(frame);
-  const rng = new Rng(seed);
-  const kick = new Set([0, 8]);
-  const snare = new Set([4, 12]);
-  const hihat = [0, 2, 4, 6, 8, 10, 12, 14];
-  kick.add(rng.choice([6, 10, 11, 14]));
+  const f = normalizeFrame(frame);
+  const rng = new Rng(seed ?? 0);
+  const bias = densityBias(f.mood ?? "", f.tempo);
+  const sparse = bias.long >= 1.5; // 切ない/遅い
+  const busy = bias.busy >= 1.5; // 明るい/速い
+  const kick = new Set<number>([0]);
+  const snare = new Set<number>();
+  let hihat: number[];
+  let hatVel = 55;
+  const open: number[] = [];
+  if (sparse) {
+    // ハーフタイム感：スネアは3拍目(8)のみ、キック疎、ハットは4分（静かに支える）。
+    snare.add(8);
+    kick.add(rng.choice([10, 11]));
+    hihat = [0, 4, 8, 12];
+    hatVel = 45;
+  } else if (busy) {
+    // 細かい：16分ハット、キック増、たまにスネアのプッシュ/ゴースト。
+    snare.add(4);
+    snare.add(12);
+    kick.add(8);
+    kick.add(rng.choice([6, 7]));
+    kick.add(rng.choice([10, 14]));
+    hihat = Array.from({ length: 16 }, (_, i) => i);
+    hatVel = 42;
+    if (rng.next() < 0.5) snare.add(rng.choice([7, 15])); // プッシュ/ゴースト
+  } else {
+    // 王道8ビート＋seedでキックのおかず1つ。
+    snare.add(4);
+    snare.add(12);
+    kick.add(8);
+    kick.add(rng.choice([6, 10, 11, 14]));
+    hihat = [0, 2, 4, 6, 8, 10, 12, 14];
+  }
+  if (rng.next() < 0.4) open.push(rng.choice([7, 14])); // 時々オープンハット（seedで）
   const lanes = [
     { name: "Kick", midi: GM.Kick, hits: [...kick].sort((a, b) => a - b), vel: 115 },
     { name: "Snare", midi: GM.Snare, hits: [...snare].sort((a, b) => a - b), vel: 105 },
-    { name: "HiHat", midi: GM.HiHat, hits: hihat, vel: 55 },
+    { name: "HiHat", midi: GM.HiHat, hits: hihat, vel: hatVel },
+    ...(open.length ? [{ name: "OpenHat", midi: GM.OpenHat, hits: open, vel: 70 }] : []),
   ];
   return { items: [{ kind: "rhythm", content: { rhythm: { steps: 16, lanes } }, label: "ドラム" }], edges: [] };
 }

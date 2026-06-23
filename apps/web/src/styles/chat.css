@@ -342,3 +342,7 @@
   color: var(--muted, #9aa0ab);
 }
 .wait-cancel:hover { color: #fff; border-color: var(--accent); }
+
+/* 考え中(planning)の不確定プログレスバー＝動いてることを示す。 */
+.wait-bar-indet { height: 100%; width: 40%; background: var(--accent); border-radius: 2px; animation: waitIndet 1.1s ease-in-out infinite; }
+@keyframes waitIndet { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }

@@ -239,9 +239,18 @@ export function Chat({
   // 待ち中の進捗（subtask 完了/総数・経過秒）。null=非ワーカー待ち。UX：止まってる不安を解消。
   const [waitInfo, setWaitInfo] = useState<{ done: number; total: number; sec: number } | null>(null);
   const cancelWait = useRef(false); // 「待たずに戻る」で立てる＝waitForJob を打ち切り入力を解放（裏で続行）。
+  const [thinkSec, setThinkSec] = useState(0); // 「考え中」(分解前 planning)の経過秒＝沈黙の不安を解消。
   const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
   const alive = useAlive(); // ワーカー待ちは長い＝閉じた後に setState しないためのガード（poll.ts 共通）
+
+  // busy の間（特に分解前の「考え中」planning）に経過秒を刻む＝無進捗の沈黙をなくす。
+  useEffect(() => {
+    if (!busy) return setThinkSec(0);
+    setThinkSec(0);
+    const t = setInterval(() => setThinkSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
   // 複数会話セッション（フリーChatのみ。Claude/ChatGPT風に作って切替/見返す）。
   const [sessionId, setSessionId] = useState(() =>
     target ? "" : (localStorage.getItem("cm-chat-session") ?? "global"),
@@ -712,8 +721,15 @@ export function Chat({
                   </button>
                 </div>
               ) : (
-                <div className="chat-text thinking">
-                  考え中<span className="dots" aria-hidden="true" />
+                // 分解前(planning)：経過秒＋不確定バーで「動いてる」ことを示す（沈黙の不安を解消）。
+                <div className="chat-wait">
+                  <div className="chat-text thinking">
+                    考え中<span className="dots" aria-hidden="true" />
+                    <span className="wait-sec"> {thinkSec}s</span>
+                  </div>
+                  <div className="wait-bar" aria-hidden="true">
+                    <div className="wait-bar-indet" />
+                  </div>
                 </div>
               )}
             </div>

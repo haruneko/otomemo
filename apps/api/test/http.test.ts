@@ -99,6 +99,14 @@ describe("http auth gate (#36)", () => {
     expect(kinds).toEqual(["bass", "chord_progression", "melody", "rhythm"]);
   });
 
+  it("POST /gen/section は素直な part名(chords/drums)も受ける＋tags尊重（df2-B）", async () => {
+    const r = await app.inject({ method: "POST", url: "/gen/section", payload: { parts: ["chords", "drums"], frame: { bars: 2 }, tags: ["dogfood2"] } });
+    const { section, composition } = r.json();
+    const kinds = composition.children.map((c: any) => c.node.neta.kind).sort();
+    expect(kinds).toEqual(["chord_progression", "rhythm"]); // chords→chord_progression, drums→rhythm
+    expect(section.tags).toContain("dogfood2"); // 呼び出し側 tags を尊重
+  });
+
   it("GET /health はトークン不要で jobs 統計を返す（S4）", async () => {
     const prev = process.env.CM_TOKEN;
     process.env.CM_TOKEN = "secret";
