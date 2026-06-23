@@ -302,6 +302,17 @@ describe("music", () => {
       const atG = notes.filter((n) => n.start === 2).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
       expect(atG).toEqual([2, 7, 11]); // G B D = pc 7,11,2
     });
+    it("合成(CP5)：section の進行に解決して鳴る（chord_progression→chord_pattern）", () => {
+      const children = [
+        { position: 0, node: { neta: { kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }] } } } },
+        { position: 0, node: { neta: { kind: "chord_pattern", content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [0, 16] } } } },
+      ];
+      const notes = compositeNotes(children, 0);
+      const at0 = notes.filter((n) => n.start === 0 && n.program === 0).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
+      const at4 = notes.filter((n) => n.start === 4 && n.program === 0).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
+      expect(at0).toEqual([0, 4, 7]); // C E G
+      expect(at4).toEqual([2, 7, 11]); // step16=4拍=G → G B D
+    });
     it("open は構成音を1つおきに広げる（close と異なる）", () => {
       const close = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch);
       const open = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "open", octave: 0 } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b);

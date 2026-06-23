@@ -391,6 +391,15 @@ export function compositeNotes(children: CompositeChild[], keyPc: number): Note[
         program: prog,
       }));
     }
+    if (kind === "chord_pattern" && isChordPattern(c.node.neta.content)) {
+      // コード楽器パターン：section の調・コードで実音解決済み＝移調しない（position だけ）。自前音色。
+      const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
+      return notesForContent(kind, c.node.neta.content, { key: keyPc, chords }).map((n) => ({
+        ...n,
+        start: n.start + c.position,
+        program: prog,
+      }));
+    }
     return notesForContent(kind, c.node.neta.content).map((n) => ({
       ...n,
       pitch: isRhythm ? n.pitch : n.pitch + keyPc,
