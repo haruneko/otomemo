@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 const {
   createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
-  link, unlink, listChatMessages, addChatMessage, clearChatThread,
+  link, unlink, listChatMessages, addChatMessage, clearChatThread, chatTurnStream,
 } = vi.hoisted(() => ({
   createJob: vi.fn(),
   getJob: vi.fn(),
@@ -19,101 +19,117 @@ const {
   listChatMessages: vi.fn(),
   addChatMessage: vi.fn(),
   clearChatThread: vi.fn(),
+  chatTurnStream: vi.fn(),
 }));
 vi.mock("../src/api", () => ({
   api: {
     createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
-    link, unlink, listChatMessages, addChatMessage, clearChatThread,
+    link, unlink, listChatMessages, addChatMessage, clearChatThread, chatTurnStream,
   },
 }));
+
+// #100④-S3 常駐 claude の stream-json を擬似発火（consult＝SSE 経路の駆動）。
+function streamEvents(...events: unknown[]) {
+  chatTurnStream.mockImplementation(
+    async (_t: string, _text: string, onEvent: (e: unknown) => void) => {
+      for (const e of events) onEvent(e);
+    },
+  );
+}
+const asst = (text: string) => ({ type: "assistant", message: { content: [{ type: "text", text }] } });
+const toolUse = (name: string) => ({ type: "assistant", message: { content: [{ type: "tool_use", name, input: {} }] } });
+const result = (text: string, is_error = false) => ({ type: "result", subtype: "success", result: text, is_error });
+// 永続履歴に proposals メッセージを置く（#100 で proposals は判別ユニオンでなく履歴経由で描く）。
+function historyWithProposals(proposals: unknown[], summary?: string) {
+  listChatMessages.mockReset();
+  listChatMessages.mockResolvedValue([
+    { id: "p", thread: "global", role: "ai", kind: "proposals", text: null, data: { proposals, summary }, created: "" },
+  ]);
+}
 
 import { Chat } from "../src/components/Chat";
 
 describe("Chat", () => {
   beforeEach(() => {
     // #70 既定：履歴は空、保存はスタブ成功（既存テストの挙動を保つ）。
+    vi.resetAllMocks(); // テスト間でモック実装/呼出が漏れないよう毎回リセット。
     listChatMessages.mockResolvedValue([]);
     addChatMessage.mockResolvedValue({ id: "m" });
     clearChatThread.mockResolvedValue({ cleared: true });
+    streamEvents(result("")); // 既定：何も言わず終わる（各テストで上書き）。
   });
-  it("consult: shows options, picks one → knowledge neta (not other) (#61)", async () => {
-    createJob.mockResolvedValue({ id: "j1", status: "queued" });
-    getJob.mockResolvedValue({
-      status: "done",
-      result: { type: "options", options: [{ title: "案A", body: "ほんぶん" }] },
-      error: null,
-    });
-    createNeta.mockResolvedValue({ id: "n1" });
-    const onChanged = vi.fn();
 
-    render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
+  it("consult(streaming): Claude の自然文返答を表示する（#100④）", async () => {
+    streamEvents(asst("Cメジャーで明るい進行はいかが？"), result("Cメジャーで明るい進行はいかが？"));
+    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.type(screen.getByLabelText("chat-input"), "発展案ちょうだい");
     await userEvent.click(screen.getByRole("button", { name: "送信" }));
-    await waitFor(() => expect(screen.getByText("案A")).toBeInTheDocument());
-
-    await userEvent.click(screen.getByText("案A"));
-    await waitFor(() => expect(createNeta).toHaveBeenCalled());
-    expect(createNeta).toHaveBeenCalledWith({
-      kind: "knowledge", // #61 無targetは other ではなく knowledge
-      title: "案A",
-      text: "ほんぶん",
-      from_job: "j1",
-    });
-    expect(onChanged).toHaveBeenCalled();
+    expect(await screen.findByText(/Cメジャーで明るい進行/)).toBeInTheDocument();
+    expect(chatTurnStream).toHaveBeenCalledWith("global", "発展案ちょうだい", expect.any(Function));
+    expect(createJob).not.toHaveBeenCalled(); // 旧ジョブ経路は使わない
   });
 
-  it("plan: waits for the worker in-chat and shows produced neta inline (not just inbox)", async () => {
-    createJob.mockResolvedValue({ id: "jp", status: "queued" });
-    getJob.mockResolvedValue({
-      status: "done",
-      result: { type: "plan", subtasks: [{ intent: "gen_pair_rule" }], plan: "1個に分解しました" },
-      error: null,
-    });
-    // ディスパッチ後、このチャットで完了を待つ＝jobOutcome をポーリング。fb-3：結果は reaper が
-    // **サーバ側で**スレッドに記録済み＝finishWait の reloadMsgs(listChatMessages) で表示する。
-    jobOutcome.mockResolvedValue({
-      settled: true,
-      failed: 0,
-      jobs: [{ id: "jp", intent: "consult", status: "done" }],
-      neta: [{ id: "m1", kind: "melody", content: { notes: [] } }],
-    });
-    // 1回目=マウントの履歴復元(空)、以降=reloadMsgs がサーバ著者の結果メッセージを返す。
-    listChatMessages.mockReset();
-    listChatMessages.mockResolvedValueOnce([]);
-    listChatMessages.mockResolvedValue([
-      { id: "x", thread: "global", role: "ai", kind: "content", text: "「melody」ができました", data: { neta: { id: "m1", kind: "melody", content: { notes: [] } } }, created: "" },
-    ]);
-    const onChanged = vi.fn();
+  it("consult(streaming): tool_use を挟んでも最終テキストで確定する（#100④）", async () => {
+    streamEvents(asst("作るね"), toolUse("mcp__creative-manager__generate"), result("できました：C-G-Am-F"));
+    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "コード進行作って");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    expect(await screen.findByText(/できました：C-G-Am-F/)).toBeInTheDocument();
+  });
 
+  it("S3b: generate 候補は保存カードで出て、保存で createNeta (#100④)", async () => {
+    const content = { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] };
+    streamEvents(
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "mcp__creative-manager__generate", input: {} }] } },
+      { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: JSON.stringify({ items: [{ kind: "chord_progression", content }] }) }] }] } },
+      result("候補を作りました"),
+    );
+    createNeta.mockResolvedValue({ id: "c9" });
+    const onChanged = vi.fn();
     render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
-    await userEvent.type(screen.getByLabelText("chat-input"), "一式そろえて");
+    await userEvent.type(screen.getByLabelText("chat-input"), "コード進行作って");
     await userEvent.click(screen.getByRole("button", { name: "送信" }));
 
-    // チャット内で待って、サーバが記録した結果（開く）が出る
-    await waitFor(() => expect(jobOutcome).toHaveBeenCalledWith("jp"), { timeout: 4000 });
-    expect(await screen.findByText(/ができました/, undefined, { timeout: 4000 })).toBeInTheDocument();
-    expect(screen.getByLabelText("open-neta")).toBeInTheDocument();
+    expect(await screen.findByLabelText("candidate-card")).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("save-candidate"));
+    await waitFor(() => expect(createNeta).toHaveBeenCalledWith({ kind: "chord_progression", content }));
     expect(onChanged).toHaveBeenCalled();
   });
 
-  it("proposals: shows approval card with before/after, approve applies content edit (#102 S3)", async () => {
-    createJob.mockResolvedValue({ id: "jx", status: "queued" });
-    getJob.mockResolvedValue({
-      status: "done",
-      result: {
-        type: "proposals",
-        summary: "メロを直す提案",
-        proposals: [
-          {
-            op: "update_content",
-            target_id: "m1",
-            args: { content: { notes: [{ pitch: 67, start: 0, dur: 1 }] } },
-            rationale: "外し音を補正",
-          },
-        ],
-      },
-      error: null,
-    });
+  it("S3b: capture 書込は「開く」＋「取り消す(undo)」カードで出る (#100④a)", async () => {
+    const neta = { id: "n9", kind: "knowledge", text: "メモ", content: null };
+    streamEvents(
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "t2", name: "mcp__creative-manager__capture", input: {} }] } },
+      { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t2", content: [{ type: "text", text: JSON.stringify(neta) }] }] } },
+      result("登録しました"),
+    );
+    deleteNeta.mockResolvedValue({ deleted: true });
+    const onOpenNeta = vi.fn();
+    const onClose = vi.fn();
+    render(<Chat onClose={onClose} onChanged={vi.fn()} onOpenNeta={onOpenNeta} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "メモして");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(await screen.findByLabelText("write-card")).toBeInTheDocument();
+    // 取り消す → deleteNeta（可逆）
+    await userEvent.click(screen.getByLabelText("undo-card"));
+    await waitFor(() => expect(deleteNeta).toHaveBeenCalledWith("n9"));
+    expect(await screen.findByText(/取り消しました/)).toBeInTheDocument();
+  });
+
+  it("consult(streaming): result が空でも無言で消えない（失敗を明示）", async () => {
+    streamEvents(result("", true));
+    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "むちゃ");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    expect(await screen.findByText(/うまくいきませんでした/)).toBeInTheDocument();
+  });
+
+  it("proposals(履歴): 承認カードで before/after、承認で content 編集を適用 (#102 S3)", async () => {
+    historyWithProposals(
+      [{ op: "update_content", target_id: "m1", args: { content: { notes: [{ pitch: 67, start: 0, dur: 1 }] } }, rationale: "外し音を補正" }],
+      "メロを直す提案",
+    );
     getNeta.mockResolvedValue({
       id: "m1",
       kind: "melody",
@@ -125,13 +141,11 @@ describe("Chat", () => {
     const onChanged = vi.fn();
 
     render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
-    await userEvent.type(screen.getByLabelText("chat-input"), "m1をコードに合わせて直して");
-    await userEvent.click(screen.getByRole("button", { name: "送信" }));
 
-    // 承認カード＋原本/提案の再生ボタンが出る（適用はまだ）
+    // 承認カード＋原本/提案の再生ボタンが出る（履歴から復元・getNeta は非同期なので await）
     await waitFor(() => expect(screen.getByLabelText("proposal")).toBeInTheDocument());
-    expect(screen.getByLabelText("play-before")).toBeInTheDocument();
-    expect(screen.getByLabelText("play-after")).toBeInTheDocument();
+    expect(await screen.findByLabelText("play-before")).toBeInTheDocument();
+    expect(await screen.findByLabelText("play-after")).toBeInTheDocument();
     expect(updateNeta).not.toHaveBeenCalled();
 
     // 承認 → updateNeta が呼ばれて適用
@@ -141,25 +155,15 @@ describe("Chat", () => {
     expect(await screen.findByText(/適用しました/)).toBeInTheDocument();
   });
 
-  it("proposals: place_child approve calls placeChild; reject applies nothing (#102 S3)", async () => {
-    createJob.mockResolvedValue({ id: "jy", status: "queued" });
-    getJob.mockResolvedValue({
-      status: "done",
-      result: {
-        type: "proposals",
-        proposals: [
-          { op: "place_child", target_id: "n2", args: { parent_id: "s1", position: 0 } },
-          { op: "delete", target_id: "n3" },
-        ],
-      },
-      error: null,
-    });
+  it("proposals(履歴): place_child 承認で placeChild、reject は何もしない (#102 S3)", async () => {
+    historyWithProposals([
+      { op: "place_child", target_id: "n2", args: { parent_id: "s1", position: 0 } },
+      { op: "delete", target_id: "n3" },
+    ]);
     getNeta.mockResolvedValue({ id: "x", kind: "other", text: "ネタ", content: {} });
     placeChild.mockResolvedValue({ ok: true });
 
     render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
-    await userEvent.type(screen.getByLabelText("chat-input"), "n2をs1に置いて、n3は消して");
-    await userEvent.click(screen.getByRole("button", { name: "送信" }));
 
     await waitFor(() => expect(screen.getAllByLabelText("proposal").length).toBe(2));
     const approves = screen.getAllByLabelText("approve");
@@ -171,27 +175,19 @@ describe("Chat", () => {
     expect(await screen.findByText(/却下しました/)).toBeInTheDocument();
   });
 
-  it("proposals: 'approve all' applies every appliable proposal at once (#102 S4)", async () => {
-    createJob.mockResolvedValue({ id: "jb", status: "queued" });
-    getJob.mockResolvedValue({
-      status: "done",
-      result: {
-        type: "proposals",
-        summary: "2件まとめて",
-        proposals: [
-          { op: "place_child", target_id: "n1", args: { parent_id: "s1", position: 0 } },
-          { op: "link", target_id: "n2", args: { to_id: "n3", type: "ref" } },
-        ],
-      },
-      error: null,
-    });
+  it("proposals(履歴): 「すべて承認」で適用可能な全提案を一括適用 (#102 S4)", async () => {
+    historyWithProposals(
+      [
+        { op: "place_child", target_id: "n1", args: { parent_id: "s1", position: 0 } },
+        { op: "link", target_id: "n2", args: { to_id: "n3", type: "ref" } },
+      ],
+      "2件まとめて",
+    );
     getNeta.mockResolvedValue({ id: "x", kind: "other", text: "ネタ", content: {} });
     placeChild.mockResolvedValue({ ok: true });
     link.mockResolvedValue({ ok: true });
 
     render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
-    await userEvent.type(screen.getByLabelText("chat-input"), "まとめて配置と関連を");
-    await userEvent.click(screen.getByRole("button", { name: "送信" }));
 
     // 適用可能が2件＝「すべて承認」が出る
     await waitFor(() => expect(screen.getByLabelText("approve-all")).toBeInTheDocument());
@@ -202,25 +198,15 @@ describe("Chat", () => {
     await waitFor(() => expect(screen.getAllByText(/適用しました/).length).toBe(2));
   });
 
-  it("proposals: unlink approve calls unlink; content-less transform is not auto-appliable (#102 S3)", async () => {
-    createJob.mockResolvedValue({ id: "jz", status: "queued" });
-    getJob.mockResolvedValue({
-      status: "done",
-      result: {
-        type: "proposals",
-        proposals: [
-          { op: "unlink", target_id: "n1", args: { to_id: "n2", type: "ref" } },
-          { op: "transform", target_id: "n3", args: { by: -2 } }, // content 無し＝自動適用不可
-        ],
-      },
-      error: null,
-    });
+  it("proposals(履歴): unlink 承認で unlink、content無し transform は自動適用不可 (#102 S3)", async () => {
+    historyWithProposals([
+      { op: "unlink", target_id: "n1", args: { to_id: "n2", type: "ref" } },
+      { op: "transform", target_id: "n3", args: { by: -2 } }, // content 無し＝自動適用不可
+    ]);
     getNeta.mockResolvedValue({ id: "x", kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, key: 0 });
     unlink.mockResolvedValue({ ok: true });
 
     render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
-    await userEvent.type(screen.getByLabelText("chat-input"), "n1とn2の関連を外して、n3を2度下げて");
-    await userEvent.click(screen.getByRole("button", { name: "送信" }));
 
     await waitFor(() => expect(screen.getAllByLabelText("proposal").length).toBe(2));
     const approves = screen.getAllByLabelText("approve");
@@ -232,36 +218,17 @@ describe("Chat", () => {
     await waitFor(() => expect(unlink).toHaveBeenCalledWith("n1", "n2", "ref"));
   });
 
-  it("consult: content → creates a proper-kind neta, no other (#61), with open link (#68)", async () => {
-    createJob.mockResolvedValue({ id: "jc", status: "queued" });
-    getJob.mockResolvedValue({
-      status: "done",
-      result: {
-        type: "content",
-        neta_kind: "chord_progression",
-        content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] },
-      },
-      error: null,
-    });
-    createNeta.mockResolvedValue({
-      id: "c1",
-      kind: "chord_progression",
-      content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] },
-    });
-    const onChanged = vi.fn();
+  it("history: 作成ネタの「開く」→ onOpenNeta ＋ Chat を閉じる (#68)", async () => {
+    // #100 では capture が server 側で書く＝結果ネタは履歴に content メッセージとして残る。
+    const neta = { id: "c1", kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } };
+    listChatMessages.mockReset();
+    listChatMessages.mockResolvedValue([
+      { id: "n", thread: "global", role: "ai", kind: "content", text: "「コード進行」を作りました", data: { neta }, created: "" },
+    ]);
     const onClose = vi.fn();
     const onOpenNeta = vi.fn();
 
-    render(<Chat onClose={onClose} onChanged={onChanged} onOpenNeta={onOpenNeta} />);
-    await userEvent.type(screen.getByLabelText("chat-input"), "コード進行作って");
-    await userEvent.click(screen.getByRole("button", { name: "送信" }));
-    await waitFor(() => expect(createNeta).toHaveBeenCalled());
-    expect(createNeta).toHaveBeenCalledWith({
-      kind: "chord_progression",
-      content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] },
-      from_job: "jc",
-    });
-    expect(onChanged).toHaveBeenCalled();
+    render(<Chat onClose={onClose} onChanged={vi.fn()} onOpenNeta={onOpenNeta} />);
     expect(await screen.findByText(/「コード進行」を作りました/)).toBeInTheDocument();
 
     // #68 「開く」→ onOpenNeta(neta) ＋ Chat を閉じる
@@ -326,6 +293,24 @@ describe("Chat", () => {
         "global",
         expect.objectContaining({ role: "user", text: "こんにちは" }),
       ),
+    );
+  });
+
+  it("#70 送信した user メッセージは（streaming 経路でも）永続化される", async () => {
+    listChatMessages.mockResolvedValue([]);
+    streamEvents(asst("はい"), result("はい"));
+    render(<Chat onClose={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "メロ直して");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    await waitFor(() =>
+      expect(addChatMessage).toHaveBeenCalledWith(
+        "global",
+        expect.objectContaining({ role: "user", text: "メロ直して" }),
+      ),
+    );
+    // AI 返答も履歴に積まれる（脳=Claude の自然文）。
+    await waitFor(() =>
+      expect(addChatMessage).toHaveBeenCalledWith("global", expect.objectContaining({ role: "ai", text: "はい" })),
     );
   });
 });

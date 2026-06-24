@@ -8,15 +8,19 @@
 """
 
 import base64
+import contextvars
 import io
 import json
 import logging
 import os
+import queue
 import re
 import shutil
 import signal
 import subprocess
-from typing import Callable
+import threading
+import time
+from typing import Callable, Iterable
 
 log = logging.getLogger(__name__)
 
@@ -144,23 +148,164 @@ def _mcp_args() -> list[str]:
     ]
 
 
+# #99 実況：agentic の進捗を job.progress に書く sink。run_once が contextvar にセットし、
+# claude_prompt のストリームが tool_use を見るたび呼ぶ（handler 署名は不変＝横断で通す）。
+_progress_sink: "contextvars.ContextVar[Callable[[str], None] | None]" = contextvars.ContextVar(
+    "cm_progress_sink", default=None
+)
+
+
+def _emit_progress(label: str) -> None:
+    """現在の progress sink があれば呼ぶ（best-effort・失敗は握り潰す＝本処理を止めない）。"""
+    sink = _progress_sink.get()
+    if sink is None:
+        return
+    try:
+        sink(label)
+    except Exception as e:  # noqa: BLE001
+        log.warning("progress sink failed: %s", e)
+
+
+# tool 名（mcp__creative-manager__xxx の末尾）→ 人間語ラベル（「今なにしてるか」）。
+_TOOL_LABELS = {
+    "list_neta": "ネタ帳を見てる", "get_neta": "ネタを読んでる", "facets": "ネタを探してる",
+    "get_composition": "曲の構成を見てる", "get_relations": "関連を辿ってる",
+    "find_progressions": "似た進行を探してる", "find_similar": "似たネタを探してる",
+    "identify_progression": "進行を読み解いてる", "analyze_progression": "進行を分析してる",
+    "explain_progression": "進行を読み解いてる", "substitute_chord": "代理コードを考えてる",
+    "emotion_shift": "雰囲気を寄せてる", "harmonize": "ハモりを考えてる",
+    "next_chord": "次のコードを考えてる", "analyze_fit": "当てはまりを点検してる",
+    "fit_to_chords": "コードに合わせてる", "detect_key": "調を推定してる",
+    "melody_similarity": "メロの近さを測ってる",
+    "gen_chords": "コードを作ってる", "gen_melody": "メロを作ってる", "gen_bass": "ベースを作ってる",
+    "gen_drums": "ドラムを作ってる", "gen_named_progression": "定番進行を引いてる",
+}
+
+
+def _stream_label(event: dict) -> str | None:
+    """stream-json の1イベントが tool_use を含めば人間語ラベルを返す（純関数）。
+    それ以外（テキスト/result/system）は None＝実況を出さない。"""
+    if not isinstance(event, dict) or event.get("type") != "assistant":
+        return None
+    for block in (event.get("message") or {}).get("content") or []:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            base = str(block.get("name") or "").split("__")[-1]
+            return _TOOL_LABELS.get(base, f"{base} を使ってる") if base else None
+    return None
+
+
+def _consume_stream(lines: Iterable[str], on_progress: Callable[[str], None] | None):
+    """stream-json(NDJSON) の各行を読み、tool_use を on_progress に流しつつ最終 result を拾う（純関数）。
+    返り: (最終テキスト, subtype, is_error)。空行/壊れ行は無視＝途中の1行で全体を落とさない。"""
+    text, subtype, is_error = "", "success", False
+    for line in lines:
+        line = (line or "").strip()
+        if not line:
+            continue
+        try:
+            ev = json.loads(line)
+        except Exception:  # noqa: BLE001
+            continue
+        label = _stream_label(ev)
+        if label and on_progress:
+            try:
+                on_progress(label)
+            except Exception:  # noqa: BLE001
+                pass
+        if isinstance(ev, dict) and ev.get("type") == "result":
+            text = str(ev.get("result") or "")
+            subtype = str(ev.get("subtype") or "success")
+            is_error = bool(ev.get("is_error"))
+    return text, subtype, is_error
+
+
+def _finalize_stream(text: str, subtype: str, is_error: bool, returncode: int | None, stderr: str) -> str:
+    """stream の最終状態を返値/例外に落とす（純関数）。max-turns はソフト＝部分結果があれば返す（#99）。"""
+    text = (text or "").strip()
+    if subtype == "error_max_turns":
+        if text:
+            return text  # 部分結果で答えられる（consult が JSON 抽出 or chat フォールバックに活かす）
+        raise RuntimeError("agentic 上限(max-turns)到達：文脈が足りず手順を決めきれなかった可能性")
+    if is_error or (returncode not in (0, None) and not text):
+        raise RuntimeError(f"claude {subtype or 'error'}({returncode}): {(stderr or '').strip()[:300]}")
+    return text
+
+
+def _killpg(proc: "subprocess.Popen") -> None:
+    """子＋孫(MCP stdio)をプロセスグループごと SIGKILL（孤児乱立を断つ・design「アーキ是正 決定4」）。"""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        proc.kill()
+
+
+def _claude_stream(binary: str, prompt: str, timeout: int) -> str:
+    """agentic 経路：`claude -p --output-format stream-json --verbose`。tool_use を実況しつつ最終結果を返す。
+    全体に wall-clock deadline を張り、超過で killpg＝（パイプ詰まりでの常駐ハングも防ぐ）。"""
+    args = [binary, "-p", prompt, "--output-format", "stream-json", "--verbose"] + _mcp_args()
+    proc = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True
+    )
+    q: "queue.Queue[str | None]" = queue.Queue()
+
+    def _reader() -> None:
+        try:
+            for line in proc.stdout:  # type: ignore[union-attr]
+                q.put(line)
+        finally:
+            q.put(None)  # EOF 番兵
+
+    threading.Thread(target=_reader, daemon=True).start()
+    deadline = time.monotonic() + timeout
+
+    def _lines() -> "Iterable[str]":
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(args, timeout)
+            try:
+                item = q.get(timeout=remaining)
+            except queue.Empty:
+                raise subprocess.TimeoutExpired(args, timeout)
+            if item is None:
+                return
+            yield item
+
+    try:
+        text, subtype, is_error = _consume_stream(_lines(), _emit_progress)
+    except subprocess.TimeoutExpired:
+        _killpg(proc)
+        try:
+            proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            log.warning("claude_stream: process did not exit after kill (pid=%s)", proc.pid)
+        raise
+    try:
+        _, err = proc.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        _killpg(proc)
+        err = ""
+        log.warning("claude_stream: drain timed out (pid=%s)", proc.pid)
+    return _finalize_stream(text, subtype, is_error, proc.returncode, err)
+
+
 def claude_prompt(prompt: str, timeout: int = 120, tools: bool = False) -> str:
     """`claude -p`（print/非対話モード）をsubprocessで叩く。Max認証を流用＝APIキー不要。
-    tools=True かつ CM_MCP_STDIO_CMD があれば creative-manager(TS) の音楽/読取ツールを agentic に使える。"""
+    tools=True かつ CM_MCP_STDIO_CMD があれば creative-manager(TS) の音楽/読取ツールを agentic に使える
+    （その場合は stream-json で実況＝job.progress 更新＋max-turns ソフト処理・#99）。"""
     binary = shutil.which(CLAUDE_BIN) or CLAUDE_BIN
-    args = [binary, "-p", prompt] + (_mcp_args() if tools else [])
-    # start_new_session=True で子を新プロセスグループのリーダーに＝timeout 時に killpg で claude＋
-    # 孫(MCP stdio = pnpm ... mcp)ごと殺す（孤児プロセス乱立を断つ・design「アーキ是正 決定4」）。
+    if tools:
+        return _claude_stream(binary, prompt, timeout)
+    # 非agentic（短い1発）：従来どおり communicate（blast半径を限定＝既存呼出の挙動を保つ）。
+    args = [binary, "-p", prompt]
+    # start_new_session=True で子を新プロセスグループのリーダーに＝timeout 時に killpg。
     proc = subprocess.Popen(
         args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True
     )
     try:
         out, err = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            proc.kill()
+        _killpg(proc)
         # kill 後の後始末も無制限待ちにしない（パイプが詰まると常駐が固まる）。
         try:
             proc.communicate(timeout=5)
@@ -993,6 +1138,7 @@ def handle_consult(params: dict) -> dict:
     壁打ち(suggest)＋おまかせ(plan)を畳んだ Chat の単一窓口。空/不正は chat フォールバック。"""
     context = params.get("context", "")
     instruction = params.get("instruction") or "この内容について相談に乗って。"
+    history = params.get("history") or ""  # #99 worker が焼いた会話履歴（前ターンの生成物=実ノート含む）
     agentic = bool(CM_MCP_STDIO_CMD)  # creative-manager(TS) の音楽/読取ツールが使えるか（cm-music廃止後）
     neta_read = bool(CM_MCP_STDIO_CMD)  # creative-manager read-only ツールで既存ネタを読めるか（#102 S1）
     tools = agentic or neta_read      # MCP を claude -p に載せるか（どちらかでも有れば載せる）
@@ -1053,8 +1199,12 @@ def handle_consult(params: dict) -> dict:
         f"{music_block}"
         f"{neta_block if neta_read else ''}"
         "判断基準：作って/生成して＝楽曲（特定/名前/旋法/様式なら自分で書く・汎用枠だけならルール）、"
-        "案・アイデア請求＝options、それ以外＝chat。\n\n"
-        f"# 対象\n{context}\n\n# 依頼\n{instruction}"
+        "案・アイデア請求＝options、それ以外＝chat。\n"
+        # #99 「さっき/前の/これ/それ/直して」等は直近の会話・生成物を指す。履歴の最後の生成物を対象にする。
+        "『さっき/前の/この/その/直して』等の指示語は **これまでの会話** の直近の発言・生成物を指す"
+        "（特に直前に生成した実ノート/コードが下にあればそれを対象に直す）。\n\n"
+        + (f"# これまでの会話\n{history}\n\n" if history else "")
+        + f"# 対象\n{context}\n\n# 依頼\n{instruction}"
     )
     text = claude_prompt(prompt, timeout=240 if tools else 120, tools=tools)
     try:

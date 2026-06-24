@@ -31,6 +31,18 @@ CREATE TABLE IF NOT EXISTS job_result (
   role    TEXT,
   data    TEXT
 );
+-- #99 consult が前ターンを踏まえるため worker が chat_message を**直読み**する（生産者がDBを読む・design#85/L174）。
+-- DDL 権威は api(db.ts)。ここは worker 単独/テスト用の保険＝**api と一字一句一致**させること。
+CREATE TABLE IF NOT EXISTS chat_message (
+  id      TEXT PRIMARY KEY,
+  thread  TEXT NOT NULL,
+  role    TEXT NOT NULL,
+  kind    TEXT,
+  text    TEXT,
+  data    TEXT,
+  created TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_thread ON chat_message(thread, created);
 """
 
 

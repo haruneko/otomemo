@@ -269,6 +269,46 @@ export const api = {
       method: "DELETE",
     }),
   listChatThreads: () => http<ChatThread[]>(`/chat/threads`),
+
+  // #100④-S3：常駐 claude へ1ターン送り、stream-json イベントを SSE で受けて onEvent へ流す。
+  // 旧 createJob+ポーリングを置換（脳は Claude＝記憶/多ターン/ツール選択をネイティブに）。
+  chatTurnStream: async (
+    thread: string,
+    text: string,
+    onEvent: (e: unknown) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/chat/${encodeURIComponent(thread)}/turn`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal,
+      });
+    } catch (e) {
+      throw new NetworkError(`POST /chat/${thread}/turn`, e);
+    }
+    if (!res.ok || !res.body) throw new ApiError(res.status, await res.text().catch(() => ""));
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i: number;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("data: ")) {
+            try { onEvent(JSON.parse(line.slice(6))); } catch { /* 非JSON行は無視 */ }
+          }
+        }
+      }
+    }
+  },
 };
 
 export interface ChatThread {
@@ -309,6 +349,7 @@ export interface Job {
   target_neta_id?: string | null;
   result: { suggestions?: string } | Record<string, unknown> | null;
   error: string | null;
+  progress?: string | null; // #99 実況：agentic が今なにしてるか（「メロを作ってる」等）
   notify_level?: string | null;
   question?: string | null;
   parent_job_id?: string | null;

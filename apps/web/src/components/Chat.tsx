@@ -4,6 +4,7 @@ import { api, type Neta, type ChatMessage, type ChatThread, type JobOutcome } fr
 import { playNotes, notesForContent } from "../music";
 import { MUSIC_KINDS, KIND_LABEL } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
+import { parseTurnEvent, toolCardFromResult, type ToolCard, type ToolCardItem } from "../chat-stream";
 
 interface Opt {
   title: string;
@@ -32,6 +33,7 @@ interface Msg {
   neta?: Neta; // #68 作成したネタ（開く/試聴リンク用）
   proposals?: Proposal[]; // #102 S3 変異提案（承認カード）
   summary?: string; // #102 S3 提案群の要約
+  cards?: ToolCard[]; // #100④-S3b turn 中の tool_use 結果（生成候補/書込）
 }
 type Mode = "consult" | "research";
 
@@ -217,7 +219,85 @@ function ProposalGroup({
   );
 }
 
-// consult/content の neta_kind 表示名
+// #100④-S3b turn 中の tool 結果カード。候補（generate/fit…）＝試聴＋保存／書込（capture）＝開く＋取り消す(可逆)。
+function ChatToolCard({
+  card,
+  onOpen,
+  onSaveItem,
+  onUndo,
+}: {
+  card: ToolCard;
+  onOpen: (neta: Neta) => void;
+  onSaveItem: (it: ToolCardItem) => Promise<void>;
+  onUndo: (id: string) => Promise<void>;
+}) {
+  const [saved, setSaved] = useState<Set<number>>(new Set());
+  const [undone, setUndone] = useState(false);
+
+  if (card.klass === "candidate" && card.items && card.items.length > 0) {
+    return (
+      <div className="tool-card" aria-label="candidate-card">
+        <div className="tool-card-head muted">{card.label}＝候補</div>
+        {card.items.map((it, k) => {
+          const isMusic = MUSIC_KINDS.includes(it.kind);
+          return (
+            <div key={k} className="tool-card-item">
+              <span className="muted">{KIND_LABEL[it.kind] ?? it.kind}</span>
+              {isMusic && <MiniRoll neta={{ id: "", kind: it.kind, content: it.content } as Neta} />}
+              {isMusic && (
+                <button
+                  type="button"
+                  className="bs-btn"
+                  aria-label="play-candidate"
+                  onClick={() => void playNotes(notesForContent(it.kind, it.content, { key: 0 }), 120)}
+                >
+                  ▶ 試聴
+                </button>
+              )}
+              <button
+                type="button"
+                className="bs-btn"
+                aria-label="save-candidate"
+                disabled={saved.has(k)}
+                onClick={() => void onSaveItem(it).then(() => setSaved((s) => new Set(s).add(k)))}
+              >
+                {saved.has(k) ? "保存しました" : "保存"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  if (card.klass === "write" && card.neta?.id) {
+    const neta = card.neta;
+    const kindLabel = KIND_LABEL[neta.kind ?? ""] ?? neta.kind ?? "ネタ";
+    return (
+      <div className="tool-card" aria-label="write-card">
+        <div className="tool-card-head">
+          {kindLabel} を{card.tool === "capture" ? "作成" : "更新"}しました
+        </div>
+        <div className="chat-neta-actions">
+          <button type="button" className="bs-btn" aria-label="open-card-neta" onClick={() => onOpen(neta as Neta)}>
+            ✎ 開く
+          </button>
+          {card.tool === "capture" && !undone && (
+            <button
+              type="button"
+              className="bs-btn"
+              aria-label="undo-card"
+              onClick={() => void onUndo(neta.id!).then(() => setUndone(true))}
+            >
+              ↩ 取り消す
+            </button>
+          )}
+          {undone && <span className="muted">取り消しました</span>}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
 
 // 相談（docs/design.md #19/#20）。target 付きで開くと「このネタについての相談」になり、
 // 最初の提案を自動で出す。案は Chat 上で選んでネタ化（from_job で対象に紐づく）。
@@ -240,6 +320,9 @@ export function Chat({
   const [waitInfo, setWaitInfo] = useState<{ done: number; total: number; sec: number } | null>(null);
   const cancelWait = useRef(false); // 「待たずに戻る」で立てる＝waitForJob を打ち切り入力を解放（裏で続行）。
   const [thinkSec, setThinkSec] = useState(0); // 「考え中」(分解前 planning)の経過秒＝沈黙の不安を解消。
+  const [thinkLabel, setThinkLabel] = useState(""); // #99 実況：job.progress（「メロを作ってる」等）。空=ラベル無し。
+  const [streamText, setStreamText] = useState(""); // #100④-S3 常駐 claude の途中テキスト（ストリーミング表示）。
+  const [liveCards, setLiveCards] = useState<ToolCard[]>([]); // #100④-S3b turn 中に出た候補/書込カード（確定でメッセージへ畳む）。
   const [inflight, setInflight] = useState(0); // 裏で実行中のジョブ数（リロードで待ち状態が消えても可視化）。
   const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
@@ -247,7 +330,11 @@ export function Chat({
 
   // busy の間（特に分解前の「考え中」planning）に経過秒を刻む＝無進捗の沈黙をなくす。
   useEffect(() => {
-    if (!busy) return setThinkSec(0);
+    if (!busy) {
+      setThinkSec(0);
+      setThinkLabel("");
+      return;
+    }
     setThinkSec(0);
     const t = setInterval(() => setThinkSec((s) => s + 1), 1000);
     return () => clearInterval(t);
@@ -357,7 +444,69 @@ export function Chat({
     };
   }, [thread]);
 
+  // #100④-S3 ディスパッチ：consult は常駐 claude（SSE）／research は当面 旧ジョブ経路（フォールバック）。
   async function run(text: string) {
+    if (mode === "consult") return runStream(text);
+    return runJob(text);
+  }
+
+  // #100④-S3 常駐 claude に1ターン。stream-json を逐次描画し、result（or 最後の text）を AI 発言として確定。
+  // 脳は Claude＝自然文＋ツール選択。書込(capture/revise/assemble)は事前承認済で可逆（#100 a）。
+  async function runStream(text: string) {
+    pushMsg({ role: "user", text });
+    setBusy(true);
+    setStreamText("");
+    setThinkLabel("");
+    setLiveCards([]);
+    const toolNames = new Map<string, string>(); // tool_use id → name（tool_result と突合）
+    const cards: ToolCard[] = [];
+    let acc = "";
+    let finalText = "";
+    let errored = false;
+    try {
+      await api.chatTurnStream(thread, text, (ev) => {
+        if (!alive.current) return;
+        for (const a of parseTurnEvent(ev as Parameters<typeof parseTurnEvent>[0])) {
+          if (a.kind === "text") { acc = a.text; setStreamText(acc); }
+          else if (a.kind === "tool") { setThinkLabel(a.label); if (a.id) toolNames.set(a.id, a.name); }
+          else if (a.kind === "toolResult") {
+            const name = a.id ? toolNames.get(a.id) : undefined;
+            if (name) {
+              const card = toolCardFromResult(name, a.payload);
+              // 読取(search/analyze)はカードにしない＝実況のみ。候補/書込だけ見せる。
+              if (card.klass !== "read" && (card.items?.length || card.neta)) { cards.push(card); setLiveCards([...cards]); }
+            }
+          } else if (a.kind === "result") { finalText = a.text; errored = a.isError; }
+        }
+      });
+    } catch {
+      errored = true;
+    } finally {
+      setStreamText("");
+      setThinkLabel("");
+      setLiveCards([]);
+      setBusy(false);
+    }
+    const out = finalText || acc;
+    if (out || cards.length) {
+      pushMsg({ role: "ai", text: out || undefined, saveable: out || undefined, cards: cards.length ? cards : undefined });
+    } else {
+      pushMsg({ role: "ai", text: errored ? "うまくいきませんでした（もう一度試してください）" : "（応答がありませんでした）" });
+    }
+    onChanged?.();
+  }
+
+  // #100④-S3b カードの操作：候補を保存（capture 相当）／書込を取り消す（可逆・undo）。
+  async function saveCandidate(it: ToolCardItem) {
+    await api.createNeta({ kind: it.kind, content: it.content });
+    onChanged?.();
+  }
+  async function undoWrite(id: string) {
+    await api.deleteNeta(id);
+    onChanged?.();
+  }
+
+  async function runJob(text: string) {
     pushMsg({ role: "user", text });
     setBusy(true);
     try {
@@ -369,7 +518,10 @@ export function Chat({
           ? { topic: text, chat_thread: thread }
           : { context: ctx, instruction: text, target_kind: target?.kind, chat_thread: thread };
       const job = await api.createJob({ intent, target_neta_id: target?.id, params });
-      for (let i = 0; i < 80; i++) {
+      // 予算は worker の agentic timeout(240s) を覆う＝180tick×1.5s=270s。
+      // 以前は 80tick=120s で **ジョブ完了前にUIが降り無言で消えた**（#99 固まる正体）。
+      const MAX_TICKS = 180;
+      for (let i = 0; i < MAX_TICKS; i++) {
         const j = await api.getJob(job.id);
         if (j.status === "done") {
           if (mode === "research") {
@@ -386,8 +538,15 @@ export function Chat({
           pushMsg({ role: "ai", text: j.error ?? "失敗しました" });
           return;
         }
+        // #99 実況：worker が書いた「今なにしてるか」を表示（無進捗の沈黙をなくす）。
+        if (alive.current) setThinkLabel(typeof j.progress === "string" ? j.progress : "");
         await new Promise((r) => setTimeout(r, 1500));
       }
+      // #99 予算超過：無言で消さない。裏で続行＝結果は reaper がこのスレッドに残す（fb-3）。
+      pushMsg({
+        role: "ai",
+        text: "まだ処理中です…このまま続けます。できたらこのチャットと受信箱 📥 に届きます（閉じても大丈夫）。",
+      });
     } finally {
       setBusy(false);
     }
@@ -670,6 +829,9 @@ export function Chat({
               {m.proposals && (
                 <ProposalGroup proposals={m.proposals} summary={m.summary} onApply={applyProposal} />
               )}
+              {m.cards?.map((card, k) => (
+                <ChatToolCard key={k} card={card} onOpen={openNeta} onSaveItem={saveCandidate} onUndo={undoWrite} />
+              ))}
               {m.saveable && (
                 <button type="button" className="bs-btn" onClick={() => void saveKnowledge(m.saveable!)}>
                   知見化
@@ -736,6 +898,14 @@ export function Chat({
               )}
             </div>
           ))}
+          {busy && (streamText || liveCards.length > 0) && (
+            <div className="chat-msg ai" aria-label="streaming">
+              {streamText && <div className="chat-text">{streamText}</div>}
+              {liveCards.map((card, k) => (
+                <ChatToolCard key={k} card={card} onOpen={openNeta} onSaveItem={saveCandidate} onUndo={undoWrite} />
+              ))}
+            </div>
+          )}
           {busy && (
             <div className="chat-msg ai" aria-label="thinking">
               {waitInfo ? (
@@ -763,7 +933,8 @@ export function Chat({
                 // 分解前(planning)：経過秒＋不確定バーで「動いてる」ことを示す（沈黙の不安を解消）。
                 <div className="chat-wait">
                   <div className="chat-text thinking">
-                    考え中<span className="dots" aria-hidden="true" />
+                    {thinkLabel || "考え中"}
+                    <span className="dots" aria-hidden="true" />
                     <span className="wait-sec"> {thinkSec}s</span>
                   </div>
                   <div className="wait-bar" aria-hidden="true">

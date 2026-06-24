@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
 import { createReadStream, createWriteStream, mkdirSync, statSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -30,6 +30,7 @@ import {
   parseChordSymbol,
 } from "./music";
 import { findProgressions } from "./progression-search";
+import { getChatSession } from "./chat-session";
 
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
 function assetsDir(): string {
@@ -512,6 +513,31 @@ export function buildHttp(core: Core): FastifyInstance {
     const { thread } = req.params as { thread: string };
     core.clearChatThread(thread);
     return { cleared: true };
+  });
+
+  // #100 薄いラッパー：スレッド毎の長命 claude セッションに1ターン送り、stream-json を SSE で中継。
+  // 脳は Claude（記憶・多ターン・10 verbs のツール選択）。api は spawn と中継だけ。
+  app.post("/chat/:thread/turn", async (req, reply) => {
+    const { thread } = req.params as { thread: string };
+    const text = String((req.body as { text?: unknown } | null)?.text ?? "");
+    const dbPath = resolve(process.env.CM_DB ?? "./data/cm.sqlite");
+    const repo = dirname(dirname(dbPath)); // <repo>/data/cm.sqlite → <repo>（pnpm workspace ルート）
+    reply.hijack();
+    const raw = reply.raw;
+    raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    const send = (e: unknown) => raw.write(`data: ${JSON.stringify(e)}\n\n`);
+    try {
+      const sess = getChatSession(thread, dbPath, repo);
+      await sess.say(text, send);
+    } catch (err) {
+      send({ type: "error", error: String(err) });
+    }
+    raw.write("event: done\ndata: {}\n\n");
+    raw.end();
   });
 
   return app;

@@ -11,6 +11,8 @@ const dbPath = process.env.CM_DB ?? "./data/cm.sqlite";
 if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
 
 const core = new Core(openDb(dbPath));
-const server = buildMcpServer(core);
+// CM_MCP_SURFACE=chat で 10 verbs だけ公開（ラッパー/チャット用）。既定 full（worker/旧互換）。
+const surface = process.env.CM_MCP_SURFACE === "chat" ? "chat" : "full";
+const server = buildMcpServer(core, { surface });
 const transport = new StdioServerTransport();
 await server.connect(transport);

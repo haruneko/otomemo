@@ -178,6 +178,174 @@ def test_fit_block_renders_and_empty():
     assert jobs._fit_block({}) == ""
 
 
+def test_run_once_writes_progress_during_handler(tmp_path, monkeypatch):
+    # #99 実況：handler 実行中の _emit_progress が job.progress に書かれ、完了で NULL に戻る
+    import sqlite3
+
+    import cm_worker.jobs as jobs
+    from cm_worker.db import connect
+
+    db = str(tmp_path / "t.sqlite")
+    conn = connect(db)
+    captured = {}
+
+    def fake_handler(params):
+        jobs._emit_progress("メロを作ってる")  # ストリームが tool_use を見た想定
+        c2 = sqlite3.connect(db)
+        c2.row_factory = sqlite3.Row
+        row = c2.execute("SELECT progress, status FROM job WHERE id='j1'").fetchone()
+        captured["mid_progress"] = row["progress"]
+        captured["mid_status"] = row["status"]
+        c2.close()
+        return {"type": "chat", "text": "ok"}
+
+    monkeypatch.setitem(jobs.HANDLERS, "consult", fake_handler)
+    _enqueue(conn, "consult", {"instruction": "直して"})
+    run_once(conn)
+    # mid-flight で別接続から progress が見える（実況がDBに乗っている）
+    assert captured["mid_progress"] == "メロを作ってる"
+    assert captured["mid_status"] == "running"
+    # 完了後は progress を片付ける
+    assert conn.execute("SELECT progress FROM job WHERE id='j1'").fetchone()["progress"] is None
+
+
+def test_stream_label_maps_tool_use_to_japanese():
+    # #99 実況：stream-json の tool_use を人間語ラベルに（純関数）
+    import cm_worker.jobs as jobs
+
+    ev = {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "mcp__creative-manager__gen_melody", "input": {}},
+    ]}}
+    assert jobs._stream_label(ev) == "メロを作ってる"
+    # 既知の読取ツール
+    ev2 = {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "mcp__creative-manager__list_neta"}]}}
+    assert "ネタ" in jobs._stream_label(ev2)
+    # テキストだけ/別typeは None（実況を出さない）
+    assert jobs._stream_label({"type": "assistant", "message": {"content": [{"type": "text", "text": "..."}]}}) is None
+    assert jobs._stream_label({"type": "result", "subtype": "success"}) is None
+    # 未知ツールでも何か返す（無言にしない）
+    ev3 = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "mcp__x__weird"}]}}
+    assert jobs._stream_label(ev3)
+
+
+def test_consume_stream_collects_result_and_emits_progress():
+    import cm_worker.jobs as jobs
+
+    seen = []
+    lines = [
+        '{"type":"system","subtype":"init"}',
+        '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__creative-manager__list_neta"}]}}',
+        "",  # 空行は無視
+        "not json",  # 壊れ行は無視（落とさない）
+        '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__creative-manager__gen_melody"}]}}',
+        '{"type":"result","subtype":"success","is_error":false,"result":"{\\"type\\":\\"chat\\",\\"text\\":\\"ok\\"}"}',
+    ]
+    text, subtype, is_error = jobs._consume_stream(lines, seen.append)
+    assert subtype == "success" and is_error is False
+    assert '"type":"chat"' in text
+    assert len(seen) == 2 and "メロ" in seen[1]
+
+
+def test_consume_stream_captures_max_turns():
+    import cm_worker.jobs as jobs
+
+    lines = ['{"type":"result","subtype":"error_max_turns","is_error":true,"result":""}']
+    text, subtype, is_error = jobs._consume_stream(lines, None)
+    assert subtype == "error_max_turns" and is_error is True and text == ""
+
+
+def test_finalize_stream_soft_handles_max_turns():
+    import cm_worker.jobs as jobs
+    import pytest as _pytest
+
+    # 部分結果があれば返す（consult が JSON 抽出 or chat フォールバックに活かす）
+    assert jobs._finalize_stream('{"type":"chat","text":"hi"}', "error_max_turns", True, 1, "") \
+        == '{"type":"chat","text":"hi"}'
+    # 部分結果が無ければ明示メッセージで失敗（無音にしない）
+    with _pytest.raises(RuntimeError) as e:
+        jobs._finalize_stream("", "error_max_turns", True, 1, "")
+    assert "max-turns" in str(e.value)
+    # 通常成功はテキストを返す
+    assert jobs._finalize_stream("ok", "success", False, 0, "") == "ok"
+    # その他エラーは subtype 付きで失敗
+    with _pytest.raises(RuntimeError) as e2:
+        jobs._finalize_stream("", "error_during_execution", True, 1, "boom")
+    assert "error_during_execution" in str(e2.value)
+
+
+def test_resolve_chat_history_injects_recent_turns(tmp_path):
+    # #99 本丸：consult が前ターンを踏まえられるよう chat_thread の直近履歴を history に焼く。
+    # 特に直前 AI 生成の data.neta.content（実ノート）を含む＝「さっきのメロを直して」が成立。
+    from cm_worker.db import connect
+    from cm_worker.worker import _resolve_chat_history
+
+    conn = connect(str(tmp_path / "t.sqlite"))
+
+    def add(role, kind, text, data, created):
+        conn.execute(
+            "INSERT INTO chat_message (id, thread, role, kind, text, data, created) VALUES (?,?,?,?,?,?,?)",
+            (created, "chat:x", role, kind, text, json.dumps(data) if data else None, created),
+        )
+
+    add("user", "chat", "6/8 マイナーの曲つくって", None, "2026-06-24T10:40:00Z")
+    add(
+        "ai", "content", "「①テーマ旋律」ができました",
+        {"neta": {"kind": "melody", "title": "①テーマ旋律",
+                  "content": {"notes": [{"pitch": 67, "start": 0, "dur": 1.5}]}}},
+        "2026-06-24T10:41:00Z",
+    )
+    conn.commit()
+
+    p = _resolve_chat_history(conn, {"chat_thread": "chat:x", "instruction": "直して"})
+    h = p["history"]
+    assert "ユーザー" in h and "6/8 マイナー" in h
+    assert "①テーマ旋律" in h
+    assert "67" in h  # 実ノートが含まれる＝直すべきメロが Claude に渡る
+    # 時系列順（ユーザー発言が AI 生成より前）
+    assert h.index("6/8 マイナー") < h.index("①テーマ旋律")
+
+
+def test_resolve_chat_history_noop_without_thread(tmp_path):
+    from cm_worker.db import connect
+    from cm_worker.worker import _resolve_chat_history
+
+    conn = connect(str(tmp_path / "t.sqlite"))
+    # chat_thread 無し＝素通り（退化しない）
+    assert _resolve_chat_history(conn, {"context": "x"}) == {"context": "x"}
+    # 履歴ゼロのスレッドも history を生やさない
+    assert "history" not in _resolve_chat_history(conn, {"chat_thread": "chat:none"})
+
+
+def test_resolve_chat_history_safe_when_table_missing(tmp_path):
+    # best-effort：chat_message 表が無い古い DB でも consult を壊さない（#43 失敗は無音にしない＝logのみ）
+    import sqlite3
+
+    from cm_worker.worker import _resolve_chat_history
+
+    conn = sqlite3.connect(str(tmp_path / "bare.sqlite"))
+    conn.row_factory = sqlite3.Row
+    p = {"chat_thread": "chat:x", "instruction": "直して"}
+    assert _resolve_chat_history(conn, p) == p  # 例外を握り潰して素通り
+
+
+def test_consult_prompt_includes_history(monkeypatch):
+    # handle_consult が history をプロンプトに含める（前ターン参照が成立）
+    import cm_worker.jobs as jobs
+
+    captured = {}
+    monkeypatch.setattr(
+        jobs, "claude_prompt",
+        lambda p, timeout=120, **kw: captured.setdefault("p", p) or '{"type":"chat","text":"ok"}',
+    )
+    jobs.handle_consult({
+        "context": "",
+        "instruction": "メロを8分16分で直して",
+        "history": "ユーザー: 6/8でつくって\nアシスタント[生成:melody] ①テーマ: {\"notes\":[{\"pitch\":67}]}",
+    })
+    assert "67" in captured["p"] and "これまでの会話" in captured["p"]
+
+
 def test_gen_variations_builds_items_and_edges(monkeypatch):
     # #85 S2a 1回でN個・各々コード+メロ→ section に compose
     import json as _json

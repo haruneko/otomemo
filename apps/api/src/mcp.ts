@@ -48,9 +48,25 @@ const err = (msg: string) => ({
  * MCPツール層（docs/design.md #20）。TSの操作コアを AIクライアント（Claude Code/Desktop 等）に公開。
  * HTTP と同じ Core を叩く＝同一操作の別アダプタ。
  */
-export function buildMcpServer(core: Core): McpServer {
-  const server = new McpServer({ name: "creative-manager", version: "0.0.0" });
+// 10 verbs / legacy 両方が使う共有スキーマ（モジュール級＝surface 分岐の外に置く）。
+const oneChord = z.object({ root: z.union([z.number(), z.string()]), quality: z.string().optional() });
+const frameSchema = z
+  .object({
+    key: z.number().int().min(0).max(11).optional(),
+    meter: z.string().optional(),
+    tempo: z.number().optional(),
+    bars: z.number().int().optional(),
+    mood: z.string().optional(),
+  })
+  .optional();
+const notesSchema = z.array(z.object({ pitch: z.number(), start: z.number().optional(), dur: z.number().optional() }));
 
+// #100/#101: surface="chat" は **10 verbs だけ**公開（旧39を隠す＝モデルが旧ツールを掴まない）。"full"(既定)は49（test/worker 互換）。
+export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } = {}): McpServer {
+  const server = new McpServer({ name: "creative-manager", version: "0.0.0" });
+  const legacy = opts.surface !== "chat";
+
+  if (legacy) {
   server.registerTool(
     "create_neta",
     {
@@ -152,7 +168,7 @@ export function buildMcpServer(core: Core): McpServer {
     async ({ chords, key, mode }) => ok(explainProgression(chords, { key, mode })),
   );
 
-  const oneChord = z.object({ root: z.union([z.number(), z.string()]), quality: z.string().optional() });
+  // oneChord/frameSchema/notesSchema はモジュール級へ移動（surface 分岐の外）。
   server.registerTool(
     "substitute_chord",
     {
@@ -453,15 +469,6 @@ export function buildMcpServer(core: Core): McpServer {
   );
 
   // 生成（ルールベース・決定的記号エンジン・TS一本化＝cm-music の gen_* を置換）。frame=key/meter/bars/mood。
-  const frameSchema = z
-    .object({
-      key: z.number().int().min(0).max(11).optional(),
-      meter: z.string().optional(),
-      tempo: z.number().optional(),
-      bars: z.number().int().optional(),
-      mood: z.string().optional(),
-    })
-    .optional();
   server.registerTool(
     "gen_chords",
     { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・C基準）。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
@@ -489,7 +496,6 @@ export function buildMcpServer(core: Core): McpServer {
   );
 
   // 当てはまり判定/補正/調推定/類似（cm-music-mcp の analysis を TS に集約＝S2 でcm-music廃止）。
-  const notesSchema = z.array(z.object({ pitch: z.number(), start: z.number().optional(), dur: z.number().optional() }));
   server.registerTool(
     "analyze_fit",
     { title: "メロのコード当てはまり", description: "メロが各コードにどれだけ合うか（コードトーン/スケール/外し）を判定。", inputSchema: { melody: notesSchema, chords: chordsSchema, key: z.number().int().min(0).max(11).optional() } },
@@ -514,6 +520,116 @@ export function buildMcpServer(core: Core): McpServer {
     "find_similar",
     { title: "近いメロを探す", description: "target に近い順に候補メロを返す。", inputSchema: { target: notesSchema, candidates: z.array(z.object({ id: z.string().optional(), label: z.string().optional(), notes: notesSchema })), top: z.number().int().optional() } },
     async ({ target, candidates, top }) => ok(findSimilar(target, candidates, top)),
+  );
+
+  } // ← if(legacy) ここまで＝full のみ旧39を登録。surface="chat" は以下の10 verbsだけ。
+
+  // ── #101 目的ツール面（10 thin verbs）。chat面はこれだけ＝モデルが旧ツールを掴まない。既存エンジンへ dispatch、未実装は明示エラー(捏造禁止)。
+  //    A 書込: capture/revise/assemble ｜ B 生成(候補・保存しない): generate/fit/reshape/convert/continue ｜ C 読取: search/analyze
+  //    横断概念(range/feel/style)はB群の修飾引数で吸収(fat化させない)。role/structure(連結)は assemble/continue 側。
+  server.registerTool(
+    "capture",
+    { title: "置く（捕獲）", description: "持ち込んだコード/メロ/歌詞等をそのまま登録（生成しない）。生成候補の確定もここ。", inputSchema: netaInputShape },
+    async (args) => ok(core.createNeta(args)),
+  );
+  server.registerTool(
+    "revise",
+    { title: "直す（上書き/削除）", description: "既存ネタの確定的な書換え・破棄。候補の採用差替もここ。", inputSchema: { id: z.string(), content: z.unknown().optional(), text: z.string().nullable().optional(), title: z.string().nullable().optional(), tags: z.array(z.string()).optional(), mood: z.string().nullable().optional(), del: z.boolean().optional().describe("true で削除") } },
+    async ({ id, del, ...patch }) => {
+      if (del) return ok({ deleted: core.deleteNeta(id) });
+      const n = core.updateNeta(id, patch);
+      return n ? ok(n) : err("not found");
+    },
+  );
+  server.registerTool(
+    "assemble",
+    { title: "組み立てる（配置）", description: "ネタを入れ子に配置/外す（section→song）。", inputSchema: { parent: z.string(), child: z.string(), position: z.number().optional(), ord: z.number().int().optional(), remove: z.boolean().optional() } },
+    async ({ parent, child, position, ord, remove }) => {
+      if (remove) { core.removeChild(parent, child, position); return ok({ removed: true }); }
+      core.placeChild(parent, child, position ?? 0, ord ?? 0);
+      return ok({ placed: true });
+    },
+  );
+  server.registerTool(
+    "generate",
+    { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝fit を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional() } },
+    async ({ kind, frame, name, seed, role, structure }) => {
+      if (role || structure) return err("role/structure は未対応（③-7）。構造(連結等)は assemble/continue で組む。");
+      if (name) return ok(genNamedProgression(name, frame));
+      if (kind === "chord_progression") return ok(genChords(frame, seed));
+      return ok(genDrums(frame, seed));
+    },
+  );
+  server.registerTool(
+    "fit",
+    { title: "合わせる（基準に噛ませる・候補）", description: "必ず基準(chords/melody)を入力に取りそれに噛み合うものを作る/直す。コードに合うメロ・既存メロの補正・ハモ付け。保存しない。", inputSchema: { target: z.enum(["melody", "bass", "chords"]), frame: frameSchema, chords: chordsSchema.optional(), melody: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), seed: z.number().int().optional() } },
+    async ({ target, frame, chords, melody, key, mode, seed }) => {
+      if (target === "melody") {
+        if (!chords) return err("fit melody は基準 chords が必須");
+        if (melody) return ok(fitToChords(melody, chords, key)); // 既存メロをコードへ追従(U10)
+        return ok(genMelody(frame, chords, seed)); // コードに合う新規メロ(U3)
+      }
+      if (target === "bass") {
+        if (!chords) return err("fit bass は基準 chords が必須");
+        return ok(genBass(frame, chords));
+      }
+      if (!melody) return err("fit chords(ハモ付け) は基準 melody が必須");
+      return ok(harmonize(melody, key ?? 0, { mode }));
+    },
+  );
+  server.registerTool(
+    "reshape",
+    { title: "寄せる（感じで変形・候補）", description: "既存を「ある感じ」へ変形。範囲指定や“オープン/緊張”等の進行レベル feel は未対応(③-3)。保存しない。", inputSchema: { mode: z.enum(["emotion"]), chord: oneChord.optional(), dir: z.enum(["darker", "brighter"]).optional(), range: z.unknown().optional(), feel: z.string().optional() } },
+    async ({ mode, chord, dir, range, feel }) => {
+      if (range || feel) return err("range/feel拡張(オープン等・進行レベル・部分)は未対応（③-3）");
+      if (mode === "emotion") {
+        if (!chord || !dir) return err("reshape emotion は chord と dir(darker|brighter)");
+        const deg = toDegrees([chord], 0)[0]!; // ルート不変＝key不要（degree=root）
+        return ok(emotionShift(deg, dir).map((s) => ({ ...s, root: s.degree })));
+      }
+      return err("reshape: 未対応の mode");
+    },
+  );
+  server.registerTool(
+    "convert",
+    { title: "変換する（移調/拍子・確定）", description: "AI判断不要の確定変換（移調/6-8化）。", inputSchema: { mode: z.enum(["transpose", "meter"]), semitones: z.number().int().optional(), meter: z.string().optional(), content: z.unknown().optional() } },
+    async () => err("確定変換(convert)は未実装（③-4）"),
+  );
+  server.registerTool(
+    "continue",
+    { title: "続ける（継続・候補）", description: "既存進行の次のコード候補。複数小節/役割への継続は未対応(③-6)。保存しない。", inputSchema: { chords: chordsSchema, key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), top: z.number().int().optional(), bars: z.number().int().optional() } },
+    async ({ chords, key, mode, top, bars }) => {
+      if (bars) return err("複数小節/役割への継続は未対応（③-6）。単一の次コード候補のみ。");
+      return ok(nextChordCandidates(toDegrees(chords, key ?? 0), { mode, top }));
+    },
+  );
+  server.registerTool(
+    "search",
+    { title: "探す（在庫/コーパス・読取）", description: "ネタ帳(project)＋連想元コーパス(library)から意味/様式/名前/類似で引く。一覧も。捏造せず無ければ空。対照(contrast)は未対応(③-5)。", inputSchema: { q: z.string().optional(), kind: z.string().optional(), mood: z.string().optional(), key: z.number().int().optional(), meter: z.string().optional(), tags: z.array(z.string()).optional(), scope: scopeEnum.optional(), limit: z.number().int().optional(), offset: z.number().int().optional(), like: chordsSchema.optional(), likeKey: z.number().int().optional(), similarTo: notesSchema.optional(), candidates: z.array(z.object({ id: z.string().optional(), label: z.string().optional(), notes: notesSchema })).optional(), mode: z.enum(["similar", "contrast"]).optional(), top: z.number().int().optional() } },
+    async ({ q, kind, mood, key, meter, tags, scope, limit, offset, like, likeKey, similarTo, candidates, mode, top }) => {
+      if (mode === "contrast") return err("対照(contrast)検索は未対応（③-5）");
+      if (similarTo) return ok(findSimilar(similarTo, candidates ?? [], top));
+      if (like) return ok(findProgressions(core, { tags, like: { chords: like, key: likeKey }, limit }));
+      return ok(core.listNeta({ q, kind, mood, key, meter, tags, scope, limit, offset }));
+    },
+  );
+  server.registerTool(
+    "analyze",
+    { title: "判る（同定/説明/当てはまり）", description: "これ何進行?/なぜ?/調は?/合ってる?。全生成・修正の土台。", inputSchema: { question: z.enum(["fit", "identify", "key", "explain", "progression"]), chords: chordsSchema.optional(), notes: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional() } },
+    async ({ question, chords, notes, key, mode }) => {
+      if (question === "fit") {
+        if (!notes || !chords) return err("analyze fit は notes と chords");
+        return ok(analyzeFit(notes, chords, key));
+      }
+      if (question === "key") {
+        if (!notes) return err("analyze key は notes");
+        return ok(detectKeyFromNotes(notes));
+      }
+      if (!chords) return err(`analyze ${question} は chords`);
+      if (question === "identify") return ok(identifyProgression(chords, key !== undefined ? { key } : {}));
+      if (question === "explain") return ok(explainProgression(chords, { key, mode }));
+      return ok(analyzeProgression(chords, { key, mode }));
+    },
   );
 
   return server;

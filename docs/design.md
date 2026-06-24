@@ -340,6 +340,78 @@
 - **決定**：consult の楽曲生成を **(S)特定/名前/旋法/様式（丸の内・カノン・小室・ブルース・ドリアン・『〇〇進行』『あの曲っぽい』等）→ ルールに渡さず Claude の知識で正確に書き起こす(type:content chord_progression)**／**(G)汎用・枠だけ → ルール(gen_pair_rule/gen_chords_rule)** に分岐。迷ったら(S)。**(S)で Claude が書いた進行も analyze_fit/detect_key を必ず通す**＝#86「判定が提案の前提」は崩さない（生成元がルールでなくても判定は通す）。
 - **本命の上積み（実装済・#98）**：**名前付き進行DB**（`music/progressions.py`＝名前→度数列・C基準）で定番進行を「Claudeのそれっぽさ」→「**確定realize**」に格上げ。登録: 丸の内(丸サ/JtToU=FM7-E7-Am7-Gm7-C7)・カノン・小室(6451)・王道(4536)・ツーファイブ(ii-V-I)・12小節ブルース。別名/表記揺れ照合(`find_progression`)。realize は1コード=1小節・C基準保存(調は後段トランスポーズ)。MCPツール `gen_named_progression(name, frame)` で公開＝agentic Claude は名前付き進行を**記憶で書かず必ずこのツール**を使う（未知名のときだけ自分の知識へフォールバック・prompt 明記）。非ダイアトニック(E7/Gm7)も正確。当てはまり判定(analyze_fit)は従来どおり通す。次点: fetch の web 接続・旋法/様式のルール拡張・進行の追加登録。
 
+#### 決定：Chat相談の文脈・待ち・実況（#99・2026-06-24）
+- **症状（実機・固まる）**：フリーChat（`chat:*`スレッド）で前ターンの生成メロに対し「メロがいただけない、8分16分で直して」が **failed（`claude failed (1)`・stderr空）**。UIは考え中表示のまま無言で消えた＝「固まった」。
+- **根因（実コードで確証・3層）**：
+  1. **文脈欠落（本丸）**：`Chat.tsx` が consult に渡す `context` は **target ネタのタイトル/本文だけ**（`const ctx = target ? (title??text) : ""`）。**会話履歴をプロンプトに一切入れない**。フリーChat は target 無し＝`context=""`。Claude は「直す対象のメロ」を知らされず、agentic の read-only ツールで探し回り **`--max-turns 8` を使い切って exit 1**（created→updated が約147秒＝彷徨いの形）。
+  2. **UI待ち < worker timeout**：`Chat.tsx` のポーリングは `for(i<80)×1500ms = 120秒`で打切るが、agentic worker の `claude -p` timeout は **240秒**。**ジョブ完了前にUIが降りる**。しかも時間切れでループを抜けると `finally{setBusy(false)}` だけ走り**メッセージを出さない**＝無言で消える＝固まって見える正体。
+  3. **max-turns 到達が不透明 hard fail**：`claude -p` が上限で exit 1・stderr空→`RuntimeError("claude failed (1): ")` だけ。観測も復帰もできない。
+- **決定**：
+  1. **会話履歴は worker が DB 直読みで context に焼く**（`_resolve_fit_context` と同じ「生産者がDBを読む」原則・design#85/L174）。consult かつ `params.chat_thread` があれば `chat_message` 表から直近Nターンを読み、**特に直前 AI 生成の `data.neta.content`（実ノート/コード）**を含めて `params.history` に展開→`handle_consult` がプロンプトに含める。**reload耐性あり**（履歴はサーバ権威・fb-3）。クライアント側 `context` 構築は変えない（退化防止）。
+  2. **UIポーリング予算を worker timeout 以上に**（120s→約270s）し、**時間切れでも無言にしない**：「まだ処理中・受信箱で受け取れます」を出して busy を解く（裏で続行・reaper がスレッドに結果を残す）。
+  3. **実況（できる範囲で）**：agentic 経路の `claude -p` を **`--output-format stream-json --verbose`** にし、NDJSON の `tool_use` を**人間語ラベル**（list_neta=ネタ帳を見てる／gen_melody=メロを作ってる…）に変換して **`job.progress` 列**へ随時書く（既存列・design#15「progress更新」）。UIはポーリングで `j.progress` を「考え中: …」表示。worker は run_once が running を commit 済＝conn 空きを使い contextvar の progress sink で書く（handler 署名は不変）。
+  4. **max-turns はソフト処理**：stream-json の `result` イベントから `subtype`(`error_max_turns` 等)・`is_error`・最終テキストを取得。**部分結果テキストがあれば返す**（consult は `_extract_json`→失敗時 chat フォールバックで活かせる）。無ければ「上限到達（文脈不足の可能性）」と**明示メッセージ**で失敗（#43 失敗は無音にしない）。
+- **段階（TDD・契約=パーサ先行）**：①worker 履歴注入（純関数＋プロンプト反映）→②stream-json パーサ（`event→progressラベル` / `result→(text,subtype,is_error)` の純関数）→③progress sink 配線（run_once）→④web ポーリング予算・非無言・進捗表示。①②は契約なのでテスト先行。`tools=False`（非agentic）経路は `communicate()` 維持＝blast半径を限定。
+- **⚠️ #100 により大半が陳腐化**：①履歴注入・②実況・④ポーリング延命は「workerが脳をホストする」前提の対症。新背骨（Claudeクライアントが脳＝セッションで記憶・SSEで逐次）では**最初から不要**。緑のコード（worker S0止血の history保険DDL 等）は #100 移行まで残置、移行で撤去。
+
+#### 決定：設計転換＝作曲MCP＋薄いClaudeラッパー（脳を作らない）（#100・2026-06-24・GO）
+- **問題（#61/#99 を貫く根因）**：worker(Python) が `claude -p` を**ステートレス単発JSON API**として使い、intentごとに**手組みプロンプト→判別ユニオン**(`handle_consult`＝`chat|options|content|items|proposals|plan`)を返す**ルーター**だった。＝worker が会話エージェントを**自作・ホスト**している。これは「LLM差し替え可能」設計としては綺麗だが、Claude Code が本来持つ**永続セッション・ネイティブなエージェントループ・ツール・メモリ・自然な多ターン会話**を捨てている。症状＝「会話が返ってこない」（request→構造化アーティファクト）。#99 の履歴焼き直し・max-turns 彷徨い・ポーリング無言も**すべてこの構造の派生**。オーナー評：「AIのAPIすぎる／元々webチャットはClaudeのラッパーのつもりが（AIの助言で）難しくした」。
+- **決定＝脳を作らない**。会話エージェントを自作するのをやめ、**既製の Claude クライアントを脳として使う**。我々が作るのは2つだけ：
+  1. **作曲MCP（ドメイン）**＝既存 `apps/api/src/mcp.ts` を脇役から**主役へ昇格**。読取＋**ルールエンジン生成(gen_*)**＋判定(analyze_fit)＋**書込(create/update/上書き/place/link/delete)**。書込は**候補返し＋明示commit**で承認が効く形にする。宣言的（ツール定義＋説明文）で、どの MCP クライアントからでも叩ける。
+  2. **薄いチャットラッパー（ビュー層）**＝web 内に1パネル。**チャット1本につき長命の `claude -p --input-format stream-json --output-format stream-json` を1プロセス保持**して中継（毎ターン spawn しない＝MCPが温まる・トークン逐次・多ターンはプロセス内でネイティブ）。流れる `tool_use`/`tool_result` を**既存の視覚部品**（ピアノロール/▶︎再生/選択カード #55/#57/#84）として描き、入力/クリックを stdin へ返す。プロセス落ち後の復活は `--resume`（**cwdスコープ＝固定cwdで起動**）。**プロンプト組み立て・ルーティング・記憶は持たない**（脳はClaude）。
+- **統合バス＝neta DB**。Claude が MCP で neta を書く→既存キャンバスが同じDBを見て再描画/再生する。だから「UI統合」は**橋を架け直さず**成立する（弱点は「別の汎用Claude窓で喋ると自分のキャンバスが見えない」点だけ＝チャットをアプリ内に置けば解消）。
+- **承認**（創作の本体＝「2案のどっちで上書き?」）：**CLI権限機構に依存しない**（v2.1.187 に `--permission-prompt-tool` は無い）。**MCPツール設計で実現**＝生成は候補返しのみ／上書き・削除は明示 commit ツール→ラッパーが候補をカード描画し、選択を次ターンへ流す。破壊操作の安全ゲートが欲しければ `--input-format stream-json` の **control プロトコル（control_request/response＝canUseTool）**で拾える。
+- **真実源は不変**：音楽的妥当性はルールエンジン（MCPツール）が担保。Claude は引く/選ぶ/直す＝requirements #92/#151 と整合（今回の転換は概念の変更でなく、アーキ/設計が概念から乖離していた**是正**）。
+- **残す/消す**：残す＝データモデル(neta/compose/job)・ルールエンジン・web の視覚/再生。**消す**＝worker の12プロンプト・判別ユニオンルーター(`handle_consult`)・`_resolve_chat_history`(#99)・ポーリング/max-turns/progress sink。worker は**決定的バッチ専任**（MIDI分割mido・埋め込み）へ。スケジュールAIが要れば「MCP付きの定期Claude」。
+- **#61/#99 の扱い**：#61（consult統合の判別ユニオン）は**本決定で置換**＝Claudeが自然文で喋りつつ構造化はツール呼び出しで起こす（unionを返さない）。#99 の対症は#100移行で撤去（上記注記）。
+- **フィジビリ検証済（実機・2026-06-24）**：`claude -p` は Max認証で動作（apiKeySource:none）／stream-json形(system/init→assistant→tool_result→result)／`--resume`が**別プロセス間で記憶持続**／`mcp__creative-manager__list_neta` が**実発火し tool_use/result が stream に見える**／`--model` 指定可。→ 薄いラッパー＋MCP は技術的に成立。
+- **モデル**：会話=軽い→sonnet/難しい所→opus の**出し分け**。**ツール駆動ターンに haiku は不可**（フィジビリで tool_use チャネルを使わず `<function_calls>` をテキスト捏造するのを確認）。クォータ理由でなく**正しさ**の選択。
+- **フィジビリ深掘り確定（実機・2026-06-24）**：
+  - (a) **承認は CLI 権限フックを使えない（実証で確定・2026-06-25）**：`claude -p` stream-json で allowedTools 外のツールを呼ぶと **tool_result が is_error（自動拒否）**＝`control_request`/permission イベントは**流れてこない**（観測イベント型＝assistant/result/user/system のみ・`--permission-prompt-tool` も本CLIに無い）。∴ **mid-stream の対話承認は不可**。承認は **書込ツールを allowedTools で事前承認＋可逆(undo)＋UIの候補選択（候補返し→人が選ぶ→commit）** で担保（#101 の会話/UI承認＝CLI gate に依存しない）。
+  - (b) `--resume` は **cwd スコープ**（/tmp 生成→project resume で `No conversation found`）→**ラッパーは固定 cwd で claude を起動**する。
+  - (c) `--strict-mcp-config`＋`--tools "mcp__creative-manager__*"` で**利用ツールをMCPだけに限定**でき Bash 逃げ道を消せる。**ただし真因は MCP コールドスタート**：`pnpm…mcp`(stdio) が接続前にターンが走ると init `available tools:[]`/`status:pending`。`claude -p` は毎プロセスで stdio MCP を起動し直す（`--resume` でも温まらない）→ **長命プロセスでMCPを温めるのが必須**（毎ターン spawn 不可）。将来 **api が HTTP/SSE MCP を常駐ホスト**も選択肢。
+- **③-8 実機検証＝10 verbs面で成立（2026-06-25）**：長命 `claude -p --input-format stream-json --output-format stream-json` を1プロセス保持し **warmup 1ターン→2ターン目で MCP `connected`**。自然文「Cメジャー明るい4小節」→ **sonnet も haiku も `generate(kind:chord_progression, frame:{key,mode,bars,mood})` を正しく選択**＝目的命名で選択が素直。`--allowedTools` 無しだと `generate` が**承認要求**（書込ゲートが現に効く）／有りで実行まで通り haiku が `C-G-B-C` を報告。**Haiku仮説=単発確定呼びは絞った面でいける（多段fuzzyはsonnet/opus）**。**ラッパー④のレシピ確定**：長命process／warmup／`--strict-mcp-config`＋`--tools`(10)／`--allowedTools`=10全部を事前承認(候補/読取/書込とも)・人のループはUIの候補選択＋可逆／sonnet主・haiku単発。
+- **③-8 続き＝feasibility 完了（2026-06-25・make-or-break 残無し）**：
+  - **B 多段◎**：sonnet が `generate→fit→analyze` を**正しい順で連鎖し中間状態(生成コード→fitのchords→analyzeのmelody)も渡る**＝研究の「状態喪失」起きず。会話作曲の本体が成立。
+  - **A 承認◎（上記a）**：CLI対話承認は不可と確定→UI候補選択＋可逆で担保。
+  - **D 解決済（2026-06-25）**：`--tools` は**MCPツールを絞れない**（init #tools=49・モデルが旧 `analyze_fit` を掴んだ）→ **サーバ側で絞る**。`buildMcpServer(core, {surface:"chat"|"full"})` を追加（共有スキーマをモジュール級へ巻き上げ・legacy39を `if(legacy)` で包む）。`mcp-stdio.ts` は `CM_MCP_SURFACE=chat` で chat面。**実証**：chat面で init `#tools:10`（旧39消滅）・多段が `generate→fit→**analyze**`（新verb）で通り fit 0.721 要約。api255緑＋chat-surfaceテスト。**＝additive をやめ chat は10だけ＝モデルが旧を掴まない**。
+  - **C 中継**：worker が headless で `claude -p` を回す前例あり＝低リスク作業。
+  - **残りは全て実装（feasibility risk ゼロ）**：エンジン欠落③-2..7(feel/roleのみ設計品質)／D=チャット面10登録／④ラッパー／⑤旧撤去。
+- **進め方**：①ドキュメント是正（済）→②フィジビリ深掘り（済・上記）→③MCP の書込/生成ツール整備（候補返し＋明示commit・説明文）→④薄いラッパー実装（長命 stream-json プロセス／固定cwd／`--strict-mcp-config`＋`--tools`限定／sonnet）→⑤worker のチャット機構撤去。SDD：上から確認済（concept=requirements #92/#151 と整合、architecture #1 を是正反映）。
+
+##### 決定：セッション管理＝「1 thread = 1 claude session = 1 履歴」（#100④-S・2026-06-25）
+**問題**：④は api 側に実装済（`apps/api/src/chat-session.ts`＝`Map<thread,ChatSession>`・長命 `claude -p --input-format stream-json`・MCP chat面 warmup・`/chat/:thread/turn` SSE 中継・**通し動作確認済**：同一スレッド 6.9s(cold)→1.8s(warm)）。だが **session_id 未指定＝プロセスが落ちると claude 側の文脈が消える**（DB履歴は残るが claude は知らない）。「履歴＝セッション」をどう対応させ、切替/再起動/分岐をどう管理するか。
+- **記憶は3層に分離**：①**アプリ履歴**(`chat_messages`/thread毎/DB)＝**永続SSOT**・UI表示・人間の正準（毎ターン保存＝fb-3）／②**claude セッション**(`~/.claude` の session_id ファイル・**cwdスコープ**)＝Claude の作業記憶＝**キャッシュ扱い**（消えうる・再構築可）／③**生きた claude プロセス**＝今温まってる実体（idle/落ちで消える・session_id は残す）。
+- **対応＝決定的導出**：**session_id = UUIDv5(固定ns, thread)**（thread は `'global'` か neta id）。DB列不要・ステートレス・再起動耐性。cwd は repo root 固定（現コードは cwd=`dirname(dirname(CM_DB))`＝repo root で固定済＝整合）。
+- **spawn = resume-or-create**（実機で境界確定・2026-06-25）：まず `--resume <sid>` を試し、`No conversation found`(rc=1) なら新規 `--session-id <sid>`、以降は常に resume。理由＝**既存idへ再 `--session-id` は "already in use"(rc=1) エラー／不存在 `--resume` も "No conversation found"(rc=1) エラー**＝両方ハード失敗するので試行分岐が要る。`--resume` は `--input-format stream-json` と**併用可**（resume 後も stdin で多ターン継続・記憶跨ぎ実証＝別プロセスで合言葉を想起）。
+- **切替＝thread切替**：UI でスレッドを変える＝その thread の session_id へ resume。`Map<thread,ChatSession>` は既にこの骨＝各 ChatSession に sid を持たせ resume で温め直すだけ。
+- **ライフサイクル**：idle reap（無発言が続けば claude プロセス kill＝メモリ解放／session_id 残置→次発言で resume・文脈は戻る・latency は warm でなく cold ~4s）。落ちたら `proc.on(exit)` で null→次 `say()` で resume 再spawn。
+- **分岐（将来）**：`--fork-session`＝新 session_id・記憶継承（実証済）＝「この会話から別案を一気に試す」を本筋を汚さず。v1 では未配線（capability のみ確保）。
+- **divergence 対処**：claude セッションファイル消失（`~/.claude` クリア/別cwd/別マシン）でも DB履歴は残る→**resume 失敗時は DB履歴を文脈に詰めて再構築**（v1 最低限＝resume失敗→新規＋`logging.warn`、履歴 replay は後続）。逆（claude記憶ありDB欠落）は毎ターン保存ゆえ起きない。
+- **実装スライス**：(S1) chat-session.ts に session_id 導出＋resume-or-create＋exit再spawn〔契約=導出関数＋分岐をテスト先行〕→(S2) idle reap →(S3) web 切替（別決定）→(S4) ⑤worker チャット撤去。
+
+#### 決定：MCP の道具を「目的」で再設計（#101・2026-06-24・#100 の具体化）
+ユースケースは `docs/usecases-compose.md`（U1-U21・生きた文書）。**白紙サブエージェント（既存39ツールを見ずに導出）＋実在39との突合**で収束。
+- **問題**：現MCPは39ツール＝**機械動作名**（gen_chords/substitute_chord/fit_to_chords/emotion_shift…）。ユーザーの**目的の言い方**（後ろをオープンに／合わせて／きれいに）と噛まず、Claude が「"オープン"はどれ？」を逆算＝彷徨いの源。**目的で命名し直す＋数を絞る。**
+- **決定＝チャット面は9ツール**（39は目的で畳める。引数に概念を宿し、道具は動作の種類だけに対応）：
+  - **A 真実源を書く（確定・人が選んでから）**：`capture`(置く＝create_neta)／`revise`(直す/上書き/削除＝update/delete_neta)／`assemble`(組む＝place_child/remove_child)
+  - **B 決定論エンジン（候補を返す・保存しない）**：`generate`(枠/様式から作る←gen_chords/gen_named_progression/gen_bass/gen_drums)／`fit`(合う物を作る＝コードに合うメロ・ハモ付け・音節合わせ←gen_melody/harmonize/fit_to_chords)／`transform`(範囲＋目標で変形・確定変換←substitute_chord/emotion_shift＋移調/拍子)／`continue`(時間方向に伸ばす←next_chord)
+  - **C 読むだけ**：`search`(意味/様式/名前/類似/対照/一覧←list_neta/facets/find_progressions/find_similar/melody_similarity)／`analyze`(同定/説明/当てはまり判定←analyze_fit/analyze_progression/detect_key/identify/explain・**全生成/修正の土台 #92**)
+- **CUT**：`create_job`/`list_jobs`/`get_job`/`get_job_results`（旧・非同期ワーカー経路。どのUCにも出ない）。
+- **4横断語彙＝概念は道具でなく共通引数に宿す**（道具増殖を防ぐ・ここが実作業の核）：**range**(範囲＝後半だけ)／**feel**(感じ＝オープン/緊張/切ない)／**style**(様式＝artist/mode/名前付き)／**role-structure**(役割Aメロ/サビ・構造 4小節×2連結)。これを transform/fit/continue/generate/search が共有。
+- **道具にしない（AIオーケストレーション）**：U18仕上げ（analyze→transform→人が選んで revise）／U10追従（analyze→fit→revise）／U16調べて反映（Claude Web→generate）。fuzzy高レベルはClaudeが9道具を組む。
+- **生成のルーティング（真実源を保つ・#86/#98 と整合）**：枠→エンジン(generate)／名前付き→gen_named_progression／**様式・アーティスト→まずコーパス引き(search)→下敷きにClaude適応**／いずれも **analyze が必ず検算**（"AIは捏造しない"＝"エンジンが全部作る"でなく"analyzeが必ず通る"で守る）。
+- **引く系の鉄則（#151＝当てずっぽう禁止を検索へ）**：「切ない進行/あの曲のコード/YOASOBIっぽく」は**捏造しない**＝①ネタ帳コーパス（アーティスト進行が入っている＝U-FRET取込・例 `Mr.Children-Again` source/tags）→②Claude Web→③無ければ「見つからない」と言う。この連鎖はAIオーケストレーション。
+- **エンジン欠落（#101が露わにした実作業・要実コード確認）**：(1)**range**（部分操作）(2)**feel語彙**（mood/emotion_shift止まり＝"オープン/解決有無"未モデル）(3)**role/structure**（Aメロらしさ/フレーズ連結）(4)**確定変換(移調/6-8)がMCP未公開**（worker handler のまま）(5)**対照(contrast)検索**未実装(6)**複数小節/役割への継続**（next_chordは1手）。→ ③の中身＝この欠落埋め＋目的命名のラッパー。
+- **粒度の根拠**：書込は作る/直す/組むの3で閉じる。生成方向は無から/並走/変形/延長の4が直交（畳むと意図が潰れる）。読取は探す/判るの2。fuzzyは道具化せずオーケストレーションへ逃がす。
+- **研究反映＝粒度に赤入れ（web根拠・2026-06-24・9→10へ）**：「39→一桁・目的命名」は実証的に正しい（<10ツール推奨／7ツールで50ツール並み／Copilot 40→13で改善：RAG-MCP[2505.03275]・"How Many Tools"[2605.24660]・Anthropic "writing tools for agents"）。プリミティブ多数をClaudeに連鎖させる案(b)は却下（多段で失敗複利63%・順序完全一致28%・中間状態喪失）。**ただし9案の2欠陥を是正**：
+  1. **`transform` を mode 多重化にしない**（fat tool＝parameter hallucination 直撃／6-10パラメータで誤り増）→ **`reshape`(feel/range で寄せる・候補・解釈を伴う)** と **`convert`(移調/拍子＝確定・AI判断不要・mode enum 正当)** に**2分割**。**9→10**（10も精度の理想帯）。
+  2. **`generate`↔`fit` の重複を入力で排他**（Anthropic最大の警告＝overlapping tools）：**`fit` は基準(chords/melody)入力を必須**・`generate` は基準なし。「人間がどちらを使うか即答できないならAIにも無理」。
+  3. **横断概念(range/feel/style)は"修飾引数"でOK**（同一動作の修飾＝mode分岐でない＝fat化しない）。enum値はユーザーの言い方へ寄せ＋自由文fallback（'ORG'罠回避）。**ただし role/structure(4小節×2連結)は構造操作＝引数でなく `assemble`/`continue` 側へ**（引数吸収を構造まで広げると fat化）。
+  4. **defer_loading/tool-search は10ツールに不要**（数十〜数千ツール帯の薬・過剰）。代わり**ツール定義を長命プロセス先頭に固定しプロンプトキャッシュ**（単一ユーザー/Max・レイテンシに最適）。
+  - **Haiku仮説＝半分当たり**：個別確定呼び(capture/convert単発)はHaiku可、**fuzzy多段(U18/U16)はHaiku不可＝能力問題（粒度で消えない）**→ sonnet/opusがオーケストレータ・Haikuは個別実行のみ（#100の出し分けが正・Haiku単独運用は狙わない）。
+  - **最終形＝10 thin verbs**：A書込 `capture`/`revise`/`assemble`・B生成(候補) `generate`/`fit`/`reshape`/`convert`/`continue`・C読取 `search`/`analyze`。横断概念=B群の共通"修飾引数"。fuzzy=オーケストレーション。承認=A/B分離で担保。
+
 #### 決定：MIDI取り込みの worker 分割(#81) — 過去資産を素材化（design#16 通り）
 - **問題**：従来は web `midiToNotes` で **melody 1本**に潰していた（design#16 の worker(mido)分割と乖離）。
 - **フロー**：web が MIDI を **base64 で `import_midi` ジョブに載せる**（asset経路もhandler-DB結合も不要・handlerは純粋 params→result を維持）→ worker `handle_import_midi`(mido) が **トラック×チャンネルで分割**（ch10[0-index 9]=ドラム→rhythm、他=melody・原音高そのまま＝二重トランスポーズ回避#41）→ `reapResults` が **import_midi の result.tracks を複数ネタに materialize**（web は自分でネタ化しない＝stale ガード無しで即回収、空は空マーカーで再reap防止）。
@@ -349,6 +421,7 @@
 - **"相談"と"投げる"は同じClaudeの2モード**：軽いターン＝即応の相談・壁打ち／重いターン＝plan-jobを生成（非同期、結果はChatと対象netaの受け取りに返る）。
 
 #### 決定：Chatモード統合（#61・GUI #19 改訂）
+> **⚠️ #100 で置換（2026-06-24）**：判別ユニオン(`handle_consult` が `chat|options|content|plan|proposals` を返しクライアントが switch)は**廃止方針**。Claude クライアントが自然文で喋りつつ構造化はツール呼び出しで起こす（作曲MCP＋薄いラッパー）。以下は経緯記録として残す。
 - **問題**：実機で「チャットでコード進行作って」が `other` ネタに落ちた。根因＝(1) `Chat.pick()` が `kind: target?.kind ?? "other"`（無targetのグローバルChatは常に other）、(2) 壁打ち(suggest)はテキスト案しか出さず `chord_progression` content を生成する導線が無い。さらにユーザー指摘「壁打ちとおまかせの差が分からない／普通のチャットAIは一本化されてる」。
 - **決定**：Chatのモードを **「相談」と「調べる」の2つに集約**。**壁打ち(suggest)＋おまかせ(plan)→「相談」に統合**（実装都合の漏れだったモード区別を畳む）。調べる(research/参考曲)は intent が別物なので残す。
 - **「相談」の挙動**：1つの会話で Claude が内容を見て分岐＝(a) 会話テキストで返す／(b) 発展案（選択カード）／(c) **生成要求（メロ/コード/リズム/全体）は正しい kind のネタを生成**。生成は同期（その場でネタ化、`from_job` で対象に紐づく）。重い多段は従来どおり plan として裏で進み受け取りトレイへ。
