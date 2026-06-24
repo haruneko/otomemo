@@ -27,6 +27,7 @@
 
 ### 決定3：core.ts の層分離
 - `Core`(1071行) を永続層 Repo 群（Neta/Edge/Job/Asset/Schedule/Chat）へ分割。**reapResults / tickSchedules は独立モジュール**（Reaper/Scheduler・intent→materializer 登録テーブル）へ。design#15「TS=生産者」に対し reap が消費者化している事実を構造で可視化する。
+- **完了（2026-06-24）**：`apps/api/src/repo/` に NetaRepo・ComposeRepo(compose_edge)・RelationRepo・JobRepo(job/job_result)・AssetRepo(asset/neta_asset/song)・ScheduleRepo・ChatRepo＋util(now/parseJsonColumn) を抽出。**Core=合成ルート**＝7 repo を `core.neta`/`core.job`… で公開しつつ、現行フラットAPI(`core.createNeta` 等)を repo へ委譲する薄いファサードとして維持（http/mcp/test の呼出 約250箇所は無改修＝回帰ゼロ）。**集約跨ぎの orchestration は Core 残置**：`createNeta`(neta+tag+job_result マーカーの原子化)・`copyNeta`(compose 再帰)・`recordJobResult`・`jobOutcome`・`getComposition`・`reapResults`(Reaper駆動)・`tickSchedules`(Scheduler駆動)。core.ts は 881→330行(-63%)。api251緑。新ドメイン追加＝repo を1つ足すだけ（拡張が局所化）。
 - **reapResults を `db.transaction` で囲い**、structured(items+edges)/import_midi/空マーカー/部分失敗の回帰テストを TDD で追加（最複雑分岐が無保護・無テストの是正）。bass(relative) が hasMusic/kindOf から漏れ reap で消える疑いをテストで暴く。facets() に scope 対応。
 
 ### 神ファイル分割の進め方（2026-06-23・リスク監査→是正）
