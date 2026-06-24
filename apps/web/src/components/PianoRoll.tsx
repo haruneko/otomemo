@@ -1,5 +1,6 @@
 import { useMemo, useState, type Ref } from "react";
 import type { Note } from "../music";
+import { NoteValuePicker } from "./NoteValuePicker";
 
 const CELL_PX = 12; // .proll-cell の幅。1拍=SUBDIV*CELL_PX で playhead を px 配置（横スクロール追従）。
 const KEY_PX = 40; // .proll-key の幅
@@ -85,27 +86,14 @@ export function PianoRoll({
   return (
     <div className="proll-wrap">
       <div className="proll-tools">
-        <span>音長(分)</span>
-        {LENGTHS.map((l) => (
-          <button
-            key={l.v}
-            type="button"
-            className={"len" + (noteLen === l.v ? " on" : "")}
-            onClick={() => setNoteLen(l.v)}
-          >
-            {l.label}
-          </button>
-        ))}
-        {/* 付点：選択音価を1.5倍（例 四分→付点四分=1.5拍）。6/8 の付点四分ビートにも対応。 */}
-        <button
-          type="button"
-          className={"len dot" + (dotted ? " on" : "")}
-          aria-label="dotted"
-          title="付点（×1.5）"
-          onClick={() => setDotted((d) => !d)}
-        >
-          ．
-        </button>
+        <NoteValuePicker
+          label="音長(分)"
+          options={LENGTHS}
+          value={noteLen}
+          dotted={dotted}
+          onChange={setNoteLen}
+          onToggleDotted={() => setDotted((d) => !d)}
+        />
       </div>
       <div className="proll" role="grid" aria-label="piano-roll" ref={scrollerRef}>
         {/* #58/#74 プレイヘッド：生beat --phb をコンテンツ座標(px)へ＝横スクロールに追従。1拍=SUBDIV*CELL_PX。 */}

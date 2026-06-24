@@ -2,6 +2,7 @@ import { useState, type Ref } from "react";
 import { type ChordPatternContent, type ChordTone } from "../music";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
+import { NoteValuePicker } from "./NoteValuePicker";
 import type { Neta } from "../api";
 
 const NAME_PX = 58;
@@ -89,11 +90,13 @@ export function ChordPatternEditor({
           <button type="button" aria-label="oct-inc" onClick={() => onChange({ ...pattern, voicing: { ...v, octave: Math.min(2, v.octave + 1) } })}>＋</button>
         </div>
         <div className="cp-tones" aria-label="lengths">
-          <span className="muted">音長</span>
-          {LENGTHS.map((l) => (
-            <button key={l.v} type="button" aria-label={`len-${l.v}`} className={len === l.v ? "len on" : "len"} onClick={() => setLen(l.v)}>{l.label}</button>
-          ))}
-          <button type="button" aria-label="dotted" title="付点（×1.5）" className={dotted ? "len on" : "len"} onClick={() => setDotted((d) => !d)}>．</button>
+          <NoteValuePicker
+            options={LENGTHS}
+            value={len}
+            dotted={dotted}
+            onChange={setLen}
+            onToggleDotted={() => setDotted((d) => !d)}
+          />
         </div>
         <BarsControl bars={bars} max={4} onChange={(n) => onChange({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
       </div>

@@ -1,6 +1,7 @@
 import { useState, type Ref } from "react";
 import type { BassDegree, BassStep } from "../music";
 import { BarsControl } from "./BarsControl";
+import { NoteValuePicker } from "./NoteValuePicker";
 
 // #bass S2: 相対ベースの度数エディタ（半リズムパート）。
 // **度数レーン**(行=R/3/5/7/8/approach)×**ステップ**(列)。各ステップはモノフォニック＝1度数だけ。
@@ -67,26 +68,13 @@ export function BassStepEditor({
     <div className="bass-step">
       <BarsControl bars={bars} max={4} onChange={setBars} />
       <div className="bass-lens">
-        音長
-        {LENGTHS.map((l) => (
-          <button
-            key={l.v}
-            type="button"
-            className={len === l.v ? "on" : ""}
-            onClick={() => setLen(l.v)}
-          >
-            {l.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          aria-label="dotted"
-          title="付点（×1.5）"
-          className={dotted ? "on" : ""}
-          onClick={() => setDotted((d) => !d)}
-        >
-          ．
-        </button>
+        <NoteValuePicker
+          options={LENGTHS}
+          value={len}
+          dotted={dotted}
+          onChange={setLen}
+          onToggleDotted={() => setDotted((d) => !d)}
+        />
       </div>
       <div className="bass-grid" role="grid" aria-label="bass-step" ref={scrollerRef}>
         <div
