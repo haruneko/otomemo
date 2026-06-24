@@ -183,13 +183,20 @@ export function App() {
 
   useEffect(() => {
     applyColors(loadColors());
-    // #55a/#55c 選択中SoundFontを再生に反映（設定を開かなくても効く）。
-    // 消えた/古いidは最新へ自己修復（永久フォールバック防止）。
-    void initSoundFont();
     // #84 最初のユーザー操作で旋律＋標準ドラムを裏で先読み＝初回再生の885ms待ちを解消。
     // 冪等（成功後はno-op）。suspended ctx でも decode/キャッシュは進む。
-    const onFirst = () => void prewarmSoundFont();
+    let gestured = false;
+    const onFirst = () => {
+      gestured = true;
+      void prewarmSoundFont();
+    };
     window.addEventListener("pointerdown", onFirst);
+    // #55a/#55c 選択中SoundFontを再生に反映（設定を開かなくても効く）。消えた/古いidは最新へ自己修復。
+    // URL は非同期確定。**先にユーザー操作が来ていたら URL 確定後に温める**＝初回ジェスチャが
+    // URL 未設定で空振りして先読みが効かない取りこぼしを塞ぐ（#84 是正）。
+    void initSoundFont().then(() => {
+      if (gestured) void prewarmSoundFont();
+    });
     return () => window.removeEventListener("pointerdown", onFirst);
   }, []);
 

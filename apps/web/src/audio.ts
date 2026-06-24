@@ -115,7 +115,7 @@ function disposeKit() {
 let activeSfUrl: string | null = null;
 let sfSampler: any = null; // 旋律用（1楽器ロード済み）
 let sfLoadedUrl: string | null = null;
-let sfLoading = false;
+let sfLoadPromise: Promise<any | null> | null = null; // 進行中ロードを共有（先読み×再生の二重DL防止）
 let sfLastError: string | null = null; // #55a 診断用：直近のロード失敗理由
 let sfInstrumentCount = 0;
 let sfInstrumentNames: string[] = []; // #55b ドラム楽器名の探索に使う
@@ -138,6 +138,7 @@ function resetSfCaches(): void {
   sfGmDrumMap = null;
   sfParsed = null;
   sfParsedUrl = null;
+  sfLoadPromise = null; // SF2 変更で進行中ロードの共有も破棄（旧URLの結果を新URLに使い回さない）
   sfDrumCache.clear();
   sfMelodicCache.clear(); // #section音色: program毎の旋律samplerもSF2変更で破棄
   prewarmDone = false; // SF2が変わったら先読みもやり直し
@@ -247,31 +248,40 @@ async function makeSampler(url: string, Tone: any): Promise<any> {
   });
 }
 
-async function ensureSoundFont(Tone: any, program = 0): Promise<any | null> {
+// waitIfCold=false: 誰もロードしてない冷スタートでは今回フォールバック（裏でロードは進む＝次回から鳴る）。
+// ただし**進行中のロードがあれば必ず待つ**＝先読み中の再生も同じロードを共有して SF2 で鳴る（#84 是正）。
+async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true): Promise<any | null> {
   const url = activeSfUrl;
   if (!url) return null;
-  // 未ロードならロード（ロード中は今回フォールバック＝次回から鳴る）。
   if (!(sfLoadedUrl === url && sfSampler)) {
-    if (sfLoading) return null;
-    sfLoading = true;
-    try {
-      const sampler = await makeSampler(url, Tone);
-      await sampler.ready;
-      sfInstrumentNames = sampler.instrumentNames ?? [];
-      sfInstrumentCount = sfInstrumentNames.length;
-      sfCurrentInstrument = null;
-      sfSampler = sampler;
-      sfLoadedUrl = url;
-      sfLastError = null;
-    } catch (e) {
-      sfLastError = e instanceof Error ? e.message || String(e) : String(e);
-      console.error("[SoundFont] load failed:", e);
-      sfSampler = null;
-      sfLoadedUrl = null;
-      return null;
-    } finally {
-      sfLoading = false;
+    const alreadyLoading = !!sfLoadPromise;
+    if (!sfLoadPromise) {
+      // 進行中ロードを1本に集約＝先読みと再生が同時に来ても makeSampler は1回だけ。
+      sfLoadPromise = (async () => {
+        try {
+          const sampler = await makeSampler(url, Tone);
+          await sampler.ready;
+          sfInstrumentNames = sampler.instrumentNames ?? [];
+          sfInstrumentCount = sfInstrumentNames.length;
+          sfCurrentInstrument = null;
+          sfSampler = sampler;
+          sfLoadedUrl = url;
+          sfLastError = null;
+          return sampler;
+        } catch (e) {
+          sfLastError = e instanceof Error ? e.message || String(e) : String(e);
+          console.error("[SoundFont] load failed:", e);
+          sfSampler = null;
+          sfLoadedUrl = null;
+          return null;
+        } finally {
+          sfLoadPromise = null;
+        }
+      })();
     }
+    // 冷スタートで待たない指定なら即フォールバック（裏ロードは継続）。進行中ロード有りなら待って共有。
+    if (!alreadyLoading && !waitIfCold) return null;
+    if (!(await sfLoadPromise)) return null;
   }
   // ネタの音色(program)に合わせて旋律楽器を切替（毎回・差分のみ実ロード）。
   if (sfSampler) {
@@ -458,7 +468,8 @@ export async function prewarmSoundFont(): Promise<void> {
       Tone,
     );
     dbg("prewarm done");
-  } catch {
+  } catch (e) {
+    dbg("prewarm failed (retry next gesture)", e); // 握り潰さず可視化（#84 是正）
     prewarmDone = false; // 失敗時は次の機会に再試行
   }
 }
@@ -496,7 +507,8 @@ export async function playNotes(
   // SF2 が選択・ロード済みなら旋律はそれで鳴らす。ドラムは SF2 にマッチ楽器があればそれ、
   // 無ければ簡易キット。SF2 無しは全部キット（後退ゼロ）。
   const defaultProg = opts.program ?? 0;
-  const sf = await ensureSoundFont(Tone, defaultProg);
+  // 冷スタートはブロックせずフォールバック（次回warm）。ただし先読み等のロードが進行中なら待って SF2 で鳴らす。
+  const sf = await ensureSoundFont(Tone, defaultProg, false);
   const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number, DrumVoice>();
   // #section音色: パート毎(program毎)の旋律 sampler を用意（合成再生で音色を保つ）
   const melodicByProg = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<number, any>();
