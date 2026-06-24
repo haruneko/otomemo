@@ -197,7 +197,7 @@ article[aria-label="neta-card"].dragging {
   border-left: 2px solid #3a3f49;
 }
 .step-cell.on {
-  background: var(--k-melody, var(--accent));
+  background: var(--k, var(--k-melody, var(--accent))); /* #10④ kind 色（ベース=シアン）に */
 }
 /* #bass S2 相対度数グリッド：度数ラベルを出す幅広セル＋bass色 */
 .bass-step {
@@ -248,10 +248,10 @@ article[aria-label="neta-card"].dragging {
   justify-content: center;
 }
 .step-cell.deg.on {
-  background: var(--k-melody); /* 他エディタ(StepPad/リズム)と同じ active 色 */
+  background: var(--k, var(--k-melody)); /* #10④ kind 色（ベース=シアン） */
 }
 .step-cell.deg.sustain {
-  background: color-mix(in srgb, var(--k-melody) 34%, transparent); /* 音長の伸び（薄色） */
+  background: color-mix(in srgb, var(--k, var(--k-melody)) 34%, transparent); /* 音長の伸び（薄色） */
 }
 .lane-cell.over {
   background: var(--accent);

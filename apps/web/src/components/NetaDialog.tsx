@@ -228,8 +228,16 @@ export function NetaDialog({
   const showKey = (isMusic || isContainer) && !isRhythm; // 調（rhythm以外の音楽/section）
   const showMeta = isMusic || isContainer; // テンポ
 
+  // #10④ エディタ本体の active 色を kind 色に（--k＝カードと同じ変数。chord_pattern は chord 色を流用）。
+  const colorKind = neta.kind === "chord_pattern" ? "chord" : neta.kind;
   return (
-    <div className="mainpane-editor" role="dialog" aria-label="edit-neta">
+    <div
+      className="mainpane-editor"
+      role="dialog"
+      aria-label="edit-neta"
+      data-kind={neta.kind}
+      style={{ ["--k" as string]: `var(--k-${colorKind})` }}
+    >
       <div className="editor-bar">
         <button className="back" onClick={onClose} aria-label="close">
           ← 戻る

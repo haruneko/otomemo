@@ -318,7 +318,7 @@
   border-left: 3px solid #5b6270; /* 小節頭は強め */
 }
 .rhythm-cell.on {
-  background: var(--accent);
+  background: var(--k, var(--accent)); /* #10④ 打点を kind 色（rhythm=赤）に */
 }
 .bars-control {
   display: flex;

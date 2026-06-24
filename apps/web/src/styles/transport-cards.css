@@ -408,8 +408,8 @@
   top: 1px;
   height: 12px;
   min-width: 4px;
-  background: var(--accent);
-  border: 1px solid #6f9bf0;
+  background: var(--k, var(--accent)); /* #10④ ノートを kind 色（メロ=水色/ベース=シアン）に */
+  border: 1px solid color-mix(in srgb, var(--k, var(--accent)) 60%, #fff);
   border-radius: 2px;
   z-index: 2;
   padding: 0;
