@@ -17,25 +17,16 @@ import type {
 import { reapResults } from "./reaper";
 import { tickSchedules } from "./scheduler";
 import { findSimilar } from "./music/similarity";
+import { now, parseJsonColumn } from "./repo/util";
+import { AssetRepo, type Asset, type SongOverlay } from "./repo/asset-repo";
 
-const now = (): string => new Date().toISOString();
+// repo に移した型を従来の import 元(core)からも引けるよう再公開（呼び出し側 無改修）。
+export type { Asset, SongOverlay } from "./repo/asset-repo";
 
 // 複数プロジェクト（design「prj: 名前空間タグ」）：プロジェクト所属は `prj:<名前>` タグで表す。
 // 意味タグ(mood/ジャンル)とは別軸＝facets/検索で分離する。
 export const PROJECT_TAG_PREFIX = "prj:";
 export const isProjectTag = (name: string): boolean => name.startsWith(PROJECT_TAG_PREFIX);
-
-// DB の JSON 列は外部書込/部分書込で壊れうる。1行の壊れ JSON で getter/一覧全体が throw するのを防ぐ
-// ＝壊れたら null＋warn（無音にしない・design 決定4／reaper.ts と同方針）。
-function parseJsonColumn(s: unknown, col: string): unknown {
-  if (s == null) return null;
-  try {
-    return JSON.parse(s as string);
-  } catch {
-    console.warn(`[core] malformed JSON in column "${col}" — treated as null`);
-    return null;
-  }
-}
 
 /**
  * 操作コア（docs/design.md #20 ツールカタログ）。
@@ -43,8 +34,13 @@ function parseJsonColumn(s: unknown, col: string): unknown {
  * 消費者ロジック（reap=生成結果のネタ化）は reaper.ts に分離（design「アーキ是正 決定3」）。
  */
 export class Core {
+  // 合成ルート（#6）：集約ごとの repo を保持。新コードは core.asset 等の名前空間APIを使える。
+  // 既存の フラットAPI(core.addAsset 等) は下で repo へ委譲＝呼び出し側 無改修（回帰ゼロ）。
+  readonly asset: AssetRepo;
   // db は同一パッケージの reaper/scheduler から読む（readonly＝外部からは書けない）。
-  constructor(readonly db: Database.Database) {}
+  constructor(readonly db: Database.Database) {
+    this.asset = new AssetRepo(db);
+  }
 
   createNeta(input: NetaInput): Neta {
     const id = randomUUID();
@@ -575,115 +571,33 @@ export class Core {
   }
 
   // --- asset（#77 SoundFont等のファイル資産。実体は data/assets/、ここはメタ）---
-  addAsset(input: {
-    kind: string;
-    name?: string | null;
-    path: string;
-    size?: number | null;
-    mime?: string | null;
-    meta?: unknown;
-  }): Asset {
-    const id = randomUUID();
-    this.db
-      .prepare(
-        `INSERT INTO asset (id,kind,name,path,size,mime,meta,created)
-         VALUES (@id,@kind,@name,@path,@size,@mime,@meta,@created)`,
-      )
-      .run({
-        id,
-        kind: input.kind,
-        name: input.name ?? null,
-        path: input.path,
-        size: input.size ?? null,
-        mime: input.mime ?? null,
-        meta: input.meta == null ? null : JSON.stringify(input.meta),
-        created: now(),
-      });
-    return this.getAsset(id)!;
+  // --- asset / song / neta_asset：AssetRepo へ委譲（#6。新コードは core.asset を直接使ってよい）---
+  addAsset(input: Parameters<AssetRepo["addAsset"]>[0]): Asset {
+    return this.asset.addAsset(input);
   }
-
   listAssets(kind?: string): Asset[] {
-    const rows = (
-      kind
-        ? this.db.prepare(`SELECT * FROM asset WHERE kind=? ORDER BY created DESC`).all(kind)
-        : this.db.prepare(`SELECT * FROM asset ORDER BY created DESC`).all()
-    ) as Record<string, unknown>[];
-    return rows.map(rowToAsset);
+    return this.asset.listAssets(kind);
   }
-
   getAsset(id: string): Asset | null {
-    const row = this.db.prepare(`SELECT * FROM asset WHERE id=?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
-    return row ? rowToAsset(row) : null;
+    return this.asset.getAsset(id);
   }
-
   deleteAsset(id: string): boolean {
-    return this.db.prepare(`DELETE FROM asset WHERE id=?`).run(id).changes > 0;
+    return this.asset.deleteAsset(id);
   }
-
-  // --- song（#83 曲の箱 overlay：neta[kind=song] と 1:1。段階／次の一手）---
-  updateSong(
-    netaId: string,
-    patch: { stage?: string | null; next_action?: string | null },
-  ): { neta_id: string; stage: string | null; next_action: string | null; updated: string } | null {
-    if (!this.getNeta(netaId)) return null;
-    const cur = this.getSong(netaId);
-    const stage = patch.stage !== undefined ? patch.stage : (cur?.stage ?? null);
-    const next_action =
-      patch.next_action !== undefined ? patch.next_action : (cur?.next_action ?? null);
-    this.db
-      .prepare(
-        `INSERT INTO song (neta_id, stage, next_action, updated) VALUES (@n,@s,@a,@u)
-         ON CONFLICT(neta_id) DO UPDATE SET stage=@s, next_action=@a, updated=@u`,
-      )
-      .run({ n: netaId, s: stage, a: next_action, u: now() });
-    return this.getSong(netaId);
+  updateSong(netaId: string, patch: { stage?: string | null; next_action?: string | null }): SongOverlay | null {
+    return this.asset.updateSong(netaId, patch);
   }
-
-  getSong(
-    netaId: string,
-  ): { neta_id: string; stage: string | null; next_action: string | null; updated: string } | null {
-    const row = this.db.prepare(`SELECT * FROM song WHERE neta_id=?`).get(netaId) as
-      | Record<string, unknown>
-      | undefined;
-    return row
-      ? {
-          neta_id: row.neta_id as string,
-          stage: (row.stage as string) ?? null,
-          next_action: (row.next_action as string) ?? null,
-          updated: row.updated as string,
-        }
-      : null;
+  getSong(netaId: string): SongOverlay | null {
+    return this.asset.getSong(netaId);
   }
-
-  // --- neta_asset（#83 ネタ↔資産の紐付け：role=source/attachment/render）---
   linkAsset(netaId: string, assetId: string, role = "attachment"): boolean {
-    if (!this.getNeta(netaId) || !this.getAsset(assetId)) return false;
-    this.db
-      .prepare(
-        `INSERT INTO neta_asset (neta_id, asset_id, role, created) VALUES (?,?,?,?)
-         ON CONFLICT(neta_id, asset_id, role) DO NOTHING`,
-      )
-      .run(netaId, assetId, role, now());
-    return true;
+    return this.asset.linkAsset(netaId, assetId, role);
   }
-
   unlinkAsset(netaId: string, assetId: string, role?: string): boolean {
-    const sql = role
-      ? this.db.prepare(`DELETE FROM neta_asset WHERE neta_id=? AND asset_id=? AND role=?`).run(netaId, assetId, role)
-      : this.db.prepare(`DELETE FROM neta_asset WHERE neta_id=? AND asset_id=?`).run(netaId, assetId);
-    return sql.changes > 0;
+    return this.asset.unlinkAsset(netaId, assetId, role);
   }
-
   getNetaAssets(netaId: string): (Asset & { role: string })[] {
-    const rows = this.db
-      .prepare(
-        `SELECT a.*, na.role AS na_role FROM neta_asset na JOIN asset a ON a.id = na.asset_id
-         WHERE na.neta_id=? ORDER BY na.created DESC`,
-      )
-      .all(netaId) as Record<string, unknown>[];
-    return rows.map((r) => ({ ...rowToAsset(r), role: r.na_role as string }));
+    return this.asset.getNetaAssets(netaId);
   }
 
   // --- schedule（#80 proactive: 見てない間に継続研究/収集を進める）---
@@ -856,26 +770,3 @@ function rowToSchedule(row: Record<string, unknown>): Schedule {
   };
 }
 
-export interface Asset {
-  id: string;
-  kind: string;
-  name: string | null;
-  path: string;
-  size: number | null;
-  mime: string | null;
-  meta: unknown;
-  created: string;
-}
-
-function rowToAsset(row: Record<string, unknown>): Asset {
-  return {
-    id: row.id as string,
-    kind: row.kind as string,
-    name: (row.name as string) ?? null,
-    path: row.path as string,
-    size: (row.size as number) ?? null,
-    mime: (row.mime as string) ?? null,
-    meta: parseJsonColumn(row.meta, "asset.meta"),
-    created: row.created as string,
-  };
-}
