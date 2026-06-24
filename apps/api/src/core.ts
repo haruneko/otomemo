@@ -23,6 +23,7 @@ import { ScheduleRepo, type Schedule } from "./repo/schedule-repo";
 import { ChatRepo, type ChatMessage } from "./repo/chat-repo";
 import { RelationRepo } from "./repo/relation-repo";
 import { ComposeRepo } from "./repo/compose-repo";
+import { JobRepo } from "./repo/job-repo";
 
 // repo に移した型を従来の import 元(core)からも引けるよう再公開（呼び出し側 無改修）。
 export type { Asset, SongOverlay } from "./repo/asset-repo";
@@ -47,6 +48,7 @@ export class Core {
   readonly chat: ChatRepo;
   readonly relation: RelationRepo;
   readonly compose: ComposeRepo;
+  readonly job: JobRepo;
   // db は同一パッケージの reaper/scheduler から読む（readonly＝外部からは書けない）。
   constructor(readonly db: Database.Database) {
     this.asset = new AssetRepo(db);
@@ -54,6 +56,7 @@ export class Core {
     this.chat = new ChatRepo(db);
     this.relation = new RelationRepo(db);
     this.compose = new ComposeRepo(db);
+    this.job = new JobRepo(db);
   }
 
   createNeta(input: NetaInput): Neta {
@@ -148,10 +151,9 @@ export class Core {
     if (job?.target_neta_id) this.link(job.target_neta_id, netaId, "result");
   }
 
+  // --- job：CRUD は JobRepo へ委譲。jobOutcome/reapResults は neta/reaper 跨ぎ＝Core 残置（#6）---
   getJobResults(jobId: string): JobResult[] {
-    return this.db
-      .prepare(`SELECT neta_id, role FROM job_result WHERE job_id = ? ORDER BY ord`)
-      .all(jobId) as JobResult[];
+    return this.job.getJobResults(jobId);
   }
 
   /**
@@ -379,135 +381,22 @@ export class Core {
   // --- ジョブ（投げて→進めて→受け取る。生産側）---
 
   enqueueJob(input: JobInput): Job {
-    const id = randomUUID();
-    const ts = now();
-    this.db
-      .prepare(
-        `INSERT INTO job (id, target_neta_id, level, intent, instruction, params, status, priority, notify_level, created, updated)
-         VALUES (@id, @target, @level, @intent, @instruction, @params, 'queued', @priority, @notify, @created, @updated)`,
-      )
-      .run({
-        id,
-        target: input.target_neta_id ?? null,
-        level: input.level ?? "atomic",
-        intent: input.intent,
-        instruction: input.instruction ?? null,
-        params: input.params == null ? null : JSON.stringify(input.params),
-        priority: input.priority ?? 0,
-        notify: input.notify_level ?? null,
-        created: ts,
-        updated: ts,
-      });
-    return this.getJob(id)!;
+    return this.job.enqueueJob(input);
   }
-
   getJob(id: string): Job | null {
-    const row = this.db.prepare(`SELECT * FROM job WHERE id = ?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
-    return row ? this.rowToJob(row) : null;
+    return this.job.getJob(id);
   }
-
-  // #45: ジョブが人に質問して待つ（status=waiting＋question）。
   askQuestion(jobId: string, question: string): Job | null {
-    this.db
-      .prepare(`UPDATE job SET status='waiting', question=@q, updated=@u WHERE id=@id`)
-      .run({ id: jobId, q: question, u: now() });
-    return this.getJob(jobId);
+    return this.job.askQuestion(jobId, question);
   }
-
-  // #45/#85 S3: 待機中ジョブへの回答。回答を載せた継続ジョブを積み、元ジョブを done にする。
-  // 元 params（frame/count/condition）を必ず引き継ぐ（#85 指摘6：枠を消さない）。
-  // 構造化回答（フォーム＝Record）は frame へ畳む（#85 指摘5）。文字列回答は instruction へ。
   answerJob(jobId: string, answer: string | Record<string, unknown>): Job | null {
-    const orig = this.getJob(jobId);
-    if (!orig) return null;
-    const baseParams: Record<string, unknown> =
-      orig.params && typeof orig.params === "object"
-        ? { ...(orig.params as Record<string, unknown>) }
-        : {};
-    let instruction = orig.instruction ?? "";
-    if (typeof answer === "string") {
-      instruction = `${instruction}\n[回答] ${answer}`.trim();
-    } else {
-      // フォーム回答を畳む。count/kinds/structure/condition は params トップレベル（worker が
-      // そこを読む）、それ以外（meter/key/tempo/bars/mood…）は frame へ上書きマージ。
-      const topLevel = new Set(["count", "kinds", "structure", "condition", "target"]);
-      const prevFrame =
-        baseParams.frame && typeof baseParams.frame === "object"
-          ? (baseParams.frame as Record<string, unknown>)
-          : {};
-      const framePart: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(answer)) {
-        if (topLevel.has(k)) baseParams[k] = v;
-        else framePart[k] = v;
-      }
-      baseParams.frame = { ...prevFrame, ...framePart };
-    }
-    const cont = this.enqueueJob({
-      intent: orig.intent,
-      target_neta_id: orig.target_neta_id ?? undefined,
-      instruction: instruction || undefined,
-      params: Object.keys(baseParams).length ? baseParams : undefined,
-      notify_level: orig.notify_level ?? undefined,
-    });
-    this.db
-      .prepare(`UPDATE job SET parent_job_id=@p, updated=@u WHERE id=@id`)
-      .run({ id: cont.id, p: jobId, u: now() });
-    this.db
-      .prepare(`UPDATE job SET status='done', updated=@u WHERE id=@id`)
-      .run({ id: jobId, u: now() });
-    return this.getJob(cont.id);
+    return this.job.answerJob(jobId, answer);
   }
-
-  // 運用ヘルス（/health 用）：滞留(queued)・実行中・直近失敗・最古queuedの待ち秒。可観測性の最小限。
   healthStats(): { queued: number; running: number; failed: number; oldestQueuedAgeSec: number | null } {
-    const count = (sql: string): number => (this.db.prepare(sql).get() as { c: number }).c;
-    const queued = count(`SELECT COUNT(*) c FROM job WHERE status='queued'`);
-    const running = count(`SELECT COUNT(*) c FROM job WHERE status='running'`);
-    const failed = count(`SELECT COUNT(*) c FROM job WHERE status='failed'`);
-    const oldest = this.db
-      .prepare(`SELECT created FROM job WHERE status='queued' ORDER BY created ASC LIMIT 1`)
-      .get() as { created: string } | undefined;
-    const oldestQueuedAgeSec = oldest
-      ? Math.max(0, Math.round((Date.now() - new Date(oldest.created).getTime()) / 1000))
-      : null;
-    return { queued, running, failed, oldestQueuedAgeSec };
+    return this.job.healthStats();
   }
-
   listJobs(q: JobQuery = {}): Job[] {
-    const where: string[] = [];
-    const params: Record<string, unknown> = {};
-    if (q.status) (where.push(`status = @status`), (params.status = q.status));
-    if (q.target) (where.push(`target_neta_id = @target`), (params.target = q.target));
-    params.limit = q.limit ?? 100;
-    const sql = `SELECT * FROM job ${
-      where.length ? "WHERE " + where.join(" AND ") : ""
-    } ORDER BY created DESC LIMIT @limit`;
-    return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map((r) =>
-      this.rowToJob(r),
-    );
-  }
-
-  private rowToJob(row: Record<string, unknown>): Job {
-    return {
-      id: row.id as string,
-      target_neta_id: (row.target_neta_id as string) ?? null,
-      level: row.level as string,
-      intent: row.intent as string,
-      instruction: (row.instruction as string) ?? null,
-      params: parseJsonColumn(row.params, "job.params"),
-      status: row.status as string,
-      priority: row.priority as number,
-      progress: (row.progress as string) ?? null,
-      notify_level: (row.notify_level as string) ?? null,
-      parent_job_id: (row.parent_job_id as string) ?? null,
-      question: (row.question as string) ?? null,
-      result: parseJsonColumn(row.result_summary, "job.result_summary"),
-      error: (row.error as string) ?? null,
-      created: row.created as string,
-      updated: row.updated as string,
-    };
+    return this.job.listJobs(q);
   }
 
   private rowToNeta(row: Record<string, unknown>): Neta {
