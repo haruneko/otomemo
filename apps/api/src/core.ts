@@ -19,9 +19,14 @@ import { tickSchedules } from "./scheduler";
 import { findSimilar } from "./music/similarity";
 import { now, parseJsonColumn } from "./repo/util";
 import { AssetRepo, type Asset, type SongOverlay } from "./repo/asset-repo";
+import { ScheduleRepo, type Schedule } from "./repo/schedule-repo";
+import { ChatRepo, type ChatMessage } from "./repo/chat-repo";
+import { RelationRepo } from "./repo/relation-repo";
 
 // repo に移した型を従来の import 元(core)からも引けるよう再公開（呼び出し側 無改修）。
 export type { Asset, SongOverlay } from "./repo/asset-repo";
+export type { Schedule } from "./repo/schedule-repo";
+export type { ChatMessage } from "./repo/chat-repo";
 
 // 複数プロジェクト（design「prj: 名前空間タグ」）：プロジェクト所属は `prj:<名前>` タグで表す。
 // 意味タグ(mood/ジャンル)とは別軸＝facets/検索で分離する。
@@ -37,9 +42,15 @@ export class Core {
   // 合成ルート（#6）：集約ごとの repo を保持。新コードは core.asset 等の名前空間APIを使える。
   // 既存の フラットAPI(core.addAsset 等) は下で repo へ委譲＝呼び出し側 無改修（回帰ゼロ）。
   readonly asset: AssetRepo;
+  readonly schedule: ScheduleRepo;
+  readonly chat: ChatRepo;
+  readonly relation: RelationRepo;
   // db は同一パッケージの reaper/scheduler から読む（readonly＝外部からは書けない）。
   constructor(readonly db: Database.Database) {
     this.asset = new AssetRepo(db);
+    this.schedule = new ScheduleRepo(db);
+    this.chat = new ChatRepo(db);
+    this.relation = new RelationRepo(db);
   }
 
   createNeta(input: NetaInput): Neta {
@@ -391,22 +402,15 @@ export class Core {
     return { neta, children };
   }
 
+  // --- relation：RelationRepo へ委譲（#6）---
   link(fromId: string, toId: string, type = "related"): void {
-    this.db
-      .prepare(`INSERT OR IGNORE INTO relation_edge (from_id, to_id, type) VALUES (?, ?, ?)`)
-      .run(fromId, toId, type);
+    this.relation.link(fromId, toId, type);
   }
-
   unlink(fromId: string, toId: string, type = "related"): void {
-    this.db
-      .prepare(`DELETE FROM relation_edge WHERE from_id = ? AND to_id = ? AND type = ?`)
-      .run(fromId, toId, type);
+    this.relation.unlink(fromId, toId, type);
   }
-
   getRelations(id: string): Relation[] {
-    return this.db
-      .prepare(`SELECT to_id AS "to", type FROM relation_edge WHERE from_id = ? ORDER BY type, to_id`)
-      .all(id) as Relation[];
+    return this.relation.getRelations(id);
   }
 
   // --- ジョブ（投げて→進めて→受け取る。生産側）---
@@ -601,172 +605,39 @@ export class Core {
   }
 
   // --- schedule（#80 proactive: 見てない間に継続研究/収集を進める）---
-  addSchedule(input: {
-    neta_id?: string | null;
-    intent: string;
-    params?: unknown;
-    every_sec: number;
-  }): Schedule {
-    const id = randomUUID();
-    const ts = now();
-    this.db
-      .prepare(
-        `INSERT INTO schedule (id,neta_id,intent,params,every_sec,enabled,last_run,next_run,created)
-         VALUES (@id,@neta_id,@intent,@params,@every_sec,1,NULL,@next,@created)`,
-      )
-      .run({
-        id,
-        neta_id: input.neta_id ?? null,
-        intent: input.intent,
-        params: input.params == null ? null : JSON.stringify(input.params),
-        every_sec: input.every_sec,
-        next: ts, // next_run=now＝次 tick で初回を即実行（UX：登録したら進み始める）
-        created: ts,
-      });
-    return this.getSchedule(id)!;
+  // --- schedule：CRUD は ScheduleRepo へ委譲。tickSchedules(期日→enqueue) は集約跨ぎ＝Core 残置（#6）---
+  addSchedule(input: Parameters<ScheduleRepo["addSchedule"]>[0]): Schedule {
+    return this.schedule.addSchedule(input);
   }
-
   getSchedule(id: string): Schedule | null {
-    const row = this.db.prepare(`SELECT * FROM schedule WHERE id=?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
-    return row ? rowToSchedule(row) : null;
+    return this.schedule.getSchedule(id);
   }
-
   listSchedules(netaId?: string): Schedule[] {
-    const rows = (
-      netaId
-        ? this.db.prepare(`SELECT * FROM schedule WHERE neta_id=? ORDER BY created DESC`).all(netaId)
-        : this.db.prepare(`SELECT * FROM schedule ORDER BY created DESC`).all()
-    ) as Record<string, unknown>[];
-    return rows.map(rowToSchedule);
+    return this.schedule.listSchedules(netaId);
   }
-
   setScheduleEnabled(id: string, enabled: boolean): boolean {
-    return (
-      this.db.prepare(`UPDATE schedule SET enabled=? WHERE id=?`).run(enabled ? 1 : 0, id).changes > 0
-    );
+    return this.schedule.setScheduleEnabled(id, enabled);
   }
-
   deleteSchedule(id: string): boolean {
-    return this.db.prepare(`DELETE FROM schedule WHERE id=?`).run(id).changes > 0;
+    return this.schedule.deleteSchedule(id);
   }
-
-  // 期日が来た schedule に research/collect ジョブを積む（main の reap interval から呼ぶ）。
-  // spam防止：同 schedule の未消化(queued/running)ジョブがあるものは飛ばす。
   /** 期日スケジュールから継続調査ジョブを enqueue。駆動ロジックは scheduler.ts に分離（委譲のみ）。 */
   tickSchedules(): number {
     return tickSchedules(this);
   }
 
-  // --- chat（#70 Chat履歴の永続化。thread=対象neta id or 'global'）---
-  addChatMessage(input: {
-    thread: string;
-    role: string;
-    kind?: string | null;
-    text?: string | null;
-    data?: unknown;
-  }): ChatMessage {
-    const id = randomUUID();
-    const ts = now();
-    this.db
-      .prepare(
-        `INSERT INTO chat_message (id, thread, role, kind, text, data, created)
-         VALUES (@id, @thread, @role, @kind, @text, @data, @created)`,
-      )
-      .run({
-        id,
-        thread: input.thread,
-        role: input.role,
-        kind: input.kind ?? null,
-        text: input.text ?? null,
-        data: input.data == null ? null : JSON.stringify(input.data),
-        created: ts,
-      });
-    return rowToChatMessage(
-      this.db.prepare(`SELECT * FROM chat_message WHERE id = ?`).get(id) as Record<string, unknown>,
-    );
+  // --- chat（#70 Chat履歴）：ChatRepo へ委譲 ---
+  addChatMessage(input: Parameters<ChatRepo["addChatMessage"]>[0]): ChatMessage {
+    return this.chat.addChatMessage(input);
   }
-
   listChatMessages(thread: string, limit = 200): ChatMessage[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM chat_message WHERE thread = ? ORDER BY created, rowid LIMIT ?`)
-      .all(thread, limit) as Record<string, unknown>[];
-    return rows.map(rowToChatMessage);
+    return this.chat.listChatMessages(thread, limit);
   }
-
   clearChatThread(thread: string): void {
-    this.db.prepare(`DELETE FROM chat_message WHERE thread = ?`).run(thread);
+    this.chat.clearChatThread(thread);
   }
-
-  // フリーChatの会話セッション一覧（thread='global' か 'chat:*'）。最終時刻・件数・冒頭プレビュー付き。
-  // ネタ別スレッド(thread=neta id)は対象外（ネタから辿るため）。
   listChatThreads(): { thread: string; last: string; count: number; preview: string | null }[] {
-    const rows = this.db
-      .prepare(
-        `SELECT m.thread AS thread, MAX(m.created) AS last, COUNT(*) AS count,
-           (SELECT x.text FROM chat_message x
-              WHERE x.thread = m.thread AND x.role = 'user' AND x.text IS NOT NULL
-              ORDER BY x.created LIMIT 1) AS preview
-         FROM chat_message m
-         WHERE m.thread = 'global' OR m.thread LIKE 'chat:%'
-         GROUP BY m.thread ORDER BY last DESC`,
-      )
-      .all() as Record<string, unknown>[];
-    return rows.map((r) => ({
-      thread: r.thread as string,
-      last: r.last as string,
-      count: Number(r.count),
-      preview: (r.preview as string) ?? null,
-    }));
+    return this.chat.listChatThreads();
   }
-}
-
-export interface ChatMessage {
-  id: string;
-  thread: string;
-  role: string;
-  kind: string | null;
-  text: string | null;
-  data: unknown;
-  created: string;
-}
-
-function rowToChatMessage(row: Record<string, unknown>): ChatMessage {
-  return {
-    id: row.id as string,
-    thread: row.thread as string,
-    role: row.role as string,
-    kind: (row.kind as string) ?? null,
-    text: (row.text as string) ?? null,
-    data: parseJsonColumn(row.data, "chat.data"),
-    created: row.created as string,
-  };
-}
-
-export interface Schedule {
-  id: string;
-  neta_id: string | null;
-  intent: string;
-  params: unknown;
-  every_sec: number;
-  enabled: boolean;
-  last_run: string | null;
-  next_run: string;
-  created: string;
-}
-
-function rowToSchedule(row: Record<string, unknown>): Schedule {
-  return {
-    id: row.id as string,
-    neta_id: (row.neta_id as string) ?? null,
-    intent: row.intent as string,
-    params: parseJsonColumn(row.params, "schedule.params"),
-    every_sec: row.every_sec as number,
-    enabled: !!row.enabled,
-    last_run: (row.last_run as string) ?? null,
-    next_run: row.next_run as string,
-    created: row.created as string,
-  };
 }
 
