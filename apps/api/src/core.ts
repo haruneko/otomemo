@@ -22,6 +22,7 @@ import { AssetRepo, type Asset, type SongOverlay } from "./repo/asset-repo";
 import { ScheduleRepo, type Schedule } from "./repo/schedule-repo";
 import { ChatRepo, type ChatMessage } from "./repo/chat-repo";
 import { RelationRepo } from "./repo/relation-repo";
+import { ComposeRepo } from "./repo/compose-repo";
 
 // repo に移した型を従来の import 元(core)からも引けるよう再公開（呼び出し側 無改修）。
 export type { Asset, SongOverlay } from "./repo/asset-repo";
@@ -45,12 +46,14 @@ export class Core {
   readonly schedule: ScheduleRepo;
   readonly chat: ChatRepo;
   readonly relation: RelationRepo;
+  readonly compose: ComposeRepo;
   // db は同一パッケージの reaper/scheduler から読む（readonly＝外部からは書けない）。
   constructor(readonly db: Database.Database) {
     this.asset = new AssetRepo(db);
     this.schedule = new ScheduleRepo(db);
     this.chat = new ChatRepo(db);
     this.relation = new RelationRepo(db);
+    this.compose = new ComposeRepo(db);
   }
 
   createNeta(input: NetaInput): Neta {
@@ -341,63 +344,23 @@ export class Core {
     };
   }
 
-  // 合成の子孫 id 集合（compose_edge を BFS）。循環判定用。
-  private descendantIds(id: string): Set<string> {
-    const out = new Set<string>();
-    const stack = [id];
-    while (stack.length) {
-      const cur = stack.pop()!;
-      const rows = this.db
-        .prepare(`SELECT child_id FROM compose_edge WHERE parent_id = ?`)
-        .all(cur) as { child_id: string }[];
-      for (const r of rows) if (!out.has(r.child_id)) (out.add(r.child_id), stack.push(r.child_id));
-    }
-    return out;
-  }
-
+  // --- compose：辺操作は ComposeRepo へ委譲。getComposition は neta ノードを組む横断サービス（#6）---
   placeChild(parentId: string, childId: string, position = 0, ord = 0): void {
-    // section に section を入れる等のネストを許すが、**循環は禁止**（自分自身／子孫を親に置けない）。
-    if (childId === parentId) throw new Error("自分自身は子にできない");
-    if (this.descendantIds(childId).has(parentId)) throw new Error("循環になる配置はできない");
-    // #54: 同じ子を別位置に複数置ける。同位置への再配置は冪等（ord を更新）。
-    this.db
-      .prepare(
-        `INSERT INTO compose_edge (parent_id, child_id, position, ord) VALUES (?, ?, ?, ?)
-         ON CONFLICT(parent_id, child_id, position) DO UPDATE SET ord = excluded.ord`,
-      )
-      .run(parentId, childId, position, ord);
+    this.compose.placeChild(parentId, childId, position, ord);
   }
-
-  // position 指定で1インスタンスのみ解除。未指定なら (parent,child) の全インスタンス。
   removeChild(parentId: string, childId: string, position?: number): void {
-    if (position === undefined) {
-      this.db
-        .prepare(`DELETE FROM compose_edge WHERE parent_id = ? AND child_id = ?`)
-        .run(parentId, childId);
-    } else {
-      this.db
-        .prepare(`DELETE FROM compose_edge WHERE parent_id = ? AND child_id = ? AND position = ?`)
-        .run(parentId, childId, position);
-    }
+    this.compose.removeChild(parentId, childId, position);
   }
 
-  /** 合成ツリーを再帰取得（DAGなので訪問済みガードでサイクル防止）。 */
+  /** 合成ツリーを再帰取得（DAGなので訪問済みガードでサイクル防止）。compose辺＋neta ノードを束ねる。 */
   getComposition(id: string, seen = new Set<string>()): CompositionNode | null {
     const neta = this.getNeta(id);
     if (!neta) return null;
     if (seen.has(id)) return { neta, children: [] };
     seen.add(id);
-    const rows = this.db
-      .prepare(
-        `SELECT child_id, position, ord FROM compose_edge WHERE parent_id = ? ORDER BY ord, position`,
-      )
-      .all(id) as { child_id: string; position: number; ord: number }[];
-    const children = rows
-      .map((r) => ({
-        position: r.position,
-        ord: r.ord,
-        node: this.getComposition(r.child_id, seen),
-      }))
+    const children = this.compose
+      .childEdges(id)
+      .map((r) => ({ position: r.position, ord: r.ord, node: this.getComposition(r.child_id, seen) }))
       .filter((c): c is { position: number; ord: number; node: CompositionNode } => c.node !== null);
     return { neta, children };
   }
