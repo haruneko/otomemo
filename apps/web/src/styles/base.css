@@ -89,6 +89,7 @@ main {
      基底ルールが後方にあるので .notebook で詳細度を上げて勝たせる（@media は詳細度を上げない） */
   .notebook section[aria-label="neta-list"] {
     grid-template-columns: 1fr;
+    padding-bottom: 84px; /* 右下チャットFAB(z40)に最下カードが隠れないようクリアランス */
   }
   /* ネタを開いてないときはメインペーン(空)を出さず、ネタ帳だけ表示 */
   .mainpane:has(.mainpane-empty) {
