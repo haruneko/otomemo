@@ -183,20 +183,13 @@ export function App() {
 
   useEffect(() => {
     applyColors(loadColors());
-    // #84 最初のユーザー操作で旋律＋標準ドラムを裏で先読み＝初回再生の885ms待ちを解消。
-    // 冪等（成功後はno-op）。suspended ctx でも decode/キャッシュは進む。
-    let gestured = false;
-    const onFirst = () => {
-      gestured = true;
-      void prewarmSoundFont();
-    };
-    window.addEventListener("pointerdown", onFirst);
     // #55a/#55c 選択中SoundFontを再生に反映（設定を開かなくても効く）。消えた/古いidは最新へ自己修復。
-    // URL は非同期確定。**先にユーザー操作が来ていたら URL 確定後に温める**＝初回ジェスチャが
-    // URL 未設定で空振りして先読みが効かない取りこぼしを塞ぐ（#84 是正）。
-    void initSoundFont().then(() => {
-      if (gestured) void prewarmSoundFont();
-    });
+    // #84 先読みは **画面ロード時**に実行（SF2の fetch/decode は suspended ctx で可能＝gesture 不要）。
+    // URL は initSoundFont で非同期確定するので、その後に温める＝初回再生はもう warm。冪等。
+    void initSoundFont().then(() => void prewarmSoundFont());
+    // 念のためのリトライ網（ロード時に URL 未取得/失敗でも、最初の操作で温め直す。冪等＝成功後no-op）。
+    const onFirst = () => void prewarmSoundFont();
+    window.addEventListener("pointerdown", onFirst);
     return () => window.removeEventListener("pointerdown", onFirst);
   }, []);
 

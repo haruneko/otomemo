@@ -451,9 +451,9 @@ async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, Dr
   return map;
 }
 
-// #84 先読み：再生クリックより前（最初のユーザー操作時）に旋律＋標準ドラムを裏でロードして
-// キャッシュを温める。初回再生で 885ms 待たされる問題を解消（warm は ~1ms）。
-// AudioContext は呼び出し元のジェスチャ内で Tone.start 済みである必要がある。冪等。
+// #84 先読み：旋律＋標準ドラムを裏でロードしてキャッシュを温める。初回再生で 885ms 待たされる問題を解消。
+// **ユーザー操作は不要**＝SF2 の fetch/parse/decode は suspended な AudioContext でできる（Tone.start＝resume は
+// 実際に音を出す瞬間=再生クリックだけで要る）。よって画面ロード直後（URL確定後）に呼べる。冪等。
 let prewarmDone = false;
 const COMMON_DRUMS = [36, 38, 42, 46, 41, 45, 48, 49, 51, 39, 37]; // kick/snare/hh/tom/crash/ride/clap/rim
 export async function prewarmSoundFont(): Promise<void> {
@@ -461,7 +461,8 @@ export async function prewarmSoundFont(): Promise<void> {
   prewarmDone = true;
   try {
     const Tone = await import("tone");
-    await Tone.start();
+    // Tone.start() は呼ばない＝gesture 不要。samples は suspended ctx に decode され、
+    // 再生クリック時の Tone.start() で即鳴る（その時にはもう温まっている）。
     await ensureSoundFont(Tone, 0); // 旋律(ピアノ)サンプラ
     await prepareDrumKits(
       COMMON_DRUMS.map((p) => ({ pitch: p, start: 0, dur: 0.25, drum: true })),
