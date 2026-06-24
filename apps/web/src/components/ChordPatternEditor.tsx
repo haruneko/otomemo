@@ -7,11 +7,13 @@ import type { Neta } from "../api";
 const NAME_PX = 58;
 const BEAT_PX = 88;
 const TONES: ChordTone[] = ["R", "3", "5", "7"];
+// 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える（"2分"表記を"2"に統一）。
 const LENGTHS = [
   { label: "16", v: 1 },
   { label: "8", v: 2 },
   { label: "4", v: 4 },
-  { label: "2分", v: 8 },
+  { label: "2", v: 8 },
+  { label: "1", v: 16 },
 ];
 
 // 拍子→1小節step数（1step=16分）。4/4=16, 6/8=12, 3/4=12。複合(6/8系)はビート=6step。
@@ -40,13 +42,14 @@ export function ChordPatternEditor({
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
   const [len, setLen] = useState(4); // 各音の長さ（step数・既定=四分）
+  const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 対応）
   const v = pattern.voicing;
   const bars = Math.max(1, Math.round(pattern.steps / stepsPerBar));
   const startAt = (s: number) => pattern.hits.find((h) => h.step === s);
   const sustainAt = (s: number) => pattern.hits.some((h) => h.step < s && s < h.step + h.dur);
   const toggleHit = (s: number) => {
     if (startAt(s)) onChange({ ...pattern, hits: pattern.hits.filter((h) => h.step !== s) }); // 同所タップ＝消す
-    else onChange({ ...pattern, hits: [...pattern.hits, { step: s, dur: len }].sort((a, b) => a.step - b.step) });
+    else onChange({ ...pattern, hits: [...pattern.hits, { step: s, dur: dotted ? len * 1.5 : len }].sort((a, b) => a.step - b.step) });
   };
   const toggleTone = (t: ChordTone) => {
     const has = v.tones.includes(t);
@@ -90,6 +93,7 @@ export function ChordPatternEditor({
           {LENGTHS.map((l) => (
             <button key={l.v} type="button" aria-label={`len-${l.v}`} className={len === l.v ? "len on" : "len"} onClick={() => setLen(l.v)}>{l.label}</button>
           ))}
+          <button type="button" aria-label="dotted" title="付点（×1.5）" className={dotted ? "len on" : "len"} onClick={() => setDotted((d) => !d)}>．</button>
         </div>
         <BarsControl bars={bars} max={4} onChange={(n) => onChange({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
       </div>

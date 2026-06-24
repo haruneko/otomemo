@@ -16,11 +16,13 @@ const LANES: { d: BassDegree; label: string }[] = [
   { d: "R", label: "R" },
   { d: "approach", label: "→" }, // approach=次の解決ルートへ半音で寄せる（歩く）
 ];
-// 音長（step数）。1=16分 / 2=8分 / 4=4分。
+// 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/コード楽器)と揃える。
 const LENGTHS = [
   { label: "16", v: 1 },
   { label: "8", v: 2 },
   { label: "4", v: 4 },
+  { label: "2", v: 8 },
+  { label: "1", v: 16 },
 ];
 
 export function BassStepEditor({
@@ -39,6 +41,7 @@ export function BassStepEditor({
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
   const [len, setLen] = useState(2); // 既定 8分
+  const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 の付点音価に対応）
   const bars = Math.max(1, Math.round(steps / 16));
   // 小節数を変える：縮小は**非破壊**（範囲外の音は描画しないだけで保持・melodyと同じ）。
   const setBars = (n: number) => onStepsChange(Math.max(1, Math.min(4, n)) * 16);
@@ -57,7 +60,7 @@ export function BassStepEditor({
     }
     // モノフォニック：同ステップ始まりの音を消してから置く
     const rest = pattern.filter((p) => p.step !== step);
-    onChange([...rest, { step, degree: lane, dur: len }].sort((a, b) => a.step - b.step));
+    onChange([...rest, { step, degree: lane, dur: dotted ? len * 1.5 : len }].sort((a, b) => a.step - b.step));
   }
 
   return (
@@ -75,6 +78,15 @@ export function BassStepEditor({
             {l.label}
           </button>
         ))}
+        <button
+          type="button"
+          aria-label="dotted"
+          title="付点（×1.5）"
+          className={dotted ? "on" : ""}
+          onClick={() => setDotted((d) => !d)}
+        >
+          ．
+        </button>
       </div>
       <div className="bass-grid" role="grid" aria-label="bass-step" ref={scrollerRef}>
         <div
