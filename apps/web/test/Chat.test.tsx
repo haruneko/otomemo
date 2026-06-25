@@ -237,36 +237,18 @@ describe("Chat", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("research mode shows reference songs and saves one as a reference neta (#9)", async () => {
-    createJob.mockResolvedValue({ id: "jr", status: "queued" });
-    getJob.mockResolvedValue({
-      status: "done",
-      result: {
-        summary: "夜系の要点",
-        references: [{ title: "曲A", artist: "X", why: "進行が近い", points: "IVmで翳り" }],
-      },
-      error: null,
-    });
-    createNeta.mockResolvedValue({ id: "r1" });
-    const onChanged = vi.fn();
-
-    render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
-    // research モードに切替
+  it("research(streaming): 調べる モードも常駐 claude へ（リサーチ依頼に包んで /turn）(#100④)", async () => {
+    streamEvents(asst("『曲A』(X) が近い。IVmの翳りが効いてる。"), result("『曲A』(X) が近い。IVmの翳りが効いてる。"));
+    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "調べる" }));
     await userEvent.type(screen.getByLabelText("chat-input"), "夜の曲");
     await userEvent.click(screen.getByRole("button", { name: "送信" }));
-    await waitFor(() => expect(screen.getByText("曲A")).toBeInTheDocument());
-
-    await userEvent.click(screen.getByLabelText("save-ref-0"));
-    await waitFor(() => expect(createNeta).toHaveBeenCalled());
-    expect(createNeta).toHaveBeenCalledWith({
-      kind: "reference",
-      title: "曲A / X",
-      text: "進行が近い\nIVmで翳り",
-      content: { references: [{ title: "曲A", artist: "X", why: "進行が近い", points: "IVmで翳り" }] },
-      from_job: "jr",
-    });
-    expect(onChanged).toHaveBeenCalled();
+    expect(await screen.findByText(/曲A/)).toBeInTheDocument();
+    // 旧ジョブ経路は使わず、ユーザー文を「リサーチ依頼」に包んで常駐へ流す（脳は Claude）。
+    const sent = chatTurnStream.mock.calls[0]?.[1] as string;
+    expect(sent).toContain("リサーチ依頼");
+    expect(sent).toContain("夜の曲");
+    expect(createJob).not.toHaveBeenCalled();
   });
 
   it("#70 restores persisted messages on open", async () => {

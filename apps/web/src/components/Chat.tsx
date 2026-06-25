@@ -445,26 +445,31 @@ export function Chat({
   }, [thread]);
 
   // #100④-S3 ディスパッチ：consult は常駐 claude（SSE）／research は当面 旧ジョブ経路（フォールバック）。
+  // #100④-S3/research：consult も research も常駐 claude（/turn）へ。脳は Claude＝自作ルーティング無し。
   async function run(text: string) {
-    if (mode === "consult") return runStream(text);
-    return runJob(text);
+    return runStream(text);
   }
 
   // #100④-S3 常駐 claude に1ターン。stream-json を逐次描画し、result（or 最後の text）を AI 発言として確定。
   // 脳は Claude＝自然文＋ツール選択。書込(capture/revise/assemble)は事前承認済で可逆（#100 a）。
+  // research モードはユーザー文を「リサーチ依頼」にだけ薄く包む（脳は持たない＝Claude が自由に調べ/記録）。
   async function runStream(text: string) {
     pushMsg({ role: "user", text });
     setBusy(true);
     setStreamText("");
     setThinkLabel("");
     setLiveCards([]);
+    const sendText =
+      mode === "research"
+        ? `【リサーチ依頼】${text}\n参考になる実在の曲・コード進行・テクニックを挙げて。良ければ参考ネタとして記録(capture)してOK。`
+        : text;
     const toolNames = new Map<string, string>(); // tool_use id → name（tool_result と突合）
     const cards: ToolCard[] = [];
     let acc = "";
     let finalText = "";
     let errored = false;
     try {
-      await api.chatTurnStream(thread, text, (ev) => {
+      await api.chatTurnStream(thread, sendText, (ev) => {
         if (!alive.current) return;
         for (const a of parseTurnEvent(ev as Parameters<typeof parseTurnEvent>[0])) {
           if (a.kind === "text") { acc = a.text; setStreamText(acc); }
