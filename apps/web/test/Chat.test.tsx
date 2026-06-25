@@ -251,6 +251,29 @@ describe("Chat", () => {
     expect(createJob).not.toHaveBeenCalled();
   });
 
+  it("AI 本文のマークダウン表は <table> で描画（生の | を出さない）", async () => {
+    const md = "整理します。\n\n| 小節 | コード |\n|------|--------|\n| 1 | C |\n| 2 | F |";
+    listChatMessages.mockReset();
+    listChatMessages.mockResolvedValue([
+      { id: "m", thread: "global", role: "ai", kind: "chat", text: md, data: null, created: "" },
+    ]);
+    render(<Chat onClose={vi.fn()} />);
+    // 表が要素として描かれる（生の "|------|" が見えるのではなく table/セル）
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "小節" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "C" })).toBeInTheDocument();
+    expect(screen.queryByText(/\|------\|/)).toBeNull();
+  });
+
+  it("user 文は素のまま（マークダウン解釈しない）", async () => {
+    listChatMessages.mockReset();
+    listChatMessages.mockResolvedValue([
+      { id: "u", thread: "global", role: "user", kind: "chat", text: "# これは見出しにしない", data: null, created: "" },
+    ]);
+    render(<Chat onClose={vi.fn()} />);
+    expect(await screen.findByText("# これは見出しにしない")).toBeInTheDocument();
+  });
+
   it("#70 restores persisted messages on open", async () => {
     listChatMessages.mockResolvedValue([
       { id: "1", thread: "global", role: "user", kind: "chat", text: "前の質問", data: null },

@@ -5,6 +5,18 @@ import { playNotes, notesForContent } from "../music";
 import { MUSIC_KINDS, KIND_LABEL } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
 import { parseTurnEvent, toolCardFromResult, type ToolCard, type ToolCardItem } from "../chat-stream";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+// #100④ Chat 本文の描画：AI はマークダウン（表/見出し/箇条書きを読める形に）。user は素のまま（入力をいじらない）。
+function ChatText({ text, ai }: { text: string; ai: boolean }) {
+  if (!ai) return <div className="chat-text">{text}</div>;
+  return (
+    <div className="chat-text chat-md">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+    </div>
+  );
+}
 
 interface Opt {
   title: string;
@@ -830,7 +842,7 @@ export function Chat({
           )}
           {msgs.map((m, i) => (
             <div key={i} className={"chat-msg " + m.role}>
-              {m.text && <div className="chat-text">{m.text}</div>}
+              {m.text && <ChatText text={m.text} ai={m.role === "ai"} />}
               {m.proposals && (
                 <ProposalGroup proposals={m.proposals} summary={m.summary} onApply={applyProposal} />
               )}
@@ -905,7 +917,7 @@ export function Chat({
           ))}
           {busy && (streamText || liveCards.length > 0) && (
             <div className="chat-msg ai" aria-label="streaming">
-              {streamText && <div className="chat-text">{streamText}</div>}
+              {streamText && <ChatText text={streamText} ai />}
               {liveCards.map((card, k) => (
                 <ChatToolCard key={k} card={card} onOpen={openNeta} onSaveItem={saveCandidate} onUndo={undoWrite} />
               ))}
