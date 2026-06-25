@@ -11,7 +11,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from .jobs import HANDLERS, _progress_sink, split_mora
+from .jobs import HANDLERS, split_mora
 
 log = logging.getLogger(__name__)
 
@@ -167,30 +167,14 @@ def run_once(conn: sqlite3.Connection) -> int:
             raise ValueError(f"no handler for intent: {row['intent']}")
         params = json.loads(row["params"]) if row["params"] else {}
         params = _resolve_fit_context(conn, params)  # #85 S2b 合わせる相手を展開
-        if row["intent"] == "consult":  # #99 前ターンを踏まえる＝会話履歴を context に焼く
-            params = _resolve_chat_history(conn, params)
 
-        # #99 実況：handler 実行中の進捗を job.progress へ随時書く（'running' commit 済＝conn 空き／単一スレッド）。
-        def _write_progress(label: str) -> None:
-            conn.execute("UPDATE job SET progress=?, updated=? WHERE id=?", (label, _now(), job_id))
-            conn.commit()
-
-        token = _progress_sink.set(_write_progress)
-        try:
-            result = handler(params)
-        finally:
-            _progress_sink.reset(token)
+        # #100⑤ 会話(agentic consult)は api 常駐 claude へ移管済＝worker は決定的バッチ専任。
+        # handler は AI プロンプトを持たない（research/gen 等の短い1発のみ）。
+        result = handler(params)
         conn.execute(
             "UPDATE job SET status='done', result_summary=?, progress=NULL, updated=? WHERE id=?",
             (json.dumps(result, ensure_ascii=False), _now(), job_id),
         )
-        # plan、または consult が type=plan を返したとき、子ジョブを積む（#61）
-        is_plan = row["intent"] == "plan" or (
-            row["intent"] == "consult" and result.get("type") == "plan"
-        )
-        if is_plan and isinstance(result.get("subtasks"), list):
-            # 親の chat_thread を子へ伝播＝子の生成結果もそのチャットに残る（fb-3）。
-            _enqueue_children(conn, job_id, result["subtasks"], row["target_neta_id"], params.get("chat_thread"))
         # #93 方向確認：handler が _propose を返したら「承認待ち」ジョブを積む（1案はこのジョブで
         # materialize 済み。承認で answerJob が残りを継続）。
         prop = result.get("_propose") if isinstance(result, dict) else None

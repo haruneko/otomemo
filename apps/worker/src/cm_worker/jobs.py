@@ -8,19 +8,16 @@
 """
 
 import base64
-import contextvars
 import io
 import json
 import logging
 import os
-import queue
 import re
 import shutil
 import signal
 import subprocess
-import threading
 import time
-from typing import Callable, Iterable
+from typing import Callable
 
 log = logging.getLogger(__name__)
 
@@ -107,130 +104,6 @@ def handle_echo(params: dict) -> dict:
 CLAUDE_BIN = os.environ.get("CM_CLAUDE_BIN", "claude")
 # 旧 cm-music-mcp は廃止（アーキ是正 S2＝音楽ドメインTS一本化）。音楽ツールは creative-manager(TS) に集約。
 # 後方互換: CM_MUSIC_MCP_URL が残っていても無視する（参照しない）。
-# #102 S1 creative-manager MCP（既存ネタの読取面＋音楽ドメイン）。cold-start 無し＝claude -p が stdio で spawn。
-# CM_MCP_STDIO_CMD が spawn コマンド、CM_MCP_STDIO_ARGS が JSON 配列の引数。CM_DB は環境継承で本番DB。
-CM_MCP_STDIO_CMD = os.environ.get("CM_MCP_STDIO_CMD")
-CM_MCP_STDIO_ARGS = os.environ.get("CM_MCP_STDIO_ARGS")
-# creative-manager の許可ツール。**書込(create/update/delete/place_child/link)は意図的に除外**
-# ＝Claude に書込口を与えない（変異は proposals→承認→TS core で1箇所適用・#102）。
-# 音楽ツール(分析/生成)は純関数＝読取扱いで許可（cm-music の置換）。
-_NETA_READ_TOOLS = [
-    "list_neta", "get_neta", "facets", "get_composition", "get_relations",
-    # 連想エンジン（read-only・#20）。
-    "identify_progression", "analyze_progression", "explain_progression", "substitute_chord", "emotion_shift",
-    "harmonize", "next_chord", "find_progressions",
-    # 当てはまり判定/補正/調推定/類似（旧 cm-music の analysis を TS 集約）。
-    "analyze_fit", "fit_to_chords", "detect_key", "melody_similarity", "find_similar",
-    # 生成（決定的記号エンジン・TS一本化）。
-    "gen_chords", "gen_melody", "gen_bass", "gen_drums", "gen_named_progression",
-]
-
-
-def _mcp_args() -> list[str]:
-    """agentic Chat の claude -p に creative-manager MCP(stdio) を接続する引数（音楽ドメインTS一本化後）。
-    CM_MCP_STDIO_CMD 未設定なら [] ＝後退ゼロ（dispatch にフォールバック）。--max-turns でループ打ち切り。"""
-    if not CM_MCP_STDIO_CMD:
-        return []
-    servers = {
-        "creative-manager": {
-            "command": CM_MCP_STDIO_CMD,
-            "args": json.loads(CM_MCP_STDIO_ARGS) if CM_MCP_STDIO_ARGS else [],
-        }
-    }
-    allowed = [f"mcp__creative-manager__{t}" for t in _NETA_READ_TOOLS]
-    cfg = json.dumps({"mcpServers": servers})
-    max_turns = os.environ.get("CM_AGENTIC_MAX_TURNS", "8")
-    return [
-        "--mcp-config", cfg,
-        "--allowedTools", ",".join(allowed),
-        "--permission-mode", "bypassPermissions",
-        "--max-turns", max_turns,
-    ]
-
-
-# #99 実況：agentic の進捗を job.progress に書く sink。run_once が contextvar にセットし、
-# claude_prompt のストリームが tool_use を見るたび呼ぶ（handler 署名は不変＝横断で通す）。
-_progress_sink: "contextvars.ContextVar[Callable[[str], None] | None]" = contextvars.ContextVar(
-    "cm_progress_sink", default=None
-)
-
-
-def _emit_progress(label: str) -> None:
-    """現在の progress sink があれば呼ぶ（best-effort・失敗は握り潰す＝本処理を止めない）。"""
-    sink = _progress_sink.get()
-    if sink is None:
-        return
-    try:
-        sink(label)
-    except Exception as e:  # noqa: BLE001
-        log.warning("progress sink failed: %s", e)
-
-
-# tool 名（mcp__creative-manager__xxx の末尾）→ 人間語ラベル（「今なにしてるか」）。
-_TOOL_LABELS = {
-    "list_neta": "ネタ帳を見てる", "get_neta": "ネタを読んでる", "facets": "ネタを探してる",
-    "get_composition": "曲の構成を見てる", "get_relations": "関連を辿ってる",
-    "find_progressions": "似た進行を探してる", "find_similar": "似たネタを探してる",
-    "identify_progression": "進行を読み解いてる", "analyze_progression": "進行を分析してる",
-    "explain_progression": "進行を読み解いてる", "substitute_chord": "代理コードを考えてる",
-    "emotion_shift": "雰囲気を寄せてる", "harmonize": "ハモりを考えてる",
-    "next_chord": "次のコードを考えてる", "analyze_fit": "当てはまりを点検してる",
-    "fit_to_chords": "コードに合わせてる", "detect_key": "調を推定してる",
-    "melody_similarity": "メロの近さを測ってる",
-    "gen_chords": "コードを作ってる", "gen_melody": "メロを作ってる", "gen_bass": "ベースを作ってる",
-    "gen_drums": "ドラムを作ってる", "gen_named_progression": "定番進行を引いてる",
-}
-
-
-def _stream_label(event: dict) -> str | None:
-    """stream-json の1イベントが tool_use を含めば人間語ラベルを返す（純関数）。
-    それ以外（テキスト/result/system）は None＝実況を出さない。"""
-    if not isinstance(event, dict) or event.get("type") != "assistant":
-        return None
-    for block in (event.get("message") or {}).get("content") or []:
-        if isinstance(block, dict) and block.get("type") == "tool_use":
-            base = str(block.get("name") or "").split("__")[-1]
-            return _TOOL_LABELS.get(base, f"{base} を使ってる") if base else None
-    return None
-
-
-def _consume_stream(lines: Iterable[str], on_progress: Callable[[str], None] | None):
-    """stream-json(NDJSON) の各行を読み、tool_use を on_progress に流しつつ最終 result を拾う（純関数）。
-    返り: (最終テキスト, subtype, is_error)。空行/壊れ行は無視＝途中の1行で全体を落とさない。"""
-    text, subtype, is_error = "", "success", False
-    for line in lines:
-        line = (line or "").strip()
-        if not line:
-            continue
-        try:
-            ev = json.loads(line)
-        except Exception:  # noqa: BLE001
-            continue
-        label = _stream_label(ev)
-        if label and on_progress:
-            try:
-                on_progress(label)
-            except Exception:  # noqa: BLE001
-                pass
-        if isinstance(ev, dict) and ev.get("type") == "result":
-            text = str(ev.get("result") or "")
-            subtype = str(ev.get("subtype") or "success")
-            is_error = bool(ev.get("is_error"))
-    return text, subtype, is_error
-
-
-def _finalize_stream(text: str, subtype: str, is_error: bool, returncode: int | None, stderr: str) -> str:
-    """stream の最終状態を返値/例外に落とす（純関数）。max-turns はソフト＝部分結果があれば返す（#99）。"""
-    text = (text or "").strip()
-    if subtype == "error_max_turns":
-        if text:
-            return text  # 部分結果で答えられる（consult が JSON 抽出 or chat フォールバックに活かす）
-        raise RuntimeError("agentic 上限(max-turns)到達：文脈が足りず手順を決めきれなかった可能性")
-    if is_error or (returncode not in (0, None) and not text):
-        raise RuntimeError(f"claude {subtype or 'error'}({returncode}): {(stderr or '').strip()[:300]}")
-    return text
-
-
 def _killpg(proc: "subprocess.Popen") -> None:
     """子＋孫(MCP stdio)をプロセスグループごと SIGKILL（孤児乱立を断つ・design「アーキ是正 決定4」）。"""
     try:
@@ -239,64 +112,10 @@ def _killpg(proc: "subprocess.Popen") -> None:
         proc.kill()
 
 
-def _claude_stream(binary: str, prompt: str, timeout: int) -> str:
-    """agentic 経路：`claude -p --output-format stream-json --verbose`。tool_use を実況しつつ最終結果を返す。
-    全体に wall-clock deadline を張り、超過で killpg＝（パイプ詰まりでの常駐ハングも防ぐ）。"""
-    args = [binary, "-p", prompt, "--output-format", "stream-json", "--verbose"] + _mcp_args()
-    proc = subprocess.Popen(
-        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True
-    )
-    q: "queue.Queue[str | None]" = queue.Queue()
-
-    def _reader() -> None:
-        try:
-            for line in proc.stdout:  # type: ignore[union-attr]
-                q.put(line)
-        finally:
-            q.put(None)  # EOF 番兵
-
-    threading.Thread(target=_reader, daemon=True).start()
-    deadline = time.monotonic() + timeout
-
-    def _lines() -> "Iterable[str]":
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise subprocess.TimeoutExpired(args, timeout)
-            try:
-                item = q.get(timeout=remaining)
-            except queue.Empty:
-                raise subprocess.TimeoutExpired(args, timeout)
-            if item is None:
-                return
-            yield item
-
-    try:
-        text, subtype, is_error = _consume_stream(_lines(), _emit_progress)
-    except subprocess.TimeoutExpired:
-        _killpg(proc)
-        try:
-            proc.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            log.warning("claude_stream: process did not exit after kill (pid=%s)", proc.pid)
-        raise
-    try:
-        _, err = proc.communicate(timeout=5)
-    except subprocess.TimeoutExpired:
-        _killpg(proc)
-        err = ""
-        log.warning("claude_stream: drain timed out (pid=%s)", proc.pid)
-    return _finalize_stream(text, subtype, is_error, proc.returncode, err)
-
-
-def claude_prompt(prompt: str, timeout: int = 120, tools: bool = False) -> str:
+def claude_prompt(prompt: str, timeout: int = 120) -> str:
     """`claude -p`（print/非対話モード）をsubprocessで叩く。Max認証を流用＝APIキー不要。
-    tools=True かつ CM_MCP_STDIO_CMD があれば creative-manager(TS) の音楽/読取ツールを agentic に使える
-    （その場合は stream-json で実況＝job.progress 更新＋max-turns ソフト処理・#99）。"""
+    会話(agentic)は api 常駐 claude(#100④)へ移管済＝ここは research/gen 等の短い1発専用。"""
     binary = shutil.which(CLAUDE_BIN) or CLAUDE_BIN
-    if tools:
-        return _claude_stream(binary, prompt, timeout)
-    # 非agentic（短い1発）：従来どおり communicate（blast半径を限定＝既存呼出の挙動を保つ）。
     args = [binary, "-p", prompt]
     # start_new_session=True で子を新プロセスグループのリーダーに＝timeout 時に killpg。
     proc = subprocess.Popen(
@@ -1133,180 +952,6 @@ def _validate_proposals(raw: list) -> list[dict]:
     return out
 
 
-def handle_consult(params: dict) -> dict:
-    """相談（#61 統合）。Claudeに「会話/発展案/生成/多段」を判断させ判別ユニオンを返す。
-    壁打ち(suggest)＋おまかせ(plan)を畳んだ Chat の単一窓口。空/不正は chat フォールバック。"""
-    context = params.get("context", "")
-    instruction = params.get("instruction") or "この内容について相談に乗って。"
-    history = params.get("history") or ""  # #99 worker が焼いた会話履歴（前ターンの生成物=実ノート含む）
-    agentic = bool(CM_MCP_STDIO_CMD)  # creative-manager(TS) の音楽/読取ツールが使えるか（cm-music廃止後）
-    neta_read = bool(CM_MCP_STDIO_CMD)  # creative-manager read-only ツールで既存ネタを読めるか（#102 S1）
-    tools = agentic or neta_read      # MCP を claude -p に載せるか（どちらかでも有れば載せる）
-    # #routing A：楽曲生成は【特定 vs 汎用】を先に見分ける。
-    # 特定(名前/参照/旋法/様式)はルールに渡さず Claude の知識でコードを書き起こす（ルールはダイアトニック
-    # 度数表だけで丸の内のE7/Gm7等の非ダイアトニックを原理的に出せない）。汎用(枠だけ)はルールへ。
-    specific = (
-        "  ◆**特定/名前/参照/旋法/様式**（丸の内・カノン・小室・王道4536・ツーファイブ・ブルース(12小節)・"
-        "ドリアン/リディアン等の旋法・『〇〇進行』『あの曲っぽい』など固有名や非ダイアトニックを含む）→"
-        "**ルールに渡さず自分の知識で正確に書き起こす**。"
-        '{"type":"content","neta_kind":"chord_progression",'
-        '"content":{"chords":[{"root":"C".."B","quality":""or"m"or"7"or"maj7"or"m7"or"m7b5"or"dim"or"sus4","start":拍,"dur":拍}]}}'
-        "（名前どおりの実コードを正確に。例 丸の内進行=FM7-E7-Am7-Gm7-C7）。迷ったら特定扱いで自分が書く。\n"
-    )
-    if agentic:
-        music_block = (
-            "- 楽曲を作る → まず【特定か汎用か】を見分ける：\n"
-            f"{specific}"
-            "  ◆特定が**名前付き定番進行**（丸の内/カノン/小室/王道4536/ツーファイブ/12小節ブルース 等）なら"
-            "**gen_named_progression(name) を必ず使う**（記憶で書かない＝非ダイアトニックも正確に確定realize）。"
-            "返りが {items:[]} の未知名のときだけ自分の知識で書く。\n"
-            "  ◆**汎用/枠だけ/当てはめ**（明るい/切ない/6/8で/N個/このコードに合うメロ/一式 等、固有名なし）→"
-            "**creative-manager のMCPツールを使う**（gen_chords→gen_melody→analyze_fit で点検→必要なら作り直す）。\n"
-            '  いずれも最終結果を {"type":"items","items":[{"kind":"chord_progression|melody|bass|rhythm|section",'
-            '"content":...,"label":"短い見出し"}],"edges":[{"type":"compose","from":idx,"to":idx,"position":数}]} で返す'
-            "（特定で自分が書いた進行も analyze_fit で当てはまりを点検して所見を持つ）。frame.key は整数(0-11)。\n"
-        )
-    else:
-        music_block = (
-            "- 楽曲を作る → まず【特定か汎用か】を見分ける：\n"
-            f"{specific}"
-            "  ◆**汎用/枠だけ/当てはめ**（固有名なし・雰囲気＋構造の枠だけ）→ "
-            '{"type":"plan","subtasks":[{"intent":"gen_pair_rule|gen_chords_rule|gen_lyric|fetch|transform|research|collect","params":{"frame":{...},"count":N,"parts":[...]}}]}'
-            "（汎用の音符生成はルール gen_pair_rule 優先）\n"
-        )
-    # #102 S1：既存ネタを読む手段。read-only ツール(検索/読取)のみ＝在庫を踏まえて答えられる。
-    # 書込は出来ない（変異は後続 S2 の proposals で承認制）。
-    neta_block = (
-        "- 既存ネタについて聞かれた／今ある素材を踏まえて答えたい → "
-        "creative-manager のツールで読める（list_neta=一覧, get_neta=中身, facets=検索の軸, "
-        "get_composition=曲の構成, get_relations=関連）。**読むだけ**（ツールでの書込は不可）。\n"
-        "- コード進行について『これ何進行?／なぜ切ない・構造は?／○番目の代替は?／このコードもっと切なく・明るく』"
-        "→ identify_progression（名前あて）/ explain_progression（度数・機能・終止の事実→君が「なぜ」を語る）/ "
-        "substitute_chord（代替候補・実コードで）/ emotion_shift（単体の感情シフト）。**決定的に正しい候補が返る**ので"
-        "それを元に選ぶ・説明する（自分で音を捏造しない）。\n"
-        "- 既存ネタを**直す/配置する/関連づける/削除する**よう頼まれた → ツールで対象を読んで特定し、"
-        "**変更は提案として返す**（その場では適用しない＝ユーザーが承認してから反映）：\n"
-        '  {"type":"proposals","summary":"何をするかの要約","proposals":[{"op":..., "target_id":"対象ネタID", "args":{...}, "rationale":"理由"}]}\n'
-        "  op と args：update_content{content:新content} / transform{...移調や拍子のパラメータ} / "
-        "fit_to{...コードに合わせる補正} / place_child{parent_id,position} / remove_child{parent_id} / "
-        "link{to_id,type} / unlink{to_id,type} / delete{}。target_id は read ツールで得た実在IDを使う。\n"
-    )
-    prompt = (
-        "あなたは作曲アシスタント。ユーザーの発言に応じ、次のいずれか1つだけを JSON で返す"
-        "（前置き・説明・コードフェンス禁止、JSONのみ）。\n"
-        '- 会話・助言・壁打ち → {"type":"chat","text":"..."}\n'
-        '- 発展案を複数 → {"type":"options","options":[{"title":"見出し","body":"本文"}]}（2〜4個）\n'
-        f"{music_block}"
-        f"{neta_block if neta_read else ''}"
-        "判断基準：作って/生成して＝楽曲（特定/名前/旋法/様式なら自分で書く・汎用枠だけならルール）、"
-        "案・アイデア請求＝options、それ以外＝chat。\n"
-        # #99 「さっき/前の/これ/それ/直して」等は直近の会話・生成物を指す。履歴の最後の生成物を対象にする。
-        "『さっき/前の/この/その/直して』等の指示語は **これまでの会話** の直近の発言・生成物を指す"
-        "（特に直前に生成した実ノート/コードが下にあればそれを対象に直す）。\n\n"
-        + (f"# これまでの会話\n{history}\n\n" if history else "")
-        + f"# 対象\n{context}\n\n# 依頼\n{instruction}"
-    )
-    text = claude_prompt(prompt, timeout=240 if tools else 120, tools=tools)
-    try:
-        data = _extract_json(text)
-    except Exception:  # noqa: BLE001
-        return {"type": "chat", "text": text.strip()}  # 非JSON＝そのまま会話
-
-    t = data.get("type") if isinstance(data, dict) else None
-    if t == "chat":
-        return {"type": "chat", "text": str(data.get("text", "")).strip() or _CONSULT_FALLBACK}
-    if t == "options":
-        opts = [
-            {"title": str(o.get("title", ""))[:80], "body": str(o.get("body", ""))}
-            for o in (data.get("options") or [])
-            if isinstance(o, dict)
-        ]
-        return {"type": "options", "options": opts} if opts else {"type": "chat", "text": _CONSULT_FALLBACK}
-    if t == "items":
-        # #86 S2b agentic：ツールで推敲した一式。**items は index を保存（compact しない）**＝
-        # edge の from/to(index) とズレないように。非dict だけ除く。実検証は reap(core.ts)が担う
-        # （無効itemは null-idMap で詰めず index 保持・両端非nullでedge）。
-        raw_items = data.get("items") if isinstance(data.get("items"), list) else []
-        items = [it if isinstance(it, dict) else {} for it in raw_items]  # 非dict→空dict(reapで弾く)・index保存
-        edges = [
-            {"type": str(e.get("type", "relation")), "from": int(e["from"]), "to": int(e["to"]),
-             **({"position": e["position"]} if isinstance(e.get("position"), (int, float)) else {})}
-            for e in (data.get("edges") or [])
-            if isinstance(e, dict) and isinstance(e.get("from"), int) and isinstance(e.get("to"), int)
-        ]
-        # 中身のある item が1つでもあるか（空dict だけなら chat フォールバック）
-        has_real = any(
-            it.get("kind") and (it.get("kind") in ("section", "song") or hasmusic_or_text(it))
-            for it in items
-        )
-        return {"type": "items", "items": items, "edges": edges} if has_real else {"type": "chat", "text": _CONSULT_FALLBACK}
-    if t == "proposals":
-        # #102 S2 既存ネタの変異提案。検証して返すだけ（承認＝web、適用＝既存HTTP書込が1箇所）。
-        props = _validate_proposals(data.get("proposals"))
-        if not props:
-            return {"type": "chat", "text": _CONSULT_FALLBACK}
-        return {"type": "proposals", "summary": str(data.get("summary", "")), "proposals": props}
-    if t == "content":
-        nk = data.get("neta_kind")
-        builder = _CONSULT_CONTENT.get(nk)
-        if builder:
-            try:
-                content = builder(data.get("content") or {})
-            except Exception:  # noqa: BLE001
-                content = {}
-            if _consult_nonempty(nk, content):
-                return {"type": "content", "neta_kind": nk, "content": content}
-        return {"type": "chat", "text": _CONSULT_FALLBACK}
-    if t == "plan":
-        subs = [
-            s
-            for s in (data.get("subtasks") or [])
-            if isinstance(s, dict) and s.get("intent") and s.get("intent") != "consult"
-        ]
-        return (
-            {"type": "plan", "subtasks": subs, "plan": f"{len(subs)}個のタスクに分解しました"}
-            if subs
-            else {"type": "chat", "text": _CONSULT_FALLBACK}
-        )
-    return {"type": "chat", "text": _CONSULT_FALLBACK}  # type 不明
-
-
-def handle_plan(params: dict) -> dict:
-    """おまかせ（plan）。依頼を実行可能な小タスク(intent)へ分解する。子ジョブは worker が enqueue する。"""
-    request = params.get("instruction") or params.get("context") or ""
-    prompt = (
-        "あなたは作曲アシスタントのプランナー。依頼を実行可能な小タスクに分解する。\n"
-        "使える intent と用途:\n"
-        "- research: テーマの参考曲を調べて学びをまとめる（作る前の下調べ）\n"
-        "- collect: 試せる断片/アイデア（コード進行例・リズム・歌詞フレーズ等）を集める\n"
-        "■ 音符を作る生成は**ルールベースを優先**（音楽的な当てはまり・調・コードが保証される）:\n"
-        "- gen_pair_rule: ルールのみで**コード進行＋それに合うパーツ(メロ/ベース/ドラム)を一式**生成。"
-        'params: count(案の数)/parts(["melody"],["melody","bass","drums"]等)/structure("section"|"pair")/frame{meter,key,bars,mood}。'
-        "『コードに合うメロ』『一式/セクションのラフ』『N案』はこれ1つ。"
-        "ユーザーが方向を決めかねている/たくさん作る前に確認したそうなら params.confirm=true "
-        "（まず1案だけ作って『この方向でいい?』と聞き、承認で残りを作る）。\n"
-        "- gen_chords_rule: ルールのみでコード進行（機能和声）。frame{meter,key,bars,mood}\n"
-        "- gen_lyric: 歌詞を作る（params.count／歌詞に合わせるなら condition）\n"
-        "- fetch: 参考曲などからコード進行/メロを取ってくる（params.target）\n"
-        "- transform: 既存ネタを移調/拍子替え（決定的・params.condition.fit_to＋frame）\n"
-        "- suggest: 既存内容への改善案を出す ／ research/collect: 下調べ/収集\n"
-        "（gen_melody/gen_chord/gen_rhythm/gen_variations は Claude生成で当てはまり保証が無いので、"
-        "音楽生成は基本ルールベース(gen_pair_rule/gen_chords_rule)を選ぶ。）\n"
-        "既存ネタに『合わせる/修正/変換』なら params.condition={fit_to:[netaのid], by:'syllable'|'harmony'} を付ける。\n"
-        "必要なら『調べてから作る』のように順に並べてよい（例: research → gen_pair_rule）。\n"
-        '出力は JSON のみ：{"subtasks":[{"intent":"...","params":{"context":"...","instruction":"..."}}]}\n'
-        "2〜5個・各 params.context に対象内容・instruction に具体指示。JSONのみ。\n\n"
-        f"# 依頼\n{request}"
-    )
-    text = claude_prompt(prompt)
-    try:
-        subs = _extract_json(text).get("subtasks") or []
-        subtasks = [s for s in subs if isinstance(s, dict) and "intent" in s]
-    except Exception:  # noqa: BLE001
-        subtasks = []
-    return {"subtasks": subtasks, "plan": f"{len(subtasks)}個のタスクに分解しました"}
-
-
 HANDLERS: dict[str, Callable[[dict], dict]] = {
     "mora_count": handle_mora_count,
     "echo": handle_echo,
@@ -1326,6 +971,4 @@ HANDLERS: dict[str, Callable[[dict], dict]] = {
     "research": handle_research,
     "collect": handle_collect,
     "import_midi": handle_import_midi,
-    "plan": handle_plan,
-    "consult": handle_consult,
 }

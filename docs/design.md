@@ -388,7 +388,8 @@
 - **ライフサイクル**：idle reap（無発言が続けば claude プロセス kill＝メモリ解放／session_id 残置→次発言で resume・文脈は戻る・latency は warm でなく cold ~4s）。落ちたら `proc.on(exit)` で null→次 `say()` で resume 再spawn。
 - **分岐（将来）**：`--fork-session`＝新 session_id・記憶継承（実証済）＝「この会話から別案を一気に試す」を本筋を汚さず。v1 では未配線（capability のみ確保）。
 - **divergence 対処**：claude セッションファイル消失（`~/.claude` クリア/別cwd/別マシン）でも DB履歴は残る→**resume 失敗時は DB履歴を文脈に詰めて再構築**（v1 最低限＝resume失敗→新規＋`logging.warn`、履歴 replay は後続）。逆（claude記憶ありDB欠落）は毎ターン保存ゆえ起きない。
-- **実装スライス**：(S1) chat-session.ts に session_id 導出＋resume-or-create＋exit再spawn〔契約=導出関数＋分岐をテスト先行〕→(S2) idle reap →(S3) web 切替（別決定）→(S4) ⑤worker チャット撤去。
+- **実装スライス**：(S1) chat-session.ts に session_id 導出＋resume-or-create＋exit再spawn〔契約=導出関数＋分岐をテスト先行〕→(S2) idle reap →(S3) web 切替（別決定）→(S4) ⑤worker チャット撤去。**S1/S2/S3a/S3b＋⑤=実施済（2026-06-25）**。
+  - **⑤ 実施（2026-06-25）**：worker から agentic consult 機構を撤去＝`handle_consult`/`handle_plan`／`_claude_stream`/`_mcp_args`/`_NETA_READ_TOOLS`／#99 進捗sink(`_progress_sink`/`_consume_stream`/`_stream_label`/`_finalize_stream`)／worker.py の sink・consult履歴注入・plan子ジョブ配線。`claude_prompt` は **plain 専用**（tools 分岐削除）で research/gen_*/brainstorm 用に温存（NetaList の AI生成・scheduled research がまだ使う＝TS 移管は別途）。worker テスト 75→53 緑。会話の脳は api 常駐 claude のみ＝worker は決定的バッチ専任（architecture #1/#100 と一致）。
 
 #### 決定：MCP の道具を「目的」で再設計（#101・2026-06-24・#100 の具体化）
 ユースケースは `docs/usecases-compose.md`（U1-U21・生きた文書）。**白紙サブエージェント（既存39ツールを見ずに導出）＋実在39との突合**で収束。

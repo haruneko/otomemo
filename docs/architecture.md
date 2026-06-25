@@ -34,7 +34,7 @@
 - 非同期ジョブ：SQLite上のジョブ表＋Pythonワーカー＋スケジューラ（Redis等の追加インフラ無し）。
 - 音：**Tone.js**（中核：テンポ/小節/スケジューリング/シンセ）＋ smplr/SoundFont（音色）＋ **@tonejs/midi**（MIDI入出力＝ABILITY書き出しも担う）。
 - 楽譜表示：**VexFlow / OpenSheetMusicDisplay**（"できれば"が現実的。楽譜"入力"は別途重い）。
-- 配置（実態 2026-06-23・アーキ是正S2/S4後）：K8-Plus の **WSL2(mirrored) 上で tsx/uv 起動**（Docker 不使用）。**3プロセス**：api(:8787 単一オリジン＝web も配信／**音楽ドメインTS＝`/music`**／**creative-manager MCP の宿主**／**会話＝`claude -p` セッションを中継する薄いラッパー endpoint→web に SSE**)／worker(ヘッドレス＝**決定的バッチ専任**:MIDI分割(mido)・埋め込み。**AIプロンプト handler は退役**・#100)／cm-search(:8788 意味検索)。**cm-music-mcp(:8790) は廃止**（S2で音楽ドメインをTSへ一本化＝5→4→実質3）。外は Tailscale serve/IP で tailnet 限定。**自動起動＝systemd 化済**（`deploy/systemd/`：cm-api/worker/search＋backup.timer）。
+- 配置（実態 2026-06-23・アーキ是正S2/S4後）：K8-Plus の **WSL2(mirrored) 上で tsx/uv 起動**（Docker 不使用）。**3プロセス**：api(:8787 単一オリジン＝web も配信／**音楽ドメインTS＝`/music`**／**creative-manager MCP の宿主**／**会話＝`claude -p` セッションを中継する薄いラッパー endpoint→web に SSE**)／worker(ヘッドレス＝**決定的バッチ専任**:MIDI分割(mido)・埋め込み。**agentic consult/plan＝撤去済(#100⑤・2026-06-25)**＝会話の脳は api 常駐 claude のみ。残る claude_prompt は research/gen の短い1発専用)／cm-search(:8788 意味検索)。**cm-music-mcp(:8790) は廃止**（S2で音楽ドメインをTSへ一本化＝5→4→実質3）。外は Tailscale serve/IP で tailnet 限定。**自動起動＝systemd 化済**（`deploy/systemd/`：cm-api/worker/search＋backup.timer）。
 
 ## 解決済み（旧「未決・要調査」）
 - **ノート生成エンジン**（#12）→ **決定＋是正済(S2)**：Claude非依存の記号エンジン＝当てはまり保証つきの汎用生成＋判定。**実装は TypeScript `apps/api/src/music/`（生成・理論・analyze_fit・連想・名前付き進行）に一本化**（旧 Python/music21 の `cm-music` は廃止・music21 依存も除去）。**2026-06-24 是正（#100）**：この生成/判定面は **creative-manager MCP のツール**として公開し、**会話する Claude クライアントが直接叩く**（worker の手組みプロンプト＋判別ユニオンルーターは退役）。特定/名前/旋法/様式は Claude 知識へ（routing A は MCP の `gen_named_progression` 等で吸収）。詳細は design.md #12/#86/#100。
