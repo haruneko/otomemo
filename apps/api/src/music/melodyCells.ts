@@ -169,8 +169,8 @@ export function genContour(onsetCount: number, model: MoveModel, seed: number, o
     if (i > 0) {
       let m = sampleMoveR(model, prev, r), tries = 0;
       while (tries < 8 && forbidden(m, prev)) { m = sampleMoveR(model, prev, r); tries++; }
-      if (Math.abs(m) === 6) m = m > 0 ? 5 : -5; // 三全音→完全5度へ寄せる
-      if (Math.abs(cum + m) > range) m = -Math.sign(cum || 1) * Math.abs(m); // range超過は折返し
+      if (Math.abs(m) === 6) m = m > 0 ? 2 : -2; // 三全音→3度内stepへ（旧:5度跳躍は跳躍過剰の一因＝実測leap19%>real14%）
+      if (Math.abs(cum + m) > range) m = -Math.sign(cum || 1) * Math.min(2, Math.abs(m)); // range超過は小さな逆step（旧:同magの逆跳躍＝反転過剰46%>real34%の主因）
       cum += m; prev = m;
       if (revert > 0) cum -= Math.round(cum * revert); // 平均回帰＝構造音へ戻る（dwell）
     }
