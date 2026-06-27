@@ -227,9 +227,10 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   for (let bar = 0; bar < bars; bar++) { const cr = (((chordRootsPerBar[bar]! - tonicPc) % 12) + 12) % 12; for (const q of strongQ) slots.push({ beat: bar * bpb + q, cr }); }
   const spu = strongQ.length * 2;
   // 制約① rangeSteps＝構造線の音域(音階ステップ)。6度差≈5-6。既定12(≒1.7oct)。主音やや下〜上に窓。
-  const span = Math.max(2, opts.rangeSteps ?? 12);
-  const lo = tonicIdx - Math.round(span * 0.3), hi = tonicIdx + Math.round(span * 0.7), cl = (i: number) => Math.max(lo, Math.min(hi, i));
-  const idxOf = (deg: number, pi: number) => { let best = cl(tonicIdx + deg), bdL = Infinity; for (let oc = -2; oc <= 2; oc++) { const i2 = tonicIdx + deg + 7 * oc; if (i2 < lo || i2 > hi) continue; const d = Math.abs(i2 - pi); if (d < bdL) { bdL = d; best = i2; } } return best; };
+  const span = Math.max(2, opts.rangeSteps ?? 10);
+  const lo = tonicIdx - Math.round(span * 0.35), hi = tonicIdx + Math.round(span * 0.5), cl = (i: number) => Math.max(lo, Math.min(hi, i)); // 上方向を抑える（主音の上に5度程度＝climb抑制）
+  // 声部進行：前音に最寄りのオクターブ＋**中心(主音レジスタ)へ寄せる**＝音域端へのドリフト→大跳躍を防ぐ。
+  const idxOf = (deg: number, pi: number) => { let best = cl(tonicIdx + deg), bdL = Infinity; for (let oc = -2; oc <= 2; oc++) { const i2 = tonicIdx + deg + 7 * oc; if (i2 < lo || i2 > hi) continue; const d = Math.abs(i2 - pi) + 0.7 * Math.abs(i2 - tonicIdx); if (d < bdL) { bdL = d; best = i2; } } return best; };
   // 制約② repetition＝反復強度 0=反復なし(隣接31%)〜1=強反復(61%)。既定0.85(≒58%・耳で「弱い」解消・実曲42%超だが裸の骨格は他の同一性手掛りが無い分 強めが要る)。
   const rep = opts.repetition ?? 0.85;
   const useMotif = opts.motif !== false && rep > 0;
