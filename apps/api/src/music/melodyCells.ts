@@ -255,7 +255,7 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
 
 // 統合＝有機メロ生成。コード追従骨格＋2小節motifリズム(語彙sample・反復)＋Markov contour(gap-fill)＋位置段階snap。
 // chordPcsPerBar[bar]＝その小節のコード構成pc。返り＝音符列（durは次onsetまで・末は伸ばし）。
-export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; revert?: number; skelModel?: SkeletonModel; skeletonRest?: boolean; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
+export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; revert?: number; skelModel?: SkeletonModel; skeletonRest?: boolean; appoggiatura?: number; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
   const seed = opts.seed ?? 1;
   const bars = chordPcsPerBar.length;
   // meter：4/4 既定（4四分/小節・8枠/小節・強拍0,2）。6/8＝{3, 6, [0,1.5]}。中景(contour)は流用。
@@ -319,6 +319,19 @@ export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[
     if (strongQ.some((q) => Math.abs(inBar - q) < 0.12)) continue; // 強拍は協和維持で触らない
     notes[j]!.pitch = clampScale(scalePitches, idx(notes[j - 1]!.pitch) - Math.sign(pm)); // 逆向き1step
   }
+  // 倚音(appoggiatura)挿入＝中景の表情：強拍コードトーンの一部を「次の解決音(CT)の1音上」へ上げる＝下行解決する強拍の非和声。
+  // 計測：実曲の強拍は57%CT(=43%が倚音/掛留)だが我々は99%＝綺麗すぎ。contourは強拍に非和声を作らない(骨格=CTに張付く)ので能動挿入。
+  if (opts.appoggiatura) { const ra = makeRng(seed + 41);
+    for (let i = 0; i < notes.length - 1; i++) {
+      const n = notes[i]!, nx = notes[i + 1]!, inBar = ((n.start % bpb) + bpb) % bpb;
+      if (!strongQ.some((q) => Math.abs(inBar - q) < 0.12) || n.dur >= 1.5 || nx.start - n.start > 1.01) continue; // 強拍・非カデンツ・次音が隣接
+      const pcsN = chordPcsPerBar[Math.min(bars - 1, Math.floor(n.start / bpb))] ?? [];
+      const pcsX = chordPcsPerBar[Math.min(bars - 1, Math.floor(nx.start / bpb))] ?? [];
+      if (!pcsN.includes(((n.pitch % 12) + 12) % 12) || !pcsX.includes(((nx.pitch % 12) + 12) % 12) || ra() >= opts.appoggiatura) continue; // 元=強拍CT・次=解決音(CT)
+      const cand = clampScale(scalePitches, idx(nx.pitch) + 1); // 解決音の1音上
+      if (!pcsN.includes(((cand % 12) + 12) % 12) && Math.abs(cand - nx.pitch) <= 2) n.pitch = cand; // 非和声なら倚音化(下行解決)
+    }
+  }
   // 終止 cadence：最後の音を close=調tonic / open=調5度 へ（確率 cadenceForce）。
   // 計測 close=主音73%＝100%強制は硬すぎ→確率化。既定0.73（自前データ準拠。FMDは0が最小だが参照=曲中切片で句末でない交絡ゆえ採らない）。
   if (notes.length && makeRng(seed + 99)() < (opts.cadenceForce ?? 0.73)) { const endPc = (opts.ending ?? "close") === "open" ? (opts.fifthPc ?? 7) : (opts.tonicPc ?? 0); notes[notes.length - 1]!.pitch = nearestPitchWithPc(notes[notes.length - 1]!.pitch, [endPc], scalePitches); }
@@ -347,17 +360,25 @@ export function anticipate(notes: Note[], opts: { beats?: number[]; offset?: num
 // コードトーンへのスナップ＝**位置段階**（計測：強拍90%/弱拍・ウラ55-60%/長音やや高）。
 // 縛る＝強拍(小節内0,2拍・極短は除く) or 長音(dur≥longDur)。弱拍頭/ウラ/短音は**通す**＝passing/滑らかさが生きる。
 // （小節頭は start を4拍周期の倍数と仮定。chordPcsAt(beat)＝その拍のコード構成pc。）
-export function snapToChordTones(notes: Note[], chordPcsAt: (beat: number) => number[], scalePitches: number[], opts: { longDur?: number; shortFree?: number; barQuarters?: number; strongQuarters?: number[] } = {}): void {
+export function snapToChordTones(notes: Note[], chordPcsAt: (beat: number) => number[], scalePitches: number[], opts: { longDur?: number; shortFree?: number; barQuarters?: number; strongQuarters?: number[]; appoggiatura?: number; seed?: number } = {}): void {
   const longDur = opts.longDur ?? 1.5;     // これ以上は位置に関わらず縛る（カデンツ/着地）
   const shortFree = opts.shortFree ?? 0.3; // これ未満は強拍でも通す（解決じみた極短音）
   const barQuarters = opts.barQuarters ?? 4;         // 1小節の四分数（4/4=4, 6/8=3）
   const strongQuarters = opts.strongQuarters ?? [0, 2]; // 小節内の強拍位置（四分）（6/8=[0,1.5]）
-  for (const n of notes) {
+  const appo = opts.appoggiatura ?? 0; // 倚音率：強拍の非和声音が「次音へ順次解決」する時、確率appoで残す＝実曲の強拍CT57%(43%は倚音/掛留)を再現
+  const r = makeRng(opts.seed ?? 7);
+  for (let i = 0; i < notes.length; i++) {
+    const n = notes[i]!;
     const inBar = ((n.start % barQuarters) + barQuarters) % barQuarters;
     const strong = strongQuarters.some((q) => Math.abs(inBar - q) < 0.12);
     if (!((strong && n.dur >= shortFree) || n.dur >= longDur)) continue; // それ以外は自由
     const pcs = chordPcsAt(n.start);
-    if (pcs.length && !pcs.includes(((n.pitch % 12) + 12) % 12)) n.pitch = nearestPitchWithPc(n.pitch, pcs, scalePitches);
+    if (!pcs.length || pcs.includes(((n.pitch % 12) + 12) % 12)) continue; // 既にコードトーン
+    if (appo > 0 && strong && n.dur < longDur) { // 倚音：非和声だが次が順次でコードトーン(=解決)なら確率で残す（カデンツ長音は除く）
+      const nx = notes[i + 1];
+      if (nx && Math.abs(nx.pitch - n.pitch) <= 2 && chordPcsAt(nx.start).includes(((nx.pitch % 12) + 12) % 12) && r() < appo) continue;
+    }
+    n.pitch = nearestPitchWithPc(n.pitch, pcs, scalePitches);
   }
 }
 
