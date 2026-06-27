@@ -1,4 +1,4 @@
-import { SKELETON_MODEL_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
+import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
 // 有機メロの再帰モデル・層2＝joint cell（design #12-M S8 / research findings）。
 // メロの中身を「度数move@slot(8分0/1)」記号で表し、骨格move(次拍への度数差)で条件づけて学習・サンプル。
 // 全部「度数＋相対位置」＝テンポ/調 非依存。手当て(ランダム規則)を全廃し、データの条件付き分布で動かす。
@@ -182,14 +182,16 @@ export function genContour(onsetCount: number, model: MoveModel, seed: number, o
 // 学習骨格＝実曲の「構造音の度数遷移」を P(度数 | コード根(調相対), 直前度数) で学習（手書きUrlinieを置換）。
 // 計測：実曲の骨格は密度低(dwell長)・tonic/3度中心・低い。＝手書きでなくデータで度数分布/密度を合わせる。
 export interface SkeletonModel { trans: Map<string, Map<number, number>> }
-// 同梱済み学習骨格（POP909から学習・FMD検証で骨格レベル≒床）を Map へ復元（初回のみ・以後キャッシュ）。
-let _shippedSkel: SkeletonModel | null = null;
-export function loadSkeletonModel(): SkeletonModel {
-  if (_shippedSkel) return _shippedSkel;
+// 同梱済み学習骨格（POP909から長短別に学習）を Map へ復元（初回のみ・以後キャッシュ）。minor=短調モデル。
+let _shippedSkel: SkeletonModel | null = null, _shippedSkelMin: SkeletonModel | null = null;
+function buildSkel(data: Record<string, Record<string, number>>): SkeletonModel {
   const trans = new Map<string, Map<number, number>>();
-  for (const [k, m] of Object.entries(SKELETON_MODEL_DATA)) { const mm = new Map<number, number>(); for (const [d, c] of Object.entries(m)) mm.set(Number(d), c); trans.set(k, mm); }
-  _shippedSkel = { trans };
-  return _shippedSkel;
+  for (const [k, m] of Object.entries(data)) { const mm = new Map<number, number>(); for (const [d, c] of Object.entries(m)) mm.set(Number(d), c); trans.set(k, mm); }
+  return { trans };
+}
+export function loadSkeletonModel(minor = false): SkeletonModel {
+  if (minor) return (_shippedSkelMin ??= buildSkel(SKELETON_MODEL_MINOR_DATA));
+  return (_shippedSkel ??= buildSkel(SKELETON_MODEL_DATA));
 }
 export function learnSkeleton(units: { chordRel: number; prevDeg: number; deg: number }[]): SkeletonModel {
   const trans = new Map<string, Map<number, number>>();
