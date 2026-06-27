@@ -230,8 +230,8 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   const span = Math.max(2, opts.rangeSteps ?? 12);
   const lo = tonicIdx - Math.round(span * 0.3), hi = tonicIdx + Math.round(span * 0.7), cl = (i: number) => Math.max(lo, Math.min(hi, i));
   const idxOf = (deg: number, pi: number) => { let best = cl(tonicIdx + deg), bdL = Infinity; for (let oc = -2; oc <= 2; oc++) { const i2 = tonicIdx + deg + 7 * oc; if (i2 < lo || i2 > hi) continue; const d = Math.abs(i2 - pi); if (d < bdL) { bdL = d; best = i2; } } return best; };
-  // 制約② repetition＝反復強度 0=反復なし(全fresh)〜1=強反復。既定0.6(実曲の隣接42%付近)。
-  const rep = opts.repetition ?? 0.6;
+  // 制約② repetition＝反復強度 0=反復なし(隣接31%)〜1=強反復(61%)。既定0.85(≒58%・耳で「弱い」解消・実曲42%超だが裸の骨格は他の同一性手掛りが無い分 強めが要る)。
+  const rep = opts.repetition ?? 0.85;
   const useMotif = opts.motif !== false && rep > 0;
   const I: number[] = new Array(slots.length).fill(tonicIdx);
   const smp = (cr: number, pv: number) => ((sampleSkelDeg(model, cr, pv, r) % 7) + 7) % 7;
@@ -243,15 +243,13 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
       const cr = slots[base + s]!.cr;
       let idx: number;
       if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi);
-      else if (s < spu - 1) { // 頭＝音の「動きの向き」だけ反復(ふんわり)、音程は都度sample。repetitionで反復適用率を制御
-        const dir = reuse[s] ?? 0; let cand = idxOf(smp(cr, pv), pi), t2 = 0;
-        if (r() < rep) while (t2 < 6 && dir !== 0 && Math.sign(cand - pi) !== dir) { cand = idxOf(smp(cr, pv), pi); t2++; } // 反復強度で向きbiasを適用
-        idx = cand;
+      else if (s < spu - 1) { // 頭＝動機の反復。repetition＝「頭の正確なステップ移動を反復」する確率。残りはfresh＝varied反復。
+        idx = r() < rep ? cl(pi + (reuse[s] ?? 0)) : idxOf(smp(cr, pv), pi);
       } else idx = phraseEnd ? idxOf(0, pi) : idxOf(smp(cr, pv), pi); // 尾：句末=主音(答え)
       I[base + s] = idx; pi = idx; pv = ((idx - tonicIdx) % 7 + 7) % 7;
     }
-    if (useMotif && u % 4 === 0) { hA = [0]; for (let s = 1; s < spu; s++) hA.push(Math.sign((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx))); }
-    if (useMotif && u % 4 === 2) { hB = [0]; for (let s = 1; s < spu; s++) hB.push(Math.sign((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx))); }
+    if (useMotif && u % 4 === 0) { hA = [0]; for (let s = 1; s < spu; s++) hA.push((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx)); } // 連続ステップ移動(符号付き大きさ)を記録＝正確な輪郭の反復用
+    if (useMotif && u % 4 === 2) { hB = [0]; for (let s = 1; s < spu; s++) hB.push((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx)); }
   }
   const points = slots.map((sl, i) => ({ beat: sl.beat, pitch: scalePitches[Math.max(0, Math.min(scalePitches.length - 1, I[i]!))]! }));
   const out: number[] = [];
