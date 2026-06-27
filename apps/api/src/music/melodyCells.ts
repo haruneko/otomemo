@@ -157,8 +157,9 @@ function sampleMoveR(model: MoveModel, prev: number, r: () => number): number {
   return h && h.size ? weightedPickNum(h, r) : 0;
 }
 // onsetCount 個の累積半音contour（先頭0）。マルコフで歩き、range超過は折返し＝音域内に収める。
-export function genContour(onsetCount: number, model: MoveModel, seed: number, opts: { range?: number } = {}): number[] {
+export function genContour(onsetCount: number, model: MoveModel, seed: number, opts: { range?: number; revert?: number } = {}): number[] {
   const range = opts.range ?? 9;
+  const revert = opts.revert ?? 0; // 0=自由歩行／>0=構造音(0)へ平均回帰＝dwell（漂流せず装飾的に留まる）
   const r = makeRng(seed);
   const out: number[] = []; let cum = 0, prev = 0;
   // 禁則＝三全音(±6)／同方向の跳躍(|≥5|)2連続（Fux）。当たれば再サンプル、ダメなら step へ。
@@ -170,6 +171,7 @@ export function genContour(onsetCount: number, model: MoveModel, seed: number, o
       if (Math.abs(m) === 6) m = m > 0 ? 5 : -5; // 三全音→完全5度へ寄せる
       if (Math.abs(cum + m) > range) m = -Math.sign(cum || 1) * Math.abs(m); // range超過は折返し
       cum += m; prev = m;
+      if (revert > 0) cum -= Math.round(cum * revert); // 平均回帰＝構造音へ戻る（dwell）
     }
     out.push(cum);
   }
@@ -226,7 +228,7 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
 
 // 統合＝有機メロ生成。コード追従骨格＋2小節motifリズム(語彙sample・反復)＋Markov contour(gap-fill)＋位置段階snap。
 // chordPcsPerBar[bar]＝その小節のコード構成pc。返り＝音符列（durは次onsetまで・末は伸ばし）。
-export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; skelModel?: SkeletonModel; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
+export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; revert?: number; skelModel?: SkeletonModel; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
   const seed = opts.seed ?? 1;
   const bars = chordPcsPerBar.length;
   // meter：4/4 既定（4四分/小節・8枠/小節・強拍0,2）。6/8＝{3, 6, [0,1.5]}。中景(contour)は流用。
@@ -240,21 +242,22 @@ export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[
     ? genSkeletonFromModel(chordPcsPerBar.map((pcs) => pcs[0] ?? 0), opts.skelModel, scalePitches, { tonicPc: opts.tonicPc ?? 0, seed, beatsPerBar: bpb, strongQuarters: strongQ, start: opts.start ?? 60 })
     : genSkeleton(chordPcsPerBar, scalePitches, { ending: opts.ending ?? "close", tonicPc: opts.tonicPc ?? 0, fifthPc: opts.fifthPc ?? 7, start: opts.start ?? 67, beatsPerBar: bpb });
   // nM 個の (2小節motif=リズム+contour) を用意。ブロックは循環で割当（変化を与える）。
+  const rev = opts.revert ?? 0; // contour 平均回帰（dwell）。検証：revert>0/拍別アンカーは FMD 退行ゆえ既定off。
   const motifs = Array.from({ length: nM }, (_, k) => {
     const sd = seed + k * 101;
     const pat = [sampleBarRhythm(rhythmModel, sd), sampleBarRhythm(rhythmModel, sd + 37)];
     const ons: number[] = [];
     for (let bar = 0; bar < 2; bar++) for (let s = 0; s < epb; s++) if (pat[bar]![s] === "x") ons.push(bar * epb + s);
-    return { ons, sem: genContour(ons.length, moveModel, sd + 5, { range }) };
+    return { ons, sem: genContour(ons.length, moveModel, sd + 5, { range, revert: rev }) };
   });
   const notes: Note[] = [];
   for (let blk = 0; blk * 2 < bars; blk++) {
     const baseBar = blk * 2;
-    const anchor = skel[baseBar * bpb] ?? 67;
     const { ons, sem } = motifs[blk % nM]!;
     ons.forEach((sl, i) => {
       const t = baseBar * bpb + sl * 0.5; // 8分=0.5四分（複合でも8分は0.5四分）
       if (t >= bars * bpb - 1e-6) return;
+      const anchor = skel[baseBar * bpb] ?? 67; // ブロック先頭の骨格音をアンカー（拍別アンカーは FMD 退行ゆえ戻した）
       notes.push({ pitch: clampScale(scalePitches, idx(anchor + sem[i]!)), start: t, dur: 0.5 });
     });
   }
