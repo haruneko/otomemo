@@ -17,7 +17,7 @@ import {
   BASS_FIGS,
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
-import { genMotifMelody, scalePitchList, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { genMotifMelody, scalePitchList, loadSkeletonModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -375,7 +375,7 @@ export function genMelody(
       chordPcsPerBar.push(ch ? chordPcs(ch.root ?? 0, ch.quality ?? "") : scaleArr.map((d) => ((d % 12) + 12) % 12));
     }
     const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
-    const mNotes = genMotifMelody(chordPcsPerBar, sp, opts.motifModel.rhythm, opts.motifModel.move, { seed: seed ?? 1, tonicPc, fifthPc: (tonicPc + 7) % 12, ending: "close", skelModel: opts.skelModel });
+    const mNotes = genMotifMelody(chordPcsPerBar, sp, opts.motifModel.rhythm, opts.motifModel.move, { seed: seed ?? 1, tonicPc, fifthPc: (tonicPc + 7) % 12, ending: "close", skelModel: opts.skelModel ?? loadSkeletonModel() }); // 既定=同梱学習骨格（FMD検証で全勝・骨格レベル≒床）
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
