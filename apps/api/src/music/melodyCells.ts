@@ -178,28 +178,34 @@ export function genContour(onsetCount: number, model: MoveModel, seed: number, o
 
 // 統合＝有機メロ生成。コード追従骨格＋2小節motifリズム(語彙sample・反復)＋Markov contour(gap-fill)＋位置段階snap。
 // chordPcsPerBar[bar]＝その小節のコード構成pc。返り＝音符列（durは次onsetまで・末は伸ばし）。
-export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
+export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
   const seed = opts.seed ?? 1;
   const bars = chordPcsPerBar.length;
   // meter：4/4 既定（4四分/小節・8枠/小節・強拍0,2）。6/8＝{3, 6, [0,1.5]}。中景(contour)は流用。
   const bpb = opts.meter?.beatsPerBar ?? 4;        // 1小節の四分数
   const epb = opts.meter?.eighthsPerBar ?? 8;      // 1小節の8分枠数（=bpb*2）
   const strongQ = opts.meter?.strongQuarters ?? [0, 2];
+  const range = opts.contourRange ?? 5;            // contour 振れ幅（FMDスイープで5が最も実曲寄り）
+  const nM = Math.max(1, opts.distinctMotifs ?? 2); // 区別する2小節motifの数（FMD: 2=AABB最小・4は実曲から遠い）
   const idx = (p: number) => nearestIdx(scalePitches, p);
   const skel = genSkeleton(chordPcsPerBar, scalePitches, { ending: opts.ending ?? "close", tonicPc: opts.tonicPc ?? 0, fifthPc: opts.fifthPc ?? 7, start: opts.start ?? 67, beatsPerBar: bpb });
-  // 2小節motif（リズム2本）＋その onset 群（8分slot index 0..2*epb-1）
-  const motif = [sampleBarRhythm(rhythmModel, seed), sampleBarRhythm(rhythmModel, seed + 37)];
-  const onsets: number[] = [];
-  for (let bar = 0; bar < 2; bar++) for (let s = 0; s < epb; s++) if (motif[bar]![s] === "x") onsets.push(bar * epb + s);
-  const semis = genContour(onsets.length, moveModel, seed + 5, { range: 9 }); // contour（リズムと一体・各ブロックで反復）＝拍子非依存で流用
+  // nM 個の (2小節motif=リズム+contour) を用意。ブロックは循環で割当（変化を与える）。
+  const motifs = Array.from({ length: nM }, (_, k) => {
+    const sd = seed + k * 101;
+    const pat = [sampleBarRhythm(rhythmModel, sd), sampleBarRhythm(rhythmModel, sd + 37)];
+    const ons: number[] = [];
+    for (let bar = 0; bar < 2; bar++) for (let s = 0; s < epb; s++) if (pat[bar]![s] === "x") ons.push(bar * epb + s);
+    return { ons, sem: genContour(ons.length, moveModel, sd + 5, { range }) };
+  });
   const notes: Note[] = [];
   for (let blk = 0; blk * 2 < bars; blk++) {
     const baseBar = blk * 2;
     const anchor = skel[baseBar * bpb] ?? 67;
-    onsets.forEach((sl, i) => {
+    const { ons, sem } = motifs[blk % nM]!;
+    ons.forEach((sl, i) => {
       const t = baseBar * bpb + sl * 0.5; // 8分=0.5四分（複合でも8分は0.5四分）
       if (t >= bars * bpb - 1e-6) return;
-      notes.push({ pitch: clampScale(scalePitches, idx(anchor + semis[i]!)), start: t, dur: 0.5 });
+      notes.push({ pitch: clampScale(scalePitches, idx(anchor + sem[i]!)), start: t, dur: 0.5 });
     });
   }
   notes.sort((a, b) => a.start - b.start);
@@ -216,8 +222,9 @@ export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[
     if (strongQ.some((q) => Math.abs(inBar - q) < 0.12)) continue; // 強拍は協和維持で触らない
     notes[j]!.pitch = clampScale(scalePitches, idx(notes[j - 1]!.pitch) - Math.sign(pm)); // 逆向き1step
   }
-  // 終止 cadence：最後の音を close=調tonic / open=調5度 へ（骨格の終止を表面に届ける）。
-  if (notes.length) { const endPc = (opts.ending ?? "close") === "open" ? (opts.fifthPc ?? 7) : (opts.tonicPc ?? 0); notes[notes.length - 1]!.pitch = nearestPitchWithPc(notes[notes.length - 1]!.pitch, [endPc], scalePitches); }
+  // 終止 cadence：最後の音を close=調tonic / open=調5度 へ（確率 cadenceForce）。
+  // 計測 close=主音73%＝100%強制は硬すぎ→確率化。既定0.73（自前データ準拠。FMDは0が最小だが参照=曲中切片で句末でない交絡ゆえ採らない）。
+  if (notes.length && makeRng(seed + 99)() < (opts.cadenceForce ?? 0.73)) { const endPc = (opts.ending ?? "close") === "open" ? (opts.fifthPc ?? 7) : (opts.tonicPc ?? 0); notes[notes.length - 1]!.pitch = nearestPitchWithPc(notes[notes.length - 1]!.pitch, [endPc], scalePitches); }
   return notes;
 }
 
