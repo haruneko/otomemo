@@ -21,20 +21,21 @@ import {
   findSimilar,
   genNamedProgression,
 } from "./music";
+import { learnStepWeightsFromLibrary, learnMotifModelFromLibrary } from "./music/corpusBias";
 import { findProgressions } from "./progression-search";
 import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
 
-// コード進行の共通 inputSchema（content.chords 形＝{root:0-11 or 音名, quality, start?, dur?}）。
+// コード進行の共通 inputSchema（content.chords 形）。実音で扱う（脳に度数↔実音の変換をさせない）。
 const chordsSchema = z
   .array(
     z.object({
-      root: z.union([z.number(), z.string()]),
-      quality: z.string().optional(),
-      start: z.number().optional(),
-      dur: z.number().optional(),
+      root: z.union([z.number(), z.string()]).describe("根音＝実音。数値はピッチクラス0-11(0=C,1=C#…)、文字列は音名(\"C\",\"F#\",\"Bb\")"),
+      quality: z.string().optional().describe("コード品質（\"\"=メジャー, \"m\", \"7\", \"dim\" 等）"),
+      start: z.number().optional().describe("開始位置。単位＝拍(beat)。0=曲頭、4/4なら0,4,8…"),
+      dur: z.number().optional().describe("長さ。単位＝拍(beat)。1小節=拍子の拍数"),
     }),
   )
-  .describe("コード進行（C基準・content.chords 形）");
+  .describe("コード進行（content.chords 形・各 root はその曲の実音ピッチクラス）");
 
 const ok = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -49,17 +50,28 @@ const err = (msg: string) => ({
  * HTTP と同じ Core を叩く＝同一操作の別アダプタ。
  */
 // 10 verbs / legacy 両方が使う共有スキーマ（モジュール級＝surface 分岐の外に置く）。
-const oneChord = z.object({ root: z.union([z.number(), z.string()]), quality: z.string().optional() });
+const oneChord = z.object({
+  root: z.union([z.number(), z.string()]).describe("根音＝実音。数値はピッチクラス0-11(0=C…)、文字列は音名"),
+  quality: z.string().optional().describe("コード品質（\"\"=メジャー, \"m\", \"7\" 等）"),
+});
 const frameSchema = z
   .object({
-    key: z.number().int().min(0).max(11).optional(),
-    meter: z.string().optional(),
-    tempo: z.number().optional(),
-    bars: z.number().int().optional(),
-    mood: z.string().optional(),
+    key: z.number().int().min(0).max(11).optional().describe("主音のピッチクラス0-11（0=C,7=G…）。生成はこの調の実音で返る"),
+    meter: z.string().optional().describe("拍子＝\"分子/分母\"文字列（例 \"4/4\",\"3/4\",\"6/8\"）"),
+    tempo: z.number().optional().describe("テンポ＝BPM（密度の判断にも使う）"),
+    bars: z.number().int().optional().describe("小節数（1コール=この小節数の“1つ”の構造。1-16にクランプ）"),
+    mood: z.string().optional().describe("雰囲気＝自由文字列。「切ない/悲し/dark/sad」等は短調・疎、「明るい/速い/ダンス」等は密に効く"),
   })
   .optional();
-const notesSchema = z.array(z.object({ pitch: z.number(), start: z.number().optional(), dur: z.number().optional() }));
+const notesSchema = z
+  .array(
+    z.object({
+      pitch: z.number().describe("MIDIノート番号0-127（60=中央C）。ピッチクラス0-11ではない"),
+      start: z.number().optional().describe("開始位置。単位＝拍(beat)。0=曲頭"),
+      dur: z.number().optional().describe("長さ。単位＝拍(beat)。0.5=八分音符"),
+    }),
+  )
+  .describe("ノート列（pitch=MIDI番号・start/dur=拍）");
 
 // #100/#101: surface="chat" は **10 verbs だけ**公開（旧39を隠す＝モデルが旧ツールを掴まない）。"full"(既定)は49（test/worker 互換）。
 export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } = {}): McpServer {
@@ -213,7 +225,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       inputSchema: {
         melody: z
           .array(z.object({ pitch: z.number(), start: z.number().optional(), dur: z.number().optional() }))
-          .describe("メロディのノート列（C基準MIDI番号）"),
+          .describe("メロディのノート列（pitch=MIDIノート番号0-127, 60=中央C）"),
         key: z.number().int().min(0).max(11),
         mode: z.enum(["major", "minor"]).optional(),
         barBeats: z.number().optional().describe("1小節の拍数（既定4）"),
@@ -471,13 +483,13 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   // 生成（ルールベース・決定的記号エンジン・TS一本化＝cm-music の gen_* を置換）。frame=key/meter/bars/mood。
   server.registerTool(
     "gen_chords",
-    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・C基準）。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
+    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・frame.key の実音で返る）。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
     async ({ frame, seed }) => ok(genChords(frame, seed)),
   );
   server.registerTool(
     "gen_melody",
-    { title: "メロディを生成", description: "コードトーン拘束のメロを生成（拍頭=コードトーン）。chords を渡せば合わせる。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional() } },
-    async ({ frame, chords, seed }) => ok(genMelody(frame, chords, seed)),
+    { title: "メロディを生成", description: "コードトーン拘束のメロを生成（拍頭=コードトーン）。chords を渡せば合わせる。style でコーパス(library)の歩幅統計にバイアス。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), style: z.string().optional().describe("コーパスstyle(irish/game等)。投入済みなら歩幅をその統計へ寄せる") } },
+    async ({ frame, chords, seed, style }) => ok(genMelody(frame, chords, seed, { stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: learnMotifModelFromLibrary(core, style) ?? undefined })),
   );
   server.registerTool(
     "gen_bass",
@@ -486,12 +498,12 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "gen_drums",
-    { title: "ドラムを生成", description: "GMバックビート（16ステップ1小節・seedで小変化）。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
+    { title: "ドラムを生成", description: "GMバックビート（1小節・16分グリッド hits=step index・4/4で16step/6-8で12step・seedで小変化）。content.rhythm.beatsPerStep で拍換算。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
     async ({ frame, seed }) => ok(genDrums(frame, seed)),
   );
   server.registerTool(
     "gen_named_progression",
-    { title: "名前付き進行を生成", description: "丸の内/カノン/小室/王道/ツーファイブ/ブルース等を確定realize（別名・表記揺れ可・C基準）。未知は空。", inputSchema: { name: z.string(), frame: frameSchema } },
+    { title: "名前付き進行を生成", description: "丸の内/カノン/小室/王道/ツーファイブ/ブルース等を確定realize（別名・表記揺れ可・frame.key の実音で返る）。未知は空。", inputSchema: { name: z.string(), frame: frameSchema } },
     async ({ name, frame }) => ok(genNamedProgression(name, frame)),
   );
 
@@ -562,19 +574,28 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "fit",
-    { title: "合わせる（基準に噛ませる・候補）", description: "必ず基準(chords/melody)を入力に取りそれに噛み合うものを作る/直す。コードに合うメロ・既存メロの補正・ハモ付け。保存しない。", inputSchema: { target: z.enum(["melody", "bass", "chords"]), frame: frameSchema, chords: chordsSchema.optional(), melody: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), seed: z.number().int().optional() } },
-    async ({ target, frame, chords, melody, key, mode, seed }) => {
+    { title: "合わせる（基準に噛ませる・候補）", description: "必ず基準(chords/melody)を入力に取りそれに噛み合うものを作る/直す。コードに合うメロ・既存メロの補正・ハモ付け。候補は generate と同じ items 形({items:[{kind,content}]})で返る。保存しない。", inputSchema: { target: z.enum(["melody", "bass", "chords"]), frame: frameSchema, chords: chordsSchema.optional(), melody: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), seed: z.number().int().optional(), style: z.string().optional().describe("コーパスstyle(irish/game等)。melody新規生成時に歩幅をその統計へ寄せる") } },
+    async ({ target, frame, chords, melody, key, mode, seed, style }) => {
       if (target === "melody") {
         if (!chords) return err("fit melody は基準 chords が必須");
-        if (melody) return ok(fitToChords(melody, chords, key)); // 既存メロをコードへ追従(U10)
-        return ok(genMelody(frame, chords, seed)); // コードに合う新規メロ(U3)
+        if (melody) {
+          const r = fitToChords(melody, chords, key); // 既存メロをコードへ追従(U10)
+          // C③ 候補は generate と同じ items 形に統一（web/脳が返り型で分岐せずに済む）。補正スコアは meta へ。
+          return ok({ items: [{ kind: "melody", content: { notes: r.notes }, label: "コードへ補正" }], meta: { before: r.before, after: r.after }, edges: [] });
+        }
+        return ok(genMelody(frame, chords, seed, { stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: learnMotifModelFromLibrary(core, style) ?? undefined })); // コードに合う新規メロ(U3・style でコーパス bias)
       }
       if (target === "bass") {
         if (!chords) return err("fit bass は基準 chords が必須");
         return ok(genBass(frame, chords));
       }
       if (!melody) return err("fit chords(ハモ付け) は基準 melody が必須");
-      return ok(harmonize(melody, key ?? 0, { mode }));
+      // C③ ハモ付けも items 形に統一：各小節の最有力を1進行に、代替候補は meta.bars に残す。
+      const mm = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(frame?.meter ?? "");
+      const bpb = mm ? (Number(mm[1]) * 4) / Number(mm[2]) : 4;
+      const bars = harmonize(melody, key ?? 0, { mode });
+      const chordsOut = bars.map((b) => ({ root: b.candidates[0]?.root ?? 0, quality: b.candidates[0]?.quality ?? "", start: b.start, dur: bpb }));
+      return ok({ items: [{ kind: "chord_progression", content: { chords: chordsOut }, label: "ハモ付け" }], meta: { bars }, edges: [] });
     },
   );
   server.registerTool(
@@ -600,7 +621,10 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     { title: "続ける（継続・候補）", description: "既存進行の次のコード候補。複数小節/役割への継続は未対応(③-6)。保存しない。", inputSchema: { chords: chordsSchema, key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), top: z.number().int().optional(), bars: z.number().int().optional() } },
     async ({ chords, key, mode, top, bars }) => {
       if (bars) return err("複数小節/役割への継続は未対応（③-6）。単一の次コード候補のみ。");
-      return ok(nextChordCandidates(toDegrees(chords, key ?? 0), { mode, top }));
+      const k = key ?? 0;
+      const cands = nextChordCandidates(toDegrees(chords, k), { mode, top });
+      // 実音で返す（degree↔実音の変換は脳にさせない）：next_chord と対称に root を添える。
+      return ok(cands.map((c) => ({ ...c, root: (c.degree + k) % 12 })));
     },
   );
   server.registerTool(

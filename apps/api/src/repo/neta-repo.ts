@@ -5,6 +5,21 @@ import type { Neta, NetaInput, NetaPatch, ListQuery, Facets } from "../types";
 import { findSimilar } from "../music/similarity";
 import { type Db, now, parseJsonColumn } from "./util";
 
+// param揺れ対策（#86）：常駐LLMが content を「JSON文字列」で渡す事故の根治。
+// オブジェクト/配列にparseできる文字列だけ実体化（生テキスト＝歌詞等は壊さない）。
+// これが無いと JSON.stringify(文字列) で二重エンコードされ、読み戻しが文字列のまま＝web が content.notes 等を読めず「保存できない」。
+export function coerceContent(c: unknown): unknown {
+  if (typeof c !== "string") return c;
+  const s = c.trim();
+  if (!(s.startsWith("{") || s.startsWith("["))) return c; // 明らかなJSONオブジェクト/配列のみ対象
+  try {
+    const v = JSON.parse(s);
+    return v !== null && typeof v === "object" ? v : c;
+  } catch {
+    return c;
+  }
+}
+
 // 複数プロジェクト（design「prj: 名前空間タグ」）：プロジェクト所属は `prj:<名前>` タグで表す。
 export const PROJECT_TAG_PREFIX = "prj:";
 export const isProjectTag = (name: string): boolean => name.startsWith(PROJECT_TAG_PREFIX);
@@ -23,7 +38,7 @@ export class NetaRepo {
         id,
         kind: input.kind,
         title: input.title ?? null,
-        content: input.content == null ? null : JSON.stringify(input.content),
+        content: input.content == null ? null : JSON.stringify(coerceContent(input.content)),
         text: input.text ?? null,
         key: input.key ?? null,
         mode: input.mode ?? null,
@@ -58,7 +73,7 @@ export class NetaRepo {
     };
     if (patch.kind !== undefined) set("kind", patch.kind);
     if (patch.title !== undefined) set("title", patch.title);
-    if (patch.content !== undefined) set("content", patch.content == null ? null : JSON.stringify(patch.content));
+    if (patch.content !== undefined) set("content", patch.content == null ? null : JSON.stringify(coerceContent(patch.content)));
     if (patch.text !== undefined) set("text", patch.text);
     if (patch.key !== undefined) set(`"key"`, patch.key);
     if (patch.mode !== undefined) set("mode", patch.mode);

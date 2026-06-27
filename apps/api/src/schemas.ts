@@ -13,7 +13,7 @@ export const netaInputShape = {
     .min(1)
     .describe("melody/chord/chord_progression/bass/rhythm/lyric/theme/section/song/knowledge/other"),
   title: z.string().nullish(),
-  content: z.unknown().optional().describe("音楽的中身(JSON, Cキー基準)"),
+  content: z.unknown().optional().describe("音楽的中身＝JSONオブジェクトをそのまま渡す（例 {chords:[...]} / {notes:[...]}）。文字列化したJSONは渡さない。pitch/rootは実音。"),
   text: z.string().nullish().describe("歌詞・自由文"),
   key: z.number().int().min(0).max(11).nullish(),
   mode: z.string().nullish(),

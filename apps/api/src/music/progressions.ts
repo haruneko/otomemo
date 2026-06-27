@@ -85,17 +85,18 @@ function bpbOf(meter?: string): number {
   return n > 0 && d > 0 ? n * (4 / d) : 4;
 }
 
-/** 名前付き進行を C基準で確定 realize（1コード=1小節）。返り #85 items 形。未知は items:[]。 */
+/** 名前付き進行を realize（1コード=1小節）＝度数表は C基準、key で実音へ移調。未知は items:[]。 */
 export function genNamedProgression(
   name: string,
-  frame?: { meter?: string } | null,
+  frame?: { meter?: string; key?: number } | null,
 ): { items: { kind: string; content: unknown; label: string }[]; edges: never[] } {
   const entry = findNamedProgression(name);
   if (!entry) return { items: [], edges: [] };
   const bpb = bpbOf(frame?.meter);
+  const key = ((Math.trunc(frame?.key ?? 0) % 12) + 12) % 12;
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
   const chords = entry.degrees.map((d, i) => ({
-    root: d.degree,
+    root: (d.degree + key) % 12,
     quality: d.quality,
     start: r3(i * bpb),
     dur: r3(bpb),
