@@ -297,16 +297,27 @@ export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[
       }
     }
   }
+  // 八分の核＝**骨格点＋決定的diminution**：onsetが強拍上なら骨格音そのもの、拍間なら隣り合う骨格点A→Bを
+  // 音程に応じて埋める（3度+=経過音／2度・同=刺繍）。**決定的**ゆえ骨格が反復(AA'BB')する所で八分も同じ図形が戻る＝反復が伝播。
+  const total1 = bars * bpb;
+  const dimin = (t: number): number => {
+    const seg = Math.floor(t / 2) * 2; // 直前の強拍(2拍grid)
+    const A = skel[Math.min(total1 - 1, seg)] ?? 67, B = skel[Math.min(total1 - 1, seg + 2)] ?? A;
+    if (t - seg < 0.25) return A; // 強拍上＝骨格点を置く
+    const ai = idx(A), bi = idx(B), steps = bi - ai, frac = (t - seg) / 2; // 2拍区間内の進捗 0..0.75
+    if (Math.abs(steps) >= 2) return clampScale(scalePitches, ai + Math.round(steps * frac)); // 経過音(A→Bを順次に)
+    const nb = steps !== 0 ? Math.sign(steps) : (Math.round(t * 2) % 2 === 0 ? 1 : -1); // 刺繍(隣)／同方向
+    return frac >= 0.6 ? clampScale(scalePitches, ai + steps) : clampScale(scalePitches, ai + nb);
+  };
   const notes: Note[] = [];
   for (let blk = 0; blk * 2 < bars; blk++) {
     const baseBar = blk * 2;
-    const { ons, sem } = motifs[blk % nM]!;
-    ons.forEach((sl, i) => {
-      const t = baseBar * bpb + sl * 0.5; // 8分=0.5四分（複合でも8分は0.5四分）
+    const { ons } = motifs[Math.floor(blk / 2) % nM]!; // リズムmotifを骨格反復(AA'BB')に揃える＝A,A'に同じリズム＝八分の反復が伝播([0,0,1,1])
+    ons.forEach((sl) => {
+      const t = baseBar * bpb + sl * 0.5; // 8分=0.5四分
       if (t >= bars * bpb - 1e-6) return;
-      if (restMask[Math.floor(t + 1e-6)]) return; // 骨格休符域＝surface onset を抑制＝無音(遅延入場)
-      const anchor = skel[baseBar * bpb] ?? 67; // ブロック先頭の骨格音をアンカー（拍別アンカーは FMD 退行ゆえ戻した）
-      notes.push({ pitch: clampScale(scalePitches, idx(anchor + sem[i]!)), start: t, dur: 0.5 });
+      if (restMask[Math.floor(t + 1e-6)]) return; // 骨格休符域＝無音(遅延入場)
+      notes.push({ pitch: dimin(t), start: t, dur: 0.5 });
     });
   }
   notes.sort((a, b) => a.start - b.start);
