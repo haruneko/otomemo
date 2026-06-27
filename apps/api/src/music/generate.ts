@@ -345,7 +345,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路＝degrade gracefully）
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -375,7 +375,7 @@ export function genMelody(
       chordPcsPerBar.push(ch ? chordPcs(ch.root ?? 0, ch.quality ?? "") : scaleArr.map((d) => ((d % 12) + 12) % 12));
     }
     const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
-    const mNotes = genMotifMelody(chordPcsPerBar, sp, opts.motifModel.rhythm, opts.motifModel.move, { seed: seed ?? 1, tonicPc, fifthPc: (tonicPc + 7) % 12, ending: "close", skelModel: opts.skelModel ?? loadSkeletonModel(minor), appoggiatura: opts.appoggiatura ?? 0.5 }); // 既定=同梱学習骨格(長短別)＋倚音0.5（中景の表情・強拍CT99→81%・実曲57%へ向け耳で微調整）
+    const mNotes = genMotifMelody(chordPcsPerBar, sp, opts.motifModel.rhythm, opts.motifModel.move, { seed: seed ?? 1, tonicPc, fifthPc: (tonicPc + 7) % 12, ending: "close", skelModel: opts.skelModel ?? loadSkeletonModel(minor), appoggiatura: opts.appoggiatura ?? 0.5, repetition: opts.repetition, rangeSteps: opts.rangeSteps }); // 既定=同梱学習骨格(長短別)＋倚音0.5。repetition/rangeSteps=利用時制約
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);

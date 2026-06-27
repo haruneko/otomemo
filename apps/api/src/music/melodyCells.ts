@@ -211,7 +211,7 @@ function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, 
   return h && h.size ? weightedPickNum(h, r) : 0;
 }
 // コード根(調相対pc)列＋学習モデル → 骨格ピッチ列(bars*beatsPerBar)。各強拍で度数をサンプルし声部進行で配置、次強拍まで保持。
-export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean } = {}): number[] {
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number } = {}): number[] {
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
   const bpb = opts.beatsPerBar ?? 4;
   const strongQ = opts.strongQuarters ?? [0, 2];
@@ -226,9 +226,13 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   const slots: { beat: number; cr: number }[] = [];
   for (let bar = 0; bar < bars; bar++) { const cr = (((chordRootsPerBar[bar]! - tonicPc) % 12) + 12) % 12; for (const q of strongQ) slots.push({ beat: bar * bpb + q, cr }); }
   const spu = strongQ.length * 2;
-  const lo = tonicIdx - 3, hi = tonicIdx + 9, cl = (i: number) => Math.max(lo, Math.min(hi, i));
+  // 制約① rangeSteps＝構造線の音域(音階ステップ)。6度差≈5-6。既定12(≒1.7oct)。主音やや下〜上に窓。
+  const span = Math.max(2, opts.rangeSteps ?? 12);
+  const lo = tonicIdx - Math.round(span * 0.3), hi = tonicIdx + Math.round(span * 0.7), cl = (i: number) => Math.max(lo, Math.min(hi, i));
   const idxOf = (deg: number, pi: number) => { let best = cl(tonicIdx + deg), bdL = Infinity; for (let oc = -2; oc <= 2; oc++) { const i2 = tonicIdx + deg + 7 * oc; if (i2 < lo || i2 > hi) continue; const d = Math.abs(i2 - pi); if (d < bdL) { bdL = d; best = i2; } } return best; };
-  const useMotif = opts.motif !== false;
+  // 制約② repetition＝反復強度 0=反復なし(全fresh)〜1=強反復。既定0.6(実曲の隣接42%付近)。
+  const rep = opts.repetition ?? 0.6;
+  const useMotif = opts.motif !== false && rep > 0;
   const I: number[] = new Array(slots.length).fill(tonicIdx);
   const smp = (cr: number, pv: number) => ((sampleSkelDeg(model, cr, pv, r) % 7) + 7) % 7;
   let pv = -1, pi = tonicIdx, hA: number[] | null = null, hB: number[] | null = null;
@@ -239,9 +243,9 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
       const cr = slots[base + s]!.cr;
       let idx: number;
       if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi);
-      else if (s < spu - 1) { // 頭＝音の「動きの向き」だけ反復(ふんわり)、音程は都度sample＝厳密コピーを避け実曲の varied反復へ
+      else if (s < spu - 1) { // 頭＝音の「動きの向き」だけ反復(ふんわり)、音程は都度sample。repetitionで反復適用率を制御
         const dir = reuse[s] ?? 0; let cand = idxOf(smp(cr, pv), pi), t2 = 0;
-        while (t2 < 6 && dir !== 0 && Math.sign(cand - pi) !== dir) { cand = idxOf(smp(cr, pv), pi); t2++; }
+        if (r() < rep) while (t2 < 6 && dir !== 0 && Math.sign(cand - pi) !== dir) { cand = idxOf(smp(cr, pv), pi); t2++; } // 反復強度で向きbiasを適用
         idx = cand;
       } else idx = phraseEnd ? idxOf(0, pi) : idxOf(smp(cr, pv), pi); // 尾：句末=主音(答え)
       I[base + s] = idx; pi = idx; pv = ((idx - tonicIdx) % 7 + 7) % 7;
@@ -257,7 +261,7 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
 
 // 統合＝有機メロ生成。コード追従骨格＋2小節motifリズム(語彙sample・反復)＋Markov contour(gap-fill)＋位置段階snap。
 // chordPcsPerBar[bar]＝その小節のコード構成pc。返り＝音符列（durは次onsetまで・末は伸ばし）。
-export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; revert?: number; skelModel?: SkeletonModel; skeletonRest?: boolean; appoggiatura?: number; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
+export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; revert?: number; skelModel?: SkeletonModel; skeletonRest?: boolean; appoggiatura?: number; repetition?: number; rangeSteps?: number; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
   const seed = opts.seed ?? 1;
   const bars = chordPcsPerBar.length;
   // meter：4/4 既定（4四分/小節・8枠/小節・強拍0,2）。6/8＝{3, 6, [0,1.5]}。中景(contour)は流用。
@@ -268,7 +272,7 @@ export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[
   const nM = Math.max(1, opts.distinctMotifs ?? 2); // 区別する2小節motifの数（FMD: 2=AABB最小・4は実曲から遠い）
   const idx = (p: number) => nearestIdx(scalePitches, p);
   const skel = opts.skelModel
-    ? genSkeletonFromModel(chordPcsPerBar.map((pcs) => pcs[0] ?? 0), opts.skelModel, scalePitches, { tonicPc: opts.tonicPc ?? 0, seed, beatsPerBar: bpb, strongQuarters: strongQ, start: opts.start ?? 60 })
+    ? genSkeletonFromModel(chordPcsPerBar.map((pcs) => pcs[0] ?? 0), opts.skelModel, scalePitches, { tonicPc: opts.tonicPc ?? 0, seed, beatsPerBar: bpb, strongQuarters: strongQ, start: opts.start ?? 60, repetition: opts.repetition, rangeSteps: opts.rangeSteps })
     : genSkeleton(chordPcsPerBar, scalePitches, { ending: opts.ending ?? "close", tonicPc: opts.tonicPc ?? 0, fifthPc: opts.fifthPc ?? 7, start: opts.start ?? 67, beatsPerBar: bpb });
   // 骨格を**半音クラッシュの時だけ**コードトーンへ寄せる（avoid-note解消＋短調Vの導音）。全音離れた経過音は残す＝実曲の「良い雑さ」。
   if (opts.skelModel) for (let b = 0; b < skel.length; b++) { const pcs = chordPcsPerBar[Math.min(bars - 1, Math.floor(b / bpb))]; if (pcs && pcs.length) { const pc = ((skel[b]! % 12) + 12) % 12; if (!pcs.includes(pc)) { if (pcs.includes((pc + 11) % 12)) skel[b]! -= 1; else if (pcs.includes((pc + 1) % 12)) skel[b]! += 1; } } }
