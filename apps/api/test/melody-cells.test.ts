@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cellToNotes, learnMelodyCells, sampleCell, scalePitchList, realizeMelody, snapToChordTones, genSkeleton, genCells, anticipate, learnBarRhythms, sampleBarRhythm, learnMoveTransitions, genContour, genMotifMelody } from "../src/music/melodyCells";
+import { cellToNotes, learnMelodyCells, sampleCell, scalePitchList, realizeMelody, snapToChordTones, genSkeleton, genCells, anticipate, learnBarRhythms, sampleBarRhythm, learnMoveTransitions, genContour, genMotifMelody, learnSkeleton, genSkeletonFromModel } from "../src/music/melodyCells";
 import { scalePcs } from "../src/music/theory";
 
 const cMaj = scalePitchList(scalePcs(0, "major"), 48, 84); // C major の音階ピッチ列
@@ -191,6 +191,19 @@ describe("learnMoveTransitions / genContour（Markov contour＝gap-fill：跳ん
     const m = learnMoveTransitions([[60, 66, 60, 66, 67, 61, 67, 61]]); // ±6(三全音)だらけのモデル
     const c = genContour(8, m, 3, { range: 12 });
     for (let i = 1; i < c.length; i++) expect(Math.abs(c[i]! - c[i - 1]!)).not.toBe(6);
+  });
+});
+
+describe("learnSkeleton / genSkeletonFromModel（骨格をデータ駆動で学習）", () => {
+  it("学習した度数遷移で骨格・各拍スケール音・先頭はtonic", () => {
+    const m = learnSkeleton([
+      { chordRel: 0, prevDeg: -1, deg: 0 }, { chordRel: 0, prevDeg: 0, deg: 2 }, { chordRel: 0, prevDeg: 2, deg: 0 },
+      { chordRel: 0, prevDeg: -1, deg: 0 }, { chordRel: 0, prevDeg: 0, deg: 2 },
+    ]); // I で start→tonic→3度→tonic を学習
+    const sk = genSkeletonFromModel([0, 0], m, cMaj, { tonicPc: 0, seed: 1, beatsPerBar: 4, strongQuarters: [0, 2], start: 60 });
+    expect(sk.length).toBe(8); // 2小節×4拍
+    for (const p of sk) expect(cMaj.includes(p)).toBe(true); // 各拍スケール音
+    expect(((sk[0]! % 12) + 12) % 12).toBe(0); // 先頭強拍=tonic(C)
   });
 });
 

@@ -176,9 +176,57 @@ export function genContour(onsetCount: number, model: MoveModel, seed: number, o
   return out;
 }
 
+// 学習骨格＝実曲の「構造音の度数遷移」を P(度数 | コード根(調相対), 直前度数) で学習（手書きUrlinieを置換）。
+// 計測：実曲の骨格は密度低(dwell長)・tonic/3度中心・低い。＝手書きでなくデータで度数分布/密度を合わせる。
+export interface SkeletonModel { trans: Map<string, Map<number, number>> }
+export function learnSkeleton(units: { chordRel: number; prevDeg: number; deg: number }[]): SkeletonModel {
+  const trans = new Map<string, Map<number, number>>();
+  for (const u of units) {
+    const k = `${((u.chordRel % 12) + 12) % 12}|${u.prevDeg}`;
+    const m = trans.get(k) ?? trans.set(k, new Map()).get(k)!;
+    m.set(u.deg, (m.get(u.deg) ?? 0) + 1);
+  }
+  return { trans };
+}
+function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, r: () => number): number {
+  const cr = ((chordRel % 12) + 12) % 12;
+  let h = model.trans.get(`${cr}|${prevDeg}`);
+  if (!h || !h.size) h = model.trans.get(`${cr}|-1`);                                   // 直前無視
+  if (!h || !h.size) for (const [k, m] of model.trans) { if (k.startsWith(`${cr}|`) && m.size) { h = m; break; } } // 任意prev・同コード
+  if (!h || !h.size) for (const [, m] of model.trans) { if (m.size) { h = m; break; } } // 何でも
+  return h && h.size ? weightedPickNum(h, r) : 0;
+}
+// コード根(調相対pc)列＋学習モデル → 骨格ピッチ列(bars*beatsPerBar)。各強拍で度数をサンプルし声部進行で配置、次強拍まで保持。
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number } = {}): number[] {
+  const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
+  const bpb = opts.beatsPerBar ?? 4;
+  const strongQ = opts.strongQuarters ?? [0, 2];
+  const r = makeRng(opts.seed ?? 1);
+  const near = nearestIdx(scalePitches, opts.start ?? 60);
+  let tonicIdx = 0, bd = Infinity;
+  for (let i = 0; i < scalePitches.length; i++) if (((scalePitches[i]! % 12) + 12) % 12 === tonicPc) { const d = Math.abs(i - near); if (d < bd) { bd = d; tonicIdx = i; } }
+  const bars = chordRootsPerBar.length;
+  const total = bars * bpb;
+  const points: { beat: number; pitch: number }[] = [];
+  let prevDeg = -1, prevPitch = scalePitches[tonicIdx]!;
+  for (let bar = 0; bar < bars; bar++) {
+    const chordRel = (((chordRootsPerBar[bar]! - tonicPc) % 12) + 12) % 12;
+    for (const q of strongQ) {
+      const deg = ((sampleSkelDeg(model, chordRel, prevDeg, r) % 7) + 7) % 7; // 0-6 度数
+      let best = scalePitches[Math.max(0, Math.min(scalePitches.length - 1, tonicIdx + deg))]!, bestD = Infinity;
+      for (let oct = -1; oct <= 1; oct++) { const i2 = tonicIdx + deg + 7 * oct; if (i2 < 0 || i2 >= scalePitches.length) continue; const p = scalePitches[i2]!; const d = Math.abs(p - prevPitch); if (d < bestD) { bestD = d; best = p; } }
+      points.push({ beat: bar * bpb + q, pitch: best });
+      prevDeg = deg; prevPitch = best;
+    }
+  }
+  const out: number[] = [];
+  for (let b = 0; b < total; b++) { let p = points[0]?.pitch ?? scalePitches[tonicIdx]!; for (const pt of points) { if (pt.beat <= b + 1e-6) p = pt.pitch; else break; } out.push(p); }
+  return out;
+}
+
 // 統合＝有機メロ生成。コード追従骨格＋2小節motifリズム(語彙sample・反復)＋Markov contour(gap-fill)＋位置段階snap。
 // chordPcsPerBar[bar]＝その小節のコード構成pc。返り＝音符列（durは次onsetまで・末は伸ばし）。
-export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
+export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; skelModel?: SkeletonModel; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
   const seed = opts.seed ?? 1;
   const bars = chordPcsPerBar.length;
   // meter：4/4 既定（4四分/小節・8枠/小節・強拍0,2）。6/8＝{3, 6, [0,1.5]}。中景(contour)は流用。
@@ -188,7 +236,9 @@ export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[
   const range = opts.contourRange ?? 5;            // contour 振れ幅（FMDスイープで5が最も実曲寄り）
   const nM = Math.max(1, opts.distinctMotifs ?? 2); // 区別する2小節motifの数（FMD: 2=AABB最小・4は実曲から遠い）
   const idx = (p: number) => nearestIdx(scalePitches, p);
-  const skel = genSkeleton(chordPcsPerBar, scalePitches, { ending: opts.ending ?? "close", tonicPc: opts.tonicPc ?? 0, fifthPc: opts.fifthPc ?? 7, start: opts.start ?? 67, beatsPerBar: bpb });
+  const skel = opts.skelModel
+    ? genSkeletonFromModel(chordPcsPerBar.map((pcs) => pcs[0] ?? 0), opts.skelModel, scalePitches, { tonicPc: opts.tonicPc ?? 0, seed, beatsPerBar: bpb, strongQuarters: strongQ, start: opts.start ?? 60 })
+    : genSkeleton(chordPcsPerBar, scalePitches, { ending: opts.ending ?? "close", tonicPc: opts.tonicPc ?? 0, fifthPc: opts.fifthPc ?? 7, start: opts.start ?? 67, beatsPerBar: bpb });
   // nM 個の (2小節motif=リズム+contour) を用意。ブロックは循環で割当（変化を与える）。
   const motifs = Array.from({ length: nM }, (_, k) => {
     const sd = seed + k * 101;

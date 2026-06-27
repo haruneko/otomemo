@@ -17,7 +17,7 @@ import {
   BASS_FIGS,
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
-import { genMotifMelody, scalePitchList, type BarRhythmModel, type MoveModel } from "./melodyCells";
+import { genMotifMelody, scalePitchList, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -345,7 +345,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel } }, // stepWeights/motifModel=コーパス学習（無指定＝旧経路＝degrade gracefully）
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路＝degrade gracefully）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -375,7 +375,7 @@ export function genMelody(
       chordPcsPerBar.push(ch ? chordPcs(ch.root ?? 0, ch.quality ?? "") : scaleArr.map((d) => ((d % 12) + 12) % 12));
     }
     const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
-    const mNotes = genMotifMelody(chordPcsPerBar, sp, opts.motifModel.rhythm, opts.motifModel.move, { seed: seed ?? 1, tonicPc, fifthPc: (tonicPc + 7) % 12, ending: "close" });
+    const mNotes = genMotifMelody(chordPcsPerBar, sp, opts.motifModel.rhythm, opts.motifModel.move, { seed: seed ?? 1, tonicPc, fifthPc: (tonicPc + 7) % 12, ending: "close", skelModel: opts.skelModel });
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
