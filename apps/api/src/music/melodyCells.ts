@@ -1,4 +1,4 @@
-import { SKELETON_MODEL_DATA } from "./skeletonModelData";
+import { SKELETON_MODEL_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
 // 有機メロの再帰モデル・層2＝joint cell（design #12-M S8 / research findings）。
 // メロの中身を「度数move@slot(8分0/1)」記号で表し、骨格move(次拍への度数差)で条件づけて学習・サンプル。
 // 全部「度数＋相対位置」＝テンポ/調 非依存。手当て(ランダム規則)を全廃し、データの条件付き分布で動かす。
@@ -238,7 +238,7 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
 
 // 統合＝有機メロ生成。コード追従骨格＋2小節motifリズム(語彙sample・反復)＋Markov contour(gap-fill)＋位置段階snap。
 // chordPcsPerBar[bar]＝その小節のコード構成pc。返り＝音符列（durは次onsetまで・末は伸ばし）。
-export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; revert?: number; skelModel?: SkeletonModel; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
+export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[], rhythmModel: BarRhythmModel, moveModel: MoveModel, opts: { seed?: number; tonicPc?: number; fifthPc?: number; ending?: "open" | "close"; start?: number; contourRange?: number; distinctMotifs?: number; cadenceForce?: number; revert?: number; skelModel?: SkeletonModel; skeletonRest?: boolean; meter?: { beatsPerBar?: number; eighthsPerBar?: number; strongQuarters?: number[] } } = {}): Note[] {
   const seed = opts.seed ?? 1;
   const bars = chordPcsPerBar.length;
   // meter：4/4 既定（4四分/小節・8枠/小節・強拍0,2）。6/8＝{3, 6, [0,1.5]}。中景(contour)は流用。
@@ -260,6 +260,19 @@ export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[
     for (let bar = 0; bar < 2; bar++) for (let s = 0; s < epb; s++) if (pat[bar]![s] === "x") ons.push(bar * epb + s);
     return { ons, sem: genContour(ons.length, moveModel, sd + 5, { range, revert: rev }) };
   });
+  // 骨格休符マスク：強拍スロット(2拍粒)別の rest率(同梱・実曲)で、その2拍を無音化＝**句頭の遅延入場**。
+  // 実曲は曲頭強拍を86%休む（入りが遅れる）。骨格=構造の単位に休符を置く＝表面の2小節規則休符(筋悪)でなく句頭へ正しく配置。
+  const restMask = new Array<boolean>(bars * bpb).fill(false);
+  if (opts.skelModel && opts.skeletonRest !== false) {
+    const rr = makeRng(seed + 777);
+    for (let bar = 0; bar < bars; bar++) for (let qi = 0; qi < strongQ.length; qi++) {
+      const slot = bar * strongQ.length + qi; // 強拍スロット通し番号
+      if (rr() < (SKELETON_REST_BY_POS[slot % SKELETON_REST_BY_POS.length] ?? 0)) {
+        const t0 = bar * bpb + strongQ[qi]!;
+        for (let b = Math.floor(t0); b < t0 + 2 && b < bars * bpb; b++) restMask[b] = true; // 2拍(骨格保持長)を無音化
+      }
+    }
+  }
   const notes: Note[] = [];
   for (let blk = 0; blk * 2 < bars; blk++) {
     const baseBar = blk * 2;
@@ -267,12 +280,14 @@ export function genMotifMelody(chordPcsPerBar: number[][], scalePitches: number[
     ons.forEach((sl, i) => {
       const t = baseBar * bpb + sl * 0.5; // 8分=0.5四分（複合でも8分は0.5四分）
       if (t >= bars * bpb - 1e-6) return;
+      if (restMask[Math.floor(t + 1e-6)]) return; // 骨格休符域＝surface onset を抑制＝無音(遅延入場)
       const anchor = skel[baseBar * bpb] ?? 67; // ブロック先頭の骨格音をアンカー（拍別アンカーは FMD 退行ゆえ戻した）
       notes.push({ pitch: clampScale(scalePitches, idx(anchor + sem[i]!)), start: t, dur: 0.5 });
     });
   }
   notes.sort((a, b) => a.start - b.start);
   for (let i = 0; i < notes.length; i++) notes[i]!.dur = (notes[i + 1]?.start ?? notes[i]!.start + 0.5) - notes[i]!.start;
+  for (const n of notes) for (let b = Math.ceil(n.start + 1e-6); b < n.start + n.dur - 1e-6; b++) if (restMask[b]) { n.dur = b - n.start; break; } // 直前音は休符域の手前で切る＝息継ぎ
   snapToChordTones(notes, (beat) => chordPcsPerBar[Math.min(bars - 1, Math.floor(beat / bpb))] ?? [], scalePitches, { barQuarters: bpb, strongQuarters: strongQ });
   // 表面の gap-fill：跳躍(|≥5|)の直後が逆向きstepでなければ、弱位置の次音を逆向き1stepへ（強拍=協和は触らない）。
   // ＝ブロック境界の跳躍が解決しない問題（E-rule の gapFill=0）を表面で回収。
