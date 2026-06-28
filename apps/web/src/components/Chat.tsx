@@ -412,6 +412,10 @@ export function Chat({
   function pushMsg(m: Msg) {
     setMsgs((prev) => [...prev, m]);
     persistMsg(m);
+    // 器（プロジェクト）への束ねは「ユーザーが実際に発言した時」だけ＝空会話がゴミ化しない（upsert冪等）。
+    if (m.role === "user" && !target && activeProject) {
+      void api.setChatThread(thread, { project: activeProject }).catch(() => {});
+    }
   }
 
   // サーバのスレッド履歴から再描画（生成結果は reaper がサーバ側で記録済＝クライアント非依存・fb-3）。
@@ -771,8 +775,7 @@ export function Chat({
   }
   function newSession() {
     const id = "chat:" + (crypto.randomUUID?.() ?? Date.now().toString(36));
-    // 器（プロジェクト）が選ばれていれば、新規セッションをその器に束ねる（作成直後から一覧に出る）。
-    if (activeProject) void api.setChatThread(id, { project: activeProject }).catch(() => {});
+    // 器への束ねは最初の発言時に遅延（pushMsg）＝発言ゼロの空会話を作らない。
     pickSession(id);
   }
 

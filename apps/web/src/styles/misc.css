@@ -417,7 +417,10 @@ details.theme summary {
 .ps-list .muted {
   font-size: 0.7rem;
 }
-/* 狭い画面：知識を下に回す */
+/* 狭い画面：知識(ファイル)を下に回す。
+   注: 最下段カードに 💬チャットバブルが被るのは、モバイルのワークスペース・スクロール構造
+   （mainpane 全画面＋レールはドロワー、が未実装）に由来＝project-screen 単体のpaddingでは解けない。
+   モバイル整備の backlog で一緒に直す。 */
 @media (max-width: 720px) {
   .ps-grid {
     grid-template-columns: 1fr;

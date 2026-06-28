@@ -43,6 +43,7 @@ export function App() {
   const [chatTarget, setChatTarget] = useState<Neta | undefined>(undefined);
   const [trayOpen, setTrayOpen] = useState(false);
   const [projectView, setProjectView] = useState(false); // メインペーンにプロジェクト画面を出す
+  const [fromProject, setFromProject] = useState(false); // プロジェクト画面からネタを開いた＝閉じたら画面へ戻す
   const [chatSeed, setChatSeed] = useState(""); // Chatを開くときの最初の一言（プロジェクト画面の起点入力から）
   const [doneCount, setDoneCount] = useState(0);
   const [active, setActive] = useState<Neta | null>(null);
@@ -170,11 +171,11 @@ export function App() {
     setChatOpen(true);
   };
 
-  // プロジェクト画面の「新しい会話を始める」：器に属す新規セッションを作り、最初の一言を載せてChatを開く。
+  // プロジェクト画面の「新しい会話を始める」：器に属す新規セッションを開く。器への束ねは
+  // 最初の発言時に遅延（Chat.pushMsg）＝送らずに閉じても空会話が残らない。seed を載せて開く。
   function startProjectChat(seed: string) {
     if (!activeProject) return;
     const id = "chat:" + (crypto.randomUUID?.() ?? Date.now().toString(36));
-    void api.setChatThread(id, { project: activeProject }).catch(() => {});
     localStorage.setItem("cm-chat-session", id);
     openChat(undefined, seed);
   }
@@ -460,6 +461,7 @@ export function App() {
               project={activeProject}
               onOpenNeta={(n) => {
                 setProjectView(false);
+                setFromProject(true); // 閉じたらプロジェクト画面へ戻す（特にSPで空ペーンに落ちない）
                 setActive(n);
               }}
               onOpenSession={(thread) => {
@@ -473,7 +475,13 @@ export function App() {
               key={active.id} /* ネタを切り替えたら作り直して内部状態を新ネタで初期化 */
               neta={active}
               reloadSignal={composeSignal}
-              onClose={() => setActive(null)}
+              onClose={() => {
+                setActive(null);
+                if (fromProject) {
+                  setProjectView(true); // プロジェクト画面から開いたネタ＝閉じたら器へ戻る
+                  setFromProject(false);
+                }
+              }}
               onChanged={() => void reload()}
             />
           ) : (
