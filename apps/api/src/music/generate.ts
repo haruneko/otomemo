@@ -17,7 +17,7 @@ import {
   BASS_FIGS,
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
-import { genMotifMelody, scalePitchList, loadSkeletonModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { genMotifMelody, genMotifMelodyV2, loadMotifModel16, scalePitchList, loadSkeletonModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -345,7 +345,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -364,6 +364,29 @@ export function genMelody(
   const bias = densityBias(mood, f.tempo);
   const lo = 60;
   const hi = 84;
+
+  // A2レシピ経路（docs/research/melody-recipe-validated.md）：4/4＋chords＋bars≥1＋useV2 時。
+  // 骨格(句頭アンカー)＋モチーフ選別＋輪郭駆動＋発展(A/A'/B反行+弧/A'')。旧経路は下に残す（回帰防止）。
+  if (opts?.useV2 && bpb === 4 && (chords?.length ?? 0) > 0 && bars >= 1) {
+    const sp = scalePitchList(scale, lo, hi);
+    const chordPcsPerBar: number[][] = [];
+    const rootsPerBar: number[] = [];
+    const qualsPerBar: string[] = [];
+    const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
+    for (let bar = 0; bar < bars; bar++) {
+      const ch = chordAt(bar * perBar, chords);
+      const root = ch ? normRoot(ch.root ?? 0) : tonicPc;
+      const qual = ch?.quality ?? "";
+      rootsPerBar.push(root);
+      qualsPerBar.push(qual);
+      chordPcsPerBar.push(ch ? chordPcs(root, qual) : scaleArr.map((d) => ((d % 12) + 12) % 12));
+    }
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, loadMotifModel16(), { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor) });
+    if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
+    if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
+    const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
+    return { items: [{ kind: "melody", content: { notes: mNotes }, label: lbl }], edges: [] };
+  }
 
   // 新パイプライン（motif-rhythm＋Markov contour＋snap・design#12-M S7/S8）：4/4＋motifModel＋chords 時。
   // ＝コーパスで学んだ「1小節リズム語彙」と「move遷移(gap-fill)」でモチーフを生成・反復。無指定/他拍子は下の旧経路へ。

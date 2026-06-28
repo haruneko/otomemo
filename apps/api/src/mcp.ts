@@ -489,7 +489,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   server.registerTool(
     "gen_melody",
     { title: "メロディを生成", description: "コードトーン拘束のメロを生成（拍頭=コードトーン）。chords を渡せば合わせる。style でコーパス(library)の歩幅統計にバイアス。repetition=動機反復の強さ(0-1)、rangeSteps=音域(音階ステップ・6度≈6)で利用時制約。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), style: z.string().optional().describe("コーパスstyle(irish/game等)。投入済みなら歩幅をその統計へ寄せる"), repetition: z.number().min(0).max(1).optional().describe("動機反復の強さ 0=反復なし〜1=強反復(既定0.85=やや強め)"), rangeSteps: z.number().int().min(2).max(20).optional().describe("骨格の音域(音階ステップ)。6度差に抑えるなら6") } },
-    async ({ frame, chords, seed, style, repetition, rangeSteps }) => ok(genMelody(frame, chords, seed, { stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: learnMotifModelFromLibrary(core, style) ?? undefined, repetition, rangeSteps })),
+    async ({ frame, chords, seed, style, repetition, rangeSteps }) => ok(genMelody(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: learnMotifModelFromLibrary(core, style) ?? undefined, repetition, rangeSteps })),
   );
   server.registerTool(
     "gen_bass",

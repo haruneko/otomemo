@@ -1,4 +1,6 @@
 import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
+import { RHYTHM16_DATA, MOVE_TRANS_DATA } from "./motifModelData";
+import { chordPcs } from "./theory";
 // 有機メロの再帰モデル・層2＝joint cell（design #12-M S8 / research findings）。
 // メロの中身を「度数move@slot(8分0/1)」記号で表し、骨格move(次拍への度数差)で条件づけて学習・サンプル。
 // 全部「度数＋相対位置」＝テンポ/調 非依存。手当て(ランダム規則)を全廃し、データの条件付き分布で動かす。
@@ -424,4 +426,181 @@ export function genSkeleton(chordPcsPerBar: number[][], scalePitches: number[], 
   }
   if (out.length) out[out.length - 1] = nearestPitchWithPc(out[out.length - 1]!, [ending === "open" ? fifthPc : tonicPc], scalePitches);
   return out;
+}
+
+// ── A2レシピ（検証済・docs/research/melody-recipe-validated.md）の production 実装。
+// 骨格(句頭アンカー)＋モチーフ選別(N=12 score最良)＋輪郭駆動の近景(強拍=輪郭が指す音の最近CT)＋
+// 発展(A/A'尾変奏/B反行+弧/A''トニック着地)＋16分解像度。旧 genMotifMelody は保持（回帰防止）。
+export interface MotifModel16 { rhythm16: Record<string, number>; move: MoveModel }
+let _shippedMotif16: MotifModel16 | null = null;
+// 同梱データ(RHYTHM16_DATA/MOVE_TRANS_DATA・統計のみ)から MotifModel16 を構築（初回のみ・以後キャッシュ）。
+export function loadMotifModel16(): MotifModel16 {
+  if (_shippedMotif16) return _shippedMotif16;
+  const trans = new Map<number, Map<number, number>>();
+  for (const [a, m] of Object.entries(MOVE_TRANS_DATA)) {
+    const mm = new Map<number, number>();
+    for (const [k, c] of Object.entries(m)) mm.set(Number(k), c);
+    trans.set(Number(a), mm);
+  }
+  return (_shippedMotif16 = { rhythm16: RHYTHM16_DATA, move: { trans } });
+}
+
+// Record<string,number> から重み付き抽選（weightedPick の Record 版＝_A2 の wpS）。
+function weightedPickRec(rec: Record<string, number>, r: () => number): string {
+  const e = Object.entries(rec);
+  const tot = e.reduce((a, b) => a + b[1], 0);
+  let x = r() * tot;
+  for (const [k, c] of e) { x -= c; if (x <= 0) return k; }
+  return e[0]?.[0] ?? "";
+}
+
+interface Motif16 { ons: number[]; mv: number[]; run: boolean[] }
+
+// A2レシピ本体。chordPcsPerBar/roots/quals は各bar(=4拍)のコード、scalePitches=その調の音階ピッチ列、
+// motif16=loadMotifModel16()。骨格は opts.skelModel(genSkeletonFromModel) を句頭アンカーに使う。返り＝Note[]。
+// 純粋・seed決定的（makeRng のみ・Math.random/Date 不使用）。
+export function genMotifMelodyV2(
+  chordPcsPerBar: number[][],
+  chordRootsPerBar: number[],
+  chordQuals: string[],
+  scalePitches: number[],
+  motif16: MotifModel16,
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel } = {},
+): Note[] {
+  const seed = opts.seed ?? 1;
+  const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
+  const minor = opts.minor ?? false;
+  const sp = scalePitches;
+  const bars = chordPcsPerBar.length;
+  const moveTrans = motif16.move.trans;
+
+  // 各barのコード構成pc（chordPcsPerBar 優先・無ければ root/quality から復元）。
+  const pcsOfBar = (bar: number): number[] => {
+    const b = Math.max(0, Math.min(bars - 1, bar));
+    const pre = chordPcsPerBar[b];
+    if (pre && pre.length) return pre;
+    return chordPcs((chordRootsPerBar[b] ?? tonicPc) % 12, chordQuals[b] ?? "");
+  };
+
+  // モチーフ生成＝16分リズムパターンを2小節ぶん抽選し、各onsetへ move（run=16分走句は方向保持・他はMarkov）。
+  const mkMotif = (r: () => number): Motif16 | null => {
+    const ons: number[] = [];
+    for (let bar = 0; bar < 2; bar++) {
+      const p = weightedPickRec(motif16.rhythm16, r);
+      for (let s = 0; s < 16; s++) {
+        if (p[s] !== "x") continue;
+        const t = bar * 4 + s * 0.25;
+        if (t >= 6.5) continue;
+        ons.push(t);
+      }
+    }
+    if (ons.length < 4 || ons.length > 10) return null;
+    if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
+    const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
+    const mv: number[] = [0];
+    let rdir = r() < 0.5 ? 1 : -1, leaps = 0;
+    for (let i = 1; i < ons.length; i++) {
+      let m: number;
+      if (run[i]) { if (!run[i - 1]) rdir = r() < 0.5 ? 1 : -1; m = rdir; }
+      else {
+        m = weightedPickNum(moveTrans.get(clamp7(mv[i - 1]!)) ?? new Map(), r);
+        if (m === 0) m = r() < 0.5 ? 1 : -1;
+        if (Math.abs(m) >= 3) { if (leaps >= 1) m = Math.sign(m); else leaps++; }
+      }
+      mv.push(m);
+    }
+    for (let i = 1; i < mv.length - 1; i++) if (Math.abs(mv[i]!) >= 3) mv[i + 1] = -Math.sign(mv[i]!) * Math.abs(mv[i + 1]! || 1); // 跳躍後は逆向き(gap-fill)
+    return { ons, mv, run };
+  };
+
+  // スコア＝range4-6・方向転換~2・跳躍≤1・16分走句少・明確なピーク(中央やや後)・始点付近に戻る・音数~6。
+  const score = (M: Motif16): number => {
+    let cum = 0, hi = 0, lo = 0, peakAt = 0; const cums = [0];
+    for (let i = 1; i < M.mv.length; i++) { cum += M.mv[i]!; cums.push(cum); if (cum > hi) { hi = cum; peakAt = i; } lo = Math.min(lo, cum); }
+    const range = hi - lo;
+    let dirs = 0, pd = 0;
+    for (let i = 1; i < M.mv.length; i++) { if (M.mv[i] !== 0 && Math.sign(M.mv[i]!) !== Math.sign(pd) && pd !== 0) dirs++; if (M.mv[i] !== 0) pd = M.mv[i]!; }
+    const leaps = M.mv.filter((m) => Math.abs(m) >= 3).length;
+    const runN = M.run.filter(Boolean).length;
+    const endRet = Math.abs(cums[cums.length - 1]!);
+    const peakMid = Math.abs(peakAt / (M.mv.length - 1) - 0.55);
+    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - 0.5 * Math.max(0, runN - 3) - 0.4 * endRet - 2 * peakMid - 0.3 * Math.abs(M.ons.length - 6);
+  };
+
+  // 選別＝12個生成しスコア最良を採用（クソ乱数排除）。全滅時は安全な既定モチーフ。
+  const genBest = (r: () => number): Motif16 => {
+    let best: Motif16 | null = null, bs = -1e9;
+    for (let i = 0; i < 12; i++) { const m = mkMotif(r); if (!m) continue; const s = score(m); if (s > bs) { bs = s; best = m; } }
+    return best ?? { ons: [0.5, 1, 1.5, 2.5, 3], mv: [0, 2, -1, 2, -1], run: [false, false, false, false, false] };
+  };
+
+  // 尾変奏＝前半を保持し後半の move を引き直す（A'＝問いに対する変化した答え）。
+  const varyTail = (M: Motif16, r: () => number): Motif16 => {
+    const k = Math.max(2, Math.ceil(M.ons.length / 2));
+    const mv = M.mv.slice(0, k);
+    let rdir = r() < 0.5 ? 1 : -1;
+    for (let i = k; i < M.ons.length; i++) {
+      if (M.run[i]) { mv.push(rdir); continue; }
+      let m = weightedPickNum(moveTrans.get(clamp7(mv[i - 1]!)) ?? new Map(), r);
+      if (m === 0) m = r() < 0.5 ? 1 : -1;
+      if (Math.abs(m) >= 3) m = Math.sign(m) * 2;
+      mv.push(m);
+    }
+    return { ons: M.ons, mv, run: M.run };
+  };
+
+  // 反行＝move を符号反転（B＝対比だが M から派生・輪郭が上下逆）。
+  const invert = (M: Motif16): Motif16 => ({ ons: M.ons, mv: M.mv.map((m, i) => (i === 0 ? 0 : -m)), run: M.run });
+
+  // 近景レンダ＝コミットした輪郭(move)を辿る。強拍(onMain)は「輪郭が指す音の最近コードトーン」＝形を保ち和声に乗る。
+  // 16分走句はスカラーsnap。toTonic で句末をトニックへ着地。tr=音域移高(弧の+5等)。
+  const snapSc = (c: number): number => { let b = c, bd = 99; for (const q of sp) { const d = Math.abs(q - c); if (d < bd) { bd = d; b = q; } } return b; };
+  const ctOf = (c: number, pc: number[]): number => { let b = c, bd = 99; for (const q of sp) { if (!pc.includes(((q % 12) + 12) % 12)) continue; const d = Math.abs(q - c); if (d < bd) { bd = d; b = q; } } return b; };
+  const render = (M: Motif16, bar0: number, anchor: number, tr: number, toTonic: boolean): Note[] => {
+    const out: Note[] = [];
+    let prev = anchor + tr;
+    for (let i = 0; i < M.ons.length; i++) {
+      const t = bar0 * 4 + M.ons[i]!;
+      const onMain = Math.abs(M.ons[i]! - Math.round(M.ons[i]! * 2) / 2) < 0.01 && !M.run[i];
+      const pcs = pcsOfBar(Math.floor(t / 4));
+      let p: number;
+      if (i === 0) p = ctOf(anchor + tr, pcs);
+      else if (toTonic && i === M.ons.length - 1) {
+        let b = prev, bd = 99;
+        for (const q of sp) { if (((q % 12) + 12) % 12 !== tonicPc) continue; if (Math.abs(q - prev) < bd) { bd = Math.abs(q - prev); b = q; } }
+        p = b;
+      } else {
+        const want = prev + M.mv[i]!;
+        p = onMain ? ctOf(want, pcs) : snapSc(want);
+        if (p === prev) p = snapSc(prev + (M.mv[i]! >= 0 ? 1 : -1));
+      }
+      out.push({ pitch: p, start: t, dur: 0.25 });
+      prev = p;
+    }
+    // 句末で音を切り息継ぎ：長gapは on拍1.2/裏0.7で切る・短gapは詰める。
+    for (let i = 0; i < out.length; i++) {
+      const gap = (out[i + 1]?.start ?? (bar0 + 2) * 4) - out[i]!.start;
+      const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25;
+      out[i]!.dur = gap > 1.25 ? Math.min(gap, onB ? 1.2 : 0.7) : Math.min(gap, 2);
+    }
+    return out;
+  };
+
+  // 骨格＝genSkeletonFromModel（句頭アンカー）。発展＝2小節ブロックで A/A'/B(反行+弧)/A''(トニック着地) を循環。
+  const skel = genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: 4, strongQuarters: [0, 2], start: 62 });
+  const r = makeRng(seed + 5);
+  const M = genBest(r);
+  const an = (bar: number): number => skel[Math.min(skel.length - 1, bar)] ?? sp[Math.floor(sp.length / 2)] ?? 62;
+  const nBlk = Math.ceil(bars / 2);
+  const notes: Note[] = [];
+  for (let blk = 0; blk < nBlk; blk++) {
+    const bar0 = blk * 2;
+    const role = blk % 4;
+    const last = blk === nBlk - 1;
+    const variant = role === 1 ? varyTail(M, r) : role === 2 ? invert(M) : M; // A / A'(尾変奏) / B(反行) / A''
+    const tr = role === 2 ? 5 : 0; // 弧＝Bを音域ピーク(+5)へ
+    notes.push(...render(variant, bar0, an(bar0), tr, last));
+  }
+  notes.sort((a, b) => a.start - b.start);
+  return notes;
 }
