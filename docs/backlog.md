@@ -3,7 +3,19 @@
 スペック層（requirements/architecture/design）にも Task 機能にも載せきれない「いつかやる／保留」をここに貯める。
 着手したら Task 化して、ここからは消すか「→ #NN」と印を付ける。最終更新を都度書く。
 
-最終更新: 2026-06-27
+最終更新: 2026-06-29
+
+## プロジェクト＝器（ワークスペース）の不足機能（2026-06-29・コード面＋E2E[SP/PC]で洗い出し）
+S0-S4実装済（曲/ファイル/会話の集約・説明/指示・指示のAI注入）。以下は未充足。優先度は[H/M/L]。
+- **[M] 会話セッションの操作**：改名（`setChatThread.title` はAPI有・UI無）／削除（`clearChatThread`は履歴消しのみ＝スレッド削除なし）／**既存(未仕分け・別器)の会話を今の器へ移す**導線（API `setChatThread(project)` 有・UI無）。ProjectScreen/Chat の会話カードは「開く」のみ。
+- **[M] ワークスペースのファイル操作**：追加（器画面からアップロード→prj配下ネタに紐付け）／削除（`deleteAsset`/`unlinkAsset` 有・未使用）／プレビュー（テキスト/音）。今は表示＋DLのみ。**DLリンクが相対 `/asset/:id`＝dev(vite)で壊れる→`api.assetUrl()` に**。
+- **[M] ワークスペースから曲を新規作成**：ProjectScreen に「＋曲」導線が無く左レールに戻る必要。Task#5(song/section整合)と一緒に。
+- **[M] ジョブ/継続研究の可視化**：jobs は `target_neta_id` でしか絞れず「prj配下のジョブ」集約が無い→器画面に進行中/受け取りの窓が無い（要件「投げて受け取る」がワークスペース未到達）。
+- **[M] モバイルのワークスペース整備**（design「狭い＝mainpane全画面＋レールはドロワー/タブ」が未実装の顕在化）：①🏠後もレールが上に積まれる（暫定=🏠で自動畳み済）②💬バブルが最下段カードに被る（page scroll構造由来でproject-screen単体では解けず）③エディタ全画面の戻るボタンが☰を覆う。まとめて構造から直す。
+- **[L] プロジェクトの改名・削除**：無し。改名は prj:タグ(全ネタ)＋`chat_thread.project`＋`project`行＋localStorage 横断更新＝重い（要設計）。
+- **[L] 空プロジェクト到達不能**：picker選択肢＝facets.projects（prj:タグ持ちネタから導出）。説明だけ作って曲ゼロの器は picker に出ず ProjectScreen に行けない（`project`行はあるのに不可視）。
+- **[L] 指示の実感・既定会話の整合**：instructions 保存後 Chat 側に「この器の指示が効いています」表示無し＋走行中プロセスは次spawnまで反映。💬バブルを器内で開くと `cm-chat-session`(global=未仕分け)に着地し器の一覧に出ないことがある。
+
 
 ## メロ生成 brush-up（理論裏打ち済・耳確認が要るので滞留＝出先で音が聴けない間は保留）
 根拠＝`docs/research/skeleton-model-crossmap.md`（我々×音楽理論 cross-map）。各々 melodyCells の層に対応。**着手は音を聴ける時に**（微細な質改善は耳検証が要る）。対処済＝骨格v2(Urlinie下降+単一頂点)・禁則跳躍除外。残：
