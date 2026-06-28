@@ -465,7 +465,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -473,6 +473,7 @@ export function genMotifMelodyV2(
   const sp = scalePitches;
   const bars = chordPcsPerBar.length;
   const moveTrans = motif16.move.trans;
+  const mb = Math.max(1, Math.min(4, Math.round(opts.motifBars ?? 2))); // モチーフ/ブロック長（小節）。短=反復多/長=展開的。
 
   // 各barのコード構成pc（chordPcsPerBar 優先・無ければ root/quality から復元）。
   const pcsOfBar = (bar: number): number[] => {
@@ -485,19 +486,19 @@ export function genMotifMelodyV2(
   // モチーフ生成＝16分リズムパターンを2小節ぶん抽選し、各onsetへ move（run=16分走句は方向保持・他はMarkov）。
   const mkMotif = (r: () => number): Motif16 | null => {
     const ons: number[] = [];
-    for (let bar = 0; bar < 2; bar++) {
+    for (let bar = 0; bar < mb; bar++) {
       const p = weightedPickRec(motif16.rhythm16, r);
       for (let s = 0; s < 16; s++) {
         if (p[s] !== "x") continue;
         const t = bar * 4 + s * 0.25;
-        if (t >= 6.5) continue;
+        if (t >= mb * 4 - 1.5) continue; // 末尾~1.5拍は息継ぎ
         ons.push(t);
       }
     }
-    if (ons.length < 4 || ons.length > 8) return null;
+    if (ons.length < 2 * mb || ons.length > 4 * mb) return null;
     if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
     const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
-    if (_gap.length && Math.max(..._gap) > 2.0) return null; // 孤立音(2拍超の間隔)モチーフは棄却＝繋がった塊のみ
+    if (_gap.length && Math.max(..._gap) > Math.max(2.0, mb)) return null; // 孤立音(大間隔)モチーフは棄却＝繋がった塊のみ（長尺ほど内部restは許容）
     const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
     const mv: number[] = [0];
     let rdir = r() < 0.5 ? 1 : -1, leaps = 0;
@@ -531,7 +532,7 @@ export function genMotifMelodyV2(
     const endRet = Math.abs(cums[cums.length - 1]!);
     const peakMid = Math.abs(peakAt / (M.mv.length - 1) - 0.55);
     // 16分過多(動き細かい)・密度過多(細切れ)・大間隔(孤立音)・頭の遅れ(先頭無音)を減点＝歌える/繋がった塊を選ぶ。
-    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - 0.8 * Math.max(0, runN - 2) - 0.7 * n16 - 0.4 * endRet - 2 * peakMid - 0.4 * Math.max(0, M.ons.length - 6) - 1.3 * Math.max(0, maxGap - 1.5) - 0.6 * Math.max(0, firstOns - 1);
+    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - 0.8 * Math.max(0, runN - 2) - 0.7 * n16 - 0.4 * endRet - 2 * peakMid - 0.4 * Math.max(0, M.ons.length - 3 * mb) - 1.3 * Math.max(0, maxGap - 1.5) - 0.6 * Math.max(0, firstOns - 1);
   };
 
   // 選別＝12個生成しスコア最良を採用（クソ乱数排除）。全滅時は安全な既定モチーフ。
@@ -586,7 +587,7 @@ export function genMotifMelodyV2(
     }
     // 句末で音を切り息継ぎ：大gap(>1.4)のみ on拍1.6/裏1.05で切る（少しレガート＝つなげる）・短gapは詰める。
     for (let i = 0; i < out.length; i++) {
-      const gap = (out[i + 1]?.start ?? (bar0 + 2) * 4) - out[i]!.start;
+      const gap = (out[i + 1]?.start ?? (bar0 + mb) * 4) - out[i]!.start;
       const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25;
       out[i]!.dur = gap > 1.4 ? Math.min(gap, onB ? 1.6 : 1.05) : Math.min(gap, 2);
     }
@@ -598,10 +599,10 @@ export function genMotifMelodyV2(
   const r = makeRng(seed + 5);
   const M = genBest(r);
   const an = (bar: number): number => skel[Math.min(skel.length - 1, bar)] ?? sp[Math.floor(sp.length / 2)] ?? 62;
-  const nBlk = Math.ceil(bars / 2);
+  const nBlk = Math.ceil(bars / mb);
   const notes: Note[] = [];
   for (let blk = 0; blk < nBlk; blk++) {
-    const bar0 = blk * 2;
+    const bar0 = blk * mb;
     const role = blk % 4;
     const last = blk === nBlk - 1;
     const variant = role === 1 ? varyTail(M, r) : role === 2 ? invert(M) : M; // A / A'(尾変奏) / B(反行) / A''
