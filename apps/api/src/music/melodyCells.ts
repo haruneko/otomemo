@@ -494,7 +494,7 @@ export function genMotifMelodyV2(
         ons.push(t);
       }
     }
-    if (ons.length < 4 || ons.length > 10) return null;
+    if (ons.length < 4 || ons.length > 8) return null;
     if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
     const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
     const mv: number[] = [0];
@@ -522,9 +522,11 @@ export function genMotifMelodyV2(
     for (let i = 1; i < M.mv.length; i++) { if (M.mv[i] !== 0 && Math.sign(M.mv[i]!) !== Math.sign(pd) && pd !== 0) dirs++; if (M.mv[i] !== 0) pd = M.mv[i]!; }
     const leaps = M.mv.filter((m) => Math.abs(m) >= 3).length;
     const runN = M.run.filter(Boolean).length;
+    const n16 = M.ons.filter((t) => Math.abs(((t * 4) % 2) - 1) < 0.1).length; // 16分裏onset数＝「動きの細かさ」
     const endRet = Math.abs(cums[cums.length - 1]!);
     const peakMid = Math.abs(peakAt / (M.mv.length - 1) - 0.55);
-    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - 0.5 * Math.max(0, runN - 3) - 0.4 * endRet - 2 * peakMid - 0.3 * Math.abs(M.ons.length - 6);
+    // 16分過多(動きが細かい)・密度過多(細切れ)を強めに減点＝歌える/滑らかなモチーフを選ぶ。
+    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - 0.8 * Math.max(0, runN - 2) - 0.7 * n16 - 0.4 * endRet - 2 * peakMid - 0.5 * Math.max(0, M.ons.length - 5);
   };
 
   // 選別＝12個生成しスコア最良を採用（クソ乱数排除）。全滅時は安全な既定モチーフ。
