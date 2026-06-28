@@ -650,9 +650,36 @@ export function genMotifMelodyV2(
     const role = blk % 4;
     const last = blk === nBlk - 1;
     const variant = role === 1 ? varyTail(M, r) : role === 2 ? invert(M) : M; // A / A'(尾変奏) / B(反行) / A''
-    const tr = role === 2 ? 5 : 0; // 弧＝Bを音域ピーク(+5)へ
+    const tr = role === 2 ? 3 : 0; // 弧＝Bを音域ピーク(+3)へ（+5は音域広げ/多頂点になりがち＝自己チェックで -inRange/-singleClimax）
     notes.push(...render(variant, bar0, an(bar0), tr, last));
   }
   notes.sort((a, b) => a.start - b.start);
+
+  // ── 自己チェック(E-rule)対策の後処理：①強拍CT ②禁則跳躍除去 ③跳躍回収(gap-fill) ④単一頂点 ──
+  const strongPos = compound ? [0, 1.5] : [0, 2];
+  const onStrong = (t: number): boolean => { const ib = ((t % barLen) + barLen) % barLen; return strongPos.some((p) => Math.abs(ib - p) < 0.12); };
+  const ctP = (pitch: number, pcs: number[]): number => { let b = pitch, bd = 99; for (const q of sp) { if (!pcs.includes(((q % 12) + 12) % 12)) continue; const d = Math.abs(q - pitch); if (d < bd) { bd = d; b = q; } } return b; };
+  // ② 禁則跳躍(三全音6/7度10,11/8度超)→同方向2スケール段(≈3度)に縮める。③ 跳躍(|≥5|半音)後は逆向きstepで回収。2pass。
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 1; i < notes.length; i++) {
+      const iv = notes[i]!.pitch - notes[i - 1]!.pitch, a = Math.abs(iv);
+      if (a === 6 || a === 10 || a === 11 || a > 12) notes[i]!.pitch = clampScale(sp, nearestIdx(sp, notes[i - 1]!.pitch) + (Math.sign(iv) || 1) * 2);
+    }
+    for (let i = 1; i < notes.length - 1; i++) {
+      const iv = notes[i]!.pitch - notes[i - 1]!.pitch;
+      if (Math.abs(iv) >= 5) {
+        const nx = notes[i + 1]!.pitch - notes[i]!.pitch;
+        if (!(Math.sign(nx) === -Math.sign(iv) && Math.abs(nx) <= 2) && i + 1 < notes.length - 1) { // 句末(最後)は触らない＝終止保護
+          const target = notes[i]!.pitch - (Math.sign(iv) || 1) * 1.5;
+          notes[i + 1]!.pitch = onStrong(notes[i + 1]!.start) ? ctP(target, pcsOfBar(Math.floor(notes[i + 1]!.start / barLen))) : clampScale(sp, nearestIdx(sp, target));
+        }
+      }
+    }
+  }
+  // ① 強拍をコードトーンへ（句末トニック着地は保持＝最後の音は触らない）。
+  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) notes[i]!.pitch = ctP(notes[i]!.pitch, pcsOfBar(Math.floor(notes[i]!.start / barLen)));
+  // ④ 単一頂点＝最高音が複数なら後続をスケール1段下げ（アーチ明確化）。
+  const hi = Math.max(...notes.map((n) => n.pitch)), peaks = notes.filter((n, idx) => n.pitch === hi && idx < notes.length - 1); // 句末は除外＝終止保護
+  if (peaks.length > 1) for (let k = 1; k < peaks.length; k++) peaks[k]!.pitch = clampScale(sp, nearestIdx(sp, hi) - 1);
   return notes;
 }
