@@ -496,6 +496,8 @@ export function genMotifMelodyV2(
     }
     if (ons.length < 4 || ons.length > 8) return null;
     if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
+    const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
+    if (_gap.length && Math.max(..._gap) > 2.0) return null; // 孤立音(2拍超の間隔)モチーフは棄却＝繋がった塊のみ
     const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
     const mv: number[] = [0];
     let rdir = r() < 0.5 ? 1 : -1, leaps = 0;
@@ -523,10 +525,13 @@ export function genMotifMelodyV2(
     const leaps = M.mv.filter((m) => Math.abs(m) >= 3).length;
     const runN = M.run.filter(Boolean).length;
     const n16 = M.ons.filter((t) => Math.abs(((t * 4) % 2) - 1) < 0.1).length; // 16分裏onset数＝「動きの細かさ」
+    const gaps = M.ons.slice(1).map((t, i) => t - M.ons[i]!);
+    const maxGap = gaps.length ? Math.max(...gaps) : 0; // モチーフ内の最大間隔＝「孤立音(塊から離れたポツン1音)」
+    const firstOns = M.ons[0]!; // 先頭onset＝遅いとブロック頭が無音
     const endRet = Math.abs(cums[cums.length - 1]!);
     const peakMid = Math.abs(peakAt / (M.mv.length - 1) - 0.55);
-    // 16分過多(動きが細かい)・密度過多(細切れ)を強めに減点＝歌える/滑らかなモチーフを選ぶ。
-    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - 0.8 * Math.max(0, runN - 2) - 0.7 * n16 - 0.4 * endRet - 2 * peakMid - 0.5 * Math.max(0, M.ons.length - 5);
+    // 16分過多(動き細かい)・密度過多(細切れ)・大間隔(孤立音)・頭の遅れ(先頭無音)を減点＝歌える/繋がった塊を選ぶ。
+    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - 0.8 * Math.max(0, runN - 2) - 0.7 * n16 - 0.4 * endRet - 2 * peakMid - 0.4 * Math.max(0, M.ons.length - 6) - 1.3 * Math.max(0, maxGap - 1.5) - 0.6 * Math.max(0, firstOns - 1);
   };
 
   // 選別＝12個生成しスコア最良を採用（クソ乱数排除）。全滅時は安全な既定モチーフ。
@@ -579,11 +584,11 @@ export function genMotifMelodyV2(
       out.push({ pitch: p, start: t, dur: 0.25 });
       prev = p;
     }
-    // 句末で音を切り息継ぎ：長gapは on拍1.2/裏0.7で切る・短gapは詰める。
+    // 句末で音を切り息継ぎ：大gap(>1.4)のみ on拍1.6/裏1.05で切る（少しレガート＝つなげる）・短gapは詰める。
     for (let i = 0; i < out.length; i++) {
       const gap = (out[i + 1]?.start ?? (bar0 + 2) * 4) - out[i]!.start;
       const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25;
-      out[i]!.dur = gap > 1.25 ? Math.min(gap, onB ? 1.2 : 0.7) : Math.min(gap, 2);
+      out[i]!.dur = gap > 1.4 ? Math.min(gap, onB ? 1.6 : 1.05) : Math.min(gap, 2);
     }
     return out;
   };
