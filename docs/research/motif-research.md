@@ -53,3 +53,14 @@
 
 ## 出典
 WuYun [abs](https://arxiv.org/abs/2301.04488) / Yin-Yang [html](https://arxiv.org/html/2501.17759v1) / MeloForm [pdf](https://arxiv.org/pdf/2208.14345) / Small Tunes Transformer [html](https://arxiv.org/html/2410.08626v1) / SIATEC [Meredith](http://www.titanmusic.com/papers/public/siajnmr_submit_2.pdf) / COSIATEC [pdf](https://vbn.aau.dk/ws/files/181893482/DM10.pdf) / Forth-Wiggins [pdf](https://research.gold.ac.uk/id/eprint/8578/1/forth-wiggins-2009.pdf) / MIREX [Repeated Themes](https://www.music-ir.org/mirex/wiki/2019:Discovery_of_Repeated_Themes_&_Sections) / 著作権 [CLL](https://www.cll.com/CopyrightDevelopmentsBlog/uncleared-melody-musicological-factors-considered-in-copyright-infringement-cases) [Swirsky](https://blogs.law.gwu.edu/mcir/case/swirsky-v-carey/) / motif定義 [Wikipedia](https://en.wikipedia.org/wiki/Motif_(music))
+
+## 6. 実装プロト検証（2026-06-28・scratch・指標のみ／耳未）
+**基盤＝骨格点(強拍)＋拍間を move学習で歩く(次強拍へ gap-fill)** ＝自由材料が実曲分布に完全一致：
+| | 順次 | 3度 | 跳躍 | 同音 | CT |
+|---|---|---|---|---|---|
+| 実曲 | 45 | 18 | 14 | 23 | 50 |
+| 基盤 | 43 | 19 | 14 | 24 | 51 |
+＝**ダルダル(跳躍0/同音52/CT99)を一発で解消**。move学習が実曲の跳躍/3度/同音/協和を全部持ってるのが効いた（mechanical diminution は捨てる）。
+- **fresh モチーフ注入**（4音 move列・跳躍保証・句頭2+反行1）：跳躍13維持・**主モチーフ4.5回(実曲2.4)・同音35(実曲23)＝出過ぎ**。
+- **残調整**：注入を2箇所へ／モチーフから0-move除外／occurrence 2.4・同音23 に合わせる。
+- ＝**設計は正しく検証済**。production統合は「基盤(move歩き)＋軽い hook注入」＝耳flush後に値詰め。
