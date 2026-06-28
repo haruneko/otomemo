@@ -1,5 +1,5 @@
 import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
-import { RHYTHM16_DATA, MOVE_TRANS_DATA } from "./motifModelData";
+import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA } from "./motifModelData";
 import { chordPcs } from "./theory";
 // 有機メロの再帰モデル・層2＝joint cell（design #12-M S8 / research findings）。
 // メロの中身を「度数move@slot(8分0/1)」記号で表し、骨格move(次拍への度数差)で条件づけて学習・サンプル。
@@ -465,7 +465,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -474,6 +474,17 @@ export function genMotifMelodyV2(
   const bars = chordPcsPerBar.length;
   const moveTrans = motif16.move.trans;
   const mb = Math.max(1, Math.min(4, Math.round(opts.motifBars ?? 2))); // モチーフ/ブロック長（小節）。短=反復多/長=展開的。
+  // 拍子分岐：既定=4/4（1小節=4四分・16分16枠グリッド）。compound=6/8等（1小節=3四分・8分6枠グリッド・3+3）。
+  // 骨格/move/選別/発展/弧は共通。差し替えるのは「リズム語彙・時間map・onset上下限・孤立フィルタ・跳ね(dur)」のみ（_68.ts 忠実）。
+  const compound = opts.compound ?? false;
+  const barLen = compound ? 3 : 4; // 1小節の四分数
+  // 6/8リズム＝設計重み付き6枠パターンを抽選（RHYTHM68_DATA）。runningはやや強め＝jig寄り。
+  const pick68 = (r: () => number): string => {
+    const tot = RHYTHM68_DATA.reduce((a, b) => a + b[1], 0);
+    let x = r() * tot;
+    for (const [p, w] of RHYTHM68_DATA) { x -= w; if (x <= 0) return p; }
+    return RHYTHM68_DATA[0]![0];
+  };
 
   // 各barのコード構成pc（chordPcsPerBar 優先・無ければ root/quality から復元）。
   const pcsOfBar = (bar: number): number[] => {
@@ -486,20 +497,38 @@ export function genMotifMelodyV2(
   // モチーフ生成＝16分リズムパターンを2小節ぶん抽選し、各onsetへ move（run=16分走句は方向保持・他はMarkov）。
   const mkMotif = (r: () => number): Motif16 | null => {
     const ons: number[] = [];
-    for (let bar = 0; bar < mb; bar++) {
-      const p = weightedPickRec(motif16.rhythm16, r);
-      for (let s = 0; s < 16; s++) {
-        if (p[s] !== "x") continue;
-        const t = bar * 4 + s * 0.25;
-        if (t >= mb * 4 - 1.5) continue; // 末尾~1.5拍は息継ぎ
-        ons.push(t);
+    if (compound) {
+      // 6/8：1小節=8分6枠(3+3)。t=bar*3+e*0.5。末尾~0.75拍は息継ぎ。onset上下限 2*mb..5*mb・孤立フィルタ>1.6。
+      for (let bar = 0; bar < mb; bar++) {
+        const p = pick68(r);
+        for (let e = 0; e < 6; e++) {
+          if (p[e] !== "x") continue;
+          const t = bar * 3 + e * 0.5;
+          if (t >= mb * 3 - 0.75) continue;
+          ons.push(t);
+        }
       }
+      if (ons.length < 2 * mb || ons.length > 5 * mb) return null;
+      const g = ons.slice(1).map((t, i) => t - ons[i]!);
+      if (g.length && Math.max(...g) > 1.6) return null;
+    } else {
+      // 4/4：1小節=16分16枠。t=bar*4+s*0.25。末尾~1.5拍は息継ぎ。
+      for (let bar = 0; bar < mb; bar++) {
+        const p = weightedPickRec(motif16.rhythm16, r);
+        for (let s = 0; s < 16; s++) {
+          if (p[s] !== "x") continue;
+          const t = bar * 4 + s * 0.25;
+          if (t >= mb * 4 - 1.5) continue; // 末尾~1.5拍は息継ぎ
+          ons.push(t);
+        }
+      }
+      if (ons.length < 2 * mb || ons.length > 4 * mb) return null;
+      if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
+      const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
+      if (_gap.length && Math.max(..._gap) > Math.max(2.0, mb)) return null; // 孤立音(大間隔)モチーフは棄却＝繋がった塊のみ（長尺ほど内部restは許容）
     }
-    if (ons.length < 2 * mb || ons.length > 4 * mb) return null;
-    if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
-    const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
-    if (_gap.length && Math.max(..._gap) > Math.max(2.0, mb)) return null; // 孤立音(大間隔)モチーフは棄却＝繋がった塊のみ（長尺ほど内部restは許容）
-    const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
+    // 16分走句(run)＝4/4のみ（隣接0.25）。6/8は8分グリッドゆえ走句概念なし＝全false（_68 と同じ純Markov contour）。
+    const run = compound ? ons.map(() => false) : ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
     const mv: number[] = [0];
     let rdir = r() < 0.5 ? 1 : -1, leaps = 0;
     for (let i = 1; i < ons.length; i++) {
@@ -539,7 +568,9 @@ export function genMotifMelodyV2(
   const genBest = (r: () => number): Motif16 => {
     let best: Motif16 | null = null, bs = -1e9;
     for (let i = 0; i < 12; i++) { const m = mkMotif(r); if (!m) continue; const s = score(m); if (s > bs) { bs = s; best = m; } }
-    return best ?? { ons: [0.5, 1, 1.5, 2.5, 3], mv: [0, 2, -1, 2, -1], run: [false, false, false, false, false] };
+    return best ?? (compound
+      ? { ons: [0, 0.5, 1, 1.5, 2.5], mv: [0, 1, 1, -1, 2], run: [false, false, false, false, false] }
+      : { ons: [0.5, 1, 1.5, 2.5, 3], mv: [0, 2, -1, 2, -1], run: [false, false, false, false, false] });
   };
 
   // 尾変奏＝前半を保持し後半の move を引き直す（A'＝問いに対する変化した答え）。
@@ -568,9 +599,13 @@ export function genMotifMelodyV2(
     const out: Note[] = [];
     let prev = anchor + tr;
     for (let i = 0; i < M.ons.length; i++) {
-      const t = bar0 * 4 + M.ons[i]!;
-      const onMain = Math.abs(M.ons[i]! - Math.round(M.ons[i]! * 2) / 2) < 0.01 && !M.run[i];
-      const pcs = pcsOfBar(Math.floor(t / 4));
+      const t = bar0 * barLen + M.ons[i]!;
+      // 強拍(onMain)：4/4=8分グリッド上かつ非走句／6/8=付点四分ビート頭(inbar 0 と 1.5)。ここは輪郭が指す音の最近CTに乗せる。
+      const inbar = ((M.ons[i]! % barLen) + barLen) % barLen;
+      const onMain = compound
+        ? (Math.abs(inbar) < 0.1 || Math.abs(inbar - 1.5) < 0.1)
+        : (Math.abs(M.ons[i]! - Math.round(M.ons[i]! * 2) / 2) < 0.01 && !M.run[i]);
+      const pcs = pcsOfBar(Math.floor(t / barLen));
       let p: number;
       if (i === 0) p = ctOf(anchor + tr, pcs);
       else if (toTonic && i === M.ons.length - 1) {
@@ -582,14 +617,23 @@ export function genMotifMelodyV2(
         p = onMain ? ctOf(want, pcs) : snapSc(want);
         if (p === prev) p = snapSc(prev + (M.mv[i]! >= 0 ? 1 : -1));
       }
-      out.push({ pitch: p, start: t, dur: 0.25 });
+      out.push({ pitch: p, start: t, dur: compound ? 0.5 : 0.25 });
       prev = p;
     }
-    // 句末で音を切り息継ぎ：大gap(>1.4)のみ on拍1.6/裏1.05で切る（少しレガート＝つなげる）・短gapは詰める。
-    for (let i = 0; i < out.length; i++) {
-      const gap = (out[i + 1]?.start ?? (bar0 + mb) * 4) - out[i]!.start;
-      const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25;
-      out[i]!.dur = gap > 1.4 ? Math.min(gap, onB ? 1.6 : 1.05) : Math.min(gap, 2);
+    if (compound) {
+      // 6/8 跳ね(jig)＝裏拍は短く(0.55)・拍頭(start%1.5≈0)は伸ばす(1.2/1.4)＝はねるグルーヴ。
+      for (let i = 0; i < out.length; i++) {
+        const g = (out[i + 1]?.start ?? (bar0 + mb) * 3) - out[i]!.start;
+        const onM = Math.abs(out[i]!.start % 1.5) < 0.1;
+        out[i]!.dur = g > 1.0 ? Math.min(g, onM ? 1.2 : 0.55) : Math.min(g, onM ? 1.4 : 0.55);
+      }
+    } else {
+      // 句末で音を切り息継ぎ：大gap(>1.4)のみ on拍1.6/裏1.05で切る（少しレガート＝つなげる）・短gapは詰める。
+      for (let i = 0; i < out.length; i++) {
+        const gap = (out[i + 1]?.start ?? (bar0 + mb) * 4) - out[i]!.start;
+        const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25;
+        out[i]!.dur = gap > 1.4 ? Math.min(gap, onB ? 1.6 : 1.05) : Math.min(gap, 2);
+      }
     }
     return out;
   };

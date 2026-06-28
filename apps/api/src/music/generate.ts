@@ -367,7 +367,7 @@ export function genMelody(
 
   // A2レシピ経路（docs/research/melody-recipe-validated.md）：4/4＋chords＋bars≥1＋useV2 時。
   // 骨格(句頭アンカー)＋モチーフ選別＋輪郭駆動＋発展(A/A'/B反行+弧/A'')。旧経路は下に残す（回帰防止）。
-  if (opts?.useV2 && bpb === 4 && (chords?.length ?? 0) > 0 && bars >= 1) {
+  if (opts?.useV2 && (bpb === 4 || compound) && (chords?.length ?? 0) > 0 && bars >= 1) {
     const sp = scalePitchList(scale, lo, hi);
     const chordPcsPerBar: number[][] = [];
     const rootsPerBar: number[] = [];
@@ -381,7 +381,7 @@ export function genMelody(
       qualsPerBar.push(qual);
       chordPcsPerBar.push(ch ? chordPcs(root, qual) : scaleArr.map((d) => ((d % 12) + 12) % 12));
     }
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, loadMotifModel16(), { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars });
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, loadMotifModel16(), { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
