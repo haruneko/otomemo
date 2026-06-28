@@ -577,7 +577,7 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **スキーマが契約**で各エンジンが裏に差さる（不変）。
 
 ### #12-M メロ生成の高度化（骨格優先・度数内部モデル／2026-06-23）
-**full spec＝`docs/research/melody-generation.md`**（理論3視点＋実装サーベイ＋骨格文法）。ここは設計の確定事項。
+**full spec＝`docs/research/melody-generation.md`**（理論3視点＋実装サーベイ＋骨格文法）。ここは設計の確定事項。**研究の全体根拠＝索引 `docs/research/README.md`**（到達点サマリ＋全29本のグループ別目次）。
 **問題**：現 `genMelody`（モチーフ反復・拍頭コードトーン）は phrase/period・句末の息継ぎ・カデンツ着地・頂点・滑り込みが**構造的に無い**＝「呼吸しない／コード音ばかりで素直すぎ」。
 **方針（#86 不変＝決定的記号エンジンが音符を作る・調非依存）**：
 - **表現＝度数内部モデル（保存は不変）**：メロ保存は今のまま絶対ピッチ `notes:[{pitch,start,dur}]`（PianoRoll/再生/compositeNotes/similarity 不変＝**移行なし**）。`genMelody` の**内部**を「度数(+oct+alter)＋コード文脈→文法で組む→`degreeToPitch`で絶対ピッチへ描画」に通す。新規純関数 `apps/api/src/music/degree.ts`：`pitchToDegree/degreeToPitch/isChordTone(=既存chordPcs)/classifyNCT`。`classifyNCT` は滑り込み文法判定＋連想エッセンスE5を兼ねる（S1-3とS4-5で共用）。
