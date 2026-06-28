@@ -492,6 +492,11 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     async ({ frame, chords, seed, style, repetition, rangeSteps, motifBars }) => ok(genMelody(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: learnMotifModelFromLibrary(core, style) ?? undefined, repetition, rangeSteps, motifBars })),
   );
   server.registerTool(
+    "complete_melody",
+    { title: "メロディを補完", description: "部分メロ(先頭数小節)を種に、そのモチーフを発展させて frame.bars 全体まで埋める（補完=completion）。notes の小節は実音を保持し、残りを A'/B(反行)/A'' 発展で生成。決定的(seed)・著作権セーフ(ユーザー自作の発展)。", inputSchema: { notes: notesSchema.describe("部分メロ＝発展の種（先頭1-2小節想定）"), chords: chordsSchema, frame: frameSchema, seed: z.number().int().optional() } },
+    async ({ notes, chords, frame, seed }) => ok(genMelody(frame, chords, seed, { useV2: true, partial: notes })),
+  );
+  server.registerTool(
     "gen_bass",
     { title: "ベースを生成", description: "強拍ルート/弱拍5度のベースライン（C2基準低域・コードに合う）。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional() } },
     async ({ frame, chords }) => ok(genBass(frame, chords)),

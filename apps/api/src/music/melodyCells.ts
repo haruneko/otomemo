@@ -454,7 +454,21 @@ function weightedPickRec(rec: Record<string, number>, r: () => number): string {
   return e[0]?.[0] ?? "";
 }
 
-interface Motif16 { ons: number[]; mv: number[]; run: boolean[] }
+export interface Motif16 { ons: number[]; mv: number[]; run: boolean[] }
+
+// render の逆＝部分メロ(Note[])から Motif16 を抽出。補完(completion)の種にする。
+// ons=各音の「先頭音の小節頭」からの相対拍（start%barLen 起点で詰める）／mv=[0, …連続音のclamp7半音差]／
+// run=隣接onsetが<=0.26（16分走句）。partial が 1-2小節想定でも不揃いでも落ちない（防御）。
+export function extractMotif16(notes: { pitch: number; start: number; dur?: number }[], barLen = 4): Motif16 {
+  const ns = [...(notes ?? [])].filter((n) => Number.isFinite(n.pitch) && Number.isFinite(n.start)).sort((a, b) => a.start - b.start);
+  if (ns.length === 0) return { ons: [0], mv: [0], run: [false] };
+  const base = Math.floor(ns[0]!.start / barLen) * barLen; // 先頭音の小節頭＝相対拍の原点
+  const ons = ns.map((n) => Math.max(0, n.start - base));
+  const mv: number[] = [0];
+  for (let i = 1; i < ns.length; i++) mv.push(clamp7(ns[i]!.pitch - ns[i - 1]!.pitch)); // 先頭0＋以降は半音差(±7クランプ)
+  const run = ns.map((_, i) => (i > 0 && ons[i]! - ons[i - 1]! <= 0.26) || (i < ns.length - 1 && ons[i + 1]! - ons[i]! <= 0.26));
+  return { ons, mv, run };
+}
 
 // A2レシピ本体。chordPcsPerBar/roots/quals は各bar(=4拍)のコード、scalePitches=その調の音階ピッチ列、
 // motif16=loadMotifModel16()。骨格は opts.skelModel(genSkeletonFromModel) を句頭アンカーに使う。返り＝Note[]。
@@ -465,7 +479,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -641,13 +655,16 @@ export function genMotifMelodyV2(
   // 骨格＝genSkeletonFromModel（句頭アンカー）。発展＝2小節ブロックで A/A'/B(反行+弧)/A''(トニック着地) を循環。
   const skel = genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: 4, strongQuarters: [0, 2], start: 62 });
   const r = makeRng(seed + 5);
-  const M = genBest(r);
+  // seedMotif 指定時は genBest をスキップしてそれを M に（補完=与モチーフを発展）。既定(未指定)は現挙動と完全一致。
+  const M = opts.seedMotif ?? genBest(r);
+  const kfb = Math.max(0, Math.floor(opts.keepFirstBlocks ?? 0)); // >0：先頭 kfb ブロックは素材(A=M)・以降を A'/B/A'' 発展
   const an = (bar: number): number => skel[Math.min(skel.length - 1, bar)] ?? sp[Math.floor(sp.length / 2)] ?? 62;
   const nBlk = Math.ceil(bars / mb);
   const notes: Note[] = [];
   for (let blk = 0; blk < nBlk; blk++) {
     const bar0 = blk * mb;
-    const role = blk % 4;
+    // 既定(kfb=0)＝従来の A/A'/B/A'' 循環。kfb>0＝先頭 kfb ブロックは A(M)、残りは varyTail(1)/invert(2)/M(3) を循環。
+    const role = kfb > 0 ? (blk < kfb ? 0 : ((blk - kfb) % 3) + 1) : blk % 4;
     const last = blk === nBlk - 1;
     const variant = role === 1 ? varyTail(M, r) : role === 2 ? invert(M) : M; // A / A'(尾変奏) / B(反行) / A''
     const tr = role === 2 ? 3 : 0; // 弧＝Bを音域ピーク(+3)へ（+5は音域広げ/多頂点になりがち＝自己チェックで -inRange/-singleClimax）
@@ -682,4 +699,43 @@ export function genMotifMelodyV2(
   const hi = Math.max(...notes.map((n) => n.pitch)), peaks = notes.filter((n, idx) => n.pitch === hi && idx < notes.length - 1); // 句末は除外＝終止保護
   if (peaks.length > 1) for (let k = 1; k < peaks.length; k++) peaks[k]!.pitch = clampScale(sp, nearestIdx(sp, hi) - 1);
   return notes;
+}
+
+// メロディ補完(completion)＝ユーザーの部分メロ(先頭数小節)を種に V2 が残りを発展で埋める。
+// partial→extractMotif16(seedMotif)→V2(seedMotif/keepFirstBlocks)で全小節生成→**partial の小節は実音を保持**し
+// 残り(coveredBars 以降)を発展ぶんで埋める。接続は best-effort（種末尾から跳ねすぎたらオクターブ寄せ）。
+// 著作権：ユーザー自作 partial を発展させるだけ＝セーフ。partial無し/不揃いでも落ちない。
+export function completeMelody(
+  partial: { pitch: number; start: number; dur?: number }[],
+  chordPcsPerBar: number[][],
+  chordRootsPerBar: number[],
+  chordQuals: string[],
+  scalePitches: number[],
+  motif16: MotifModel16,
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; compound?: boolean } = {},
+): Note[] {
+  const barLen = opts.compound ? 3 : 4;
+  const bars = chordPcsPerBar.length;
+  const ns = [...(partial ?? [])].filter((n) => Number.isFinite(n.pitch) && Number.isFinite(n.start)).sort((a, b) => a.start - b.start);
+  // partial 無し＝通常 V2（回帰：補完を呼んでも種が無ければ素の生成と一致）。
+  if (ns.length === 0) return genMotifMelodyV2(chordPcsPerBar, chordRootsPerBar, chordQuals, scalePitches, motif16, { seed: opts.seed, tonicPc: opts.tonicPc, minor: opts.minor, skelModel: opts.skelModel, compound: opts.compound });
+  const maxEnd = Math.max(...ns.map((n) => n.start + (n.dur ?? 0.25)));
+  const coveredBars = Math.max(1, Math.min(bars, Math.ceil(maxEnd / barLen - 1e-6))); // partial が覆う小節数（残りを埋める）
+  const mb = Math.max(1, Math.min(4, coveredBars)); // モチーフ/ブロック長＝partial 長に合わせる
+  const seedMotif = extractMotif16(ns, barLen);
+  const head: Note[] = ns.map((n) => ({ pitch: n.pitch, start: n.start, dur: Math.max(0.25, n.dur ?? 0.25) })); // partial は実音保持
+  if (coveredBars >= bars) return head; // partial が全体を覆う＝埋める余地なし
+  // V2 を seedMotif で回す（block0=種・以降=発展）。先頭ブロック(=partial 区間)は捨て、tail のみ採用。
+  const full = genMotifMelodyV2(chordPcsPerBar, chordRootsPerBar, chordQuals, scalePitches, motif16, {
+    seed: opts.seed, tonicPc: opts.tonicPc, minor: opts.minor, skelModel: opts.skelModel, compound: opts.compound,
+    motifBars: mb, seedMotif, keepFirstBlocks: 1,
+  });
+  const cut = coveredBars * barLen;
+  const tail = full.filter((n) => n.start >= cut - 1e-6);
+  // 接続(best-effort)：tail 先頭が partial 末尾から1oct超で跳ねたら、近いオクターブへ寄せる（滑らかに継続）。
+  if (tail.length && head.length) {
+    const iv = tail[0]!.pitch - head[head.length - 1]!.pitch;
+    if (Math.abs(iv) > 12) tail[0]!.pitch = clampScale(scalePitches, nearestIdx(scalePitches, tail[0]!.pitch) - Math.sign(iv) * 7);
+  }
+  return [...head, ...tail];
 }
