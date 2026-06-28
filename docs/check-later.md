@@ -22,12 +22,13 @@
 | rangeSteps | 10 | 音域（6度に絞る→6） |
 | 句頭休符量 | SKELETON_REST_BY_POS | 多すぎ→係数で弱める |
 
-## ★flush追加：motif-driven 基盤（送付済 `MD_Am/MD_C`）
-**骨格点＋move歩き** が自由材料を実曲分布に一致（跳躍14/同音24/CT51＝[motif-research.md](research/motif-research.md) §6）＝**ダルダル解消を指標で確定**。耳で：
-- **跳躍が入って“歩くだけ”でなくなったか**（vs 旧 RF3/H8 のダルダル）。
-- **同音が多すぎないか**（指標 24〜34 と振れる・実曲23＝耳で「多い」なら抑制）。
-- **hook(モチーフ)が認識できるか**＝occurrence指標は同音連打を水増しで壊れてる＝**耳が判定器**。
-- これOKなら production統合（genMotifMelody を move歩き基盤＋軽hook に）。
+## ★確認タスク：motif-driven メロ（送付済 `MB_MAJ_C/MAJ_G/MIN_Am/MIN_Em`）
+**骨格点＋move歩き＋fresh hook×2**（注入2+同音回避）。指標：跳躍14/CT51/非自明モチーフ出現2.3回＝実曲水準（[motif-research.md](research/motif-research.md) §6/6.1）。耳で4点：
+1. **ダルダルが消えて跳ぶか**（vs 旧 RF3/H8 の「歩くだけ・同音連打」）。
+2. **hook(モチーフ)が認識できるか**＝同じ動きが戻る（occurrence指標は交絡してたので耳が判定器）。
+3. **同音が多すぎないか**（指標27-34 vs 実曲23・seed振れ大＝耳で「多い」なら抑制）。
+4. **コードに乗ってるか・濁らないか**（CT51）。
+- これOKなら **production統合**（genMotifMelody の pitch割当を「move歩き基盤＋軽hook」へ＝今の決定的diminutionを置換）。旧 `MD_Am/MD_C` は破棄（注入過剰版）。
 
 ## 保留（flush対象外）
 - **6/8（複合拍子）**：IrishMAN jig 学習で「アイリッシュ臭過多」問題（旧A2）＝汎用6/8として使えるか・style分離要否。骨格エンジンが4/4で固まってから 6/8 へ展開する際に再確認。
