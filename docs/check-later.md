@@ -22,8 +22,14 @@
 | rangeSteps | 10 | 音域（6度に絞る→6） |
 | 句頭休符量 | SKELETON_REST_BY_POS | 多すぎ→係数で弱める |
 
-## 保留（実装途中＝flush対象外・完成後に追加）
-- **八分の motif-driven 版**：fresh モチーフ＋Yin-Yang展開＋自由材料（[motif-research.md](research/motif-research.md) 設計）。scratch で構築中。指標(反復/CT/跳躍)が実曲一致したら flush に追加。
+## ★flush追加：motif-driven 基盤（送付済 `MD_Am/MD_C`）
+**骨格点＋move歩き** が自由材料を実曲分布に一致（跳躍14/同音24/CT51＝[motif-research.md](research/motif-research.md) §6）＝**ダルダル解消を指標で確定**。耳で：
+- **跳躍が入って“歩くだけ”でなくなったか**（vs 旧 RF3/H8 のダルダル）。
+- **同音が多すぎないか**（指標 24〜34 と振れる・実曲23＝耳で「多い」なら抑制）。
+- **hook(モチーフ)が認識できるか**＝occurrence指標は同音連打を水増しで壊れてる＝**耳が判定器**。
+- これOKなら production統合（genMotifMelody を move歩き基盤＋軽hook に）。
+
+## 保留（flush対象外）
 - **6/8（複合拍子）**：IrishMAN jig 学習で「アイリッシュ臭過多」問題（旧A2）＝汎用6/8として使えるか・style分離要否。骨格エンジンが4/4で固まってから 6/8 へ展開する際に再確認。
 
 ## 著作権メモ
