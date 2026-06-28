@@ -456,6 +456,25 @@ export function buildHttp(core: Core): FastifyInstance {
     return { unlinked: core.unlinkAsset(id, assetId, role) };
   });
 
+  // プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイルを器単位で集約（S2）。
+  app.get("/projects/:project/files", async (req) => {
+    const { project } = req.params as { project: string };
+    return core.listProjectFiles(project);
+  });
+
+  // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返す（画面は常に開ける）。
+  app.get("/projects/:name", async (req) => {
+    const { name } = req.params as { name: string };
+    return core.getProject(name) ?? { name, description: null, instructions: null, created: null, updated: null };
+  });
+  const projectMeta = z.object({ description: z.string().nullish(), instructions: z.string().nullish() });
+  app.post("/projects/:name", async (req, reply) => {
+    const { name } = req.params as { name: string };
+    const p = projectMeta.safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    return core.setProject(name, p.data);
+  });
+
   // --- schedule（#80 proactive: 継続研究/収集を見てない間に進める）---
   app.post("/schedule", async (req, reply) => {
     const p = z
@@ -495,7 +514,23 @@ export function buildHttp(core: Core): FastifyInstance {
     data: z.unknown().optional(),
   });
 
-  app.get("/chat/threads", async () => core.listChatThreads());
+  app.get("/chat/threads", async (req) => {
+    const { project } = (req.query ?? {}) as { project?: string };
+    return core.listChatThreads(project && project.length ? project : null);
+  });
+
+  // 会話セッションを器（プロジェクト）に束ねる／タイトル付与（upsert・部分更新）。
+  const chatThreadMeta = z.object({
+    project: z.string().nullish(),
+    title: z.string().nullish(),
+  });
+  app.post("/chat/:thread/meta", async (req, reply) => {
+    const { thread } = req.params as { thread: string };
+    const p = chatThreadMeta.safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    core.setChatThread({ thread, ...p.data });
+    return { ok: true };
+  });
 
   app.get("/chat/:thread/messages", async (req) => {
     const { thread } = req.params as { thread: string };
@@ -531,7 +566,10 @@ export function buildHttp(core: Core): FastifyInstance {
     });
     const send = (e: unknown) => raw.write(`data: ${JSON.stringify(e)}\n\n`);
     try {
-      const sess = getChatSession(thread, dbPath, repo);
+      // 器（プロジェクト）の指示文を会話に効かせる：thread→project→instructions を system prompt に追記。
+      const proj = core.getChatThreadProject(thread);
+      const instructions = proj ? (core.getProject(proj)?.instructions ?? "") : "";
+      const sess = getChatSession(thread, dbPath, repo, instructions);
       await sess.say(text, send);
     } catch (err) {
       send({ type: "error", error: String(err) });

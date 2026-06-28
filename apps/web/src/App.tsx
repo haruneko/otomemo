@@ -20,6 +20,7 @@ import { parseMusicXml } from "./musicxml";
 import { HummingRecorder } from "./components/HummingRecorder";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
+import { ProjectScreen } from "./components/ProjectScreen";
 import { flushOutbox } from "./outbox";
 import { projectTag } from "./project";
 
@@ -41,6 +42,8 @@ export function App() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Neta | undefined>(undefined);
   const [trayOpen, setTrayOpen] = useState(false);
+  const [projectView, setProjectView] = useState(false); // メインペーンにプロジェクト画面を出す
+  const [chatSeed, setChatSeed] = useState(""); // Chatを開くときの最初の一言（プロジェクト画面の起点入力から）
   const [doneCount, setDoneCount] = useState(0);
   const [active, setActive] = useState<Neta | null>(null);
   const [railOpen, setRailOpen] = useState(true);
@@ -161,10 +164,20 @@ export function App() {
     await reload();
   }
 
-  const openChat = (target?: Neta) => {
+  const openChat = (target?: Neta, seed = "") => {
     setChatTarget(target);
+    setChatSeed(seed);
     setChatOpen(true);
   };
+
+  // プロジェクト画面の「新しい会話を始める」：器に属す新規セッションを作り、最初の一言を載せてChatを開く。
+  function startProjectChat(seed: string) {
+    if (!activeProject) return;
+    const id = "chat:" + (crypto.randomUUID?.() ?? Date.now().toString(36));
+    void api.setChatThread(id, { project: activeProject }).catch(() => {});
+    localStorage.setItem("cm-chat-session", id);
+    openChat(undefined, seed);
+  }
 
   // ＋新規プロジェクト：名前を取り、アクティブにする（以降の新規ネタに prj: が付く）。
   // 実体はネタに prj: が付いた時点で facets に現れる＝ここでは選択肢にも即時反映しておく。
@@ -272,6 +285,21 @@ export function App() {
           ♪
         </h1>
         <div className="head-right">
+          {activeProject && (
+            <button
+              className={"gear" + (projectView ? " on" : "")}
+              aria-label="project-home"
+              title={`${activeProject} のプロジェクト画面（曲・ファイル・会話）`}
+              onClick={() => {
+                setActive(null);
+                setProjectView(true);
+                // 狭い画面では、開いた瞬間にプロジェクト画面を主役へ（ネタ帳レールは上に積まれるので畳む）。
+                if (typeof window !== "undefined" && window.innerWidth < 720) setRailOpen(false);
+              }}
+            >
+              🏠
+            </button>
+          )}
           <button className="gear" aria-label="tray" title="受け取りトレイ" onClick={openTray}>
             📥{doneCount > 0 && <span className="badge">{doneCount}</span>}
           </button>
@@ -427,7 +455,20 @@ export function App() {
           />
         </aside>
         <section className="mainpane" aria-label="mainpane">
-          {active ? (
+          {projectView && activeProject ? (
+            <ProjectScreen
+              project={activeProject}
+              onOpenNeta={(n) => {
+                setProjectView(false);
+                setActive(n);
+              }}
+              onOpenSession={(thread) => {
+                localStorage.setItem("cm-chat-session", thread);
+                openChat();
+              }}
+              onStartChat={(seed) => startProjectChat(seed)}
+            />
+          ) : active ? (
             <NetaDialog
               key={active.id} /* ネタを切り替えたら作り直して内部状態を新ネタで初期化 */
               neta={active}
@@ -459,6 +500,8 @@ export function App() {
       {chatOpen && (
         <Chat
           target={chatTarget}
+          activeProject={activeProject || undefined} // 器＝一曲(or組曲)：新規会話をこの器に束ね一覧も絞る
+          initialText={chatSeed} // プロジェクト画面の起点入力からの最初の一言
           onClose={() => {
             setChatOpen(false);
             setChatTarget(undefined);

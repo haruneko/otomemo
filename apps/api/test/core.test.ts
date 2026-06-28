@@ -7,6 +7,57 @@ beforeEach(() => {
   core = new Core(openDb(":memory:"));
 });
 
+// プロジェクト実体（説明・AIへの指示）。器の説明文と、会話に効く指示を持つ（Claude Projects風）。
+describe("project entity (description / instructions)", () => {
+  it("getProject returns null until set, then round-trips", () => {
+    expect(core.getProject("みなそこ")).toBeNull();
+    core.setProject("みなそこ", { description: "切ない疾走の一曲", instructions: "サビは上行で締める" });
+    const p = core.getProject("みなそこ")!;
+    expect(p.name).toBe("みなそこ");
+    expect(p.description).toBe("切ない疾走の一曲");
+    expect(p.instructions).toBe("サビは上行で締める");
+  });
+
+  it("setProject upserts: partial update keeps the other field", () => {
+    core.setProject("みなそこ", { description: "説明A", instructions: "指示A" });
+    core.setProject("みなそこ", { description: "説明B" }); // instructions は触らない
+    const p = core.getProject("みなそこ")!;
+    expect(p.description).toBe("説明B");
+    expect(p.instructions).toBe("指示A");
+  });
+});
+
+// プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイル(asset)を曲単位で集約する（S2）。
+describe("listProjectFiles (workspace file aggregation)", () => {
+  it("aggregates assets attached to netas carrying prj: tag, grouped per asset", () => {
+    const song = core.createNeta({ kind: "section", title: "セクションA", tags: ["prj:みなそこ"] });
+    const other = core.createNeta({ kind: "melody", title: "別曲メロ", tags: ["prj:別曲"] });
+    const lyric = core.addAsset({ kind: "lyrics", name: "歌詞.txt", path: "/x/歌詞.txt", mime: "text/plain" });
+    const mid = core.addAsset({ kind: "midi", name: "demo.mid", path: "/x/demo.mid" });
+    const stray = core.addAsset({ kind: "midi", name: "別.mid", path: "/x/別.mid" });
+    core.linkAsset(song.id, lyric.id, "source");
+    core.linkAsset(song.id, mid.id, "render");
+    core.linkAsset(other.id, stray.id, "source");
+
+    const files = core.listProjectFiles("みなそこ");
+    expect(files.map((f) => f.name).sort()).toEqual(["demo.mid", "歌詞.txt"]);
+    const lf = files.find((f) => f.name === "歌詞.txt")!;
+    expect(lf.attachedTo).toEqual([{ netaId: song.id, title: "セクションA", kind: "section", role: "source" }]);
+    expect(files.map((f) => f.name)).not.toContain("別.mid");
+  });
+
+  it("dedupes an asset attached to multiple netas in the same project (attachedTo has both)", () => {
+    const a = core.createNeta({ kind: "section", title: "A", tags: ["prj:みなそこ"] });
+    const b = core.createNeta({ kind: "section", title: "B", tags: ["prj:みなそこ"] });
+    const shared = core.addAsset({ kind: "image", name: "ジャケ.png", path: "/x/ジャケ.png" });
+    core.linkAsset(a.id, shared.id, "attachment");
+    core.linkAsset(b.id, shared.id, "attachment");
+    const files = core.listProjectFiles("みなそこ");
+    expect(files.length).toBe(1);
+    expect(files[0].attachedTo.map((x) => x.title).sort()).toEqual(["A", "B"]);
+  });
+});
+
 describe("neta CRUD", () => {
   it("creates and reads a neta with content + tags", () => {
     const n = core.createNeta({

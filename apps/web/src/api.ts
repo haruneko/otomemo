@@ -57,6 +57,20 @@ export interface Asset {
   created: string;
 }
 
+// プロジェクト配下ファイル（asset＋紐づき先ネタ）。器のファイル集約の戻り（S2）。
+export interface ProjectFile extends Asset {
+  attachedTo: { netaId: string; title: string | null; kind: string; role: string }[];
+}
+
+// プロジェクト実体（器の説明＋AIへの指示）。未設定時は description/instructions が null。
+export interface Project {
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  created: string | null;
+  updated: string | null;
+}
+
 export interface SongOverlay {
   neta_id: string;
   stage: string | null;
@@ -195,6 +209,13 @@ export const api = {
   updateSong: (id: string, patch: { stage?: string | null; next_action?: string | null }) =>
     http<SongOverlay>(`/neta/${id}/song`, { method: "PATCH", body: JSON.stringify(patch) }),
   getNetaAssets: (id: string) => http<(Asset & { role: string })[]>(`/neta/${id}/assets`),
+  // プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイルを器単位で集約（S2）。
+  listProjectFiles: (project: string) =>
+    http<ProjectFile[]>(`/projects/${encodeURIComponent(project)}/files`),
+  // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返る。
+  getProject: (name: string) => http<Project>(`/projects/${encodeURIComponent(name)}`),
+  setProject: (name: string, meta: { description?: string | null; instructions?: string | null }) =>
+    http<Project>(`/projects/${encodeURIComponent(name)}`, { method: "POST", body: JSON.stringify(meta) }),
   linkAsset: (id: string, asset_id: string, role: "source" | "attachment" | "render" = "attachment") =>
     http<{ ok: boolean }>(`/neta/${id}/assets`, { method: "POST", body: JSON.stringify({ asset_id, role }) }),
 
@@ -268,7 +289,15 @@ export const api = {
     http<{ cleared: boolean }>(`/chat/${encodeURIComponent(thread)}/messages`, {
       method: "DELETE",
     }),
-  listChatThreads: () => http<ChatThread[]>(`/chat/threads`),
+  // プロジェクト指定時はその器に束ねたセッションのみ。未指定＝全フリーChat。
+  listChatThreads: (project?: string | null) =>
+    http<ChatThread[]>(`/chat/threads${project ? `?project=${encodeURIComponent(project)}` : ""}`),
+  // 会話セッションを器（プロジェクト）に束ねる／タイトル付与（upsert・部分更新）。
+  setChatThread: (thread: string, meta: { project?: string | null; title?: string | null }) =>
+    http<{ ok: boolean }>(`/chat/${encodeURIComponent(thread)}/meta`, {
+      method: "POST",
+      body: JSON.stringify(meta),
+    }),
 
   // #100④-S3：常駐 claude へ1ターン送り、stream-json イベントを SSE で受けて onEvent へ流す。
   // 旧 createJob+ポーリングを置換（脳は Claude＝記憶/多ターン/ツール選択をネイティブに）。
@@ -313,9 +342,11 @@ export const api = {
 
 export interface ChatThread {
   thread: string;
-  last: string;
+  last: string | null;
   count: number;
   preview: string | null;
+  project: string | null;
+  title: string | null;
 }
 
 export interface ChatMessageInput {

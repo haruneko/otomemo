@@ -20,18 +20,25 @@ import { now } from "./repo/util";
 import { AssetRepo, type Asset, type SongOverlay } from "./repo/asset-repo";
 import { ScheduleRepo, type Schedule } from "./repo/schedule-repo";
 import { ChatRepo, type ChatMessage } from "./repo/chat-repo";
+import { ProjectRepo, type Project } from "./repo/project-repo";
 import { RelationRepo } from "./repo/relation-repo";
 import { ComposeRepo } from "./repo/compose-repo";
 import { JobRepo } from "./repo/job-repo";
-import { NetaRepo } from "./repo/neta-repo";
+import { NetaRepo, PROJECT_TAG_PREFIX } from "./repo/neta-repo";
 
 // prj 名前空間タグの判定は NetaRepo が持つ（facets/検索で使う）。従来 import 元(core)からも引けるよう再公開。
 export { PROJECT_TAG_PREFIX, isProjectTag } from "./repo/neta-repo";
+
+// プロジェクト配下ファイル（asset＋紐づき先ネタ）。器＝一曲(or組曲)のファイル集約の戻り（S2）。
+export interface ProjectFile extends Asset {
+  attachedTo: { netaId: string; title: string | null; kind: string; role: string }[];
+}
 
 // repo に移した型を従来の import 元(core)からも引けるよう再公開（呼び出し側 無改修）。
 export type { Asset, SongOverlay } from "./repo/asset-repo";
 export type { Schedule } from "./repo/schedule-repo";
 export type { ChatMessage } from "./repo/chat-repo";
+export type { Project } from "./repo/project-repo";
 
 /**
  * 操作コア（docs/design.md #20 ツールカタログ）。
@@ -44,6 +51,7 @@ export class Core {
   readonly asset: AssetRepo;
   readonly schedule: ScheduleRepo;
   readonly chat: ChatRepo;
+  readonly project: ProjectRepo;
   readonly relation: RelationRepo;
   readonly compose: ComposeRepo;
   readonly job: JobRepo;
@@ -54,6 +62,7 @@ export class Core {
     this.asset = new AssetRepo(db);
     this.schedule = new ScheduleRepo(db);
     this.chat = new ChatRepo(db);
+    this.project = new ProjectRepo(db);
     this.relation = new RelationRepo(db);
     this.compose = new ComposeRepo(db);
     this.job = new JobRepo(db);
@@ -291,6 +300,42 @@ export class Core {
     return this.asset.getNetaAssets(netaId);
   }
 
+  // プロジェクト＝一曲(or組曲)の器：配下ネタ(prj: タグ)に紐づくファイルを器単位で集約（集約跨ぎ＝Core 残置・#6）。
+  // 同一 asset が複数ネタに紐づく場合は1件に畳み、attachedTo に紐づき先（ネタ＋role）を列挙。
+  listProjectFiles(project: string): ProjectFile[] {
+    const tag = PROJECT_TAG_PREFIX + project;
+    const rows = this.db
+      .prepare(
+        `SELECT na.asset_id AS asset_id, na.role AS role,
+                n.id AS neta_id, n.title AS neta_title, n.kind AS neta_kind
+         FROM neta_tag nt
+         JOIN tag t        ON t.id = nt.tag_id AND t.name = @tag
+         JOIN neta n       ON n.id = nt.neta_id
+         JOIN neta_asset na ON na.neta_id = n.id
+         JOIN asset a      ON a.id = na.asset_id
+         ORDER BY a.created DESC, na.asset_id`,
+      )
+      .all({ tag }) as Record<string, unknown>[];
+    const byAsset = new Map<string, ProjectFile>();
+    for (const r of rows) {
+      const aid = r.asset_id as string;
+      let f = byAsset.get(aid);
+      if (!f) {
+        const asset = this.asset.getAsset(aid);
+        if (!asset) continue;
+        f = { ...asset, attachedTo: [] };
+        byAsset.set(aid, f);
+      }
+      f.attachedTo.push({
+        netaId: r.neta_id as string,
+        title: (r.neta_title as string) ?? null,
+        kind: r.neta_kind as string,
+        role: r.role as string,
+      });
+    }
+    return [...byAsset.values()];
+  }
+
   // --- schedule（#80 proactive: 見てない間に継続研究/収集を進める）---
   // --- schedule：CRUD は ScheduleRepo へ委譲。tickSchedules(期日→enqueue) は集約跨ぎ＝Core 残置（#6）---
   addSchedule(input: Parameters<ScheduleRepo["addSchedule"]>[0]): Schedule {
@@ -323,8 +368,26 @@ export class Core {
   clearChatThread(thread: string): void {
     this.chat.clearChatThread(thread);
   }
-  listChatThreads(): { thread: string; last: string; count: number; preview: string | null }[] {
-    return this.chat.listChatThreads();
+  setChatThread(input: Parameters<ChatRepo["setChatThread"]>[0]): void {
+    this.chat.setChatThread(input);
+  }
+  listChatThreads(project?: string | null): ReturnType<ChatRepo["listChatThreads"]> {
+    return this.chat.listChatThreads(project);
+  }
+  // スレッドが属す器（プロジェクト名）。未束ね＝null（指示注入の引き当てに使う）。
+  getChatThreadProject(thread: string): string | null {
+    const row = this.db.prepare(`SELECT project FROM chat_thread WHERE thread=?`).get(thread) as
+      | { project: string | null }
+      | undefined;
+    return row?.project ?? null;
+  }
+
+  // --- project（器の説明＋AIへの指示）：ProjectRepo へ委譲 ---
+  getProject(name: string): Project | null {
+    return this.project.getProject(name);
+  }
+  setProject(name: string, patch: { description?: string | null; instructions?: string | null }): Project {
+    return this.project.setProject(name, patch);
   }
 }
 

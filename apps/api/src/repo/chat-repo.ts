@@ -65,25 +65,68 @@ export class ChatRepo {
     this.db.prepare(`DELETE FROM chat_message WHERE thread = ?`).run(thread);
   }
 
+  // 会話セッションを器（プロジェクト）に束ねる。upsert（部分更新は既存を温存＝COALESCE）。
+  // project/title 省略時は既存値を保つ（id 採番時の登録 → 後からタイトル付与、の順を許す）。
+  setChatThread(input: { thread: string; project?: string | null; title?: string | null }): void {
+    const ts = now();
+    this.db
+      .prepare(
+        `INSERT INTO chat_thread (thread, project, title, created, updated)
+         VALUES (@thread, @project, @title, @ts, @ts)
+         ON CONFLICT(thread) DO UPDATE SET
+           project = COALESCE(@project, project),
+           title   = COALESCE(@title, title),
+           updated = @ts`,
+      )
+      .run({
+        thread: input.thread,
+        project: input.project ?? null,
+        title: input.title ?? null,
+        ts,
+      });
+  }
+
   // フリーChatの会話セッション一覧（thread='global' か 'chat:*'）。最終時刻・件数・冒頭プレビュー付き。
   // ネタ別スレッド(thread=neta id)は対象外（ネタから辿るため）。
-  listChatThreads(): { thread: string; last: string; count: number; preview: string | null }[] {
+  // project 指定時はその器に束ねたセッションのみ（chat_thread.project 一致）。未指定＝全フリーChat。
+  // メッセージ前の空セッション（chat_thread 行のみ）も器に表示する＝新規作成直後から一覧に出る。
+  listChatThreads(
+    project?: string | null,
+  ): {
+    thread: string;
+    last: string | null;
+    count: number;
+    preview: string | null;
+    project: string | null;
+    title: string | null;
+  }[] {
     const rows = this.db
       .prepare(
-        `SELECT m.thread AS thread, MAX(m.created) AS last, COUNT(*) AS count,
+        `WITH ids AS (
+           SELECT thread FROM chat_message WHERE thread = 'global' OR thread LIKE 'chat:%'
+           UNION
+           SELECT thread FROM chat_thread
+         )
+         SELECT i.thread AS thread,
+           (SELECT MAX(created) FROM chat_message WHERE thread = i.thread) AS last,
+           (SELECT COUNT(*) FROM chat_message WHERE thread = i.thread) AS count,
            (SELECT x.text FROM chat_message x
-              WHERE x.thread = m.thread AND x.role = 'user' AND x.text IS NOT NULL
-              ORDER BY x.created LIMIT 1) AS preview
-         FROM chat_message m
-         WHERE m.thread = 'global' OR m.thread LIKE 'chat:%'
-         GROUP BY m.thread ORDER BY last DESC`,
+              WHERE x.thread = i.thread AND x.role = 'user' AND x.text IS NOT NULL
+              ORDER BY x.created LIMIT 1) AS preview,
+           t.project AS project, t.title AS title, t.created AS t_created
+         FROM ids i
+         LEFT JOIN chat_thread t ON t.thread = i.thread
+         WHERE (@project IS NULL OR t.project = @project)
+         ORDER BY COALESCE((SELECT MAX(created) FROM chat_message WHERE thread = i.thread), t.created) DESC`,
       )
-      .all() as Record<string, unknown>[];
+      .all({ project: project ?? null }) as Record<string, unknown>[];
     return rows.map((r) => ({
       thread: r.thread as string,
-      last: r.last as string,
+      last: (r.last as string) ?? null,
       count: Number(r.count),
       preview: (r.preview as string) ?? null,
+      project: (r.project as string) ?? null,
+      title: (r.title as string) ?? null,
     }));
   }
 }

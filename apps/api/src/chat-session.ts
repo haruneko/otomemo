@@ -79,6 +79,7 @@ export class ChatSession {
   private mode: "resume" | "create" = "resume"; // 初手は resume、失敗（不存在）時のみ create にフォールバック
   private sawNoConv = false; // stderr に "No conversation found"（＝新規スレッド）
   private lastActiveAt = 0; // 最後に say した時刻（idle reap 用）。0=未発言。
+  private systemSuffix = ""; // 器（プロジェクト）の指示文。COMPOSE_PLAYBOOK に追記＝この会話に効かせる。空=従来通り。
 
   constructor(private readonly thread: string, private readonly dbPath: string, private readonly cwd: string) {
     this.sid = sessionIdForThread(thread);
@@ -111,7 +112,7 @@ export class ChatSession {
       ...sessionArg,
       "--mcp-config", mcpConfig, "--strict-mcp-config",
       "--tools", ...CHAT_VERBS, "--allowedTools", ...CHAT_VERBS,
-      "--append-system-prompt", COMPOSE_PLAYBOOK,
+      "--append-system-prompt", this.systemPrompt(),
       "--model", "claude-sonnet-4-6",
     ];
     const env = { ...process.env, CM_DB: this.dbPath, PATH: childPath };
@@ -199,6 +200,18 @@ export class ChatSession {
     });
   }
 
+  /** 器の指示文を差し替える（次の spawn から有効＝走行中プロセスは idle reap 後の再起動で反映）。 */
+  setSystemSuffix(suffix: string): void {
+    this.systemSuffix = suffix ?? "";
+  }
+
+  // COMPOSE_PLAYBOOK にプロジェクト指示を追記。空なら従来と完全に同一（回帰ゼロ）。
+  private systemPrompt(): string {
+    const s = this.systemSuffix.trim();
+    if (!s) return COMPOSE_PLAYBOOK;
+    return `${COMPOSE_PLAYBOOK}\n\n[Project guidance from the user — honor it, but stay within the rules above]\n${s}`;
+  }
+
   kill(): void {
     this.proc?.kill();
     this.proc = null;
@@ -228,13 +241,14 @@ function ensureReaper(): void {
   reaper.unref?.(); // イベントループを生かし続けない
 }
 
-/** スレッド毎の長命セッションを取得（無ければ生成・遅延spawn）。 */
-export function getChatSession(thread: string, dbPath: string, cwd: string): ChatSession {
+/** スレッド毎の長命セッションを取得（無ければ生成・遅延spawn）。systemSuffix=器の指示文（毎回最新を反映）。 */
+export function getChatSession(thread: string, dbPath: string, cwd: string, systemSuffix = ""): ChatSession {
   ensureReaper();
   let s = sessions.get(thread);
   if (!s) {
     s = new ChatSession(thread, dbPath, cwd);
     sessions.set(thread, s);
   }
+  s.setSystemSuffix(systemSuffix); // 指示文が更新されていれば次spawnで効く
   return s;
 }

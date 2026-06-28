@@ -1,0 +1,195 @@
+// プロジェクト＝一曲(or組曲)の器の「画面」（Claude Projects 風ランディング・メインペーン埋め込み）。
+// 上＝この曲について会話を始める起点、下＝会話/曲・セクション（左）とファイル＝知識（右）。
+// 要件「一曲（または組曲）の器にまとめる」/ design「プロジェクト＝…ホーム」。データは既存テーブルの読み。
+import { useEffect, useState } from "react";
+import { api, type Neta, type ProjectFile, type ChatThread, type Project } from "../api";
+import { projectTag } from "../project";
+
+function fileSize(n: number | null): string {
+  if (n == null) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function ProjectScreen({
+  project,
+  onOpenNeta,
+  onOpenSession,
+  onStartChat,
+}: {
+  project: string;
+  onOpenNeta: (neta: Neta) => void;
+  onOpenSession: (thread: string) => void;
+  onStartChat: (seed: string) => void; // この曲についての新規会話を始める（seed=最初の一言・空可）
+}) {
+  const [songs, setSongs] = useState<Neta[]>([]); // kind=song/section
+  const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [sessions, setSessions] = useState<ChatThread[]>([]);
+  const [seed, setSeed] = useState("");
+  const [meta, setMeta] = useState<Project | null>(null);
+  const [editing, setEditing] = useState(false); // 説明・指示の編集パネル開閉
+  const [descDraft, setDescDraft] = useState("");
+  const [instrDraft, setInstrDraft] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const [netas, fs, th, pm] = await Promise.all([
+          api.listNeta({ tags: [projectTag(project)] }),
+          api.listProjectFiles(project),
+          api.listChatThreads(project),
+          api.getProject(project),
+        ]);
+        if (!alive) return;
+        setSongs(netas.filter((n) => n.kind === "song" || n.kind === "section"));
+        setFiles(fs);
+        setSessions(th);
+        setMeta(pm);
+        setDescDraft(pm.description ?? "");
+        setInstrDraft(pm.instructions ?? "");
+      } catch {
+        /* 取得失敗＝空のまま */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [project]);
+
+  async function saveMeta() {
+    try {
+      const pm = await api.setProject(project, { description: descDraft, instructions: instrDraft });
+      setMeta(pm);
+      setEditing(false);
+    } catch {
+      /* 失敗＝編集のまま */
+    }
+  }
+
+  function start() {
+    onStartChat(seed.trim());
+    setSeed("");
+  }
+
+  return (
+    <div className="project-screen" aria-label="project-screen">
+      <div className="ps-titlebar">
+        <h2 className="ps-title">🏠 {project}</h2>
+        <button className="ps-edit" aria-label="edit-project" onClick={() => setEditing((v) => !v)}>
+          {editing ? "閉じる" : "編集"}
+        </button>
+      </div>
+      {!editing && meta?.description && <p className="ps-desc">{meta.description}</p>}
+      {!editing && meta?.instructions && (
+        <p className="ps-instr muted" title="この器での会話に効く指示">📌 {meta.instructions}</p>
+      )}
+
+      {editing && (
+        <div className="ps-meta-edit" aria-label="project-meta-edit">
+          <label>
+            説明（この曲はどんな曲か・メモ）
+            <textarea
+              aria-label="project-description"
+              rows={2}
+              value={descDraft}
+              onChange={(e) => setDescDraft(e.target.value)}
+              placeholder="例：切ない疾走感のミドルバラード。サビで一気に上がる。"
+            />
+          </label>
+          <label>
+            AIへの指示（この器の会話に常に効く）
+            <textarea
+              aria-label="project-instructions"
+              rows={3}
+              value={instrDraft}
+              onChange={(e) => setInstrDraft(e.target.value)}
+              placeholder="例：キーはAm。サビは上行で締める。コードは王道進行を避けて少しひねる。"
+            />
+          </label>
+          <div className="ps-meta-actions">
+            <button className="primary" onClick={() => void saveMeta()}>
+              保存
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 起点：この曲について会話を始める（Claude Projects のチャット入力にあたる主役） */}
+      <form
+        className="ps-starter"
+        onSubmit={(e) => {
+          e.preventDefault();
+          start();
+        }}
+      >
+        <input
+          aria-label="start-chat"
+          placeholder={`「${project}」について相談・続きを書く…`}
+          value={seed}
+          onChange={(e) => setSeed(e.target.value)}
+        />
+        <button type="submit" className="primary" aria-label="start-chat-go">
+          ↑
+        </button>
+      </form>
+
+      <div className="ps-grid">
+        <div className="ps-main">
+          <section className="ps-block" aria-label="sessions">
+            <h3>会話 <span className="muted">{sessions.length}</span></h3>
+            {sessions.length === 0 && <p className="muted">まだ会話がありません。上から始められます。</p>}
+            <ul className="ps-list">
+              {sessions.map((s) => (
+                <li key={s.thread}>
+                  <button type="button" onClick={() => onOpenSession(s.thread)}>
+                    <span className="ph-title">{s.title ?? s.preview ?? "(無題の会話)"}</span>
+                    <span className="muted">
+                      {s.last ? new Date(s.last).toLocaleString() : "新規"} · {s.count}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="ps-block" aria-label="songs">
+            <h3>曲・セクション <span className="muted">{songs.length}</span></h3>
+            {songs.length === 0 && <p className="muted">まだ曲がありません</p>}
+            <ul className="ps-list">
+              {songs.map((n) => (
+                <li key={n.id}>
+                  <button type="button" onClick={() => onOpenNeta(n)}>
+                    <span className="ph-title">{n.title ?? n.text ?? "(無題)"}</span>
+                    <span className="muted">{n.kind === "song" ? "曲" : "セクション"}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+
+        {/* 知識＝この曲に貯めたファイル（Claude Projects の Project knowledge にあたる） */}
+        <aside className="ps-knowledge" aria-label="files">
+          <h3>ファイル <span className="muted">{files.length}</span></h3>
+          {files.length === 0 && <p className="muted">まだファイルがありません</p>}
+          <ul className="ps-list">
+            {files.map((f) => (
+              <li key={f.id}>
+                <a href={`/asset/${encodeURIComponent(f.id)}`} download={f.name ?? undefined}>
+                  <span className="ph-title">{f.name ?? f.id}</span>
+                  <span className="muted">
+                    {f.kind}
+                    {f.size != null ? ` · ${fileSize(f.size)}` : ""} ·{" "}
+                    {f.attachedTo.map((a) => a.title ?? a.kind).join("、")}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      </div>
+    </div>
+  );
+}

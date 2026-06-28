@@ -318,14 +318,18 @@ export function Chat({
   onChanged,
   onClose,
   onOpenNeta,
+  activeProject,
+  initialText,
 }: {
   target?: Neta;
   onChanged?: () => void;
   onClose: () => void;
   onOpenNeta?: (neta: Neta) => void; // #68 ネタを開く（Chatは閉じる）
+  activeProject?: string; // プロジェクト＝一曲(or組曲)の器：新規セッションをこの器に束ね、一覧もこの器で絞る
+  initialText?: string; // 開いた瞬間に入力欄へ載せる最初の一言（プロジェクト画面の起点入力など）
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialText ?? "");
   const [mode, setMode] = useState<Mode>("consult");
   const [busy, setBusy] = useState(false);
   // 待ち中の進捗（subtask 完了/総数・経過秒）。null=非ワーカー待ち。UX：止まってる不安を解消。
@@ -755,9 +759,10 @@ export function Chat({
   }
 
   // 会話セッション：一覧を開く／新規作成／切替（フリーChatのみ）。
+  // アクティブな器（プロジェクト）があれば、その器に束ねたセッションのみを一覧（横断は器を外す）。
   function openSessions() {
     setShowSessions(true);
-    void api.listChatThreads().then(setSessions).catch(() => {});
+    void api.listChatThreads(activeProject).then(setSessions).catch(() => {});
   }
   function pickSession(id: string) {
     localStorage.setItem("cm-chat-session", id);
@@ -766,6 +771,8 @@ export function Chat({
   }
   function newSession() {
     const id = "chat:" + (crypto.randomUUID?.() ?? Date.now().toString(36));
+    // 器（プロジェクト）が選ばれていれば、新規セッションをその器に束ねる（作成直後から一覧に出る）。
+    if (activeProject) void api.setChatThread(id, { project: activeProject }).catch(() => {});
     pickSession(id);
   }
 
@@ -803,13 +810,17 @@ export function Chat({
         {showSessions && !target && (
           <div className="chat-sessions" role="dialog" aria-label="chat-sessions">
             <div className="chat-sessions-head">
-              <strong>会話</strong>
+              <strong>{activeProject ? `会話 · ${activeProject}` : "会話"}</strong>
               <button onClick={newSession}>＋ 新しい会話</button>
               <button aria-label="close-sessions" onClick={() => setShowSessions(false)}>
                 ✕
               </button>
             </div>
-            {sessions.length === 0 && <p className="muted">まだ会話がありません</p>}
+            {sessions.length === 0 && (
+              <p className="muted">
+                {activeProject ? `「${activeProject}」の会話はまだありません` : "まだ会話がありません"}
+              </p>
+            )}
             {sessions.map((s) => (
               <button
                 key={s.thread}
@@ -818,9 +829,11 @@ export function Chat({
                 onClick={() => pickSession(s.thread)}
               >
                 <span className="chat-session-title">
-                  {s.preview ?? (s.thread === "global" ? "(最初の会話)" : "(無題の会話)")}
+                  {s.title ?? s.preview ?? (s.thread === "global" ? "(最初の会話)" : "(無題の会話)")}
                 </span>
-                <span className="muted">{new Date(s.last).toLocaleString()} · {s.count}</span>
+                <span className="muted">
+                  {s.last ? new Date(s.last).toLocaleString() : "新規"} · {s.count}
+                </span>
               </button>
             ))}
           </div>
