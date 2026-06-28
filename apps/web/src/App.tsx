@@ -59,11 +59,11 @@ export function App() {
     else localStorage.removeItem(ACTIVE_PROJECT_KEY);
   }, [activeProject]);
 
-  // プロジェクト一覧（facets の projects＝prj: を剥がした名前）。reload時に追従。
+  // プロジェクト一覧（prj:タグ ∪ project行＝説明だけ作った空の器も拾う）。reload時に追従。
   const loadProjects = useCallback(() => {
     api
-      .facets()
-      .then((f) => setProjects(f.projects ?? []))
+      .listProjectNames()
+      .then((names) => setProjects(names))
       .catch(() => {});
   }, []);
 
@@ -469,6 +469,11 @@ export function App() {
                 openChat();
               }}
               onStartChat={(seed) => startProjectChat(seed)}
+              onCreateSong={() => {
+                setFromProject(true); // 組み終えて閉じたら器へ戻る
+                setProjectView(false);
+                void newSong();
+              }}
             />
           ) : active ? (
             <NetaDialog

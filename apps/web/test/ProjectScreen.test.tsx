@@ -2,15 +2,20 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 // プロジェクト画面（Claude Projects 風ランディング）：会話起点＋曲/ファイル/会話の集約（S3/UI）。
-const { listNeta, listProjectFiles, listChatThreads, getProject, setProject } = vi.hoisted(() => ({
-  listNeta: vi.fn(),
-  listProjectFiles: vi.fn(),
-  listChatThreads: vi.fn(),
-  getProject: vi.fn(),
-  setProject: vi.fn(),
-}));
+const { listNeta, listProjectFiles, listChatThreads, getProject, setProject, setChatThread, deleteChatThread, deleteAsset, assetUrl } =
+  vi.hoisted(() => ({
+    listNeta: vi.fn(),
+    listProjectFiles: vi.fn(),
+    listChatThreads: vi.fn(),
+    getProject: vi.fn(),
+    setProject: vi.fn(),
+    setChatThread: vi.fn().mockResolvedValue({}),
+    deleteChatThread: vi.fn().mockResolvedValue({}),
+    deleteAsset: vi.fn().mockResolvedValue({}),
+    assetUrl: vi.fn((id) => `/asset/${id}`),
+  }));
 vi.mock("../src/api", () => ({
-  api: { listNeta, listProjectFiles, listChatThreads, getProject, setProject },
+  api: { listNeta, listProjectFiles, listChatThreads, getProject, setProject, setChatThread, deleteChatThread, deleteAsset, assetUrl },
 }));
 
 import { ProjectScreen } from "../src/components/ProjectScreen";
@@ -32,7 +37,7 @@ describe("ProjectScreen", () => {
     const onOpenSession = vi.fn();
     const onStartChat = vi.fn();
     render(
-      <ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={onOpenSession} onStartChat={onStartChat} />,
+      <ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={onOpenSession} onStartChat={onStartChat} onCreateSong={vi.fn()} />,
     );
 
     // 器の説明が見出し下に出る
@@ -61,12 +66,42 @@ describe("ProjectScreen", () => {
     listChatThreads.mockResolvedValue([]);
     getProject.mockResolvedValue({ name: "みなそこ", description: null, instructions: null, created: null, updated: null });
     setProject.mockResolvedValue({ name: "みなそこ", description: "新説明", instructions: "Amで上行", created: "x", updated: "x" });
-    render(<ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={vi.fn()} onStartChat={vi.fn()} />);
+    render(<ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={vi.fn()} onStartChat={vi.fn()} onCreateSong={vi.fn()} />);
 
     fireEvent.click(await screen.findByLabelText("edit-project"));
     fireEvent.change(screen.getByLabelText("project-description"), { target: { value: "新説明" } });
     fireEvent.change(screen.getByLabelText("project-instructions"), { target: { value: "Amで上行" } });
     fireEvent.click(screen.getByText("保存"));
     expect(setProject).toHaveBeenCalledWith("みなそこ", { description: "新説明", instructions: "Amで上行" });
+  });
+
+  it("session rename/delete, file delete, and ＋曲 are wired", async () => {
+    listNeta.mockResolvedValue([]);
+    listProjectFiles.mockResolvedValue([
+      { id: "a1", kind: "lyrics", name: "歌詞.txt", size: 10, mime: null, created: "x", attachedTo: [] },
+    ]);
+    listChatThreads.mockResolvedValue([
+      { thread: "chat:z", last: "2026-06-28T00:00:00Z", count: 1, preview: "壁打ち", project: "みなそこ", title: null },
+    ]);
+    getProject.mockResolvedValue({ name: "みなそこ", description: null, instructions: null, created: null, updated: null });
+    const onCreateSong = vi.fn();
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("改名後");
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={vi.fn()} onStartChat={vi.fn()} onCreateSong={onCreateSong} />);
+
+    fireEvent.click(await screen.findByLabelText("rename-session"));
+    expect(setChatThread).toHaveBeenCalledWith("chat:z", { title: "改名後" });
+
+    fireEvent.click(screen.getByLabelText("delete-session"));
+    expect(deleteChatThread).toHaveBeenCalledWith("chat:z");
+
+    fireEvent.click(screen.getByLabelText("delete-file"));
+    expect(deleteAsset).toHaveBeenCalledWith("a1");
+
+    fireEvent.click(screen.getByLabelText("create-song"));
+    expect(onCreateSong).toHaveBeenCalled();
+
+    promptSpy.mockRestore();
+    confirmSpy.mockRestore();
   });
 });

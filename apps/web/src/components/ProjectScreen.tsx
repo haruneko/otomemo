@@ -1,7 +1,7 @@
 // プロジェクト＝一曲(or組曲)の器の「画面」（Claude Projects 風ランディング・メインペーン埋め込み）。
 // 上＝この曲について会話を始める起点、下＝会話/曲・セクション（左）とファイル＝知識（右）。
 // 要件「一曲（または組曲）の器にまとめる」/ design「プロジェクト＝…ホーム」。データは既存テーブルの読み。
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, type Neta, type ProjectFile, type ChatThread, type Project } from "../api";
 import { projectTag } from "../project";
 
@@ -17,11 +17,13 @@ export function ProjectScreen({
   onOpenNeta,
   onOpenSession,
   onStartChat,
+  onCreateSong,
 }: {
   project: string;
   onOpenNeta: (neta: Neta) => void;
   onOpenSession: (thread: string) => void;
   onStartChat: (seed: string) => void; // この曲についての新規会話を始める（seed=最初の一言・空可）
+  onCreateSong: () => void; // 器の中で曲を新規に組む（左レールに戻らず完結）
 }) {
   const [songs, setSongs] = useState<Neta[]>([]); // kind=song/section
   const [files, setFiles] = useState<ProjectFile[]>([]);
@@ -32,31 +34,38 @@ export function ProjectScreen({
   const [descDraft, setDescDraft] = useState("");
   const [instrDraft, setInstrDraft] = useState("");
 
+  // 器の中身（曲/ファイル/会話）を読み直す。変更操作（改名/削除）後にも呼ぶ。
+  const loadContent = useCallback(async () => {
+    try {
+      const [netas, fs, th] = await Promise.all([
+        api.listNeta({ tags: [projectTag(project)] }),
+        api.listProjectFiles(project),
+        api.listChatThreads(project),
+      ]);
+      setSongs(netas.filter((n) => n.kind === "song" || n.kind === "section"));
+      setFiles(fs);
+      setSessions(th);
+    } catch {
+      /* 取得失敗＝現状維持 */
+    }
+  }, [project]);
+
   useEffect(() => {
     let alive = true;
-    void (async () => {
-      try {
-        const [netas, fs, th, pm] = await Promise.all([
-          api.listNeta({ tags: [projectTag(project)] }),
-          api.listProjectFiles(project),
-          api.listChatThreads(project),
-          api.getProject(project),
-        ]);
+    void loadContent();
+    void api
+      .getProject(project)
+      .then((pm) => {
         if (!alive) return;
-        setSongs(netas.filter((n) => n.kind === "song" || n.kind === "section"));
-        setFiles(fs);
-        setSessions(th);
         setMeta(pm);
         setDescDraft(pm.description ?? "");
         setInstrDraft(pm.instructions ?? "");
-      } catch {
-        /* 取得失敗＝空のまま */
-      }
-    })();
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [project]);
+  }, [project, loadContent]);
 
   async function saveMeta() {
     try {
@@ -66,6 +75,24 @@ export function ProjectScreen({
     } catch {
       /* 失敗＝編集のまま */
     }
+  }
+
+  // 会話セッションの改名／削除（器の中で完結）。
+  async function renameSession(s: ChatThread) {
+    const name = window.prompt("会話のタイトル", s.title ?? s.preview ?? "")?.trim();
+    if (name == null) return;
+    await api.setChatThread(s.thread, { title: name }).catch(() => {});
+    await loadContent();
+  }
+  async function deleteSession(s: ChatThread) {
+    if (!window.confirm(`会話「${s.title ?? s.preview ?? "(無題)"}」を削除します。取り消せません。`)) return;
+    await api.deleteChatThread(s.thread).catch(() => {});
+    await loadContent();
+  }
+  async function deleteFile(f: ProjectFile) {
+    if (!window.confirm(`ファイル「${f.name ?? f.id}」を削除します。取り消せません。`)) return;
+    await api.deleteAsset(f.id).catch(() => {});
+    await loadContent();
   }
 
   function start() {
@@ -142,21 +169,34 @@ export function ProjectScreen({
             {sessions.length === 0 && <p className="muted">まだ会話がありません。上から始められます。</p>}
             <ul className="ps-list">
               {sessions.map((s) => (
-                <li key={s.thread}>
-                  <button type="button" onClick={() => onOpenSession(s.thread)}>
+                <li key={s.thread} className="ps-row">
+                  <button type="button" className="ps-row-main" onClick={() => onOpenSession(s.thread)}>
                     <span className="ph-title">{s.title ?? s.preview ?? "(無題の会話)"}</span>
                     <span className="muted">
                       {s.last ? new Date(s.last).toLocaleString() : "新規"} · {s.count}
                     </span>
                   </button>
+                  <span className="ps-row-actions">
+                    <button type="button" aria-label="rename-session" title="改名" onClick={() => void renameSession(s)}>
+                      ✎
+                    </button>
+                    <button type="button" aria-label="delete-session" title="削除" onClick={() => void deleteSession(s)}>
+                      🗑
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>
           </section>
 
           <section className="ps-block" aria-label="songs">
-            <h3>曲・セクション <span className="muted">{songs.length}</span></h3>
-            {songs.length === 0 && <p className="muted">まだ曲がありません</p>}
+            <h3 className="ps-block-head">
+              <span>曲・セクション <span className="muted">{songs.length}</span></span>
+              <button type="button" className="ps-add" aria-label="create-song" onClick={onCreateSong}>
+                ＋曲を組む
+              </button>
+            </h3>
+            {songs.length === 0 && <p className="muted">まだ曲がありません。「＋曲を組む」から。</p>}
             <ul className="ps-list">
               {songs.map((n) => (
                 <li key={n.id}>
@@ -176,8 +216,8 @@ export function ProjectScreen({
           {files.length === 0 && <p className="muted">まだファイルがありません</p>}
           <ul className="ps-list">
             {files.map((f) => (
-              <li key={f.id}>
-                <a href={`/asset/${encodeURIComponent(f.id)}`} download={f.name ?? undefined}>
+              <li key={f.id} className="ps-row">
+                <a className="ps-row-main" href={api.assetUrl(f.id)} download={f.name ?? undefined}>
                   <span className="ph-title">{f.name ?? f.id}</span>
                   <span className="muted">
                     {f.kind}
@@ -185,6 +225,11 @@ export function ProjectScreen({
                     {f.attachedTo.map((a) => a.title ?? a.kind).join("、")}
                   </span>
                 </a>
+                <span className="ps-row-actions">
+                  <button type="button" aria-label="delete-file" title="削除" onClick={() => void deleteFile(f)}>
+                    🗑
+                  </button>
+                </span>
               </li>
             ))}
           </ul>

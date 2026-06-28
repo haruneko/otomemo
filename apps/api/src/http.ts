@@ -462,6 +462,9 @@ export function buildHttp(core: Core): FastifyInstance {
     return core.listProjectFiles(project);
   });
 
+  // プロジェクト名一覧（prj:タグ ∪ project行＝空の器も含む）。picker のソース。
+  app.get("/projects", async () => core.listProjectNames());
+
   // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返す（画面は常に開ける）。
   app.get("/projects/:name", async (req) => {
     const { name } = req.params as { name: string };
@@ -548,6 +551,13 @@ export function buildHttp(core: Core): FastifyInstance {
     const { thread } = req.params as { thread: string };
     core.clearChatThread(thread);
     return { cleared: true };
+  });
+
+  // セッションごと削除（履歴＋器への所属）。/messages は履歴だけ消す（別物）。
+  app.delete("/chat/:thread", async (req) => {
+    const { thread } = req.params as { thread: string };
+    core.deleteChatThread(thread);
+    return { deleted: true };
   });
 
   // #100 薄いラッパー：スレッド毎の長命 claude セッションに1ターン送り、stream-json を SSE で中継。

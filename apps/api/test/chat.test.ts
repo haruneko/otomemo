@@ -75,6 +75,22 @@ describe("Core chat threads bound to project (workspace)", () => {
     expect(t.project).toBe("みなそこ");
   });
 
+  it("deleteChatThread removes both the messages and the thread row (gone from list)", () => {
+    core.setChatThread({ thread: "chat:a", project: "みなそこ", title: "消す会話" });
+    core.addChatMessage({ thread: "chat:a", role: "user", text: "hi" });
+    core.deleteChatThread("chat:a");
+    expect(core.listChatMessages("chat:a")).toEqual([]);
+    expect(core.listChatThreads("みなそこ").map((t) => t.thread)).not.toContain("chat:a");
+  });
+
+  it("rename = setChatThread title; move = setChatThread project (existing thread → another 器)", () => {
+    core.addChatMessage({ thread: "chat:a", role: "user", text: "x" }); // 未仕分け
+    core.setChatThread({ thread: "chat:a", project: "みなそこ", title: "命名" }); // 器へ移動＋改名
+    const [t] = core.listChatThreads("みなそこ");
+    expect(t.thread).toBe("chat:a");
+    expect(t.title).toBe("命名");
+  });
+
   it("setChatThread upserts: partial update keeps existing fields", () => {
     core.setChatThread({ thread: "chat:a", project: "みなそこ", title: "初手" });
     core.setChatThread({ thread: "chat:a", title: "改題" }); // project は触らない

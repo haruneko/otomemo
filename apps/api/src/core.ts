@@ -368,6 +368,9 @@ export class Core {
   clearChatThread(thread: string): void {
     this.chat.clearChatThread(thread);
   }
+  deleteChatThread(thread: string): void {
+    this.chat.deleteChatThread(thread);
+  }
   setChatThread(input: Parameters<ChatRepo["setChatThread"]>[0]): void {
     this.chat.setChatThread(input);
   }
@@ -380,6 +383,23 @@ export class Core {
       | { project: string | null }
       | undefined;
     return row?.project ?? null;
+  }
+
+  // プロジェクト名の一覧＝prj:タグを持つネタ ∪ project行（説明だけ作った空の器も拾う＝picker到達可能に）。
+  listProjectNames(): string[] {
+    const prefix = PROJECT_TAG_PREFIX;
+    const tagRows = this.db
+      .prepare(
+        `SELECT DISTINCT t.name AS name FROM tag t
+         JOIN neta_tag nt ON nt.tag_id = t.id
+         WHERE t.name LIKE @like`,
+      )
+      .all({ like: prefix + "%" }) as { name: string }[];
+    const tableRows = this.db.prepare(`SELECT name FROM project`).all() as { name: string }[];
+    const names = new Set<string>();
+    for (const r of tagRows) names.add(r.name.slice(prefix.length));
+    for (const r of tableRows) names.add(r.name);
+    return [...names].sort((a, b) => a.localeCompare(b, "ja"));
   }
 
   // --- project（器の説明＋AIへの指示）：ProjectRepo へ委譲 ---

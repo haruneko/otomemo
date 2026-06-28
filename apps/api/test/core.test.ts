@@ -27,6 +27,17 @@ describe("project entity (description / instructions)", () => {
   });
 });
 
+// プロジェクト名の一覧＝prj:タグを持つネタ ∪ project行（説明だけ作った空の器も拾う＝到達可能に）。
+describe("listProjectNames (picker source incl. empty projects)", () => {
+  it("unions tag-derived projects and project-table-only (empty) ones", () => {
+    core.createNeta({ kind: "section", title: "A", tags: ["prj:みなそこ"] });
+    core.setProject("空の器", { description: "まだ曲なし" }); // ネタゼロ＝タグ由来には出ない
+    const names = core.listProjectNames();
+    expect(names).toContain("みなそこ");
+    expect(names).toContain("空の器");
+  });
+});
+
 // プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイル(asset)を曲単位で集約する（S2）。
 describe("listProjectFiles (workspace file aggregation)", () => {
   it("aggregates assets attached to netas carrying prj: tag, grouped per asset", () => {

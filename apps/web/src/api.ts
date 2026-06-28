@@ -213,6 +213,8 @@ export const api = {
   listProjectFiles: (project: string) =>
     http<ProjectFile[]>(`/projects/${encodeURIComponent(project)}/files`),
   // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返る。
+  // プロジェクト名一覧（prj:タグ ∪ project行＝空の器も含む）。picker のソース。
+  listProjectNames: () => http<string[]>(`/projects`),
   getProject: (name: string) => http<Project>(`/projects/${encodeURIComponent(name)}`),
   setProject: (name: string, meta: { description?: string | null; instructions?: string | null }) =>
     http<Project>(`/projects/${encodeURIComponent(name)}`, { method: "POST", body: JSON.stringify(meta) }),
@@ -289,6 +291,9 @@ export const api = {
     http<{ cleared: boolean }>(`/chat/${encodeURIComponent(thread)}/messages`, {
       method: "DELETE",
     }),
+  // セッションごと削除（履歴＋器への所属）。/messages は履歴だけ消す別物。
+  deleteChatThread: (thread: string) =>
+    http<{ deleted: boolean }>(`/chat/${encodeURIComponent(thread)}`, { method: "DELETE" }),
   // プロジェクト指定時はその器に束ねたセッションのみ。未指定＝全フリーChat。
   listChatThreads: (project?: string | null) =>
     http<ChatThread[]>(`/chat/threads${project ? `?project=${encodeURIComponent(project)}` : ""}`),

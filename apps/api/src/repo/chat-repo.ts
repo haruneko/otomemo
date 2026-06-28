@@ -65,6 +65,12 @@ export class ChatRepo {
     this.db.prepare(`DELETE FROM chat_message WHERE thread = ?`).run(thread);
   }
 
+  // セッションごと削除：履歴＋器への所属行（chat_thread）も消す（clearChatThread は履歴だけ）。
+  deleteChatThread(thread: string): void {
+    this.db.prepare(`DELETE FROM chat_message WHERE thread = ?`).run(thread);
+    this.db.prepare(`DELETE FROM chat_thread WHERE thread = ?`).run(thread);
+  }
+
   // 会話セッションを器（プロジェクト）に束ねる。upsert（部分更新は既存を温存＝COALESCE）。
   // project/title 省略時は既存値を保つ（id 採番時の登録 → 後からタイトル付与、の順を許す）。
   setChatThread(input: { thread: string; project?: string | null; title?: string | null }): void {

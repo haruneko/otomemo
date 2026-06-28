@@ -417,6 +417,42 @@ details.theme summary {
 .ps-list .muted {
   font-size: 0.7rem;
 }
+/* カード＝主ボタン＋操作(改名/削除) の横並び */
+.ps-list .ps-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+}
+.ps-list .ps-row .ps-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.ps-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+.ps-row-actions button {
+  padding: 0.25rem 0.45rem;
+  background: transparent;
+  border: 1px solid #2a2e36;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+}
+.ps-row-actions button:hover {
+  background: #20242b;
+}
+/* セクション見出し＋右の追加ボタン */
+.ps-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ps-add {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.6rem;
+}
 /* 狭い画面：知識(ファイル)を下に回す。
    注: 最下段カードに 💬チャットバブルが被るのは、モバイルのワークスペース・スクロール構造
    （mainpane 全画面＋レールはドロワー、が未実装）に由来＝project-screen 単体のpaddingでは解けない。
