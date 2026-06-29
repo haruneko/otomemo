@@ -73,6 +73,9 @@
   border-radius: 8px;
   padding: 6px;
   overflow-x: auto;
+  /* overflow-x:auto は仕様上 overflow-y を auto に化けさせ、丸め超過で縦スクロールバーが出る
+     （rhythm-editor と同件）。レーンは固定行で縦スクロール不要＝overflow-y を明示 hidden。 */
+  overflow-y: hidden;
   position: relative;
 }
 .playhead {
