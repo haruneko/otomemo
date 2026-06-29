@@ -12,6 +12,7 @@ import {
   nextChordCandidates,
   genChords,
   genMelody,
+  genFromEssence,
   genBass,
   genDrums,
   analyzeFit,
@@ -605,13 +606,38 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "reshape",
-    { title: "寄せる（感じで変形・候補）", description: "既存を「ある感じ」へ変形。範囲指定や“オープン/緊張”等の進行レベル feel は未対応(③-3)。保存しない。", inputSchema: { mode: z.enum(["emotion"]), chord: oneChord.optional(), dir: z.enum(["darker", "brighter"]).optional(), range: z.unknown().optional(), feel: z.string().optional() } },
-    async ({ mode, chord, dir, range, feel }) => {
-      if (range || feel) return err("range/feel拡張(オープン等・進行レベル・部分)は未対応（③-3）");
+    {
+      title: "寄せる/崩す（感じで変形・候補）",
+      description:
+        "既存を「ある感じ」へ変形。emotion=コードを darker/brighter。**deform=メロを崩す**＝提示メロのリズム指紋＋輪郭(身振り)を継ぎ、ピッチ列はコードに沿って作り直す＝「似た雰囲気の別メロ」(著作権セーフ)。strength 0..1(0=寄せる/1=面影だけ)・blendWith で複数メロの身振りを混ぜる。保存しない(候補)。範囲指定や進行レベル feel は未対応(③-3)。",
+      inputSchema: {
+        mode: z.enum(["emotion", "deform"]),
+        chord: oneChord.optional(),
+        dir: z.enum(["darker", "brighter"]).optional(),
+        range: z.unknown().optional(),
+        feel: z.string().optional(),
+        // deform 用
+        melody: notesSchema.optional(),
+        chords: chordsSchema.optional(),
+        strength: z.number().min(0).max(1).optional(),
+        blendWith: z.array(notesSchema).optional(),
+        seed: z.number().int().optional(),
+        frame: z.unknown().optional(),
+      },
+    },
+    async ({ mode, chord, dir, range, feel, melody, chords, strength, blendWith, seed, frame }) => {
       if (mode === "emotion") {
+        if (range || feel) return err("range/feel拡張(オープン等・進行レベル・部分)は未対応（③-3）");
         if (!chord || !dir) return err("reshape emotion は chord と dir(darker|brighter)");
         const deg = toDegrees([chord], 0)[0]!; // ルート不変＝key不要（degree=root）
         return ok(emotionShift(deg, dir).map((s) => ({ ...s, root: s.degree })));
+      }
+      if (mode === "deform") {
+        if (!melody?.length) return err("reshape deform は melody(崩す元メロ) が要る");
+        // メロを崩す＝essence(リズム指紋+輪郭)を継ぎ、ピッチ列はコードに沿って再生成（似て非なる・著作権セーフ）。
+        return ok(
+          genFromEssence(melody, (frame ?? null) as Parameters<typeof genFromEssence>[1], chords, seed, { strength, blendWith }),
+        );
       }
       return err("reshape: 未対応の mode");
     },

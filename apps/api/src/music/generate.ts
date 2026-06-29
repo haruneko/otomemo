@@ -691,19 +691,36 @@ export function genFromEssence(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
+  opts?: {
+    strength?: number; // 崩し強度 0..1。0=従来(輪郭を厳密保存)・1=面影だけ。既定0＝後方互換。
+    blendWith?: { pitch: number; start?: number; dur?: number }[][]; // 追加参照（輪郭を混ぜ、単一源に辿れなくする）
+  },
 ): GenResult {
   const f = normalizeFrame(frame);
-  const ns = [...(refNotes ?? [])]
-    .filter((n) => typeof n.pitch === "number")
-    .sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  const sortFilter = (arr: { pitch: number; start?: number; dur?: number }[]) =>
+    [...(arr ?? [])].filter((n) => typeof n.pitch === "number").sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  const ns = sortFilter(refNotes);
   if (ns.length === 0) return genMelody(frame, chords, seed); // 参照無し＝通常生成
+  const strength = Math.max(0, Math.min(1, opts?.strength ?? 0));
   const rng = new Rng(seed ?? 1);
   const minor = isMinorMood(f.mood ?? "");
   const scale = scalePcs(0, minor ? "minor" : "major");
   const scaleArr = scaleArray(scale);
   const lo = 60;
   const hi = 84;
-  const e = melodyEssence(ns); // contour（身振り）を継ぐ
+  // ブレンド：主参照＋追加参照の輪郭を位置ごとに混ぜる＝出力が単一源に辿れない（著作権＋凡庸さ対策）。
+  const refs = [ns, ...(opts?.blendWith ?? []).map(sortFilter).filter((r) => r.length > 0)];
+  const contours = refs.map((r) => melodyEssence(r).contour); // contour（身振り）を継ぐ
+  const dirAt = (k: number): number => {
+    const cand: number[] = [];
+    for (const c of contours) if (c[k] !== undefined) cand.push(c[k]!);
+    if (cand.length === 0) return 0;
+    if (cand.length === 1) return cand[0]!; // 単一参照＝従来どおり（rng を引かない＝後方互換）
+    return rng.choice(cand); // 複数参照＝位置ごとに身振りを混ぜる
+  };
+  // 崩し強度→歩幅プールと向きの揺らぎ確率。strength=0 は [1,1,2]・揺らぎ無し＝従来と完全一致。
+  const magPool = strength < 0.34 ? [1, 1, 2] : strength < 0.67 ? [1, 2, 2, 3] : [1, 2, 3, 4];
+  const flipP = strength * 0.5;
   const ctAt = (t: number): Set<number> => {
     const ch = chordAt(Math.floor(Math.max(0, t)), chords);
     return ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
@@ -714,8 +731,9 @@ export function genFromEssence(
     const t = ns[i]!.start ?? 0;
     const dur = ns[i]!.dur ?? 0.5;
     if (i > 0) {
-      const dir = e.contour[i - 1] ?? 0; // 参照の上下動（身振り）を踏襲
-      const mag = dir === 0 ? 0 : rng.choice([1, 1, 2]); // 歩幅は作り直す＝別の音程に
+      let dir = dirAt(i - 1); // 参照(群)の上下動（身振り）
+      if (strength > 0 && rng.next() < flipP) dir = rng.choice([-1, 0, 1]); // 崩し：向きを揺らす＝面影だけ残す
+      const mag = dir === 0 ? 0 : rng.choice(magPool); // 歩幅は作り直す＝別の音程に（強いほど広い）
       const d = toScaleDegree(pitch, scaleArr);
       pitch = degreeToPitch(d.idx + dir * mag, d.oct, scaleArr);
     }
@@ -723,7 +741,8 @@ export function genFromEssence(
     pitch = Math.max(lo, Math.min(hi, pitch));
     notes.push({ pitch, start: round3(t), dur: round3(dur) });
   }
-  const label = (f.mood ? f.mood + "の連想メロ" : "連想メロ").slice(0, 24);
+  const tag = strength >= 0.67 ? "大きく崩した" : strength >= 0.34 ? "崩した" : "連想";
+  const label = (f.mood ? f.mood + "の" + tag + "メロ" : tag + "メロ").slice(0, 24);
   return { items: [{ kind: "melody", content: { notes }, label }], edges: [] };
 }
 

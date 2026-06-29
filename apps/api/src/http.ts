@@ -135,7 +135,10 @@ export function buildHttp(core: Core): FastifyInstance {
       switch (op) {
         case "gen_chords": return genChords(b.frame, b.seed);
         case "gen_melody": return genMelody(b.frame, asChords(b.chords), b.seed);
-        case "gen_from_essence": return genFromEssence(asNotes(b.ref ?? b.melody), b.frame, asChords(b.chords), b.seed);
+        case "gen_from_essence": return genFromEssence(asNotes(b.ref ?? b.melody), b.frame, asChords(b.chords), b.seed, {
+          strength: typeof b.strength === "number" ? b.strength : undefined,
+          blendWith: Array.isArray(b.blendWith ?? b.refs) ? (b.blendWith ?? b.refs).map(asNotes) : undefined,
+        });
         case "melody_essence": return melodyEssence(asNotes(b.notes ?? b.melody));
         case "normalize_to_c": return { notes: normalizeToC(asNotes(b.notes ?? b.melody), b.key) };
         case "gen_bass": return genBass(b.frame, asChords(b.chords));

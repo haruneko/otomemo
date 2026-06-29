@@ -252,6 +252,51 @@ describe("genFromEssence エッセンス→違うメロ（S5a・北極星）", (
   });
 });
 
+describe("genFromEssence 崩し強度＋複数参照ブレンド（崩し機能）", () => {
+  const ref = [
+    { pitch: 60, start: 0, dur: 0.5 }, { pitch: 64, start: 0.5, dur: 0.5 },
+    { pitch: 62, start: 1, dur: 0.5 }, { pitch: 67, start: 1.5, dur: 0.5 },
+    { pitch: 65, start: 2, dur: 0.5 }, { pitch: 64, start: 2.5, dur: 0.5 },
+    { pitch: 69, start: 3, dur: 0.5 }, { pitch: 67, start: 3.5, dur: 0.5 },
+  ];
+  const ref2 = [
+    { pitch: 67, start: 0, dur: 0.5 }, { pitch: 65, start: 0.5, dur: 0.5 },
+    { pitch: 64, start: 1, dur: 0.5 }, { pitch: 60, start: 1.5, dur: 0.5 },
+    { pitch: 62, start: 2, dur: 0.5 }, { pitch: 64, start: 2.5, dur: 0.5 },
+    { pitch: 65, start: 3, dur: 0.5 }, { pitch: 64, start: 3.5, dur: 0.5 },
+  ];
+  const ch = [{ root: 0, quality: "", start: 0, dur: 8 }];
+  const pcs = (r: ReturnType<typeof genFromEssence>) => (r.items[0]!.content as { notes: { pitch: number; start: number }[] }).notes;
+
+  it("strength=0 は従来と完全一致（後方互換）", () => {
+    expect(JSON.stringify(genFromEssence(ref, { bars: 2 }, ch, 3, { strength: 0 }))).toBe(
+      JSON.stringify(genFromEssence(ref, { bars: 2 }, ch, 3)),
+    );
+  });
+  it("strength を上げると音が変わる（崩しが効く）＝どれかの seed で差分・ノリ(オンセット)は保つ・音域内", () => {
+    const anyDiff = [1, 2, 3, 4, 5].some(
+      (s) =>
+        JSON.stringify(pcs(genFromEssence(ref, { bars: 2 }, ch, s, { strength: 1 })).map((n) => n.pitch)) !==
+        JSON.stringify(pcs(genFromEssence(ref, { bars: 2 }, ch, s, { strength: 0 })).map((n) => n.pitch)),
+    );
+    expect(anyDiff).toBe(true);
+    const hard = pcs(genFromEssence(ref, { bars: 2 }, ch, 3, { strength: 1 }));
+    expect(hard.map((n) => n.start)).toEqual(ref.map((n) => n.start)); // リズム指紋は保つ
+    expect(hard.every((n) => n.pitch >= 60 && n.pitch <= 84)).toBe(true);
+    expect(JSON.stringify(genFromEssence(ref, { bars: 2 }, ch, 3, { strength: 1 }))).toBe(
+      JSON.stringify(genFromEssence(ref, { bars: 2 }, ch, 3, { strength: 1 })),
+    ); // 決定的
+  });
+  it("複数参照ブレンド：オンセットは主参照・音域内・決定的", () => {
+    const out = pcs(genFromEssence(ref, { bars: 2 }, ch, 5, { blendWith: [ref2] }));
+    expect(out.map((n) => n.start)).toEqual(ref.map((n) => n.start));
+    expect(out.every((n) => n.pitch >= 60 && n.pitch <= 84)).toBe(true);
+    expect(JSON.stringify(genFromEssence(ref, { bars: 2 }, ch, 5, { blendWith: [ref2] }))).toBe(
+      JSON.stringify(genFromEssence(ref, { bars: 2 }, ch, 5, { blendWith: [ref2] })),
+    );
+  });
+});
+
 describe("genBass（ルート/5度＋リズム）", () => {
   it("先頭=ルート・低域・リズムあり", () => {
     const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
