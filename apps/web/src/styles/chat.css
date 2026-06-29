@@ -333,6 +333,12 @@
   flex: 0 0 auto;
   font-size: 0.72rem;
   color: var(--muted);
+  /* 複数小節で横スクロールしてもレーン名を左に固定＝何の行か見失わない（DAW定石）。
+     背景で後ろのセルを隠す。 */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
 }
 .rhythm-cell {
   width: var(--rcell);
