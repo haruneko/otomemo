@@ -215,6 +215,9 @@ export const api = {
   // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返る。
   // プロジェクト名一覧（prj:タグ ∪ project行＝空の器も含む）。picker のソース。
   listProjectNames: () => http<string[]>(`/projects`),
+  // プロジェクト配下のジョブ（投げて受け取る）をワークスペースに可視化。
+  listProjectJobs: (project: string) =>
+    http<Job[]>(`/projects/${encodeURIComponent(project)}/jobs`),
   getProject: (name: string) => http<Project>(`/projects/${encodeURIComponent(name)}`),
   setProject: (name: string, meta: { description?: string | null; instructions?: string | null }) =>
     http<Project>(`/projects/${encodeURIComponent(name)}`, { method: "POST", body: JSON.stringify(meta) }),

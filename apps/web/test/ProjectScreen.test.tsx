@@ -2,11 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 // プロジェクト画面（Claude Projects 風ランディング）：会話起点＋曲/ファイル/会話の集約（S3/UI）。
-const { listNeta, listProjectFiles, listChatThreads, getProject, setProject, setChatThread, deleteChatThread, deleteAsset, assetUrl } =
+const { listNeta, listProjectFiles, listChatThreads, listProjectJobs, getProject, setProject, setChatThread, deleteChatThread, deleteAsset, assetUrl } =
   vi.hoisted(() => ({
     listNeta: vi.fn(),
     listProjectFiles: vi.fn(),
     listChatThreads: vi.fn(),
+    listProjectJobs: vi.fn().mockResolvedValue([]),
     getProject: vi.fn(),
     setProject: vi.fn(),
     setChatThread: vi.fn().mockResolvedValue({}),
@@ -15,7 +16,7 @@ const { listNeta, listProjectFiles, listChatThreads, getProject, setProject, set
     assetUrl: vi.fn((id) => `/asset/${id}`),
   }));
 vi.mock("../src/api", () => ({
-  api: { listNeta, listProjectFiles, listChatThreads, getProject, setProject, setChatThread, deleteChatThread, deleteAsset, assetUrl },
+  api: { listNeta, listProjectFiles, listChatThreads, listProjectJobs, getProject, setProject, setChatThread, deleteChatThread, deleteAsset, assetUrl },
 }));
 
 import { ProjectScreen } from "../src/components/ProjectScreen";
@@ -103,5 +104,30 @@ describe("ProjectScreen", () => {
 
     promptSpy.mockRestore();
     confirmSpy.mockRestore();
+  });
+
+  it("shows project jobs and imports an unsorted session into the 器", async () => {
+    listNeta.mockResolvedValue([]);
+    listProjectFiles.mockResolvedValue([]);
+    getProject.mockResolvedValue({ name: "みなそこ", description: null, instructions: null, created: null, updated: null });
+    listProjectJobs.mockResolvedValue([{ id: "j1", intent: "research", status: "running", instruction: "参考曲を調べる", progress: "検索中" }]);
+    // 器の会話は空。取り込み用に未仕分け（project=null）の会話を返す。
+    listChatThreads.mockImplementation((project) =>
+      Promise.resolve(
+        project
+          ? []
+          : [{ thread: "chat:u", last: "2026-06-28T00:00:00Z", count: 2, preview: "未仕分け会話", project: null, title: null }],
+      ),
+    );
+    render(<ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={vi.fn()} onStartChat={vi.fn()} onCreateSong={vi.fn()} />);
+
+    // 進行中ジョブが見える
+    expect(await screen.findByText("参考曲を調べる")).toBeInTheDocument();
+    expect(screen.getByText(/実行中/)).toBeInTheDocument();
+
+    // 取り込み：未仕分け会話を今の器へ
+    fireEvent.click(screen.getByLabelText("import-session"));
+    fireEvent.click(await screen.findByText("未仕分け会話"));
+    expect(setChatThread).toHaveBeenCalledWith("chat:u", { project: "みなそこ" });
   });
 });

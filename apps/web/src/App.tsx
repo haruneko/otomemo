@@ -59,6 +59,20 @@ export function App() {
     else localStorage.removeItem(ACTIVE_PROJECT_KEY);
   }, [activeProject]);
 
+  // 器のAIへの指示（Chatに「効いている実感」を出す＋将来の文脈に使う）。器が変われば取り直す。
+  const [projectInstructions, setProjectInstructions] = useState("");
+  useEffect(() => {
+    if (!activeProject) return setProjectInstructions("");
+    let alive = true;
+    void api
+      .getProject(activeProject)
+      .then((p) => alive && setProjectInstructions(p.instructions ?? ""))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [activeProject]);
+
   // プロジェクト一覧（prj:タグ ∪ project行＝説明だけ作った空の器も拾う）。reload時に追従。
   const loadProjects = useCallback(() => {
     api
@@ -514,6 +528,7 @@ export function App() {
         <Chat
           target={chatTarget}
           activeProject={activeProject || undefined} // 器＝一曲(or組曲)：新規会話をこの器に束ね一覧も絞る
+          projectInstructions={projectInstructions} // 器の指示が効いている実感バナー用
           initialText={chatSeed} // プロジェクト画面の起点入力からの最初の一言
           onClose={() => {
             setChatOpen(false);

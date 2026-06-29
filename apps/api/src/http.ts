@@ -465,6 +465,12 @@ export function buildHttp(core: Core): FastifyInstance {
   // プロジェクト名一覧（prj:タグ ∪ project行＝空の器も含む）。picker のソース。
   app.get("/projects", async () => core.listProjectNames());
 
+  // プロジェクト配下のジョブ（投げて受け取る）をワークスペースに可視化。
+  app.get("/projects/:project/jobs", async (req) => {
+    const { project } = req.params as { project: string };
+    return core.listProjectJobs(project);
+  });
+
   // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返す（画面は常に開ける）。
   app.get("/projects/:name", async (req) => {
     const { name } = req.params as { name: string };

@@ -319,6 +319,7 @@ export function Chat({
   onClose,
   onOpenNeta,
   activeProject,
+  projectInstructions,
   initialText,
 }: {
   target?: Neta;
@@ -326,6 +327,7 @@ export function Chat({
   onClose: () => void;
   onOpenNeta?: (neta: Neta) => void; // #68 ネタを開く（Chatは閉じる）
   activeProject?: string; // プロジェクト＝一曲(or組曲)の器：新規セッションをこの器に束ね、一覧もこの器で絞る
+  projectInstructions?: string; // 器のAIへの指示（効いている実感バナー）
   initialText?: string; // 開いた瞬間に入力欄へ載せる最初の一言（プロジェクト画面の起点入力など）
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -839,6 +841,12 @@ export function Chat({
                 </span>
               </button>
             ))}
+          </div>
+        )}
+        {!target && activeProject && projectInstructions && (
+          <div className="chat-instr" aria-label="project-instructions-active" title={projectInstructions}>
+            📌 「{activeProject}」の指示が効いています：{projectInstructions.slice(0, 60)}
+            {projectInstructions.length > 60 ? "…" : ""}
           </div>
         )}
         {targetLabel && <div className="chat-target">「{targetLabel.slice(0, 30)}」についての相談</div>}

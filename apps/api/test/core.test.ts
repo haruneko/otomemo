@@ -38,6 +38,17 @@ describe("listProjectNames (picker source incl. empty projects)", () => {
   });
 });
 
+// プロジェクト配下のジョブ（投げて受け取る）をワークスペースに可視化する（S6）。
+describe("listProjectJobs (workspace job visibility)", () => {
+  it("lists jobs targeting netas in the project, excludes others", () => {
+    const song = core.createNeta({ kind: "section", title: "A", tags: ["prj:みなそこ"] });
+    const other = core.createNeta({ kind: "section", title: "B", tags: ["prj:別曲"] });
+    const j1 = core.enqueueJob({ intent: "research", target_neta_id: song.id });
+    core.enqueueJob({ intent: "research", target_neta_id: other.id });
+    expect(core.listProjectJobs("みなそこ").map((j) => j.id)).toEqual([j1.id]);
+  });
+});
+
 // プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイル(asset)を曲単位で集約する（S2）。
 describe("listProjectFiles (workspace file aggregation)", () => {
   it("aggregates assets attached to netas carrying prj: tag, grouped per asset", () => {

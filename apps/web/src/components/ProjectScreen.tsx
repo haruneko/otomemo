@@ -2,7 +2,7 @@
 // 上＝この曲について会話を始める起点、下＝会話/曲・セクション（左）とファイル＝知識（右）。
 // 要件「一曲（または組曲）の器にまとめる」/ design「プロジェクト＝…ホーム」。データは既存テーブルの読み。
 import { useCallback, useEffect, useState } from "react";
-import { api, type Neta, type ProjectFile, type ChatThread, type Project } from "../api";
+import { api, type Neta, type ProjectFile, type ChatThread, type Project, type Job } from "../api";
 import { projectTag } from "../project";
 
 function fileSize(n: number | null): string {
@@ -11,6 +11,15 @@ function fileSize(n: number | null): string {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+// ジョブ状態のラベル（投げて受け取るの可視化）。
+const JOB_STATUS: Record<string, string> = {
+  queued: "⏳ 待機",
+  running: "🔄 実行中",
+  waiting: "❓ 確認待ち",
+  done: "✅ 完了",
+  failed: "⚠ 失敗",
+};
 
 export function ProjectScreen({
   project,
@@ -28,23 +37,28 @@ export function ProjectScreen({
   const [songs, setSongs] = useState<Neta[]>([]); // kind=song/section
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [sessions, setSessions] = useState<ChatThread[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [seed, setSeed] = useState("");
   const [meta, setMeta] = useState<Project | null>(null);
   const [editing, setEditing] = useState(false); // 説明・指示の編集パネル開閉
   const [descDraft, setDescDraft] = useState("");
   const [instrDraft, setInstrDraft] = useState("");
+  const [importing, setImporting] = useState(false); // 未仕分け会話の取り込みパネル
+  const [unsorted, setUnsorted] = useState<ChatThread[]>([]);
 
-  // 器の中身（曲/ファイル/会話）を読み直す。変更操作（改名/削除）後にも呼ぶ。
+  // 器の中身（曲/ファイル/会話/ジョブ）を読み直す。変更操作（改名/削除）後にも呼ぶ。
   const loadContent = useCallback(async () => {
     try {
-      const [netas, fs, th] = await Promise.all([
+      const [netas, fs, th, js] = await Promise.all([
         api.listNeta({ tags: [projectTag(project)] }),
         api.listProjectFiles(project),
         api.listChatThreads(project),
+        api.listProjectJobs(project),
       ]);
       setSongs(netas.filter((n) => n.kind === "song" || n.kind === "section"));
       setFiles(fs);
       setSessions(th);
+      setJobs(js);
     } catch {
       /* 取得失敗＝現状維持 */
     }
@@ -92,6 +106,22 @@ export function ProjectScreen({
   async function deleteFile(f: ProjectFile) {
     if (!window.confirm(`ファイル「${f.name ?? f.id}」を削除します。取り消せません。`)) return;
     await api.deleteAsset(f.id).catch(() => {});
+    await loadContent();
+  }
+
+  // 未仕分け（どの器にも属さない）会話の取り込み：一覧を開く→選んで今の器へ束ねる。
+  async function openImport() {
+    setImporting(true);
+    try {
+      const all = await api.listChatThreads(); // 器指定なし＝全フリーChat
+      setUnsorted(all.filter((t) => !t.project)); // project=null＝未仕分けのみ
+    } catch {
+      setUnsorted([]);
+    }
+  }
+  async function importSession(t: ChatThread) {
+    await api.setChatThread(t.thread, { project }).catch(() => {});
+    setImporting(false);
     await loadContent();
   }
 
@@ -164,8 +194,53 @@ export function ProjectScreen({
 
       <div className="ps-grid">
         <div className="ps-main">
+          {jobs.length > 0 && (
+            <section className="ps-block" aria-label="jobs">
+              <h3>進行中・受け取り <span className="muted">{jobs.length}</span></h3>
+              <ul className="ps-list">
+                {jobs.map((j) => (
+                  <li key={j.id}>
+                    <div className="ps-job">
+                      <span className="ph-title">{j.instruction ?? j.intent}</span>
+                      <span className="muted">
+                        {JOB_STATUS[j.status] ?? j.status}
+                        {j.progress ? ` · ${j.progress}` : ""}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <section className="ps-block" aria-label="sessions">
-            <h3>会話 <span className="muted">{sessions.length}</span></h3>
+            <h3 className="ps-block-head">
+              <span>会話 <span className="muted">{sessions.length}</span></span>
+              <button type="button" className="ps-add" aria-label="import-session" onClick={() => void openImport()}>
+                ＋取り込む
+              </button>
+            </h3>
+            {importing && (
+              <div className="ps-import" aria-label="import-panel">
+                <div className="ps-import-head">
+                  <span className="muted">未仕分けの会話を選んでこの器へ</span>
+                  <button type="button" aria-label="close-import" onClick={() => setImporting(false)}>
+                    ✕
+                  </button>
+                </div>
+                {unsorted.length === 0 && <p className="muted">取り込める未仕分けの会話はありません</p>}
+                <ul className="ps-list">
+                  {unsorted.map((t) => (
+                    <li key={t.thread}>
+                      <button type="button" onClick={() => void importSession(t)}>
+                        <span className="ph-title">{t.title ?? t.preview ?? "(無題の会話)"}</span>
+                        <span className="muted">{t.last ? new Date(t.last).toLocaleString() : "新規"} · {t.count}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {sessions.length === 0 && <p className="muted">まだ会話がありません。上から始められます。</p>}
             <ul className="ps-list">
               {sessions.map((s) => (

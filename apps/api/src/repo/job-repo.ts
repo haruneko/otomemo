@@ -109,6 +109,19 @@ export class JobRepo {
     const sql = `SELECT * FROM job ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created DESC LIMIT @limit`;
     return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map(rowToJob);
   }
+
+  // プロジェクト（prj: タグ）配下ネタを対象にしたジョブ＝ワークスペースの「投げて受け取る」可視化用。
+  listForProjectTag(projectTag: string, limit = 50): Job[] {
+    const rows = this.db
+      .prepare(
+        `SELECT j.* FROM job j
+         JOIN neta_tag nt ON nt.neta_id = j.target_neta_id
+         JOIN tag t       ON t.id = nt.tag_id AND t.name = @tag
+         ORDER BY j.created DESC LIMIT @limit`,
+      )
+      .all({ tag: projectTag, limit }) as Record<string, unknown>[];
+    return rows.map(rowToJob);
+  }
 }
 
 function rowToJob(row: Record<string, unknown>): Job {

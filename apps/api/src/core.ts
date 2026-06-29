@@ -402,6 +402,11 @@ export class Core {
     return [...names].sort((a, b) => a.localeCompare(b, "ja"));
   }
 
+  // プロジェクト配下ネタを対象にしたジョブ一覧（ワークスペースの「投げて受け取る」可視化）。
+  listProjectJobs(project: string): Job[] {
+    return this.job.listForProjectTag(PROJECT_TAG_PREFIX + project);
+  }
+
   // --- project（器の説明＋AIへの指示）：ProjectRepo へ委譲 ---
   getProject(name: string): Project | null {
     return this.project.getProject(name);

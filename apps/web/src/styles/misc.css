@@ -453,6 +453,39 @@ details.theme summary {
   font-size: 0.78rem;
   padding: 0.25rem 0.6rem;
 }
+.ps-job {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.5rem 0.6rem;
+  background: #16181d;
+  border: 1px solid #2a2e36;
+  border-radius: 8px;
+}
+.ps-job .muted {
+  font-size: 0.7rem;
+}
+.ps-import {
+  margin: 0.25rem 0 0.5rem;
+  padding: 0.5rem;
+  background: #131519;
+  border: 1px dashed #2a2e36;
+  border-radius: 8px;
+}
+.ps-import-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+/* Chat：器の指示が効いている実感バナー */
+.chat-instr {
+  font-size: 0.72rem;
+  padding: 0.3rem 0.5rem;
+  background: #16181d;
+  border-bottom: 1px solid #2a2e36;
+  color: #c7ccd4;
+}
 /* 狭い画面：知識(ファイル)を下に回す。
    注: 最下段カードに 💬チャットバブルが被るのは、モバイルのワークスペース・スクロール構造
    （mainpane 全画面＋レールはドロワー、が未実装）に由来＝project-screen 単体のpaddingでは解けない。
