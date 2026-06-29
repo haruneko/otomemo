@@ -27,6 +27,21 @@ import { projectTag } from "./project";
 const ACTIVE_PROJECT_KEY = "cm-active-project";
 
 
+// モバイル土台：狭い画面か（≤820px、base.css のブレークポイントと一致）。リサイズ追従。
+const MOBILE_MQ = "(max-width: 820px)";
+function useIsMobile(): boolean {
+  const has = typeof window !== "undefined" && typeof window.matchMedia === "function";
+  const [m, setM] = useState(() => has && window.matchMedia(MOBILE_MQ).matches);
+  useEffect(() => {
+    if (!has) return; // jsdom 等 matchMedia 無し＝デスクトップ既定
+    const mq = window.matchMedia(MOBILE_MQ);
+    const on = () => setM(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [has]);
+  return m;
+}
+
 export function App() {
   const [items, setItems] = useState<(Neta & { matchType?: string })[]>([]);
   const [scope, setScope] = useState<"project" | "library">("project"); // プロジェクト/ライブラリ タブ
@@ -48,6 +63,7 @@ export function App() {
   const [doneCount, setDoneCount] = useState(0);
   const [active, setActive] = useState<Neta | null>(null);
   const [railOpen, setRailOpen] = useState(true);
+  const isMobile = useIsMobile();
   const [composeSignal, setComposeSignal] = useState(0); // D&D配置でSectionEditorを再読込
 
   // ドラッグは5px動かしてから開始＝カードのクリック(開く)と両立（#52②c）
@@ -291,8 +307,14 @@ export function App() {
         <button
           className="gear"
           aria-label="toggle-rail"
-          title="ネタ帳の開閉"
-          onClick={() => setRailOpen((v) => !v)}
+          title={isMobile ? "ネタ帳へ" : "ネタ帳の開閉"}
+          onClick={() => {
+            // モバイル＝一画面ずつ：☰ はホーム(ネタ帳)へ戻る。PC＝レールの開閉。
+            if (isMobile) {
+              setActive(null);
+              setProjectView(false);
+            } else setRailOpen((v) => !v);
+          }}
         >
           ☰
         </button>
@@ -306,10 +328,9 @@ export function App() {
               aria-label="project-home"
               title={`${activeProject} のプロジェクト画面（曲・ファイル・会話）`}
               onClick={() => {
+                // モバイル土台＝一画面ずつ：projectView で mainpane が主役になる（レール畳みの応急処置は不要に）。
                 setActive(null);
                 setProjectView(true);
-                // 狭い画面では、開いた瞬間にプロジェクト画面を主役へ（ネタ帳レールは上に積まれるので畳む）。
-                if (typeof window !== "undefined" && window.innerWidth < 720) setRailOpen(false);
               }}
             >
               🏠
@@ -333,7 +354,13 @@ export function App() {
         collisionDetection={pointerWithin}
         onDragEnd={(e) => void onDragEnd(e)}
       >
-        <div className="workspace">
+        <div
+          className={
+            "workspace" +
+            // モバイルは一画面ずつ：mainpane が主役(編集 or プロジェクト)なら mv-pane、でなければ mv-home。
+            (isMobile ? (active || (projectView && activeProject) ? " mv-pane" : " mv-home") : "")
+          }
+        >
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
           <div className="notebook-actions">
             <button className="import-btn accent" onClick={() => void newSong()}>

@@ -81,6 +81,11 @@ main {
   border-radius: 8px;
   padding: 8px 16px;
 }
+/* モバイルのワークスペース土台（2026-06-29 刷新）：状態ごとの :has() ハックをやめ、
+   「一度に1つの全画面ビュー」モデルへ。App が .workspace に .mv-home / .mv-pane を付ける。
+   mv-home＝ネタ帳(捕獲＋一覧)が主役／mv-pane＝mainpane(プロジェクト or 編集)が主役。
+   どちらも通常フローの全幅＝積み重ね・固定オーバーレイ・z-index 競合が無くなり、
+   app-head が常に上に残る（編集の戻るが ☰ を覆う問題も解消）。 */
 @media (max-width: 820px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -91,27 +96,21 @@ main {
     grid-template-columns: 1fr;
     padding-bottom: 84px; /* 右下チャットFAB(z40)に最下カードが隠れないようクリアランス */
   }
-  /* ネタを開いてないときはメインペーン(空)を出さず、ネタ帳だけ表示 */
-  .mainpane:has(.mainpane-empty) {
+  /* 一画面ずつ：表示しない側を畳む（両方マウントのまま＝状態を失わない） */
+  .workspace.mv-pane .notebook {
     display: none;
   }
-  /* 編集中はメインペーンを全画面に（ネタ帳の下に埋もれない／戻るで閉じる） */
-  .mainpane:has(.mainpane-editor) {
-    position: fixed;
-    inset: 0;
-    /* base の max-height:calc(100vh-24px) を解除＝全画面に高さ確定。未解除だと高さが頭打ちになり、
-       下層のネタ帳レールが透けて操作できてしまう（モバイル固有バグ）。100dvh＝アドレスバー考慮の動的VH。 */
-    height: 100dvh;
-    max-height: 100dvh;
-    z-index: 30;
-    min-height: 0;
-    border: 0;
-    border-radius: 0;
+  .workspace.mv-home .mainpane {
+    display: none;
   }
-  .mainpane:has(.mainpane-editor) .mainpane-editor {
+  /* mainpane はモバイルでは通常フローの全幅。PC の sticky / max-height / overflow:hidden を解除し、
+     ページが素直にスクロール＝バブルのクリアランスや内側スクロールの破綻を断つ。 */
+  .mainpane {
+    position: static;
+    top: auto;
     max-height: none;
-    height: 100%;
-    overflow-y: auto; /* 内容が縦に長ければ全画面内でスクロール（下層へ流さない） */
+    min-height: 100dvh;
+    overflow: visible;
   }
 }
 .app-head {
