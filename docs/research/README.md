@@ -21,6 +21,7 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [sixteenth-rhythm](sixteenth-rhythm.md) — 16分リズム（外部調査＋POP909実測）
 - [motif-extraction](motif-extraction.md) ／ [motif-research](motif-research.md) — モチーフ抽出・生成・著作権
 - [2026-06-29-melody-corpus-and-deform](2026-06-29-melody-corpus-and-deform.md) — メロコーパス情報源＋「崩す」(genFromEssence)＝提示メロ→同雰囲気の別メロ。ライセンス別源マップ(PDMX/POP909等)＋法的整理(TDM/30条の4/substantial similarity)＋強化案
+- [2026-06-29-drum-sound-resolution](2026-06-29-drum-sound-resolution.md) — ドラム音解決の点検＝regexアドホック vs SF2権威マップ＋ピッチ異常(ride2+8/cowbell-7)の診断と修正(root= overridingRootKey ?? gmPitch)。次=権威マップ化＋キット選択(アコ/エレキ)
 - [skeleton-melody-musicology](skeleton-melody-musicology.md) ／ [skeleton-theory-detail](skeleton-theory-detail.md) ／ [skeleton-model-crossmap](skeleton-model-crossmap.md) — 骨格メロの音楽学・理論・cross-map
 
 ## 評価・AI調査（このストーリーの結論）

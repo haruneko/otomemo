@@ -396,10 +396,16 @@ function drumVoiceFor(
   };
   if (kz) {
     const op = kz.sample?.header?.originalPitch ?? 60;
-    const root = zoneGen(kz, 58) ?? op; // overridingRootKey
+    const coarse = zoneGen(kz, 51) ?? 0;
+    const fine = zoneGen(kz, 52) ?? 0;
+    // #84 是正（異常ピッチ修正）：root は **overridingRootKey があれば必ずそれ（音程意図＝トム/tune込み）、
+    // 無ければ叩いた鍵 gmPitch（＝自然音高）**。従来の `?? op(originalPitch)` が、rootKey 無しのゾーンで
+    // (GM番号 − originalPitch) ぶん勝手にピッチを飛ばしていた（ride2=+8 等の異常）。
+    // 実効ピッチ eff = (gmPitch − root) + tune ＝ rootKey ありは spec 準拠、無しは 0（自然）。
+    const root = zoneGen(kz, 58) ?? gmPitch;
     return {
       note: gmPitch,
-      detune: drumDetune(op, root, zoneGen(kz, 51) ?? 0, zoneGen(kz, 52) ?? 0),
+      detune: drumDetune(op, root, coarse, fine),
       stopId: exclusiveOf(kz),
     };
   }
