@@ -20,6 +20,7 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [melody-figure-contour](melody-figure-contour.md) — 「音楽的な塊」＝輪郭図形の測り方
 - [sixteenth-rhythm](sixteenth-rhythm.md) — 16分リズム（外部調査＋POP909実測）
 - [motif-extraction](motif-extraction.md) ／ [motif-research](motif-research.md) — モチーフ抽出・生成・著作権
+- [2026-06-29-melody-corpus-and-deform](2026-06-29-melody-corpus-and-deform.md) — メロコーパス情報源＋「崩す」(genFromEssence)＝提示メロ→同雰囲気の別メロ。ライセンス別源マップ(PDMX/POP909等)＋法的整理(TDM/30条の4/substantial similarity)＋強化案
 - [skeleton-melody-musicology](skeleton-melody-musicology.md) ／ [skeleton-theory-detail](skeleton-theory-detail.md) ／ [skeleton-model-crossmap](skeleton-model-crossmap.md) — 骨格メロの音楽学・理論・cross-map
 
 ## 評価・AI調査（このストーリーの結論）
