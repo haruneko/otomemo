@@ -290,6 +290,19 @@
   align-content: start;
   overflow-x: auto;
   position: relative; /* #74 プレイヘッド基準 */
+  --rcell: 20px; /* ステップ幅。プレイヘッド計算も同値を参照（RhythmEditor PLAYHEAD_LEFT） */
+  --rname: 56px; /* レーン名（ラベル）幅 */
+}
+/* 狭い画面：セル/ラベルを縮めて 1小節(16step) が横スクロール無しで収まるように（プレイヘッドは変数追従） */
+@media (max-width: 480px) {
+  .rhythm-editor {
+    --rcell: 14px;
+    --rname: 42px;
+  }
+  .rhythm-name {
+    font-size: 0.62rem;
+    line-height: 1.05;
+  }
 }
 .rhythm-toolbar {
   display: flex;
@@ -313,13 +326,13 @@
   gap: 2px;
 }
 .rhythm-name {
-  width: 56px;
+  width: var(--rname);
   flex: 0 0 auto;
   font-size: 0.72rem;
   color: var(--muted);
 }
 .rhythm-cell {
-  width: 20px;
+  width: var(--rcell);
   height: 18px;
   flex: 0 0 auto;
   padding: 0;
