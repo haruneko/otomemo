@@ -53,6 +53,11 @@
 - **thesession.org データ配布**：伝承曲（曲自体はPD）だが、**配布DBは ODbL＋「LLM利用禁止」カスタム条項**＝そのままは不可。使うなら個別ABC（PD曲）を規約外で。 https://github.com/adactio/TheSession-data
 - **Wikifonia**：著作権ライセンス継続不能で2013年閉鎖＝不可。 https://en.wikipedia.org/wiki/Wikifonia
 
+## ④-b 実態：コーパスは既に一部投入済み（2026-06-29 確認）
+本番DB(`data/cm.sqlite`)を読取確認＝**library に melody パターン 1425件**（`pop`1139/`irish`186/`game`100、6/8 が60件）。**ABC取込パイプラインも既設**（`apps/api/src/ingest-abc.ts`＋CLI `apps/api/scripts/ingest-abc.ts <style> <file.abc>`＝ABC→C正規化→library neta・styleタグ。`ingest-abc.test.ts` あり）。`corpusBias.learnStepWeightsFromLibrary/learnMotifModelFromLibrary` が style 別に学習し、**MCP `generate` の `style:"irish"` で歩幅/モチーフをコーパスへバイアス（配線済み）**。
+- ＝「メロコーパス」は**基盤＋取込＋一部データ＋style生成バイアス＋崩し（本日）まで揃っている**。
+- **残る本質＝質の検証（耳）**：probe で irish bias の差が弱く・6/8出力が疎（ランニング8分のジグ感が薄い）に見えた（1シード・退化フレームの所見）。**「ジグらしく鳴るか」は試聴が要る**＝出先では保留（melody brush-up と同じ理由）。盲目チューニング不可。
+
 ## ⑤ 設計含意・次の一手
 - **データ投入の本命＝PDMX＋自作**：ここから melody を抽出→`melodyEssence`＋motif統計→`normalizeToC`→**library に essence ネタ化**（出自/ライセンスタグ付き）。POP909等は**統計モデル(`learnMotifModelFromLibrary`)更新のみ**に使う。
 - **崩しの制御を実装**：`genFromEssence` に `strength` 引数＋複数essenceブレンドを足し、MCP/Chat に「これを崩して/似た雰囲気で別案」を露出（基盤は揃っている）。
