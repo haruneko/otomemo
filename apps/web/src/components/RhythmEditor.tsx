@@ -1,5 +1,6 @@
 import { type Ref } from "react";
-import { type RhythmContent, DRUM_LABEL, DRUM_KITS } from "../music";
+import { type RhythmContent, DRUM_LABEL, DRUM_KITS, drumVel } from "../music";
+import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 
 // プレイヘッド位置は CSS 変数(--rname/--rcell)から計算＝セルをmobileで縮めてもズレない（#74）。
@@ -32,6 +33,8 @@ export function RhythmEditor({
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
   function toggle(li: number, step: number) {
+    const lane = rhythm.lanes[li];
+    const turningOn = !!lane && !lane.hits.includes(step);
     const lanes = rhythm.lanes.map((l, k) => {
       if (k !== li) return l;
       const on = l.hits.includes(step);
@@ -41,6 +44,9 @@ export function RhythmEditor({
       };
     });
     onChange({ ...rhythm, lanes });
+    // 打点を置いた時だけそのドラム音を鳴らす（選択キットで）。
+    if (turningOn && lane)
+      void previewNote({ pitch: lane.midi, start: 0, dur: 0.25, drum: true, kit: rhythm.kit, vel: drumVel(lane.midi, lane.vel) });
   }
 
   // 小節数（1〜4）。1小節=stepsPerBar（拍子依存：4/4=16, 6/8=12）。縮小は**非破壊**。

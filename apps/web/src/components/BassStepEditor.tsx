@@ -1,7 +1,14 @@
 import { useState, type Ref } from "react";
 import type { BassDegree, BassStep } from "../music";
+import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
+
+// プレビュー用：度数→実音高（C2=36 基準の代表音）。再生時は調/コードで解決するが、入力フィードバックは
+// C基準で度数の高さを鳴らす（R=C2/3=E2/5=G2/7=B♭2/8=C3/approach=B1）。
+const BASS_PREVIEW_PITCH: Record<BassDegree, number> = {
+  R: 36, "3": 40, "5": 43, "7": 46, "8": 48, approach: 35,
+};
 
 // #bass S2: 相対ベースの度数エディタ（半リズムパート）。
 // **度数レーン**(行=R/3/5/7/8/approach)×**ステップ**(列)。各ステップはモノフォニック＝1度数だけ。
@@ -62,6 +69,8 @@ export function BassStepEditor({
     // モノフォニック：同ステップ始まりの音を消してから置く
     const rest = pattern.filter((p) => p.step !== step);
     onChange([...rest, { step, degree: lane, dur: dotted ? len * 1.5 : len }].sort((a, b) => a.step - b.step));
+    // 置いた度数を即鳴らす（C基準の代表音・ベース音色）。
+    void previewNote({ pitch: BASS_PREVIEW_PITCH[lane], start: 0, dur: 0.4, program: 33 });
   }
 
   return (

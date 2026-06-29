@@ -516,6 +516,58 @@ export async function probeSoundFont(): Promise<{
   return { ok: !!sf, instruments: sfInstrumentCount, error: sfLastError };
 }
 
+// 単発プレビュー用フォールバック（SF2 未ロード時）。生成→発音→少し後に dispose（ノード蓄積を防ぐ）。
+function previewFallbackMelodic(Tone: any, pitch: number, vel: number, now: number): void {
+  const s = new Tone.Synth().toDestination();
+  s.triggerAttackRelease(Tone.Frequency(pitch, "midi").toNote(), 0.4, now, vel);
+  setTimeout(() => { try { s.dispose(); } catch { /* already disposed */ } }, 700);
+}
+function previewFallbackDrum(Tone: any, pitch: number, vel: number, now: number): void {
+  if (pitch <= 41) {
+    const m = new Tone.MembraneSynth().toDestination();
+    m.triggerAttackRelease(Tone.Frequency(pitch, "midi").toFrequency(), 0.15, now, vel);
+    setTimeout(() => { try { m.dispose(); } catch { /* */ } }, 500);
+  } else {
+    const n = new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.12, sustain: 0 } }).toDestination();
+    n.triggerAttackRelease(0.05, now, vel);
+    setTimeout(() => { try { n.dispose(); } catch { /* */ } }, 400);
+  }
+}
+
+// 音符を置いた時にその音を即鳴らす（エディタの入力フィードバック）。Transport を使わず Tone.now() で
+// 発音＝再生中でも止めない・低遅延。SF2 があればそれ（drum はキット・melodic は program）、無ければ簡易シンセ。
+// 失敗は無音で握り潰す（音が出なくても入力は止めない）。
+export async function previewNote(note: Note): Promise<void> {
+  try {
+    const Tone = await import("tone");
+    await Tone.start();
+    const now = Tone.now();
+    const vel127 = Math.round(note.vel ?? 100);
+    const sf = await ensureSoundFont(Tone, note.program ?? 0, false);
+    if (note.drum) {
+      if (sf) {
+        const kits = await prepareDrumKits([note], Tone);
+        const ds = kits.get(drumKey(note.kit ?? 0, note.pitch));
+        if (ds) {
+          ds.sampler.start({ note: ds.note, time: now, velocity: vel127, loop: false, detune: ds.detune });
+          return;
+        }
+      }
+      previewFallbackDrum(Tone, note.pitch, vel127 / 127, now);
+      return;
+    }
+    if (sf) {
+      const byProg = await prepareMelodicSamplers([note], Tone, note.program ?? 0, sf);
+      const inst = byProg.get(note.program ?? 0) ?? sf;
+      inst.start({ note: note.pitch, time: now, duration: 0.45, velocity: vel127 });
+      return;
+    }
+    previewFallbackMelodic(Tone, note.pitch, vel127 / 127, now);
+  } catch {
+    /* preview 失敗は無音（入力は止めない） */
+  }
+}
+
 // Tone.js は再生時のみ動的import（jsdom/テストで読み込まない）。
 // #57①: Tone.Transport ベース。戻り値 Handle で pause/resume/stop（②でUI配線）。
 // 既存呼び出し元は `void playNotes(notes, tempo)` のままでも従来通り鳴る（後方互換）。

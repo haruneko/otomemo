@@ -1,5 +1,6 @@
 import { useMemo, useState, type Ref } from "react";
 import type { Note } from "../music";
+import { previewNote } from "../audio";
 import { NoteValuePicker } from "./NoteValuePicker";
 
 const CELL_PX = 12; // .proll-cell の幅。1拍=SUBDIV*CELL_PX で playhead を px 配置（横スクロール追従）。
@@ -78,6 +79,7 @@ export function PianoRoll({
       return;
     }
     onChange([...notes, { pitch, start, dur: dotted ? noteLen * 1.5 : noteLen }]);
+    void previewNote({ pitch, start: 0, dur: 0.4 }); // 置いた音を即鳴らす（入力フィードバック）
   }
   function removeNote(target: Note) {
     onChange(notes.filter((n) => n !== target));

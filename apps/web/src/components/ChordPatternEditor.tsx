@@ -1,5 +1,6 @@
 import { useState, type Ref } from "react";
 import { type ChordPatternContent, type ChordTone } from "../music";
+import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -8,6 +9,8 @@ import type { Neta } from "../api";
 const NAME_PX = 58;
 const BEAT_PX = 88;
 const TONES: ChordTone[] = ["R", "3", "5", "7"];
+// プレビュー用：構成音→Cからの半音（R=C/3=E/5=G/7=B♭）。再生時は調/コードで解決、入力時はC基準で鳴らす。
+const TONE_SEMI: Record<ChordTone, number> = { R: 0, "3": 4, "5": 7, "7": 10 };
 // 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える（"2分"表記を"2"に統一）。
 const LENGTHS = [
   { label: "16", v: 1 },
@@ -49,8 +52,14 @@ export function ChordPatternEditor({
   const startAt = (s: number) => pattern.hits.find((h) => h.step === s);
   const sustainAt = (s: number) => pattern.hits.some((h) => h.step < s && s < h.step + h.dur);
   const toggleHit = (s: number) => {
-    if (startAt(s)) onChange({ ...pattern, hits: pattern.hits.filter((h) => h.step !== s) }); // 同所タップ＝消す
-    else onChange({ ...pattern, hits: [...pattern.hits, { step: s, dur: dotted ? len * 1.5 : len }].sort((a, b) => a.step - b.step) });
+    if (startAt(s)) {
+      onChange({ ...pattern, hits: pattern.hits.filter((h) => h.step !== s) }); // 同所タップ＝消す
+      return;
+    }
+    onChange({ ...pattern, hits: [...pattern.hits, { step: s, dur: dotted ? len * 1.5 : len }].sort((a, b) => a.step - b.step) });
+    // 置いた打点でボイシング（構成音）をC基準で即鳴らす。
+    const base = 48 + (v.octave ?? 0) * 12; // C3 基準＋高さ
+    for (const t of v.tones) void previewNote({ pitch: base + (TONE_SEMI[t] ?? 0), start: 0, dur: 0.5 });
   };
   const toggleTone = (t: ChordTone) => {
     const has = v.tones.includes(t);
