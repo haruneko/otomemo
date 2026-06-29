@@ -236,6 +236,11 @@ article[aria-label="neta-card"].dragging {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--muted); /* 他エディタと同じ控えめなラベル色 */
+  /* 横スクロールで度数ラベル(R/3/5…)を左に固定（全エディタ統一）。 */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
 }
 .step-cell.deg {
   flex: 0 0 28px;

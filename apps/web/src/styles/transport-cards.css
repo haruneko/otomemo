@@ -103,6 +103,11 @@
   color: var(--muted);
   display: flex;
   align-items: center;
+  /* 横スクロールでレーン名(コード進行/メロ…)を左に固定＝何の行か見失わない（全エディタ統一）。 */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
 }
 .ruler-bars {
   flex: 1;
@@ -401,6 +406,9 @@
 }
 .proll-row {
   display: flex;
+  /* ロー幅を内容幅に＝鍵盤(.proll-key sticky)が横スクロール全域でピンされる
+     （ない時はロー幅が容器幅どまりで、1画面分しか効かず鍵盤が流れた）。 */
+  min-width: max-content;
 }
 .proll-lane {
   display: flex;
