@@ -289,6 +289,9 @@
   gap: 4px;
   align-content: start;
   overflow-x: auto;
+  /* overflow-x:auto は仕様上 overflow-y を auto に化けさせ、1px の丸め超過で縦スクロールバーが出る
+     （実機で顕在化）。横スクロールだけ欲しいので overflow-y を明示 hidden（1pxは丸め＝実害なし）。 */
+  overflow-y: hidden;
   position: relative; /* #74 プレイヘッド基準 */
   --rcell: 20px; /* ステップ幅。プレイヘッド計算も同値を参照（RhythmEditor PLAYHEAD_LEFT） */
   --rname: 56px; /* レーン名（ラベル）幅 */
