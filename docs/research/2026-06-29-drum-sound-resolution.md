@@ -37,10 +37,12 @@ eff＝自然音高からのズレ＝`(gm − op) + detune/100 = (gm − root) + 
 - 実測：最大|eff| 12 → ほぼ0。残るは `Cowbell -7`（**overridingRootKey=61 をキットが明示**＝spec通り・データエラーでない）＝勝手に上書きせず家で試聴判断。
 - **回帰ゼロ**：良ケース（eff=0）は gmPitch==op で値不変。buggyノート（ride2等＝普段使わない高GM番号）のみ修正。
 
-## ④ 残・次（refactor＝権威マップ＋キット選択）
-- `buildGmDrumMap(preset)` を preset パラメタ化＋キット別キャッシュ／`drumNameFor` を「権威マップ＋キック主観1行＋薄いフォールバック」に圧縮（regex一掃）。
-- リズムに `kit`（GMドラム番号）→再生＆**MIDI ch10 program 書き出し**（ABILITY一致 #47 維持）→**アコ(Standard/Room/Power/Jazz/Brush)/エレキ(Electronic/808-909/Dance)選択**。
-- Standard 既定は不変＝回帰ゼロ。新キットの音の良し悪しは**耳判断（出先保留）**。
+## ④ キット選択（アコ/エレキ）＝実装済（2026-06-29）
+- `buildGmDrumMap(preset)` を preset パラメタ化＋`kitMap(preset)` でキット別キャッシュ。`drumNameFor(pitch,names,kitPreset)`：**非Standardは権威マップを全打点に使う**（808 Kick 等）／Standard(0)は従来（kick/snare ヒューリスティック＋他は権威）＝**回帰ゼロ**。
+- `RhythmContent.kit`（GM bank128 preset・既定0）→ `rhythmToNotes` が各drumノートに `kit` 付与 → `scheduleTimes`→`ScheduledNote.kit`→`playEvent` が `drumKey(kit,pitch)` で(キット,番号)別サンプラを引く（section内で別kit混在可）。`prepareDrumKits` も (kit,pitch) 単位。
+- **MIDI 書き出し**：drumトラックの ch10 に `track.instrument.number = kit`（program change）＝**ABILITYでも同じキットで鳴る**（#47一致維持）。
+- UI：RhythmEditor に「アコ(Standard/Room/Power/Jazz/Brush)/エレキ(Electronic/808-909/Dance)」select。
+- **構造検証（耳なし）**：全キットが全打点(kick/snare/hh/crash/ride)を**実在サンプルに解決**＝鳴ることを確認。音の良し悪しは試聴で。web197緑・tsc0。
 
 ## 出典
 - 自実測：SF2 PHDR/PBAG/IGEN ゾーン解析（`soundfont2` パーサ）。SF2/GM spec：overridingRootKey=gen58・coarseTune=gen51（semitone）・fineTune=gen52（cents）。smplr は region.pitch=originalPitch で鳴らし overridingRootKey を無視→detune で補正（#84）。

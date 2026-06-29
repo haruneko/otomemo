@@ -50,6 +50,9 @@ function dbg(...args: unknown[]): void {
   if (audioDbgOn()) console.log("[CMAUDIO]", ...args);
 }
 
+// ドラム音声マップのキー＝(キット, GM番号)。同じ番号でもキット違いで別サンプル。
+export const drumKey = (kit: number, pitch: number): number => (kit << 8) | pitch;
+
 // 1音の発音ディスパッチ（テスト可能に切り出し）。
 // ドラム: SF2にマッチ楽器があればそれ、無ければ簡易キット(membrane/noise)。
 // 旋律: SF2があればそれ、無ければ poly シンセ。SF2 は absolute time(秒)・velocity 0..127。
@@ -64,7 +67,7 @@ export function playEvent(
   defaultProg = 0,
 ): void {
   if (ev.voice === "membrane" || ev.voice === "noise") {
-    const ds = drumKits?.get(ev.pitch);
+    const ds = drumKits?.get(drumKey(ev.kit ?? 0, ev.pitch));
     if (ds) {
       dbg("note pitch", ev.pitch, "via sf2-drum @", ds.note, "detune", ds.detune);
       // 打楽器はワンショット＝loop を明示OFF。SF2のキック等は loop点を持ち、loop有のまま
@@ -126,7 +129,8 @@ let sfParsedUrl: string | null = null;
 // #55b ドラムは GM 統合キットが無いため、GM番号→楽器名で個別samplerをロードしキャッシュ。
 const sfDrumCache = new Map<string, any>(); // 楽器名 → drum sampler
 let sfCtx: any = null; // 共有 AudioContext（Tone.rawContext）
-let sfGmDrumMap: Map<number, string> | null = null; // #55e bank128/preset0 の権威 GM ドラムマップ
+// #55e/kit: bank128/preset別の権威 GM ドラムマップ（GM番号→楽器名）。キット選択でpreset別にキャッシュ。
+const sfKitMaps = new Map<number, Map<number, string>>();
 
 function resetSfCaches(): void {
   sfSampler = null;
@@ -135,7 +139,7 @@ function resetSfCaches(): void {
   sfInstrumentCount = 0;
   sfInstrumentNames = [];
   sfCurrentInstrument = null;
-  sfGmDrumMap = null;
+  sfKitMaps.clear();
   sfParsed = null;
   sfParsedUrl = null;
   sfLoadPromise = null; // SF2 変更で進行中ロードの共有も破棄（旧URLの結果を新URLに使い回さない）
@@ -300,10 +304,19 @@ async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true): Promi
 function krOfZone(z: any): { lo: number; hi: number } | undefined {
   return z?.keyRange ?? z?.generators?.["43"]?.range;
 }
-function buildGmDrumMap(): Map<number, string> {
+// bank128/preset の権威マップ（GM番号→楽器名）をキャッシュ。キット選択はこの preset を変えるだけ。
+function kitMap(preset: number): Map<number, string> {
+  let m = sfKitMaps.get(preset);
+  if (!m) {
+    m = buildGmDrumMap(preset);
+    sfKitMaps.set(preset, m);
+  }
+  return m;
+}
+function buildGmDrumMap(preset = 0): Map<number, string> {
   const map = new Map<number, string>();
   const presets: any[] = sfParsed?.presets ?? [];
-  const std = presets.find((p) => presetBank(p) === 128 && presetNum(p) === 0);
+  const std = presets.find((p) => presetBank(p) === 128 && presetNum(p) === preset);
   if (!std) return map;
   const instCovers = (inst: any, k: number) =>
     (inst?.zones ?? []).some((iz: any) => {
@@ -328,11 +341,17 @@ function buildGmDrumMap(): Map<number, string> {
 // #55f バスドラ(35/36)・スネア(38/40)は**ヒューリスティック優先**（前バージョンの音色が好評。
 //   権威マップだと Standard Kick 3@38 になり評価が下がったため、Standard Kick 1@root を維持）。
 // それ以外(hihat/tom/crash/ride/perc 等)は **権威マップ(Standardキット)優先**。
-export function drumNameFor(pitch: number, names: string[]): string | null {
+export function drumNameFor(pitch: number, names: string[], kitPreset = 0): string | null {
+  // 非Standardキット（アコ/エレキ選択）＝**権威マップを全ノートで使う**（808 Kick 等キット固有名）。
+  // 権威に無ければ下の Standard 経路へフォールバック（後退ゼロ）。
+  if (kitPreset !== 0 && sfParsed) {
+    const nm = kitMap(kitPreset).get(pitch);
+    if (nm && names.includes(nm)) return nm;
+  }
+  // Standard(0)：kick/snare はヒューリスティック（#55f 好評の音）優先、他は権威(preset0)マップ。
   const kickOrSnare = pitch <= 36 || pitch === 38 || pitch === 40;
   if (!kickOrSnare && sfParsed) {
-    if (!sfGmDrumMap) sfGmDrumMap = buildGmDrumMap();
-    const fromKit = sfGmDrumMap.get(pitch);
+    const fromKit = kitMap(0).get(pitch);
     if (fromKit && names.includes(fromKit)) return fromKit;
   }
   let res: RegExp[];
@@ -437,22 +456,25 @@ export type DrumVoice = { sampler: any; note: number; detune: number; stopId?: s
 async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, DrumVoice>> {
   const map = new Map<number, DrumVoice>();
   if (!sfInstrumentNames.length) return map;
-  const pitches = [...new Set(notes.filter((n) => n.drum).map((n) => n.pitch))];
+  // (キット, GM番号) の組ごとにサンプラを用意（アコ/エレキ混在もOK＝section内で別kit可）。
+  const combos = [...new Set(notes.filter((n) => n.drum).map((n) => drumKey(n.kit ?? 0, n.pitch)))];
   // #84 S0: ドラムサンプラのロードを並列化（直列awaitで初回再生が1〜2.5s重い問題を緩和）。
   const loaded = await Promise.all(
-    pitches.map(async (p) => {
-      const name = drumNameFor(p, sfInstrumentNames);
+    combos.map(async (key) => {
+      const kit = key >> 8;
+      const p = key & 0xff;
+      const name = drumNameFor(p, sfInstrumentNames, kit);
       if (!name) return null;
       const s = await loadDrumSampler(name, Tone);
       if (!s) return null;
       const v = drumVoiceFor(name, p); // #84 S2/S3: note＋ピッチ補正detune＋choke stopId
-      return { p, name, sampler: s, note: v.note, detune: v.detune, stopId: v.stopId };
+      return { key, name, sampler: s, note: v.note, detune: v.detune, stopId: v.stopId };
     }),
   );
   for (const r of loaded) {
     if (!r) continue;
-    map.set(r.p, { sampler: r.sampler, note: r.note, detune: r.detune, stopId: r.stopId });
-    dbg("drum", r.p, "->", r.name, "@note", r.note, "detune", r.detune, "stopId", r.stopId);
+    map.set(r.key, { sampler: r.sampler, note: r.note, detune: r.detune, stopId: r.stopId });
+    dbg("drum", r.key, "->", r.name, "@note", r.note, "detune", r.detune, "stopId", r.stopId);
   }
   return map;
 }

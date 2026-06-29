@@ -291,6 +291,22 @@
   overflow-x: auto;
   position: relative; /* #74 プレイヘッド基準 */
 }
+.rhythm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.drum-kit-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.drum-kit-pick select {
+  font: inherit;
+}
 .rhythm-row {
   display: flex;
   align-items: center;

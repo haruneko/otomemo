@@ -10,6 +10,7 @@ export interface Note {
   syllable?: string; // 歌詞の音節割当（design #16）。今はデータ枠のみ。
   drum?: boolean; // GMドラム＝打楽器シンセで鳴らす（melodic synthだと低すぎて聞こえない）
   program?: number; // #section音色: 合成再生で子(パート)ごとの GM音色を保つ（compositeNotesが付与）
+  kit?: number; // ドラムキット(GM bank128 preset番号 0=Standard)。アコ/エレキ選択＝drumノートに付与。
 }
 
 const CHORD_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -148,7 +149,20 @@ export const drumVel = (midi: number, vel?: number): number =>
 export interface RhythmContent {
   steps: number;
   lanes: RhythmLane[];
+  kit?: number; // ドラムキット(GM bank128 preset 0=Standard)。アコ/エレキ選択。未指定=Standard。
 }
+
+// 選べるドラムキット（SF2 bank128 のプリセット）。アコ/エレキでグループ。
+export const DRUM_KITS: { program: number; label: string; group: "acoustic" | "electric" }[] = [
+  { program: 0, label: "Standard", group: "acoustic" },
+  { program: 8, label: "Room", group: "acoustic" },
+  { program: 16, label: "Power", group: "acoustic" },
+  { program: 32, label: "Jazz", group: "acoustic" },
+  { program: 40, label: "Brush", group: "acoustic" },
+  { program: 24, label: "Electronic", group: "electric" },
+  { program: 25, label: "808/909", group: "electric" },
+  { program: 26, label: "Dance", group: "electric" },
+];
 
 export const DRUMS: { name: string; midi: number }[] = [
   { name: "Kick", midi: 36 },
@@ -186,6 +200,7 @@ export function rhythmToNotes(r: RhythmContent): Note[] {
       dur: 0.25,
       drum: true,
       vel: drumVel(l.midi, l.vel), // #84 S4 レーン/GM既定ベロシティ
+      kit: r.kit, // 選択キット（未指定=Standard）。再生/書出でこの番号のキットを使う。
     })),
   );
 }
@@ -529,8 +544,11 @@ export function notesToMidi(
   const ts = meterPair(meter); // #51: 拍子記号をMIDIヘッダへ（音価は秒絶対なので不変）
   if (ts) midi.header.timeSignatures.push({ ticks: 0, timeSignature: ts });
   const track = midi.addTrack();
-  if (notes.some((n) => n.drum)) track.channel = 9; // GMドラム=ch10
-  else if (program !== undefined) track.instrument.number = program;
+  if (notes.some((n) => n.drum)) {
+    track.channel = 9; // GMドラム=ch10
+    const kit = notes.find((n) => n.drum)?.kit; // キット＝ch10のprogram change（ABILITYでも同じキットで鳴る）
+    if (kit) track.instrument.number = kit;
+  } else if (program !== undefined) track.instrument.number = program;
   const spb = 60 / bpm;
   for (const n of notes) {
     track.addNote({
@@ -550,6 +568,7 @@ export interface MidiTrackSpec {
   program?: number;
   drum?: boolean;
   name?: string;
+  kit?: number; // ドラムトラックのキット（ch10 program）。
 }
 export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null): Uint8Array {
   const midi = new Midi();
@@ -561,8 +580,11 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
     if (!t.notes.length) continue;
     const track = midi.addTrack();
     if (t.name) track.name = t.name;
-    if (t.drum) track.channel = 9;
-    else if (t.program !== undefined) track.instrument.number = t.program;
+    if (t.drum) {
+      track.channel = 9;
+      const kit = t.kit ?? t.notes.find((n) => n.drum)?.kit;
+      if (kit) track.instrument.number = kit;
+    } else if (t.program !== undefined) track.instrument.number = t.program;
     for (const n of t.notes) {
       track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
     }
@@ -636,6 +658,7 @@ export interface ScheduledNote {
   pitch: number;
   vel: number; // 0..1
   program?: number; // #section音色: per-note の GM音色（合成再生でパート毎に切替）
+  kit?: number; // ドラムキット(GM bank128 preset)。drum 音の解決でこのキットのサンプルを使う。
 }
 
 const MEMBRANE_DUR = 0.15;
@@ -649,7 +672,7 @@ export function scheduleTimes(notes: Note[], bpm = 120): ScheduledNote[] {
     const vel = (n.vel ?? 100) / 127;
     if (n.drum) {
       const voice: Voice = n.pitch <= 41 ? "membrane" : "noise";
-      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel };
+      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel, kit: n.kit };
     }
     return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel, program: n.program };
   });

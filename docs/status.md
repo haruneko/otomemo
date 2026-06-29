@@ -16,7 +16,7 @@
 | 入力モダリティ | 🟡 | ✅ピアノロール／パッドステップ／文字、添付(asset)。✅楽譜入力(MusicXML)・✅音声(ハミング)＝#56 |
 | 検索・つなぐ | ✅ | ファセット検索、意味検索(埋め込み＋較正ゲート #65)、関連辺・合成辺 |
 | スケッチ・再生 | ✅ | 4要素エディタ、Tone.js＋SF2再生、プレイヘッド・トランスポート、section/song合成、GM音色(再生↔書出一致 #47) |
-| ドラム再生 | 🟡 | ✅速度/音高/チョーク #84 S0-S3＋**S4 ベロシティ層(ハット控えめ)**。🟡1 SmplrPreset集約(音質検証要・別途) |
+| ドラム再生 | 🟡 | ✅速度/音高/チョーク #84 S0-S3＋S4 ベロシティ層。**✅ピッチ異常修正(2026-06-29: root=overridingRootKey??叩いた鍵・ride2+8等を断つ)**。**✅キット選択 アコ/エレキ(2026-06-29: buildGmDrumMap(preset)パラメタ化・RhythmContent.kit→再生&MIDI ch10 program・Standard不変=回帰ゼロ・全キット実在サンプル解決を構造確認)**。研究=research/2026-06-29-drum-sound-resolution.md。残=新キットの音の試聴調整・Standardのregex一掃(任意・要A/B) |
 | DAW往復・過去資産 | 🟡 | ✅MIDI書出、MIDI取込(worker分割 melody/rhythm #81)、歌詞取込。⬜コード自動検出、mp3整理、ABILITY往復は基本のみ |
 | 投げて受け取る | ✅ | ジョブ→worker→reap→トレイ、plan分解・継続・通知強度・waiting/question #45、定期スケジューラ #80、フォーム質問パネル #85S3 |
 | AI生成 枠＋動作＋構造 #85 | 🟡 | ✅枠(6/8効く)、gen_variations(N個・items+edges)、condition(音数/コード)、verb(fetch/transform/gen_lyric)、文章＋パネル導線。✅方向確認(confirm) |

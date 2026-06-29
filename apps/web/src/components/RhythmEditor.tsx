@@ -1,5 +1,5 @@
 import { type Ref } from "react";
-import { type RhythmContent, DRUM_LABEL } from "../music";
+import { type RhythmContent, DRUM_LABEL, DRUM_KITS } from "../music";
 import { BarsControl } from "./BarsControl";
 
 const NAME_PX = 58; // rhythm-name(56) + gap(2)
@@ -50,7 +50,29 @@ export function RhythmEditor({
 
   return (
     <div className="rhythm-editor" ref={scrollerRef}>
-      <BarsControl bars={bars} max={4} onChange={setBars} />
+      <div className="rhythm-toolbar">
+        <BarsControl bars={bars} max={4} onChange={setBars} />
+        {/* ドラムキット（アコ/エレキ）選択＝GM bank128 preset。再生＆MIDI ch10 program に反映。 */}
+        <label className="drum-kit-pick">
+          キット
+          <select
+            aria-label="drum-kit"
+            value={rhythm.kit ?? 0}
+            onChange={(e) => onChange({ ...rhythm, kit: Number(e.target.value) })}
+          >
+            <optgroup label="アコースティック">
+              {DRUM_KITS.filter((k) => k.group === "acoustic").map((k) => (
+                <option key={k.program} value={k.program}>{k.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="エレキ">
+              {DRUM_KITS.filter((k) => k.group === "electric").map((k) => (
+                <option key={k.program} value={k.program}>{k.label}</option>
+              ))}
+            </optgroup>
+          </select>
+        </label>
+      </div>
       <div
         className="proll-playhead"
         aria-hidden="true"
