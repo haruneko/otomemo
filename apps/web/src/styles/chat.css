@@ -334,11 +334,12 @@
   font-size: 0.72rem;
   color: var(--muted);
   /* 複数小節で横スクロールしてもレーン名を左に固定＝何の行か見失わない（DAW定石）。
-     背景で後ろのセルを隠す。 */
+     背景で後ろのセルを隠す＋右に影＝「ここから先がスクロールする」フローズン列に見える（かぶり解消）。 */
   position: sticky;
   left: 0;
   z-index: 2;
   background: var(--card);
+  box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.55);
 }
 .rhythm-cell {
   width: var(--rcell);
