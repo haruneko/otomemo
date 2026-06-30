@@ -14,6 +14,9 @@ const LENGTHS = [
   { v: 4, label: "1小節" },
   { v: 8, label: "2小節" },
 ];
+// 付点＝長さ×1.5（各行ごと）。dur が基準長の1.5倍なら付点。
+const isDotted = (d: number) => LENGTHS.some((l) => Math.abs(d - l.v * 1.5) < 1e-6);
+const baseDur = (d: number) => (isDotted(d) ? d / 1.5 : d);
 
 // コードは「順番に並ぶ」＝start は手入力でなく長さから自動フロー（直感的・"よくわからない"を解消）。
 function reflow(chords: ChordEntry[]): ChordEntry[] {
@@ -38,8 +41,14 @@ export function ChordEditor({
   playing?: boolean;
 }) {
   const [activeIdx, setActiveIdx] = useState(-1);
-  const [dotted, setDotted] = useState(false); // 付点：長さボタンを ×1.5（1拍→1.5＝6/8ビート、2拍→3＝6/8小節）
-  const durFor = (v: number) => (dotted ? v * 1.5 : v);
+  // 長さボタン：その基準長にする（付点状態は引き継ぐ）。付点ボタン：その行の長さを×1.5 ⇔ 等倍でトグル。
+  function setLen(i: number, dur: number, v: number) {
+    update(i, { dur: isDotted(dur) ? v * 1.5 : v });
+  }
+  function toggleDot(i: number, dur: number) {
+    const b = baseDur(dur);
+    update(i, { dur: isDotted(dur) ? b : b * 1.5 });
+  }
   useEffect(() => {
     if (!playing || !beatRef) {
       setActiveIdx(-1);
@@ -131,11 +140,16 @@ export function ChordEditor({
             ))}
           </select>
           <div className="chord-len" aria-label={`len-${i}`}>
+            <span className="chord-len-label">長さ</span>
             {LENGTHS.map((l) => (
-              <button key={l.v} type="button" className={"len" + (c.dur === durFor(l.v) ? " on" : "")} aria-label={`len-${i}-${l.v}`} onClick={() => update(i, { dur: durFor(l.v) })}>
+              <button key={l.v} type="button" className={"len" + (baseDur(c.dur) === l.v ? " on" : "")} aria-label={`len-${i}-${l.v}`} onClick={() => setLen(i, c.dur, l.v)}>
                 {l.label}
               </button>
             ))}
+            {/* 付点＝長さ4ボタンの後ろ（その行の長さを×1.5）。例 1拍→1.5。 */}
+            <button type="button" className={"len dot" + (isDotted(c.dur) ? " on" : "")} aria-label={`dot-${i}`} aria-pressed={isDotted(c.dur)} title="付点（長さ×1.5）" onClick={() => toggleDot(i, c.dur)}>
+              付点
+            </button>
           </div>
           <button type="button" aria-label={`remove-chord-${i}`} onClick={() => remove(i)}>✕</button>
         </div>
@@ -143,17 +157,6 @@ export function ChordEditor({
       })}
       <div className="chord-foot">
         <button type="button" className="bs-btn" onClick={add}>＋コード</button>
-        {/* 付点：以降クリックする長さボタンを ×1.5（6/8 の付点四分=1.5拍・付点二分=3拍に対応）。 */}
-        <button
-          type="button"
-          className={"bs-btn" + (dotted ? " on" : "")}
-          aria-label="dotted"
-          aria-pressed={dotted}
-          title="付点（長さ×1.5・6/8対応）"
-          onClick={() => setDotted((d) => !d)}
-        >
-          付点．
-        </button>
         {chords.length > 0 && (
           <span className="muted chord-total">計 {chords.reduce((s, c) => s + c.dur, 0)}拍（{Math.round((chords.reduce((s, c) => s + c.dur, 0) / 4) * 10) / 10}小節）</span>
         )}

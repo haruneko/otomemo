@@ -68,19 +68,29 @@ describe("ChordEditor", () => {
     ]);
   });
 
-  it("付点ONで長さボタンが×1.5（1拍→1.5＝6/8の付点四分・#2）", async () => {
+  it("付点ボタン（行ごと）で長さ×1.5（1拍→1.5＝6/8の付点四分・#2）", async () => {
     const onChange = vi.fn();
-    render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("dotted")); // 付点 ON
-    await userEvent.click(screen.getByLabelText("len-0-1")); // 1拍 ボタン
-    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 1.5 }]);
+    render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 1 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("dot-0")); // その行を付点に
+    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 1.5 }]);
   });
 
-  it("付点OFFは従来どおり（1拍=1）", async () => {
+  it("付点ボタンはトグル（付点1.5→等倍1）＋長さボタンは付点を引き継ぐ", async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 1.5 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("dot-0")); // 付点を外す → 1
+    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 1 }]);
+    // 付点1.5拍の行で「2拍」を押すと付点を引き継いで 3
+    rerender(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 1.5 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("len-0-2"));
+    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 3 }]);
+  });
+
+  it("長さボタン単発（1拍=1）", async () => {
     const onChange = vi.fn();
     render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />);
     await userEvent.click(screen.getByLabelText("len-0-1"));
-    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 1 }]);
+    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 1 }]);
   });
 
   it("highlights the chord under the playhead beat while playing (#76)", () => {
