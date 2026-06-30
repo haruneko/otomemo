@@ -4,18 +4,26 @@ import { MiniRoll } from "./MiniRoll";
 import type { Neta } from "../api";
 
 const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const QUALITIES = [
-  { v: "", label: "maj" },
-  { v: "m", label: "min" },
-  { v: "7", label: "7" },
-  { v: "maj7", label: "maj7" },
-  { v: "m7", label: "m7" },
-  { v: "dim", label: "dim" },
-  { v: "aug", label: "aug" },
-  { v: "sus4", label: "sus4" },
-  { v: "6", label: "6" },
-  { v: "m6", label: "m6" },
-  { v: "9", label: "9" },
+// コード品質（QUALITY_INTERVALS と一致）。グループ化して選びやすく（design「決定A」）。
+const QUALITY_GROUPS: { group: string; items: { v: string; label: string }[] }[] = [
+  { group: "基本", items: [
+    { v: "", label: "maj" }, { v: "m", label: "min" }, { v: "sus4", label: "sus4" },
+    { v: "sus2", label: "sus2" }, { v: "aug", label: "aug" }, { v: "dim", label: "dim" },
+  ] },
+  { group: "7th", items: [
+    { v: "7", label: "7" }, { v: "maj7", label: "maj7" }, { v: "m7", label: "m7" },
+    { v: "m7b5", label: "m7♭5" }, { v: "dim7", label: "dim7" }, { v: "mM7", label: "mM7" },
+    { v: "7sus4", label: "7sus4" }, { v: "aug7", label: "7♯5" }, { v: "7b5", label: "7♭5" },
+  ] },
+  { group: "6th", items: [
+    { v: "6", label: "6" }, { v: "m6", label: "m6" }, { v: "69", label: "6/9" },
+  ] },
+  { group: "テンション", items: [
+    { v: "add9", label: "add9" }, { v: "9", label: "9" }, { v: "maj9", label: "maj9" },
+    { v: "m9", label: "m9" }, { v: "m11", label: "m11" }, { v: "13", label: "13" },
+    { v: "7b9", label: "7♭9" }, { v: "7#9", label: "7♯9" }, { v: "7#11", label: "7♯11" },
+    { v: "maj7#11", label: "maj7♯11" }, { v: "m69", label: "m6/9" },
+  ] },
 ];
 const LENGTHS = [
   { v: 1, label: "1拍" },
@@ -96,8 +104,12 @@ export function ChordEditor({
             ))}
           </select>
           <select aria-label={`quality-${i}`} value={c.quality} onChange={(e) => update(i, { quality: e.target.value })}>
-            {QUALITIES.map((q) => (
-              <option key={q.v} value={q.v}>{q.label}</option>
+            {QUALITY_GROUPS.map((g) => (
+              <optgroup key={g.group} label={g.group}>
+                {g.items.map((q) => (
+                  <option key={q.v} value={q.v}>{q.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <div className="chord-len" aria-label={`len-${i}`}>

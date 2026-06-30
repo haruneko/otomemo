@@ -7,20 +7,43 @@ export type Degree = { degree: number; quality: string };
 export type KeyCandidate = { key: number; mode: "major" | "minor"; score: number };
 
 export const QUALITY_INTERVALS: Record<string, number[]> = {
+  // ※ web `apps/web/src/music.ts` の同名と**キー集合を一致**させる（property test で担保・design「決定A」）。
+  // 三和音
   "": [0, 4, 7],
   maj: [0, 4, 7],
   m: [0, 3, 7],
   min: [0, 3, 7],
-  "7": [0, 4, 7, 10],
-  maj7: [0, 4, 7, 11],
-  m7: [0, 3, 7, 10],
   dim: [0, 3, 6],
-  m7b5: [0, 3, 6, 10],
   aug: [0, 4, 8],
   sus4: [0, 5, 7],
   sus2: [0, 2, 7],
+  // 7th
+  "7": [0, 4, 7, 10],
+  maj7: [0, 4, 7, 11],
+  m7: [0, 3, 7, 10],
+  m7b5: [0, 3, 6, 10], // ハーフディミニッシュ
+  dim7: [0, 3, 6, 9], // フルディミニッシュ7
+  aug7: [0, 4, 8, 10], // =7#5
+  "7b5": [0, 4, 6, 10],
+  mM7: [0, 3, 7, 11], // m(maj7)
+  "7sus4": [0, 5, 7, 10],
+  // 6th
   "6": [0, 4, 7, 9],
   m6: [0, 3, 7, 9],
+  // テンション（9系は 9度=14→pc2）
+  "9": [0, 4, 7, 10, 2],
+  maj9: [0, 4, 7, 11, 2],
+  m9: [0, 3, 7, 10, 2],
+  add9: [0, 4, 7, 2],
+  "69": [0, 4, 7, 9, 2], // 6/9
+  m69: [0, 3, 7, 9, 2],
+  // altered / extended dominant
+  "7b9": [0, 4, 7, 10, 1],
+  "7#9": [0, 4, 7, 10, 3],
+  "7#11": [0, 4, 7, 10, 6],
+  "13": [0, 4, 7, 10, 2, 9],
+  m11: [0, 3, 7, 10, 2, 5],
+  "maj7#11": [0, 4, 7, 11, 6],
 };
 
 const PC_BY_NAME: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };

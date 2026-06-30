@@ -65,6 +65,21 @@ describe("music", () => {
     expect(notes.every((n) => n.start === 0 && n.dur === 4)).toBe(true);
   });
 
+  it("renders tension chords from QUALITY_INTERVALS (C9 = C E G Bb D・pc正しい・テンションはオクターブ上)", () => {
+    const notes = chordsToNotes([{ root: 0, quality: "9", start: 0, dur: 4 }]);
+    expect(notes).toHaveLength(5); // R3579
+    const pcs = notes.map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
+    expect([...new Set(pcs)]).toEqual([0, 2, 4, 7, 10]); // C D E G Bb
+    // 9th(D) はクラスタでなくオクターブ上に開く（最低Cより1オクターブ超上）
+    const cs = notes.map((n) => n.pitch).sort((a, b) => a - b);
+    expect(cs[cs.length - 1]! - cs[0]!).toBeGreaterThanOrEqual(12);
+  });
+
+  it("unknown quality falls back to major triad（後方互換）", () => {
+    const notes = chordsToNotes([{ root: 0, quality: "zzz", start: 0, dur: 1 }]);
+    expect(notes).toHaveLength(3);
+  });
+
   it("expands a rhythm lane's hits to drum notes (step/4 = beat)", () => {
     const notes = rhythmToNotes({ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4] }] });
     expect(notes).toEqual([

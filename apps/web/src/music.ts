@@ -114,15 +114,22 @@ export function chordToMidi(sym: string, octave = 4): number[] {
   return out;
 }
 
-// コード列を、各コードの start/dur に重ねたノート列へ（再生/MIDIはメロと同じ経路）
+const CHORD_PREVIEW_BASE = 60; // C4 付近（進行プレビューの中立な積み）
+// コード列を、各コードの start/dur に重ねたノート列へ（再生/MIDIはメロと同じ経路）。
+// **QUALITY_INTERVALS(SSOT) から積む**＝テンション(9/13/add9 等)も pc 正しく鳴る（旧 Tonal依存を排し
+// 我々の語彙と一致）。tones は昇順になるようオクターブで開く＝C9=C E G B♭ D'（クラスタにせず和音色が分かる）。
 export function chordsToNotes(chords: ChordEntry[]): Note[] {
-  return chords.flatMap((c) =>
-    chordToMidi((CHORD_NAMES[c.root] ?? "C") + c.quality).map((pitch) => ({
-      pitch,
-      start: c.start,
-      dur: c.dur,
-    })),
-  );
+  return chords.flatMap((c) => {
+    const ivals = QUALITY_INTERVALS[c.quality] ?? [0, 4, 7];
+    const r = (((Math.round(c.root) % 12) + 12) % 12);
+    let prev = -1;
+    return ivals.map((iv) => {
+      let v = iv;
+      while (v <= prev) v += 12; // 昇順に開く（テンションをオクターブ上へ）
+      prev = v;
+      return { pitch: CHORD_PREVIEW_BASE + r + v, start: c.start, dur: c.dur };
+    });
+  });
 }
 
 // --- リズム（rhythm）。GMドラムのステップグリッド。1ステップ=16分音符（拍=step/4） ---
@@ -224,22 +231,18 @@ export interface RelativeBassContent {
 const BASS_FLOOR = 28; // E1（エレキ4弦ベースの最低音）
 const BASS_STEP_TO_BEAT = 0.25; // 1step=16分=0.25拍
 
-// コード品質 → ルートからの半音インターバル（worker theory.QUALITY_INTERVALS と一致）。
+// コード品質 → ルートからの半音インターバル。**api `theory.ts` の QUALITY_INTERVALS とキー集合一致**
+// （SSOT・design「決定A」。property test で担保）。
 const QUALITY_INTERVALS: Record<string, number[]> = {
-  "": [0, 4, 7],
-  maj: [0, 4, 7],
-  m: [0, 3, 7],
-  min: [0, 3, 7],
-  "7": [0, 4, 7, 10],
-  maj7: [0, 4, 7, 11],
-  m7: [0, 3, 7, 10],
-  dim: [0, 3, 6],
-  m7b5: [0, 3, 6, 10],
-  aug: [0, 4, 8],
-  sus4: [0, 5, 7],
-  sus2: [0, 2, 7],
-  "6": [0, 4, 7, 9],
-  m6: [0, 3, 7, 9],
+  "": [0, 4, 7], maj: [0, 4, 7], m: [0, 3, 7], min: [0, 3, 7],
+  dim: [0, 3, 6], aug: [0, 4, 8], sus4: [0, 5, 7], sus2: [0, 2, 7],
+  "7": [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10], m7b5: [0, 3, 6, 10],
+  dim7: [0, 3, 6, 9], aug7: [0, 4, 8, 10], "7b5": [0, 4, 6, 10], mM7: [0, 3, 7, 11], "7sus4": [0, 5, 7, 10],
+  "6": [0, 4, 7, 9], m6: [0, 3, 7, 9],
+  "9": [0, 4, 7, 10, 2], maj9: [0, 4, 7, 11, 2], m9: [0, 3, 7, 10, 2], add9: [0, 4, 7, 2],
+  "69": [0, 4, 7, 9, 2], m69: [0, 3, 7, 9, 2],
+  "7b9": [0, 4, 7, 10, 1], "7#9": [0, 4, 7, 10, 3], "7#11": [0, 4, 7, 10, 6],
+  "13": [0, 4, 7, 10, 2, 9], m11: [0, 3, 7, 10, 2, 5], "maj7#11": [0, 4, 7, 11, 6],
 };
 const DEGREE_CHORD_INDEX: Record<string, number> = { "3": 1, "5": 2, "7": 3 };
 
