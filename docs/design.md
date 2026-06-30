@@ -276,6 +276,29 @@
 - **段階(CP)＝✅実装済(2026-06-23)**：CP1 進行を抽象化(音色固定GM49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(music.ts) → CP3 エディタ(ChordPatternEditor＝hitsグリッド＋長さツール＋voicing＋voicing MiniRoll) → CP4 `genChordPattern`＋/gen/section 配線 → CP5 compositeNotes で section 進行に解決(パート毎 program・複数可)。api/web 緑。
 - **コード入力/section UX（CV・✅実装済）**：ChordEditor＝start自動フロー(順番)・長さボタン・ピアノロール表示・合計尺。SectionEditor＝レーン層モデル順(進行→メロ→コード楽器→ベース→リズム→section)・**占有セルのみ配置不可**(別小節は自由)。トグル/構成音の選択色＝OFF地色付与で是正(E2E)。
 
+### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
+**問題（ユーザー指摘）**：①品質語彙が不足＝テンション(9/11/13/add9)・dim7・altered(7♭9/7♯9/7♯5)が無い。しかも ChordEditor は「9」を選べるのに `QUALITY_INTERVALS` に定義が無く **major トライアドにフォールバック＝壊れている**。②分数コード(slash/on-chord)が表現できない＝`ChordEntry` に bass 欄が無い。③コード楽器(comping)の高さが**ルートのpcぶん跳ねる**(`base = 48 + octave*12 + root_pc`)＝進行が動くたびレジスタが上下。「大体の高さを決める」＋スムーズに置きたい。
+
+**決定A：品質語彙の拡張（SSOT同期）**
+- `QUALITY_INTERVALS`（正準＝`apps/api/src/music/theory.ts`、複製＝web `music.ts`/`chordname.ts`/`chordDetect.ts`）に追加：
+  - 7系：`dim7`[0,3,6,9]・`aug7`(=7#5)[0,4,8,10]・`7b5`[0,4,6,10]・`mM7`(=m(maj7))[0,3,7,11]・`7sus4`[0,5,7,10]
+  - テンション：`9`[0,4,7,10,2]・`maj9`[0,4,7,11,2]・`m9`[0,3,7,10,2]・`add9`[0,4,7,2]・`69`[0,4,7,9,2]・`m69`[0,3,7,9,2]
+  - altered/extended：`7b9`[0,4,7,10,1]・`7#9`[0,4,7,10,3]・`7#11`[0,4,7,10,6]・`13`[0,4,7,10,2,9]・`m11`[0,3,7,10,2,5]・`maj7#11`[0,4,7,11,6]
+- ChordEditor の QUALITIES を同セットへ拡張（基本/7th/テンション/sus/dim-aug でグループ）。未知qualityは従来どおり major フォールバック＝後方互換。
+- comping voicing(R/3/5/7)は当面7thまで＝テンションは進行プレビュー(chordToMidi/chordPcs)で鳴る。テンション込みvoicingは将来。
+- **同期テスト**：4ファイルの `QUALITY_INTERVALS` がキー集合一致(property test)＝SSOT乖離を防ぐ。
+
+**決定B：分数コード（slash bass）**
+- `ChordEntry` に **`bass?: number`**（pc 0-11・省略=root）。「C/E」={root:0, quality:"", bass:4}。C基準保存。section配置の移調は root と同じ shift を bass にも適用(実音保持)。
+- 鳴り：プレビュー/comping で**最低音を bass pc に置き換え/追加**（root より下に bass を1音）。`analyze_fit` の pc集合に bass を含める(メロ判定が低音を考慮)。相対ベースが「R」を当てる時の基準は `bass ?? root`（slash上のベースは slash 低音を弾く）。
+- ChordEditor に「/（onベース）」セレクタ(off=root / pc選択)。表示は「C/E」。MIDI も最低音に反映。
+
+**決定C：伴奏レジスタ（跳ね解消・高さアンカー）**
+- `voiceChord` の `base = CHORD_BASE + octave*12 + root_pc` を**アンカー中心の最寄りオクターブ配置**へ：`anchor = CHORD_BASE + octave*12`（octave=「大体の高さ」）／`rootPitch = nearestPcTo(root_pc, anchor)`＝root を anchor±6半音帯に置く(CもBも anchor近傍＝跳ねない)／その上に voicing を積む。bass(分数)はさらに下。
+- メロ/ベースの placementLanding と同じ「最寄りオクターブで音域維持」を comping にも。`octave` はアンカーのシフトとして意味付け（octave=0≈C3帯で従来と近い＝後方互換）。結果＝進行が動いても comping レジスタ一定・声部進行が滑らか。
+
+**段階**：S1 品質語彙(決定A・独立) → S2 伴奏レジスタ(決定C・voiceChordのみ) → S3 分数コード(決定B・スキーマ+UI+fit+MIDI=横断)。各 TDD＋Playwright で ChordEditor/section の見た目を確認。
+
 ### 再生
 - section/song：メインペーンに**トランスポート（全体再生）パネル**。
 - ネタ帳：カードを**タップで個別再生**（断片を単独 audition、調ヒントで鳴らす）。
