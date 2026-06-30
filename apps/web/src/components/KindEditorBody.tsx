@@ -107,6 +107,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     pickup={p.pickup}
                     low={isBass ? 28 : undefined}
                     high={isBass ? 55 : undefined}
+                    enableLyric={isMelody}
                     playheadRef={tp.lineRef}
                     scrollerRef={tp.scrollerRef}
                   />

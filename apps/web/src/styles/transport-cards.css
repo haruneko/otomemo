@@ -373,6 +373,27 @@
   font-size: 0.75rem;
   color: var(--muted);
 }
+/* 歌詞流し込み入力（メロのみ・LS3）。 */
+.proll-lyric-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  flex-wrap: wrap;
+}
+.proll-lyric-input input {
+  flex: 1;
+  min-width: 130px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+.proll-lyric-input button {
+  padding: 5px 10px;
+}
 .proll-tools .len {
   background: #2b2f36;
   color: var(--fg);
@@ -452,6 +473,45 @@
 .proll-key.black {
   background: #2a2d33;
   color: #9aa0aa;
+}
+/* 歌詞レーン（流し込み結果＝各音符のx位置に歌詞）。「詞」ラベルは鍵盤と同じく左に固定。 */
+.proll-lyric-lane {
+  display: flex;
+  align-items: stretch;
+  min-width: max-content;
+  border-top: 1px solid #2a2d33;
+  background: #15171b;
+  position: sticky; /* 縦スクロールしても下端に固定＝音域が広くても歌詞が常に見える */
+  bottom: 0;
+  z-index: 2;
+}
+.proll-lyric-key {
+  flex: 0 0 auto;
+  width: 40px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 22px;
+  text-align: center;
+  border: 1px solid #24272e;
+}
+.proll-lyric-track {
+  position: relative;
+  height: 22px;
+}
+.proll-syl {
+  position: absolute;
+  top: 3px;
+  font-size: 11px;
+  color: #e6e8ec;
+  white-space: nowrap;
+  transform: translateX(1px);
+}
+.proll-syl.melisma {
+  color: #6b7280; /* メリスマ ー は控えめ */
 }
 .proll-cell {
   width: 12px;

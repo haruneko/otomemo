@@ -1,6 +1,7 @@
 import { useMemo, useState, type Ref } from "react";
 import type { Note } from "../music";
 import { previewNote } from "../audio";
+import { flowLyric, splitMora } from "../lyrics";
 import { NoteValuePicker } from "./NoteValuePicker";
 
 const CELL_PX = 12; // .proll-cell の幅。1拍=SUBDIV*CELL_PX で playhead を px 配置（横スクロール追従）。
@@ -34,6 +35,7 @@ export function PianoRoll({
   scrollerRef,
   low = DEFAULT_LOW,
   high = DEFAULT_HIGH,
+  enableLyric = false,
 }: {
   notes: Note[];
   onChange: (n: Note[]) => void;
@@ -43,9 +45,11 @@ export function PianoRoll({
   scrollerRef?: Ref<HTMLDivElement>; // #74 追従スクロール対象（.proll）
   low?: number; // 既定で見せる最低音（bass は E1=28 など低域既定）
   high?: number; // 既定で見せる最高音
+  enableLyric?: boolean; // メロのみ：歌詞流し込み（LS3・design L2）
 }) {
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
+  const [lyricDraft, setLyricDraft] = useState(""); // 流し込む歌詞（かな・読み）。永続せずUIだけ
 
   const pitches = useMemo(() => {
     const lo = Math.min(low, ...notes.map((n) => n.pitch));
@@ -96,6 +100,31 @@ export function PianoRoll({
           onToggleDotted={() => setDotted((d) => !d)}
         />
       </div>
+      {enableLyric && (
+        <div className="proll-lyric-input">
+          <span className="muted">歌詞</span>
+          <input
+            type="text"
+            aria-label="lyric-draft"
+            placeholder="かな（読み）を入力→流し込む"
+            value={lyricDraft}
+            onChange={(e) => setLyricDraft(e.target.value)}
+          />
+          <button
+            type="button"
+            aria-label="flow-lyric"
+            disabled={!notes.length || splitMora(lyricDraft).length === 0}
+            onClick={() => onChange(flowLyric(notes, splitMora(lyricDraft)))}
+          >
+            流し込む
+          </button>
+          {notes.some((n) => n.syllable) && (
+            <button type="button" aria-label="clear-lyric" onClick={() => onChange(notes.map((n) => ({ ...n, syllable: undefined })))}>
+              クリア
+            </button>
+          )}
+        </div>
+      )}
       <div className="proll" role="grid" aria-label="piano-roll" ref={scrollerRef}>
         {/* #58/#74 プレイヘッド：生beat --phb をコンテンツ座標(px)へ＝横スクロールに追従。1拍=SUBDIV*CELL_PX。 */}
         <div
@@ -151,6 +180,24 @@ export function PianoRoll({
             </div>
           </div>
         ))}
+        {notes.some((n) => n.syllable) && (
+          <div className="proll-lyric-lane" aria-label="lyrics">
+            <div className="proll-lyric-key" aria-hidden="true">詞</div>
+            <div className="proll-lyric-track" style={{ width: `${steps * CELL_PX}px` }}>
+              {notes
+                .filter((n) => n.syllable)
+                .map((n, i) => (
+                  <span
+                    key={i}
+                    className={"proll-syl" + (n.syllable === "ー" ? " melisma" : "")}
+                    style={{ left: `${((n.start + pre) / total) * 100}%` }}
+                  >
+                    {n.syllable}
+                  </span>
+                ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
