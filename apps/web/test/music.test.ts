@@ -306,6 +306,19 @@ describe("music", () => {
       expect(atStart).toEqual([48, 52, 55]); // C E G（close・octave0）
       expect(notes.filter((n) => n.start === 0).every((n) => n.dur === 2)).toBe(true); // 次hit(step8=2拍)まで
     });
+    it("レジスタ安定（決定C）：C進行とB進行のcompingが近接＝ルートで跳ねない", () => {
+      const lowOf = (rootPc: number) => {
+        const notes = resolveChordPattern(cp({ hits: [{ step: 0, dur: 8 }] }), [{ root: rootPc, quality: "", start: 0, dur: 4 }], 0);
+        return Math.min(...notes.map((n) => n.pitch));
+      };
+      const cLow = lowOf(0); // C
+      const bLow = lowOf(11); // B（旧実装だと 48→59 で11半音跳ねた）
+      expect(Math.abs(bLow - cLow)).toBeLessThanOrEqual(6); // アンカー最寄り＝近接
+    });
+    it("octave で大体の高さがシフト（+1 で約1オクターブ上）", () => {
+      const low = (oct: number) => Math.min(...resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: oct } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).map((n) => n.pitch));
+      expect(low(1) - low(0)).toBe(12);
+    });
     it("arp：構成音を1つずつ巡回（各 hit 1音）", () => {
       const notes = resolveChordPattern(cp({ mode: "arp", hits: [{ step: 0, dur: 4 }, { step: 4, dur: 4 }, { step: 8, dur: 4 }] }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
       expect(notes.length).toBe(3); // 3 hit = 3音

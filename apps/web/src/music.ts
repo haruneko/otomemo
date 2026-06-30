@@ -360,10 +360,15 @@ export function emptyChordPattern(): ChordPatternContent {
   return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
 }
 
-// コードを voicing で実音化：構成音(R/3/5/7)をルートから積み、open は1つおきに+12で広げる（スケッチ範囲）。
+// コードを voicing で実音化（決定C・伴奏レジスタ）：構成音(R/3/5/7)を**アンカーの最寄りオクターブ**に
+// 置いたルートから積む＝コードが動いてもレジスタが跳ねない（旧 base=CHORD_BASE+octave*12+root_pc は
+// ルートのpcぶん上下した）。anchor=「大体の高さ」。open は1つおきに+12で広げる（スケッチ範囲）。
 function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
   const r = (((Math.round(root) % 12) + 12) % 12);
-  const base = CHORD_BASE + (v.octave ?? 0) * 12 + r;
+  const anchor = CHORD_BASE + (v.octave ?? 0) * 12;
+  let d = (((r - anchor) % 12) + 12) % 12; // root を anchor の最寄りオクターブへ（anchor±6半音帯）
+  if (d > 6) d -= 12;
+  const base = anchor + d;
   const tones = (v.tones?.length ? v.tones : ["R", "3", "5"]).map((t) => base + degreeInterval(t, quality));
   tones.sort((a, b) => a - b);
   return v.openClose === "open" ? tones.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : tones;
