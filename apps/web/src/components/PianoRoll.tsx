@@ -107,7 +107,12 @@ export function PianoRoll({
         />
         {pitches.map((p) => (
           <div className={"proll-row" + (isBlack(p) ? " black" : " white")} key={p} role="row">
-            <div className={"proll-key" + (isBlack(p) ? " black" : " white")} aria-hidden="true">
+            <div
+              className={"proll-key" + (isBlack(p) ? " black" : " white")}
+              role="button"
+              aria-label={`key-${noteName(p)}`}
+              onClick={() => void previewNote({ pitch: p, start: 0, dur: 0.5 })}
+            >
               {noteName(p)}
             </div>
             <div className="proll-lane">

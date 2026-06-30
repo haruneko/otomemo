@@ -440,6 +440,10 @@
   padding-right: 3px;
   border: 1px solid #24272e;
   user-select: none;
+  cursor: pointer; /* タップでその音を鳴らす（鍵盤プレビュー） */
+}
+.proll-key:active {
+  filter: brightness(1.25); /* 押した手応え */
 }
 .proll-key.white {
   background: #d7dae0;
