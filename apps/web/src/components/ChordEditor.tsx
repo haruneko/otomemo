@@ -97,6 +97,7 @@ export function ChordEditor({
           <span className="chord-sym">
             {ROOTS[c.root]}
             {c.quality}
+            {c.bass != null && c.bass !== c.root ? `/${ROOTS[c.bass]}` : ""}
           </span>
           <select aria-label={`root-${i}`} value={c.root} onChange={(e) => update(i, { root: Number(e.target.value) })}>
             {ROOTS.map((r, idx) => (
@@ -110,6 +111,14 @@ export function ChordEditor({
                   <option key={q.v} value={q.v}>{q.label}</option>
                 ))}
               </optgroup>
+            ))}
+          </select>
+          {/* 分数コードのオンベース（決定B）。—=ルート（通常） */}
+          <select aria-label={`bass-${i}`} value={c.bass ?? ""} title="オンベース（分数コード）"
+            onChange={(e) => update(i, { bass: e.target.value === "" ? undefined : Number(e.target.value) })}>
+            <option value="">/ —</option>
+            {ROOTS.map((r, idx) => (
+              <option key={idx} value={idx}>/{r}</option>
             ))}
           </select>
           <div className="chord-len" aria-label={`len-${i}`}>

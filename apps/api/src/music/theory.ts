@@ -1,7 +1,7 @@
 // 連想エンジンの理論素片（framework非依存・依存なし）。design.md「連想エンジン」。
 // worker theory.py / web music.ts の QUALITY_INTERVALS と一致させる（C基準・度数はルートから半音）。
 
-export type Chord = { root: number | string; quality?: string; start?: number; dur?: number };
+export type Chord = { root: number | string; quality?: string; start?: number; dur?: number; bass?: number };
 /** 調相対の度数（degree=調主音からの半音 0-11）＋コード品質。進行はこれで保持＝移調不変。 */
 export type Degree = { degree: number; quality: string };
 export type KeyCandidate = { key: number; mode: "major" | "minor"; score: number };

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { QUALITY_INTERVALS, chordPcs } from "../src/music/theory";
+import { analyzeFit } from "../src/music/fit";
 
 // コード品質語彙の拡張（design「決定A」）：テンション/dim7/altered が pc 正しく解決するか。
 describe("QUALITY_INTERVALS 拡張", () => {
@@ -25,5 +26,14 @@ describe("QUALITY_INTERVALS 拡張", () => {
       expect(pcs.every((p) => p >= 0 && p <= 11), q).toBe(true);
       expect(new Set(pcs).size, `${q} に重複pc`).toBe(ivals.length);
     }
+  });
+});
+
+describe("分数コード（決定B）の fit", () => {
+  it("オンベース pc は当てはまり扱い（C/D で メロ D が in-chord）", () => {
+    const mel = [{ pitch: 62, start: 0, dur: 4 }]; // D4 単音（Cメジャーの非和音音）
+    const plain = analyzeFit(mel, [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+    const slash = analyzeFit(mel, [{ root: 0, quality: "", start: 0, dur: 4, bass: 2 }], 0); // C/D
+    expect(slash.inChordRate).toBeGreaterThan(plain.inChordRate);
   });
 });

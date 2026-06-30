@@ -78,18 +78,20 @@ export interface ChordEntry {
   quality: string; // ""(major) / "m" / "7" / "maj7" / "m7" / "dim" ...
   start: number; // 拍
   dur: number; // 拍
+  bass?: number; // 分数コードのオンベース pc（0–11・省略=root）。「C/E」={root:0,quality:"",bass:4}（design 決定B）
 }
 
 export function chordsOf(content: unknown): ChordEntry[] {
   const c = content as { chords?: unknown } | null;
   if (!c || !Array.isArray(c.chords)) return [];
   // 旧データ（root が "C".."B" 文字列）を 0–11 へ移行
-  return (c.chords as { root: number | string; quality?: string; start: number; dur: number }[]).map(
+  return (c.chords as { root: number | string; quality?: string; start: number; dur: number; bass?: number }[]).map(
     (ch) => ({
       root: typeof ch.root === "number" ? ch.root : Math.max(0, CHORD_NAMES.indexOf(ch.root)),
       quality: ch.quality ?? "",
       start: ch.start,
       dur: ch.dur,
+      ...(ch.bass != null ? { bass: ((Math.round(ch.bass) % 12) + 12) % 12 } : {}),
     }),
   );
 }
@@ -123,12 +125,18 @@ export function chordsToNotes(chords: ChordEntry[]): Note[] {
     const ivals = QUALITY_INTERVALS[c.quality] ?? [0, 4, 7];
     const r = (((Math.round(c.root) % 12) + 12) % 12);
     let prev = -1;
-    return ivals.map((iv) => {
+    const out = ivals.map((iv) => {
       let v = iv;
       while (v <= prev) v += 12; // 昇順に開く（テンションをオクターブ上へ）
       prev = v;
       return { pitch: CHORD_PREVIEW_BASE + r + v, start: c.start, dur: c.dur };
     });
+    // 分数コード（決定B）：オンベース pc を一番下（C3帯）に追加＝最低音が bass に。
+    if (c.bass != null) {
+      const bpc = ((Math.round(c.bass) % 12) + 12) % 12;
+      out.unshift({ pitch: CHORD_PREVIEW_BASE - 12 + bpc, start: c.start, dur: c.dur });
+    }
+    return out;
   });
 }
 
@@ -316,9 +324,10 @@ export function resolveRelativeBass(
     const offBeat = Math.abs(start - Math.round(start)) > 1e-9;
     const refBeat = offBeat && nextBeat < start + dur - 1e-9 ? nextBeat : start;
     const ch = bassChordAt(refBeat, chords);
-    const root = ch ? ((ch.root % 12) + 12) % 12 : k;
+    const chRootPc = ch ? ((ch.root % 12) + 12) % 12 : k;
+    // 分数コード（決定B）：オンベースがあれば R（ルート）はその低音を弾く。3/5/7 はコードのルート基準。
+    const bassPc = ch && ch.bass != null ? ((ch.bass % 12) + 12) % 12 : chRootPc;
     const quality = ch ? ch.quality : "";
-    const rootPitch = band(root); // ルート音を E1..D#2 帯へ（帯はルートの置き場）
     let pitch: number;
     if (e.degree === "approach") {
       const target = band(nextRootPc(entries, i, chords, k));
@@ -327,8 +336,9 @@ export function resolveRelativeBass(
       const ref = prevPitch ?? target;
       pitch = Math.abs(up - ref) <= Math.abs(down - ref) ? up : down;
     } else {
-      // 度数はルートから上に積む（5度=root+7 等。5度がルートより下にならない）
-      pitch = rootPitch + degreeInterval(e.degree, quality);
+      // 度数はルートから上に積む（5度=root+7 等）。R のみオンベース基準。
+      const refPc = e.degree === "R" ? bassPc : chRootPc;
+      pitch = band(refPc) + degreeInterval(e.degree, quality);
     }
     while (pitch < BASS_FLOOR) pitch += 12; // 床(28)より下は出さない（approach 救済）
     notes.push({ pitch, start, dur });
@@ -395,6 +405,14 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
       arpIdx++;
     } else {
       for (const p of voiced) out.push({ pitch: p, start, dur });
+      // 分数コード（決定B）：strum はオンベースを voicing の下に1音足す＝最低音が bass に。
+      if (ch && ch.bass != null) {
+        const bpc = ((ch.bass % 12) + 12) % 12;
+        const lowest = Math.min(...voiced);
+        let bp = Math.floor(lowest / 12) * 12 + bpc;
+        while (bp >= lowest) bp -= 12; // 確実にコードより下へ
+        out.push({ pitch: bp, start, dur });
+      }
     }
   }
   return out;

@@ -85,7 +85,10 @@ export function analyzeFit(melody: Note[], chords: Chord[], key?: number): FitRe
     const c = chordAt(start, chords);
     if (c === null) continue; // コード無し区間は対象外
     covered += w;
-    if (chordPcs(c.root, c.quality ?? "").includes(pc)) {
+    // 分数コード（決定B）：オンベース pc も鳴っている協和音＝当てはまり扱いに含める。
+    const consonant = chordPcs(c.root, c.quality ?? "");
+    if (c.bass != null) consonant.push(((Math.round(c.bass) % 12) + 12) % 12);
+    if (consonant.includes(pc)) {
       inChord += w;
       continue;
     }

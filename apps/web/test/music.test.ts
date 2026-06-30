@@ -80,6 +80,15 @@ describe("music", () => {
     expect(notes).toHaveLength(3);
   });
 
+  it("分数コード（決定B）：C/E は最低音が E＝bass pc が一番下に追加される", () => {
+    const plain = chordsToNotes([{ root: 0, quality: "", start: 0, dur: 4 }]);
+    const slash = chordsToNotes([{ root: 0, quality: "", start: 0, dur: 4, bass: 4 }]); // C/E
+    expect(slash.length).toBe(plain.length + 1); // bass 1音追加
+    const low = slash.reduce((m, n) => (n.pitch < m.pitch ? n : m), slash[0]!);
+    expect(((low.pitch % 12) + 12) % 12).toBe(4); // 最低音=E
+    expect(low.pitch).toBeLessThan(Math.min(...plain.map((n) => n.pitch))); // コードより下
+  });
+
   it("expands a rhythm lane's hits to drum notes (step/4 = beat)", () => {
     const notes = rhythmToNotes({ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4] }] });
     expect(notes).toEqual([
