@@ -1,30 +1,13 @@
 import { useEffect, useState, type RefObject } from "react";
 import { type ChordEntry } from "../music";
+import {
+  type Triad, type Ext, type Alt, type ChordParts,
+  decomposeQuality, composeQuality, TRIAD_OPTIONS, extOptionsFor, maj7Applicable, altOptionsFor,
+} from "../chordQuality";
 import { MiniRoll } from "./MiniRoll";
 import type { Neta } from "../api";
 
 const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-// コード品質（QUALITY_INTERVALS と一致）。グループ化して選びやすく（design「決定A」）。
-const QUALITY_GROUPS: { group: string; items: { v: string; label: string }[] }[] = [
-  { group: "基本", items: [
-    { v: "", label: "maj" }, { v: "m", label: "min" }, { v: "sus4", label: "sus4" },
-    { v: "sus2", label: "sus2" }, { v: "aug", label: "aug" }, { v: "dim", label: "dim" },
-  ] },
-  { group: "7th", items: [
-    { v: "7", label: "7" }, { v: "maj7", label: "maj7" }, { v: "m7", label: "m7" },
-    { v: "m7b5", label: "m7♭5" }, { v: "dim7", label: "dim7" }, { v: "mM7", label: "mM7" },
-    { v: "7sus4", label: "7sus4" }, { v: "aug7", label: "7♯5" }, { v: "7b5", label: "7♭5" },
-  ] },
-  { group: "6th", items: [
-    { v: "6", label: "6" }, { v: "m6", label: "m6" }, { v: "69", label: "6/9" },
-  ] },
-  { group: "テンション", items: [
-    { v: "add9", label: "add9" }, { v: "9", label: "9" }, { v: "maj9", label: "maj9" },
-    { v: "m9", label: "m9" }, { v: "m11", label: "m11" }, { v: "13", label: "13" },
-    { v: "7b9", label: "7♭9" }, { v: "7#9", label: "7♯9" }, { v: "7#11", label: "7♯11" },
-    { v: "maj7#11", label: "maj7♯11" }, { v: "m69", label: "m6/9" },
-  ] },
-];
 const LENGTHS = [
   { v: 1, label: "1拍" },
   { v: 2, label: "2拍" },
@@ -74,6 +57,16 @@ export function ChordEditor({
   function update(i: number, patch: Partial<ChordEntry>) {
     commit(chords.map((c, k) => (k === i ? { ...c, ...patch } : c)));
   }
+  // 三和音/拡張/△/オルタードのどれかを変えて quality を再合成（無効な組合せは正規化）。
+  function setParts(i: number, cur: ChordParts, patch: Partial<ChordParts>) {
+    let p: ChordParts = { ...cur, ...patch };
+    // 三和音や拡張を変えたら、その三和音で許される拡張へ寄せる
+    const exts = extOptionsFor(p.tri).map((o) => o.v);
+    if (!exts.includes(p.ext)) p.ext = "";
+    if (!maj7Applicable(p.tri, p.ext)) p.maj7 = false;
+    if (!altOptionsFor(p.tri, p.ext, p.maj7).some((o) => o.v === p.alt)) p.alt = "";
+    update(i, { quality: composeQuality(p) });
+  }
   function add() {
     commit([...chords, { root: 0, quality: "", start: 0, dur: 4 }]);
   }
@@ -92,7 +85,10 @@ export function ChordEditor({
         </div>
       )}
       {chords.length === 0 && <p className="muted">「＋コード」で追加（左から順に並びます）</p>}
-      {chords.map((c, i) => (
+      {chords.map((c, i) => {
+        const parts = decomposeQuality(c.quality);
+        const altOpts = altOptionsFor(parts.tri, parts.ext, parts.maj7);
+        return (
         <div className={"chord-row" + (i === activeIdx ? " playing" : "")} key={i}>
           <span className="chord-sym">
             {ROOTS[c.root]}
@@ -104,15 +100,35 @@ export function ChordEditor({
               <option key={idx} value={idx}>{r}</option>
             ))}
           </select>
-          <select aria-label={`quality-${i}`} value={c.quality} onChange={(e) => update(i, { quality: e.target.value })}>
-            {QUALITY_GROUPS.map((g) => (
-              <optgroup key={g.group} label={g.group}>
-                {g.items.map((q) => (
-                  <option key={q.v} value={q.v}>{q.label}</option>
-                ))}
-              </optgroup>
+          {/* 三和音（maj は「""＝無印」表示。ユーザー要望） */}
+          <select aria-label={`triad-${i}`} value={parts.tri} title="三和音"
+            onChange={(e) => setParts(i, parts, { tri: e.target.value as Triad })}>
+            {TRIAD_OPTIONS.map((t) => (
+              <option key={t.v} value={t.v}>{t.label}</option>
             ))}
           </select>
+          {/* 拡張（番号だけ＝ドミナント既定。三和音で可否が変わる） */}
+          <select aria-label={`ext-${i}`} value={parts.ext} title="拡張（7=ドミナント♭7）"
+            onChange={(e) => setParts(i, parts, { ext: e.target.value as Ext })}>
+            {extOptionsFor(parts.tri).map((x) => (
+              <option key={x.v} value={x.v}>{x.label}</option>
+            ))}
+          </select>
+          {/* △＝長7（C7→Cmaj7）。7/9/13 のときだけ */}
+          {maj7Applicable(parts.tri, parts.ext) && (
+            <button type="button" aria-label={`maj7-${i}`} title="長7（maj7）にする"
+              className={"chord-maj7" + (parts.maj7 ? " on" : "")}
+              onClick={() => setParts(i, parts, { maj7: !parts.maj7 })}>△</button>
+          )}
+          {/* オルタード（ドミナント♭9/♯9/♯11/♭5・maj7♯11）。選択肢が複数のときだけ */}
+          {altOpts.length > 1 && (
+            <select aria-label={`alt-${i}`} value={parts.alt} title="オルタード"
+              onChange={(e) => setParts(i, parts, { alt: e.target.value as Alt })}>
+              {altOpts.map((a) => (
+                <option key={a.v} value={a.v}>{a.label}</option>
+              ))}
+            </select>
+          )}
           {/* 分数コードのオンベース（決定B）。—=ルート（通常） */}
           <select aria-label={`bass-${i}`} value={c.bass ?? ""} title="オンベース（分数コード）"
             onChange={(e) => update(i, { bass: e.target.value === "" ? undefined : Number(e.target.value) })}>
@@ -130,7 +146,8 @@ export function ChordEditor({
           </div>
           <button type="button" aria-label={`remove-chord-${i}`} onClick={() => remove(i)}>✕</button>
         </div>
-      ))}
+        );
+      })}
       <div className="chord-foot">
         <button type="button" className="bs-btn" onClick={add}>＋コード</button>
         {/* 付点：以降クリックする長さボタンを ×1.5（6/8 の付点四分=1.5拍・付点二分=3拍に対応）。 */}

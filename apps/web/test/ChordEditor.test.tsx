@@ -13,13 +13,31 @@ describe("ChordEditor", () => {
     expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 4 }]);
   });
 
-  it("changes a chord's quality", async () => {
+  it("拡張を足して quality 合成（m に 7 = m7・単発）", async () => {
     const onChange = vi.fn();
     render(
-      <ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />,
+      <ChordEditor chords={[{ root: 0, quality: "m", start: 0, dur: 4 }]} onChange={onChange} />,
     );
-    await userEvent.selectOptions(screen.getByLabelText("quality-0"), "m7");
-    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "m7", start: 0, dur: 4 }]);
+    await userEvent.selectOptions(screen.getByLabelText("ext-0"), "7"); // m + 7 = m7
+    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "m7", start: 0, dur: 4 }]);
+  });
+
+  it("三和音を maj→m に変えると quality も追従（7th 維持 7→m7）", async () => {
+    const onChange = vi.fn();
+    render(
+      <ChordEditor chords={[{ root: 0, quality: "7", start: 0, dur: 4 }]} onChange={onChange} />,
+    );
+    await userEvent.selectOptions(screen.getByLabelText("triad-0"), "m"); // C7 → Cm7
+    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "m7", start: 0, dur: 4 }]);
+  });
+
+  it("△で長7に＝ドミナント7→maj7（拡張7のまま△ON）", async () => {
+    const onChange = vi.fn();
+    render(
+      <ChordEditor chords={[{ root: 0, quality: "7", start: 0, dur: 4 }]} onChange={onChange} />,
+    );
+    await userEvent.click(screen.getByLabelText("maj7-0")); // C7 → Cmaj7
+    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "maj7", start: 0, dur: 4 }]);
   });
 
   it("removes a chord", async () => {
