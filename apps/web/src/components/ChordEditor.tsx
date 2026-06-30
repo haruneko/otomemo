@@ -98,6 +98,8 @@ export function ChordEditor({
         const altOpts = altOptionsFor(parts.tri, parts.ext);
         return (
         <div className={"chord-row" + (i === activeIdx ? " playing" : "")} key={i}>
+          {/* セレクタ行（root/三和音/拡張/オルタード/オンベース＋✕）。長さ行と分離＝E7で増えても混ざらない。 */}
+          <div className="chord-q">
           <span className="chord-sym">
             {ROOTS[c.root]}
             {c.quality}
@@ -139,6 +141,8 @@ export function ChordEditor({
               <option key={idx} value={idx}>/{r}</option>
             ))}
           </select>
+          <button type="button" className="chord-rm" aria-label={`remove-chord-${i}`} onClick={() => remove(i)}>✕</button>
+          </div>{/* /chord-q */}
           <div className="chord-len" aria-label={`len-${i}`}>
             <span className="chord-len-label">長さ</span>
             {LENGTHS.map((l) => (
@@ -151,7 +155,6 @@ export function ChordEditor({
               付点
             </button>
           </div>
-          <button type="button" aria-label={`remove-chord-${i}`} onClick={() => remove(i)}>✕</button>
         </div>
         );
       })}
