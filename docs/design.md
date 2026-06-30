@@ -1,9 +1,22 @@
 # creative_manager 設計（SDD）v0.1
 
-最終更新: 2026-06-20
+最終更新: 2026-06-30
 
 要件: `docs/requirements.md` ／ アーキテクチャ: `docs/architecture.md`。
-ここは統合設計。実装（#4〜11）はこれに沿って進める。
+ここは統合設計。実装（#4〜11）はこれに沿って進める。**現況の正準は `docs/status.md`**（本書は決定ログ）。
+
+## 棚卸し（2026-06-30）— 実装済み/置換済みで本文の旧記述が古い箇所
+以下は実装が本文より進んでいる。本文の該当節を読むときはこの注記を優先（詳細は status.md・コード）。
+- **プロジェクト＝器**（下「プロジェクト＝…ホーム」節）：S1-S3 は **✅実装済**（`ProjectScreen`・`GET /projects(/files|/jobs)`・`chat_thread`/`project` 表・`listProjectFiles/Jobs`・`deleteChatThread`）。**プロジェクトの instructions は chat-session の `append-system-prompt` に注入**（chat-session.ts `systemPrompt()`）＝器の会話に常に効く。「複数プロジェクト」節(L295〜)の「フィルタどまり/将来昇格可」は経緯（昇格済）。
+- **ドラム**：`rhythm` content に **`kit`**（GMドラムキット＝アコ/エレキ・bank128 preset）追加。`buildGmDrumMap(preset)` は **preset パラメタ化**（#84 の preset0固定記述は古い）。ピッチは **root=overridingRootKey??叩いた鍵**（#84 S2 の中間記述より進む）。MIDI は ch10 program にキット反映。research 2026-06-29-drum-sound-resolution。
+- **メロ崩し**：`genFromEssence(…, {strength, blendWith})`（崩し強度＋複数参照ブレンド）。**MCP `reshape` に `mode:"deform"`** で露出（L416 の reshape 記述は emotion のみで古い）。research 2026-06-29-melody-corpus-and-deform。
+- **音符プレビュー**：エディタで音符配置/鍵盤タップ→`previewNote` 即発音（web/audio.ts・PianoRoll/Rhythm/ChordPattern/BassStep）。
+- **モバイル土台**：編集面を可視 dvh に収め底のトランスポートが潜らない＋横スクロールの左ラベル/鍵盤 sticky（全エディタ）。
+- **MCP/HTTP**：`convert` は公開済（L413(4) の「未公開」は古い）。`#101` の「CUT」宣言した旧ジョブ系ツールは**まだ並存**（撤去未了）。`/projects*`・`/chat/:thread/meta|turn`・`DELETE /chat/:thread` は本書の一覧に未掲載。`/schedule` に PATCH は無い。
+- **コーパス**：library は U-FRET進行315に加え **メロパターン irish186/pop1139/game100 投入済**（L596「データ未収集」前提は古い）。質の検証（耳）が残。
+
+## アーキテクチャ是正方針（2026-06-23・4監査→ユーザー確定）
+長い縦スライス自走で「動く」を優先した結果、上位スペックとコードが乖離した（CLAUDE.md「後追いでスペックを腐らせない」への違反）。4スライスの独立監査で確定した負債と是正方針を**上位として確定**する。実装はこの方針を根拠に降ろす。
 
 ## アーキテクチャ是正方針（2026-06-23・4監査→ユーザー確定）
 長い縦スライス自走で「動く」を優先した結果、上位スペックとコードが乖離した（CLAUDE.md「後追いでスペックを腐らせない」への違反）。4スライスの独立監査で確定した負債と是正方針を**上位として確定**する。実装はこの方針を根拠に降ろす。
@@ -83,9 +96,14 @@
 - 判断基準：後での統合はきつい／後での分離は統合よりマシ。だから最初は同居で始める。
 
 ### 残りのテーブル
+- ※`neta` 行には実装で **`scope`(project既定/library)** 列を追加済み（連想元の分離・db.ts／後段「project/library 分離」）。
 - `song`(neta_id[kind=song], stage[段階], next_action[次の一手], updated) — 曲の箱(overlay)。`neta` と 1:1。
 - `asset`(id, kind[mp3/midi/ability/lyric_text/image/render], path, meta[JSON: key/bpm/mood等], created) — ソース/添付ファイル。
 - `neta_asset`(neta_id, asset_id, role[source=分解元 / attachment=添付 / render=音源レンダ])
+- `chat_message`(id, thread, role, kind, text, data, created) — 会話履歴（#70。thread=対象neta id / 'global' / 'chat:*'）。
+- `schedule`(id, neta_id, intent, params, every_sec, enabled, last_run, next_run, created) — 定期スケジューラ（#80）。
+- **`chat_thread`(thread PK, project, title, created, updated)** — 会話セッションを器(プロジェクト)に束ねる薄表（2026-06-28「プロジェクト＝器」B案）。
+- **`project`(name PK, description, instructions, created, updated)** — プロジェクト実体（器の説明＋AIへの指示。instructions は会話の system prompt に注入）。
 - `job`(id, target_neta_id, instruction, type[壁打ち/部分生成/作例/研究/収集/発展], status[queued/running/done/needs_decision/failed], progress, notify_level, created, updated) — 投げた仕事。対象は常に `neta_id`。
 - `job_result`(job_id, neta_id, order) — ジョブの生成物（複数可）。生成物も neta。受理時に対象へ compose/relation で繋ぐ。**reap の冪等性は「job_id に job_result 行が在るか」で判定**するので、**ネタ削除では job_result 行を消さない**（`deleteNeta` は `neta_id` を NULL にしてから削除＝CASCADE 道連れを防ぐ。実装 2026-06-22・#97）。これを破ると削除した生成ネタが reap で蘇生する。
 
@@ -298,7 +316,7 @@
 - **見せ方だけ別軸**：`prj:` タグは UI で意味タグのチップ列から外し、**プロジェクト・ピッカー＋専用表示**に出す。意味タグ(mood/ジャンル)は汚れない。`isProjectTag = name.startsWith("prj:")` を境界に置く。
 - **facets**：`tags` から `prj:` を除外し、`projects`（prj: を剥がした一覧）を別フィールドで返す。**library(scope=library)は全プロジェクト共有**（prj: を持たない・連想で横断）。
 - **絞り込み**：アクティブプロジェクトは**クライアント状態(localStorage)**。一覧/検索は `listNeta` の既存タグ絞り込みに `prj:<active>` を渡すだけ。新規ネタはアクティブの `prj:` を自動付与。
-- **非破壊移行**：既存 project ネタは `prj:` 無し＝「未分類」。データ書込の一括移行はしない（必要時にユーザーが付与 or 「未分類」ビューで見える）。撤回容易（タグ消すだけ）。将来厳密化したければ `project` テーブルへ昇格可。
+- **非破壊移行**：既存 project ネタは `prj:` 無し＝「未分類」。データ書込の一括移行はしない（必要時にユーザーが付与 or 「未分類」ビューで見える）。撤回容易（タグ消すだけ）。~~将来厳密化したければ `project` テーブルへ昇格可。~~ → **実行済（2026-06-28）**：`project` 表（説明＋指示）＋`chat_thread` 表で器へ昇格。下記「プロジェクト＝…ホーム」節。
 
 #### 決定：プロジェクト＝一曲(or組曲)の器・“辿れるホーム”へ昇格（2026-06-28・要件「一曲の器にまとめる」）
 従来 `prj:` は「neta一覧のフィルタ」どまりだった。要件の新項目に応えて**プロジェクトを曲・ファイル・会話セッションを集約するホーム**にする。

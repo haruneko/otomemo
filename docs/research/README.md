@@ -6,6 +6,7 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 ## ★到達点（メロディ探索 大ストーリーの確定結論・2026-06-28）
 - **V2＝制御メロエンジンが本番**（`genMotifMelodyV2`・A2レシピ＝骨格＋モチーフ選別＋発展＋後処理＋輪郭駆動・4/4＋6/8）。中身＝[melody-recipe-validated](melody-recipe-validated.md)、計測＝[melody-corpus-findings](melody-corpus-findings.md)。
 - **メロ補完(`complete_melody`)実装**＝部分→続き/4倍をユーザー素材から発展（決定的・著作権セーフ）。
+- **メロ「崩し」実装(2026-06-29)**＝`genFromEssence(strength/blendWith)`＝提示メロのノリを保ちピッチ/輪郭を強度に応じ崩す（著作権セーフ）。MCP `reshape deform`。コーパスは irish186/pop/game 投入済（質検証=耳が残）。[2026-06-29-melody-corpus-and-deform](2026-06-29-melody-corpus-and-deform.md)。
 - **perplexity研究クローズ**＝公式形式で校正、V2は変なの出さない＝「検出ガード」として有効・常時フィルタ不要。[eval-models-learned](eval-models-learned.md)。
 - **使えるAI候補マップ**＝外部メロAIは制御弱/中庸で現状不採用。[usable-ai-map](usable-ai-map.md)。
 - ★**設計思想確定**＝機械は候補/選択肢まで・仕上げは人間。Suno等は画像生成的で別パラダイム・競合しない。

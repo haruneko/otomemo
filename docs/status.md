@@ -1,6 +1,6 @@
 # creative_manager 進捗・管理表（living）
 
-最終更新: 2026-06-28
+最終更新: 2026-06-30
 
 このファイルが**残タスクの正準**。頭の中／揮発タスクで管理しない。着手・完了でここを更新する。
 凡例: ✅完了 / 🟡部分・留保 / ⬜未着手。acceptor列: design=design-acceptor要 / impl=impl-acceptor要 / —=不要。
@@ -13,7 +13,8 @@
 | 領域 | 状態 | 中身 |
 |---|---|---|
 | 捕獲・ネタ帳 | ✅ | メモ/歌詞/コード/メロ/リズム/テーマ、タグ・mood・key・tempo・拍子、一覧・ミニプレビュー・削除 |
-| 入力モダリティ | 🟡 | ✅ピアノロール／パッドステップ／文字、添付(asset)。✅楽譜入力(MusicXML)・✅音声(ハミング)＝#56 |
+| 入力モダリティ | 🟡 | ✅ピアノロール／パッドステップ／文字、添付(asset)。✅楽譜入力(MusicXML)・✅音声(ハミング)＝#56。**✅音符プレビュー(2026-06-30: メロ/ベース/コード楽器/リズムで配置時＋ピアノロール鍵盤タップで即発音=previewNote)** |
+| モバイル編集UI | ✅ | (2026-06-30) 編集面を可視dvhに収め底のトランスポートがブラウザ下バーに潜らない・横スクロールの左ラベル/鍵盤sticky(全エディタ)・リズムグリッドのモバイル幅収め・縦バー副作用除去。Playwrightで各エディタ実測 |
 | 検索・つなぐ | ✅ | ファセット検索、意味検索(埋め込み＋較正ゲート #65)、関連辺・合成辺 |
 | スケッチ・再生 | ✅ | 4要素エディタ、Tone.js＋SF2再生、プレイヘッド・トランスポート、section/song合成、GM音色(再生↔書出一致 #47) |
 | ドラム再生 | 🟡 | ✅速度/音高/チョーク #84 S0-S3＋S4 ベロシティ層。**✅ピッチ異常修正(2026-06-29: root=overridingRootKey??叩いた鍵・ride2+8等を断つ)**。**✅キット選択 アコ/エレキ(2026-06-29: buildGmDrumMap(preset)パラメタ化・RhythmContent.kit→再生&MIDI ch10 program・Standard不変=回帰ゼロ・全キット実在サンプル解決を構造確認)**。研究=research/2026-06-29-drum-sound-resolution.md。残=新キットの音の試聴調整・Standardのregex一掃(任意・要A/B) |
@@ -25,7 +26,7 @@
 | コード実現層 | ✅ | **進行=抽象**(音色固定GM49・選択不可)＋**新kind chord_pattern**(strum/arp・voicing R/3/5/7・open/close・高さ・各音の長さ{step,dur}・自前音色)＝進行に解決する相対型の和音版(CP1-5)。/gen/section に配線・複数重ね可 |
 | コード入力/section UX | ✅ | ChordEditor(start自動フロー・長さボタン・ピアノロール表示・合計尺)・section レーン層モデル順(進行→メロ→コード楽器→ベース→リズム)＋**占有セルのみ配置不可**・相対ベースのつんのめり(アンティシペーション)解決・トグル/構成音の選択色是正(E2E) |
 | 情報収集 | ✅ | research/collect・参考曲・継続研究 #9 |
-| 非機能 | 🟡 | ✅認証(CM_TOKEN)・✅**到達=Tailscale tailnet限定**・単一オリジン配信＋localhostバインド・✅**自動起動(systemd)＋バックアップ(timer)**(S4)。⬜Tailscale serve設定(ユーザ側・初回のみ) |
+| 非機能 | 🟡 | ✅認証(CM_TOKEN)・✅**到達=Tailscale tailnet限定**・単一オリジン配信＋localhostバインド・✅バックアップ(timer・S4)。🟡**自動起動=systemdユニット定義済だが未install**(母艦再起動で手起動・backlog)。⬜Tailscale serve設定(ユーザ側・初回のみ) |
 
 ---
 
@@ -35,7 +36,7 @@
 
 | # | 領域 | 内容 | 関連設計 | 段取り | acceptor | 状態 |
 |---|---|---|---|---|---|---|
-| 器 | プロジェクト | **プロジェクト＝一曲(or組曲)の器**：曲・ファイル・会話セッションを集約する"辿れるホーム"へ昇格。階層 Project⊃Song(1..N)⊃section。**S1=会話を器に束ねる**(chat_thread表[B案・薄表]・listChatThreads(project)・新規会話を器に登録・空セッションも一覧・既存=未仕分け)。**S2=ファイル集約**(listProjectFiles=prj配下neta→neta_asset→asset・同一assetは畳んでattachedTo列挙・GET /projects/:p/files)。**S3=プロジェクト画面**(🏠→ProjectScreen・**Claude Projects風ランディングをメインペーン埋め込み**＝会話起点入力＋左[会話・曲/セクション]＋右[ファイル＝知識]・会話クリックでChat復元・起点入力はseed付きで新規セッション開始)。**S4=プロジェクト実体**(project表＝説明description＋AIへの指示instructions・画面で編集/表示・**指示は chat-session の append-system-prompt に注入＝この器の会話に常に効く**[空=従来通り回帰ゼロ]・thread→project→instructions引き当て)。**S5=操作面**(E2E洗い出しを是正：空会話クラッタ修正[束ねを発言時に遅延]・SP戻り先[器へ復帰]・会話の改名/削除[deleteChatThread]・ファイルDL修正[assetUrl]/削除・＋曲を器内から・空プロジェクト到達[GET /projects=prj:タグ∪project行])。api405/web196緑。**S6=可視化と取り込み**(進行中ジョブをワークスペースに可視化=GET /projects/:p/jobs・未仕分け会話を器へ取り込む「＋取り込む」・Chatに「📌器の指示が効いています」バナー)。api406/web197緑・本番ビルド通過・実機(Playwright)でjobs可視化/取り込み/バナー確認。**S7=モバイル土台刷新**(`:has()`状態ハック撤去→「一度に1つの全画面ビュー」＝App が `.workspace` に mv-home/mv-pane 付与・mainpane全幅・app-head常駐で戻るが☰を覆わない・mv-paneでバブル非表示＝被り解消・横はみ出し無し。useIsMobile/jsdomガード。E2EでSP切替/戻る/PC回帰確認)。web197緑・ビルド通過。残=backlog参照(ファイル追加/プレビュー[紐付け先要設計]・ネタ帳の真ドロワー化[任意]・プロジェクト改名削除[要設計]・指示の即時反映・既定会話整合) | requirements「一曲(or組曲)の器にまとめる」/design「プロジェクト＝…ホーム」 | S0仕様→**S1✅S2✅S3✅** | design+impl | ✅ S0-S3完了。残=song/section整合(別タスク・要設計判断) |
+| 器 | プロジェクト | **プロジェクト＝一曲(or組曲)の器**：曲・ファイル・会話セッションを集約する"辿れるホーム"へ昇格。階層 Project⊃Song(1..N)⊃section。**S1=会話を器に束ねる**(chat_thread表[B案・薄表]・listChatThreads(project)・新規会話を器に登録・空セッションも一覧・既存=未仕分け)。**S2=ファイル集約**(listProjectFiles=prj配下neta→neta_asset→asset・同一assetは畳んでattachedTo列挙・GET /projects/:p/files)。**S3=プロジェクト画面**(🏠→ProjectScreen・**Claude Projects風ランディングをメインペーン埋め込み**＝会話起点入力＋左[会話・曲/セクション]＋右[ファイル＝知識]・会話クリックでChat復元・起点入力はseed付きで新規セッション開始)。**S4=プロジェクト実体**(project表＝説明description＋AIへの指示instructions・画面で編集/表示・**指示は chat-session の append-system-prompt に注入＝この器の会話に常に効く**[空=従来通り回帰ゼロ]・thread→project→instructions引き当て)。**S5=操作面**(E2E洗い出しを是正：空会話クラッタ修正[束ねを発言時に遅延]・SP戻り先[器へ復帰]・会話の改名/削除[deleteChatThread]・ファイルDL修正[assetUrl]/削除・＋曲を器内から・空プロジェクト到達[GET /projects=prj:タグ∪project行])。api405/web196緑。**S6=可視化と取り込み**(進行中ジョブをワークスペースに可視化=GET /projects/:p/jobs・未仕分け会話を器へ取り込む「＋取り込む」・Chatに「📌器の指示が効いています」バナー)。api406/web197緑・本番ビルド通過・実機(Playwright)でjobs可視化/取り込み/バナー確認。**S7=モバイル土台刷新**(`:has()`状態ハック撤去→「一度に1つの全画面ビュー」＝App が `.workspace` に mv-home/mv-pane 付与・mainpane全幅・app-head常駐で戻るが☰を覆わない・mv-paneでバブル非表示＝被り解消・横はみ出し無し。useIsMobile/jsdomガード。E2EでSP切替/戻る/PC回帰確認)。web197緑・ビルド通過。残=backlog参照(ファイル追加/プレビュー[紐付け先要設計]・ネタ帳の真ドロワー化[任意]・プロジェクト改名削除[要設計]・指示の即時反映・既定会話整合) | requirements「一曲(or組曲)の器にまとめる」/design「プロジェクト＝…ホーム」 | S0仕様→S1..S7 | design+impl | ✅ **S0-S7完了**(器/操作面/可視化/取込/モバイル土台)。残=song/section整合(#5別タスク・要設計判断)＋backlog [M/L] |
 | 連想 | エンジン | **連想エンジン**(コード進行/度数/連想)を要件→設計→実装。要件/設計とも独立acceptor ACCEPT。**S1度数化/調推定/進行距離・S2機能/カデンツ解析・名前あて・代替・感情シフト・説明 実装済**(apps/api/src/music・TS・データ不要・各impl-acceptor ACCEPT)。**ユーザー露出**=creative-manager MCPに read-only 5ツール(identify/analyze/explain/substitute/emotion)＋agentic許可＝Chatが「これ何進行?/なぜ/代替/もっと切なく」に実コードで答える。api122/worker99緑 | requirements「連想で…」/design「連想エンジン」/research 5本 | ✅S1/S2/名前あて/代替/感情/説明/ハモ付け/継続/retrieval＋進行コーパス仕入れ。MCP8本露出 | design+impl | ✅ 一通り完了。コーパス=U-FRETから10アーティスト(Mr.Children/椎名林檎/BUMP/ラルク/YOASOBI/Mrs.GREEN APPLE/志方あきこ/King Gnu/米津玄師/Vaundy)×〜10曲→**315進行**を度数列+タグ(「取込」で手作りと区別)+出典でneta化・本番稼働中。残=タグ精緻化/品質改善は運用で |
 | メロ連想 | データ | **メロコーパスのデータ収集**(度数/抽象層のみ・著作権セーフ)＝基盤(melodyEssence/類似/retrieval/genFromEssence/normalizeToC)は実装済。**崩し機能を昇格(2026-06-29)**：genFromEssence に **崩し強度strength＋複数参照blendWith**＝提示メロのノリ(リズム指紋)を保ちピッチ/輪郭を強度に応じ崩す＝「似た雰囲気の別メロ」。MCP `reshape mode:"deform"`＋http露出・api409緑・実機確認。情報源マップ=research [2026-06-29-melody-corpus-and-deform](research/2026-06-29-melody-corpus-and-deform.md)(PDMX本命/POP909等は統計のみ)。**実態(2026-06-29確認)＝コーパスは一部投入済**：library に melody パターン1425件(pop1139/irish186/game100・6/8 60件)・ABC取込CLI(`scripts/ingest-abc.ts`)＋style生成バイアス(`generate style:"irish"`)配線済。**残＝質の検証(耳・出先で保留)＋データ拡充(自作/PDMX)＋リズム指紋の変形** | research 2026-06-29-melody-corpus-and-deform.md | 既設パイプラインで追加投入→試聴調整 | — | 🟡 基盤＋崩し＋一部データ済・質検証は耳待ち |
 | UX磨き | 低 | E2E発見の低優先：トランスポート絵文字(⏮🔁📥)が□(フォント差・実機要確認/SVG化候補)・意味検索が無一致でも「近い」を返す(ヒント文)・スマホで mood 入力右端見切れ/section全画面後の薄カード覗き | E2E(2026-06-23) | — | — | ⬜ |
