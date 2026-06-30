@@ -476,8 +476,16 @@
 .proll-row.black .proll-cell.pickup { background: #0f1115; }
 
 /* コード楽器パターン エディタ（CP3）：voicing コントロール行。 */
+/* コード楽器：コントロール群（枠の外）＋グリッド（横スクロール枠）を縦に。min-width:0 で
+   子がビューポートを超えて広がらない＝モバイルで横はみ出さない。 */
+.cp-editor { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .cp-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 6px; }
 .cp-tones { display: flex; align-items: center; gap: 4px; }
 .cp-tones .len { min-width: 26px; background: #2b2f36; color: var(--fg); border: 1px solid var(--line); }
 /* 構成音(R/3/5/7)・長さツールの選択中アクセント（OFF地色＝暗・ON＝accent でオンオフが見分く）。 */
 .cp-tones .len.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* モバイル：コード楽器は1行に詰め込むと横はみ出すので、構成音/長さ群を各1行（全幅）に。 */
+@media (max-width: 480px) {
+  .cp-controls { gap: 6px; }
+  .cp-tones { flex-basis: 100%; }
+}

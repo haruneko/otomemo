@@ -71,7 +71,7 @@ export function ChordPatternEditor({
   const previewNeta = { kind: "chord_pattern", content: pattern, key: 0 } as unknown as Neta;
 
   return (
-    <div className="rhythm-editor" ref={scrollerRef}>
+    <div className="cp-editor">
       {pattern.hits.length > 0 && (
         <div className="chord-roll" aria-label="voicing-roll">
           <MiniRoll neta={previewNeta} />
@@ -109,23 +109,26 @@ export function ChordPatternEditor({
         </div>
         <BarsControl bars={bars} max={4} onChange={(n) => onChange({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
       </div>
-      <div
-        className="proll-playhead"
-        aria-hidden="true"
-        ref={playheadRef}
-        style={{ left: `calc(${NAME_PX}px + var(--phb, 0) * ${BEAT_PX}px)` }}
-      />
-      <div className="rhythm-row">
-        <span className="rhythm-name">コード</span>
-        {Array.from({ length: pattern.steps }, (_, s) => (
-          <button
-            key={s}
-            type="button"
-            aria-label={`hit-${s}`}
-            className={"rhythm-cell" + (startAt(s) ? " on" : sustainAt(s) ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
-            onClick={() => toggleHit(s)}
-          />
-        ))}
+      {/* グリッドだけ横スクロール枠に（コントロールは枠の外＝広いグリッドに引き伸ばされない・メロと同じ）。 */}
+      <div className="rhythm-editor" ref={scrollerRef}>
+        <div
+          className="proll-playhead"
+          aria-hidden="true"
+          ref={playheadRef}
+          style={{ left: `calc(${NAME_PX}px + var(--phb, 0) * ${BEAT_PX}px)` }}
+        />
+        <div className="rhythm-row">
+          <span className="rhythm-name">コード</span>
+          {Array.from({ length: pattern.steps }, (_, s) => (
+            <button
+              key={s}
+              type="button"
+              aria-label={`hit-${s}`}
+              className={"rhythm-cell" + (startAt(s) ? " on" : sustainAt(s) ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
+              onClick={() => toggleHit(s)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

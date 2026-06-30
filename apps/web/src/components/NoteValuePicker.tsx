@@ -8,7 +8,7 @@ export function NoteValuePicker({
   dotted,
   onChange,
   onToggleDotted,
-  label = "音長",
+  label = "長さ(分)", // 全エディタ統一（数字16/8/4/2/1=分音符）。ChordEditor は拍/小節なので「長さ」。
 }: {
   options: { label: string; v: number }[];
   value: number;
@@ -34,11 +34,11 @@ export function NoteValuePicker({
       <button
         type="button"
         aria-label="dotted"
-        title="付点（×1.5）"
+        title="付点（長さ×1.5）"
         className={"len dot" + (dotted ? " on" : "")}
         onClick={onToggleDotted}
       >
-        ．
+        付点
       </button>
     </>
   );

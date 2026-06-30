@@ -89,7 +89,6 @@ export function PianoRoll({
     <div className="proll-wrap">
       <div className="proll-tools">
         <NoteValuePicker
-          label="音長(分)"
           options={LENGTHS}
           value={noteLen}
           dotted={dotted}
