@@ -256,7 +256,8 @@
 }
 .chord-sym {
   font-weight: 600;
-  min-width: 48px;
+  flex: 0 0 auto;
+  width: 52px; /* 固定＝各行のセレクタ列が揃う（長名 Cmaj7#11 等は稀・はみ出し許容） */
 }
 .chord-row label {
   font-size: 0.75rem;
@@ -271,8 +272,15 @@
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 4px;
+  padding: 4px 2px;
   font: inherit;
+}
+/* セレクタ(root/三和音/拡張/オルタード/オンベース)を**同一幅**に＝列が揃う・見た目統一。 */
+.chord-row select {
+  flex: 0 0 auto;
+  width: 64px;
+  text-align: center;
+  text-align-last: center;
 }
 .chord-row input[type="number"] {
   width: 52px;
@@ -305,6 +313,22 @@
   .rhythm-name {
     font-size: 0.62rem;
     line-height: 1.05;
+  }
+  /* コード行：セレクタを少し詰めて root/三和音/拡張/オルタード/オンベースの5つが1行に収まる
+     ＝ドミナント7(オルタード有)の行も /オンベース が次行に落ちず、行ごとに揃う。 */
+  .chord-row {
+    gap: 4px;
+  }
+  .chord-row select {
+    width: 56px;
+    font-size: 0.85rem;
+  }
+  .chord-sym {
+    width: 42px;
+    font-size: 0.9rem;
+  }
+  .chord-row button {
+    padding: 2px 6px;
   }
 }
 .rhythm-toolbar {
