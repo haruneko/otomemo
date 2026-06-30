@@ -31,12 +31,12 @@ describe("ChordEditor", () => {
     expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "m7", start: 0, dur: 4 }]);
   });
 
-  it("△で長7に＝ドミナント7→maj7（拡張7のまま△ON）", async () => {
+  it("三和音 maj で長7に＝C7(空欄)→Cmaj7(maj)", async () => {
     const onChange = vi.fn();
     render(
       <ChordEditor chords={[{ root: 0, quality: "7", start: 0, dur: 4 }]} onChange={onChange} />,
     );
-    await userEvent.click(screen.getByLabelText("maj7-0")); // C7 → Cmaj7
+    await userEvent.selectOptions(screen.getByLabelText("triad-0"), "maj"); // C7 → Cmaj7
     expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "maj7", start: 0, dur: 4 }]);
   });
 

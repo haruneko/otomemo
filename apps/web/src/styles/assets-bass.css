@@ -321,7 +321,4 @@ article header {
 
 /* 長さボタンの選択中ハイライト（ドッグフード[高]・.on のCSS欠落を補う）。 */
 .chord-len .len.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-/* △＝maj7 トグル（拡張の長7化）。OFF地色＋ONアクセント。 */
-.chord-maj7 { padding: 4px 9px; font-size: 0.85rem; background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
-.chord-maj7.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .chord-foot { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }

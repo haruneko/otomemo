@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decomposeQuality, composeQuality, extOptionsFor, maj7Applicable } from "../src/chordQuality";
+import { decomposeQuality, composeQuality, extOptionsFor } from "../src/chordQuality";
 
 // 分解→合成の往復（保存形式の quality を壊さない）。design 決定A・UI直交化。
 const CANON = [
@@ -20,24 +20,25 @@ describe("chordQuality 分解/合成", () => {
     expect(composeQuality(decomposeQuality("min"))).toBe("m");
   });
 
-  it("ドミナントは番号だけ・長7は△（決定）", () => {
-    // C7（ドミナント）＝ maj + 7 + △off
-    expect(composeQuality({ tri: "maj", ext: "7", maj7: false, alt: "" })).toBe("7");
-    // Cmaj7 ＝ maj + 7 + △on
-    expect(composeQuality({ tri: "maj", ext: "7", maj7: true, alt: "" })).toBe("maj7");
+  it("長7vsドミナントは三和音の maj/空欄で切替（決定）", () => {
+    // C7（ドミナント）＝ 空欄 + 7／ Cmaj7 ＝ maj + 7
+    expect(composeQuality({ tri: "", ext: "7", alt: "" })).toBe("7");
+    expect(composeQuality({ tri: "maj", ext: "7", alt: "" })).toBe("maj7");
     // C9 / Cmaj9 / Dm9
-    expect(composeQuality({ tri: "maj", ext: "9", maj7: false, alt: "" })).toBe("9");
-    expect(composeQuality({ tri: "maj", ext: "9", maj7: true, alt: "" })).toBe("maj9");
-    expect(composeQuality({ tri: "m", ext: "9", maj7: false, alt: "" })).toBe("m9");
+    expect(composeQuality({ tri: "", ext: "9", alt: "" })).toBe("9");
+    expect(composeQuality({ tri: "maj", ext: "9", alt: "" })).toBe("maj9");
+    expect(composeQuality({ tri: "m", ext: "9", alt: "" })).toBe("m9");
+    // maj 単独＝C／ mM7 は minor+maj7拡張
+    expect(composeQuality({ tri: "maj", ext: "", alt: "" })).toBe("");
+    expect(composeQuality({ tri: "m", ext: "M7", alt: "" })).toBe("mM7");
     // 7♭9 / maj7♯11
-    expect(composeQuality({ tri: "maj", ext: "7", maj7: false, alt: "b9" })).toBe("7b9");
-    expect(composeQuality({ tri: "maj", ext: "7", maj7: true, alt: "#11" })).toBe("maj7#11");
+    expect(composeQuality({ tri: "", ext: "7", alt: "b9" })).toBe("7b9");
+    expect(composeQuality({ tri: "maj", ext: "7", alt: "#11" })).toBe("maj7#11");
   });
 
-  it("三和音ごとに拡張の可否が変わる（dim+7=m7♭5・△は maj/m のみ）", () => {
+  it("三和音ごとに拡張の可否が変わる（空欄/dim/minor）", () => {
     expect(extOptionsFor("dim").map((o) => o.v)).toContain("dim7");
-    expect(maj7Applicable("maj", "7")).toBe(true);
-    expect(maj7Applicable("dim", "7")).toBe(false);
-    expect(maj7Applicable("maj", "6")).toBe(false);
+    expect(extOptionsFor("m").map((o) => o.v)).toContain("M7"); // mM7用
+    expect(extOptionsFor("maj").map((o) => o.v)).toEqual(["", "7", "9", "13"]);
   });
 });

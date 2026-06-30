@@ -2,7 +2,7 @@ import { useEffect, useState, type RefObject } from "react";
 import { type ChordEntry } from "../music";
 import {
   type Triad, type Ext, type Alt, type ChordParts,
-  decomposeQuality, composeQuality, TRIAD_OPTIONS, extOptionsFor, maj7Applicable, altOptionsFor,
+  decomposeQuality, composeQuality, TRIAD_OPTIONS, extOptionsFor, altOptionsFor,
 } from "../chordQuality";
 import { MiniRoll } from "./MiniRoll";
 import type { Neta } from "../api";
@@ -57,14 +57,13 @@ export function ChordEditor({
   function update(i: number, patch: Partial<ChordEntry>) {
     commit(chords.map((c, k) => (k === i ? { ...c, ...patch } : c)));
   }
-  // 三和音/拡張/△/オルタードのどれかを変えて quality を再合成（無効な組合せは正規化）。
+  // 三和音/拡張/オルタードのどれかを変えて quality を再合成（無効な組合せは正規化）。
   function setParts(i: number, cur: ChordParts, patch: Partial<ChordParts>) {
-    let p: ChordParts = { ...cur, ...patch };
-    // 三和音や拡張を変えたら、その三和音で許される拡張へ寄せる
+    const p: ChordParts = { ...cur, ...patch };
+    // 三和音を変えたら、その三和音で許される拡張へ寄せる
     const exts = extOptionsFor(p.tri).map((o) => o.v);
     if (!exts.includes(p.ext)) p.ext = "";
-    if (!maj7Applicable(p.tri, p.ext)) p.maj7 = false;
-    if (!altOptionsFor(p.tri, p.ext, p.maj7).some((o) => o.v === p.alt)) p.alt = "";
+    if (!altOptionsFor(p.tri, p.ext).some((o) => o.v === p.alt)) p.alt = "";
     update(i, { quality: composeQuality(p) });
   }
   function add() {
@@ -87,7 +86,7 @@ export function ChordEditor({
       {chords.length === 0 && <p className="muted">「＋コード」で追加（左から順に並びます）</p>}
       {chords.map((c, i) => {
         const parts = decomposeQuality(c.quality);
-        const altOpts = altOptionsFor(parts.tri, parts.ext, parts.maj7);
+        const altOpts = altOptionsFor(parts.tri, parts.ext);
         return (
         <div className={"chord-row" + (i === activeIdx ? " playing" : "")} key={i}>
           <span className="chord-sym">
@@ -100,26 +99,20 @@ export function ChordEditor({
               <option key={idx} value={idx}>{r}</option>
             ))}
           </select>
-          {/* 三和音（maj は「""＝無印」表示。ユーザー要望） */}
-          <select aria-label={`triad-${i}`} value={parts.tri} title="三和音"
+          {/* 三和音（空欄＝素のメジャー/ドミナント・maj＝長7。ユーザー決定） */}
+          <select aria-label={`triad-${i}`} value={parts.tri} title="三和音（空欄=C7系 / maj=Cmaj7系）"
             onChange={(e) => setParts(i, parts, { tri: e.target.value as Triad })}>
             {TRIAD_OPTIONS.map((t) => (
               <option key={t.v} value={t.v}>{t.label}</option>
             ))}
           </select>
-          {/* 拡張（番号だけ＝ドミナント既定。三和音で可否が変わる） */}
-          <select aria-label={`ext-${i}`} value={parts.ext} title="拡張（7=ドミナント♭7）"
+          {/* 拡張（番号。空欄三和音なら7=ドミナント、maj三和音なら7=長7） */}
+          <select aria-label={`ext-${i}`} value={parts.ext} title="拡張"
             onChange={(e) => setParts(i, parts, { ext: e.target.value as Ext })}>
             {extOptionsFor(parts.tri).map((x) => (
               <option key={x.v} value={x.v}>{x.label}</option>
             ))}
           </select>
-          {/* △＝長7（C7→Cmaj7）。7/9/13 のときだけ */}
-          {maj7Applicable(parts.tri, parts.ext) && (
-            <button type="button" aria-label={`maj7-${i}`} title="長7（maj7）にする"
-              className={"chord-maj7" + (parts.maj7 ? " on" : "")}
-              onClick={() => setParts(i, parts, { maj7: !parts.maj7 })}>△</button>
-          )}
           {/* オルタード（ドミナント♭9/♯9/♯11/♭5・maj7♯11）。選択肢が複数のときだけ */}
           {altOpts.length > 1 && (
             <select aria-label={`alt-${i}`} value={parts.alt} title="オルタード"
