@@ -297,7 +297,7 @@
 - `voiceChord` の `base = CHORD_BASE + octave*12 + root_pc` を**アンカー中心の最寄りオクターブ配置**へ：`anchor = CHORD_BASE + octave*12`（octave=「大体の高さ」）／`rootPitch = nearestPcTo(root_pc, anchor)`＝root を anchor±6半音帯に置く(CもBも anchor近傍＝跳ねない)／その上に voicing を積む。bass(分数)はさらに下。
 - メロ/ベースの placementLanding と同じ「最寄りオクターブで音域維持」を comping にも。`octave` はアンカーのシフトとして意味付け（octave=0≈C3帯で従来と近い＝後方互換）。結果＝進行が動いても comping レジスタ一定・声部進行が滑らか。
 
-**段階**：S1 品質語彙(決定A・独立) → S2 伴奏レジスタ(決定C・voiceChordのみ) → S3 分数コード(決定B・スキーマ+UI+fit+MIDI=横断)。各 TDD＋Playwright で ChordEditor/section の見た目を確認。
+**段階＝✅実装済(2026-06-30)**：S1 品質語彙(決定A) → S2 伴奏レジスタ(決定C) → S3 分数コード(決定B)。各 TDD＋Playwright 確認済(api412/web緑・tsc0)。残＝テンション込みvoicing(将来)・compingの声部進行最適化(将来)。
 
 ### 再生
 - section/song：メインペーンに**トランスポート（全体再生）パネル**。

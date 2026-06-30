@@ -25,6 +25,7 @@
 | メロ生成 高度化 | ✅ | **S1-S3**(骨格優先=フレーズ/句末息継ぎ/カデンツ着地/頂点アーチ≈0.62/滑り込み倚音/弱拍経過刺繍/位置駆動変奏・6/8ネイティブ・弱起・度数内部モデル degree.ts/meter.ts/skeleton.ts)＋**S4-S5連想**(melodyEssence/多層melodySimilarity/similarMelodies retrieval/genFromEssence=エッセンス→違うメロ/normalizeToC)。研究=docs/research/melody-generation.md。残=メロコーパスのデータ収集 |
 | コード実現層 | ✅ | **進行=抽象**(音色固定GM49・選択不可)＋**新kind chord_pattern**(strum/arp・voicing R/3/5/7・open/close・高さ・各音の長さ{step,dur}・自前音色)＝進行に解決する相対型の和音版(CP1-5)。/gen/section に配線・複数重ね可 |
 | コード入力/section UX | ✅ | ChordEditor(start自動フロー・長さボタン・ピアノロール表示・合計尺)・section レーン層モデル順(進行→メロ→コード楽器→ベース→リズム)＋**占有セルのみ配置不可**・相対ベースのつんのめり(アンティシペーション)解決・トグル/構成音の選択色是正(E2E) |
+| コード語彙/分数/レジスタ | ✅ | **(2026-06-30・design「コードが不足」)** A語彙拡張=テンション(9/maj9/m9/add9/69/13/m11)・dim7・altered(7b9/7#9/7#5/7b5)等をQUALITY_INTERVALS(theory+web同期)＋ChordEditor optgroup29品質(※「9」欠落でmajフォールバックを是正)。B分数コード=ChordEntry.bass(C/E・最低音/相対ベースR/analyzeFit/エディタ/MIDI)。C伴奏レジスタ=voiceChordをアンカー最寄りオクターブ配置(跳ね解消)。api412/web緑・Playwright確認。残=テンション込みvoicing(将来) |
 | 情報収集 | ✅ | research/collect・参考曲・継続研究 #9 |
 | 非機能 | 🟡 | ✅認証(CM_TOKEN)・✅**到達=Tailscale tailnet限定**・単一オリジン配信＋localhostバインド・✅バックアップ(timer・S4)。🟡**自動起動=systemdユニット定義済だが未install**(母艦再起動で手起動・backlog)。⬜Tailscale serve設定(ユーザ側・初回のみ) |
 
