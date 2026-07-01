@@ -1,6 +1,6 @@
 # creative_manager 進捗・管理表（living）
 
-最終更新: 2026-06-30
+最終更新: 2026-07-01
 
 このファイルが**残タスクの正準**。頭の中／揮発タスクで管理しない。着手・完了でここを更新する。
 凡例: ✅完了 / 🟡部分・留保 / ⬜未着手。acceptor列: design=design-acceptor要 / impl=impl-acceptor要 / —=不要。
@@ -15,6 +15,8 @@
 | 捕獲・ネタ帳 | ✅ | メモ/歌詞/コード/メロ/リズム/テーマ、タグ・mood・key・tempo・拍子、一覧・ミニプレビュー・削除 |
 | 入力モダリティ | 🟡 | ✅ピアノロール／パッドステップ／文字、添付(asset)。✅楽譜入力(MusicXML)・✅音声(ハミング)＝#56。**✅音符プレビュー(2026-06-30: メロ/ベース/コード楽器/リズムで配置時＋ピアノロール鍵盤タップで即発音=previewNote)** |
 | モバイル編集UI | ✅ | (2026-06-30) 編集面を可視dvhに収め底のトランスポートがブラウザ下バーに潜らない・横スクロールの左ラベル/鍵盤sticky(全エディタ)・リズムグリッドのモバイル幅収め・縦バー副作用除去。Playwrightで各エディタ実測 |
+| 編集Undo/Redo | ✅ | **(2026-07-01・design U1-U3)** NetaDialog層にcontent一式snapshot履歴(`history.ts`+`useEditHistory`・純ロジックTDD6)＝melody/chord/bass/rhythm/chord_pattern全部に一発。UI=TransportBar左↩/↪(文字矢印・空でdisable・案1)。Playwright実機で置く→undo→redo確認。残=section/song・トースト |
+| 歌詞→メロ | 🟡 | (2026-07-01) `flowLyric`(モーラ→音符1:1・多=分割/少=メリスマ・TDD)＋メロエディタ「歌詞流し込み」＋音符下に歌詞レーン(sticky下端)。残=lyricネタに読み欄/選択流し込み(LS2)・手動調整・MIDI歌詞メタ。仮歌(歌声合成)はbacklog別口 |
 | 検索・つなぐ | ✅ | ファセット検索、意味検索(埋め込み＋較正ゲート #65)、関連辺・合成辺 |
 | スケッチ・再生 | ✅ | 4要素エディタ、Tone.js＋SF2再生、プレイヘッド・トランスポート、section/song合成、GM音色(再生↔書出一致 #47) |
 | ドラム再生 | 🟡 | ✅速度/音高/チョーク #84 S0-S3＋S4 ベロシティ層。**✅ピッチ異常修正(2026-06-29: root=overridingRootKey??叩いた鍵・ride2+8等を断つ)**。**✅キット選択 アコ/エレキ(2026-06-29: buildGmDrumMap(preset)パラメタ化・RhythmContent.kit→再生&MIDI ch10 program・Standard不変=回帰ゼロ・全キット実在サンプル解決を構造確認)**。研究=research/2026-06-29-drum-sound-resolution.md。残=新キットの音の試聴調整・Standardのregex一掃(任意・要A/B) |
