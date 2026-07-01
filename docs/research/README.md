@@ -31,6 +31,7 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [2026-06-28-melody-ai-survey](2026-06-28-melody-ai-survey.md) — メロディ・ライン拡張AI調査
 - [2026-06-28-chord-harmony-ai-survey](2026-06-28-chord-harmony-ai-survey.md) — コード/和声ライン拡張AI調査
 - [2026-06-28-lyric-melody-ai-survey](2026-06-28-lyric-melody-ai-survey.md) — 歌詞ライン拡張AI調査（日本語モーラ/アクセント）
+- [2026-07-01-singing-voice-synthesis](2026-07-01-singing-voice-synthesis.md) — メロ＋歌詞を歌わせる可能性調査。Tier0=SF2合唱パッチ(即・言葉なし)／本命=**VOICEVOX歌唱ローカルHTTP**(無料商用可・日本語・自宅完結)／高音質=NEUTRINO(MusicXML書出が橋・CPU低速)。既存 Note.syllable がスコアの素。母艦GPU無しでニューラルは遅い
 
 ## 和声/コード
 - [harmony-cadence-theory](harmony-cadence-theory.md) — 和声・終止・声部進行の理論リファレンス
