@@ -266,9 +266,12 @@ export function NetaDialog({
       }
       return n;
     });
-  // 畳んだ時に出す要約（調・テンポ・音色）。
+  // メタを折りたたむ対象＝メタ行を持つ全編集画面（音楽ネタ＋section/song コンテナ）。
+  const collapsibleMeta = isMusic || isContainer;
+  // 畳んだ時に出す要約（調・拍子・テンポ・音色）。
   const metaSummary = [
     showKey ? `${KEY_NAMES[key]} ${mode === "major" ? "長調" : "短調"}` : null,
+    isContainer ? meter : null,
     showMeta ? `♩${tempo}` : null,
     isMelody || isBass || isChordPat ? GM_INSTRUMENTS.find((g) => g.value === program)?.label : null,
   ]
@@ -310,14 +313,14 @@ export function NetaDialog({
           </button>
         </span>
       </div>
-      {/* メタ設定は music ネタで折りたたみ可（土地節約・スマホ）。畳んだ時は要約1行。 */}
-      {isMusic && (
+      {/* メタ設定は全編集画面（音楽ネタ＋section/song）で折りたたみ可（土地節約・スマホ）。畳んだ時は要約1行。 */}
+      {collapsibleMeta && (
         <button type="button" className="editor-meta-toggle" aria-label="toggle-meta" aria-expanded={metaOpen} onClick={toggleMeta}>
           <span className="emt-caret">{metaOpen ? "▾ 設定" : "▸ 設定"}</span>
           {!metaOpen && metaSummary && <span className="editor-meta-summary">{metaSummary}</span>}
         </button>
       )}
-      {(!isMusic || metaOpen) && (
+      {(!collapsibleMeta || metaOpen) && (
       <>
       {/* 属性行：調→長短→拍子→テンポ→音色→アクション の統一順。非該当kindはその枠を出さないだけ。 */}
       <div className="editor-attrs">

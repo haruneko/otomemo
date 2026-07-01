@@ -324,6 +324,29 @@
 **決定U3（UI＝案1確定）**：**TransportBar 左に ↩︎/↪︎**（親指ゾーン・縦を消費しない）。**絵文字でなく文字矢印/SVG**（⏮🔁の□化を避ける）。空スタックは disable。feedback＝内容が戻る（トーストは将来）。
 **段階**：US1 `history.ts` 純ロジック(TDD) → US2 `useEditHistory` hook＋NetaDialog 配線(snapshot/apply) → US3 TransportBar ↩︎/↪︎（Playwrightで「置く→undo→戻る→redo→復活」確認）。
 
+### 編集画面の共通パーツ化（2026-07-01・NetaDialog 神コンポーネント分解）
+**問題**：`NetaDialog`(~470行)が編集画面の全責務（state ~24個・派生・effect・save/remove/detectKey・
+history・transport・ヘッダ/メタ/body/relations 描画）を抱える神コンポーネント。**メタ折りたたみ・Undo/Redo
+のような「全編集画面に効く機能」を足すたびにこの1ファイルを触る**＝差分が読みにくく回帰リスク。
+※アーキ是正 S5 で `KindEditorBody`(kind別 body)は分離済。残り（ヘッダ/メタ/transport/relations/state）を共通パーツへ。
+**決定（分解＝ロジックhook＋共有UI・契約先行）**：
+- **`useNetaEditor(neta, {onClose,onChanged})` フック**＝編集の"脳"。全 state・派生(flags/playable/showKey…)・
+  アクション(save/remove/detectKey/savePatch)・history・transport・metaOpen を所有し、`{header, meta, body,
+  transport, rels, flags}` に構造化して返す。→ NetaDialog の render は**薄い合成**に。ロジックが単体テスト可能に。
+- **共有UIコンポーネント（props＝契約）**：
+  - `<EditorHeader>`：← 戻る / kind / title(setTitle) / 削除 / 保存(busy)。
+  - `<MetaPanel>`：折りたたみトグル＋要約＋メタ本体（調/mode/拍子/tempo/音色/+4拍/MIDI/tags/mood）。
+    **flags でどの枠を出すか決める**（kind 分岐を集約）。折りたたみ状態(localStorage)と要約はここに閉じる。
+  - `<KindEditorBody>`：既存（kind別 body）。 `<TransportBar>`：既存（play/undo/redo/loop）。
+  - `<RelationsPanel>`：連関ネタ。
+- **NetaDialog＝合成のみ**：`const ed = useNetaEditor(neta,…); return <Editor><EditorHeader {...ed.header}/>
+  <MetaPanel {...ed.meta}/><KindEditorBody {...ed.body}/>{ed.flags.isMusic&&<TransportBar {...ed.transport}/>}
+  <RelationsPanel rels={ed.rels}/></Editor>`。
+**原則**：契約(props)先行・**aria-label 不変**（テスト回帰ゼロ）・**1つずつ抽出**。全編集画面に効く機能
+(折りたたみ/Undo/将来のvelocity等)は該当共有パーツ1箇所に入れば**全kindに一発で効く**（＝今回の折りたたみ/Undoが実証）。
+**段階**：CP1 `MetaPanel` 抽出（折りたたみ含む・今回の変更をコンポーネント化）→ CP2 `EditorHeader`/`RelationsPanel`
+→ CP3 `useNetaEditor` へ state/logic 移設（NetaDialog を薄く）。各段階でテスト緑維持。機能追加のついでに進める（コールドで一気に割らない・S5後続）。
+
 ### 再生
 - section/song：メインペーンに**トランスポート（全体再生）パネル**。
 - ネタ帳：カードを**タップで個別再生**（断片を単独 audition、調ヒントで鳴らす）。
