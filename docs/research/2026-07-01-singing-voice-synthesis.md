@@ -66,6 +66,14 @@ VOICEVOX ENGINE 0.25.2 linux-cpu-x64 を母艦（Ryzen 7 8845HS・16スレッド
 - **含意**：我々のアプリはパイプラインを握っているので、**f0/volume 配列を編集する「表現コントロール」（ビブラート深さ/速さ・しゃくり量・強弱カーブ・アクセント）を自前UIで載せられる**＝VOICEVOXのGUI以上の作り込みが可能。設計思想（機械は足場/候補・人が仕上げ）と合致＝「プリセットで雰囲気→手で微調整」。
 - **限界**：AI駆動の表現スタイルや声質そのもの（ブレス/性別/歌い回し）はモデルに焼き込み＝そこはSynthV等（商用・API連携弱）の領分。ピッチ/強弱/タイミングのニュアンスは VOICEVOX のフレーム配列で十分。
 
+## ちゃんとしたエディタ（フリー）＝ある。しかも MusicXML/MIDI 取込
+- **VOICEVOX 公式エディタ自体が"ちゃんとした"編集を持つ**：Song モードに**ピッチ編集モード（ノート上に波線をドラッグして音程曲線を描く）**、talk側はフレーズ単位のピッチ/音量/話速/無音編集。**File メニューから MIDI / UST / MusicXML をインポート**できる。無料。
+- **もっと本格派＝OpenUTAU（無料・OSS）**：ピッチ/表現の作り込みが強い定番の歌エディタで、**VOICEVOX の声をボイスバンクとして使える**（widely used）。UTAU系の表現（ピッチベンド/ビブラート/フラグ）＋ neural(DiffSinger)も。
+- **我々への含意（設計が楽になる）**：VOICEVOXエディタも OpenUTAU も **MusicXML/MIDI/UST を取り込める**。→ **自前で本格ボーカルエディタを作らなくてよい**。役割分担＝
+  - **本アプリ**＝作曲/スケッチ＋歌詞流し込み＋**ラフな歌唱プレビュー**（VOICEVOX API・表現なしで"言葉と音程"を即確認）。
+  - **仕上げの歌の表現**＝**MusicXML/MIDI(+歌詞)を書き出して → VOICEVOXエディタ or OpenUTAU で作り込む**。
+  - ＝**MusicXML書き出し（今は入力のみ・未実装）が最重要の橋**（NEUTRINO用だけでなく、公式エディタ/OpenUTAU への受け渡しにも効く）。[[project-design-philosophy-options-not-finished]] と合致（機械は足場、仕上げは専用ツールで人が）。
+
 ## 制約・注意
 - **GPU無し見込み**→ニューラル(NEUTRINO/DiffSinger)はCPUで遅い（数分/分）。**VOICEVOX humming / OpenUTAU classic(WORLDLINE) は軽め**。
 - **フットプリント（VOICEVOX ENGINE）**：Docker **CPU版 ≈1.85GB（圧縮・Docker Hub表示）→展開後の実ディスクはその2〜3倍(≈4-5GB目安)**。GPU版≈2.95GBは**GPU無しなので不要**。嵩の主因は音声モデル。RAMは常駐で数百MB〜。**※母艦はarchitecture上「Docker不使用(WSL2でtsx/uv直起動)」方針**＝Docker前提にするか、engineをバイナリ/uvで直起動するかは要判断（ディスク量は同程度・モデルが本体）。数GB＋常駐1プロセス＝ミニPCで許容範囲だが「軽くはない」。合唱パッチ(Tier0)は+0GB。
