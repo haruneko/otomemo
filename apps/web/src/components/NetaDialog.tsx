@@ -4,7 +4,6 @@ import { useEditHistory } from "../history";
 import { moraLines } from "../lyrics";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
-import { NumberField } from "./NumberField";
 import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
 import { BassStepEditor } from "./BassStepEditor";
@@ -13,6 +12,9 @@ import { RhythmEditor } from "./RhythmEditor";
 import { BarsControl } from "./BarsControl";
 import { SectionEditor } from "./SectionEditor";
 import { KindEditorBody } from "./KindEditorBody";
+import { MetaPanel } from "./MetaPanel";
+import { EditorHeader } from "./EditorHeader";
+import { RelationsPanel } from "./RelationsPanel";
 import {
   notesOf,
   chordsOf,
@@ -21,7 +23,6 @@ import {
   rhythmToNotes,
   downloadMidi,
   programOf,
-  GM_INSTRUMENTS,
   isRelativeBass,
   resolveRelativeBass,
   isChordPattern,
@@ -34,7 +35,6 @@ import {
   type ChordPatternContent,
 } from "../music";
 
-const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 export function NetaDialog({
   neta,
@@ -248,35 +248,8 @@ export function NetaDialog({
   const showKey = (isMusic || isContainer) && !isRhythm; // 調（rhythm以外の音楽/section）
   const showMeta = isMusic || isContainer; // テンポ
 
-  // メタ設定の折りたたみ（土地節約・スマホ）。music ネタのみ。localStorage 記憶・既定=畳む。
-  const [metaOpen, setMetaOpen] = useState(() => {
-    try {
-      return localStorage.getItem("cm-editor-meta-open") === "1";
-    } catch {
-      return false;
-    }
-  });
-  const toggleMeta = () =>
-    setMetaOpen((v) => {
-      const n = !v;
-      try {
-        localStorage.setItem("cm-editor-meta-open", n ? "1" : "0");
-      } catch {
-        /* localStorage不可でも動く */
-      }
-      return n;
-    });
-  // メタを折りたたむ対象＝メタ行を持つ全編集画面（音楽ネタ＋section/song コンテナ）。
+  // メタを折りたたむ対象＝メタ行を持つ全編集画面（音楽ネタ＋section/song）。折りたたみ状態/要約は MetaPanel が持つ（CP1）。
   const collapsibleMeta = isMusic || isContainer;
-  // 畳んだ時に出す要約（調・拍子・テンポ・音色）。
-  const metaSummary = [
-    showKey ? `${KEY_NAMES[key]} ${mode === "major" ? "長調" : "短調"}` : null,
-    isContainer ? meter : null,
-    showMeta ? `♩${tempo}` : null,
-    isMelody || isBass || isChordPat ? GM_INSTRUMENTS.find((g) => g.value === program)?.label : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
 
   // #10④ エディタ本体の active 色を kind 色に（--k＝カードと同じ変数。chord_pattern は chord 色を流用）。
   const colorKind = neta.kind === "chord_pattern" ? "chord" : neta.kind;
@@ -288,153 +261,30 @@ export function NetaDialog({
       data-kind={neta.kind}
       style={{ ["--k" as string]: `var(--k-${colorKind})` }}
     >
-      <div className="editor-bar">
-        <button className="back" onClick={onClose} aria-label="close">
-          ← 戻る
-        </button>
-        <span className="kind" data-kind={neta.kind}>
-          {neta.kind}
-        </span>
-        <input
-          aria-label="title"
-          className="editor-title"
-          placeholder="タイトル"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        {/* 保存/削除は常に右端固定・2つで1グループ＝スマホでも分離せず一緒に右上へ収まる。 */}
-        <span className="spacer" />
-        <span className="editor-actions">
-          <button className="danger" onClick={remove} disabled={busy}>
-            削除
-          </button>
-          <button className="primary" onClick={save} disabled={busy}>
-            保存
-          </button>
-        </span>
-      </div>
-      {/* メタ設定は全編集画面（音楽ネタ＋section/song）で折りたたみ可（土地節約・スマホ）。畳んだ時は要約1行。 */}
-      {collapsibleMeta && (
-        <button type="button" className="editor-meta-toggle" aria-label="toggle-meta" aria-expanded={metaOpen} onClick={toggleMeta}>
-          <span className="emt-caret">{metaOpen ? "▾ 設定" : "▸ 設定"}</span>
-          {!metaOpen && metaSummary && <span className="editor-meta-summary">{metaSummary}</span>}
-        </button>
-      )}
-      {(!collapsibleMeta || metaOpen) && (
-      <>
-      {/* 属性行：調→長短→拍子→テンポ→音色→アクション の統一順。非該当kindはその枠を出さないだけ。 */}
-      <div className="editor-attrs">
-        {showKey && (
-          <label className="meta">
-            調
-            <select aria-label="key" value={key} onChange={(e) => setKey(Number(e.target.value))}>
-              {KEY_NAMES.map((nm, i) => (
-                <option key={i} value={i}>
-                  {nm}
-                </option>
-              ))}
-            </select>
-            <select aria-label="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="major">長調</option>
-              <option value="minor">短調</option>
-            </select>
-          </label>
-        )}
-        {isChord && chords.length > 0 && (
-          <button
-            type="button"
-            aria-label="detect-key"
-            title="コードから調を推定して設定（クリックで候補=Cmaj/Am 等を順に切替）"
-            onClick={() => void detectKey()}
-          >
-            調を推定
-          </button>
-        )}
-        {isContainer && (
-          <label className="meta">
-            拍子
-            <select aria-label="meter" value={meter} onChange={(e) => setMeter(e.target.value)}>
-              {["4/4", "3/4", "6/8", "2/4", "5/4", "12/8"].map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {showMeta && (
-          <label className="meta">
-            ♩
-            <NumberField aria-label="tempo" min={20} max={300} value={tempo} onChange={setTempo} />
-          </label>
-        )}
-        {(isMelody || isBass || isChordPat) && (
-          <label className="meta">
-            音色
-            <select
-              aria-label="program"
-              value={program}
-              onChange={(e) => setProgram(Number(e.target.value))}
-            >
-              {GM_INSTRUMENTS.map((g) => (
-                <option key={g.value} value={g.value}>
-                  {g.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {isMelody && (
-          <button type="button" onClick={() => setLen(len + 4)}>
-            ＋4拍
-          </button>
-        )}
-        {isMusic && (
-          <button
-            type="button"
-            onClick={() =>
-              downloadMidi(
-                playable,
-                `${neta.title ?? "sketch"}.mid`,
-                tempo,
-                null,
-                isRhythm ? undefined : isChord ? 48 : program, // 進行は固定GM49(CP1)
-              )
-            }
-          >
-            MIDI
-          </button>
-        )}
-        {isThemeable && (
-          <button
-            type="button"
-            className={schedId ? "primary" : ""}
-            aria-label="continuous-research"
-            title="このテーマを見てない間も継続して調べ、参考をトレイに溜める"
-            onClick={() => void toggleSchedule()}
-          >
-            {schedId ? "🔁 継続調査中" : "🔁 継続して調べる"}
-          </button>
-        )}
-      </div>
-      <div className="editor-meta-row">
-        <input
-          aria-label="tags"
-          className="editor-tags"
-          placeholder="タグ（スペース区切り）"
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-        />
-        <input
-          aria-label="mood"
-          className="editor-tags"
-          placeholder="ムード（任意・例：切ない/疾走）"
-          value={mood}
-          onChange={(e) => setMood(e.target.value)}
-        />
-      </div>
-      </>
-      )}
+      <EditorHeader kind={neta.kind} title={title} setTitle={setTitle} onClose={onClose} onSave={save} onDelete={remove} busy={busy} />
+      {/* メタ設定パネル（共通パーツ CP1）。折りたたみ状態・要約は MetaPanel が持つ。 */}
+      <MetaPanel
+        flags={{ collapsible: collapsibleMeta, showKey, showMeta, isChord, isContainer, isMelody, isBass, isChordPat, isMusic, isThemeable, hasChords: chords.length > 0 }}
+        keyPc={key}
+        mode={mode}
+        meter={meter}
+        tempo={tempo}
+        program={program}
+        tags={tags}
+        mood={mood}
+        setKey={setKey}
+        setMode={setMode}
+        setMeter={setMeter}
+        setTempo={setTempo}
+        setProgram={setProgram}
+        setTags={setTags}
+        setMood={setMood}
+        onDetectKey={() => void detectKey()}
+        onExtendLen={() => setLen(len + 4)}
+        onExportMidi={() => downloadMidi(playable, `${neta.title ?? "sketch"}.mid`, tempo, null, isRhythm ? undefined : isChord ? 48 : program)}
+        onToggleSchedule={() => void toggleSchedule()}
+        schedId={schedId}
+      />
       <KindEditorBody
         neta={neta}
         flags={{ isMelody, isBass, isChord, isChordPat, isRhythm, isContainer, isRelBass }}
@@ -467,19 +317,7 @@ export function NetaDialog({
           canRedo={editHist.canRedo}
         />
       )}
-      {rels.length > 0 && (
-        <div className="relations">
-          <span className="rel-label">関連</span>
-          {rels.map(
-            (r, i) =>
-              r.neta && (
-                <span key={i} className="rel-item">
-                  {r.neta.kind}: {(r.neta.title ?? r.neta.text ?? "(無題)").slice(0, 16)}
-                </span>
-              ),
-          )}
-        </div>
-      )}
+      <RelationsPanel rels={rels} />
     </div>
   );
 }
