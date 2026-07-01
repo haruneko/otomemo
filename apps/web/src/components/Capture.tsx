@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { api, ApiError, type Neta } from "../api";
-import { KINDS, TEXT_KINDS } from "../kinds";
+import { KINDS, TEXT_KINDS, KIND_LABEL } from "../kinds";
 import { queueNeta } from "../outbox";
 import { projectTag } from "../project";
 
-// 摩擦ゼロの捕獲（要件）。本文1個＋kind＋任意タグ＋「放り込む」。
+// 摩擦ゼロの捕獲（要件）＝**テキストの思いつき専用**（歌詞/テーマ/メモ/知識）。本文1個＋種別＋任意タグ。
+// 音楽の新規（メロ/コード/リズム/ベース）は notebook-actions の「＋◯◯」ボタン＝エディタ直行に分離（2026-07-02）。
+const CAPTURE_TEXT_KINDS = KINDS.filter((k) => TEXT_KINDS.has(k)); // 歌詞/テーマ/知識/その他
 
 export function Capture({
   onCreated,
@@ -13,7 +15,7 @@ export function Capture({
   onCreated?: (n: Neta) => void;
   activeProject?: string; // アクティブプロジェクト名（""＝すべて）。新規ネタに prj: を自動付与。
 }) {
-  const [kind, setKind] = useState<string>("lyric");
+  const [kind, setKind] = useState<string>("lyric"); // テキスト系のみ（歌詞既定）
   const [body, setBody] = useState("");
   const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,15 +67,15 @@ export function Capture({
   return (
     <form aria-label="capture" onSubmit={submit}>
       <select aria-label="kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-        {KINDS.map((k) => (
+        {CAPTURE_TEXT_KINDS.map((k) => (
           <option key={k} value={k}>
-            {k}
+            {KIND_LABEL[k]}
           </option>
         ))}
       </select>
       <textarea
         aria-label="body"
-        placeholder="放り込む…"
+        placeholder="歌詞・メモ・テーマを放り込む…"
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />

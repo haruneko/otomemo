@@ -116,6 +116,12 @@ export function App() {
     await reload();
     setActive(s); // メインペーンで開く
   }
+  // 音楽ネタの新規＝空で作ってエディタ直行（放り込むから分離・2026-07-02）。
+  async function createBlank(kind: string, title: string) {
+    const n = await api.createNeta({ kind, title, tags: projectTags });
+    await reload();
+    setActive(n);
+  }
 
   // #46: mood でのクライアント側絞り込み（取得済みリストに対して）
   const shownItems = moodFilter.trim()
@@ -369,6 +375,11 @@ export function App() {
             <button className="import-btn accent" onClick={() => void newSong()}>
               ＋曲を組む
             </button>
+            {/* 音楽ネタの新規＝エディタ直行（放り込む=テキスト捕獲 と分離）。 */}
+            <button className="import-btn" onClick={() => void createBlank("melody", "新しいメロ")}>＋メロ</button>
+            <button className="import-btn" onClick={() => void createBlank("chord_progression", "新しいコード進行")}>＋コード</button>
+            <button className="import-btn" onClick={() => void createBlank("rhythm", "新しいリズム")}>＋リズム</button>
+            <button className="import-btn" onClick={() => void createBlank("bass", "新しいベース")}>＋ベース</button>
             <label className="import-btn">
               {importing ? "取り込み中…" : "MIDI取込"}
               <input
