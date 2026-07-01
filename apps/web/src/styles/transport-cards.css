@@ -383,6 +383,21 @@
   font-size: 0.75rem;
   color: var(--muted);
 }
+/* 音符イラストのボタン（音価/付点）：SVGを中央に・高さ揃え。 */
+.len.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  min-height: 30px;
+}
+/* モードトグルのアイコン中央寄せ。 */
+.proll-modes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+}
 /* 歌詞流し込み入力（メロのみ・LS3）。 */
 .proll-lyric-input {
   display: flex;

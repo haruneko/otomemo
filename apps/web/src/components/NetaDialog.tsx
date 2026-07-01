@@ -63,6 +63,7 @@ export function NetaDialog({
         onExportMidi={ed.onExportMidi}
         onToggleSchedule={() => void ed.toggleSchedule()}
         schedId={ed.schedId}
+        rollBars={f.showRollBars ? { len: ed.len, setLen: ed.setLen, pickup: ed.pickup, setPickup: ed.setPickup } : null}
       />
       <KindEditorBody
         neta={neta}

@@ -221,12 +221,14 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const showKey = (isMusic || isContainer) && !isRhythm; // 調（rhythm以外の音楽/section）
   const showMeta = isMusic || isContainer; // テンポ
   const collapsibleMeta = isMusic || isContainer; // メタ折りたたみ対象（MetaPanel）
+  // 小節/弱起は roll（メロ・ベース絶対）のみ＝折りたたみ設定(MetaPanel)へ移す対象（縦詰め）。
+  const showRollBars = (isMelody || (isBass && bassMode === "absolute")) && melodyView === "roll";
   // #10④ エディタ本体の active 色を kind 色に（chord_pattern は chord 色を流用）。
   const colorKind = neta.kind === "chord_pattern" ? "chord" : neta.kind;
 
   return {
     // フラグ
-    flags: { isMelody, isBass, isChord, isChordPat, isRhythm, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, hasChords: chords.length > 0 },
+    flags: { isMelody, isBass, isChord, isChordPat, isRhythm, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, hasChords: chords.length > 0 },
     // 値＋setter
     title, setTitle, text, setText, tags, setTags, mood, setMood,
     key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram,

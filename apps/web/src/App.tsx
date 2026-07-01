@@ -303,6 +303,8 @@ export function App() {
 
   return (
     <main>
+      {/* 編集中(モバイル)は app-head を隠す＝エディタの「← 戻る」があるので不要・上まで画面を使う。 */}
+      {!(isMobile && active) && (
       <div className="app-head">
         <button
           className="gear"
@@ -349,6 +351,7 @@ export function App() {
           </button>
         </div>
       </div>
+      )}
       <DndContext
         sensors={sensors}
         collisionDetection={pointerWithin}

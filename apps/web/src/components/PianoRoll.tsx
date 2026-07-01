@@ -149,13 +149,17 @@ export function PianoRoll({
 
   return (
     <div className="proll-wrap">
-      {/* 描く/選ぶ モードトグル（design N1・案A）。描く=配置/削除、選ぶ=選択して編集。 */}
+      {/* 描く/選ぶ モードトグル（design N1・案A）。鉛筆=配置/削除、範囲=選択して編集。 */}
       <div className="proll-modes">
-        <button type="button" aria-label="mode-draw" className={mode === "draw" ? "on" : ""} onClick={toDraw}>
-          描く
+        <button type="button" aria-label="mode-draw" title="描く（配置/削除）" className={mode === "draw" ? "on" : ""} onClick={toDraw}>
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor" />
+          </svg>
         </button>
-        <button type="button" aria-label="mode-select" className={mode === "select" ? "on" : ""} onClick={() => setMode("select")}>
-          選ぶ
+        <button type="button" aria-label="mode-select" title="選ぶ（選択して編集）" className={mode === "select" ? "on" : ""} onClick={() => setMode("select")}>
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3.5 3" />
+          </svg>
         </button>
       </div>
       <div className="proll-tools">

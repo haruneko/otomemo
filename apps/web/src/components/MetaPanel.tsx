@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { GM_INSTRUMENTS } from "../music";
 import { NumberField } from "./NumberField";
+import { BarsControl } from "./BarsControl";
 
 const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const METERS = ["4/4", "3/4", "6/8", "2/4", "5/4", "12/8"];
@@ -43,6 +44,7 @@ export function MetaPanel(p: {
   onExportMidi: () => void;
   onToggleSchedule: () => void;
   schedId: string | null;
+  rollBars?: { len: number; setLen: (n: number) => void; pickup: number; setPickup: (n: number) => void } | null; // 小節/弱起（roll のみ・縦詰めで設定内へ）
 }) {
   const f = p.flags;
   // 折りたたみ状態（localStorage 記憶・既定=畳む＝スマホの空間優先）。
@@ -151,6 +153,22 @@ export function MetaPanel(p: {
               </button>
             )}
           </div>
+          {/* 小節/弱起（roll のみ・縦詰めで設定内へ移動）。 */}
+          {p.rollBars && (
+            <div className="roll-controls">
+              <BarsControl
+                bars={Math.max(1, Math.round(p.rollBars.len / 4))}
+                max={Math.max(4, Math.ceil(p.rollBars.len / 4))}
+                onChange={(n) => p.rollBars!.setLen(n * 4)}
+              />
+              <div className="bars-control" title="弱起（拍0の前の空き）">
+                <span className="muted">弱起</span>
+                <button type="button" aria-label="pickup-dec" disabled={p.rollBars.pickup <= 0} onClick={() => p.rollBars!.setPickup(Math.max(0, p.rollBars!.pickup - 1))}>−</button>
+                <span aria-label="pickup-count">{p.rollBars.pickup}</span>
+                <button type="button" aria-label="pickup-inc" disabled={p.rollBars.pickup >= 4} onClick={() => p.rollBars!.setPickup(p.rollBars!.pickup + 1)}>＋</button>
+              </div>
+            </div>
+          )}
           <div className="editor-meta-row">
             <input aria-label="tags" className="editor-tags" placeholder="タグ（スペース区切り）" value={p.tags} onChange={(e) => p.setTags(e.target.value)} />
             <input aria-label="mood" className="editor-tags" placeholder="ムード（任意・例：切ない/疾走）" value={p.mood} onChange={(e) => p.setMood(e.target.value)} />

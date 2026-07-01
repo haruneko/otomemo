@@ -7,7 +7,6 @@ import { BassStepEditor } from "./BassStepEditor";
 import { ChordEditor } from "./ChordEditor";
 import { ChordPatternEditor } from "./ChordPatternEditor";
 import { RhythmEditor } from "./RhythmEditor";
-import { BarsControl } from "./BarsControl";
 import { SectionEditor } from "./SectionEditor";
 import type { Neta } from "../api";
 import type { Note, ChordEntry, RhythmContent, BassStep, ChordPatternContent } from "../music";
@@ -86,20 +85,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
               </div>
               {p.melodyView === "roll" ? (
                 <>
-                  <div className="roll-controls">
-                    <BarsControl
-                      bars={Math.max(1, Math.round(p.len / 4))}
-                      max={Math.max(4, Math.ceil(p.len / 4))}
-                      onChange={(n) => p.setLen(n * 4)}
-                    />
-                    {/* 弱起（アウフタクト）：拍0の前に lead-in を足す。ダウンビートは位置を保つ。 */}
-                    <div className="bars-control" title="弱起（拍0の前の空き）">
-                      <span className="muted">弱起</span>
-                      <button type="button" aria-label="pickup-dec" disabled={p.pickup <= 0} onClick={() => p.setPickup(Math.max(0, p.pickup - 1))}>−</button>
-                      <span aria-label="pickup-count">{p.pickup}</span>
-                      <button type="button" aria-label="pickup-inc" disabled={p.pickup >= 4} onClick={() => p.setPickup(p.pickup + 1)}>＋</button>
-                    </div>
-                  </div>
+                  {/* 小節/弱起 は折りたたみ設定(MetaPanel)へ移動＝縦詰め（design/ユーザー 2026-07-02）。 */}
                   <PianoRoll
                     notes={p.notes}
                     onChange={p.setNotes}

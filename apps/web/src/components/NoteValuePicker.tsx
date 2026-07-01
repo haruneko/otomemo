@@ -2,6 +2,8 @@
 // PianoRoll(メロ/ベース絶対)・BassStepEditor(相対)・ChordPatternEditor で共有。
 // 値の単位(拍 or step)は呼び出し側に委ねる＝options の v をそのまま採用（unit 非依存）。
 // controlled：value/dotted を親が保持し、選択・付点トグルをコールバックで返す。dur の ×1.5 は親が適用。
+import { NoteGlyph } from "./NoteGlyph";
+
 export function NoteValuePicker({
   options,
   value,
@@ -21,24 +23,26 @@ export function NoteValuePicker({
     <>
       <span className="muted">{label}</span>
       {options.map((o) => (
-        // aria-label は付けない＝可視テキスト("16"等)がそのままアクセシブル名（従来挙動・テスト互換）。
+        // 可視は音符イラスト(NoteGlyph)。アクセシブル名は aria-label で保つ（テスト/読み上げ互換）。
         <button
           key={o.v}
           type="button"
-          className={"len" + (value === o.v ? " on" : "")}
+          aria-label={o.label}
+          title={`${o.label}分音符`}
+          className={"len glyph" + (value === o.v ? " on" : "")}
           onClick={() => onChange(o.v)}
         >
-          {o.label}
+          <NoteGlyph note={o.label} />
         </button>
       ))}
       <button
         type="button"
         aria-label="dotted"
         title="付点（長さ×1.5）"
-        className={"len dot" + (dotted ? " on" : "")}
+        className={"len glyph" + (dotted ? " on" : "")}
         onClick={onToggleDotted}
       >
-        付点
+        <NoteGlyph note="4" dotted />
       </button>
     </>
   );
