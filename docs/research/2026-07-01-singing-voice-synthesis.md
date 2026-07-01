@@ -47,6 +47,7 @@
 
 ## 制約・注意
 - **GPU無し見込み**→ニューラル(NEUTRINO/DiffSinger)はCPUで遅い（数分/分）。**VOICEVOX humming / OpenUTAU classic(WORLDLINE) は軽め**。
+- **フットプリント（VOICEVOX ENGINE）**：Docker **CPU版 ≈1.85GB（圧縮・Docker Hub表示）→展開後の実ディスクはその2〜3倍(≈4-5GB目安)**。GPU版≈2.95GBは**GPU無しなので不要**。嵩の主因は音声モデル。RAMは常駐で数百MB〜。**※母艦はarchitecture上「Docker不使用(WSL2でtsx/uv直起動)」方針**＝Docker前提にするか、engineをバイナリ/uvで直起動するかは要判断（ディスク量は同程度・モデルが本体）。数GB＋常駐1プロセス＝ミニPCで許容範囲だが「軽くはない」。合唱パッチ(Tier0)は+0GB。
 - **読み(かな)の質**：`splitMora` はかな前提。漢字→読みは未（設計 L1 で lyric に「読み」欄を持つ方針）。歌声合成はかな/音素前提なので、**読みを正準にする設計(L1)と整合**。漢字自動読みが要るなら pyopenjtalk 等（別問題）。
 - **ライセンス**：VOICEVOX＝商用可（強い）。NEUTRINO/一部ボイス＝非商用。**個人用途なら概ね可**。生成音声・キャラクターの利用規約は各要確認。
 - **プライバシー/到達**：全案ローカル自己ホストで完結可（クラウド送信不要）＝Tailnet/オフライン方針と合致。
