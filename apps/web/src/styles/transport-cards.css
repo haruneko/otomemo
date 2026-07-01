@@ -34,6 +34,16 @@
   color: #fff;
   border-color: var(--accent);
 }
+.tp-btn:disabled {
+  opacity: 0.35; /* 履歴が空＝押せない（Undo/Redo） */
+  cursor: default;
+}
+.tp-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+  margin: 0 4px; /* Undo/Redo と再生系の区切り */
+}
 .transport-time {
   margin-left: auto;
   font-variant-numeric: tabular-nums;

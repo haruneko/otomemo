@@ -9,6 +9,10 @@ export function TransportBar({
   onPlayPause,
   onRewind,
   onToggleLoop,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
 }: {
   state: TransportState;
   loopOn: boolean;
@@ -16,10 +20,25 @@ export function TransportBar({
   onPlayPause: () => void;
   onRewind: () => void;
   onToggleLoop: () => void;
+  onUndo?: () => void; // 音楽ネタの編集Undo（design 決定U3・案1＝トランスポート左）
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }) {
   const playing = state === "playing";
   return (
     <div className="transport" role="group" aria-label="transport">
+      {onUndo && (
+        <>
+          <button type="button" className="tp-btn" aria-label="undo" title="元に戻す" onClick={onUndo} disabled={!canUndo}>
+            ↩
+          </button>
+          <button type="button" className="tp-btn" aria-label="redo" title="やり直す" onClick={onRedo} disabled={!canRedo}>
+            ↪
+          </button>
+          <span className="tp-divider" aria-hidden="true" />
+        </>
+      )}
       <button type="button" className="tp-btn" aria-label="rewind" title="頭出し" onClick={onRewind}>
         ⏮
       </button>

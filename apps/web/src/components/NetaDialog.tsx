@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, type Neta, type NetaPatch } from "../api";
+import { useEditHistory } from "../history";
 import { moraLines } from "../lyrics";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
@@ -124,6 +125,25 @@ export function NetaDialog({
     bpb: 4,
     program: isRhythm ? undefined : isChord ? 48 : program, // コード進行は抽象＝固定GM49(strings)・選択不可(CP1)
   });
+
+  // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。
+  // title/text/tags/mood 等のテキストは含めない（input の native undo・per-keystroke で汚れる）。
+  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, key, mode, tempo, program, len, pickup };
+  const applySnapshot = useCallback((s: typeof snapshot) => {
+    setNotes(s.notes);
+    setChords(s.chords);
+    setRhythm(s.rhythm);
+    setBassPattern(s.bassPattern);
+    setBassSteps(s.bassSteps);
+    setChordPat(s.chordPat);
+    setKey(s.key);
+    setMode(s.mode);
+    setTempo(s.tempo);
+    setProgram(s.program);
+    setLen(s.len);
+    setPickup(s.pickup);
+  }, []);
+  const editHist = useEditHistory(snapshot, applySnapshot, { resetKey: neta.id });
 
   // Space=再生/停止（design #58/#59）。入力中は無効。音楽ネタのときだけ。
   useEffect(() => {
@@ -400,6 +420,10 @@ export function NetaDialog({
           onPlayPause={tp.playPause}
           onRewind={tp.rewind}
           onToggleLoop={tp.toggleLoop}
+          onUndo={editHist.undo}
+          onRedo={editHist.redo}
+          canUndo={editHist.canUndo}
+          canRedo={editHist.canRedo}
         />
       )}
       {rels.length > 0 && (
