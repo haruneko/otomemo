@@ -2,7 +2,11 @@ import { useMemo, useState, type Ref } from "react";
 import type { Note } from "../music";
 import { previewNote } from "../audio";
 import { flowLyric, splitMora } from "../lyrics";
+import { nudgeNotes, duplicateSel, deleteSel, copySel, pasteNotes } from "../noteEdit";
 import { NoteValuePicker } from "./NoteValuePicker";
+
+// ノート編集のクリップボード（モジュール保持＝別ネタへも貼れる・design N1）。
+let noteClipboard: Note[] = [];
 
 const CELL_PX = 12; // .proll-cell の幅。1拍=SUBDIV*CELL_PX で playhead を px 配置（横スクロール追従）。
 const KEY_PX = 40; // .proll-key の幅
@@ -50,6 +54,10 @@ export function PianoRoll({
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
   const [lyricDraft, setLyricDraft] = useState(""); // 流し込む歌詞（かな・読み）。永続せずUIだけ
+  // ノート編集（design N1・案A）：描く/選ぶ モード・選択(index集合)・貼付arm。
+  const [mode, setMode] = useState<"draw" | "select">("draw");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [pasteArmed, setPasteArmed] = useState(false);
 
   const pitches = useMemo(() => {
     const lo = Math.min(low, ...notes.map((n) => n.pitch));
@@ -89,8 +97,67 @@ export function PianoRoll({
     onChange(notes.filter((n) => n !== target));
   }
 
+  // --- ノート編集（選ぶモード）。全て onChange 経由＝Undo/Redo が自動で効く（design N3）。 ---
+  const GRID = 1 / SUBDIV; // 1セル=16分＝時間nudgeの単位（拍）
+  function toDraw() {
+    setMode("draw");
+    setSelected(new Set());
+    setPasteArmed(false);
+  }
+  function onNoteClick(gi: number, target: Note, e: { stopPropagation: () => void }) {
+    e.stopPropagation();
+    if (mode === "draw") {
+      removeNote(target);
+      return;
+    }
+    setSelected((s) => {
+      const t = new Set(s);
+      if (t.has(gi)) t.delete(gi);
+      else t.add(gi);
+      return t;
+    });
+  }
+  function onCellClick(pitch: number, step: number) {
+    if (mode === "draw") {
+      addAt(pitch, step);
+      return;
+    }
+    if (pasteArmed && noteClipboard.length) {
+      const at = step / SUBDIV - pre; // タップ位置の拍にクリップボードを置く
+      const r = pasteNotes(notes, noteClipboard, at);
+      onChange(r.notes);
+      setSelected(r.selection);
+      setPasteArmed(false);
+      return;
+    }
+    setSelected(new Set()); // 空タップ＝全解除
+  }
+  const doNudge = (dPitch: number, dBeats: number) => onChange(nudgeNotes(notes, selected, dPitch, dBeats));
+  function doDuplicate() {
+    const r = duplicateSel(notes, selected, 4); // +1小節右へ
+    onChange(r.notes);
+    setSelected(r.selection);
+  }
+  function doDelete() {
+    onChange(deleteSel(notes, selected));
+    setSelected(new Set());
+  }
+  function doCopy() {
+    noteClipboard = copySel(notes, selected);
+    setPasteArmed(false);
+  }
+
   return (
     <div className="proll-wrap">
+      {/* 描く/選ぶ モードトグル（design N1・案A）。描く=配置/削除、選ぶ=選択して編集。 */}
+      <div className="proll-modes">
+        <button type="button" aria-label="mode-draw" className={mode === "draw" ? "on" : ""} onClick={toDraw}>
+          描く
+        </button>
+        <button type="button" aria-label="mode-select" className={mode === "select" ? "on" : ""} onClick={() => setMode("select")}>
+          選ぶ
+        </button>
+      </div>
       <div className="proll-tools">
         <NoteValuePicker
           options={LENGTHS}
@@ -125,6 +192,24 @@ export function PianoRoll({
           )}
         </div>
       )}
+      {/* 選択バー（選ぶモード）：複製/コピー/貼付/削除＋nudge移動（design N1）。 */}
+      {mode === "select" && (
+        <div className="proll-selbar" aria-label="selection-bar">
+          <span className="muted">{selected.size}個</span>
+          <button type="button" aria-label="dup" disabled={!selected.size} onClick={doDuplicate}>複製</button>
+          <button type="button" aria-label="copy" disabled={!selected.size} onClick={doCopy}>コピー</button>
+          <button type="button" aria-label="paste" className={pasteArmed ? "on" : ""} disabled={!noteClipboard.length} onClick={() => setPasteArmed((a) => !a)}>
+            {pasteArmed ? "貼付：タップ" : "貼付"}
+          </button>
+          <button type="button" aria-label="del" disabled={!selected.size} onClick={doDelete}>削除</button>
+          <span className="sel-nudge">
+            <button type="button" aria-label="nudge-left" disabled={!selected.size} onClick={() => doNudge(0, -GRID)}>←</button>
+            <button type="button" aria-label="nudge-right" disabled={!selected.size} onClick={() => doNudge(0, GRID)}>→</button>
+            <button type="button" aria-label="nudge-up" disabled={!selected.size} onClick={() => doNudge(1, 0)}>↑</button>
+            <button type="button" aria-label="nudge-down" disabled={!selected.size} onClick={() => doNudge(-1, 0)}>↓</button>
+          </span>
+        </div>
+      )}
       <div className="proll" role="grid" aria-label="piano-roll" ref={scrollerRef}>
         {/* #58/#74 プレイヘッド：生beat --phb をコンテンツ座標(px)へ＝横スクロールに追従。1拍=SUBDIV*CELL_PX。 */}
         <div
@@ -155,26 +240,24 @@ export function PianoRoll({
                     (s === pre * SUBDIV ? " downbeat" : "") + // 拍0＝ダウンビート（弱起の境目）
                     (s < pre * SUBDIV ? " pickup" : "")
                   }
-                  onClick={() => addAt(p, s)}
+                  onClick={() => onCellClick(p, s)}
                 />
               ))}
               {notes
-                .filter((n) => n.pitch === p)
-                .map((n, i) => (
+                .map((n, gi) => ({ n, gi }))
+                .filter((x) => x.n.pitch === p)
+                .map(({ n, gi }) => (
                   <button
-                    key={i}
+                    key={gi}
                     type="button"
                     aria-label={`note-${p}-${n.start}`}
-                    className="proll-note"
+                    className={"proll-note" + (selected.has(gi) ? " sel" : "")}
                     style={{
                       left: `${((n.start + pre) / total) * 100}%`,
                       width: `${(n.dur / total) * 100}%`,
                     }}
                     title={`${noteName(p)} ${n.start}拍 +${n.dur}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeNote(n);
-                    }}
+                    onClick={(e) => onNoteClick(gi, n, e)}
                   />
                 ))}
             </div>

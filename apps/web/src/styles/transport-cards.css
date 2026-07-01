@@ -458,6 +458,64 @@
   padding: 0;
   cursor: pointer;
 }
+.proll-note.sel {
+  outline: 2px solid #ffd24a; /* 選択中＝黄枠（どの kind 色でも目立つ）。 */
+  outline-offset: -1px;
+  z-index: 3;
+  filter: brightness(1.15);
+}
+/* 描く/選ぶ モードトグル。 */
+.proll-modes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.proll-modes button {
+  padding: 4px 14px;
+  font-size: 0.8rem;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-modes button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+/* 選択バー（複製/コピー/貼付/削除＋nudge）。 */
+.proll-selbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 6px 8px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.proll-selbar button {
+  padding: 5px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-selbar button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.proll-selbar button:disabled {
+  opacity: 0.35;
+}
+.sel-nudge {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+}
 .proll-key {
   width: 40px;
   height: 14px;
