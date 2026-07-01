@@ -314,6 +314,16 @@
 
 **段階**：LS1 `flowLyric` 純TS＋モーラ配列splitter(TDD) → LS2 lyric に reading 欄(後方互換) → LS3 メロエディタ「歌詞を流し込む」(lyric選択→ notes に syllable)＋**音符下に歌詞表示**(Playwright) → LS4 手動調整/MIDI歌詞メタ/MCP露出(将来)。最初の縦スライスは緩く(動かして学ぶ)。
 
+### エディタ Undo/Redo（2026-07-01・backlog「簡易作曲ツールA」・スマホ前提）
+**目的**：メロ/コード/ベース/リズム/コード楽器の編集を取り消せる/やり直せる。
+**決定U1（機構＝スナップショット履歴）**：**NetaDialog 層に編集内容のスナップショット履歴を1つ持つ**（`useEditHistory`）。全単体エディタは content 構造を NetaDialog state で編集するので、**構造一式の snapshot を push/pop で復元**すれば全 kind に一発で効く（コマンドパターン不要＝簡易）。
+- snapshot ＝ `{ notes, chords, rhythm, bassPattern, bassSteps, chordPat, key, mode, tempo, program, len, pickup }`（構造的な楽音編集）。**title/text/tags/mood 等のテキスト入力は含めない**（input の native undo があり・per-keystroke で履歴が汚れるため）。
+- 記録＝各 state 変化を effect で検知し**変化直前**の snapshot を past へ push（future クリア）。**undo/redo 適用中は記録しない**（guard フラグ）。深さ上限（50）。past/future 長は再描画のため state（ボタン disable 連動）。
+- **純ロジック（push/undo/redo）は `history.ts` に分離し TDD**。
+**決定U2（scope）**：単体エディタ（melody/bass/chord/chord_pattern/rhythm）。**section/song コンテナ（SectionEditor 自前 state）は対象外＝将来**。※backlog「ネタの版管理(chat書込のサーバ側undo)」とは別レイヤ・両立。
+**決定U3（UI＝案1確定）**：**TransportBar 左に ↩︎/↪︎**（親指ゾーン・縦を消費しない）。**絵文字でなく文字矢印/SVG**（⏮🔁の□化を避ける）。空スタックは disable。feedback＝内容が戻る（トーストは将来）。
+**段階**：US1 `history.ts` 純ロジック(TDD) → US2 `useEditHistory` hook＋NetaDialog 配線(snapshot/apply) → US3 TransportBar ↩︎/↪︎（Playwrightで「置く→undo→戻る→redo→復活」確認）。
+
 ### 再生
 - section/song：メインペーンに**トランスポート（全体再生）パネル**。
 - ネタ帳：カードを**タップで個別再生**（断片を単独 audition、調ヒントで鳴らす）。
