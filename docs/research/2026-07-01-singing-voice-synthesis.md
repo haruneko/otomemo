@@ -94,6 +94,12 @@ VOICEVOX ENGINE 0.25.2 linux-cpu-x64 を母艦（Ryzen 7 8845HS・16スレッド
 - MusicXML書き出しを作るか（NEUTRINO/汎用の橋）。
 - 漢字→読みの自動化（pyopenjtalk 等）は別トラック。
 
+## 研究クローズ（2026-07-01）＝結論と持ち越し
+- **技術的にアリ**：VOICEVOX歌唱をローカルCPU（母艦Ryzen8845HS）で**リアルタイムより速く**（0.38x）レンダ成功・音質もユーザーOK。フットプリント≈2GB＋常駐1・sudo不要で立つ。
+- **細かい雰囲気も可**：`FrameAudioQuery` の f0/volume/phoneme をフレーム編集して合成前に注入できる＝**自前UIで表現を作り込む余地あり**（ユーザー意向＝offloadだけでなく自作の余地を残す）。
+- **外部の本格エディタも無料であり**（VOICEVOX公式Song＝MusicXML/MIDI取込・OpenUTAU）。橋＝**MusicXML/MIDI+歌詞の書き出し（未実装）**。
+- **これは本線（作曲支援）とは別口**＝研究はここでクローズ。**フィーチャーは backlog「仮歌入れ込み」に記載**（着手時に Task 化）。最小実装案＝①ラフ歌唱プレビュー(VOICEVOX API・🎤+キャッシュ)②MusicXML/MIDI+歌詞書き出し③表現編集(f0/volume)は将来の自作余地。
+
 ## 出典
 - NEUTRINO（freeware・MusicXML入→WAV・CPU可だが低速・一部ボイス非商用）：[Vocal Synth Wiki](https://vocalsynth.fandom.com/wiki/NEUTRINO) / [sleepfreaks解説](https://sleepfreaks-dtm.com/en/softsynth/neutrino/)
 - OpenUTAU（classic WORLDLINE + neural DiffSinger/ENUNU/Vogen・ボイスバンク）：[Rendering Pipeline (DeepWiki)](https://deepwiki.com/stakira/OpenUtau/4.1-rendering-pipeline) / [OpenUtau Wiki](https://github.com/stakira/OpenUtau/wiki/Voicebank-development)
