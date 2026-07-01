@@ -8,9 +8,9 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { api, type Neta } from "./api";
-import { FILTER_KINDS, MUSIC_KINDS, CONTAINER_KINDS } from "./kinds";
+import { FILTER_KINDS } from "./kinds";
 import { applyColors, loadColors } from "./theme";
-import { Capture } from "./components/Capture";
+import { KindIcon } from "./components/KindIcon";
 import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
 import { ThemeSettings } from "./settings/ThemeSettings";
@@ -371,15 +371,30 @@ export function App() {
           }
         >
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
-          <div className="notebook-actions">
-            <button className="import-btn accent" onClick={() => void newSong()}>
-              ＋曲を組む
+          {/* 作成タイル＝「空のカード」（左に色帯＋kindアイコン）。押すとその kind のネタを作りエディタへ。
+              放り込むフォームは撤去＝雑な捕獲はチャットに委譲（2026-07-02）。 */}
+          <div className="create-tiles">
+            <button className="create-tile" style={{ ["--k" as string]: "var(--k-section)" }} onClick={() => void newSong()}>
+              <KindIcon kind="song" />
+              <span>＋曲</span>
             </button>
-            {/* 音楽ネタの新規＝エディタ直行（放り込む=テキスト捕獲 と分離）。 */}
-            <button className="import-btn" onClick={() => void createBlank("melody", "新しいメロ")}>＋メロ</button>
-            <button className="import-btn" onClick={() => void createBlank("chord_progression", "新しいコード進行")}>＋コード</button>
-            <button className="import-btn" onClick={() => void createBlank("rhythm", "新しいリズム")}>＋リズム</button>
-            <button className="import-btn" onClick={() => void createBlank("bass", "新しいベース")}>＋ベース</button>
+            {(
+              [
+                ["melody", "メロ", "新しいメロ"],
+                ["chord_progression", "コード", "新しいコード進行"],
+                ["rhythm", "リズム", "新しいリズム"],
+                ["bass", "ベース", "新しいベース"],
+                ["lyric", "歌詞", "新しい歌詞"],
+                ["theme", "テーマ", "新しいテーマ"],
+              ] as const
+            ).map(([k, label, title]) => (
+              <button key={k} className="create-tile" style={{ ["--k" as string]: `var(--k-${k})` }} onClick={() => void createBlank(k, title)}>
+                <KindIcon kind={k} />
+                <span>＋{label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="notebook-actions">
             <label className="import-btn">
               {importing ? "取り込み中…" : "MIDI取込"}
               <input
@@ -423,14 +438,6 @@ export function App() {
               />
             </label>
           </div>
-          <Capture
-            activeProject={activeProject}
-            onCreated={(n) => {
-              void reload();
-              // 音楽/コンテナ kind は中身が空＝そのままエディタを開く（再タップ不要・スマホUX）。
-              if (MUSIC_KINDS.includes(n.kind) || CONTAINER_KINDS.includes(n.kind)) setActive(n);
-            }}
-          />
           <div className="scope-tabs" role="tablist" aria-label="scope">
             <button
               role="tab"
