@@ -208,6 +208,33 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+/* メタ設定の折りたたみトグル（土地節約）。畳んだ時は要約(調・♩・音色)を1行で。 */
+.editor-meta-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin: 2px 0 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.editor-meta-toggle .emt-caret {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.editor-meta-summary {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .editor-actions {
   display: flex;
   gap: 8px;

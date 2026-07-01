@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
@@ -48,6 +48,8 @@ const neta: Neta = {
 };
 
 describe("NetaDialog", () => {
+  beforeEach(() => localStorage.clear()); // メタ折りたたみ状態が test 間に残らないよう
+
   it("edits text and saves", async () => {
     const onChanged = vi.fn();
     const onClose = vi.fn();
@@ -66,6 +68,7 @@ describe("NetaDialog", () => {
     const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByLabelText("cell-60-0"));
+    await userEvent.click(screen.getByLabelText("toggle-meta")); // メタは既定で畳む→開く
     await userEvent.selectOptions(screen.getByLabelText("key"), "9");
     await userEvent.selectOptions(screen.getByLabelText("mode"), "minor"); // 長短を選べる（調号）
     const tempoInput = screen.getByLabelText("tempo");
@@ -145,6 +148,7 @@ describe("NetaDialog", () => {
       content: { chords: [{ root: 6, quality: "m", start: 0, dur: 4 }] },
     };
     render(<NetaDialog neta={cp} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta")); // メタは既定で畳む→開く
     // 1回目：第1候補 F#m を設定
     await userEvent.click(screen.getByLabelText("detect-key"));
     await waitFor(() => expect((screen.getByLabelText("key") as HTMLSelectElement).value).toBe("6"));
