@@ -31,6 +31,8 @@ export interface KindEditorBodyProps {
   setBassMode: (m: "absolute" | "relative") => void;
   melodyView: "roll" | "pad";
   setMelodyView: (v: "roll" | "pad") => void;
+  rollMode: "draw" | "select";
+  setRollMode: (v: "draw" | "select") => void;
   len: number;
   setLen: (n: number) => void;
   pickup: number; // 弱起（lead-in拍数）
@@ -75,13 +77,33 @@ export function KindEditorBody(p: KindEditorBodyProps) {
             />
           ) : (
             <>
-              <div className="input-toggle">
-                <button type="button" className={p.melodyView === "roll" ? "on" : ""} onClick={() => p.setMelodyView("roll")}>
-                  ロール
-                </button>
-                <button type="button" className={p.melodyView === "pad" ? "on" : ""} onClick={() => p.setMelodyView("pad")}>
-                  パッド
-                </button>
+              {/* ロール/パッド と 描く/選ぶ を同じ行に（縦詰め・縦線で区切り）。 */}
+              <div className="roll-toolbar">
+                <div className="input-toggle">
+                  <button type="button" className={p.melodyView === "roll" ? "on" : ""} onClick={() => p.setMelodyView("roll")}>
+                    ロール
+                  </button>
+                  <button type="button" className={p.melodyView === "pad" ? "on" : ""} onClick={() => p.setMelodyView("pad")}>
+                    パッド
+                  </button>
+                </div>
+                {p.melodyView === "roll" && (
+                  <>
+                    <span className="tb-divider" aria-hidden="true" />
+                    <div className="proll-modes">
+                      <button type="button" aria-label="mode-draw" title="描く（配置/削除）" className={p.rollMode === "draw" ? "on" : ""} onClick={() => p.setRollMode("draw")}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor" />
+                        </svg>
+                      </button>
+                      <button type="button" aria-label="mode-select" title="選ぶ（選択して編集）" className={p.rollMode === "select" ? "on" : ""} onClick={() => p.setRollMode("select")}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                          <rect x="3" y="3" width="18" height="18" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3.5 3" />
+                        </svg>
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
               {p.melodyView === "roll" ? (
                 <>
@@ -94,6 +116,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     low={isBass ? 28 : undefined}
                     high={isBass ? 55 : undefined}
                     enableLyric={isMelody}
+                    mode={p.rollMode}
                     playheadRef={tp.lineRef}
                     scrollerRef={tp.scrollerRef}
                   />

@@ -70,6 +70,8 @@ export function MetaPanel(p: {
     f.isContainer ? p.meter : null,
     f.showMeta ? `♩${p.tempo}` : null,
     f.isMelody || f.isBass || f.isChordPat ? GM_INSTRUMENTS.find((g) => g.value === p.program)?.label : null,
+    p.rollBars ? `${Math.max(1, Math.round(p.rollBars.len / 4))}小節` : null,
+    p.rollBars && p.rollBars.pickup > 0 ? `弱起${p.rollBars.pickup}` : null,
   ]
     .filter(Boolean)
     .join(" · ");

@@ -392,11 +392,35 @@
   min-height: 30px;
 }
 /* モードトグルのアイコン中央寄せ。 */
+.proll-modes {
+  display: flex;
+  gap: 4px;
+}
 .proll-modes button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 40px;
+}
+/* ロール/パッド と 描く/選ぶ を同じ行に（縦線で区切り）。 */
+.roll-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.tb-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+  margin: 0 2px;
+}
+/* 音価ボタンと付点の区切り線（付点=修飾で別物と分かる）。 */
+.nv-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--line);
+  margin: 0 4px;
 }
 /* 歌詞流し込み入力（メロのみ・LS3）。 */
 .proll-lyric-input {

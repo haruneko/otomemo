@@ -76,6 +76,7 @@ export function NetaDialog({
         bassSteps={ed.bassSteps} setBassSteps={ed.setBassSteps}
         bassMode={ed.bassMode} setBassMode={ed.setBassMode}
         melodyView={ed.melodyView} setMelodyView={ed.setMelodyView}
+        rollMode={ed.rollMode} setRollMode={ed.setRollMode}
         len={ed.len} setLen={ed.setLen}
         pickup={ed.pre} setPickup={ed.setPickup}
         text={ed.text} setText={ed.setText}

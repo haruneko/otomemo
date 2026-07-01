@@ -53,6 +53,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     programOf(neta.content) ?? (neta.kind === "bass" ? 33 : 0), // #47 GM音色（bassは既定フィンガーベース）
   );
   const [melodyView, setMelodyView] = useState<"roll" | "pad">("roll"); // #35 ロール/パッド
+  const [rollMode, setRollMode] = useState<"draw" | "select">("draw"); // ロールの描く/選ぶ（ロール/パッドと同じ行に出す）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
   const [bassMode, setBassMode] = useState<"absolute" | "relative">(
     isRelativeBass(neta.content) ? "relative" : "absolute",
@@ -234,7 +235,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram,
     notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat,
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
-    melodyView, setMelodyView, len, setLen, pickup, setPickup, pre,
+    melodyView, setMelodyView, rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
     // 派生・道具
     playable, tp, editHist, rels, busy, schedId, colorKind,
     // アクション

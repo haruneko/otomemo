@@ -1,4 +1,4 @@
-import { useMemo, useState, type Ref } from "react";
+import { useEffect, useMemo, useState, type Ref } from "react";
 import type { Note } from "../music";
 import { previewNote } from "../audio";
 import { flowLyric, splitMora } from "../lyrics";
@@ -40,6 +40,7 @@ export function PianoRoll({
   low = DEFAULT_LOW,
   high = DEFAULT_HIGH,
   enableLyric = false,
+  mode = "draw",
 }: {
   notes: Note[];
   onChange: (n: Note[]) => void;
@@ -50,14 +51,20 @@ export function PianoRoll({
   low?: number; // 既定で見せる最低音（bass は E1=28 など低域既定）
   high?: number; // 既定で見せる最高音
   enableLyric?: boolean; // メロのみ：歌詞流し込み（LS3・design L2）
+  mode?: "draw" | "select"; // 描く/選ぶ（トグルは KindEditorBody 側＝ロール/パッドと同じ行に）
 }) {
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
   const [lyricDraft, setLyricDraft] = useState(""); // 流し込む歌詞（かな・読み）。永続せずUIだけ
-  // ノート編集（design N1・案A）：描く/選ぶ モード・選択(index集合)・貼付arm。
-  const [mode, setMode] = useState<"draw" | "select">("draw");
+  // ノート編集（design N1・案A）：選択(index集合)・貼付arm。描く に戻ったら選択解除。
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pasteArmed, setPasteArmed] = useState(false);
+  useEffect(() => {
+    if (mode === "draw") {
+      setSelected(new Set());
+      setPasteArmed(false);
+    }
+  }, [mode]);
 
   const pitches = useMemo(() => {
     const lo = Math.min(low, ...notes.map((n) => n.pitch));
@@ -99,11 +106,6 @@ export function PianoRoll({
 
   // --- ノート編集（選ぶモード）。全て onChange 経由＝Undo/Redo が自動で効く（design N3）。 ---
   const GRID = 1 / SUBDIV; // 1セル=16分＝時間nudgeの単位（拍）
-  function toDraw() {
-    setMode("draw");
-    setSelected(new Set());
-    setPasteArmed(false);
-  }
   function onNoteClick(gi: number, target: Note, e: { stopPropagation: () => void }) {
     e.stopPropagation();
     if (mode === "draw") {
@@ -149,19 +151,6 @@ export function PianoRoll({
 
   return (
     <div className="proll-wrap">
-      {/* 描く/選ぶ モードトグル（design N1・案A）。鉛筆=配置/削除、範囲=選択して編集。 */}
-      <div className="proll-modes">
-        <button type="button" aria-label="mode-draw" title="描く（配置/削除）" className={mode === "draw" ? "on" : ""} onClick={toDraw}>
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor" />
-          </svg>
-        </button>
-        <button type="button" aria-label="mode-select" title="選ぶ（選択して編集）" className={mode === "select" ? "on" : ""} onClick={() => setMode("select")}>
-          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="3" width="18" height="18" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3.5 3" />
-          </svg>
-        </button>
-      </div>
       <div className="proll-tools">
         <NoteValuePicker
           options={LENGTHS}

@@ -35,6 +35,8 @@ export function NoteValuePicker({
           <NoteGlyph note={o.label} />
         </button>
       ))}
+      {/* 付点は音価とは別（修飾）＝縦線で区切って少し離す。 */}
+      <span className="nv-divider" aria-hidden="true" />
       <button
         type="button"
         aria-label="dotted"
