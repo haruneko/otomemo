@@ -45,6 +45,16 @@
 - **これで"重さ"は消える**：レンダは押した時だけ＝**1セッションで数回**。常駐サーバのCPUには全く問題ない（重いのは"毎編集で回す"時だけ）。
 - 実装は既存の **job/asset/render** に乗る＝「sing ジョブ→ローカルVOICEVOX HTTP→WAV asset→通知」。VOICEVOX ENGINE は cm-search と並ぶ常駐サービスとして1本追加。
 
+## PoC実測（2026-07-01・母艦で実行）
+VOICEVOX ENGINE 0.25.2 linux-cpu-x64 を母艦（Ryzen 7 8845HS・16スレッド・WSL2・GPU未使用）で直起動し、サンプルメロを歌わせて実測。**成功**。
+- **導入**：GitHub release の `voicevox_engine-linux-cpu-x64-0.25.2.7z.001`（**DL 1.82GB**）→ 解凍後 **2.1GB**。7z解凍は `uv tool install py7zr`（sudo不要）。起動＝`./run --host 127.0.0.1 --port 50021`（**起動1秒**）。
+- **歌唱スタイル構造**：`/singers` の各styleに `type`。**`sing`＝波音リツ(id 6000)＝本物の歌声**、**`frame_decode`＝ハミング（ずんだもん3003等・多数キャラ）**。正道＝**query は sing、synth は frame_decode(声質)** を別々に渡す。
+- **API**：`POST /sing_frame_audio_query?speaker=<sing id>`（body=Score）→ FrameAudioQuery → `POST /frame_synthesis?speaker=<frame_decode id>`（body=query）→ **WAV(24kHz mono 16bit)**。
+- **Score形（確定）**：`{"notes":[{"key":MIDI番号 or null(休符), "frame_length":フレーム数, "lyric":"かな" or ""}]}`。**先頭に休符noteが必要**。フレームレート=**93.75 fps**（24000/256）＝`frame_length = round(秒 × 93.75)`。我々の `pitch/dur/syllable` がほぼ直変換。
+- **速度＝リアルタイムより速い**：2.9秒の歌唱を **query 0.80s + synth 0.29s = 合計1.10s（0.38x）**。→ **オンデマンドで1フレーズ≒1秒**。前提だった「数秒〜重い」は覆り、CPUで十分実用。
+- **注意（実測中に判明）**：エンジンはHTTP常駐1プロセス。**未ロードstyleは初回に遅延ロード**（初回レンダのみ遅い場合あり＝ウォームアップ推奨）。本PoCでは初回1.1s、別styleへの2回目呼びで詰まり→（サンドボックス側のタイムアウトSIGTERMがエンジンに波及して落ちた＝運用では無関係）。
+- **結論**：**本命VOICEVOX歌唱はローカルCPUで実用速度・音質は要試聴。** フットプリント約2GB＋常駐1プロセス。導入は直バイナリでsudo不要。
+
 ## 制約・注意
 - **GPU無し見込み**→ニューラル(NEUTRINO/DiffSinger)はCPUで遅い（数分/分）。**VOICEVOX humming / OpenUTAU classic(WORLDLINE) は軽め**。
 - **フットプリント（VOICEVOX ENGINE）**：Docker **CPU版 ≈1.85GB（圧縮・Docker Hub表示）→展開後の実ディスクはその2〜3倍(≈4-5GB目安)**。GPU版≈2.95GBは**GPU無しなので不要**。嵩の主因は音声モデル。RAMは常駐で数百MB〜。**※母艦はarchitecture上「Docker不使用(WSL2でtsx/uv直起動)」方針**＝Docker前提にするか、engineをバイナリ/uvで直起動するかは要判断（ディスク量は同程度・モデルが本体）。数GB＋常駐1プロセス＝ミニPCで許容範囲だが「軽くはない」。合唱パッチ(Tier0)は+0GB。
