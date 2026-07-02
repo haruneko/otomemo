@@ -19,8 +19,19 @@ article .kind {
   font-weight: 600;
   color: var(--k, var(--fg));
 }
+/* LV2 情報優先度：id は識別用の脇役＝小さく薄く退避（タイトルを主役に）。 */
+article .id {
+  font-size: 0.6rem;
+  font-weight: 400;
+  opacity: 0.45;
+  letter-spacing: 0.02em;
+}
 article .body {
   margin: 6px 0;
+  /* LV2：タイトルを主役に＝一段太く。テキストプレビュー兼用なので過剰にはしない。 */
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--fg);
   white-space: pre-wrap;
   display: -webkit-box;
   -webkit-line-clamp: 6;

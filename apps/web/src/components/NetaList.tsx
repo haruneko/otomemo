@@ -37,6 +37,8 @@ export function NetaCard({
   const label = neta.title ?? neta.text ?? "(無題)";
   const [gen, setGen] = useState(false);
   const [genOpen, setGenOpen] = useState(false);
+  // LV2: 副アクション（複製/ライブラリへ/生成）は既定で畳む＝主要2つ(▶/相談)＋「…」に整理。
+  const [moreOpen, setMoreOpen] = useState(false);
   // #52②c: ネタ帳カードをセクションのレーンへドラッグ配置（PC）。ハンドルだけドラッグ可。
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `card-${neta.id}`,
@@ -231,7 +233,18 @@ export function NetaCard({
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
           相談
         </button>
-        {scope === "library" ? (
+        {!moreOpen && (
+          <button
+            className="bs-btn more"
+            aria-label={`more-${neta.id}`}
+            title="他の操作（複製・ライブラリ・生成）"
+            onClick={() => setMoreOpen(true)}
+          >
+            …
+          </button>
+        )}
+        {moreOpen &&
+          (scope === "library" ? (
           <button
             className="bs-btn"
             title="このライブラリ進行をプロジェクトにコピー（編集可・元は不変）"
@@ -265,8 +278,9 @@ export function NetaCard({
               ライブラリへ
             </button>
           </>
-        )}
-        {gen ? (
+          ))}
+        {moreOpen &&
+          (gen ? (
           <span className="bs-btn">生成中…</span>
         ) : genOpen ? (
           <>
@@ -287,7 +301,7 @@ export function NetaCard({
           <button className="bs-btn" onClick={() => setGenOpen(true)}>
             生成 ▾
           </button>
-        )}
+          ))}
       </div>
     </article>
   );
@@ -316,38 +330,72 @@ export function NetaList({
     setDense(d);
     localStorage.setItem("cm-list-density", d ? "list" : "card");
   };
-  const toggle = (
-    <div className="list-density" role="group" aria-label="表示密度">
-      <button
-        className={dense ? "" : "on"}
-        aria-pressed={!dense}
-        title="カード表示（リッチ）"
-        onClick={() => setDensity(false)}
+  // LV2 並べ替え。既定=受信順（検索の関連度順を壊さない）。localStorage で永続。
+  const [sortKey, setSortKey] = useState<string>(
+    () => localStorage.getItem("cm-list-sort") || "default",
+  );
+  const changeSort = (k: string) => {
+    setSortKey(k);
+    localStorage.setItem("cm-list-sort", k);
+  };
+  const labelOf = (n: Neta) => n.title ?? n.text ?? "";
+  const ordered =
+    sortKey === "default"
+      ? items
+      : [...items].sort((a, b) => {
+          if (sortKey === "updated") return (b.updated ?? "").localeCompare(a.updated ?? "");
+          if (sortKey === "kind")
+            return a.kind.localeCompare(b.kind) || (b.updated ?? "").localeCompare(a.updated ?? "");
+          if (sortKey === "title") return labelOf(a).localeCompare(labelOf(b), "ja");
+          return 0;
+        });
+
+  const controls = (
+    <div className="list-controls">
+      <div className="list-density" role="group" aria-label="表示密度">
+        <button
+          className={dense ? "" : "on"}
+          aria-pressed={!dense}
+          title="カード表示（リッチ）"
+          onClick={() => setDensity(false)}
+        >
+          ▦ カード
+        </button>
+        <button
+          className={dense ? "on" : ""}
+          aria-pressed={dense}
+          title="リスト表示（圧縮・一覧しやすい）"
+          onClick={() => setDensity(true)}
+        >
+          ☰ リスト
+        </button>
+      </div>
+      <select
+        className="list-sort"
+        aria-label="並べ替え"
+        value={sortKey}
+        title="並べ替え"
+        onChange={(e) => changeSort(e.target.value)}
       >
-        ▦ カード
-      </button>
-      <button
-        className={dense ? "on" : ""}
-        aria-pressed={dense}
-        title="リスト表示（圧縮・一覧しやすい）"
-        onClick={() => setDensity(true)}
-      >
-        ☰ リスト
-      </button>
+        <option value="default">既定順</option>
+        <option value="updated">更新が新しい順</option>
+        <option value="kind">種別ごと</option>
+        <option value="title">タイトル順</option>
+      </select>
     </div>
   );
   if (items.length === 0)
     return (
       <>
-        {toggle}
+        {controls}
         <p className="muted">{emptyText}</p>
       </>
     );
   return (
     <>
-      {toggle}
+      {controls}
       <section aria-label="neta-list" className={dense ? "dense" : ""}>
-        {items.map((n) => (
+        {ordered.map((n) => (
           <NetaCard
             key={n.id}
             neta={n}

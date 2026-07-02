@@ -64,12 +64,39 @@ describe("NetaList", () => {
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "x" }));
   });
 
+  it("LV2: 副アクションは既定で畳まれ「…」で開く", async () => {
+    render(<NetaCard neta={mk({ id: "x", kind: "melody", title: "m" })} />);
+    // 既定＝主要2つ(相談＋…)のみ。複製/生成は隠れている。
+    expect(screen.queryByRole("button", { name: "複製" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "生成 ▾" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("more-x"));
+    expect(screen.getByRole("button", { name: "複製" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成 ▾" })).toBeInTheDocument();
+  });
+
+  it("LV2: 並べ替え=タイトル順で表示順が変わる", async () => {
+    localStorage.clear();
+    render(
+      <NetaList
+        items={[
+          mk({ id: "1", kind: "melody", title: "ん最後" }),
+          mk({ id: "2", kind: "melody", title: "あ最初" }),
+        ]}
+      />,
+    );
+    await userEvent.selectOptions(screen.getByLabelText("並べ替え"), "title");
+    const cards = screen.getAllByLabelText("neta-card");
+    expect(cards[0]).toHaveTextContent("あ最初");
+    expect(cards[1]).toHaveTextContent("ん最後");
+  });
+
   it("generates from the 生成 menu (melody) and creates a linked neta", async () => {
     createJob.mockResolvedValue({ id: "j1", status: "queued" });
     getJob.mockResolvedValue({ id: "j1", status: "done", result: { content: { notes: [] } }, error: null });
     createNeta.mockResolvedValue({ id: "m1" });
     const onChanged = vi.fn();
     render(<NetaCard neta={mk({ id: "x", text: "夜" })} onChanged={onChanged} />);
+    await userEvent.click(screen.getByLabelText("more-x")); // LV2: 副アクションは「…」の裏
     await userEvent.click(screen.getByRole("button", { name: "生成 ▾" }));
     await userEvent.click(screen.getByRole("button", { name: "メロ" }));
     await waitFor(() => expect(createNeta).toHaveBeenCalled());
@@ -85,6 +112,7 @@ describe("NetaList", () => {
     createNeta.mockResolvedValue({ id: "s1" });
     placeChild.mockResolvedValue({ ok: true });
     render(<NetaCard neta={mk({ id: "x", text: "夜" })} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("more-x")); // LV2: 副アクションは「…」の裏
     await userEvent.click(screen.getByRole("button", { name: "生成 ▾" }));
     await userEvent.click(screen.getByRole("button", { name: "全体" }));
     await waitFor(() => expect(placeChild).toHaveBeenCalledTimes(3));

@@ -263,11 +263,33 @@ article[aria-label="neta-card"].dragging {
   background: var(--accent);
   opacity: 0.7; /* ドロップ可の強調 */
 }
+/* 一覧コントロール行＝表示密度＋並べ替え（研究 2026-07-02・LV2）。 */
+.list-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  flex-wrap: wrap;
+}
+.list-sort {
+  margin-left: auto; /* 密度は左・並べ替えは右 */
+  font-size: 0.76rem;
+  padding: 4px 8px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 /* 表示密度トグル（カード｜リスト）＝ネタ一覧の圧縮切替（研究 2026-07-02）。 */
 .list-density {
   display: flex;
   gap: 4px;
-  margin: 0 0 8px;
+}
+/* 副アクション畳みの「…」＝主要2つ(▶/相談)の脇に控えめに（LV2 アクション整理）。 */
+.bs-btn.more {
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--muted);
 }
 .list-density button {
   font-size: 0.76rem;
