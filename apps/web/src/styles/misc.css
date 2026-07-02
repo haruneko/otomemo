@@ -502,10 +502,45 @@ details.theme summary {
 @media (max-width: 820px) {
   .ps-grid {
     grid-template-columns: 1fr;
+    gap: 1rem; /* 縦詰め：カラム間の 1.5rem は縦積みでは過剰 */
+  }
+  .ps-main {
+    gap: 1rem;
+  }
+  /* ファイル欄が「浮いた枠」になって不揃い→他ブロックと同じフラットな見た目に揃える。 */
+  .ps-knowledge {
+    background: none;
+    border: none;
+    padding: 0;
   }
   .project-screen {
     height: auto;
     overflow: visible;
     padding-bottom: 2rem;
   }
+}
+
+/* ジョブ状態の色ドット（絵文字の代替）。 */
+.job-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+  background: var(--muted);
+}
+.job-dot.running { background: #3b82f6; }
+.job-dot.waiting { background: #e0a33c; }
+.job-dot.done { background: #3ea36a; }
+.job-dot.failed { background: #e0533f; }
+
+/* ヘッダ/プロジェクト画面のアイコンボタン：SVG を中央寄せ（絵文字→SVG化）。 */
+.gear svg,
+.chat-bubble svg,
+.ps-row-actions svg {
+  display: block;
+}
+.ps-title svg {
+  vertical-align: -3px;
 }

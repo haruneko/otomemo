@@ -13,6 +13,7 @@ import { api, type Neta } from "./api";
 import { FILTER_KINDS } from "./kinds";
 import { applyColors, loadColors } from "./theme";
 import { KindIcon } from "./components/KindIcon";
+import { Icon } from "./components/Icon";
 import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
 import { ThemeSettings } from "./settings/ThemeSettings";
@@ -387,11 +388,12 @@ export function App() {
                 setProjectView(true);
               }}
             >
-              🏠
+              <Icon name="home" />
             </button>
           )}
           <button className="gear" aria-label="tray" title="受け取りトレイ" onClick={openTray}>
-            📥{doneCount > 0 && <span className="badge">{doneCount}</span>}
+            <Icon name="inbox" />
+            {doneCount > 0 && <span className="badge">{doneCount}</span>}
           </button>
           <button
             className="gear"
@@ -399,7 +401,7 @@ export function App() {
             title="設定"
             onClick={() => setSettingsOpen(true)}
           >
-            ⚙
+            <Icon name="gear" />
           </button>
         </div>
       </div>
@@ -647,7 +649,7 @@ export function App() {
           title="相談（Chat）"
           onClick={() => openChat()}
         >
-          💬
+          <Icon name="chat" size={24} />
         </button>
       )}
       {chatOpen && (

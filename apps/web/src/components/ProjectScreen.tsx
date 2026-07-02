@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Neta, type ProjectFile, type ChatThread, type Project, type Job } from "../api";
 import { projectTag } from "../project";
+import { Icon } from "./Icon";
 
 function fileSize(n: number | null): string {
   if (n == null) return "";
@@ -12,13 +13,13 @@ function fileSize(n: number | null): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ジョブ状態のラベル（投げて受け取るの可視化）。
+// ジョブ状態のラベル（投げて受け取るの可視化）。絵文字は □ 化するので色ドット＋テキストで表す。
 const JOB_STATUS: Record<string, string> = {
-  queued: "⏳ 待機",
-  running: "🔄 実行中",
-  waiting: "❓ 確認待ち",
-  done: "✅ 完了",
-  failed: "⚠ 失敗",
+  queued: "待機",
+  running: "実行中",
+  waiting: "確認待ち",
+  done: "完了",
+  failed: "失敗",
 };
 
 export function ProjectScreen({
@@ -133,14 +134,18 @@ export function ProjectScreen({
   return (
     <div className="project-screen" aria-label="project-screen">
       <div className="ps-titlebar">
-        <h2 className="ps-title">🏠 {project}</h2>
+        <h2 className="ps-title">
+          <Icon name="home" size={22} /> {project}
+        </h2>
         <button className="ps-edit" aria-label="edit-project" onClick={() => setEditing((v) => !v)}>
           {editing ? "閉じる" : "編集"}
         </button>
       </div>
       {!editing && meta?.description && <p className="ps-desc">{meta.description}</p>}
       {!editing && meta?.instructions && (
-        <p className="ps-instr muted" title="この器での会話に効く指示">📌 {meta.instructions}</p>
+        <p className="ps-instr muted" title="この器での会話に効く指示">
+          <Icon name="pin" size={15} /> {meta.instructions}
+        </p>
       )}
 
       {editing && (
@@ -203,6 +208,7 @@ export function ProjectScreen({
                     <div className="ps-job">
                       <span className="ph-title">{j.instruction ?? j.intent}</span>
                       <span className="muted">
+                        <span className={"job-dot " + j.status} aria-hidden="true" />
                         {JOB_STATUS[j.status] ?? j.status}
                         {j.progress ? ` · ${j.progress}` : ""}
                       </span>
@@ -253,10 +259,10 @@ export function ProjectScreen({
                   </button>
                   <span className="ps-row-actions">
                     <button type="button" aria-label="rename-session" title="改名" onClick={() => void renameSession(s)}>
-                      ✎
+                      <Icon name="edit" size={16} />
                     </button>
                     <button type="button" aria-label="delete-session" title="削除" onClick={() => void deleteSession(s)}>
-                      🗑
+                      <Icon name="trash" size={16} />
                     </button>
                   </span>
                 </li>
@@ -302,7 +308,7 @@ export function ProjectScreen({
                 </a>
                 <span className="ps-row-actions">
                   <button type="button" aria-label="delete-file" title="削除" onClick={() => void deleteFile(f)}>
-                    🗑
+                    <Icon name="trash" size={16} />
                   </button>
                 </span>
               </li>
