@@ -12,9 +12,10 @@ test.describe("editors persist (U6/U7)", () => {
     });
     try {
       await openNeta(page, `${s}-ch`);
-      await page.getByRole("button", { name: "＋コード" }).click();
+      // 「＋コード」は作成タイルとエディタ内の追加ボタンで同名＝エディタにスコープして曖昧回避。
+      await page.getByLabel("edit-neta").getByRole("button", { name: "＋コード" }).click();
       await page.getByLabel("root-0").selectOption("9"); // A
-      await page.getByLabel("quality-0").selectOption("m"); // minor
+      await page.getByLabel("triad-0").selectOption("m"); // minor（quality選択→decomposed 三和音に変更済）
       await page.getByRole("button", { name: "保存" }).click();
       await expect(page.getByLabel("edit-neta")).toHaveCount(0, { timeout: 8000 });
       const after = await (await request.get(`/api/neta/${ch.id}`)).json();

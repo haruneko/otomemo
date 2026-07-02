@@ -13,6 +13,7 @@ test("section save: key/tempo/meter roundtrip persists (U9)", async ({ page, req
   });
   try {
     await openNeta(page, `${s}-sec`);
+    await page.getByLabel("toggle-meta").click(); // メタ(調/tempo/拍子)は既定折りたたみ→展開
     const tempo = page.getByLabel("tempo");
     await tempo.fill("");
     await tempo.fill("96");
