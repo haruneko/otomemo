@@ -284,11 +284,18 @@ export function App() {
     return () => window.removeEventListener("pointerdown", onFirst);
   }, []);
 
+  const reloadSeq = useRef(0);
   const reload = useCallback(async () => {
+    // レース対策：複数の reload が並走し得る（初期ロード↔検索入力）。遅い旧結果が速い新結果を
+    // 後から上書きしないよう、最新シーケンスの結果だけ採用する（検索が全件表示に戻る不具合の修正）。
+    const seq = ++reloadSeq.current;
+    const put = (items: (Neta & { matchType?: string })[]) => {
+      if (seq === reloadSeq.current) setItems(items);
+    };
     const query = q.trim();
     // ライブラリ＝連想元コーパスの閲覧（filter のみ・意味検索は project 側）。
     if (scope === "library") {
-      setItems(
+      put(
         await api.listNeta({ scope: "library", kind: kindFilter || undefined, q: query || undefined, limit: 2000 }),
       );
       return;
@@ -296,11 +303,11 @@ export function App() {
     if (!query) {
       // 未仕分け（P4）＝どの器にも属さないネタだけ。器の絞り込みとは排他。
       if (unassignedOnly) {
-        setItems(await api.listNeta({ kind: kindFilter || undefined, unassigned: true }));
+        put(await api.listNeta({ kind: kindFilter || undefined, unassigned: true }));
         return;
       }
       // project ブラウズ：アクティブプロジェクトがあれば prj: タグでAND絞り込み（横断は検索経路）。
-      setItems(
+      put(
         await api.listNeta({
           kind: kindFilter || undefined,
           tags: activeProject ? [projectTag(activeProject)] : undefined,
@@ -310,10 +317,10 @@ export function App() {
       return;
     }
     try {
-      setItems(await api.search(query)); // #65 ハイブリッド検索（一致∪意味・該当なしが出る）
+      put(await api.search(query)); // #65 ハイブリッド検索（一致∪意味・該当なしが出る）
     } catch {
       // API自体が不通なら LIKE 絞り込みに退避（出先/オフラインで無音にしない）
-      setItems(await api.listNeta({ q: query }));
+      put(await api.listNeta({ q: query }));
     }
   }, [kindFilter, q, scope, activeProject, unassignedOnly]);
 

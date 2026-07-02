@@ -388,7 +388,15 @@ export function buildHttp(core: Core): FastifyInstance {
     const semIds = new Set<string>();
     const semantic: NonNullable<ReturnType<typeof core.getNeta>>[] = [];
     try {
-      const res = await fetch(`${SEARCH_URL}/search?q=${encodeURIComponent(q)}&k=${limit}`);
+      // cm-search 不通時にハングしない（閉ポートが RST を返さない環境=WSL2 等では OS connect が
+      // ~11s ブロック＝AbortSignal では connect 中断が効かない）。2s で応答を切り上げてキーワード
+      // だけで返す＝検索は常に即応。背後の接続は放置で無害（undici が後で片付ける）。
+      const res = (await Promise.race([
+        fetch(`${SEARCH_URL}/search?q=${encodeURIComponent(q)}&k=${limit}`, {
+          signal: AbortSignal.timeout(2000),
+        }),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("cm-search timeout")), 2000)),
+      ])) as Response;
       if (res.ok) {
         const hits = (await res.json()) as { neta_id: string; score: number; rel?: number }[];
         for (const h of hits) {
