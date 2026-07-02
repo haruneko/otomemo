@@ -98,6 +98,44 @@ button:disabled {
 .project-picker select {
   flex: 1;
 }
+/* P1 プロジェクト・チップ＝横スクロールの1タップ切替（件数バッジ付き）。 */
+.proj-chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 6px;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.proj-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  padding: 5px 11px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.proj-chip.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.proj-chip .chip-n {
+  font-size: 0.68rem;
+  opacity: 0.7;
+}
+.proj-chip.on .chip-n {
+  opacity: 0.9;
+}
+.proj-chip.add {
+  font-weight: 700;
+  color: var(--muted);
+  padding: 5px 12px;
+}
 .filters {
   display: flex;
   flex-wrap: wrap;

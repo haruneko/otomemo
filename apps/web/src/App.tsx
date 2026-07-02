@@ -52,6 +52,12 @@ export function App() {
     () => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? "",
   );
   const [projects, setProjects] = useState<string[]>([]); // facets() 由来のプロジェクト名一覧
+  // ピッカーのチップ件数（P1）＝すべて/未仕分け/器別。
+  const [counts, setCounts] = useState<{
+    all: number;
+    unassigned: number;
+    projects: { name: string; count: number }[];
+  }>({ all: 0, unassigned: 0, projects: [] });
   const [unassignedOnly, setUnassignedOnly] = useState(false); // 未仕分け(prj:無し)だけ表示（P4）
   const [kindFilter, setKindFilter] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
@@ -101,6 +107,10 @@ export function App() {
     api
       .listProjectNames()
       .then((names) => setProjects(names))
+      .catch(() => {});
+    api
+      .getProjectCounts()
+      .then(setCounts)
       .catch(() => {});
   }, []);
 
@@ -244,11 +254,15 @@ export function App() {
 
   // ＋新規プロジェクト：名前を取り、アクティブにする（以降の新規ネタに prj: が付く）。
   // 実体はネタに prj: が付いた時点で facets に現れる＝ここでは選択肢にも即時反映しておく。
-  function newProject() {
+  async function newProject() {
     const name = window.prompt("新しいプロジェクト名")?.trim();
     if (!name) return;
+    // P2: 作成を永続化（setProject）＝空の器でもリロードで消えない（旧 prompt はローカルのみで揮発）。
+    await api.setProject(name, {}).catch(() => {});
     setProjects((ps) => (ps.includes(name) ? ps : [...ps, name]));
+    setUnassignedOnly(false);
     setActiveProject(name);
+    loadProjects();
   }
 
   function openTray() {
@@ -490,31 +504,51 @@ export function App() {
           </div>
           {/* プロジェクト・ピッカー：project スコープ時のみ（library は全プロジェクト共有）。 */}
           {scope === "project" && (
-            <div className="project-picker">
-              <select
-                aria-label="project"
-                value={unassignedOnly ? " unassigned" : activeProject}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === " unassigned") {
-                    setUnassignedOnly(true);
-                    setActiveProject("");
-                  } else {
-                    setUnassignedOnly(false);
-                    setActiveProject(v);
-                  }
+            <div className="project-picker proj-chips" role="tablist" aria-label="project">
+              <button
+                role="tab"
+                aria-selected={!unassignedOnly && !activeProject}
+                className={"proj-chip" + (!unassignedOnly && !activeProject ? " on" : "")}
+                onClick={() => {
+                  setUnassignedOnly(false);
+                  setActiveProject("");
                 }}
               >
-                <option value="">すべて</option>
-                <option value={" unassigned"}>未仕分け</option>
-                {projects.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-              <button className="import-btn" onClick={newProject}>
-                ＋新規
+                すべて <span className="chip-n">{counts.all}</span>
+              </button>
+              <button
+                role="tab"
+                aria-selected={unassignedOnly}
+                className={"proj-chip" + (unassignedOnly ? " on" : "")}
+                title="どの器にも入れていないネタ"
+                onClick={() => {
+                  setUnassignedOnly(true);
+                  setActiveProject("");
+                }}
+              >
+                未仕分け <span className="chip-n">{counts.unassigned}</span>
+              </button>
+              {counts.projects.map((p) => (
+                <button
+                  key={p.name}
+                  role="tab"
+                  aria-selected={!unassignedOnly && activeProject === p.name}
+                  className={"proj-chip" + (!unassignedOnly && activeProject === p.name ? " on" : "")}
+                  onClick={() => {
+                    setUnassignedOnly(false);
+                    setActiveProject(p.name);
+                  }}
+                >
+                  {p.name} <span className="chip-n">{p.count}</span>
+                </button>
+              ))}
+              <button
+                className="proj-chip add"
+                aria-label="new-project"
+                title="新しい器を作る"
+                onClick={() => void newProject()}
+              >
+                ＋
               </button>
             </div>
           )}

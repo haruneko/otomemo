@@ -405,6 +405,38 @@ export class Core {
     return [...names].sort((a, b) => a.localeCompare(b, "ja"));
   }
 
+  // ピッカーのチップ用（P1）＝すべて/未仕分け/器別の件数。器の中身の量を一目に。
+  projectCounts(): { all: number; unassigned: number; projects: { name: string; count: number }[] } {
+    const like = PROJECT_TAG_PREFIX + "%";
+    const all = (this.db.prepare(`SELECT COUNT(*) AS c FROM neta WHERE scope='project'`).get() as { c: number }).c;
+    const unassigned = (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) AS c FROM neta n WHERE n.scope='project' AND NOT EXISTS
+             (SELECT 1 FROM neta_tag nt JOIN tag t ON t.id=nt.tag_id
+              WHERE nt.neta_id=n.id AND t.name LIKE @like)`,
+        )
+        .get({ like }) as { c: number }
+    ).c;
+    const rows = this.db
+      .prepare(
+        `SELECT t.name AS name, COUNT(*) AS c FROM tag t
+           JOIN neta_tag nt ON nt.tag_id=t.id
+           JOIN neta n ON n.id=nt.neta_id AND n.scope='project'
+           WHERE t.name LIKE @like GROUP BY t.name`,
+      )
+      .all({ like }) as { name: string; c: number }[];
+    const map = new Map<string, number>();
+    for (const r of rows) map.set(r.name.slice(PROJECT_TAG_PREFIX.length), r.c);
+    // 空の器（説明だけ作った project 行）も 0 件で含める＝picker 到達可能。
+    for (const r of this.db.prepare(`SELECT name FROM project`).all() as { name: string }[])
+      if (!map.has(r.name)) map.set(r.name, 0);
+    const projects = [...map.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+    return { all, unassigned, projects };
+  }
+
   // プロジェクト配下ネタを対象にしたジョブ一覧（ワークスペースの「投げて受け取る」可視化）。
   listProjectJobs(project: string): Job[] {
     return this.job.listForProjectTag(PROJECT_TAG_PREFIX + project);

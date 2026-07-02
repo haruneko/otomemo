@@ -227,6 +227,11 @@ export const api = {
   // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返る。
   // プロジェクト名一覧（prj:タグ ∪ project行＝空の器も含む）。picker のソース。
   listProjectNames: () => http<string[]>(`/projects`),
+  // ピッカーのチップ用件数（P1）＝すべて/未仕分け/器別。
+  getProjectCounts: () =>
+    http<{ all: number; unassigned: number; projects: { name: string; count: number }[] }>(
+      `/project-counts`,
+    ),
   // プロジェクト配下のジョブ（投げて受け取る）をワークスペースに可視化。
   listProjectJobs: (project: string) =>
     http<Job[]>(`/projects/${encodeURIComponent(project)}/jobs`),

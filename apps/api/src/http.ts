@@ -491,6 +491,8 @@ export function buildHttp(core: Core): FastifyInstance {
 
   // プロジェクト名一覧（prj:タグ ∪ project行＝空の器も含む）。picker のソース。
   app.get("/projects", async () => core.listProjectNames());
+  // ピッカーのチップ用件数（P1）＝すべて/未仕分け/器別。/projects/:name と衝突しない別パス。
+  app.get("/project-counts", async () => core.projectCounts());
 
   // プロジェクト配下のジョブ（投げて受け取る）をワークスペースに可視化。
   app.get("/projects/:project/jobs", async (req) => {

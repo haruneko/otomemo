@@ -42,3 +42,25 @@ describe("未仕分け(P4)＝prj: タグを1つも持たないネタ", () => {
     expect(ids(core.listNeta({ unassigned: true }))).not.toContain(a.id);
   });
 });
+
+describe("projectCounts(P1)＝チップ用の件数", () => {
+  it("すべて/未仕分け/器別を数える", () => {
+    core.createNeta({ kind: "melody", tags: ["prj:A"] });
+    core.createNeta({ kind: "melody", tags: ["prj:A"] });
+    core.createNeta({ kind: "melody", tags: ["prj:B"] });
+    core.createNeta({ kind: "melody", tags: ["メモ"] }); // 未仕分け
+    const c = core.projectCounts();
+    expect(c.all).toBe(4);
+    expect(c.unassigned).toBe(1);
+    expect(c.projects).toEqual([
+      { name: "A", count: 2 },
+      { name: "B", count: 1 },
+    ]);
+  });
+
+  it("説明だけ作った空の器も 0 件で拾う（picker 到達可能）", () => {
+    core.setProject("空器", { description: "まだ中身なし" });
+    const c = core.projectCounts();
+    expect(c.projects).toEqual([{ name: "空器", count: 0 }]);
+  });
+});
