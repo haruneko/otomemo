@@ -105,6 +105,7 @@ export interface ListQuery {
   tags?: string[];
   limit?: number;
   scope?: "project" | "library" | "all";
+  orderProject?: string; // 手動並べ替え(neta_order)の適用対象。未指定=既定 updated 順。
 }
 
 // サーバが応答したがエラー(4xx/5xx)。ネットワーク不達(fetch自体のreject)とは区別する。
@@ -176,9 +177,14 @@ export const api = {
     if (q.tags?.length) p.set("tags", q.tags.join(","));
     if (q.limit !== undefined) p.set("limit", String(q.limit));
     if (q.scope) p.set("scope", q.scope);
+    if (q.orderProject !== undefined) p.set("orderProject", q.orderProject);
     const qs = p.toString();
     return http<Neta[]>(`/neta${qs ? `?${qs}` : ""}`);
   },
+
+  // 手動並べ替えの保存（被せ表 neta_order・design LV-A）。project='' はプロジェクト未指定バケツ。
+  reorderNeta: (project: string, ids: string[]) =>
+    http<{ ok: true }>(`/neta/reorder`, { method: "POST", body: JSON.stringify({ project, ids }) }),
 
   facets: () => http<Facets>("/facets"),
 

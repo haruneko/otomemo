@@ -333,6 +333,13 @@ article[aria-label="neta-card"].dense .card-main {
   min-width: 0; /* タイトル省略のため */
   padding: 0;
 }
+/* リスト行の並べ替えハンドル＝行内左に静的配置（カードの絶対配置を上書き）。 */
+.drag-handle.dense-handle {
+  position: static;
+  flex: 0 0 auto;
+  padding: 2px;
+  font-size: 0.85rem;
+}
 .dense-icon {
   flex: 0 0 auto;
   color: var(--k, var(--muted));

@@ -147,6 +147,16 @@ CREATE TABLE IF NOT EXISTS project (
   created      TEXT NOT NULL,
   updated      TEXT NOT NULL
 );
+
+-- ネタ一覧の手動並べ替え（被せ表・純加算）。project=絞り込み中のプロジェクト名 or ''(未指定)。
+-- 行が無いネタ=position NULL＝既定(updated DESC)へフォール＝並べ替え前は現状と同一。design LV-A。
+CREATE TABLE IF NOT EXISTS neta_order (
+  project  TEXT NOT NULL,
+  neta_id  TEXT NOT NULL REFERENCES neta(id) ON DELETE CASCADE,
+  position REAL NOT NULL,
+  PRIMARY KEY (project, neta_id)
+);
+CREATE INDEX IF NOT EXISTS idx_neta_order_project ON neta_order(project, position);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {

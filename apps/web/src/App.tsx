@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
+  TouchSensor,
   pointerWithin,
   useSensor,
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
 import { api, type Neta } from "./api";
 import { FILTER_KINDS } from "./kinds";
 import { applyColors, loadColors } from "./theme";
@@ -67,7 +69,11 @@ export function App() {
   const [composeSignal, setComposeSignal] = useState(0); // D&D配置でSectionEditorを再読込
 
   // ドラッグは5px動かしてから開始＝カードのクリック(開く)と両立（#52②c）
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // PC=5pxで即ドラッグ。スマホ=長押し(250ms)で掴む＝タップ再生/カードを開くとの誤爆回避。
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  );
 
   // アクティブプロジェクトの永続化（端末ローカル状態）。
   useEffect(() => {
@@ -103,12 +109,26 @@ export function App() {
   async function onDragEnd(e: DragEndEvent) {
     const dragged = e.active.data.current?.neta as Neta | undefined;
     const drop = e.over?.data.current as { kinds?: readonly string[]; position?: number } | undefined;
-    if (!dragged || !drop?.kinds || drop.position === undefined) return;
-    if (!active || (active.kind !== "section" && active.kind !== "song")) return; // 開いてるのがsectionの時だけ
-    if (!drop.kinds.includes(dragged.kind)) return; // レーンのkindに合わなければ無視
-    await api.placeChild(active.id, dragged.id, drop.position, 0);
-    setComposeSignal((v) => v + 1);
-    void reload();
+    // (1) レーンへのドロップ＝セクションに配置（従来）。
+    if (drop?.kinds && drop.position !== undefined) {
+      if (!dragged) return;
+      if (!active || (active.kind !== "section" && active.kind !== "song")) return; // 開いてるのがsectionの時だけ
+      if (!drop.kinds.includes(dragged.kind)) return; // レーンのkindに合わなければ無視
+      await api.placeChild(active.id, dragged.id, drop.position, 0);
+      setComposeSignal((v) => v + 1);
+      void reload();
+      return;
+    }
+    // (2) 一覧内の並べ替え＝別カードにドロップ（reorderable の時だけ・sortDisabled で他は掴めない）。
+    const overId = e.over?.id;
+    if (reorderable && overId && e.active.id !== overId) {
+      const oldI = items.findIndex((n) => n.id === e.active.id);
+      const newI = items.findIndex((n) => n.id === overId);
+      if (oldI < 0 || newI < 0) return;
+      const next = arrayMove(items, oldI, newI);
+      setItems(next); // 楽観更新＝すぐ並ぶ
+      await api.reorderNeta(activeProject, next.map((n) => n.id)).catch(() => void reload());
+    }
   }
 
   async function newSong() {
@@ -127,6 +147,11 @@ export function App() {
   const shownItems = moodFilter.trim()
     ? items.filter((n) => (n.mood ?? "").toLowerCase().includes(moodFilter.trim().toLowerCase()))
     : items;
+
+  // 手動並べ替えが効くのは「素のプロジェクト一覧」だけ＝検索/種別/mood 絞り込み中は無効
+  // （部分集合を並べ替えると position が疎になり混乱する）。この時 items===表示順で楽観更新が安全。
+  const reorderable =
+    scope === "project" && !q.trim() && !kindFilter && !moodFilter.trim();
 
   // #10: 過去資産の一括取込（複数ファイル）
   // #81 MIDIはworker(mido)でトラック×チャンネル分割→melody/rhythmネタ化。
@@ -258,6 +283,7 @@ export function App() {
         await api.listNeta({
           kind: kindFilter || undefined,
           tags: activeProject ? [projectTag(activeProject)] : undefined,
+          orderProject: activeProject, // 手動並べ替え(neta_order)を適用。'' は未指定バケツ。
         }),
       );
       return;
@@ -507,6 +533,7 @@ export function App() {
           <NetaList
             items={shownItems}
             scope={scope}
+            reorderable={reorderable}
             onChanged={() => void reload()}
             onChat={openChat}
             onOpen={setActive}

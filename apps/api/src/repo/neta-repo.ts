@@ -132,10 +132,32 @@ export class NetaRepo {
     }
     params.limit = q.limit ?? 100;
     params.offset = q.offset ?? 0;
-    const sql = `SELECT n.* FROM neta n ${
+    // 手動並べ替え：orderProject 指定時は neta_order を LEFT JOIN。position のある行を先に position 昇順、
+    // 未設定(NULL=まだ並べ替えてない/新規)は既定 updated DESC へフォール＝並べ替え前は現状と同一。
+    const ordered = q.orderProject !== undefined;
+    if (ordered) params.orderProject = q.orderProject;
+    const join = ordered
+      ? `LEFT JOIN neta_order o ON o.neta_id = n.id AND o.project = @orderProject`
+      : "";
+    const orderBy = ordered
+      ? `ORDER BY (o.position IS NOT NULL), o.position ASC, n.updated DESC, n.id`
+      : `ORDER BY n.updated DESC, n.id`;
+    const sql = `SELECT n.* FROM neta n ${join} ${
       where.length ? "WHERE " + where.join(" AND ") : ""
-    } ORDER BY n.updated DESC, n.id LIMIT @limit OFFSET @offset`;
+    } ${orderBy} LIMIT @limit OFFSET @offset`;
     return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map((r) => this.rowToNeta(r));
+  }
+
+  /** 手動並べ替えの保存（被せ表 neta_order）。渡された順に position=index を全上書き（小さい一覧前提）。 */
+  reorderNeta(project: string, orderedIds: string[]): void {
+    const del = this.db.prepare(`DELETE FROM neta_order WHERE project = ?`);
+    const ins = this.db.prepare(
+      `INSERT INTO neta_order (project, neta_id, position) VALUES (?, ?, ?)`,
+    );
+    this.db.transaction(() => {
+      del.run(project);
+      orderedIds.forEach((id, i) => ins.run(project, id, i));
+    })();
   }
 
   /** メロ連想（S4c・spec§6）：scope（既定 library＝連想元）の melody を候補に、多層類似で近い順に。 */

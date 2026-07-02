@@ -38,6 +38,10 @@ export const listQueryShape = {
   scope: scopeQueryEnum.optional().describe("既定project。library=取込/連想元コーパス、all=両方"),
   tags: z.array(z.string()).optional(),
   q: z.string().optional().describe("title/text 部分一致"),
+  orderProject: z
+    .string()
+    .optional()
+    .describe("手動並べ替え(neta_order)の適用対象プロジェクト。指定時は position 順→未設定は updated 順"),
   limit: z.coerce.number().int().optional(),
   offset: z.coerce.number().int().optional(),
 } as const;

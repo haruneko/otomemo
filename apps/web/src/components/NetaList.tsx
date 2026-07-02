@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useDraggable } from "@dnd-kit/core";
+import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { api, type Neta } from "../api";
 import { useAlive, pollJobContent } from "../poll";
 import { MUSIC_KINDS, CONTAINER_KINDS } from "../kinds";
@@ -23,6 +24,7 @@ export function NetaCard({
   neta,
   scope = "project",
   dense = false,
+  sortDisabled = false,
   onChanged,
   onChat,
   onOpen,
@@ -30,6 +32,7 @@ export function NetaCard({
   neta: Neta & { matchType?: string };
   scope?: "project" | "library";
   dense?: boolean;
+  sortDisabled?: boolean;
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
@@ -39,11 +42,14 @@ export function NetaCard({
   const [genOpen, setGenOpen] = useState(false);
   // LV2: 副アクション（複製/ライブラリへ/生成）は既定で畳む＝主要2つ(▶/相談)＋「…」に整理。
   const [moreOpen, setMoreOpen] = useState(false);
-  // #52②c: ネタ帳カードをセクションのレーンへドラッグ配置（PC）。ハンドルだけドラッグ可。
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `card-${neta.id}`,
+  // 手動並べ替え(sortable)＋セクションのレーンへドラッグ配置(#52②c)を1つのハンドルで兼ねる。
+  // 一覧内で別カードにドロップ→reorder（App.onDragEnd）／レーンにドロップ→placeChild。
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: neta.id,
     data: { neta },
+    disabled: sortDisabled,
   });
+  const sortStyle = { transform: CSS.Transform.toString(transform), transition };
 
   const intentOf = {
     melody: "gen_melody",
@@ -157,10 +163,21 @@ export function NetaCard({
   if (dense) {
     return (
       <article
+        ref={setNodeRef}
+        style={sortStyle}
         aria-label="neta-card"
         data-kind={neta.kind}
         className={"dense" + (isDragging ? " dragging" : "")}
       >
+        <button
+          {...listeners}
+          {...attributes}
+          className="drag-handle dense-handle"
+          aria-label={`drag-${neta.id}`}
+          title="ドラッグで並べ替え"
+        >
+          ⠿
+        </button>
         <div
           className="card-main"
           role="button"
@@ -185,14 +202,19 @@ export function NetaCard({
   }
 
   return (
-    <article aria-label="neta-card" data-kind={neta.kind} className={isDragging ? "dragging" : ""}>
+    <article
+      ref={setNodeRef}
+      style={sortStyle}
+      aria-label="neta-card"
+      data-kind={neta.kind}
+      className={isDragging ? "dragging" : ""}
+    >
       <button
-        ref={setNodeRef}
         {...listeners}
         {...attributes}
         className="drag-handle"
         aria-label={`drag-${neta.id}`}
-        title="ドラッグでセクションのレーンへ置く（PC）"
+        title="ドラッグで並べ替え／セクションのレーンへ配置"
       >
         ⠿
       </button>
@@ -310,6 +332,7 @@ export function NetaCard({
 export function NetaList({
   items,
   scope = "project",
+  reorderable = false,
   onChanged,
   onChat,
   onOpen,
@@ -317,6 +340,7 @@ export function NetaList({
 }: {
   items: (Neta & { matchType?: string })[];
   scope?: "project" | "library";
+  reorderable?: boolean; // App が「並べ替え可（検索/絞り込み無し）」の時だけ true。
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
@@ -391,22 +415,27 @@ export function NetaList({
         <p className="muted">{emptyText}</p>
       </>
     );
+  // 並べ替えが効くのは「並べ替え可(App)」かつ「既定順表示」の時だけ＝基準ソート中の誤並べ替えを防ぐ。
+  const canReorder = reorderable && sortKey === "default";
   return (
     <>
       {controls}
-      <section aria-label="neta-list" className={dense ? "dense" : ""}>
-        {ordered.map((n) => (
-          <NetaCard
-            key={n.id}
-            neta={n}
-            scope={scope}
-            dense={dense}
-            onChanged={onChanged}
-            onChat={onChat}
-            onOpen={onOpen}
-          />
-        ))}
-      </section>
+      <SortableContext items={ordered.map((n) => n.id)} strategy={verticalListSortingStrategy}>
+        <section aria-label="neta-list" className={dense ? "dense" : ""}>
+          {ordered.map((n) => (
+            <NetaCard
+              key={n.id}
+              neta={n}
+              scope={scope}
+              dense={dense}
+              sortDisabled={!canReorder}
+              onChanged={onChanged}
+              onChat={onChat}
+              onOpen={onOpen}
+            />
+          ))}
+        </section>
+      </SortableContext>
     </>
   );
 }

@@ -206,6 +206,9 @@ export class Core {
   listNeta(q: ListQuery = {}): Neta[] {
     return this.neta.listNeta(q);
   }
+  reorderNeta(project: string, orderedIds: string[]): void {
+    this.neta.reorderNeta(project, orderedIds);
+  }
   similarMelodies(
     notes: { pitch: number; start?: number; dur?: number }[],
     scope: "project" | "library" | "all" = "library",

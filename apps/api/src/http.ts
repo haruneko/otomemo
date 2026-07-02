@@ -106,10 +106,20 @@ export function buildHttp(core: Core): FastifyInstance {
       tags: q.tags ? q.tags.split(",").filter(Boolean) : undefined,
       q: q.q,
       scope: scopeQueryEnum.optional().catch(undefined).parse(q.scope), // 無効値は素通しせず undefined(既定project)へ
+      orderProject: q.orderProject, // 手動並べ替え(neta_order)の適用対象。未指定=既定 updated 順。
 
       limit: q.limit ? Number(q.limit) : undefined,
       offset: q.offset ? Number(q.offset) : undefined,
     });
+  });
+
+  // 手動並べ替えの保存（被せ表 neta_order・design LV-A）。project='' は「プロジェクト未指定」バケツ。
+  app.post("/neta/reorder", async (req, reply) => {
+    const b = (req.body ?? {}) as { project?: unknown; ids?: unknown };
+    if (typeof b.project !== "string" || !Array.isArray(b.ids) || b.ids.some((x) => typeof x !== "string"))
+      return reply.code(400).send({ error: "project(string) と ids(string[]) が必要" });
+    core.reorderNeta(b.project, b.ids as string[]);
+    return { ok: true };
   });
 
   app.get("/facets", async () => core.facets());
