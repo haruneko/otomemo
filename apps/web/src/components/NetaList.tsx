@@ -5,6 +5,7 @@ import { useAlive, pollJobContent } from "../poll";
 import { MUSIC_KINDS, CONTAINER_KINDS } from "../kinds";
 import { isProjectTag } from "../project";
 import { MiniRoll } from "./MiniRoll";
+import { KindIcon } from "./KindIcon";
 import {
   playNotes,
   notesForContent,
@@ -21,12 +22,14 @@ const MATCH_LABEL: Record<string, string> = { exact: "一致", both: "一致", s
 export function NetaCard({
   neta,
   scope = "project",
+  dense = false,
   onChanged,
   onChat,
   onOpen,
 }: {
   neta: Neta & { matchType?: string };
   scope?: "project" | "library";
+  dense?: boolean;
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
@@ -122,6 +125,63 @@ export function NetaCard({
     }
   }
 
+  // 再生ボタン（カード/リスト両モードで共用）。楽器ネタ=単独再生／器ネタ=合成プレビュー。
+  const playBtn = MUSIC_KINDS.includes(neta.kind) ? (
+    <button
+      className="bs-btn"
+      aria-label={`play-${neta.id}`}
+      title={playing ? "停止" : "このネタを単独再生（C基準そのまま）"}
+      onClick={() =>
+        void toggle(
+          () => notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }),
+          neta.kind === "rhythm" ? undefined : (programOf(neta.content) ?? 0),
+        )
+      }
+    >
+      {playing ? "⏹" : "▶"}
+    </button>
+  ) : CONTAINER_KINDS.includes(neta.kind) ? (
+    <button
+      className="bs-btn"
+      aria-label={`play-${neta.id}`}
+      title={playing ? "停止" : "合成プレビュー再生"}
+      onClick={() => void toggle(sectionNotes)}
+    >
+      {playing ? "⏹" : "▶"}
+    </button>
+  ) : null;
+
+  // リスト（コンパクト）表示：1行に圧縮＝左色帯＋アイコン＋タイトル主役＋種別小＋▶のみ。
+  if (dense) {
+    return (
+      <article
+        aria-label="neta-card"
+        data-kind={neta.kind}
+        className={"dense" + (isDragging ? " dragging" : "")}
+      >
+        <div
+          className="card-main"
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpen?.(neta)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onOpen?.(neta);
+          }}
+        >
+          <span className="dense-icon" aria-hidden="true">
+            <KindIcon kind={neta.kind} />
+          </span>
+          <span className="dense-title">{label}</span>
+          {neta.matchType && MATCH_LABEL[neta.matchType] && (
+            <span className={"match-badge " + neta.matchType}>{MATCH_LABEL[neta.matchType]}</span>
+          )}
+          <span className="kind dense-kind">{neta.kind}</span>
+        </div>
+        <div className="bs-tools">{playBtn}</div>
+      </article>
+    );
+  }
+
   return (
     <article aria-label="neta-card" data-kind={neta.kind} className={isDragging ? "dragging" : ""}>
       <button
@@ -167,32 +227,7 @@ export function NetaCard({
         })()}
       </div>
       <div className="bs-tools">
-        {MUSIC_KINDS.includes(neta.kind) && (
-          <button
-            className="bs-btn"
-            aria-label={`play-${neta.id}`}
-            title={playing ? "停止" : "このネタを単独再生（C基準そのまま）"}
-            onClick={() =>
-              void toggle(
-                // 相対bass は neta の key を tonic に解決（#bass S2）。
-                () => notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }),
-                neta.kind === "rhythm" ? undefined : (programOf(neta.content) ?? 0),
-              )
-            }
-          >
-            {playing ? "⏹" : "▶"}
-          </button>
-        )}
-        {CONTAINER_KINDS.includes(neta.kind) && (
-          <button
-            className="bs-btn"
-            aria-label={`play-${neta.id}`}
-            title={playing ? "停止" : "合成プレビュー再生"}
-            onClick={() => void toggle(sectionNotes)}
-          >
-            {playing ? "⏹" : "▶"}
-          </button>
-        )}
+        {playBtn}
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
           相談
         </button>
@@ -273,12 +308,57 @@ export function NetaList({
   onOpen?: (neta: Neta) => void;
   emptyText?: string;
 }) {
-  if (items.length === 0) return <p className="muted">{emptyText}</p>;
+  // 表示密度＝カード（リッチ）/ リスト（圧縮・一覧性）。既定=card で現状維持。localStorage で永続。
+  const [dense, setDense] = useState<boolean>(
+    () => localStorage.getItem("cm-list-density") === "list",
+  );
+  const setDensity = (d: boolean) => {
+    setDense(d);
+    localStorage.setItem("cm-list-density", d ? "list" : "card");
+  };
+  const toggle = (
+    <div className="list-density" role="group" aria-label="表示密度">
+      <button
+        className={dense ? "" : "on"}
+        aria-pressed={!dense}
+        title="カード表示（リッチ）"
+        onClick={() => setDensity(false)}
+      >
+        ▦ カード
+      </button>
+      <button
+        className={dense ? "on" : ""}
+        aria-pressed={dense}
+        title="リスト表示（圧縮・一覧しやすい）"
+        onClick={() => setDensity(true)}
+      >
+        ☰ リスト
+      </button>
+    </div>
+  );
+  if (items.length === 0)
+    return (
+      <>
+        {toggle}
+        <p className="muted">{emptyText}</p>
+      </>
+    );
   return (
-    <section aria-label="neta-list">
-      {items.map((n) => (
-        <NetaCard key={n.id} neta={n} scope={scope} onChanged={onChanged} onChat={onChat} onOpen={onOpen} />
-      ))}
-    </section>
+    <>
+      {toggle}
+      <section aria-label="neta-list" className={dense ? "dense" : ""}>
+        {items.map((n) => (
+          <NetaCard
+            key={n.id}
+            neta={n}
+            scope={scope}
+            dense={dense}
+            onChanged={onChanged}
+            onChat={onChat}
+            onOpen={onOpen}
+          />
+        ))}
+      </section>
+    </>
   );
 }

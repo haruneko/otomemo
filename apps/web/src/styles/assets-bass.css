@@ -263,6 +263,84 @@ article[aria-label="neta-card"].dragging {
   background: var(--accent);
   opacity: 0.7; /* ドロップ可の強調 */
 }
+/* 表示密度トグル（カード｜リスト）＝ネタ一覧の圧縮切替（研究 2026-07-02）。 */
+.list-density {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+.list-density button {
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  background: #1b1e23;
+  color: var(--muted, #9aa0ab);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-weight: 600;
+}
+.list-density button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* リスト（コンパクト）表示＝1行に圧縮。位置が揃い比較しやすい（NN/g）。 */
+section[aria-label="neta-list"].dense {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+article[aria-label="neta-card"].dense {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  width: 100%;
+  min-width: 0; /* 長いタイトルで行が画面幅を超えないよう */
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+article[aria-label="neta-card"].dense .card-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0; /* タイトル省略のため */
+  padding: 0;
+}
+.dense-icon {
+  flex: 0 0 auto;
+  color: var(--k, var(--muted));
+  display: inline-flex;
+}
+.dense-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.dense-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--fg);
+}
+.dense-kind {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+article[aria-label="neta-card"].dense .bs-tools {
+  flex: 0 0 auto;
+  margin: 0;
+}
+article[aria-label="neta-card"].dense .bs-btn {
+  padding: 3px 9px;
+}
 .card-main {
   cursor: pointer;
 }
