@@ -52,6 +52,7 @@ export function App() {
     () => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? "",
   );
   const [projects, setProjects] = useState<string[]>([]); // facets() 由来のプロジェクト名一覧
+  const [unassignedOnly, setUnassignedOnly] = useState(false); // 未仕分け(prj:無し)だけ表示（P4）
   const [kindFilter, setKindFilter] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
   const [q, setQ] = useState("");
@@ -151,7 +152,7 @@ export function App() {
   // 手動並べ替えが効くのは「素のプロジェクト一覧」だけ＝検索/種別/mood 絞り込み中は無効
   // （部分集合を並べ替えると position が疎になり混乱する）。この時 items===表示順で楽観更新が安全。
   const reorderable =
-    scope === "project" && !q.trim() && !kindFilter && !moodFilter.trim();
+    scope === "project" && !unassignedOnly && !q.trim() && !kindFilter && !moodFilter.trim();
 
   // #10: 過去資産の一括取込（複数ファイル）
   // #81 MIDIはworker(mido)でトラック×チャンネル分割→melody/rhythmネタ化。
@@ -278,6 +279,11 @@ export function App() {
       return;
     }
     if (!query) {
+      // 未仕分け（P4）＝どの器にも属さないネタだけ。器の絞り込みとは排他。
+      if (unassignedOnly) {
+        setItems(await api.listNeta({ kind: kindFilter || undefined, unassigned: true }));
+        return;
+      }
       // project ブラウズ：アクティブプロジェクトがあれば prj: タグでAND絞り込み（横断は検索経路）。
       setItems(
         await api.listNeta({
@@ -294,7 +300,7 @@ export function App() {
       // API自体が不通なら LIKE 絞り込みに退避（出先/オフラインで無音にしない）
       setItems(await api.listNeta({ q: query }));
     }
-  }, [kindFilter, q, scope, activeProject]);
+  }, [kindFilter, q, scope, activeProject, unassignedOnly]);
 
   useEffect(() => {
     reload().catch(() => {});
@@ -487,10 +493,20 @@ export function App() {
             <div className="project-picker">
               <select
                 aria-label="project"
-                value={activeProject}
-                onChange={(e) => setActiveProject(e.target.value)}
+                value={unassignedOnly ? " unassigned" : activeProject}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === " unassigned") {
+                    setUnassignedOnly(true);
+                    setActiveProject("");
+                  } else {
+                    setUnassignedOnly(false);
+                    setActiveProject(v);
+                  }
+                }}
               >
                 <option value="">すべて</option>
+                <option value={" unassigned"}>未仕分け</option>
                 {projects.map((p) => (
                   <option key={p} value={p}>
                     {p}
@@ -534,6 +550,7 @@ export function App() {
             items={shownItems}
             scope={scope}
             reorderable={reorderable}
+            projects={projects}
             onChanged={() => void reload()}
             onChat={openChat}
             onOpen={setActive}

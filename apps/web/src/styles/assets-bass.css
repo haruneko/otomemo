@@ -291,6 +291,26 @@ article[aria-label="neta-card"].dragging {
   letter-spacing: 1px;
   color: var(--muted);
 }
+/* P3 器ピッカー＝「器へ ▾」を押すと候補チップが下に出る（在籍は✓/accent）。 */
+.assign-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.assign-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 240px;
+  padding: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
 .list-density button {
   font-size: 0.76rem;
   padding: 4px 10px;

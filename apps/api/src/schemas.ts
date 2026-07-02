@@ -42,6 +42,7 @@ export const listQueryShape = {
     .string()
     .optional()
     .describe("手動並べ替え(neta_order)の適用対象プロジェクト。指定時は position 順→未設定は updated 順"),
+  unassigned: z.coerce.boolean().optional().describe("true=どの器にも属さない(prj: タグ無し)ネタだけ"),
   limit: z.coerce.number().int().optional(),
   offset: z.coerce.number().int().optional(),
 } as const;

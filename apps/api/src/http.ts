@@ -253,6 +253,20 @@ export function buildHttp(core: Core): FastifyInstance {
     return n;
   });
 
+  // 器への出し入れ（P3）＝prj: タグを addTag/removeTag（他タグ非破壊。updateNeta(tags)は全置換で危険）。
+  app.post("/neta/:id/project", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z
+      .object({ project: z.string().min(1), member: z.boolean().default(true) })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    if (!core.getNeta(id)) return reply.code(404).send({ error: "not found" });
+    const tag = `prj:${p.data.project}`;
+    if (p.data.member) core.addTag(id, tag);
+    else core.removeTag(id, tag);
+    return core.getNeta(id);
+  });
+
   app.get("/neta/:id/composition", async (req, reply) => {
     const { id } = req.params as { id: string };
     const t = core.getComposition(id);

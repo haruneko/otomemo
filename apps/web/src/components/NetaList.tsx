@@ -25,6 +25,7 @@ export function NetaCard({
   scope = "project",
   dense = false,
   sortDisabled = false,
+  projects = [],
   onChanged,
   onChat,
   onOpen,
@@ -33,6 +34,7 @@ export function NetaCard({
   scope?: "project" | "library";
   dense?: boolean;
   sortDisabled?: boolean;
+  projects?: string[]; // 入れ先候補の器（名前一覧）。カードの「器へ」ピッカーに使う。
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
@@ -42,6 +44,8 @@ export function NetaCard({
   const [genOpen, setGenOpen] = useState(false);
   // LV2: 副アクション（複製/ライブラリへ/生成）は既定で畳む＝主要2つ(▶/相談)＋「…」に整理。
   const [moreOpen, setMoreOpen] = useState(false);
+  // P3: 器ピッカーの開閉（入れ先はフィルタと独立＝どの器へでも入れられる）。
+  const [assignOpen, setAssignOpen] = useState(false);
   // 手動並べ替え(sortable)＋セクションのレーンへドラッグ配置(#52②c)を1つのハンドルで兼ねる。
   // 一覧内で別カードにドロップ→reorder（App.onDragEnd）／レーンにドロップ→placeChild。
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -158,6 +162,49 @@ export function NetaCard({
       {playing ? "⏹" : "▶"}
     </button>
   ) : null;
+
+  // 器への出し入れ（P3）＝入れ先はフィルタと独立。既存器チップ（✓=在籍→押すと出す）＋新しい器。
+  const memberOf = (p: string) => neta.tags.includes(`prj:${p}`);
+  async function toggleProject(p: string, member: boolean) {
+    await api.assignProject(neta.id, p, member);
+    onChanged?.();
+  }
+  async function assignNewProject() {
+    const name = window.prompt("新しい器（プロジェクト）名")?.trim();
+    if (!name) return;
+    await toggleProject(name, true);
+  }
+  const assignMenu =
+    scope === "project" ? (
+      <div className="assign-wrap">
+        <button
+          className="bs-btn"
+          aria-label={`assign-${neta.id}`}
+          title="この曲/ネタを器（プロジェクト）へ入れる・出す"
+          onClick={() => setAssignOpen((v) => !v)}
+        >
+          器へ ▾
+        </button>
+        {assignOpen && (
+          <div className="assign-menu" aria-label={`assign-menu-${neta.id}`}>
+            {projects.map((p) => (
+              <button
+                key={p}
+                className={"bs-btn" + (memberOf(p) ? " on" : "")}
+                onClick={() => void toggleProject(p, !memberOf(p))}
+                title={memberOf(p) ? "この器から出す" : `「${p}」へ入れる`}
+              >
+                {memberOf(p) ? "✓ " : ""}
+                {p}
+              </button>
+            ))}
+            <button className="bs-btn" aria-label={`assign-new-${neta.id}`} onClick={() => void assignNewProject()}>
+              ＋新しい器
+            </button>
+          </div>
+        )}
+      </div>
+    ) : null;
 
   // リスト（コンパクト）表示：1行に圧縮＝左色帯＋アイコン＋タイトル主役＋種別小＋▶のみ。
   if (dense) {
@@ -279,6 +326,7 @@ export function NetaCard({
           </button>
         ) : (
           <>
+            {assignMenu}
             <button
               className="bs-btn"
               title="複製（バリエーションの素体に）"
@@ -333,6 +381,7 @@ export function NetaList({
   items,
   scope = "project",
   reorderable = false,
+  projects = [],
   onChanged,
   onChat,
   onOpen,
@@ -341,6 +390,7 @@ export function NetaList({
   items: (Neta & { matchType?: string })[];
   scope?: "project" | "library";
   reorderable?: boolean; // App が「並べ替え可（検索/絞り込み無し）」の時だけ true。
+  projects?: string[]; // 入れ先候補の器一覧。カードの「器へ」ピッカーへ渡す。
   onChanged?: () => void;
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
@@ -429,6 +479,7 @@ export function NetaList({
               scope={scope}
               dense={dense}
               sortDisabled={!canReorder}
+              projects={projects}
               onChanged={onChanged}
               onChat={onChat}
               onOpen={onOpen}

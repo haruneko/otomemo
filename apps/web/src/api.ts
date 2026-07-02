@@ -106,6 +106,7 @@ export interface ListQuery {
   limit?: number;
   scope?: "project" | "library" | "all";
   orderProject?: string; // 手動並べ替え(neta_order)の適用対象。未指定=既定 updated 順。
+  unassigned?: boolean; // true=どの器にも属さない(prj: タグ無し)ネタだけ。
 }
 
 // サーバが応答したがエラー(4xx/5xx)。ネットワーク不達(fetch自体のreject)とは区別する。
@@ -178,6 +179,7 @@ export const api = {
     if (q.limit !== undefined) p.set("limit", String(q.limit));
     if (q.scope) p.set("scope", q.scope);
     if (q.orderProject !== undefined) p.set("orderProject", q.orderProject);
+    if (q.unassigned) p.set("unassigned", "true");
     const qs = p.toString();
     return http<Neta[]>(`/neta${qs ? `?${qs}` : ""}`);
   },
@@ -185,6 +187,10 @@ export const api = {
   // 手動並べ替えの保存（被せ表 neta_order・design LV-A）。project='' はプロジェクト未指定バケツ。
   reorderNeta: (project: string, ids: string[]) =>
     http<{ ok: true }>(`/neta/reorder`, { method: "POST", body: JSON.stringify({ project, ids }) }),
+
+  // 器への出し入れ（P3）＝prj: タグの addTag/removeTag（他タグ非破壊）。member=false で取り出す。
+  assignProject: (id: string, project: string, member = true) =>
+    http<Neta>(`/neta/${id}/project`, { method: "POST", body: JSON.stringify({ project, member }) }),
 
   facets: () => http<Facets>("/facets"),
 

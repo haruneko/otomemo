@@ -3,14 +3,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { createJob, getJob, createNeta, link, placeChild } = vi.hoisted(() => ({
+const { createJob, getJob, createNeta, link, placeChild, assignProject } = vi.hoisted(() => ({
   createJob: vi.fn(),
   getJob: vi.fn(),
   createNeta: vi.fn(),
   link: vi.fn(),
   placeChild: vi.fn(),
+  assignProject: vi.fn(),
 }));
-vi.mock("../src/api", () => ({ api: { createJob, getJob, createNeta, link, placeChild } }));
+vi.mock("../src/api", () => ({
+  api: { createJob, getJob, createNeta, link, placeChild, assignProject },
+}));
 
 import { NetaList, NetaCard } from "../src/components/NetaList";
 
@@ -72,6 +75,40 @@ describe("NetaList", () => {
     await userEvent.click(screen.getByLabelText("more-x"));
     expect(screen.getByRole("button", { name: "複製" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成 ▾" })).toBeInTheDocument();
+  });
+
+  it("P3: 「…」→「器へ」ピッカーで既存器に入れる(member=true)", async () => {
+    assignProject.mockResolvedValue({});
+    render(<NetaCard neta={mk({ id: "x", kind: "melody", title: "m" })} projects={["みなそこ"]} />);
+    await userEvent.click(screen.getByLabelText("more-x"));
+    await userEvent.click(screen.getByLabelText("assign-x")); // 器へ ▾
+    await userEvent.click(screen.getByRole("button", { name: "みなそこ" }));
+    expect(assignProject).toHaveBeenCalledWith("x", "みなそこ", true);
+  });
+
+  it("P3: 在籍している器は✓表示＝押すと出す(member=false)", async () => {
+    assignProject.mockResolvedValue({});
+    render(
+      <NetaCard
+        neta={mk({ id: "y", kind: "melody", title: "m", tags: ["prj:みなそこ"] })}
+        projects={["みなそこ"]}
+      />,
+    );
+    await userEvent.click(screen.getByLabelText("more-y"));
+    await userEvent.click(screen.getByLabelText("assign-y"));
+    await userEvent.click(screen.getByRole("button", { name: "✓ みなそこ" }));
+    expect(assignProject).toHaveBeenCalledWith("y", "みなそこ", false);
+  });
+
+  it("P3: 「＋新しい器」で作成しつつ入れる", async () => {
+    assignProject.mockResolvedValue({});
+    const spy = vi.spyOn(window, "prompt").mockReturnValue("新器");
+    render(<NetaCard neta={mk({ id: "z", kind: "melody", title: "m" })} projects={[]} />);
+    await userEvent.click(screen.getByLabelText("more-z"));
+    await userEvent.click(screen.getByLabelText("assign-z"));
+    await userEvent.click(screen.getByLabelText("assign-new-z"));
+    expect(assignProject).toHaveBeenCalledWith("z", "新器", true);
+    spy.mockRestore();
   });
 
   it("LV2: 並べ替え=タイトル順で表示順が変わる", async () => {

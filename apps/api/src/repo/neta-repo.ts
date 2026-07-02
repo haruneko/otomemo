@@ -130,6 +130,13 @@ export class NetaRepo {
       q.tags.forEach((t, i) => (params[`tag${i}`] = t));
       params.tagcount = q.tags.length;
     }
+    // 未仕分け＝どの器(prj:*)にも属さない＝prj: で始まるタグを1つも持たない。
+    if (q.unassigned) {
+      where.push(
+        `NOT EXISTS (SELECT 1 FROM neta_tag nt JOIN tag t ON t.id = nt.tag_id
+          WHERE nt.neta_id = n.id AND t.name LIKE 'prj:%')`,
+      );
+    }
     params.limit = q.limit ?? 100;
     params.offset = q.offset ?? 0;
     // 手動並べ替え：orderProject 指定時は neta_order を LEFT JOIN。position のある行を先に position 昇順、
