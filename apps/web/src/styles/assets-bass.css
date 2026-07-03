@@ -107,8 +107,8 @@ button:disabled {
    選択中はその種別色でリング＋淡い地。タップで選択/再タップで解除。 */
 .filter-kinds {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(8, minmax(0, 1fr)); /* minmax(0,…)＝列を縮められる＝横はみ出し防止 */
+  gap: 5px;
   margin: 0 0 8px;
 }
 .filter-kind {

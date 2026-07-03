@@ -611,6 +611,7 @@ export function App() {
               [
                 ["melody", "var(--k-melody)"],
                 ["chord_progression", "var(--k-chord)"],
+                ["chord_pattern", "var(--k-chord)"], // コード楽器＝探せるように追加（オーナー要望）
                 ["lyric", "var(--k-lyric)"],
                 ["section", "var(--k-section)"], // 作成の「曲」に対応（実体は section）
                 ["rhythm", "var(--k-rhythm)"],

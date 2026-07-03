@@ -46,6 +46,9 @@ main {
 .notebook {
   min-width: 0;
   display: grid;
+  /* 単一列を container 幅で頭打ち（minmax(0,1fr)）＝広い min-content を持つ子（filter-kinds 等）が
+     列を押し広げて横スクロールする事故を防ぐ（既定の暗黙列=auto は最大 min-content に膨らむ）。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding-bottom: 80px; /* #67 最下カードが右下チャットバブルの下に潜らないよう余白 */
 }

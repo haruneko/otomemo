@@ -317,6 +317,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1; /* 残り幅を取り、長いタイトルを ellipsis に収める（min-width:0 と対で横はみ出し防止）。 */
   min-width: 0;
 }
 .picker-item-meta strong {
