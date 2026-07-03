@@ -291,6 +291,13 @@ export const api = {
       { method: "POST", body: JSON.stringify(body) },
     ),
 
+  // 作曲補助②（文脈系）：section のコード進行＋frame からメロ候補を生成（gen_melody）。
+  genMelodyFor: (body: { frame: unknown; chords: unknown; seed?: number }) =>
+    http<{ items: { kind: string; content: unknown; label: string }[] }>("/music/gen_melody", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   unlink: (from: string, to: string, type = "related") =>
     http<{ ok: boolean }>("/relation/remove", {
       method: "POST",

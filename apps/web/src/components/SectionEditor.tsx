@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
 import { useTransport } from "../useTransport";
@@ -37,7 +37,9 @@ import {
   compositeNotes,
   downloadMidi,
   downloadMultitrackMidi,
+  playNotes,
   type Note,
+  type PlaybackHandle,
 } from "../music";
 import { MiniRoll } from "./MiniRoll";
 
@@ -134,6 +136,10 @@ export function SectionEditor({
   const [children, setChildren] = useState<Child[]>([]);
   const [picker, setPicker] = useState<{ lane: Lane; position: number; all: Neta[] } | null>(null);
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
+  // ②文脈系：この進行にメロ（section のコード＋frame から候補生成→試聴→メロレーンに置く）。
+  const [melCand, setMelCand] = useState<Note[] | null>(null);
+  const [genBusy, setGenBusy] = useState(false);
+  const candPlay = useRef<PlaybackHandle | null>(null);
   const BPB = beatsPerBar(meter ?? neta.meter); // 1小節の拍数（#51・編集中はprop優先）
   const TOTAL = BARS * BPB;
   // #49/#58/#59 トランスポート。合成結果を再生／プレイヘッドは TOTAL(グリッド全体)尺・拍子BPB。
@@ -201,6 +207,59 @@ export function SectionEditor({
     onChanged?.();
   }
 
+  // ②文脈系：この進行にメロ。section のコード進行を1本に連結（各コード子を小節位置ぶんオフセット）。
+  function sectionChords() {
+    const chordLane = LANES.find((l) => l.key === "chord")!;
+    const out: { root?: number; quality?: string; start?: number; dur?: number }[] = [];
+    for (const c of laneChildren(chordLane)) {
+      const content = c.node.neta.content as { chords?: typeof out } | null;
+      const offset = (c.position ?? 0) * BPB;
+      for (const ch of content?.chords ?? []) out.push({ ...ch, start: (ch.start ?? 0) + offset });
+    }
+    return out.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+  }
+  async function genMelodyForSection() {
+    const chords = sectionChords();
+    if (!chords.length || genBusy) return;
+    setGenBusy(true);
+    try {
+      const r = await api.genMelodyFor({
+        frame: { key: keyPc, meter: neta.meter, tempo, bars: BARS },
+        chords,
+        seed: Math.floor(Math.random() * 1e6), // 押すたび別案
+      });
+      const ns = notesForContent("melody", r.items?.[0]?.content);
+      setMelCand(ns.length ? ns : null);
+    } finally {
+      setGenBusy(false);
+    }
+  }
+  async function auditionCandidate() {
+    candPlay.current?.stop();
+    if (melCand) candPlay.current = await playNotes(melCand, tempo, { program: 0 });
+  }
+  async function placeCandidate() {
+    if (!melCand) return;
+    candPlay.current?.stop();
+    const created = await api.createNeta({
+      kind: "melody",
+      title: `${neta.title ?? "曲"} メロ`,
+      content: { notes: melCand },
+      key: keyPc,
+      tempo,
+      meter: neta.meter ?? undefined,
+      tags: neta.tags,
+    });
+    await api.placeChild(neta.id, created.id, 0, children.length);
+    setMelCand(null);
+    await load();
+    onChanged?.();
+  }
+  function closeCandidate() {
+    candPlay.current?.stop();
+    setMelCand(null);
+  }
+
   // 合成：子を section の調へ移調（rhythm除く）＋位置オフセット（共有: compositeNotes）
   function composite(): Note[] {
     return compositeNotes(children, keyPc, neta.mode);
@@ -233,7 +292,37 @@ export function SectionEditor({
         >
           MIDI(分割)
         </button>
+        {sectionChords().length > 0 && !melCand && (
+          <button
+            type="button"
+            className="tb-tool"
+            aria-label="gen-melody-for-section"
+            title="この進行に合うメロの候補を生成（決定的・Claude不要）"
+            disabled={genBusy}
+            onClick={() => void genMelodyForSection()}
+          >
+            {genBusy ? "生成中…" : "この進行にメロ"}
+          </button>
+        )}
       </div>
+
+      {melCand && (
+        <div className="reshape-bar" aria-label="melody-candidate" style={{ ["--k" as string]: "var(--k-melody)" }}>
+          <span className="reshape-label">メロ候補（この進行に生成）</span>
+          <button type="button" className="tb-tool" aria-label="audition-candidate" onClick={() => void auditionCandidate()}>
+            ▶試聴
+          </button>
+          <button type="button" className="tb-tool" disabled={genBusy} onClick={() => void genMelodyForSection()}>
+            {genBusy ? "…" : "別案"}
+          </button>
+          <button type="button" className="tb-tool primary" aria-label="place-candidate" onClick={() => void placeCandidate()}>
+            メロレーンに置く
+          </button>
+          <button type="button" className="tb-tool" aria-label="close-candidate" onClick={closeCandidate}>
+            閉じる
+          </button>
+        </div>
+      )}
 
       <div className="lanes" aria-label="timeline" ref={tp.scrollerRef}>
         <div className="playhead" aria-hidden="true" ref={tp.lineRef} />
