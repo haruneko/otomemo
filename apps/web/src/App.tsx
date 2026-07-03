@@ -72,6 +72,18 @@ export function App() {
   const [chatSeed, setChatSeed] = useState(""); // Chatを開くときの最初の一言（プロジェクト画面の起点入力から）
   const [doneCount, setDoneCount] = useState(0);
   const [active, setActive] = useState<Neta | null>(null);
+  // Section から子ネタへ潜った履歴（← 戻るで親 Section に戻す）。トップ階層の open は空にする。
+  const [navStack, setNavStack] = useState<Neta[]>([]);
+  // トップ階層で開く（一覧/Chat/プロジェクト）＝履歴をリセット。
+  const openTop = (n: Neta) => {
+    setNavStack([]);
+    setActive(n);
+  };
+  // 潜る（Section のブロックから子ネタへ）＝今の active を積んでから開く。
+  const drillNeta = (n: Neta) => {
+    setNavStack((s) => (active ? [...s, active] : s));
+    setActive(n);
+  };
   const [railOpen, setRailOpen] = useState(true);
   const isMobile = useIsMobile();
   const [composeSignal, setComposeSignal] = useState(0); // D&D配置でSectionEditorを再読込
@@ -636,7 +648,7 @@ export function App() {
             projects={projects}
             onChanged={() => void reload()}
             onChat={openChat}
-            onOpen={setActive}
+            onOpen={openTop}
             emptyText={
               q.trim() || moodFilter.trim()
                 ? `「${(q.trim() || moodFilter.trim()).slice(0, 20)}」に一致するネタはありません`
@@ -651,7 +663,7 @@ export function App() {
               onOpenNeta={(n) => {
                 setProjectView(false);
                 setFromProject(true); // 閉じたらプロジェクト画面へ戻す（特にSPで空ペーンに落ちない）
-                setActive(n);
+                openTop(n);
               }}
               onOpenSession={(thread) => {
                 localStorage.setItem("cm-chat-session", thread);
@@ -669,7 +681,14 @@ export function App() {
               key={active.id} /* ネタを切り替えたら作り直して内部状態を新ネタで初期化 */
               neta={active}
               reloadSignal={composeSignal}
+              onOpenNeta={drillNeta} /* Section のブロックタップ→子ネタへ潜る */
               onClose={() => {
+                if (navStack.length) {
+                  // 潜っている途中＝親 Section に戻る（一覧に落とさない）。
+                  setActive(navStack[navStack.length - 1]!);
+                  setNavStack(navStack.slice(0, -1));
+                  return;
+                }
                 setActive(null);
                 if (fromProject) {
                   setProjectView(true); // プロジェクト画面から開いたネタ＝閉じたら器へ戻る
@@ -710,7 +729,7 @@ export function App() {
             setChatTarget(undefined);
           }}
           onChanged={() => void reload()}
-          onOpenNeta={(n) => setActive(n)} // #68 Chatからネタを開く
+          onOpenNeta={(n) => openTop(n)} // #68 Chatからネタを開く
         />
       )}
       {trayOpen && (
@@ -718,7 +737,7 @@ export function App() {
           onClose={() => setTrayOpen(false)}
           onOpenNeta={(n) => {
             setTrayOpen(false);
-            setActive(n); // できたネタを開く
+            openTop(n); // できたネタを開く
           }}
           onOpenChat={(targetId) => {
             setTrayOpen(false);

@@ -249,6 +249,21 @@
   color: #fff;
   border-color: var(--accent);
 }
+/* 探して無ければ作る＝ピッカー上部の新規作成ボタン（点線＝"追加"の合図）。 */
+.picker-create {
+  width: 100%;
+  margin: 8px 0 4px;
+  padding: 9px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, #1b1e23);
+  color: var(--fg);
+  font-size: 0.85rem;
+  text-align: left;
+}
+.picker-create:hover {
+  background: color-mix(in srgb, var(--accent) 24%, #1b1e23);
+}
 .picker-list {
   display: grid;
   gap: 6px;

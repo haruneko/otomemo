@@ -57,6 +57,7 @@ export interface KindEditorBodyProps {
   onClearKeyReport?: () => void;
   reloadSignal?: number;
   onChanged?: () => void;
+  onOpenNeta?: (n: Neta) => void; // Section のブロックタップ→子ネタを開く（潜る）
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
   tp: { lineRef: any; scrollerRef: any; beatRef: any; playing: boolean };
 }
@@ -248,6 +249,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           meter={p.meter}
           reloadSignal={p.reloadSignal}
           onChanged={p.onChanged}
+          onOpenNeta={p.onOpenNeta}
         />
       ) : (
         <div className="text-editor">

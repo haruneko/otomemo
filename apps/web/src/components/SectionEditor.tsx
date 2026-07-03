@@ -143,6 +143,7 @@ export function SectionEditor({
   meter,
   reloadSignal,
   onChanged,
+  onOpenNeta,
 }: {
   neta: Neta;
   keyPc: number;
@@ -150,6 +151,7 @@ export function SectionEditor({
   meter?: string; // 編集中ライブ反映用（未指定は neta.meter）
   reloadSignal?: number; // 外部(D&D配置)からの再読込トリガ
   onChanged?: () => void;
+  onOpenNeta?: (n: Neta) => void; // ブロックタップ→子ネタを編集画面で開く（潜る）
 }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [picker, setPicker] = useState<{ lane: Lane; position: number; all: Neta[] } | null>(null);
@@ -230,6 +232,52 @@ export function SectionEditor({
     await api.removeChild(neta.id, childId, position);
     await load();
     onChanged?.();
+  }
+
+  // ブロック操作＝tap:子ネタを開いて編集／長押し:配置解除（ネタ自体は残る）。右端グリップ(③)は別。
+  const lp = useRef<{ timer: ReturnType<typeof setTimeout> | null; fired: boolean; x: number; y: number }>({
+    timer: null, fired: false, x: 0, y: 0,
+  });
+  function onBlockDown(e: React.PointerEvent, c: Child) {
+    lp.current.fired = false;
+    lp.current.x = e.clientX;
+    lp.current.y = e.clientY;
+    lp.current.timer = setTimeout(() => {
+      lp.current.fired = true; // 長押し成立＝外す（後続の click は無効化）
+      void remove(c.node.neta.id, c.position);
+    }, 500);
+  }
+  function cancelLp() {
+    if (lp.current.timer) {
+      clearTimeout(lp.current.timer);
+      lp.current.timer = null;
+    }
+  }
+  function onBlockMove(e: React.PointerEvent) {
+    // 指が動いた＝スクロール等＝長押し中止（誤爆で外さない）。
+    if (Math.abs(e.clientX - lp.current.x) > 8 || Math.abs(e.clientY - lp.current.y) > 8) cancelLp();
+  }
+  function onBlockClick(e: React.MouseEvent, c: Child) {
+    e.stopPropagation();
+    cancelLp();
+    if (lp.current.fired) {
+      lp.current.fired = false; // 長押しで外した→この click は編集を開かない
+      return;
+    }
+    onOpenNeta?.(c.node.neta); // tap＝子ネタを編集画面で開く（潜る）
+  }
+  // ピッカーの「＋新規作成」：このレーンの kind で空ネタを作って配置→そのまま編集を開く
+  //（探して無ければ作る導線）。コード進行は chord_progression を既定に。
+  async function createInLane() {
+    if (!picker) return;
+    const kinds = picker.lane.kinds;
+    const kind = kinds.includes("chord_progression") ? "chord_progression" : kinds[0]!;
+    const created = await api.createNeta({ kind, title: pq.trim() || undefined });
+    await api.placeChild(neta.id, created.id, picker.position, picker.lane.row ?? 0).catch(() => {});
+    setPicker(null);
+    await load();
+    onChanged?.();
+    onOpenNeta?.(created); // 作ったらすぐ中身を描けるよう編集へ
   }
 
   // ③ 右端ドラッグでループ伸ばし＝同じ子を小節境界のループ単位でタイル反復配置（compose_edge は
@@ -518,15 +566,16 @@ export function SectionEditor({
                   className="lane-block"
                   data-kind={c.node.neta.kind}
                   aria-label={`block-${c.node.neta.id}@${c.position}`}
-                  title={`${c.node.neta.title ?? c.node.neta.text ?? ""} @${c.position}拍 — タップで外す`}
+                  title={`${c.node.neta.title ?? c.node.neta.text ?? ""} @${c.position}拍 — タップで編集／長押しで外す`}
                   style={{
                     left: `${(c.position / TOTAL) * 100}%`,
                     width: `${(Math.min(childDur(c), TOTAL - c.position) / TOTAL) * 100}%`,
                   }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void remove(c.node.neta.id, c.position);
-                  }}
+                  onPointerDown={(e) => onBlockDown(e, c)}
+                  onPointerMove={onBlockMove}
+                  onPointerUp={cancelLp}
+                  onPointerLeave={cancelLp}
+                  onClick={(e) => onBlockClick(e, c)}
                 >
                   <MiniRoll neta={c.node.neta} />
                   <span className="lane-block-label">
@@ -556,7 +605,9 @@ export function SectionEditor({
           </div>
         ))}
       </div>
-      <p className="muted lanes-hint">空きをタップ→置くネタを選ぶ／ブロックをタップで外す</p>
+      <p className="muted lanes-hint">
+        空きをタップ→置く/新規作成／ブロックをタップで編集・長押しで外す／右端ドラッグで繰り返し
+      </p>
 
       {others.length > 0 && (
         <div className="section-others">
@@ -611,6 +662,10 @@ export function SectionEditor({
               value={pq}
               onChange={(e) => setPq(e.target.value)}
             />
+            {/* 探して無ければ作る：このレーンの kind で新規作成→配置→編集へ。 */}
+            <button type="button" className="picker-create" aria-label="picker-create" onClick={() => void createInLane()}>
+              ＋ {pq.trim() ? `「${pq.trim()}」を` : ""}新しい{picker.lane.label}を作る
+            </button>
             <div className="picker-list">
               {(() => {
                 const q = pq.toLowerCase();

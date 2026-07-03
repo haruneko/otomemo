@@ -1,15 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { getComposition, listNeta, placeChild, removeChild } = vi.hoisted(() => ({
+const { getComposition, listNeta, placeChild, removeChild, createNeta } = vi.hoisted(() => ({
   getComposition: vi.fn(),
   listNeta: vi.fn(),
   placeChild: vi.fn(),
   removeChild: vi.fn(),
+  createNeta: vi.fn(),
 }));
-vi.mock("../src/api", () => ({ api: { getComposition, listNeta, placeChild, removeChild } }));
+vi.mock("../src/api", () => ({ api: { getComposition, listNeta, placeChild, removeChild, createNeta } }));
 
 import { SectionEditor, beatsPerBar, loopPositions } from "../src/components/SectionEditor";
 
@@ -46,16 +47,42 @@ const mk = (id: string, kind: string, over: Partial<Neta> = {}): Neta => ({
 });
 
 describe("SectionEditor (3-lane timeline)", () => {
-  it("shows a placed child on its lane and removes it on tap", async () => {
+  it("ブロックをタップ＝子ネタを編集画面で開く（潜る・外さない）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("c1", "melody", { title: "メロ案" }), children: [] } }],
+    });
+    const onOpenNeta = vi.fn();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} onOpenNeta={onOpenNeta} />);
+    await userEvent.click(await screen.findByLabelText("block-c1@0"));
+    expect(onOpenNeta).toHaveBeenCalledWith(expect.objectContaining({ id: "c1" }));
+    expect(removeChild).not.toHaveBeenCalled(); // タップは外さない
+  });
+
+  it("ブロック長押し＝配置を外す（#54・ネタ自体は残す）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
       children: [{ position: 0, ord: 0, node: { neta: mk("c1", "melody", { title: "メロ案" }), children: [] } }],
     });
     removeChild.mockResolvedValue({ ok: true });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-c1@0");
-    await userEvent.click(screen.getByLabelText("block-c1@0"));
-    expect(removeChild).toHaveBeenCalledWith("s1", "c1", 0); // #54: 位置指定で1インスタンス解除
+    const block = await screen.findByLabelText("block-c1@0");
+    fireEvent.pointerDown(block, { clientX: 5, clientY: 5 }); // 長押し開始（動かさない）
+    await waitFor(() => expect(removeChild).toHaveBeenCalledWith("s1", "c1", 0), { timeout: 1200 });
+  });
+
+  it("ピッカーの新規作成＝空ネタを作って配置し、そのまま編集を開く", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    listNeta.mockResolvedValue([]);
+    createNeta.mockResolvedValue(mk("newm", "melody"));
+    placeChild.mockResolvedValue({ ok: true });
+    const onOpenNeta = vi.fn();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} onOpenNeta={onOpenNeta} />);
+    await userEvent.click(screen.getByLabelText("place-melody-0")); // 1小節目のメロ空セル
+    await userEvent.click(await screen.findByLabelText("picker-create"));
+    await waitFor(() => expect(createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "melody" })));
+    expect(placeChild).toHaveBeenCalledWith("s1", "newm", 0, 0);
+    expect(onOpenNeta).toHaveBeenCalledWith(expect.objectContaining({ id: "newm" })); // 作ったら開く
   });
 
   it("taps a melody-lane cell to place a neta at that bar (position = bar*4)", async () => {
