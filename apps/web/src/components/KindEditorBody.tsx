@@ -42,6 +42,13 @@ export interface KindEditorBodyProps {
   keyPc: number; // 調（'key' は React 予約 prop なので keyPc）
   tempo: number;
   meter: string;
+  // 崩し候補（①道具）：候補があれば PianoRoll に候補=実線/元=ゴーストで表示・再生は候補。
+  candidate?: import("../music").Note[] | null;
+  candStrength?: number;
+  reshaping?: boolean;
+  onReshape?: (strength?: number) => void;
+  onSaveCandidate?: () => void;
+  onDiscardCandidate?: () => void;
   reloadSignal?: number;
   onChanged?: () => void;
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
@@ -102,14 +109,56 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                         </svg>
                       </button>
                     </div>
+                    {isMelody && !p.candidate && (
+                      <>
+                        <span className="tb-divider" aria-hidden="true" />
+                        <button
+                          type="button"
+                          className="tb-tool"
+                          aria-label="reshape"
+                          title="崩す＝ノリを保ったまま別メロの候補を出す（決定的・Claude不要）"
+                          disabled={p.reshaping}
+                          onClick={() => p.onReshape?.()}
+                        >
+                          {p.reshaping ? "崩し中…" : "崩す"}
+                        </button>
+                      </>
+                    )}
                   </>
                 )}
               </div>
               {p.melodyView === "roll" ? (
                 <>
+                  {p.candidate && (
+                    <div className="reshape-bar" aria-label="reshape-candidate">
+                      <span className="reshape-label">崩し候補（元＝点線／▶で候補を試聴）</span>
+                      <div className="reshape-strength">
+                        {([["弱", 0.3], ["中", 0.55], ["強", 0.8]] as const).map(([lbl, s]) => (
+                          <button
+                            key={lbl}
+                            type="button"
+                            className={Math.abs((p.candStrength ?? 0.55) - s) < 0.01 ? "on" : ""}
+                            disabled={p.reshaping}
+                            onClick={() => p.onReshape?.(s)}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                      <button type="button" className="tb-tool" disabled={p.reshaping} onClick={() => p.onReshape?.()}>
+                        {p.reshaping ? "…" : "別案"}
+                      </button>
+                      <button type="button" className="tb-tool primary" aria-label="save-candidate" onClick={() => p.onSaveCandidate?.()}>
+                        新ネタで保存
+                      </button>
+                      <button type="button" className="tb-tool" aria-label="discard-candidate" onClick={() => p.onDiscardCandidate?.()}>
+                        破棄
+                      </button>
+                    </div>
+                  )}
                   {/* 小節/弱起 は折りたたみ設定(MetaPanel)へ移動＝縦詰め（design/ユーザー 2026-07-02）。 */}
                   <PianoRoll
-                    notes={p.notes}
+                    notes={p.candidate ?? p.notes}
                     onChange={p.setNotes}
                     beats={p.len}
                     pickup={p.pickup}
@@ -117,6 +166,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     high={isBass ? 55 : undefined}
                     enableLyric={isMelody}
                     mode={p.rollMode}
+                    ghostNotes={p.candidate ? p.notes : undefined}
+                    readOnly={!!p.candidate}
                     playheadRef={tp.lineRef}
                     scrollerRef={tp.scrollerRef}
                   />

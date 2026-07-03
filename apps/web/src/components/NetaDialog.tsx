@@ -77,6 +77,8 @@ export function NetaDialog({
         bassMode={ed.bassMode} setBassMode={ed.setBassMode}
         melodyView={ed.melodyView} setMelodyView={ed.setMelodyView}
         rollMode={ed.rollMode} setRollMode={ed.setRollMode}
+        candidate={ed.candidate} candStrength={ed.candStrength} reshaping={ed.reshaping}
+        onReshape={ed.reshape} onSaveCandidate={ed.saveCandidate} onDiscardCandidate={ed.discardCandidate}
         len={ed.len} setLen={ed.setLen}
         pickup={ed.pre} setPickup={ed.setPickup}
         text={ed.text} setText={ed.setText}

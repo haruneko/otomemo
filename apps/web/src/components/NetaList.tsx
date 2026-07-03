@@ -46,9 +46,6 @@ export function NetaCard({
   const [moreOpen, setMoreOpen] = useState(false);
   // P3: 器ピッカーの開閉（入れ先はフィルタと独立＝どの器へでも入れられる）。
   const [assignOpen, setAssignOpen] = useState(false);
-  // 作曲補助①：崩す（強度）の開閉＋実行中ガード。
-  const [reshapeOpen, setReshapeOpen] = useState(false);
-  const [reshaping, setReshaping] = useState(false);
   // 手動並べ替え(sortable)＋セクションのレーンへドラッグ配置(#52②c)を1つのハンドルで兼ねる。
   // 一覧内で別カードにドロップ→reorder（App.onDragEnd）／レーンにドロップ→placeChild。
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -178,37 +175,6 @@ export function NetaCard({
     await toggleProject(name, true);
   }
 
-  // 崩す：提示メロを強度に応じ崩した別メロを新規ネタ化（元は不変・link で紐づけ・Claude不要）。
-  async function reshapeMelody(strength: number) {
-    if (reshaping) return;
-    setReshaping(true);
-    try {
-      const content = neta.content as { notes?: unknown[] } | null;
-      const r = await api.reshapeMelody({
-        ref: content?.notes ?? [],
-        frame: { key: neta.key ?? 0, meter: neta.meter, tempo: neta.tempo, bars: neta.bars, mood: neta.mood },
-        strength,
-        seed: Math.floor(Math.random() * 1e6), // 押すたび違う崩し＝ばらつき
-      });
-      const item = r.items?.[0];
-      if (!item) return;
-      const created = await api.createNeta({
-        kind: "melody",
-        title: `${label} 崩し`,
-        content: item.content,
-        key: neta.key ?? undefined,
-        tempo: neta.tempo ?? undefined,
-        meter: neta.meter ?? undefined,
-        mood: neta.mood ?? undefined,
-        tags: neta.tags, // 同じ器・同じ意味タグを引き継ぐ
-      });
-      await api.link(neta.id, created.id, "variation").catch(() => {});
-      setReshapeOpen(false);
-      onChanged?.();
-    } finally {
-      setReshaping(false);
-    }
-  }
   const assignMenu =
     scope === "project" ? (
       <div className="assign-wrap">
@@ -361,25 +327,6 @@ export function NetaCard({
           </button>
         ) : (
           <>
-            {neta.kind === "melody" && (
-              <div className="assign-wrap">
-                <button
-                  className={"bs-btn" + (reshaping ? " on" : "")}
-                  aria-label={`reshape-${neta.id}`}
-                  title="このメロのノリを保ったまま崩した別メロを作る（決定的・Claude不要）"
-                  onClick={() => setReshapeOpen((v) => !v)}
-                >
-                  {reshaping ? "崩し中…" : "崩す ▾"}
-                </button>
-                {reshapeOpen && !reshaping && (
-                  <div className="assign-menu" aria-label={`reshape-menu-${neta.id}`}>
-                    <button className="bs-btn" onClick={() => void reshapeMelody(0.3)}>弱</button>
-                    <button className="bs-btn" onClick={() => void reshapeMelody(0.55)}>中</button>
-                    <button className="bs-btn" onClick={() => void reshapeMelody(0.8)}>強</button>
-                  </div>
-                )}
-              </div>
-            )}
             {assignMenu}
             <button
               className="bs-btn"

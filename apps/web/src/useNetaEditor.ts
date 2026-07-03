@@ -31,6 +31,10 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [text, setText] = useState(neta.text ?? "");
   const [tags, setTags] = useState(neta.tags.join(" "));
   const [notes, setNotes] = useState<Note[]>(notesOf(neta.content));
+  // 崩し候補（①道具）：生成した別メロを候補として保持（元 notes は不変）。表示/再生は候補、保存で新ネタ。
+  const [candidate, setCandidate] = useState<Note[] | null>(null);
+  const [candStrength, setCandStrength] = useState(0.55);
+  const [reshaping, setReshaping] = useState(false);
   const [chords, setChords] = useState<ChordEntry[]>(chordsOf(neta.content));
   const [rhythm, setRhythm] = useState<RhythmContent>(rhythmOf(neta.content));
   const [key, setKey] = useState<number>(neta.key ?? 0);
@@ -84,7 +88,9 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const isRelBass = isBass && bassMode === "relative"; // #bass S2 相対モード
   // 弱起ぶんの lead-in（指定 pickup と既存の負 start を包む）。ソロ再生はこの分だけ前へずらして鳴らす
   // ＝弱起→ダウンビートの順で聞こえる（PianoRoll も同じ pre で描画）。
-  const pre = Math.max(0, pickup, Math.ceil(-Math.min(0, ...notesOf(neta.content).map((n) => n.start), ...notes.map((n) => n.start))));
+  // 崩し候補モード中は表示/再生を候補メロにする（元 notes は保存用に温存）。
+  const activeNotes = candidate ?? notes;
+  const pre = Math.max(0, pickup, Math.ceil(-Math.min(0, ...notesOf(neta.content).map((n) => n.start), ...activeNotes.map((n) => n.start))));
   // ソロ編集は見た目=実音（WYSIWYG）＝トランスポーズしない。調支配は合成(SectionEditor)側。
   // 相対bass は単体プレビュー＝調(key)を tonic に度数解決して鳴らす（実音高）。
   const playable = isRelBass
@@ -92,7 +98,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     : isChordPat
       ? resolveChordPattern(chordPat, [], key) // 単体プレビュー＝key の tonic コードに解決
       : isMelody || isBass
-        ? notes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る
+        ? activeNotes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る
         : isChord
           ? chordsToNotes(chords)
           : rhythmToNotes(rhythm);
@@ -187,6 +193,46 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     return {};
   }
 
+  // 崩し候補：生成→試聴→良ければ保存の道具（①）。元は不変・候補として一時保持。
+  async function reshape(strength?: number) {
+    if (!isMelody || reshaping) return;
+    const s = strength ?? candStrength;
+    setCandStrength(s);
+    setReshaping(true);
+    try {
+      const r = await api.reshapeMelody({
+        ref: notes,
+        frame: { key, meter, tempo, bars: Math.ceil(len / 4), mood: mood.trim() || undefined },
+        strength: s,
+        seed: Math.floor(Math.random() * 1e6), // 押すたび別案
+      });
+      const cn = notesOf(r.items?.[0]?.content);
+      if (cn.length) setCandidate(cn);
+    } finally {
+      setReshaping(false);
+    }
+  }
+  async function saveCandidate() {
+    if (!candidate) return;
+    const created = await api.createNeta({
+      kind: "melody",
+      title: `${title.trim() || neta.title || "メロ"} 崩し`,
+      content: { notes: candidate, program },
+      key,
+      mode,
+      tempo,
+      meter,
+      mood: mood.trim() || undefined,
+      tags: neta.tags, // 同じ器・意味タグを継承
+    });
+    await api.link(neta.id, created.id, "variation").catch(() => {});
+    setCandidate(null);
+    onChanged?.();
+  }
+  function discardCandidate() {
+    setCandidate(null);
+  }
+
   async function save() {
     setBusy(true);
     try {
@@ -236,6 +282,8 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat,
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
     melodyView, setMelodyView, rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
+    // 崩し候補（①道具）
+    candidate, candStrength, reshaping, reshape, saveCandidate, discardCandidate,
     // 派生・道具
     playable, tp, editHist, rels, busy, schedId, colorKind,
     // アクション

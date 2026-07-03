@@ -41,6 +41,8 @@ export function PianoRoll({
   high = DEFAULT_HIGH,
   enableLyric = false,
   mode = "draw",
+  ghostNotes,
+  readOnly = false,
 }: {
   notes: Note[];
   onChange: (n: Note[]) => void;
@@ -52,6 +54,8 @@ export function PianoRoll({
   high?: number; // 既定で見せる最高音
   enableLyric?: boolean; // メロのみ：歌詞流し込み（LS3・design L2）
   mode?: "draw" | "select"; // 描く/選ぶ（トグルは KindEditorBody 側＝ロール/パッドと同じ行に）
+  ghostNotes?: Note[]; // 崩し候補モード：元メロを半透明ゴーストで重ねる（比較用・非操作）
+  readOnly?: boolean; // 候補レビュー中は編集不可（クリックで足さない）
 }) {
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
@@ -66,22 +70,24 @@ export function PianoRoll({
     }
   }, [mode]);
 
+  // 崩し候補モードは候補(notes)＋ゴースト(元)の両方が収まる範囲/尺で描く。
+  const rangeNotes = useMemo(() => (ghostNotes ? [...notes, ...ghostNotes] : notes), [notes, ghostNotes]);
   const pitches = useMemo(() => {
-    const lo = Math.min(low, ...notes.map((n) => n.pitch));
-    const hi = Math.max(high, ...notes.map((n) => n.pitch));
+    const lo = Math.min(low, ...rangeNotes.map((n) => n.pitch));
+    const hi = Math.max(high, ...rangeNotes.map((n) => n.pitch));
     const arr: number[] = [];
     for (let p = hi; p >= lo; p--) arr.push(p);
     return arr;
-  }, [notes, low, high]);
+  }, [rangeNotes, low, high]);
   // 弱起ぶんの lead-in（拍0の前）。指定 pickup と既存の負 start を両方包む。拍0=ダウンビートは固定。
   const pre = useMemo(
-    () => Math.max(0, pickup, Math.ceil(-Math.min(0, ...notes.map((n) => n.start)))),
-    [pickup, notes],
+    () => Math.max(0, pickup, Math.ceil(-Math.min(0, ...rangeNotes.map((n) => n.start)))),
+    [pickup, rangeNotes],
   );
   // 表示尺は content に追従（生成/取込で beats を超える音もはみ出さない）＋弱起ぶん左へ。
   const span = useMemo(
-    () => Math.max(beats, ...notes.map((n) => Math.ceil(n.start + n.dur))),
-    [beats, notes],
+    () => Math.max(beats, ...rangeNotes.map((n) => Math.ceil(n.start + n.dur))),
+    [beats, rangeNotes],
   );
   const total = pre + span; // 表示する総拍（-pre 〜 span）
   const steps = total * SUBDIV;
@@ -108,6 +114,7 @@ export function PianoRoll({
   const GRID = 1 / SUBDIV; // 1セル=16分＝時間nudgeの単位（拍）
   function onNoteClick(gi: number, target: Note, e: { stopPropagation: () => void }) {
     e.stopPropagation();
+    if (readOnly) return; // 候補レビュー中は編集しない
     if (mode === "draw") {
       removeNote(target);
       return;
@@ -120,6 +127,7 @@ export function PianoRoll({
     });
   }
   function onCellClick(pitch: number, step: number) {
+    if (readOnly) return; // 候補レビュー中は編集しない
     if (mode === "draw") {
       addAt(pitch, step);
       return;
@@ -236,6 +244,19 @@ export function PianoRoll({
                   onClick={() => onCellClick(p, s)}
                 />
               ))}
+              {ghostNotes
+                ?.filter((n) => n.pitch === p)
+                .map((n, i) => (
+                  <span
+                    key={`ghost-${i}`}
+                    className="proll-note ghost"
+                    aria-hidden="true"
+                    style={{
+                      left: `${((n.start + pre) / total) * 100}%`,
+                      width: `${(n.dur / total) * 100}%`,
+                    }}
+                  />
+                ))}
               {notes
                 .map((n, gi) => ({ n, gi }))
                 .filter((x) => x.n.pitch === p)

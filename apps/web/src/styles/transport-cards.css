@@ -415,6 +415,57 @@
   background: var(--line);
   margin: 0 2px;
 }
+/* ツールバーの道具ボタン（崩す 等）＋崩し候補バー（①道具・候補プレビュー）。 */
+.tb-tool {
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.tb-tool:disabled {
+  opacity: 0.5;
+}
+.tb-tool.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.reshape-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--k, var(--accent)) 12%, #1b1e23);
+  border: 1px solid var(--k, var(--accent));
+  border-radius: 8px;
+}
+.reshape-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-right: auto;
+}
+.reshape-strength {
+  display: inline-flex;
+  gap: 2px;
+}
+.reshape-strength button {
+  font-size: 0.76rem;
+  padding: 3px 9px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.reshape-strength button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
 /* 音価ボタンと付点の区切り線（付点=修飾で別物と分かる）。 */
 .nv-divider {
   width: 1px;
@@ -502,6 +553,14 @@
   outline-offset: -1px;
   z-index: 3;
   filter: brightness(1.15);
+}
+/* 崩し候補モード：元メロを半透明ゴーストで重ねる（比較用・非操作・候補の背面）。 */
+.proll-note.ghost {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--k, var(--accent)) 55%, #fff);
+  opacity: 0.4;
+  z-index: 1;
+  pointer-events: none;
 }
 /* 描く/選ぶ モードトグル。 */
 .proll-modes {
