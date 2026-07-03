@@ -351,10 +351,20 @@ export function resolveRelativeBass(
 // --- コード楽器パターン（chord_pattern・CP2）。進行に解決する相対型の和音版（コンピング/アルペジオ）---
 export type ChordPatternMode = "strum" | "arp";
 export type ChordTone = "R" | "3" | "5" | "7";
-// top＝トップ声部の「狙い音」（絶対MIDIピッチ・任意）。指定時は各コードでこの音に最寄りの
-// コードトーンを最高声部に採り、内声を下へ積む＝レジスタを一定に保ち進行間の声部進行が滑らか。
-// 絶対採用（調が変わってもコンピングの音域は動かさない＝物理レジスタ／design 2026-07-04）。
-export interface ChordVoicing { tones: ChordTone[]; openClose: "open" | "close"; octave: number; top?: number }
+// 響きモデル（2026-07-04 作り替え）：構成音の手選択(tones)は撤去＝鳴る音はコードの質から自動。
+// - top: トップ声部の「狙い音」（絶対MIDIピッチ）。各コードでこの音に最寄りのコードトーンを最高声部に。
+// - powerChord: 3rd 等を落として R+5 だけ（唯一の"間引き"＝手選択の代わり）。
+// - openClose: 広がり（close=密／open=1つおきに+12で広げる）。octave: 高さ微調整。
+// - arpDir: アルペジオの向き（up/down/updown）。音域は top+openClose で決まる＝別指定しない。
+// tones は後方互換のため残す（top 未指定の旧パターンは従来どおり tones で鳴る）。
+export interface ChordVoicing {
+  tones: ChordTone[];
+  openClose: "open" | "close";
+  octave: number;
+  top?: number;
+  powerChord?: boolean;
+  arpDir?: "up" | "down" | "updown";
+}
 export interface ChordHit { step: number; dur: number } // dur=step数（1step=16分）＝各音の長さを指定
 export interface ChordPatternContent {
   mode: ChordPatternMode;
@@ -379,9 +389,11 @@ export function emptyChordPattern(): ChordPatternContent {
 // ルートのpcぶん上下した）。anchor=「大体の高さ」。open は1つおきに+12で広げる（スケッチ範囲）。
 // トップ狙い音（絶対）ベースのボイシング＝各コードで top に最寄りのコードトーンを最高声部にし、
 // 残りをその下へ密に積む（多少雑でOK＝厳密な最適配置は DAW 案件）。open は1つおきに+12で広げる。
-function voiceToTop(root: number, quality: string, toneList: ChordTone[], top: number, open: boolean): number[] {
+function voiceToTop(root: number, quality: string, powerChord: boolean, top: number, open: boolean): number[] {
   const r = (((Math.round(root) % 12) + 12) % 12);
-  const pcs = (toneList.length ? toneList : ["R", "3", "5"]).map((t) => (((r + degreeInterval(t, quality)) % 12) + 12) % 12);
+  // 鳴る音はコードの質から自動（QUALITY_INTERVALS＝全コードトーン）。パワーコードは R+5 のみ。
+  const ivals = powerChord ? [0, 7] : (QUALITY_INTERVALS[quality] ?? [0, 4, 7]);
+  const pcs = ivals.map((iv) => (((r + iv) % 12) + 12) % 12);
   const nearest = (pc: number) => Math.round((top - pc) / 12) * 12 + pc; // pc を top 最寄りのオクターブへ
   // トップ＝top に一番近い実現ピッチを与える構成音（同距離は先勝ち＝細かい優先は DAW 案件）。
   let topPc = pcs[0]!, topPitch = nearest(pcs[0]!);
@@ -404,7 +416,7 @@ function voiceToTop(root: number, quality: string, toneList: ChordTone[], top: n
 }
 
 function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
-  if (v.top != null) return voiceToTop(root, quality, v.tones ?? [], v.top, v.openClose === "open");
+  if (v.top != null) return voiceToTop(root, quality, v.powerChord === true, v.top, v.openClose === "open");
   const r = (((Math.round(root) % 12) + 12) % 12);
   const anchor = CHORD_BASE + (v.octave ?? 0) * 12;
   let d = (((r - anchor) % 12) + 12) % 12; // root を anchor の最寄りオクターブへ（anchor±6半音帯）
@@ -413,6 +425,18 @@ function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
   const tones = (v.tones?.length ? v.tones : ["R", "3", "5"]).map((t) => base + degreeInterval(t, quality));
   tones.sort((a, b) => a - b);
   return v.openClose === "open" ? tones.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : tones;
+}
+
+// アルペジオ i 番目が voiced（昇順・n音）のどのインデックスか。up=昇順／down=降順／updown=ピンポン。
+function arpStep(i: number, n: number, dir?: "up" | "down" | "updown"): number {
+  if (n <= 1) return 0;
+  if (dir === "down") return (n - 1) - (i % n);
+  if (dir === "updown") {
+    const period = 2 * (n - 1); // 0..n-1..1 の三角波
+    const t = ((i % period) + period) % period;
+    return t < n ? t : period - t;
+  }
+  return i % n; // up（既定）
 }
 
 // コード楽器パターンをコードに当てて実音 notes へ（strum=和音ブロック／arp=構成音を巡回）。相対型＝進行に解決。
@@ -432,7 +456,8 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
     const quality = ch ? ch.quality : "";
     const voiced = voiceChord(root, quality, v);
     if (mode === "arp") {
-      out.push({ pitch: voiced[arpIdx % voiced.length]!, start, dur });
+      // 向き（up=昇順／down=降順／updown=ピンポン）で voiced（昇順）を辿る。音域は voicing 継承＝別指定なし。
+      out.push({ pitch: voiced[arpStep(arpIdx, voiced.length, v.arpDir)]!, start, dur });
       arpIdx++;
     } else {
       for (const p of voiced) out.push({ pitch: p, start, dur });

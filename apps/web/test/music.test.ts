@@ -405,6 +405,36 @@ describe("music", () => {
       );
       expect(notes.filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b)).toEqual([48, 52, 55]); // C E G（従来通り）
     });
+    it("構成音は自動＝top指定時はコードの質から全トーン（maj7 は7thも鳴る／手選択不要）", () => {
+      const notes = resolveChordPattern(
+        { mode: "strum", voicing: { tones: [], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+        [{ root: 0, quality: "maj7", start: 0, dur: 4 }],
+        0,
+      );
+      const pcs = new Set(notes.map((n) => ((n.pitch % 12) + 12) % 12));
+      expect(pcs).toEqual(new Set([0, 4, 7, 11])); // C E G B（7thが自動で入る）
+    });
+    it("パワーコード＝R+5 の2音だけ（3rd を落とす・唯一の間引き）", () => {
+      const at0 = resolveChordPattern(
+        { mode: "strum", voicing: { tones: [], openClose: "close", octave: 0, top: 67, powerChord: true }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+        [{ root: 0, quality: "", start: 0, dur: 4 }],
+        0,
+      ).filter((n) => n.start === 0);
+      expect(at0.length).toBe(2);
+      expect(new Set(at0.map((n) => ((n.pitch % 12) + 12) % 12))).toEqual(new Set([0, 7])); // C G（E=3rd 無し）
+    });
+    it("アルペジオ向き：up と down で辿る順が逆（音域は voicing 継承）", () => {
+      const play = (dir: "up" | "down") =>
+        resolveChordPattern(
+          { mode: "arp", voicing: { tones: [], openClose: "close", octave: 0, top: 72, arpDir: dir }, steps: 16, hits: [{ step: 0, dur: 2 }, { step: 2, dur: 2 }, { step: 4, dur: 2 }] },
+          [{ root: 0, quality: "", start: 0, dur: 12 }],
+          0,
+        ).map((n) => n.pitch);
+      const up = play("up"), down = play("down");
+      expect(up[0]! < up[2]!).toBe(true); // 昇順で辿る
+      expect(down[0]! > down[2]!).toBe(true); // 降順で辿る
+      expect(up.slice().reverse()).toEqual(down); // 完全に逆順
+    });
     it("open は構成音を1つおきに広げる（close と異なる）", () => {
       const close = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch);
       const open = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "open", octave: 0 } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b);
