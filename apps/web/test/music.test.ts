@@ -286,6 +286,21 @@ describe("music", () => {
       expect(notes[0]!.pitch).toBe(62);
       expect(notes[0]!.start).toBe(4);
     });
+
+    it("① 進行トラックは無音の骨格＝自分は鳴らさず、コード楽器の解決文脈だけ提供する", () => {
+      const prog = { position: 0, node: { neta: { kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } } } };
+      // 進行だけ置いても音は出ない（骨格＝抽象・CP1）
+      expect(compositeNotes([prog], 0)).toEqual([]);
+      // 進行＋コード楽器 → 進行の骨格に解決してコード楽器だけ鳴る（進行の自前発音48は出力に無い）
+      const withInstr = [
+        prog,
+        { position: 0, node: { neta: { kind: "chord_pattern", content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 16, hits: [{ step: 0, dur: 16 }] } } } },
+      ];
+      const notes = compositeNotes(withInstr, 0);
+      expect(notes.length).toBeGreaterThan(0);
+      expect(notes.every((n) => n.program !== 48)).toBe(true); // 進行(GM49=48)は無音
+      expect(notes.filter((n) => n.start === 0).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b)).toEqual([0, 4, 7]); // C E G（コード楽器が解決）
+    });
   });
 
   it("notesOf extracts notes or empty", () => {

@@ -487,11 +487,12 @@ export function compositeNotes(
       const subMode = c.node.neta.mode ?? (c.node.neta.key == null ? sectionMode : null);
       return compositeNotes(c.node.children ?? [], subKey, subMode).map((n) => ({ ...n, start: n.start + c.position }));
     }
+    // ①（2026-07-03）コード進行トラックは**無音の骨格**＝自分は発音しない（伴奏は chord_pattern が
+    // 担う・CP1）。和声の解決文脈は上の sectionChords から既に供給済み＝役目は保持。
+    if (kind === "chord" || kind === "chord_progression") return [];
     const isRhythm = kind === "rhythm";
-    const isProg = kind === "chord" || kind === "chord_progression";
-    // パートの音色（GM program）。コード進行は**抽象＝音色固定 GM49(strings)・選択不可**（伴奏は
-    // chord_pattern が担う・CP1）。bass は既定フィンガーベース。他は content.program か既定0。
-    const prog = isRhythm ? undefined : isProg ? 48 : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : 0));
+    // パートの音色（GM program）。bass は既定フィンガーベース。他は content.program か既定0。
+    const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : 0));
     if (kind === "bass" && isRelativeBass(c.node.neta.content)) {
       // 相対bass：section の調・コードで解決済み実音高なので、ここでは移調しない（position だけ）。
       const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
