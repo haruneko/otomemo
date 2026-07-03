@@ -260,7 +260,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     keyCursorRef.current++;
     const name = KEY_NAMES[c.key] ?? c.key;
     setKeyReport(
-      `調推定：${name} ${c.mode === "minor" ? "短調" : "長調"}（${keyCursorRef.current}/${cands.length}・ツール→調推定で次候補）`,
+      `調推定：${name} ${c.mode === "minor" ? "短調" : "長調"}（${keyCursorRef.current}/${cands.length}・いじる→調推定で次候補）`,
     );
   }
 

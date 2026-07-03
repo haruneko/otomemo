@@ -146,10 +146,10 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                             className={"tb-tool tools-btn" + (toolsOpen ? " on" : "")}
                             aria-label="tools"
                             aria-expanded={toolsOpen}
-                            title="このメロの道具（崩す・調推定・似たメロ・移調）"
+                            title="このメロをいじる（崩す・調推定・似たメロ・移調）"
                             onClick={() => setToolsOpen((v) => !v)}
                           >
-                            <Icon name="wand" size={16} /> ツール ▾
+                            <Icon name="wand" size={16} /> いじる ▾
                           </button>
                           {toolsOpen && (
                             <div className="assign-menu to-right tools-menu" aria-label="tools-menu">
