@@ -1,6 +1,7 @@
 // NetaDialog のエディタ本体（kind 別ディスパッチ）を分離（アーキ是正 S5）。
 // メロ/ベース(絶対・相対)/コード/リズム/コンテナ/テキスト の描画。状態は親(NetaDialog)が所有し props で受ける。
 import { useState } from "react";
+import { api } from "../api";
 import { moraLines } from "../lyrics";
 import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
@@ -61,9 +62,27 @@ export function KindEditorBody(p: KindEditorBodyProps) {
   const { isMelody, isBass, isChord, isRhythm, isContainer, isRelBass } = p.flags;
   const tp = p.tp;
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [simReport, setSimReport] = useState<string | null>(null);
   // トランスポーズ（①道具・純クライアント＝Undo可）。全ノートのピッチを移動。
   const transpose = (d: number) =>
     p.setNotes(p.notes.map((n) => ({ ...n, pitch: Math.max(0, Math.min(127, n.pitch + d)) })));
+  // 似たメロ（①道具・retrieval・読むだけv1）：連想元コーパスから近いメロを近い順に。
+  async function findSimilar() {
+    setToolsOpen(false);
+    if (!p.notes.length) return;
+    setSimReport("探し中…");
+    try {
+      const r = await api.melodyNeighbors({ notes: p.notes, scope: "library", top: 5 });
+      const list = (r.neighbors ?? []).filter((x) => x.similarity > 0);
+      setSimReport(
+        list.length
+          ? "似たメロ：" + list.map((x) => `${x.label ?? "?"}(${Math.round(x.similarity * 100)}%)`).join("・")
+          : "似たメロは見つからず（連想元コーパスに近いものなし）",
+      );
+    } catch {
+      setSimReport("似たメロの検索に失敗");
+    }
+  }
   return (
     <div className="editor-body">
       {isMelody || isBass ? (
@@ -135,6 +154,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                           {toolsOpen && (
                             <div className="assign-menu" aria-label="tools-menu">
                               <button type="button" className="bs-btn" aria-label="detect-key-melody" onClick={() => { setToolsOpen(false); p.onDetectKey?.(); }}>調推定</button>
+                              <button type="button" className="bs-btn" aria-label="find-similar-melody" onClick={() => void findSimilar()}>似たメロ</button>
                               <button type="button" className="bs-btn" onClick={() => transpose(1)}>＋半音</button>
                               <button type="button" className="bs-btn" onClick={() => transpose(-1)}>−半音</button>
                               <button type="button" className="bs-btn" onClick={() => transpose(12)}>＋8va</button>
@@ -147,6 +167,11 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                   </>
                 )}
               </div>
+              {simReport && (
+                <p className="fit-report" aria-label="similar-report" onClick={() => setSimReport(null)}>
+                  {simReport} <span className="muted">（タップで消す）</span>
+                </p>
+              )}
               {p.melodyView === "roll" ? (
                 <>
                   {p.candidate && (

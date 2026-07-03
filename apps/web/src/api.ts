@@ -296,6 +296,13 @@ export const api = {
   music: <T = unknown>(op: string, body: Record<string, unknown>) =>
     http<T>(`/music/${op}`, { method: "POST", body: JSON.stringify(body) }),
 
+  // 似たメロ（①道具・retrieval）：提示メロに近いメロを scope(既定 library=連想元)から近い順。
+  melodyNeighbors: (body: { notes: unknown; scope?: string; top?: number; id?: string }) =>
+    http<{ neighbors: { id?: string; label?: string; similarity: number }[] }>("/melody/neighbors", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   unlink: (from: string, to: string, type = "related") =>
     http<{ ok: boolean }>("/relation/remove", {
       method: "POST",
