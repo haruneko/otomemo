@@ -72,6 +72,17 @@ export function beatsPerBar(meter: string | null | undefined): number {
 type Lane = (typeof LANES)[number];
 type Child = CompositionNode["children"][number];
 
+// ③ ループ伸ばしのタイル位置＝元ブロック(fromPos)の後ろに unit 刻みで反復（各ループが endBeat と
+// グリッド total 内に完全に収まる位置だけ）。純関数＝配置の契約としてテストする。
+export function loopPositions(fromPos: number, unit: number, endBeat: number, total: number): number[] {
+  const out: number[] = [];
+  if (unit <= 0) return out;
+  for (let p = fromPos + unit; p + unit <= endBeat + 1e-6 && p + unit <= total + 1e-6; p += unit) {
+    out.push(Math.round(p * 1e6) / 1e6);
+  }
+  return out;
+}
+
 // #83/#55 曲(song)の段階・次の一手パネル。song overlay を読み込み、編集して保存（blur時）。
 function SongStatus({ netaId }: { netaId: string }) {
   const [stage, setStage] = useState("");
@@ -136,6 +147,8 @@ export function SectionEditor({
 }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [picker, setPicker] = useState<{ lane: Lane; position: number; all: Neta[] } | null>(null);
+  // ③ 右端ドラッグでループ伸ばし中のプレビュー（fromPos〜endBeat をゴースト表示）。
+  const [drag, setDrag] = useState<{ childId: string; laneKey: string; fromPos: number; unit: number; endBeat: number } | null>(null);
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
   const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
@@ -205,6 +218,54 @@ export function SectionEditor({
   }
   async function remove(childId: string, position?: number) {
     await api.removeChild(neta.id, childId, position);
+    await load();
+    onChanged?.();
+  }
+
+  // ③ 右端ドラッグでループ伸ばし＝同じ子を小節境界のループ単位でタイル反復配置（compose_edge は
+  // PKに position を含み反復配置可・#54＝スキーマ不要）。縮めたらこの子の反復だけ末尾から外す。
+  function beatFromClientX(clientX: number, trackEl: HTMLElement): number {
+    const r = trackEl.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    return ratio * TOTAL;
+  }
+  function onGripDown(e: React.PointerEvent, c: Child, lane: Lane) {
+    e.stopPropagation(); // ブロック本体の onClick(=外す) を抑止
+    e.preventDefault();
+    const trackEl = (e.currentTarget as HTMLElement).closest(".lane-track") as HTMLElement | null;
+    if (!trackEl) return;
+    const unit = Math.max(BPB, Math.ceil(childDur(c) / BPB) * BPB); // ループ単位＝小節境界に丸めた子の尺
+    const clamp = (x: number) => Math.max(c.position + unit, Math.min(TOTAL, beatFromClientX(x, trackEl)));
+    const move = (ev: PointerEvent) =>
+      setDrag({ childId: c.node.neta.id, laneKey: lane.key, fromPos: c.position, unit, endBeat: clamp(ev.clientX) });
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const end = clamp(ev.clientX);
+      setDrag(null);
+      void applyLoop(c, lane, unit, end);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  async function applyLoop(c: Child, lane: Lane, unit: number, endBeat: number) {
+    const childId = c.node.neta.id;
+    const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+    // 反復させたい位置（元ブロック fromPos は据え置き、以降 unit 刻み・グリッド内・各ループが収まる範囲）。
+    const wanted = loopPositions(c.position, unit, endBeat, TOTAL);
+    const existing = laneChildren(lane)
+      .filter((x) => x.node.neta.id === childId && x.position > c.position + 1e-6)
+      .map((x) => x.position);
+    // 追加：wanted で未配置かつ他ブロックに占有されてない所へ（同じ ord=行を維持）。
+    for (const p of wanted) {
+      if (existing.some((e) => near(e, p))) continue;
+      if (occupiedAt(lane, p)) continue;
+      await api.placeChild(neta.id, childId, p, c.ord).catch(() => {});
+    }
+    // 削除：縮めた分＝existing で wanted に無いこの子の反復だけ外す（他の子や元ブロックは触らない）。
+    for (const e of existing) {
+      if (!wanted.some((p) => near(p, e))) await api.removeChild(neta.id, childId, e).catch(() => {});
+    }
     await load();
     onChanged?.();
   }
@@ -460,8 +521,26 @@ export function SectionEditor({
                   <span className="lane-block-label">
                     {c.node.neta.title ?? c.node.neta.text ?? c.node.neta.kind}
                   </span>
+                  {/* ③ 右端グリップ＝ドラッグでループ伸ばし（この子を反復配置）。本体タップ(=外す)とは分離。 */}
+                  <span
+                    className="block-resize"
+                    aria-label={`extend-${c.node.neta.id}@${c.position}`}
+                    title="右へドラッグで繰り返し（ループ）"
+                    onPointerDown={(e) => onGripDown(e, c, lane)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
                 </button>
               ))}
+              {drag && drag.laneKey === lane.key && (
+                <div
+                  className="loop-ghost"
+                  aria-hidden="true"
+                  style={{
+                    left: `${(drag.fromPos / TOTAL) * 100}%`,
+                    width: `${((Math.min(drag.endBeat, TOTAL) - drag.fromPos) / TOTAL) * 100}%`,
+                  }}
+                />
+              )}
             </div>
           </div>
         ))}
