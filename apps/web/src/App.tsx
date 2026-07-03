@@ -10,7 +10,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api, type Neta } from "./api";
-import { FILTER_KINDS, KIND_LABEL } from "./kinds";
+import { KIND_LABEL } from "./kinds";
 import { applyColors, loadColors } from "./theme";
 import { KindIcon } from "./components/KindIcon";
 import { Icon } from "./components/Icon";
@@ -182,7 +182,6 @@ export function App() {
   // base64でジョブに載せ、workerが分割→reaperがネタ化。jobのdoneを待って一覧へ反映。
   const [importing, setImporting] = useState(false);
   const [importOpen, setImportOpen] = useState(false); // 取込ボタン群を畳む（既定=閉）
-  const [filtersOpen, setFiltersOpen] = useState(false); // 種別/mood 絞り込みを畳む（既定=閉）
   async function importMidi(files: FileList | null) {
     if (!files) return;
     setImporting(true);
@@ -596,7 +595,8 @@ export function App() {
                 <Icon name="library" size={15} /> ライブラリ
               </button>
           </div>
-          {/* 検索を主役に。種別/mood の絞り込みは「絞込 ▾」に畳む（Stage2）。効いてる時は●で示す。 */}
+          {/* 検索を主役に。種別の絞り込みは「作成と同じ絵の7アイコン」を常時1行（種別色・ラベル無し）。
+              開閉トグルは廃止＝常に見えて分かりやすい。順番は作成グリッドと一致（曲＝section）。 */}
           <div className="filters">
             <input
               className="search-main"
@@ -605,47 +605,41 @@ export function App() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <button
-              type="button"
-              className={"filter-toggle" + (kindFilter || moodFilter.trim() ? " active" : "")}
-              aria-label="toggle-filters"
-              aria-expanded={filtersOpen}
-              title="種別・mood で絞り込む"
-              onClick={() => setFiltersOpen((v) => !v)}
-            >
-              絞込 {filtersOpen ? "▲" : "▾"}
-              {(kindFilter || moodFilter.trim()) && <span className="filter-dot" aria-hidden="true" />}
-            </button>
           </div>
-          {filtersOpen && (
-            <div className="filters filters-sub">
-              {/* 種別フィルタ＝アイコンのチップ行（作成グリッドと同じ絵で絞る・生スネーク select を廃止）。
-                  タップで選択/再タップで解除。検索中は無効（title で明示）。 */}
-              <div className="filter-kinds" role="group" aria-label="kind-filter">
-                {FILTER_KINDS.map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    className={"filter-kind" + (kindFilter === k ? " on" : "")}
-                    aria-label={`kind-filter-${k}`}
-                    aria-pressed={kindFilter === k}
-                    disabled={!!q.trim()}
-                    title={q.trim() ? "検索中は種別フィルタは無効" : `${KIND_LABEL[k] ?? k}で絞る`}
-                    onClick={() => setKindFilter(kindFilter === k ? "" : k)}
-                  >
-                    <KindIcon kind={k} />
-                    <span>{KIND_LABEL[k] ?? k}</span>
-                  </button>
-                ))}
-              </div>
-              <input
-                aria-label="mood-filter"
-                placeholder="mood で絞る…"
-                value={moodFilter}
-                onChange={(e) => setMoodFilter(e.target.value)}
-              />
-            </div>
-          )}
+          <div className="filter-kinds" role="group" aria-label="kind-filter">
+            {(
+              [
+                ["melody", "var(--k-melody)"],
+                ["chord_progression", "var(--k-chord)"],
+                ["lyric", "var(--k-lyric)"],
+                ["section", "var(--k-section)"], // 作成の「曲」に対応（実体は section）
+                ["rhythm", "var(--k-rhythm)"],
+                ["bass", "var(--k-bass)"],
+                ["theme", "var(--k-theme)"],
+              ] as const
+            ).map(([k, col]) => (
+              <button
+                key={k}
+                type="button"
+                className={"filter-kind" + (kindFilter === k ? " on" : "")}
+                style={{ ["--k" as string]: col }}
+                aria-label={`kind-filter-${k}`}
+                aria-pressed={kindFilter === k}
+                disabled={!!q.trim()}
+                title={q.trim() ? "検索中は種別フィルタは無効" : `${KIND_LABEL[k] ?? k}で絞る`}
+                onClick={() => setKindFilter(kindFilter === k ? "" : k)}
+              >
+                <KindIcon kind={k} />
+              </button>
+            ))}
+          </div>
+          <input
+            className="mood-filter-input"
+            aria-label="mood-filter"
+            placeholder="mood で絞る…"
+            value={moodFilter}
+            onChange={(e) => setMoodFilter(e.target.value)}
+          />
           <NetaList
             items={shownItems}
             scope={scope}
