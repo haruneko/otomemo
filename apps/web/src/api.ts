@@ -28,6 +28,13 @@ export interface NetaInput {
   text?: string;
   content?: unknown;
   tags?: string[];
+  key?: number;
+  mode?: string;
+  tempo?: number;
+  meter?: string;
+  bars?: number;
+  mood?: string;
+  scope?: "project" | "library";
   /** どのジョブの結果か。指定すると job_result 記録＋ジョブ対象へ relation。 */
   from_job?: string;
 }
@@ -275,6 +282,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ from, to, type }),
     }),
+
+  // 作曲補助①（単体系・決定的＝Claude不要/クォータ0）。崩す＝提示メロのノリを保ち強度に応じ
+  // ピッチ/輪郭を崩した別メロを生成（gen_from_essence）。返り＝items[0].content が新メロ content。
+  reshapeMelody: (body: { ref: unknown; frame: unknown; strength: number; seed?: number }) =>
+    http<{ items: { kind: string; content: unknown; label: string }[] }>(
+      "/music/gen_from_essence",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 
   unlink: (from: string, to: string, type = "related") =>
     http<{ ok: boolean }>("/relation/remove", {

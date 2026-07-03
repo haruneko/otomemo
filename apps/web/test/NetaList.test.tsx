@@ -3,16 +3,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { createJob, getJob, createNeta, link, placeChild, assignProject } = vi.hoisted(() => ({
-  createJob: vi.fn(),
-  getJob: vi.fn(),
-  createNeta: vi.fn(),
-  link: vi.fn(),
-  placeChild: vi.fn(),
-  assignProject: vi.fn(),
-}));
+const { createJob, getJob, createNeta, link, placeChild, assignProject, reshapeMelody } = vi.hoisted(
+  () => ({
+    createJob: vi.fn(),
+    getJob: vi.fn(),
+    createNeta: vi.fn(),
+    link: vi.fn(),
+    placeChild: vi.fn(),
+    assignProject: vi.fn(),
+    reshapeMelody: vi.fn(),
+  }),
+);
 vi.mock("../src/api", () => ({
-  api: { createJob, getJob, createNeta, link, placeChild, assignProject },
+  api: { createJob, getJob, createNeta, link, placeChild, assignProject, reshapeMelody },
 }));
 
 import { NetaList, NetaCard } from "../src/components/NetaList";
@@ -109,6 +112,33 @@ describe("NetaList", () => {
     await userEvent.click(screen.getByLabelText("assign-new-z"));
     expect(assignProject).toHaveBeenCalledWith("z", "新器", true);
     spy.mockRestore();
+  });
+
+  it("崩す(①道具): メロの「…」→崩す→中で gen_from_essence→新メロ生成→link", async () => {
+    reshapeMelody.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 62 }] }, label: "x" }] });
+    createNeta.mockResolvedValue({ id: "reshaped1" });
+    link.mockResolvedValue({ ok: true });
+    const onChanged = vi.fn();
+    render(
+      <NetaCard neta={mk({ id: "mel", kind: "melody", title: "夜メロ", content: { notes: [{ pitch: 60 }] } })} onChanged={onChanged} />,
+    );
+    await userEvent.click(screen.getByLabelText("more-mel"));
+    await userEvent.click(screen.getByLabelText("reshape-mel")); // 崩す ▾
+    await userEvent.click(screen.getByRole("button", { name: "中" }));
+    await waitFor(() => expect(createNeta).toHaveBeenCalled());
+    expect(reshapeMelody).toHaveBeenCalledWith(
+      expect.objectContaining({ strength: 0.55, ref: [{ pitch: 60 }] }),
+    );
+    expect(createNeta).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "melody", title: "夜メロ 崩し", content: { notes: [{ pitch: 62 }] } }),
+    );
+    expect(link).toHaveBeenCalledWith("mel", "reshaped1", "variation");
+  });
+
+  it("崩す: 非メロには出ない", async () => {
+    render(<NetaCard neta={mk({ id: "c", kind: "chord_progression", title: "進行" })} />);
+    await userEvent.click(screen.getByLabelText("more-c"));
+    expect(screen.queryByLabelText("reshape-c")).not.toBeInTheDocument();
   });
 
   it("LV2: 並べ替え=タイトル順で表示順が変わる", async () => {
