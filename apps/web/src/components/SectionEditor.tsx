@@ -10,6 +10,7 @@ function LaneCell({
   kinds,
   bar,
   position,
+  row,
   onTap,
   disabled,
 }: {
@@ -17,10 +18,11 @@ function LaneCell({
   kinds: readonly string[];
   bar: number;
   position: number;
+  row?: number; // ② コード楽器の行（D&Dドロップ時の ord に使う）
   onTap: (position: number) => void;
   disabled?: boolean; // 単一パートが埋まってる＝置けない（CV3）
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `cell-${laneKey}-${bar}`, data: { kinds, position }, disabled });
+  const { setNodeRef, isOver } = useDroppable({ id: `cell-${laneKey}-${bar}`, data: { kinds, position, row }, disabled });
   return (
     <button
       ref={setNodeRef}
@@ -49,14 +51,18 @@ import { harmonyVoice } from "../harmony";
 // 調/テンポは section が支配。rhythm(ドラム)は移調しない。
 // レーン順＝層モデル（進行が一番上→メロ→コード楽器→ベース→リズム→ネスト）。
 // 配置は「占有セルのみ不可」＝同じ位置に二重で置けないだけ（別小節には自由に置ける・CV3 是正）。
-const LANES = [
+// ②（2026-07-03）コード楽器は2レーン（ピアノ＋パッド等を同時に鳴らす）。同 kind の行識別は
+// placement の `ord`（0=1／1=2）で行う（ord は並び/zヒントで本質非依存）。row を持つレーンは
+// laneChildren を rowOf で絞る。再生は元々全 chord_pattern 子を鳴らすので発音側は変更不要。
+const LANES: readonly { key: string; label: string; kinds: readonly string[]; row?: number }[] = [
   { key: "chord", label: "コード進行", kinds: ["chord", "chord_progression"] },
   { key: "melody", label: "メロ", kinds: ["melody"] },
-  { key: "chord_pattern", label: "コード楽器", kinds: ["chord_pattern"] },
+  { key: "chord_pattern", label: "コード楽器1", kinds: ["chord_pattern"], row: 0 },
+  { key: "chord_pattern2", label: "コード楽器2", kinds: ["chord_pattern"], row: 1 },
   { key: "bass", label: "ベース", kinds: ["bass"] },
   { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
   { key: "section", label: "セクション", kinds: ["section"] }, // #15 section をネスト配置
-] as const;
+];
 const BARS = 8;
 
 // #51: 拍子(meter "n/d")から1小節の拍数を導出。beat=四分=1.0 基準で num*4/den。
@@ -183,7 +189,10 @@ export function SectionEditor({
 
   const inLane = (lane: Lane, kind: string) => (lane.kinds as readonly string[]).includes(kind);
   const laneOf = (kind: string) => LANES.find((l) => inLane(l, kind));
-  const laneChildren = (lane: Lane) => children.filter((c) => inLane(lane, c.node.neta.kind));
+  // ② コード楽器の行＝ord（1→2レーン目、それ以外→1レーン目）。row 付きレーンはこの行で絞る。
+  const rowOf = (c: Child) => (c.ord === 1 ? 1 : 0);
+  const laneChildren = (lane: Lane) =>
+    children.filter((c) => inLane(lane, c.node.neta.kind) && (lane.row === undefined || rowOf(c) === lane.row));
   const others = children.filter((c) => !laneOf(c.node.neta.kind));
 
   function childDur(c: Child): number {
@@ -206,7 +215,8 @@ export function SectionEditor({
     try {
       // ライブラリ項目は project にコピーしてから配置（元コーパスを汚さない・編集はコピー側）。
       const target = child.scope === "library" ? await api.copyNeta(child.id) : child;
-      await api.placeChild(neta.id, target.id, picker.position, children.length);
+      // ② コード楽器レーンは行を ord に持たせる（1→2レーン目）。他レーンは 0。
+      await api.placeChild(neta.id, target.id, picker.position, picker.lane.row ?? 0);
     } catch {
       // section ネストで循環になる配置は core が拒否（400）→ そっと無視（配置しない）
       setPicker(null);
@@ -368,7 +378,7 @@ export function SectionEditor({
       meter: neta.meter ?? undefined,
       tags: neta.tags,
     });
-    await api.placeChild(neta.id, created.id, 0, children.length);
+    await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
     setCand(null);
     await load();
     onChanged?.();
@@ -496,6 +506,7 @@ export function SectionEditor({
                   kinds={lane.kinds}
                   bar={b}
                   position={b * BPB}
+                  row={lane.row}
                   disabled={occupiedAt(lane, b * BPB)}
                   onTap={(pos) => void openPicker(lane, pos)}
                 />

@@ -120,13 +120,13 @@ export function App() {
 
   async function onDragEnd(e: DragEndEvent) {
     const dragged = e.active.data.current?.neta as Neta | undefined;
-    const drop = e.over?.data.current as { kinds?: readonly string[]; position?: number } | undefined;
+    const drop = e.over?.data.current as { kinds?: readonly string[]; position?: number; row?: number } | undefined;
     // (1) レーンへのドロップ＝セクションに配置（従来）。
     if (drop?.kinds && drop.position !== undefined) {
       if (!dragged) return;
       if (!active || (active.kind !== "section" && active.kind !== "song")) return; // 開いてるのがsectionの時だけ
       if (!drop.kinds.includes(dragged.kind)) return; // レーンのkindに合わなければ無視
-      await api.placeChild(active.id, dragged.id, drop.position, 0);
+      await api.placeChild(active.id, dragged.id, drop.position, drop.row ?? 0); // ② コード楽器2レーンは row を ord に
       setComposeSignal((v) => v + 1);
       void reload();
       return;
