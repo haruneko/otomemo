@@ -1,5 +1,5 @@
 import { type Ref, useState } from "react";
-import { type ChordPatternContent } from "../music";
+import { type ChordPatternContent, applyCellTap } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
@@ -60,12 +60,9 @@ export function ChordPatternEditor({
   const setV = (patch: Partial<typeof v>) => onChange({ ...pattern, voicing: { ...v, top, ...patch } });
 
   const toggleHit = (s: number) => {
-    if (startAt(s)) {
-      onChange({ ...pattern, hits: pattern.hits.filter((h) => h.step !== s) }); // 同所タップ＝消す
-      return;
-    }
-    onChange({ ...pattern, hits: [...pattern.hits, { step: s, dur: dotted ? len * 1.5 : len }].sort((a, b) => a.step - b.step) });
-    void previewNote({ pitch: top, start: 0, dur: 0.4 }); // 置いた合図＝トップ音を軽く
+    const r = applyCellTap(pattern.hits, s, dotted ? len * 1.5 : len); // 頭=消す／伸び=長さ調整／空き=新規
+    onChange({ ...pattern, hits: r.hits });
+    if (r.placed) void previewNote({ pitch: top, start: 0, dur: 0.4 }); // 置いた合図＝トップ音を軽く
   };
 
   // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。
@@ -92,7 +89,10 @@ export function ChordPatternEditor({
           </div>
         </div>
         <div className="cp-when-row">
-          <NoteValuePicker options={LENGTHS} value={len} dotted={dotted} onChange={setLen} onToggleDotted={() => setDotted((d) => !d)} />
+          {/* 長さツールはメロ編集(PianoRoll)と同じ proll-tools で包む＝見た目・選択表示を統一。 */}
+          <div className="proll-tools">
+            <NoteValuePicker options={LENGTHS} value={len} dotted={dotted} onChange={setLen} onToggleDotted={() => setDotted((d) => !d)} />
+          </div>
           <BarsControl bars={bars} max={4} onChange={(n) => onChange({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
         </div>
       </div>

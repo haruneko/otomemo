@@ -435,6 +435,18 @@ describe("music", () => {
       expect(down[0]! > down[2]!).toBe(true); // 降順で辿る
       expect(up.slice().reverse()).toEqual(down); // 完全に逆順
     });
+    it("セルタップ：頭=消す／伸び=長さ調整／末尾直後=1つ伸ばす／空き=新規（applyCellTap）", async () => {
+      const { applyCellTap } = await import("../src/music");
+      const hits = [{ step: 0, dur: 4 }]; // step0-3 を占有
+      // 頭(0)＝消す
+      expect(applyCellTap(hits, 0, 4)).toEqual({ hits: [], placed: false });
+      // 伸びの上(2)＝終わりを2に＝dur 3（詰める）
+      expect(applyCellTap(hits, 2, 4)).toEqual({ hits: [{ step: 0, dur: 3 }], placed: false });
+      // 末尾直後(4=step+dur)＝1つ伸ばす＝dur 5
+      expect(applyCellTap(hits, 4, 4)).toEqual({ hits: [{ step: 0, dur: 5 }], placed: false });
+      // 離れた空き(8)＝新規配置（長さツール4）
+      expect(applyCellTap(hits, 8, 4)).toEqual({ hits: [{ step: 0, dur: 4 }, { step: 8, dur: 4 }], placed: true });
+    });
     it("open は構成音を1つおきに広げる（close と異なる）", () => {
       const close = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch);
       const open = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "open", octave: 0 } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b);

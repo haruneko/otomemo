@@ -762,9 +762,6 @@
 /* ①「いつ弾く」＝主役：グリッド＋長さ＋小節をまとめた枠。 */
 .cp-when { min-width: 0; }
 .cp-when-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-/* 長さボタンの OFF/ON（親スコープ依存を補う＝メロ proll-tools と同じ見え方に。全部青を防ぐ）。 */
-.cp-when-row .len.glyph { background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
-.cp-when-row .len.glyph.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 /* ②「響き」＝音の作り込みを1枠に集約・静かに（青の壁を解体）。 */
 .cp-voicing { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #191c21; }
 .cp-vrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }

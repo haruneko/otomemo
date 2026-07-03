@@ -475,6 +475,15 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
   return out;
 }
 
+// コード楽器 grid のセルタップ→hits の更新（純関数・契約テスト用）。
+// 頭(onset)＝消す／伸び(sustain)or末尾直後＝そのノートの終わりを s に（長さ調整＝詰める/1つ伸ばす）／空き＝新規配置。
+export function applyCellTap(hits: ChordHit[], s: number, placeLen: number): { hits: ChordHit[]; placed: boolean } {
+  if (hits.some((h) => h.step === s)) return { hits: hits.filter((h) => h.step !== s), placed: false };
+  const owner = hits.find((h) => h.step < s && s <= h.step + h.dur);
+  if (owner) return { hits: hits.map((h) => (h === owner ? { ...h, dur: s - h.step + 1 } : h)), placed: false };
+  return { hits: [...hits, { step: s, dur: placeLen }].sort((a, b) => a.step - b.step), placed: true };
+}
+
 export function isChordPattern(content: unknown): content is ChordPatternContent {
   return !!content && typeof content === "object" && "hits" in content && "voicing" in content;
 }

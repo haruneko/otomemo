@@ -450,6 +450,11 @@
 .rhythm-cell.on {
   background: var(--k, var(--accent)); /* #10④ 打点を kind 色（rhythm=赤）に */
 }
+/* コード楽器：音の伸び（sustain）＝薄い kind 色で「押しっぱなし＝伸びてる」を表す。
+   頭(on)＝濃い／伸び(sustain)＝薄い。伸びの上をタップで長さ調整（ChordPatternEditor）。 */
+.rhythm-cell.sustain {
+  background: color-mix(in srgb, var(--k, var(--accent)) 34%, #1b1e23);
+}
 .bars-control {
   display: flex;
   align-items: center;
