@@ -378,12 +378,17 @@ article[aria-label="neta-card"].dragging {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  max-width: 240px;
+  max-width: min(240px, calc(100vw - 24px)); /* スマホで画面外へはみ出さない（レビュー H-2） */
   padding: 6px;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+/* 画面右端に近いトリガ（道具▾ 等）は右寄せで開く＝右見切れ回避（レビュー H-2）。 */
+.assign-menu.to-right {
+  left: auto;
+  right: 0;
 }
 .list-density button {
   font-size: 0.76rem;

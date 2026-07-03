@@ -287,6 +287,17 @@ export function App() {
     return () => window.removeEventListener("pointerdown", onFirst);
   }, []);
 
+  // チップ列で選択中(.on)が端に隠れないよう可視域へ（レビュー M-4）。
+  const chipsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = chipsRef.current?.querySelector(".proj-chip.on");
+    try {
+      el?.scrollIntoView({ block: "nearest", inline: "center" });
+    } catch {
+      /* jsdom 等 scrollIntoView 未実装環境では無視 */
+    }
+  }, [scope, activeProject, unassignedOnly]);
+
   const reloadSeq = useRef(0);
   const reload = useCallback(async () => {
     // レース対策：複数の reload が並走し得る（初期ロード↔検索入力）。遅い旧結果が速い新結果を
@@ -512,7 +523,7 @@ export function App() {
           )}
           {/* 案1：スコープ＋器を1行に統合。すべて/未仕分け/器＝作業ネタの絞り込み、区切りの先の
               「ライブラリ」＝連想元の参考素材（別の場所・全プロジェクト共有）。 */}
-          <div className="project-picker proj-chips" role="tablist" aria-label="scope">
+          <div className="project-picker proj-chips" role="tablist" aria-label="scope" ref={chipsRef}>
               <button
                 role="tab"
                 aria-selected={scope === "project" && !unassignedOnly && !activeProject}

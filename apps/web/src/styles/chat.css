@@ -444,7 +444,9 @@
 }
 .section-actions {
   display: flex;
+  flex-wrap: wrap; /* 道具箱が増えて横に溢れる→折返す（レビュー M-1・PCでも見切れ解消） */
   gap: 8px;
+  margin-bottom: 8px;
 }
 
 /* ワーカー待ちの進捗＋キャンセル（待ち UX 改善）。止まってる不安と拘束を解消。 */

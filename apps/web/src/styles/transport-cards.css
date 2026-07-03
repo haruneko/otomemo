@@ -443,11 +443,12 @@
   background: color-mix(in srgb, var(--k, var(--accent)) 12%, #1b1e23);
   border: 1px solid var(--k, var(--accent));
   border-radius: 8px;
+  max-width: 680px; /* PC で1行フル幅に間延びしない＝候補UIのまとまり（レビュー M-3） */
 }
 .reshape-label {
   font-size: 0.72rem;
   color: var(--muted);
-  margin-right: auto;
+  width: 100%; /* ラベルは1行占有＝操作ボタンは次行に固まる（PCで間延びしない・レビュー M-3） */
 }
 .reshape-strength {
   display: inline-flex;
@@ -566,9 +567,9 @@
 }
 /* 崩し候補モード：元メロを半透明ゴーストで重ねる（比較用・非操作・候補の背面）。 */
 .proll-note.ghost {
-  background: transparent;
-  border: 1px dashed color-mix(in srgb, var(--k, var(--accent)) 55%, #fff);
-  opacity: 0.4;
+  background: color-mix(in srgb, var(--k, var(--accent)) 14%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--k, var(--accent)) 75%, #fff);
+  opacity: 0.62; /* ダーク背景でも元メロ（点線）が見えるよう濃くする（レビュー L-3） */
   z-index: 1;
   pointer-events: none;
 }

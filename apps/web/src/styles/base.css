@@ -38,7 +38,8 @@ main {
 /* 2ペーン・ワークスペース（design #19）：ネタ帳レール＋メインペーン。狭い画面は1カラム */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) 1fr;
+  /* PC はレールを広めに＝一覧のタイトル省略を減らす（レビュー M-2）。右ペインが空でも左が詰まらない。 */
+  grid-template-columns: minmax(300px, 460px) 1fr;
   gap: 12px;
   align-items: start;
 }

@@ -55,6 +55,46 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M16 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2" />
         </svg>
       );
+    case "play":
+      return (
+        <svg {...s} fill="currentColor">
+          <path d="M7 5l12 7-12 7z" />
+        </svg>
+      );
+    case "pause":
+      return (
+        <svg {...s} fill="currentColor">
+          <rect x="6" y="5" width="4" height="14" rx="1" />
+          <rect x="14" y="5" width="4" height="14" rx="1" />
+        </svg>
+      );
+    case "rewind": // 頭出し（|◀）
+      return (
+        <svg {...s} fill="currentColor">
+          <rect x="5" y="5" width="2.4" height="14" rx="1" />
+          <path d="M20 5l-11 7 11 7z" />
+        </svg>
+      );
+    case "loop": // 🔁 ループ
+      return (
+        <svg {...s}>
+          <path {...st} d="M4 9a5 5 0 0 1 5-5h8l-2.5-2.5M20 15a5 5 0 0 1-5 5H7l2.5 2.5" />
+        </svg>
+      );
+    case "undo":
+      return (
+        <svg {...s}>
+          <path {...st} d="M9 7 4 12l5 5" />
+          <path {...st} d="M4 12h10a6 6 0 0 1 0 12h-1" />
+        </svg>
+      );
+    case "redo":
+      return (
+        <svg {...s}>
+          <path {...st} d="m15 7 5 5-5 5" />
+          <path {...st} d="M20 12H10a6 6 0 0 0 0 12h1" />
+        </svg>
+      );
     case "pin": // 指示ピン
       return (
         <svg {...s}>

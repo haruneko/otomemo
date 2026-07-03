@@ -1,5 +1,6 @@
 import { type Ref } from "react";
 import { type TransportState } from "../useTransport";
+import { Icon } from "./Icon";
 
 // #59 下端固定トランスポート。⏮頭出し / ▶⇄⏸ / 🔁ループ / 小節:拍。タップ標的44px。
 export function TransportBar({
@@ -31,16 +32,16 @@ export function TransportBar({
       {onUndo && (
         <>
           <button type="button" className="tp-btn" aria-label="undo" title="元に戻す" onClick={onUndo} disabled={!canUndo}>
-            ↩
+            <Icon name="undo" />
           </button>
           <button type="button" className="tp-btn" aria-label="redo" title="やり直す" onClick={onRedo} disabled={!canRedo}>
-            ↪
+            <Icon name="redo" />
           </button>
           <span className="tp-divider" aria-hidden="true" />
         </>
       )}
       <button type="button" className="tp-btn" aria-label="rewind" title="頭出し" onClick={onRewind}>
-        ⏮
+        <Icon name="rewind" />
       </button>
       <button
         type="button"
@@ -50,7 +51,7 @@ export function TransportBar({
         title={playing ? "一時停止" : "再生"}
         onClick={onPlayPause}
       >
-        {playing ? "⏸" : "▶"}
+        <Icon name={playing ? "pause" : "play"} size={22} />
       </button>
       <button
         type="button"
@@ -60,7 +61,7 @@ export function TransportBar({
         title="ループ"
         onClick={onToggleLoop}
       >
-        🔁
+        <Icon name="loop" />
       </button>
       <span className="transport-time" aria-label="position" ref={timeRef}>
         1:1

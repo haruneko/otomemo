@@ -152,7 +152,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                             道具 ▾
                           </button>
                           {toolsOpen && (
-                            <div className="assign-menu" aria-label="tools-menu">
+                            <div className="assign-menu to-right" aria-label="tools-menu">
                               <button type="button" className="bs-btn" aria-label="detect-key-melody" onClick={() => { setToolsOpen(false); p.onDetectKey?.(); }}>調推定</button>
                               <button type="button" className="bs-btn" aria-label="find-similar-melody" onClick={() => void findSimilar()}>似たメロ</button>
                               <button type="button" className="bs-btn" onClick={() => transpose(1)}>＋半音</button>
