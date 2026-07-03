@@ -756,14 +756,32 @@
 /* コード楽器パターン エディタ（CP3）：voicing コントロール行。 */
 /* コード楽器：コントロール群（枠の外）＋グリッド（横スクロール枠）を縦に。min-width:0 で
    子がビューポートを超えて広がらない＝モバイルで横はみ出さない。 */
-.cp-editor { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.cp-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 6px; }
-.cp-tones { display: flex; align-items: center; gap: 4px; }
-.cp-tones .len { min-width: 26px; background: #2b2f36; color: var(--fg); border: 1px solid var(--line); }
-/* 構成音(R/3/5/7)・長さツールの選択中アクセント（OFF地色＝暗・ON＝accent でオンオフが見分く）。 */
-.cp-tones .len.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-/* モバイル：コード楽器は1行に詰め込むと横はみ出すので、構成音/長さ群を各1行（全幅）に。 */
+.cp-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* ゾーンの小見出し（いつ弾く／響き）。 */
+.cp-zlabel { font-size: 0.68rem; color: var(--muted); margin: 0 0 6px; }
+/* ①「いつ弾く」＝主役：グリッド＋長さ＋小節をまとめた枠。 */
+.cp-when { min-width: 0; }
+.cp-when-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+/* 長さボタンの OFF/ON（親スコープ依存を補う＝メロ proll-tools と同じ見え方に。全部青を防ぐ）。 */
+.cp-when-row .len.glyph { background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
+.cp-when-row .len.glyph.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* ②「響き」＝音の作り込みを1枠に集約・静かに（青の壁を解体）。 */
+.cp-voicing { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #191c21; }
+.cp-vrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }
+.cp-vrow:last-child { margin-bottom: 0; }
+.cp-vlbl { font-size: 0.75rem; color: var(--muted); }
+/* セグメント（二択/多択）：選択だけ色・他はグレー＝全部青を避ける。既定=accent／chord系=種別色。 */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { background: transparent; border: 0; color: var(--muted); padding: 6px 12px; font-size: 0.85rem; cursor: pointer; }
+.seg button.on { background: var(--accent); color: #fff; }
+.seg.seg-chord button.on { background: var(--k-chord); color: #fff; }
+/* トップ狙い・高さのステッパー（無彩色＝±が青くならない）。 */
+.cp-top { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 2px 4px; }
+.cp-top button { width: 28px; height: 28px; border: 0; background: #22252b; color: var(--fg); border-radius: 6px; font-size: 15px; cursor: pointer; }
+.cp-top span { min-width: 30px; text-align: center; font-size: 0.85rem; }
+/* パワーコード＝チェック風トグル（OFF=地色／ON=コード色）。 */
+.cp-chk { background: #191c21; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); padding: 6px 10px; font-size: 0.78rem; cursor: pointer; }
+.cp-chk.on { border-color: var(--k-chord); color: var(--fg); background: color-mix(in srgb, var(--k-chord) 20%, #191c21); }
 @media (max-width: 480px) {
-  .cp-controls { gap: 6px; }
-  .cp-tones { flex-basis: 100%; }
+  .cp-vrow { gap: 6px; }
 }

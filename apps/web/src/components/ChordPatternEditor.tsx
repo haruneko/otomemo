@@ -1,5 +1,5 @@
-import { useState, type Ref } from "react";
-import { type ChordPatternContent, type ChordTone } from "../music";
+import { type Ref, useState } from "react";
+import { type ChordPatternContent } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
@@ -8,10 +8,10 @@ import type { Neta } from "../api";
 
 const NAME_PX = 58;
 const BEAT_PX = 88;
-const TONES: ChordTone[] = ["R", "3", "5", "7"];
-// プレビュー用：構成音→Cからの半音（R=C/3=E/5=G/7=B♭）。再生時は調/コードで解決、入力時はC基準で鳴らす。
-const TONE_SEMI: Record<ChordTone, number> = { R: 0, "3": 4, "5": 7, "7": 10 };
-// 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える（"2分"表記を"2"に統一）。
+const DEFAULT_TOP = 72; // C5（トップ狙い音の既定）
+const PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const pitchName = (m: number) => `${PITCH_NAMES[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`; // MIDI 60=C4
+// 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える。
 const LENGTHS = [
   { label: "16", v: 1 },
   { label: "8", v: 2 },
@@ -29,8 +29,10 @@ function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
   return { stepsPerBar, beatStep: d === 8 && n % 3 === 0 && n >= 6 ? 6 : 4 };
 }
 
-// コード楽器パターン（CP3）：リズムstepグリッド(hits)＋voicing（mode/構成音/open-close/高さ）。
-// スケッチ範囲＝シーケンサー化しない。進行への解決は合成/プレビュー側（resolveChordPattern）。
+// コード楽器パターン（CP3・響きモデル作り替え 2026-07-04）：2ゾーン構成。
+//  ①「いつ弾く」＝リズムstepグリッド(hits)＋長さ＋小節（主役・上）。
+//  ②「響き」＝打ち方/トップ狙い/広がり/高さ/パワーコード(＋arpは向き)（音の作り込み・下・静か）。
+// 構成音の手選択は撤去＝鳴る音はコードの質から自動（resolveChordPattern/voiceToTop）。
 export function ChordPatternEditor({
   pattern,
   onChange,
@@ -48,87 +50,103 @@ export function ChordPatternEditor({
   const [len, setLen] = useState(4); // 各音の長さ（step数・既定=四分）
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 対応）
   const v = pattern.voicing;
+  const top = v.top ?? DEFAULT_TOP;
+  const isArp = pattern.mode === "arp";
   const bars = Math.max(1, Math.round(pattern.steps / stepsPerBar));
   const startAt = (s: number) => pattern.hits.find((h) => h.step === s);
   const sustainAt = (s: number) => pattern.hits.some((h) => h.step < s && s < h.step + h.dur);
+
+  // 響き変更は必ず top を書き込む（旧パターンも触った瞬間から新モデルで鳴る）。
+  const setV = (patch: Partial<typeof v>) => onChange({ ...pattern, voicing: { ...v, top, ...patch } });
+
   const toggleHit = (s: number) => {
     if (startAt(s)) {
       onChange({ ...pattern, hits: pattern.hits.filter((h) => h.step !== s) }); // 同所タップ＝消す
       return;
     }
     onChange({ ...pattern, hits: [...pattern.hits, { step: s, dur: dotted ? len * 1.5 : len }].sort((a, b) => a.step - b.step) });
-    // 置いた打点でボイシング（構成音）をC基準で即鳴らす。
-    const base = 48 + (v.octave ?? 0) * 12; // C3 基準＋高さ
-    for (const t of v.tones) void previewNote({ pitch: base + (TONE_SEMI[t] ?? 0), start: 0, dur: 0.5 });
-  };
-  const toggleTone = (t: ChordTone) => {
-    const has = v.tones.includes(t);
-    if (has && v.tones.length <= 1) return; // 最低1音は残す
-    onChange({ ...pattern, voicing: { ...v, tones: (has ? v.tones.filter((x) => x !== t) : [...v.tones, t]).sort((a, b) => TONES.indexOf(a) - TONES.indexOf(b)) } });
+    void previewNote({ pitch: top, start: 0, dur: 0.4 }); // 置いた合図＝トップ音を軽く
   };
 
-  // voicing の結果（key tonic に解決した積み和音）をピアノロールで可視化（ドッグフード[中]）。
-  const previewNeta = { kind: "chord_pattern", content: pattern, key: 0 } as unknown as Neta;
+  // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。
+  const previewNeta = { kind: "chord_pattern", content: { ...pattern, voicing: { ...v, top } }, key: 0 } as unknown as Neta;
 
   return (
     <div className="cp-editor">
-      {pattern.hits.length > 0 && (
-        <div className="chord-roll" aria-label="voicing-roll">
-          <MiniRoll neta={previewNeta} />
+      {/* ① いつ弾く（主役）：グリッド＋長さ＋小節 */}
+      <div className="cp-when">
+        <p className="cp-zlabel">いつ弾く（タップで配置{isArp ? "＝各hitで次の音" : ""}）</p>
+        <div className="rhythm-editor" ref={scrollerRef}>
+          <div className="proll-playhead" aria-hidden="true" ref={playheadRef} style={{ left: `calc(${NAME_PX}px + var(--phb, 0) * ${BEAT_PX}px)` }} />
+          <div className="rhythm-row">
+            <span className="rhythm-name">コード</span>
+            {Array.from({ length: pattern.steps }, (_, s) => (
+              <button
+                key={s}
+                type="button"
+                aria-label={`hit-${s}`}
+                className={"rhythm-cell" + (startAt(s) ? " on" : sustainAt(s) ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
+                onClick={() => toggleHit(s)}
+              />
+            ))}
+          </div>
         </div>
-      )}
-      <div className="cp-controls">
-        <div className="input-toggle">
-          <button type="button" className={pattern.mode === "strum" ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "strum" })}>ストラム</button>
-          <button type="button" className={pattern.mode === "arp" ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "arp" })}>アルペジオ</button>
+        <div className="cp-when-row">
+          <NoteValuePicker options={LENGTHS} value={len} dotted={dotted} onChange={setLen} onToggleDotted={() => setDotted((d) => !d)} />
+          <BarsControl bars={bars} max={4} onChange={(n) => onChange({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
         </div>
-        <div className="cp-tones" aria-label="tones">
-          <span className="muted">構成音</span>
-          {TONES.map((t) => (
-            <button key={t} type="button" aria-label={`tone-${t}`} className={v.tones.includes(t) ? "len on" : "len"} onClick={() => toggleTone(t)}>{t}</button>
-          ))}
-        </div>
-        <div className="input-toggle">
-          <button type="button" className={v.openClose === "close" ? "on" : ""} onClick={() => onChange({ ...pattern, voicing: { ...v, openClose: "close" } })}>close</button>
-          <button type="button" className={v.openClose === "open" ? "on" : ""} onClick={() => onChange({ ...pattern, voicing: { ...v, openClose: "open" } })}>open</button>
-        </div>
-        <div className="bars-control" title="高さ（オクターブ）">
-          <span className="muted">高さ</span>
-          <button type="button" aria-label="oct-dec" onClick={() => onChange({ ...pattern, voicing: { ...v, octave: Math.max(-1, v.octave - 1) } })}>−</button>
-          <span aria-label="octave">{v.octave}</span>
-          <button type="button" aria-label="oct-inc" onClick={() => onChange({ ...pattern, voicing: { ...v, octave: Math.min(2, v.octave + 1) } })}>＋</button>
-        </div>
-        <div className="cp-tones" aria-label="lengths">
-          <NoteValuePicker
-            options={LENGTHS}
-            value={len}
-            dotted={dotted}
-            onChange={setLen}
-            onToggleDotted={() => setDotted((d) => !d)}
-          />
-        </div>
-        <BarsControl bars={bars} max={4} onChange={(n) => onChange({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
       </div>
-      {/* グリッドだけ横スクロール枠に（コントロールは枠の外＝広いグリッドに引き伸ばされない・メロと同じ）。 */}
-      <div className="rhythm-editor" ref={scrollerRef}>
-        <div
-          className="proll-playhead"
-          aria-hidden="true"
-          ref={playheadRef}
-          style={{ left: `calc(${NAME_PX}px + var(--phb, 0) * ${BEAT_PX}px)` }}
-        />
-        <div className="rhythm-row">
-          <span className="rhythm-name">コード</span>
-          {Array.from({ length: pattern.steps }, (_, s) => (
-            <button
-              key={s}
-              type="button"
-              aria-label={`hit-${s}`}
-              className={"rhythm-cell" + (startAt(s) ? " on" : sustainAt(s) ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
-              onClick={() => toggleHit(s)}
-            />
-          ))}
+
+      {/* ② 響き（どう鳴らす）：音の作り込みを1ゾーンに */}
+      <div className="cp-voicing" aria-label="voicing">
+        <p className="cp-zlabel">響き（どう鳴らす）</p>
+        <div className="cp-vrow">
+          <span className="cp-vlbl">打ち方</span>
+          <div className="seg" role="group" aria-label="mode">
+            <button type="button" className={!isArp ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "strum" })}>ストラム</button>
+            <button type="button" className={isArp ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "arp" })}>アルペジオ</button>
+          </div>
         </div>
+        <div className="cp-vrow">
+          <span className="cp-vlbl">トップ</span>
+          <div className="cp-top" aria-label="top">
+            <button type="button" aria-label="top-dec" onClick={() => setV({ top: Math.max(48, top - 1) })}>−</button>
+            <span aria-label="top-note">{pitchName(top)}</span>
+            <button type="button" aria-label="top-inc" onClick={() => setV({ top: Math.min(88, top + 1) })}>＋</button>
+          </div>
+          <span className="cp-vlbl">広がり</span>
+          <div className="seg seg-chord" role="group" aria-label="spread">
+            <button type="button" className={v.openClose === "close" ? "on" : ""} onClick={() => setV({ openClose: "close" })}>close</button>
+            <button type="button" className={v.openClose === "open" ? "on" : ""} onClick={() => setV({ openClose: "open" })}>open</button>
+          </div>
+        </div>
+        <div className="cp-vrow">
+          {isArp ? (
+            <>
+              <span className="cp-vlbl">向き</span>
+              <div className="seg seg-chord" role="group" aria-label="arp-dir">
+                <button type="button" aria-label="arp-up" className={(v.arpDir ?? "up") === "up" ? "on" : ""} onClick={() => setV({ arpDir: "up" })}>↑</button>
+                <button type="button" aria-label="arp-down" className={v.arpDir === "down" ? "on" : ""} onClick={() => setV({ arpDir: "down" })}>↓</button>
+                <button type="button" aria-label="arp-updown" className={v.arpDir === "updown" ? "on" : ""} onClick={() => setV({ arpDir: "updown" })}>↑↓</button>
+              </div>
+            </>
+          ) : (
+            <button type="button" className={"cp-chk" + (v.powerChord ? " on" : "")} aria-label="power-chord" aria-pressed={!!v.powerChord} onClick={() => setV({ powerChord: !v.powerChord })}>
+              パワーコード（3rd抜き）
+            </button>
+          )}
+          <span className="cp-vlbl">高さ</span>
+          <div className="cp-top" aria-label="octave-ctrl">
+            <button type="button" aria-label="oct-dec" onClick={() => setV({ octave: Math.max(-1, v.octave - 1) })}>−</button>
+            <span aria-label="octave">{v.octave}</span>
+            <button type="button" aria-label="oct-inc" onClick={() => setV({ octave: Math.min(2, v.octave + 1) })}>＋</button>
+          </div>
+        </div>
+        {pattern.hits.length > 0 && (
+          <div className="chord-roll" aria-label="voicing-roll">
+            <MiniRoll neta={previewNeta} />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -381,7 +381,8 @@ function normHits(hits: unknown): ChordHit[] {
 }
 
 export function emptyChordPattern(): ChordPatternContent {
-  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
+  // top を持たせて新モデル（構成音自動＋トップ狙い）で動く。tones は後方互換で残置。
+  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, powerChord: false, arpDir: "up" }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
 }
 
 // コードを voicing で実音化（決定C・伴奏レジスタ）：構成音(R/3/5/7)を**アンカーの最寄りオクターブ**に
