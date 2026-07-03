@@ -3,16 +3,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { createJob, getJob, createNeta, link, placeChild, assignProject } = vi.hoisted(() => ({
+const { createJob, getJob, createNeta, link, placeChild, assignProject, getComposition } = vi.hoisted(() => ({
   createJob: vi.fn(),
   getJob: vi.fn(),
   createNeta: vi.fn(),
   link: vi.fn(),
   placeChild: vi.fn(),
   assignProject: vi.fn(),
+  getComposition: vi.fn().mockResolvedValue({ children: [] }), // ④ SectionMini の遅延取得
 }));
 vi.mock("../src/api", () => ({
-  api: { createJob, getJob, createNeta, link, placeChild, assignProject },
+  api: { createJob, getJob, createNeta, link, placeChild, assignProject, getComposition },
 }));
 
 import { NetaList, NetaCard } from "../src/components/NetaList";

@@ -230,6 +230,51 @@ article[aria-label="neta-card"].dragging {
 .mini-roll rect {
   fill: var(--k, var(--accent));
 }
+/* ④ section/song カードのレーン帯ミニ・タイムライン（どのパートがどの小節に入ってるか）。 */
+.section-mini {
+  margin-top: 6px;
+  padding: 6px;
+  background: #15171c;
+  border-radius: 4px;
+  display: grid;
+  gap: 3px;
+}
+.section-mini .sm-lane {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+.section-mini .sm-lane.empty {
+  opacity: 0.4;
+}
+.section-mini .sm-label {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.section-mini .sm-cells {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+}
+.section-mini .sm-cell {
+  flex: 1;
+  border-radius: 1px;
+  background: #23262d; /* 空きセル＝薄い地 */
+}
+.section-mini .sm-cell.on {
+  background: var(--k, var(--accent)); /* 埋まってる小節＝kind色（カードの--k） */
+}
+.section-mini .sm-bars {
+  font-size: 0.62rem;
+  justify-self: end;
+}
+.section-mini-empty {
+  margin-top: 6px;
+  font-size: 0.72rem;
+}
 .input-toggle {
   display: flex;
   gap: 4px;

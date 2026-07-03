@@ -5,7 +5,7 @@ import { api, type Neta } from "../api";
 import { useAlive, pollJobContent } from "../poll";
 import { MUSIC_KINDS, CONTAINER_KINDS } from "../kinds";
 import { isProjectTag } from "../project";
-import { MiniRoll } from "./MiniRoll";
+import { MiniRoll, SectionMini } from "./MiniRoll";
 import { KindIcon } from "./KindIcon";
 import {
   playNotes,
@@ -283,7 +283,7 @@ export function NetaCard({
           <code className="id">{neta.id.slice(0, 8)}</code>
         </header>
         <div className="body">{label}</div>
-        <MiniRoll neta={neta} />
+        {CONTAINER_KINDS.includes(neta.kind) ? <SectionMini neta={neta} /> : <MiniRoll neta={neta} />}
         {/* プロジェクト所属(prj:)は別軸＝ピッカーに出すので意味タグのチップ列からは外す */}
         {(() => {
           const tags = neta.tags.filter((t) => !isProjectTag(t));
