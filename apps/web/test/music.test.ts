@@ -365,6 +365,46 @@ describe("music", () => {
       expect(at0).toEqual([0, 4, 7]); // C E G
       expect(at4).toEqual([2, 7, 11]); // step16=4拍=G → G B D
     });
+    it("トップ狙い音(絶対)：C→F→G でコンピングのトップが一定レジスタに保たれる（voice leading）", () => {
+      const play = (root: number) =>
+        resolveChordPattern(
+          { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 67 }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+          [{ root, quality: "", start: 0, dur: 4 }],
+          0,
+        );
+      const topOf = (root: number) => Math.max(...play(root).map((n) => n.pitch));
+      const c = topOf(0), f = topOf(5), g = topOf(7);
+      // 狙い 67(G4) の周り＝完全4度窓に収まる＝音域が跳ねない
+      for (const t of [c, f, g]) {
+        expect(t).toBeGreaterThanOrEqual(64);
+        expect(t).toBeLessThanOrEqual(69);
+      }
+      expect(c).toBe(67); // C は G4 がトップ（一番近いコードトーン）
+    });
+    it("トップ狙い音は絶対＝調(コード)が変わってもトップ音域は動かない", () => {
+      const topOf = (root: number) =>
+        Math.max(
+          ...resolveChordPattern(
+            { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 67 }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+            [{ root, quality: "", start: 0, dur: 4 }],
+            0,
+          ).map((n) => n.pitch),
+        );
+      // E♭(root3) でも A(root9) でもトップは 67 付近＝絶対の磁石（相対なら上へズレる）
+      for (const root of [3, 9, 10]) {
+        const t = topOf(root);
+        expect(t).toBeGreaterThanOrEqual(64);
+        expect(t).toBeLessThanOrEqual(69);
+      }
+    });
+    it("top 未指定は従来の anchor ベース（後退なし）", () => {
+      const notes = resolveChordPattern(
+        { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+        [{ root: 0, quality: "", start: 0, dur: 4 }],
+        0,
+      );
+      expect(notes.filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b)).toEqual([48, 52, 55]); // C E G（従来通り）
+    });
     it("open は構成音を1つおきに広げる（close と異なる）", () => {
       const close = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch);
       const open = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "open", octave: 0 } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b);

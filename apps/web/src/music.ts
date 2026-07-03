@@ -351,7 +351,10 @@ export function resolveRelativeBass(
 // --- コード楽器パターン（chord_pattern・CP2）。進行に解決する相対型の和音版（コンピング/アルペジオ）---
 export type ChordPatternMode = "strum" | "arp";
 export type ChordTone = "R" | "3" | "5" | "7";
-export interface ChordVoicing { tones: ChordTone[]; openClose: "open" | "close"; octave: number }
+// top＝トップ声部の「狙い音」（絶対MIDIピッチ・任意）。指定時は各コードでこの音に最寄りの
+// コードトーンを最高声部に採り、内声を下へ積む＝レジスタを一定に保ち進行間の声部進行が滑らか。
+// 絶対採用（調が変わってもコンピングの音域は動かさない＝物理レジスタ／design 2026-07-04）。
+export interface ChordVoicing { tones: ChordTone[]; openClose: "open" | "close"; octave: number; top?: number }
 export interface ChordHit { step: number; dur: number } // dur=step数（1step=16分）＝各音の長さを指定
 export interface ChordPatternContent {
   mode: ChordPatternMode;
@@ -374,7 +377,34 @@ export function emptyChordPattern(): ChordPatternContent {
 // コードを voicing で実音化（決定C・伴奏レジスタ）：構成音(R/3/5/7)を**アンカーの最寄りオクターブ**に
 // 置いたルートから積む＝コードが動いてもレジスタが跳ねない（旧 base=CHORD_BASE+octave*12+root_pc は
 // ルートのpcぶん上下した）。anchor=「大体の高さ」。open は1つおきに+12で広げる（スケッチ範囲）。
+// トップ狙い音（絶対）ベースのボイシング＝各コードで top に最寄りのコードトーンを最高声部にし、
+// 残りをその下へ密に積む（多少雑でOK＝厳密な最適配置は DAW 案件）。open は1つおきに+12で広げる。
+function voiceToTop(root: number, quality: string, toneList: ChordTone[], top: number, open: boolean): number[] {
+  const r = (((Math.round(root) % 12) + 12) % 12);
+  const pcs = (toneList.length ? toneList : ["R", "3", "5"]).map((t) => (((r + degreeInterval(t, quality)) % 12) + 12) % 12);
+  const nearest = (pc: number) => Math.round((top - pc) / 12) * 12 + pc; // pc を top 最寄りのオクターブへ
+  // トップ＝top に一番近い実現ピッチを与える構成音（同距離は先勝ち＝細かい優先は DAW 案件）。
+  let topPc = pcs[0]!, topPitch = nearest(pcs[0]!);
+  for (const pc of pcs) {
+    const p = nearest(pc);
+    if (Math.abs(p - top) < Math.abs(topPitch - top)) { topPitch = p; topPc = pc; }
+  }
+  const rest = [...pcs];
+  rest.splice(rest.indexOf(topPc), 1); // トップに使った1音だけ除く
+  const voices = [topPitch];
+  let lowest = topPitch;
+  for (const pc of rest) {
+    let cand = Math.floor(lowest / 12) * 12 + pc;
+    while (cand >= lowest) cand -= 12; // 現在の最低音の直下へ（密に積む）
+    voices.push(cand);
+    lowest = cand;
+  }
+  voices.sort((a, b) => a - b);
+  return open ? voices.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : voices;
+}
+
 function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
+  if (v.top != null) return voiceToTop(root, quality, v.tones ?? [], v.top, v.openClose === "open");
   const r = (((Math.round(root) % 12) + 12) % 12);
   const anchor = CHORD_BASE + (v.octave ?? 0) * 12;
   let d = (((r - anchor) % 12) + 12) % 12; // root を anchor の最寄りオクターブへ（anchor±6半音帯）
