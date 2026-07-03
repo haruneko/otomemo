@@ -264,24 +264,83 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     );
   }
 
-  async function save() {
-    setBusy(true);
-    try {
-      await api.updateNeta(neta.id, {
-        title: title.trim() || null,
-        text: text.trim() || null,
-        tags: tags
-          .split(/[,\s]+/)
-          .map((t) => t.trim())
-          .filter(Boolean),
-        mood: mood.trim() || null,
-        ...savePatch(),
-      });
-      onChanged?.();
-      onClose();
-    } finally {
-      setBusy(false);
+  // 保存する全体パッチ（メタ＋kind別content）。自動保存/手動フラッシュ/クローズで共有。
+  function fullPatch(): NetaPatch {
+    return {
+      title: title.trim() || null,
+      text: text.trim() || null,
+      tags: tags
+        .split(/[,\s]+/)
+        .map((t) => t.trim())
+        .filter(Boolean),
+      mood: mood.trim() || null,
+      ...savePatch(),
+    };
+  }
+
+  // 自動保存（design「編集は自動保存」2026-07-03・req L174 データを失わない/L66 Undoが安全網）。
+  // 明示「保存」は廃止。編集で patch が変わったらデバウンスで PATCH（閉じない）。← 戻る・別ネタ切替
+  // (unmount)・リロード(beforeunload) では未保存ぶんをフラッシュ＝取りこぼさない。ミスは Undo で戻す。
+  // 候補フロー（崩す＝saveCandidate）は別物＝明示 commit のまま（元notes不変・新ネタ化）。
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "dirty">("saved");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dirtyRef = useRef(false);
+  const patchRef = useRef(""); // 最新パッチ JSON（unmount/リロードで参照）
+  const firstRun = useRef(true);
+  const mountedRef = useRef(true); // unmount後の setState を避ける（アンマウント時フラッシュ対策）
+
+  async function flushSave(opts?: { keepalive?: boolean }) {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
     }
+    if (!dirtyRef.current) return; // 変更が無ければ書かない（onChanged の空振り連発を防ぐ）
+    dirtyRef.current = false;
+    if (mountedRef.current) setSaveStatus("saving");
+    try {
+      await api.updateNeta(neta.id, JSON.parse(patchRef.current) as NetaPatch, opts);
+      onChanged?.();
+      if (mountedRef.current) setSaveStatus("saved");
+    } catch {
+      dirtyRef.current = true; // 失敗＝未保存へ戻し、次の編集/クローズで再挑戦
+      if (mountedRef.current) setSaveStatus("dirty");
+    }
+  }
+  const flushRef = useRef(flushSave);
+  flushRef.current = flushSave; // 毎レンダで最新の flush（timer/unmount が古い state を掴まないよう）
+
+  const patchStr = JSON.stringify(fullPatch());
+  patchRef.current = patchStr;
+
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false; // 初期値＝既に保存済＝スルー
+      return;
+    }
+    dirtyRef.current = true;
+    setSaveStatus("dirty");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void flushRef.current(), 600);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [patchStr]);
+
+  // 別ネタへ切替(unmount)・リロード/タブ閉じ(beforeunload) でも未保存を落とさない。
+  useEffect(() => {
+    const onBU = () => void flushRef.current({ keepalive: true });
+    window.addEventListener("beforeunload", onBU);
+    return () => {
+      window.removeEventListener("beforeunload", onBU);
+      mountedRef.current = false; // 以降 setState しない
+      void flushRef.current({ keepalive: true });
+    };
+  }, []);
+
+  // ← 戻る：未保存ぶんをフラッシュしてから閉じる。
+  async function close() {
+    await flushSave();
+    onClose();
   }
 
   async function remove() {
@@ -318,8 +377,10 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     keyReport, clearKeyReport: () => setKeyReport(null),
     // 派生・道具
     playable, tp, editHist, rels, busy, schedId, colorKind,
+    // 自動保存：状態＋手動フラッシュ（保存ピル）＋閉じる（← 戻る＝フラッシュしてから）
+    saveStatus, onFlush: () => void flushSave(), close,
     // アクション
-    save, remove, detectKey, toggleSchedule,
+    remove, detectKey, toggleSchedule,
     onExtendLen: () => setLen(len + 4),
     onExportMidi: () => downloadMidi(playable, `${neta.title ?? "sketch"}.mid`, tempo, null, isRhythm ? undefined : isChord ? 48 : program),
   };

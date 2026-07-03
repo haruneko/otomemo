@@ -29,7 +29,7 @@ export function NetaDialog({
       data-kind={neta.kind}
       style={{ ["--k" as string]: `var(--k-${ed.colorKind})` }}
     >
-      <EditorHeader kind={neta.kind} title={ed.title} setTitle={ed.setTitle} onClose={onClose} onSave={ed.save} onDelete={ed.remove} busy={ed.busy} />
+      <EditorHeader kind={neta.kind} title={ed.title} setTitle={ed.setTitle} onClose={ed.close} saveStatus={ed.saveStatus} onFlush={ed.onFlush} onDelete={ed.remove} busy={ed.busy} />
       <MetaPanel
         flags={{
           collapsible: f.collapsibleMeta,

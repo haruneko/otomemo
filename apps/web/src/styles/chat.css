@@ -239,6 +239,29 @@
   display: flex;
   gap: 8px;
   flex-wrap: nowrap; /* 削除と保存は分離させない */
+  align-items: center;
+}
+/* 自動保存の状態ピル（旧「保存」ボタンの跡地）。押すと即フラッシュ。控えめ＝押す義務は無い。 */
+.save-status {
+  font-size: 0.8rem;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #1b1e23;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.save-status[data-state="saved"] {
+  color: var(--k-theme); /* 緑＝残ってる安心 */
+  border-color: color-mix(in srgb, var(--k-theme) 45%, var(--line));
+}
+.save-status[data-state="dirty"] {
+  color: var(--k-section); /* 橙＝未保存（じき自動で保存される） */
+  border-color: color-mix(in srgb, var(--k-section) 55%, var(--line));
+}
+.save-status[data-state="saving"] {
+  color: var(--fg);
+  opacity: 0.7;
 }
 .editor-title {
   flex: 1;

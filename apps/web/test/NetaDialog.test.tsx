@@ -50,18 +50,31 @@ const neta: Neta = {
 describe("NetaDialog", () => {
   beforeEach(() => localStorage.clear()); // メタ折りたたみ状態が test 間に残らないよう
 
-  it("edits text and saves", async () => {
+  it("編集すると自動保存される（明示「保存」不要・押さずに残る）", async () => {
     const onChanged = vi.fn();
     const onClose = vi.fn();
     render(<NetaDialog neta={neta} onClose={onClose} onChanged={onChanged} />);
     const ta = screen.getByLabelText("text");
     await userEvent.clear(ta);
     await userEvent.type(ta, "朝を待つ");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
-    expect(updateNeta.mock.calls[0]![1].text).toBe("朝を待つ");
+    // 何も押さずデバウンス(600ms)で PATCH が飛ぶ＝メモの当たり前（design 自動保存）
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled(), { timeout: 1500 });
+    expect(updateNeta.mock.calls.at(-1)![1].text).toBe("朝を待つ");
     expect(onChanged).toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled(); // 自動保存は閉じない（保存＝閉じるの2役を解体）
+  });
+
+  it("← 戻る は未保存ぶんをフラッシュしてから閉じる", async () => {
+    const onChanged = vi.fn();
+    const onClose = vi.fn();
+    render(<NetaDialog neta={neta} onClose={onClose} onChanged={onChanged} />);
+    const ta = screen.getByLabelText("text");
+    await userEvent.clear(ta);
+    await userEvent.type(ta, "宵闇");
+    await userEvent.click(screen.getByLabelText("close")); // ← 戻る
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(updateNeta).toHaveBeenCalled();
+    expect(updateNeta.mock.calls.at(-1)![1].text).toBe("宵闇");
   });
 
   it("shows a piano roll for melody and saves notes", async () => {
@@ -74,7 +87,7 @@ describe("NetaDialog", () => {
     const tempoInput = screen.getByLabelText("tempo");
     await userEvent.clear(tempoInput);
     await userEvent.type(tempoInput, "140");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }], program: 0 }); // #47
@@ -128,7 +141,7 @@ describe("NetaDialog", () => {
     const cp: Neta = { ...neta, kind: "chord_progression", text: null, content: null };
     render(<NetaDialog neta={cp} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "＋コード" }));
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content).toEqual({ chords: [{ root: 0, quality: "", start: 0, dur: 4 }] }); // CP1: 進行は抽象＝program持たない
@@ -158,7 +171,7 @@ describe("NetaDialog", () => {
     await waitFor(() => expect((screen.getByLabelText("key") as HTMLSelectElement).value).toBe("9"));
     expect((screen.getByLabelText("mode") as HTMLSelectElement).value).toBe("major");
     // 保存パッチに反映
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     expect(updateNeta.mock.calls.at(-1)![1].key).toBe(9);
     expect(updateNeta.mock.calls.at(-1)![1].mode).toBe("major");
@@ -168,7 +181,7 @@ describe("NetaDialog", () => {
     const r: Neta = { ...neta, kind: "rhythm", text: null, content: null };
     render(<NetaDialog neta={r} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByLabelText("hit-Kick-0"));
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content.rhythm.lanes[0]).toEqual({ name: "Kick", midi: 36, hits: [0] });

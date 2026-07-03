@@ -165,8 +165,9 @@ export const api = {
   createNeta: (input: NetaInput) =>
     http<Neta>("/neta", { method: "POST", body: JSON.stringify(input) }),
 
-  updateNeta: (id: string, patch: NetaPatch) =>
-    http<Neta>(`/neta/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  // keepalive: リロード/タブ閉じ(beforeunload)でも自動保存を落とさない（unmount時のフラッシュ用）。
+  updateNeta: (id: string, patch: NetaPatch, opts?: { keepalive?: boolean }) =>
+    http<Neta>(`/neta/${id}`, { method: "PATCH", body: JSON.stringify(patch), keepalive: opts?.keepalive }),
 
   deleteNeta: (id: string) =>
     http<{ deleted: boolean }>(`/neta/${id}`, { method: "DELETE" }),
