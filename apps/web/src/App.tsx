@@ -169,6 +169,7 @@ export function App() {
   // #81 MIDIはworker(mido)でトラック×チャンネル分割→melody/rhythmネタ化。
   // base64でジョブに載せ、workerが分割→reaperがネタ化。jobのdoneを待って一覧へ反映。
   const [importing, setImporting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false); // 取込ボタン群を畳む（既定=閉）
   async function importMidi(files: FileList | null) {
     if (!files) return;
     setImporting(true);
@@ -426,29 +427,42 @@ export function App() {
           }
         >
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
-          {/* 作成タイル＝「空のカード」（左に色帯＋kindアイコン）。押すとその kind のネタを作りエディタへ。
-              放り込むフォームは撤去＝雑な捕獲はチャットに委譲（2026-07-02）。 */}
+          {/* 作成タイル＝コンパクトなアイコングリッド（案A・2026-07-03）。色は塗り帯でなくアイコンへ寄せ、
+              作成は上＋1タップ維持。並びはメロ優先。放り込むフォームは撤去（雑な捕獲はチャット）。 */}
           <div className="create-tiles">
-            <button className="create-tile" style={{ ["--k" as string]: "var(--k-section)" }} onClick={() => void newSong()}>
-              <KindIcon kind="song" />
-              <span>＋曲</span>
-            </button>
             {(
               [
-                ["melody", "メロ", "新しいメロ"],
-                ["chord_progression", "コード", "新しいコード進行"],
-                ["rhythm", "リズム", "新しいリズム"],
-                ["bass", "ベース", "新しいベース"],
-                ["lyric", "歌詞", "新しい歌詞"],
-                ["theme", "テーマ", "新しいテーマ"],
+                ["melody", "メロ", "新しいメロ", "var(--k-melody)"],
+                ["chord_progression", "コード", "新しいコード進行", "var(--k-chord)"],
+                ["lyric", "歌詞", "新しい歌詞", "var(--k-lyric)"],
+                ["song", "曲", "", "var(--k-section)"], // song は newSong（section を作る）
+                ["rhythm", "リズム", "新しいリズム", "var(--k-rhythm)"],
+                ["bass", "ベース", "新しいベース", "var(--k-bass)"],
+                ["theme", "テーマ", "新しいテーマ", "var(--k-theme)"],
               ] as const
-            ).map(([k, label, title]) => (
-              <button key={k} className="create-tile" style={{ ["--k" as string]: `var(--k-${k})` }} onClick={() => void createBlank(k, title)}>
+            ).map(([k, label, title, col]) => (
+              <button
+                key={k}
+                className="create-tile"
+                style={{ ["--k" as string]: col }}
+                onClick={() => (k === "song" ? void newSong() : void createBlank(k, title))}
+              >
                 <KindIcon kind={k} />
                 <span>＋{label}</span>
               </button>
             ))}
+            <button
+              className={"create-tile import-tile" + (importOpen ? " on" : "")}
+              aria-label="toggle-import"
+              aria-expanded={importOpen}
+              style={{ ["--k" as string]: "var(--muted)" }}
+              onClick={() => setImportOpen((v) => !v)}
+            >
+              <Icon name="inbox" size={22} />
+              <span>取込 {importOpen ? "▲" : "▾"}</span>
+            </button>
           </div>
+          {importOpen && (
           <div className="notebook-actions">
             <label className="import-btn">
               {importing ? "取り込み中…" : "MIDI取込"}
@@ -493,6 +507,7 @@ export function App() {
               />
             </label>
           </div>
+          )}
           <div className="scope-tabs" role="tablist" aria-label="scope">
             <button
               role="tab"

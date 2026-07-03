@@ -452,35 +452,44 @@ article header {
   flex-wrap: wrap;
   gap: 6px;
 }
-/* 作成タイル＝「空のカード」（左に色帯＋kindアイコン）。カードと同じ色言語で繋ぐ。 */
+/* 作成タイル＝コンパクトなアイコングリッド（案A・2026-07-03）。色は塗り帯でなくアイコンへ寄せ、
+   低背・4列で作成を上に残しつつファーストビューのごちゃつきを抑える。 */
 .create-tiles {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .create-tile {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  background: var(--card);
+  gap: 3px;
+  background: #1b1e23;
   color: var(--fg);
   border: 1px solid var(--line);
-  border-left: 4px solid var(--k, var(--accent)); /* カードの左帯と同じ＝紐づく */
-  border-radius: 8px;
-  padding: 7px 12px 7px 9px;
-  font-size: 0.82rem;
+  border-radius: 10px;
+  padding: 8px 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
   cursor: pointer;
 }
 .create-tile svg {
-  color: var(--k, var(--accent)); /* アイコンは kind 色 */
+  color: var(--k, var(--accent)); /* アイコン＝kind 色（可愛さと識別を担う） */
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
 }
-.create-tile span {
-  font-weight: 600;
-}
 .create-tile:hover {
-  background: color-mix(in srgb, var(--k, var(--accent)) 14%, var(--card));
+  background: color-mix(in srgb, var(--k, var(--accent)) 16%, #1b1e23);
+  border-color: var(--k, var(--accent));
+}
+.create-tile.import-tile {
+  color: var(--muted);
+}
+.create-tile.import-tile.on {
+  background: color-mix(in srgb, var(--accent) 16%, #1b1e23);
+  border-color: var(--accent);
 }
 .import-btn.accent {
   background: var(--accent);
