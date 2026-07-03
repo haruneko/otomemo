@@ -44,11 +44,12 @@ function bpbOf(meter?: string | null): number {
 // ④(2026-07-03) section/song カードの中身プレビュー＝レーン帯のミニ・タイムライン。
 // どのパートがどの小節に入ってるかを帯で図示（編集画面タイムラインの縮小版）＋小節数。
 // 子は getComposition を表示時に遅延取得（container カードのみ・数は少ない）。
-const MINI_LANES: { label: string; kinds: string[] }[] = [
-  { label: "メロ", kinds: ["melody"] },
-  { label: "コード", kinds: ["chord", "chord_progression", "chord_pattern"] },
-  { label: "ベース", kinds: ["bass"] },
-  { label: "リズム", kinds: ["rhythm"] },
+// 各レーンは編集画面タイムラインと同じ種別色で塗る（単色オレンジの壁を避け、パートを見分ける）。
+const MINI_LANES: { label: string; kinds: string[]; color: string }[] = [
+  { label: "メロ", kinds: ["melody"], color: "--k-melody" },
+  { label: "コード", kinds: ["chord", "chord_progression", "chord_pattern"], color: "--k-chord" },
+  { label: "ベース", kinds: ["bass"], color: "--k-bass" },
+  { label: "リズム", kinds: ["rhythm"], color: "--k-rhythm" },
 ];
 const MINI_BARS_CAP = 16; // カードに出す最大小節（超過は帯を切って小節数で示す）
 
@@ -84,12 +85,16 @@ export function SectionMini({ neta }: { neta: Neta }) {
       const e = Math.ceil((c.position + durOf(c)) / bpb);
       for (let b = s; b < e && b < shown; b++) cells[b] = true;
     }
-    return { label: lane.label, cells, any: cells.some(Boolean) };
+    return { label: lane.label, color: lane.color, cells, any: cells.some(Boolean) };
   });
   return (
     <div className="section-mini" aria-label="section-preview">
       {lanes.map((l) => (
-        <div className={"sm-lane" + (l.any ? "" : " empty")} key={l.label}>
+        <div
+          className={"sm-lane" + (l.any ? "" : " empty")}
+          key={l.label}
+          style={{ ["--lc" as string]: `var(${l.color})` }}
+        >
           <span className="sm-label">{l.label}</span>
           <span className="sm-cells">
             {l.cells.map((on, i) => (
