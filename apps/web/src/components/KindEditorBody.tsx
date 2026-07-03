@@ -1,5 +1,6 @@
 // NetaDialog のエディタ本体（kind 別ディスパッチ）を分離（アーキ是正 S5）。
 // メロ/ベース(絶対・相対)/コード/リズム/コンテナ/テキスト の描画。状態は親(NetaDialog)が所有し props で受ける。
+import { useState } from "react";
 import { moraLines } from "../lyrics";
 import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
@@ -58,6 +59,10 @@ export interface KindEditorBodyProps {
 export function KindEditorBody(p: KindEditorBodyProps) {
   const { isMelody, isBass, isChord, isRhythm, isContainer, isRelBass } = p.flags;
   const tp = p.tp;
+  const [toolsOpen, setToolsOpen] = useState(false);
+  // トランスポーズ（①道具・純クライアント＝Undo可）。全ノートのピッチを移動。
+  const transpose = (d: number) =>
+    p.setNotes(p.notes.map((n) => ({ ...n, pitch: Math.max(0, Math.min(127, n.pitch + d)) })));
   return (
     <div className="editor-body">
       {isMelody || isBass ? (
@@ -122,6 +127,19 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                         >
                           {p.reshaping ? "崩し中…" : "崩す"}
                         </button>
+                        <div className="assign-wrap">
+                          <button type="button" className="tb-tool" aria-label="tools" title="道具（移調 ほか）" onClick={() => setToolsOpen((v) => !v)}>
+                            道具 ▾
+                          </button>
+                          {toolsOpen && (
+                            <div className="assign-menu" aria-label="tools-menu">
+                              <button type="button" className="bs-btn" onClick={() => transpose(1)}>＋半音</button>
+                              <button type="button" className="bs-btn" onClick={() => transpose(-1)}>−半音</button>
+                              <button type="button" className="bs-btn" onClick={() => transpose(12)}>＋8va</button>
+                              <button type="button" className="bs-btn" onClick={() => transpose(-12)}>−8va</button>
+                            </div>
+                          )}
+                        </div>
                       </>
                     )}
                   </>
