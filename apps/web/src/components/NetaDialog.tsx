@@ -79,6 +79,7 @@ export function NetaDialog({
         rollMode={ed.rollMode} setRollMode={ed.setRollMode}
         candidate={ed.candidate} candStrength={ed.candStrength} reshaping={ed.reshaping}
         onReshape={ed.reshape} onSaveCandidate={ed.saveCandidate} onDiscardCandidate={ed.discardCandidate}
+        onDetectKey={() => void ed.detectKeyFromMelody()}
         len={ed.len} setLen={ed.setLen}
         pickup={ed.pre} setPickup={ed.setPickup}
         text={ed.text} setText={ed.setText}

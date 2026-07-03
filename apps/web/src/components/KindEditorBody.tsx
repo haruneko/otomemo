@@ -50,6 +50,7 @@ export interface KindEditorBodyProps {
   onReshape?: (strength?: number) => void;
   onSaveCandidate?: () => void;
   onDiscardCandidate?: () => void;
+  onDetectKey?: () => void; // 調推定（メロの音→key設定）
   reloadSignal?: number;
   onChanged?: () => void;
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
@@ -133,6 +134,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                           </button>
                           {toolsOpen && (
                             <div className="assign-menu" aria-label="tools-menu">
+                              <button type="button" className="bs-btn" aria-label="detect-key-melody" onClick={() => { setToolsOpen(false); p.onDetectKey?.(); }}>調推定</button>
                               <button type="button" className="bs-btn" onClick={() => transpose(1)}>＋半音</button>
                               <button type="button" className="bs-btn" onClick={() => transpose(-1)}>−半音</button>
                               <button type="button" className="bs-btn" onClick={() => transpose(12)}>＋8va</button>

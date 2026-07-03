@@ -232,6 +232,12 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   function discardCandidate() {
     setCandidate(null);
   }
+  // 調推定（①道具）：メロの音から調(key+mode)を推定して設定（決定的・Claude不要）。
+  async function detectKeyFromMelody() {
+    const r = await api.music<{ key: number; mode: string }>("detect_key", { notes });
+    setKey(r.key);
+    setMode(r.mode);
+  }
 
   async function save() {
     setBusy(true);
@@ -283,7 +289,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
     melodyView, setMelodyView, rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
     // 崩し候補（①道具）
-    candidate, candStrength, reshaping, reshape, saveCandidate, discardCandidate,
+    candidate, candStrength, reshaping, reshape, saveCandidate, discardCandidate, detectKeyFromMelody,
     // 派生・道具
     playable, tp, editHist, rels, busy, schedId, colorKind,
     // アクション
