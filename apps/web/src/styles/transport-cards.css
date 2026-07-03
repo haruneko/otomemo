@@ -466,6 +466,16 @@
   color: #fff;
   border-color: var(--accent);
 }
+.fit-report {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--fg);
+  cursor: pointer;
+}
 /* 音価ボタンと付点の区切り線（付点=修飾で別物と分かる）。 */
 .nv-divider {
   width: 1px;

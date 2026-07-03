@@ -42,6 +42,7 @@ import {
   type PlaybackHandle,
 } from "../music";
 import { MiniRoll } from "./MiniRoll";
+import { harmonyVoice } from "../harmony";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/ベース/リズムの4レーン×小節 で組む。
 // レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
@@ -233,7 +234,7 @@ export function SectionEditor({
     if (part.needsChords && !chords.length) return;
     setGenBusy(true);
     try {
-      const r = await api.music(part.op, {
+      const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, {
         frame: { key: keyPc, meter: neta.meter, tempo, bars: BARS },
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
@@ -243,6 +244,49 @@ export function SectionEditor({
     } finally {
       setGenBusy(false);
     }
+  }
+  // メロレーンの（最初の）メロ notes＝ハモリ/fit の入力。
+  function melodyLaneNotes(): Note[] {
+    const ml = LANES.find((l) => l.key === "melody")!;
+    const c = laneChildren(ml)[0];
+    return c ? notesForContent("melody", c.node.neta.content) : [];
+  }
+  const isMinor = (neta.mode ?? "").toLowerCase().includes("min");
+  // ハモリ（上/下＝並行第2声部・調内平行3度・決定的）。候補→メロレーンに置く（原メロと重なって鳴る）。
+  function makeHarmony(degSteps: number) {
+    const mel = melodyLaneNotes();
+    if (!mel.length) return;
+    lastPartRef.current = null; // 決定的＝別案なし
+    setCand({ kind: "melody", content: { notes: harmonyVoice(mel, keyPc, isMinor, degSteps) } });
+  }
+  // コードに合わせる（fit_to_chords）：メロの各音を近いコードトーンへ寄せた候補。
+  async function fitToChords() {
+    const mel = melodyLaneNotes();
+    const chords = sectionChords();
+    if (!mel.length || !chords.length || genBusy) return;
+    setGenBusy(true);
+    try {
+      const r = await api.music<{ notes: Note[] }>("fit_to_chords", { melody: mel, chords, key: keyPc });
+      lastPartRef.current = null;
+      if (r.notes?.length) setCand({ kind: "melody", content: { notes: r.notes } });
+    } finally {
+      setGenBusy(false);
+    }
+  }
+  // 噛み合い診断（analyze_fit・読むだけ）：メロ×コードの当てはまりを一言で。
+  const [fitReport, setFitReport] = useState<string | null>(null);
+  async function analyzeFit() {
+    const mel = melodyLaneNotes();
+    const chords = sectionChords();
+    if (!mel.length || !chords.length) return;
+    const r = await api.music<{ score: number; inChordRate: number; issues?: string[] }>("analyze_fit", {
+      melody: mel,
+      chords,
+      key: keyPc,
+    });
+    const pct = Math.round((r.inChordRate ?? 0) * 100);
+    const verdict = r.score >= 0.75 ? "よく噛み合ってる" : r.score >= 0.5 ? "まあまあ" : "ズレ気味";
+    setFitReport(`噛み合い：${verdict}（コードトーン率 ${pct}%${r.issues?.length ? "・" + r.issues[0] : ""}）`);
   }
   async function auditionCandidate() {
     candPlay.current?.stop();
@@ -319,7 +363,32 @@ export function SectionEditor({
               {genBusy ? "生成中…" : `この進行に${part.label}`}
             </button>
           ))}
+        {!cand && melodyLaneNotes().length > 0 && (
+          <>
+            <button type="button" className="tb-tool" aria-label="harmony-up" title="上ハモ＝調内で平行3度上の第2声部" onClick={() => makeHarmony(2)}>
+              上ハモ
+            </button>
+            <button type="button" className="tb-tool" aria-label="harmony-down" title="下ハモ＝調内で平行3度下の第2声部" onClick={() => makeHarmony(-2)}>
+              下ハモ
+            </button>
+            {sectionChords().length > 0 && (
+              <>
+                <button type="button" className="tb-tool" aria-label="fit-to-chords" title="メロの各音を近いコードトーンへ寄せる" disabled={genBusy} onClick={() => void fitToChords()}>
+                  コードに合わせる
+                </button>
+                <button type="button" className="tb-tool" aria-label="analyze-fit" title="メロとコードの噛み合いを診断（読むだけ）" onClick={() => void analyzeFit()}>
+                  噛み合い診断
+                </button>
+              </>
+            )}
+          </>
+        )}
       </div>
+      {fitReport && (
+        <p className="fit-report" aria-label="fit-report" onClick={() => setFitReport(null)}>
+          {fitReport} <span className="muted">（タップで消す）</span>
+        </p>
+      )}
 
       {cand && (
         <div

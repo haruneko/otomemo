@@ -291,12 +291,10 @@ export const api = {
       { method: "POST", body: JSON.stringify(body) },
     ),
 
-  // 作曲補助②（文脈系）：決定的音楽オペの汎用窓口（gen_melody/gen_bass/gen_drums/fit_to_chords…）。
-  music: (op: string, body: Record<string, unknown>) =>
-    http<{ items: { kind: string; content: unknown; label: string }[] }>(`/music/${op}`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+  // 作曲補助②（文脈系）：決定的音楽オペの汎用窓口。返りは op ごとに違う（gen_*={items}、
+  // fit_to_chords={notes,after}、analyze_fit={score,…}）ので呼び出し側でキャスト。
+  music: <T = unknown>(op: string, body: Record<string, unknown>) =>
+    http<T>(`/music/${op}`, { method: "POST", body: JSON.stringify(body) }),
 
   unlink: (from: string, to: string, type = "related") =>
     http<{ ok: boolean }>("/relation/remove", {
