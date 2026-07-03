@@ -80,6 +80,7 @@ export function NetaDialog({
         candidate={ed.candidate} candStrength={ed.candStrength} reshaping={ed.reshaping}
         onReshape={ed.reshape} onSaveCandidate={ed.saveCandidate} onDiscardCandidate={ed.discardCandidate}
         onDetectKey={() => void ed.detectKeyFromMelody()}
+        keyReport={ed.keyReport} onClearKeyReport={ed.clearKeyReport}
         len={ed.len} setLen={ed.setLen}
         pickup={ed.pre} setPickup={ed.setPickup}
         text={ed.text} setText={ed.setText}

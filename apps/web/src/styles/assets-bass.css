@@ -385,10 +385,59 @@ article[aria-label="neta-card"].dragging {
   border-radius: 8px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
-/* 画面右端に近いトリガ（道具▾ 等）は右寄せで開く＝右見切れ回避（レビュー H-2）。 */
+/* 画面右端に近いトリガ（ツール▾ 等）は右寄せで開く＝右見切れ回避（レビュー H-2）。 */
 .assign-menu.to-right {
   left: auto;
   right: 0;
+}
+/* メロの「ツール」メニュー＝崩す/調推定/似たメロ/移調 を縦にまとめる（崩すを主役に）。 */
+.tools-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tools-btn.on {
+  border-color: var(--k-melody);
+  color: var(--k-melody);
+}
+.tools-menu {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 168px;
+  gap: 4px;
+}
+.tool-item {
+  text-align: left;
+  font-size: 0.82rem;
+  padding: 7px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.tool-item:disabled {
+  opacity: 0.5;
+}
+.tool-item.primary {
+  background: color-mix(in srgb, var(--k-melody) 22%, #2b2f36);
+  border-color: var(--k-melody);
+  font-weight: 600;
+}
+.tools-sep {
+  font-size: 0.68rem;
+  color: var(--muted);
+  padding: 4px 4px 0;
+}
+.tools-transpose {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tools-transpose .tool-item {
+  flex: 1 0 44%;
+  text-align: center;
+  padding: 6px 4px;
 }
 .list-density button {
   font-size: 0.76rem;

@@ -18,6 +18,7 @@ import {
   analyzeFit,
   fitToChords,
   detectKeyFromNotes,
+  detectKeyCandidatesFromNotes,
   detectKeyFromChords,
   melodySimilarity,
   findSimilar,
@@ -158,6 +159,7 @@ export function buildHttp(core: Core): FastifyInstance {
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
         case "fit_to_chords": return fitToChords(asNotes(b.melody), asChords(b.chords), b.key);
         case "detect_key": return detectKeyFromNotes(asNotes(b.notes ?? b.melody));
+        case "detect_key_candidates": return { candidates: detectKeyCandidatesFromNotes(asNotes(b.notes ?? b.melody), b.top ?? 4) };
         // #9 コードから調(key+mode)候補を上位N。section/コード進行の調を「宣言」する補助。
         case "detect_key_chords": return { candidates: detectKeyFromChords(asChords(b.chords), b.top ?? 3) };
         case "melody_similarity": return { similarity: melodySimilarity(asNotes(b.a), asNotes(b.b)) };

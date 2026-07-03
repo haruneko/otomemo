@@ -2,6 +2,7 @@
 // メロ/ベース(絶対・相対)/コード/リズム/コンテナ/テキスト の描画。状態は親(NetaDialog)が所有し props で受ける。
 import { useState } from "react";
 import { api } from "../api";
+import { Icon } from "./Icon";
 import { moraLines } from "../lyrics";
 import { PianoRoll } from "./PianoRoll";
 import { StepPad } from "./StepPad";
@@ -51,7 +52,9 @@ export interface KindEditorBodyProps {
   onReshape?: (strength?: number) => void;
   onSaveCandidate?: () => void;
   onDiscardCandidate?: () => void;
-  onDetectKey?: () => void; // 調推定（メロの音→key設定）
+  onDetectKey?: () => void; // 調推定（メロの音→key設定・押すごとに候補巡回）
+  keyReport?: string | null;
+  onClearKeyReport?: () => void;
   reloadSignal?: number;
   onChanged?: () => void;
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
@@ -137,28 +140,31 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     {isMelody && !p.candidate && (
                       <>
                         <span className="tb-divider" aria-hidden="true" />
-                        <button
-                          type="button"
-                          className="tb-tool"
-                          aria-label="reshape"
-                          title="崩す＝ノリを保ったまま別メロの候補を出す（決定的・Claude不要）"
-                          disabled={p.reshaping}
-                          onClick={() => p.onReshape?.()}
-                        >
-                          {p.reshaping ? "崩し中…" : "崩す"}
-                        </button>
                         <div className="assign-wrap">
-                          <button type="button" className="tb-tool" aria-label="tools" title="道具（移調 ほか）" onClick={() => setToolsOpen((v) => !v)}>
-                            道具 ▾
+                          <button
+                            type="button"
+                            className={"tb-tool tools-btn" + (toolsOpen ? " on" : "")}
+                            aria-label="tools"
+                            aria-expanded={toolsOpen}
+                            title="このメロの道具（崩す・調推定・似たメロ・移調）"
+                            onClick={() => setToolsOpen((v) => !v)}
+                          >
+                            <Icon name="wand" size={16} /> ツール ▾
                           </button>
                           {toolsOpen && (
-                            <div className="assign-menu to-right" aria-label="tools-menu">
-                              <button type="button" className="bs-btn" aria-label="detect-key-melody" onClick={() => { setToolsOpen(false); p.onDetectKey?.(); }}>調推定</button>
-                              <button type="button" className="bs-btn" aria-label="find-similar-melody" onClick={() => void findSimilar()}>似たメロ</button>
-                              <button type="button" className="bs-btn" onClick={() => transpose(1)}>＋半音</button>
-                              <button type="button" className="bs-btn" onClick={() => transpose(-1)}>−半音</button>
-                              <button type="button" className="bs-btn" onClick={() => transpose(12)}>＋8va</button>
-                              <button type="button" className="bs-btn" onClick={() => transpose(-12)}>−8va</button>
+                            <div className="assign-menu to-right tools-menu" aria-label="tools-menu">
+                              <button type="button" className="tool-item primary" aria-label="reshape" disabled={p.reshaping} onClick={() => { setToolsOpen(false); p.onReshape?.(); }}>
+                                崩す（別メロ候補）
+                              </button>
+                              <button type="button" className="tool-item" aria-label="detect-key-melody" onClick={() => { setToolsOpen(false); p.onDetectKey?.(); }}>調推定</button>
+                              <button type="button" className="tool-item" aria-label="find-similar-melody" onClick={() => void findSimilar()}>似たメロ</button>
+                              <div className="tools-sep">移調</div>
+                              <div className="tools-transpose">
+                                <button type="button" className="tool-item" onClick={() => transpose(1)}>＋半音</button>
+                                <button type="button" className="tool-item" onClick={() => transpose(-1)}>−半音</button>
+                                <button type="button" className="tool-item" onClick={() => transpose(12)}>＋8va</button>
+                                <button type="button" className="tool-item" onClick={() => transpose(-12)}>−8va</button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -170,6 +176,11 @@ export function KindEditorBody(p: KindEditorBodyProps) {
               {simReport && (
                 <p className="fit-report" aria-label="similar-report" onClick={() => setSimReport(null)}>
                   {simReport} <span className="muted">（タップで消す）</span>
+                </p>
+              )}
+              {p.keyReport && (
+                <p className="fit-report" aria-label="key-report" onClick={() => p.onClearKeyReport?.()}>
+                  {p.keyReport} <span className="muted">（タップで消す）</span>
                 </p>
               )}
               {p.melodyView === "roll" ? (

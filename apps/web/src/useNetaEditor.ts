@@ -1,7 +1,7 @@
 // 編集画面の"脳"（共通パーツ化 CP3・design「編集画面の共通パーツ化」）。
 // NetaDialog が抱えていた state/派生/effect/アクション/history/transport を集約。
 // NetaDialog は本フックの返りを各共有UI(EditorHeader/MetaPanel/KindEditorBody/TransportBar/RelationsPanel)へ流す薄い合成に。
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Neta, type NetaPatch } from "./api";
 import { useEditHistory } from "./history";
 import { useTransport } from "./useTransport";
@@ -24,6 +24,8 @@ import {
   type BassStep,
   type ChordPatternContent,
 } from "./music";
+
+const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged?: () => void }) {
   const { onClose, onChanged } = opts;
@@ -232,11 +234,34 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   function discardCandidate() {
     setCandidate(null);
   }
-  // 調推定（①道具）：メロの音から調(key+mode)を推定して設定（決定的・Claude不要）。
+  // 調推定（①道具）：メロの音から調候補（相対短調含む複数）を推定。押すごとに候補を巡回して設定
+  //（C 長調 ⇔ A 短調 のような曖昧さを"次候補"で切替）。ノート編集で候補はリセット。
+  const keyCandsRef = useRef<{ key: number; mode: string }[]>([]);
+  const keyCursorRef = useRef(0);
+  useEffect(() => {
+    keyCandsRef.current = [];
+    keyCursorRef.current = 0;
+  }, [notes]);
+  const [keyReport, setKeyReport] = useState<string | null>(null);
   async function detectKeyFromMelody() {
-    const r = await api.music<{ key: number; mode: string }>("detect_key", { notes });
-    setKey(r.key);
-    setMode(r.mode);
+    if (!keyCandsRef.current.length) {
+      const r = await api.music<{ candidates: { key: number; mode: string }[] }>(
+        "detect_key_candidates",
+        { notes, top: 4 },
+      );
+      keyCandsRef.current = r.candidates ?? [];
+      keyCursorRef.current = 0;
+    }
+    const cands = keyCandsRef.current;
+    const c = cands[keyCursorRef.current % (cands.length || 1)];
+    if (!c) return;
+    setKey(c.key);
+    setMode(c.mode);
+    keyCursorRef.current++;
+    const name = KEY_NAMES[c.key] ?? c.key;
+    setKeyReport(
+      `調推定：${name} ${c.mode === "minor" ? "短調" : "長調"}（${keyCursorRef.current}/${cands.length}・ツール→調推定で次候補）`,
+    );
   }
 
   async function save() {
@@ -290,6 +315,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     melodyView, setMelodyView, rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
     // 崩し候補（①道具）
     candidate, candStrength, reshaping, reshape, saveCandidate, discardCandidate, detectKeyFromMelody,
+    keyReport, clearKeyReport: () => setKeyReport(null),
     // 派生・道具
     playable, tp, editHist, rels, busy, schedId, colorKind,
     // アクション

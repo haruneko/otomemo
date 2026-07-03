@@ -95,6 +95,14 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M20 12H10a6 6 0 0 0 0 12h1" />
         </svg>
       );
+    case "wand": // ツール（キラッ＝補助/生成系のまとまり）
+      return (
+        <svg {...s}>
+          <path d="M12 3l1.4 3.6L17 8l-3.6 1.4L12 13l-1.4-3.6L7 8l3.6-1.4z" fill="currentColor" />
+          <path d="M18 13l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="currentColor" opacity="0.8" />
+          <path d="M6 14l.6 1.6L8.2 16l-1.6.6L6 18.2l-.6-1.6L3.8 16l1.6-.4z" fill="currentColor" opacity="0.7" />
+        </svg>
+      );
     case "pin": // 指示ピン
       return (
         <svg {...s}>
