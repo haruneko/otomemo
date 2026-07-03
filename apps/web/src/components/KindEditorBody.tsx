@@ -5,7 +5,6 @@ import { api } from "../api";
 import { Icon } from "./Icon";
 import { moraLines } from "../lyrics";
 import { PianoRoll } from "./PianoRoll";
-import { StepPad } from "./StepPad";
 import { BassStepEditor } from "./BassStepEditor";
 import { ChordEditor } from "./ChordEditor";
 import { ChordPatternEditor } from "./ChordPatternEditor";
@@ -32,8 +31,6 @@ export interface KindEditorBodyProps {
   setBassSteps: (n: number) => void;
   bassMode: "absolute" | "relative";
   setBassMode: (m: "absolute" | "relative") => void;
-  melodyView: "roll" | "pad";
-  setMelodyView: (v: "roll" | "pad") => void;
   rollMode: "draw" | "select";
   setRollMode: (v: "draw" | "select") => void;
   len: number;
@@ -113,19 +110,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
             />
           ) : (
             <>
-              {/* ロール/パッド と 描く/選ぶ を同じ行に（縦詰め・縦線で区切り）。 */}
+              {/* 描く/選ぶ ＋ いじる（メロはロール一本＝パッド撤去 2026-07-04）。 */}
               <div className="roll-toolbar">
-                <div className="input-toggle">
-                  <button type="button" className={p.melodyView === "roll" ? "on" : ""} onClick={() => p.setMelodyView("roll")}>
-                    ロール
-                  </button>
-                  <button type="button" className={p.melodyView === "pad" ? "on" : ""} onClick={() => p.setMelodyView("pad")}>
-                    パッド
-                  </button>
-                </div>
-                {p.melodyView === "roll" && (
-                  <>
-                    <span className="tb-divider" aria-hidden="true" />
                     <div className="proll-modes">
                       <button type="button" aria-label="mode-draw" title="描く（配置/削除）" className={p.rollMode === "draw" ? "on" : ""} onClick={() => p.setRollMode("draw")}>
                         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -171,8 +157,6 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                         </div>
                       </>
                     )}
-                  </>
-                )}
               </div>
               {simReport && (
                 <p className="fit-report" aria-label="similar-report" onClick={() => setSimReport(null)}>
@@ -184,9 +168,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                   {p.keyReport} <span className="muted">（タップで消す）</span>
                 </p>
               )}
-              {p.melodyView === "roll" ? (
-                <>
-                  {p.candidate && (
+              {p.candidate && (
                     <div className="reshape-bar" aria-label="reshape-candidate">
                       <span className="reshape-label">崩し候補（元＝点線／▶で候補を試聴）</span>
                       <div className="reshape-strength">
@@ -228,10 +210,6 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     playheadRef={tp.lineRef}
                     scrollerRef={tp.scrollerRef}
                   />
-                </>
-              ) : (
-                <StepPad notes={p.notes} onChange={p.setNotes} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
-              )}
             </>
           )}
         </div>

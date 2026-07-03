@@ -76,7 +76,6 @@ export function NetaDialog({
         bassPattern={ed.bassPattern} setBassPattern={ed.setBassPattern}
         bassSteps={ed.bassSteps} setBassSteps={ed.setBassSteps}
         bassMode={ed.bassMode} setBassMode={ed.setBassMode}
-        melodyView={ed.melodyView} setMelodyView={ed.setMelodyView}
         rollMode={ed.rollMode} setRollMode={ed.setRollMode}
         candidate={ed.candidate} candStrength={ed.candStrength} reshaping={ed.reshaping}
         onReshape={ed.reshape} onSaveCandidate={ed.saveCandidate} onDiscardCandidate={ed.discardCandidate}

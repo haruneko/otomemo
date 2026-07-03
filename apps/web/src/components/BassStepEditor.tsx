@@ -14,7 +14,7 @@ const BASS_PREVIEW_PITCH: Record<BassDegree, number> = {
 // **度数レーン**(行=R/3/5/7/8/approach)×**ステップ**(列)。各ステップはモノフォニック＝1度数だけ。
 // セルをタップでそのレーン×ステップに置く（同ステップの他レーンは消える）。音長は長さツールで選ぶ。
 // 度数はコード/調に当てて再生時に解決＝ここは「何度を・いつ・どれだけ」だけ編集（オクターブは自動）。
-const BEAT_PX = 88; // 1拍=4step。StepPad と同じプレイヘッド係数。1小節=16step。
+const BEAT_PX = 88; // 1拍=4step（20px cell+2px gap）＝プレイヘッドの px/beat。1小節=16step。
 // 上ほど高い度数（ピアノロールと同じ向き）：上から 8/7/5/3/R、approach は最下段。
 const LANES: { d: BassDegree; label: string }[] = [
   { d: "8", label: "8" },

@@ -57,7 +57,6 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [program, setProgram] = useState<number>(
     programOf(neta.content) ?? (neta.kind === "bass" ? 33 : 0), // #47 GM音色（bassは既定フィンガーベース）
   );
-  const [melodyView, setMelodyView] = useState<"roll" | "pad">("roll"); // #35 ロール/パッド
   const [rollMode, setRollMode] = useState<"draw" | "select">("draw"); // ロールの描く/選ぶ（ロール/パッドと同じ行に出す）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
   const [bassMode, setBassMode] = useState<"absolute" | "relative">(
@@ -358,7 +357,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const showMeta = isMusic || isContainer; // テンポ
   const collapsibleMeta = isMusic || isContainer; // メタ折りたたみ対象（MetaPanel）
   // 小節/弱起は roll（メロ・ベース絶対）のみ＝折りたたみ設定(MetaPanel)へ移す対象（縦詰め）。
-  const showRollBars = (isMelody || (isBass && bassMode === "absolute")) && melodyView === "roll";
+  const showRollBars = isMelody || (isBass && bassMode === "absolute"); // メロ/絶対ベースの roll（パッド撤去でロール一本）
   // #10④ エディタ本体の active 色を kind 色に（chord_pattern は chord 色を流用）。
   const colorKind = neta.kind === "chord_pattern" ? "chord" : neta.kind;
 
@@ -370,7 +369,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram,
     notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat,
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
-    melodyView, setMelodyView, rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
+    rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
     // 崩し候補（①道具）
     candidate, candStrength, reshaping, reshape, saveCandidate, discardCandidate, detectKeyFromMelody,
     keyReport, clearKeyReport: () => setKeyReport(null),
