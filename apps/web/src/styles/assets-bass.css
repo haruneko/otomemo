@@ -72,23 +72,58 @@ button:disabled {
   font-size: 0.75rem;
   color: #e0a33c;
 }
+/* コンパクトなセグメント（旧＝全幅の大ボタン→ごちゃつきの一因だったので詰める・Stage2）。 */
 .scope-tabs {
-  display: flex;
-  gap: 6px;
+  display: inline-flex;
+  gap: 0;
   margin: 8px 0;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
 }
 .scope-tabs button {
-  flex: 1;
-  padding: 6px 8px;
-  background: #1b1e23;
-  border: 1px solid #2a2e36;
-  border-radius: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 0.82rem;
   color: var(--muted, #9aa0ab);
 }
 .scope-tabs button.on {
   background: var(--accent);
   color: #fff;
+}
+/* 検索を主役＝広く。絞込は畳みトグル（効いてる時は●）。 */
+.filters .search-main {
+  flex: 1;
+}
+.filter-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  padding: 8px 12px;
+  background: #1b1e23;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-weight: 600;
+}
+.filter-toggle.active {
+  color: var(--fg);
   border-color: var(--accent);
+}
+.filter-dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.filters-sub {
+  margin-top: -6px;
 }
 .project-picker {
   display: flex;

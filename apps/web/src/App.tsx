@@ -170,6 +170,7 @@ export function App() {
   // base64でジョブに載せ、workerが分割→reaperがネタ化。jobのdoneを待って一覧へ反映。
   const [importing, setImporting] = useState(false);
   const [importOpen, setImportOpen] = useState(false); // 取込ボタン群を畳む（既定=閉）
+  const [filtersOpen, setFiltersOpen] = useState(false); // 種別/mood 絞り込みを畳む（既定=閉）
   async function importMidi(files: FileList | null) {
     if (!files) return;
     setImporting(true);
@@ -576,34 +577,51 @@ export function App() {
               </button>
             </div>
           )}
+          {/* 検索を主役に。種別/mood の絞り込みは「絞込 ▾」に畳む（Stage2）。効いてる時は●で示す。 */}
           <div className="filters">
             <input
+              className="search-main"
               aria-label="search"
               placeholder="検索…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <select
-              aria-label="kind-filter"
-              value={kindFilter}
-              disabled={!!q.trim()}
-              title={q.trim() ? "検索中は種類フィルタは無効" : "種類で絞る"}
-              onChange={(e) => setKindFilter(e.target.value)}
+            <button
+              type="button"
+              className={"filter-toggle" + (kindFilter || moodFilter.trim() ? " active" : "")}
+              aria-label="toggle-filters"
+              aria-expanded={filtersOpen}
+              title="種別・mood で絞り込む"
+              onClick={() => setFiltersOpen((v) => !v)}
             >
-              <option value="">すべて</option>
-              {FILTER_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
-            <input
-              aria-label="mood-filter"
-              placeholder="mood で絞る…"
-              value={moodFilter}
-              onChange={(e) => setMoodFilter(e.target.value)}
-            />
+              絞込 {filtersOpen ? "▲" : "▾"}
+              {(kindFilter || moodFilter.trim()) && <span className="filter-dot" aria-hidden="true" />}
+            </button>
           </div>
+          {filtersOpen && (
+            <div className="filters filters-sub">
+              <select
+                aria-label="kind-filter"
+                value={kindFilter}
+                disabled={!!q.trim()}
+                title={q.trim() ? "検索中は種類フィルタは無効" : "種類で絞る"}
+                onChange={(e) => setKindFilter(e.target.value)}
+              >
+                <option value="">種別：すべて</option>
+                {FILTER_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+              <input
+                aria-label="mood-filter"
+                placeholder="mood で絞る…"
+                value={moodFilter}
+                onChange={(e) => setMoodFilter(e.target.value)}
+              />
+            </div>
+          )}
           <NetaList
             items={shownItems}
             scope={scope}

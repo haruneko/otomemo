@@ -40,6 +40,7 @@ test.describe("search & filters (U4/U20)", () => {
     });
     try {
       await page.goto("/");
+      await page.getByLabel("toggle-filters").click(); // 種別/mood は既定折りたたみ→展開
       // 検索文字入力で kind-filter は無効化（検索中は種類フィルタ無効の連動）
       await page.getByLabel("search").fill("夜");
       await expect(page.getByLabel("kind-filter")).toBeDisabled();
