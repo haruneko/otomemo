@@ -41,7 +41,6 @@ export function MetaPanel(p: {
   setMood: (v: string) => void;
   onDetectKey: () => void;
   onExtendLen: () => void;
-  onExportMidi: () => void;
   onToggleSchedule: () => void;
   schedId: string | null;
   rollBars?: { len: number; setLen: (n: number) => void; pickup: number; setPickup: (n: number) => void } | null; // 小節/弱起（roll のみ・縦詰めで設定内へ）
@@ -144,11 +143,8 @@ export function MetaPanel(p: {
                 ＋4拍
               </button>
             )}
-            {f.isMusic && (
-              <button type="button" onClick={p.onExportMidi}>
-                MIDI
-              </button>
-            )}
+            {/* 単体ネタの MIDI 書き出しは編集画面から撤去（薄く保つ・2026-07-04）。書き出しは Section
+                本体（合成/分割）から。将来は「エクスポート機能でネタを選ぶ」導線も可。 */}
             {f.isThemeable && (
               <button type="button" className={p.schedId ? "primary" : ""} aria-label="continuous-research" title="このテーマを見てない間も継続して調べ、参考をトレイに溜める" onClick={p.onToggleSchedule}>
                 {p.schedId ? "🔁 継続調査中" : "🔁 継続して調べる"}

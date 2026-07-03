@@ -62,7 +62,6 @@ export function NetaDialog({
         setMood={ed.setMood}
         onDetectKey={() => void ed.detectKey()}
         onExtendLen={ed.onExtendLen}
-        onExportMidi={ed.onExportMidi}
         onToggleSchedule={() => void ed.toggleSchedule()}
         schedId={ed.schedId}
         rollBars={f.showRollBars ? { len: ed.len, setLen: ed.setLen, pickup: ed.pickup, setPickup: ed.setPickup } : null}

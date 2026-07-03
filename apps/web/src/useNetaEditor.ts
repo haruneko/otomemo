@@ -11,7 +11,6 @@ import {
   chordsToNotes,
   rhythmOf,
   rhythmToNotes,
-  downloadMidi,
   programOf,
   isRelativeBass,
   resolveRelativeBass,
@@ -382,6 +381,5 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     // アクション
     remove, detectKey, toggleSchedule,
     onExtendLen: () => setLen(len + 4),
-    onExportMidi: () => downloadMidi(playable, `${neta.title ?? "sketch"}.mid`, tempo, null, isRhythm ? undefined : isChord ? 48 : program),
   };
 }
