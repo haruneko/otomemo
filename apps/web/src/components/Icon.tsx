@@ -48,6 +48,13 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
         </svg>
       );
+    case "library": // 参考素材の池＝積み重なったコレクション
+      return (
+        <svg {...s}>
+          <rect {...st} x="8" y="4" width="12" height="12" rx="2" />
+          <path {...st} d="M16 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2" />
+        </svg>
+      );
     case "pin": // 指示ピン
       return (
         <svg {...s}>

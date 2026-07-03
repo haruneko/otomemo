@@ -263,6 +263,7 @@ export function App() {
     // P2: 作成を永続化（setProject）＝空の器でもリロードで消えない（旧 prompt はローカルのみで揮発）。
     await api.setProject(name, {}).catch(() => {});
     setProjects((ps) => (ps.includes(name) ? ps : [...ps, name]));
+    setScope("project");
     setUnassignedOnly(false);
     setActiveProject(name);
     loadProjects();
@@ -509,32 +510,15 @@ export function App() {
             </label>
           </div>
           )}
-          <div className="scope-tabs" role="tablist" aria-label="scope">
-            <button
-              role="tab"
-              aria-label="scope-project"
-              className={scope === "project" ? "on" : ""}
-              onClick={() => setScope("project")}
-            >
-              プロジェクト
-            </button>
-            <button
-              role="tab"
-              aria-label="scope-library"
-              className={scope === "library" ? "on" : ""}
-              onClick={() => setScope("library")}
-            >
-              ライブラリ（連想元）
-            </button>
-          </div>
-          {/* プロジェクト・ピッカー：project スコープ時のみ（library は全プロジェクト共有）。 */}
-          {scope === "project" && (
-            <div className="project-picker proj-chips" role="tablist" aria-label="project">
+          {/* 案1：スコープ＋器を1行に統合。すべて/未仕分け/器＝作業ネタの絞り込み、区切りの先の
+              「ライブラリ」＝連想元の参考素材（別の場所・全プロジェクト共有）。 */}
+          <div className="project-picker proj-chips" role="tablist" aria-label="scope">
               <button
                 role="tab"
-                aria-selected={!unassignedOnly && !activeProject}
-                className={"proj-chip" + (!unassignedOnly && !activeProject ? " on" : "")}
+                aria-selected={scope === "project" && !unassignedOnly && !activeProject}
+                className={"proj-chip" + (scope === "project" && !unassignedOnly && !activeProject ? " on" : "")}
                 onClick={() => {
+                  setScope("project");
                   setUnassignedOnly(false);
                   setActiveProject("");
                 }}
@@ -543,10 +527,11 @@ export function App() {
               </button>
               <button
                 role="tab"
-                aria-selected={unassignedOnly}
-                className={"proj-chip" + (unassignedOnly ? " on" : "")}
+                aria-selected={scope === "project" && unassignedOnly}
+                className={"proj-chip" + (scope === "project" && unassignedOnly ? " on" : "")}
                 title="どの器にも入れていないネタ"
                 onClick={() => {
+                  setScope("project");
                   setUnassignedOnly(true);
                   setActiveProject("");
                 }}
@@ -557,9 +542,10 @@ export function App() {
                 <button
                   key={p.name}
                   role="tab"
-                  aria-selected={!unassignedOnly && activeProject === p.name}
-                  className={"proj-chip" + (!unassignedOnly && activeProject === p.name ? " on" : "")}
+                  aria-selected={scope === "project" && !unassignedOnly && activeProject === p.name}
+                  className={"proj-chip" + (scope === "project" && !unassignedOnly && activeProject === p.name ? " on" : "")}
                   onClick={() => {
+                    setScope("project");
                     setUnassignedOnly(false);
                     setActiveProject(p.name);
                   }}
@@ -575,8 +561,18 @@ export function App() {
               >
                 ＋
               </button>
-            </div>
-          )}
+              <span className="proj-divider" aria-hidden="true" />
+              <button
+                role="tab"
+                aria-label="scope-library"
+                aria-selected={scope === "library"}
+                className={"proj-chip lib" + (scope === "library" ? " on" : "")}
+                title="ライブラリ＝連想元の参考素材（全プロジェクト共有）"
+                onClick={() => setScope("library")}
+              >
+                <Icon name="library" size={15} /> ライブラリ
+              </button>
+          </div>
           {/* 検索を主役に。種別/mood の絞り込みは「絞込 ▾」に畳む（Stage2）。効いてる時は●で示す。 */}
           <div className="filters">
             <input

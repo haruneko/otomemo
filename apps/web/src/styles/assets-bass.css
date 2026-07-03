@@ -72,28 +72,6 @@ button:disabled {
   font-size: 0.75rem;
   color: #e0a33c;
 }
-/* コンパクトなセグメント（旧＝全幅の大ボタン→ごちゃつきの一因だったので詰める・Stage2）。 */
-.scope-tabs {
-  display: inline-flex;
-  gap: 0;
-  margin: 8px 0;
-  background: #1b1e23;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.scope-tabs button {
-  padding: 6px 14px;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  font-size: 0.82rem;
-  color: var(--muted, #9aa0ab);
-}
-.scope-tabs button.on {
-  background: var(--accent);
-  color: #fff;
-}
 /* 検索を主役＝広く。絞込は畳みトグル（効いてる時は●）。 */
 .filters .search-main {
   flex: 1;
@@ -170,6 +148,29 @@ button:disabled {
   font-weight: 700;
   color: var(--muted);
   padding: 5px 12px;
+}
+/* 案1：器チップと「ライブラリ」を1行に。区切り線で"別の場所"と分ける。 */
+.proj-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background: #33373f;
+}
+.proj-chip.lib {
+  gap: 5px;
+  color: #cbb8f5; /* 連想元＝紫系で"参考素材の別プール"を示唆（作業ネタの青と差別化） */
+  border-color: #3c3560;
+  background: #221f2e;
+}
+.proj-chip.lib svg {
+  width: 15px;
+  height: 15px;
+}
+.proj-chip.lib.on {
+  background: #5a4bd0;
+  border-color: #5a4bd0;
+  color: #fff;
 }
 .filters {
   display: flex;
