@@ -1,5 +1,7 @@
 // 編集画面のヘッダ（共通パーツ CP2）：← 戻る / kind / タイトル / 削除 / 保存状態ピル。
 // 保存は自動（design「編集は自動保存」）。旧「保存」ボタンは状態ピル（押すと即フラッシュ）に。
+import { KIND_LABEL } from "../kinds";
+
 export function EditorHeader(p: {
   kind: string;
   title: string;
@@ -17,7 +19,7 @@ export function EditorHeader(p: {
         ← 戻る
       </button>
       <span className="kind" data-kind={p.kind}>
-        {p.kind}
+        {KIND_LABEL[p.kind] ?? p.kind}
       </span>
       <input aria-label="title" className="editor-title" placeholder="タイトル" value={p.title} onChange={(e) => p.setTitle(e.target.value)} />
       {/* 保存状態/削除は常に右端固定・2つで1グループ＝スマホでも分離せず一緒に右上へ収まる。 */}

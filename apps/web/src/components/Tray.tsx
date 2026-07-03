@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Job, type Neta } from "../api";
+import { KIND_LABEL } from "../kinds";
 
 // 何のジョブか分かる日本語ラベル（生 intent を出さない・fb-1）。
 const INTENT_LABEL: Record<string, string> = {
@@ -132,7 +133,7 @@ export function Tray({
                 <div className="tray-results">
                   {results[j.id]!.map((n) => (
                     <button key={n.id} className="tray-result" aria-label="open-result" onClick={() => onOpenNeta?.(n)}>
-                      <span className="kind" data-kind={n.kind}>{n.kind}</span>
+                      <span className="kind" data-kind={n.kind}>{KIND_LABEL[n.kind] ?? n.kind}</span>
                       <span className="tray-result-title">{n.title ?? n.text ?? "(無題)"}</span>
                     </button>
                   ))}

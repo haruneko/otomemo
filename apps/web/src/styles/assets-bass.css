@@ -103,6 +103,44 @@ button:disabled {
 .filters-sub {
   margin-top: -6px;
 }
+/* 種別フィルタ＝アイコンのチップ行（作成グリッドと同じ絵で絞る・生スネーク select を廃止）。 */
+.filter-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.filter-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #1b1e23;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 10px 5px 8px;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.filter-kind svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: currentColor;
+}
+.filter-kind:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.filter-kind.on {
+  background: color-mix(in srgb, var(--accent) 20%, #1b1e23);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.filter-kind:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .project-picker {
   display: flex;
   gap: 6px;

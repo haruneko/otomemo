@@ -192,7 +192,7 @@ describe("NetaDialog", () => {
       { type: "result", neta: { ...neta, id: "m1", kind: "melody", title: "メロ案", text: null } },
     ]);
     render(<NetaDialog neta={neta} onClose={vi.fn()} onChanged={vi.fn()} />);
-    expect(await screen.findByText(/melody: メロ案/)).toBeInTheDocument();
+    expect(await screen.findByText(/メロディ: メロ案/)).toBeInTheDocument(); // 種別は日本語ラベル
   });
 
   it("remounts with fresh state when the keyed neta changes (no stale swap)", () => {

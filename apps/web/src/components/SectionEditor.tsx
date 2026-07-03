@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
+import { KIND_LABEL } from "../kinds";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
 
@@ -579,7 +580,7 @@ export function SectionEditor({
                 >
                   <MiniRoll neta={c.node.neta} />
                   <span className="lane-block-label">
-                    {c.node.neta.title ?? c.node.neta.text ?? c.node.neta.kind}
+                    {c.node.neta.title ?? c.node.neta.text ?? KIND_LABEL[c.node.neta.kind] ?? c.node.neta.kind}
                   </span>
                   {/* ③ 右端グリップ＝ドラッグでループ伸ばし（この子を反復配置）。本体タップ(=外す)とは分離。 */}
                   <span
@@ -614,7 +615,7 @@ export function SectionEditor({
           <span className="muted">その他：</span>
           {others.map((c) => (
             <span key={`${c.node.neta.id}@${c.position}`} className="rel-item">
-              {c.node.neta.kind} @{c.position}
+              {KIND_LABEL[c.node.neta.kind] ?? c.node.neta.kind} @{c.position}
               <button
                 type="button"
                 aria-label={`remove-${c.node.neta.id}@${c.position}`}
@@ -691,7 +692,7 @@ export function SectionEditor({
                     <div className="picker-item-meta">
                       <strong>{n.title ?? n.text ?? "(無題)"}</strong>
                       <span className="muted">
-                        {n.kind}
+                        {KIND_LABEL[n.kind] ?? n.kind}
                         {n.mood ? ` · ${n.mood}` : ""}
                         {n.key != null ? ` · ${["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][n.key]}` : ""}
                       </span>

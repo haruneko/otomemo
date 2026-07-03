@@ -3,7 +3,7 @@ import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { api, type Neta } from "../api";
 import { useAlive, pollJobContent } from "../poll";
-import { MUSIC_KINDS, CONTAINER_KINDS } from "../kinds";
+import { MUSIC_KINDS, CONTAINER_KINDS, KIND_LABEL } from "../kinds";
 import { isProjectTag } from "../project";
 import { MiniRoll, SectionMini } from "./MiniRoll";
 import { KindIcon } from "./KindIcon";
@@ -242,7 +242,7 @@ export function NetaCard({
           {neta.matchType && MATCH_LABEL[neta.matchType] && (
             <span className={"match-badge " + neta.matchType}>{MATCH_LABEL[neta.matchType]}</span>
           )}
-          <span className="kind dense-kind">{neta.kind}</span>
+          <span className="kind dense-kind">{KIND_LABEL[neta.kind] ?? neta.kind}</span>
         </div>
         <div className="bs-tools">{playBtn}</div>
       </article>
@@ -276,7 +276,7 @@ export function NetaCard({
         }}
       >
         <header>
-          <span className="kind">{neta.kind}</span>
+          <span className="kind">{KIND_LABEL[neta.kind] ?? neta.kind}</span>
           {neta.matchType && MATCH_LABEL[neta.matchType] && (
             <span className={"match-badge " + neta.matchType}>{MATCH_LABEL[neta.matchType]}</span>
           )}

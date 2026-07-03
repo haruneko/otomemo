@@ -10,7 +10,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api, type Neta } from "./api";
-import { FILTER_KINDS } from "./kinds";
+import { FILTER_KINDS, KIND_LABEL } from "./kinds";
 import { applyColors, loadColors } from "./theme";
 import { KindIcon } from "./components/KindIcon";
 import { Icon } from "./components/Icon";
@@ -619,20 +619,25 @@ export function App() {
           </div>
           {filtersOpen && (
             <div className="filters filters-sub">
-              <select
-                aria-label="kind-filter"
-                value={kindFilter}
-                disabled={!!q.trim()}
-                title={q.trim() ? "検索中は種類フィルタは無効" : "種類で絞る"}
-                onChange={(e) => setKindFilter(e.target.value)}
-              >
-                <option value="">種別：すべて</option>
+              {/* 種別フィルタ＝アイコンのチップ行（作成グリッドと同じ絵で絞る・生スネーク select を廃止）。
+                  タップで選択/再タップで解除。検索中は無効（title で明示）。 */}
+              <div className="filter-kinds" role="group" aria-label="kind-filter">
                 {FILTER_KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
+                  <button
+                    key={k}
+                    type="button"
+                    className={"filter-kind" + (kindFilter === k ? " on" : "")}
+                    aria-label={`kind-filter-${k}`}
+                    aria-pressed={kindFilter === k}
+                    disabled={!!q.trim()}
+                    title={q.trim() ? "検索中は種別フィルタは無効" : `${KIND_LABEL[k] ?? k}で絞る`}
+                    onClick={() => setKindFilter(kindFilter === k ? "" : k)}
+                  >
+                    <KindIcon kind={k} />
+                    <span>{KIND_LABEL[k] ?? k}</span>
+                  </button>
                 ))}
-              </select>
+              </div>
               <input
                 aria-label="mood-filter"
                 placeholder="mood で絞る…"
