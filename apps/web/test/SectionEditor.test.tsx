@@ -115,19 +115,17 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(screen.getByText("コード楽器2")).toBeInTheDocument();
   });
 
-  it("評価修正C: リズムを置くとセクション末尾まで自動で敷き詰める（複数配置）", async () => {
+  it("リズムを置く＝その小節に1つだけ（自動末尾充填はしない＝小節別に別パターンを置ける）", async () => {
     placeChild.mockClear(); // テスト間で mock.calls が累積するため（このテストの配置だけ数える）
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
     listNeta.mockResolvedValue([mk("r", "rhythm", { title: "ドラム素材", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } })]);
     placeChild.mockResolvedValue({ ok: true });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await userEvent.click(screen.getByLabelText("place-rhythm-0"));
+    await userEvent.click(screen.getByLabelText("place-rhythm-1")); // 2小節目(position 4)に置く
     await userEvent.click(await screen.findByText("ドラム素材"));
     await waitFor(() => expect(placeChild).toHaveBeenCalled());
-    // 8小節(4/4)を1小節ループで充填＝8回配置（頭0拍＋4,8,…,28拍）。
-    expect(placeChild.mock.calls.length).toBeGreaterThan(1);
-    expect(placeChild.mock.calls[0]).toEqual(["s1", "r", 0, 0]);
-    expect(placeChild.mock.calls.some((c) => c[2] === 4)).toBe(true); // 2小節目にも敷かれる
+    expect(placeChild.mock.calls.length).toBe(1); // 1回だけ（末尾まで敷かない）
+    expect(placeChild.mock.calls[0]).toEqual(["s1", "r", 4, 0]);
   });
   it("評価バグ②: in-context作成は section のライブ拍子(6/8)を部品に刻む（stale neta.meter でなく）", async () => {
     createNeta.mockClear();

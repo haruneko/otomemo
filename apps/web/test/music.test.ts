@@ -287,6 +287,21 @@ describe("music", () => {
       expect(notes[0]!.start).toBe(4);
     });
 
+    it("小節別リズム＝A@0/B@小節2/A@小節3 が ABA で鳴る（BがBBBに漏れない）", () => {
+      const A = { neta: { kind: "rhythm", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } } };
+      const B = { neta: { kind: "rhythm", content: { rhythm: { steps: 16, lanes: [{ name: "Snare", midi: 38, hits: [0] }] } } } };
+      const notes = compositeNotes(
+        [
+          { position: 0, node: A }, // 小節1（4/4・bpb=4）
+          { position: 4, node: B }, // 小節2
+          { position: 8, node: A }, // 小節3
+        ],
+        0,
+      );
+      // Kick(36)は 0拍と8拍、Snare(38)は 4拍だけ＝ABA。B が小節3以降に漏れない。
+      expect(notes.filter((n) => n.pitch === 36).map((n) => n.start).sort((a, b) => a - b)).toEqual([0, 8]);
+      expect(notes.filter((n) => n.pitch === 38).map((n) => n.start)).toEqual([4]);
+    });
     it("① 進行トラックは無音の骨格＝自分は鳴らさず、コード楽器の解決文脈だけ提供する", () => {
       const prog = { position: 0, node: { neta: { kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } } } };
       // 進行だけ置いても音は出ない（骨格＝抽象・CP1）

@@ -268,25 +268,15 @@ export function SectionEditor({
     setPickerOtherMeter(false);
     setPicker({ lane, position, all });
   }
-  // ネタの実長（拍）。配置時のループ充填に使う。
-  const netaBeats = (n: { kind: string; content: unknown }) => {
-    const ns = notesForContent(n.kind, n.content);
-    return ns.length ? Math.max(...ns.map((x) => x.start + x.dur)) : BPB;
-  };
   async function placeAt(child: Neta) {
     if (!picker) return;
     try {
       // ライブラリ項目は project にコピーしてから配置（元コーパスを汚さない・編集はコピー側）。
       const target = child.scope === "library" ? await api.copyNeta(child.id) : child;
       const ord = picker.lane.row ?? 0; // ② コード楽器レーンは行を ord に。他は 0。
+      // 置く＝1小節ぶんだけ（小節別に別パターンを置ける）。繰り返したい時は右端ドラッグ(③)で。
+      // ※旧・自動末尾充填は撤去＝別リズムを小節別に置くと重なって ABBBBB になる問題の元だった。
       await api.placeChild(neta.id, target.id, picker.position, ord);
-      // ループ系（リズム/コード楽器）は既定でセクション末尾まで敷き詰め＝置いた瞬間パート全体が鳴る（評価修正C）。
-      if (target.kind === "rhythm" || target.kind === "chord_pattern") {
-        const unit = Math.max(BPB, Math.ceil(netaBeats(target) / BPB) * BPB);
-        for (const p of loopPositions(picker.position, unit, TOTAL, TOTAL)) {
-          await api.placeChild(neta.id, target.id, p, ord).catch(() => {});
-        }
-      }
     } catch {
       // section ネストで循環になる配置は core が拒否（400）→ そっと無視（配置しない）
       setPicker(null);
