@@ -103,6 +103,13 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path d="M6 14l.6 1.6L8.2 16l-1.6.6L6 18.2l-.6-1.6L3.8 16l1.6-.4z" fill="currentColor" opacity="0.7" />
         </svg>
       );
+    case "eraser": // 消しゴム（斜めのブロック＋下線）
+      return (
+        <svg {...s}>
+          <path {...st} d="M8 18.5 3.8 14.3a1.6 1.6 0 0 1 0-2.3l7.9-7.9a1.6 1.6 0 0 1 2.3 0l4.2 4.2a1.6 1.6 0 0 1 0 2.3L12.5 18.5z" />
+          <path {...st} d="M8.5 8.5 15 15M7.5 18.5H21" />
+        </svg>
+      );
     case "check-circle": // 保存済（丸チェック）
       return (
         <svg {...s}>

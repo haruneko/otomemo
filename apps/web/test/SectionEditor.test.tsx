@@ -59,16 +59,19 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(removeChild).not.toHaveBeenCalled(); // タップは外さない
   });
 
-  it("ブロック長押し＝配置を外す（#54・ネタ自体は残す）", async () => {
+  it("消しゴムモード＝ブロックtap一発で外す（通常はtap=編集・長押しは撤去）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
       children: [{ position: 0, ord: 0, node: { neta: mk("c1", "melody", { title: "メロ案" }), children: [] } }],
     });
     removeChild.mockResolvedValue({ ok: true });
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    const block = await screen.findByLabelText("block-c1@0");
-    fireEvent.pointerDown(block, { clientX: 5, clientY: 5 }); // 長押し開始（動かさない）
-    await waitFor(() => expect(removeChild).toHaveBeenCalledWith("s1", "c1", 0), { timeout: 1200 });
+    const onOpenNeta = vi.fn();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} onOpenNeta={onOpenNeta} />);
+    await screen.findByLabelText("block-c1@0");
+    await userEvent.click(screen.getByLabelText("mode-erase")); // 消しゴムモードへ
+    await userEvent.click(screen.getByLabelText("block-c1@0")); // tap一発
+    await waitFor(() => expect(removeChild).toHaveBeenCalledWith("s1", "c1", 0));
+    expect(onOpenNeta).not.toHaveBeenCalled(); // 消しゴム中は編集を開かない
   });
 
   it("ピッカーの新規作成＝空ネタを作って配置し、そのまま編集を開く", async () => {

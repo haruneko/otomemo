@@ -47,6 +47,7 @@ import {
 } from "../music";
 import { MiniRoll } from "./MiniRoll";
 import { KindIcon } from "./KindIcon";
+import { Icon } from "./Icon";
 import { harmonyVoice } from "../harmony";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/ベース/リズムの4レーン×小節 で組む。
@@ -177,6 +178,7 @@ export function SectionEditor({
   // ピッカーの母集団を器で絞る（A）＝どのプロジェクトのネタから選ぶか（""=自作すべて）。
   const [pickerSource, setPickerSource] = useState<string>("");
   const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
+  const [eraseMode, setEraseMode] = useState(false); // 消しゴムモード＝ブロックtapで外す（PianoRollの描く/選ぶと同じモード流儀）
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
   const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
   const [genBusy, setGenBusy] = useState(false);
@@ -300,37 +302,15 @@ export function SectionEditor({
     onChanged?.();
   }
 
-  // ブロック操作＝tap:子ネタを開いて編集／長押し:配置解除（ネタ自体は残る）。右端グリップ(③)は別。
-  const lp = useRef<{ timer: ReturnType<typeof setTimeout> | null; fired: boolean; x: number; y: number }>({
-    timer: null, fired: false, x: 0, y: 0,
-  });
-  function onBlockDown(e: React.PointerEvent, c: Child) {
-    lp.current.fired = false;
-    lp.current.x = e.clientX;
-    lp.current.y = e.clientY;
-    lp.current.timer = setTimeout(() => {
-      lp.current.fired = true; // 長押し成立＝外す（後続の click は無効化）
-      void remove(c.node.neta.id, c.position);
-    }, 500);
-  }
-  function cancelLp() {
-    if (lp.current.timer) {
-      clearTimeout(lp.current.timer);
-      lp.current.timer = null;
-    }
-  }
-  function onBlockMove(e: React.PointerEvent) {
-    // 指が動いた＝スクロール等＝長押し中止（誤爆で外さない）。
-    if (Math.abs(e.clientX - lp.current.x) > 8 || Math.abs(e.clientY - lp.current.y) > 8) cancelLp();
-  }
+  // ブロック操作＝消しゴム中は tap で外す／通常は tap で子ネタを編集（潜る）。右端グリップ(③伸ばし)は別。
+  // 「モードで tap の意味が変わる」＝PianoRoll の描く/選ぶと同じ流儀（紛らわしい長押し=外すは撤去）。
   function onBlockClick(e: React.MouseEvent, c: Child) {
     e.stopPropagation();
-    cancelLp();
-    if (lp.current.fired) {
-      lp.current.fired = false; // 長押しで外した→この click は編集を開かない
+    if (eraseMode) {
+      void remove(c.node.neta.id, c.position); // 消しゴム：tap 一発で外す
       return;
     }
-    onOpenNeta?.(c.node.neta); // tap＝子ネタを編集画面で開く（潜る）
+    onOpenNeta?.(c.node.neta); // 通常：tap＝子ネタを編集画面で開く（潜る）
   }
   // ピッカーの「＋新規作成」：このレーンの kind で空ネタを作って配置→そのまま編集を開く
   //（探して無ければ作る導線）。コード進行は chord_progression を既定に。
@@ -604,6 +584,16 @@ export function SectionEditor({
         <button type="button" aria-label="bars-dec" disabled={BARS <= MIN_BARS} onClick={() => void setSectionBars(BARS - 1)}>−</button>
         <span aria-label="bars-count">{BARS}</span>
         <button type="button" aria-label="bars-inc" disabled={BARS >= MAX_BARS} onClick={() => void setSectionBars(BARS + 1)}>＋</button>
+        <span className="spacer" style={{ flex: 1 }} />
+        {/* 通常/消しゴム のモードトグル（PianoRoll の 描く/選ぶ と同じ流儀・アイコン）。 */}
+        <div className="proll-modes" role="group" aria-label="section-mode">
+          <button type="button" aria-label="mode-edit" title="通常（タップで編集）" className={!eraseMode ? "on" : ""} onClick={() => setEraseMode(false)}>
+            <Icon name="edit" size={18} />
+          </button>
+          <button type="button" aria-label="mode-erase" title="消しゴム（タップで外す）" className={eraseMode ? "on" : ""} onClick={() => setEraseMode(true)}>
+            <Icon name="eraser" size={18} />
+          </button>
+        </div>
       </div>
       <div className="lanes" aria-label="timeline" ref={tp.scrollerRef}>
         <div className="playhead" aria-hidden="true" ref={tp.lineRef} />
@@ -637,32 +627,30 @@ export function SectionEditor({
                 <button
                   key={`${c.node.neta.id}@${c.position}`}
                   type="button"
-                  className="lane-block"
+                  className={"lane-block" + (eraseMode ? " erasing" : "")}
                   data-kind={c.node.neta.kind}
                   aria-label={`block-${c.node.neta.id}@${c.position}`}
-                  title={`${c.node.neta.title ?? c.node.neta.text ?? ""} @${c.position}拍 — タップで編集／長押しで外す`}
+                  title={eraseMode ? "タップで外す" : `${c.node.neta.title ?? c.node.neta.text ?? ""} @${c.position}拍 — タップで編集`}
                   style={{
                     left: `${(c.position / TOTAL) * 100}%`,
                     width: `${(Math.min(childDur(c), TOTAL - c.position) / TOTAL) * 100}%`,
                   }}
-                  onPointerDown={(e) => onBlockDown(e, c)}
-                  onPointerMove={onBlockMove}
-                  onPointerUp={cancelLp}
-                  onPointerLeave={cancelLp}
                   onClick={(e) => onBlockClick(e, c)}
                 >
                   <MiniRoll neta={c.node.neta} />
                   <span className="lane-block-label">
                     {c.node.neta.title ?? c.node.neta.text ?? KIND_LABEL[c.node.neta.kind] ?? c.node.neta.kind}
                   </span>
-                  {/* ③ 右端グリップ＝ドラッグでループ伸ばし（この子を反復配置）。本体タップ(=外す)とは分離。 */}
-                  <span
-                    className="block-resize"
-                    aria-label={`extend-${c.node.neta.id}@${c.position}`}
-                    title="右へドラッグで繰り返し（ループ）"
-                    onPointerDown={(e) => onGripDown(e, c, lane)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
+                  {/* ③ 右端グリップ＝ドラッグでループ伸ばし。消しゴム中は無効（誤操作防止）。 */}
+                  {!eraseMode && (
+                    <span
+                      className="block-resize"
+                      aria-label={`extend-${c.node.neta.id}@${c.position}`}
+                      title="右へドラッグで繰り返し（ループ）"
+                      onPointerDown={(e) => onGripDown(e, c, lane)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )}
                 </button>
               ))}
               {drag && drag.laneKey === lane.key && (
