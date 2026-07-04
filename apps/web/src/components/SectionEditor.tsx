@@ -46,6 +46,7 @@ import {
   type PlaybackHandle,
 } from "../music";
 import { MiniRoll } from "./MiniRoll";
+import { KindIcon } from "./KindIcon";
 import { harmonyVoice } from "../harmony";
 
 // 配置タイムライン（design #19）。section/song を メロ/コード/ベース/リズムの4レーン×小節 で組む。
@@ -67,6 +68,16 @@ const LANES: readonly { key: string; label: string; kinds: readonly string[]; ro
 ];
 const MIN_BARS = 8;
 const MAX_BARS = 32; // セクション尺の上限（16小節等の曲を1セクションで組めるように・評価修正A）
+// ピッカー種別タブの色＝作成タイルと揃える（種別色・アイコン+ラベル）。chord_pattern は chord 色。
+const LANE_COLOR: Record<string, string> = {
+  chord: "var(--k-chord)",
+  melody: "var(--k-melody)",
+  chord_pattern: "var(--k-chord)",
+  chord_pattern2: "var(--k-chord)",
+  bass: "var(--k-bass)",
+  rhythm: "var(--k-rhythm)",
+  section: "var(--k-section)",
+};
 
 // #51: 拍子(meter "n/d")から1小節の拍数を導出。beat=四分=1.0 基準で num*4/den。
 // 4/4→4.0、6/8→3.0、3/4→3.0。未指定/不正は 4/4。
@@ -712,9 +723,11 @@ export function SectionEditor({
                   type="button"
                   aria-label={`picker-kind-${l.key}`}
                   className={l.key === picker.lane.key ? "on" : ""}
+                  style={{ ["--k" as string]: LANE_COLOR[l.key] ?? "var(--accent)" }}
                   onClick={() => setPicker((p) => (p ? { ...p, lane: l } : p))}
                 >
-                  {l.label}
+                  <KindIcon kind={l.kinds[0]!} />
+                  <span>{l.label}</span>
                 </button>
               ))}
             </div>
