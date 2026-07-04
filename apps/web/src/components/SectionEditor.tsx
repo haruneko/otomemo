@@ -749,8 +749,16 @@ export function SectionEditor({
             aria-label="place-picker"
             onClick={(e) => e.stopPropagation()}
           >
-            <header>
-              <span>{picker.position / BPB + 1} 小節目に置く</span>
+            {/* ヘッダ＝どこに置くかのパンくず（Section ▸ パート ▸ 小節）。"に置く"は自明なので削り、
+                位置だけ軽く。Section名は長ければ省略＝1行を保つ。 */}
+            <header className="picker-head">
+              <span className="picker-crumb">
+                <span className="crumb-sec">{liveTitle || KIND_LABEL[neta.kind]}</span>
+                <span className="crumb-sep" aria-hidden="true">▸</span>
+                <span className="crumb-fix">{picker.lane.label}</span>
+                <span className="crumb-sep" aria-hidden="true">▸</span>
+                <span className="crumb-fix">{picker.position / BPB + 1}小節目</span>
+              </span>
               <button aria-label="close" onClick={() => setPicker(null)}>
                 ✕
               </button>
@@ -771,28 +779,8 @@ export function SectionEditor({
                 </button>
               ))}
             </div>
-            {/* 母集団を器で絞る（A）＋拍子一致のみ（B）。生コーパスは出さない＝自作から選ぶ。 */}
-            <div className="picker-scope-row">
-              <label className="picker-source">
-                <span className="muted">元</span>
-                <select aria-label="picker-source" value={pickerSource} onChange={(e) => setPickerSource(e.target.value)}>
-                  <option value="">自作すべて</option>
-                  {[...new Set(picker.all.flatMap(netaProjects))].sort().map((pj) => (
-                    <option key={pj} value={pj}>{pj}</option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className={"picker-meter-toggle" + (pickerOtherMeter ? " on" : "")}
-                aria-label="picker-other-meter"
-                aria-pressed={pickerOtherMeter}
-                title={pickerOtherMeter ? "拍子一致のみに戻す" : "拍子違いも出す"}
-                onClick={() => setPickerOtherMeter((v) => !v)}
-              >
-                拍子違いも
-              </button>
-            </div>
+            {/* 絞り込み＝検索を主役に、その下に元ネタ(器)＋拍子一致のみを1行で。ラベルは"絞り込み"文脈で
+                自明なので付けない（オーナー）。生コーパスは出さない＝自作から選ぶ。 */}
             <div className="picker-search-row">
               <input
                 aria-label="picker-search"
@@ -801,6 +789,24 @@ export function SectionEditor({
                 value={pq}
                 onChange={(e) => setPq(e.target.value)}
               />
+            </div>
+            <div className="picker-filter-row">
+              <select aria-label="picker-source" value={pickerSource} onChange={(e) => setPickerSource(e.target.value)}>
+                <option value="">自作すべて</option>
+                {[...new Set(picker.all.flatMap(netaProjects))].sort().map((pj) => (
+                  <option key={pj} value={pj}>{pj}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className={"picker-meter-btn" + (!pickerOtherMeter ? " on" : "")}
+                aria-label="picker-other-meter"
+                aria-pressed={!pickerOtherMeter}
+                title={pickerOtherMeter ? "拍子一致のみに絞る" : "拍子違いも出す"}
+                onClick={() => setPickerOtherMeter((v) => !v)}
+              >
+                拍子一致のみ
+              </button>
             </div>
             {/* 探して無ければ作る：このレーンの kind で新規作成→配置→編集へ。 */}
             <button type="button" className="picker-create" aria-label="picker-create" onClick={() => void createInLane()}>

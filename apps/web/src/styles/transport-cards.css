@@ -290,24 +290,26 @@
    小さく余白だらけ(スカスカ・オーナー指摘)だった。 */
 .picker-kinds {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap; /* 1行に詰める（オーナー）＝横スクロール（ダイアログ内で収まる）。 */
+  overflow-x: auto;
+  gap: 5px;
   margin: 6px 0;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
 }
 .picker-kinds button {
-  flex: 1 1 28%; /* ≒3列に折り返す横チップ（6タブ→2行） */
-  min-width: 0;
+  flex: 0 0 auto; /* 内容ぶんの横チップを1行に並べる */
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   background: #1b1e23;
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 9px 10px;
-  font-size: 0.74rem;
+  padding: 8px 11px;
+  font-size: 0.73rem;
   font-weight: 600;
 }
 .picker-kinds button svg {
@@ -331,42 +333,62 @@
   flex: 1;
   min-width: 0;
 }
-/* 母集団を器で絞る（元セレクト）＋拍子違いトグル（A/B）。 */
-.picker-scope-row {
+/* ヘッダのパンくず（Section ▸ パート ▸ 小節）＝1行。Section名だけ省略で潰れる。 */
+.picker-crumb {
   display: flex;
-  gap: 6px;
   align-items: center;
-  margin-bottom: 4px;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
 }
-.picker-source {
+.picker-crumb .crumb-sec {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-weight: 600;
+}
+.picker-crumb .crumb-fix {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.picker-crumb .crumb-sep {
+  flex: 0 0 auto;
+  opacity: 0.55;
+}
+/* 絞り込み行＝元ネタ(器)セレクト＋拍子一致のみトグル。ラベルは"絞り込み"文脈で自明なので付けない。 */
+.picker-filter-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
   font-size: 0.78rem;
-  flex: 1;
-  min-width: 0;
 }
-.picker-source select {
-  flex: 1;
+.picker-filter-row select {
   min-width: 0;
+  max-width: 60%;
   background: #1b1e23;
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 6px 8px;
-  font-size: 0.82rem;
+  padding: 6px 9px;
+  font-size: 0.8rem;
 }
-.picker-meter-toggle {
+/* 拍子一致のみ＝トグルボタン（アプリ内はボタン式で統一・チェックボックスは他に無い）。既定ON。 */
+.picker-meter-btn {
   flex: 0 0 auto;
   background: #1b1e23;
   border: 1px solid var(--line);
   color: var(--muted);
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   font-size: 0.78rem;
   white-space: nowrap;
+  cursor: pointer;
 }
-.picker-meter-toggle.on {
+.picker-meter-btn.on {
   border-color: var(--accent);
   color: var(--fg);
   background: color-mix(in srgb, var(--accent) 18%, #1b1e23);
