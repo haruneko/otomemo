@@ -610,8 +610,8 @@ export function App() {
                 <Icon name="library" size={15} /> ライブラリ
               </button>
           </div>
-          {/* 検索を主役に。種別の絞り込みは「作成と同じ絵の7アイコン」を常時1行（種別色・ラベル無し）。
-              開閉トグルは廃止＝常に見えて分かりやすい。順番は作成グリッドと一致（曲＝section）。 */}
+          {/* 検索を主役に。種別の絞り込みは「作成タイルと同じ絵・同じ順」を常時1行（種別色・ラベル無し）。
+              開閉トグルは廃止＝常に見えて分かりやすい。順は作成と一致：パーツ→組み立て→文字。 */}
           <div className="filters">
             <input
               className="search-main"
@@ -624,13 +624,15 @@ export function App() {
           <div className="filter-kinds" role="group" aria-label="kind-filter">
             {(
               [
+                // 作成タイルと同じ順：パーツ(メロ/コード/ベース/リズム/コード楽器)→組み立て(セクション/曲)→文字(歌詞/テーマ)。
                 ["melody", "var(--k-melody)"],
                 ["chord_progression", "var(--k-chord)"],
-                ["chord_pattern", "var(--k-chord)"], // コード楽器＝探せるように追加（オーナー要望）
-                ["lyric", "var(--k-lyric)"],
-                ["section", "var(--k-section)"], // 作成の「曲」に対応（実体は section）
-                ["rhythm", "var(--k-rhythm)"],
                 ["bass", "var(--k-bass)"],
+                ["rhythm", "var(--k-rhythm)"],
+                ["chord_pattern", "var(--k-chord)"],
+                ["section", "var(--k-section)"],
+                ["song", "var(--k-song)"],
+                ["lyric", "var(--k-lyric)"],
                 ["theme", "var(--k-theme)"],
               ] as const
             ).map(([k, col]) => (
