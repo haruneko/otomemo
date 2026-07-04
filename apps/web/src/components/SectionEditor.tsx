@@ -64,7 +64,8 @@ const LANES: readonly { key: string; label: string; kinds: readonly string[]; ro
   { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
   { key: "section", label: "セクション", kinds: ["section"] }, // #15 section をネスト配置
 ];
-const BARS = 8;
+const MIN_BARS = 8;
+const MAX_BARS = 32; // セクション尺の上限（16小節等の曲を1セクションで組めるように・評価修正A）
 
 // #51: 拍子(meter "n/d")から1小節の拍数を導出。beat=四分=1.0 基準で num*4/den。
 // 4/4→4.0、6/8→3.0、3/4→3.0。未指定/不正は 4/4。
@@ -165,7 +166,19 @@ export function SectionEditor({
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; prog?: number; label: string } | null>(null);
   const BPB = beatsPerBar(meter ?? neta.meter); // 1小節の拍数（#51・編集中はprop優先）
+  // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
+  const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
+  const contentEnd = children.length ? Math.max(0, ...children.map((c) => c.position + childDur(c))) : 0;
+  const BARS = Math.min(MAX_BARS, Math.max(secBars, Math.ceil(contentEnd / BPB - 1e-6)));
   const TOTAL = BARS * BPB;
+  // 小節が多い時だけトラックに最小幅を与えて横スクロール（セルが潰れないように・8小節までは従来どおり伸縮）。
+  const trackStyle = BARS > 10 ? { minWidth: `${BARS * 34}px` } : undefined;
+  async function setSectionBars(n: number) {
+    const b = Math.max(MIN_BARS, Math.min(MAX_BARS, n));
+    setSecBars(b);
+    await api.updateNeta(neta.id, { bars: b }).catch(() => {});
+    onChanged?.();
+  }
   // #49/#58/#59 トランスポート。合成結果を再生／プレイヘッドは TOTAL(グリッド全体)尺・拍子BPB。
   const tp = useTransport(() => composite(), tempo, { scaleBeats: TOTAL, bpb: BPB });
 
@@ -199,7 +212,13 @@ export function SectionEditor({
   const others = children.filter((c) => !laneOf(c.node.neta.kind));
 
   function childDur(c: Child): number {
-    const ns = notesForContent(c.node.neta.kind, c.node.neta.content);
+    const k = c.node.neta.kind;
+    // ネストした section/song＝中身の実長（子を再帰で畳む）＝1小節固定でなく本当の尺（評価修正A）。
+    if (k === "section" || k === "song") {
+      const kids = c.node.children ?? [];
+      return kids.length ? Math.max(...kids.map((kc) => kc.position + childDur(kc))) : BPB;
+    }
+    const ns = notesForContent(k, c.node.neta.content);
     return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : BPB;
   }
 
@@ -532,11 +551,18 @@ export function SectionEditor({
         </div>
       )}
 
+      {/* セクション尺（小節数）＝可変（評価修正A）。placed content より短くはできない（自動で伸びる）。 */}
+      <div className="section-bars" aria-label="section-bars">
+        <span className="muted">小節</span>
+        <button type="button" aria-label="bars-dec" disabled={BARS <= MIN_BARS} onClick={() => void setSectionBars(BARS - 1)}>−</button>
+        <span aria-label="bars-count">{BARS}</span>
+        <button type="button" aria-label="bars-inc" disabled={BARS >= MAX_BARS} onClick={() => void setSectionBars(BARS + 1)}>＋</button>
+      </div>
       <div className="lanes" aria-label="timeline" ref={tp.scrollerRef}>
         <div className="playhead" aria-hidden="true" ref={tp.lineRef} />
         <div className="lane-ruler">
           <div className="lane-label" />
-          <div className="ruler-bars">
+          <div className="ruler-bars" style={trackStyle}>
             {Array.from({ length: BARS }, (_, b) => (
               <div key={b} className="bar-num">
                 {b + 1}
@@ -547,7 +573,7 @@ export function SectionEditor({
         {LANES.map((lane) => (
           <div className="lane" key={lane.key}>
             <div className="lane-label">{lane.label}</div>
-            <div className="lane-track">
+            <div className="lane-track" style={trackStyle}>
               {Array.from({ length: BARS }, (_, b) => (
                 <LaneCell
                   key={b}

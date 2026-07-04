@@ -76,6 +76,31 @@
   opacity: 0.85;
   min-width: 3px;
 }
+/* セクション尺（小節数）ステッパー（評価修正A・可変尺）。 */
+.section-bars {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.section-bars button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  background: #22252b;
+  color: var(--fg);
+  border-radius: 6px;
+}
+.section-bars button:disabled {
+  opacity: 0.4;
+}
+.section-bars [aria-label="bars-count"] {
+  min-width: 26px;
+  text-align: center;
+  color: var(--fg);
+}
 .lanes {
   display: grid;
   gap: 3px;

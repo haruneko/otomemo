@@ -123,6 +123,29 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(placeChild).toHaveBeenCalledWith("s1", "cp9", 0, 1); // ord=1＝2レーン目
   });
 
+  it("評価修正A: 既定は8小節（place-melody-7 まで／8は無い）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("place-melody-7");
+    expect(screen.queryByLabelText("place-melody-8")).toBeNull();
+    expect(screen.getByLabelText("bars-count").textContent).toBe("8");
+  });
+  it("評価修正A: neta.bars で尺が伸びる（16小節＝place-melody-15 が出る）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section", { bars: 16 }), children: [] });
+    render(<SectionEditor neta={mk("s1", "section", { bars: 16 })} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("place-melody-15");
+    expect(screen.getByLabelText("bars-count").textContent).toBe("16");
+  });
+  it("評価修正A: 配置済みcontentが8小節超なら尺が自動で伸びる（子の実長で切れない）", async () => {
+    // 24拍(=6/8で8小節)のメロを step0 に置くと 8小節、48拍なら16小節に自動伸長。
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section", { meter: "6/8" }),
+      children: [{ position: 0, ord: 0, node: { neta: mk("m", "melody", { content: { notes: [{ pitch: 60, start: 0, dur: 48 }] } }), children: [] } }],
+    });
+    render(<SectionEditor neta={mk("s1", "section", { meter: "6/8" })} keyPc={0} tempo={120} meter="6/8" />);
+    await screen.findByLabelText("place-melody-15"); // 48拍÷3拍=16小節ぶんのセルがある
+    expect(Number(screen.getByLabelText("bars-count").textContent)).toBeGreaterThanOrEqual(16);
+  });
   it("sizes bars by meter — 6/8 bar1 = position 3 (#51)", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section", { meter: "6/8" }), children: [] });
     listNeta.mockResolvedValue([mk("c2", "melody", { title: "M" })]);
