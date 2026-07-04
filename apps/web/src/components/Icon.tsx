@@ -103,6 +103,19 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path d="M6 14l.6 1.6L8.2 16l-1.6.6L6 18.2l-.6-1.6L3.8 16l1.6-.4z" fill="currentColor" opacity="0.7" />
         </svg>
       );
+    case "check-circle": // 保存済（丸チェック）
+      return (
+        <svg {...s}>
+          <circle {...st} cx="12" cy="12" r="9" />
+          <path {...st} d="M8 12.4l2.6 2.6L16 9" />
+        </svg>
+      );
+    case "circle": // 未保存/保存中（丸）
+      return (
+        <svg {...s}>
+          <circle {...st} cx="12" cy="12" r="9" />
+        </svg>
+      );
     case "pin": // 指示ピン
       return (
         <svg {...s}>

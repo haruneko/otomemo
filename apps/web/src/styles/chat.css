@@ -241,27 +241,48 @@
   flex-wrap: nowrap; /* 削除と保存は分離させない */
   align-items: center;
 }
-/* 自動保存の状態ピル（旧「保存」ボタンの跡地）。押すと即フラッシュ。控えめ＝押す義務は無い。 */
-.save-status {
-  font-size: 0.8rem;
-  padding: 6px 10px;
-  border-radius: 999px;
+/* 右上のアイコンボタン（保存状態＝丸チェック／削除＝ゴミ箱）。ラベル無しで一行目を軽く。 */
+.icon-status,
+.icon-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   background: #1b1e23;
   color: var(--muted);
-  white-space: nowrap;
+  padding: 0;
+  cursor: pointer;
 }
-.save-status[data-state="saved"] {
-  color: var(--k-theme); /* 緑＝残ってる安心 */
+.icon-status[data-state="saved"] {
+  color: var(--k-theme); /* 緑＝残ってる安心（丸チェック） */
   border-color: color-mix(in srgb, var(--k-theme) 45%, var(--line));
 }
-.save-status[data-state="dirty"] {
-  color: var(--k-section); /* 橙＝未保存（じき自動で保存される） */
+.icon-status[data-state="dirty"] {
+  color: var(--k-section); /* 橙＝未保存（じき自動で保存される・丸） */
   border-color: color-mix(in srgb, var(--k-section) 55%, var(--line));
 }
-.save-status[data-state="saving"] {
-  color: var(--fg);
-  opacity: 0.7;
+.icon-status[data-state="saving"] svg {
+  animation: cm-spin 0.9s linear infinite; /* 保存中＝丸をくるくる */
+}
+.icon-danger {
+  color: #e0705a; /* 削除＝控えめな赤の枠＋ゴミ箱（叫ばない） */
+  border-color: color-mix(in srgb, #e0705a 40%, var(--line));
+}
+.icon-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #e0705a 18%, #1b1e23);
+}
+.icon-status:disabled,
+.icon-danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+@keyframes cm-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .editor-title {
   flex: 1;
