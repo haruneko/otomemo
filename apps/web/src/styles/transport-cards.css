@@ -402,15 +402,22 @@
   padding-bottom: 4px;
 }
 .picker-rec {
+  position: relative;
   flex: 0 0 auto;
   width: 94px;
+  background: #1b1e23;
+  border: 1px solid var(--line); /* 旧: border-top 3px 種別色＝角丸で"角"が出て壊れて見えた→均一枠に */
+  border-radius: 8px;
+  overflow: hidden;
+}
+.picker-rec-tap {
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 6px;
-  background: #1b1e23;
-  border: 1px solid var(--line); /* 旧: border-top 3px 種別色＝角丸で"角"が出て壊れて見えた→均一枠に */
-  border-radius: 8px;
+  width: 100%;
+  background: none;
+  border: 0;
   cursor: pointer;
   color: inherit;
 }
@@ -422,8 +429,23 @@
   border-radius: 4px;
 }
 .picker-rec:hover {
-  background: #24272e;
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+/* おすすめ概形の右上に重ねる試聴ボタン（丸）。 */
+.picker-rec .picker-play {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.55rem;
+  padding-left: 1px; /* ▶ の見た目中央寄せ */
+}
+.picker-rec .picker-play:hover {
+  background: var(--accent);
 }
 .picker-rec-label {
   font-size: 0.66rem;
@@ -439,21 +461,53 @@
   overflow-y: auto;
 }
 /* #55 ピッカーの候補をネタ帳カード風に：概形(MiniRoll)＋種類/mood/keyで見て選べる */
+/* リスト項目＝配置ボタン(picker-item-tap)＋試聴(picker-play)の横並び。枠は wrapper が持つ。 */
 .picker-item {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  align-items: stretch;
   width: 100%;
-  text-align: left;
-  padding: 0.5rem;
+  min-height: 44px; /* grid項目＋overflow:hidden だと自動最小が0に潰れ、2行メタが切れる→高さを確保 */
   background: #1b1e23;
   border: 1px solid #2a2d33;
   border-left: 3px solid var(--accent);
   border-radius: 6px;
-  cursor: pointer;
-  color: inherit;
+  overflow: hidden;
 }
-.picker-item:hover {
+.picker-item-tap {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px; /* 概形34px＋2行メタが切れない高さ（overflow:hidden で下線が欠けてた） */
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.picker-item-tap:hover {
+  background: #24272e;
+}
+/* 試聴ボタン（リスト右／おすすめは概形右上に重ねる）。 */
+.picker-play {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.picker-item .picker-play {
+  width: 40px;
+  border-left: 1px solid var(--line);
+  font-size: 0.72rem;
+}
+.picker-item .picker-play:hover {
+  color: var(--accent);
   background: #24272e;
 }
 .picker-item[data-kind="melody"] {

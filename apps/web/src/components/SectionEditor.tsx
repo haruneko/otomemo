@@ -184,6 +184,7 @@ export function SectionEditor({
   const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
   const [eraseMode, setEraseMode] = useState(false); // 消しゴムモード＝ブロックtapで外す（PianoRollの描く/選ぶと同じモード流儀）
   const [toolsOpen, setToolsOpen] = useState(false); // いじる▾ メニュー（生成/ハモリ/書き出しを集約・メロ編集画面と整合・⑤）
+  const previewPlay = useRef<PlaybackHandle | null>(null); // ピッカー項目の試聴（配置前に耳で確認）
   // #5 container kind でレーン/尺を差し替え（song=section を並べる編成・section=パート専用）。
   const isSong = neta.kind === "song";
   const LANES = lanesForKind(neta.kind);
@@ -332,6 +333,17 @@ export function SectionEditor({
     await load();
     onChanged?.();
   }
+  // ピッカー項目の試聴＝配置前に耳で確認（相対bass/コード楽器は section の調で解決して鳴らす）。
+  async function previewNeta(n: Neta) {
+    previewPlay.current?.stop();
+    const notes = notesForContent(n.kind, n.content, { key: n.key ?? keyPc });
+    if (notes.length) previewPlay.current = await playNotes(notes, tempo, { program: n.kind === "bass" ? 33 : n.kind === "rhythm" ? undefined : 0 });
+  }
+  // ピッカーを閉じたら試聴を止める（鳴りっぱなし防止）。
+  useEffect(() => {
+    if (!picker) previewPlay.current?.stop();
+  }, [picker]);
+  useEffect(() => () => previewPlay.current?.stop(), []);
 
   // ブロック操作＝消しゴム中は tap で外す／通常は tap で子ネタを編集（潜る）。右端グリップ(③伸ばし)は別。
   // 「モードで tap の意味が変わる」＝PianoRoll の描く/選ぶと同じ流儀（紛らわしい長押し=外すは撤去）。
@@ -801,18 +813,19 @@ export function SectionEditor({
                 <span className="picker-recs-head muted">おすすめ（コーパス）</span>
                 <div className="picker-recs-strip">
                   {pickerRecs.map((n) => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      className="picker-rec"
-                      data-kind={n.kind}
-                      aria-label={`picker-rec-${n.id}`}
-                      title={n.title ?? n.text ?? "(無題)"}
-                      onClick={() => void placeAt(n)}
-                    >
-                      <MiniRoll neta={n} />
-                      <span className="picker-rec-label">{n.title ?? n.text ?? "コーパス"}</span>
-                    </button>
+                    <div key={n.id} className="picker-rec" data-kind={n.kind}>
+                      <button
+                        type="button"
+                        className="picker-rec-tap"
+                        aria-label={`picker-rec-${n.id}`}
+                        title={n.title ?? n.text ?? "(無題)"}
+                        onClick={() => void placeAt(n)}
+                      >
+                        <MiniRoll neta={n} />
+                        <span className="picker-rec-label">{n.title ?? n.text ?? "コーパス"}</span>
+                      </button>
+                      <button type="button" className="picker-play" aria-label={`preview-${n.id}`} title="試聴" onClick={() => void previewNeta(n)}>▶</button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -835,25 +848,22 @@ export function SectionEditor({
                 if (list.length === 0)
                   return <p className="muted">置ける{picker.lane.label}のネタがありません（元/拍子の条件を緩めるか、＋新規作成）</p>;
                 return list.map((n) => (
-                  <button
-                    key={n.id}
-                    type="button"
-                    className="picker-item"
-                    data-kind={n.kind}
-                    onClick={() => void placeAt(n)}
-                  >
-                    <div className="picker-item-roll">
-                      <MiniRoll neta={n} />
-                    </div>
-                    <div className="picker-item-meta">
-                      <strong>{n.title ?? n.text ?? "(無題)"}</strong>
-                      <span className="muted">
-                        {KIND_LABEL[n.kind] ?? n.kind}
-                        {n.mood ? ` · ${n.mood}` : ""}
-                        {n.key != null ? ` · ${PITCH_NAMES[n.key]}` : ""}
-                      </span>
-                    </div>
-                  </button>
+                  <div key={n.id} className="picker-item" data-kind={n.kind}>
+                    <button type="button" className="picker-item-tap" aria-label={`place-${n.id}`} onClick={() => void placeAt(n)}>
+                      <div className="picker-item-roll">
+                        <MiniRoll neta={n} />
+                      </div>
+                      <div className="picker-item-meta">
+                        <strong>{n.title ?? n.text ?? "(無題)"}</strong>
+                        <span className="muted">
+                          {KIND_LABEL[n.kind] ?? n.kind}
+                          {n.mood ? ` · ${n.mood}` : ""}
+                          {n.key != null ? ` · ${PITCH_NAMES[n.key]}` : ""}
+                        </span>
+                      </div>
+                    </button>
+                    <button type="button" className="picker-play" aria-label={`preview-${n.id}`} title="試聴" onClick={() => void previewNeta(n)}>▶</button>
+                  </div>
                 ));
               })()}
             </div>

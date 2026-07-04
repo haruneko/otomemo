@@ -45,6 +45,11 @@ body:has(.dialog-backdrop) {
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
+/* ピッカーは行を内容ぶんに詰めて上寄せ＝全画面(100dvh)で行が引き伸ばされ間延びする(情報密度↓)のを防ぐ。
+   ※Chat/トレイは中身(ログ)を伸ばして埋める前提なので stretch のまま＝ここでは触らない。 */
+.dialog[aria-label="place-picker"] {
+  align-content: start;
+}
 .dialog header {
   display: flex;
   justify-content: space-between;
