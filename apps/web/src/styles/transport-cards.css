@@ -255,6 +255,13 @@
 .lane-block[data-kind="rhythm"] {
   background: var(--k-rhythm);
 }
+/* #5 song の編成レーン＝section/song ブロックも種別色に（旧: accent 青のフォールバックで浮いてた）。 */
+.lane-block[data-kind="section"] {
+  background: var(--k-section);
+}
+.lane-block[data-kind="song"] {
+  background: var(--k-song);
+}
 .lanes-hint {
   font-size: 0.72rem;
 }

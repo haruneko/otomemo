@@ -263,6 +263,14 @@ export function SectionEditor({
     return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : BPB;
   }
 
+  // #5 song の section/song ブロック概形＝中身を合成した notes（ドラムは音域を乱すので除く）。
+  // 単体パート(メロ/ベース等)は MiniRoll が content から描くので undefined（従来通り）。
+  function blockPreviewNotes(c: Child): Note[] | undefined {
+    const k = c.node.neta.kind;
+    if (k !== "section" && k !== "song") return undefined;
+    return compositeNotes(c.node.children ?? [], c.node.neta.key ?? keyPc, c.node.neta.mode).filter((n) => !n.drum);
+  }
+
   // その位置が既にブロックで埋まっているか（レーン全体でなく**占有セルだけ**不可＝別小節には置ける）。
   const occupiedAt = (lane: Lane, position: number) =>
     laneChildren(lane).some((c) => c.position <= position + 1e-6 && position < c.position + childDur(c) - 1e-6);
@@ -662,7 +670,7 @@ export function SectionEditor({
                   }}
                   onClick={(e) => onBlockClick(e, c)}
                 >
-                  <MiniRoll neta={c.node.neta} />
+                  <MiniRoll neta={c.node.neta} notes={blockPreviewNotes(c)} />
                   <span className="lane-block-label">
                     {c.node.neta.title ?? c.node.neta.text ?? KIND_LABEL[c.node.neta.kind] ?? c.node.neta.kind}
                   </span>
