@@ -360,6 +360,48 @@
 .picker-create:hover {
   background: color-mix(in srgb, var(--accent) 24%, #1b1e23);
 }
+/* #20 おすすめ（コーパス）＝横スクロールの小さな概形タイル。自作リスト(縦)と視覚的に分ける。 */
+.picker-recs {
+  margin: 6px 0;
+}
+.picker-recs-head {
+  display: block;
+  font-size: 0.72rem;
+  margin-bottom: 4px;
+}
+.picker-recs-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.picker-rec {
+  flex: 0 0 auto;
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  background: #1b1e23;
+  border: 1px solid #2a2d33;
+  border-top: 3px solid var(--k-chord);
+  border-radius: 6px;
+  cursor: pointer;
+  color: inherit;
+}
+.picker-rec[data-kind="melody"] {
+  border-top-color: var(--k-melody);
+}
+.picker-rec:hover {
+  background: #24272e;
+}
+.picker-rec-label {
+  font-size: 0.66rem;
+  color: var(--muted, #9aa0a8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .picker-list {
   display: grid;
   gap: 6px;

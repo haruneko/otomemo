@@ -261,6 +261,15 @@ export const api = {
   search: (q: string, k = 20) =>
     http<(Neta & { matchType?: string })[]>(`/search?q=${encodeURIComponent(q)}&k=${k}`),
 
+  // #20 ピッカーおすすめ＝コーパス(library)から拍子/調で関連数件だけ（生1781を選ばせない）。
+  recommend: (kind: string, opts: { meter?: string; key?: number; top?: number } = {}) => {
+    const p = new URLSearchParams({ kind });
+    if (opts.meter) p.set("meter", opts.meter);
+    if (opts.key != null) p.set("key", String(opts.key));
+    if (opts.top != null) p.set("top", String(opts.top));
+    return http<Neta[]>(`/neta/recommend?${p.toString()}`);
+  },
+
   createJob: (input: { intent: string; target_neta_id?: string; params?: unknown }) =>
     http<Job>("/job", { method: "POST", body: JSON.stringify(input) }),
 

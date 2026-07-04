@@ -1,16 +1,20 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { getComposition, listNeta, placeChild, removeChild, createNeta } = vi.hoisted(() => ({
+const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend } = vi.hoisted(() => ({
   getComposition: vi.fn(),
   listNeta: vi.fn(),
   placeChild: vi.fn(),
   removeChild: vi.fn(),
   createNeta: vi.fn(),
+  copyNeta: vi.fn(),
+  recommend: vi.fn(),
 }));
-vi.mock("../src/api", () => ({ api: { getComposition, listNeta, placeChild, removeChild, createNeta } }));
+vi.mock("../src/api", () => ({
+  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend },
+}));
 
 import { SectionEditor, loopPositions } from "../src/components/SectionEditor";
 import { beatsPerBar } from "../src/music";
@@ -48,6 +52,11 @@ const mk = (id: string, kind: string, over: Partial<Neta> = {}): Neta => ({
 });
 
 describe("SectionEditor (3-lane timeline)", () => {
+  beforeEach(() => {
+    recommend.mockResolvedValue([]); // #20 既定＝おすすめ無し（各テストで上書き可）
+    copyNeta.mockReset();
+  });
+
   it("ブロックをタップ＝子ネタを編集画面で開く（潜る・外さない）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
@@ -96,6 +105,23 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(screen.getByLabelText("gen-gen_drums")).toBeInTheDocument();
     expect(screen.getByLabelText("harmony-up")).toBeInTheDocument(); // メロがある→ハモリ
     expect(screen.getByLabelText("export-midi")).toBeInTheDocument();
+  });
+
+  it("#20 ピッカーおすすめ＝コーパスを数件出し、tapでコピーして配置（生libraryは直接選ばせない）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    listNeta.mockResolvedValue([]); // 自作は無し
+    recommend.mockResolvedValue([mk("libM", "melody", { title: "コーパスメロ", scope: "library" } as Partial<Neta>)]);
+    copyNeta.mockResolvedValue(mk("copyM", "melody"));
+    placeChild.mockResolvedValue({ ok: true });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} meter="4/4" />);
+    await userEvent.click(screen.getByLabelText("place-melody-0")); // メロ空セル→ピッカー
+    // おすすめにコーパス項目が出る（拍子/調で数件）
+    await waitFor(() => expect(recommend).toHaveBeenCalledWith("melody", expect.objectContaining({ meter: "4/4", key: 0 })));
+    const rec = await screen.findByLabelText("picker-rec-libM");
+    await userEvent.click(rec);
+    // library はコピーしてから配置（元コーパスを汚さない）
+    await waitFor(() => expect(copyNeta).toHaveBeenCalledWith("libM"));
+    expect(placeChild).toHaveBeenCalledWith("s1", "copyM", 0, 0);
   });
 
   it("ピッカーの新規作成＝空ネタを作って配置し、そのまま編集を開く", async () => {

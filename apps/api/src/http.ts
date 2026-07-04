@@ -32,6 +32,7 @@ import {
 } from "./music";
 import { findProgressions } from "./progression-search";
 import { getChatSession } from "./chat-session";
+import { rankRecommendations } from "./music/recommend";
 
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
 function assetsDir(): string {
@@ -111,6 +112,19 @@ export function buildHttp(core: Core): FastifyInstance {
 
       limit: q.limit ? Number(q.limit) : undefined,
       offset: q.offset ? Number(q.offset) : undefined,
+    });
+  });
+
+  // #20 ピッカーおすすめ＝コーパス(library)から拍子/調で関連数件だけ返す（生1781を選ばせない）。
+  // kind 単位（melody / chord_progression）。frame の meter/key で rank。
+  app.get("/neta/recommend", async (req) => {
+    const q = req.query as Record<string, string | undefined>;
+    if (!q.kind) return [];
+    const pool = core.listNeta({ scope: "library", kind: q.kind, limit: 5000 });
+    return rankRecommendations(pool, {
+      meter: q.meter,
+      key: q.key !== undefined ? Number(q.key) : undefined,
+      top: q.top ? Number(q.top) : 6,
     });
   });
 

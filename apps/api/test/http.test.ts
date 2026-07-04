@@ -48,6 +48,22 @@ describe("http data API", () => {
     expect(tree.json().children.length).toBe(1);
   });
 
+  it("#20 GET /neta/recommend：library から拍子一致だけを数件返す（生リストを出さない）", async () => {
+    const lib = async (kind: string, meter: string) => {
+      const n = (await app.inject({ method: "POST", url: "/neta", payload: { kind, meter } })).json();
+      await app.inject({ method: "POST", url: `/neta/${n.id}/scope`, payload: { scope: "library" } });
+      return n.id;
+    };
+    const m44 = await lib("melody", "4/4");
+    await lib("melody", "3/4"); // 拍子不一致＝除外される
+    // project スコープのメロは対象外（library のみ）
+    await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", meter: "4/4" } });
+    const r = await app.inject({ method: "GET", url: "/neta/recommend?kind=melody&meter=4/4&top=6" });
+    expect(r.statusCode).toBe(200);
+    const ids = (r.json() as { id: string }[]).map((x) => x.id);
+    expect(ids).toEqual([m44]); // 4/4 の library メロ1件だけ
+  });
+
   it("#9 /music/detect_key_chords：コードから調候補(key+mode)を返す", async () => {
     // C-Am-F-G（C major / A minor の素材）。第1候補は C major か A minor。
     const r = await app.inject({

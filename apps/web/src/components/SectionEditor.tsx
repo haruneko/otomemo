@@ -167,6 +167,7 @@ export function SectionEditor({
   // ③ 右端ドラッグでループ伸ばし中のプレビュー（fromPos〜endBeat をゴースト表示）。
   const [drag, setDrag] = useState<{ childId: string; laneKey: string; fromPos: number; unit: number; endBeat: number } | null>(null);
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
+  const [pickerRecs, setPickerRecs] = useState<Neta[]>([]); // #20 おすすめ（コーパス）＝拍子/調で数件
   // ピッカーの母集団を器で絞る（A）＝どのプロジェクトのネタから選ぶか（""=自作すべて）。
   const [pickerSource, setPickerSource] = useState<string>("");
   const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
@@ -254,13 +255,37 @@ export function SectionEditor({
   const sectionProjects = (neta.tags ?? []).filter(isProjectTag).map(projectName);
   async function openPicker(lane: Lane, position: number) {
     if (occupiedAt(lane, position)) return; // 既に埋まってる所には置かせない（CV3・占有セルのみ）
-    // 自作ネタのみ取得（コーパス=libraryは直接選ばせない＝推薦経由・Phase2）。
+    // 自作ネタのみ取得（コーパス=libraryは直接選ばせない＝推薦経由・Phase2/#20）。
     const all = await api.listNeta({ scope: "project", limit: 2000 });
     setPq("");
     setPickerSource(sectionProjects[0] ?? ""); // 既定＝この曲の器
     setPickerOtherMeter(false);
     setPicker({ lane, position, all });
   }
+  // #20 レーンに対応するコーパス種別（推薦できるのは melody / chord_progression のみ）。
+  const corpusKindFor = (lane: Lane): string | null =>
+    (lane.kinds as readonly string[]).includes("melody")
+      ? "melody"
+      : (lane.kinds as readonly string[]).includes("chord_progression")
+        ? "chord_progression"
+        : null;
+  // ピッカーを開く/種別タブを変えるたび、拍子・調に合うコーパスを数件だけ取得（生リストは出さない）。
+  useEffect(() => {
+    const ck = picker ? corpusKindFor(picker.lane) : null;
+    if (!ck) {
+      setPickerRecs([]);
+      return;
+    }
+    let live = true;
+    void api
+      .recommend(ck, { meter: liveMeter, key: keyPc, top: 6 })
+      .then((r) => live && setPickerRecs(r))
+      .catch(() => live && setPickerRecs([]));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picker?.lane.key, !!picker, liveMeter, keyPc]);
   async function placeAt(child: Neta) {
     if (!picker) return;
     try {
@@ -738,6 +763,29 @@ export function SectionEditor({
             <button type="button" className="picker-create" aria-label="picker-create" onClick={() => void createInLane()}>
               ＋ {pq.trim() ? `「${pq.trim()}」を` : ""}新しい{picker.lane.label}を作る
             </button>
+            {/* #20 おすすめ（コーパス）＝拍子/調に合う数件だけ横並び。生1781は出さず推薦経由で。
+                tap＝placeAt が library→project にコピーして配置（元コーパスは汚さない）。 */}
+            {pickerRecs.length > 0 && (
+              <div className="picker-recs" aria-label="picker-recs">
+                <span className="picker-recs-head muted">おすすめ（コーパス）</span>
+                <div className="picker-recs-strip">
+                  {pickerRecs.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className="picker-rec"
+                      data-kind={n.kind}
+                      aria-label={`picker-rec-${n.id}`}
+                      title={n.title ?? n.text ?? "(無題)"}
+                      onClick={() => void placeAt(n)}
+                    >
+                      <MiniRoll neta={n} />
+                      <span className="picker-rec-label">{n.title ?? n.text ?? "コーパス"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="picker-list">
               {(() => {
                 const q = pq.toLowerCase();
