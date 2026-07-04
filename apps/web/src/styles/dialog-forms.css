@@ -40,6 +40,9 @@ body:has(.dialog-backdrop) {
   max-height: 90vh;
   overflow: auto;
   display: grid;
+  /* 単一列を親幅に固定＝中の横広コンテンツ(おすすめ横帯/長いタイトル)がダイアログを画面より
+     広げず、帯はスクロール・文字は省略に収まる（.notebook と同じ min-content 対策）。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .dialog header {
