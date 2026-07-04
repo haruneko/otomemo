@@ -126,6 +126,18 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(placeChild.mock.calls[0]).toEqual(["s1", "r", 0, 0]);
     expect(placeChild.mock.calls.some((c) => c[2] === 4)).toBe(true); // 2小節目にも敷かれる
   });
+  it("評価バグ②: in-context作成は section のライブ拍子(6/8)を部品に刻む（stale neta.meter でなく）", async () => {
+    createNeta.mockClear();
+    // neta(=App active)は meter=null(stale)。だがライブ meter prop=6/8。作る部品は 6/8 で作る。
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    listNeta.mockResolvedValue([]);
+    createNeta.mockResolvedValue(mk("newc", "chord_progression"));
+    placeChild.mockResolvedValue({ ok: true });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} meter="6/8" />);
+    await userEvent.click(screen.getByLabelText("place-chord-0"));
+    await userEvent.click(await screen.findByLabelText("picker-create"));
+    await waitFor(() => expect(createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "chord_progression", meter: "6/8" })));
+  });
   it("評価修正C: ピッカーはコーパス(library)を既定で隠す＝自作のみ／トグルで表示", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
     listNeta.mockResolvedValue([

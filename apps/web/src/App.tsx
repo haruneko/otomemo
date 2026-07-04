@@ -685,8 +685,11 @@ export function App() {
               onClose={() => {
                 if (navStack.length) {
                   // 潜っている途中＝親 Section に戻る（一覧に落とさない）。
-                  setActive(navStack[navStack.length - 1]!);
+                  // navStack の親は drill 時のスナップショット＝stale なことがある（新規曲の meter/bars/title 巻き戻り・
+                  // DB上書きの原因）。最新を再フェッチして setActive＝古い値での再初期化を防ぐ（評価バグ②）。
+                  const parent = navStack[navStack.length - 1]!;
                   setNavStack(navStack.slice(0, -1));
+                  void api.getNeta(parent.id).then((fresh) => setActive(fresh ?? parent)).catch(() => setActive(parent));
                   return;
                 }
                 setActive(null);

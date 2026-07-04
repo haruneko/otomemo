@@ -166,7 +166,9 @@ export function SectionEditor({
   const [genBusy, setGenBusy] = useState(false);
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; prog?: number; label: string } | null>(null);
-  const BPB = beatsPerBar(meter ?? neta.meter); // 1小節の拍数（#51・編集中はprop優先）
+  // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
+  const liveMeter = meter ?? neta.meter ?? undefined;
+  const BPB = beatsPerBar(liveMeter); // 1小節の拍数（#51・編集中はprop優先）
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
   const contentEnd = children.length ? Math.max(0, ...children.map((c) => c.position + childDur(c))) : 0;
@@ -305,7 +307,8 @@ export function SectionEditor({
     if (!picker) return;
     const kinds = picker.lane.kinds;
     const kind = kinds.includes("chord_progression") ? "chord_progression" : kinds[0]!;
-    const created = await api.createNeta({ kind, title: pq.trim() || undefined });
+    // 作る部品に section のライブ拍子を刻む＝単体編集でも6/8で表示される（評価バグ②）。
+    const created = await api.createNeta({ kind, title: pq.trim() || undefined, meter: liveMeter });
     await api.placeChild(neta.id, created.id, picker.position, picker.lane.row ?? 0).catch(() => {});
     setPicker(null);
     await load();
@@ -387,7 +390,7 @@ export function SectionEditor({
     setGenBusy(true);
     try {
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, {
-        frame: { key: keyPc, meter: neta.meter, tempo, bars: BARS },
+        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS },
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       });
@@ -456,7 +459,7 @@ export function SectionEditor({
       content: cand.content,
       key: keyPc,
       tempo,
-      meter: neta.meter ?? undefined,
+      meter: liveMeter,
       tags: neta.tags,
     });
     await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
@@ -488,7 +491,7 @@ export function SectionEditor({
       <div className="section-actions">
         <button
           type="button"
-          onClick={() => downloadMidi(composite(), `${neta.title ?? "section"}.mid`, tempo, neta.meter)}
+          onClick={() => downloadMidi(composite(), `${neta.title ?? "section"}.mid`, tempo, liveMeter ?? null)}
         >
           MIDI
         </button>
@@ -496,7 +499,7 @@ export function SectionEditor({
           type="button"
           title="メロ/コード/ベース/リズムを別トラックに分けて書き出す"
           onClick={() =>
-            downloadMultitrackMidi(laneTracks(), `${neta.title ?? "section"}-tracks.mid`, tempo, neta.meter)
+            downloadMultitrackMidi(laneTracks(), `${neta.title ?? "section"}-tracks.mid`, tempo, liveMeter ?? null)
           }
         >
           MIDI(分割)
