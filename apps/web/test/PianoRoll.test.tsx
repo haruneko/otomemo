@@ -26,6 +26,17 @@ describe("PianoRoll", () => {
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
+  it("erase mode: note tap deletes, empty cell does nothing (④)", async () => {
+    const onChange = vi.fn();
+    render(<PianoRoll notes={[{ pitch: 60, start: 0, dur: 1 }]} onChange={onChange} mode="erase" />);
+    // 空セルは無反応（描くと違い足さない）
+    await userEvent.click(screen.getByLabelText("cell-62-0"));
+    expect(onChange).not.toHaveBeenCalled();
+    // ノートtapで削除
+    await userEvent.click(screen.getByLabelText("note-60-0"));
+    expect(onChange).toHaveBeenCalledWith([]);
+  });
+
   it("labels rows with a fixed piano keyboard (note names)", () => {
     render(<PianoRoll notes={[]} onChange={vi.fn()} />);
     expect(screen.getByText("C4")).toBeInTheDocument();

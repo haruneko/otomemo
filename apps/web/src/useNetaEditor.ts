@@ -59,7 +59,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [program, setProgram] = useState<number>(
     programOf(neta.content) ?? (neta.kind === "bass" ? 33 : 0), // #47 GM音色（bassは既定フィンガーベース）
   );
-  const [rollMode, setRollMode] = useState<"draw" | "select">("draw"); // ロールの描く/選ぶ（ロール/パッドと同じ行に出す）
+  const [rollMode, setRollMode] = useState<"draw" | "select" | "erase">("draw"); // ロールの描く/選ぶ/消す（同じ行に出す・Section と同流儀）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
   const [bassMode, setBassMode] = useState<"absolute" | "relative">(
     isRelativeBass(neta.content) ? "relative" : "absolute",

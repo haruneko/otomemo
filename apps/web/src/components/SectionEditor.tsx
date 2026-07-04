@@ -179,6 +179,7 @@ export function SectionEditor({
   const [pickerSource, setPickerSource] = useState<string>("");
   const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
   const [eraseMode, setEraseMode] = useState(false); // 消しゴムモード＝ブロックtapで外す（PianoRollの描く/選ぶと同じモード流儀）
+  const [toolsOpen, setToolsOpen] = useState(false); // いじる▾ メニュー（生成/ハモリ/書き出しを集約・メロ編集画面と整合・⑤）
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
   const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
   const [genBusy, setGenBusy] = useState(false);
@@ -489,56 +490,67 @@ export function SectionEditor({
   return (
     <div className="section-editor">
       {neta.kind === "song" && <SongStatus netaId={neta.id} />}
-      <div className="section-actions">
-        <button
-          type="button"
-          onClick={() => downloadMidi(composite(), `${liveTitle || "section"}.mid`, tempo, liveMeter ?? null)}
-        >
-          MIDI
-        </button>
-        <button
-          type="button"
-          title="メロ/コード/ベース/リズムを別トラックに分けて書き出す"
-          onClick={() =>
-            downloadMultitrackMidi(laneTracks(), `${liveTitle || "section"}-tracks.mid`, tempo, liveMeter ?? null)
-          }
-        >
-          MIDI(分割)
-        </button>
-        {!cand &&
-          GEN_PARTS.filter((part) => !part.needsChords || sectionChords().length > 0).map((part) => (
-            <button
-              key={part.op}
-              type="button"
-              className="tb-tool"
-              aria-label={`gen-${part.op}`}
-              title={`この進行に合う${part.label}の候補を生成（決定的・Claude不要）`}
-              disabled={genBusy}
-              onClick={() => void genPart(part)}
-            >
-              {genBusy ? "生成中…" : `この進行に${part.label}`}
-            </button>
-          ))}
-        {!cand && melodyLaneNotes().length > 0 && (
-          <>
-            <button type="button" className="tb-tool" aria-label="harmony-up" title="上ハモ＝調内で平行3度上の第2声部" onClick={() => makeHarmony(2)}>
-              上ハモ
-            </button>
-            <button type="button" className="tb-tool" aria-label="harmony-down" title="下ハモ＝調内で平行3度下の第2声部" onClick={() => makeHarmony(-2)}>
-              下ハモ
-            </button>
-            {sectionChords().length > 0 && (
-              <>
-                <button type="button" className="tb-tool" aria-label="fit-to-chords" title="メロの各音を近いコードトーンへ寄せる" disabled={genBusy} onClick={() => void fitToChords()}>
-                  コードに合わせる
-                </button>
-                <button type="button" className="tb-tool" aria-label="analyze-fit" title="メロとコードの噛み合いを診断（読むだけ）" onClick={() => void analyzeFit()}>
-                  噛み合い診断
-                </button>
-              </>
-            )}
-          </>
-        )}
+      {/* 道具は メロ編集画面に整合：[✎通常][⌫消しゴム] modes（左）… [✨いじる▾]（右）。
+          生成/ハモリ/書き出しは全部 いじる メニューに集約＝バラ撒きボタンを畳んで薄く（②⑤）。 */}
+      <div className="roll-toolbar section-toolbar">
+        <div className="proll-modes" role="group" aria-label="section-mode">
+          <button type="button" aria-label="mode-edit" title="通常（タップで編集）" className={!eraseMode ? "on" : ""} onClick={() => setEraseMode(false)}>
+            <Icon name="edit" size={18} />
+          </button>
+          <button type="button" aria-label="mode-erase" title="消しゴム（タップで外す）" className={eraseMode ? "on" : ""} onClick={() => setEraseMode(true)}>
+            <Icon name="eraser" size={18} />
+          </button>
+        </div>
+        <span className="tb-divider" aria-hidden="true" />
+        <div className="assign-wrap">
+          <button
+            type="button"
+            className={"tb-tool tools-btn" + (toolsOpen ? " on" : "")}
+            aria-label="tools"
+            aria-expanded={toolsOpen}
+            title="この進行をいじる（生成・ハモリ・書き出し）"
+            onClick={() => setToolsOpen((v) => !v)}
+          >
+            <Icon name="wand" size={16} /> いじる ▾
+          </button>
+          {toolsOpen && (
+            <div className="assign-menu to-right tools-menu" aria-label="tools-menu">
+              {!cand && (
+                <>
+                  <div className="tools-sep">この進行に生成</div>
+                  {GEN_PARTS.filter((part) => !part.needsChords || sectionChords().length > 0).map((part) => (
+                    <button
+                      key={part.op}
+                      type="button"
+                      className="tool-item"
+                      aria-label={`gen-${part.op}`}
+                      disabled={genBusy}
+                      onClick={() => { setToolsOpen(false); void genPart(part); }}
+                    >
+                      {genBusy ? "生成中…" : part.label}
+                    </button>
+                  ))}
+                  {melodyLaneNotes().length > 0 && (
+                    <>
+                      <div className="tools-sep">メロ加工</div>
+                      <button type="button" className="tool-item" aria-label="harmony-up" title="調内で平行3度上の第2声部" onClick={() => { setToolsOpen(false); makeHarmony(2); }}>上ハモ</button>
+                      <button type="button" className="tool-item" aria-label="harmony-down" title="調内で平行3度下の第2声部" onClick={() => { setToolsOpen(false); makeHarmony(-2); }}>下ハモ</button>
+                      {sectionChords().length > 0 && (
+                        <>
+                          <button type="button" className="tool-item" aria-label="fit-to-chords" title="メロの各音を近いコードトーンへ寄せる" disabled={genBusy} onClick={() => { setToolsOpen(false); void fitToChords(); }}>コードに合わせる</button>
+                          <button type="button" className="tool-item" aria-label="analyze-fit" title="メロとコードの噛み合いを診断（読むだけ）" onClick={() => { setToolsOpen(false); void analyzeFit(); }}>噛み合い診断</button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              <div className="tools-sep">書き出し</div>
+              <button type="button" className="tool-item" aria-label="export-midi" onClick={() => { setToolsOpen(false); downloadMidi(composite(), `${liveTitle || "section"}.mid`, tempo, liveMeter ?? null); }}>MIDI</button>
+              <button type="button" className="tool-item" aria-label="export-midi-split" title="メロ/コード/ベース/リズムを別トラックに" onClick={() => { setToolsOpen(false); downloadMultitrackMidi(laneTracks(), `${liveTitle || "section"}-tracks.mid`, tempo, liveMeter ?? null); }}>MIDI（分割）</button>
+            </div>
+          )}
+        </div>
       </div>
       {fitReport && (
         <p className="fit-report" aria-label="fit-report" onClick={() => setFitReport(null)}>
@@ -574,16 +586,6 @@ export function SectionEditor({
         <button type="button" aria-label="bars-dec" disabled={BARS <= MIN_BARS} onClick={() => void setSectionBars(BARS - 1)}>−</button>
         <span aria-label="bars-count">{BARS}</span>
         <button type="button" aria-label="bars-inc" disabled={BARS >= MAX_BARS} onClick={() => void setSectionBars(BARS + 1)}>＋</button>
-        <span className="spacer" style={{ flex: 1 }} />
-        {/* 通常/消しゴム のモードトグル（PianoRoll の 描く/選ぶ と同じ流儀・アイコン）。 */}
-        <div className="proll-modes" role="group" aria-label="section-mode">
-          <button type="button" aria-label="mode-edit" title="通常（タップで編集）" className={!eraseMode ? "on" : ""} onClick={() => setEraseMode(false)}>
-            <Icon name="edit" size={18} />
-          </button>
-          <button type="button" aria-label="mode-erase" title="消しゴム（タップで外す）" className={eraseMode ? "on" : ""} onClick={() => setEraseMode(true)}>
-            <Icon name="eraser" size={18} />
-          </button>
-        </div>
       </div>
       <div className="lanes" aria-label="timeline" ref={tp.scrollerRef}>
         <div className="playhead" aria-hidden="true" ref={tp.lineRef} />
@@ -658,7 +660,7 @@ export function SectionEditor({
         ))}
       </div>
       <p className="muted lanes-hint">
-        空きをタップ→置く/新規作成／ブロックをタップで編集・長押しで外す／右端ドラッグで繰り返し
+        空きをタップ→置く/新規作成／ブロックをタップで編集（⌫消しゴムでタップ＝外す）／右端ドラッグで繰り返し
       </p>
 
       {others.length > 0 && (

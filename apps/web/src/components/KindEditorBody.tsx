@@ -31,8 +31,8 @@ export interface KindEditorBodyProps {
   setBassSteps: (n: number) => void;
   bassMode: "absolute" | "relative";
   setBassMode: (m: "absolute" | "relative") => void;
-  rollMode: "draw" | "select";
-  setRollMode: (v: "draw" | "select") => void;
+  rollMode: "draw" | "select" | "erase";
+  setRollMode: (v: "draw" | "select" | "erase") => void;
   len: number;
   setLen: (n: number) => void;
   pickup: number; // 弱起（lead-in拍数）
@@ -123,6 +123,10 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
                           <rect x="3" y="3" width="18" height="18" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3.5 3" />
                         </svg>
+                      </button>
+                      {/* 消す＝ノートtapで削除（Section の消しゴムと同じ流儀・④）。 */}
+                      <button type="button" aria-label="mode-erase" title="消す（タップで削除）" className={p.rollMode === "erase" ? "on" : ""} onClick={() => p.setRollMode("erase")}>
+                        <Icon name="eraser" size={18} />
                       </button>
                     </div>
                     {isMelody && !p.candidate && (

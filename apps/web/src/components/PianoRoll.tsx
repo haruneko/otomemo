@@ -45,6 +45,7 @@ export function PianoRoll({
   readOnly = false,
   meter,
 }: {
+
   notes: Note[];
   onChange: (n: Note[]) => void;
   beats?: number;
@@ -55,7 +56,7 @@ export function PianoRoll({
   low?: number; // 既定で見せる最低音（bass は E1=28 など低域既定）
   high?: number; // 既定で見せる最高音
   enableLyric?: boolean; // メロのみ：歌詞流し込み（LS3・design L2）
-  mode?: "draw" | "select"; // 描く/選ぶ（トグルは KindEditorBody 側＝ロール/パッドと同じ行に）
+  mode?: "draw" | "select" | "erase"; // 描く/選ぶ/消す（トグルは KindEditorBody 側＝同じ行に・Section と同流儀）
   ghostNotes?: Note[]; // 崩し候補モード：元メロを半透明ゴーストで重ねる（比較用・非操作）
   readOnly?: boolean; // 候補レビュー中は編集不可（クリックで足さない）
 }) {
@@ -66,7 +67,8 @@ export function PianoRoll({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pasteArmed, setPasteArmed] = useState(false);
   useEffect(() => {
-    if (mode === "draw") {
+    if (mode !== "select") {
+      // 描く/消す へ移ったら選択・貼付を解除（選択編集は選ぶ専用）。
       setSelected(new Set());
       setPasteArmed(false);
     }
@@ -119,8 +121,8 @@ export function PianoRoll({
   function onNoteClick(gi: number, target: Note, e: { stopPropagation: () => void }) {
     e.stopPropagation();
     if (readOnly) return; // 候補レビュー中は編集しない
-    if (mode === "draw") {
-      removeNote(target);
+    if (mode !== "select") {
+      removeNote(target); // 描く/消す＝ノートtapで削除
       return;
     }
     setSelected((s) => {
@@ -132,6 +134,7 @@ export function PianoRoll({
   }
   function onCellClick(pitch: number, step: number) {
     if (readOnly) return; // 候補レビュー中は編集しない
+    if (mode === "erase") return; // 消す＝空セルは無反応（ノートtapのみ削除）
     if (mode === "draw") {
       addAt(pitch, step);
       return;
@@ -270,7 +273,7 @@ export function PianoRoll({
                     key={gi}
                     type="button"
                     aria-label={`note-${p}-${n.start}`}
-                    className={"proll-note" + (selected.has(gi) ? " sel" : "")}
+                    className={"proll-note" + (selected.has(gi) ? " sel" : "") + (mode === "erase" ? " erasing" : "")}
                     style={{
                       left: `${((n.start + pre) / total) * 100}%`,
                       width: `${(n.dur / total) * 100}%`,

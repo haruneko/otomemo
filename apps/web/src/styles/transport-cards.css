@@ -710,6 +710,12 @@
   z-index: 1;
   pointer-events: none;
 }
+/* 消す モード中のノート＝赤い破線で「タップ＝削除」を示す（Section の lane-block.erasing と同流儀・④）。 */
+.proll-note.erasing {
+  outline: 1.5px dashed #e0705a;
+  outline-offset: -1px;
+  cursor: crosshair;
+}
 /* 描く/選ぶ モードトグル。 */
 .proll-modes {
   display: flex;

@@ -74,6 +74,29 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(onOpenNeta).not.toHaveBeenCalled(); // 消しゴム中は編集を開かない
   });
 
+  it("いじる▾に生成・書き出しを集約＝閉じてる間は隠れ、開くと現れる（⑤ メロ編集画面と整合）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        {
+          position: 0,
+          ord: 0,
+          node: { neta: mk("c1", "melody", { title: "メロ案", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }), children: [] },
+        },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-c1@0");
+    // 閉じてる間は生成/書き出しボタンは出さない（バラ撒かない＝薄い）
+    expect(screen.queryByLabelText("gen-gen_drums")).toBeNull();
+    expect(screen.queryByLabelText("export-midi")).toBeNull();
+    // いじる▾ を開くと現れる
+    await userEvent.click(screen.getByLabelText("tools"));
+    expect(screen.getByLabelText("gen-gen_drums")).toBeInTheDocument();
+    expect(screen.getByLabelText("harmony-up")).toBeInTheDocument(); // メロがある→ハモリ
+    expect(screen.getByLabelText("export-midi")).toBeInTheDocument();
+  });
+
   it("ピッカーの新規作成＝空ネタを作って配置し、そのまま編集を開く", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
     listNeta.mockResolvedValue([]);
