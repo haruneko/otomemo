@@ -64,6 +64,11 @@ describe("http data API", () => {
     expect(ids).toEqual([m44]); // 4/4 の library メロ1件だけ
   });
 
+  it("API JSON は Cache-Control: no-store（モバイルが古い合成ツリーを出し続けない）", async () => {
+    const g = await app.inject({ method: "GET", url: "/neta?limit=1" });
+    expect(g.headers["cache-control"]).toBe("no-store");
+  });
+
   it("#9 /music/detect_key_chords：コードから調候補(key+mode)を返す", async () => {
     // C-Am-F-G（C major / A minor の素材）。第1候補は C major か A minor。
     const r = await app.inject({

@@ -65,6 +65,17 @@ export function buildHttp(core: Core): FastifyInstance {
     }
   });
 
+  // API データ(JSON)はブラウザにキャッシュさせない＝配置/合成の変更後にスマホが古いツリーを
+  // 出し続ける事故を防ぐ（getComposition 等の GET は cache-control 無しだとモバイルで残る）。
+  // ※ハッシュ付き静的アセット(JS/CSS)は JSON でないので対象外＝従来通りキャッシュ可。
+  app.addHook("onSend", async (_req, reply, payload) => {
+    const ct = reply.getHeader("content-type");
+    if (typeof ct === "string" && ct.includes("application/json")) {
+      reply.header("Cache-Control", "no-store");
+    }
+    return payload;
+  });
+
   // 運用ヘルス（systemd/監視用・トークン不要）。queued滞留・失敗数・依存ポート(search/music-mcp)疎通。
   app.get("/health", async () => {
     const s = core.healthStats();
