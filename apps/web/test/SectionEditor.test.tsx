@@ -19,8 +19,18 @@ vi.mock("../src/api", () => ({
   api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong },
 }));
 
-import { SectionEditor, loopPositions } from "../src/components/SectionEditor";
+import { SectionEditor, loopPositions, spanOverlaps } from "../src/components/SectionEditor";
 import { beatsPerBar } from "../src/music";
+
+describe("spanOverlaps（尺の重なり判定＝配置/ループのはみ出し重複ガード）", () => {
+  it("重なる／端が接するだけ／離れる を正しく判定", () => {
+    expect(spanOverlaps(0, 3, 2, 3)).toBe(true); // 0-3 と 2-5 は重なる
+    expect(spanOverlaps(0, 3, 3, 3)).toBe(false); // 0-3 と 3-6 は端が接するだけ＝重ならない（小節隣接OK）
+    expect(spanOverlaps(0, 3, 6, 3)).toBe(false); // 離れてる
+    expect(spanOverlaps(6, 2.75, 9, 2.75)).toBe(false); // 1小節rhythmの隣接（0.25ギャップ）は重ならない
+    expect(spanOverlaps(6, 6, 9, 3)).toBe(true); // 2小節ネタ@6(6-12)は @9(9-12) と重なる＝はみ出し重複を検出
+  });
+});
 
 describe("loopPositions（③ ループ伸ばしのタイル反復位置）", () => {
   it("元ブロックの後ろに unit 刻みで、中点を過ぎたループを並べる（fromPos は据え置き＝含めない）", () => {

@@ -107,6 +107,12 @@ export function loopPositions(fromPos: number, unit: number, endBeat: number, to
   return out;
 }
 
+// 区間 [aPos,aPos+aDur) と [bPos,bPos+bDur) が重なるか（端が接するだけは重なり無し）。
+// 配置/ループの重複ガード＝「点」でなく「尺」で判定＝マルチ小節ネタのはみ出し重複を防ぐ（純関数=テスト対象）。
+export function spanOverlaps(aPos: number, aDur: number, bPos: number, bDur: number): boolean {
+  return aPos < bPos + bDur - 1e-6 && bPos < aPos + aDur - 1e-6;
+}
+
 // #83/#55 曲(song)の段階・次の一手パネル。song overlay を読み込み、編集して保存（blur時）。
 function SongStatus({ netaId }: { netaId: string }) {
   const [stage, setStage] = useState("");
@@ -275,6 +281,15 @@ export function SectionEditor({
   // その位置が既にブロックで埋まっているか（レーン全体でなく**占有セルだけ**不可＝別小節には置ける）。
   const occupiedAt = (lane: Lane, position: number) =>
     laneChildren(lane).some((c) => c.position <= position + 1e-6 && position < c.position + childDur(c) - 1e-6);
+  // 置くネタ自体の尺（leaf は実音の長さ・未知は1小節）。配置/ループの尺重複ガードに使う。
+  const contentDur = (kind: string, content: unknown): number => {
+    if (kind === "section" || kind === "song") return BPB; // ネストは picker では稀・保守的に1小節扱い
+    const ns = notesForContent(kind, content);
+    return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : BPB;
+  };
+  // 同レーンの「別ネタ」と尺(スパン)が重なるか＝点判定 occupiedAt の穴(はみ出し重複)を塞ぐ。
+  const overlapsOtherInLane = (lane: Lane, childId: string, pos: number, dur: number) =>
+    laneChildren(lane).some((c) => c.node.neta.id !== childId && spanOverlaps(pos, dur, c.position, childDur(c)));
   // この曲(section)が属する器＝母集団の既定ソース（A）。無ければ「自作すべて」。
   const sectionProjects = (neta.tags ?? []).filter(isProjectTag).map(projectName);
   async function openPicker(lane: Lane, position: number) {
@@ -316,6 +331,11 @@ export function SectionEditor({
       // ライブラリ項目は project にコピーしてから配置（元コーパスを汚さない・編集はコピー側）。
       const target = child.scope === "library" ? await api.copyNeta(child.id) : child;
       const ord = picker.lane.row ?? 0; // ② コード楽器レーンは行を ord に。他は 0。
+      // 尺のはみ出し重複を防ぐ＝置くネタが同レーンの別ネタと重なるなら配置しない（点判定 occupiedAt の穴埋め）。
+      if (overlapsOtherInLane(picker.lane, target.id, picker.position, contentDur(target.kind, target.content))) {
+        setPicker(null);
+        return;
+      }
       // 置く＝1小節ぶんだけ（小節別に別パターンを置ける）。繰り返したい時は右端ドラッグ(③)で。
       // ※旧・自動末尾充填は撤去＝別リズムを小節別に置くと重なって ABBBBB になる問題の元だった。
       await api.placeChild(neta.id, target.id, picker.position, ord);
@@ -408,6 +428,7 @@ export function SectionEditor({
     for (const p of wanted) {
       if (existing.some((e) => near(e, p))) continue;
       if (occupiedAt(lane, p)) continue;
+      if (overlapsOtherInLane(lane, childId, p, childDur(c))) continue; // 別ネタと尺が重なる位置には置かない（はみ出し重複防止）
       await api.placeChild(neta.id, childId, p, c.ord).catch(() => {});
     }
     // 削除：縮めた分＝existing で wanted に無いこの子の反復だけ外す（他の子や元ブロックは触らない）。
