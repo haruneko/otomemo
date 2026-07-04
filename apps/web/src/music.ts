@@ -606,6 +606,12 @@ function meterPair(meter?: string | null): [number, number] | null {
   return n > 0 && d > 0 ? [n, d] : null;
 }
 
+// 1小節の拍数（四分=1.0 基準）。4/4→4、6/8→3、3/4→3。未指定/不正は4（SSOT・SectionEditor等と一致）。
+export function beatsPerBar(meter?: string | null): number {
+  const p = meterPair(meter);
+  return p ? (p[0] * 4) / p[1] : 4;
+}
+
 // #47: GM音色。content.program(0-127) を MIDI トラックの楽器に反映＝書き出しが実音色に一致。
 export const GM_INSTRUMENTS: { value: number; label: string }[] = [
   { value: 0, label: "ピアノ" },

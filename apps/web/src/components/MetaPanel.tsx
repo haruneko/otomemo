@@ -2,7 +2,7 @@
 // 折りたたみトグル＋要約＋メタ本体（調/mode/拍子/tempo/音色/+4拍/MIDI/継続調査/タグ/ムード）。
 // どの枠を出すかは flags で決める（kind 分岐を集約）。折りたたみ状態(localStorage)と要約はここに閉じる。
 import { useState } from "react";
-import { GM_INSTRUMENTS } from "../music";
+import { GM_INSTRUMENTS, beatsPerBar } from "../music";
 import { NumberField } from "./NumberField";
 import { BarsControl } from "./BarsControl";
 
@@ -43,7 +43,7 @@ export function MetaPanel(p: {
   onExtendLen: () => void;
   onToggleSchedule: () => void;
   schedId: string | null;
-  rollBars?: { len: number; setLen: (n: number) => void; pickup: number; setPickup: (n: number) => void } | null; // 小節/弱起（roll のみ・縦詰めで設定内へ）
+  rollBars?: { len: number; setLen: (n: number) => void; pickup: number; setPickup: (n: number) => void; meter?: string } | null; // 小節/弱起（roll のみ・縦詰めで設定内へ・小節数は拍子基準）
 }) {
   const f = p.flags;
   // 折りたたみ状態（localStorage 記憶・既定=畳む＝スマホの空間優先）。
@@ -69,7 +69,7 @@ export function MetaPanel(p: {
     f.isContainer ? p.meter : null,
     f.showMeta ? `♩${p.tempo}` : null,
     f.isMelody || f.isBass || f.isChordPat ? GM_INSTRUMENTS.find((g) => g.value === p.program)?.label : null,
-    p.rollBars ? `${Math.max(1, Math.round(p.rollBars.len / 4))}小節` : null,
+    p.rollBars ? `${Math.max(1, Math.round(p.rollBars.len / beatsPerBar(p.rollBars.meter)))}小節` : null,
     p.rollBars && p.rollBars.pickup > 0 ? `弱起${p.rollBars.pickup}` : null,
   ]
     .filter(Boolean)
@@ -140,7 +140,7 @@ export function MetaPanel(p: {
             )}
             {f.isMelody && (
               <button type="button" onClick={p.onExtendLen}>
-                ＋4拍
+                ＋1小節
               </button>
             )}
             {/* 単体ネタの MIDI 書き出しは編集画面から撤去（薄く保つ・2026-07-04）。書き出しは Section
@@ -155,9 +155,9 @@ export function MetaPanel(p: {
           {p.rollBars && (
             <div className="roll-controls">
               <BarsControl
-                bars={Math.max(1, Math.round(p.rollBars.len / 4))}
-                max={Math.max(4, Math.ceil(p.rollBars.len / 4))}
-                onChange={(n) => p.rollBars!.setLen(n * 4)}
+                bars={Math.max(1, Math.round(p.rollBars.len / beatsPerBar(p.rollBars.meter)))}
+                max={Math.max(4, Math.ceil(p.rollBars.len / beatsPerBar(p.rollBars.meter)))}
+                onChange={(n) => p.rollBars!.setLen(n * beatsPerBar(p.rollBars!.meter))}
               />
               <div className="bars-control" title="弱起（拍0の前の空き）">
                 <span className="muted">弱起</span>

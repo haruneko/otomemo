@@ -303,6 +303,15 @@ describe("music", () => {
     });
   });
 
+  it("beatsPerBar：拍子→1小節の拍数（6/8=3・4/4=4・3/4=3・未指定=4／評価修正B）", async () => {
+    const { beatsPerBar } = await import("../src/music");
+    expect(beatsPerBar("4/4")).toBe(4);
+    expect(beatsPerBar("6/8")).toBe(3);
+    expect(beatsPerBar("3/4")).toBe(3);
+    expect(beatsPerBar("2/2")).toBe(4);
+    expect(beatsPerBar(null)).toBe(4);
+    expect(beatsPerBar("garbage")).toBe(4);
+  });
   it("notesOf extracts notes or empty", () => {
     expect(notesOf({ notes: [{ pitch: 60, start: 0, dur: 1 }] })).toHaveLength(1);
     expect(notesOf(null)).toEqual([]);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Ref } from "react";
-import type { Note } from "../music";
+import { beatsPerBar, type Note } from "../music";
 import { previewNote } from "../audio";
 import { flowLyric, splitMora } from "../lyrics";
 import { nudgeNotes, duplicateSel, deleteSel, copySel, pasteNotes } from "../noteEdit";
@@ -43,10 +43,12 @@ export function PianoRoll({
   mode = "draw",
   ghostNotes,
   readOnly = false,
+  meter,
 }: {
   notes: Note[];
   onChange: (n: Note[]) => void;
   beats?: number;
+  meter?: string; // 拍子（小節線・複製単位・小節数を拍子で正しく／6/8対応・評価修正B）
   pickup?: number; // 弱起（アウフタクト）：拍0の前に置ける lead-in 拍数。負 start の音を扱う。
   playheadRef?: Ref<HTMLDivElement>; // #58 再生プレイヘッド（--phb 生beatを ref直書き）
   scrollerRef?: Ref<HTMLDivElement>; // #74 追従スクロール対象（.proll）
@@ -91,6 +93,8 @@ export function PianoRoll({
   );
   const total = pre + span; // 表示する総拍（-pre 〜 span）
   const steps = total * SUBDIV;
+  const bpb = beatsPerBar(meter); // 1小節の拍数（6/8=3・4/4=4）
+  const barStep = SUBDIV * bpb; // 1小節ぶんの step 数（小節線・小節数の単位）
 
   function addAt(pitch: number, step: number) {
     const start = step / SUBDIV - pre; // 先頭 pre*SUBDIV セルは負拍（弱起）
@@ -144,7 +148,7 @@ export function PianoRoll({
   }
   const doNudge = (dPitch: number, dBeats: number) => onChange(nudgeNotes(notes, selected, dPitch, dBeats));
   function doDuplicate() {
-    const r = duplicateSel(notes, selected, 4); // +1小節右へ
+    const r = duplicateSel(notes, selected, bpb); // +1小節右へ（拍子基準＝6/8なら+3拍）
     onChange(r.notes);
     setSelected(r.selection);
   }
@@ -238,7 +242,8 @@ export function PianoRoll({
                   className={
                     "proll-cell" +
                     (s % SUBDIV === 0 ? " beat" : "") +
-                    (s === pre * SUBDIV ? " downbeat" : "") + // 拍0＝ダウンビート（弱起の境目）
+                    (s >= pre * SUBDIV && (s - pre * SUBDIV) % barStep === 0 && s !== pre * SUBDIV ? " bar" : "") + // 小節線（拍子基準）
+                    (s === pre * SUBDIV ? " downbeat" : "") + // 拍0＝ダウンビート（弱起の境目・1小節目頭）
                     (s < pre * SUBDIV ? " pickup" : "")
                   }
                   onClick={() => onCellClick(p, s)}

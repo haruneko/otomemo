@@ -11,6 +11,7 @@ import {
   chordsToNotes,
   rhythmOf,
   rhythmToNotes,
+  beatsPerBar,
   programOf,
   isRelativeBass,
   resolveRelativeBass,
@@ -54,6 +55,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   }
   const [tempo, setTempo] = useState<number>(neta.tempo ?? 120);
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
+  const bpb = beatsPerBar(meter); // 1小節の拍数（6/8=3・4/4=4）＝小節数/尺の換算に（評価修正B）
   const [program, setProgram] = useState<number>(
     programOf(neta.content) ?? (neta.kind === "bass" ? 33 : 0), // #47 GM音色（bassは既定フィンガーベース）
   );
@@ -70,7 +72,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   ); // 相対ベースの小節数（16step=1小節）。既定2小節。
   const [mood, setMood] = useState(neta.mood ?? "");
   const [len, setLen] = useState(() =>
-    Math.max(16, (neta.bars ?? 0) * 4, ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
+    Math.max(16, (neta.bars ?? 0) * beatsPerBar(neta.meter), ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
   );
   // 弱起（アウフタクト）：拍0の前の lead-in 拍数。既存の負 start を包む値で初期化。
   const [pickup, setPickup] = useState(() => Math.max(0, Math.ceil(-Math.min(0, ...notesOf(neta.content).map((n) => n.start)))));
@@ -185,7 +187,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   function savePatch(): NetaPatch {
     if (isRelBass)
       return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, mode, tempo, bars: Math.max(1, Math.round(bassSteps / 16)) };
-    if (isMelody || isBass) return { content: { notes, program }, key, mode, tempo, bars: Math.ceil(len / 4) };
+    if (isMelody || isBass) return { content: { notes, program }, key, mode, tempo, bars: Math.ceil(len / bpb) };
     if (isChordPat) return { content: { ...chordPat, program }, key, mode, tempo }; // コード楽器＝自前音色
     if (isChord) return { content: { chords }, key, mode, tempo }; // 進行は抽象＝program持たない(CP1)
     if (isRhythm) return { content: { rhythm }, tempo };
@@ -202,7 +204,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     try {
       const r = await api.reshapeMelody({
         ref: notes,
-        frame: { key, meter, tempo, bars: Math.ceil(len / 4), mood: mood.trim() || undefined },
+        frame: { key, meter, tempo, bars: Math.ceil(len / bpb), mood: mood.trim() || undefined },
         strength: s,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       });
@@ -379,6 +381,6 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     saveStatus, onFlush: () => void flushSave(), close,
     // アクション
     remove, detectKey, toggleSchedule,
-    onExtendLen: () => setLen(len + 4),
+    onExtendLen: () => setLen(len + bpb),
   };
 }

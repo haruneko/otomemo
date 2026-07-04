@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
-import { type ChordEntry } from "../music";
+import { type ChordEntry, beatsPerBar } from "../music";
 import {
   type Triad, type Ext, type Alt, type ChordParts,
   decomposeQuality, composeQuality, TRIAD_OPTIONS, extOptionsFor, altOptionsFor,
@@ -8,15 +8,6 @@ import { MiniRoll } from "./MiniRoll";
 import type { Neta } from "../api";
 
 const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const LENGTHS = [
-  { v: 1, label: "1拍" },
-  { v: 2, label: "2拍" },
-  { v: 4, label: "1小節" },
-  { v: 8, label: "2小節" },
-];
-// 付点＝長さ×1.5（各行ごと）。dur が基準長の1.5倍なら付点。
-const isDotted = (d: number) => LENGTHS.some((l) => Math.abs(d - l.v * 1.5) < 1e-6);
-const baseDur = (d: number) => (isDotted(d) ? d / 1.5 : d);
 
 // コードは「順番に並ぶ」＝start は手入力でなく長さから自動フロー（直感的・"よくわからない"を解消）。
 function reflow(chords: ChordEntry[]): ChordEntry[] {
@@ -34,12 +25,24 @@ export function ChordEditor({
   onChange,
   beatRef,
   playing,
+  meter,
 }: {
   chords: ChordEntry[];
   onChange: (c: ChordEntry[]) => void;
   beatRef?: RefObject<number>;
   playing?: boolean;
+  meter?: string; // 拍子（「1小節」の拍数を拍子で正しく／6/8対応・評価修正B）
 }) {
+  const bpb = beatsPerBar(meter); // 1小節の拍数（6/8=3・4/4=4）
+  // 長さ選択肢＝拍子基準（1小節=bpb拍）。付点＝長さ×1.5。
+  const LENGTHS = [
+    { v: 1, label: "1拍" },
+    { v: 2, label: "2拍" },
+    { v: bpb, label: "1小節" },
+    { v: bpb * 2, label: "2小節" },
+  ];
+  const isDotted = (d: number) => LENGTHS.some((l) => Math.abs(d - l.v * 1.5) < 1e-6);
+  const baseDur = (d: number) => (isDotted(d) ? d / 1.5 : d);
   const [activeIdx, setActiveIdx] = useState(-1);
   // 長さボタン：その基準長にする（付点状態は引き継ぐ）。付点ボタン：その行の長さを×1.5 ⇔ 等倍でトグル。
   function setLen(i: number, dur: number, v: number) {
@@ -76,7 +79,7 @@ export function ChordEditor({
     update(i, { quality: composeQuality(p) });
   }
   function add() {
-    commit([...chords, { root: 0, quality: "", start: 0, dur: 4 }]);
+    commit([...chords, { root: 0, quality: "", start: 0, dur: bpb }]);
   }
   function remove(i: number) {
     commit(chords.filter((_, k) => k !== i));
@@ -161,7 +164,7 @@ export function ChordEditor({
       <div className="chord-foot">
         <button type="button" className="bs-btn" onClick={add}>＋コード</button>
         {chords.length > 0 && (
-          <span className="muted chord-total">計 {chords.reduce((s, c) => s + c.dur, 0)}拍（{Math.round((chords.reduce((s, c) => s + c.dur, 0) / 4) * 10) / 10}小節）</span>
+          <span className="muted chord-total">計 {chords.reduce((s, c) => s + c.dur, 0)}拍（{Math.round((chords.reduce((s, c) => s + c.dur, 0) / bpb) * 10) / 10}小節）</span>
         )}
       </div>
     </div>

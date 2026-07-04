@@ -200,6 +200,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     notes={p.candidate ?? p.notes}
                     onChange={p.setNotes}
                     beats={p.len}
+                    meter={p.meter}
                     pickup={p.pickup}
                     low={isBass ? 28 : undefined}
                     high={isBass ? 55 : undefined}
@@ -216,7 +217,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
       ) : p.flags.isChordPat ? (
         <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isChord ? (
-        <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} />
+        <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />
       ) : isRhythm ? (
         <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isContainer ? (
