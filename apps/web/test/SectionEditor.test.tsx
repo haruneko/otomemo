@@ -12,7 +12,8 @@ const { getComposition, listNeta, placeChild, removeChild, createNeta } = vi.hoi
 }));
 vi.mock("../src/api", () => ({ api: { getComposition, listNeta, placeChild, removeChild, createNeta } }));
 
-import { SectionEditor, beatsPerBar, loopPositions } from "../src/components/SectionEditor";
+import { SectionEditor, loopPositions } from "../src/components/SectionEditor";
+import { beatsPerBar } from "../src/music";
 
 describe("loopPositions（③ ループ伸ばしのタイル反復位置）", () => {
   it("元ブロックの後ろに unit 刻みで、収まるループだけ並べる（fromPos は据え置き＝含めない）", () => {

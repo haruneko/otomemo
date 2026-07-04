@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Ref } from "react";
-import { beatsPerBar, type Note } from "../music";
+import { beatsPerBar, pitchName, PITCH_NAMES, type Note } from "../music";
 import { previewNote } from "../audio";
 import { flowLyric, splitMora } from "../lyrics";
 import { nudgeNotes, duplicateSel, deleteSel, copySel, pasteNotes } from "../noteEdit";
@@ -11,9 +11,8 @@ let noteClipboard: Note[] = [];
 const CELL_PX = 12; // .proll-cell の幅。1拍=SUBDIV*CELL_PX で playhead を px 配置（横スクロール追従）。
 const KEY_PX = 40; // .proll-key の幅
 
-const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const noteName = (p: number) => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
-const isBlack = (p: number) => NAMES[p % 12]!.includes("#");
+const noteName = pitchName; // 音名（SSOT: music.pitchName）
+const isBlack = (p: number) => PITCH_NAMES[((p % 12) + 12) % 12]!.includes("#");
 
 const DEFAULT_LOW = 60; // C4
 const DEFAULT_HIGH = 83; // B5

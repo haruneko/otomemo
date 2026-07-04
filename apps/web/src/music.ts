@@ -13,7 +13,10 @@ export interface Note {
   kit?: number; // ドラムキット(GM bank128 preset番号 0=Standard)。アコ/エレキ選択＝drumノートに付与。
 }
 
-const CHORD_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+// 12音名（シャープ表記・SSOT）。調名/コード根/ピアノロール鍵盤/コード楽器で共有。
+export const PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+// MIDIノート番号→音名（MIDI 60=C4）。負値も安全（(m%12+12)%12）。
+export const pitchName = (midi: number) => `${PITCH_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 
 export interface MelodyContent {
   notes: Note[];
@@ -87,7 +90,7 @@ export function chordsOf(content: unknown): ChordEntry[] {
   // 旧データ（root が "C".."B" 文字列）を 0–11 へ移行
   return (c.chords as { root: number | string; quality?: string; start: number; dur: number; bass?: number }[]).map(
     (ch) => ({
-      root: typeof ch.root === "number" ? ch.root : Math.max(0, CHORD_NAMES.indexOf(ch.root)),
+      root: typeof ch.root === "number" ? ch.root : Math.max(0, PITCH_NAMES.indexOf(ch.root)),
       quality: ch.quality ?? "",
       start: ch.start,
       dur: ch.dur,

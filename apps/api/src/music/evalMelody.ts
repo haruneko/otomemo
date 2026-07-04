@@ -1,7 +1,7 @@
 // メロディの規則ベース自動評価（E-rule）。理論(skeleton/contour/harmony 研究)をスコア関数化。
 // ＝「耳なし反復」の土台：brush-up を指標の上下で回せる。各 metric 0..1（高=良）、score は加重平均。
 // 相棒の E-AI（LLM のゲシュタルト判定）と相補（rule=具体違反を正確に／AI=musicality を曖昧に）。
-import { chordPcs } from "./theory";
+import { chordPcs, normRoot } from "./theory";
 import { meterInfo } from "./meter";
 import type { BarRhythmModel, MoveModel } from "./melodyCells";
 
@@ -10,12 +10,8 @@ type Chord = { root?: number | string; quality?: string; start?: number; dur?: n
 
 export interface MelodyEval { score: number; metrics: Record<string, number>; critique: string[] }
 
-const NAME_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-function rootPc(r?: number | string): number {
-  if (typeof r === "number") return ((r % 12) + 12) % 12;
-  const m = /^([A-G])([#b]?)/.exec(String(r ?? "C")); if (!m) return 0;
-  let pc = NAME_PC[m[1]!]!; if (m[2] === "#") pc++; else if (m[2] === "b") pc--; return ((pc % 12) + 12) % 12;
-}
+// 根音→ピッチクラス（SSOT: theory.normRoot＝Unicode♯♭・重臨時記号も安全）。
+const rootPc = (r?: number | string): number => normRoot(r ?? "C");
 
 // 0..1 にクランプ。target 中心の三角スコア（target で1・幅 w で0）。
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));

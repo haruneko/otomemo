@@ -1,12 +1,12 @@
 // 編集画面のメタ設定パネル（共通パーツ化 CP1・design「編集画面の共通パーツ化」）。
-// 折りたたみトグル＋要約＋メタ本体（調/mode/拍子/tempo/音色/+4拍/MIDI/継続調査/タグ/ムード）。
+// 折りたたみトグル＋要約＋メタ本体（調/mode/拍子/tempo/音色/+4拍/継続調査/タグ/ムード）。
+// ※MIDI書き出しは単体編集画面から撤去済（2026-07-04）＝Section の いじる▾ のみ。
 // どの枠を出すかは flags で決める（kind 分岐を集約）。折りたたみ状態(localStorage)と要約はここに閉じる。
 import { useState } from "react";
-import { GM_INSTRUMENTS, beatsPerBar } from "../music";
+import { GM_INSTRUMENTS, beatsPerBar, PITCH_NAMES as KEY_NAMES } from "../music";
 import { NumberField } from "./NumberField";
 import { BarsControl } from "./BarsControl";
 
-const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const METERS = ["4/4", "3/4", "6/8", "2/4", "5/4", "12/8"];
 
 export interface MetaFlags {

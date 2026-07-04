@@ -528,18 +528,7 @@
   padding: 3px 8px;
   min-height: 30px;
 }
-/* モードトグルのアイコン中央寄せ。 */
-.proll-modes {
-  display: flex;
-  gap: 4px;
-}
-.proll-modes button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-}
-/* ロール/パッド と 描く/選ぶ を同じ行に（縦線で区切り）。 */
+/* 描く/選ぶ と 同じ行に（縦線で区切り）。.proll-modes 本体は下方に集約。 */
 .roll-toolbar {
   display: flex;
   align-items: center;
@@ -716,13 +705,17 @@
   outline-offset: -1px;
   cursor: crosshair;
 }
-/* 描く/選ぶ モードトグル。 */
+/* 描く/選ぶ/消す モードトグル（メロ/ベース/Section 共通・SSOT）。 */
 .proll-modes {
   display: flex;
   gap: 4px;
   margin-bottom: 4px;
 }
 .proll-modes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
   padding: 4px 14px;
   font-size: 0.8rem;
   background: #2b2f36;

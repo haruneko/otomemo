@@ -23,6 +23,7 @@ import {
   genNamedProgression,
 } from "./music";
 import { learnStepWeightsFromLibrary, learnMotifModelFromLibrary } from "./music/corpusBias";
+import { meterInfo } from "./music/meter";
 import { findProgressions } from "./progression-search";
 import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
 
@@ -597,8 +598,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       }
       if (!melody) return err("fit chords(ハモ付け) は基準 melody が必須");
       // C③ ハモ付けも items 形に統一：各小節の最有力を1進行に、代替候補は meta.bars に残す。
-      const mm = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(frame?.meter ?? "");
-      const bpb = mm ? (Number(mm[1]) * 4) / Number(mm[2]) : 4;
+      const bpb = meterInfo(frame?.meter).beatsPerBar;
       const bars = harmonize(melody, key ?? 0, { mode });
       const chordsOut = bars.map((b) => ({ root: b.candidates[0]?.root ?? 0, quality: b.candidates[0]?.quality ?? "", start: b.start, dur: bpb }));
       return ok({ items: [{ kind: "chord_progression", content: { chords: chordsOut }, label: "ハモ付け" }], meta: { bars }, edges: [] });

@@ -18,14 +18,13 @@ import {
   isChordPattern,
   resolveChordPattern,
   emptyChordPattern,
+  PITCH_NAMES as KEY_NAMES,
   type Note,
   type ChordEntry,
   type RhythmContent,
   type BassStep,
   type ChordPatternContent,
 } from "./music";
-
-const KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged?: () => void }) {
   const { onClose, onChanged } = opts;

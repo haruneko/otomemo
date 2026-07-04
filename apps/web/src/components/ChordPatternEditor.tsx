@@ -1,5 +1,5 @@
 import { type Ref, useState } from "react";
-import { type ChordPatternContent, applyCellTap, voicingPreviewPitches } from "../music";
+import { type ChordPatternContent, applyCellTap, voicingPreviewPitches, pitchName } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
@@ -9,8 +9,6 @@ import type { Neta } from "../api";
 const NAME_PX = 58;
 const BEAT_PX = 88;
 const DEFAULT_TOP = 72; // C5（トップ狙い音の既定）
-const PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const pitchName = (m: number) => `${PITCH_NAMES[((m % 12) + 12) % 12]}${Math.floor(m / 12) - 1}`; // MIDI 60=C4
 // 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える。
 const LENGTHS = [
   { label: "16", v: 1 },

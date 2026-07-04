@@ -42,6 +42,8 @@ import {
   downloadMidi,
   downloadMultitrackMidi,
   playNotes,
+  beatsPerBar,
+  PITCH_NAMES,
   type Note,
   type PlaybackHandle,
 } from "../music";
@@ -79,16 +81,6 @@ const LANE_COLOR: Record<string, string> = {
   rhythm: "var(--k-rhythm)",
   section: "var(--k-section)",
 };
-
-// #51: 拍子(meter "n/d")から1小節の拍数を導出。beat=四分=1.0 基準で num*4/den。
-// 4/4→4.0、6/8→3.0、3/4→3.0。未指定/不正は 4/4。
-export function beatsPerBar(meter: string | null | undefined): number {
-  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
-  if (!m) return 4;
-  const num = Number(m[1]);
-  const den = Number(m[2]);
-  return num > 0 && den > 0 ? (num * 4) / den : 4;
-}
 
 type Lane = (typeof LANES)[number];
 type Child = CompositionNode["children"][number];
@@ -779,7 +771,7 @@ export function SectionEditor({
                       <span className="muted">
                         {KIND_LABEL[n.kind] ?? n.kind}
                         {n.mood ? ` · ${n.mood}` : ""}
-                        {n.key != null ? ` · ${["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][n.key]}` : ""}
+                        {n.key != null ? ` · ${PITCH_NAMES[n.key]}` : ""}
                       </span>
                     </div>
                   </button>

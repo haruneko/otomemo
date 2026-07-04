@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { notesForContent } from "../music";
+import { notesForContent, beatsPerBar } from "../music";
 import { api, type Neta, type CompositionNode } from "../api";
 
 // #48: カードにメロ/コード/ベース/リズムの概形（小さなピアノロール）を出す。音楽以外は何も描かない。
@@ -32,15 +32,6 @@ export function MiniRoll({ neta }: { neta: Neta }) {
   );
 }
 
-// 1小節の拍数（meter "n/d"→ num*4/den）。SectionEditor.beatsPerBar のミラー（dnd依存を持ち込まない）。
-function bpbOf(meter?: string | null): number {
-  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
-  if (!m) return 4;
-  const n = Number(m[1]);
-  const d = Number(m[2]);
-  return n > 0 && d > 0 ? (n * 4) / d : 4;
-}
-
 // ④(2026-07-03) section/song カードの中身プレビュー＝レーン帯のミニ・タイムライン。
 // どのパートがどの小節に入ってるかを帯で図示（編集画面タイムラインの縮小版）＋小節数。
 // 子は getComposition を表示時に遅延取得（container カードのみ・数は少ない）。
@@ -70,7 +61,7 @@ export function SectionMini({ neta }: { neta: Neta }) {
   if (!children) return null; // 取得前は何も出さない（レイアウト揺れを避ける）
   if (!children.length) return <p className="section-mini-empty muted">（空・タップで組む）</p>;
 
-  const bpb = bpbOf(neta.meter);
+  const bpb = beatsPerBar(neta.meter);
   const durOf = (c: CompositionNode["children"][number]) => {
     const ns = notesForContent(c.node.neta.kind, c.node.neta.content);
     return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : bpb;

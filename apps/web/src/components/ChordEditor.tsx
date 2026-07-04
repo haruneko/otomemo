@@ -1,13 +1,11 @@
 import { useEffect, useState, type RefObject } from "react";
-import { type ChordEntry, beatsPerBar } from "../music";
+import { type ChordEntry, beatsPerBar, PITCH_NAMES as ROOTS } from "../music";
 import {
   type Triad, type Ext, type Alt, type ChordParts,
   decomposeQuality, composeQuality, TRIAD_OPTIONS, extOptionsFor, altOptionsFor,
 } from "../chordQuality";
 import { MiniRoll } from "./MiniRoll";
 import type { Neta } from "../api";
-
-const ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 // コードは「順番に並ぶ」＝start は手入力でなく長さから自動フロー（直感的・"よくわからない"を解消）。
 function reflow(chords: ChordEntry[]): ChordEntry[] {
