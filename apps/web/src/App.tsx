@@ -481,19 +481,12 @@ export function App() {
                 ["lyric", "歌詞", "新しい歌詞", "var(--k-lyric)"],
                 ["theme", "テーマ", "新しいテーマ", "var(--k-theme)"],
               ] as const;
+              // グループ見出し(パーツ/組み立て/文字)は撤去＝ラベルはタイル自身が持つので冗長(オーナー)。
+              // 行のまとまり(パーツ5列 / 組み立て・文字4列)だけで種別のグループは伝わる。
               return (
                 <>
-                  <div className="ct-group">
-                    <span className="ct-head">パーツ（sectionに置く）</span>
-                    <div className="ct-row ct-parts">{PARTS.map(tile)}</div>
-                  </div>
-                  <div className="ct-group">
-                    <div className="ct-heads">
-                      <span>組み立て</span>
-                      <span>文字</span>
-                    </div>
-                    <div className="ct-row ct-buildtext">{BUILD_TEXT.map(tile)}</div>
-                  </div>
+                  <div className="ct-row ct-parts">{PARTS.map(tile)}</div>
+                  <div className="ct-row ct-buildtext">{BUILD_TEXT.map(tile)}</div>
                 </>
               );
             })()}

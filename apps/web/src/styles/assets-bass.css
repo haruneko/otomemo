@@ -764,25 +764,13 @@ article header {
 }
 /* 作成タイル＝コンパクトなアイコングリッド（案A・2026-07-03）。色は塗り帯でなくアイコンへ寄せ、
    低背・4列で作成を上に残しつつファーストビューのごちゃつきを抑える。 */
-/* 作成タイル＝グループ分け（案A）。パーツ(5列)／組み立て・文字(4列・見出し2分割)／取込(全幅)。 */
+/* 作成タイル＝グループ分け（案A・見出しは撤去＝タイル自身のラベルで足りる）。
+   行のまとまりだけ：パーツ(5列)／組み立て・文字(4列)／取込(全幅)。 */
 .create-tiles {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   margin-bottom: 8px;
-}
-.ct-head {
-  display: block;
-  font-size: 0.66rem;
-  color: var(--muted);
-  margin-bottom: 5px;
-}
-.ct-heads {
-  display: grid;
-  grid-template-columns: 1fr 1fr; /* 組み立て(左2枚) / 文字(右2枚) の上に見出し */
-  font-size: 0.66rem;
-  color: var(--muted);
-  margin-bottom: 5px;
 }
 .ct-row {
   display: grid;
