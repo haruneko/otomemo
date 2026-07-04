@@ -217,7 +217,8 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }
-/* ③ 右端グリップ＝ドラッグでループ伸ばし。本体タップ(=外す)と分けるため右端の掴み代を確保。 */
+/* ③ 右端グリップ＝ドラッグでループ伸ばし。掴み代(タッチ域)は14px確保しつつ、
+   見た目は控えめに＝右端中央の小さな縦ハンドルだけ（旧: 白線+グラデ帯が"糊代"で後ろに出過ぎ・オーナー指摘）。 */
 .block-resize {
   position: absolute;
   top: 0;
@@ -228,8 +229,21 @@
   touch-action: none; /* ドラッグ中にページがスクロールしない */
   pointer-events: auto;
   z-index: 3;
-  border-left: 2px solid rgba(255, 255, 255, 0.55);
-  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.22));
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.block-resize::after {
+  content: "";
+  width: 2px;
+  height: 42%;
+  margin-right: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.block-resize:hover::after {
+  height: 70%;
+  background: rgba(255, 255, 255, 0.85);
 }
 /* ループ伸ばし中のゴースト（fromPos〜ドラッグ位置）。 */
 .loop-ghost {
