@@ -318,15 +318,20 @@
   flex: 0 0 auto;
   white-space: nowrap;
 }
-/* 置く種別＝色付きアイコン（撤去した種別タブの代わり・絵と色だけ）。色は inline style。 */
+/* 置く種別＝色付きアイコン＋パート名（撤去した種別タブの代わり）。アイコン色は inline style。 */
 .picker-crumb .crumb-kind {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
+  gap: 4px;
 }
 .picker-crumb .crumb-kind svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+}
+.picker-crumb .crumb-kind-label {
+  color: var(--fg); /* 名前は白で読みやすく（アイコンだけ色付き）。 */
+  font-weight: 600;
 }
 .picker-crumb .crumb-sep {
   flex: 0 0 auto;

@@ -755,9 +755,10 @@ export function SectionEditor({
               <span className="picker-crumb">
                 <span className="crumb-sec">{liveTitle || KIND_LABEL[neta.kind]}</span>
                 <span className="crumb-sep" aria-hidden="true">▸</span>
-                {/* 置く種別＝絵＋色だけ（撤去した種別タブの代わりに"今なにを置くか"を示すラベル）。 */}
-                <span className="crumb-kind" style={{ color: LANE_COLOR[picker.lane.key] ?? "var(--accent)" }} title={picker.lane.label}>
+                {/* 置く種別＝色付きアイコン＋パート名（アイコンだけだと分かりにくい・オーナー）。 */}
+                <span className="crumb-kind" style={{ color: LANE_COLOR[picker.lane.key] ?? "var(--accent)" }}>
                   <KindIcon kind={picker.lane.kinds[0]!} />
+                  <span className="crumb-kind-label">{picker.lane.label}</span>
                 </span>
                 <span className="crumb-sep" aria-hidden="true">▸</span>
                 <span className="crumb-fix">{picker.position / BPB + 1}小節目</span>
