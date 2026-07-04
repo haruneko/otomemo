@@ -452,30 +452,51 @@ export function App() {
           }
         >
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
-          {/* 作成タイル＝コンパクトなアイコングリッド（案A・2026-07-03）。色は塗り帯でなくアイコンへ寄せ、
-              作成は上＋1タップ維持。並びはメロ優先。放り込むフォームは撤去（雑な捕獲はチャット）。 */}
+          {/* 作成タイル＝グループ分け（案A・2026-07-04）＝パーツ/組み立て・文字/取込。
+              section と song を別タイルに分離＝「パーツを組む1ブロック(section)」と「並べる(song)」の混乱を解消。
+              組み立てと文字は同じ行(4枚)に（オーナー）。放り込むフォームは撤去（雑な捕獲はチャット）。 */}
           <div className="create-tiles">
-            {(
-              [
+            {(() => {
+              const tile = ([k, label, title, col]: readonly [string, string, string, string]) => (
+                <button
+                  key={k}
+                  className="create-tile"
+                  style={{ ["--k" as string]: col }}
+                  onClick={() => (k === "song" ? void newSong() : void createBlank(k, title))}
+                >
+                  <KindIcon kind={k} />
+                  <span>＋{label}</span>
+                </button>
+              );
+              const PARTS = [
                 ["melody", "メロ", "新しいメロ", "var(--k-melody)"],
                 ["chord_progression", "コード", "新しいコード進行", "var(--k-chord)"],
-                ["lyric", "歌詞", "新しい歌詞", "var(--k-lyric)"],
-                ["song", "曲", "", "var(--k-section)"], // song は newSong（section を作る）
-                ["rhythm", "リズム", "新しいリズム", "var(--k-rhythm)"],
                 ["bass", "ベース", "新しいベース", "var(--k-bass)"],
+                ["rhythm", "リズム", "新しいリズム", "var(--k-rhythm)"],
+                ["chord_pattern", "コード楽器", "新しいコード楽器", "var(--k-chord)"],
+              ] as const;
+              const BUILD_TEXT = [
+                ["section", "セクション", "新しいセクション", "var(--k-section)"],
+                ["song", "曲", "", "var(--k-song)"],
+                ["lyric", "歌詞", "新しい歌詞", "var(--k-lyric)"],
                 ["theme", "テーマ", "新しいテーマ", "var(--k-theme)"],
-              ] as const
-            ).map(([k, label, title, col]) => (
-              <button
-                key={k}
-                className="create-tile"
-                style={{ ["--k" as string]: col }}
-                onClick={() => (k === "song" ? void newSong() : void createBlank(k, title))}
-              >
-                <KindIcon kind={k} />
-                <span>＋{label}</span>
-              </button>
-            ))}
+              ] as const;
+              return (
+                <>
+                  <div className="ct-group">
+                    <span className="ct-head">パーツ（sectionに置く）</span>
+                    <div className="ct-row ct-parts">{PARTS.map(tile)}</div>
+                  </div>
+                  <div className="ct-group">
+                    <div className="ct-heads">
+                      <span>組み立て</span>
+                      <span>文字</span>
+                    </div>
+                    <div className="ct-row ct-buildtext">{BUILD_TEXT.map(tile)}</div>
+                  </div>
+                </>
+              );
+            })()}
             <button
               className={"create-tile import-tile" + (importOpen ? " on" : "")}
               aria-label="toggle-import"

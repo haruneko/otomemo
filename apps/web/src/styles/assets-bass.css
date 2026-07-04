@@ -764,11 +764,35 @@ article header {
 }
 /* 作成タイル＝コンパクトなアイコングリッド（案A・2026-07-03）。色は塗り帯でなくアイコンへ寄せ、
    低背・4列で作成を上に残しつつファーストビューのごちゃつきを抑える。 */
+/* 作成タイル＝グループ分け（案A）。パーツ(5列)／組み立て・文字(4列・見出し2分割)／取込(全幅)。 */
 .create-tiles {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin-bottom: 8px;
+}
+.ct-head {
+  display: block;
+  font-size: 0.66rem;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.ct-heads {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 組み立て(左2枚) / 文字(右2枚) の上に見出し */
+  font-size: 0.66rem;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.ct-row {
+  display: grid;
+  gap: 6px;
+}
+.ct-parts {
+  grid-template-columns: repeat(5, 1fr);
+}
+.ct-buildtext {
+  grid-template-columns: repeat(4, 1fr);
 }
 .create-tile {
   display: flex;
@@ -796,6 +820,11 @@ article header {
 }
 .create-tile.import-tile {
   color: var(--muted);
+  /* 取込は"作成"でないのでグリッド外＝全幅の横並びボタンに（アイコン＋ラベル横）。 */
+  flex-direction: row;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
 }
 .create-tile.import-tile.on {
   background: color-mix(in srgb, var(--accent) 16%, #1b1e23);
