@@ -274,6 +274,31 @@
   color: #fff;
   border-color: var(--accent);
 }
+/* ピッカー検索行＝絞り込み入力＋コーパス表示トグル。 */
+.picker-search-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.picker-search-row .editor-tags {
+  flex: 1;
+  min-width: 0;
+}
+.picker-corpus-toggle {
+  flex: 0 0 auto;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.picker-corpus-toggle.on {
+  border-color: var(--accent);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 18%, #1b1e23);
+}
 /* 探して無ければ作る＝ピッカー上部の新規作成ボタン（点線＝"追加"の合図）。 */
 .picker-create {
   width: 100%;

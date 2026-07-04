@@ -160,6 +160,7 @@ export function SectionEditor({
   // ③ 右端ドラッグでループ伸ばし中のプレビュー（fromPos〜endBeat をゴースト表示）。
   const [drag, setDrag] = useState<{ childId: string; laneKey: string; fromPos: number; unit: number; endBeat: number } | null>(null);
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
+  const [pickerCorpus, setPickerCorpus] = useState(false); // ピッカーでコーパス(library)も出すか（既定=自作のみ・評価修正C）
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
   const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
   const [genBusy, setGenBusy] = useState(false);
@@ -232,13 +233,25 @@ export function SectionEditor({
     setPq("");
     setPicker({ lane, position, all });
   }
+  // ネタの実長（拍）。配置時のループ充填に使う。
+  const netaBeats = (n: { kind: string; content: unknown }) => {
+    const ns = notesForContent(n.kind, n.content);
+    return ns.length ? Math.max(...ns.map((x) => x.start + x.dur)) : BPB;
+  };
   async function placeAt(child: Neta) {
     if (!picker) return;
     try {
       // ライブラリ項目は project にコピーしてから配置（元コーパスを汚さない・編集はコピー側）。
       const target = child.scope === "library" ? await api.copyNeta(child.id) : child;
-      // ② コード楽器レーンは行を ord に持たせる（1→2レーン目）。他レーンは 0。
-      await api.placeChild(neta.id, target.id, picker.position, picker.lane.row ?? 0);
+      const ord = picker.lane.row ?? 0; // ② コード楽器レーンは行を ord に。他は 0。
+      await api.placeChild(neta.id, target.id, picker.position, ord);
+      // ループ系（リズム/コード楽器）は既定でセクション末尾まで敷き詰め＝置いた瞬間パート全体が鳴る（評価修正C）。
+      if (target.kind === "rhythm" || target.kind === "chord_pattern") {
+        const unit = Math.max(BPB, Math.ceil(netaBeats(target) / BPB) * BPB);
+        for (const p of loopPositions(picker.position, unit, TOTAL, TOTAL)) {
+          await api.placeChild(neta.id, target.id, p, ord).catch(() => {});
+        }
+      }
     } catch {
       // section ネストで循環になる配置は core が拒否（400）→ そっと無視（配置しない）
       setPicker(null);
@@ -682,13 +695,26 @@ export function SectionEditor({
                 </button>
               ))}
             </div>
-            <input
-              aria-label="picker-search"
-              className="editor-tags"
-              placeholder="絞り込み…（曲名・アーティスト）"
-              value={pq}
-              onChange={(e) => setPq(e.target.value)}
-            />
+            <div className="picker-search-row">
+              <input
+                aria-label="picker-search"
+                className="editor-tags"
+                placeholder="絞り込み…（曲名・アーティスト）"
+                value={pq}
+                onChange={(e) => setPq(e.target.value)}
+              />
+              {/* コーパス(library=参考の辞書)は既定で隠す＝自作ネタが埋もれない（評価修正C）。 */}
+              <button
+                type="button"
+                className={"picker-corpus-toggle" + (pickerCorpus ? " on" : "")}
+                aria-label="picker-corpus-toggle"
+                aria-pressed={pickerCorpus}
+                title={pickerCorpus ? "コーパスを隠す" : "コーパス（参考）も表示"}
+                onClick={() => setPickerCorpus((v) => !v)}
+              >
+                コーパス
+              </button>
+            </div>
             {/* 探して無ければ作る：このレーンの kind で新規作成→配置→編集へ。 */}
             <button type="button" className="picker-create" aria-label="picker-create" onClick={() => void createInLane()}>
               ＋ {pq.trim() ? `「${pq.trim()}」を` : ""}新しい{picker.lane.label}を作る
@@ -700,6 +726,7 @@ export function SectionEditor({
                   (n) =>
                     inLane(picker.lane, n.kind) &&
                     n.id !== neta.id &&
+                    (pickerCorpus || n.scope !== "library") && // 既定はコーパス(library)を隠す
                     (n.title ?? n.text ?? "").toLowerCase().includes(q),
                 );
                 if (list.length === 0)

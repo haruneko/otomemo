@@ -112,6 +112,33 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(screen.getByText("コード楽器2")).toBeInTheDocument();
   });
 
+  it("評価修正C: リズムを置くとセクション末尾まで自動で敷き詰める（複数配置）", async () => {
+    placeChild.mockClear(); // テスト間で mock.calls が累積するため（このテストの配置だけ数える）
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    listNeta.mockResolvedValue([mk("r", "rhythm", { title: "ドラム素材", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } })]);
+    placeChild.mockResolvedValue({ ok: true });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await userEvent.click(screen.getByLabelText("place-rhythm-0"));
+    await userEvent.click(await screen.findByText("ドラム素材"));
+    await waitFor(() => expect(placeChild).toHaveBeenCalled());
+    // 8小節(4/4)を1小節ループで充填＝8回配置（頭0拍＋4,8,…,28拍）。
+    expect(placeChild.mock.calls.length).toBeGreaterThan(1);
+    expect(placeChild.mock.calls[0]).toEqual(["s1", "r", 0, 0]);
+    expect(placeChild.mock.calls.some((c) => c[2] === 4)).toBe(true); // 2小節目にも敷かれる
+  });
+  it("評価修正C: ピッカーはコーパス(library)を既定で隠す＝自作のみ／トグルで表示", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    listNeta.mockResolvedValue([
+      mk("mine", "melody", { title: "自作メロ", scope: "project" }),
+      mk("corp", "melody", { title: "pop pattern", scope: "library" }),
+    ]);
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await userEvent.click(screen.getByLabelText("place-melody-0"));
+    await screen.findByText("自作メロ");
+    expect(screen.queryByText("pop pattern")).toBeNull(); // コーパスは既定で隠れる
+    await userEvent.click(screen.getByLabelText("picker-corpus-toggle"));
+    expect(await screen.findByText("pop pattern")).toBeInTheDocument(); // トグルで出る
+  });
   it("② コード楽器2レーンの空セルに置くと ord=1 で配置される", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
     listNeta.mockResolvedValue([mk("cp9", "chord_pattern", { title: "パッド素材" })]);
