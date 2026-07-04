@@ -1,5 +1,5 @@
 import { type Ref, useState } from "react";
-import { type ChordPatternContent, applyCellTap } from "../music";
+import { type ChordPatternContent, applyCellTap, voicingPreviewPitches } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
@@ -62,7 +62,8 @@ export function ChordPatternEditor({
   const toggleHit = (s: number) => {
     const r = applyCellTap(pattern.hits, s, dotted ? len * 1.5 : len); // 頭=消す／伸び=長さ調整／空き=新規
     onChange({ ...pattern, hits: r.hits });
-    if (r.placed) void previewNote({ pitch: top, start: 0, dur: 0.4 }); // 置いた合図＝トップ音を軽く
+    // 置いた合図＝現在の voicing で C を和音プレビュー（ドミソ／単音でなく響きで確認）。
+    if (r.placed) for (const p of voicingPreviewPitches({ ...v, top })) void previewNote({ pitch: p, start: 0, dur: 0.5 });
   };
 
   // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。

@@ -476,12 +476,18 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
 }
 
 // コード楽器 grid のセルタップ→hits の更新（純関数・契約テスト用）。
-// 頭(onset)＝消す／伸び(sustain)or末尾直後＝そのノートの終わりを s に（長さ調整＝詰める/1つ伸ばす）／空き＝新規配置。
+// 頭(onset)＝消す／伸び(sustain)の"上"＝そのノートの終わりを s に詰める（長さ調整）／空き＝新規配置。
+// ※末尾の直後(step+dur)は"空き"扱い＝新規配置できる（隣接した音 x--x を打てるように・伸ばしと衝突させない）。
 export function applyCellTap(hits: ChordHit[], s: number, placeLen: number): { hits: ChordHit[]; placed: boolean } {
   if (hits.some((h) => h.step === s)) return { hits: hits.filter((h) => h.step !== s), placed: false };
-  const owner = hits.find((h) => h.step < s && s <= h.step + h.dur);
+  const owner = hits.find((h) => h.step < s && s < h.step + h.dur); // 伸びの"上"だけ（末尾直後は含めない）
   if (owner) return { hits: hits.map((h) => (h === owner ? { ...h, dur: s - h.step + 1 } : h)), placed: false };
   return { hits: [...hits, { step: s, dur: placeLen }].sort((a, b) => a.step - b.step), placed: true };
+}
+
+// 入力時プレビュー用＝現在の voicing で C を鳴らした実音（ドミソ）。単音でなく和音で確認できる。
+export function voicingPreviewPitches(v: ChordVoicing): number[] {
+  return voiceChord(0, "", v); // C メジャーを現在の voicing で（top/close-open/powerChord 反映）
 }
 
 export function isChordPattern(content: unknown): content is ChordPatternContent {

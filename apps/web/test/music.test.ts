@@ -435,17 +435,33 @@ describe("music", () => {
       expect(down[0]! > down[2]!).toBe(true); // 降順で辿る
       expect(up.slice().reverse()).toEqual(down); // 完全に逆順
     });
-    it("セルタップ：頭=消す／伸び=長さ調整／末尾直後=1つ伸ばす／空き=新規（applyCellTap）", async () => {
+    it("セルタップ：頭=消す／伸びの上=長さ調整／末尾直後や空き=新規（applyCellTap）", async () => {
       const { applyCellTap } = await import("../src/music");
       const hits = [{ step: 0, dur: 4 }]; // step0-3 を占有
-      // 頭(0)＝消す
-      expect(applyCellTap(hits, 0, 4)).toEqual({ hits: [], placed: false });
-      // 伸びの上(2)＝終わりを2に＝dur 3（詰める）
-      expect(applyCellTap(hits, 2, 4)).toEqual({ hits: [{ step: 0, dur: 3 }], placed: false });
-      // 末尾直後(4=step+dur)＝1つ伸ばす＝dur 5
-      expect(applyCellTap(hits, 4, 4)).toEqual({ hits: [{ step: 0, dur: 5 }], placed: false });
-      // 離れた空き(8)＝新規配置（長さツール4）
-      expect(applyCellTap(hits, 8, 4)).toEqual({ hits: [{ step: 0, dur: 4 }, { step: 8, dur: 4 }], placed: true });
+      expect(applyCellTap(hits, 0, 4)).toEqual({ hits: [], placed: false }); // 頭=消す
+      expect(applyCellTap(hits, 2, 4)).toEqual({ hits: [{ step: 0, dur: 3 }], placed: false }); // 伸びの上(2)=dur 3に詰める
+      // 末尾の直後(4=step+dur)は"空き"＝新規配置できる（隣接した音を打てる／伸ばしと衝突しない）
+      expect(applyCellTap(hits, 4, 1)).toEqual({ hits: [{ step: 0, dur: 4 }, { step: 4, dur: 1 }], placed: true });
+    });
+    it("打ち込みテスト：x--- x--x .x-. x---（x=打点/-=伸ばし/.=休符）が1小節で組める", async () => {
+      const { applyCellTap } = await import("../src/music");
+      // x=length を選んで打点、- は自動の伸び、. は置かない。長さ: x---=4, x--=3(付点8分), 単x=1, x-=2。
+      const taps: [number, number][] = [
+        [0, 4], // x---（step0, dur4）
+        [4, 3], // x--（step4, dur3＝付点8分）
+        [7, 1], // x（step7, dur1）← 前の音の直後だが"新規"で置ける（旧・伸ばし食いバグの回帰防止）
+        [9, 2], // .x-（step9, dur2／step8は休符=置かない）
+        [12, 4], // x---（step12, dur4）
+      ];
+      let hits: { step: number; dur: number }[] = [];
+      for (const [s, len] of taps) hits = applyCellTap(hits, s, len).hits;
+      expect(hits).toEqual([
+        { step: 0, dur: 4 },
+        { step: 4, dur: 3 },
+        { step: 7, dur: 1 },
+        { step: 9, dur: 2 },
+        { step: 12, dur: 4 },
+      ]);
     });
     it("open は構成音を1つおきに広げる（close と異なる）", () => {
       const close = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch);
