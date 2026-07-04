@@ -541,6 +541,14 @@ details.theme summary {
 .ps-row-actions svg {
   display: block;
 }
+/* 設定の歯車＝金属グラデ(Icon側)＋ホバーで回る（歯車らしい遊び）。 */
+.gear[aria-label="settings"] svg {
+  transition: transform 0.4s ease;
+  filter: drop-shadow(0 0 3px rgba(232, 161, 60, 0.35));
+}
+.gear[aria-label="settings"]:hover svg {
+  transform: rotate(90deg);
+}
 .ps-title svg {
   vertical-align: -3px;
 }

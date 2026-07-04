@@ -18,17 +18,29 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M4 13 6 5h12l2 8v6H4z" />
         </svg>
       );
-    case "gear": // 歯付きの歯車（太陽と紛れないよう外周に歯＋中央ハブ）
+    case "gear": {
+      // 歯付きの歯車（外周に歯＋中央ハブ）。設定ボタン専用＝金属的なアンバー→オレンジのグラデで
+      // 他のヘッダアイコン(muted)より"効く"色に（オーナー「歯車の色をリッチに」）。
+      const g = "gearGrad";
       return (
         <svg {...s}>
-          <circle {...st} cx="12" cy="12" r="5.4" />
-          <circle cx="12" cy="12" r="1.9" fill="currentColor" />
+          <defs>
+            <linearGradient id={g} x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stopColor="#f4d06b" />
+              <stop offset="0.55" stopColor="#e8a13c" />
+              <stop offset="1" stopColor="#d9772e" />
+            </linearGradient>
+          </defs>
+          <circle {...st} stroke={`url(#${g})`} cx="12" cy="12" r="5.4" />
+          <circle cx="12" cy="12" r="1.9" fill={`url(#${g})`} />
           <path
             {...st}
+            stroke={`url(#${g})`}
             d="M12 3.6v2.2M12 18.2v2.2M3.6 12h2.2M18.2 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M18 6l-1.6 1.6M7.6 16.4 6 18"
           />
         </svg>
       );
+    }
     case "chat":
       return (
         <svg {...s}>

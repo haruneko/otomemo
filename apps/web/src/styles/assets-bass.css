@@ -1,38 +1,163 @@
 /* #77 asset(SoundFont)・#bass 相対度数グリッド */
-/* #77 SoundFont 一覧 */
+/* #77 SoundFont 設定（リッチ版：使用中バッジ・状態ピル・試聴パレット） */
+.sf-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sf-head h3 {
+  margin: 0;
+}
+.sf-status-pill {
+  font-size: 0.72rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: #23262c;
+}
+.sf-status-pill.ok {
+  color: #63c98a;
+  border-color: color-mix(in srgb, #3ea36a 55%, transparent);
+  background: color-mix(in srgb, #3ea36a 16%, #23262c);
+}
+.sf-status-pill.bad {
+  color: #eb7a63;
+  border-color: color-mix(in srgb, #e0533f 55%, transparent);
+  background: color-mix(in srgb, #e0533f 15%, #23262c);
+}
 .sf-list {
   list-style: none;
   padding: 0;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 .sf-item {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.sf-item.on {
-  font-weight: 600;
-}
 .sf-pick {
   flex: 1;
   min-width: 0; /* #67 狭幅で長いファイル名がはみ出さないよう省略 */
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
+  background: #23262c;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.sf-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+}
+.sf-item.on .sf-pick {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, #23262c);
+}
+.sf-item.on .sf-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.sf-name {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: #2b2f36;
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 5px 8px;
+  font-weight: 500;
 }
-.sf-item.on .sf-pick {
+.sf-size {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+}
+.sf-badge {
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.sf-del {
+  flex: 0 0 auto;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.sf-del:hover {
+  color: #eb7a63;
+  border-color: color-mix(in srgb, #e0533f 55%, transparent);
+}
+.sf-upload-btn {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--fg);
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.sf-upload-btn:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.sf-empty {
+  padding: 8px 2px;
+}
+/* 試聴パレット＝GM音色チップ（読み込んだ音源で鳴らす）。 */
+.sf-audition {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.sf-audition-head {
+  display: block;
+  font-size: 0.74rem;
+  margin-bottom: 8px;
+}
+.sf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sf-chip {
+  font-size: 0.8rem;
+  color: var(--fg);
+  background: linear-gradient(180deg, #2c3038, #23262c);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 13px;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.15s ease;
+}
+.sf-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+.sf-chip:active {
+  transform: scale(0.94);
   border-color: var(--accent);
 }
+.sf-actions {
+  margin-top: 12px;
+}
 .sf-err {
-  color: #e0533f;
+  color: #eb7a63;
+  font-size: 0.8rem;
 }
 form[aria-label="capture"] {
   display: grid;
