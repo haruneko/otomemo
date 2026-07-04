@@ -285,44 +285,7 @@
   gap: 6px;
   align-items: center;
 }
-/* 種別タブ＝作成タイル(create-tiles)と同じ「アイコン＋ラベル・種別色」に統一。 */
-/* 種別タブ＝コンパクトな横チップ（アイコン＋ラベル横並び）。旧: 4列の縦長スクエアで中身が
-   小さく余白だらけ(スカスカ・オーナー指摘)だった。 */
-.picker-kinds {
-  display: flex;
-  flex-wrap: nowrap; /* 1行に詰める（オーナー）＝横スクロール（ダイアログ内で収まる）。 */
-  overflow-x: auto;
-  gap: 5px;
-  margin: 6px 0;
-  padding-bottom: 2px;
-  scrollbar-width: thin;
-}
-.picker-kinds button {
-  flex: 0 0 auto; /* 内容ぶんの横チップを1行に並べる */
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  background: #1b1e23;
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 11px;
-  font-size: 0.73rem;
-  font-weight: 600;
-}
-.picker-kinds button svg {
-  color: var(--k, var(--accent)); /* アイコン＝種別色 */
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-}
-.picker-kinds button.on {
-  border-color: var(--k, var(--accent));
-  box-shadow: inset 0 0 0 1px var(--k, var(--accent));
-  background: color-mix(in srgb, var(--k, var(--accent)) 16%, #1b1e23);
-}
+/* ※種別タブは撤去（タップしたレーンに固定・置く種別はヘッダの色付きアイコンで示す）。 */
 /* ピッカー検索行＝絞り込み入力＋コーパス表示トグル。 */
 .picker-search-row {
   display: flex;
@@ -354,6 +317,16 @@
 .picker-crumb .crumb-fix {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+/* 置く種別＝色付きアイコン（撤去した種別タブの代わり・絵と色だけ）。色は inline style。 */
+.picker-crumb .crumb-kind {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+.picker-crumb .crumb-kind svg {
+  width: 18px;
+  height: 18px;
 }
 .picker-crumb .crumb-sep {
   flex: 0 0 auto;

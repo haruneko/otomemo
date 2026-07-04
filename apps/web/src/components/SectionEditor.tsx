@@ -755,7 +755,10 @@ export function SectionEditor({
               <span className="picker-crumb">
                 <span className="crumb-sec">{liveTitle || KIND_LABEL[neta.kind]}</span>
                 <span className="crumb-sep" aria-hidden="true">▸</span>
-                <span className="crumb-fix">{picker.lane.label}</span>
+                {/* 置く種別＝絵＋色だけ（撤去した種別タブの代わりに"今なにを置くか"を示すラベル）。 */}
+                <span className="crumb-kind" style={{ color: LANE_COLOR[picker.lane.key] ?? "var(--accent)" }} title={picker.lane.label}>
+                  <KindIcon kind={picker.lane.kinds[0]!} />
+                </span>
                 <span className="crumb-sep" aria-hidden="true">▸</span>
                 <span className="crumb-fix">{picker.position / BPB + 1}小節目</span>
               </span>
@@ -763,22 +766,8 @@ export function SectionEditor({
                 ✕
               </button>
             </header>
-            {/* 種別を選ぶ（セクション or パート＝メロ/コード/ベース/リズム）。 */}
-            <div className="picker-kinds">
-              {LANES.map((l) => (
-                <button
-                  key={l.key}
-                  type="button"
-                  aria-label={`picker-kind-${l.key}`}
-                  className={l.key === picker.lane.key ? "on" : ""}
-                  style={{ ["--k" as string]: LANE_COLOR[l.key] ?? "var(--accent)" }}
-                  onClick={() => setPicker((p) => (p ? { ...p, lane: l } : p))}
-                >
-                  <KindIcon kind={l.kinds[0]!} />
-                  <span>{l.label}</span>
-                </button>
-              ))}
-            </div>
+            {/* 種別タブは撤去＝タップしたレーンに固定（別パートはそのレーンのセルをタップ）。
+                今なにを置くかはヘッダの色付きアイコンで示す（オーナー）。 */}
             {/* 絞り込み＝検索を主役に、その下に元ネタ(器)＋拍子一致のみを1行で。ラベルは"絞り込み"文脈で
                 自明なので付けない（オーナー）。生コーパスは出さない＝自作から選ぶ。 */}
             <div className="picker-search-row">
