@@ -93,12 +93,15 @@ const LANE_COLOR: Record<string, string> = {
 type Lane = LaneDef;
 type Child = CompositionNode["children"][number];
 
-// ③ ループ伸ばしのタイル位置＝元ブロック(fromPos)の後ろに unit 刻みで反復（各ループが endBeat と
-// グリッド total 内に完全に収まる位置だけ）。純関数＝配置の契約としてテストする。
+// ③ ループ伸ばしのタイル位置＝元ブロック(fromPos)の後ろに unit 刻みで反復。
+// 各コピーは「開始 p がドラッグ位置 endBeat 内(p<endBeat)」かつ「コピー全体がグリッド total に収まる(p+unit<=total)」なら置く。
+// ＝ドラッグ先を少し超える程度でコピー1個が確実に置ける（旧「コピー全体が endBeat 内」だと、ネタが
+//   グリッドの大きな割合を占める時＝section をsongでループ等、端まで精密ドラッグしないと1個も置けなかった）。
 export function loopPositions(fromPos: number, unit: number, endBeat: number, total: number): number[] {
   const out: number[] = [];
   if (unit <= 0) return out;
-  for (let p = fromPos + unit; p + unit <= endBeat + 1e-6 && p + unit <= total + 1e-6; p += unit) {
+  for (let p = fromPos + unit; p + unit <= total + 1e-6; p += unit) {
+    if (p >= endBeat - 1e-6) break; // ドラッグ位置を過ぎた＝これ以上は置かない
     out.push(Math.round(p * 1e6) / 1e6);
   }
   return out;

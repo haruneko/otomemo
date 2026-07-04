@@ -230,14 +230,18 @@ export class Core {
   }
 
   /** 合成ツリーを再帰取得（DAGなので訪問済みガードでサイクル防止）。compose辺＋neta ノードを束ねる。 */
-  getComposition(id: string, seen = new Set<string>()): CompositionNode | null {
+  // ancestors＝**今たどっている経路（先祖）** のみ。真の循環(先祖に自分)だけ止め、
+  // 同じネタの**繰り返し配置**(section を song でループ等＝DAG)は各所で完全に展開する。
+  // ※旧実装は横断全体で1つの seen を共有＝2個目以降の同一ネタが children:[] になり
+  //   合成(再生)で無音・伸ばしたsectionが鳴らないバグの原因だった。
+  getComposition(id: string, ancestors = new Set<string>()): CompositionNode | null {
     const neta = this.getNeta(id);
     if (!neta) return null;
-    if (seen.has(id)) return { neta, children: [] };
-    seen.add(id);
+    if (ancestors.has(id)) return { neta, children: [] }; // 循環（先祖に自分）だけ打ち切る
+    const next = new Set(ancestors).add(id); // この経路の先祖に自分を足す（枝ごとに独立）
     const children = this.compose
       .childEdges(id)
-      .map((r) => ({ position: r.position, ord: r.ord, node: this.getComposition(r.child_id, seen) }))
+      .map((r) => ({ position: r.position, ord: r.ord, node: this.getComposition(r.child_id, next) }))
       .filter((c): c is { position: number; ord: number; node: CompositionNode } => c.node !== null);
     return { neta, children };
   }

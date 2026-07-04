@@ -335,3 +335,20 @@ describe("deleteNeta は reap を蘇生させない (#97)", () => {
     expect(rows[0]!.neta_id).toBeNull();
   });
 });
+
+describe("getComposition：繰り返し配置は各所で展開・循環だけ打ち切る（伸ばしたsectionが鳴る）", () => {
+  it("同じ section を2箇所に置くと、両方とも子(パート)が展開される（旧: 2個目が空だった）", () => {
+    const song = core.createNeta({ kind: "song", title: "S" });
+    const sec = core.createNeta({ kind: "section", title: "A" });
+    const mel = core.createNeta({ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } });
+    core.placeChild(sec.id, mel.id, 0, 0);
+    core.placeChild(song.id, sec.id, 0, 0);
+    core.placeChild(song.id, sec.id, 16, 0); // ループ＝同一 section をもう1箇所
+    const tree = core.getComposition(song.id)!;
+    expect(tree.children.length).toBe(2);
+    // 両方の section が melody 子を持つ（2個目も空でない＝合成で鳴る）
+    expect(tree.children.map((c) => c.node.children.length)).toEqual([1, 1]);
+  });
+  // ※真の循環は placeChild(descendantIds) が配置時点で拒否＝データに存在しない。
+  // getComposition の ancestors ガードはその上の防御的バックストップ（データ破損時の無限再帰止め）。
+});

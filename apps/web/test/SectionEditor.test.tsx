@@ -23,13 +23,16 @@ import { SectionEditor, loopPositions } from "../src/components/SectionEditor";
 import { beatsPerBar } from "../src/music";
 
 describe("loopPositions（③ ループ伸ばしのタイル反復位置）", () => {
-  it("元ブロックの後ろに unit 刻みで、収まるループだけ並べる（fromPos は据え置き＝含めない）", () => {
-    expect(loopPositions(0, 4, 8, 32)).toEqual([4]); // 8拍まで→4拍に1ループ
+  it("元ブロックの後ろに unit 刻みで、開始がドラッグ内のループを並べる（fromPos は据え置き＝含めない）", () => {
+    expect(loopPositions(0, 4, 8, 32)).toEqual([4]); // 8拍まで→開始4のみ(開始8は endBeat 到達で止め)
     expect(loopPositions(0, 4, 16, 32)).toEqual([4, 8, 12]); // 16拍まで→3ループ
   });
-  it("最後のループが端に収まらなければ置かない（半端は切る）／total で頭打ち", () => {
-    expect(loopPositions(0, 4, 7, 32)).toEqual([]); // 4+4=8 > 7＝収まらない
+  it("ドラッグ先を少し過ぎたコピーは置く（半端ピクセルでも1個は確実に）／グリッド total で頭打ち", () => {
+    // 開始 p<endBeat かつ p+unit<=total なら置く＝ネタが大きくても端まで精密ドラッグ不要（修正）。
+    expect(loopPositions(0, 4, 7, 32)).toEqual([4]); // 開始4<7 → 置く（コピーは4-8＝ドラッグ7を少し超えてよい）
     expect(loopPositions(0, 4, 100, 12)).toEqual([4, 8]); // total=12 で頭打ち（12+4=16>12 で停止）
+    // section を song でループ再現：4小節(unit16)を8小節グリッド(total32)で、半分過ぎに置けば1個載る（旧仕様は端pxまで不可）。
+    expect(loopPositions(0, 16, 20, 32)).toEqual([16]);
   });
   it("2小節(8拍)ユニットは8拍刻み", () => {
     expect(loopPositions(0, 8, 24, 32)).toEqual([8, 16]);
