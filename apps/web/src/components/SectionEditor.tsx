@@ -94,14 +94,14 @@ type Lane = LaneDef;
 type Child = CompositionNode["children"][number];
 
 // ③ ループ伸ばしのタイル位置＝元ブロック(fromPos)の後ろに unit 刻みで反復。
-// 各コピーは「開始 p がドラッグ位置 endBeat 内(p<endBeat)」かつ「コピー全体がグリッド total に収まる(p+unit<=total)」なら置く。
-// ＝ドラッグ先を少し超える程度でコピー1個が確実に置ける（旧「コピー全体が endBeat 内」だと、ネタが
-//   グリッドの大きな割合を占める時＝section をsongでループ等、端まで精密ドラッグしないと1個も置けなかった）。
+// 各コピー p は「ドラッグがその**中点(p+unit/2)を過ぎた**」＝半分まで引いたら確定（p+unit/2<endBeat）。
+// かつ「コピー全体がグリッド total に収まる(p+unit<=total)」こと。
+// ＝開始を過ぎた瞬間に全長が飛び出す（後ろに飛び出し過ぎ・オーナー指摘）のを防ぐ＝半分引いてから入る。
 export function loopPositions(fromPos: number, unit: number, endBeat: number, total: number): number[] {
   const out: number[] = [];
   if (unit <= 0) return out;
   for (let p = fromPos + unit; p + unit <= total + 1e-6; p += unit) {
-    if (p >= endBeat - 1e-6) break; // ドラッグ位置を過ぎた＝これ以上は置かない
+    if (p + unit / 2 >= endBeat - 1e-6) break; // まだ中点まで引いてない＝置かない
     out.push(Math.round(p * 1e6) / 1e6);
   }
   return out;
@@ -686,16 +686,23 @@ export function SectionEditor({
                   )}
                 </button>
               ))}
-              {drag && drag.laneKey === lane.key && (
-                <div
-                  className="loop-ghost"
-                  aria-hidden="true"
-                  style={{
-                    left: `${(drag.fromPos / TOTAL) * 100}%`,
-                    width: `${((Math.min(drag.endBeat, TOTAL) - drag.fromPos) / TOTAL) * 100}%`,
-                  }}
-                />
-              )}
+              {drag &&
+                drag.laneKey === lane.key &&
+                (() => {
+                  // ゴーストは「実際に確定するコピー」までスナップ＝見た目＝結果（中点を過ぎたぶんだけ伸びる）。
+                  const ps = loopPositions(drag.fromPos, drag.unit, drag.endBeat, TOTAL);
+                  const end = (ps.length ? Math.max(...ps) : drag.fromPos) + drag.unit; // 最後のコピー終端（無ければ元ブロック終端）
+                  return (
+                    <div
+                      className="loop-ghost"
+                      aria-hidden="true"
+                      style={{
+                        left: `${(drag.fromPos / TOTAL) * 100}%`,
+                        width: `${((Math.min(end, TOTAL) - drag.fromPos) / TOTAL) * 100}%`,
+                      }}
+                    />
+                  );
+                })()}
             </div>
           </div>
         ))}

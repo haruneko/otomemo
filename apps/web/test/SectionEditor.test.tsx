@@ -23,16 +23,18 @@ import { SectionEditor, loopPositions } from "../src/components/SectionEditor";
 import { beatsPerBar } from "../src/music";
 
 describe("loopPositions（③ ループ伸ばしのタイル反復位置）", () => {
-  it("元ブロックの後ろに unit 刻みで、開始がドラッグ内のループを並べる（fromPos は据え置き＝含めない）", () => {
-    expect(loopPositions(0, 4, 8, 32)).toEqual([4]); // 8拍まで→開始4のみ(開始8は endBeat 到達で止め)
-    expect(loopPositions(0, 4, 16, 32)).toEqual([4, 8, 12]); // 16拍まで→3ループ
+  it("元ブロックの後ろに unit 刻みで、中点を過ぎたループを並べる（fromPos は据え置き＝含めない）", () => {
+    expect(loopPositions(0, 4, 8, 32)).toEqual([4]); // 4-8 の中点6<8 → 入る
+    expect(loopPositions(0, 4, 16, 32)).toEqual([4, 8, 12]); // 中点6/10/14 <16 → 3ループ
   });
-  it("ドラッグ先を少し過ぎたコピーは置く（半端ピクセルでも1個は確実に）／グリッド total で頭打ち", () => {
-    // 開始 p<endBeat かつ p+unit<=total なら置く＝ネタが大きくても端まで精密ドラッグ不要（修正）。
-    expect(loopPositions(0, 4, 7, 32)).toEqual([4]); // 開始4<7 → 置く（コピーは4-8＝ドラッグ7を少し超えてよい）
+  it("コピーは中点まで引いて確定＝少し引いただけで全長が飛び出さない／グリッド total で頭打ち", () => {
+    // p+unit/2 < endBeat（中点超え）で確定。半分引かないと入らない＝後ろに飛び出し過ぎない（オーナー指摘）。
+    expect(loopPositions(0, 4, 7, 32)).toEqual([4]); // 4-8 の中点6<7 → 入る
+    expect(loopPositions(0, 4, 5, 32)).toEqual([]); // 中点6>=5 → まだ入らない
+    // section を song でループ：4小節(unit16)を8小節グリッド(total32)。中点24を過ぎたら1個。
+    expect(loopPositions(0, 16, 20, 32)).toEqual([]); // 中点24>=20 → まだ
+    expect(loopPositions(0, 16, 26, 32)).toEqual([16]); // 中点24<26 → 入る
     expect(loopPositions(0, 4, 100, 12)).toEqual([4, 8]); // total=12 で頭打ち（12+4=16>12 で停止）
-    // section を song でループ再現：4小節(unit16)を8小節グリッド(total32)で、半分過ぎに置けば1個載る（旧仕様は端pxまで不可）。
-    expect(loopPositions(0, 16, 20, 32)).toEqual([16]);
   });
   it("2小節(8拍)ユニットは8拍刻み", () => {
     expect(loopPositions(0, 8, 24, 32)).toEqual([8, 16]);
