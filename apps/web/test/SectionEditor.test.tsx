@@ -138,18 +138,34 @@ describe("SectionEditor (3-lane timeline)", () => {
     await userEvent.click(await screen.findByLabelText("picker-create"));
     await waitFor(() => expect(createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "chord_progression", meter: "6/8" })));
   });
-  it("評価修正C: ピッカーはコーパス(library)を既定で隠す＝自作のみ／トグルで表示", async () => {
+  it("ピッカー(B): 拍子一致のみ既定＋トグルで拍子違いも／コーパス(library)は出さない", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
     listNeta.mockResolvedValue([
-      mk("mine", "melody", { title: "自作メロ", scope: "project" }),
-      mk("corp", "melody", { title: "pop pattern", scope: "library" }),
+      mk("m44", "melody", { title: "よん", meter: "4/4" }),
+      mk("m68", "melody", { title: "ろくはち", meter: "6/8" }),
+      mk("corp", "melody", { title: "pop pattern", scope: "library", meter: "4/4" }),
     ]);
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} meter="4/4" />);
     await userEvent.click(screen.getByLabelText("place-melody-0"));
-    await screen.findByText("自作メロ");
-    expect(screen.queryByText("pop pattern")).toBeNull(); // コーパスは既定で隠れる
-    await userEvent.click(screen.getByLabelText("picker-corpus-toggle"));
-    expect(await screen.findByText("pop pattern")).toBeInTheDocument(); // トグルで出る
+    await screen.findByText("よん");
+    expect(screen.queryByText("ろくはち")).toBeNull(); // 拍子違いは既定で隠れる
+    expect(screen.queryByText("pop pattern")).toBeNull(); // コーパスは直接出さない
+    await userEvent.click(screen.getByLabelText("picker-other-meter"));
+    expect(await screen.findByText("ろくはち")).toBeInTheDocument(); // トグルで拍子違いも
+    expect(screen.queryByText("pop pattern")).toBeNull(); // それでもコーパスは出ない
+  });
+  it("ピッカー(A): 母集団を器で絞る＝section の器が既定／「自作すべて」で全部", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section", { tags: ["prj:曲A"] }), children: [] });
+    listNeta.mockResolvedValue([
+      mk("ma", "melody", { title: "曲Aメロ", tags: ["prj:曲A"], meter: "4/4" }),
+      mk("mb", "melody", { title: "曲Bメロ", tags: ["prj:曲B"], meter: "4/4" }),
+    ]);
+    render(<SectionEditor neta={mk("s1", "section", { tags: ["prj:曲A"] })} keyPc={0} tempo={120} meter="4/4" />);
+    await userEvent.click(screen.getByLabelText("place-melody-0"));
+    await screen.findByText("曲Aメロ"); // section の器=曲A が既定ソース
+    expect(screen.queryByText("曲Bメロ")).toBeNull();
+    await userEvent.selectOptions(screen.getByLabelText("picker-source"), ""); // 自作すべて
+    expect(await screen.findByText("曲Bメロ")).toBeInTheDocument();
   });
   it("② コード楽器2レーンの空セルに置くと ord=1 で配置される", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });

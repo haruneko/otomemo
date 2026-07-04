@@ -284,7 +284,32 @@
   flex: 1;
   min-width: 0;
 }
-.picker-corpus-toggle {
+/* 母集団を器で絞る（元セレクト）＋拍子違いトグル（A/B）。 */
+.picker-scope-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.picker-source {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  flex: 1;
+  min-width: 0;
+}
+.picker-source select {
+  flex: 1;
+  min-width: 0;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.82rem;
+}
+.picker-meter-toggle {
   flex: 0 0 auto;
   background: #1b1e23;
   border: 1px solid var(--line);
@@ -294,7 +319,7 @@
   font-size: 0.78rem;
   white-space: nowrap;
 }
-.picker-corpus-toggle.on {
+.picker-meter-toggle.on {
   border-color: var(--accent);
   color: var(--fg);
   background: color-mix(in srgb, var(--accent) 18%, #1b1e23);

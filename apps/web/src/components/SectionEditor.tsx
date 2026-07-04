@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
 import { KIND_LABEL } from "../kinds";
+import { isProjectTag, projectName } from "../project";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
 
@@ -162,7 +163,9 @@ export function SectionEditor({
   // ③ 右端ドラッグでループ伸ばし中のプレビュー（fromPos〜endBeat をゴースト表示）。
   const [drag, setDrag] = useState<{ childId: string; laneKey: string; fromPos: number; unit: number; endBeat: number } | null>(null);
   const [pq, setPq] = useState(""); // ピッカーの絞り込み
-  const [pickerCorpus, setPickerCorpus] = useState(false); // ピッカーでコーパス(library)も出すか（既定=自作のみ・評価修正C）
+  // ピッカーの母集団を器で絞る（A）＝どのプロジェクトのネタから選ぶか（""=自作すべて）。
+  const [pickerSource, setPickerSource] = useState<string>("");
+  const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
   const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
   const [genBusy, setGenBusy] = useState(false);
@@ -171,6 +174,16 @@ export function SectionEditor({
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
   const liveMeter = meter ?? neta.meter ?? undefined;
   const liveTitle = (title ?? neta.title ?? "").trim(); // 生成/作成/MIDI名に使うライブタイトル
+  // ネタの所属プロジェクト（prj: タグ由来）。母集団を器で絞る（A）に使う。
+  const netaProjects = (n: Neta) => (n.tags ?? []).filter(isProjectTag).map(projectName);
+  // ピッカーの相性（B）：拍子一致（bpb比較）。meter 未指定(null)は"不特定"＝中立で表示（断片を隠さない）。
+  const sameMeter = (n: Neta) => n.meter == null || beatsPerBar(n.meter) === BPB;
+  const fifthsPos = (pc: number) => (((pc * 7) % 12) + 12) % 12;
+  const keyDist = (n: Neta) => {
+    if (n.key == null) return 3; // keyless＝中立（一致と不一致の中間）
+    const d = Math.abs(fifthsPos(n.key) - fifthsPos(keyPc));
+    return Math.min(d, 12 - d);
+  };
   const BPB = beatsPerBar(liveMeter); // 1小節の拍数（#51・編集中はprop優先）
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
@@ -231,11 +244,15 @@ export function SectionEditor({
   // その位置が既にブロックで埋まっているか（レーン全体でなく**占有セルだけ**不可＝別小節には置ける）。
   const occupiedAt = (lane: Lane, position: number) =>
     laneChildren(lane).some((c) => c.position <= position + 1e-6 && position < c.position + childDur(c) - 1e-6);
+  // この曲(section)が属する器＝母集団の既定ソース（A）。無ければ「自作すべて」。
+  const sectionProjects = (neta.tags ?? []).filter(isProjectTag).map(projectName);
   async function openPicker(lane: Lane, position: number) {
     if (occupiedAt(lane, position)) return; // 既に埋まってる所には置かせない（CV3・占有セルのみ）
-    // project＋library 両方を候補に（library=連想元コーパス・椎名林檎等）。種別は picker 内で切替。
-    const all = await api.listNeta({ scope: "all", limit: 2000 });
+    // 自作ネタのみ取得（コーパス=libraryは直接選ばせない＝推薦経由・Phase2）。
+    const all = await api.listNeta({ scope: "project", limit: 2000 });
     setPq("");
+    setPickerSource(sectionProjects[0] ?? ""); // 既定＝この曲の器
+    setPickerOtherMeter(false);
     setPicker({ lane, position, all });
   }
   // ネタの実長（拍）。配置時のループ充填に使う。
@@ -701,6 +718,28 @@ export function SectionEditor({
                 </button>
               ))}
             </div>
+            {/* 母集団を器で絞る（A）＋拍子一致のみ（B）。生コーパスは出さない＝自作から選ぶ。 */}
+            <div className="picker-scope-row">
+              <label className="picker-source">
+                <span className="muted">元</span>
+                <select aria-label="picker-source" value={pickerSource} onChange={(e) => setPickerSource(e.target.value)}>
+                  <option value="">自作すべて</option>
+                  {[...new Set(picker.all.flatMap(netaProjects))].sort().map((pj) => (
+                    <option key={pj} value={pj}>{pj}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={"picker-meter-toggle" + (pickerOtherMeter ? " on" : "")}
+                aria-label="picker-other-meter"
+                aria-pressed={pickerOtherMeter}
+                title={pickerOtherMeter ? "拍子一致のみに戻す" : "拍子違いも出す"}
+                onClick={() => setPickerOtherMeter((v) => !v)}
+              >
+                拍子違いも
+              </button>
+            </div>
             <div className="picker-search-row">
               <input
                 aria-label="picker-search"
@@ -709,17 +748,6 @@ export function SectionEditor({
                 value={pq}
                 onChange={(e) => setPq(e.target.value)}
               />
-              {/* コーパス(library=参考の辞書)は既定で隠す＝自作ネタが埋もれない（評価修正C）。 */}
-              <button
-                type="button"
-                className={"picker-corpus-toggle" + (pickerCorpus ? " on" : "")}
-                aria-label="picker-corpus-toggle"
-                aria-pressed={pickerCorpus}
-                title={pickerCorpus ? "コーパスを隠す" : "コーパス（参考）も表示"}
-                onClick={() => setPickerCorpus((v) => !v)}
-              >
-                コーパス
-              </button>
             </div>
             {/* 探して無ければ作る：このレーンの kind で新規作成→配置→編集へ。 */}
             <button type="button" className="picker-create" aria-label="picker-create" onClick={() => void createInLane()}>
@@ -728,15 +756,20 @@ export function SectionEditor({
             <div className="picker-list">
               {(() => {
                 const q = pq.toLowerCase();
-                const list = picker.all.filter(
-                  (n) =>
-                    inLane(picker.lane, n.kind) &&
-                    n.id !== neta.id &&
-                    (pickerCorpus || n.scope !== "library") && // 既定はコーパス(library)を隠す
-                    (n.title ?? n.text ?? "").toLowerCase().includes(q),
-                );
+                const list = picker.all
+                  .filter(
+                    (n) =>
+                      inLane(picker.lane, n.kind) &&
+                      n.id !== neta.id &&
+                      n.scope !== "library" && // コーパスは直接出さない（推薦経由・Phase2）
+                      (pickerSource === "" || netaProjects(n).includes(pickerSource)) && // A: 母集団を器で絞る
+                      (pickerOtherMeter || sameMeter(n)) && // B: 拍子一致のみ（既定）
+                      (n.title ?? n.text ?? "").toLowerCase().includes(q),
+                  )
+                  // B: 調が近い順→最近順（拍子は既に一致で絞れている）。
+                  .sort((a, b) => keyDist(a) - keyDist(b) || (b.created ?? "").localeCompare(a.created ?? ""));
                 if (list.length === 0)
-                  return <p className="muted">置ける{picker.lane.label}のネタがありません</p>;
+                  return <p className="muted">置ける{picker.lane.label}のネタがありません（元/拍子の条件を緩めるか、＋新規作成）</p>;
                 return list.map((n) => (
                   <button
                     key={n.id}
