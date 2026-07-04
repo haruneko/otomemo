@@ -146,11 +146,13 @@ export function SectionEditor({
   reloadSignal,
   onChanged,
   onOpenNeta,
+  title,
 }: {
   neta: Neta;
   keyPc: number;
   tempo: number;
   meter?: string; // 編集中ライブ反映用（未指定は neta.meter）
+  title?: string; // 編集中ライブタイトル（未指定は neta.title・App activeがstaleな新規曲対策）
   reloadSignal?: number; // 外部(D&D配置)からの再読込トリガ
   onChanged?: () => void;
   onOpenNeta?: (n: Neta) => void; // ブロックタップ→子ネタを編集画面で開く（潜る）
@@ -168,6 +170,7 @@ export function SectionEditor({
   const lastPartRef = useRef<{ op: string; needsChords: boolean; prog?: number; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
   const liveMeter = meter ?? neta.meter ?? undefined;
+  const liveTitle = (title ?? neta.title ?? "").trim(); // 生成/作成/MIDI名に使うライブタイトル
   const BPB = beatsPerBar(liveMeter); // 1小節の拍数（#51・編集中はprop優先）
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
@@ -455,7 +458,7 @@ export function SectionEditor({
     const lane = laneOf(cand.kind);
     const created = await api.createNeta({
       kind: cand.kind,
-      title: `${neta.title ?? "曲"} ${lane?.label ?? cand.kind}`,
+      title: `${liveTitle || "曲"} ${lane?.label ?? cand.kind}`,
       content: cand.content,
       key: keyPc,
       tempo,
@@ -491,7 +494,7 @@ export function SectionEditor({
       <div className="section-actions">
         <button
           type="button"
-          onClick={() => downloadMidi(composite(), `${neta.title ?? "section"}.mid`, tempo, liveMeter ?? null)}
+          onClick={() => downloadMidi(composite(), `${liveTitle || "section"}.mid`, tempo, liveMeter ?? null)}
         >
           MIDI
         </button>
@@ -499,7 +502,7 @@ export function SectionEditor({
           type="button"
           title="メロ/コード/ベース/リズムを別トラックに分けて書き出す"
           onClick={() =>
-            downloadMultitrackMidi(laneTracks(), `${neta.title ?? "section"}-tracks.mid`, tempo, liveMeter ?? null)
+            downloadMultitrackMidi(laneTracks(), `${liveTitle || "section"}-tracks.mid`, tempo, liveMeter ?? null)
           }
         >
           MIDI(分割)

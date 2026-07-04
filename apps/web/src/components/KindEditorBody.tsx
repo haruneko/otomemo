@@ -42,6 +42,7 @@ export interface KindEditorBodyProps {
   keyPc: number; // 調（'key' は React 予約 prop なので keyPc）
   tempo: number;
   meter: string;
+  title?: string; // 編集中ライブタイトル（section の生成/MIDI名に使う・stale活性対策）
   // 崩し候補（①道具）：候補があれば PianoRoll に候補=実線/元=ゴーストで表示・再生は候補。
   candidate?: import("../music").Note[] | null;
   candStrength?: number;
@@ -226,6 +227,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           keyPc={p.keyPc}
           tempo={p.tempo}
           meter={p.meter}
+          title={p.title}
           reloadSignal={p.reloadSignal}
           onChanged={p.onChanged}
           onOpenNeta={p.onOpenNeta}
