@@ -42,6 +42,10 @@ const MINI_LANES: { label: string; kinds: string[]; color: string }[] = [
   { label: "ベース", kinds: ["bass"], color: "--k-bass" },
   { label: "リズム", kinds: ["rhythm"], color: "--k-rhythm" },
 ];
+// #5 song カードは「構成（section 帯）」を出す（song は section を並べる編成）。
+const SONG_MINI_LANES: { label: string; kinds: string[]; color: string }[] = [
+  { label: "構成", kinds: ["section", "song"], color: "--k-section" },
+];
 const MINI_BARS_CAP = 16; // カードに出す最大小節（超過は帯を切って小節数で示す）
 
 export function SectionMini({ neta }: { neta: Neta }) {
@@ -62,14 +66,20 @@ export function SectionMini({ neta }: { neta: Neta }) {
   if (!children.length) return <p className="section-mini-empty muted">（空・タップで組む）</p>;
 
   const bpb = beatsPerBar(neta.meter);
-  const durOf = (c: CompositionNode["children"][number]) => {
-    const ns = notesForContent(c.node.neta.kind, c.node.neta.content);
+  // 子の実長。ネストした section/song は子を再帰で畳む（1小節固定でなく本当の尺・SectionEditor.childDur と同旨）。
+  const durOf = (c: CompositionNode["children"][number]): number => {
+    const k = c.node.neta.kind;
+    if (k === "section" || k === "song") {
+      const kids = c.node.children ?? [];
+      return kids.length ? Math.max(...kids.map((kc) => kc.position + durOf(kc))) : bpb;
+    }
+    const ns = notesForContent(k, c.node.neta.content);
     return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : bpb;
   };
   const endBeat = Math.max(bpb, ...children.map((c) => c.position + durOf(c)));
   const bars = Math.max(1, Math.ceil(endBeat / bpb));
   const shown = Math.min(bars, MINI_BARS_CAP);
-  const lanes = MINI_LANES.map((lane) => {
+  const lanes = (neta.kind === "song" ? SONG_MINI_LANES : MINI_LANES).map((lane) => {
     const cells = new Array(shown).fill(false);
     for (const c of children) {
       if (!lane.kinds.includes(c.node.neta.kind)) continue;

@@ -156,7 +156,8 @@ export function App() {
   }
 
   async function newSong() {
-    const s = await api.createNeta({ kind: "section", title: "新しい曲", tags: projectTags });
+    // #5 「＋曲を組む」＝kind=song（section を並べる編成）。宣言済み階層 Project⊃Song⊃section⊃leaf。
+    const s = await api.createNeta({ kind: "song", title: "新しい曲", tags: projectTags });
     await reload();
     setActive(s); // メインペーンで開く
   }

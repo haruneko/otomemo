@@ -3,17 +3,20 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend } = vi.hoisted(() => ({
-  getComposition: vi.fn(),
-  listNeta: vi.fn(),
-  placeChild: vi.fn(),
-  removeChild: vi.fn(),
-  createNeta: vi.fn(),
-  copyNeta: vi.fn(),
-  recommend: vi.fn(),
-}));
+const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong } =
+  vi.hoisted(() => ({
+    getComposition: vi.fn(),
+    listNeta: vi.fn(),
+    placeChild: vi.fn(),
+    removeChild: vi.fn(),
+    createNeta: vi.fn(),
+    copyNeta: vi.fn(),
+    recommend: vi.fn(),
+    getSong: vi.fn(),
+    updateSong: vi.fn(),
+  }));
 vi.mock("../src/api", () => ({
-  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend },
+  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong },
 }));
 
 import { SectionEditor, loopPositions } from "../src/components/SectionEditor";
@@ -54,6 +57,8 @@ const mk = (id: string, kind: string, over: Partial<Neta> = {}): Neta => ({
 describe("SectionEditor (3-lane timeline)", () => {
   beforeEach(() => {
     recommend.mockResolvedValue([]); // #20 既定＝おすすめ無し（各テストで上書き可）
+    getSong.mockResolvedValue(null); // song の SongStatus overlay（未設定）
+    updateSong.mockResolvedValue({});
     copyNeta.mockReset();
   });
 
@@ -122,6 +127,33 @@ describe("SectionEditor (3-lane timeline)", () => {
     // library はコピーしてから配置（元コーパスを汚さない）
     await waitFor(() => expect(copyNeta).toHaveBeenCalledWith("libM"));
     expect(placeChild).toHaveBeenCalledWith("s1", "copyM", 0, 0);
+  });
+
+  it("#5 song＝セクションを並べる編成（レーンは[section]のみ・パートレーンは無い）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("g1", "song"), children: [] });
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    expect(screen.getByLabelText("place-section-0")).toBeInTheDocument(); // section レーンあり
+    expect(screen.queryByLabelText("place-melody-0")).toBeNull(); // パートレーンは無い
+    expect(screen.queryByLabelText("place-rhythm-0")).toBeNull();
+  });
+
+  it("#5 section＝パート専用（section-in-section 廃止＝section レーンは無い）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    expect(screen.getByLabelText("place-melody-0")).toBeInTheDocument(); // パートレーンあり
+    expect(screen.queryByLabelText("place-section-0")).toBeNull(); // 入れ子は廃止
+  });
+
+  it("#5 song の いじる▾ は書き出しのみ（生成/ハモリはパートの道具＝section 専用）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("g1", "song"), children: [] });
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    await userEvent.click(screen.getByLabelText("tools"));
+    expect(screen.getByLabelText("export-midi")).toBeInTheDocument();
+    expect(screen.queryByLabelText("gen-gen_drums")).toBeNull(); // 生成は出さない
+    expect(screen.queryByLabelText("harmony-up")).toBeNull();
   });
 
   it("ピッカーの新規作成＝空ネタを作って配置し、そのまま編集を開く", async () => {

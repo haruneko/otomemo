@@ -60,17 +60,25 @@ import { harmonyVoice } from "../harmony";
 // ②（2026-07-03）コード楽器は2レーン（ピアノ＋パッド等を同時に鳴らす）。同 kind の行識別は
 // placement の `ord`（0=1／1=2）で行う（ord は並び/zヒントで本質非依存）。row を持つレーンは
 // laneChildren を rowOf で絞る。再生は元々全 chord_pattern 子を鳴らすので発音側は変更不要。
-const LANES: readonly { key: string; label: string; kinds: readonly string[]; row?: number }[] = [
+type LaneDef = { key: string; label: string; kinds: readonly string[]; row?: number };
+// #5 container kind でレーンを差し替え（宣言済み階層 Project⊃Song⊃section⊃leaf）。
+// section＝パート専用（入れ子廃止）。song＝section を並べる編成（[section] のみ）。
+const SECTION_LANES: readonly LaneDef[] = [
   { key: "chord", label: "コード進行", kinds: ["chord", "chord_progression"] },
   { key: "melody", label: "メロ", kinds: ["melody"] },
   { key: "chord_pattern", label: "コード楽器1", kinds: ["chord_pattern"], row: 0 },
   { key: "chord_pattern2", label: "コード楽器2", kinds: ["chord_pattern"], row: 1 },
   { key: "bass", label: "ベース", kinds: ["bass"] },
   { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
-  { key: "section", label: "セクション", kinds: ["section"] }, // #15 section をネスト配置
 ];
+const SONG_LANES: readonly LaneDef[] = [
+  { key: "section", label: "セクション", kinds: ["section"] }, // song は section を時間順に並べる
+];
+const lanesForKind = (kind: string): readonly LaneDef[] => (kind === "song" ? SONG_LANES : SECTION_LANES);
 const MIN_BARS = 8;
-const MAX_BARS = 32; // セクション尺の上限（16小節等の曲を1セクションで組めるように・評価修正A）
+const SECTION_MAX_BARS = 32; // section 尺の上限（1ブロック＝Aメロ/サビ等）
+const SONG_MAX_BARS = 64; // song 尺の上限（section を複数並べる編成）
+const maxBarsForKind = (kind: string): number => (kind === "song" ? SONG_MAX_BARS : SECTION_MAX_BARS);
 // ピッカー種別タブの色＝作成タイルと揃える（種別色・アイコン+ラベル）。chord_pattern は chord 色。
 const LANE_COLOR: Record<string, string> = {
   chord: "var(--k-chord)",
@@ -82,7 +90,7 @@ const LANE_COLOR: Record<string, string> = {
   section: "var(--k-section)",
 };
 
-type Lane = (typeof LANES)[number];
+type Lane = LaneDef;
 type Child = CompositionNode["children"][number];
 
 // ③ ループ伸ばしのタイル位置＝元ブロック(fromPos)の後ろに unit 刻みで反復（各ループが endBeat と
@@ -173,6 +181,10 @@ export function SectionEditor({
   const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
   const [eraseMode, setEraseMode] = useState(false); // 消しゴムモード＝ブロックtapで外す（PianoRollの描く/選ぶと同じモード流儀）
   const [toolsOpen, setToolsOpen] = useState(false); // いじる▾ メニュー（生成/ハモリ/書き出しを集約・メロ編集画面と整合・⑤）
+  // #5 container kind でレーン/尺を差し替え（song=section を並べる編成・section=パート専用）。
+  const isSong = neta.kind === "song";
+  const LANES = lanesForKind(neta.kind);
+  const MAX_BARS = maxBarsForKind(neta.kind);
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
   const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
   const [genBusy, setGenBusy] = useState(false);
@@ -532,7 +544,8 @@ export function SectionEditor({
           </button>
           {toolsOpen && (
             <div className="assign-menu to-right tools-menu" aria-label="tools-menu">
-              {!cand && (
+              {/* 生成/ハモリはパートを作る道具＝section 専用。song(編成)は書き出しのみ（#5）。 */}
+              {!cand && !isSong && (
                 <>
                   <div className="tools-sep">この進行に生成</div>
                   {GEN_PARTS.filter((part) => !part.needsChords || sectionChords().length > 0).map((part) => (
