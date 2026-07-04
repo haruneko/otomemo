@@ -64,7 +64,8 @@ export function SectionMini({ neta }: { neta: Neta }) {
     return () => {
       live = false;
     };
-  }, [neta.id]);
+    // neta オブジェクト依存＝一覧 reload(自動保存/配置後)で新規参照になり再取得＝子の変更がカードに反映される。
+  }, [neta]);
 
   if (!children) return null; // 取得前は何も出さない（レイアウト揺れを避ける）
   if (!children.length) return <p className="section-mini-empty muted">（空・タップで組む）</p>;
