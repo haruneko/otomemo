@@ -150,15 +150,68 @@ main {
 .app-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 h1 {
   font-size: 1.1rem;
 }
-.logo {
-  font-size: 1.5rem;
-  margin: 0;
+/* PC のみのネタ帳レール開閉（サイドバー切替）。 */
+.rail-toggle {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.15rem;
+  padding: 2px 4px;
+}
+/* アプリ名のロゴ＝ホームへ。♪マーク＋ワードマーク。 */
+.app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  color: var(--fg);
+  cursor: pointer;
+  padding: 2px 2px;
+  min-width: 0;
+}
+.app-brand .brand-mark {
+  color: var(--k-melody);
+  font-size: 1.3rem;
   line-height: 1;
+}
+.app-brand .brand-name {
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+/* パンくず＝現在のプロジェクト（タップで器画面）。長い名は省略。 */
+.app-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 2px;
+}
+.app-crumb .crumb-sep {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+.app-crumb .crumb-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.app-crumb.on .crumb-project {
+  color: var(--fg);
 }
 .gear {
   background: none;

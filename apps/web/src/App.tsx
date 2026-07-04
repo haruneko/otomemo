@@ -32,6 +32,8 @@ const ACTIVE_PROJECT_KEY = "cm-active-project";
 
 // モバイル土台：狭い画面か（≤820px、base.css のブレークポイントと一致）。リサイズ追従。
 const MOBILE_MQ = "(max-width: 820px)";
+// アプリ表示名（ヘッダ左のロゴ）。リポジトリ名(sketch-it)とは別＝いつでも変更可（仮: Motif）。
+const APP_NAME = "Motif";
 function useIsMobile(): boolean {
   const has = typeof window !== "undefined" && typeof window.matchMedia === "function";
   const [m, setM] = useState(() => has && window.matchMedia(MOBILE_MQ).matches);
@@ -390,40 +392,43 @@ export function App() {
   return (
     <main>
       {/* 編集中(モバイル)は app-head を隠す＝エディタの「← 戻る」があるので不要・上まで画面を使う。 */}
+      {/* パンくず型ヘッダ：[ロゴ=アプリ名→ホーム] › [プロジェクト名→器画面] … [📥][⚙]。
+          旧ヘッダの「☰=ホーム(意味ズレ)」「♪飾りロゴ」「🏠でホーム2重」を解消＝現在地と帰り道が明確。 */}
       {!(isMobile && active) && (
       <div className="app-head">
+        {/* PC のみ：ネタ帳レールの開閉（☰=サイドバー切替はPCでは慣習的で紛れない）。モバイルはロゴ=ホームで足りる。 */}
+        {!isMobile && (
+          <button className="rail-toggle" aria-label="toggle-rail" title="ネタ帳の開閉" onClick={() => setRailOpen((v) => !v)}>
+            ☰
+          </button>
+        )}
         <button
-          className="gear"
-          aria-label="toggle-rail"
-          title={isMobile ? "ネタ帳へ" : "ネタ帳の開閉"}
+          className="app-brand"
+          aria-label={APP_NAME}
+          title="ホーム（ネタ帳）へ"
           onClick={() => {
-            // モバイル＝一画面ずつ：☰ はホーム(ネタ帳)へ戻る。PC＝レールの開閉。
-            if (isMobile) {
-              setActive(null);
-              setProjectView(false);
-            } else setRailOpen((v) => !v);
+            setActive(null);
+            setProjectView(false);
           }}
         >
-          ☰
+          <span className="brand-mark" aria-hidden="true">♪</span>
+          <span className="brand-name">{APP_NAME}</span>
         </button>
-        <h1 className="logo" aria-label="creative_manager" title="creative_manager">
-          ♪
-        </h1>
+        {activeProject && (
+          <button
+            className={"app-crumb" + (projectView ? " on" : "")}
+            aria-label="project-home"
+            title={`${activeProject} のプロジェクト画面（曲・ファイル・会話）`}
+            onClick={() => {
+              setActive(null);
+              setProjectView(true);
+            }}
+          >
+            <span className="crumb-sep" aria-hidden="true">›</span>
+            <span className="crumb-project">{activeProject}</span>
+          </button>
+        )}
         <div className="head-right">
-          {activeProject && (
-            <button
-              className={"gear" + (projectView ? " on" : "")}
-              aria-label="project-home"
-              title={`${activeProject} のプロジェクト画面（曲・ファイル・会話）`}
-              onClick={() => {
-                // モバイル土台＝一画面ずつ：projectView で mainpane が主役になる（レール畳みの応急処置は不要に）。
-                setActive(null);
-                setProjectView(true);
-              }}
-            >
-              <Icon name="home" />
-            </button>
-          )}
           <button className="gear" aria-label="tray" title="受け取りトレイ" onClick={openTray}>
             <Icon name="inbox" />
             {doneCount > 0 && <span className="badge">{doneCount}</span>}

@@ -19,7 +19,7 @@ import { App } from "../src/App";
 describe("App", () => {
   it("renders title and empty state", async () => {
     render(<App />);
-    expect(screen.getByRole("heading", { name: "creative_manager" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Motif" })).toBeInTheDocument(); // ヘッダ左のアプリ名ロゴ
     await waitFor(() =>
       expect(screen.getByText("まだネタがありません。")).toBeInTheDocument(),
     );
