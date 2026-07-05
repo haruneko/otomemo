@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { openDb } from "./db";
 import { Core } from "./core";
 import { buildHttp } from "./http";
+import { runResearchJob } from "./research-runner";
 
 // CM_DB 未指定なら **リポジトリルートの data/cm.sqlite を絶対パスで**（cwd 依存で apps/api/data 等に
 // rogue DB を作る事故を断つ・docs/design「アーキ是正 決定4」）。import.meta.dirname=apps/api/src。
@@ -68,4 +69,27 @@ setInterval(() => {
   } catch (e) {
     console.error("schedule tick error", e);
   }
+  pumpResearch();
 }, 5000).unref();
+
+// #30 継続調査の consumer＝api が queued の research/collect を1件ずつ claude で実行（worker 置換）。
+// 直列（researchBusy）＝claude を同時多発させない。claim は原子的（queued→running）で二重取りしない。
+// runResearchJob が done/failed に確定→次tickで reaper が reference ネタ化しトレイへ。
+let researchBusy = false;
+function pumpResearch(): void {
+  if (researchBusy) return;
+  let job;
+  try {
+    job = core.claimQueued(["research", "collect"]);
+  } catch (e) {
+    console.error("research claim error", e);
+    return;
+  }
+  if (!job) return;
+  researchBusy = true;
+  console.log(`research: running job ${job.id} (${job.intent})`);
+  void runResearchJob(core, job).finally(() => {
+    researchBusy = false;
+    console.log(`research: job ${job.id} settled`);
+  });
+}

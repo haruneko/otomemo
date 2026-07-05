@@ -265,6 +265,16 @@ export class Core {
   getJob(id: string): Job | null {
     return this.job.getJob(id);
   }
+  // api 内 consumer（research 実行器）用：claim(queued→running)/complete(done+result)/fail。
+  claimQueued(intents: string[]): Job | null {
+    return this.job.claimQueued(intents);
+  }
+  completeJob(id: string, result: unknown): void {
+    this.job.completeJob(id, result);
+  }
+  failJob(id: string, error: string): void {
+    this.job.failJob(id, error);
+  }
   askQuestion(jobId: string, question: string): Job | null {
     return this.job.askQuestion(jobId, question);
   }
