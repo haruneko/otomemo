@@ -664,6 +664,23 @@ export function buildHttp(core: Core): FastifyInstance {
     Connection: "keep-alive",
   } as const;
 
+  // tool_result の content（[{type:"text", text:"<JSON>"}] or 文字列）から payload(object) を取り出す。
+  function parseToolResultPayload(content: unknown): Record<string, unknown> | null {
+    let text: string | undefined;
+    if (typeof content === "string") text = content;
+    else if (Array.isArray(content)) {
+      const t = content.find((b) => (b as { type?: string })?.type === "text") as { text?: string } | undefined;
+      text = typeof t?.text === "string" ? t.text : undefined;
+    }
+    if (text === undefined) return null;
+    try {
+      const v = JSON.parse(text);
+      return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+
   // 走行中ターンへ購読し、SSE ソケットへ書き出す（DONE 番兵→`event: done`＋close）。socket 死は握る。
   function pipeLiveToSocket(thread: string, raw: import("node:http").ServerResponse): (() => void) | null {
     return attachTurn(thread, (e) => {
@@ -692,6 +709,11 @@ export function buildHttp(core: Core): FastifyInstance {
     raw.on("close", () => detach?.()); // ブラウザが閉じたら購読解除（ターン自体は継続）
     let finalText = ""; // result イベントの最終テキスト
     let lastText = ""; // フォールバック：最後の assistant テキストブロック
+    // ★書込(capture/revise/assemble)で作られた/更新されたネタの参照を集める＝assistant メッセージに
+    //   永続化し、開き直しても「ネタへのカード/リンク」が消えないようにする（S5 でカードは非永続だった）。
+    const WRITE_VERBS = new Set(["capture", "revise", "assemble"].map((v) => `mcp__creative-manager__${v}`));
+    const toolNames = new Map<string, string>(); // tool_use id → verb 名（tool_result と突合）
+    const writtenNetas: { id: string; kind?: string; title?: string }[] = [];
     try {
       // 器（プロジェクト）の指示文を会話に効かせる：thread→project→instructions を system prompt に追記。
       const proj = core.getChatThreadProject(thread);
@@ -709,9 +731,25 @@ export function buildHttp(core: Core): FastifyInstance {
       const sess = getChatSession(thread, dbPath, repo, suffix);
       // イベントを蓄積しつつバッファへ流す（購読者＝このソケット＋あとから来る再アタッチ全部に届く）。
       await sess.say(text, (e) => {
-        const ev = e as { type?: string; result?: string; message?: { content?: Array<{ type?: string; text?: string }> } };
+        const ev = e as {
+          type?: string; result?: string;
+          message?: { content?: Array<{ type?: string; text?: string; name?: string; id?: string; tool_use_id?: string; content?: unknown }> };
+        };
         if (ev.type === "assistant") {
-          for (const b of ev.message?.content ?? []) if (b.type === "text" && b.text) lastText = b.text;
+          for (const b of ev.message?.content ?? []) {
+            if (b.type === "text" && b.text) lastText = b.text;
+            else if (b.type === "tool_use" && b.id && b.name) toolNames.set(b.id, b.name); // 書込突合用
+          }
+        } else if (ev.type === "user") {
+          // tool_result：書込 verb のものだけ、返ってきたネタ(id/kind/title)を控える。
+          for (const b of ev.message?.content ?? []) {
+            if (b.type === "tool_result" && b.tool_use_id && WRITE_VERBS.has(toolNames.get(b.tool_use_id) ?? "")) {
+              const p = parseToolResultPayload(b.content);
+              if (p && typeof p.id === "string") {
+                writtenNetas.push({ id: p.id, kind: typeof p.kind === "string" ? p.kind : undefined, title: typeof p.title === "string" ? p.title : undefined });
+              }
+            }
+          }
         } else if (ev.type === "result" && typeof ev.result === "string") {
           finalText = ev.result;
         }
@@ -720,10 +758,18 @@ export function buildHttp(core: Core): FastifyInstance {
     } catch (err) {
       pushTurnEvent(thread, { type: "error", error: String(err) });
     } finally {
-      // ★ソケットが切れていてもここまで来る（say は claude の result で解決）。締めの返信を履歴に残す。
+      // ★ソケットが切れていてもここまで来る（say は claude の result で解決）。締めの返信＋作られたネタ参照を履歴に残す。
       const outText = (finalText || lastText).trim();
-      if (outText) {
-        try { core.addChatMessage({ thread, role: "assistant", kind: "chat", text: outText }); } catch { /* 保存失敗は握る（従来どおりメモリだけでも動く） */ }
+      // 同一ネタの重複（同ターンで capture→revise 等）は最後の1件に畳む。
+      const netas = [...new Map(writtenNetas.map((n) => [n.id, n])).values()];
+      if (outText || netas.length) {
+        try {
+          core.addChatMessage({
+            thread, role: "assistant", kind: "chat",
+            text: outText || null,
+            data: netas.length ? { netas } : undefined, // 開き直しでネタカードを復元する材料
+          });
+        } catch { /* 保存失敗は握る（従来どおりメモリだけでも動く） */ }
       }
       endTurn(thread); // DONE を全購読者へ（このソケットはここで end される）
     }

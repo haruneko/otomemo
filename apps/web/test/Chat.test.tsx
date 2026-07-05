@@ -157,6 +157,23 @@ describe("Chat", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("#S8 開き直しでも「作られたネタ」がカードで残り、開く→getNeta(id)で開ける", async () => {
+    // サーバが assistant メッセージに data.netas を永続化＝再オープンでカード復元。
+    listChatMessages.mockReset();
+    listChatMessages.mockResolvedValue([
+      { id: "u", thread: "global", role: "user", kind: "chat", text: "保存して", data: null, created: "" },
+      { id: "a", thread: "global", role: "assistant", kind: "chat", text: "保存しました。",
+        data: { netas: [{ id: "neta-xyz", kind: "chord_progression", title: "作った進行" }] }, created: "" },
+    ]);
+    getNeta.mockResolvedValue({ id: "neta-xyz", kind: "chord_progression", content: { chords: [] } });
+    const onOpenNeta = vi.fn();
+    render(<Chat onClose={vi.fn()} onOpenNeta={onOpenNeta} />);
+    expect(await screen.findByText("作った進行")).toBeInTheDocument(); // カードのタイトル
+    await userEvent.click(screen.getByLabelText("open-neta"));
+    await waitFor(() => expect(getNeta).toHaveBeenCalledWith("neta-xyz")); // スナップショット→本体取り直し
+    await waitFor(() => expect(onOpenNeta).toHaveBeenCalledWith(expect.objectContaining({ id: "neta-xyz" })));
+  });
+
   it("research(streaming): 調べる モードも常駐 claude へ（リサーチ依頼に包んで /turn）(#100④)", async () => {
     streamEvents(asst("『曲A』(X) が近い。IVmの翳りが効いてる。"), result("『曲A』(X) が近い。IVmの翳りが効いてる。"));
     render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);

@@ -24,6 +24,7 @@ interface Msg {
   saveable?: string;
   neta?: Neta; // #68 作成したネタ（開く/試聴リンク用）
   cards?: ToolCard[]; // #100④-S3b turn 中の tool_use 結果（生成候補/書込）
+  netas?: { id: string; kind?: string; title?: string }[]; // #S8 サーバが永続化した「このターンで作られたネタ」参照（開き直しで復元）
 }
 type Mode = "consult" | "research";
 
@@ -407,6 +408,13 @@ export function Chat({
     // 相対bass は neta の key を tonic に解決して試聴（#bass S2）。
     void playNotes(notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }), neta.tempo ?? 120);
   }
+  // #S8 履歴復元のネタカード：スナップショット(id/kind/title)しか無いので、開く/試聴の直前に本体を取り直す。
+  async function openNetaById(id: string) {
+    try { openNeta(await api.getNeta(id)); } catch { /* 削除済み等＝黙って無視 */ }
+  }
+  async function previewById(id: string) {
+    try { preview(await api.getNeta(id)); } catch { /* 削除済み等 */ }
+  }
 
   async function saveKnowledge(text: string) {
     await api.createNeta({ kind: "knowledge", text });
@@ -554,6 +562,17 @@ export function Chat({
                   )}
                 </div>
               )}
+              {/* #S8 このターンで作られたネタ＝カードで残す（開き直しても消えない）。ネタ帳と同じ体裁。 */}
+              {m.netas?.map((n) => (
+                <div key={n.id} className="chat-neta-card">
+                  <span className="kind" data-kind={n.kind}>{KIND_LABEL[n.kind ?? "other"] ?? n.kind}</span>
+                  <span className="chat-neta-card-title">{n.title || "(無題)"}</span>
+                  <button type="button" className="bs-btn" aria-label="open-neta" onClick={() => void openNetaById(n.id)}>✎ 開く</button>
+                  {n.kind && MUSIC_KINDS.includes(n.kind) && (
+                    <button type="button" className="bs-btn" aria-label="preview-neta" onClick={() => void previewById(n.id)}>▶ 試聴</button>
+                  )}
+                </div>
+              ))}
             </div>
           ))}
           {busy && (streamText || liveCards.length > 0) && (

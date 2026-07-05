@@ -252,6 +252,27 @@ body:has(.dialog-backdrop) {
   gap: 6px;
   margin-top: 4px;
 }
+/* #S8 履歴に残る「作られたネタ」カード（ネタ帳と同じ体裁＝種別チップ＋タイトル＋開く/試聴）。 */
+.chat-neta-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 0;
+}
+.chat-neta-card .chat-neta-card-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+.chat-neta-card .bs-btn { flex: 0 0 auto; }
 
 /* 受け取りトレイの文脈表示（fb-1）：何の依頼か・💬由来・できたネタ(タップで開く)。 */
 .tray-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
