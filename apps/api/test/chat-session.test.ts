@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { sessionIdForThread, isIdle } from "../src/chat-session";
+import { sessionIdForThread, isIdle, CHAT_TOOLS } from "../src/chat-session";
+
+describe("CHAT_TOOLS（チャットに見せる/事前承認するツール一式）", () => {
+  it("MCP 作曲動詞＋Web 検索を含み、Bash 等の危険ツールは含まない（#100④-S7）", () => {
+    expect(CHAT_TOOLS).toContain("mcp__creative-manager__capture");
+    expect(CHAT_TOOLS).toContain("mcp__creative-manager__generate");
+    expect(CHAT_TOOLS).toContain("WebSearch"); // ブラウザ検索を許可
+    expect(CHAT_TOOLS).toContain("WebFetch");
+    expect(CHAT_TOOLS).not.toContain("Bash"); // Bash 逃げ道は開かない（当初の制限意図を維持）
+    expect(CHAT_TOOLS).not.toContain("Write");
+    expect(CHAT_TOOLS).not.toContain("Edit");
+  });
+});
 
 // #100④-S：thread から claude session_id を決定的に導出（DB列不要・再起動耐性）。
 // 「1 thread = 1 claude session = 1 履歴」の土台＝同じ thread は常に同じ session を resume する。

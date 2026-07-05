@@ -16,6 +16,14 @@ const CHAT_VERBS = [
   "capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze",
 ].map((n) => `mcp__creative-manager__${n}`);
 
+// #100④-S7：チャットにブラウザ検索を許す（実在曲/コード進行/機材レビュー等を調べる）。
+// WebSearch/WebFetch は読み取り専用＝Bash 逃げ道は開かない（当初の制限意図＝MCP限定でBash遮断は維持）。
+// 承認ゲートが無い常駐 claude では allowedTools で事前承認も要る（tools=見える／allowedTools=無承認で使える）。
+const WEB_TOOLS = ["WebSearch", "WebFetch"];
+
+/** チャット常駐 claude に見せる/事前承認するツール一式（MCP 作曲動詞＋Web 検索）。 */
+export const CHAT_TOOLS = [...CHAT_VERBS, ...WEB_TOOLS];
+
 // #100④ 脳の作法（A）：設計#16(枠は最後まで効く)・#86(Claude=言葉→構造化の翻訳、音符は記号エンジンが保証)を
 // 脳の眼前に置く。ツールの段取りを束ねる上位指示＝ここが空だと「16小節→16進行」等の取りこぼしが出る。
 const COMPOSE_PLAYBOOK = `You are a composer's partner. Your job is not to finish the work, but to give the user
@@ -50,6 +58,12 @@ put that into words, then change it.
 [Style by corpus] When the user asks for a specific flavor (e.g. Irish, game-music), pass a
 "style" arg to generate/fit (style:"irish" or "game") so the melody leans on the learned
 corpus's idiom. Omit it for the neutral default.
+
+[Web search] You CAN browse the web (WebSearch / WebFetch). Use it when the user wants to look
+something up — real songs, chord progressions, artist/genre references, gear specs & reviews,
+plugin comparisons — or when a real-world fact would make your answer concrete. Say briefly what
+you found and cite the source. Keep using the composition tools for anything musical/structural
+(notes stay the engine's job); web search is for facts and references, not for inventing music.
 
 [When asked "what's next?" or the user is stuck] Use song_state to read the song's ACTUAL
 state — which lanes/sections are filled vs still empty, and its stage/next_action — plus
@@ -122,7 +136,7 @@ export class ChatSession {
       "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
       ...sessionArg,
       "--mcp-config", mcpConfig, "--strict-mcp-config",
-      "--tools", ...CHAT_VERBS, "--allowedTools", ...CHAT_VERBS,
+      "--tools", ...CHAT_TOOLS, "--allowedTools", ...CHAT_TOOLS,
       "--append-system-prompt", this.systemPrompt(),
       "--model", "claude-sonnet-4-6",
     ];
