@@ -19,9 +19,9 @@
 |---|---|---|
 | `apps/api` | TypeScript / Fastify / better-sqlite3 | 操作コア（neta CRUD・検索・ジョブ）＋**決定的音楽エンジン**（gen_*/fit/analyze）を **HTTP** と **MCP(stdio)** で公開。Chat の `claude -p` 中継・継続調査の実行もここ |
 | `apps/web` | React / Vite | スマホ優先 PWA |
-| `apps/worker` | Python / uv | **決定的ジョブのみ**（MIDI取込）＋意味検索（cm-search）。※会話・生成・研究の“脳”は Claude/MCP・api へ移管済＝**worker に claude は無い** |
+| `apps/worker` | Python / uv | **意味検索（cm-search）専用**。※旧ジョブワーカー(cm-worker)は撤去＝生成/研究/MIDI取込は全て api(TS/MCP)へ移管、脳は Claude |
 
-データは単一の SQLite（`data/cm.sqlite`、WAL）。TS↔Python の境界は**ジョブ表のみ**。
+データは単一の SQLite（`data/cm.sqlite`、WAL）。TS↔Python の境界は **DB のみ**（cm-search が neta を読んで意味索引を張る）。ジョブは api(TS) 内で完結。
 
 ## 起動
 本番は api が web の dist も配信＝**外部公開は :8787 の1ポートだけ**（dev は vite）。
@@ -33,8 +33,8 @@ DB=$PWD/data/cm.sqlite
 CM_DB=$DB pnpm --filter @cm/api start                 # API（web配信込み）:8787
 pnpm --filter @cm/web dev                             # Web dev :5173 (/api→8787)
 CM_DB=$DB uv run --directory apps/worker cm-search    # 意味検索 :8788
-CM_DB=$DB uv run --directory apps/worker cm-worker    # MIDI取込ジョブ（任意・取込を使う時だけ）
 ```
+（生成・研究・MIDI取込は api 内で完結＝別プロセス不要。旧 cm-worker は撤去済。）
 スマホ等からは Tailscale 経由、または `http://<箱のIP>:8787`。WSL2 mirrored の場合、Windows の
 Hyper‑V ファイアウォールで 5173/8787 の inbound 許可が必要（`allow-creative-manager.cmd` 同梱）。
 

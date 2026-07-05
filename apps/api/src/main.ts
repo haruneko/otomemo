@@ -4,6 +4,7 @@ import { openDb } from "./db";
 import { Core } from "./core";
 import { buildHttp } from "./http";
 import { runResearchJob } from "./research-runner";
+import { parseMidiImport } from "./midi-import";
 
 // CM_DB 未指定なら **リポジトリルートの data/cm.sqlite を絶対パスで**（cwd 依存で apps/api/data 等に
 // rogue DB を作る事故を断つ・docs/design「アーキ是正 決定4」）。import.meta.dirname=apps/api/src。
@@ -69,8 +70,30 @@ setInterval(() => {
   } catch (e) {
     console.error("schedule tick error", e);
   }
+  pumpImportMidi();
   pumpResearch();
 }, 5000).unref();
+
+// #30後続 MIDI取込を api 内で（worker撤去の最後）。決定的・高速＝溜まってる分を一気に処理（busy不要・
+// 遅い research の後ろで待たせない）。parse→completeJob({tracks})→reaper が melody/rhythm ネタに materialize。
+function pumpImportMidi(): void {
+  for (let i = 0; i < 20; i++) {
+    let job;
+    try {
+      job = core.claimQueued(["import_midi"]);
+    } catch (e) {
+      console.error("import_midi claim error", e);
+      return;
+    }
+    if (!job) return;
+    try {
+      const p = (job.params ?? {}) as { midi_b64?: string; filename?: string };
+      core.completeJob(job.id, parseMidiImport(p.midi_b64 ?? "", p.filename ?? "midi"));
+    } catch (e) {
+      core.failJob(job.id, e instanceof Error ? e.message : String(e));
+    }
+  }
+}
 
 // #30 継続調査の consumer＝api が queued の research/collect を1件ずつ claude で実行（worker 置換）。
 // 直列（researchBusy）＝claude を同時多発させない。claim は原子的（queued→running）で二重取りしない。

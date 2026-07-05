@@ -19,6 +19,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.13.0
         version: 1.29.0(zod@3.25.76)
+      '@tonejs/midi':
+        specifier: ^2.0.28
+        version: 2.0.28
       better-sqlite3:
         specifier: ^11.8.1
         version: 11.10.0

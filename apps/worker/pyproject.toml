@@ -1,19 +1,16 @@
 [project]
 name = "cm-worker"
 version = "0.0.0"
-description = "creative_manager Python worker (analysis, embeddings, generation, planner)"
+description = "creative_manager 意味検索サーバ（cm-search）。旧ジョブワーカー(cm-worker)は 2026-07-05 撤去＝生成/研究/MIDI取込は api(TS)へ移管し worker脑撤去完了。"
 requires-python = ">=3.12"
 dependencies = [
     "sentence-transformers>=3.3",
     "numpy>=2",
     "fastapi>=0.115",
     "uvicorn>=0.34",
-    "mido>=1.3",
-    "mcp>=1.2",
 ]
 
 [project.scripts]
-cm-worker = "cm_worker.main:main"
 cm-search = "cm_worker.serve:run"
 
 [build-system]
