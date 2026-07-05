@@ -169,8 +169,8 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
       {showProse && <div className="awb-prose chat-md">{c.prose || "（所見なし）"}</div>}
 
       {/* ロール：横スクロール。上=コード、下=メロピアノロール、縦線=小節/拍 */}
-      <div className="awb-roll editor-body">
-        <div className="awb-strip" style={{ width: `${totalBeat * PXB}px` }}>
+      <div className="awb-roll">
+        <div className="awb-strip" style={{ width: `${totalBeat * PXB}px`, height: `${44 + rows * ROWH + 10}px` }}>
           {/* 小節線・拍線 */}
           {Array.from({ length: totalBeat + 1 }, (_v, i) => (
             <div key={"g" + i} className={"awb-grid" + (i % meter === 0 ? " bar" : "")} style={{ left: `${i * PXB}px` }}>

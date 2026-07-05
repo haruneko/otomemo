@@ -514,7 +514,7 @@ details.theme summary {
 .awb-tools .tp-btn { background: var(--k, var(--accent)); color: #fff; border: 0; border-radius: 8px; padding: 6px 14px; }
 .awb-anchor { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--muted); }
 .awb-prose { background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 8px; max-height: 30vh; overflow-y: auto; font-size: 0.9rem; }
-.awb-roll { overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: #16181d; }
+.awb-roll { overflow: auto; max-height: 46vh; border: 1px solid var(--line); border-radius: 8px; background: #16181d; }
 .awb-strip { position: relative; min-height: 160px; }
 .awb-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: #262a31; }
 .awb-grid.bar { background: #3a3f49; width: 2px; }
