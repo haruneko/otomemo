@@ -205,7 +205,7 @@ export function Chat({
     const kind = m.neta ? "content" : "chat";
     void api.addChatMessage(thread, { role, kind, text: text ?? null, data }).catch(() => {});
   }
-  // 保存しつつ画面にも積む（送受信の両方でこれを使う）。
+  // 保存しつつ画面にも積む（ユーザー発言・非ターンの確定メッセージ用）。
   function pushMsg(m: Msg) {
     setMsgs((prev) => [...prev, m]);
     persistMsg(m);
@@ -213,6 +213,11 @@ export function Chat({
     if (m.role === "user" && !target && !gear && activeProject) {
       void api.setChatThread(thread, { project: activeProject }).catch(() => {});
     }
+  }
+  // 画面にだけ積む（永続化しない）。★claude ターンの assistant 返信はサーバ側で chat_message に
+  // 永続化する（/turn 完了時）ので、ここで二重保存しない＝閉じても消えず・戻っても重複しない。
+  function renderMsg(m: Msg) {
+    setMsgs((prev) => [...prev, m]);
   }
 
   // サーバのスレッド履歴から再描画（生成結果は reaper がサーバ側で記録済＝クライアント非依存・fb-3）。
@@ -261,33 +266,57 @@ export function Chat({
     };
   }, [thread]);
 
+  // ★再アタッチ（2026-07-05・ストリーム切れ対策）：開き直した時に**走行中ターンがあれば途中から**購読して
+  // 描画を復帰する。走行中でなければサーバは即 done＝完全な no-op。履歴ロード後(loaded)にだけ試みる
+  // ＝復元済みメッセージを消さない。assistant 返信はサーバが永続化済なので、ここでの表示は renderMsg（非永続）。
+  useEffect(() => {
+    if (!loaded) return;
+    let cancelled = false;
+    void (async () => {
+      const { out, cards, sawAny } = await consumeTurn(
+        (cb) => api.chatTurnLiveStream(thread, cb),
+        () => { if (!cancelled) { started.current = true; setBusy(true); } }, // 走行中ターン検知→busy表示
+      );
+      if (cancelled) return;
+      if (sawAny) {
+        setBusy(false);
+        if (out || cards.length) {
+          renderMsg({ role: "ai", text: out || undefined, saveable: out || undefined, cards: cards.length ? cards : undefined });
+        }
+        onChanged?.();
+      }
+    })();
+    return () => { cancelled = true; };
+    // loaded/thread が変わった時だけ（＝開いた/切替えた時）。busy 依存にすると送信の度に再アタッチしてしまう。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread, loaded]);
+
   // #100④-S3 ディスパッチ：consult は常駐 claude（SSE）／research は当面 旧ジョブ経路（フォールバック）。
   // #100④-S3/research：consult も research も常駐 claude（/turn）へ。脳は Claude＝自作ルーティング無し。
   async function run(text: string) {
     return runStream(text);
   }
 
-  // #100④-S3 常駐 claude に1ターン。stream-json を逐次描画し、result（or 最後の text）を AI 発言として確定。
-  // 脳は Claude＝自然文＋ツール選択。書込(capture/revise/assemble)は事前承認済で可逆（#100 a）。
-  // research モードはユーザー文を「リサーチ依頼」にだけ薄く包む（脳は持たない＝Claude が自由に調べ/記録）。
-  async function runStream(text: string) {
-    pushMsg({ role: "user", text });
-    setBusy(true);
+  // stream-json を逐次描画しつつ、result（or 最後の text）と候補/書込カードを集める共通ループ。
+  // /turn（新規ターン）と /turn/live（再アタッチ）の両方でこれを使う＝描画ロジックを一本化。
+  // onFirst：最初のイベントが来た時に1回だけ呼ぶ（再アタッチで「走行中ターン有り」を検知して busy 表示に入る用）。
+  async function consumeTurn(
+    start: (onEvent: (e: unknown) => void) => Promise<void>,
+    onFirst?: () => void,
+  ): Promise<{ out: string; cards: ToolCard[]; errored: boolean; sawAny: boolean }> {
     setStreamText("");
     setThinkLabel("");
     setLiveCards([]);
-    const sendText =
-      mode === "research"
-        ? `【リサーチ依頼】${text}\n参考になる実在の曲・コード進行・テクニックを挙げて。良ければ参考ネタとして記録(capture)してOK。`
-        : text;
     const toolNames = new Map<string, string>(); // tool_use id → name（tool_result と突合）
     const cards: ToolCard[] = [];
     let acc = "";
     let finalText = "";
     let errored = false;
+    let sawAny = false;
     try {
-      await api.chatTurnStream(thread, sendText, (ev) => {
+      await start((ev) => {
         if (!alive.current) return;
+        if (!sawAny) { sawAny = true; onFirst?.(); }
         for (const a of parseTurnEvent(ev as Parameters<typeof parseTurnEvent>[0])) {
           if (a.kind === "text") { acc = a.text; setStreamText(acc); }
           else if (a.kind === "tool") { setThinkLabel(a.label); if (a.id) toolNames.set(a.id, a.name); }
@@ -307,13 +336,28 @@ export function Chat({
       setStreamText("");
       setThinkLabel("");
       setLiveCards([]);
-      setBusy(false);
     }
-    const out = finalText || acc;
+    return { out: finalText || acc, cards, errored, sawAny };
+  }
+
+  // #100④-S3 常駐 claude に1ターン。stream-json を逐次描画し、result（or 最後の text）を AI 発言として確定。
+  // 脳は Claude＝自然文＋ツール選択。書込(capture/revise/assemble)は事前承認済で可逆（#100 a）。
+  // research モードはユーザー文を「リサーチ依頼」にだけ薄く包む（脳は持たない＝Claude が自由に調べ/記録）。
+  // ★assistant 返信の永続化はサーバ側（/turn 完了時）＝閉じても消えない。ここは画面表示だけ（renderMsg）。
+  async function runStream(text: string) {
+    pushMsg({ role: "user", text }); // ユーザー発言は即永続化（開始時＝切断前に残る）
+    setBusy(true);
+    const sendText =
+      mode === "research"
+        ? `【リサーチ依頼】${text}\n参考になる実在の曲・コード進行・テクニックを挙げて。良ければ参考ネタとして記録(capture)してOK。`
+        : text;
+    const { out, cards, errored } = await consumeTurn((cb) => api.chatTurnStream(thread, sendText, cb));
+    setBusy(false);
     if (out || cards.length) {
-      pushMsg({ role: "ai", text: out || undefined, saveable: out || undefined, cards: cards.length ? cards : undefined });
+      renderMsg({ role: "ai", text: out || undefined, saveable: out || undefined, cards: cards.length ? cards : undefined });
     } else {
-      pushMsg({ role: "ai", text: errored ? "うまくいきませんでした（もう一度試してください）" : "（応答がありませんでした）" });
+      // 空/失敗はサーバも永続化しない（out空）→次に開いても残らない。ここはその場の案内だけ。
+      renderMsg({ role: "ai", text: errored ? "うまくいきませんでした（もう一度試してください）" : "（応答がありませんでした）" });
     }
     onChanged?.();
   }

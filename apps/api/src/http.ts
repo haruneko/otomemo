@@ -32,6 +32,7 @@ import {
 } from "./music";
 import { findProgressions } from "./progression-search";
 import { getChatSession } from "./chat-session";
+import { beginTurn, pushTurnEvent, endTurn, attachTurn, isTurnLive, DONE } from "./chat-live";
 import { rankRecommendations } from "./music/recommend";
 
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
@@ -642,6 +643,31 @@ export function buildHttp(core: Core): FastifyInstance {
 
   // #100 薄いラッパー：スレッド毎の長命 claude セッションに1ターン送り、stream-json を SSE で中継。
   // 脳は Claude（記憶・多ターン・10 verbs のツール選択）。api は spawn と中継だけ。
+  //
+  // ★ストリーム切れ対策（2026-07-05）：ターンは chat-live レジストリにバッファ＋ファンアウトし、
+  //   claude プロセスは**このHTTPソケットが切れても走り続ける**。完了時にサーバ側で assistant 返信を
+  //   chat_message に永続化する＝チャットを閉じても締めの返信が消えない。走行中に開き直したら
+  //   `GET /chat/:thread/turn/live` で途中から購読し直せる（下）。
+  const SSE_HEADERS = {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  } as const;
+
+  // 走行中ターンへ購読し、SSE ソケットへ書き出す（DONE 番兵→`event: done`＋close）。socket 死は握る。
+  function pipeLiveToSocket(thread: string, raw: import("node:http").ServerResponse): (() => void) | null {
+    return attachTurn(thread, (e) => {
+      try {
+        if (e === DONE) {
+          raw.write("event: done\ndata: {}\n\n");
+          raw.end();
+        } else {
+          raw.write(`data: ${JSON.stringify(e)}\n\n`);
+        }
+      } catch { /* ソケットが既に閉じている＝無視（ターンはサーバ側で継続） */ }
+    });
+  }
+
   app.post("/chat/:thread/turn", async (req, reply) => {
     const { thread } = req.params as { thread: string };
     const text = String((req.body as { text?: unknown } | null)?.text ?? "");
@@ -649,12 +675,13 @@ export function buildHttp(core: Core): FastifyInstance {
     const repo = dirname(dirname(dbPath)); // <repo>/data/cm.sqlite → <repo>（pnpm workspace ルート）
     reply.hijack();
     const raw = reply.raw;
-    raw.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
-    const send = (e: unknown) => raw.write(`data: ${JSON.stringify(e)}\n\n`);
+    raw.writeHead(200, SSE_HEADERS);
+    // このターンをレジストリに登録し、まず自分自身のソケットを購読者として繋ぐ（再アタッチと同一経路）。
+    beginTurn(thread);
+    const detach = pipeLiveToSocket(thread, raw);
+    raw.on("close", () => detach?.()); // ブラウザが閉じたら購読解除（ターン自体は継続）
+    let finalText = ""; // result イベントの最終テキスト
+    let lastText = ""; // フォールバック：最後の assistant テキストブロック
     try {
       // 器（プロジェクト）の指示文を会話に効かせる：thread→project→instructions を system prompt に追記。
       const proj = core.getChatThreadProject(thread);
@@ -670,12 +697,43 @@ export function buildHttp(core: Core): FastifyInstance {
         : "";
       const suffix = [instructions, targetNote, gearNote].filter(Boolean).join("\n\n");
       const sess = getChatSession(thread, dbPath, repo, suffix);
-      await sess.say(text, send);
+      // イベントを蓄積しつつバッファへ流す（購読者＝このソケット＋あとから来る再アタッチ全部に届く）。
+      await sess.say(text, (e) => {
+        const ev = e as { type?: string; result?: string; message?: { content?: Array<{ type?: string; text?: string }> } };
+        if (ev.type === "assistant") {
+          for (const b of ev.message?.content ?? []) if (b.type === "text" && b.text) lastText = b.text;
+        } else if (ev.type === "result" && typeof ev.result === "string") {
+          finalText = ev.result;
+        }
+        pushTurnEvent(thread, e as Record<string, unknown>);
+      });
     } catch (err) {
-      send({ type: "error", error: String(err) });
+      pushTurnEvent(thread, { type: "error", error: String(err) });
+    } finally {
+      // ★ソケットが切れていてもここまで来る（say は claude の result で解決）。締めの返信を履歴に残す。
+      const outText = (finalText || lastText).trim();
+      if (outText) {
+        try { core.addChatMessage({ thread, role: "assistant", kind: "chat", text: outText }); } catch { /* 保存失敗は握る（従来どおりメモリだけでも動く） */ }
+      }
+      endTurn(thread); // DONE を全購読者へ（このソケットはここで end される）
     }
-    raw.write("event: done\ndata: {}\n\n");
-    raw.end();
+  });
+
+  // ★再アタッチ：開き直した時に**走行中ターンを途中から**購読する。走行中でなければ即 done（no-op）。
+  app.get("/chat/:thread/turn/live", async (req, reply) => {
+    const { thread } = req.params as { thread: string };
+    reply.hijack();
+    const raw = reply.raw;
+    raw.writeHead(200, SSE_HEADERS);
+    const detach = pipeLiveToSocket(thread, raw);
+    if (!detach) { raw.write("event: done\ndata: {}\n\n"); raw.end(); return; } // 走行中ターン無し
+    raw.on("close", () => detach());
+  });
+
+  // 走行中ターンの有無だけ軽く返す（UI が「考え中…」表示や再アタッチ要否を判断する用）。
+  app.get("/chat/:thread/turn/status", async (req) => {
+    const { thread } = req.params as { thread: string };
+    return { live: isTurnLive(thread) };
   });
 
   return app;

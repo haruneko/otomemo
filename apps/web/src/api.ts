@@ -401,26 +401,52 @@ export const api = {
       throw new NetworkError(`POST /chat/${thread}/turn`, e);
     }
     if (!res.ok || !res.body) throw new ApiError(res.status, await res.text().catch(() => ""));
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i: number;
-      while ((i = buf.indexOf("\n\n")) >= 0) {
-        const frame = buf.slice(0, i);
-        buf = buf.slice(i + 2);
-        for (const line of frame.split("\n")) {
-          if (line.startsWith("data: ")) {
-            try { onEvent(JSON.parse(line.slice(6))); } catch { /* 非JSON行は無視 */ }
-          }
+    await readSse(res, onEvent);
+  },
+
+  // ★再アタッチ（2026-07-05）：走行中ターンを**途中から**購読する（チャットを閉じて開き直した時）。
+  // 走行中ターンが無ければサーバは即 done を返す＝onEvent は呼ばれずすぐ解決（no-op）。脳は持たない。
+  chatTurnLiveStream: async (
+    thread: string,
+    onEvent: (e: unknown) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/chat/${encodeURIComponent(thread)}/turn/live`, { signal });
+    } catch (e) {
+      throw new NetworkError(`GET /chat/${thread}/turn/live`, e);
+    }
+    if (!res.ok || !res.body) throw new ApiError(res.status, await res.text().catch(() => ""));
+    await readSse(res, onEvent);
+  },
+
+  // 走行中ターンの有無（UI が再アタッチ要否を判断する用）。
+  chatTurnStatus: (thread: string) =>
+    http<{ live: boolean }>(`/chat/${encodeURIComponent(thread)}/turn/status`),
+};
+
+// SSE レスポンスを1フレーム（`\n\n` 区切り）ずつ読み、`data: ` 行の JSON を onEvent へ。
+async function readSse(res: Response, onEvent: (e: unknown) => void): Promise<void> {
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const frame = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("data: ")) {
+          try { onEvent(JSON.parse(line.slice(6))); } catch { /* 非JSON行は無視 */ }
         }
       }
     }
-  },
-};
+  }
+}
 
 export interface ChatThread {
   thread: string;

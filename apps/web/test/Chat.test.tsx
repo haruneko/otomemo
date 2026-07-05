@@ -201,21 +201,22 @@ describe("Chat", () => {
     );
   });
 
-  it("#70 送信した user メッセージは（streaming 経路でも）永続化される", async () => {
+  it("#70 user は即永続化／AI 返答はサーバ側で永続化＝クライアントからは addChatMessage しない（ストリーム切れ対策）", async () => {
     listChatMessages.mockResolvedValue([]);
     streamEvents(asst("はい"), result("はい"));
     render(<Chat onClose={vi.fn()} />);
     await userEvent.type(screen.getByLabelText("chat-input"), "メロ直して");
     await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    // ユーザー発言は開始時にクライアントが永続化（切断前に残る）。
     await waitFor(() =>
       expect(addChatMessage).toHaveBeenCalledWith(
         "global",
         expect.objectContaining({ role: "user", text: "メロ直して" }),
       ),
     );
-    // AI 返答も履歴に積まれる（脳=Claude の自然文）。
-    await waitFor(() =>
-      expect(addChatMessage).toHaveBeenCalledWith("global", expect.objectContaining({ role: "ai", text: "はい" })),
-    );
+    // AI 返答は画面には出るが…
+    await waitFor(() => expect(screen.getByText("はい")).toBeInTheDocument());
+    // …クライアントからは保存しない（/turn 完了時にサーバが chat_message へ書く＝閉じても消えない・重複しない）。
+    expect(addChatMessage).not.toHaveBeenCalledWith("global", expect.objectContaining({ role: "ai" }));
   });
 });
