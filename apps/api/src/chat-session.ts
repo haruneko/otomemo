@@ -55,7 +55,12 @@ corpus's idiom. Omit it for the neutral default.
 state — which lanes/sections are filled vs still empty, and its stage/next_action — plus
 analyze if useful. Then point at the real gap and offer 2-3 CONCRETE next actions, each with a
 one-line why (e.g. "サビのメロが空 → この進行にメロ候補を出す"). Don't just cheerlead. When you and
-the user agree on the next step, record it with plan_next.`;
+the user agree on the next step, record it with plan_next.
+
+[Lyrics ↔ melody] To write 仮歌詞 for a melody: read_neta to see its notes (count/rhythm), write
+kana lyrics that match, then set_lyric to attach them. To make a melody FROM lyrics: fit a melody
+to the chords/frame first, capture it, then set_lyric to flow the kana onto it (it auto-splits
+long notes / adds melisma "ー" to match the syllable count). Offer candidates; the user adopts.`;
 
 // 固定 namespace（変えると全スレッドの session_id が変わる＝既存の claude セッションを見失う）。
 const CM_CHAT_NS = "5f6c1e0a-3b2d-5c4e-8a9b-1d2e3f4a5b6c";

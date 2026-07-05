@@ -23,6 +23,7 @@ import {
   genNamedProgression,
 } from "./music";
 import { learnStepWeightsFromLibrary, learnMotifModelFromLibrary } from "./music/corpusBias";
+import { splitMora, flowLyric, type LNote } from "./lyric";
 import { meterInfo } from "./music/meter";
 import { findProgressions } from "./progression-search";
 import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
@@ -576,6 +577,26 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     async ({ id, stage, next_action }) => {
       const s = core.updateSong(id, { stage, next_action });
       return s ? ok(s) : err("not found");
+    },
+  );
+  // ② 歌詞↔メロ：read_neta でメロの音符/歌詞を読む・set_lyric で歌詞(かな)を音符へ流し込む。
+  server.registerTool(
+    "read_neta",
+    { title: "ネタを読む", description: "ネタの中身(content 込み)を取得。メロの音符/歌詞/コードを読むのに使う（メロ→仮歌詞・歌詞の音数合わせに）。", inputSchema: { id: z.string() } },
+    async ({ id }) => { const n = core.getNeta(id); return n ? ok(n) : err("not found"); },
+  );
+  server.registerTool(
+    "set_lyric",
+    { title: "歌詞をメロに載せる", description: "melody ネタに歌詞(かな)を1:1で流し込み各音符に syllable を付ける（モーラ>音符は最長音符を分割、余りはメリスマ\"ー\"）。歌詞→メロの仕上げ／メロ→仮歌詞の反映に。", inputSchema: { id: z.string(), lyrics: z.string() } },
+    async ({ id, lyrics }) => {
+      const n = core.getNeta(id);
+      if (!n) return err("not found");
+      const content = (n.content ?? {}) as { notes?: unknown };
+      const notes = Array.isArray(content.notes) ? (content.notes as LNote[]) : [];
+      if (!notes.length) return err("このネタに notes がありません（melody を指定して）");
+      const flowed = flowLyric(notes, splitMora(lyrics));
+      const upd = core.updateNeta(id, { content: { ...content, notes: flowed } });
+      return upd ? ok(upd) : err("not found");
     },
   );
   server.registerTool(
