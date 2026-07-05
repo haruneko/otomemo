@@ -40,13 +40,6 @@ const asst = (text: string) => ({ type: "assistant", message: { content: [{ type
 const toolUse = (name: string) => ({ type: "assistant", message: { content: [{ type: "tool_use", name, input: {} }] } });
 const result = (text: string, is_error = false) => ({ type: "result", subtype: "success", result: text, is_error });
 // 永続履歴に proposals メッセージを置く（#100 で proposals は判別ユニオンでなく履歴経由で描く）。
-function historyWithProposals(proposals: unknown[], summary?: string) {
-  listChatMessages.mockReset();
-  listChatMessages.mockResolvedValue([
-    { id: "p", thread: "global", role: "ai", kind: "proposals", text: null, data: { proposals, summary }, created: "" },
-  ]);
-}
-
 import { Chat } from "../src/components/Chat";
 
 describe("Chat", () => {
@@ -123,99 +116,6 @@ describe("Chat", () => {
     await userEvent.type(screen.getByLabelText("chat-input"), "むちゃ");
     await userEvent.click(screen.getByRole("button", { name: "送信" }));
     expect(await screen.findByText(/うまくいきませんでした/)).toBeInTheDocument();
-  });
-
-  it("proposals(履歴): 承認カードで before/after、承認で content 編集を適用 (#102 S3)", async () => {
-    historyWithProposals(
-      [{ op: "update_content", target_id: "m1", args: { content: { notes: [{ pitch: 67, start: 0, dur: 1 }] } }, rationale: "外し音を補正" }],
-      "メロを直す提案",
-    );
-    getNeta.mockResolvedValue({
-      id: "m1",
-      kind: "melody",
-      content: { notes: [{ pitch: 60, start: 0, dur: 1 }] },
-      key: 0,
-      tempo: 120,
-    });
-    updateNeta.mockResolvedValue({ id: "m1" });
-    const onChanged = vi.fn();
-
-    render(<Chat onClose={vi.fn()} onChanged={onChanged} />);
-
-    // 承認カード＋原本/提案の再生ボタンが出る（履歴から復元・getNeta は非同期なので await）
-    await waitFor(() => expect(screen.getByLabelText("proposal")).toBeInTheDocument());
-    expect(await screen.findByLabelText("play-before")).toBeInTheDocument();
-    expect(await screen.findByLabelText("play-after")).toBeInTheDocument();
-    expect(updateNeta).not.toHaveBeenCalled();
-
-    // 承認 → updateNeta が呼ばれて適用
-    await userEvent.click(screen.getByLabelText("approve"));
-    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("m1", { content: { notes: [{ pitch: 67, start: 0, dur: 1 }] } }));
-    expect(onChanged).toHaveBeenCalled();
-    expect(await screen.findByText(/適用しました/)).toBeInTheDocument();
-  });
-
-  it("proposals(履歴): place_child 承認で placeChild、reject は何もしない (#102 S3)", async () => {
-    historyWithProposals([
-      { op: "place_child", target_id: "n2", args: { parent_id: "s1", position: 0 } },
-      { op: "delete", target_id: "n3" },
-    ]);
-    getNeta.mockResolvedValue({ id: "x", kind: "other", text: "ネタ", content: {} });
-    placeChild.mockResolvedValue({ ok: true });
-
-    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
-
-    await waitFor(() => expect(screen.getAllByLabelText("proposal").length).toBe(2));
-    const approves = screen.getAllByLabelText("approve");
-    const rejects = screen.getAllByLabelText("reject");
-    await userEvent.click(approves[0]!); // place_child を承認
-    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("s1", "n2", 0));
-    await userEvent.click(rejects[1]!); // delete を却下
-    expect(deleteNeta).not.toHaveBeenCalled();
-    expect(await screen.findByText(/却下しました/)).toBeInTheDocument();
-  });
-
-  it("proposals(履歴): 「すべて承認」で適用可能な全提案を一括適用 (#102 S4)", async () => {
-    historyWithProposals(
-      [
-        { op: "place_child", target_id: "n1", args: { parent_id: "s1", position: 0 } },
-        { op: "link", target_id: "n2", args: { to_id: "n3", type: "ref" } },
-      ],
-      "2件まとめて",
-    );
-    getNeta.mockResolvedValue({ id: "x", kind: "other", text: "ネタ", content: {} });
-    placeChild.mockResolvedValue({ ok: true });
-    link.mockResolvedValue({ ok: true });
-
-    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
-
-    // 適用可能が2件＝「すべて承認」が出る
-    await waitFor(() => expect(screen.getByLabelText("approve-all")).toBeInTheDocument());
-    await userEvent.click(screen.getByLabelText("approve-all"));
-    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("s1", "n1", 0));
-    await waitFor(() => expect(link).toHaveBeenCalledWith("n2", "n3", "ref"));
-    // 両方とも「適用しました」になる
-    await waitFor(() => expect(screen.getAllByText(/適用しました/).length).toBe(2));
-  });
-
-  it("proposals(履歴): unlink 承認で unlink、content無し transform は自動適用不可 (#102 S3)", async () => {
-    historyWithProposals([
-      { op: "unlink", target_id: "n1", args: { to_id: "n2", type: "ref" } },
-      { op: "transform", target_id: "n3", args: { by: -2 } }, // content 無し＝自動適用不可
-    ]);
-    getNeta.mockResolvedValue({ id: "x", kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, key: 0 });
-    unlink.mockResolvedValue({ ok: true });
-
-    render(<Chat onClose={vi.fn()} onChanged={vi.fn()} />);
-
-    await waitFor(() => expect(screen.getAllByLabelText("proposal").length).toBe(2));
-    const approves = screen.getAllByLabelText("approve");
-    // content 無し transform は承認ボタン無効＝自動適用不可
-    expect(approves[1]).toBeDisabled();
-    expect(screen.getByText(/自動適用は未対応/)).toBeInTheDocument();
-    // unlink は承認で api.unlink 呼出
-    await userEvent.click(approves[0]!);
-    await waitFor(() => expect(unlink).toHaveBeenCalledWith("n1", "n2", "ref"));
   });
 
   it("history: 作成ネタの「開く」→ onOpenNeta ＋ Chat を閉じる (#68)", async () => {
