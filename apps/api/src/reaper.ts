@@ -3,6 +3,7 @@
 // Core の公開操作(createNeta/placeChild/link)＋db を使う。原子性は createNeta 内＋ジョブ単位トランザクション。
 import type { Core } from "./core";
 import type { Neta, NetaInput } from "./types";
+import { chordsFromTimeline, pcFromKeyName } from "./audio-chords";
 
 // チャット発のジョブは params.chat_thread を持つ。その場合、生成結果を**サーバ側で**そのスレッドの
 // チャットメッセージとして記録する＝クライアントが待ち中に離脱/リロードしても結果が必ずチャットに残る
@@ -188,6 +189,24 @@ export function reapResults(core: Core): number {
       from_job: r.id,
     });
     n += 1;
+    // 学習の出口（usecases-chat ①）：検出コードを**弾き直せる chord_progression 候補ネタ**に落とす。
+    // 知見(文章)だけだと「自分で弾いて学ぶ」ができず要件未達だった。冒頭抜粋・要トリム前提の候補。
+    const facts = (parsed.facts ?? {}) as { bpm?: number; key?: { key?: string; mode?: string }; chords_timeline?: unknown; chords?: unknown };
+    const timeline = facts.chords_timeline ?? facts.chords; // analyze.py は chords_timeline で出す
+    const chords = chordsFromTimeline(timeline, typeof facts.bpm === "number" ? facts.bpm : 120);
+    if (chords.length >= 2) {
+      core.createNeta({
+        kind: "chord_progression",
+        title: `アナリーゼ: ${parsed.title ?? "音源"} のコード（候補・冒頭抜粋）`,
+        content: { chords },
+        key: pcFromKeyName(facts.key?.key),
+        mode: facts.key?.mode ?? null,
+        tempo: typeof facts.bpm === "number" ? Math.round(facts.bpm) : null,
+        tags: ["アナリーゼ", "候補"],
+        from_job: r.id,
+      });
+      n += 1;
+    }
   }
 
   // #81 MIDI取り込み：done の import_midi の result.tracks を melody/rhythm ネタに分割materialize。
