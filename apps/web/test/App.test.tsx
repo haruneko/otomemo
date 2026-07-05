@@ -19,7 +19,7 @@ import { App } from "../src/App";
 describe("App", () => {
   it("renders title and empty state", async () => {
     render(<App />);
-    expect(screen.getByRole("button", { name: "Motif" })).toBeInTheDocument(); // ヘッダ左のアプリ名ロゴ
+    expect(screen.getByRole("button", { name: "Otomemo" })).toBeInTheDocument(); // ヘッダ左のアプリ名ロゴ
     await waitFor(() =>
       expect(screen.getByText("まだネタがありません。")).toBeInTheDocument(),
     );

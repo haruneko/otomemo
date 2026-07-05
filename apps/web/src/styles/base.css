@@ -177,9 +177,8 @@ h1 {
   min-width: 0;
 }
 .app-brand .brand-mark {
-  color: var(--k-melody);
-  font-size: 1.3rem;
-  line-height: 1;
+  flex: 0 0 auto;
+  display: block;
 }
 .app-brand .brand-name {
   font-size: 1.02rem;

@@ -32,8 +32,8 @@ const ACTIVE_PROJECT_KEY = "cm-active-project";
 
 // モバイル土台：狭い画面か（≤820px、base.css のブレークポイントと一致）。リサイズ追従。
 const MOBILE_MQ = "(max-width: 820px)";
-// アプリ表示名（ヘッダ左のロゴ）。リポジトリ名(sketch-it)とは別＝いつでも変更可（仮: Motif）。
-const APP_NAME = "Motif";
+// アプリ表示名（ヘッダ左のロゴ）。リポジトリ名(sketch-it)とは別。「音メモ＝手早く音を出してメモ」。
+const APP_NAME = "Otomemo";
 function useIsMobile(): boolean {
   const has = typeof window !== "undefined" && typeof window.matchMedia === "function";
   const [m, setM] = useState(() => has && window.matchMedia(MOBILE_MQ).matches);
@@ -411,7 +411,18 @@ export function App() {
             setProjectView(false);
           }}
         >
-          <span className="brand-mark" aria-hidden="true">♪</span>
+          <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden="true" width="22" height="22">
+            {/* Otomemo ロゴ＝吹き出し(ひとこと)＋♪＝"サッと音のメモ"（C案）。 */}
+            <path
+              d="M5 4h13a3 3 0 0 1 3 3v6.5a3 3 0 0 1-3 3h-7.5l-4 3v-3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z"
+              fill="var(--accent)"
+            />
+            <g fill="#fff">
+              <ellipse cx="9.2" cy="12" rx="1.8" ry="1.4" />
+              <rect x="10.6" y="6.6" width="1.2" height="5.8" />
+              <path d="M11.8 6.6c2 .5 2.7 1.7 2.2 3.2-.3-.9-1.1-1.4-2.2-1.5z" />
+            </g>
+          </svg>
           <span className="brand-name">{APP_NAME}</span>
         </button>
         {activeProject && (
