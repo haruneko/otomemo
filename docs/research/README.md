@@ -53,3 +53,6 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [self-check-log](self-check-log.md) — 自己チェック・ループ ログ（評価器で仮説→検証→FB）
 - [consistency-review](consistency-review.md) — 整合監査（研究findings ↔ 設計#12-M ↔ 実装）
 - [research-program](research-program.md) — 大計画（研究プログラム・発散リスト）
+
+## E2E・受け入れテスト
+- [chat-e2e-2026-07-05](chat-e2e-2026-07-05.md) — チャット機能の初回通しE2E（既存会話履歴の発掘＋新経路のライブ実行）。**BUG#1(高・修正済)＝chat面14 verbとallowlistの不一致で③次の一手/②歌詞↔メロが自動拒否で黙って死亡**／BUG#2(中)＝曲名アナリーゼの期待ズレ(チャットにMIR無し・二次情報を"解析済"に見せる)／BUG#3/4(低)＝孤児スレッド・role不整合。合格＝作曲/Web検索/song_state/歌詞流し込み/停止/切断永続化。感想＝相棒として想像以上・落とし穴は「登録したのに許可してない」型でE2Eの価値が出た
