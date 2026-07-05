@@ -85,6 +85,25 @@ export function extractLoops(chords: ParsedChord[]): ParsedChord[][] {
   return loops;
 }
 
+/**
+ * アナリーゼ用：U-FRET html → **実キーのまま弾ける**進行1本（コーパス取込の songToProgressions とは別＝
+ * C基準にせず実音・主要ループ or 先頭16コード）。「サイト取得＝人手採譜を優先」の中核。取れねば null。
+ */
+export function analyzeProgressionFromUfret(
+  html: string,
+): { chords: { root: number; quality: string; start: number; dur: number }[]; key: number; mode: "major" | "minor" } | null {
+  const chords = linesToChords(extractUfretLines(html));
+  if (chords.length < 2) return null;
+  const loops = extractLoops(chords);
+  const seq = loops[0] ?? chords.slice(0, 16); // 主要ループ（無ければ先頭）
+  const det = detectKeyFromChords(seq, 1)[0];
+  return {
+    chords: seq.map((c, i) => ({ root: c.root, quality: c.quality, start: i * CHORD_BEATS, dur: CHORD_BEATS })),
+    key: det?.key ?? 0,
+    mode: det?.mode ?? "major",
+  };
+}
+
 /** 1曲の HTML → 進行neta 素材（ループごと・C基準度数・タグ・出典）。 */
 export function songToProgressions(html: string, meta: SongMeta): ProgressionInput[] {
   const chords = linesToChords(extractUfretLines(html));

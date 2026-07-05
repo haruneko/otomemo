@@ -72,3 +72,23 @@ describe("U-FRET 取込", () => {
     expect(p.content.source.url).toBe("http://x");
   });
 });
+
+import { analyzeProgressionFromUfret } from "../src/ingest-ufret";
+describe("analyzeProgressionFromUfret（サイト取得＝実キーの進行・アナリーゼ用）", () => {
+  it("U-FRET html → 実音のコード進行（C基準にしない）＋キー検出", () => {
+    const html = `<script>ufret_chord_datas = ${JSON.stringify([
+      "[A]あ[E]い[F#m]う[D]え",
+      "[A]お[E]か[F#m]き[D]く",
+    ])};</script>`;
+    const p = analyzeProgressionFromUfret(html)!;
+    expect(p).not.toBeNull();
+    // A E F#m D（I-V-vi-IV in A）＝実音のまま（root は絶対pc）
+    expect(p.chords.map((c) => `${c.root}:${c.quality}`)).toEqual(["9:", "4:", "6:m", "2:"]);
+    expect(p.chords[1]!.start).toBe(2); // CHORD_BEATS=2
+    expect(p.key).toBe(9); // A（C基準の0でなく実キー）
+    expect(p.mode).toBe("major");
+  });
+  it("コード譜が取れなければ null", () => {
+    expect(analyzeProgressionFromUfret("<html>no chords here</html>")).toBeNull();
+  });
+});

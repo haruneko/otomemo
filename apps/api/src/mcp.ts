@@ -24,6 +24,7 @@ import {
 } from "./music";
 import { learnStepWeightsFromLibrary, learnMotifModelFromLibrary } from "./music/corpusBias";
 import { splitMora, flowLyric, type LNote } from "./lyric";
+import { analyzeProgressionFromUfret, extractSongTitle } from "./ingest-ufret";
 import { meterInfo } from "./music/meter";
 import { findProgressions } from "./progression-search";
 import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
@@ -611,6 +612,41 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     async ({ url, title }) => {
       const job = core.enqueueJob({ intent: "audio_analyze", params: { url, filename: title } });
       return ok({ jobId: job.id, status: "queued", note: "解析を裏で開始しました。数分後にトレイ📥と知見ネタに届きます（待たずに戻ってOK）。" });
+    },
+  );
+  // ① サイト取得（優先）：コード譜サイト(U-FRET)から**人手採譜のコード進行**を取ってきて弾けるネタにする。
+  // 音源MIR(~85%)より人の採譜が正確＝コード/構成を知りたい時はこちらを優先（YouTube落としは音の実測が要る時だけ）。
+  server.registerTool(
+    "fetch_chords",
+    {
+      title: "コード譜サイトから取得（U-FRET）",
+      description: "コード譜サイト(U-FRET)のURLから**人手採譜のコード進行**を取ってきて、実キーのまま弾ける chord_progression ネタにする（主要ループを抽出）。音源解析(analyze_audio)より正確＝コード/進行を知りたい時はまずこれ。曲名しか無ければ WebSearch で『曲名 アーティスト U-FRET』のURLを見つけて渡す。対応はU-FRET（他サイトは非対応→その時は analyze_audio）。",
+      inputSchema: { url: z.string().describe("U-FRET のコード譜ページURL"), title: z.string().optional().describe("曲名(表示用)") },
+    },
+    async ({ url, title }) => {
+      let html: string;
+      try {
+        const res = await fetch(url, {
+          headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" },
+        });
+        if (!res.ok) return err(`取得失敗(HTTP ${res.status})`);
+        html = await res.text();
+      } catch (e) {
+        return err(`取得に失敗: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      const prog = analyzeProgressionFromUfret(html);
+      if (!prog) return err("このURLからコード譜を取れませんでした（対応=U-FRET）。別URLか、音源解析(analyze_audio)を使って。");
+      const songTitle = title || extractSongTitle(html) || "取得コード";
+      const neta = core.createNeta({
+        kind: "chord_progression",
+        title: `${songTitle} のコード（サイト取得）`,
+        content: { chords: prog.chords, source: { url } },
+        key: prog.key,
+        mode: prog.mode,
+        meter: "4/4",
+        tags: ["アナリーゼ", "取得"],
+      });
+      return ok(neta);
     },
   );
   server.registerTool(

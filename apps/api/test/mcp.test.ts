@@ -120,16 +120,16 @@ describe("mcp tool layer", () => {
 // #101 目的ツール面（10 thin verbs）。機械動作名(39)を目的語へ畳む。既存39は残置(additive)、チャットは --tools で10だけ見る。
 // 研究反映：transform は fat tool 回避で reshape(feel/range)＋convert(移調/拍子・確定) に2分割。generate↔fit は入力で排他。
 describe("purpose tool surface (#101)", () => {
-  // ③ song_state/plan_next・② read_neta/set_lyric・① analyze_audio を追加（10→15）。旧39は隠したまま。
-  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio"];
+  // ③ song_state/plan_next・② read_neta/set_lyric・① analyze_audio を追加（10→16）。旧39は隠したまま。
+  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords"];
 
-  it("目的ツール(15)を公開する", async () => {
+  it("目的ツール(16)を公開する", async () => {
     const { client } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name);
     for (const n of VERBS) expect(names, n).toContain(n);
   });
 
-  it("surface:chat は 15 verbs だけ（旧39を隠す＝モデルが旧ツールを掴まない・#100 D）", async () => {
+  it("surface:chat は 16 verbs だけ（旧39を隠す＝モデルが旧ツールを掴まない・#100 D）", async () => {
     const core = new Core(openDb(":memory:"));
     const server = buildMcpServer(core, { surface: "chat" });
     const [clientT, serverT] = InMemoryTransport.createLinkedPair();
