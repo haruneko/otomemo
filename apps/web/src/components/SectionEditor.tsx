@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
 import { KIND_LABEL, kindColor } from "../kinds";
+import { fitReportText } from "../fitReport";
 import { isProjectTag, projectName } from "../project";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
@@ -519,14 +520,11 @@ export function SectionEditor({
     const mel = melodyLaneNotes();
     const chords = sectionChords();
     if (!mel.length || !chords.length) return;
-    const r = await api.music<{ score: number; inChordRate: number; issues?: string[] }>("analyze_fit", {
-      melody: mel,
-      chords,
-      key: keyPc,
-    });
-    const pct = Math.round((r.inChordRate ?? 0) * 100);
-    const verdict = r.score >= 0.75 ? "よく噛み合ってる" : r.score >= 0.5 ? "まあまあ" : "ズレ気味";
-    setFitReport(`噛み合い：${verdict}（コードトーン率 ${pct}%${r.issues?.length ? "・" + r.issues[0] : ""}）`);
+    const r = await api.music<{ score: number; inChordRate: number; issues?: { msg: string }[] }>(
+      "analyze_fit",
+      { melody: mel, chords, key: keyPc },
+    );
+    setFitReport(fitReportText(r));
   }
   async function auditionCandidate() {
     candPlay.current?.stop();

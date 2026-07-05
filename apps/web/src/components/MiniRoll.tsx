@@ -6,7 +6,10 @@ import { api, type Neta, type CompositionNode } from "../api";
 // notes を渡すと content の代わりにそれを描く（section/song ブロック＝合成した概形を出す用・#5）。
 export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import("../music").Note[] }) {
   // 相対bass は単体プレビュー＝neta の key を tonic に解決（#bass S2）。
-  const notes = given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 });
+  // 不正 content 由来の NaN ノートは弾く（NaN が maxT/span に伝播して <rect> が NaN 属性・描画破綻するのを防ぐ・監査 堅牢性）。
+  const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 })).filter(
+    (n) => Number.isFinite(n.pitch) && Number.isFinite(n.start) && Number.isFinite(n.dur),
+  );
   if (!notes.length) return null;
   const W = 160;
   const H = 30;
@@ -78,7 +81,10 @@ export function SectionMini({ neta }: { neta: Neta }) {
     return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : bpb;
   };
   const endBeat = Math.max(bpb, ...children.map((c) => c.position + durOf(c)));
-  const bars = Math.max(1, Math.ceil(endBeat / bpb));
+  // 不正 content で endBeat/bpb が NaN・Infinity になると new Array(shown) が『Invalid array length』を投げて
+  // 一覧全体を白画面に落とす（監査 横断/堅牢性）。有限な正整数に丸める。
+  const rawBars = Math.ceil(endBeat / bpb);
+  const bars = Number.isFinite(rawBars) ? Math.max(1, rawBars) : 1;
   const shown = Math.min(bars, MINI_BARS_CAP);
   const lanes = (neta.kind === "song" ? SONG_MINI_LANES : MINI_LANES).map((lane) => {
     const cells = new Array(shown).fill(false);

@@ -59,6 +59,11 @@ main {
 .notebook.closed {
   display: none;
 }
+/* レールを畳んだら編集ペーンが 1fr 全幅を占める。既定は第1列=minmax(300,460) なので、notebook を
+   display:none にすると mainpane が460px上限の第1列へ落ち右が空白になっていた（監査 ST-02）。単一列に切替。 */
+.workspace:has(.notebook.closed) {
+  grid-template-columns: 1fr;
+}
 .mainpane {
   min-width: 0;
   min-height: 72vh;

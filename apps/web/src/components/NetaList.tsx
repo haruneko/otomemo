@@ -6,6 +6,7 @@ import { useAlive, pollJobContent } from "../poll";
 import { MUSIC_KINDS, CONTAINER_KINDS, KIND_LABEL } from "../kinds";
 import { isProjectTag } from "../project";
 import { MiniRoll, SectionMini } from "./MiniRoll";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { KindIcon } from "./KindIcon";
 import {
   playNotes,
@@ -283,7 +284,9 @@ export function NetaCard({
           <code className="id">{neta.id.slice(0, 8)}</code>
         </header>
         <div className="body">{label}</div>
-        {CONTAINER_KINDS.includes(neta.kind) ? <SectionMini neta={neta} /> : <MiniRoll neta={neta} />}
+        <ErrorBoundary fallback={<p className="section-mini-empty muted">（概形を表示できませんでした）</p>}>
+          {CONTAINER_KINDS.includes(neta.kind) ? <SectionMini neta={neta} /> : <MiniRoll neta={neta} />}
+        </ErrorBoundary>
         {/* プロジェクト所属(prj:)は別軸＝ピッカーに出すので意味タグのチップ列からは外す */}
         {(() => {
           const tags = neta.tags.filter((t) => !isProjectTag(t));
