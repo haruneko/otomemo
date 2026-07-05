@@ -306,6 +306,20 @@ export const api = {
   music: <T = unknown>(op: string, body: Record<string, unknown>) =>
     http<T>(`/music/${op}`, { method: "POST", body: JSON.stringify(body) }),
 
+  // 一式生成（決定的・純TS＝worker/クォータ不要）。frame(調/テンポ/拍子)から section＋各パートを
+  // 即生成し compose して返す。旧カードの gen_* ジョブ経路（worker 依存でハング）の置き換え。
+  genSection: (body: {
+    frame: { key?: number; tempo?: number | null; meter?: string | null };
+    parts?: string[];
+    seed?: number;
+    title?: string;
+    tags?: string[];
+  }) =>
+    http<{ section: Neta; composition: CompositionNode }>("/gen/section", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   // 似たメロ（①道具・retrieval）：提示メロに近いメロを scope(既定 library=連想元)から近い順。
   melodyNeighbors: (body: { notes: unknown; scope?: string; top?: number; id?: string }) =>
     http<{ neighbors: { id?: string; label?: string; similarity: number }[] }>("/melody/neighbors", {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api, type Neta } from "../api";
-import { useAlive, pollJobContent } from "../poll";
+import { useAlive } from "../poll";
 import { MUSIC_KINDS, CONTAINER_KINDS, KIND_LABEL } from "../kinds";
 import { isProjectTag } from "../project";
 import { MiniRoll, SectionMini } from "./MiniRoll";
@@ -42,7 +42,6 @@ export function NetaCard({
 }) {
   const label = neta.title ?? neta.text ?? "(無題)";
   const [gen, setGen] = useState(false);
-  const [genOpen, setGenOpen] = useState(false);
   // LV2: 副アクション（複製/ライブラリへ/生成）は既定で畳む＝主要2つ(▶/相談)＋「…」に整理。
   const [moreOpen, setMoreOpen] = useState(false);
   // P3: 器ピッカーの開閉（入れ先はフィルタと独立＝どの器へでも入れられる）。
@@ -56,11 +55,6 @@ export function NetaCard({
   });
   const sortStyle = { transform: CSS.Transform.toString(transform), transition };
 
-  const intentOf = {
-    melody: "gen_melody",
-    chord_progression: "gen_chord",
-    rhythm: "gen_rhythm",
-  } as const;
   const ctx = () => neta.title ?? neta.text ?? "";
 
   // 再生/停止トグル（#73+停止）。playNotes は単一Transportなので別ネタ再生で自動停止。
@@ -94,44 +88,17 @@ export function NetaCard({
     return tree ? compositeNotes(tree.children, neta.key ?? 0, neta.mode) : [];
   }
 
-  // 生成ジョブの done を待って content を取る（poll.ts 共通・worker timeout超まで待つ／reaper も拾う）
-  const pollContent = (jobId: string) => pollJobContent(jobId, alive);
-
-  async function generate(kind: keyof typeof intentOf) {
-    setGenOpen(false);
-    setGen(true);
-    try {
-      const job = await api.createJob({
-        intent: intentOf[kind],
-        target_neta_id: neta.id,
-        params: { context: ctx() },
-      });
-      const content = await pollContent(job.id);
-      if (content == null || !alive.current) return; // 失敗/タイムアウト/アンマウント：空ネタを作らない
-      await api.createNeta({ kind, title: neta.title ?? "案", content, from_job: job.id });
-      if (alive.current) onChanged?.();
-    } finally {
-      if (alive.current) setGen(false);
-    }
-  }
-
-  // 全体作例：メロ+コード+リズムを生成して section に composeする
+  // 全体作例＝決定的 /gen/section（純TS・worker不要/クォータ0）で section＋各パート(コード/コード楽器/
+  // メロ/ベース/ドラム)を即生成し compose。旧実装は gen_* ジョブを worker に投げ pollContent で待つ設計で、
+  // worker 非稼働時に「生成中…」のまま無限ハングしていた（監査 GN-08）。カードは決定的な一式作例に一本化し、
+  // パート単位のいじり(この進行にメロ生成 等)はコード文脈のある section エディタの「いじる▾」に委ねる。
   async function generateSection() {
-    setGenOpen(false);
     setGen(true);
     try {
-      const section = await api.createNeta({ kind: "section", title: `${ctx() || "作例"} 一式` });
-      for (const kind of ["melody", "chord_progression", "rhythm"] as const) {
-        const job = await api.createJob({
-          intent: intentOf[kind],
-          target_neta_id: neta.id,
-          params: { context: ctx() },
-        });
-        const content = await pollContent(job.id);
-        if (content == null || !alive.current) continue; // 失敗/アンマウントの子は作らない
-        const child = await api.createNeta({ kind, title: kind, content, from_job: job.id });
-        await api.placeChild(section.id, child.id, 0, 0).catch(() => {});
-      }
+      await api.genSection({
+        frame: { key: neta.key ?? 0, tempo: neta.tempo ?? undefined, meter: neta.meter ?? undefined },
+        title: `${ctx() || "作例"} 一式`,
+      });
       if (alive.current) onChanged?.();
     } finally {
       if (alive.current) setGen(false);
@@ -355,26 +322,15 @@ export function NetaCard({
           ))}
         {moreOpen &&
           (gen ? (
-          <span className="bs-btn">生成中…</span>
-        ) : genOpen ? (
-          <>
-            <button className="bs-btn" onClick={() => generate("melody")}>
-              メロ
+            <span className="bs-btn">生成中…</span>
+          ) : (
+            <button
+              className="bs-btn"
+              onClick={generateSection}
+              title="この調・拍子で一式（コード/コード楽器/メロ/ベース/ドラム）の作例を即生成"
+            >
+              作例を生成
             </button>
-            <button className="bs-btn" onClick={() => generate("chord_progression")}>
-              コード
-            </button>
-            <button className="bs-btn" onClick={() => generate("rhythm")}>
-              リズム
-            </button>
-            <button className="bs-btn" onClick={generateSection}>
-              全体
-            </button>
-          </>
-        ) : (
-          <button className="bs-btn" onClick={() => setGenOpen(true)}>
-            生成 ▾
-          </button>
           ))}
       </div>
     </article>
