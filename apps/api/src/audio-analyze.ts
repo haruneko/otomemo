@@ -71,8 +71,22 @@ export function synthesisPrompt(facts: unknown, label: string): string {
     "- 事実(BPM・調・音域・機能和声)と、候補どまり(7th/テンション・混合音源の楽器)を分けて、信頼度が低い所は『候補』と明記。\n" +
     "- コード進行は主ループ＋差し色を要約（全部列挙しない）。メロ/音域の特徴を一言。\n" +
     "- 最後に『学ぶなら〜』の一言。前置き不要、アナリーゼ文だけ。\n\n" +
-    `# 曲: ${label}\n# 解析結果(JSON)\n${JSON.stringify(facts)}`
+    `# 曲: ${label}\n# 解析結果(JSON)\n${JSON.stringify(summarizeFacts(facts))}`
   );
+}
+
+// ★プロンプトに生の巨大配列(beat_times/melody_f0/melody_notes 数千点)を入れると Claude がタイムアウトする。
+//   文章化に要る要約だけ渡す（BPM/拍子/調/音域/コード頻度top/コード列）。
+function summarizeFacts(facts: unknown): unknown {
+  const f = (facts ?? {}) as {
+    bpm?: number; meter?: number; key?: unknown; vocal_range?: unknown; duration_sec?: number;
+    chord_freq_top?: unknown; chord_labels_seq?: unknown[];
+  };
+  return {
+    bpm: f.bpm, meter: f.meter, key: f.key, vocal_range: f.vocal_range, duration_sec: f.duration_sec,
+    chord_freq_top: f.chord_freq_top,
+    chords: Array.isArray(f.chord_labels_seq) ? f.chord_labels_seq.slice(0, 80) : undefined,
+  };
 }
 
 // 1件の audio_analyze ジョブを実行。file(b64) or url → analyze.py → facts → Claude統合 → done。
@@ -97,8 +111,15 @@ export async function runAudioAnalyzeJob(
       writeFileSync(audioPath, Buffer.from(p.audio_b64 ?? "", "base64"));
     }
     const facts = await analyze(audioPath, dir, meter, bpmHint, signal);
-    const prose = await shot(synthesisPrompt(facts, label), 120_000, signal);
-    core.completeJob(job.id, { facts, prose: prose.trim(), title: label });
+    // ★重いMIRが済んだら prose 失敗でも facts は残す（prose は二次的・タイムアウトで全部捨てない）。
+    let prose = "";
+    try {
+      prose = (await shot(synthesisPrompt(facts, label), 120_000, signal)).trim();
+    } catch (e) {
+      if (signal.aborted) throw e; // 停止/削除は失敗として扱う
+      prose = "（所見の自動生成に失敗＝再生成できます。実測データは揃っています）";
+    }
+    core.completeJob(job.id, { facts, prose, title: label });
   } catch (e) {
     core.failJob(job.id, e instanceof Error ? e.message : String(e));
   } finally {
