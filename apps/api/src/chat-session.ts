@@ -49,7 +49,13 @@ put that into words, then change it.
 
 [Style by corpus] When the user asks for a specific flavor (e.g. Irish, game-music), pass a
 "style" arg to generate/fit (style:"irish" or "game") so the melody leans on the learned
-corpus's idiom. Omit it for the neutral default.`;
+corpus's idiom. Omit it for the neutral default.
+
+[When asked "what's next?" or the user is stuck] Use song_state to read the song's ACTUAL
+state — which lanes/sections are filled vs still empty, and its stage/next_action — plus
+analyze if useful. Then point at the real gap and offer 2-3 CONCRETE next actions, each with a
+one-line why (e.g. "サビのメロが空 → この進行にメロ候補を出す"). Don't just cheerlead. When you and
+the user agree on the next step, record it with plan_next.`;
 
 // 固定 namespace（変えると全スレッドの session_id が変わる＝既存の claude セッションを見失う）。
 const CM_CHAT_NS = "5f6c1e0a-3b2d-5c4e-8a9b-1d2e3f4a5b6c";

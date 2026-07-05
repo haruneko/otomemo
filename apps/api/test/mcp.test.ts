@@ -120,15 +120,16 @@ describe("mcp tool layer", () => {
 // #101 目的ツール面（10 thin verbs）。機械動作名(39)を目的語へ畳む。既存39は残置(additive)、チャットは --tools で10だけ見る。
 // 研究反映：transform は fat tool 回避で reshape(feel/range)＋convert(移調/拍子・確定) に2分割。generate↔fit は入力で排他。
 describe("purpose tool surface (#101)", () => {
-  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze"];
+  // ③ 次の一手ナビで song_state/plan_next を追加（10→12）。旧39は隠したまま。
+  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next"];
 
-  it("10個の目的ツールを公開する", async () => {
+  it("目的ツール(12)を公開する", async () => {
     const { client } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name);
     for (const n of VERBS) expect(names, n).toContain(n);
   });
 
-  it("surface:chat は 10 verbs だけ（旧39を隠す＝モデルが旧ツールを掴まない・#100 D）", async () => {
+  it("surface:chat は 12 verbs だけ（旧39を隠す＝モデルが旧ツールを掴まない・#100 D）", async () => {
     const core = new Core(openDb(":memory:"));
     const server = buildMcpServer(core, { surface: "chat" });
     const [clientT, serverT] = InMemoryTransport.createLinkedPair();
@@ -162,6 +163,19 @@ describe("purpose tool surface (#101)", () => {
       arguments: { question: "fit", chords: [{ root: 0, quality: "", start: 0, dur: 4 }], notes: [{ pitch: 60, start: 0, dur: 1 }] },
     })));
     expect(ana).toBeTruthy();
+  });
+
+  it("③ song_state で曲の状態を読み、plan_next で次の一手を残せる", async () => {
+    const { client } = await connect();
+    const song = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "song", title: "曲" } })));
+    const sec = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "section", title: "A" } })));
+    await client.callTool({ name: "assemble", arguments: { parent: song.id, child: sec.id } });
+    const st = JSON.parse(textOf(await client.callTool({ name: "song_state", arguments: { id: song.id } })));
+    expect(st.composition.children.length).toBe(1); // 構成が読める
+    const pn = JSON.parse(textOf(await client.callTool({ name: "plan_next", arguments: { id: song.id, stage: "ラフ", next_action: "サビのメロを詰める" } })));
+    expect(pn.next_action).toBe("サビのメロを詰める");
+    const st2 = JSON.parse(textOf(await client.callTool({ name: "song_state", arguments: { id: song.id } })));
+    expect(st2.song.next_action).toBe("サビのメロを詰める"); // 記録が反映される
   });
 
   it("未実装のギャップは明示エラーを返す（黙って捏造しない）", async () => {

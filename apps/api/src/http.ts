@@ -659,7 +659,13 @@ export function buildHttp(core: Core): FastifyInstance {
       // 器（プロジェクト）の指示文を会話に効かせる：thread→project→instructions を system prompt に追記。
       const proj = core.getChatThreadProject(thread);
       const instructions = proj ? (core.getProject(proj)?.instructions ?? "") : "";
-      const sess = getChatSession(thread, dbPath, repo, instructions);
+      // ③ 対象ネタの文脈：thread が neta id なら「今どのネタの話か」を Claude に伝える＝song_state 等が使える。
+      const target = core.getNeta(thread);
+      const targetNote = target
+        ? `[Current neta] You are working on neta id="${target.id}" (kind=${target.kind}${target.title ? `, title="${target.title}"` : ""}). When the user refers to "this song / this melody / 次どうする / 詰まった", operate on this id (e.g. song_state, analyze, fit).`
+        : "";
+      const suffix = [instructions, targetNote].filter(Boolean).join("\n\n");
+      const sess = getChatSession(thread, dbPath, repo, suffix);
       await sess.say(text, send);
     } catch (err) {
       send({ type: "error", error: String(err) });

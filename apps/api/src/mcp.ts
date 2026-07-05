@@ -560,6 +560,24 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       return ok({ placed: true });
     },
   );
+  // ③ 次の一手ナビ：曲の現状を読む(song_state)／合意した次の一手を残す(plan_next)。「次どうする？」の土台。
+  server.registerTool(
+    "song_state",
+    { title: "曲の状態を見る", description: "曲/セクションの現状＝子の構成・埋まってる/空きレーン・段階(stage)/次の一手(next_action)を返す。「次どうする？/詰まった」の判断に使う。", inputSchema: { id: z.string() } },
+    async ({ id }) => {
+      const tree = core.getComposition(id);
+      if (!tree) return err("not found");
+      return ok({ composition: tree, song: core.getSong(id) });
+    },
+  );
+  server.registerTool(
+    "plan_next",
+    { title: "次の一手を記録", description: "曲(song)の stage（段階）と next_action（次にやること）を更新して残す。ユーザーと合意した次の一手をここに書く。", inputSchema: { id: z.string(), stage: z.string().nullable().optional(), next_action: z.string().nullable().optional() } },
+    async ({ id, stage, next_action }) => {
+      const s = core.updateSong(id, { stage, next_action });
+      return s ? ok(s) : err("not found");
+    },
+  );
   server.registerTool(
     "generate",
     { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝fit を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional() } },
