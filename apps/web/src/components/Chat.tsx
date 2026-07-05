@@ -274,6 +274,12 @@ export function Chat({
     if (!loaded) return;
     let cancelled = false;
     void (async () => {
+      // ★まず「走行中ターンが実在するか」だけ軽く確認（UI状態に触れない GET）。実在する時だけ再アタッチする。
+      // これをしないと、走行中でないのに consumeTurn を走らせて streamText 等を空クリアし、直後に始まった
+      // 送信の途中表示を消してしまう＝新規チャットの一つ目の回答が尻切れトンボになる（回帰の原因）。
+      let live = false;
+      try { live = (await api.chatTurnStatus(thread)).live; } catch { /* 取得失敗＝再アタッチしない */ }
+      if (cancelled || !live) return;
       const { out, cards, sawAny } = await consumeTurn(
         (cb) => api.chatTurnLiveStream(thread, cb),
         () => { if (!cancelled) { started.current = true; setBusy(true); } }, // 走行中ターン検知→busy表示

@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 const {
   createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
   link, unlink, listChatMessages, addChatMessage, clearChatThread, chatTurnStream,
-  chatTurnLiveStream, chatTurnStop,
+  chatTurnLiveStream, chatTurnStop, chatTurnStatus,
 } = vi.hoisted(() => ({
   createJob: vi.fn(),
   getJob: vi.fn(),
@@ -23,12 +23,13 @@ const {
   chatTurnStream: vi.fn(),
   chatTurnLiveStream: vi.fn(),
   chatTurnStop: vi.fn(),
+  chatTurnStatus: vi.fn(),
 }));
 vi.mock("../src/api", () => ({
   api: {
     createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
     link, unlink, listChatMessages, addChatMessage, clearChatThread, chatTurnStream,
-    chatTurnLiveStream, chatTurnStop,
+    chatTurnLiveStream, chatTurnStop, chatTurnStatus,
   },
 }));
 
@@ -55,7 +56,19 @@ describe("Chat", () => {
     clearChatThread.mockResolvedValue({ cleared: true });
     chatTurnLiveStream.mockResolvedValue(undefined); // 再アタッチ：既定は走行中ターン無し（no-op）。
     chatTurnStop.mockResolvedValue({ stopped: true });
+    chatTurnStatus.mockResolvedValue({ live: false }); // 既定：走行中ターン無し＝再アタッチしない。
     streamEvents(result("")); // 既定：何も言わず終わる（各テストで上書き）。
+  });
+
+  it("走行中ターンが無ければ再アタッチしない＝一つ目の回答を消さない（尻切れ回帰・#S8b）", async () => {
+    chatTurnStatus.mockResolvedValue({ live: false });
+    streamEvents(asst("最初の回答です。ちゃんと最後まで。"), result("最初の回答です。ちゃんと最後まで。"));
+    render(<Chat onClose={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "はじめまして");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    expect(await screen.findByText(/最初の回答です。ちゃんと最後まで。/)).toBeInTheDocument();
+    // 走行中でないので live 購読(=streamText を空クリアする経路)は呼ばない。
+    expect(chatTurnLiveStream).not.toHaveBeenCalled();
   });
 
   it("生成中は「停止」ボタンが出て、押すと chatTurnStop を呼ぶ（#100④-S6）", async () => {
