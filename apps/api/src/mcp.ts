@@ -379,28 +379,19 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         // ワーカーが実際に処理できる intent のみを enum で強制（無効intentで死にジョブを作らない）
         intent: z
           .enum([
-            "gen_melody",
-            "gen_chord",
-            "gen_rhythm",
-            "gen_variations",
             "gen_chords_rule",
             "gen_pair_rule",
             "fit_to_chords",
             "find_similar",
-            "gen_lyric",
-            "fetch",
             "transform",
-            "brainstorm",
-            "suggest",
             "mora_count",
+            "import_midi",
             "research",
             "collect",
-            "plan",
-            "consult",
             "echo",
           ])
           .describe(
-            "意図: gen_melody/gen_chord/gen_rhythm=単体生成, gen_variations=枠付きでN種類を一括(params: count/kinds/structure/frame), gen_chords_rule=ルールベース(機能和声)のコード進行・Claude非依存・決定的(params.frame), gen_pair_rule=ルールのみでコード進行+それに合うメロのペアをcount個・即時・当てはまり保証(params.frame/count/structure), gen_lyric=歌詞生成, fetch=参考から抽出(params.target), transform=移調/拍子替え(条件付き・決定的), brainstorm=壁打ち, suggest=改善案, mora_count=モーラ数, research=参考調査, collect=断片/アイデア収集, plan=おまかせ(小タスクへ分解), consult=相談(会話/案/生成/多段を自動判別), echo=疎通確認。既存に合わせる/修正/変換は params.condition={fit_to,by}",
+            "意図（すべて決定的 or api処理・Claude非依存）: gen_chords_rule=ルールベース(機能和声)のコード進行(params.frame), gen_pair_rule=ルールのみでコード進行+それに合うメロのペアをcount個・当てはまり保証(params.frame/count/structure), fit_to_chords=外し音をコードに合わせて補正, find_similar=近い過去メロを記号類似で探す, transform=移調/拍子替え(条件付き・決定的), mora_count=モーラ数, import_midi=MIDIをトラック分割して取り込み(params.midi_b64), research=参考調査(api), collect=断片/アイデア収集(api), echo=疎通確認。既存に合わせる/修正/変換は params.condition={fit_to,by}",
           ),
         target_neta_id: z.string().optional(),
         instruction: z.string().optional(),
