@@ -31,7 +31,7 @@ import {
   parseChordSymbol,
 } from "./music";
 import { findProgressions } from "./progression-search";
-import { getChatSession } from "./chat-session";
+import { getChatSession, stopChatSession } from "./chat-session";
 import { beginTurn, pushTurnEvent, endTurn, attachTurn, isTurnLive, DONE } from "./chat-live";
 import { rankRecommendations } from "./music/recommend";
 
@@ -369,6 +369,12 @@ export function buildHttp(core: Core): FastifyInstance {
     const j = core.getJob(id);
     if (!j) return reply.code(404).send({ error: "not found" });
     return j;
+  });
+
+  // #100④-S6 ジョブ削除：消費者のいない/廃止インテントの死にジョブをトレイから消せる（滞留の自浄）。
+  app.delete("/job/:id", async (req) => {
+    const { id } = req.params as { id: string };
+    return { deleted: core.deleteJob(id) };
   });
 
   // Chat がディスパッチ後もそのチャットで完了を待てるよう、ジョブ＋子ジョブの決着を返す。
@@ -734,6 +740,13 @@ export function buildHttp(core: Core): FastifyInstance {
   app.get("/chat/:thread/turn/status", async (req) => {
     const { thread } = req.params as { thread: string };
     return { live: isTurnLive(thread) };
+  });
+
+  // ★停止：走行中の claude ターンを落とす（session_id は残る＝次発言で resume）。say が proc の exit で
+  // 解決し、/turn の finally が**それまでの部分テキストを永続化**して endTurn＝購読者に DONE が届く。
+  app.post("/chat/:thread/turn/stop", async (req) => {
+    const { thread } = req.params as { thread: string };
+    return { stopped: stopChatSession(thread) };
   });
 
   return app;

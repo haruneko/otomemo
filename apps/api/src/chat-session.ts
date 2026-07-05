@@ -196,19 +196,40 @@ export class ChatSession {
     return () => this.listeners.delete(l);
   }
 
-  /** 1ターン：text を送り、そのターンの全イベントを onEvent へ。result で解決。 */
+  /** 1ターン：text を送り、そのターンの全イベントを onEvent へ。result で解決。
+   *  ★停止対応：ターン中にプロセスが死んだら（stop() や異常終了）合成 result(aborted) を流して解決する
+   *  ＝外から kill しても promise が永久に未解決にならない（/turn の finally＝永続化+endTurn を必ず走らせる）。 */
   async say(text: string, onEvent: (e: Ev) => void): Promise<void> {
     this.lastActiveAt = Date.now();
     if (!this.proc) this.ready = this.ensureReady();
     await this.ready; // resume-or-create＋MCP が温まるまで待つ
     if (!this.proc) { onEvent({ type: "error", error: "claude session の起動に失敗しました" }); return; }
+    const proc = this.proc;
     return new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        off();
+        proc.removeListener("exit", onExit);
+        resolve();
+      };
       const off = this.on((e) => {
         onEvent(e);
-        if (e.type === "result") { off(); resolve(); }
+        if (e.type === "result") finish();
       });
+      const onExit = () => {
+        onEvent({ type: "result", subtype: "aborted", is_error: false, result: "" }); // 中断＝ターン境界を通知
+        finish();
+      };
+      proc.once("exit", onExit);
       this.write(text);
     });
+  }
+
+  /** 実行中ターンを中断＝プロセスを落とす。session_id は残る→次 say で resume（文脈は戻る）。 */
+  stop(): void {
+    this.kill();
   }
 
   /** 器の指示文を差し替える（次の spawn から有効＝走行中プロセスは idle reap 後の再起動で反映）。 */
@@ -250,6 +271,14 @@ function ensureReaper(): void {
     for (const s of sessions.values()) s.reapIfIdle(now, IDLE_MS);
   }, 60_000);
   reaper.unref?.(); // イベントループを生かし続けない
+}
+
+/** 走行中ターンを停止（プロセスを落とす）。セッションが存在すれば true。無ければ何もせず false。 */
+export function stopChatSession(thread: string): boolean {
+  const s = sessions.get(thread);
+  if (!s) return false;
+  s.stop();
+  return true;
 }
 
 /** スレッド毎の長命セッションを取得（無ければ生成・遅延spawn）。systemSuffix=器の指示文（毎回最新を反映）。 */

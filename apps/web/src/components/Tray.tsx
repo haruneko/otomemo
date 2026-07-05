@@ -91,6 +91,13 @@ export function Tray({
     await reload();
   }
 
+  // #100④-S6 死にジョブ削除：消費者のいない/廃止インテントの滞留をトレイから消す（自浄）。
+  async function removeJob(id: string) {
+    await api.deleteJob(id).catch(() => {});
+    setJobs((js) => js.filter((j) => j.id !== id)); // 楽観削除（失敗しても次のreloadで整合）
+    await reload();
+  }
+
   async function answerForm(id: string) {
     const f = forms[id] ?? {};
     const payload: Record<string, unknown> = {};
@@ -126,6 +133,14 @@ export function Tray({
                 )}
                 <span className={"tray-status " + j.status}>{j.status}</span>
                 {j.notify_level && <span className="tray-notify">{j.notify_level}</span>}
+                <button
+                  className="tray-del"
+                  aria-label="delete-job"
+                  title="このジョブを消す"
+                  onClick={() => void removeJob(j.id)}
+                >
+                  🗑
+                </button>
               </div>
               {asked(j) && <div className="tray-asked">「{asked(j)}」</div>}
               {/* 何ができたか＝ネタをカードで（タップで開く）。 */}

@@ -277,6 +277,9 @@ export class Core {
   failJob(id: string, error: string): void {
     this.job.failJob(id, error);
   }
+  deleteJob(id: string): boolean {
+    return this.job.deleteJob(id);
+  }
   askQuestion(jobId: string, question: string): Job | null {
     return this.job.askQuestion(jobId, question);
   }

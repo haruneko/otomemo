@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 const {
   createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
   link, unlink, listChatMessages, addChatMessage, clearChatThread, chatTurnStream,
+  chatTurnLiveStream, chatTurnStop,
 } = vi.hoisted(() => ({
   createJob: vi.fn(),
   getJob: vi.fn(),
@@ -20,11 +21,14 @@ const {
   addChatMessage: vi.fn(),
   clearChatThread: vi.fn(),
   chatTurnStream: vi.fn(),
+  chatTurnLiveStream: vi.fn(),
+  chatTurnStop: vi.fn(),
 }));
 vi.mock("../src/api", () => ({
   api: {
     createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
     link, unlink, listChatMessages, addChatMessage, clearChatThread, chatTurnStream,
+    chatTurnLiveStream, chatTurnStop,
   },
 }));
 
@@ -49,7 +53,23 @@ describe("Chat", () => {
     listChatMessages.mockResolvedValue([]);
     addChatMessage.mockResolvedValue({ id: "m" });
     clearChatThread.mockResolvedValue({ cleared: true });
+    chatTurnLiveStream.mockResolvedValue(undefined); // 再アタッチ：既定は走行中ターン無し（no-op）。
+    chatTurnStop.mockResolvedValue({ stopped: true });
     streamEvents(result("")); // 既定：何も言わず終わる（各テストで上書き）。
+  });
+
+  it("生成中は「停止」ボタンが出て、押すと chatTurnStop を呼ぶ（#100④-S6）", async () => {
+    // ストリームを解決させない＝busy を保つ（停止ボタンが出続ける）。
+    chatTurnStream.mockImplementation(async (_t: string, _x: string, onEvent: (e: unknown) => void) => {
+      onEvent(asst("考え中の途中…"));
+      await new Promise(() => {}); // 保留（result を出さない）
+    });
+    render(<Chat onClose={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("chat-input"), "重い相談");
+    await userEvent.click(screen.getByRole("button", { name: "送信" }));
+    const stopBtn = await screen.findByRole("button", { name: "stop-turn" });
+    await userEvent.click(stopBtn);
+    await waitFor(() => expect(chatTurnStop).toHaveBeenCalledWith("global"));
   });
 
   it("consult(streaming): Claude の自然文返答を表示する（#100④）", async () => {

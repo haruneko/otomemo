@@ -281,6 +281,9 @@ export const api = {
 
   getJob: (id: string) => http<Job>(`/job/${id}`),
 
+  // #100④-S6 ジョブ削除：消費者のいない/廃止インテントの死にジョブをトレイから消す。
+  deleteJob: (id: string) => http<{ deleted: boolean }>(`/job/${id}`, { method: "DELETE" }),
+
   // ジョブ＋子ジョブの決着（Chat がディスパッチ後もそのチャットで完了を待つため）。
   jobOutcome: (id: string) => http<JobOutcome>(`/job/${id}/outcome`),
 
@@ -424,6 +427,10 @@ export const api = {
   // 走行中ターンの有無（UI が再アタッチ要否を判断する用）。
   chatTurnStatus: (thread: string) =>
     http<{ live: boolean }>(`/chat/${encodeURIComponent(thread)}/turn/status`),
+
+  // ★停止：走行中の claude ターンを落とす（部分テキストはサーバが履歴に残す）。
+  chatTurnStop: (thread: string) =>
+    http<{ stopped: boolean }>(`/chat/${encodeURIComponent(thread)}/turn/stop`, { method: "POST" }),
 };
 
 // SSE レスポンスを1フレーム（`\n\n` 区切り）ずつ読み、`data: ` 行の JSON を onEvent へ。

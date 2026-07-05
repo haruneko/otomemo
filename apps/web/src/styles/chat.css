@@ -44,6 +44,16 @@
   border-radius: 8px;
   padding: 8px 14px;
 }
+/* 生成中の「停止」＝控えめな赤（叫ばないが、止められると分かる）。 */
+.chat-input button.chat-stop {
+  background: #1b1e23;
+  color: #e0705a;
+  border: 1px solid color-mix(in srgb, #e0705a 45%, var(--line));
+  white-space: nowrap;
+}
+.chat-input button.chat-stop:hover {
+  background: color-mix(in srgb, #e0705a 16%, #1b1e23);
+}
 .dialog header button {
   background: none;
   border: 0;

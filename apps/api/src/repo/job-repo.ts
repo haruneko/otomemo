@@ -67,6 +67,16 @@ export class JobRepo {
       .run({ id, e: error.slice(0, 500), u: now() });
   }
 
+  // #100④-S6 ジョブ削除：消費者のいない/廃止インテントの死にジョブを消す（トレイの自浄）。
+  // 子 job_result も落として孤児を残さない。存在して消せたら true。
+  deleteJob(id: string): boolean {
+    return this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM job_result WHERE job_id = ?`).run(id);
+      const r = this.db.prepare(`DELETE FROM job WHERE id = ?`).run(id);
+      return r.changes > 0;
+    })();
+  }
+
   getJobResults(jobId: string): JobResult[] {
     return this.db
       .prepare(`SELECT neta_id, role FROM job_result WHERE job_id = ? ORDER BY ord`)

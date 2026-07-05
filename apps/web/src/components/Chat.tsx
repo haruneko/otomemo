@@ -379,6 +379,16 @@ export function Chat({
     await run(text);
   }
 
+  // ★停止：走行中の claude ターンを落とす。サーバが部分テキストを履歴に残し、SSE は DONE で閉じる
+  // ＝consumeTurn が解決して busy が下りる（ここでは busy を触らない＝二重制御を避ける）。
+  async function stopTurn() {
+    try {
+      await api.chatTurnStop(thread);
+    } catch {
+      /* 停止要求の失敗は握る（次善＝そのまま待てる） */
+    }
+  }
+
   // 対象付きで開いたら最初の提案を自動で出す
   useEffect(() => {
     if (loaded && target && !started.current) {
@@ -587,9 +597,13 @@ export function Chat({
               }
             }}
           />
-          <button onClick={() => void send()} disabled={busy}>
-            {busy ? "…" : "送信"}
-          </button>
+          {busy ? (
+            <button className="chat-stop" aria-label="stop-turn" title="生成を止める" onClick={() => void stopTurn()}>
+              ■ 停止
+            </button>
+          ) : (
+            <button onClick={() => void send()}>送信</button>
+          )}
         </div>
       </div>
     </div>

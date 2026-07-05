@@ -216,8 +216,20 @@ body:has(.dialog-backdrop) {
   min-height: 0;
   overflow-y: auto;
   display: grid;
+  /* 単一列を container 幅に固定（minmax(0,1fr)）＝メッセージ内の横広な素材（長いスラッシュ列
+     "AD2/BFD3/EZ…"・URL・表）が暗黙列(auto=min-content)を押し広げてダイアログを画面より広げ、
+     本文が左右に見切れる事故を防ぐ（.notebook / .dialog と同じ対策）。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   align-content: start;
+}
+/* グリッド子は既定 min-width:auto＝内容幅で膨らむ→列を破る。0 を許して列内に収める。 */
+.chat-msg {
+  min-width: 0;
+}
+/* 本文の長い非改行トークン（型番のスラッシュ列・URL 等）は折り返して幅を溢れさせない。 */
+.chat-msg .chat-text {
+  overflow-wrap: anywhere;
 }
 .muted {
   color: var(--muted);
@@ -249,6 +261,19 @@ body:has(.dialog-backdrop) {
   background: #1b1e23; border: 1px solid #2a2e36; color: var(--muted, #9aa0ab);
 }
 .tray-chip:hover { color: #fff; border-color: var(--accent); }
+/* 死にジョブ削除＝右端に控えめなゴミ箱（叫ばない・押せば消える）。 */
+.tray-del {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  color: var(--muted, #9aa0ab);
+  cursor: pointer;
+  font-size: 0.9em;
+  padding: 2px 4px;
+  border-radius: 6px;
+  opacity: 0.7;
+}
+.tray-del:hover { opacity: 1; background: color-mix(in srgb, #e0705a 18%, transparent); }
 .tray-asked { font-size: 0.85em; color: var(--muted, #9aa0ab); margin: 4px 0; }
 .tray-results { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .tray-result {
