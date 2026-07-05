@@ -42,6 +42,10 @@ main {
   grid-template-columns: minmax(300px, 460px) 1fr;
   gap: 12px;
   align-items: start;
+  /* 広いモニタで編集ペーン(ピアノロール等)が横に間延びしない＝全体を中央寄せで頭打ち（デザイン監査#3）。
+     モバイル(全幅<1240)では無効。 */
+  max-width: 1240px;
+  margin: 0 auto;
 }
 .notebook {
   min-width: 0;

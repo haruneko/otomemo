@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { api, type Neta, type CompositionNode } from "../api";
-import { KIND_LABEL } from "../kinds";
+import { KIND_LABEL, kindColor } from "../kinds";
 import { isProjectTag, projectName } from "../project";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
@@ -88,6 +88,16 @@ const LANE_COLOR: Record<string, string> = {
   bass: "var(--k-bass)",
   rhythm: "var(--k-rhythm)",
   section: "var(--k-section)",
+};
+// MIDIトラック名は ASCII に（@tonejs/midi は名前を Latin-1 で書く＝日本語だと DAW で文字化け）。
+const LANE_MIDI_NAME: Record<string, string> = {
+  chord: "Chord",
+  melody: "Melody",
+  chord_pattern: "Keys 1",
+  chord_pattern2: "Keys 2",
+  bass: "Bass",
+  rhythm: "Drums",
+  section: "Section",
 };
 
 type Lane = LaneDef;
@@ -199,7 +209,7 @@ export function SectionEditor({
   const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
   const [genBusy, setGenBusy] = useState(false);
   const candPlay = useRef<PlaybackHandle | null>(null);
-  const lastPartRef = useRef<{ op: string; needsChords: boolean; prog?: number; label: string } | null>(null);
+  const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
   const liveMeter = meter ?? neta.meter ?? undefined;
   const liveTitle = (title ?? neta.title ?? "").trim(); // 生成/作成/MIDI名に使うライブタイトル
@@ -357,7 +367,7 @@ export function SectionEditor({
   async function previewNeta(n: Neta) {
     previewPlay.current?.stop();
     const notes = notesForContent(n.kind, n.content, { key: n.key ?? keyPc });
-    if (notes.length) previewPlay.current = await playNotes(notes, tempo, { program: n.kind === "bass" ? 33 : n.kind === "rhythm" ? undefined : 0 });
+    if (notes.length) previewPlay.current = await playNotes(notes, tempo, { program: progForKind(n.kind) });
   }
   // ピッカーを閉じたら試聴を止める（鳴りっぱなし防止）。
   useEffect(() => {
@@ -452,12 +462,12 @@ export function SectionEditor({
   }
   // 生成パーツ（この進行に◯）。メロ/ベースはコードが要る、ドラムは frame だけ。
   const GEN_PARTS = [
-    { label: "メロ", op: "gen_melody", needsChords: true, prog: 0 },
-    { label: "ベース", op: "gen_bass", needsChords: true, prog: 33 },
-    { label: "ドラム", op: "gen_drums", needsChords: false, prog: undefined },
+    { label: "メロ", op: "gen_melody", needsChords: true },
+    { label: "ベース", op: "gen_bass", needsChords: true },
+    { label: "ドラム", op: "gen_drums", needsChords: false },
   ] as const;
   const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : 0);
-  async function genPart(part: { op: string; needsChords: boolean; prog?: number; label: string }) {
+  async function genPart(part: { op: string; needsChords: boolean; label: string }) {
     if (genBusy) return;
     lastPartRef.current = part;
     const chords = sectionChords();
@@ -554,7 +564,7 @@ export function SectionEditor({
   // #55 多トラック書出：レーン(メロ/コード/ベース/リズム)別に1トラックずつ。空レーンは省く。
   function laneTracks() {
     return LANES.map((lane) => ({
-      name: lane.label,
+      name: LANE_MIDI_NAME[lane.key] ?? lane.key, // ASCII＝DAWで文字化けしない（日本語ラベルは使わない）
       notes: compositeNotes(laneChildren(lane), keyPc, neta.mode),
       drum: lane.key === "rhythm",
     })).filter((t) => t.notes.length);
@@ -830,7 +840,7 @@ export function SectionEditor({
                 <span className="picker-recs-head muted">おすすめ（コーパス）</span>
                 <div className="picker-recs-strip">
                   {pickerRecs.map((n) => (
-                    <div key={n.id} className="picker-rec" data-kind={n.kind}>
+                    <div key={n.id} className="picker-rec" data-kind={n.kind} style={{ ["--k" as string]: kindColor(n.kind) }}>
                       <button
                         type="button"
                         className="picker-rec-tap"
@@ -865,7 +875,7 @@ export function SectionEditor({
                 if (list.length === 0)
                   return <p className="muted">置ける{picker.lane.label}のネタがありません（元/拍子の条件を緩めるか、＋新規作成）</p>;
                 return list.map((n) => (
-                  <div key={n.id} className="picker-item" data-kind={n.kind}>
+                  <div key={n.id} className="picker-item" data-kind={n.kind} style={{ ["--k" as string]: kindColor(n.kind) }}>
                     <button type="button" className="picker-item-tap" aria-label={`place-${n.id}`} onClick={() => void placeAt(n)}>
                       <div className="picker-item-roll">
                         <MiniRoll neta={n} />

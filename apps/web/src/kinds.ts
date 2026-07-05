@@ -34,3 +34,10 @@ export const MUSIC_KINDS = KIND_DEFS.filter((d) => d.music).map((d) => d.key);
 export const CONTAINER_KINDS = KIND_DEFS.filter((d) => d.container).map((d) => d.key);
 export const TEXT_KINDS = new Set(KIND_DEFS.filter((d) => d.text).map((d) => d.key));
 export const KIND_LABEL: Record<string, string> = Object.fromEntries(KIND_DEFS.map((d) => [d.key, d.label]));
+
+// kind → 種別色のCSS変数（SSOT）。chord系(chord/chord_progression/chord_pattern)は --k-chord に畳む
+// （作成タイル/レーン/ピッカー等の色ルールを1箇所に・監査#5）。theme.ts:DEFAULT_COLORS の変数を指す。
+export function kindColor(kind: string): string {
+  const k = kind === "chord_progression" || kind === "chord_pattern" ? "chord" : kind;
+  return `var(--k-${k})`;
+}
