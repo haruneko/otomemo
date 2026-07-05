@@ -4,6 +4,7 @@
 import type { Core } from "./core";
 import type { Neta, NetaInput } from "./types";
 import { chordsFromTimeline, pcFromKeyName } from "./audio-chords";
+import { autoDownbeatOffset } from "./audio-grid";
 
 // チャット発のジョブは params.chat_thread を持つ。その場合、生成結果を**サーバ側で**そのスレッドの
 // チャットメッセージとして記録する＝クライアントが待ち中に離脱/リロードしても結果が必ずチャットに残る
@@ -180,19 +181,35 @@ export function reapResults(core: Core): number {
       core.db.prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`).run(r.id);
       continue;
     }
+    // #S10 アナリーゼ・ワークベンチ：生データ＋メタ＋overlay を持つ **analysis ネタ**を主出力にする。
+    // 開くとワークベンチ（メロピアノロール＋コード＋小節線）。仕上げ(アンカー/切出)は人間。
+    const facts = (parsed.facts ?? {}) as {
+      bpm?: number; meter?: number; key?: { key?: string; mode?: string }; vocal_range?: unknown; duration_sec?: number;
+      beat_times?: number[]; melody_notes?: unknown; melody_f0?: unknown; chords_timeline?: unknown; chords?: unknown;
+    };
+    const timeline = (facts.chords_timeline ?? facts.chords) as [number, number, string][] | undefined;
+    const meter = typeof facts.meter === "number" && facts.meter > 0 ? facts.meter : 4;
+    const beatTimes = Array.isArray(facts.beat_times) ? facts.beat_times : [];
+    const changes = Array.isArray(timeline) ? timeline.filter((c) => c[2] !== "N" && c[2] !== "X").map((c) => c[0]) : [];
+    const offset = autoDownbeatOffset(beatTimes, changes, meter); // 小節頭の自動推定＝初期アンカー
     core.createNeta({
-      kind: "knowledge",
+      kind: "analysis",
       title: `アナリーゼ: ${parsed.title ?? "音源"}`,
       text: parsed.prose ?? "",
-      content: { facts: parsed.facts, prose: parsed.prose ?? "" },
+      content: {
+        meta: { bpm: facts.bpm ?? null, meter, key: facts.key ?? null, vocal_range: facts.vocal_range ?? null, duration_sec: facts.duration_sec ?? null },
+        raw: { beat_times: beatTimes, melody_notes: facts.melody_notes ?? [], melody_f0: facts.melody_f0 ?? [], chords_timeline: timeline ?? [] },
+        overlay: { anchors: [{ t_sec: beatTimes[offset] ?? 0, meter, bar_no: 1 }], cuts: [], chord_edits: [], sections: [] },
+        prose: parsed.prose ?? "",
+      },
+      tempo: typeof facts.bpm === "number" ? Math.round(facts.bpm) : null,
+      key: pcFromKeyName(facts.key?.key),
+      mode: facts.key?.mode ?? null,
       tags: ["アナリーゼ"],
       from_job: r.id,
     });
     n += 1;
-    // 学習の出口（usecases-chat ①）：検出コードを**弾き直せる chord_progression 候補ネタ**に落とす。
-    // 知見(文章)だけだと「自分で弾いて学ぶ」ができず要件未達だった。冒頭抜粋・要トリム前提の候補。
-    const facts = (parsed.facts ?? {}) as { bpm?: number; key?: { key?: string; mode?: string }; chords_timeline?: unknown; chords?: unknown };
-    const timeline = facts.chords_timeline ?? facts.chords; // analyze.py は chords_timeline で出す
+    // 学習の出口（usecases-chat ①）：検出コードを**弾き直せる chord_progression 候補ネタ**にも落とす（即使える冒頭抜粋）。
     const chords = chordsFromTimeline(timeline, typeof facts.bpm === "number" ? facts.bpm : 120);
     if (chords.length >= 2) {
       core.createNeta({

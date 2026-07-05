@@ -607,10 +607,10 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     {
       title: "音源を解析（YouTube等URL）",
       description: "実在曲の録音を実際にダウンロードして本物のMIR解析（音源分離+BPM+コードから調を導出+音域）を裏で回す。YouTube等の音声/動画URLを渡す。重い(数分)ので『投げてトレイ📥で受け取る』形。結果は知見(アナリーゼ)ネタになる。曲名しか無い時は先に WebSearch で公式音源等のURLを探してから渡すこと。推定でお茶を濁さず、URLが取れるならこれで実測する。",
-      inputSchema: { url: z.string().describe("YouTube等の音声/動画URL"), title: z.string().optional().describe("曲名など表示用ラベル") },
+      inputSchema: { url: z.string().describe("YouTube等の音声/動画URL"), title: z.string().optional().describe("曲名など表示用ラベル"), meter: z.number().int().optional().describe("拍子=1小節の拍数。4/4=4, 6/8=6, 3/4=3。自動検出しない＝ユーザーに聞いて渡す（未指定=4）") },
     },
-    async ({ url, title }) => {
-      const job = core.enqueueJob({ intent: "audio_analyze", params: { url, filename: title } });
+    async ({ url, title, meter }) => {
+      const job = core.enqueueJob({ intent: "audio_analyze", params: { url, filename: title, meter } });
       return ok({ jobId: job.id, status: "queued", note: "解析を裏で開始しました。数分後にトレイ📥と知見ネタに届きます（待たずに戻ってOK）。" });
     },
   );

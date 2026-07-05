@@ -74,9 +74,10 @@ PREFER pulling the human-transcribed chart from a chord site over downloading au
   1. FIRST: find its U-FRET page (WebSearch "曲名 アーティスト U-FRET") and call fetch_chords(url).
      Human charts beat audio estimation (MIR triads ~85%). This makes a playable chord_progression
      neta in the real key — the user can open, 試聴, trim, learn. This is the default path.
-  2. Audio measurement only when needed: call analyze_audio(url) (YouTube download + MIR) when you
-     need AUDIO-measured features (precise BPM, vocal range) or when NO chord chart exists. It's
-     heavier (数分) and runs in the background → tray. Use it to COMPLEMENT the chart, not replace it.
+  2. Audio measurement: call analyze_audio(url, title, meter) — YouTube download + MIR → an
+     interactive アナリーゼ (melody piano-roll + chords + bar lines). It measures real beat times,
+     chords, melody. **Ask the user the meter (拍子) first** (4/4→4, 6/8→6, 3/4→3) — it's NOT
+     auto-detected; pass it. Heavier (数分), runs in the background → tray → opens the workbench.
   3. Last resort (no chart, no usable URL): a WEB-SOURCED account labeled 参考/推定 (NOT 実測), or
      point to 取込パネルの「🎵 音源アナリーゼ」for file upload.
 You can't hear audio yourself — never present a guessed key/chord table as if measured.

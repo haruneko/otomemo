@@ -54,9 +54,9 @@ export async function fetchAudioFromUrl(url: string, dir: string, signal?: Abort
   return join(dir, "dl.mp3");
 }
 
-// analyze.py を叩いて facts(JSON) を得る。stdout に混じりがあっても {..} を拾う。
-export async function analyzeAudioFile(audioPath: string, workdir: string, signal?: AbortSignal): Promise<unknown> {
-  const out = await run(PY, [SCRIPT, audioPath, workdir], 900_000, signal); // 分離が重い＝最大15分
+// analyze.py を叩いて facts(JSON) を得る。stdout に混じりがあっても {..} を拾う。meter=ユーザー指定拍子。
+export async function analyzeAudioFile(audioPath: string, workdir: string, meter = 4, signal?: AbortSignal): Promise<unknown> {
+  const out = await run(PY, [SCRIPT, audioPath, workdir, String(meter)], 900_000, signal); // 分離が重い＝最大15分
   const s = out.indexOf("{"), e = out.lastIndexOf("}");
   if (s < 0 || e <= s) throw new Error("analyze.py: JSON が取れませんでした");
   return JSON.parse(out.slice(s, e + 1));
@@ -80,13 +80,14 @@ export async function runAudioAnalyzeJob(
   core: Core,
   job: Job,
   shot: (p: string, ms?: number, signal?: AbortSignal) => Promise<string> = claudeShot,
-  analyze: (a: string, w: string, signal?: AbortSignal) => Promise<unknown> = analyzeAudioFile,
+  analyze: (a: string, w: string, meter?: number, signal?: AbortSignal) => Promise<unknown> = analyzeAudioFile,
 ): Promise<void> {
   const signal = beginJobProc(job.id); // 停止/削除で abort→demucs/python/yt-dlp を殺せるよう登録
   const dir = mkdtempSync(join(tmpdir(), "cm-audio-"));
   try {
-    const p = (job.params ?? {}) as { audio_b64?: string; filename?: string; url?: string };
+    const p = (job.params ?? {}) as { audio_b64?: string; filename?: string; url?: string; meter?: number };
     const label = p.filename || p.url || "アナリーゼ";
+    const meter = typeof p.meter === "number" && p.meter > 0 ? p.meter : 4; // ユーザー指定拍子（既定4/4）
     let audioPath: string;
     if (p.url) {
       audioPath = await fetchAudioFromUrl(p.url, dir, signal);
@@ -94,7 +95,7 @@ export async function runAudioAnalyzeJob(
       audioPath = join(dir, (p.filename || "audio.mp3").replace(/[^\w.\-]/g, "_"));
       writeFileSync(audioPath, Buffer.from(p.audio_b64 ?? "", "base64"));
     }
-    const facts = await analyze(audioPath, dir, signal);
+    const facts = await analyze(audioPath, dir, meter, signal);
     const prose = await shot(synthesisPrompt(facts, label), 120_000, signal);
     core.completeJob(job.id, { facts, prose: prose.trim(), title: label });
   } catch (e) {
