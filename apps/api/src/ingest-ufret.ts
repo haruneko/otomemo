@@ -95,7 +95,10 @@ export function analyzeProgressionFromUfret(
   const chords = linesToChords(extractUfretLines(html));
   if (chords.length < 2) return null;
   const loops = extractLoops(chords);
-  const seq = loops[0] ?? chords.slice(0, 16); // 主要ループ（無ければ先頭）
+  // 主要ループ＝**最長**を採る。loops[0]（左から最初の反復）は E↔B のような自明な2和音バンプを拾いがち
+  // （Lemon 実データで露呈）。最長が3和音未満なら先頭16コードにフォールバック。
+  const longest = loops.slice().sort((a, b) => b.length - a.length)[0];
+  const seq = longest && longest.length >= 3 ? longest : chords.slice(0, 16);
   const det = detectKeyFromChords(seq, 1)[0];
   return {
     chords: seq.map((c, i) => ({ root: c.root, quality: c.quality, start: i * CHORD_BEATS, dur: CHORD_BEATS })),
