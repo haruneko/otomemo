@@ -12,8 +12,12 @@ import { dirname } from "node:path";
 
 type Ev = Record<string, unknown>;
 
+// ⚠️ mcp.ts の surface="chat" が公開する verb と**必ず一致**させる（`--tools`/`--allowedTools` に無い verb は
+// モデルから見えても呼ぶと is_error で自動拒否＝機能が黙って死ぬ）。③次の一手(song_state/plan_next)・
+// ②歌詞↔メロ(read_neta/set_lyric) はここに無くて実際は動いていなかった（E2Eで発覚・2026-07-05）。
 const CHAT_VERBS = [
   "capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze",
+  "song_state", "plan_next", "read_neta", "set_lyric",
 ].map((n) => `mcp__creative-manager__${n}`);
 
 // #100④-S7：チャットにブラウザ検索を許す（実在曲/コード進行/機材レビュー等を調べる）。
