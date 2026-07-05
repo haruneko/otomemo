@@ -130,6 +130,14 @@ export function Chat({
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState(initialText ?? "");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // 長文向け：入力量に応じてテキストエリアの高さを内容フィット（CSS max-height で頭打ち→内部スクロール）。
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
   const [mode, setMode] = useState<Mode>("consult");
   const [busy, setBusy] = useState(false);
   const [thinkSec, setThinkSec] = useState(0); // 「考え中」(分解前 planning)の経過秒＝沈黙の不安を解消。
@@ -519,14 +527,20 @@ export function Chat({
           )}
         </div>
         <div className="chat-input">
-          <input
+          <textarea
+            ref={inputRef}
             aria-label="chat-input"
-            placeholder={busy ? "待ち中（待たずに戻れます）…" : mode === "research" ? "調べる…" : "相談を入力…"}
+            rows={1}
+            placeholder={busy ? "待ち中（待たずに戻れます）…" : mode === "research" ? "調べる…（Shift+Enterで改行）" : "相談を入力…（Shift+Enterで改行）"}
             value={input}
             disabled={busy} // 待ち中はこのチャットをロック（要望どおり）
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void send();
+              // Enter=送信 / Shift+Enter=改行（長文向け）。日本語IME変換中のEnterは送信しない。
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void send();
+              }
             }}
           />
           <button onClick={() => void send()} disabled={busy}>

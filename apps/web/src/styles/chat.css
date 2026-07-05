@@ -19,8 +19,10 @@
 .chat-input {
   display: flex;
   gap: 6px;
+  align-items: flex-end; /* 伸びるテキストエリアに対し送信ボタンは下端に */
 }
-.chat-input input {
+/* 長文向け：複数行テキストエリア（内容に応じ自動で伸縮・上限でスクロール）。スマホも。 */
+.chat-input textarea {
   flex: 1;
   min-width: 0;
   background: #1b1e23;
@@ -28,6 +30,12 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px;
+  font: inherit;
+  line-height: 1.4;
+  resize: none;
+  overflow-y: auto;
+  min-height: 38px;
+  max-height: 40vh; /* 画面の4割まで伸ばして、以降は内部スクロール */
 }
 .chat-input button {
   background: var(--accent);
