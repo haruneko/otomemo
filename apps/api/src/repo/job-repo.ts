@@ -35,6 +35,38 @@ export class JobRepo {
     return row ? rowToJob(row) : null;
   }
 
+  // 次の queued ジョブを1件 running に確定して返す（api 内 consumer 用）。SELECT→UPDATE を同一
+  // 同期トランザクションで＝原子的（better-sqlite3 は同期＝二重 claim を防ぐ）。intents で対象を絞る。
+  claimQueued(intents: string[]): Job | null {
+    if (intents.length === 0) return null;
+    const placeholders = intents.map(() => "?").join(",");
+    return this.db.transaction(() => {
+      const row = this.db
+        .prepare(
+          `SELECT id FROM job WHERE status='queued' AND intent IN (${placeholders})
+             ORDER BY priority DESC, created ASC LIMIT 1`,
+        )
+        .get(...intents) as { id: string } | undefined;
+      if (!row) return null;
+      this.db.prepare(`UPDATE job SET status='running', updated=@u WHERE id=@id`).run({ id: row.id, u: now() });
+      return this.getJob(row.id);
+    })();
+  }
+
+  // ジョブを done に＝結果(JSON)を result_summary へ。reaper が拾って materialize する。
+  completeJob(id: string, result: unknown): void {
+    this.db
+      .prepare(`UPDATE job SET status='done', result_summary=@r, error=NULL, updated=@u WHERE id=@id`)
+      .run({ id, r: result == null ? null : JSON.stringify(result), u: now() });
+  }
+
+  // ジョブを failed に（無言で消さない＝error を残す）。
+  failJob(id: string, error: string): void {
+    this.db
+      .prepare(`UPDATE job SET status='failed', error=@e, updated=@u WHERE id=@id`)
+      .run({ id, e: error.slice(0, 500), u: now() });
+  }
+
   getJobResults(jobId: string): JobResult[] {
     return this.db
       .prepare(`SELECT neta_id, role FROM job_result WHERE job_id = ? ORDER BY ord`)
@@ -108,6 +140,19 @@ export class JobRepo {
     params.limit = q.limit ?? 100;
     const sql = `SELECT * FROM job ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created DESC LIMIT @limit`;
     return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map(rowToJob);
+  }
+
+  // プロジェクト（prj: タグ）配下ネタを対象にしたジョブ＝ワークスペースの「投げて受け取る」可視化用。
+  listForProjectTag(projectTag: string, limit = 50): Job[] {
+    const rows = this.db
+      .prepare(
+        `SELECT j.* FROM job j
+         JOIN neta_tag nt ON nt.neta_id = j.target_neta_id
+         JOIN tag t       ON t.id = nt.tag_id AND t.name = @tag
+         ORDER BY j.created DESC LIMIT @limit`,
+      )
+      .all({ tag: projectTag, limit }) as Record<string, unknown>[];
+    return rows.map(rowToJob);
   }
 }
 

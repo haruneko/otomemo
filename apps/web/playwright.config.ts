@@ -5,6 +5,9 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  // 並列実行では単一 better-sqlite3(WAL)＋DL/再生の発火が稀に競合する（例：MIDI DL）。
+  // 1回リトライで自己修復＝真の失敗だけ残す（flaky は flaky と表示される）。
+  retries: 1,
   // 失敗時の手掛かりを残す（test-plan §2）：HTMLレポート＋trace/screenshot/video。
   reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   use: {

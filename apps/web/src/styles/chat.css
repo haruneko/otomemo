@@ -1,59 +1,4 @@
-/* #102 承認カード・#69 考え中・チャット */
-/* #102 S3 変異提案の承認カード（変更前後プレビュー＋原本/提案 再生）。 */
-.proposals {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-}
-.proposals-summary {
-  font-weight: 600;
-}
-.proposal-card {
-  border: 1px solid var(--line, #d0d0d0);
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: var(--surface, #fafafa);
-}
-.proposal-card.done {
-  opacity: 0.7;
-  font-size: 0.9em;
-}
-.proposal-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.proposal-why,
-.proposal-desc {
-  margin: 4px 0;
-  font-size: 0.9em;
-}
-.proposal-note {
-  font-size: 0.8em;
-  margin: 4px 0 0;
-}
-.proposal-diff {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin: 6px 0;
-}
-.proposal-side {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-start;
-}
-.proposal-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 6px;
-}
-.proposal-approve-all {
-  align-self: flex-start;
-  font-weight: 600;
-}
+/* #69 考え中・チャット */
 /* #69 考え中インジケータ。content アニメはブラウザ差で静止し得るので opacity パルスで確実に動かす。 */
 .chat-text.thinking {
   font-style: italic;
@@ -208,10 +153,81 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+/* メタ設定の折りたたみトグル（土地節約）。畳んだ時は要約(調・♩・音色)を1行で。 */
+.editor-meta-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin: 2px 0 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.editor-meta-toggle .emt-caret {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.editor-meta-summary {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .editor-actions {
   display: flex;
   gap: 8px;
   flex-wrap: nowrap; /* 削除と保存は分離させない */
+  align-items: center;
+}
+/* 右上のアイコンボタン（保存状態＝丸チェック／削除＝ゴミ箱）。ラベル無しで一行目を軽く。 */
+.icon-status,
+.icon-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #1b1e23;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+}
+.icon-status[data-state="saved"] {
+  color: var(--k-theme); /* 緑＝残ってる安心（丸チェック） */
+  border-color: color-mix(in srgb, var(--k-theme) 45%, var(--line));
+}
+.icon-status[data-state="dirty"] {
+  color: var(--k-section); /* 橙＝未保存（じき自動で保存される・丸） */
+  border-color: color-mix(in srgb, var(--k-section) 55%, var(--line));
+}
+.icon-status[data-state="saving"] svg {
+  animation: cm-spin 0.9s linear infinite; /* 保存中＝丸をくるくる */
+}
+.icon-danger {
+  color: #e0705a; /* 削除＝控えめな赤の枠＋ゴミ箱（叫ばない） */
+  border-color: color-mix(in srgb, #e0705a 40%, var(--line));
+}
+.icon-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #e0705a 18%, #1b1e23);
+}
+.icon-status:disabled,
+.icon-danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+@keyframes cm-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .editor-title {
   flex: 1;
@@ -242,21 +258,42 @@
   gap: 6px;
   align-content: start;
 }
+/* 1コード＝カード（セレクタ行＋長さ行を縦に束ねる）。2行が1コードと分かる・E7で増えても
+   セレクタ行と長さ行が混ざらない（ユーザー指摘）。 */
 .chord-row {
+  position: relative; /* ✕ をカード右上に絶対配置する基準 */
   display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  border-left: 3px solid transparent; /* #76 再生中ハイライトの余白 */
-  padding-left: 4px;
+  flex-direction: column;
+  gap: 4px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line); /* 再生中はここを赤に */
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
 }
 .chord-row.playing {
   border-left-color: #ff5a5a;
   background: rgba(255, 90, 90, 0.08);
 }
+/* セレクタ行：折り返しても長さ行とは別（root/三和音/拡張/オルタード/オンベース）。 */
+.chord-q {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-right: 30px; /* 右上の✕に被らない余白 */
+}
+.chord-rm {
+  position: absolute;
+  top: 6px;
+  right: 8px; /* カード右上に固定＝セレクタの折返しに影響しない */
+  padding: 2px 8px;
+}
 .chord-sym {
   font-weight: 600;
-  min-width: 48px;
+  flex: 0 0 auto;
+  width: 52px; /* 固定＝各行のセレクタ列が揃う（長名 Cmaj7#11 等は稀・はみ出し許容） */
 }
 .chord-row label {
   font-size: 0.75rem;
@@ -271,8 +308,15 @@
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 4px;
+  padding: 4px 2px;
   font: inherit;
+}
+/* セレクタ(root/三和音/拡張/オルタード/オンベース)を**同一幅**に＝列が揃う・見た目統一。 */
+.chord-row select {
+  flex: 0 0 auto;
+  width: 64px;
+  text-align: center;
+  text-align-last: center;
 }
 .chord-row input[type="number"] {
   width: 52px;
@@ -289,7 +333,52 @@
   gap: 4px;
   align-content: start;
   overflow-x: auto;
+  /* overflow-x:auto は仕様上 overflow-y を auto に化けさせ、1px の丸め超過で縦スクロールバーが出る
+     （実機で顕在化）。横スクロールだけ欲しいので overflow-y を明示 hidden（1pxは丸め＝実害なし）。 */
+  overflow-y: hidden;
   position: relative; /* #74 プレイヘッド基準 */
+  --rcell: 20px; /* ステップ幅。プレイヘッド計算も同値を参照（RhythmEditor PLAYHEAD_LEFT） */
+  --rname: 56px; /* レーン名（ラベル）幅 */
+}
+/* 狭い画面：セル/ラベルを縮めて 1小節(16step) が横スクロール無しで収まるように（プレイヘッドは変数追従） */
+@media (max-width: 480px) {
+  .rhythm-editor {
+    --rcell: 14px;
+    --rname: 42px;
+  }
+  .rhythm-name {
+    font-size: 0.62rem;
+    line-height: 1.05;
+  }
+  /* コード行：セレクタを少し詰めて root/三和音/拡張/オルタード/オンベースの5つが1行に収まる
+     ＝ドミナント7(オルタード有)の行も /オンベース が次行に落ちず、行ごとに揃う。 */
+  .chord-row select {
+    width: 54px;
+    font-size: 0.85rem;
+  }
+  .chord-sym {
+    width: 40px;
+    font-size: 0.9rem;
+  }
+  .chord-row button {
+    padding: 2px 6px;
+  }
+}
+.rhythm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.drum-kit-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.drum-kit-pick select {
+  font: inherit;
 }
 .rhythm-row {
   display: flex;
@@ -297,13 +386,20 @@
   gap: 2px;
 }
 .rhythm-name {
-  width: 56px;
+  width: var(--rname);
   flex: 0 0 auto;
   font-size: 0.72rem;
   color: var(--muted);
+  /* 複数小節で横スクロールしてもレーン名を左に固定＝何の行か見失わない（DAW定石）。
+     背景で後ろのセルを隠す＋右に影＝「ここから先がスクロールする」フローズン列に見える（かぶり解消）。 */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
+  box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.55);
 }
 .rhythm-cell {
-  width: 20px;
+  width: var(--rcell);
   height: 18px;
   flex: 0 0 auto;
   padding: 0;
@@ -319,6 +415,11 @@
 }
 .rhythm-cell.on {
   background: var(--k, var(--accent)); /* #10④ 打点を kind 色（rhythm=赤）に */
+}
+/* コード楽器：音の伸び（sustain）＝薄い kind 色で「押しっぱなし＝伸びてる」を表す。
+   頭(on)＝濃い／伸び(sustain)＝薄い。伸びの上をタップで長さ調整（ChordPatternEditor）。 */
+.rhythm-cell.sustain {
+  background: color-mix(in srgb, var(--k, var(--accent)) 34%, #1b1e23);
 }
 .bars-control {
   display: flex;
@@ -337,24 +438,15 @@
 }
 .section-actions {
   display: flex;
+  flex-wrap: wrap; /* 道具箱が増えて横に溢れる→折返す（レビュー M-1・PCでも見切れ解消） */
   gap: 8px;
+  margin-bottom: 8px;
 }
 
 /* ワーカー待ちの進捗＋キャンセル（待ち UX 改善）。止まってる不安と拘束を解消。 */
 .chat-wait { display: flex; flex-direction: column; gap: 6px; }
 .chat-wait .wait-sec { opacity: 0.6; font-size: 0.85em; }
 .wait-bar { height: 4px; background: #2a2e36; border-radius: 2px; overflow: hidden; }
-.wait-bar-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
-.wait-cancel {
-  align-self: flex-start;
-  font-size: 0.85em;
-  padding: 4px 10px;
-  background: #1b1e23;
-  border: 1px solid #2a2e36;
-  border-radius: 6px;
-  color: var(--muted, #9aa0ab);
-}
-.wait-cancel:hover { color: #fff; border-color: var(--accent); }
 
 /* 考え中(planning)の不確定プログレスバー＝動いてることを示す。 */
 .wait-bar-indet { height: 100%; width: 40%; background: var(--accent); border-radius: 2px; animation: waitIndet 1.1s ease-in-out infinite; }
@@ -369,3 +461,23 @@
   border-radius: 8px;
   padding: 6px 10px;
 }
+
+/* #100④ AI 本文のマークダウン描画（表/見出し/箇条書きを読める形に）。生の "| 小節 |" を解消。 */
+.chat-md > :first-child { margin-top: 0; }
+.chat-md > :last-child { margin-bottom: 0; }
+.chat-md p { margin: 0.4em 0; }
+.chat-md h1, .chat-md h2, .chat-md h3 { margin: 0.6em 0 0.3em; line-height: 1.25; }
+.chat-md h1 { font-size: 1.15em; }
+.chat-md h2 { font-size: 1.08em; }
+.chat-md h3 { font-size: 1em; }
+.chat-md ul, .chat-md ol { margin: 0.3em 0; padding-left: 1.3em; }
+.chat-md li { margin: 0.15em 0; }
+.chat-md hr { border: none; border-top: 1px solid rgba(127,127,127,0.3); margin: 0.6em 0; }
+.chat-md code { background: rgba(127,127,127,0.18); border-radius: 4px; padding: 0.05em 0.35em; font-size: 0.92em; }
+.chat-md pre { background: rgba(127,127,127,0.14); border-radius: 6px; padding: 0.6em 0.8em; overflow-x: auto; }
+.chat-md pre code { background: none; padding: 0; }
+.chat-md table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.9em; display: block; overflow-x: auto; }
+.chat-md th, .chat-md td { border: 1px solid rgba(127,127,127,0.32); padding: 0.28em 0.55em; text-align: left; white-space: nowrap; }
+.chat-md th { background: rgba(127,127,127,0.16); font-weight: 600; }
+.chat-md tr:nth-child(even) td { background: rgba(127,127,127,0.06); }
+.chat-md a { color: #4ea1ff; text-decoration: underline; }

@@ -65,6 +65,30 @@ describe("music", () => {
     expect(notes.every((n) => n.start === 0 && n.dur === 4)).toBe(true);
   });
 
+  it("renders tension chords from QUALITY_INTERVALS (C9 = C E G Bb D・pc正しい・テンションはオクターブ上)", () => {
+    const notes = chordsToNotes([{ root: 0, quality: "9", start: 0, dur: 4 }]);
+    expect(notes).toHaveLength(5); // R3579
+    const pcs = notes.map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
+    expect([...new Set(pcs)]).toEqual([0, 2, 4, 7, 10]); // C D E G Bb
+    // 9th(D) はクラスタでなくオクターブ上に開く（最低Cより1オクターブ超上）
+    const cs = notes.map((n) => n.pitch).sort((a, b) => a - b);
+    expect(cs[cs.length - 1]! - cs[0]!).toBeGreaterThanOrEqual(12);
+  });
+
+  it("unknown quality falls back to major triad（後方互換）", () => {
+    const notes = chordsToNotes([{ root: 0, quality: "zzz", start: 0, dur: 1 }]);
+    expect(notes).toHaveLength(3);
+  });
+
+  it("分数コード（決定B）：C/E は最低音が E＝bass pc が一番下に追加される", () => {
+    const plain = chordsToNotes([{ root: 0, quality: "", start: 0, dur: 4 }]);
+    const slash = chordsToNotes([{ root: 0, quality: "", start: 0, dur: 4, bass: 4 }]); // C/E
+    expect(slash.length).toBe(plain.length + 1); // bass 1音追加
+    const low = slash.reduce((m, n) => (n.pitch < m.pitch ? n : m), slash[0]!);
+    expect(((low.pitch % 12) + 12) % 12).toBe(4); // 最低音=E
+    expect(low.pitch).toBeLessThan(Math.min(...plain.map((n) => n.pitch))); // コードより下
+  });
+
   it("expands a rhythm lane's hits to drum notes (step/4 = beat)", () => {
     const notes = rhythmToNotes({ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4] }] });
     expect(notes).toEqual([
@@ -262,8 +286,47 @@ describe("music", () => {
       expect(notes[0]!.pitch).toBe(62);
       expect(notes[0]!.start).toBe(4);
     });
+
+    it("小節別リズム＝A@0/B@小節2/A@小節3 が ABA で鳴る（BがBBBに漏れない）", () => {
+      const A = { neta: { kind: "rhythm", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } } };
+      const B = { neta: { kind: "rhythm", content: { rhythm: { steps: 16, lanes: [{ name: "Snare", midi: 38, hits: [0] }] } } } };
+      const notes = compositeNotes(
+        [
+          { position: 0, node: A }, // 小節1（4/4・bpb=4）
+          { position: 4, node: B }, // 小節2
+          { position: 8, node: A }, // 小節3
+        ],
+        0,
+      );
+      // Kick(36)は 0拍と8拍、Snare(38)は 4拍だけ＝ABA。B が小節3以降に漏れない。
+      expect(notes.filter((n) => n.pitch === 36).map((n) => n.start).sort((a, b) => a - b)).toEqual([0, 8]);
+      expect(notes.filter((n) => n.pitch === 38).map((n) => n.start)).toEqual([4]);
+    });
+    it("① 進行トラックは無音の骨格＝自分は鳴らさず、コード楽器の解決文脈だけ提供する", () => {
+      const prog = { position: 0, node: { neta: { kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } } } };
+      // 進行だけ置いても音は出ない（骨格＝抽象・CP1）
+      expect(compositeNotes([prog], 0)).toEqual([]);
+      // 進行＋コード楽器 → 進行の骨格に解決してコード楽器だけ鳴る（進行の自前発音48は出力に無い）
+      const withInstr = [
+        prog,
+        { position: 0, node: { neta: { kind: "chord_pattern", content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 16, hits: [{ step: 0, dur: 16 }] } } } },
+      ];
+      const notes = compositeNotes(withInstr, 0);
+      expect(notes.length).toBeGreaterThan(0);
+      expect(notes.every((n) => n.program !== 48)).toBe(true); // 進行(GM49=48)は無音
+      expect(notes.filter((n) => n.start === 0).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b)).toEqual([0, 4, 7]); // C E G（コード楽器が解決）
+    });
   });
 
+  it("beatsPerBar：拍子→1小節の拍数（6/8=3・4/4=4・3/4=3・未指定=4／評価修正B）", async () => {
+    const { beatsPerBar } = await import("../src/music");
+    expect(beatsPerBar("4/4")).toBe(4);
+    expect(beatsPerBar("6/8")).toBe(3);
+    expect(beatsPerBar("3/4")).toBe(3);
+    expect(beatsPerBar("2/2")).toBe(4);
+    expect(beatsPerBar(null)).toBe(4);
+    expect(beatsPerBar("garbage")).toBe(4);
+  });
   it("notesOf extracts notes or empty", () => {
     expect(notesOf({ notes: [{ pitch: 60, start: 0, dur: 1 }] })).toHaveLength(1);
     expect(notesOf(null)).toEqual([]);
@@ -291,6 +354,19 @@ describe("music", () => {
       expect(atStart).toEqual([48, 52, 55]); // C E G（close・octave0）
       expect(notes.filter((n) => n.start === 0).every((n) => n.dur === 2)).toBe(true); // 次hit(step8=2拍)まで
     });
+    it("レジスタ安定（決定C）：C進行とB進行のcompingが近接＝ルートで跳ねない", () => {
+      const lowOf = (rootPc: number) => {
+        const notes = resolveChordPattern(cp({ hits: [{ step: 0, dur: 8 }] }), [{ root: rootPc, quality: "", start: 0, dur: 4 }], 0);
+        return Math.min(...notes.map((n) => n.pitch));
+      };
+      const cLow = lowOf(0); // C
+      const bLow = lowOf(11); // B（旧実装だと 48→59 で11半音跳ねた）
+      expect(Math.abs(bLow - cLow)).toBeLessThanOrEqual(6); // アンカー最寄り＝近接
+    });
+    it("octave で大体の高さがシフト（+1 で約1オクターブ上）", () => {
+      const low = (oct: number) => Math.min(...resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: oct } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).map((n) => n.pitch));
+      expect(low(1) - low(0)).toBe(12);
+    });
     it("arp：構成音を1つずつ巡回（各 hit 1音）", () => {
       const notes = resolveChordPattern(cp({ mode: "arp", hits: [{ step: 0, dur: 4 }, { step: 4, dur: 4 }, { step: 8, dur: 4 }] }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
       expect(notes.length).toBe(3); // 3 hit = 3音
@@ -312,6 +388,104 @@ describe("music", () => {
       const at4 = notes.filter((n) => n.start === 4 && n.program === 0).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
       expect(at0).toEqual([0, 4, 7]); // C E G
       expect(at4).toEqual([2, 7, 11]); // step16=4拍=G → G B D
+    });
+    it("トップ狙い音(絶対)：C→F→G でコンピングのトップが一定レジスタに保たれる（voice leading）", () => {
+      const play = (root: number) =>
+        resolveChordPattern(
+          { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 67 }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+          [{ root, quality: "", start: 0, dur: 4 }],
+          0,
+        );
+      const topOf = (root: number) => Math.max(...play(root).map((n) => n.pitch));
+      const c = topOf(0), f = topOf(5), g = topOf(7);
+      // 狙い 67(G4) の周り＝完全4度窓に収まる＝音域が跳ねない
+      for (const t of [c, f, g]) {
+        expect(t).toBeGreaterThanOrEqual(64);
+        expect(t).toBeLessThanOrEqual(69);
+      }
+      expect(c).toBe(67); // C は G4 がトップ（一番近いコードトーン）
+    });
+    it("トップ狙い音は絶対＝調(コード)が変わってもトップ音域は動かない", () => {
+      const topOf = (root: number) =>
+        Math.max(
+          ...resolveChordPattern(
+            { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 67 }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+            [{ root, quality: "", start: 0, dur: 4 }],
+            0,
+          ).map((n) => n.pitch),
+        );
+      // E♭(root3) でも A(root9) でもトップは 67 付近＝絶対の磁石（相対なら上へズレる）
+      for (const root of [3, 9, 10]) {
+        const t = topOf(root);
+        expect(t).toBeGreaterThanOrEqual(64);
+        expect(t).toBeLessThanOrEqual(69);
+      }
+    });
+    it("top 未指定は従来の anchor ベース（後退なし）", () => {
+      const notes = resolveChordPattern(
+        { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+        [{ root: 0, quality: "", start: 0, dur: 4 }],
+        0,
+      );
+      expect(notes.filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b)).toEqual([48, 52, 55]); // C E G（従来通り）
+    });
+    it("構成音は自動＝top指定時はコードの質から全トーン（maj7 は7thも鳴る／手選択不要）", () => {
+      const notes = resolveChordPattern(
+        { mode: "strum", voicing: { tones: [], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+        [{ root: 0, quality: "maj7", start: 0, dur: 4 }],
+        0,
+      );
+      const pcs = new Set(notes.map((n) => ((n.pitch % 12) + 12) % 12));
+      expect(pcs).toEqual(new Set([0, 4, 7, 11])); // C E G B（7thが自動で入る）
+    });
+    it("パワーコード＝R+5 の2音だけ（3rd を落とす・唯一の間引き）", () => {
+      const at0 = resolveChordPattern(
+        { mode: "strum", voicing: { tones: [], openClose: "close", octave: 0, top: 67, powerChord: true }, steps: 16, hits: [{ step: 0, dur: 4 }] },
+        [{ root: 0, quality: "", start: 0, dur: 4 }],
+        0,
+      ).filter((n) => n.start === 0);
+      expect(at0.length).toBe(2);
+      expect(new Set(at0.map((n) => ((n.pitch % 12) + 12) % 12))).toEqual(new Set([0, 7])); // C G（E=3rd 無し）
+    });
+    it("アルペジオ向き：up と down で辿る順が逆（音域は voicing 継承）", () => {
+      const play = (dir: "up" | "down") =>
+        resolveChordPattern(
+          { mode: "arp", voicing: { tones: [], openClose: "close", octave: 0, top: 72, arpDir: dir }, steps: 16, hits: [{ step: 0, dur: 2 }, { step: 2, dur: 2 }, { step: 4, dur: 2 }] },
+          [{ root: 0, quality: "", start: 0, dur: 12 }],
+          0,
+        ).map((n) => n.pitch);
+      const up = play("up"), down = play("down");
+      expect(up[0]! < up[2]!).toBe(true); // 昇順で辿る
+      expect(down[0]! > down[2]!).toBe(true); // 降順で辿る
+      expect(up.slice().reverse()).toEqual(down); // 完全に逆順
+    });
+    it("セルタップ：頭=消す／伸びの上=長さ調整／末尾直後や空き=新規（applyCellTap）", async () => {
+      const { applyCellTap } = await import("../src/music");
+      const hits = [{ step: 0, dur: 4 }]; // step0-3 を占有
+      expect(applyCellTap(hits, 0, 4)).toEqual({ hits: [], placed: false }); // 頭=消す
+      expect(applyCellTap(hits, 2, 4)).toEqual({ hits: [{ step: 0, dur: 3 }], placed: false }); // 伸びの上(2)=dur 3に詰める
+      // 末尾の直後(4=step+dur)は"空き"＝新規配置できる（隣接した音を打てる／伸ばしと衝突しない）
+      expect(applyCellTap(hits, 4, 1)).toEqual({ hits: [{ step: 0, dur: 4 }, { step: 4, dur: 1 }], placed: true });
+    });
+    it("打ち込みテスト：x--- x--x .x-. x---（x=打点/-=伸ばし/.=休符）が1小節で組める", async () => {
+      const { applyCellTap } = await import("../src/music");
+      // x=length を選んで打点、- は自動の伸び、. は置かない。長さ: x---=4, x--=3(付点8分), 単x=1, x-=2。
+      const taps: [number, number][] = [
+        [0, 4], // x---（step0, dur4）
+        [4, 3], // x--（step4, dur3＝付点8分）
+        [7, 1], // x（step7, dur1）← 前の音の直後だが"新規"で置ける（旧・伸ばし食いバグの回帰防止）
+        [9, 2], // .x-（step9, dur2／step8は休符=置かない）
+        [12, 4], // x---（step12, dur4）
+      ];
+      let hits: { step: number; dur: number }[] = [];
+      for (const [s, len] of taps) hits = applyCellTap(hits, s, len).hits;
+      expect(hits).toEqual([
+        { step: 0, dur: 4 },
+        { step: 4, dur: 3 },
+        { step: 7, dur: 1 },
+        { step: 9, dur: 2 },
+        { step: 12, dur: 4 },
+      ]);
     });
     it("open は構成音を1つおきに広げる（close と異なる）", () => {
       const close = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch);

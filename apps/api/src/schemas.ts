@@ -13,7 +13,7 @@ export const netaInputShape = {
     .min(1)
     .describe("melody/chord/chord_progression/bass/rhythm/lyric/theme/section/song/knowledge/other"),
   title: z.string().nullish(),
-  content: z.unknown().optional().describe("音楽的中身(JSON, Cキー基準)"),
+  content: z.unknown().optional().describe("音楽的中身＝JSONオブジェクトをそのまま渡す（例 {chords:[...]} / {notes:[...]}）。文字列化したJSONは渡さない。pitch/rootは実音。"),
   text: z.string().nullish().describe("歌詞・自由文"),
   key: z.number().int().min(0).max(11).nullish(),
   mode: z.string().nullish(),
@@ -38,6 +38,11 @@ export const listQueryShape = {
   scope: scopeQueryEnum.optional().describe("既定project。library=取込/連想元コーパス、all=両方"),
   tags: z.array(z.string()).optional(),
   q: z.string().optional().describe("title/text 部分一致"),
+  orderProject: z
+    .string()
+    .optional()
+    .describe("手動並べ替え(neta_order)の適用対象プロジェクト。指定時は position 順→未設定は updated 順"),
+  unassigned: z.coerce.boolean().optional().describe("true=どの器にも属さない(prj: タグ無し)ネタだけ"),
   limit: z.coerce.number().int().optional(),
   offset: z.coerce.number().int().optional(),
 } as const;

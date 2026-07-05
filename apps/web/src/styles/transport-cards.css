@@ -34,6 +34,16 @@
   color: #fff;
   border-color: var(--accent);
 }
+.tp-btn:disabled {
+  opacity: 0.35; /* 履歴が空＝押せない（Undo/Redo） */
+  cursor: default;
+}
+.tp-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+  margin: 0 4px; /* Undo/Redo と再生系の区切り */
+}
 .transport-time {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
@@ -66,6 +76,31 @@
   opacity: 0.85;
   min-width: 3px;
 }
+/* セクション尺（小節数）ステッパー（評価修正A・可変尺）。 */
+.section-bars {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.section-bars button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  background: #22252b;
+  color: var(--fg);
+  border-radius: 6px;
+}
+.section-bars button:disabled {
+  opacity: 0.4;
+}
+.section-bars [aria-label="bars-count"] {
+  min-width: 26px;
+  text-align: center;
+  color: var(--fg);
+}
 .lanes {
   display: grid;
   gap: 3px;
@@ -73,6 +108,9 @@
   border-radius: 8px;
   padding: 6px;
   overflow-x: auto;
+  /* overflow-x:auto は仕様上 overflow-y を auto に化けさせ、丸め超過で縦スクロールバーが出る
+     （rhythm-editor と同件）。レーンは固定行で縦スクロール不要＝overflow-y を明示 hidden。 */
+  overflow-y: hidden;
   position: relative;
 }
 .playhead {
@@ -100,6 +138,12 @@
   color: var(--muted);
   display: flex;
   align-items: center;
+  /* 横スクロールでレーン名(コード進行/メロ…)を左に固定＝何の行か見失わない（全エディタ統一）。 */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
+  box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.55); /* 右影＝フローズン列（かぶり解消） */
 }
 .ruler-bars {
   flex: 1;
@@ -143,6 +187,14 @@
   cursor: pointer;
   background: var(--accent);
 }
+/* 消しゴムモード中のブロック＝赤い破線で「タップ＝外す」を示す。 */
+.lane-block.erasing {
+  outline: 1.5px dashed #e0705a;
+  outline-offset: -2px;
+}
+.lane-block.erasing:hover {
+  box-shadow: inset 0 0 0 999px color-mix(in srgb, #e0705a 30%, transparent);
+}
 /* #55 配置ネタもネタ帳と同じ概形(MiniRoll)を背景に敷き、ラベルを上に重ねる＝何のネタか分かる */
 .lane-block .mini-roll {
   position: absolute;
@@ -165,6 +217,45 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }
+/* ③ 右端グリップ＝ドラッグでループ伸ばし。掴み代(タッチ域)は14px確保しつつ、
+   見た目は控えめに＝右端中央の小さな縦ハンドルだけ（旧: 白線+グラデ帯が"糊代"で後ろに出過ぎ・オーナー指摘）。 */
+.block-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 14px;
+  height: 100%;
+  cursor: ew-resize;
+  touch-action: none; /* ドラッグ中にページがスクロールしない */
+  pointer-events: auto;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.block-resize::after {
+  content: "";
+  width: 2px;
+  height: 42%;
+  margin-right: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.block-resize:hover::after {
+  height: 70%;
+  background: rgba(255, 255, 255, 0.85);
+}
+/* ループ伸ばし中のゴースト（fromPos〜ドラッグ位置）。 */
+.loop-ghost {
+  position: absolute;
+  top: 2px;
+  height: 34px;
+  border: 1px dashed rgba(255, 255, 255, 0.7);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+  z-index: 4;
+}
 .lane-block[data-kind="melody"] {
   background: var(--k-melody);
 }
@@ -178,6 +269,13 @@
 .lane-block[data-kind="rhythm"] {
   background: var(--k-rhythm);
 }
+/* #5 song の編成レーン＝section/song ブロックも種別色に（旧: accent 青のフォールバックで浮いてた）。 */
+.lane-block[data-kind="section"] {
+  background: var(--k-section);
+}
+.lane-block[data-kind="song"] {
+  background: var(--k-song);
+}
 .lanes-hint {
   font-size: 0.72rem;
 }
@@ -187,23 +285,174 @@
   gap: 6px;
   align-items: center;
 }
-.picker-kinds {
+/* ※種別タブは撤去（タップしたレーンに固定・置く種別はヘッダの色付きアイコンで示す）。 */
+/* ピッカー検索行＝絞り込み入力＋コーパス表示トグル。 */
+.picker-search-row {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
-  margin: 6px 0;
+  align-items: center;
 }
-.picker-kinds button {
-  flex: 1 1 auto;
-  min-width: 56px;
-  background: #2b2f36; /* OFF地色（選択中だけ accent＝どのタブが選択中か見分く） */
+.picker-search-row .editor-tags {
+  flex: 1;
+  min-width: 0;
+}
+/* ヘッダのパンくず（Section ▸ パート ▸ 小節）＝1行。Section名だけ省略で潰れる。 */
+.picker-crumb {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.picker-crumb .crumb-sec {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-weight: 600;
+}
+.picker-crumb .crumb-fix {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+/* 置く種別＝色付きアイコン＋パート名（撤去した種別タブの代わり）。アイコン色は inline style。 */
+.picker-crumb .crumb-kind {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.picker-crumb .crumb-kind svg {
+  width: 16px;
+  height: 16px;
+}
+.picker-crumb .crumb-kind-label {
+  color: var(--fg); /* 名前は白で読みやすく（アイコンだけ色付き）。 */
+  font-weight: 600;
+}
+.picker-crumb .crumb-sep {
+  flex: 0 0 auto;
+  opacity: 0.55;
+}
+/* 絞り込み行＝元ネタ(器)セレクト＋拍子一致のみトグル。ラベルは"絞り込み"文脈で自明なので付けない。 */
+.picker-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.78rem;
+}
+.picker-filter-row select {
+  min-width: 0;
+  max-width: 60%;
+  background: #1b1e23;
   color: var(--fg);
   border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 0.8rem;
 }
-.picker-kinds button.on {
-  background: var(--accent);
-  color: #fff;
+/* 拍子一致のみ＝トグルボタン（アプリ内はボタン式で統一・チェックボックスは他に無い）。既定ON。 */
+.picker-meter-btn {
+  flex: 0 0 auto;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.picker-meter-btn.on {
   border-color: var(--accent);
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 18%, #1b1e23);
+}
+/* 探して無ければ作る＝ピッカー上部の新規作成ボタン（点線＝"追加"の合図）。 */
+.picker-create {
+  width: 100%;
+  margin: 8px 0 4px;
+  padding: 9px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, #1b1e23);
+  color: var(--fg);
+  font-size: 0.85rem;
+  text-align: left;
+}
+.picker-create:hover {
+  background: color-mix(in srgb, var(--accent) 24%, #1b1e23);
+}
+/* #20 おすすめ（コーパス）＝横スクロールの小さな概形タイル。自作リスト(縦)と視覚的に分ける。 */
+.picker-recs {
+  margin: 6px 0;
+}
+.picker-recs-head {
+  display: block;
+  font-size: 0.72rem;
+  margin-bottom: 4px;
+}
+.picker-recs-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.picker-rec {
+  position: relative;
+  flex: 0 0 auto;
+  width: 94px;
+  background: #1b1e23;
+  border: 1px solid var(--line); /* 旧: border-top 3px 種別色＝角丸で"角"が出て壊れて見えた→均一枠に */
+  border-radius: 8px;
+  overflow: hidden;
+}
+.picker-rec-tap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  width: 100%;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.picker-rec .mini-roll {
+  width: 100%;
+  height: 34px;
+  display: block;
+  background: #0f1114; /* 概形の下地＝オレンジのノートが締まって見える */
+  border-radius: 4px;
+}
+.picker-rec:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+/* おすすめ概形の右上に重ねる試聴ボタン（丸）。 */
+.picker-rec .picker-play {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.55rem;
+  padding-left: 1px; /* ▶ の見た目中央寄せ */
+}
+.picker-rec .picker-play:hover {
+  background: var(--accent);
+}
+.picker-rec-label {
+  font-size: 0.66rem;
+  color: var(--muted, #9aa0a8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .picker-list {
   display: grid;
@@ -212,21 +461,53 @@
   overflow-y: auto;
 }
 /* #55 ピッカーの候補をネタ帳カード風に：概形(MiniRoll)＋種類/mood/keyで見て選べる */
+/* リスト項目＝配置ボタン(picker-item-tap)＋試聴(picker-play)の横並び。枠は wrapper が持つ。 */
 .picker-item {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  align-items: stretch;
   width: 100%;
-  text-align: left;
-  padding: 0.5rem;
+  min-height: 44px; /* grid項目＋overflow:hidden だと自動最小が0に潰れ、2行メタが切れる→高さを確保 */
   background: #1b1e23;
   border: 1px solid #2a2d33;
   border-left: 3px solid var(--accent);
   border-radius: 6px;
-  cursor: pointer;
-  color: inherit;
+  overflow: hidden;
 }
-.picker-item:hover {
+.picker-item-tap {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px; /* 概形34px＋2行メタが切れない高さ（overflow:hidden で下線が欠けてた） */
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.picker-item-tap:hover {
+  background: #24272e;
+}
+/* 試聴ボタン（リスト右／おすすめは概形右上に重ねる）。 */
+.picker-play {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.picker-item .picker-play {
+  width: 40px;
+  border-left: 1px solid var(--line);
+  font-size: 0.72rem;
+}
+.picker-item .picker-play:hover {
+  color: var(--accent);
   background: #24272e;
 }
 .picker-item[data-kind="melody"] {
@@ -258,6 +539,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1; /* 残り幅を取り、長いタイトルを ellipsis に収める（min-width:0 と対で横はみ出し防止）。 */
   min-width: 0;
 }
 .picker-item-meta strong {
@@ -268,59 +550,7 @@
 .picker-item-meta .muted {
   font-size: 0.72rem;
 }
-.section-children {
-  display: grid;
-  gap: 6px;
-}
-.section-child {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  background: #1b1e23;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px 8px;
-}
-.section-child-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.section-child label {
-  font-size: 0.72rem;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-.section-child input {
-  width: 52px;
-  background: #15171b;
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 3px;
-}
-.section-child button,
-.section-matches button {
-  background: #2b2f36;
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 4px 8px;
-}
-.section-matches {
-  display: grid;
-  gap: 4px;
-}
-.section-matches button {
-  text-align: left;
-  background: #1b1e23;
-  font-size: 0.8rem;
-}
+/* ※.section-children/.section-child*/.section-matches は撤去済みUIの死にCSS＝削除（監査）。 */
 .editor-bar select,
 .editor-bar input[type="number"],
 .editor-attrs select,
@@ -364,6 +594,117 @@
   font-size: 0.75rem;
   color: var(--muted);
 }
+/* 音符イラストのボタン（音価/付点）：SVGを中央に・高さ揃え。 */
+.len.glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  min-height: 30px;
+}
+/* 描く/選ぶ と 同じ行に（縦線で区切り）。.proll-modes 本体は下方に集約。 */
+.roll-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.tb-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+  margin: 0 2px;
+}
+/* ツールバーの道具ボタン（崩す 等）＋崩し候補バー（①道具・候補プレビュー）。 */
+.tb-tool {
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.tb-tool:disabled {
+  opacity: 0.5;
+}
+.tb-tool.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.reshape-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--k, var(--accent)) 12%, #1b1e23);
+  border: 1px solid var(--k, var(--accent));
+  border-radius: 8px;
+  max-width: 680px; /* PC で1行フル幅に間延びしない＝候補UIのまとまり（レビュー M-3） */
+}
+.reshape-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  width: 100%; /* ラベルは1行占有＝操作ボタンは次行に固まる（PCで間延びしない・レビュー M-3） */
+}
+.reshape-strength {
+  display: inline-flex;
+  gap: 2px;
+}
+.reshape-strength button {
+  font-size: 0.76rem;
+  padding: 3px 9px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.reshape-strength button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.fit-report {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--fg);
+  cursor: pointer;
+}
+/* 音価ボタンと付点の区切り線（付点=修飾で別物と分かる）。 */
+.nv-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--line);
+  margin: 0 4px;
+}
+/* 歌詞流し込み入力（メロのみ・LS3）。 */
+.proll-lyric-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  flex-wrap: wrap;
+}
+.proll-lyric-input input {
+  flex: 1;
+  min-width: 130px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+.proll-lyric-input button {
+  padding: 5px 10px;
+}
 .proll-tools .len {
   background: #2b2f36;
   color: var(--fg);
@@ -398,6 +739,9 @@
 }
 .proll-row {
   display: flex;
+  /* ロー幅を内容幅に＝鍵盤(.proll-key sticky)が横スクロール全域でピンされる
+     （ない時はロー幅が容器幅どまりで、1画面分しか効かず鍵盤が流れた）。 */
+  min-width: max-content;
 }
 .proll-lane {
   display: flex;
@@ -415,6 +759,82 @@
   padding: 0;
   cursor: pointer;
 }
+.proll-note.sel {
+  outline: 2px solid #ffd24a; /* 選択中＝黄枠（どの kind 色でも目立つ）。 */
+  outline-offset: -1px;
+  z-index: 3;
+  filter: brightness(1.15);
+}
+/* 崩し候補モード：元メロを半透明ゴーストで重ねる（比較用・非操作・候補の背面）。 */
+.proll-note.ghost {
+  background: color-mix(in srgb, var(--k, var(--accent)) 14%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--k, var(--accent)) 75%, #fff);
+  opacity: 0.62; /* ダーク背景でも元メロ（点線）が見えるよう濃くする（レビュー L-3） */
+  z-index: 1;
+  pointer-events: none;
+}
+/* 消す モード中のノート＝赤い破線で「タップ＝削除」を示す（Section の lane-block.erasing と同流儀・④）。 */
+.proll-note.erasing {
+  outline: 1.5px dashed #e0705a;
+  outline-offset: -1px;
+  cursor: crosshair;
+}
+/* 描く/選ぶ/消す モードトグル（メロ/ベース/Section 共通・SSOT）。 */
+.proll-modes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.proll-modes button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 4px 14px;
+  font-size: 0.8rem;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-modes button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+/* 選択バー（複製/コピー/貼付/削除＋nudge）。 */
+.proll-selbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 6px 8px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.proll-selbar button {
+  padding: 5px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-selbar button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.proll-selbar button:disabled {
+  opacity: 0.35;
+}
+.sel-nudge {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+}
 .proll-key {
   width: 40px;
   height: 14px;
@@ -428,6 +848,10 @@
   padding-right: 3px;
   border: 1px solid #24272e;
   user-select: none;
+  cursor: pointer; /* タップでその音を鳴らす（鍵盤プレビュー） */
+}
+.proll-key:active {
+  filter: brightness(1.25); /* 押した手応え */
 }
 .proll-key.white {
   background: #d7dae0;
@@ -436,6 +860,45 @@
 .proll-key.black {
   background: #2a2d33;
   color: #9aa0aa;
+}
+/* 歌詞レーン（流し込み結果＝各音符のx位置に歌詞）。「詞」ラベルは鍵盤と同じく左に固定。 */
+.proll-lyric-lane {
+  display: flex;
+  align-items: stretch;
+  min-width: max-content;
+  border-top: 1px solid #2a2d33;
+  background: #15171b;
+  position: sticky; /* 縦スクロールしても下端に固定＝音域が広くても歌詞が常に見える */
+  bottom: 0;
+  z-index: 2;
+}
+.proll-lyric-key {
+  flex: 0 0 auto;
+  width: 40px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 22px;
+  text-align: center;
+  border: 1px solid #24272e;
+}
+.proll-lyric-track {
+  position: relative;
+  height: 22px;
+}
+.proll-syl {
+  position: absolute;
+  top: 3px;
+  font-size: 11px;
+  color: #e6e8ec;
+  white-space: nowrap;
+  transform: translateX(1px);
+}
+.proll-syl.melisma {
+  color: #6b7280; /* メリスマ ー は控えめ */
 }
 .proll-cell {
   width: 12px;
@@ -450,6 +913,10 @@
 .proll-cell.beat {
   border-left: 1px solid #3a3f49;
 }
+/* 小節線（拍子基準・6/8対応）＝拍線より強く＝小節の頭が分かる。 */
+.proll-cell.bar {
+  border-left: 2px solid #5b6270;
+}
 
 /* 弱起（アウフタクト）：lead-in セルは淡く、ダウンビート(拍0)に強い境界線。 */
 .roll-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
@@ -460,8 +927,31 @@
 .proll-row.black .proll-cell.pickup { background: #0f1115; }
 
 /* コード楽器パターン エディタ（CP3）：voicing コントロール行。 */
-.cp-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 6px; }
-.cp-tones { display: flex; align-items: center; gap: 4px; }
-.cp-tones .len { min-width: 26px; background: #2b2f36; color: var(--fg); border: 1px solid var(--line); }
-/* 構成音(R/3/5/7)・長さツールの選択中アクセント（OFF地色＝暗・ON＝accent でオンオフが見分く）。 */
-.cp-tones .len.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* コード楽器：コントロール群（枠の外）＋グリッド（横スクロール枠）を縦に。min-width:0 で
+   子がビューポートを超えて広がらない＝モバイルで横はみ出さない。 */
+.cp-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* ゾーンの小見出し（いつ弾く／響き）。 */
+.cp-zlabel { font-size: 0.68rem; color: var(--muted); margin: 0 0 6px; }
+/* ①「いつ弾く」＝主役：グリッド＋長さ＋小節をまとめた枠。 */
+.cp-when { min-width: 0; }
+.cp-when-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+/* ②「響き」＝音の作り込みを1枠に集約・静かに（青の壁を解体）。 */
+.cp-voicing { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #191c21; }
+.cp-vrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }
+.cp-vrow:last-child { margin-bottom: 0; }
+.cp-vlbl { font-size: 0.75rem; color: var(--muted); }
+/* セグメント（二択/多択）：選択だけ色・他はグレー＝全部青を避ける。既定=accent／chord系=種別色。 */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { background: transparent; border: 0; color: var(--muted); padding: 6px 12px; font-size: 0.85rem; cursor: pointer; }
+.seg button.on { background: var(--accent); color: #fff; }
+.seg.seg-chord button.on { background: var(--k-chord); color: #fff; }
+/* トップ狙い・高さのステッパー（無彩色＝±が青くならない）。 */
+.cp-top { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 2px 4px; }
+.cp-top button { width: 28px; height: 28px; border: 0; background: #22252b; color: var(--fg); border-radius: 6px; font-size: 15px; cursor: pointer; }
+.cp-top span { min-width: 30px; text-align: center; font-size: 0.85rem; }
+/* パワーコード＝チェック風トグル（OFF=地色／ON=コード色）。 */
+.cp-chk { background: #191c21; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); padding: 6px 10px; font-size: 0.78rem; cursor: pointer; }
+.cp-chk.on { border-color: var(--k-chord); color: var(--fg); background: color-mix(in srgb, var(--k-chord) 20%, #191c21); }
+@media (max-width: 480px) {
+  .cp-vrow { gap: 6px; }
+}

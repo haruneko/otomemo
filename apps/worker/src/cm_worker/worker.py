@@ -95,6 +95,60 @@ def _enqueue_children(
     return n
 
 
+def _format_history(rows: list) -> str:
+    """chat_message 行（時系列・古い順）を Claude 向けの会話トランスクリプトに整形（純関数）。
+    AI の生成ターンは data.neta.content（実ノート/コード）を含める＝「さっきのメロを直して」が成立。
+    1行が長くなりすぎないよう content JSON は上限で丸める。"""
+    lines: list[str] = []
+    for r in rows:
+        role = r["role"]
+        text = (r["text"] or "").strip()
+        data = r["data"]
+        if isinstance(data, str) and data:
+            try:
+                data = json.loads(data)
+            except Exception:  # noqa: BLE001
+                data = None
+        if role == "user":
+            if text:
+                lines.append(f"ユーザー: {text}")
+            continue
+        # AI 側：生成物(neta)があれば kind/label/実content を出す（直す対象を渡す）。
+        neta = data.get("neta") if isinstance(data, dict) else None
+        if isinstance(neta, dict) and isinstance(neta.get("content"), (dict, list)):
+            label = (neta.get("title") or neta.get("kind") or "").strip()
+            nkind = neta.get("kind") or "?"
+            body = json.dumps(neta["content"], ensure_ascii=False)
+            if len(body) > 1200:  # 長大な content は丸める（直近1つが渡れば十分）
+                body = body[:1200] + "…"
+            lines.append(f"アシスタント[生成:{nkind}] {label}: {body}")
+        elif text:
+            lines.append(f"アシスタント: {text}")
+    return "\n".join(lines)
+
+
+def _resolve_chat_history(conn: sqlite3.Connection, params: dict, limit: int = 8) -> dict:
+    """#99 consult が前ターンを踏まえて答えられるよう、chat_thread の直近履歴を params.history に焼く。
+    生産者(worker)がDBを直読みする（design#85/L174 と同じ原則・reload耐性＝履歴はサーバ権威/fb-3）。
+    best-effort：chat_thread 無し/履歴ゼロ/表が無い等は history を生やさず素通り（退化しない・#43）。"""
+    thread = params.get("chat_thread")
+    if not isinstance(thread, str) or not thread:
+        return params
+    try:
+        rows = conn.execute(
+            "SELECT role, kind, text, data FROM chat_message "
+            "WHERE thread=? ORDER BY created DESC, rowid DESC LIMIT ?",
+            (thread, limit),
+        ).fetchall()
+    except sqlite3.Error as e:
+        log.warning("chat history read failed (thread=%s): %s", thread, e)
+        return params
+    if not rows:
+        return params
+    history = _format_history(list(reversed(rows)))  # 取得は新しい順→時系列に戻す
+    return {**params, "history": history} if history else params
+
+
 def run_once(conn: sqlite3.Connection) -> int:
     """queued を優先度順に1件処理。処理したら1、無ければ0。"""
     row = conn.execute(
@@ -113,18 +167,14 @@ def run_once(conn: sqlite3.Connection) -> int:
             raise ValueError(f"no handler for intent: {row['intent']}")
         params = json.loads(row["params"]) if row["params"] else {}
         params = _resolve_fit_context(conn, params)  # #85 S2b 合わせる相手を展開
+
+        # #100⑤ 会話(agentic consult)は api 常駐 claude へ移管済＝worker は決定的バッチ専任。
+        # handler は AI プロンプトを持たない（research/gen 等の短い1発のみ）。
         result = handler(params)
         conn.execute(
             "UPDATE job SET status='done', result_summary=?, progress=NULL, updated=? WHERE id=?",
             (json.dumps(result, ensure_ascii=False), _now(), job_id),
         )
-        # plan、または consult が type=plan を返したとき、子ジョブを積む（#61）
-        is_plan = row["intent"] == "plan" or (
-            row["intent"] == "consult" and result.get("type") == "plan"
-        )
-        if is_plan and isinstance(result.get("subtasks"), list):
-            # 親の chat_thread を子へ伝播＝子の生成結果もそのチャットに残る（fb-3）。
-            _enqueue_children(conn, job_id, result["subtasks"], row["target_neta_id"], params.get("chat_thread"))
         # #93 方向確認：handler が _propose を返したら「承認待ち」ジョブを積む（1案はこのジョブで
         # materialize 済み。承認で answerJob が残りを継続）。
         prop = result.get("_propose") if isinstance(result, dict) else None
@@ -143,7 +193,7 @@ def run_once(conn: sqlite3.Connection) -> int:
         # ただし無音にはしない＝静かな失敗（毎回 failed）を検知できるようログにも出す（traceback付き）。
         log.warning("job %s (%s) failed: %s", job_id, row["intent"], e, exc_info=True)
         conn.execute(
-            "UPDATE job SET status='failed', error=?, updated=? WHERE id=?",
+            "UPDATE job SET status='failed', error=?, progress=NULL, updated=? WHERE id=?",
             (str(e), _now(), job_id),
         )
     conn.commit()

@@ -44,6 +44,62 @@ describe("Core chat messages (#70)", () => {
   });
 });
 
+// プロジェクト＝一曲(or組曲)の器：会話セッションを器に束ねる（chat_thread・B案）。
+describe("Core chat threads bound to project (workspace)", () => {
+  let core: Core;
+  beforeEach(() => {
+    core = new Core(openDb(":memory:"));
+  });
+
+  it("listChatThreads(project) returns only that project's sessions", () => {
+    core.setChatThread({ thread: "chat:a", project: "みなそこ" });
+    core.setChatThread({ thread: "chat:b", project: "別曲" });
+    core.addChatMessage({ thread: "chat:a", role: "user", text: "a" });
+    core.addChatMessage({ thread: "chat:b", role: "user", text: "b" });
+    expect(core.listChatThreads("みなそこ").map((t) => t.thread)).toEqual(["chat:a"]);
+    expect(core.listChatThreads("別曲").map((t) => t.thread)).toEqual(["chat:b"]);
+  });
+
+  it("legacy thread (messages, no chat_thread row) = unsorted: in all-list, not in any project", () => {
+    core.addChatMessage({ thread: "chat:legacy", role: "user", text: "old" });
+    expect(core.listChatThreads().map((t) => t.thread)).toContain("chat:legacy");
+    expect(core.listChatThreads("みなそこ").map((t) => t.thread)).not.toContain("chat:legacy");
+  });
+
+  it("empty session (registered, no messages yet) still lists under its project", () => {
+    core.setChatThread({ thread: "chat:new", project: "みなそこ", title: "サビのメロ案" });
+    const [t] = core.listChatThreads("みなそこ");
+    expect(t.thread).toBe("chat:new");
+    expect(t.count).toBe(0);
+    expect(t.title).toBe("サビのメロ案");
+    expect(t.project).toBe("みなそこ");
+  });
+
+  it("deleteChatThread removes both the messages and the thread row (gone from list)", () => {
+    core.setChatThread({ thread: "chat:a", project: "みなそこ", title: "消す会話" });
+    core.addChatMessage({ thread: "chat:a", role: "user", text: "hi" });
+    core.deleteChatThread("chat:a");
+    expect(core.listChatMessages("chat:a")).toEqual([]);
+    expect(core.listChatThreads("みなそこ").map((t) => t.thread)).not.toContain("chat:a");
+  });
+
+  it("rename = setChatThread title; move = setChatThread project (existing thread → another 器)", () => {
+    core.addChatMessage({ thread: "chat:a", role: "user", text: "x" }); // 未仕分け
+    core.setChatThread({ thread: "chat:a", project: "みなそこ", title: "命名" }); // 器へ移動＋改名
+    const [t] = core.listChatThreads("みなそこ");
+    expect(t.thread).toBe("chat:a");
+    expect(t.title).toBe("命名");
+  });
+
+  it("setChatThread upserts: partial update keeps existing fields", () => {
+    core.setChatThread({ thread: "chat:a", project: "みなそこ", title: "初手" });
+    core.setChatThread({ thread: "chat:a", title: "改題" }); // project は触らない
+    const [t] = core.listChatThreads("みなそこ");
+    expect(t.title).toBe("改題");
+    expect(t.project).toBe("みなそこ");
+  });
+});
+
 describe("http chat API (#70)", () => {
   let app: FastifyInstance;
   beforeEach(async () => {
@@ -74,6 +130,16 @@ describe("http chat API (#70)", () => {
       payload: { text: "no role" },
     });
     expect(r.statusCode).toBe(400);
+  });
+
+  it("POST /chat/:thread/meta binds a session to a project, GET filters by it", async () => {
+    await app.inject({ method: "POST", url: "/chat/chat:x/meta", payload: { project: "みなそこ" } });
+    await app.inject({ method: "POST", url: "/chat/chat:x/message", payload: { role: "user", text: "hi" } });
+    const r = await app.inject({ method: "GET", url: "/chat/threads?project=みなそこ" });
+    expect(r.statusCode).toBe(200);
+    const threads = r.json() as { thread: string; project: string | null }[];
+    expect(threads.map((t) => t.thread)).toEqual(["chat:x"]);
+    expect(threads[0].project).toBe("みなそこ");
   });
 
   it("DELETE clears the thread", async () => {

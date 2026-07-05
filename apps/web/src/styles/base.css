@@ -38,18 +38,31 @@ main {
 /* 2ペーン・ワークスペース（design #19）：ネタ帳レール＋メインペーン。狭い画面は1カラム */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) 1fr;
+  /* PC はレールを広めに＝一覧のタイトル省略を減らす（レビュー M-2）。右ペインが空でも左が詰まらない。 */
+  grid-template-columns: minmax(300px, 460px) 1fr;
   gap: 12px;
   align-items: start;
+  /* 広いモニタで編集ペーン(ピアノロール等)が横に間延びしない＝全体を中央寄せで頭打ち（デザイン監査#3）。
+     モバイル(全幅<1240)では無効。 */
+  max-width: 1240px;
+  margin: 0 auto;
 }
 .notebook {
   min-width: 0;
   display: grid;
+  /* 単一列を container 幅で頭打ち（minmax(0,1fr)）＝広い min-content を持つ子（filter-kinds 等）が
+     列を押し広げて横スクロールする事故を防ぐ（既定の暗黙列=auto は最大 min-content に膨らむ）。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding-bottom: 80px; /* #67 最下カードが右下チャットバブルの下に潜らないよう余白 */
 }
 .notebook.closed {
   display: none;
+}
+/* レールを畳んだら編集ペーンが 1fr 全幅を占める。既定は第1列=minmax(300,460) なので、notebook を
+   display:none にすると mainpane が460px上限の第1列へ落ち右が空白になっていた（監査 ST-02）。単一列に切替。 */
+.workspace:has(.notebook.closed) {
+  grid-template-columns: 1fr;
 }
 .mainpane {
   min-width: 0;
@@ -81,6 +94,11 @@ main {
   border-radius: 8px;
   padding: 8px 16px;
 }
+/* モバイルのワークスペース土台（2026-06-29 刷新）：状態ごとの :has() ハックをやめ、
+   「一度に1つの全画面ビュー」モデルへ。App が .workspace に .mv-home / .mv-pane を付ける。
+   mv-home＝ネタ帳(捕獲＋一覧)が主役／mv-pane＝mainpane(プロジェクト or 編集)が主役。
+   どちらも通常フローの全幅＝積み重ね・固定オーバーレイ・z-index 競合が無くなり、
+   app-head が常に上に残る（編集の戻るが ☰ を覆う問題も解消）。 */
 @media (max-width: 820px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -91,41 +109,117 @@ main {
     grid-template-columns: 1fr;
     padding-bottom: 84px; /* 右下チャットFAB(z40)に最下カードが隠れないようクリアランス */
   }
-  /* ネタを開いてないときはメインペーン(空)を出さず、ネタ帳だけ表示 */
-  .mainpane:has(.mainpane-empty) {
+  /* 一画面ずつ：表示しない側を畳む（両方マウントのまま＝状態を失わない） */
+  .workspace.mv-pane .notebook {
     display: none;
   }
-  /* 編集中はメインペーンを全画面に（ネタ帳の下に埋もれない／戻るで閉じる） */
-  .mainpane:has(.mainpane-editor) {
-    position: fixed;
-    inset: 0;
-    /* base の max-height:calc(100vh-24px) を解除＝全画面に高さ確定。未解除だと高さが頭打ちになり、
-       下層のネタ帳レールが透けて操作できてしまう（モバイル固有バグ）。100dvh＝アドレスバー考慮の動的VH。 */
-    height: 100dvh;
-    max-height: 100dvh;
-    z-index: 30;
-    min-height: 0;
-    border: 0;
-    border-radius: 0;
+  .workspace.mv-home .mainpane {
+    display: none;
   }
-  .mainpane:has(.mainpane-editor) .mainpane-editor {
+  /* mainpane はモバイルでは通常フローの全幅。PC の sticky / max-height / overflow:hidden を解除し、
+     ページが素直にスクロール＝バブルのクリアランスや内側スクロールの破綻を断つ。 */
+  .mainpane {
+    position: static;
+    top: auto;
     max-height: none;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  /* mv-pane（編集 or プロジェクト）の時は、可視ビューポートにピッタリ収める＝編集面の底
+     （トランスポート）がブラウザ下バーの裏に潜らない。main を 100dvh の flex 列にし、mainpane を
+     残り高さに入れ、中身を内部スクロール。dvh が動的な下バーを除外する。 */
+  main:has(.workspace.mv-pane) {
+    box-sizing: border-box;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    overflow: hidden;
+  }
+  main:has(.workspace.mv-pane) .workspace {
+    flex: 1;
+    min-height: 0;
+  }
+  .workspace.mv-pane .mainpane {
+    min-height: 0;
     height: 100%;
-    overflow-y: auto; /* 内容が縦に長ければ全画面内でスクロール（下層へ流さない） */
+    overflow: hidden;
+  }
+  .workspace.mv-pane .mainpane-editor {
+    max-height: 100%;
+    height: 100%;
+  }
+  /* プロジェクト画面は内部スクロール（編集面は自前のbodyスクロール）。 */
+  .workspace.mv-pane .project-screen {
+    height: 100%;
+    max-height: 100%;
+    overflow-y: auto;
   }
 }
 .app-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 h1 {
   font-size: 1.1rem;
 }
-.logo {
-  font-size: 1.5rem;
-  margin: 0;
-  line-height: 1;
+/* PC のみのネタ帳レール開閉（サイドバー切替）。 */
+.rail-toggle {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.15rem;
+  padding: 2px 4px;
+}
+/* アプリ名のロゴ＝ホームへ。♪マーク＋ワードマーク。 */
+.app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 0;
+  color: var(--fg);
+  cursor: pointer;
+  padding: 2px 2px;
+  min-width: 0;
+}
+.app-brand .brand-mark {
+  flex: 0 0 auto;
+  display: block;
+}
+.app-brand .brand-name {
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+/* パンくず＝現在のプロジェクト（タップで器画面）。長い名は省略。 */
+.app-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 2px;
+}
+.app-crumb .crumb-sep {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+.app-crumb .crumb-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.app-crumb.on .crumb-project {
+  color: var(--fg);
 }
 .gear {
   background: none;

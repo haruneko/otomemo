@@ -8,8 +8,10 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
+      // 既定 localhost。api を Tailscale IP 等 loopback 以外にバインドしている時は
+      // CM_API_TARGET で proxy 先を差せる（e2e を api 再バインド無しで通すため）。
       "/api": {
-        target: "http://localhost:8787",
+        target: process.env.CM_API_TARGET ?? "http://localhost:8787",
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },

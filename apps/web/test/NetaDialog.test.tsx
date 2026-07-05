@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
@@ -48,37 +48,55 @@ const neta: Neta = {
 };
 
 describe("NetaDialog", () => {
-  it("edits text and saves", async () => {
+  beforeEach(() => localStorage.clear()); // メタ折りたたみ状態が test 間に残らないよう
+
+  it("編集すると自動保存される（明示「保存」不要・押さずに残る）", async () => {
     const onChanged = vi.fn();
     const onClose = vi.fn();
     render(<NetaDialog neta={neta} onClose={onClose} onChanged={onChanged} />);
     const ta = screen.getByLabelText("text");
     await userEvent.clear(ta);
     await userEvent.type(ta, "朝を待つ");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
-    expect(updateNeta.mock.calls[0]![1].text).toBe("朝を待つ");
+    // 何も押さずデバウンス(600ms)で PATCH が飛ぶ＝メモの当たり前（design 自動保存）
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled(), { timeout: 1500 });
+    expect(updateNeta.mock.calls.at(-1)![1].text).toBe("朝を待つ");
     expect(onChanged).toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled(); // 自動保存は閉じない（保存＝閉じるの2役を解体）
+  });
+
+  it("← 戻る は未保存ぶんをフラッシュしてから閉じる", async () => {
+    const onChanged = vi.fn();
+    const onClose = vi.fn();
+    render(<NetaDialog neta={neta} onClose={onClose} onChanged={onChanged} />);
+    const ta = screen.getByLabelText("text");
+    await userEvent.clear(ta);
+    await userEvent.type(ta, "宵闇");
+    await userEvent.click(screen.getByLabelText("close")); // ← 戻る
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(updateNeta).toHaveBeenCalled();
+    expect(updateNeta.mock.calls.at(-1)![1].text).toBe("宵闇");
   });
 
   it("shows a piano roll for melody and saves notes", async () => {
     const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByLabelText("cell-60-0"));
+    await userEvent.click(screen.getByLabelText("toggle-meta")); // メタは既定で畳む→開く
     await userEvent.selectOptions(screen.getByLabelText("key"), "9");
     await userEvent.selectOptions(screen.getByLabelText("mode"), "minor"); // 長短を選べる（調号）
     const tempoInput = screen.getByLabelText("tempo");
     await userEvent.clear(tempoInput);
     await userEvent.type(tempoInput, "140");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    // 拍子は単体メロ編集でも変えられる（旧=container限定の非対称を解消・監査 MB-05）。
+    await userEvent.selectOptions(screen.getByLabelText("meter"), "6/8");
+    await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }], program: 0 }); // #47
     expect(patch.key).toBe(9);
     expect(patch.mode).toBe("minor"); // A短として保存（メロ配置の相対移調に効く）
     expect(patch.tempo).toBe(140);
-    expect(patch.bars).toBe(4); // 既定16拍 = 4小節
+    expect(patch.meter).toBe("6/8"); // 単体メロでも拍子を保存
   });
 
   it("transport: play→pause→rewind drives playhead (#57/#58/#59)", async () => {
@@ -125,7 +143,7 @@ describe("NetaDialog", () => {
     const cp: Neta = { ...neta, kind: "chord_progression", text: null, content: null };
     render(<NetaDialog neta={cp} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: "＋コード" }));
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content).toEqual({ chords: [{ root: 0, quality: "", start: 0, dur: 4 }] }); // CP1: 進行は抽象＝program持たない
@@ -145,6 +163,7 @@ describe("NetaDialog", () => {
       content: { chords: [{ root: 6, quality: "m", start: 0, dur: 4 }] },
     };
     render(<NetaDialog neta={cp} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta")); // メタは既定で畳む→開く
     // 1回目：第1候補 F#m を設定
     await userEvent.click(screen.getByLabelText("detect-key"));
     await waitFor(() => expect((screen.getByLabelText("key") as HTMLSelectElement).value).toBe("6"));
@@ -154,7 +173,7 @@ describe("NetaDialog", () => {
     await waitFor(() => expect((screen.getByLabelText("key") as HTMLSelectElement).value).toBe("9"));
     expect((screen.getByLabelText("mode") as HTMLSelectElement).value).toBe("major");
     // 保存パッチに反映
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     expect(updateNeta.mock.calls.at(-1)![1].key).toBe(9);
     expect(updateNeta.mock.calls.at(-1)![1].mode).toBe("major");
@@ -164,7 +183,7 @@ describe("NetaDialog", () => {
     const r: Neta = { ...neta, kind: "rhythm", text: null, content: null };
     render(<NetaDialog neta={r} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByLabelText("hit-Kick-0"));
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
     expect(patch.content.rhythm.lanes[0]).toEqual({ name: "Kick", midi: 36, hits: [0] });
@@ -175,7 +194,7 @@ describe("NetaDialog", () => {
       { type: "result", neta: { ...neta, id: "m1", kind: "melody", title: "メロ案", text: null } },
     ]);
     render(<NetaDialog neta={neta} onClose={vi.fn()} onChanged={vi.fn()} />);
-    expect(await screen.findByText(/melody: メロ案/)).toBeInTheDocument();
+    expect(await screen.findByText(/メロディ: メロ案/)).toBeInTheDocument(); // 種別は日本語ラベル
   });
 
   it("remounts with fresh state when the keyed neta changes (no stale swap)", () => {

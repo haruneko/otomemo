@@ -7,6 +7,79 @@ beforeEach(() => {
   core = new Core(openDb(":memory:"));
 });
 
+// プロジェクト実体（説明・AIへの指示）。器の説明文と、会話に効く指示を持つ（Claude Projects風）。
+describe("project entity (description / instructions)", () => {
+  it("getProject returns null until set, then round-trips", () => {
+    expect(core.getProject("みなそこ")).toBeNull();
+    core.setProject("みなそこ", { description: "切ない疾走の一曲", instructions: "サビは上行で締める" });
+    const p = core.getProject("みなそこ")!;
+    expect(p.name).toBe("みなそこ");
+    expect(p.description).toBe("切ない疾走の一曲");
+    expect(p.instructions).toBe("サビは上行で締める");
+  });
+
+  it("setProject upserts: partial update keeps the other field", () => {
+    core.setProject("みなそこ", { description: "説明A", instructions: "指示A" });
+    core.setProject("みなそこ", { description: "説明B" }); // instructions は触らない
+    const p = core.getProject("みなそこ")!;
+    expect(p.description).toBe("説明B");
+    expect(p.instructions).toBe("指示A");
+  });
+});
+
+// プロジェクト名の一覧＝prj:タグを持つネタ ∪ project行（説明だけ作った空の器も拾う＝到達可能に）。
+describe("listProjectNames (picker source incl. empty projects)", () => {
+  it("unions tag-derived projects and project-table-only (empty) ones", () => {
+    core.createNeta({ kind: "section", title: "A", tags: ["prj:みなそこ"] });
+    core.setProject("空の器", { description: "まだ曲なし" }); // ネタゼロ＝タグ由来には出ない
+    const names = core.listProjectNames();
+    expect(names).toContain("みなそこ");
+    expect(names).toContain("空の器");
+  });
+});
+
+// プロジェクト配下のジョブ（投げて受け取る）をワークスペースに可視化する（S6）。
+describe("listProjectJobs (workspace job visibility)", () => {
+  it("lists jobs targeting netas in the project, excludes others", () => {
+    const song = core.createNeta({ kind: "section", title: "A", tags: ["prj:みなそこ"] });
+    const other = core.createNeta({ kind: "section", title: "B", tags: ["prj:別曲"] });
+    const j1 = core.enqueueJob({ intent: "research", target_neta_id: song.id });
+    core.enqueueJob({ intent: "research", target_neta_id: other.id });
+    expect(core.listProjectJobs("みなそこ").map((j) => j.id)).toEqual([j1.id]);
+  });
+});
+
+// プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイル(asset)を曲単位で集約する（S2）。
+describe("listProjectFiles (workspace file aggregation)", () => {
+  it("aggregates assets attached to netas carrying prj: tag, grouped per asset", () => {
+    const song = core.createNeta({ kind: "section", title: "セクションA", tags: ["prj:みなそこ"] });
+    const other = core.createNeta({ kind: "melody", title: "別曲メロ", tags: ["prj:別曲"] });
+    const lyric = core.addAsset({ kind: "lyrics", name: "歌詞.txt", path: "/x/歌詞.txt", mime: "text/plain" });
+    const mid = core.addAsset({ kind: "midi", name: "demo.mid", path: "/x/demo.mid" });
+    const stray = core.addAsset({ kind: "midi", name: "別.mid", path: "/x/別.mid" });
+    core.linkAsset(song.id, lyric.id, "source");
+    core.linkAsset(song.id, mid.id, "render");
+    core.linkAsset(other.id, stray.id, "source");
+
+    const files = core.listProjectFiles("みなそこ");
+    expect(files.map((f) => f.name).sort()).toEqual(["demo.mid", "歌詞.txt"]);
+    const lf = files.find((f) => f.name === "歌詞.txt")!;
+    expect(lf.attachedTo).toEqual([{ netaId: song.id, title: "セクションA", kind: "section", role: "source" }]);
+    expect(files.map((f) => f.name)).not.toContain("別.mid");
+  });
+
+  it("dedupes an asset attached to multiple netas in the same project (attachedTo has both)", () => {
+    const a = core.createNeta({ kind: "section", title: "A", tags: ["prj:みなそこ"] });
+    const b = core.createNeta({ kind: "section", title: "B", tags: ["prj:みなそこ"] });
+    const shared = core.addAsset({ kind: "image", name: "ジャケ.png", path: "/x/ジャケ.png" });
+    core.linkAsset(a.id, shared.id, "attachment");
+    core.linkAsset(b.id, shared.id, "attachment");
+    const files = core.listProjectFiles("みなそこ");
+    expect(files.length).toBe(1);
+    expect(files[0].attachedTo.map((x) => x.title).sort()).toEqual(["A", "B"]);
+  });
+});
+
 describe("neta CRUD", () => {
   it("creates and reads a neta with content + tags", () => {
     const n = core.createNeta({
@@ -261,4 +334,21 @@ describe("deleteNeta は reap を蘇生させない (#97)", () => {
     expect(rows.length).toBe(1);
     expect(rows[0]!.neta_id).toBeNull();
   });
+});
+
+describe("getComposition：繰り返し配置は各所で展開・循環だけ打ち切る（伸ばしたsectionが鳴る）", () => {
+  it("同じ section を2箇所に置くと、両方とも子(パート)が展開される（旧: 2個目が空だった）", () => {
+    const song = core.createNeta({ kind: "song", title: "S" });
+    const sec = core.createNeta({ kind: "section", title: "A" });
+    const mel = core.createNeta({ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } });
+    core.placeChild(sec.id, mel.id, 0, 0);
+    core.placeChild(song.id, sec.id, 0, 0);
+    core.placeChild(song.id, sec.id, 16, 0); // ループ＝同一 section をもう1箇所
+    const tree = core.getComposition(song.id)!;
+    expect(tree.children.length).toBe(2);
+    // 両方の section が melody 子を持つ（2個目も空でない＝合成で鳴る）
+    expect(tree.children.map((c) => c.node.children.length)).toEqual([1, 1]);
+  });
+  // ※真の循環は placeChild(descendantIds) が配置時点で拒否＝データに存在しない。
+  // getComposition の ancestors ガードはその上の防御的バックストップ（データ破損時の無限再帰止め）。
 });

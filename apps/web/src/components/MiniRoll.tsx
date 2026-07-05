@@ -1,10 +1,15 @@
-import { notesForContent } from "../music";
-import type { Neta } from "../api";
+import { useEffect, useState } from "react";
+import { notesForContent, beatsPerBar } from "../music";
+import { api, type Neta, type CompositionNode } from "../api";
 
 // #48: カードにメロ/コード/ベース/リズムの概形（小さなピアノロール）を出す。音楽以外は何も描かない。
-export function MiniRoll({ neta }: { neta: Neta }) {
+// notes を渡すと content の代わりにそれを描く（section/song ブロック＝合成した概形を出す用・#5）。
+export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import("../music").Note[] }) {
   // 相対bass は単体プレビュー＝neta の key を tonic に解決（#bass S2）。
-  const notes = notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 });
+  // 不正 content 由来の NaN ノートは弾く（NaN が maxT/span に伝播して <rect> が NaN 属性・描画破綻するのを防ぐ・監査 堅牢性）。
+  const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 })).filter(
+    (n) => Number.isFinite(n.pitch) && Number.isFinite(n.start) && Number.isFinite(n.dur),
+  );
   if (!notes.length) return null;
   const W = 160;
   const H = 30;
@@ -28,5 +33,86 @@ export function MiniRoll({ neta }: { neta: Neta }) {
         return <rect key={i} x={x} y={y} width={w} height={3} rx={1} />;
       })}
     </svg>
+  );
+}
+
+// ④(2026-07-03) section/song カードの中身プレビュー＝レーン帯のミニ・タイムライン。
+// どのパートがどの小節に入ってるかを帯で図示（編集画面タイムラインの縮小版）＋小節数。
+// 子は getComposition を表示時に遅延取得（container カードのみ・数は少ない）。
+// 各レーンは編集画面タイムラインと同じ種別色で塗る（単色オレンジの壁を避け、パートを見分ける）。
+const MINI_LANES: { label: string; kinds: string[]; color: string }[] = [
+  { label: "メロ", kinds: ["melody"], color: "--k-melody" },
+  { label: "コード", kinds: ["chord", "chord_progression", "chord_pattern"], color: "--k-chord" },
+  { label: "ベース", kinds: ["bass"], color: "--k-bass" },
+  { label: "リズム", kinds: ["rhythm"], color: "--k-rhythm" },
+];
+// #5 song カードは「構成（section 帯）」を出す（song は section を並べる編成）。
+const SONG_MINI_LANES: { label: string; kinds: string[]; color: string }[] = [
+  { label: "構成", kinds: ["section", "song"], color: "--k-section" },
+];
+const MINI_BARS_CAP = 16; // カードに出す最大小節（超過は帯を切って小節数で示す）
+
+export function SectionMini({ neta }: { neta: Neta }) {
+  const [children, setChildren] = useState<CompositionNode["children"] | null>(null);
+  useEffect(() => {
+    let live = true;
+    void api
+      .getComposition(neta.id)
+      .then((t) => live && setChildren(t?.children ?? []))
+      .catch(() => live && setChildren([]));
+    return () => {
+      live = false;
+    };
+    // neta オブジェクト依存＝一覧 reload(自動保存/配置後)で新規参照になり再取得＝子の変更がカードに反映される。
+  }, [neta]);
+
+  if (!children) return null; // 取得前は何も出さない（レイアウト揺れを避ける）
+  if (!children.length) return <p className="section-mini-empty muted">（空・タップで組む）</p>;
+
+  const bpb = beatsPerBar(neta.meter);
+  // 子の実長。ネストした section/song は子を再帰で畳む（1小節固定でなく本当の尺・SectionEditor.childDur と同旨）。
+  const durOf = (c: CompositionNode["children"][number]): number => {
+    const k = c.node.neta.kind;
+    if (k === "section" || k === "song") {
+      const kids = c.node.children ?? [];
+      return kids.length ? Math.max(...kids.map((kc) => kc.position + durOf(kc))) : bpb;
+    }
+    const ns = notesForContent(k, c.node.neta.content);
+    return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : bpb;
+  };
+  const endBeat = Math.max(bpb, ...children.map((c) => c.position + durOf(c)));
+  // 不正 content で endBeat/bpb が NaN・Infinity になると new Array(shown) が『Invalid array length』を投げて
+  // 一覧全体を白画面に落とす（監査 横断/堅牢性）。有限な正整数に丸める。
+  const rawBars = Math.ceil(endBeat / bpb);
+  const bars = Number.isFinite(rawBars) ? Math.max(1, rawBars) : 1;
+  const shown = Math.min(bars, MINI_BARS_CAP);
+  const lanes = (neta.kind === "song" ? SONG_MINI_LANES : MINI_LANES).map((lane) => {
+    const cells = new Array(shown).fill(false);
+    for (const c of children) {
+      if (!lane.kinds.includes(c.node.neta.kind)) continue;
+      const s = Math.max(0, Math.floor(c.position / bpb));
+      const e = Math.ceil((c.position + durOf(c)) / bpb);
+      for (let b = s; b < e && b < shown; b++) cells[b] = true;
+    }
+    return { label: lane.label, color: lane.color, cells, any: cells.some(Boolean) };
+  });
+  return (
+    <div className="section-mini" aria-label="section-preview">
+      {lanes.map((l) => (
+        <div
+          className={"sm-lane" + (l.any ? "" : " empty")}
+          key={l.label}
+          style={{ ["--lc" as string]: `var(${l.color})` }}
+        >
+          <span className="sm-label">{l.label}</span>
+          <span className="sm-cells">
+            {l.cells.map((on, i) => (
+              <span key={i} className={"sm-cell" + (on ? " on" : "")} />
+            ))}
+          </span>
+        </div>
+      ))}
+      <span className="sm-bars muted">{bars}小節</span>
+    </div>
   );
 }

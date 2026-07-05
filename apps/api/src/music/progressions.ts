@@ -1,6 +1,7 @@
 // 名前付き進行DB（C基準の度数列＝worker progressions.py のミラー。当面は重複を許容＝設計「フォークリフトしない」）。
 // degree は C基準のピッチクラス（C調では degree==root）。名前あて・説明の参照に使う。
 import { type Degree } from "./theory";
+import { meterInfo } from "./meter";
 
 export type NamedProgression = { name: string; aliases: string[]; degrees: Degree[] };
 
@@ -77,25 +78,18 @@ export function findNamedProgression(name: string): NamedProgression | null {
 
 export const listNamedProgressions = (): string[] => NAMED_PROGRESSIONS.map((p) => p.name);
 
-function bpbOf(meter?: string): number {
-  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
-  if (!m) return 4;
-  const n = Number(m[1]);
-  const d = Number(m[2]);
-  return n > 0 && d > 0 ? n * (4 / d) : 4;
-}
-
-/** 名前付き進行を C基準で確定 realize（1コード=1小節）。返り #85 items 形。未知は items:[]。 */
+/** 名前付き進行を realize（1コード=1小節）＝度数表は C基準、key で実音へ移調。未知は items:[]。 */
 export function genNamedProgression(
   name: string,
-  frame?: { meter?: string } | null,
+  frame?: { meter?: string; key?: number } | null,
 ): { items: { kind: string; content: unknown; label: string }[]; edges: never[] } {
   const entry = findNamedProgression(name);
   if (!entry) return { items: [], edges: [] };
-  const bpb = bpbOf(frame?.meter);
+  const bpb = meterInfo(frame?.meter).beatsPerBar;
+  const key = ((Math.trunc(frame?.key ?? 0) % 12) + 12) % 12;
   const r3 = (x: number) => Math.round(x * 1000) / 1000;
   const chords = entry.degrees.map((d, i) => ({
-    root: d.degree,
+    root: (d.degree + key) % 12,
     quality: d.quality,
     start: r3(i * bpb),
     dur: r3(bpb),

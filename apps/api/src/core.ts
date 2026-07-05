@@ -20,18 +20,25 @@ import { now } from "./repo/util";
 import { AssetRepo, type Asset, type SongOverlay } from "./repo/asset-repo";
 import { ScheduleRepo, type Schedule } from "./repo/schedule-repo";
 import { ChatRepo, type ChatMessage } from "./repo/chat-repo";
+import { ProjectRepo, type Project } from "./repo/project-repo";
 import { RelationRepo } from "./repo/relation-repo";
 import { ComposeRepo } from "./repo/compose-repo";
 import { JobRepo } from "./repo/job-repo";
-import { NetaRepo } from "./repo/neta-repo";
+import { NetaRepo, PROJECT_TAG_PREFIX } from "./repo/neta-repo";
 
 // prj 名前空間タグの判定は NetaRepo が持つ（facets/検索で使う）。従来 import 元(core)からも引けるよう再公開。
 export { PROJECT_TAG_PREFIX, isProjectTag } from "./repo/neta-repo";
+
+// プロジェクト配下ファイル（asset＋紐づき先ネタ）。器＝一曲(or組曲)のファイル集約の戻り（S2）。
+export interface ProjectFile extends Asset {
+  attachedTo: { netaId: string; title: string | null; kind: string; role: string }[];
+}
 
 // repo に移した型を従来の import 元(core)からも引けるよう再公開（呼び出し側 無改修）。
 export type { Asset, SongOverlay } from "./repo/asset-repo";
 export type { Schedule } from "./repo/schedule-repo";
 export type { ChatMessage } from "./repo/chat-repo";
+export type { Project } from "./repo/project-repo";
 
 /**
  * 操作コア（docs/design.md #20 ツールカタログ）。
@@ -44,6 +51,7 @@ export class Core {
   readonly asset: AssetRepo;
   readonly schedule: ScheduleRepo;
   readonly chat: ChatRepo;
+  readonly project: ProjectRepo;
   readonly relation: RelationRepo;
   readonly compose: ComposeRepo;
   readonly job: JobRepo;
@@ -54,6 +62,7 @@ export class Core {
     this.asset = new AssetRepo(db);
     this.schedule = new ScheduleRepo(db);
     this.chat = new ChatRepo(db);
+    this.project = new ProjectRepo(db);
     this.relation = new RelationRepo(db);
     this.compose = new ComposeRepo(db);
     this.job = new JobRepo(db);
@@ -197,6 +206,9 @@ export class Core {
   listNeta(q: ListQuery = {}): Neta[] {
     return this.neta.listNeta(q);
   }
+  reorderNeta(project: string, orderedIds: string[]): void {
+    this.neta.reorderNeta(project, orderedIds);
+  }
   similarMelodies(
     notes: { pitch: number; start?: number; dur?: number }[],
     scope: "project" | "library" | "all" = "library",
@@ -218,14 +230,18 @@ export class Core {
   }
 
   /** 合成ツリーを再帰取得（DAGなので訪問済みガードでサイクル防止）。compose辺＋neta ノードを束ねる。 */
-  getComposition(id: string, seen = new Set<string>()): CompositionNode | null {
+  // ancestors＝**今たどっている経路（先祖）** のみ。真の循環(先祖に自分)だけ止め、
+  // 同じネタの**繰り返し配置**(section を song でループ等＝DAG)は各所で完全に展開する。
+  // ※旧実装は横断全体で1つの seen を共有＝2個目以降の同一ネタが children:[] になり
+  //   合成(再生)で無音・伸ばしたsectionが鳴らないバグの原因だった。
+  getComposition(id: string, ancestors = new Set<string>()): CompositionNode | null {
     const neta = this.getNeta(id);
     if (!neta) return null;
-    if (seen.has(id)) return { neta, children: [] };
-    seen.add(id);
+    if (ancestors.has(id)) return { neta, children: [] }; // 循環（先祖に自分）だけ打ち切る
+    const next = new Set(ancestors).add(id); // この経路の先祖に自分を足す（枝ごとに独立）
     const children = this.compose
       .childEdges(id)
-      .map((r) => ({ position: r.position, ord: r.ord, node: this.getComposition(r.child_id, seen) }))
+      .map((r) => ({ position: r.position, ord: r.ord, node: this.getComposition(r.child_id, next) }))
       .filter((c): c is { position: number; ord: number; node: CompositionNode } => c.node !== null);
     return { neta, children };
   }
@@ -248,6 +264,16 @@ export class Core {
   }
   getJob(id: string): Job | null {
     return this.job.getJob(id);
+  }
+  // api 内 consumer（research 実行器）用：claim(queued→running)/complete(done+result)/fail。
+  claimQueued(intents: string[]): Job | null {
+    return this.job.claimQueued(intents);
+  }
+  completeJob(id: string, result: unknown): void {
+    this.job.completeJob(id, result);
+  }
+  failJob(id: string, error: string): void {
+    this.job.failJob(id, error);
   }
   askQuestion(jobId: string, question: string): Job | null {
     return this.job.askQuestion(jobId, question);
@@ -291,6 +317,42 @@ export class Core {
     return this.asset.getNetaAssets(netaId);
   }
 
+  // プロジェクト＝一曲(or組曲)の器：配下ネタ(prj: タグ)に紐づくファイルを器単位で集約（集約跨ぎ＝Core 残置・#6）。
+  // 同一 asset が複数ネタに紐づく場合は1件に畳み、attachedTo に紐づき先（ネタ＋role）を列挙。
+  listProjectFiles(project: string): ProjectFile[] {
+    const tag = PROJECT_TAG_PREFIX + project;
+    const rows = this.db
+      .prepare(
+        `SELECT na.asset_id AS asset_id, na.role AS role,
+                n.id AS neta_id, n.title AS neta_title, n.kind AS neta_kind
+         FROM neta_tag nt
+         JOIN tag t        ON t.id = nt.tag_id AND t.name = @tag
+         JOIN neta n       ON n.id = nt.neta_id
+         JOIN neta_asset na ON na.neta_id = n.id
+         JOIN asset a      ON a.id = na.asset_id
+         ORDER BY a.created DESC, na.asset_id`,
+      )
+      .all({ tag }) as Record<string, unknown>[];
+    const byAsset = new Map<string, ProjectFile>();
+    for (const r of rows) {
+      const aid = r.asset_id as string;
+      let f = byAsset.get(aid);
+      if (!f) {
+        const asset = this.asset.getAsset(aid);
+        if (!asset) continue;
+        f = { ...asset, attachedTo: [] };
+        byAsset.set(aid, f);
+      }
+      f.attachedTo.push({
+        netaId: r.neta_id as string,
+        title: (r.neta_title as string) ?? null,
+        kind: r.neta_kind as string,
+        role: r.role as string,
+      });
+    }
+    return [...byAsset.values()];
+  }
+
   // --- schedule（#80 proactive: 見てない間に継続研究/収集を進める）---
   // --- schedule：CRUD は ScheduleRepo へ委譲。tickSchedules(期日→enqueue) は集約跨ぎ＝Core 残置（#6）---
   addSchedule(input: Parameters<ScheduleRepo["addSchedule"]>[0]): Schedule {
@@ -323,8 +385,96 @@ export class Core {
   clearChatThread(thread: string): void {
     this.chat.clearChatThread(thread);
   }
-  listChatThreads(): { thread: string; last: string; count: number; preview: string | null }[] {
-    return this.chat.listChatThreads();
+  deleteChatThread(thread: string): void {
+    this.chat.deleteChatThread(thread);
+  }
+  setChatThread(input: Parameters<ChatRepo["setChatThread"]>[0]): void {
+    this.chat.setChatThread(input);
+  }
+  listChatThreads(project?: string | null): ReturnType<ChatRepo["listChatThreads"]> {
+    return this.chat.listChatThreads(project);
+  }
+  // スレッドが属す器（プロジェクト名）。未束ね＝null（指示注入の引き当てに使う）。
+  getChatThreadProject(thread: string): string | null {
+    const row = this.db.prepare(`SELECT project FROM chat_thread WHERE thread=?`).get(thread) as
+      | { project: string | null }
+      | undefined;
+    return row?.project ?? null;
+  }
+
+  // プロジェクト名の一覧＝prj:タグを持つネタ ∪ project行（説明だけ作った空の器も拾う＝picker到達可能に）。
+  listProjectNames(): string[] {
+    const prefix = PROJECT_TAG_PREFIX;
+    const tagRows = this.db
+      .prepare(
+        `SELECT DISTINCT t.name AS name FROM tag t
+         JOIN neta_tag nt ON nt.tag_id = t.id
+         WHERE t.name LIKE @like`,
+      )
+      .all({ like: prefix + "%" }) as { name: string }[];
+    const tableRows = this.db.prepare(`SELECT name FROM project`).all() as { name: string }[];
+    const names = new Set<string>();
+    for (const r of tagRows) names.add(r.name.slice(prefix.length));
+    for (const r of tableRows) names.add(r.name);
+    return [...names].sort((a, b) => a.localeCompare(b, "ja"));
+  }
+
+  // ピッカーのチップ用（P1）＝すべて/未仕分け/器別の件数。器の中身の量を一目に。
+  projectCounts(): { all: number; unassigned: number; projects: { name: string; count: number }[] } {
+    const like = PROJECT_TAG_PREFIX + "%";
+    const all = (this.db.prepare(`SELECT COUNT(*) AS c FROM neta WHERE scope='project'`).get() as { c: number }).c;
+    const unassigned = (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) AS c FROM neta n WHERE n.scope='project' AND NOT EXISTS
+             (SELECT 1 FROM neta_tag nt JOIN tag t ON t.id=nt.tag_id
+              WHERE nt.neta_id=n.id AND t.name LIKE @like)`,
+        )
+        .get({ like }) as { c: number }
+    ).c;
+    const rows = this.db
+      .prepare(
+        `SELECT t.name AS name, COUNT(*) AS c FROM tag t
+           JOIN neta_tag nt ON nt.tag_id=t.id
+           JOIN neta n ON n.id=nt.neta_id AND n.scope='project'
+           WHERE t.name LIKE @like GROUP BY t.name`,
+      )
+      .all({ like }) as { name: string; c: number }[];
+    const map = new Map<string, number>();
+    for (const r of rows) map.set(r.name.slice(PROJECT_TAG_PREFIX.length), r.c);
+    // 空の器（説明だけ作った project 行）も 0 件で含める＝picker 到達可能。
+    for (const r of this.db.prepare(`SELECT name FROM project`).all() as { name: string }[])
+      if (!map.has(r.name)) map.set(r.name, 0);
+    const projects = [...map.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ja"));
+    return { all, unassigned, projects };
+  }
+
+  // プロジェクト配下ネタを対象にしたジョブ一覧（ワークスペースの「投げて受け取る」可視化）。
+  listProjectJobs(project: string): Job[] {
+    return this.job.listForProjectTag(PROJECT_TAG_PREFIX + project);
+  }
+
+  // --- project（器の説明＋AIへの指示）：ProjectRepo へ委譲 ---
+  getProject(name: string): Project | null {
+    return this.project.getProject(name);
+  }
+  // 器を削除＝所属タグ(prj:name)を全ネタから外す（ネタは残る＝未仕分けへ）＋説明/指示 overlay を消す。
+  // ネタ自体は消さない（破壊的でない）。返り＝未仕分けに戻ったネタ数。空の器も row 削除で消える。
+  deleteProject(name: string): { unassigned: number } {
+    const tag = PROJECT_TAG_PREFIX + name;
+    const ids = this.db
+      .prepare(`SELECT nt.neta_id AS id FROM neta_tag nt JOIN tag t ON t.id=nt.tag_id WHERE t.name=?`)
+      .all(tag) as { id: string }[];
+    this.db.transaction(() => {
+      for (const { id } of ids) this.neta.removeTag(id, tag);
+      this.project.deleteProject(name);
+    })();
+    return { unassigned: ids.length };
+  }
+  setProject(name: string, patch: { description?: string | null; instructions?: string | null }): Project {
+    return this.project.setProject(name, patch);
   }
 }
 

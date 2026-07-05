@@ -1,0 +1,133 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+
+// プロジェクト画面（Claude Projects 風ランディング）：会話起点＋曲/ファイル/会話の集約（S3/UI）。
+const { listNeta, listProjectFiles, listChatThreads, listProjectJobs, getProject, setProject, setChatThread, deleteChatThread, deleteAsset, assetUrl } =
+  vi.hoisted(() => ({
+    listNeta: vi.fn(),
+    listProjectFiles: vi.fn(),
+    listChatThreads: vi.fn(),
+    listProjectJobs: vi.fn().mockResolvedValue([]),
+    getProject: vi.fn(),
+    setProject: vi.fn(),
+    setChatThread: vi.fn().mockResolvedValue({}),
+    deleteChatThread: vi.fn().mockResolvedValue({}),
+    deleteAsset: vi.fn().mockResolvedValue({}),
+    assetUrl: vi.fn((id) => `/asset/${id}`),
+  }));
+vi.mock("../src/api", () => ({
+  api: { listNeta, listProjectFiles, listChatThreads, listProjectJobs, getProject, setProject, setChatThread, deleteChatThread, deleteAsset, assetUrl },
+}));
+
+import { ProjectScreen } from "../src/components/ProjectScreen";
+
+describe("ProjectScreen", () => {
+  it("aggregates songs/files/sessions and exposes a chat starter", async () => {
+    listNeta.mockResolvedValue([
+      { id: "s1", kind: "song", title: "本曲" },
+      { id: "sec1", kind: "section", title: "サビ" },
+      { id: "m1", kind: "melody", title: "メロ片" }, // 曲・セクションには出ない
+    ]);
+    listProjectFiles.mockResolvedValue([
+      { id: "a1", kind: "lyrics", name: "歌詞.txt", size: 1200, mime: "text/plain", created: "x", attachedTo: [{ netaId: "s1", title: "本曲", kind: "song", role: "source" }] },
+    ]);
+    listChatThreads.mockResolvedValue([
+      { thread: "chat:z", last: "2026-06-28T00:00:00Z", count: 3, preview: "サビのメロ案", project: "みなそこ", title: null },
+    ]);
+    getProject.mockResolvedValue({ name: "みなそこ", description: "切ない疾走の一曲", instructions: null, created: null, updated: null });
+    const onOpenSession = vi.fn();
+    const onStartChat = vi.fn();
+    render(
+      <ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={onOpenSession} onStartChat={onStartChat} onCreateSong={vi.fn()} />,
+    );
+
+    // 器の説明が見出し下に出る
+    expect(await screen.findByText("切ない疾走の一曲")).toBeInTheDocument();
+
+    // 集約：曲・セクション（melody除外）／ファイル／会話
+    expect(await screen.findByText("本曲")).toBeInTheDocument();
+    expect(screen.getByText("サビ")).toBeInTheDocument();
+    expect(screen.queryByText("メロ片")).not.toBeInTheDocument();
+    expect(screen.getByText("歌詞.txt")).toBeInTheDocument();
+    expect(screen.getByText("サビのメロ案")).toBeInTheDocument();
+
+    // 会話起点：入力して送ると seed 付きで onStartChat
+    fireEvent.change(screen.getByLabelText("start-chat"), { target: { value: "サビ作りたい" } });
+    fireEvent.click(screen.getByLabelText("start-chat-go"));
+    expect(onStartChat).toHaveBeenCalledWith("サビ作りたい");
+
+    // 会話クリックで開く
+    fireEvent.click(screen.getByText("サビのメロ案"));
+    expect(onOpenSession).toHaveBeenCalledWith("chat:z");
+  });
+
+  it("edits description/instructions and saves via setProject", async () => {
+    listNeta.mockResolvedValue([]);
+    listProjectFiles.mockResolvedValue([]);
+    listChatThreads.mockResolvedValue([]);
+    getProject.mockResolvedValue({ name: "みなそこ", description: null, instructions: null, created: null, updated: null });
+    setProject.mockResolvedValue({ name: "みなそこ", description: "新説明", instructions: "Amで上行", created: "x", updated: "x" });
+    render(<ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={vi.fn()} onStartChat={vi.fn()} onCreateSong={vi.fn()} />);
+
+    fireEvent.click(await screen.findByLabelText("edit-project"));
+    fireEvent.change(screen.getByLabelText("project-description"), { target: { value: "新説明" } });
+    fireEvent.change(screen.getByLabelText("project-instructions"), { target: { value: "Amで上行" } });
+    fireEvent.click(screen.getByText("保存"));
+    expect(setProject).toHaveBeenCalledWith("みなそこ", { description: "新説明", instructions: "Amで上行" });
+  });
+
+  it("session rename/delete, file delete, and ＋曲 are wired", async () => {
+    listNeta.mockResolvedValue([]);
+    listProjectFiles.mockResolvedValue([
+      { id: "a1", kind: "lyrics", name: "歌詞.txt", size: 10, mime: null, created: "x", attachedTo: [] },
+    ]);
+    listChatThreads.mockResolvedValue([
+      { thread: "chat:z", last: "2026-06-28T00:00:00Z", count: 1, preview: "壁打ち", project: "みなそこ", title: null },
+    ]);
+    getProject.mockResolvedValue({ name: "みなそこ", description: null, instructions: null, created: null, updated: null });
+    const onCreateSong = vi.fn();
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("改名後");
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={vi.fn()} onStartChat={vi.fn()} onCreateSong={onCreateSong} />);
+
+    fireEvent.click(await screen.findByLabelText("rename-session"));
+    expect(setChatThread).toHaveBeenCalledWith("chat:z", { title: "改名後" });
+
+    fireEvent.click(screen.getByLabelText("delete-session"));
+    expect(deleteChatThread).toHaveBeenCalledWith("chat:z");
+
+    fireEvent.click(screen.getByLabelText("delete-file"));
+    expect(deleteAsset).toHaveBeenCalledWith("a1");
+
+    fireEvent.click(screen.getByLabelText("create-song"));
+    expect(onCreateSong).toHaveBeenCalled();
+
+    promptSpy.mockRestore();
+    confirmSpy.mockRestore();
+  });
+
+  it("shows project jobs and imports an unsorted session into the 器", async () => {
+    listNeta.mockResolvedValue([]);
+    listProjectFiles.mockResolvedValue([]);
+    getProject.mockResolvedValue({ name: "みなそこ", description: null, instructions: null, created: null, updated: null });
+    listProjectJobs.mockResolvedValue([{ id: "j1", intent: "research", status: "running", instruction: "参考曲を調べる", progress: "検索中" }]);
+    // 器の会話は空。取り込み用に未仕分け（project=null）の会話を返す。
+    listChatThreads.mockImplementation((project) =>
+      Promise.resolve(
+        project
+          ? []
+          : [{ thread: "chat:u", last: "2026-06-28T00:00:00Z", count: 2, preview: "未仕分け会話", project: null, title: null }],
+      ),
+    );
+    render(<ProjectScreen project="みなそこ" onOpenNeta={vi.fn()} onOpenSession={vi.fn()} onStartChat={vi.fn()} onCreateSong={vi.fn()} />);
+
+    // 進行中ジョブが見える
+    expect(await screen.findByText("参考曲を調べる")).toBeInTheDocument();
+    expect(screen.getByText(/実行中/)).toBeInTheDocument();
+
+    // 取り込み：未仕分け会話を今の器へ
+    fireEvent.click(screen.getByLabelText("import-session"));
+    fireEvent.click(await screen.findByText("未仕分け会話"));
+    expect(setChatThread).toHaveBeenCalledWith("chat:u", { project: "みなそこ" });
+  });
+});

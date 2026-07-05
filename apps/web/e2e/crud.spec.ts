@@ -33,11 +33,14 @@ test.describe("neta CRUD (desktop)", () => {
     const created = uniq("qa歌詞");
     const updated = uniq("qa歌詞改");
 
-    // --- Create: Capture からテキストネタ(lyric)を捕獲 ---
-    await page.getByLabel("kind", { exact: true }).selectOption("lyric");
-    await page.getByLabel("body").fill(created);
-    await page.getByLabel("tags").fill("qa smoke");
-    await page.locator('form[aria-label="capture"] button[type="submit"]').click();
+    // --- Create: 「＋歌詞」タイルで空の歌詞ネタ→エディタでタイトルを created に→保存
+    //   （旧 Capture フォーム撤去後の作成導線＝タイル＋エディタ）。 ---
+    await page.getByRole("button", { name: "＋歌詞", exact: true }).click();
+    await expect(page.getByLabel("edit-neta")).toBeVisible();
+    await page.getByLabel("title").fill(created);
+    await page.getByLabel("text").fill("歌詞本文");
+    await page.getByLabel("edit-neta").locator('button.primary:has-text("保存")').click();
+    await page.waitForTimeout(600);
 
     // --- Read: 一覧に出る（card body に created テキスト） ---
     const card = page
@@ -137,9 +140,12 @@ test.describe("neta CRUD (desktop)", () => {
     await ensureRailOpen(page);
 
     const title = uniq("qaメロ");
-    await page.getByLabel("kind", { exact: true }).selectOption("melody");
-    await page.getByLabel("body").fill(title);
-    await page.locator('form[aria-label="capture"] button[type="submit"]').click();
+    // 「＋メロ」タイル→エディタでタイトル設定→保存（保存でエディタは閉じ一覧へ）。
+    await page.getByRole("button", { name: "＋メロ", exact: true }).click();
+    await expect(page.getByLabel("edit-neta")).toBeVisible();
+    await page.getByLabel("title").fill(title);
+    await page.getByLabel("edit-neta").locator('button.primary:has-text("保存")').click();
+    await page.waitForTimeout(400);
 
     const card = page
       .locator('article[aria-label="neta-card"]')
@@ -182,9 +188,12 @@ test.describe("neta CRUD (mobile)", () => {
     await ensureRailOpen(page);
 
     const created = uniq("qaモバ");
-    await page.getByLabel("kind", { exact: true }).selectOption("lyric");
-    await page.getByLabel("body").fill(created);
-    await page.locator('form[aria-label="capture"] button[type="submit"]').click();
+    // 「＋歌詞」タイル→エディタでタイトル設定→保存（保存で全画面エディタが閉じ一覧へ）。
+    await page.getByRole("button", { name: "＋歌詞", exact: true }).click();
+    await expect(page.getByLabel("edit-neta")).toBeVisible();
+    await page.getByLabel("title").fill(created);
+    await page.getByLabel("edit-neta").locator('button.primary:has-text("保存")').click();
+    await page.waitForTimeout(400);
 
     const card = page
       .locator('article[aria-label="neta-card"]')

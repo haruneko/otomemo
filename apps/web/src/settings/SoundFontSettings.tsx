@@ -1,6 +1,30 @@
 import { useEffect, useState } from "react";
 import { api, type Asset } from "../api";
 import { setActiveSoundFont, probeSoundFont } from "../music";
+import { previewNote } from "../audio";
+
+// 試聴パレット＝読み込んだSF2の音色を耳で確かめる（GM program 別・ドラムも）。
+// メロ系はCメジャー三和音、ベースは低いC、ドラムはキック→スネア。
+const AUDITION: { label: string; program?: number; bass?: boolean; drum?: boolean }[] = [
+  { label: "ピアノ", program: 0 },
+  { label: "エレピ", program: 4 },
+  { label: "ギター", program: 24 },
+  { label: "ベース", program: 33, bass: true },
+  { label: "ストリングス", program: 48 },
+  { label: "ドラム", drum: true },
+];
+function audition(a: (typeof AUDITION)[number]): void {
+  if (a.drum) {
+    void previewNote({ pitch: 36, start: 0, dur: 0.3, drum: true, kit: 0 }); // キック
+    setTimeout(() => void previewNote({ pitch: 38, start: 0, dur: 0.3, drum: true, kit: 0 }), 220); // スネア
+    return;
+  }
+  if (a.bass) {
+    void previewNote({ pitch: 36, start: 0, dur: 0.7, program: a.program }); // C2
+    return;
+  }
+  for (const pitch of [60, 64, 67]) void previewNote({ pitch, start: 0, dur: 0.7, program: a.program }); // Cメジャー
+}
 
 // #77: SoundFont(GM音色)をアップロードしてサーバ asset に保存し、全体で1個を選ぶ。
 // 直リンクURLは廃止（行儀＋privacy）。localStorage には選択中 asset id のみ。
@@ -67,6 +91,7 @@ export function SoundFontSettings() {
   }
   useEffect(() => {
     void reload();
+    if (loadSoundFontId()) void test(); // 起動中の音源で楽器数を自動表示（テスト押下不要に）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -100,14 +125,52 @@ export function SoundFontSettings() {
     await reload();
   }
 
+  const ok = status.startsWith("✓");
+  const bad = status.startsWith("✗");
   return (
     <section className="sf-settings" aria-label="soundfont-settings">
-      <h3>SoundFont（GM音色）</h3>
+      <div className="sf-head">
+        <h3>SoundFont（GM音色）</h3>
+        {selected && (
+          <span className={"sf-status-pill" + (ok ? " ok" : bad ? " bad" : "")} aria-label="sf-status">
+            {status || "…"}
+          </span>
+        )}
+      </div>
       <p className="muted">
         .sf2 をアップロードして全体の音源にします（1個）。再生↔MIDI書き出しは GM の音色で一致。
       </p>
-      <label className="import-btn">
-        {busy ? "アップロード中…" : "SF2をアップロード"}
+
+      <ul className="sf-list">
+        {assets.length === 0 && <li className="sf-empty muted">まだ音源がありません。下からアップロード。</li>}
+        {assets.map((a) => (
+          <li key={a.id} className={"sf-item" + (a.id === selected ? " on" : "")}>
+            <button
+              type="button"
+              className="sf-pick"
+              aria-label={`sf-select-${a.id}`}
+              onClick={() => select(a.id)}
+            >
+              <span className="sf-dot" aria-hidden="true" />
+              <span className="sf-name">{a.name ?? a.id.slice(0, 8)}</span>
+              {a.size != null && <span className="sf-size muted">{Math.round(a.size / 1e6)}MB</span>}
+              {a.id === selected && <span className="sf-badge">使用中</span>}
+            </button>
+            <button
+              type="button"
+              className="sf-del"
+              aria-label={`sf-delete-${a.id}`}
+              title="削除"
+              onClick={() => void remove(a.id)}
+            >
+              ✕
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <label className="sf-upload-btn">
+        {busy ? "アップロード中…" : "＋ SF2をアップロード"}
         <input
           type="file"
           accept=".sf2,audio/x-soundfont"
@@ -121,38 +184,32 @@ export function SoundFontSettings() {
         />
       </label>
       {err && <p className="muted sf-err">{err}</p>}
+
+      {/* 試聴＝読み込んだ音源を耳で確かめる（GM program 別・SF2 未設定なら簡易シンセ）。 */}
+      <div className="sf-audition" aria-label="sf-audition">
+        <span className="sf-audition-head muted">試聴 — タップで鳴らす</span>
+        <div className="sf-chips">
+          {AUDITION.map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              className="sf-chip"
+              aria-label={`sf-audition-${a.label}`}
+              onClick={() => audition(a)}
+            >
+              ♪ {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {selected && (
         <div className="sf-actions">
           <button type="button" className="bs-btn" aria-label="sf-test" onClick={() => void test()}>
-            音源をテスト
+            読み込みを確認
           </button>
-          {status && <span className="muted">{status}</span>}
         </div>
       )}
-      <ul className="sf-list">
-        {assets.length === 0 && <li className="muted">まだ音源がありません</li>}
-        {assets.map((a) => (
-          <li key={a.id} className={"sf-item" + (a.id === selected ? " on" : "")}>
-            <button
-              type="button"
-              className="sf-pick"
-              aria-label={`sf-select-${a.id}`}
-              onClick={() => select(a.id)}
-            >
-              {a.id === selected ? "●" : "○"} {a.name ?? a.id.slice(0, 8)}
-              {a.size != null && <span className="muted"> （{Math.round(a.size / 1e6)}MB）</span>}
-            </button>
-            <button
-              type="button"
-              className="danger"
-              aria-label={`sf-delete-${a.id}`}
-              onClick={() => void remove(a.id)}
-            >
-              ✕
-            </button>
-          </li>
-        ))}
-      </ul>
     </section>
   );
 }

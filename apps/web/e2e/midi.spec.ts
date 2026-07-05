@@ -12,9 +12,11 @@ test("MIDI export downloads a .mid file (U18)", async ({ page, request }) => {
   });
   try {
     await openNeta(page, `${s}-mid`);
+    await page.getByLabel("toggle-meta").click(); // MIDI書き出しボタンはメタ(折りたたみ)内＝展開
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: "MIDI" }).click(),
+      // 「MIDI取込」(rail・部分一致)と衝突しないよう exact＋エディタにスコープ。
+      page.getByLabel("edit-neta").getByRole("button", { name: "MIDI", exact: true }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/\.mid$/);
     const path = await download.path();

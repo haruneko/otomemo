@@ -1,9 +1,22 @@
 # creative_manager 設計（SDD）v0.1
 
-最終更新: 2026-06-20
+最終更新: 2026-06-30
 
 要件: `docs/requirements.md` ／ アーキテクチャ: `docs/architecture.md`。
-ここは統合設計。実装（#4〜11）はこれに沿って進める。
+ここは統合設計。実装（#4〜11）はこれに沿って進める。**現況の正準は `docs/status.md`**（本書は決定ログ）。
+
+## 棚卸し（2026-06-30）— 実装済み/置換済みで本文の旧記述が古い箇所
+以下は実装が本文より進んでいる。本文の該当節を読むときはこの注記を優先（詳細は status.md・コード）。
+- **プロジェクト＝器**（下「プロジェクト＝…ホーム」節）：S1-S3 は **✅実装済**（`ProjectScreen`・`GET /projects(/files|/jobs)`・`chat_thread`/`project` 表・`listProjectFiles/Jobs`・`deleteChatThread`）。**プロジェクトの instructions は chat-session の `append-system-prompt` に注入**（chat-session.ts `systemPrompt()`）＝器の会話に常に効く。「複数プロジェクト」節(L295〜)の「フィルタどまり/将来昇格可」は経緯（昇格済）。
+- **ドラム**：`rhythm` content に **`kit`**（GMドラムキット＝アコ/エレキ・bank128 preset）追加。`buildGmDrumMap(preset)` は **preset パラメタ化**（#84 の preset0固定記述は古い）。ピッチは **root=overridingRootKey??叩いた鍵**（#84 S2 の中間記述より進む）。MIDI は ch10 program にキット反映。research 2026-06-29-drum-sound-resolution。
+- **メロ崩し**：`genFromEssence(…, {strength, blendWith})`（崩し強度＋複数参照ブレンド）。**MCP `reshape` に `mode:"deform"`** で露出（L416 の reshape 記述は emotion のみで古い）。research 2026-06-29-melody-corpus-and-deform。
+- **音符プレビュー**：エディタで音符配置/鍵盤タップ→`previewNote` 即発音（web/audio.ts・PianoRoll/Rhythm/ChordPattern/BassStep）。
+- **モバイル土台**：編集面を可視 dvh に収め底のトランスポートが潜らない＋横スクロールの左ラベル/鍵盤 sticky（全エディタ）。
+- **MCP/HTTP**：`convert` は公開済（L413(4) の「未公開」は古い）。`#101` の「CUT」宣言した旧ジョブ系ツールは**まだ並存**（撤去未了）。`/projects*`・`/chat/:thread/meta|turn`・`DELETE /chat/:thread` は本書の一覧に未掲載。`/schedule` に PATCH は無い。
+- **コーパス**：library は U-FRET進行315に加え **メロパターン irish186/pop1139/game100 投入済**（L596「データ未収集」前提は古い）。質の検証（耳）が残。
+
+## アーキテクチャ是正方針（2026-06-23・4監査→ユーザー確定）
+長い縦スライス自走で「動く」を優先した結果、上位スペックとコードが乖離した（CLAUDE.md「後追いでスペックを腐らせない」への違反）。4スライスの独立監査で確定した負債と是正方針を**上位として確定**する。実装はこの方針を根拠に降ろす。
 
 ## アーキテクチャ是正方針（2026-06-23・4監査→ユーザー確定）
 長い縦スライス自走で「動く」を優先した結果、上位スペックとコードが乖離した（CLAUDE.md「後追いでスペックを腐らせない」への違反）。4スライスの独立監査で確定した負債と是正方針を**上位として確定**する。実装はこの方針を根拠に降ろす。
@@ -83,9 +96,14 @@
 - 判断基準：後での統合はきつい／後での分離は統合よりマシ。だから最初は同居で始める。
 
 ### 残りのテーブル
+- ※`neta` 行には実装で **`scope`(project既定/library)** 列を追加済み（連想元の分離・db.ts／後段「project/library 分離」）。
 - `song`(neta_id[kind=song], stage[段階], next_action[次の一手], updated) — 曲の箱(overlay)。`neta` と 1:1。
 - `asset`(id, kind[mp3/midi/ability/lyric_text/image/render], path, meta[JSON: key/bpm/mood等], created) — ソース/添付ファイル。
 - `neta_asset`(neta_id, asset_id, role[source=分解元 / attachment=添付 / render=音源レンダ])
+- `chat_message`(id, thread, role, kind, text, data, created) — 会話履歴（#70。thread=対象neta id / 'global' / 'chat:*'）。
+- `schedule`(id, neta_id, intent, params, every_sec, enabled, last_run, next_run, created) — 定期スケジューラ（#80）。
+- **`chat_thread`(thread PK, project, title, created, updated)** — 会話セッションを器(プロジェクト)に束ねる薄表（2026-06-28「プロジェクト＝器」B案）。
+- **`project`(name PK, description, instructions, created, updated)** — プロジェクト実体（器の説明＋AIへの指示。instructions は会話の system prompt に注入）。
 - `job`(id, target_neta_id, instruction, type[壁打ち/部分生成/作例/研究/収集/発展], status[queued/running/done/needs_decision/failed], progress, notify_level, created, updated) — 投げた仕事。対象は常に `neta_id`。
 - `job_result`(job_id, neta_id, order) — ジョブの生成物（複数可）。生成物も neta。受理時に対象へ compose/relation で繋ぐ。**reap の冪等性は「job_id に job_result 行が在るか」で判定**するので、**ネタ削除では job_result 行を消さない**（`deleteNeta` は `neta_id` を NULL にしてから削除＝CASCADE 道連れを防ぐ。実装 2026-06-22・#97）。これを破ると削除した生成ネタが reap で蘇生する。
 
@@ -256,7 +274,97 @@
   - **voicing**：構成音(R/3/5/7 から選ぶ)・open/close・高さ(octave)。＝**スケッチ範囲（やりすぎてシーケンサーにしない）**。
   - resolve：各 hit の時刻のコードを取り、voicing で実音へ（strum=同時／arp=巡回）。
 - **段階(CP)＝✅実装済(2026-06-23)**：CP1 進行を抽象化(音色固定GM49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(music.ts) → CP3 エディタ(ChordPatternEditor＝hitsグリッド＋長さツール＋voicing＋voicing MiniRoll) → CP4 `genChordPattern`＋/gen/section 配線 → CP5 compositeNotes で section 進行に解決(パート毎 program・複数可)。api/web 緑。
+
+#### 決定：ドッグフード評価(16小節6/8を組む)の指摘を修正（2026-07-04・サブエージェント辛口評価→A/B/C）
+サブエージェントがPlaywrightで16小節6/8を実際に組み「部品は良いが組み上げ(尺・拍子)が未通」＝★3/5。以下を修正。
+- **A. セクション尺を可変に(8→最大32)＋ネスト合成**：`SectionEditor` の `BARS=8` 固定が最大の壁（16小節が組めない）。小節ステッパー(`neta.bars`永続)＋配置済みcontentで自動伸長(切れない)。`childDur` が子section/songでBPB固定→**再帰で実長**に（ネスト配置が重ならない＝compositeNotesの位置オフセットは元々正しく、childDurの誤りが原因だった）。尺>10で横スクロール。
+- **B. 拍子(6/8)対応**：`beatsPerBar` を music.ts に集約(SSOT)。`PianoRoll` に meter を渡し**小節線(拍子基準)＋複製単位**を拍子に。`useNetaEditor`(len初期化/bars保存/＋1小節)・`MetaPanel`(小節数表示)・`ChordEditor`(「1小節」ボタン/合計)の**4拍固定を全撤去**。6/8メロが「6小節」→正しく「8小節」に。
+- **C. 配置の長さ整合＋ピッカーのコーパス氾濫**：ループ系(リズム/コード楽器)は配置時に**セクション末尾まで自動で敷き詰め**(`loopPositions`)＝melodyは8小節なのにrhythmだけ1小節、のムラを解消。ピッカーは**コーパス(library)を既定で隠す**(トグルで表示)＝自作ネタが埋もれない。web257緑・実機で6/8・16小節セクション成立を確認。
+- **決定：ボイシング入力を「トップ狙い音」ベースへ（2026-07-04・オーナー発案／方向確定・エンジン先行）**：現状の R/3/5/7＋open/close＋octave は抽象パラメータで、一番audibleな**トップ声部（コンピングの旋律）を握れない**。→ **トップ声部の"狙い音"を人が決め、各コードでそれに最寄りのコードトーンを最高声部に採り、内声を下へ自動配置**（`voiceToTop` in music.ts・`ChordVoicing.top?`）。旨み＝レジスタが一定に保たれ**進行間の声部進行が自動で滑らか**（backlog「compingの声部進行最適化」を回収）。**トップは絶対採用**（調/コードが変わってもコンピングの音域は動かさない＝物理レジスタ。相対は将来トグル）。**"できるか"問題＝進行非依存で成立**：トップ＝絶対の狙い音（メロ実体でなく音域の磁石）だから、どの進行に乗せても各コードで最寄りトーンをトップに採るだけ。同距離時の優先やベース分離は「そこまでやるなら DAW」で割り切り（再生は多少雑でOK＝オーナー了承）。ベースはベースパートに任せる方針。**✅実装完了(2026-07-04・web249緑)**：①エンジン(構成音の手選択を撤去＝鳴る音はコード質から自動導出・`voiceToTop`／`powerChord`でR+5間引き／`arpDir`で向き＝音域はvoicing継承・別指定なし) ②エディタ再構成(ChordPatternEditorを2ゾーン＝「いつ弾く」grid主役＋長さ＋小節／「響き」＝打ち方・トップ狙い・広がり・高さ・パワーコード・arp時は向き を1枠に集約) ③トップ狙い(top)をステッパーで配線・プレビューは常にtop込み。青の壁は解体(二択セグメント/トグルはコード色/±無彩色)。音の長さは既存どおり各hitのdur(長さツール+付点)で保持。候補プレビュー化は後段。
 - **コード入力/section UX（CV・✅実装済）**：ChordEditor＝start自動フロー(順番)・長さボタン・ピアノロール表示・合計尺。SectionEditor＝レーン層モデル順(進行→メロ→コード楽器→ベース→リズム→section)・**占有セルのみ配置不可**(別小節は自由)。トグル/構成音の選択色＝OFF地色付与で是正(E2E)。
+
+### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
+**問題（ユーザー指摘）**：①品質語彙が不足＝テンション(9/11/13/add9)・dim7・altered(7♭9/7♯9/7♯5)が無い。しかも ChordEditor は「9」を選べるのに `QUALITY_INTERVALS` に定義が無く **major トライアドにフォールバック＝壊れている**。②分数コード(slash/on-chord)が表現できない＝`ChordEntry` に bass 欄が無い。③コード楽器(comping)の高さが**ルートのpcぶん跳ねる**(`base = 48 + octave*12 + root_pc`)＝進行が動くたびレジスタが上下。「大体の高さを決める」＋スムーズに置きたい。
+
+**決定A：品質語彙の拡張（SSOT同期）**
+- `QUALITY_INTERVALS`（正準＝`apps/api/src/music/theory.ts`、複製＝web `music.ts`/`chordname.ts`/`chordDetect.ts`）に追加：
+  - 7系：`dim7`[0,3,6,9]・`aug7`(=7#5)[0,4,8,10]・`7b5`[0,4,6,10]・`mM7`(=m(maj7))[0,3,7,11]・`7sus4`[0,5,7,10]
+  - テンション：`9`[0,4,7,10,2]・`maj9`[0,4,7,11,2]・`m9`[0,3,7,10,2]・`add9`[0,4,7,2]・`69`[0,4,7,9,2]・`m69`[0,3,7,9,2]
+  - altered/extended：`7b9`[0,4,7,10,1]・`7#9`[0,4,7,10,3]・`7#11`[0,4,7,10,6]・`13`[0,4,7,10,2,9]・`m11`[0,3,7,10,2,5]・`maj7#11`[0,4,7,11,6]
+- ChordEditor の QUALITIES を同セットへ拡張（基本/7th/テンション/sus/dim-aug でグループ）。未知qualityは従来どおり major フォールバック＝後方互換。
+- comping voicing(R/3/5/7)は当面7thまで＝テンションは進行プレビュー(chordToMidi/chordPcs)で鳴る。テンション込みvoicingは将来。
+- **同期テスト**：4ファイルの `QUALITY_INTERVALS` がキー集合一致(property test)＝SSOT乖離を防ぐ。
+
+**決定B：分数コード（slash bass）**
+- `ChordEntry` に **`bass?: number`**（pc 0-11・省略=root）。「C/E」={root:0, quality:"", bass:4}。C基準保存。section配置の移調は root と同じ shift を bass にも適用(実音保持)。
+- 鳴り：プレビュー/comping で**最低音を bass pc に置き換え/追加**（root より下に bass を1音）。`analyze_fit` の pc集合に bass を含める(メロ判定が低音を考慮)。相対ベースが「R」を当てる時の基準は `bass ?? root`（slash上のベースは slash 低音を弾く）。
+- ChordEditor に「/（onベース）」セレクタ(off=root / pc選択)。表示は「C/E」。MIDI も最低音に反映。
+
+**決定C：伴奏レジスタ（跳ね解消・高さアンカー）**
+- `voiceChord` の `base = CHORD_BASE + octave*12 + root_pc` を**アンカー中心の最寄りオクターブ配置**へ：`anchor = CHORD_BASE + octave*12`（octave=「大体の高さ」）／`rootPitch = nearestPcTo(root_pc, anchor)`＝root を anchor±6半音帯に置く(CもBも anchor近傍＝跳ねない)／その上に voicing を積む。bass(分数)はさらに下。
+- メロ/ベースの placementLanding と同じ「最寄りオクターブで音域維持」を comping にも。`octave` はアンカーのシフトとして意味付け（octave=0≈C3帯で従来と近い＝後方互換）。結果＝進行が動いても comping レジスタ一定・声部進行が滑らか。
+
+**段階＝✅実装済(2026-06-30)**：S1 品質語彙(決定A) → S2 伴奏レジスタ(決定C) → S3 分数コード(決定B)。各 TDD＋Playwright 確認済(api412/web緑・tsc0)。残＝テンション込みvoicing(将来)・compingの声部進行最適化(将来)。
+
+### 歌詞をメロディに流し込む（2026-07-01・要件「歌詞をそろえて組む」#16/#13）
+**目的**：既存メロ(notes)に既存歌詞(モーラ)を**後から1:1で割り当て**、音符下に歌詞を表示。`Note.syllable`(design #16・既存データ枠)を埋める。土台＝モーラ分割は web `lyrics.ts`/worker `split_mora`(拗音結合・長音ー/促音っ/撥音ん=各1モーラ)既存。
+
+**決定L1：歌詞は{表記+読み}を行ごとに持つ**（ユーザー決定）。漢字はモーラ数が一意でない→**読み(かな)を音数の正準**に。
+- lyric content：`{ lines:[{ text:表記, reading:読み(かな) }] }`。reading からモーラを割る。**reading 空なら text をかな扱い**＝今の歌詞ネタ(text直書き)と後方互換。
+- 表示は表記(行)＋音符下にモーラ(かな)。表記↔音符の語単位対応は将来(MVPは行=表記・音符=かな)。
+
+**決定L2：音数合わせ＝自動(多=分割/少=メリスマ)＋手動調整**（ユーザー決定）。`flowLyric(notes, moras, opts?)`：
+- **モーラ > 音符**（歌詞が多い）＝**一番長い音符から半分に分割**(dur→dur/2×2・同ピッチ)を、音符数=モーラ数になるまで貪欲に。**下限=16分(0.25拍)**、それ以上割れない時は残りモーラを最後の音符に詰める(連結)。
+- **モーラ < 音符**（音符が多い）＝モーラを先頭から1:1、**余り音符は `syllable:"ー"`＝メリスマ**(前の母音を伸ばす)。
+- **一致**＝1:1。結果は `Note.syllable` に格納。**決定的＝「とりあえずの割当」**を出し人が手で直す([[project-design-philosophy-options-not-finished]])。
+- 手動調整(将来でも可)：音節境界の移動・ここで分割/メリスマの強制。
+
+**段階**：LS1 `flowLyric` 純TS＋モーラ配列splitter(TDD) → LS2 lyric に reading 欄(後方互換) → LS3 メロエディタ「歌詞を流し込む」(lyric選択→ notes に syllable)＋**音符下に歌詞表示**(Playwright) → LS4 手動調整/MIDI歌詞メタ/MCP露出(将来)。最初の縦スライスは緩く(動かして学ぶ)。
+
+### エディタ Undo/Redo（2026-07-01・backlog「簡易作曲ツールA」・スマホ前提）
+**目的**：メロ/コード/ベース/リズム/コード楽器の編集を取り消せる/やり直せる。
+**決定U1（機構＝スナップショット履歴）**：**NetaDialog 層に編集内容のスナップショット履歴を1つ持つ**（`useEditHistory`）。全単体エディタは content 構造を NetaDialog state で編集するので、**構造一式の snapshot を push/pop で復元**すれば全 kind に一発で効く（コマンドパターン不要＝簡易）。
+- snapshot ＝ `{ notes, chords, rhythm, bassPattern, bassSteps, chordPat, key, mode, tempo, program, len, pickup }`（構造的な楽音編集）。**title/text/tags/mood 等のテキスト入力は含めない**（input の native undo があり・per-keystroke で履歴が汚れるため）。
+- 記録＝各 state 変化を effect で検知し**変化直前**の snapshot を past へ push（future クリア）。**undo/redo 適用中は記録しない**（guard フラグ）。深さ上限（50）。past/future 長は再描画のため state（ボタン disable 連動）。
+- **純ロジック（push/undo/redo）は `history.ts` に分離し TDD**。
+**決定U2（scope）**：単体エディタ（melody/bass/chord/chord_pattern/rhythm）。**section/song コンテナ（SectionEditor 自前 state）は対象外＝将来**。※backlog「ネタの版管理(chat書込のサーバ側undo)」とは別レイヤ・両立。
+**決定U3（UI＝案1確定）**：**TransportBar 左に ↩︎/↪︎**（親指ゾーン・縦を消費しない）。**絵文字でなく文字矢印/SVG**（⏮🔁の□化を避ける）。空スタックは disable。feedback＝内容が戻る（トーストは将来）。
+**段階**：US1 `history.ts` 純ロジック(TDD) → US2 `useEditHistory` hook＋NetaDialog 配線(snapshot/apply) → US3 TransportBar ↩︎/↪︎（Playwrightで「置く→undo→戻る→redo→復活」確認）。
+
+### ノート編集：選択・移動・複製・コピペ（2026-07-02・backlog「簡易作曲ツールA」・案A確定）
+**目的**：ピアノロールで音符を選択→移動/複製/削除/コピペ。**スマホ・タッチ前提でジェスチャ衝突を避ける**（タップ=配置/削除・ドラッグ=スクロール が既にあるため）。
+**決定N1（操作モデル＝案A）**：ロールに **[描く]/[選ぶ] モードトグル**。~~（既存 ロール/パッド の隣）~~ → **追記(2026-07-04)**：パッドは撤去（ロール一本・下記決定）、モードは **3つ [描く][選ぶ][消す]** に拡張（消す＝ノートtapで削除・下記「楽譜系エディタをメロ編集画面に整合」）。
+- **描く**＝現行（空タップ=配置・音符タップ=削除・ドラッグ=スクロール）。不変。
+- **選ぶ**＝音符タップで**選択トグル（複数可・ハイライト）**。空タップ=全解除。ドラッグ=スクロールのまま（移動は nudge）。
+- 選択1つ以上で **選択バー**：`複製 / コピー / 貼付 / 削除 / ← → ↑ ↓`。
+  - **移動＝nudge ボタン**（←→=グリッド(16分)単位で時間・↑↓=半音で音程）＝スクロール/誤爆と衝突しない・親指で正確。
+  - **複製**＝選択を +1小節右にコピー（同ピッチ）・コピーを選択。**削除**＝選択を消す。
+  - **コピー**＝クリップボード（モジュール保持＝別ネタへも貼れる）。**貼付**＝arm→次のセルタップでそこ(拍)に貼る（時間で配置・ピッチ保持）＝別の場所に置ける（ユーザー決定＝両方）。
+**決定N2（純ロジック）**：`noteEdit.ts` に純関数（nudge/duplicate/deleteSel/copySel/paste）。選択＝**index 集合**、notes 配列順は**安定**に保つ（nudge で並べ替えない＝index が保てる）。各関数は `{notes, selection}` を返す。TDD。
+**決定N3（Undo 連動）**：全編集は既存 `onChange` 経由＝**Undo/Redo が自動で効く**（snapshot 履歴・追加実装不要）。
+**段階＝✅実装済(2026-07-02)**：NE1 `noteEdit.ts` 純ロジック(TDD6) → NE2 PianoRoll に mode/selection/選択バー/クリップボード配線＋CSS(選択=黄枠) → NE3 Playwright(選択→複製→削除 実測OK・web227緑)。範囲マーキー・ドラッグ移動は将来(v2)。
+
+### 編集画面の共通パーツ化（2026-07-01・NetaDialog 神コンポーネント分解）
+**問題**：`NetaDialog`(~470行)が編集画面の全責務（state ~24個・派生・effect・save/remove/detectKey・
+history・transport・ヘッダ/メタ/body/relations 描画）を抱える神コンポーネント。**メタ折りたたみ・Undo/Redo
+のような「全編集画面に効く機能」を足すたびにこの1ファイルを触る**＝差分が読みにくく回帰リスク。
+※アーキ是正 S5 で `KindEditorBody`(kind別 body)は分離済。残り（ヘッダ/メタ/transport/relations/state）を共通パーツへ。
+**決定（分解＝ロジックhook＋共有UI・契約先行）**：
+- **`useNetaEditor(neta, {onClose,onChanged})` フック**＝編集の"脳"。全 state・派生(flags/playable/showKey…)・
+  アクション(save/remove/detectKey/savePatch)・history・transport・metaOpen を所有し、`{header, meta, body,
+  transport, rels, flags}` に構造化して返す。→ NetaDialog の render は**薄い合成**に。ロジックが単体テスト可能に。
+- **共有UIコンポーネント（props＝契約）**：
+  - `<EditorHeader>`：← 戻る / kind / title(setTitle) / 削除 / 保存(busy)。
+  - `<MetaPanel>`：折りたたみトグル＋要約＋メタ本体（調/mode/拍子/tempo/音色/+4拍/tags/mood）。※MIDI書き出しは単体編集画面から撤去（2026-07-04）＝Section の いじる▾ のみ。
+    **flags でどの枠を出すか決める**（kind 分岐を集約）。折りたたみ状態(localStorage)と要約はここに閉じる。
+  - `<KindEditorBody>`：既存（kind別 body）。 `<TransportBar>`：既存（play/undo/redo/loop）。
+  - `<RelationsPanel>`：連関ネタ。
+- **NetaDialog＝合成のみ**：`const ed = useNetaEditor(neta,…); return <Editor><EditorHeader {...ed.header}/>
+  <MetaPanel {...ed.meta}/><KindEditorBody {...ed.body}/>{ed.flags.isMusic&&<TransportBar {...ed.transport}/>}
+  <RelationsPanel rels={ed.rels}/></Editor>`。
+**原則**：契約(props)先行・**aria-label 不変**（テスト回帰ゼロ）・**1つずつ抽出**。全編集画面に効く機能
+(折りたたみ/Undo/将来のvelocity等)は該当共有パーツ1箇所に入れば**全kindに一発で効く**（＝今回の折りたたみ/Undoが実証）。
+**段階**：✅CP1 `MetaPanel` 抽出（折りたたみ・要約を内製）→ ✅CP2 `EditorHeader`/`RelationsPanel` 抽出（NetaDialog ~470→323行・web221緑・Playwrightで melody/chord/rhythm 回帰なし確認・2026-07-01）→ ✅CP3 `useNetaEditor` へ state/logic 移設（2026-07-01・NetaDialog **~470→102行**の薄い合成・ロジックは `useNetaEditor.ts` 243行に集約・web221緑・Playwrightで機能回帰なし[メタ展開/打点→undo]）。各段階でテスト緑・aria-label 不変。**完了＝編集画面は EditorHeader/MetaPanel/KindEditorBody/TransportBar/RelationsPanel の合成＋脳 useNetaEditor**。
 
 ### 再生
 - section/song：メインペーンに**トランスポート（全体再生）パネル**。
@@ -298,7 +406,14 @@
 - **見せ方だけ別軸**：`prj:` タグは UI で意味タグのチップ列から外し、**プロジェクト・ピッカー＋専用表示**に出す。意味タグ(mood/ジャンル)は汚れない。`isProjectTag = name.startsWith("prj:")` を境界に置く。
 - **facets**：`tags` から `prj:` を除外し、`projects`（prj: を剥がした一覧）を別フィールドで返す。**library(scope=library)は全プロジェクト共有**（prj: を持たない・連想で横断）。
 - **絞り込み**：アクティブプロジェクトは**クライアント状態(localStorage)**。一覧/検索は `listNeta` の既存タグ絞り込みに `prj:<active>` を渡すだけ。新規ネタはアクティブの `prj:` を自動付与。
-- **非破壊移行**：既存 project ネタは `prj:` 無し＝「未分類」。データ書込の一括移行はしない（必要時にユーザーが付与 or 「未分類」ビューで見える）。撤回容易（タグ消すだけ）。将来厳密化したければ `project` テーブルへ昇格可。
+- **非破壊移行**：既存 project ネタは `prj:` 無し＝「未分類」。データ書込の一括移行はしない（必要時にユーザーが付与 or 「未分類」ビューで見える）。撤回容易（タグ消すだけ）。~~将来厳密化したければ `project` テーブルへ昇格可。~~ → **実行済（2026-06-28）**：`project` 表（説明＋指示）＋`chat_thread` 表で器へ昇格。下記「プロジェクト＝…ホーム」節。
+
+#### 決定：プロジェクト＝一曲(or組曲)の器・“辿れるホーム”へ昇格（2026-06-28・要件「一曲の器にまとめる」）
+従来 `prj:` は「neta一覧のフィルタ」どまりだった。要件の新項目に応えて**プロジェクトを曲・ファイル・会話セッションを集約するホーム**にする。
+- **階層＝Project ⊃ Song(1..N) ⊃ section ⊃ leaf**（組曲＝1プロジェクトに song 複数）。Project と Song は層として分離維持（曲箱＝kind=song の overlay は不変。プロジェクトはその上位の器）。
+- **会話セッションの所属（B案・薄い表を足す）**：フリーChat の thread を器に束ねるため `chat_thread(thread PK, project, title, created, updated)` を新設。`listChatThreads(project?)` で器絞り込み。**A案（thread id に `chat:<prj>:` を埋める）は不採用**＝プロジェクト改名で全 thread が迷子（`prj:` タグは改名耐性があるのに、ここだけ脆い）。B は **改名耐性＋セッションにタイトル＋空でも一覧化**でき、既存 `song` overlay と同じ「id にかぶせる薄表」パターン。**純加算・移行不要**：既存 thread(global/chat:*)は project=NULL＝「未仕分け（インボックス）」に落ちるだけ。design原則「スキーマ変更は高い」は承知の上で、脆さ回避と副産物（セッション名）で正当化。
+- **ファイル集約・曲一望はクエリで（スキーマ変更なし）**：プロジェクト配下ファイル＝`prj:` タグを持つ neta → `neta_asset` → `asset` の集約。曲一覧＝`prj:` かつ kind=song。進行中ジョブ＝neta_id が `prj:` 配下。＝既存テーブルの読みで構成（S2/S3）。
+- **段階**：S1 セッション束ね（chat_thread＋listChatThreads(project)＋web セッション一覧）→ S2 ファイル集約ビュー → S3 プロジェクトホーム（曲/ファイル/セッション/ジョブのタブ一望）＋「＋曲を組む」の song/section 整合（現状 section を作る綻びを Project直下 song→section へ）。
 - **Chat（右下の吹き出し→ダイアログ, Notion風）**：相談/投げる。常駐ペーンでなくバブル起動で軽量に。※体験(ペーン/ダイアログ/オーバーレイ)は要再相談。
 - ペーン位置の可動は欲を言えば（後）。
 - **幅で形が変わる**：広い＝メインペーン＋畳めるネタ帳レール（＋Chatバブル）／狭い(スマホ)＝メインペーン全画面・ネタ帳はタブ/シート・Chatバブル。
@@ -320,6 +435,179 @@
 - **一覧**：`FILTER_KINDS` に `reference`/`knowledge` を追加して絞り込み可能に。MiniRoll は非音楽で null（不変）。
 - **スコープ外（後続）**：定期スケジューラでの自動収集（design line 56）、出典URLの厳密検証、参考曲の音源取得。まず「投げて参考曲が貯まる」最小縦スライスに絞る。
 
+#### 決定：作曲補助をUIボタン化＝チャットと住み分け（2026-07-03）
+作曲エンジンは決定的TS（`POST /music/:op`）。チャットのClaudeは同じツールを叩くだけ＝**webから直接ボタンで呼べる**（分析/変換系はClaude不要＝即時・クォータ0）。チャット＝相談/探索、ボタン＝慣れたら手で、の住み分け。
+- **2階層に分ける（ユーザー洞察）**：
+  - **① 単体系（ネタ単独で完結 → ネタのカード/編集画面）**：崩す(gen_from_essence)・調推定・normalize・似たメロ(melody_similarity/find_similar)・トランスポーズ／コードは 説明(explain/identify)・分析(analyze_progression)・代理(substitute_chord)・次の候補(next_chord)・王道進行(gen_named_progression)。＝入力1ネタ＝文脈UI不要＝軽い。
+  - **② 文脈系（複数ネタの関係が要る → Section）**：コードに合わせる(fit_to_chords)・この進行にメロ/ベース/ドラム(gen_melody/bass/drums)・噛み合い診断(analyze_fit)。**Sectionは既に文脈そのもの**（レーンに置いたメロ×コード＋frame＝調/tempo/拍子）＝「どのコードに？」の小UIが不要＝レーンを読んで実行。SectionEditorを「配置」だけでなく**組み上げの道具箱**へ拡張。
+    - **✅第1弾「この進行にメロ」(2026-07-03)**：section のコードレーンの子を小節位置ぶんオフセットして1本に連結→`gen_melody`(frame＝section の key/tempo/meter/bars)→**候補パネル**(▶試聴=playNotes／別案=別seed／メロレーンに置く=createNeta＋placeChild／閉じる)。実機で 進行→メロ生成→配置を確認。残＝gen_bass/drums・fit_to_chords・analyze_fit・ハモリ。
+- **ハモリの整理**：既存 `harmonize`＝メロ→**コード伴奏**（別物）。ユーザーの「ハモリ」＝**上ハモ/下ハモ＝並行する第2声部**（新オペ）。**Section側**（原メロと重ね、frameの調でダイアトニック）。まず**単純な平行3度/6度・上/下**から。時間差ズラし・上下混在は後。
+- **候補主義**：生成/変換は候補(before/after)を出し「適用」は人間（既存の承認カード型を流用）。
+- **候補プレビューUX（✅崩す実装 2026-07-03・全"出力する道具"の共通型）**：出力オペは即ネタ化せず**編集画面で候補プレビュー**。崩す＝メロ編集ツールバー「崩す」→**候補モード**：PianoRoll に**候補=実線/元=点線ゴースト**を重ね、下の▶は**候補だけ試聴**（元notesは不変）。バー＝強度[弱/中/強]・別案(別seed)・**新ネタで保存**(createNeta＋link variation)・破棄。＝気に入った1個だけ残る（試行のゴミが出ない）。カードの即生成は撤去。似たメロpick/ハモリ/fit も同じ型を使い回す。
+- **段階**：①単体系（軽い・先）→ ②Section道具箱（大きい・後）。
+- **メロ単体系＝「ツール ▾」1つに集約（✅2026-07-03）**：旧UI＝[崩す]ボタンと[道具 ▾]メニューが別置き＝「崩すもツールの一種なのに分かれている／"道具"の名が謎／スタイル不揃い」（オーナー指摘）。→ ✨wandアイコンの**単一「いじる ▾」**へ統合＝縦メニュー＝**崩す（別メロ候補）**を主役色(primary)で先頭、続けて調推定・似たメロ、`移調`小見出し下に ＋半音/−半音/＋8va/−8va(2×2)。＝崩すも移調も"メロを変える道具"として1箇所に並ぶ。名前は「道具」→**「いじる」**（"道具"は用途不明・"ツール"も英語にしただけ＝中身「崩す/調推定/似たメロ/移調」＝メロをいじる動詞に、オーナー選定）。
+- **調推定＝複数候補を巡回（✅2026-07-03・特に短調）**：単一キー断定でなく `POST /music/detect_key_candidates`(top:4) が Krumhansl 相関で**上位4候補**を返す（`rankKeys`）＝相対短調が確実に上位に入る（例：C-E-G-A-C → C長調0.88 / **A短調0.75** / E短調 / C短調）。「調推定」を押すたびに候補を**巡回**（keyCandsRef/keyCursorRef・notes変化でリセット）＝キー＋旋法をセットしレポート「調推定：A 短調（2/4…）」表示（タップで消える）。長調しか出ない旧挙動＝短調曲の推定漏れを解消。
+
+#### 決定：編集は自動保存（明示「保存」を廃止・2026-07-03）
+- **問題（オーナー指摘）**：ネタ編集は**明示的に「保存」を押すまでDBに書かない**＝ローカルstateに溜めるだけ。`save()`は「書く＋閉じる」の2役で、**← 戻る（onClose）は保存せず閉じる**＝ガード無し。∴ メロを描いて 戻る／別ネタへ切替／リロード すると**黙って全消え**。スマホでは戻るを誤爆しやすく「消えやすい」。
+- **要件と照合**：req L32「要はメモ書き」・L46「面倒だと続かない」・**L66「編集は取り消せる/やり直せる(Undo/Redo)＝道具の基本」（実装済）**・**L174「メモ…データが消えないようにする」**。→ 明示保存モデルは L174 に反し、Undo という安全網があるのに"保存しない＝逃げ道"を兼ねさせるのは筋が悪い。メモ道具（Notes/Keep）に保存ボタンは無い＝**書いた瞬間に残る**が当たり前、ミスは Undo で戻す。
+- **決定＝自動保存**：編集で patch が変わったら**デバウンス(≈600ms)でPATCH**（`useNetaEditor`）。「保存」ボタンは**保存状態ピル**（保存済✓／保存中…／未保存＝押すと即フラッシュ）へ格下げ。**← 戻る・別ネタ切替(unmount)・リロード(beforeunload keepalive)** で未保存ぶんをフラッシュ＝取りこぼさない。ミスの取り消しは既存 Undo/Redo（req L66）。**先例**＝song overlay は既に blur 自動保存（SectionEditor）。
+  - **ヘッダ整理（2026-07-04・全編集画面共通 EditorHeader）**：保存状態ピル→**丸チェックアイコン**（保存済=緑✓／未保存=橙丸／保存中=くるくる）、削除→**ゴミ箱アイコン**、ともに**右上**へ。さらに**kind ラベルを撤去**＝一行目が重い(オーナー)＝種類は本体(ロール/グリッド等)と色で分かるので冗長。← 戻る＋タイトル(広く)＋右上2アイコンだけの軽い1行に。
+- **例外＝候補フローは明示のまま**：崩す等の**出力オペ（候補プレビュー）は従来通り明示「新ネタで保存」/破棄**（元notesは不変・別ネタ化＝自動保存の対象外）。「直接いじる＝自動保存」「候補を採る＝明示commit」で住み分け。
+- **残（backlog）**：Undo は現状**セッション内のみ**＝閉じて開き直しての巻き戻しは無い（「undo/redo 版管理」案件）。自動保存で"誤編集が残る"時はその場でUndo。将来は版スナップショットで跨ぎUndoへ。
+
+#### 決定：単体ネタの編集画面から MIDI 書き出しを撤去（薄く保つ・2026-07-04）
+- **問題（オーナー）**：メロ/ベース等の編集画面に MIDI 書き出しがあるが、単体ネタを個別に書き出す場面は薄い＝編集画面が重い。
+- **決定**：MetaPanel の `MIDI`（`f.isMusic` 条件）を撤去＝メロ/ベース/コード/リズムの編集画面から消す。**Section 本体の書き出し（`MIDI`／`MIDI(分割)`＝合成/多トラック）は維持**（曲単位の書き出しが本来の用途）。`onExportMidi` チェーン（MetaPanel/NetaDialog/useNetaEditor）ごと削除。
+- **将来（未着手）**：単体を書き出したくなったら「エクスポート機能でネタを選ぶ」導線（オーナー案）。編集画面には戻さない。
+
+#### 決定：種別フィルタをアイコン化＋生スネークの排除（2026-07-04）
+- **問題（オーナー）**：①種別での絞り込みが「生スネークの `<option>` セレクト」で、作成のアイコングリッドに比べて見づらい＝アイコンで絞りたい。②カード/編集画面で種別が英語スネーク（`chord_progression` 等）そのまま出てフィールが悪い。
+- **決定①＝フィルタを作成と同じ7アイコンに（2手目で確定）**：`<select>{生key}` を廃止。最初はチップ（アイコン＋ラベル・全filterable）にしたが、オーナー追い指摘＝「作成と順が違う／作成と同じ絵・種別色・**ラベル無し**で**7つ1行**／開閉が分かりづらい」。→ **作成グリッドと同じ7種・同じ順**（メロ/コード(chord_progression)/歌詞/曲(=section)/リズム/ベース/テーマ）を**種別色のラベル無しアイコン1行**（`.filter-kinds` 7列グリッド）に。選択中はその種別色でリング。**開閉トグル(絞込▾)は廃止＝常時表示**（分かりづらさ解消）。mood は下に控えめな一行で常時。niche種別(chord/chord_pattern/reference/knowledge)はクイックフィルタから外す＝検索で対応。曲スロットは実体に合わせ section で絞る。
+- **決定②＝生 kind 表示を `KIND_LABEL` に統一**：カード(NetaList 濃淡両方)・編集ヘッダ(EditorHeader)・トレイ(Tray)・連関(RelationsPanel)・Section(others/picker/ブロックlabel) の生 kind を日本語ラベルへ。SSOT は既存 `kinds.ts:KIND_LABEL`。※ProjectScreen の `f.kind` は**ファイル種別**でネタ種別でないため対象外。
+- web243緑・実機でアイコン絞り込み＋日本語ラベルを確認。
+- **追い直し（2026-07-04・実機360px）**：常時表示化で `.filter-kinds` の 7列grid（aspect-ratio）min-content が 386px を要求→ `.notebook` の暗黙列(auto)を押し広げ**横スクロール**が発生。修正＝`.notebook { grid-template-columns: minmax(0,1fr) }`＋`.filter-kinds { repeat(8, minmax(0,1fr)) }`（列を縮められるように）。**コード楽器(chord_pattern)を8番目に追加**＝探せる（オーナー要望）。併せてピッカーの見切れ＝`.picker-item-meta { flex:1 }` 欠落でタイトル(nowrap)が省略されず膨らむのを修正（ellipsis 効く）。実機360pxで docScrollW=vw を確認。
+
+#### 決定：メロはロール一本（パッド入力を撤去・2026-07-04）
+- **問題（オーナー）**：メロ編集の `ロール/パッド` トグル。**パッド(StepPad)＝使わない**（スケール外が出せない・16step1小節固定で表現が狭い）。アルペジオ的に使う可能性はあるが、それは**アルペジエーターとして別実装すべき**（[[backlog]] 送り）。
+- **区別**：`ロール/パッド`（メロの入力方式）と、`ベースの絶対/相対`（度数グリッド＝コード楽器と同じパターン入力）は**別物**。**ベース相対は必須で維持**（オーナー明言）。触るのはメロのパッドだけ。
+- **決定**：メロは**ピアノロール一本**。`ロール/パッド` トグル＋`StepPad`（コンポーネント/テスト）＋ `melodyView` state を撤去（KindEditorBody/useNetaEditor/NetaDialog）。`showRollBars` は `melodyView` 依存を外す。描く/選ぶ＋いじる▾ はそのまま。web243緑・実機でメロ=ロールのみ/ベース=絶対・相対健在を確認。
+
+#### 決定：Section 作り時のピッカーを「絞れてる」に（データの扱い・2026-07-04）
+「元ネタは大量に貯めたい×Section 作り時に多すぎて選べない」を両立＝**貯める pool と置く時に見える集合を分ける**（オーナー）。
+- **A. 母集団を器(プロジェクト)で絞る**：ピッカーは既定でこの曲の器の自作ネタのみ（`prj:`タグ由来）。`元`セレクトで「自作すべて」や他器へ広げられる。取得は `scope:project`（コーパスは取らない）。
+- **B. 相性順＋拍子一致**：拍子一致のみ既定（`拍子違いも`トグル・meter未指定は中立で表示）→ 調は**五度圏距離**が近い順 →最近順。「拍子違いネタが混じって困る」を解消。
+- **C. コーパス(大量library)は直接選ばせない**：生の1781件（1425メロ＋356進行）リストは撤去。**推薦(おすすめ)経由**にする＝section の調/拍子から関連数件だけ返す。
+- web259緑・実機で器/拍子フィルタを確認。
+
+#### 決定：ピッカー Phase2＝おすすめ（コーパス推薦）を実装（#20・2026-07-04）
+上記Cの「推薦経由」を実装。**軸（ユーザー選定＝軽い方式）**：拍子一致 → 調が近い順（五度圏）→ ばらけ（idハッシュで擬似シャッフル・決定的）→ 上位K(既定6)。
+- **サーバ側で top-K**：`GET /neta/recommend?kind&meter&key&top` → `core.listNeta({scope:"library",kind})` を `rankRecommendations`（純関数・`music/recommend.ts`）でランク＆キャップ。生1781を web に流さない（design原則「関連数件だけ返す」を経路として実装）。
+- **対象は melody / chord_progression のみ**（コーパスはこの2種だけ・bass/rhythm/chord_pattern は無し）。ピッカーの種別タブに応じて `corpusKindFor(lane)` で決定、無い種別は strip 非表示。
+- **実測の含意**：コーパスのメロは**全て keyless（C基準断片）**＝調ランクは中立に落ち、実質「拍子一致＋ばらけ」で数件。進行は調付きもあるので調ランクが効く。
+- **UI**：ピッカーの「＋新規作成」の下に**おすすめ（コーパス）＝横スクロールの小さな概形タイル**（自作リストは縦・視覚的に分離）。tap＝`placeAt`（library→project にコピーして配置＝元コーパスを汚さない・既存導線）。
+- **残（Phase3・任意）**：文脈適合ランク（section にコードがあればコード適合度でメロを、メロがあれば相性で進行を）＝より musical な推薦。今回は「軽い」方式で確定。
+- api428緑（recommend純関数4＋http1）・web263緑。実機E2E：メロ=6件/リズム=0件（コーパス無し種別は非表示）/コード進行=6件、console error 0。
+
+#### 決定：曲/セクションの階層を実コードで実現（#5・2026-07-04）
+`docs:413` が既に宣言する **Project ⊃ Song ⊃ section ⊃ leaf** を**コードで enforce**（今まで「＋曲を組む」は kind=section を作り、section が section を入れ子にできる＝宣言と乖離していた）。ユーザー選定＝**フル実装**。
+- **section＝ひとつの音楽ブロック**（Aメロ/サビ等）：レーンは**パート専用**（コード進行/メロ/コード楽器×2/ベース/リズム）。**section-in-section を廃止**＝「セクション」レーンを section から外す。尺は据え置き（MIN 8・**MAX 32**）。
+- **song＝セクションの編成**：レーンは **[セクション] のみ**。song の timeline に section ブロックを時間順に並べる（tap で潜って中身編集・戻ると編成へ）。尺は長め（**MAX 64**・配置で自動伸長）。
+- **「＋曲を組む」＝kind=song を作る**（App.createSong / NetaList 一式）。song 内で section を新規作成・既存 section を配置（ピッカーの section レーン）。
+- **エンジンは無改修で成立（重要）**：`compositeNotes`/`childDur` は既に **section/song を再帰合成**（#15 の入れ子対応）＝song(→section→leaf) の再生・尺は既に正しい。よって変更は**表示とレーン導出の差し替えだけ**（レーンを container kind で選ぶ）＝低リスク。
+- **container kind でレーンを選ぶ**：`SECTION_LANES`（パート）／`SONG_LANES`（[section] のみ）を `neta.kind==="song"?SONG_LANES:SECTION_LANES` で。`MAX_BARS` も kind 依存。
+- **いじる▾（生成/ハモリ）は section 専用**：生成はパート（メロ/ベース/ドラム）を作る道具＝song 直下には置かない。song の いじる は **書き出し(MIDI)のみ**。
+- **カードプレビュー**：`SectionMini` を container kind で分岐＝song は**構成（section 帯）**、section は従来の4パート帯。
+- **非破壊移行**：既存の kind=section（"新しい曲" 等）はそのまま section として使える（standalone 可）。新規のみ song 化＝回帰ゼロ。将来「section を song に昇格」導線は任意（[[backlog]]）。
+- **song が直接パートを持つか？→ 持たない**（sections-only）。全体ベース等の"通しパート"要求が出たら再検討（今は明快さ優先）。
+
+#### 決定：UI/ブランド刷新まとめ（Otomemo・ヘッダ・ピッカー・タイル・2026-07-05）
+表示名・ヘッダ・ピッカー上部・作成/絞り込みタイルをまとめて整理（オーナーと反復）。**リポジトリ/プロジェクト名は `creative_manager` のまま**、アプリの**表示名だけ Otomemo**（`App.APP_NAME` 定数1箇所・ロゴSVG＝吹き出し+♪＝"サッと音のメモ"・`public/favicon.svg`・title「Otomemo — 手早く音のメモ」）。名前の由来＝「手早く音を出してメモできる」を伝える（音メモ）。
+- **ヘッダ＝パンくず**：`[♪ロゴ Otomemo →ホーム(ネタ帳)] › [プロジェクト名 →器画面] … [📥受信箱][⚙設定]`。旧「☰=ホーム(ハンバーガーの意味ズレ)/♪飾りロゴ/🏠でホーム2重」を解消＝現在地と帰り道が明確。ネタ帳レール開閉の ☰ は **PCのみ**（サイドバー切替はPCでは慣習的で紛れない）。※旧 header 記述「App ヘッダ(🏠…)」(下の ProjectScreen 磨き節)は 🏠 撤去で古い。
+- **ピッカー上部**：種別タブ(6個)を**撤去**＝タップしたレーンに固定（別パートはそのレーンのセルをタップ）。置く種別は**ヘッダのパンくずに色付きアイコン＋パート名**で表示（`Section ▸ [色アイコン]パート ▸ N小節目`）。おすすめの kind は `corpusKindFor(picker.lane)`（タブでなくタップしたレーン）で決定。絞り込み＝検索を主役に、下に `[自作すべて▾（元ラベル無し）]＋[拍子一致のみ トグルボタン]`（旧「元セレクト/拍子違いもトグル」は文言変更）。おすすめ帯＋自作リストの各項目に **▶試聴**（`previewNeta`＝配置前に耳で確認）。ダイアログは `grid-template-columns:minmax(0,1fr)` で画面幅に固定＋`align-content:start`（帯はスクロール・行は間延びしない）。
+- **作成タイル（ホーム）**：グループ分け（見出し無し）＝**パーツ行(メロ/コード/ベース/リズム/コード楽器)** ＋ **組み立て・文字行(セクション/曲/歌詞/テーマ)**、取込は全幅別行。**chord_pattern・section・song タイルを追加**（従来は編集画面にあったが作成導線が無かった）。
+- **絞り込みタイル**：作成と**同じ9種・同じ順**（メロ/コード/ベース/リズム/コード楽器/セクション/曲/歌詞/テーマ）＝アイコンのみ(ラベル無し)。曲(song)を追加、section と別々。
+- **色SSOT**：kind→色は `kinds.kindColor(kind)`（chord系は --k-chord に畳む）に集約。ピッカー項目は各アイテムに自前の `--k` を設定（旧: 編集中 section の --k=橙 を継承してメロ概形が橙になるバグを是正）。
+- web271緑・実機で確認（favicon 200・パンくず・ピッカー色/密度/▶）。
+
+#### 決定：MIDI多トラックのトラック名は ASCII（文字化け回避・2026-07-05）
+`@tonejs/midi` はトラック名を Latin-1 で書くため、日本語レーン名(メロ/ベース等)が DAW で文字化けする。→ `LANE_MIDI_NAME`(Melody/Chord/Bass/Drums/Keys 1/2)で **ASCII名**を渡す。音符の秒時刻・テンポ・拍子ヘッダ・ドラムch10・多トラック分けは検証済で正しい（`midi-export.test.ts`）。
+
+#### 決定：カードの生成は決定的 `/gen/section` に一本化（旧worker gen_* 撤去・2026-07-05）
+受け入れテスト(GN-08)で、ネタカードの `生成▾→全体/メロ/コード/リズム` が **worker(Python)前提の `createJob`→`pollContent` 経路**のまま残っており、worker 非稼働時に「生成中…」で**無限ハング**していた（＝「worker脳撤去→Claude脳」移行の置き去り）。
+- **修正**：カードの生成を **単一の「作例を生成」→ 決定的 `POST /gen/section`（純TS・genChords/genChordPattern/genMelody/genBass/genDrums を即実行、worker/クォータ不要）**に一本化。`frame` はネタの `key/tempo/meter` から。旧 `generate()`/`intentOf`/`pollContent`（カード側 worker 経路）は撤去。
+- **パート単位のいじり**（この進行にメロ/ベース生成 等）は**コード文脈のある Section エディタの「いじる▾」に委ねる**（GN-01/02 で決定的動作を確認済）。カード＝ゼロから一式の足場、エディタ＝文脈ありの精緻化、と役割分離。
+- 契約テスト更新（`NetaList.test.tsx`＝「作例を生成」で `genSection` 呼び・`createJob` 不使用）／live 実UIで **0.6s・ハング無し**を確認。web277緑。
+
+#### 決定：継続調査(scheduled research)を api 内 claude 実行器で動かす＝worker撤去（2026-07-05）
+継続調査は `schedule → job(research) → worker(Python claude_prompt) → reaper → reference ネタ → トレイ` の
+producer-consumer だったが、**worker が非稼働＝consumer 不在**で job が queued のまま溜まり動かなかった（受け入れ ST-07 は有効化までしか踏めず）。gen_* は今日 決定的TSへ移した（GN-08）ので、**research/collect を api が引き取れば worker は不要**になる（memory「worker脳撤去→Claude脳」と一直線）。
+- **設計＝王道の「実行器差し替え」**：schedule/job/reaper/トレイ/トグルは**不変**。consumer だけ Python worker → **api 内ループ**に。api は `claude -p <prompt>`（Max認証・単発・web可・MCP不要＝research は純テキスト）を叩き（worker `claude_prompt` の node 版・PATH補強と detached プロセスグループ kill は chat-session.ts と同型）、`{summary, references[]}` を job.result_summary に書いて done に。**既存 reaper が done research を reference ネタ化しトレイへ**（契約そのまま）。
+- **実装**：`research-runner.ts`（`claudeShot`＝spawn/timeout/killpg・`researchPrompt/collectPrompt`＝純関数・`parseResearch`＝JSON抽出の純関数・`runResearchJob(core,job,shot?)`＝shot 注入可でテスト可能）／JobRepo に `claimQueued(intents)`(queued→running 原子的)・`completeJob(id,result)`・`failJob(id,err)`／main.ts に research consumer（直列・in-flight ガード・5s tick 相乗り）。
+- **スコープ**：research/collect のみ（継続調査の対象）。import_midi 等 他 intent は当面据え置き（別途）。二重 claim は api が唯一の consumer＋原子的 UPDATE で回避。
+- テスト：parseResearch（正常/prose混じり/壊れ→fallback）・prompt 構築・**runResearchJob に fake shot を注入して claim→done→reap→reference ネタまで**を検証（claude 実発火は throwaway で1回スモーク）。
+
+#### 決定：Chat の旧ジョブ流路を撤去＝承認ワークフローは「調査系タスク」で作り直す（2026-07-05）
+`#100` の常駐 claude ストリーミング化(`send→run→runStream`)で、旧ジョブ流路 `runJob`/`waitForJob`/`finishWait`/`handleConsult` が**丸ごと未参照デッド**になっていた（`run()` が `runStream` 直行になり `runJob` が孤児化）。そこにぶら下がる **承認カード(`ProposalGroup`/`ProposalCard`/`すべて承認`/原本↔提案の並置)・`options→pick`・`references→saveRef`・待ち進捗(`waitInfo`)＋`待たずに戻る`** は、コンポーネントとテストは残るのに UI から到達不能だった（受け入れテスト CH-03/04/06/07）。
+- **判断＝A案（撤去＋意図の退避）**（オーナー選択）。B案（streaming に承認カードを再配線）は不採用：**同期の単発変異はすでに可逆な書込カード(`capture`→開く/取り消す)で足り**（承認ダイアログは過剰）、承認/トレイ配送が真に効くのは**非同期バッチ（調査系タスク）**で、それは別の実行基盤（Claude コマンドを裏で走らせる形）を要する＝旧コード復活では目的地に着かない。
+- **撤去したもの**：Chat.tsx の `runJob`/`waitForJob`/`finishWait`/`handleConsult`/`pick`/`applyProposal`/`saveRef`、`ProposalCard`/`ProposalGroup` と型(`Proposal`/`Opt`/`Ref`/`PStatus`)、`waitInfo`/`cancelWait`、Msg の `options`/`references`/`proposals`/`summary`/`jobId`、対応する死にCSS(`.proposal-*`/`.bs-option*`/`.ref-*`/`.wait-cancel`/`.wait-bar-fill`)。**生きている縦スライス（runStream・候補/可逆書込カード・知見化・開く/試聴・inflightバナー・実況/不確定バー）は不変**。web273緑・tsc緑・実UIスモークで Chat 正常描画/JSエラー0/承認カード残0を確認。
+- **退避した UX 契約（＝将来「調査系タスク＝Claude コマンド化」の受け入れ条件。backlog に対応項目）**：
+  1. **承認ワークフロー**：機械の変異提案を*即適用せず*、原本↔提案を並置して試聴・比較→個別承認/`すべて承認`→承認時のみ書込。※単発の可逆変異は現状の書込カードで足りるので、これは**複数提案のバッチtriage**が要る時に導入する。
+  2. **裏で続行→受け取りトレイ配送**：長時間タスクはチャットを閉じても裏で走り、結果がトレイ📥＋由来チャットに届く。
+  3. **待ち UX**：確定進捗(done/total)＋`待たずに戻る`（＝裏で継続）。今の同期ターンには不要、非同期タスク復活時に再導入。
+  - 実行基盤は worker(Python) 前提でなく **Claude コマンド（headless Claude が調査/生成を実行しネタを書く）**で設計し直す（memory「worker脳撤去→Claude脳」と整合）。
+
+#### 決定：受け入れテスト残の潰し込み（MIDI/検索/器削除・2026-07-05）
+受け入れテスト(69ケース)で挙がった非fail項目を実装で解消：
+- **合成MIDIのドラム分離（SG-04）**：`notesToMidi` は1音でも `drum` があるとトラック全体を ch9 固定＝ピッチ楽器が DAW でドラム音源で鳴っていた。**ドラムと非ドラムが混在する時は別トラック**（ピッチ=既定 program／ドラム=ch9）へ分離。純メロ/純ドラムは従来通り1トラック。
+- **検索のフェイルサイレント解消（FS-04）**：cm-search 不通時に `/search` が黙って keyword-only に劣化していた。`{ items, semanticOk }` を返し（`semanticOk=res.ok`）、UIで「意味検索が使えません（キーワードのみ・近い候補は出ません）」を控えめに告知。
+- **器（project）の削除**：DELETE `/projects/:name` を新設＝**所属タグ `prj:` を全ネタから外す（ネタは残す＝未仕分けへ）＋説明/指示 overlay を削除**。破壊的でない（ネタは消えない）。プロジェクト画面の編集パネルに「器を削除」（危険色・確認付き・件数明示）。空の器も row 削除で消える。
+- テスト先行（midi 混在／search semanticOk=false／deleteProject 空・中身あり）。throwaway API(loopback:8799・temp DB)で live 検証＝本番サーバ無停止。※`/search` 形と DELETE は **API コード変更＝本番 api の再起動で反映**（`CM_HOST=100.109.159.48 pnpm --filter @cm/api exec tsx src/main.ts`）。
+
+#### 決定：仕様齟齬2件の整合（拍子は全パート編集可／ピッカーはレーン固定・2026-07-05）
+受け入れテストで仕様書と食い違った2点を整合：
+- **拍子（meter）を単体パートでも編集可に（MB-05）**：旧 MetaPanel は拍子 select を `isContainer` 限定で出し、かつ保存 patch も container のみ meter を含めていた＝**テンポ/音色/弱起は単体で変えられるのに拍子だけ不可**という非対称。テンポ(showMeta)と同集合（全ての拍グリッドkind＝melody/bass/chord/chord_pattern/rhythm＋section/song）で編集可に統一。meter は roll のグリッド（小節線・6/8=12step等）と MIDI 拍子ヘッダに効くので、単体パートでも意味がある。`useNetaEditor` の保存 patch にも各パートで meter を追加。
+- **ピッカーは「タップしたレーンに kind 固定」＝種別タブは出さない（SC-02・意図どおり）**：配置ピッカーはレーン（メロ/コード/…）の空セルから開くので、**置く種別はそのレーンで決まる**＝種別で絞るタブは不要（撤去済）。絞りは 器（元ネタ）／拍子一致／検索（曲名・アーティスト）＋おすすめ（コーパス）。ヘッダの kind アイコンは「今どのレーンか」の表示。＝受け入れ仕様の「種別アイコンで絞る」は本設計では非該当（コードが正・仕様書の期待を本設計に合わせる）。
+
+#### 決定：楽譜系エディタを「メロ編集画面」に整合（②④⑤・2026-07-04）
+6種の編集画面（メロ/ベース/コード/コード楽器/リズム/Section）をスクショで横並び確認し、**一番リッチなメロ編集画面を基準**に骨格を揃えた（オーナー「機能とデザインはメロディ編集画面に揃える」）。共通骨格＝**`.roll-toolbar`＝modesトグル(左) … `いじる ▾`(右)**。
+- **④ メロ/絶対ベースに「消す」モードを追加**：PianoRoll の `mode` を `draw|select` → **`draw|select|erase`** に拡張。modes 行を **[✎描く][▭選ぶ][⌫消す]** の3つに（`.proll-modes`・KindEditorBody）。消す＝**ノート tap で削除・空セルは無反応**（描くの「空タップ=配置」とカニバらない）／消す中はノートを**赤い破線(`.proll-note.erasing`)**で示す＝Section の `lane-block.erasing` と同流儀。選択編集(複製/コピー/nudge)は選ぶ専用のまま。位置は**いじる と同じ modes 行**に置く（オーナー「メロのデザイン位置がいじると合わせて正しい」）。
+- **⑤ Section の生成/書き出しを `いじる ▾` メニューに集約**：旧 `.section-actions`＝[MIDI][MIDI(分割)][この進行にメロ/ベース/ドラム][上/下ハモ][コードに合わせる][噛み合い診断]の**ラウドなボタン壁**を撤去。メロ編集画面と同じ**✨wand「いじる ▾」**の縦メニューへ＝`この進行に生成`（メロ/ベース/ドラム・needsChords でフィルタ）／`メロ加工`（上/下ハモ・コードに合わせる・噛み合い診断＝メロ/コードがある時）／`書き出し`（MIDI・MIDI（分割））。**MIDIも menu 内へ**（Section 書き出しは維持しつつ薄く）。候補プレビュー中(cand)は生成群を隠す。
+- **② 全体整合**：Section の `[✎通常][⌫消しゴム]` トグルを section-bars 行から**この共通 roll-toolbar（modes 左・いじる 右）へ移設**＝メロと横位置が一致。カード自動更新は既に `SectionMini` の dep を `[neta]` 化で解消済（MiniRoll.tsx）。
+- web262緑（PianoRoll 消すモード＝ノートtap削除/空セル無反応・Section いじる▾ は閉で隠れ開で生成/書出が出る）。実機E2E（Playwright・loopback）でメロ=3モード＋erasing描画・Section=いじる▾集約を確認。
+
+#### 決定：Section から子ネタを直接 修正/作成（導線・2026-07-04）
+Section を触っていて「各パーツを Section から直接 修正/作成できたほうが導線が良い」（オーナー）。
+- **土台**：mainpane は App の単一 `active: Neta|null` で駆動＝`setActive(n)` でどのネタも開ける。`onChanged` は既に App→NetaDialog→KindEditorBody→SectionEditor と流れる＝**同経路に `onOpenNeta` を1本足すだけ**。自動保存（2026-07-03）で往復してもロスなし＝実現が軽い。
+- **① 修正＝ブロック tap で編集／外すは消しゴムモード**：旧 tap=配置解除 を入れ替え＝**tap→`onOpenNeta(子)` で子ネタの編集画面へ潜る**。~~長押し(500ms)→配置解除~~ → **撤去**：配置解除は共通 `.roll-toolbar` の **`[⌫消しゴム]` モード**（tap＝外す）に移した（2026-07-04「楽譜系エディタをメロ編集画面に整合」・下記④⑤ブロック参照）。長押し=外すは「tap 伸ばし(③ループ)とカニバる／分かりにくい」で撤去。右端グリップ(③ループ)は消しゴム中は無効。
+- **② 作成＝ピッカーに「新規作成」**（オーナー「探してないから作るか、的な」）：空セル→ピッカー上部に**「＋ 新しい〈レーン〉を作る」**（検索語があればタイトルに）→ `createNeta({kind})`→配置→**そのまま編集を開く**。コード進行レーンは `chord_progression` を既定に。
+- **戻る＝元の Section に戻す（ナビ履歴）**：App に `navStack: Neta[]`。潜る=`drillNeta`(今の active を積む)／トップ open(一覧/Chat/プロジェクト)=`openTop`(履歴クリア)／`← 戻る`=スタックがあれば親 Section に戻す・無ければ従来（一覧/器へ）。**Section in Section も同じ経路で潜れ・戻れる**（オーナーが唯一気にした所＝ナビ履歴で破綻せず）。web245緑・実機で潜る→戻るでSection復帰＋新規作成→編集直行を確認。
+
+#### 決定：Section の4点改善（オーナー実使用フィードバック・2026-07-03）
+出先で Section を組んで見えた4つの引っかかり。各1つずつ設計フォークをオーナーが選定。
+- **① 進行トラックは無音の骨格に（発音を止める）**：現状 `compositeNotes` は chord/chord_progression を **GM49ストリングスのブロックコードで発音**していた＝設計CP1「進行は抽象・伴奏は chord_pattern が担う」と食い違い。→ **進行は音を出さない**（`compositeNotes` の該当kindは `[]`）。ただし `sectionChords` 文脈（コード楽器/相対ベース/メロ配置の解決先）は従来どおり進行から構築＝**骨格の役目は保持**。コード楽器未配置なら和音は鳴らない（それが正）。既存の合成テストは進行の自前発音(program48)を検証していない＝後退なし。
+- **② コード楽器レーンを2本に**：ピアノ＋パッド等を**同時に鳴らしたい**。LANES のコード楽器を2レーン（コード楽器1/2）へ。**再生は元々全 chord_pattern 子を鳴らす**ので発音側は変更不要＝**UIの占有制限とレーン識別**だけ。識別は placement の **`ord`**（0/1＝行）を流用（ord は並び/zヒントで本質非依存・db compose_edge に既存列）。占有判定は (行×位置) 単位。
+- **③ 繰り返しは右端ドラッグでループ伸ばし**：既存パートの再配置が「空セルタップ→ピッカーで選び直し」で重い。→ 置いたブロックの**右端ドラッグで伸ばす＝その範囲に同じ子をタイル反復配置**（compose_edge は PK に position を含み**同じ子を別位置に反復配置できる**＝#54・スキーマ不要）。伸ばした各小節に placeChild、縮めたら末尾の反復を外す。ピッカーを経由しない。
+- **④ Section カードに中身プレビュー**：カードの `MiniRoll` は section で `[]`＝**何も描けず中身不明**。→ **レーン帯のミニ・タイムライン**（メロ/コード/ベース/リズムの各行に、どの小節が埋まってるかを帯で図示＝編集画面タイムラインの縮小版）＋小節数。子は `getComposition` を**カード表示時に遅延取得**（section/song カードのみ・数は少ない＝許容）。
+- **段階**：①(小・合成の純関数＋テスト) → ④(カード・スキーマ無) → ③(ドラッグ反復・スキーマ無) → ②(2レーン・ord流用)。各縦スライスで緑にしてから次へ。**✅全4点 実装済(2026-07-03・web243緑・各実機確認)**。
+
+#### 決定：モバイル・ファーストビューの整理（案A・2026-07-03）
+サブエージェント診断＋オーナー所感＝ファーストビューが「ガチャガチャ」＝(1)作成7タイル＋取込4で上半分が"ボタンの壁"・主コンテンツ(カード)が下すぎ (2)ボタンのスタイル言語が3系統混在 (3)色が装飾で氾濫。**制約＝出先メモでは作成がメイン導線＝上＋1タップは維持**（＋新規に畳む案は不採用）。
+- **採用＝案A（比較モックで選定）**：作成は上に残すが**コンパクトなアイコングリッド**（既存 `KindIcon` を主役に・色は"塗り帯"でなく**アイコン**へ寄せて氾濫を抑える・4列・低背）。並びは**メロ優先**（[[feedback-priority-melody-first]]）。取込4つは grid 内の**「取込」タイルに畳む**（＝作る/取り込むは同じ"ネタを増やす"）。
+- **段階**：Stage1＝作成グリッド＋取込畳み✅。Stage2＝フィルタ畳み＋scope圧縮✅。ボタンスタイルは塗り(主)＋トグル(選択)の2系統へ統一。各段 Playwright で現状と見比べ。
+- **決定：scope×器ナビの統合（案1・2026-07-03）**：旧＝スコープタブ(プロジェクト/ライブラリ)＋器チップの**2段が"気持ち悪い"**（似た見た目で役割違い＋「連想元」が難解）。→ **1行に統合**：`[すべて][未仕分け][器…][＋] ｜ [📚ライブラリ]`。すべて/未仕分け/器＝作業ネタの絞り込み、区切りの先「ライブラリ」＝連想元の参考素材（別の場所・全プロジェクト共有）を**紫系＋コレクションアイコンで区別**。器チップ押下は project scope へ復帰＋バケツ選択、ライブラリ押下は library scope。モックA/B/C比較で案1採用。
+
+#### 決定：ネタ帳一覧の詰め（カード式管理UI・研究 `2026-07-02-card-and-create-ui-patterns` 由来）
+研究結論＝**作成側（タイル＋チャット委譲）は王道で詰めどころ少／詰めしろは一覧側**（NN/g：カード羅列はスキャン・比較が弱い＝多数を見比べる時はリスト/コンパクトが要る）。3段で下ろす：
+- **決定 LV1（表示密度トグル・実装対象）**：ネタ一覧に **カード / リスト** の2密度を持たせ、`localStorage["cm-list-density"]`（既定=`card`＝現状維持）で永続。リスト＝**1行に圧縮**（左の kind 色帯＋`KindIcon`＋**タイトル主役**＋種別ラベル小＋▶再生のみ、MiniRoll/tags/idは省く）。トグルは filters 直下に segmented（カード｜リスト）。密度は `NetaList` 内で自己管理（App へ状態を上げない）。狙い＝「見た目のリッチさ」と「一覧性」を密度切替で両取り。
+- **決定 LV2（情報優先度＋並べ替え・✅実装 2026-07-02）**：カード内は **タイトル最優先（.body を太字化）／id(1ae4ffd3…)は薄く小さく退避**／副アクション（複製/ライブラリへ/生成）は既定で畳み、主要2つ（▶/相談）＋**「…」**で展開。並べ替え＝`cm-list-sort`（既定=受信順＝検索の関連度を壊さない／更新新しい順／種別ごと／タイトル順）を密度トグル隣に。web230緑・スマホ実機確認。
+- **決定 LV3（一覧画面の作り込み・🚧実装中 2026-07-02）**：フィルタ強化＋**プロジェクトの関係一覧**（既出「ホーム化」S1-S3＝line 405-409 と合流）。
+  眺めて判明＝**名前付きプロジェクトが0件**（全ネタが未仕分けバケツ）＝プロジェクト機能が休眠。原因＝(a)ネタを器に入れる導線が無い (b)`＋新規`が`window.prompt`で空だとリロードで消える。
+  → **「器を作る→入れる→切り替える」を一周させる**のが主眼。トップのピッカー改善とProjectScreen磨きを両方やる。
+  - **P3 入れる導線（最重要・0件の根本）**：カードの「…」に**「この器へ」**＝アクティブ器の `prj:` を**addTag（他タグ非破壊）**。将来「取り出す」=removeTag。※`updateNeta(tags)`は全置換で危険なので専用ルート `POST /neta/:id/project {project, member}`。
+  - **P4 未仕分け**：`listNeta({unassigned})` ＝ `prj:` タグを1つも持たないネタ。ピッカーに「未仕分け」チップ＝仕分けの入口（P3と対）。
+  - **P1 チップ化**：素の select → 横スクロールの**プロジェクト・チップ**（`[すべて][未仕分け][名前 件数]…[＋]`・1タップ切替・件数バッジ・active色塗り）。多数は「▾他」へ退避（dropdown保険）。
+  - **P2 作成健全化**：`＋新規` の prompt を廃し、作成時に **`setProject` で永続**（空でも消えない）。
+  - **P5 器のアイデンティティ（軽）**：器ごと色/絵文字＋現在地表示。
+  - **ProjectScreen 磨き（✅Slice C・2026-07-02）**：ヘッダ/画面の**絵文字□化→SVG**＝新 `Icon.tsx`(home/inbox/gear/chat/edit/trash/pin)。App ヘッダ(🏠📥⚙💬)＋ProjectScreen(🏠/📌/✎/🗑)を置換。ジョブ状態の絵文字→**色ドット＋テキスト**。`ファイル`欄の浮いた枠を他ブロックと**フラットに揃え**(モバイル)＋縦 gap 詰め。backlog「絵文字→SVG」を回収。web232緑・Playwright実機で□解消を確認。
+  - **段階**：✅Slice A＝P3＋P4（入れる＋未仕分け・2026-07-02）→ ✅Slice B＝P1＋P2（チップ＋作成・2026-07-02）→ ✅Slice C＝ProjectScreen磨き（2026-07-02）。各スライスTDD/Playwright/コミット。
+    - **Slice B 実装**：素の select → **プロジェクト・チップ**（`[すべて N][未仕分け M][器 件数]…[＋]`・横スクロール・1タップ切替・active色塗り）。件数＝新 `GET /project-counts`(core.projectCounts＝すべて/未仕分け/器別・空の器も0件で拾う)。`＋新規`は `setProject` で**永続化**（旧prompt＝ローカルのみで揮発を是正）。api423緑/web232緑/Playwrightでチップ+件数を実機確認。
+- **段階**：LV1（本スライス）→ LV2 → LV3。LV1 は純加算（既定 card で回帰なし）・aria 不変・Playwrightでスマホ確認。
+
+#### 決定 LV-A：ネタ一覧の手動並べ替え（✅実装 2026-07-02・backlog から昇格）
+ユーザー判断「ない方が変」＝手で自由に順番を入れ替えたい。backlog の「後付けが安い」設計をそのまま採用。
+- **データ＝被せ表 `neta_order(project, neta_id, position REAL)`（純加算・既存 `song`/`chat_thread` と同型）**。
+  行の無いネタは position NULL＝**並べ替え前は現状(updated DESC)と完全同一**＝回帰なし。`project=''` は「プロジェクト未指定」バケツ。
+- **並び順の解決**：`listNeta({orderProject})` で `LEFT JOIN neta_order` → `ORDER BY (position IS NOT NULL), position ASC, updated DESC, id`
+  ＝**配置済みは指定順・未配置(新規)は先頭に updated 順**（新しいものが埋もれない）。orderProject 未指定なら従来の updated 順のまま。
+- **保存**：`POST /neta/reorder {project, ids}` ＝渡された順に position=index を**全上書き**（小さい一覧前提で単純・確実）。
+- **UI（dnd-kit sortable＋touch）**：カードを `useSortable` 化し、**⠿ ハンドル**で掴む。PC=5px/スマホ=**長押し250ms**で発火
+  ＝タップ再生/カードを開くとの誤爆回避。楽観更新（すぐ並ぶ）→ 失敗時 reload。既存の**レーン配置(placeChild)は同ハンドルで両立**
+  （`onDragEnd`：over がレーン→placeChild／別カード→reorder）。
+- **有効範囲＝素のプロジェクト一覧のみ**：`reorderable = scope==='project' && 検索/種別/mood 絞り込み無し`、かつ**表示が既定順**の時だけ
+  ハンドルが効く（基準ソート/部分集合の誤並べ替え・position 疎化を防ぐ）。この時 `items===表示順` なので楽観更新が安全。
+- 契約テスト：api `neta-order.test`（並べ替え前=既定同一／指定順／新規は先頭／プロジェクト別／再並べ替えは全上書き）。
+
 #### 決定：proactive 定期スケジューラ(#80) — 「見てない間も貯め・発展」(原則3)
 - **目的**：requirements 原則3/line71「指定テーマを継続して調べてまとまったら報告」を縦スライス化。reactive(投げたら進む)は揃ったので、**proactive(指示すれば勝手に少しずつ進む)** を最小で載せる＝この道具の差別化の核。
 - **層**：スケジューラは **TS/api 側**（design line62「生産者=TS/スケジューラ、消費者=Python」を尊重。Pythonは純消費者のまま）。`main.ts` の既存 reap interval に **scheduleTick** を相乗り。Python/worker は無改修（research/collect ハンドラと reaper をそのまま使う）。
@@ -340,6 +628,79 @@
 - **決定**：consult の楽曲生成を **(S)特定/名前/旋法/様式（丸の内・カノン・小室・ブルース・ドリアン・『〇〇進行』『あの曲っぽい』等）→ ルールに渡さず Claude の知識で正確に書き起こす(type:content chord_progression)**／**(G)汎用・枠だけ → ルール(gen_pair_rule/gen_chords_rule)** に分岐。迷ったら(S)。**(S)で Claude が書いた進行も analyze_fit/detect_key を必ず通す**＝#86「判定が提案の前提」は崩さない（生成元がルールでなくても判定は通す）。
 - **本命の上積み（実装済・#98）**：**名前付き進行DB**（`music/progressions.py`＝名前→度数列・C基準）で定番進行を「Claudeのそれっぽさ」→「**確定realize**」に格上げ。登録: 丸の内(丸サ/JtToU=FM7-E7-Am7-Gm7-C7)・カノン・小室(6451)・王道(4536)・ツーファイブ(ii-V-I)・12小節ブルース。別名/表記揺れ照合(`find_progression`)。realize は1コード=1小節・C基準保存(調は後段トランスポーズ)。MCPツール `gen_named_progression(name, frame)` で公開＝agentic Claude は名前付き進行を**記憶で書かず必ずこのツール**を使う（未知名のときだけ自分の知識へフォールバック・prompt 明記）。非ダイアトニック(E7/Gm7)も正確。当てはまり判定(analyze_fit)は従来どおり通す。次点: fetch の web 接続・旋法/様式のルール拡張・進行の追加登録。
 
+#### 決定：Chat相談の文脈・待ち・実況（#99・2026-06-24）
+- **症状（実機・固まる）**：フリーChat（`chat:*`スレッド）で前ターンの生成メロに対し「メロがいただけない、8分16分で直して」が **failed（`claude failed (1)`・stderr空）**。UIは考え中表示のまま無言で消えた＝「固まった」。
+- **根因（実コードで確証・3層）**：
+  1. **文脈欠落（本丸）**：`Chat.tsx` が consult に渡す `context` は **target ネタのタイトル/本文だけ**（`const ctx = target ? (title??text) : ""`）。**会話履歴をプロンプトに一切入れない**。フリーChat は target 無し＝`context=""`。Claude は「直す対象のメロ」を知らされず、agentic の read-only ツールで探し回り **`--max-turns 8` を使い切って exit 1**（created→updated が約147秒＝彷徨いの形）。
+  2. **UI待ち < worker timeout**：`Chat.tsx` のポーリングは `for(i<80)×1500ms = 120秒`で打切るが、agentic worker の `claude -p` timeout は **240秒**。**ジョブ完了前にUIが降りる**。しかも時間切れでループを抜けると `finally{setBusy(false)}` だけ走り**メッセージを出さない**＝無言で消える＝固まって見える正体。
+  3. **max-turns 到達が不透明 hard fail**：`claude -p` が上限で exit 1・stderr空→`RuntimeError("claude failed (1): ")` だけ。観測も復帰もできない。
+- **決定**：
+  1. **会話履歴は worker が DB 直読みで context に焼く**（`_resolve_fit_context` と同じ「生産者がDBを読む」原則・design#85/L174）。consult かつ `params.chat_thread` があれば `chat_message` 表から直近Nターンを読み、**特に直前 AI 生成の `data.neta.content`（実ノート/コード）**を含めて `params.history` に展開→`handle_consult` がプロンプトに含める。**reload耐性あり**（履歴はサーバ権威・fb-3）。クライアント側 `context` 構築は変えない（退化防止）。
+  2. **UIポーリング予算を worker timeout 以上に**（120s→約270s）し、**時間切れでも無言にしない**：「まだ処理中・受信箱で受け取れます」を出して busy を解く（裏で続行・reaper がスレッドに結果を残す）。
+  3. **実況（できる範囲で）**：agentic 経路の `claude -p` を **`--output-format stream-json --verbose`** にし、NDJSON の `tool_use` を**人間語ラベル**（list_neta=ネタ帳を見てる／gen_melody=メロを作ってる…）に変換して **`job.progress` 列**へ随時書く（既存列・design#15「progress更新」）。UIはポーリングで `j.progress` を「考え中: …」表示。worker は run_once が running を commit 済＝conn 空きを使い contextvar の progress sink で書く（handler 署名は不変）。
+  4. **max-turns はソフト処理**：stream-json の `result` イベントから `subtype`(`error_max_turns` 等)・`is_error`・最終テキストを取得。**部分結果テキストがあれば返す**（consult は `_extract_json`→失敗時 chat フォールバックで活かせる）。無ければ「上限到達（文脈不足の可能性）」と**明示メッセージ**で失敗（#43 失敗は無音にしない）。
+- **段階（TDD・契約=パーサ先行）**：①worker 履歴注入（純関数＋プロンプト反映）→②stream-json パーサ（`event→progressラベル` / `result→(text,subtype,is_error)` の純関数）→③progress sink 配線（run_once）→④web ポーリング予算・非無言・進捗表示。①②は契約なのでテスト先行。`tools=False`（非agentic）経路は `communicate()` 維持＝blast半径を限定。
+- **⚠️ #100 により大半が陳腐化**：①履歴注入・②実況・④ポーリング延命は「workerが脳をホストする」前提の対症。新背骨（Claudeクライアントが脳＝セッションで記憶・SSEで逐次）では**最初から不要**。緑のコード（worker S0止血の history保険DDL 等）は #100 移行まで残置、移行で撤去。
+
+#### 決定：設計転換＝作曲MCP＋薄いClaudeラッパー（脳を作らない）（#100・2026-06-24・GO）
+- **問題（#61/#99 を貫く根因）**：worker(Python) が `claude -p` を**ステートレス単発JSON API**として使い、intentごとに**手組みプロンプト→判別ユニオン**(`handle_consult`＝`chat|options|content|items|proposals|plan`)を返す**ルーター**だった。＝worker が会話エージェントを**自作・ホスト**している。これは「LLM差し替え可能」設計としては綺麗だが、Claude Code が本来持つ**永続セッション・ネイティブなエージェントループ・ツール・メモリ・自然な多ターン会話**を捨てている。症状＝「会話が返ってこない」（request→構造化アーティファクト）。#99 の履歴焼き直し・max-turns 彷徨い・ポーリング無言も**すべてこの構造の派生**。オーナー評：「AIのAPIすぎる／元々webチャットはClaudeのラッパーのつもりが（AIの助言で）難しくした」。
+- **決定＝脳を作らない**。会話エージェントを自作するのをやめ、**既製の Claude クライアントを脳として使う**。我々が作るのは2つだけ：
+  1. **作曲MCP（ドメイン）**＝既存 `apps/api/src/mcp.ts` を脇役から**主役へ昇格**。読取＋**ルールエンジン生成(gen_*)**＋判定(analyze_fit)＋**書込(create/update/上書き/place/link/delete)**。書込は**候補返し＋明示commit**で承認が効く形にする。宣言的（ツール定義＋説明文）で、どの MCP クライアントからでも叩ける。
+  2. **薄いチャットラッパー（ビュー層）**＝web 内に1パネル。**チャット1本につき長命の `claude -p --input-format stream-json --output-format stream-json` を1プロセス保持**して中継（毎ターン spawn しない＝MCPが温まる・トークン逐次・多ターンはプロセス内でネイティブ）。流れる `tool_use`/`tool_result` を**既存の視覚部品**（ピアノロール/▶︎再生/選択カード #55/#57/#84）として描き、入力/クリックを stdin へ返す。プロセス落ち後の復活は `--resume`（**cwdスコープ＝固定cwdで起動**）。**プロンプト組み立て・ルーティング・記憶は持たない**（脳はClaude）。
+- **統合バス＝neta DB**。Claude が MCP で neta を書く→既存キャンバスが同じDBを見て再描画/再生する。だから「UI統合」は**橋を架け直さず**成立する（弱点は「別の汎用Claude窓で喋ると自分のキャンバスが見えない」点だけ＝チャットをアプリ内に置けば解消）。
+- **承認**（創作の本体＝「2案のどっちで上書き?」）：**CLI権限機構に依存しない**（v2.1.187 に `--permission-prompt-tool` は無い）。**MCPツール設計で実現**＝生成は候補返しのみ／上書き・削除は明示 commit ツール→ラッパーが候補をカード描画し、選択を次ターンへ流す。破壊操作の安全ゲートが欲しければ `--input-format stream-json` の **control プロトコル（control_request/response＝canUseTool）**で拾える。
+- **真実源は不変**：音楽的妥当性はルールエンジン（MCPツール）が担保。Claude は引く/選ぶ/直す＝requirements #92/#151 と整合（今回の転換は概念の変更でなく、アーキ/設計が概念から乖離していた**是正**）。
+- **残す/消す**：残す＝データモデル(neta/compose/job)・ルールエンジン・web の視覚/再生。**消す**＝worker の12プロンプト・判別ユニオンルーター(`handle_consult`)・`_resolve_chat_history`(#99)・ポーリング/max-turns/progress sink。worker は**決定的バッチ専任**（MIDI分割mido・埋め込み）へ。スケジュールAIが要れば「MCP付きの定期Claude」。
+- **#61/#99 の扱い**：#61（consult統合の判別ユニオン）は**本決定で置換**＝Claudeが自然文で喋りつつ構造化はツール呼び出しで起こす（unionを返さない）。#99 の対症は#100移行で撤去（上記注記）。
+- **フィジビリ検証済（実機・2026-06-24）**：`claude -p` は Max認証で動作（apiKeySource:none）／stream-json形(system/init→assistant→tool_result→result)／`--resume`が**別プロセス間で記憶持続**／`mcp__creative-manager__list_neta` が**実発火し tool_use/result が stream に見える**／`--model` 指定可。→ 薄いラッパー＋MCP は技術的に成立。
+- **モデル**：会話=軽い→sonnet/難しい所→opus の**出し分け**。**ツール駆動ターンに haiku は不可**（フィジビリで tool_use チャネルを使わず `<function_calls>` をテキスト捏造するのを確認）。クォータ理由でなく**正しさ**の選択。
+- **フィジビリ深掘り確定（実機・2026-06-24）**：
+  - (a) **承認は CLI 権限フックを使えない（実証で確定・2026-06-25）**：`claude -p` stream-json で allowedTools 外のツールを呼ぶと **tool_result が is_error（自動拒否）**＝`control_request`/permission イベントは**流れてこない**（観測イベント型＝assistant/result/user/system のみ・`--permission-prompt-tool` も本CLIに無い）。∴ **mid-stream の対話承認は不可**。承認は **書込ツールを allowedTools で事前承認＋可逆(undo)＋UIの候補選択（候補返し→人が選ぶ→commit）** で担保（#101 の会話/UI承認＝CLI gate に依存しない）。
+  - (b) `--resume` は **cwd スコープ**（/tmp 生成→project resume で `No conversation found`）→**ラッパーは固定 cwd で claude を起動**する。
+  - (c) `--strict-mcp-config`＋`--tools "mcp__creative-manager__*"` で**利用ツールをMCPだけに限定**でき Bash 逃げ道を消せる。**ただし真因は MCP コールドスタート**：`pnpm…mcp`(stdio) が接続前にターンが走ると init `available tools:[]`/`status:pending`。`claude -p` は毎プロセスで stdio MCP を起動し直す（`--resume` でも温まらない）→ **長命プロセスでMCPを温めるのが必須**（毎ターン spawn 不可）。将来 **api が HTTP/SSE MCP を常駐ホスト**も選択肢。
+- **③-8 実機検証＝10 verbs面で成立（2026-06-25）**：長命 `claude -p --input-format stream-json --output-format stream-json` を1プロセス保持し **warmup 1ターン→2ターン目で MCP `connected`**。自然文「Cメジャー明るい4小節」→ **sonnet も haiku も `generate(kind:chord_progression, frame:{key,mode,bars,mood})` を正しく選択**＝目的命名で選択が素直。`--allowedTools` 無しだと `generate` が**承認要求**（書込ゲートが現に効く）／有りで実行まで通り haiku が `C-G-B-C` を報告。**Haiku仮説=単発確定呼びは絞った面でいける（多段fuzzyはsonnet/opus）**。**ラッパー④のレシピ確定**：長命process／warmup／`--strict-mcp-config`＋`--tools`(10)／`--allowedTools`=10全部を事前承認(候補/読取/書込とも)・人のループはUIの候補選択＋可逆／sonnet主・haiku単発。
+- **③-8 続き＝feasibility 完了（2026-06-25・make-or-break 残無し）**：
+  - **B 多段◎**：sonnet が `generate→fit→analyze` を**正しい順で連鎖し中間状態(生成コード→fitのchords→analyzeのmelody)も渡る**＝研究の「状態喪失」起きず。会話作曲の本体が成立。
+  - **A 承認◎（上記a）**：CLI対話承認は不可と確定→UI候補選択＋可逆で担保。
+  - **D 解決済（2026-06-25）**：`--tools` は**MCPツールを絞れない**（init #tools=49・モデルが旧 `analyze_fit` を掴んだ）→ **サーバ側で絞る**。`buildMcpServer(core, {surface:"chat"|"full"})` を追加（共有スキーマをモジュール級へ巻き上げ・legacy39を `if(legacy)` で包む）。`mcp-stdio.ts` は `CM_MCP_SURFACE=chat` で chat面。**実証**：chat面で init `#tools:10`（旧39消滅）・多段が `generate→fit→**analyze**`（新verb）で通り fit 0.721 要約。api255緑＋chat-surfaceテスト。**＝additive をやめ chat は10だけ＝モデルが旧を掴まない**。
+  - **C 中継**：worker が headless で `claude -p` を回す前例あり＝低リスク作業。
+  - **残りは全て実装（feasibility risk ゼロ）**：エンジン欠落③-2..7(feel/roleのみ設計品質)／D=チャット面10登録／④ラッパー／⑤旧撤去。
+- **進め方**：①ドキュメント是正（済）→②フィジビリ深掘り（済・上記）→③MCP の書込/生成ツール整備（候補返し＋明示commit・説明文）→④薄いラッパー実装（長命 stream-json プロセス／固定cwd／`--strict-mcp-config`＋`--tools`限定／sonnet）→⑤worker のチャット機構撤去。SDD：上から確認済（concept=requirements #92/#151 と整合、architecture #1 を是正反映）。
+
+##### 決定：セッション管理＝「1 thread = 1 claude session = 1 履歴」（#100④-S・2026-06-25）
+**問題**：④は api 側に実装済（`apps/api/src/chat-session.ts`＝`Map<thread,ChatSession>`・長命 `claude -p --input-format stream-json`・MCP chat面 warmup・`/chat/:thread/turn` SSE 中継・**通し動作確認済**：同一スレッド 6.9s(cold)→1.8s(warm)）。だが **session_id 未指定＝プロセスが落ちると claude 側の文脈が消える**（DB履歴は残るが claude は知らない）。「履歴＝セッション」をどう対応させ、切替/再起動/分岐をどう管理するか。
+- **記憶は3層に分離**：①**アプリ履歴**(`chat_messages`/thread毎/DB)＝**永続SSOT**・UI表示・人間の正準（毎ターン保存＝fb-3）／②**claude セッション**(`~/.claude` の session_id ファイル・**cwdスコープ**)＝Claude の作業記憶＝**キャッシュ扱い**（消えうる・再構築可）／③**生きた claude プロセス**＝今温まってる実体（idle/落ちで消える・session_id は残す）。
+- **対応＝決定的導出**：**session_id = UUIDv5(固定ns, thread)**（thread は `'global'` か neta id）。DB列不要・ステートレス・再起動耐性。cwd は repo root 固定（現コードは cwd=`dirname(dirname(CM_DB))`＝repo root で固定済＝整合）。
+- **spawn = resume-or-create**（実機で境界確定・2026-06-25）：まず `--resume <sid>` を試し、`No conversation found`(rc=1) なら新規 `--session-id <sid>`、以降は常に resume。理由＝**既存idへ再 `--session-id` は "already in use"(rc=1) エラー／不存在 `--resume` も "No conversation found"(rc=1) エラー**＝両方ハード失敗するので試行分岐が要る。`--resume` は `--input-format stream-json` と**併用可**（resume 後も stdin で多ターン継続・記憶跨ぎ実証＝別プロセスで合言葉を想起）。
+- **切替＝thread切替**：UI でスレッドを変える＝その thread の session_id へ resume。`Map<thread,ChatSession>` は既にこの骨＝各 ChatSession に sid を持たせ resume で温め直すだけ。
+- **ライフサイクル**：idle reap（無発言が続けば claude プロセス kill＝メモリ解放／session_id 残置→次発言で resume・文脈は戻る・latency は warm でなく cold ~4s）。落ちたら `proc.on(exit)` で null→次 `say()` で resume 再spawn。
+- **分岐（将来）**：`--fork-session`＝新 session_id・記憶継承（実証済）＝「この会話から別案を一気に試す」を本筋を汚さず。v1 では未配線（capability のみ確保）。
+- **divergence 対処**：claude セッションファイル消失（`~/.claude` クリア/別cwd/別マシン）でも DB履歴は残る→**resume 失敗時は DB履歴を文脈に詰めて再構築**（v1 最低限＝resume失敗→新規＋`logging.warn`、履歴 replay は後続）。逆（claude記憶ありDB欠落）は毎ターン保存ゆえ起きない。
+- **実装スライス**：(S1) chat-session.ts に session_id 導出＋resume-or-create＋exit再spawn〔契約=導出関数＋分岐をテスト先行〕→(S2) idle reap →(S3) web 切替（別決定）→(S4) ⑤worker チャット撤去。**S1/S2/S3a/S3b＋⑤=実施済（2026-06-25）**。
+  - **⑤ 実施（2026-06-25）**：worker から agentic consult 機構を撤去＝`handle_consult`/`handle_plan`／`_claude_stream`/`_mcp_args`/`_NETA_READ_TOOLS`／#99 進捗sink(`_progress_sink`/`_consume_stream`/`_stream_label`/`_finalize_stream`)／worker.py の sink・consult履歴注入・plan子ジョブ配線。`claude_prompt` は **plain 専用**（tools 分岐削除）で research/gen_*/brainstorm 用に温存（NetaList の AI生成・scheduled research がまだ使う＝TS 移管は別途）。worker テスト 75→53 緑。会話の脳は api 常駐 claude のみ＝worker は決定的バッチ専任（architecture #1/#100 と一致）。
+
+#### 決定：MCP の道具を「目的」で再設計（#101・2026-06-24・#100 の具体化）
+ユースケースは `docs/usecases-compose.md`（U1-U21・生きた文書）。**白紙サブエージェント（既存39ツールを見ずに導出）＋実在39との突合**で収束。
+- **問題**：現MCPは39ツール＝**機械動作名**（gen_chords/substitute_chord/fit_to_chords/emotion_shift…）。ユーザーの**目的の言い方**（後ろをオープンに／合わせて／きれいに）と噛まず、Claude が「"オープン"はどれ？」を逆算＝彷徨いの源。**目的で命名し直す＋数を絞る。**
+- **決定＝チャット面は9ツール**（39は目的で畳める。引数に概念を宿し、道具は動作の種類だけに対応）：
+  - **A 真実源を書く（確定・人が選んでから）**：`capture`(置く＝create_neta)／`revise`(直す/上書き/削除＝update/delete_neta)／`assemble`(組む＝place_child/remove_child)
+  - **B 決定論エンジン（候補を返す・保存しない）**：`generate`(枠/様式から作る←gen_chords/gen_named_progression/gen_bass/gen_drums)／`fit`(合う物を作る＝コードに合うメロ・ハモ付け・音節合わせ←gen_melody/harmonize/fit_to_chords)／`transform`(範囲＋目標で変形・確定変換←substitute_chord/emotion_shift＋移調/拍子)／`continue`(時間方向に伸ばす←next_chord)
+  - **C 読むだけ**：`search`(意味/様式/名前/類似/対照/一覧←list_neta/facets/find_progressions/find_similar/melody_similarity)／`analyze`(同定/説明/当てはまり判定←analyze_fit/analyze_progression/detect_key/identify/explain・**全生成/修正の土台 #92**)
+- **CUT**：`create_job`/`list_jobs`/`get_job`/`get_job_results`（旧・非同期ワーカー経路。どのUCにも出ない）。
+- **4横断語彙＝概念は道具でなく共通引数に宿す**（道具増殖を防ぐ・ここが実作業の核）：**range**(範囲＝後半だけ)／**feel**(感じ＝オープン/緊張/切ない)／**style**(様式＝artist/mode/名前付き)／**role-structure**(役割Aメロ/サビ・構造 4小節×2連結)。これを transform/fit/continue/generate/search が共有。
+- **道具にしない（AIオーケストレーション）**：U18仕上げ（analyze→transform→人が選んで revise）／U10追従（analyze→fit→revise）／U16調べて反映（Claude Web→generate）。fuzzy高レベルはClaudeが9道具を組む。
+- **生成のルーティング（真実源を保つ・#86/#98 と整合）**：枠→エンジン(generate)／名前付き→gen_named_progression／**様式・アーティスト→まずコーパス引き(search)→下敷きにClaude適応**／いずれも **analyze が必ず検算**（"AIは捏造しない"＝"エンジンが全部作る"でなく"analyzeが必ず通る"で守る）。
+- **引く系の鉄則（#151＝当てずっぽう禁止を検索へ）**：「切ない進行/あの曲のコード/YOASOBIっぽく」は**捏造しない**＝①ネタ帳コーパス（アーティスト進行が入っている＝U-FRET取込・例 `Mr.Children-Again` source/tags）→②Claude Web→③無ければ「見つからない」と言う。この連鎖はAIオーケストレーション。
+- **エンジン欠落（#101が露わにした実作業・要実コード確認）**：(1)**range**（部分操作）(2)**feel語彙**（mood/emotion_shift止まり＝"オープン/解決有無"未モデル）(3)**role/structure**（Aメロらしさ/フレーズ連結）(4)**確定変換(移調/6-8)がMCP未公開**（worker handler のまま）(5)**対照(contrast)検索**未実装(6)**複数小節/役割への継続**（next_chordは1手）。→ ③の中身＝この欠落埋め＋目的命名のラッパー。
+- **粒度の根拠**：書込は作る/直す/組むの3で閉じる。生成方向は無から/並走/変形/延長の4が直交（畳むと意図が潰れる）。読取は探す/判るの2。fuzzyは道具化せずオーケストレーションへ逃がす。
+- **研究反映＝粒度に赤入れ（web根拠・2026-06-24・9→10へ）**：「39→一桁・目的命名」は実証的に正しい（<10ツール推奨／7ツールで50ツール並み／Copilot 40→13で改善：RAG-MCP[2505.03275]・"How Many Tools"[2605.24660]・Anthropic "writing tools for agents"）。プリミティブ多数をClaudeに連鎖させる案(b)は却下（多段で失敗複利63%・順序完全一致28%・中間状態喪失）。**ただし9案の2欠陥を是正**：
+  1. **`transform` を mode 多重化にしない**（fat tool＝parameter hallucination 直撃／6-10パラメータで誤り増）→ **`reshape`(feel/range で寄せる・候補・解釈を伴う)** と **`convert`(移調/拍子＝確定・AI判断不要・mode enum 正当)** に**2分割**。**9→10**（10も精度の理想帯）。
+  2. **`generate`↔`fit` の重複を入力で排他**（Anthropic最大の警告＝overlapping tools）：**`fit` は基準(chords/melody)入力を必須**・`generate` は基準なし。「人間がどちらを使うか即答できないならAIにも無理」。
+  3. **横断概念(range/feel/style)は"修飾引数"でOK**（同一動作の修飾＝mode分岐でない＝fat化しない）。enum値はユーザーの言い方へ寄せ＋自由文fallback（'ORG'罠回避）。**ただし role/structure(4小節×2連結)は構造操作＝引数でなく `assemble`/`continue` 側へ**（引数吸収を構造まで広げると fat化）。
+  4. **defer_loading/tool-search は10ツールに不要**（数十〜数千ツール帯の薬・過剰）。代わり**ツール定義を長命プロセス先頭に固定しプロンプトキャッシュ**（単一ユーザー/Max・レイテンシに最適）。
+  - **Haiku仮説＝半分当たり**：個別確定呼び(capture/convert単発)はHaiku可、**fuzzy多段(U18/U16)はHaiku不可＝能力問題（粒度で消えない）**→ sonnet/opusがオーケストレータ・Haikuは個別実行のみ（#100の出し分けが正・Haiku単独運用は狙わない）。
+  - **最終形＝10 thin verbs**：A書込 `capture`/`revise`/`assemble`・B生成(候補) `generate`/`fit`/`reshape`/`convert`/`continue`・C読取 `search`/`analyze`。横断概念=B群の共通"修飾引数"。fuzzy=オーケストレーション。承認=A/B分離で担保。
+
 #### 決定：MIDI取り込みの worker 分割(#81) — 過去資産を素材化（design#16 通り）
 - **問題**：従来は web `midiToNotes` で **melody 1本**に潰していた（design#16 の worker(mido)分割と乖離）。
 - **フロー**：web が MIDI を **base64 で `import_midi` ジョブに載せる**（asset経路もhandler-DB結合も不要・handlerは純粋 params→result を維持）→ worker `handle_import_midi`(mido) が **トラック×チャンネルで分割**（ch10[0-index 9]=ドラム→rhythm、他=melody・原音高そのまま＝二重トランスポーズ回避#41）→ `reapResults` が **import_midi の result.tracks を複数ネタに materialize**（web は自分でネタ化しない＝stale ガード無しで即回収、空は空マーカーで再reap防止）。
@@ -349,6 +710,7 @@
 - **"相談"と"投げる"は同じClaudeの2モード**：軽いターン＝即応の相談・壁打ち／重いターン＝plan-jobを生成（非同期、結果はChatと対象netaの受け取りに返る）。
 
 #### 決定：Chatモード統合（#61・GUI #19 改訂）
+> **⚠️ #100 で置換（2026-06-24）**：判別ユニオン(`handle_consult` が `chat|options|content|plan|proposals` を返しクライアントが switch)は**廃止方針**。Claude クライアントが自然文で喋りつつ構造化はツール呼び出しで起こす（作曲MCP＋薄いラッパー）。以下は経緯記録として残す。
 - **問題**：実機で「チャットでコード進行作って」が `other` ネタに落ちた。根因＝(1) `Chat.pick()` が `kind: target?.kind ?? "other"`（無targetのグローバルChatは常に other）、(2) 壁打ち(suggest)はテキスト案しか出さず `chord_progression` content を生成する導線が無い。さらにユーザー指摘「壁打ちとおまかせの差が分からない／普通のチャットAIは一本化されてる」。
 - **決定**：Chatのモードを **「相談」と「調べる」の2つに集約**。**壁打ち(suggest)＋おまかせ(plan)→「相談」に統合**（実装都合の漏れだったモード区別を畳む）。調べる(research/参考曲)は intent が別物なので残す。
 - **「相談」の挙動**：1つの会話で Claude が内容を見て分岐＝(a) 会話テキストで返す／(b) 発展案（選択カード）／(c) **生成要求（メロ/コード/リズム/全体）は正しい kind のネタを生成**。生成は同期（その場でネタ化、`from_job` で対象に紐づく）。重い多段は従来どおり plan として裏で進み受け取りトレイへ。
@@ -427,7 +789,7 @@
 - **②は縦スライス**：usePlayhead の API変更（state返却→ref/start(handle)）と、それに依存する `SectionEditor`（`beat` state廃止→ref/transform化、`startPlayhead(dur,tempo)`→新シグネチャ）改修、`NetaDialog` への展開、#57 ▶⇄■ トグルを**同一スライスで**行う（①完了後なので engine は安定）。
 
 ##### 実装設計：④全エディタへ展開＋追従スクロール（#74・#62包括）
-- usePlayhead は `--ph`(0..1比率, fit-to-width用) に加え **`--phb`(生beat, clampあり)** も ref直書き。グリッド系は **コンテンツ座標 `left: calc(gutter + var(--phb)*pxPerBeat)`** で横スクロール追従（1拍=セル幅×4）。PianoRoll(gutter40/48px)・StepPad(gutter0/88px)・RhythmEditor(gutter58/88px)。SectionEditorは fit-to-width の `--ph` 維持。
+- usePlayhead は `--ph`(0..1比率, fit-to-width用) に加え **`--phb`(生beat, clampあり)** も ref直書き。グリッド系は **コンテンツ座標 `left: calc(gutter + var(--phb)*pxPerBeat)`** で横スクロール追従（1拍=セル幅×4）。PianoRoll(gutter40/48px)・RhythmEditor(gutter58/88px)・ChordPatternEditor(gutter58/88px)。SectionEditorは fit-to-width の `--ph` 維持。※StepPad は撤去済（2026-07-04・パッド入力廃止）。
 - **追従スクロール（page-turn）**：usePlayhead に `scrollerRef`。線が右端-16pxを超えたら線を左30%へ送る。**手動スクロール(wheel/touchstart/pointerdown)後2.5sは追従停止**、programmaticフラグで自分のscrollと区別。
 - 各エディタは `playheadRef`/`scrollerRef` を受け取り line と scroller を ref付け。NetaDialogが active editor に `tp.lineRef`/`tp.scrollerRef` を配線。
 - **ChordEditorは対象外**：タイムラインでなくコード行リスト＝赤線が不自然。再生中コードの**行ハイライト**は React state が要り no-rerender設計と相性が悪いので別途（#76）。card個別再生・Chat試聴は editor非表示なので赤線なし（音のみ）でよい。
@@ -497,12 +859,13 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
   - **不適合時の扱い（G3）**：Stage1 は**そのまま content を返し判定スコアを併記**（自動再生成・補正はしない）。生成→点検→補正の自動ループは **Stage2(P2)** の範疇。
 - **Stage2（agentic＝口2/MCP・P2）**：cm-music を**常駐HTTPサービス**化→**HTTP-MCP**で `claude -p`／外部Claude が agentic にツールを叩く（「作る→点検→補正→再点検」をClaudeが多段で回す）。**永続サービスでコールドスタート回避**（既存 cm-search 同期HTTPと一貫）。**stdio MCPの毎回spawnは却下**。生成→ネタ化の縫合は既存 reap が持つので、音楽MCPは**read-only分析＋生成content返却に限定**（データ書込はさせない）。
 - **Stage3（伸ばす・隔離DL）**：Anticipatory Music Transformer(small/medium, Apache2.0, infilling)でメロ補完、GrooVAEでドラムhumanize、Basic Pitchでmp3採譜→作風特徴量。**別venv/Dockerで隔離**し worker本体(music21)を汚さない。AMT MIDI→content は Stage0 importer で。
+  - **※2026-06-28 補正**：**メロ補完はV2ネイティブで実装済(`complete_melody`)＝AMT不要**。外部メロAI(AMT/CA2/SketchNet等)は調査の上「制御弱・丸暗記/ライセンス難・中庸」で**現状不採用**(`docs/research/usable-ai-map.md`)。GrooVAE(ドラムhumanize・TS同言語)/Basic Pitch(採譜) は将来候補として残置(優先度低＝打ち込みより[[feedback-priority-melody-first]])。
 - **Stage4（任意・データ次第）**：作風寄せ＝少データでは**State Tuning（本体凍結・状態ベクトルのみ最適化）が LoRA 超え**（研究）。LoRA/フル fine-tune は過学習で保留。
 - **8060S/ローカルLLMは不採用**：Claude Max前提＋**from-scratch学習はデータ律速（ハードでは解けない）**。音声生成系（Magenta RT等）は modality 違いで除外。
 - **スキーマが契約**で各エンジンが裏に差さる（不変）。
 
 ### #12-M メロ生成の高度化（骨格優先・度数内部モデル／2026-06-23）
-**full spec＝`docs/research/melody-generation.md`**（理論3視点＋実装サーベイ＋骨格文法）。ここは設計の確定事項。
+**full spec＝`docs/research/melody-generation.md`**（理論3視点＋実装サーベイ＋骨格文法）。ここは設計の確定事項。**研究の全体根拠＝索引 `docs/research/README.md`**（到達点サマリ＋全29本のグループ別目次）。
 **問題**：現 `genMelody`（モチーフ反復・拍頭コードトーン）は phrase/period・句末の息継ぎ・カデンツ着地・頂点・滑り込みが**構造的に無い**＝「呼吸しない／コード音ばかりで素直すぎ」。
 **方針（#86 不変＝決定的記号エンジンが音符を作る・調非依存）**：
 - **表現＝度数内部モデル（保存は不変）**：メロ保存は今のまま絶対ピッチ `notes:[{pitch,start,dur}]`（PianoRoll/再生/compositeNotes/similarity 不変＝**移行なし**）。`genMelody` の**内部**を「度数(+oct+alter)＋コード文脈→文法で組む→`degreeToPitch`で絶対ピッチへ描画」に通す。新規純関数 `apps/api/src/music/degree.ts`：`pitchToDegree/degreeToPitch/isChordTone(=既存chordPcs)/classifyNCT`。`classifyNCT` は滑り込み文法判定＋連想エッセンスE5を兼ねる（S1-3とS4-5で共用）。
@@ -512,6 +875,32 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **連想(S4/5)は別トラック**（エッセンス抽出→違うメロ・著作権は抽象層のみ・LCS上限）。
 **スコープ境界（要件line160と整合・2026-06-23 緩和）**：借用する種カウンターポイントの非和声音解決則は**単旋律のポップス的処理**として軽く使う。多声の対位法/声部進行は**強く制約しない**＝厳密理論で縛らない。ただし**将来どこかで軽く取り込む余地は残す**（過度な制約で壊さない＝拡張点として開けておく）。
 **段階（縦スライス・TDD）＝✅実装済(2026-06-23・メロコーパスのデータ投入を除く)**：**S1**＝拍子(4/4+6/8)＋弱起＋句末息継ぎ＋カデンツ着地＋度数内部モデル（degree.ts/meter.ts/skeleton.ts）→ **S2**＝頂点アーチ(≈0.62)＋跳躍後反行＋**滑り込み(倚音・10.4)＋素直⇔表情ノブ** → **S3**＝句機能で位置駆動の変奏＋弱拍の経過/刺繍 → **S4**＝melodyEssence＋多層 melodySimilarity＋similarMelodies retrieval(/melody/neighbors) → **S5**＝genFromEssence(エッセンス→違うメロ)＋normalizeToC。受け入れ基準＝spec §7（seed固定 property・api/web緑）。**6/8はベース/ドラムも揃え済**。残＝メロコーパスのデータ収集(要ユーザー・#13対応物)。
+→ **S6（次・2026-06-25 設計確定／未実装＝spec §10.7）骨格音の展開文法**：S1-5 後も「骨格決定すら微妙」が残る。原因＝`planSkeleton` が句境界/カデンツ度数/息継ぎ止まりで**骨格"音"を決めず**、背骨を genMelody の幾何アーチ(archBase 67±9)＋最寄りCTで代替＝和声盲・連結なし。目標＝`planSkeleton` に **chords を渡し**「Phrase[]＋骨格音木」を返す（和声連動ピラー・**連結4(arpeggiate/passing/neighbor/repeat)＋表情2系統(倚音掛留/逸音不完全刺繍)＋制約3(gap-fill跳躍後反行/音域/大跳躍予算)**・頂点を一音・並行period）。アーチ包絡を木の展開で置換、変奏層/制約層は据え置き。リズム変換(拡大縮小断片化)は変奏層に残しピッチ木を純粋に閉じる。**S6-a＝連結骨格＋頂点一音 実装済(2026-06-25・`planSkeletonTones`/generate-skeleton.test.ts)。大筋(アーチ・着地)は良化。** S6-b＝表面の滑らかさは診断のみ(spec§10.8)：順次率≈64%・大跳躍が体感を悪くする。出所=オクターブ折りの人工跳躍＋素のコードトーン3度。**失敗知見：オクターブ寄せ/シフトの最終パスはアーチ下行(頂点後mean低下)と喧嘩しproperty割れ＝NG。正攻法は経過音"挿入"(音を増やしレジスタ不変)＋骨格音選択の是正。モチーフ歩幅は順次寄りに調整済。腰を据えてTDD。** 残＝S6-b滑らかさ・S6-c並行period・逸音/不完全刺繍。api278緑。
+
+→ **S7（新・2026-06-26 設計確定＝コーパス計測フィジビリ完了／未実装）リズム骨格＝学習した拍セルモデル（縦の線）。full計測=§12。** S6 は音高骨格（横の繋ぎ）。**縦＝リズム骨格（onsetがどの拍に載るか）が未モデル化**＝`rhythm.ts`/`buildMotif` は mood分類＋固定figで、コーパスに合わず・**歌詞の音数指定もできない**。著作権方針＝フレーズ辞書(retrieval=丸写しリスク)をやめ**統計のみ学習**（生メロ非保存）。
+- **計測(POP909・MELODY+chord_midi+beat_midi+key／秒↔MIDIの曲別整数拍ズレを(k,φ)探索で補正し高信頼整列33%採用)で確定**：リズムは**拍子で根本別**（4/4・2/4=2分割／6/8・9/8・3/8=複合3分割で.25/.75無し／3/4ワルツ=4分多く遅い）→**拍子別モデル必須**。1小節16分パターンは pop4/4 で語彙爆発(1249種,50%=199種)だが**「1拍」を単位にすると≤16語**（=2^枠の列挙・pop4/4はデータが15使用・5語で50%/12語で90%）＝多様さは**拍の組合せ＝マルコフ**が作る。
+- **モデル**：`1セル=1拍`／`枠数=拍子の最小分割`(4/4→16分4枠/6/8→8分3枠)／`語彙=2^枠（列挙・学習は頻度+遷移のみ＝NN不要）`／遷移=**`P(セル│直前セル, 小節内拍位置)`**（強拍は x.../x.x.、ウラはシンコペ＝**拍位置条件が要**・無いと強拍/ウラ差が消える）。
+- **歌詞の音数指定（ユーザー要望・骨格に内蔵）**：各セルは**onset数(1〜4)を持つ**→「B拍にちょうどN音」を**拍上DP**（状態=累積onset数×直前セル・遷移確率最大・合計=N の列を読む）で**確実かつ即時**に生成（試行錯誤でなく構成的に保証）。
+- **スイング/三連跳ね＝亜種「跳ねるボタン」**（打点を後処理で 1/3:2/3 へマップ・**語彙/遷移は流用**＝学習し直し不要）＝backlog。
+- **接続**：`rhythm.ts`/`buildMotif` の固定figを学習リズム(拍セル+位置マルコフ+音数DP)へ差し替え。②音高骨格(S6)・③充填(§10.7)は据え置き。
+- **計測による既存スペックの補正**：①**アーチは実在**（全音の平均正規化輪郭で頂点中央・末カデンツ急下降を確認）＝§10.7(a)の頂点「0.62固定」は**style/meterで可変**(pop≈中央0.5/トラッド≈前0.25)に緩める。当初の「アーチ否定(前のめり)」は頂点を**最初の最高音で採る tie処理バグ**の偽像＝撤回。②**強拍=コードトーン92%/弱拍56%**（強拍CT則を実証・当初の逆転は整列バグの偽像）。③**フレーズ頭は度数5か1で約半分**。④動きは順次主体＋下行バイアス・コードチェンジは共通音保持/順次解決。
+- **段階（TDD）**：(1)`learnRhythmCells(bars,meter)→{cells:freq, trans:Map<"pos|prev",freq>}`（純関数・DB非依存・合成入力で赤）→(2)`genRhythm(meter,{bars,syllables?,seed})`（マルコフ自由生成＋音数DP・合計=syllables を必ず満たすproperty）→(3)buildMotif接続。
+- **限界**：コード条件付け(②)の実証は POP909=4/4 のみ（他スタイルはコード注釈無く未検証＝理論上は一般的）。整列を増やすにはテンポマップ整列か伴奏MIDIからの和声化（別途）。
+
+→ **S8（新・2026-06-27 設計確定＝試聴ループで導出した「有機的メロ」の再帰モデル／実装中）。full計測=`docs/research/melody-corpus-findings.md`。** S6(音高骨格)/S7(リズム)を**分けて**作ると非有機的（モチーフが「聞いたことない動き」＝手当て起因）と判明。ユーザー核心指摘＝**骨格メロ・リズム・細かい動きは連動（interlock）**。出口＝**全部を“度数move＋相対位置”の記号にして再帰3層で学習**（テンポ/調 非依存・全層小語彙・NN不要・数えるだけ）：
+- **層1＝骨格メロ（1拍粒度）**：構造音は平均~1.9拍で替わる＝**2拍粒度が自然**（強拍0,2＝コードトーン）。動きは留37%/順次18%/跳躍35%・向き反転68%＝真っすぐでなく**留まる+ジグザグ+跳ぶ**（反転率の絶対値は定義依存＝傾向として扱う）。**終わり方(open/close)＝着地“位置”で出し分け◎実証**：曲末(close)は**1度73%**で締め、曲中の息継ぎ前(open)は**1度36%に下げ5度20%(＋2/3度)**で宙吊り＝**続くなら主音を避け5度**。一方 着地への“接近方向”(1度=上から/5度・8度=下から)は**△追試で再現弱・要再検証＝断定しない**。骨格は**4/8小節周期で自己反復**（移調反復含む）＝入れ子＝コヒーレンスの素。
+- **層2＝joint cell（核心・8分粒度）**：1拍の中身を `度数move@slot(8分0/1)` 列に符号化し、**`P(cell│骨格move)`**（次拍への度数差±3）で学習。**条件あたり50%=2-4種/80%=3-9種**（条件なしだと3771種に爆発＝条件づけが鍵）。例: 保持→[0@0]/[0@0,0@1](連打)、↑3度→[0@0,2@1]/[1@0,2@1](ド-レ-ミ)、↓2度→[0@0,-1@1]、跳躍→[3@1]。＝§10.7連結文法（経過/刺繍/連打/跳躍）が**データから条件付きで自動的に出た**。**連打は保持に・跳躍は骨格跳躍点に**自然に乗る（手当て全廃）。
+- **層3＝16分細分（稀・装飾）**：8分窓の **6%だけ** が16分2音に割れる（plain40%/empty53%）。割れ方は**全部 r01(8分を2つの16分に)・違いは2音目の度数move のみ・7種/5種で90%**（mv+1 28%/mv0 27%/mv-1 20%）。＝16分は絶対の刻みでなく**8分の細分**＝BPM非依存。
+- **BPM/調 非依存の理由**：全層が「度数move＋拍内相対slot」記号＝絶対ピッチ/秒に触れない。スイング等は層3後段の打点マップで（backlog）。
+- **段階（TDD・新モジュール `melodyCells.ts`／既存 rhythmCells.ts と並ぶ）**：(1)`learnMelodyCells(units:{move,cell}[])→{byMove}`＋`cellToNotes`＋`parseCell`＝**実装済✅**(cell記法は `tok0;tok1`＝数字onset/`s`伸/`r`休でonset/sustain/restを表現)→(2)`sampleCell(model,move,seed)`＋`realizeMelody(skeleton,model,scale)`(骨格→各拍cell→O/S/R展開で休符/伸ばし)＝**実装済✅**→(3)16分細分(`sub`)・(4)skeleton生成(move/自己反復)・(5)assemble(カデンツgesture・コード追従・**長音/強拍をコードトーンへスナップ**)・(6)genMelody/MCP統合＝**未実装(設計のみ)**。コーパス→units抽出＋実機学習サンプルはスクラッチで検証済(整列の肝はS7同様)だが**ingestスクリプト/配線は未実装**。**現状 `rhythmCells`/`melodyCells` はテスト以外未import＝実メロ生成は依然旧経路**（監査`consistency-review.md`指摘）。
+- **置換方針**：これが本命の音高生成＝旧 `planSkeletonTones`/`buildMotif` のピッチ手当てを置換（リズムは S7 拍セルと統合）。S6/§10.7 は理論的裏付けとして残置（連結文法＝層2と一致）。
+
+→ **実装現況(2026-06-28・大ストーリー「メロディ探索」締め)＝S8思想を製品エンジン `genMotifMelodyV2`(melodyCells.ts)に結実・配線済**。上の「melodyCells 未import＝旧経路」「段階(3)-(6)未実装」は**解消**（**4/4＋6/8 は V2 が本番経路**）。
+- **V2＝A2レシピ**：データ駆動骨格(`learnSkeleton`＝実曲の構造音分布に一致)＋モチーフ選別(N候補からスコア最良)＋発展(2小節ブロック A/A'(尾変奏)/B(反行)/A''(回帰))＋5項目後処理(禁則跳躍→歩進/gap-fill/強拍コードトーン/単一頂点)＋頂点アーチ＋輪郭(Parsons UDR)駆動render＋16分細分＋7thコード。**4/4・6/8(compound=barBeats3)** 両対応。`generate.ts` genMelody の **useV2 ゲート(bpb===4 || compound)** で本番化、MCP `gen_melody` は useV2:true。骨格/move は拍子非依存で流用、リズム/timingのみ拍子別。データは `motifModelData.ts`(POP909統計のみ・リテラル非保存)。
+- **補完(completion)＝新規**：`extractMotif16`(部分メロ→Motif16逆抽出)＋V2 opts `seedMotif`/`keepFirstBlocks`(両未指定=現挙動と完全一致＝回帰なし)＋`completeMelody`(部分を保持＋残りをモチーフ発展で補完)。MCP `complete_melody`(notes/chords/frame/seed)。＝「部分→続き/4倍」をユーザー素材から発展(著作権セーフ・決定的)。6/8補完は best-effort(4/4が主)。
+- **評価3レンズ確定**：耳=最終／E-rule(`evalMelody`)項目別=どの規則が弱いか／**MuPT perplexity研究はクローズ**(公式SMT-ABC形式＝改行を`<n>`で渡すと校正OK＝きらきら星3.2／V2 8.8<実曲18.3＝V2はやや優等生・予測しやすい／100回生成で外れ値0%＝変なの出さない＝**“変なの検出ガード”として有効・常時フィルタ不要**。詳細 `docs/research/eval-models-learned.md`)。FMD/分布距離は退役(制御メロに不向き)。
+- **使えるAI候補マップ**(`docs/research/usable-ai-map.md`・5ライン＋セクション)：メロ補完系AI(CA2/SketchNet/MelodyT5)は制御弱/中庸で**現状不採用**＝重い外部AI不要でV2ネイティブ補完が筋。
+- ★**設計思想 確定**：**自動生成＝候補/選択肢を出すまで・仕上げは人間**(完成品まで機械は現手駒では無理＝補完実験で実証)。**Suno等＝画像生成的(混合音を一括生成・編集可能な構造を渡さない)＝別パラダイムで競合しない**。機械の改善は「より良い選択肢/ばらつき/足場」に振る(完成へ仕上げさせる方向は追わない)。
 
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。

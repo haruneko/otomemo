@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
 import { createReadStream, createWriteStream, mkdirSync, statSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -18,6 +18,7 @@ import {
   analyzeFit,
   fitToChords,
   detectKeyFromNotes,
+  detectKeyCandidatesFromNotes,
   detectKeyFromChords,
   melodySimilarity,
   findSimilar,
@@ -30,6 +31,8 @@ import {
   parseChordSymbol,
 } from "./music";
 import { findProgressions } from "./progression-search";
+import { getChatSession } from "./chat-session";
+import { rankRecommendations } from "./music/recommend";
 
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
 function assetsDir(): string {
@@ -60,6 +63,17 @@ export function buildHttp(core: Core): FastifyInstance {
     if (req.headers["x-cm-token"] !== required) {
       return reply.code(401).send({ error: "unauthorized" });
     }
+  });
+
+  // API データ(JSON)はブラウザにキャッシュさせない＝配置/合成の変更後にスマホが古いツリーを
+  // 出し続ける事故を防ぐ（getComposition 等の GET は cache-control 無しだとモバイルで残る）。
+  // ※ハッシュ付き静的アセット(JS/CSS)は JSON でないので対象外＝従来通りキャッシュ可。
+  app.addHook("onSend", async (_req, reply, payload) => {
+    const ct = reply.getHeader("content-type");
+    if (typeof ct === "string" && ct.includes("application/json")) {
+      reply.header("Cache-Control", "no-store");
+    }
+    return payload;
   });
 
   // 運用ヘルス（systemd/監視用・トークン不要）。queued滞留・失敗数・依存ポート(search/music-mcp)疎通。
@@ -105,10 +119,33 @@ export function buildHttp(core: Core): FastifyInstance {
       tags: q.tags ? q.tags.split(",").filter(Boolean) : undefined,
       q: q.q,
       scope: scopeQueryEnum.optional().catch(undefined).parse(q.scope), // 無効値は素通しせず undefined(既定project)へ
+      orderProject: q.orderProject, // 手動並べ替え(neta_order)の適用対象。未指定=既定 updated 順。
 
       limit: q.limit ? Number(q.limit) : undefined,
       offset: q.offset ? Number(q.offset) : undefined,
     });
+  });
+
+  // #20 ピッカーおすすめ＝コーパス(library)から拍子/調で関連数件だけ返す（生1781を選ばせない）。
+  // kind 単位（melody / chord_progression）。frame の meter/key で rank。
+  app.get("/neta/recommend", async (req) => {
+    const q = req.query as Record<string, string | undefined>;
+    if (!q.kind) return [];
+    const pool = core.listNeta({ scope: "library", kind: q.kind, limit: 5000 });
+    return rankRecommendations(pool, {
+      meter: q.meter,
+      key: q.key !== undefined ? Number(q.key) : undefined,
+      top: q.top ? Number(q.top) : 6,
+    });
+  });
+
+  // 手動並べ替えの保存（被せ表 neta_order・design LV-A）。project='' は「プロジェクト未指定」バケツ。
+  app.post("/neta/reorder", async (req, reply) => {
+    const b = (req.body ?? {}) as { project?: unknown; ids?: unknown };
+    if (typeof b.project !== "string" || !Array.isArray(b.ids) || b.ids.some((x) => typeof x !== "string"))
+      return reply.code(400).send({ error: "project(string) と ids(string[]) が必要" });
+    core.reorderNeta(b.project, b.ids as string[]);
+    return { ok: true };
   });
 
   app.get("/facets", async () => core.facets());
@@ -134,7 +171,10 @@ export function buildHttp(core: Core): FastifyInstance {
       switch (op) {
         case "gen_chords": return genChords(b.frame, b.seed);
         case "gen_melody": return genMelody(b.frame, asChords(b.chords), b.seed);
-        case "gen_from_essence": return genFromEssence(asNotes(b.ref ?? b.melody), b.frame, asChords(b.chords), b.seed);
+        case "gen_from_essence": return genFromEssence(asNotes(b.ref ?? b.melody), b.frame, asChords(b.chords), b.seed, {
+          strength: typeof b.strength === "number" ? b.strength : undefined,
+          blendWith: Array.isArray(b.blendWith ?? b.refs) ? (b.blendWith ?? b.refs).map(asNotes) : undefined,
+        });
         case "melody_essence": return melodyEssence(asNotes(b.notes ?? b.melody));
         case "normalize_to_c": return { notes: normalizeToC(asNotes(b.notes ?? b.melody), b.key) };
         case "gen_bass": return genBass(b.frame, asChords(b.chords));
@@ -144,6 +184,7 @@ export function buildHttp(core: Core): FastifyInstance {
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
         case "fit_to_chords": return fitToChords(asNotes(b.melody), asChords(b.chords), b.key);
         case "detect_key": return detectKeyFromNotes(asNotes(b.notes ?? b.melody));
+        case "detect_key_candidates": return { candidates: detectKeyCandidatesFromNotes(asNotes(b.notes ?? b.melody), b.top ?? 4) };
         // #9 コードから調(key+mode)候補を上位N。section/コード進行の調を「宣言」する補助。
         case "detect_key_chords": return { candidates: detectKeyFromChords(asChords(b.chords), b.top ?? 3) };
         case "melody_similarity": return { similarity: melodySimilarity(asNotes(b.a), asNotes(b.b)) };
@@ -237,6 +278,20 @@ export function buildHttp(core: Core): FastifyInstance {
     const n = core.setScope(id, p.data.scope);
     if (!n) return reply.code(404).send({ error: "not found" });
     return n;
+  });
+
+  // 器への出し入れ（P3）＝prj: タグを addTag/removeTag（他タグ非破壊。updateNeta(tags)は全置換で危険）。
+  app.post("/neta/:id/project", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z
+      .object({ project: z.string().min(1), member: z.boolean().default(true) })
+      .safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    if (!core.getNeta(id)) return reply.code(404).send({ error: "not found" });
+    const tag = `prj:${p.data.project}`;
+    if (p.data.member) core.addTag(id, tag);
+    else core.removeTag(id, tag);
+    return core.getNeta(id);
   });
 
   app.get("/neta/:id/composition", async (req, reply) => {
@@ -359,9 +414,19 @@ export function buildHttp(core: Core): FastifyInstance {
     // 意味：rel(=score-floor)が閾値未満の弱いhitは落とす（無意味クエリ＝全員横並びを排除）。
     const semIds = new Set<string>();
     const semantic: NonNullable<ReturnType<typeof core.getNeta>>[] = [];
+    let semanticOk = false; // cm-search が応答したか＝false は意味検索が使えず keyword-only に劣化（UIで告知）。
     try {
-      const res = await fetch(`${SEARCH_URL}/search?q=${encodeURIComponent(q)}&k=${limit}`);
+      // cm-search 不通時にハングしない（閉ポートが RST を返さない環境=WSL2 等では OS connect が
+      // ~11s ブロック＝AbortSignal では connect 中断が効かない）。2s で応答を切り上げてキーワード
+      // だけで返す＝検索は常に即応。背後の接続は放置で無害（undici が後で片付ける）。
+      const res = (await Promise.race([
+        fetch(`${SEARCH_URL}/search?q=${encodeURIComponent(q)}&k=${limit}`, {
+          signal: AbortSignal.timeout(2000),
+        }),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("cm-search timeout")), 2000)),
+      ])) as Response;
       if (res.ok) {
+        semanticOk = true; // 応答あり＝意味検索は生きている（hit 0 でも「使えている」）。
         const hits = (await res.json()) as { neta_id: string; score: number; rel?: number }[];
         for (const h of hits) {
           if ((h.rel ?? 0) < SEM_MIN_REL) continue;
@@ -373,13 +438,16 @@ export function buildHttp(core: Core): FastifyInstance {
         }
       }
     } catch {
-      // 意味検索が落ちていてもキーワードだけで返す
+      // 意味検索が落ちていてもキーワードだけで返す（semanticOk=false のまま＝UIで劣化を告知）
     }
 
-    return [
-      ...keyword.map((n) => ({ ...n, matchType: semIds.has(n.id) ? "both" : "exact" })),
-      ...semantic.filter((n) => !kwIds.has(n.id)).map((n) => ({ ...n, matchType: "semantic" })),
-    ];
+    return {
+      items: [
+        ...keyword.map((n) => ({ ...n, matchType: semIds.has(n.id) ? "both" : "exact" })),
+        ...semantic.filter((n) => !kwIds.has(n.id)).map((n) => ({ ...n, matchType: "semantic" })),
+      ],
+      semanticOk,
+    };
   });
 
   // --- asset（#77 ファイル資産。SoundFont を全体で1個読む等）---
@@ -455,6 +523,41 @@ export function buildHttp(core: Core): FastifyInstance {
     return { unlinked: core.unlinkAsset(id, assetId, role) };
   });
 
+  // プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイルを器単位で集約（S2）。
+  app.get("/projects/:project/files", async (req) => {
+    const { project } = req.params as { project: string };
+    return core.listProjectFiles(project);
+  });
+
+  // プロジェクト名一覧（prj:タグ ∪ project行＝空の器も含む）。picker のソース。
+  app.get("/projects", async () => core.listProjectNames());
+  // ピッカーのチップ用件数（P1）＝すべて/未仕分け/器別。/projects/:name と衝突しない別パス。
+  app.get("/project-counts", async () => core.projectCounts());
+
+  // プロジェクト配下のジョブ（投げて受け取る）をワークスペースに可視化。
+  app.get("/projects/:project/jobs", async (req) => {
+    const { project } = req.params as { project: string };
+    return core.listProjectJobs(project);
+  });
+
+  // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返す（画面は常に開ける）。
+  app.get("/projects/:name", async (req) => {
+    const { name } = req.params as { name: string };
+    return core.getProject(name) ?? { name, description: null, instructions: null, created: null, updated: null };
+  });
+  const projectMeta = z.object({ description: z.string().nullish(), instructions: z.string().nullish() });
+  app.post("/projects/:name", async (req, reply) => {
+    const { name } = req.params as { name: string };
+    const p = projectMeta.safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    return core.setProject(name, p.data);
+  });
+  // 器の削除（所属タグを外す＝ネタは残す・未仕分けへ／説明・指示 overlay を消す）。
+  app.delete("/projects/:name", async (req) => {
+    const { name } = req.params as { name: string };
+    return core.deleteProject(name);
+  });
+
   // --- schedule（#80 proactive: 継続研究/収集を見てない間に進める）---
   app.post("/schedule", async (req, reply) => {
     const p = z
@@ -494,7 +597,23 @@ export function buildHttp(core: Core): FastifyInstance {
     data: z.unknown().optional(),
   });
 
-  app.get("/chat/threads", async () => core.listChatThreads());
+  app.get("/chat/threads", async (req) => {
+    const { project } = (req.query ?? {}) as { project?: string };
+    return core.listChatThreads(project && project.length ? project : null);
+  });
+
+  // 会話セッションを器（プロジェクト）に束ねる／タイトル付与（upsert・部分更新）。
+  const chatThreadMeta = z.object({
+    project: z.string().nullish(),
+    title: z.string().nullish(),
+  });
+  app.post("/chat/:thread/meta", async (req, reply) => {
+    const { thread } = req.params as { thread: string };
+    const p = chatThreadMeta.safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    core.setChatThread({ thread, ...p.data });
+    return { ok: true };
+  });
 
   app.get("/chat/:thread/messages", async (req) => {
     const { thread } = req.params as { thread: string };
@@ -512,6 +631,41 @@ export function buildHttp(core: Core): FastifyInstance {
     const { thread } = req.params as { thread: string };
     core.clearChatThread(thread);
     return { cleared: true };
+  });
+
+  // セッションごと削除（履歴＋器への所属）。/messages は履歴だけ消す（別物）。
+  app.delete("/chat/:thread", async (req) => {
+    const { thread } = req.params as { thread: string };
+    core.deleteChatThread(thread);
+    return { deleted: true };
+  });
+
+  // #100 薄いラッパー：スレッド毎の長命 claude セッションに1ターン送り、stream-json を SSE で中継。
+  // 脳は Claude（記憶・多ターン・10 verbs のツール選択）。api は spawn と中継だけ。
+  app.post("/chat/:thread/turn", async (req, reply) => {
+    const { thread } = req.params as { thread: string };
+    const text = String((req.body as { text?: unknown } | null)?.text ?? "");
+    const dbPath = resolve(process.env.CM_DB ?? "./data/cm.sqlite");
+    const repo = dirname(dirname(dbPath)); // <repo>/data/cm.sqlite → <repo>（pnpm workspace ルート）
+    reply.hijack();
+    const raw = reply.raw;
+    raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    const send = (e: unknown) => raw.write(`data: ${JSON.stringify(e)}\n\n`);
+    try {
+      // 器（プロジェクト）の指示文を会話に効かせる：thread→project→instructions を system prompt に追記。
+      const proj = core.getChatThreadProject(thread);
+      const instructions = proj ? (core.getProject(proj)?.instructions ?? "") : "";
+      const sess = getChatSession(thread, dbPath, repo, instructions);
+      await sess.say(text, send);
+    } catch (err) {
+      send({ type: "error", error: String(err) });
+    }
+    raw.write("event: done\ndata: {}\n\n");
+    raw.end();
   });
 
   return app;

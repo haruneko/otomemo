@@ -27,10 +27,11 @@ describe("hybrid /search", () => {
     const app = buildHttp(core);
     await app.ready();
     const r = await app.inject({ method: "GET", url: "/search?q=ない単語zzz" }); // キーワード一致なし
-    const items = r.json() as { id: string; matchType: string; score?: number }[];
-    expect(items.map((n) => n.id)).toEqual([a.id]); // bはrel不足で除外
-    expect(items[0]!.matchType).toBe("semantic");
-    expect(items[0]!.score).toBeUndefined(); // スコア数値は返さない
+    const body = r.json() as { items: { id: string; matchType: string; score?: number }[]; semanticOk: boolean };
+    expect(body.items.map((n) => n.id)).toEqual([a.id]); // bはrel不足で除外
+    expect(body.items[0]!.matchType).toBe("semantic");
+    expect(body.items[0]!.score).toBeUndefined(); // スコア数値は返さない
+    expect(body.semanticOk).toBe(true); // cm-search 応答あり＝意味検索は生きている
   });
 
   it("keyword (LIKE) hits come first as exact; both when also semantic", async () => {
@@ -49,12 +50,13 @@ describe("hybrid /search", () => {
     const app = buildHttp(core);
     await app.ready();
     const r = await app.inject({ method: "GET", url: "/search?q=夜" });
-    const items = r.json() as { id: string; matchType: string }[];
-    expect(items[0]).toMatchObject({ id: a.id, matchType: "both" }); // exact優先
-    expect(items.find((n) => n.id === b.id)?.matchType).toBe("semantic");
+    const body = r.json() as { items: { id: string; matchType: string }[]; semanticOk: boolean };
+    expect(body.items[0]).toMatchObject({ id: a.id, matchType: "both" }); // exact優先
+    expect(body.items.find((n) => n.id === b.id)?.matchType).toBe("semantic");
+    expect(body.semanticOk).toBe(true);
   });
 
-  it("returns keyword results even when the semantic backend is down (robust)", async () => {
+  it("cm-search 不通でも keyword で返し semanticOk=false（劣化を告知できる）", async () => {
     const a = core.createNeta({ kind: "lyric", text: "夜明け前" });
     vi.stubGlobal(
       "fetch",
@@ -65,9 +67,10 @@ describe("hybrid /search", () => {
     const app = buildHttp(core);
     await app.ready();
     const r = await app.inject({ method: "GET", url: "/search?q=夜明け" });
-    const items = r.json() as { id: string; matchType: string }[];
-    expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ id: a.id, matchType: "exact" });
+    const body = r.json() as { items: { id: string; matchType: string }[]; semanticOk: boolean };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]).toMatchObject({ id: a.id, matchType: "exact" });
+    expect(body.semanticOk).toBe(false); // 不通＝劣化フラグ＝UIで「キーワードのみ」を告知
   });
 
   it("returns [] (該当なし) when neither keyword nor gated-semantic match", async () => {
@@ -82,6 +85,6 @@ describe("hybrid /search", () => {
     const app = buildHttp(core);
     await app.ready();
     const r = await app.inject({ method: "GET", url: "/search?q=存在しないxyzqqq" });
-    expect(r.json()).toEqual([]);
+    expect(r.json()).toEqual({ items: [], semanticOk: true }); // 応答あり・ゲートで全落ち＝空
   });
 });

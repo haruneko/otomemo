@@ -28,6 +28,13 @@ export interface NetaInput {
   text?: string;
   content?: unknown;
   tags?: string[];
+  key?: number;
+  mode?: string;
+  tempo?: number;
+  meter?: string;
+  bars?: number;
+  mood?: string;
+  scope?: "project" | "library";
   /** どのジョブの結果か。指定すると job_result 記録＋ジョブ対象へ relation。 */
   from_job?: string;
 }
@@ -55,6 +62,20 @@ export interface Asset {
   size: number | null;
   mime: string | null;
   created: string;
+}
+
+// プロジェクト配下ファイル（asset＋紐づき先ネタ）。器のファイル集約の戻り（S2）。
+export interface ProjectFile extends Asset {
+  attachedTo: { netaId: string; title: string | null; kind: string; role: string }[];
+}
+
+// プロジェクト実体（器の説明＋AIへの指示）。未設定時は description/instructions が null。
+export interface Project {
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  created: string | null;
+  updated: string | null;
 }
 
 export interface SongOverlay {
@@ -91,6 +112,8 @@ export interface ListQuery {
   tags?: string[];
   limit?: number;
   scope?: "project" | "library" | "all";
+  orderProject?: string; // 手動並べ替え(neta_order)の適用対象。未指定=既定 updated 順。
+  unassigned?: boolean; // true=どの器にも属さない(prj: タグ無し)ネタだけ。
 }
 
 // サーバが応答したがエラー(4xx/5xx)。ネットワーク不達(fetch自体のreject)とは区別する。
@@ -142,8 +165,9 @@ export const api = {
   createNeta: (input: NetaInput) =>
     http<Neta>("/neta", { method: "POST", body: JSON.stringify(input) }),
 
-  updateNeta: (id: string, patch: NetaPatch) =>
-    http<Neta>(`/neta/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  // keepalive: リロード/タブ閉じ(beforeunload)でも自動保存を落とさない（unmount時のフラッシュ用）。
+  updateNeta: (id: string, patch: NetaPatch, opts?: { keepalive?: boolean }) =>
+    http<Neta>(`/neta/${id}`, { method: "PATCH", body: JSON.stringify(patch), keepalive: opts?.keepalive }),
 
   deleteNeta: (id: string) =>
     http<{ deleted: boolean }>(`/neta/${id}`, { method: "DELETE" }),
@@ -162,9 +186,19 @@ export const api = {
     if (q.tags?.length) p.set("tags", q.tags.join(","));
     if (q.limit !== undefined) p.set("limit", String(q.limit));
     if (q.scope) p.set("scope", q.scope);
+    if (q.orderProject !== undefined) p.set("orderProject", q.orderProject);
+    if (q.unassigned) p.set("unassigned", "true");
     const qs = p.toString();
     return http<Neta[]>(`/neta${qs ? `?${qs}` : ""}`);
   },
+
+  // 手動並べ替えの保存（被せ表 neta_order・design LV-A）。project='' はプロジェクト未指定バケツ。
+  reorderNeta: (project: string, ids: string[]) =>
+    http<{ ok: true }>(`/neta/reorder`, { method: "POST", body: JSON.stringify({ project, ids }) }),
+
+  // 器への出し入れ（P3）＝prj: タグの addTag/removeTag（他タグ非破壊）。member=false で取り出す。
+  assignProject: (id: string, project: string, member = true) =>
+    http<Neta>(`/neta/${id}/project`, { method: "POST", body: JSON.stringify({ project, member }) }),
 
   facets: () => http<Facets>("/facets"),
 
@@ -195,6 +229,26 @@ export const api = {
   updateSong: (id: string, patch: { stage?: string | null; next_action?: string | null }) =>
     http<SongOverlay>(`/neta/${id}/song`, { method: "PATCH", body: JSON.stringify(patch) }),
   getNetaAssets: (id: string) => http<(Asset & { role: string })[]>(`/neta/${id}/assets`),
+  // プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイルを器単位で集約（S2）。
+  listProjectFiles: (project: string) =>
+    http<ProjectFile[]>(`/projects/${encodeURIComponent(project)}/files`),
+  // プロジェクト実体（器の説明＋AIへの指示）。未設定でも name だけ返る。
+  // プロジェクト名一覧（prj:タグ ∪ project行＝空の器も含む）。picker のソース。
+  listProjectNames: () => http<string[]>(`/projects`),
+  // ピッカーのチップ用件数（P1）＝すべて/未仕分け/器別。
+  getProjectCounts: () =>
+    http<{ all: number; unassigned: number; projects: { name: string; count: number }[] }>(
+      `/project-counts`,
+    ),
+  // プロジェクト配下のジョブ（投げて受け取る）をワークスペースに可視化。
+  listProjectJobs: (project: string) =>
+    http<Job[]>(`/projects/${encodeURIComponent(project)}/jobs`),
+  getProject: (name: string) => http<Project>(`/projects/${encodeURIComponent(name)}`),
+  setProject: (name: string, meta: { description?: string | null; instructions?: string | null }) =>
+    http<Project>(`/projects/${encodeURIComponent(name)}`, { method: "POST", body: JSON.stringify(meta) }),
+  // 器を削除（所属タグを外す＝ネタは残す・未仕分けへ／説明・指示 overlay を消す）。返り＝未仕分けに戻った数。
+  deleteProject: (name: string) =>
+    http<{ unassigned: number }>(`/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
   linkAsset: (id: string, asset_id: string, role: "source" | "attachment" | "render" = "attachment") =>
     http<{ ok: boolean }>(`/neta/${id}/assets`, { method: "POST", body: JSON.stringify({ asset_id, role }) }),
 
@@ -207,8 +261,20 @@ export const api = {
     http<{ deleted: boolean }>(`/schedule/${id}`, { method: "DELETE" }),
 
   // #65 ハイブリッド検索（キーワード一致 ∪ 意味[較正ゲート]）。matchType: exact|semantic|both。
+  // #65 ハイブリッド検索。semanticOk=false は cm-search 不通で keyword-only に劣化＝UIで告知。
   search: (q: string, k = 20) =>
-    http<(Neta & { matchType?: string })[]>(`/search?q=${encodeURIComponent(q)}&k=${k}`),
+    http<{ items: (Neta & { matchType?: string })[]; semanticOk: boolean }>(
+      `/search?q=${encodeURIComponent(q)}&k=${k}`,
+    ),
+
+  // #20 ピッカーおすすめ＝コーパス(library)から拍子/調で関連数件だけ（生1781を選ばせない）。
+  recommend: (kind: string, opts: { meter?: string; key?: number; top?: number } = {}) => {
+    const p = new URLSearchParams({ kind });
+    if (opts.meter) p.set("meter", opts.meter);
+    if (opts.key != null) p.set("key", String(opts.key));
+    if (opts.top != null) p.set("top", String(opts.top));
+    return http<Neta[]>(`/neta/recommend?${p.toString()}`);
+  },
 
   createJob: (input: { intent: string; target_neta_id?: string; params?: unknown }) =>
     http<Job>("/job", { method: "POST", body: JSON.stringify(input) }),
@@ -231,6 +297,40 @@ export const api = {
     http<{ ok: boolean }>("/relation", {
       method: "POST",
       body: JSON.stringify({ from, to, type }),
+    }),
+
+  // 作曲補助①（単体系・決定的＝Claude不要/クォータ0）。崩す＝提示メロのノリを保ち強度に応じ
+  // ピッチ/輪郭を崩した別メロを生成（gen_from_essence）。返り＝items[0].content が新メロ content。
+  reshapeMelody: (body: { ref: unknown; frame: unknown; strength: number; seed?: number }) =>
+    http<{ items: { kind: string; content: unknown; label: string }[] }>(
+      "/music/gen_from_essence",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  // 作曲補助②（文脈系）：決定的音楽オペの汎用窓口。返りは op ごとに違う（gen_*={items}、
+  // fit_to_chords={notes,after}、analyze_fit={score,…}）ので呼び出し側でキャスト。
+  music: <T = unknown>(op: string, body: Record<string, unknown>) =>
+    http<T>(`/music/${op}`, { method: "POST", body: JSON.stringify(body) }),
+
+  // 一式生成（決定的・純TS＝worker/クォータ不要）。frame(調/テンポ/拍子)から section＋各パートを
+  // 即生成し compose して返す。旧カードの gen_* ジョブ経路（worker 依存でハング）の置き換え。
+  genSection: (body: {
+    frame: { key?: number; tempo?: number | null; meter?: string | null };
+    parts?: string[];
+    seed?: number;
+    title?: string;
+    tags?: string[];
+  }) =>
+    http<{ section: Neta; composition: CompositionNode }>("/gen/section", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  // 似たメロ（①道具・retrieval）：提示メロに近いメロを scope(既定 library=連想元)から近い順。
+  melodyNeighbors: (body: { notes: unknown; scope?: string; top?: number; id?: string }) =>
+    http<{ neighbors: { id?: string; label?: string; similarity: number }[] }>("/melody/neighbors", {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 
   unlink: (from: string, to: string, type = "related") =>
@@ -268,14 +368,67 @@ export const api = {
     http<{ cleared: boolean }>(`/chat/${encodeURIComponent(thread)}/messages`, {
       method: "DELETE",
     }),
-  listChatThreads: () => http<ChatThread[]>(`/chat/threads`),
+  // セッションごと削除（履歴＋器への所属）。/messages は履歴だけ消す別物。
+  deleteChatThread: (thread: string) =>
+    http<{ deleted: boolean }>(`/chat/${encodeURIComponent(thread)}`, { method: "DELETE" }),
+  // プロジェクト指定時はその器に束ねたセッションのみ。未指定＝全フリーChat。
+  listChatThreads: (project?: string | null) =>
+    http<ChatThread[]>(`/chat/threads${project ? `?project=${encodeURIComponent(project)}` : ""}`),
+  // 会話セッションを器（プロジェクト）に束ねる／タイトル付与（upsert・部分更新）。
+  setChatThread: (thread: string, meta: { project?: string | null; title?: string | null }) =>
+    http<{ ok: boolean }>(`/chat/${encodeURIComponent(thread)}/meta`, {
+      method: "POST",
+      body: JSON.stringify(meta),
+    }),
+
+  // #100④-S3：常駐 claude へ1ターン送り、stream-json イベントを SSE で受けて onEvent へ流す。
+  // 旧 createJob+ポーリングを置換（脳は Claude＝記憶/多ターン/ツール選択をネイティブに）。
+  chatTurnStream: async (
+    thread: string,
+    text: string,
+    onEvent: (e: unknown) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/chat/${encodeURIComponent(thread)}/turn`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal,
+      });
+    } catch (e) {
+      throw new NetworkError(`POST /chat/${thread}/turn`, e);
+    }
+    if (!res.ok || !res.body) throw new ApiError(res.status, await res.text().catch(() => ""));
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i: number;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("data: ")) {
+            try { onEvent(JSON.parse(line.slice(6))); } catch { /* 非JSON行は無視 */ }
+          }
+        }
+      }
+    }
+  },
 };
 
 export interface ChatThread {
   thread: string;
-  last: string;
+  last: string | null;
   count: number;
   preview: string | null;
+  project: string | null;
+  title: string | null;
 }
 
 export interface ChatMessageInput {
@@ -309,6 +462,7 @@ export interface Job {
   target_neta_id?: string | null;
   result: { suggestions?: string } | Record<string, unknown> | null;
   error: string | null;
+  progress?: string | null; // #99 実況：agentic が今なにしてるか（「メロを作ってる」等）
   notify_level?: string | null;
   question?: string | null;
   parent_job_id?: string | null;

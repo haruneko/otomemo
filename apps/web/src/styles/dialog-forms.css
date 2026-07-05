@@ -4,9 +4,9 @@ body:has(.dialog-backdrop) .chat-bubble {
   display: none;
 }
 @media (max-width: 820px) {
-  /* #67 モバイルで編集中は全画面エディタ＋下端トランスポートにバブルが被るので隠す
-     （戻ってからChatを開く）。 */
-  main:has(.mainpane-editor) .chat-bubble {
+  /* モバイルで mainpane が主役（編集 or プロジェクト画面）の間はバブルを隠す＝下端トランスポートや
+     最下段カードに被らない。プロジェクト画面は自前の会話起点があるので冗長でもある。ホーム(ネタ帳)では出す。 */
+  main:has(.workspace.mv-pane) .chat-bubble {
     display: none;
   }
 }
@@ -40,7 +40,15 @@ body:has(.dialog-backdrop) {
   max-height: 90vh;
   overflow: auto;
   display: grid;
+  /* 単一列を親幅に固定＝中の横広コンテンツ(おすすめ横帯/長いタイトル)がダイアログを画面より
+     広げず、帯はスクロール・文字は省略に収まる（.notebook と同じ min-content 対策）。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+}
+/* ピッカーは行を内容ぶんに詰めて上寄せ＝全画面(100dvh)で行が引き伸ばされ間延びする(情報密度↓)のを防ぐ。
+   ※Chat/トレイは中身(ログ)を伸ばして埋める前提なので stretch のまま＝ここでは触らない。 */
+.dialog[aria-label="place-picker"] {
+  align-content: start;
 }
 .dialog header {
   display: flex;

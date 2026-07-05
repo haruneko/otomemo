@@ -35,7 +35,7 @@
 | U15 | SF2 設定UI：アップロード/選択/「音源をテスト」→✓読込OK | ❌ | `soundfont.spec`：既存assetで test ボタン→OK表示（uploadはmock/小SF2は重いので選択/テストのみ）|
 | U16 | 停止：編集トランスポート ▶/⏸/⏹・カード ▶⇄⏹・**Spaceで再生/停止** | 🟡(手動確認) | カード▶⇄⏹恒久化、編集 play/pause/rewind、Space経路を1 assert |
 | U20 | 絞り込み：**mood-filter**／**kind-filter（検索中はdisabled連動）** | ❌ | `search.spec`相乗り：mood保存→絞る、検索入力でkind-filter disabled |
-| U21 | StepPad（パッド入力でノート追加・別経路） | ❌(任意) | 余力で `pad` 経路を1本（roll以外の音追加） |
+| U21 | ~~StepPad（パッド入力）~~ 撤去(2026-07-04) → 消しゴムモード（メロ: 消すでノートtap削除・Section: 消しゴムでブロック外す） | ❌(任意) | roll の [消す] モードと Section [⌫] を1本 |
 | U17 | プレイヘッド：再生中に赤線が動く（--ph/--phb 変化） | ❌ | `playhead.spec`：再生で `--ph` が0→増加 |
 | U18 | MIDI書き出し：ボタンで .mid ダウンロード発火 | ❌ | `midi.spec`：download イベント発火＋サイズ>0 |
 | U19 | レスポンシブ：3画面でレイアウト破綻なし | ✅ responsive | — |

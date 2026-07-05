@@ -125,6 +125,38 @@ CREATE TABLE IF NOT EXISTS chat_message (
   created TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_thread ON chat_message(thread, created);
+
+-- プロジェクト＝一曲(or組曲)の器：会話セッションを器に束ねる薄表（design「プロジェクト＝…ホーム」B案）。
+-- thread=フリーChatの会話id。project=prj:を剥がしたプロジェクト名 or NULL(未仕分け)。title=任意の見出し。
+-- 既存thread(global/chat:*)は行なし＝未仕分け＝純加算・移行不要。
+CREATE TABLE IF NOT EXISTS chat_thread (
+  thread  TEXT PRIMARY KEY,
+  project TEXT,
+  title   TEXT,
+  created TEXT NOT NULL,
+  updated TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_thread_project ON chat_thread(project);
+
+-- プロジェクト実体（器の説明＋AIへの指示）。識別子=prj: を剥がした名前。design「将来 project テーブルへ昇格可」を実行。
+-- 純加算：名前は従来どおり prj: タグで表れ、ここは説明/指示の置き場（無い器は行なし）。
+CREATE TABLE IF NOT EXISTS project (
+  name         TEXT PRIMARY KEY,
+  description  TEXT,
+  instructions TEXT,
+  created      TEXT NOT NULL,
+  updated      TEXT NOT NULL
+);
+
+-- ネタ一覧の手動並べ替え（被せ表・純加算）。project=絞り込み中のプロジェクト名 or ''(未指定)。
+-- 行が無いネタ=position NULL＝既定(updated DESC)へフォール＝並べ替え前は現状と同一。design LV-A。
+CREATE TABLE IF NOT EXISTS neta_order (
+  project  TEXT NOT NULL,
+  neta_id  TEXT NOT NULL REFERENCES neta(id) ON DELETE CASCADE,
+  position REAL NOT NULL,
+  PRIMARY KEY (project, neta_id)
+);
+CREATE INDEX IF NOT EXISTS idx_neta_order_project ON neta_order(project, position);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {

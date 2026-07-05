@@ -1,38 +1,163 @@
 /* #77 asset(SoundFont)・#bass 相対度数グリッド */
-/* #77 SoundFont 一覧 */
+/* #77 SoundFont 設定（リッチ版：使用中バッジ・状態ピル・試聴パレット） */
+.sf-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sf-head h3 {
+  margin: 0;
+}
+.sf-status-pill {
+  font-size: 0.72rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: #23262c;
+}
+.sf-status-pill.ok {
+  color: #63c98a;
+  border-color: color-mix(in srgb, #3ea36a 55%, transparent);
+  background: color-mix(in srgb, #3ea36a 16%, #23262c);
+}
+.sf-status-pill.bad {
+  color: #eb7a63;
+  border-color: color-mix(in srgb, #e0533f 55%, transparent);
+  background: color-mix(in srgb, #e0533f 15%, #23262c);
+}
 .sf-list {
   list-style: none;
   padding: 0;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 .sf-item {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-.sf-item.on {
-  font-weight: 600;
-}
 .sf-pick {
   flex: 1;
   min-width: 0; /* #67 狭幅で長いファイル名がはみ出さないよう省略 */
+  display: flex;
+  align-items: center;
+  gap: 8px;
   text-align: left;
+  background: #23262c;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.sf-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+}
+.sf-item.on .sf-pick {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, #23262c);
+}
+.sf-item.on .sf-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.sf-name {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: #2b2f36;
-  color: var(--fg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 5px 8px;
+  font-weight: 500;
 }
-.sf-item.on .sf-pick {
+.sf-size {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+}
+.sf-badge {
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.sf-del {
+  flex: 0 0 auto;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.sf-del:hover {
+  color: #eb7a63;
+  border-color: color-mix(in srgb, #e0533f 55%, transparent);
+}
+.sf-upload-btn {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--fg);
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.sf-upload-btn:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.sf-empty {
+  padding: 8px 2px;
+}
+/* 試聴パレット＝GM音色チップ（読み込んだ音源で鳴らす）。 */
+.sf-audition {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.sf-audition-head {
+  display: block;
+  font-size: 0.74rem;
+  margin-bottom: 8px;
+}
+.sf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sf-chip {
+  font-size: 0.8rem;
+  color: var(--fg);
+  background: linear-gradient(180deg, #2c3038, #23262c);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 13px;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.15s ease;
+}
+.sf-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+.sf-chip:active {
+  transform: scale(0.94);
   border-color: var(--accent);
 }
+.sf-actions {
+  margin-top: 12px;
+}
 .sf-err {
-  color: #e0533f;
+  color: #eb7a63;
+  font-size: 0.8rem;
 }
 form[aria-label="capture"] {
   display: grid;
@@ -72,23 +197,90 @@ button:disabled {
   font-size: 0.75rem;
   color: #e0a33c;
 }
-.scope-tabs {
-  display: flex;
-  gap: 6px;
-  margin: 8px 0;
-}
-.scope-tabs button {
+/* 検索を主役＝広く。絞込は畳みトグル（効いてる時は●）。 */
+.filters .search-main {
   flex: 1;
-  padding: 6px 8px;
-  background: #1b1e23;
-  border: 1px solid #2a2e36;
-  border-radius: 6px;
-  color: var(--muted, #9aa0ab);
 }
-.scope-tabs button.on {
-  background: var(--accent);
-  color: #fff;
+/* 意味検索(cm-search)不通時の控えめな告知＝黙って keyword-only に劣化する誤解を防ぐ。 */
+.search-degraded {
+  font-size: 0.74rem;
+  color: var(--k-lyric, #f0c544);
+  padding: 2px 2px 0;
+  line-height: 1.4;
+}
+.filter-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  padding: 8px 12px;
+  background: #1b1e23;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-weight: 600;
+}
+.filter-toggle.active {
+  color: var(--fg);
   border-color: var(--accent);
+}
+.filter-dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.filters-sub {
+  margin-top: -6px;
+}
+/* 種別フィルタ＝作成グリッドと同じ絵の7アイコンを1行（種別色・ラベル無し・常時表示）。
+   選択中はその種別色でリング＋淡い地。タップで選択/再タップで解除。 */
+.filter-kinds {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr)); /* 作成9種と同数。minmax(0,…)＝列を縮められる＝横はみ出し防止 */
+  gap: 4px;
+  margin: 0 0 8px;
+}
+.filter-kind {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--k, var(--accent)); /* アイコン＝種別色（currentColor 追従） */
+}
+.filter-kind svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+.filter-kind:hover:not(:disabled) {
+  border-color: var(--k, var(--accent));
+}
+.filter-kind.on {
+  border-color: var(--k, var(--accent));
+  box-shadow: inset 0 0 0 1px var(--k, var(--accent));
+  background: color-mix(in srgb, var(--k, var(--accent)) 18%, #1b1e23);
+}
+.filter-kind:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* mood 絞り込み＝控えめな一行（種別アイコンの下・常時）。 */
+.mood-filter-input {
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.8rem;
 }
 .project-picker {
   display: flex;
@@ -97,6 +289,67 @@ button:disabled {
 }
 .project-picker select {
   flex: 1;
+}
+/* P1 プロジェクト・チップ＝横スクロールの1タップ切替（件数バッジ付き）。 */
+.proj-chips {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 6px;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.proj-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  padding: 5px 11px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.proj-chip.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.proj-chip .chip-n {
+  font-size: 0.68rem;
+  opacity: 0.7;
+}
+.proj-chip.on .chip-n {
+  opacity: 0.9;
+}
+.proj-chip.add {
+  font-weight: 700;
+  color: var(--muted);
+  padding: 5px 12px;
+}
+/* 案1：器チップと「ライブラリ」を1行に。区切り線で"別の場所"と分ける。 */
+.proj-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background: #33373f;
+}
+.proj-chip.lib {
+  gap: 5px;
+  color: #cbb8f5; /* 連想元＝紫系で"参考素材の別プール"を示唆（作業ネタの青と差別化） */
+  border-color: #3c3560;
+  background: #221f2e;
+}
+.proj-chip.lib svg {
+  width: 15px;
+  height: 15px;
+}
+.proj-chip.lib.on {
+  background: #5a4bd0;
+  border-color: #5a4bd0;
+  color: #fff;
 }
 .filters {
   display: flex;
@@ -155,6 +408,54 @@ article[aria-label="neta-card"].dragging {
 }
 .mini-roll rect {
   fill: var(--k, var(--accent));
+}
+/* ④ section/song カードのレーン帯ミニ・タイムライン（どのパートがどの小節に入ってるか）。
+   各レーンは編集画面と同じ種別色（--lc）で塗る＝単色オレンジの壁を避け、パートを見分ける。
+   薄く小さく＝カード一覧のリズムを崩さない（メロ等の mini-roll と釣り合う高さ）。 */
+.section-mini {
+  margin-top: 6px;
+  padding: 5px 6px;
+  background: #15171c;
+  border-radius: 4px;
+  display: grid;
+  gap: 2px;
+}
+.section-mini .sm-lane {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+.section-mini .sm-lane.empty {
+  opacity: 0.35;
+}
+.section-mini .sm-label {
+  font-size: 0.58rem;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+.section-mini .sm-cells {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+}
+.section-mini .sm-cell {
+  flex: 1;
+  border-radius: 1px;
+  background: #21242b; /* 空きセル＝薄い地 */
+}
+.section-mini .sm-cell.on {
+  background: var(--lc, var(--accent)); /* 埋まってる小節＝そのパートの種別色 */
+}
+.section-mini .sm-bars {
+  font-size: 0.58rem;
+  justify-self: end;
+  margin-top: 1px;
+}
+.section-mini-empty {
+  margin-top: 6px;
+  font-size: 0.72rem;
 }
 .input-toggle {
   display: flex;
@@ -236,6 +537,12 @@ article[aria-label="neta-card"].dragging {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--muted); /* 他エディタと同じ控えめなラベル色 */
+  /* 横スクロールで度数ラベル(R/3/5…)を左に固定（全エディタ統一）。 */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
+  box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.55); /* 右影＝フローズン列（かぶり解消） */
 }
 .step-cell.deg {
   flex: 0 0 28px;
@@ -256,6 +563,187 @@ article[aria-label="neta-card"].dragging {
 .lane-cell.over {
   background: var(--accent);
   opacity: 0.7; /* ドロップ可の強調 */
+}
+/* 一覧コントロール行＝表示密度＋並べ替え（研究 2026-07-02・LV2）。 */
+.list-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  flex-wrap: wrap;
+}
+.list-sort {
+  margin-left: auto; /* 密度は左・並べ替えは右 */
+  font-size: 0.76rem;
+  padding: 4px 8px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+/* 表示密度トグル（カード｜リスト）＝ネタ一覧の圧縮切替（研究 2026-07-02）。 */
+.list-density {
+  display: flex;
+  gap: 4px;
+}
+/* 副アクション畳みの「…」＝主要2つ(▶/相談)の脇に控えめに（LV2 アクション整理）。 */
+.bs-btn.more {
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+/* P3 器ピッカー＝「器へ ▾」を押すと候補チップが下に出る（在籍は✓/accent）。 */
+.assign-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.assign-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: min(240px, calc(100vw - 24px)); /* スマホで画面外へはみ出さない（レビュー H-2） */
+  padding: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+/* 画面右端に近いトリガ（ツール▾ 等）は右寄せで開く＝右見切れ回避（レビュー H-2）。 */
+.assign-menu.to-right {
+  left: auto;
+  right: 0;
+}
+/* メロの「ツール」メニュー＝崩す/調推定/似たメロ/移調 を縦にまとめる（崩すを主役に）。 */
+.tools-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tools-btn.on {
+  border-color: var(--k-melody);
+  color: var(--k-melody);
+}
+.tools-menu {
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 168px;
+  gap: 4px;
+}
+.tool-item {
+  text-align: left;
+  font-size: 0.82rem;
+  padding: 7px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.tool-item:disabled {
+  opacity: 0.5;
+}
+.tool-item.primary {
+  background: color-mix(in srgb, var(--k-melody) 22%, #2b2f36);
+  border-color: var(--k-melody);
+  font-weight: 600;
+}
+.tools-sep {
+  font-size: 0.68rem;
+  color: var(--muted);
+  padding: 4px 4px 0;
+}
+.tools-transpose {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tools-transpose .tool-item {
+  flex: 1 0 44%;
+  text-align: center;
+  padding: 6px 4px;
+}
+.list-density button {
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  background: #1b1e23;
+  color: var(--muted, #9aa0ab);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-weight: 600;
+}
+.list-density button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* リスト（コンパクト）表示＝1行に圧縮。位置が揃い比較しやすい（NN/g）。 */
+section[aria-label="neta-list"].dense {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+article[aria-label="neta-card"].dense {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  width: 100%;
+  min-width: 0; /* 長いタイトルで行が画面幅を超えないよう */
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+article[aria-label="neta-card"].dense .card-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0; /* タイトル省略のため */
+  padding: 0;
+}
+/* リスト行の並べ替えハンドル＝行内左に静的配置（カードの絶対配置を上書き）。 */
+.drag-handle.dense-handle {
+  position: static;
+  flex: 0 0 auto;
+  padding: 2px;
+  font-size: 0.85rem;
+}
+.dense-icon {
+  flex: 0 0 auto;
+  color: var(--k, var(--muted));
+  display: inline-flex;
+}
+.dense-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.dense-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--fg);
+}
+.dense-kind {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+article[aria-label="neta-card"].dense .bs-tools {
+  flex: 0 0 auto;
+  margin: 0;
+}
+article[aria-label="neta-card"].dense .bs-btn {
+  padding: 3px 9px;
 }
 .card-main {
   cursor: pointer;
@@ -280,6 +768,62 @@ article header {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+/* 作成タイル＝コンパクトなアイコングリッド（案A・2026-07-03）。色は塗り帯でなくアイコンへ寄せ、
+   低背・4列で作成を上に残しつつファーストビューのごちゃつきを抑える。 */
+/* 作成タイル＝グループ分け（案A・見出しは撤去＝タイル自身のラベルで足りる）。
+   行のまとまりだけ：パーツ(5列)／組み立て・文字(4列)／取込(全幅)。 */
+.create-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.ct-row {
+  display: grid;
+  gap: 6px;
+}
+.ct-parts {
+  grid-template-columns: repeat(5, 1fr);
+}
+.ct-buildtext {
+  grid-template-columns: repeat(4, 1fr);
+}
+.create-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.create-tile svg {
+  color: var(--k, var(--accent)); /* アイコン＝kind 色（可愛さと識別を担う） */
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+.create-tile:hover {
+  background: color-mix(in srgb, var(--k, var(--accent)) 16%, #1b1e23);
+  border-color: var(--k, var(--accent));
+}
+.create-tile.import-tile {
+  color: var(--muted);
+  /* 取込は"作成"でないのでグリッド外＝全幅の横並びボタンに（アイコン＋ラベル横）。 */
+  flex-direction: row;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+}
+.create-tile.import-tile.on {
+  background: color-mix(in srgb, var(--accent) 16%, #1b1e23);
+  border-color: var(--accent);
 }
 .import-btn.accent {
   background: var(--accent);
@@ -308,8 +852,10 @@ article header {
 /* ChordEditor 改善（CV1）：ピアノロール表示＋長さボタン。 */
 .chord-roll { margin-bottom: 6px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #15171b; }
 .chord-roll .mini-roll { width: 100%; height: 72px; display: block; }
-.chord-len { display: inline-flex; gap: 3px; }
+.chord-len { display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.chord-len-label { font-size: 0.72rem; color: var(--muted); margin-right: 3px; } /* この群＝長さ だと分かるラベル */
 .chord-len .len { padding: 2px 6px; font-size: 0.78rem; }
+.chord-len .len.dot { margin-left: 6px; } /* 付点を長さ4ボタンから少し離す＝独立した修飾と分かる */
 /* CV3：埋まってる単一パートのセルは置けない（淡色） */
 .lane-cell.locked { opacity: 0.35; cursor: not-allowed; }
 

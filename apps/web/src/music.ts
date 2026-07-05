@@ -10,9 +10,13 @@ export interface Note {
   syllable?: string; // 歌詞の音節割当（design #16）。今はデータ枠のみ。
   drum?: boolean; // GMドラム＝打楽器シンセで鳴らす（melodic synthだと低すぎて聞こえない）
   program?: number; // #section音色: 合成再生で子(パート)ごとの GM音色を保つ（compositeNotesが付与）
+  kit?: number; // ドラムキット(GM bank128 preset番号 0=Standard)。アコ/エレキ選択＝drumノートに付与。
 }
 
-const CHORD_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+// 12音名（シャープ表記・SSOT）。調名/コード根/ピアノロール鍵盤/コード楽器で共有。
+export const PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+// MIDIノート番号→音名（MIDI 60=C4）。負値も安全（(m%12+12)%12）。
+export const pitchName = (midi: number) => `${PITCH_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 
 export interface MelodyContent {
   notes: Note[];
@@ -77,18 +81,20 @@ export interface ChordEntry {
   quality: string; // ""(major) / "m" / "7" / "maj7" / "m7" / "dim" ...
   start: number; // 拍
   dur: number; // 拍
+  bass?: number; // 分数コードのオンベース pc（0–11・省略=root）。「C/E」={root:0,quality:"",bass:4}（design 決定B）
 }
 
 export function chordsOf(content: unknown): ChordEntry[] {
   const c = content as { chords?: unknown } | null;
   if (!c || !Array.isArray(c.chords)) return [];
   // 旧データ（root が "C".."B" 文字列）を 0–11 へ移行
-  return (c.chords as { root: number | string; quality?: string; start: number; dur: number }[]).map(
+  return (c.chords as { root: number | string; quality?: string; start: number; dur: number; bass?: number }[]).map(
     (ch) => ({
-      root: typeof ch.root === "number" ? ch.root : Math.max(0, CHORD_NAMES.indexOf(ch.root)),
+      root: typeof ch.root === "number" ? ch.root : Math.max(0, PITCH_NAMES.indexOf(ch.root)),
       quality: ch.quality ?? "",
       start: ch.start,
       dur: ch.dur,
+      ...(ch.bass != null ? { bass: ((Math.round(ch.bass) % 12) + 12) % 12 } : {}),
     }),
   );
 }
@@ -113,15 +119,28 @@ export function chordToMidi(sym: string, octave = 4): number[] {
   return out;
 }
 
-// コード列を、各コードの start/dur に重ねたノート列へ（再生/MIDIはメロと同じ経路）
+const CHORD_PREVIEW_BASE = 60; // C4 付近（進行プレビューの中立な積み）
+// コード列を、各コードの start/dur に重ねたノート列へ（再生/MIDIはメロと同じ経路）。
+// **QUALITY_INTERVALS(SSOT) から積む**＝テンション(9/13/add9 等)も pc 正しく鳴る（旧 Tonal依存を排し
+// 我々の語彙と一致）。tones は昇順になるようオクターブで開く＝C9=C E G B♭ D'（クラスタにせず和音色が分かる）。
 export function chordsToNotes(chords: ChordEntry[]): Note[] {
-  return chords.flatMap((c) =>
-    chordToMidi((CHORD_NAMES[c.root] ?? "C") + c.quality).map((pitch) => ({
-      pitch,
-      start: c.start,
-      dur: c.dur,
-    })),
-  );
+  return chords.flatMap((c) => {
+    const ivals = QUALITY_INTERVALS[c.quality] ?? [0, 4, 7];
+    const r = (((Math.round(c.root) % 12) + 12) % 12);
+    let prev = -1;
+    const out = ivals.map((iv) => {
+      let v = iv;
+      while (v <= prev) v += 12; // 昇順に開く（テンションをオクターブ上へ）
+      prev = v;
+      return { pitch: CHORD_PREVIEW_BASE + r + v, start: c.start, dur: c.dur };
+    });
+    // 分数コード（決定B）：オンベース pc を一番下（C3帯）に追加＝最低音が bass に。
+    if (c.bass != null) {
+      const bpc = ((Math.round(c.bass) % 12) + 12) % 12;
+      out.unshift({ pitch: CHORD_PREVIEW_BASE - 12 + bpc, start: c.start, dur: c.dur });
+    }
+    return out;
+  });
 }
 
 // --- リズム（rhythm）。GMドラムのステップグリッド。1ステップ=16分音符（拍=step/4） ---
@@ -148,7 +167,20 @@ export const drumVel = (midi: number, vel?: number): number =>
 export interface RhythmContent {
   steps: number;
   lanes: RhythmLane[];
+  kit?: number; // ドラムキット(GM bank128 preset 0=Standard)。アコ/エレキ選択。未指定=Standard。
 }
+
+// 選べるドラムキット（SF2 bank128 のプリセット）。アコ/エレキでグループ。
+export const DRUM_KITS: { program: number; label: string; group: "acoustic" | "electric" }[] = [
+  { program: 0, label: "Standard", group: "acoustic" },
+  { program: 8, label: "Room", group: "acoustic" },
+  { program: 16, label: "Power", group: "acoustic" },
+  { program: 32, label: "Jazz", group: "acoustic" },
+  { program: 40, label: "Brush", group: "acoustic" },
+  { program: 24, label: "Electronic", group: "electric" },
+  { program: 25, label: "808/909", group: "electric" },
+  { program: 26, label: "Dance", group: "electric" },
+];
 
 export const DRUMS: { name: string; midi: number }[] = [
   { name: "Kick", midi: 36 },
@@ -186,6 +218,7 @@ export function rhythmToNotes(r: RhythmContent): Note[] {
       dur: 0.25,
       drum: true,
       vel: drumVel(l.midi, l.vel), // #84 S4 レーン/GM既定ベロシティ
+      kit: r.kit, // 選択キット（未指定=Standard）。再生/書出でこの番号のキットを使う。
     })),
   );
 }
@@ -209,22 +242,19 @@ export interface RelativeBassContent {
 const BASS_FLOOR = 28; // E1（エレキ4弦ベースの最低音）
 const BASS_STEP_TO_BEAT = 0.25; // 1step=16分=0.25拍
 
-// コード品質 → ルートからの半音インターバル（worker theory.QUALITY_INTERVALS と一致）。
+// コード品質 → ルートからの半音インターバル。**api `theory.ts` の QUALITY_INTERVALS とキー集合一致**
+// （SSOT・design「決定A」。property test で担保）。
 const QUALITY_INTERVALS: Record<string, number[]> = {
-  "": [0, 4, 7],
-  maj: [0, 4, 7],
-  m: [0, 3, 7],
-  min: [0, 3, 7],
-  "7": [0, 4, 7, 10],
-  maj7: [0, 4, 7, 11],
-  m7: [0, 3, 7, 10],
-  dim: [0, 3, 6],
-  m7b5: [0, 3, 6, 10],
-  aug: [0, 4, 8],
-  sus4: [0, 5, 7],
-  sus2: [0, 2, 7],
-  "6": [0, 4, 7, 9],
-  m6: [0, 3, 7, 9],
+  "": [0, 4, 7], maj: [0, 4, 7], m: [0, 3, 7], min: [0, 3, 7],
+  dim: [0, 3, 6], aug: [0, 4, 8], sus4: [0, 5, 7], sus2: [0, 2, 7],
+  "7": [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10], m7b5: [0, 3, 6, 10],
+  dim7: [0, 3, 6, 9], aug7: [0, 4, 8, 10], "7b5": [0, 4, 6, 10], mM7: [0, 3, 7, 11], "7sus4": [0, 5, 7, 10],
+  "6": [0, 4, 7, 9], m6: [0, 3, 7, 9],
+  "9": [0, 4, 7, 10, 2], maj9: [0, 4, 7, 11, 2], m9: [0, 3, 7, 10, 2], add9: [0, 4, 7, 2],
+  "69": [0, 4, 7, 9, 2], m69: [0, 3, 7, 9, 2],
+  "7b9": [0, 4, 7, 10, 1], "7#9": [0, 4, 7, 10, 3], "7#11": [0, 4, 7, 10, 6],
+  "13": [0, 4, 7, 10, 2, 9], "11": [0, 4, 7, 10, 2, 5], m11: [0, 3, 7, 10, 2, 5],
+  m13: [0, 3, 7, 10, 2, 9], maj13: [0, 4, 7, 11, 2, 9], "maj7#11": [0, 4, 7, 11, 6],
 };
 const DEGREE_CHORD_INDEX: Record<string, number> = { "3": 1, "5": 2, "7": 3 };
 
@@ -298,9 +328,10 @@ export function resolveRelativeBass(
     const offBeat = Math.abs(start - Math.round(start)) > 1e-9;
     const refBeat = offBeat && nextBeat < start + dur - 1e-9 ? nextBeat : start;
     const ch = bassChordAt(refBeat, chords);
-    const root = ch ? ((ch.root % 12) + 12) % 12 : k;
+    const chRootPc = ch ? ((ch.root % 12) + 12) % 12 : k;
+    // 分数コード（決定B）：オンベースがあれば R（ルート）はその低音を弾く。3/5/7 はコードのルート基準。
+    const bassPc = ch && ch.bass != null ? ((ch.bass % 12) + 12) % 12 : chRootPc;
     const quality = ch ? ch.quality : "";
-    const rootPitch = band(root); // ルート音を E1..D#2 帯へ（帯はルートの置き場）
     let pitch: number;
     if (e.degree === "approach") {
       const target = band(nextRootPc(entries, i, chords, k));
@@ -309,8 +340,9 @@ export function resolveRelativeBass(
       const ref = prevPitch ?? target;
       pitch = Math.abs(up - ref) <= Math.abs(down - ref) ? up : down;
     } else {
-      // 度数はルートから上に積む（5度=root+7 等。5度がルートより下にならない）
-      pitch = rootPitch + degreeInterval(e.degree, quality);
+      // 度数はルートから上に積む（5度=root+7 等）。R のみオンベース基準。
+      const refPc = e.degree === "R" ? bassPc : chRootPc;
+      pitch = band(refPc) + degreeInterval(e.degree, quality);
     }
     while (pitch < BASS_FLOOR) pitch += 12; // 床(28)より下は出さない（approach 救済）
     notes.push({ pitch, start, dur });
@@ -322,7 +354,20 @@ export function resolveRelativeBass(
 // --- コード楽器パターン（chord_pattern・CP2）。進行に解決する相対型の和音版（コンピング/アルペジオ）---
 export type ChordPatternMode = "strum" | "arp";
 export type ChordTone = "R" | "3" | "5" | "7";
-export interface ChordVoicing { tones: ChordTone[]; openClose: "open" | "close"; octave: number }
+// 響きモデル（2026-07-04 作り替え）：構成音の手選択(tones)は撤去＝鳴る音はコードの質から自動。
+// - top: トップ声部の「狙い音」（絶対MIDIピッチ）。各コードでこの音に最寄りのコードトーンを最高声部に。
+// - powerChord: 3rd 等を落として R+5 だけ（唯一の"間引き"＝手選択の代わり）。
+// - openClose: 広がり（close=密／open=1つおきに+12で広げる）。octave: 高さ微調整。
+// - arpDir: アルペジオの向き（up/down/updown）。音域は top+openClose で決まる＝別指定しない。
+// tones は後方互換のため残す（top 未指定の旧パターンは従来どおり tones で鳴る）。
+export interface ChordVoicing {
+  tones: ChordTone[];
+  openClose: "open" | "close";
+  octave: number;
+  top?: number;
+  powerChord?: boolean;
+  arpDir?: "up" | "down" | "updown";
+}
 export interface ChordHit { step: number; dur: number } // dur=step数（1step=16分）＝各音の長さを指定
 export interface ChordPatternContent {
   mode: ChordPatternMode;
@@ -339,16 +384,63 @@ function normHits(hits: unknown): ChordHit[] {
 }
 
 export function emptyChordPattern(): ChordPatternContent {
-  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
+  // top を持たせて新モデル（構成音自動＋トップ狙い）で動く。tones は後方互換で残置。
+  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, powerChord: false, arpDir: "up" }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
 }
 
-// コードを voicing で実音化：構成音(R/3/5/7)をルートから積み、open は1つおきに+12で広げる（スケッチ範囲）。
-function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
+// コードを voicing で実音化（決定C・伴奏レジスタ）：構成音(R/3/5/7)を**アンカーの最寄りオクターブ**に
+// 置いたルートから積む＝コードが動いてもレジスタが跳ねない（旧 base=CHORD_BASE+octave*12+root_pc は
+// ルートのpcぶん上下した）。anchor=「大体の高さ」。open は1つおきに+12で広げる（スケッチ範囲）。
+// トップ狙い音（絶対）ベースのボイシング＝各コードで top に最寄りのコードトーンを最高声部にし、
+// 残りをその下へ密に積む（多少雑でOK＝厳密な最適配置は DAW 案件）。open は1つおきに+12で広げる。
+function voiceToTop(root: number, quality: string, powerChord: boolean, top: number, open: boolean): number[] {
   const r = (((Math.round(root) % 12) + 12) % 12);
-  const base = CHORD_BASE + (v.octave ?? 0) * 12 + r;
+  // 鳴る音はコードの質から自動（QUALITY_INTERVALS＝全コードトーン）。パワーコードは R+5 のみ。
+  const ivals = powerChord ? [0, 7] : (QUALITY_INTERVALS[quality] ?? [0, 4, 7]);
+  const pcs = ivals.map((iv) => (((r + iv) % 12) + 12) % 12);
+  const nearest = (pc: number) => Math.round((top - pc) / 12) * 12 + pc; // pc を top 最寄りのオクターブへ
+  // トップ＝top に一番近い実現ピッチを与える構成音（同距離は先勝ち＝細かい優先は DAW 案件）。
+  let topPc = pcs[0]!, topPitch = nearest(pcs[0]!);
+  for (const pc of pcs) {
+    const p = nearest(pc);
+    if (Math.abs(p - top) < Math.abs(topPitch - top)) { topPitch = p; topPc = pc; }
+  }
+  const rest = [...pcs];
+  rest.splice(rest.indexOf(topPc), 1); // トップに使った1音だけ除く
+  const voices = [topPitch];
+  let lowest = topPitch;
+  for (const pc of rest) {
+    let cand = Math.floor(lowest / 12) * 12 + pc;
+    while (cand >= lowest) cand -= 12; // 現在の最低音の直下へ（密に積む）
+    voices.push(cand);
+    lowest = cand;
+  }
+  voices.sort((a, b) => a - b);
+  return open ? voices.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : voices;
+}
+
+function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
+  if (v.top != null) return voiceToTop(root, quality, v.powerChord === true, v.top, v.openClose === "open");
+  const r = (((Math.round(root) % 12) + 12) % 12);
+  const anchor = CHORD_BASE + (v.octave ?? 0) * 12;
+  let d = (((r - anchor) % 12) + 12) % 12; // root を anchor の最寄りオクターブへ（anchor±6半音帯）
+  if (d > 6) d -= 12;
+  const base = anchor + d;
   const tones = (v.tones?.length ? v.tones : ["R", "3", "5"]).map((t) => base + degreeInterval(t, quality));
   tones.sort((a, b) => a - b);
   return v.openClose === "open" ? tones.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : tones;
+}
+
+// アルペジオ i 番目が voiced（昇順・n音）のどのインデックスか。up=昇順／down=降順／updown=ピンポン。
+function arpStep(i: number, n: number, dir?: "up" | "down" | "updown"): number {
+  if (n <= 1) return 0;
+  if (dir === "down") return (n - 1) - (i % n);
+  if (dir === "updown") {
+    const period = 2 * (n - 1); // 0..n-1..1 の三角波
+    const t = ((i % period) + period) % period;
+    return t < n ? t : period - t;
+  }
+  return i % n; // up（既定）
 }
 
 // コード楽器パターンをコードに当てて実音 notes へ（strum=和音ブロック／arp=構成音を巡回）。相対型＝進行に解決。
@@ -368,13 +460,37 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
     const quality = ch ? ch.quality : "";
     const voiced = voiceChord(root, quality, v);
     if (mode === "arp") {
-      out.push({ pitch: voiced[arpIdx % voiced.length]!, start, dur });
+      // 向き（up=昇順／down=降順／updown=ピンポン）で voiced（昇順）を辿る。音域は voicing 継承＝別指定なし。
+      out.push({ pitch: voiced[arpStep(arpIdx, voiced.length, v.arpDir)]!, start, dur });
       arpIdx++;
     } else {
       for (const p of voiced) out.push({ pitch: p, start, dur });
+      // 分数コード（決定B）：strum はオンベースを voicing の下に1音足す＝最低音が bass に。
+      if (ch && ch.bass != null) {
+        const bpc = ((ch.bass % 12) + 12) % 12;
+        const lowest = Math.min(...voiced);
+        let bp = Math.floor(lowest / 12) * 12 + bpc;
+        while (bp >= lowest) bp -= 12; // 確実にコードより下へ
+        out.push({ pitch: bp, start, dur });
+      }
     }
   }
   return out;
+}
+
+// コード楽器 grid のセルタップ→hits の更新（純関数・契約テスト用）。
+// 頭(onset)＝消す／伸び(sustain)の"上"＝そのノートの終わりを s に詰める（長さ調整）／空き＝新規配置。
+// ※末尾の直後(step+dur)は"空き"扱い＝新規配置できる（隣接した音 x--x を打てるように・伸ばしと衝突させない）。
+export function applyCellTap(hits: ChordHit[], s: number, placeLen: number): { hits: ChordHit[]; placed: boolean } {
+  if (hits.some((h) => h.step === s)) return { hits: hits.filter((h) => h.step !== s), placed: false };
+  const owner = hits.find((h) => h.step < s && s < h.step + h.dur); // 伸びの"上"だけ（末尾直後は含めない）
+  if (owner) return { hits: hits.map((h) => (h === owner ? { ...h, dur: s - h.step + 1 } : h)), placed: false };
+  return { hits: [...hits, { step: s, dur: placeLen }].sort((a, b) => a.step - b.step), placed: true };
+}
+
+// 入力時プレビュー用＝現在の voicing で C を鳴らした実音（ドミソ）。単音でなく和音で確認できる。
+export function voicingPreviewPitches(v: ChordVoicing): number[] {
+  return voiceChord(0, "", v); // C メジャーを現在の voicing で（top/close-open/powerChord 反映）
 }
 
 export function isChordPattern(content: unknown): content is ChordPatternContent {
@@ -445,11 +561,12 @@ export function compositeNotes(
       const subMode = c.node.neta.mode ?? (c.node.neta.key == null ? sectionMode : null);
       return compositeNotes(c.node.children ?? [], subKey, subMode).map((n) => ({ ...n, start: n.start + c.position }));
     }
+    // ①（2026-07-03）コード進行トラックは**無音の骨格**＝自分は発音しない（伴奏は chord_pattern が
+    // 担う・CP1）。和声の解決文脈は上の sectionChords から既に供給済み＝役目は保持。
+    if (kind === "chord" || kind === "chord_progression") return [];
     const isRhythm = kind === "rhythm";
-    const isProg = kind === "chord" || kind === "chord_progression";
-    // パートの音色（GM program）。コード進行は**抽象＝音色固定 GM49(strings)・選択不可**（伴奏は
-    // chord_pattern が担う・CP1）。bass は既定フィンガーベース。他は content.program か既定0。
-    const prog = isRhythm ? undefined : isProg ? 48 : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : 0));
+    // パートの音色（GM program）。bass は既定フィンガーベース。他は content.program か既定0。
+    const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : 0));
     if (kind === "bass" && isRelativeBass(c.node.neta.content)) {
       // 相対bass：section の調・コードで解決済み実音高なので、ここでは移調しない（position だけ）。
       const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
@@ -492,6 +609,12 @@ function meterPair(meter?: string | null): [number, number] | null {
   return n > 0 && d > 0 ? [n, d] : null;
 }
 
+// 1小節の拍数（四分=1.0 基準）。4/4→4、6/8→3、3/4→3。未指定/不正は4（SSOT・SectionEditor等と一致）。
+export function beatsPerBar(meter?: string | null): number {
+  const p = meterPair(meter);
+  return p ? (p[0] * 4) / p[1] : 4;
+}
+
 // #47: GM音色。content.program(0-127) を MIDI トラックの楽器に反映＝書き出しが実音色に一致。
 export const GM_INSTRUMENTS: { value: number; label: string }[] = [
   { value: 0, label: "ピアノ" },
@@ -528,17 +651,27 @@ export function notesToMidi(
   midi.header.setTempo(bpm);
   const ts = meterPair(meter); // #51: 拍子記号をMIDIヘッダへ（音価は秒絶対なので不変）
   if (ts) midi.header.timeSignatures.push({ ticks: 0, timeSignature: ts });
-  const track = midi.addTrack();
-  if (notes.some((n) => n.drum)) track.channel = 9; // GMドラム=ch10
-  else if (program !== undefined) track.instrument.number = program;
   const spb = 60 / bpm;
-  for (const n of notes) {
-    track.addNote({
-      midi: n.pitch,
-      time: n.start * spb,
-      duration: n.dur * spb,
-      velocity: (n.vel ?? 100) / 127,
-    });
+  const addNotes = (track: ReturnType<Midi["addTrack"]>, ns: Note[]) => {
+    for (const n of ns) {
+      track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
+    }
+  };
+  // ドラムとピッチ楽器は GM 上ch分けが必須（ch10=ドラム）。混在時は別トラックに分離＝1トラックに
+  // 全部押し込んで ch9 固定にすると、ピッチ楽器が DAW でドラム音源で鳴る破綻を防ぐ（監査 SG-04）。
+  const drums = notes.filter((n) => n.drum);
+  const pitched = notes.filter((n) => !n.drum);
+  if (pitched.length || drums.length === 0) {
+    const track = midi.addTrack(); // 純ドラムでない限りピッチ用トラック（空 notes でも従来通り1トラック出す）
+    if (program !== undefined) track.instrument.number = program;
+    addNotes(track, pitched);
+  }
+  if (drums.length) {
+    const dtrack = midi.addTrack();
+    dtrack.channel = 9; // GMドラム=ch10
+    const kit = drums.find((n) => n.drum)?.kit; // キット＝ch10のprogram change（ABILITYでも同じキットで鳴る）
+    if (kit) dtrack.instrument.number = kit;
+    addNotes(dtrack, drums);
   }
   return midi.toArray();
 }
@@ -550,6 +683,7 @@ export interface MidiTrackSpec {
   program?: number;
   drum?: boolean;
   name?: string;
+  kit?: number; // ドラムトラックのキット（ch10 program）。
 }
 export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null): Uint8Array {
   const midi = new Midi();
@@ -561,8 +695,11 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
     if (!t.notes.length) continue;
     const track = midi.addTrack();
     if (t.name) track.name = t.name;
-    if (t.drum) track.channel = 9;
-    else if (t.program !== undefined) track.instrument.number = t.program;
+    if (t.drum) {
+      track.channel = 9;
+      const kit = t.kit ?? t.notes.find((n) => n.drum)?.kit;
+      if (kit) track.instrument.number = kit;
+    } else if (t.program !== undefined) track.instrument.number = t.program;
     for (const n of t.notes) {
       track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
     }
@@ -636,6 +773,7 @@ export interface ScheduledNote {
   pitch: number;
   vel: number; // 0..1
   program?: number; // #section音色: per-note の GM音色（合成再生でパート毎に切替）
+  kit?: number; // ドラムキット(GM bank128 preset)。drum 音の解決でこのキットのサンプルを使う。
 }
 
 const MEMBRANE_DUR = 0.15;
@@ -649,7 +787,7 @@ export function scheduleTimes(notes: Note[], bpm = 120): ScheduledNote[] {
     const vel = (n.vel ?? 100) / 127;
     if (n.drum) {
       const voice: Voice = n.pitch <= 41 ? "membrane" : "noise";
-      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel };
+      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel, kit: n.kit };
     }
     return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel, program: n.program };
   });

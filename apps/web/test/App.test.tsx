@@ -8,6 +8,8 @@ vi.mock("../src/api", () => ({
     listNeta: vi.fn().mockResolvedValue([]),
     createNeta: vi.fn(),
     facets: vi.fn().mockResolvedValue({ kind: [], mood: [], meter: [], key: [], tags: [] }),
+    listProjectNames: vi.fn().mockResolvedValue([]),
+    getProjectCounts: vi.fn().mockResolvedValue({ all: 0, unassigned: 0, projects: [] }),
     listJobs: vi.fn().mockResolvedValue([]),
   },
 }));
@@ -17,7 +19,7 @@ import { App } from "../src/App";
 describe("App", () => {
   it("renders title and empty state", async () => {
     render(<App />);
-    expect(screen.getByRole("heading", { name: "creative_manager" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Otomemo" })).toBeInTheDocument(); // ヘッダ左のアプリ名ロゴ
     await waitFor(() =>
       expect(screen.getByText("まだネタがありません。")).toBeInTheDocument(),
     );
