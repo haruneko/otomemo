@@ -527,3 +527,10 @@ details.theme summary {
 .awb-cut { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; }
 .awb-cut input { width: 52px; background: #1b1e23; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px; font: inherit; }
 .awb-msg { font-size: 0.82rem; color: var(--k-theme); background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+
+/* #S10 再生プレイヘッド（PianoRoll の .proll-playhead 流儀＝赤2px絶対配置） */
+.awb-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #ff5a5a; pointer-events: none; z-index: 3; }
+/* 小節頭アンカーボタン＝タップ標的44px（.tp-btn 準拠・精密作業のため） */
+.awb-nudge { min-width: 44px; min-height: 44px; background: #1b1e23; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
+.awb-cut .tb-tool { min-height: 40px; }
+.awb-cut input { min-height: 38px; }
