@@ -95,6 +95,7 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const [seekBeat, setSeekBeat] = useState(0); // 再生開始位置（ロールをタップで指定）
+  const [quantize, setQuantize] = useState(true); // コードを拍にそろえる（既定ON）
 
   // ★画面を閉じたら（unmount）再生を必ず止める（編集画面と同じ＝閉じたら鳴り止む）。
   useEffect(() => () => { handleRef.current?.stop(); if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
@@ -108,6 +109,26 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   const dur = c.meta?.duration_sec ?? (bt[bt.length - 1] ?? 30);
   const totalBeat = Math.max(4, Math.ceil(b(dur)));
   const totalBars = Math.ceil(totalBeat / meter);
+
+  // ★コードを拍グリッドにクオンタイズ（最小=四分音符=1拍）。実測の揺れ/BTC細切れを拍にそろえて綺麗に見せる。
+  // 逐次で単調・非重なりに整える（前のコード終端より前には始まらない）。既定ON。生位置は quantize=off で。
+  const chordBeats = useMemo(() => {
+    const out: { sb: number; eb: number; root: number; disp: string; iv: number[]; q: string }[] = [];
+    let cursor = -Infinity;
+    for (const [s, e, lab] of chords) {
+      const p = parseBtc(lab); if (!p) continue;
+      let sb = b(s), eb = b(e);
+      if (quantize) {
+        sb = Math.round(sb); eb = Math.round(eb);
+        if (sb < cursor) sb = cursor;      // 直前と重ならない
+        if (eb <= sb) eb = sb + 1;          // 最小1拍
+      }
+      cursor = eb;
+      out.push({ sb, eb, root: p.root, disp: p.disp, iv: p.iv, q: p.q });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chords, anchorBeat, quantize]);
 
   // メロの音域（描画用）：pyin のオクターブ誤検出=外れ値が音域を膨らませ空白帯を作る。
   // バックエンドが出す **vocal_range（f0 の 5〜95%tile＝頑健）** を優先し、無ければ音符の 10〜90%tile。
@@ -135,11 +156,10 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
       const st = b(s) - from; const d = Math.max(0.1, b(e) - b(s));
       if (st + d > 0) out.push({ pitch: midi, start: Math.max(0, st), dur: d, program: 73 }); // 73=flute
     }
-    for (const [s, e, lab] of chords) {
-      const p = parseBtc(lab); if (!p) continue;
-      const st = b(s) - from; const d = Math.max(0.2, b(e) - b(s));
+    for (const cb of chordBeats) {
+      const st = cb.sb - from; const d = Math.max(0.2, cb.eb - cb.sb);
       if (st + d <= 0) continue;
-      for (const iv of p.iv) out.push({ pitch: 48 + p.root + iv, start: Math.max(0, st), dur: d, program: 0 }); // 0=piano
+      for (const iv of cb.iv) out.push({ pitch: 48 + cb.root + iv, start: Math.max(0, st), dur: d, program: 0 }); // 0=piano
     }
     for (let beat = Math.ceil(from); beat <= totalBeat; beat++) { // クリック（小節頭=強・他拍=弱）
       const down = beat % meter === 0;
@@ -181,18 +201,17 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
     }, 250);
   }
 
-  // --- 切り出し：bar範囲[from,to]のコードを chord_progression ネタへ（弾ける・実キー）---
+  // --- 切り出し：bar範囲[from,to]のコード（拍そろえ済み chordBeats）を chord_progression ネタへ ---
   async function cut() {
     const fb = (fromBar - 1) * meter, tb = toBar * meter; // beat 範囲
     const picked: { root: number; quality: string; start: number; dur: number }[] = [];
-    for (const [s, e, lab] of chords) {
-      const p = parseBtc(lab); if (!p) continue;
-      const st = b(s); if (st >= tb || b(e) <= fb) continue;
-      const start = Math.max(0, Math.round(st - fb));
-      const d = Math.max(1, Math.round(b(e) - st));
+    for (const cb of chordBeats) {
+      if (cb.sb >= tb || cb.eb <= fb) continue;
+      const start = Math.max(0, Math.round(cb.sb - fb));
+      const d = Math.max(1, Math.round(cb.eb - cb.sb));
       const last = picked[picked.length - 1];
-      if (last && last.root === p.root && last.quality === p.q) last.dur += d;
-      else picked.push({ root: p.root, quality: p.q, start, dur: d });
+      if (last && last.root === cb.root && last.quality === cb.q) last.dur += d;
+      else picked.push({ root: cb.root, quality: cb.q, start, dur: d });
     }
     if (picked.length < 1) { setMsg("その範囲にコードがありません"); return; }
     await api.createNeta({
@@ -225,6 +244,7 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
           <button className="tp-btn awb-nudge" aria-label="anchor-prev" onClick={() => nudgeAnchor(-1)}>◀拍</button>
           <button className="tp-btn awb-nudge" aria-label="anchor-next" onClick={() => nudgeAnchor(1)}>拍▶</button>
         </span>
+        <button className={"bs-btn" + (quantize ? " on" : "")} aria-label="toggle-quantize" title="コードを拍にそろえる（最小=四分音符）" onClick={() => setQuantize((v) => !v)}>拍そろえ</button>
         <button className="bs-btn" aria-label="toggle-prose" onClick={() => setShowProse((v) => !v)}>所見{showProse ? "▲" : "▼"}</button>
       </div>
       {showProse && <div className="awb-prose chat-md">{c.prose || "（所見なし）"}</div>}
@@ -238,14 +258,13 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
               {i % meter === 0 && <span className="awb-barno">{i / meter + 1}</span>}
             </div>
           ))}
-          {/* コードレーン（左端 straddle は可視幅だけ＝重なり回避 B1） */}
+          {/* コードレーン（拍そろえ済み chordBeats・左端 straddle は可視幅だけ＝重なり回避） */}
           <div className="awb-chords">
-            {chords.map(([s, e, lab], i) => {
-              const p = parseBtc(lab); if (!p) return null;
-              const xs = b(s) * PXB, xe = b(e) * PXB;
+            {chordBeats.map((cb, i) => {
+              const xs = cb.sb * PXB, xe = cb.eb * PXB;
               if (xe <= 0) return null; // 完全にアンカー手前＝描かない
               const left = Math.max(0, xs); const w = Math.max(14, xe - left);
-              return <div key={"c" + i} className="awb-chip" style={{ left: `${left}px`, width: `${w}px` }}>{ROOTS[p.root]}{p.disp}</div>;
+              return <div key={"c" + i} className="awb-chip" style={{ left: `${left}px`, width: `${w}px` }}>{ROOTS[cb.root]}{cb.disp}</div>;
             })}
           </div>
           {/* メロ・ピアノロール（外れ値はクランプ／straddle は可視幅） */}
