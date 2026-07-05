@@ -136,10 +136,10 @@ export function Tray({
                 <button
                   className="tray-del"
                   aria-label="delete-job"
-                  title="このジョブを消す"
+                  title={j.status === "running" ? "止めて消す（実行中の処理も停止）" : "このジョブを消す"}
                   onClick={() => void removeJob(j.id)}
                 >
-                  🗑
+                  {j.status === "running" ? "■" : "🗑"}
                 </button>
               </div>
               {asked(j) && <div className="tray-asked">「{asked(j)}」</div>}

@@ -5,36 +5,48 @@ import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 import type { Core } from "./core";
 import type { Job } from "./types";
+import { beginJobProc, endJobProc } from "./job-procs";
 
 export interface ResearchResult {
   summary: string;
   references: { title: string; artist: string; why: string; points: string }[];
 }
 
-// 単発 claude。stdout をテキストで返す。timeout で detached プロセスグループごと kill（孤児を断つ・
-// worker `_killpg` と同型）。research は純テキスト＝MCP/tools 不要（web は claude 既定ツールで足りる）。
-export function claudeShot(prompt: string, timeoutMs = 180_000): Promise<string> {
+// 単発 claude。stdout をテキストで返す。timeout / signal(停止) で detached プロセスグループごと kill
+// （孤児を断つ・worker `_killpg` と同型）。research は純テキスト＝MCP/tools 不要（web は claude 既定ツールで足りる）。
+export function claudeShot(prompt: string, timeoutMs = 180_000, signal?: AbortSignal): Promise<string> {
   const nodeBin = dirname(process.execPath);
   const env = { ...process.env, PATH: `${nodeBin}:${process.env.PATH ?? ""}` };
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new Error("停止しました"));
     const proc = spawn("claude", ["-p", prompt], { env, detached: true });
     let out = "";
     let err = "";
     let done = false;
-    const finish = (fn: () => void) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      fn();
-    };
-    const timer = setTimeout(() => {
+    const killGroup = () => {
       try {
         if (proc.pid) process.kill(-proc.pid, "SIGKILL"); // プロセスグループごと（detached）
       } catch {
         proc.kill("SIGKILL");
       }
+    };
+    const finish = (fn: () => void) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      fn();
+    };
+    const timer = setTimeout(() => {
+      killGroup();
       finish(() => reject(new Error("claude timeout")));
     }, timeoutMs);
+    // ★停止：削除/停止で abort されたら実プロセスを殺す（研究の裏処理を走り切らせない）。
+    const onAbort = () => {
+      killGroup();
+      finish(() => reject(new Error("停止しました")));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     proc.stdout.setEncoding("utf8");
     proc.stdout.on("data", (d: string) => (out += d));
     proc.stderr.setEncoding("utf8");
@@ -110,8 +122,9 @@ export function parseResearch(text: string): ResearchResult {
 export async function runResearchJob(
   core: Core,
   job: Job,
-  shot: (prompt: string, timeoutMs?: number) => Promise<string> = claudeShot,
+  shot: (prompt: string, timeoutMs?: number, signal?: AbortSignal) => Promise<string> = claudeShot,
 ): Promise<void> {
+  const signal = beginJobProc(job.id); // 停止/削除で abort→実プロセスを殺せるよう登録
   try {
     // scheduler は テーマ(neta の title/text)を job.instruction に載せる（params.topic ではない）。
     // topic/context が無ければ instruction をテーマとして流す＝汎用プロンプトに落ちない。
@@ -119,9 +132,11 @@ export async function runResearchJob(
       job.params && typeof job.params === "object" ? { ...(job.params as Record<string, unknown>) } : {};
     if (typeof base.topic !== "string" && typeof base.context !== "string") base.topic = job.instruction ?? "";
     const prompt = job.intent === "collect" ? collectPrompt(base) : researchPrompt(base);
-    const text = await shot(prompt);
+    const text = await shot(prompt, undefined, signal);
     core.completeJob(job.id, parseResearch(text)); // 既存 reaper が done research を reference ネタ化→トレイ
   } catch (e) {
     core.failJob(job.id, e instanceof Error ? e.message : String(e));
+  } finally {
+    endJobProc(job.id);
   }
 }

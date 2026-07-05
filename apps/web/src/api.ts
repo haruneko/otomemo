@@ -281,8 +281,8 @@ export const api = {
 
   getJob: (id: string) => http<Job>(`/job/${id}`),
 
-  // #100④-S6 ジョブ削除：消費者のいない/廃止インテントの死にジョブをトレイから消す。
-  deleteJob: (id: string) => http<{ deleted: boolean }>(`/job/${id}`, { method: "DELETE" }),
+  // #100④-S6 ジョブ削除：死にジョブを消す。実行中(research/audio)なら実プロセスも殺す（killed）。
+  deleteJob: (id: string) => http<{ deleted: boolean; killed: boolean }>(`/job/${id}`, { method: "DELETE" }),
 
   // ジョブ＋子ジョブの決着（Chat がディスパッチ後もそのチャットで完了を待つため）。
   jobOutcome: (id: string) => http<JobOutcome>(`/job/${id}/outcome`),

@@ -6,6 +6,7 @@ import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { claudeShot } from "./research-runner";
+import { beginJobProc, endJobProc } from "./job-procs";
 import type { Core } from "./core";
 import type { Job } from "./types";
 
@@ -14,16 +15,32 @@ const PY = process.env.CM_AUDIO_PY ?? join(REPO, "_audio_poc/.venv/bin/python");
 const SCRIPT = process.env.CM_AUDIO_SCRIPT ?? join(REPO, "_audio_poc/analyze.py");
 const YTDLP = process.env.CM_YTDLP ?? join(REPO, "_audio_poc/.venv/bin/yt-dlp");
 
-// 子プロセスを spawn し stdout を集める。timeout で detached プロセスグループごと kill。
-function run(cmd: string, args: string[], timeoutMs: number): Promise<string> {
+// 子プロセスを spawn し stdout を集める。timeout / signal(停止) で detached プロセスグループごと kill。
+function run(cmd: string, args: string[], timeoutMs: number, signal?: AbortSignal): Promise<string> {
   return new Promise((res, rej) => {
+    if (signal?.aborted) return rej(new Error("停止しました"));
     const proc = spawn(cmd, args, { detached: true });
     let out = "", err = "", done = false;
-    const finish = (fn: () => void) => { if (done) return; done = true; clearTimeout(t); fn(); };
-    const t = setTimeout(() => {
+    const killGroup = () => {
       try { if (proc.pid) process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); }
+    };
+    const finish = (fn: () => void) => {
+      if (done) return;
+      done = true;
+      clearTimeout(t);
+      signal?.removeEventListener("abort", onAbort);
+      fn();
+    };
+    const t = setTimeout(() => {
+      killGroup();
       finish(() => rej(new Error(`${cmd} timeout`)));
     }, timeoutMs);
+    // ★停止：削除/停止で abort されたら実プロセス（demucs/python/yt-dlp）を殺す。
+    const onAbort = () => {
+      killGroup();
+      finish(() => rej(new Error("停止しました")));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     proc.stdout.on("data", (d) => (out += d));
     proc.stderr.on("data", (d) => (err += String(d).slice(0, 2000)));
     proc.on("error", (e) => finish(() => rej(e)));
@@ -32,14 +49,14 @@ function run(cmd: string, args: string[], timeoutMs: number): Promise<string> {
 }
 
 // YouTube等のURLから音源を一時DL（yt-dlp・best-effort＝SABR/POトークンで失敗し得る）。
-export async function fetchAudioFromUrl(url: string, dir: string): Promise<string> {
-  await run(YTDLP, ["-x", "--audio-format", "mp3", "--no-playlist", "-o", join(dir, "dl.%(ext)s"), url], 180_000);
+export async function fetchAudioFromUrl(url: string, dir: string, signal?: AbortSignal): Promise<string> {
+  await run(YTDLP, ["-x", "--audio-format", "mp3", "--no-playlist", "-o", join(dir, "dl.%(ext)s"), url], 180_000, signal);
   return join(dir, "dl.mp3");
 }
 
 // analyze.py を叩いて facts(JSON) を得る。stdout に混じりがあっても {..} を拾う。
-export async function analyzeAudioFile(audioPath: string, workdir: string): Promise<unknown> {
-  const out = await run(PY, [SCRIPT, audioPath, workdir], 900_000); // 分離が重い＝最大15分
+export async function analyzeAudioFile(audioPath: string, workdir: string, signal?: AbortSignal): Promise<unknown> {
+  const out = await run(PY, [SCRIPT, audioPath, workdir], 900_000, signal); // 分離が重い＝最大15分
   const s = out.indexOf("{"), e = out.lastIndexOf("}");
   if (s < 0 || e <= s) throw new Error("analyze.py: JSON が取れませんでした");
   return JSON.parse(out.slice(s, e + 1));
@@ -62,26 +79,28 @@ export function synthesisPrompt(facts: unknown, label: string): string {
 export async function runAudioAnalyzeJob(
   core: Core,
   job: Job,
-  shot: (p: string, ms?: number) => Promise<string> = claudeShot,
-  analyze: (a: string, w: string) => Promise<unknown> = analyzeAudioFile,
+  shot: (p: string, ms?: number, signal?: AbortSignal) => Promise<string> = claudeShot,
+  analyze: (a: string, w: string, signal?: AbortSignal) => Promise<unknown> = analyzeAudioFile,
 ): Promise<void> {
+  const signal = beginJobProc(job.id); // 停止/削除で abort→demucs/python/yt-dlp を殺せるよう登録
   const dir = mkdtempSync(join(tmpdir(), "cm-audio-"));
   try {
     const p = (job.params ?? {}) as { audio_b64?: string; filename?: string; url?: string };
     const label = p.filename || p.url || "アナリーゼ";
     let audioPath: string;
     if (p.url) {
-      audioPath = await fetchAudioFromUrl(p.url, dir);
+      audioPath = await fetchAudioFromUrl(p.url, dir, signal);
     } else {
       audioPath = join(dir, (p.filename || "audio.mp3").replace(/[^\w.\-]/g, "_"));
       writeFileSync(audioPath, Buffer.from(p.audio_b64 ?? "", "base64"));
     }
-    const facts = await analyze(audioPath, dir);
-    const prose = await shot(synthesisPrompt(facts, label), 120_000);
+    const facts = await analyze(audioPath, dir, signal);
+    const prose = await shot(synthesisPrompt(facts, label), 120_000, signal);
     core.completeJob(job.id, { facts, prose: prose.trim(), title: label });
   } catch (e) {
     core.failJob(job.id, e instanceof Error ? e.message : String(e));
   } finally {
     rmSync(dir, { recursive: true, force: true }); // 音源・stem を削除（30-4：派生事実のみ残す）
+    endJobProc(job.id);
   }
 }

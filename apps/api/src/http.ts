@@ -33,6 +33,7 @@ import {
 import { findProgressions } from "./progression-search";
 import { getChatSession, stopChatSession } from "./chat-session";
 import { beginTurn, pushTurnEvent, endTurn, attachTurn, isTurnLive, DONE } from "./chat-live";
+import { killJobProc } from "./job-procs";
 import { rankRecommendations } from "./music/recommend";
 
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
@@ -372,9 +373,12 @@ export function buildHttp(core: Core): FastifyInstance {
   });
 
   // #100④-S6 ジョブ削除：消費者のいない/廃止インテントの死にジョブをトレイから消せる（滞留の自浄）。
+  // ★実行中(research/audio)なら**実プロセスも殺す**（abort→spawn がプロセスグループごと SIGKILL）＝
+  //   停止時に裏処理を走り切らせない（ユーザー要望）。killed=実プロセスを止めたか。
   app.delete("/job/:id", async (req) => {
     const { id } = req.params as { id: string };
-    return { deleted: core.deleteJob(id) };
+    const killed = killJobProc(id);
+    return { deleted: core.deleteJob(id), killed };
   });
 
   // Chat がディスパッチ後もそのチャットで完了を待てるよう、ジョブ＋子ジョブの決着を返す。
