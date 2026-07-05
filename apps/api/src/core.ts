@@ -133,7 +133,9 @@ export class Core {
     const job = this.db.prepare(`SELECT target_neta_id FROM job WHERE id = ?`).get(jobId) as
       | { target_neta_id: string | null }
       | undefined;
-    if (job?.target_neta_id) this.link(job.target_neta_id, netaId, "result");
+    // 対象ネタが既に削除済だと relation_edge の FK に弾かれ、materialize 全体(createNeta の tx)が
+    // ロールバック→reap が毎tick 無限リトライになる。存在する時だけ関連付ける（結果ネタ自体は必ず残す）。
+    if (job?.target_neta_id && this.neta.getNeta(job.target_neta_id)) this.link(job.target_neta_id, netaId, "result");
   }
 
   // --- job：CRUD は JobRepo へ委譲。jobOutcome/reapResults は neta/reaper 跨ぎ＝Core 残置（#6）---
