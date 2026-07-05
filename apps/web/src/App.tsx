@@ -16,6 +16,7 @@ import { KindIcon } from "./components/KindIcon";
 import { Icon } from "./components/Icon";
 import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
+import { AnalysisWorkbench } from "./components/AnalysisWorkbench";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
@@ -789,6 +790,13 @@ export function App() {
                 loadProjects();
                 void reload();
               }}
+            />
+          ) : active && active.kind === "analysis" ? (
+            <AnalysisWorkbench
+              key={active.id}
+              neta={active}
+              onChanged={() => void reload()}
+              onClose={() => setActive(null)}
             />
           ) : active ? (
             <NetaDialog

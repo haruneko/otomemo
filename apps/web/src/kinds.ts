@@ -24,6 +24,7 @@ export const KIND_DEFS: readonly KindDef[] = [
   { key: "section", label: "セクション", container: true, capturable: true, filterable: true },
   { key: "song", label: "曲", container: true, capturable: true, filterable: true },
   { key: "reference", label: "参考", filterable: true },
+  { key: "analysis", label: "アナリーゼ", filterable: true }, // #S10 音源解析ワークベンチ（専用エディタ）
   { key: "knowledge", label: "知識", text: true, capturable: true, filterable: true },
   { key: "other", label: "その他", text: true, capturable: true },
 ] as const;

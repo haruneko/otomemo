@@ -506,3 +506,24 @@ details.theme summary {
 .ps-title svg {
   vertical-align: -3px;
 }
+
+/* #S10 アナリーゼ・ワークベンチ（メロピアノロール＋コード＋小節線＋切り出し） */
+.analysis-wb { gap: 8px; }
+.analysis-wb .awb-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.awb-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.awb-tools .tp-btn { background: var(--k, var(--accent)); color: #fff; border: 0; border-radius: 8px; padding: 6px 14px; }
+.awb-anchor { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--muted); }
+.awb-prose { background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 8px; max-height: 30vh; overflow-y: auto; font-size: 0.9rem; }
+.awb-roll { overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: #16181d; }
+.awb-strip { position: relative; min-height: 160px; }
+.awb-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: #262a31; }
+.awb-grid.bar { background: #3a3f49; width: 2px; }
+.awb-barno { position: absolute; top: 0; left: 2px; font-size: 0.62rem; color: var(--muted); }
+.awb-chords { position: relative; height: 26px; margin-top: 14px; }
+.awb-chip { position: absolute; top: 0; height: 22px; display: flex; align-items: center; padding: 0 6px; font-size: 0.72rem; font-weight: 600;
+  background: color-mix(in srgb, var(--k-chord) 30%, #1b1e23); border: 1px solid var(--k-chord); border-radius: 5px; color: var(--fg); overflow: hidden; white-space: nowrap; }
+.awb-mel { position: relative; margin-top: 4px; }
+.awb-note { position: absolute; background: var(--k-melody); border-radius: 2px; opacity: 0.92; }
+.awb-cut { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.85rem; }
+.awb-cut input { width: 52px; background: #1b1e23; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px; font: inherit; }
+.awb-msg { font-size: 0.82rem; color: var(--k-theme); background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
