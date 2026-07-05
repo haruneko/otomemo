@@ -187,6 +187,7 @@ export function App() {
   // base64でジョブに載せ、workerが分割→reaperがネタ化。jobのdoneを待って一覧へ反映。
   const [importing, setImporting] = useState(false);
   const [importOpen, setImportOpen] = useState(false); // 取込ボタン群を畳む（既定=閉）
+  const [analyzeUrlText, setAnalyzeUrlText] = useState(""); // ① 音源アナリーゼの URL 入力
   async function importMidi(files: FileList | null) {
     if (!files) return;
     setImporting(true);
@@ -219,6 +220,31 @@ export function App() {
       setImporting(false);
     }
   }
+  // ① 音源アナリーゼ：ファイル or URL → audio_analyze job（裏で分離+MIR+Claude統合）→ 受信トレイに知見ネタ。
+  // 音源は解析後にサーバ側で削除（著30-4＝派生事実のみ残す）。
+  async function analyzeAudio(files: FileList | null) {
+    if (!files || !files.length) return;
+    setImporting(true);
+    try {
+      for (const file of Array.from(files)) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let bin = "";
+        for (const b of bytes) bin += String.fromCharCode(b);
+        await api.createJob({ intent: "audio_analyze", params: { audio_b64: btoa(bin), filename: file.name } });
+      }
+      setImportOpen(false);
+    } finally {
+      setImporting(false);
+    }
+  }
+  async function analyzeAudioUrl() {
+    const u = analyzeUrlText.trim();
+    if (!u) return;
+    await api.createJob({ intent: "audio_analyze", params: { url: u } }).catch(() => {});
+    setAnalyzeUrlText("");
+    setImportOpen(false);
+  }
+
   // #56 楽譜(MusicXML)取込：ローカルで解析→melodyネタ化（worker不要）。
   async function importScore(files: FileList | null) {
     if (!files) return;
@@ -567,6 +593,29 @@ export function App() {
               />
             </label>
             <HummingRecorder onCreated={() => void reload()} />
+            <label className="import-btn" title="音源を分離→BPM/調/コード/音域を解析しアナリーゼ文を受信トレイへ（音源は解析後に削除）">
+              {importing ? "解析中…" : "🎵 音源アナリーゼ"}
+              <input
+                type="file"
+                accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
+                hidden
+                disabled={importing}
+                onChange={async (e) => {
+                  await analyzeAudio(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <input
+              className="import-url"
+              aria-label="analyze-url"
+              placeholder="URLでアナリーゼ(YouTube等・best-effort)"
+              value={analyzeUrlText}
+              onChange={(e) => setAnalyzeUrlText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void analyzeAudioUrl();
+              }}
+            />
             <label className="import-btn">
               歌詞取込
               <input

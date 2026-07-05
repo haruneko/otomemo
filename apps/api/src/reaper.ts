@@ -160,6 +160,36 @@ export function reapResults(core: Core): number {
     n += 1;
   }
 
+  // ① アナリーゼ：done audio_analyze の {facts, prose, title} を知見ネタ化（tags=アナリーゼ）。web は待つので即回収。
+  const audioRows = core.db
+    .prepare(
+      `SELECT j.id, j.result_summary AS result FROM job j
+         WHERE j.status='done' AND j.intent='audio_analyze'
+           AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
+    )
+    .all() as { id: string; result: string | null }[];
+  for (const r of audioRows) {
+    let parsed: { facts?: unknown; prose?: string; title?: string };
+    try {
+      parsed = JSON.parse(r.result ?? "{}") as { facts?: unknown; prose?: string; title?: string };
+    } catch {
+      parsed = {};
+    }
+    if (!parsed.prose && !parsed.facts) {
+      core.db.prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`).run(r.id);
+      continue;
+    }
+    core.createNeta({
+      kind: "knowledge",
+      title: `アナリーゼ: ${parsed.title ?? "音源"}`,
+      text: parsed.prose ?? "",
+      content: { facts: parsed.facts, prose: parsed.prose ?? "" },
+      tags: ["アナリーゼ"],
+      from_job: r.id,
+    });
+    n += 1;
+  }
+
   // #81 MIDI取り込み：done の import_midi の result.tracks を melody/rhythm ネタに分割materialize。
   // web は自分でネタ化しない（投げて受け取る）ので stale ガード無しで即回収。
   const midiRows = core.db

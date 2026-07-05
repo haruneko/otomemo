@@ -5,6 +5,7 @@ import { Core } from "./core";
 import { buildHttp } from "./http";
 import { runResearchJob } from "./research-runner";
 import { parseMidiImport } from "./midi-import";
+import { runAudioAnalyzeJob } from "./audio-analyze";
 
 // CM_DB 未指定なら **リポジトリルートの data/cm.sqlite を絶対パスで**（cwd 依存で apps/api/data 等に
 // rogue DB を作る事故を断つ・docs/design「アーキ是正 決定4」）。import.meta.dirname=apps/api/src。
@@ -72,7 +73,29 @@ setInterval(() => {
   }
   pumpImportMidi();
   pumpResearch();
+  pumpAudioAnalyze();
 }, 5000).unref();
+
+// ① アナリーゼ consumer＝audio_analyze を1件ずつ実行（分離が重い＝直列・research とは別 busy）。
+// file(b64)/URL → analyze.py(Python音声) → facts → Claude統合文 → done。reaper が知見ネタ化しトレイへ。
+let audioBusy = false;
+function pumpAudioAnalyze(): void {
+  if (audioBusy) return;
+  let job;
+  try {
+    job = core.claimQueued(["audio_analyze"]);
+  } catch (e) {
+    console.error("audio_analyze claim error", e);
+    return;
+  }
+  if (!job) return;
+  audioBusy = true;
+  console.log(`audio_analyze: running job ${job.id}`);
+  void runAudioAnalyzeJob(core, job).finally(() => {
+    audioBusy = false;
+    console.log(`audio_analyze: job ${job.id} settled`);
+  });
+}
 
 // #30後続 MIDI取込を api 内で（worker撤去の最後）。決定的・高速＝溜まってる分を一気に処理（busy不要・
 // 遅い research の後ろで待たせない）。parse→completeJob({tracks})→reaper が melody/rhythm ネタに materialize。

@@ -236,3 +236,14 @@ h1 {
   padding: 4px 8px;
   cursor: pointer;
 }
+/* ① 音源アナリーゼの URL 入力（取込パネル内）。 */
+.import-url {
+  font-size: 0.78rem;
+  color: var(--fg);
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  min-width: 0;
+  flex: 1 1 140px;
+}
