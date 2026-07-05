@@ -54,7 +54,8 @@ const SEM_MIN_REL = Number(process.env.CM_SEM_MIN_REL ?? 0.07);
 
 /** 低次元データAPI（docs/design.md #15/#16）。PWAの主窓口。 */
 export function buildHttp(core: Core): FastifyInstance {
-  const app = Fastify({ logger: false });
+  // 音源アナリーゼの audio_b64（数MB〜）を受けるため body 上限を上げる（既定1MB＝ファイル取込が413で死ぬバグ）。
+  const app = Fastify({ logger: false, bodyLimit: 64 * 1024 * 1024 });
 
   // #36 公開制御：CM_TOKEN を設定したときだけ x-cm-token 必須（未設定=LAN内開放のまま）。
   // 未発表素材を外から覗かれないための任意ゲート。
