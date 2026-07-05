@@ -599,6 +599,20 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       return upd ? ok(upd) : err("not found");
     },
   );
+  // ① 音源アナリーゼ：実在曲を**実際に落として本物のMIR解析**を裏で回す（yt-dlp→Demucs→BPM/コードから調/音域）。
+  // チャットは音を聴けないので、曲名しか無ければ先に WebSearch で音声URLを見つけてから渡す＝「落としてきて分析」を実現。
+  server.registerTool(
+    "analyze_audio",
+    {
+      title: "音源を解析（YouTube等URL）",
+      description: "実在曲の録音を実際にダウンロードして本物のMIR解析（音源分離+BPM+コードから調を導出+音域）を裏で回す。YouTube等の音声/動画URLを渡す。重い(数分)ので『投げてトレイ📥で受け取る』形。結果は知見(アナリーゼ)ネタになる。曲名しか無い時は先に WebSearch で公式音源等のURLを探してから渡すこと。推定でお茶を濁さず、URLが取れるならこれで実測する。",
+      inputSchema: { url: z.string().describe("YouTube等の音声/動画URL"), title: z.string().optional().describe("曲名など表示用ラベル") },
+    },
+    async ({ url, title }) => {
+      const job = core.enqueueJob({ intent: "audio_analyze", params: { url, filename: title } });
+      return ok({ jobId: job.id, status: "queued", note: "解析を裏で開始しました。数分後にトレイ📥と知見ネタに届きます（待たずに戻ってOK）。" });
+    },
+  );
   server.registerTool(
     "generate",
     { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝fit を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional() } },

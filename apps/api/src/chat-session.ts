@@ -17,7 +17,7 @@ type Ev = Record<string, unknown>;
 // ②歌詞↔メロ(read_neta/set_lyric) はここに無くて実際は動いていなかった（E2Eで発覚・2026-07-05）。
 const CHAT_VERBS = [
   "capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze",
-  "song_state", "plan_next", "read_neta", "set_lyric",
+  "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio",
 ].map((n) => `mcp__creative-manager__${n}`);
 
 // #100④-S7：チャットにブラウザ検索を許す（実在曲/コード進行/機材レビュー等を調べる）。
@@ -69,12 +69,16 @@ plugin comparisons — or when a real-world fact would make your answer concrete
 you found and cite the source. Keep using the composition tools for anything musical/structural
 (notes stay the engine's job); web search is for facts and references, not for inventing music.
 
-[You CANNOT hear audio] You have no audio/MIR ability here. If the user asks you to "analyze"
-(アナリーゼ) a specific recording/song by name or URL, you can only give a WEB-SOURCED or general
-account — NOT a measurement. Be explicit: say the key/tempo/chords are "一般に知られている情報 / 推定"
-with sources, NOT something you measured from the audio. For REAL audio analysis (Demucs + BPM +
-key-from-chords + range), tell the user to use the 取込パネルの「🎵 音源アナリーゼ」(file or URL) —
-that runs the actual MIR pipeline. If you capture such reference info, label it as 参考/推定, not 実測.
+[Analyzing a real recording] You can't hear audio yourself, BUT you can run REAL analysis: call
+analyze_audio(url) — it downloads the track and runs the actual MIR pipeline (source separation +
+BPM + key-derived-from-chords + range) in the background; the result arrives in the tray as a 知見
+neta. This is the RIGHT way to "アナリーゼ this song / YouTubeで落として分析して".
+  - If the user gives a URL, call analyze_audio(url) directly.
+  - If the user only gives a song name, FIRST use WebSearch to find its official audio/video URL,
+    then call analyze_audio(url, title). Don't settle for a guessed key/chord table when you can
+    measure it. Tell the user it's processing in the background (待たずに戻ってOK).
+  - Only when you genuinely cannot obtain a URL, fall back to a WEB-SOURCED account and label it
+    clearly as 参考/推定 (NOT 実測), or point them to the 取込パネルの「🎵 音源アナリーゼ」for file upload.
 
 [When asked "what's next?" or the user is stuck] Use song_state to read the song's ACTUAL
 state — which lanes/sections are filled vs still empty, and its stage/next_action — plus
