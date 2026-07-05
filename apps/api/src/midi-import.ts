@@ -1,7 +1,12 @@
 // MIDI取込を api 内で（旧 worker handle_import_midi の TS 移植＝worker全撤去の最後の1機能）。
 // トラック×チャンネルで分割し melody/rhythm ネタの素材に。ch10(0-index 9)=ドラム→rhythm、他=melody。
 // 純パース＝claude 不要・高速。返り {tracks:[{kind,title,content}]}＝既存 reaper がそのまま materialize。
-import { Midi } from "@tonejs/midi";
+// @tonejs/midi は CJS。tsx(Node ESM 実行)だと名前付き import `{ Midi }` が実行時に解決できない
+// （vite/vitest は相互運用で通るが本番 tsx で ERR_MODULE）。実行時は default import で受け、型は
+// `import type` から与える（キャストで両立）。
+import midiPkg from "@tonejs/midi";
+import type { Midi as MidiInstance } from "@tonejs/midi";
+const MidiCtor = (midiPkg as unknown as { Midi: new (data?: Uint8Array | ArrayBuffer) => MidiInstance }).Midi;
 
 // GM ドラムマップ（旧 worker _GM_DRUM と同一）。
 const GM_DRUM: Record<number, string> = {
@@ -47,9 +52,9 @@ export interface ImportedTrack {
 
 export function parseMidiImport(midiB64: string, filename: string): { tracks: ImportedTrack[] } {
   const base = ((filename || "midi").split("/").pop() ?? "midi").replace(/\.midi?$/i, "") || "midi";
-  let midi: Midi;
+  let midi: MidiInstance;
   try {
-    midi = new Midi(Buffer.from(midiB64, "base64"));
+    midi = new MidiCtor(Buffer.from(midiB64, "base64"));
   } catch {
     return { tracks: [] }; // 壊れMIDIは空（無言で落とさない・旧workerと同じ）
   }
