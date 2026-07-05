@@ -47,6 +47,15 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M5 5h14v11H9l-4 4z" />
         </svg>
       );
+    case "sliders": // 機材（ミキサーのフェーダー）
+      return (
+        <svg {...s}>
+          <path {...st} d="M6 4v16M12 4v16M18 4v16" />
+          <circle {...st} cx="6" cy="9" r="1.9" />
+          <circle {...st} cx="12" cy="14" r="1.9" />
+          <circle {...st} cx="18" cy="7" r="1.9" />
+        </svg>
+      );
     case "edit": // 鉛筆
       return (
         <svg {...s}>

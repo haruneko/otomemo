@@ -117,6 +117,7 @@ export function Chat({
   activeProject,
   projectInstructions,
   initialText,
+  gear,
 }: {
   target?: Neta;
   onChanged?: () => void;
@@ -125,6 +126,7 @@ export function Chat({
   activeProject?: string; // プロジェクト＝一曲(or組曲)の器：新規セッションをこの器に束ね、一覧もこの器で絞る
   projectInstructions?: string; // 器のAIへの指示（効いている実感バナー）
   initialText?: string; // 開いた瞬間に入力欄へ載せる最初の一言（プロジェクト画面の起点入力など）
+  gear?: boolean; // ④ 機材モード：全曲共通のグローバル相談（器に束ねない・thread固定="gear"）
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState(initialText ?? "");
@@ -185,7 +187,7 @@ export function Chat({
   const targetLabel = target ? (target.title ?? target.text ?? "(無題)") : null;
 
   // #70 スレッド＝対象ネタ id（無ければフリーChatの会話セッションid）。
-  const thread = target?.id ?? sessionId;
+  const thread = gear ? "gear" : (target?.id ?? sessionId); // ④ 機材は固定グローバルthread
 
   // #70 永続化（後退ゼロ）：保存に失敗してもメモリだけで従来どおり動く。
   // 構造化ペイロード（neta/saveable/cards）は data へ畳む。
@@ -200,7 +202,7 @@ export function Chat({
     setMsgs((prev) => [...prev, m]);
     persistMsg(m);
     // 器（プロジェクト）への束ねは「ユーザーが実際に発言した時」だけ＝空会話がゴミ化しない（upsert冪等）。
-    if (m.role === "user" && !target && activeProject) {
+    if (m.role === "user" && !target && !gear && activeProject) {
       void api.setChatThread(thread, { project: activeProject }).catch(() => {});
     }
   }
@@ -441,6 +443,7 @@ export function Chat({
             {projectInstructions.length > 60 ? "…" : ""}
           </div>
         )}
+        {gear && <div className="chat-target">🎛 機材の相談（全曲共通・器に紐づかない）</div>}
         {targetLabel && <div className="chat-target">「{targetLabel.slice(0, 30)}」についての相談</div>}
         {/* リロード等で待ち状態が消えても、裏で動いてるジョブを可視化（待ちか不明をなくす）。 */}
         {inflight > 0 && !busy && (

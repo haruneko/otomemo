@@ -664,7 +664,11 @@ export function buildHttp(core: Core): FastifyInstance {
       const targetNote = target
         ? `[Current neta] You are working on neta id="${target.id}" (kind=${target.kind}${target.title ? `, title="${target.title}"` : ""}). When the user refers to "this song / this melody / 次どうする / 詰まった", operate on this id (e.g. song_state, analyze, fit).`
         : "";
-      const suffix = [instructions, targetNote].filter(Boolean).join("\n\n");
+      // ④ 機材相談：専用グローバルスレッド。器に紐づかない全曲共通の知識として答え/貯める。
+      const gearNote = thread === "gear"
+        ? `[Gear consultation / 機材] This is a GLOBAL, cross-project conversation about gear, plugins and sound design (the user's DAW is ABILITY). Answer practically. When the user wants to keep a durable tip, save it with capture(kind:"knowledge", tags:["機材"], text:...) — do NOT attach any project tag (機材 knowledge is shared across ALL songs). To recall past tips, search prior 機材 knowledge.`
+        : "";
+      const suffix = [instructions, targetNote, gearNote].filter(Boolean).join("\n\n");
       const sess = getChatSession(thread, dbPath, repo, suffix);
       await sess.say(text, send);
     } catch (err) {

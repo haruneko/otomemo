@@ -68,6 +68,7 @@ export function App() {
   const [searchDegraded, setSearchDegraded] = useState(false); // cm-search 不通＝意味検索が効かず keyword-only
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [gearMode, setGearMode] = useState(false); // ④ 機材相談（全曲共通のグローバルチャット）
   const [chatTarget, setChatTarget] = useState<Neta | undefined>(undefined);
   const [trayOpen, setTrayOpen] = useState(false);
   const [projectView, setProjectView] = useState(false); // メインペーンにプロジェクト画面を出す
@@ -256,8 +257,16 @@ export function App() {
   }
 
   const openChat = (target?: Neta, seed = "") => {
+    setGearMode(false);
     setChatTarget(target);
     setChatSeed(seed);
+    setChatOpen(true);
+  };
+  // ④ 機材相談＝器に紐づかない全曲共通のグローバルチャット（ヘッダ🎛️）。
+  const openGear = () => {
+    setGearMode(true);
+    setChatTarget(undefined);
+    setChatSeed("");
     setChatOpen(true);
   };
 
@@ -447,6 +456,9 @@ export function App() {
           </button>
         )}
         <div className="head-right">
+          <button className="gear" aria-label="gear-chat" title="機材の相談（全曲共通）" onClick={openGear}>
+            <Icon name="sliders" />
+          </button>
           <button className="gear" aria-label="tray" title="受け取りトレイ" onClick={openTray}>
             <Icon name="inbox" />
             {doneCount > 0 && <span className="badge">{doneCount}</span>}
@@ -777,12 +789,14 @@ export function App() {
       {chatOpen && (
         <Chat
           target={chatTarget}
-          activeProject={activeProject || undefined} // 器＝一曲(or組曲)：新規会話をこの器に束ね一覧も絞る
-          projectInstructions={projectInstructions} // 器の指示が効いている実感バナー用
+          gear={gearMode} // ④ 機材モード（全曲共通）
+          activeProject={gearMode ? undefined : activeProject || undefined} // 機材は器に束ねない
+          projectInstructions={gearMode ? undefined : projectInstructions} // 器の指示が効いている実感バナー用
           initialText={chatSeed} // プロジェクト画面の起点入力からの最初の一言
           onClose={() => {
             setChatOpen(false);
             setChatTarget(undefined);
+            setGearMode(false);
           }}
           onChanged={() => void reload()}
           onOpenNeta={(n) => openTop(n)} // #68 Chatからネタを開く
