@@ -430,7 +430,12 @@ export function Chat({
 
   // 会話セッション：一覧を開く／新規作成／切替（フリーChatのみ）。
   // アクティブな器（プロジェクト）があれば、その器に束ねたセッションのみを一覧（横断は器を外す）。
+  // ☰ はトグル：開いてたら閉じる＝会話を選び直さなくても一覧を畳める（要望：閉じるのが不便）。
   function openSessions() {
+    if (showSessions) {
+      setShowSessions(false);
+      return;
+    }
     setShowSessions(true);
     void api.listChatThreads(activeProject).then(setSessions).catch(() => {});
   }

@@ -184,6 +184,9 @@ details.theme summary {
   padding: 0.5rem;
   z-index: 20;
   display: grid;
+  /* 単一列を panel 幅に固定＝会話タイトル(nowrap)の min-content が暗黙列(auto)を広げてパネルより
+     はみ出し、プレビュー文が右端で見切れるのを防ぐ（.chat-log と同じ既知対策）。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
@@ -207,6 +210,7 @@ details.theme summary {
   border-radius: 6px;
   cursor: pointer;
   color: inherit;
+  min-width: 0; /* グリッド子を列内に収める＝タイトルの ellipsis を効かせる */
 }
 .chat-session-item.on {
   border-color: var(--accent);
