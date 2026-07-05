@@ -12,6 +12,25 @@
 
 ---
 
+## ★POC 実測結果（2026-07-05・**GO確定**）
+実際に CPU で組んで8曲回した実測（＝feasibility を裏取り）。環境＝`_audio_poc/`（uv venv：**Demucs htdemucs** + **librosa** + **BTC**[2019コードを numpy2/torch2.6/yaml 用に4点パッチ] + pyin）、ランナー `analyze.py`（音源→分離→BPM/調/音域/コード→JSON）。ffmpeg 導入済。torchaudio.save の torchcodec 依存は **demucs を Python API 直叩き＋soundfile 保存**で回避。
+
+**テスト8曲**：PDピアノ6（Bach 前奏曲1 Cmaj/前奏曲2 Cmin、Satie ジムノペディ1 Dmaj/3 Amin、Joplin Maple Leaf A♭maj、Beethoven エリーゼ Amin＝いずれも既知キー・Wikimedia CC0/PD）＋実ポップ2（LostMemory=自作・MIDI正解あり／DeepSea）。
+
+| 指標 | 実測 | 読み |
+|---|---|---|
+| **BPM** | LostMemory 86 vs 正解87（MIDIの自動推定は191=2倍取り） | 堅い。**倍取りは要フラグ** |
+| **調"検出器"(librosa Krumhansl)** | 完全一致 **~80%**（PD 5/6）、**外しは全部"相対調/属和音"混同**（Satie Amin→C、DeepSea Gm→Dm=v） | feasibility予言どおり。**単独では信用しない** |
+| **コード認識(BTC)が正しい調に収まる率** | **~95%**（PD平均96%・LostMemory 100%・DeepSea 94%） | **強い。BTC訓練外のクラシックでも96%** |
+| **ボーカル音域** | 歌モノで実測可（LostMemory A3–G♯5・DeepSea A3–D5） | 堅い |
+
+**設計に直結する発見**：**「調」は librosa 単独でなく BTC コード頻度から導く**。DeepSea で検出器は Dm 誤答／コードは Gm を94%整合で当て、PD6曲でも 検出器83% vs コード整合96%。→ 実装で調はコード起点に。
+**副産物**：ツールがユーザーの思い込みを正した実例（DeepSea を「F#m かな」→ 実測は半音上の Gm を94%整合で提示）＝アナリーゼの真価。
+**判定＝GO**：事実系（テンポ／調[コード経由]／音域／機能和声）は信用できる、候補系（7th・テンション・正確なノート境界・混合音源の楽器名）は"候補"として出す＝otomemo「機械は候補・人間仕上げ」に合致。
+**POC資産**：`_audio_poc/analyze.py`・`BTC-ISMIR19`(patched)・venv（実装の種）。**実装の骨格（未着手）**＝`audio_analyze` job → api内 Python音声CLI(A案) → {facts} → Claude統合文 → 知見ネタ＋トレイ。stem/結果は asset キャッシュ、**音源は保存しない**(著30-4)。
+
+---
+
 ## 1. 基礎メタ（BPM・調・構成）
 
 **BPM**：`librosa`(ISC・軽・実時間超速・定常4/4なら十分、ルバートは弱い) / `essentia RhythmExtractor2013`(高精度・C++速・**AGPLv3**) / `madmom DBN`(**最精度**だが2018停止・Py≤3.7・numpy/Cythonビルド破綻・**モデルNC**＝避ける)。→ **librosa が実用既定**。※後述 allin1 が拍/ダウンビート/テンポをSOTA精度でオマケ出力。
