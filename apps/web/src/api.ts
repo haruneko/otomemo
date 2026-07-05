@@ -258,8 +258,11 @@ export const api = {
     http<{ deleted: boolean }>(`/schedule/${id}`, { method: "DELETE" }),
 
   // #65 ハイブリッド検索（キーワード一致 ∪ 意味[較正ゲート]）。matchType: exact|semantic|both。
+  // #65 ハイブリッド検索。semanticOk=false は cm-search 不通で keyword-only に劣化＝UIで告知。
   search: (q: string, k = 20) =>
-    http<(Neta & { matchType?: string })[]>(`/search?q=${encodeURIComponent(q)}&k=${k}`),
+    http<{ items: (Neta & { matchType?: string })[]; semanticOk: boolean }>(
+      `/search?q=${encodeURIComponent(q)}&k=${k}`,
+    ),
 
   // #20 ピッカーおすすめ＝コーパス(library)から拍子/調で関連数件だけ（生1781を選ばせない）。
   recommend: (kind: string, opts: { meter?: string; key?: number; top?: number } = {}) => {

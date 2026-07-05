@@ -65,6 +65,7 @@ export function App() {
   const [kindFilter, setKindFilter] = useState("");
   const [moodFilter, setMoodFilter] = useState("");
   const [q, setQ] = useState("");
+  const [searchDegraded, setSearchDegraded] = useState(false); // cm-search 不通＝意味検索が効かず keyword-only
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Neta | undefined>(undefined);
@@ -320,6 +321,10 @@ export function App() {
     const put = (items: (Neta & { matchType?: string })[]) => {
       if (seq === reloadSeq.current) setItems(items);
     };
+    const putDegraded = (d: boolean) => {
+      if (seq === reloadSeq.current) setSearchDegraded(d);
+    };
+    putDegraded(false); // 既定＝劣化なし（検索経路のみ true になり得る）
     const query = q.trim();
     // ライブラリ＝連想元コーパスの閲覧（filter のみ・意味検索は project 側）。
     if (scope === "library") {
@@ -345,7 +350,9 @@ export function App() {
       return;
     }
     try {
-      put(await api.search(query)); // #65 ハイブリッド検索（一致∪意味・該当なしが出る）
+      const r = await api.search(query); // #65 ハイブリッド検索（一致∪意味・該当なしが出る）
+      put(r.items);
+      putDegraded(!r.semanticOk); // cm-search 不通＝意味検索が効かず keyword-only（下で告知）
     } catch {
       // API自体が不通なら LIKE 絞り込みに退避（出先/オフラインで無音にしない）
       put(await api.listNeta({ q: query }));
@@ -637,6 +644,12 @@ export function App() {
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
+          {searchDegraded && q.trim() && (
+            // フェイルサイレント解消：意味検索(cm-search)不通時は黙って劣化せず、キーワードのみと明示。
+            <div className="search-degraded" aria-label="search-degraded">
+              ⚠ 意味検索が使えません。キーワード一致のみで検索中（「近い」候補は出ません）
+            </div>
+          )}
           <div className="filter-kinds" role="group" aria-label="kind-filter">
             {(
               [

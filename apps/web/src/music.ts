@@ -651,20 +651,27 @@ export function notesToMidi(
   midi.header.setTempo(bpm);
   const ts = meterPair(meter); // #51: 拍子記号をMIDIヘッダへ（音価は秒絶対なので不変）
   if (ts) midi.header.timeSignatures.push({ ticks: 0, timeSignature: ts });
-  const track = midi.addTrack();
-  if (notes.some((n) => n.drum)) {
-    track.channel = 9; // GMドラム=ch10
-    const kit = notes.find((n) => n.drum)?.kit; // キット＝ch10のprogram change（ABILITYでも同じキットで鳴る）
-    if (kit) track.instrument.number = kit;
-  } else if (program !== undefined) track.instrument.number = program;
   const spb = 60 / bpm;
-  for (const n of notes) {
-    track.addNote({
-      midi: n.pitch,
-      time: n.start * spb,
-      duration: n.dur * spb,
-      velocity: (n.vel ?? 100) / 127,
-    });
+  const addNotes = (track: ReturnType<Midi["addTrack"]>, ns: Note[]) => {
+    for (const n of ns) {
+      track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
+    }
+  };
+  // ドラムとピッチ楽器は GM 上ch分けが必須（ch10=ドラム）。混在時は別トラックに分離＝1トラックに
+  // 全部押し込んで ch9 固定にすると、ピッチ楽器が DAW でドラム音源で鳴る破綻を防ぐ（監査 SG-04）。
+  const drums = notes.filter((n) => n.drum);
+  const pitched = notes.filter((n) => !n.drum);
+  if (pitched.length || drums.length === 0) {
+    const track = midi.addTrack(); // 純ドラムでない限りピッチ用トラック（空 notes でも従来通り1トラック出す）
+    if (program !== undefined) track.instrument.number = program;
+    addNotes(track, pitched);
+  }
+  if (drums.length) {
+    const dtrack = midi.addTrack();
+    dtrack.channel = 9; // GMドラム=ch10
+    const kit = drums.find((n) => n.drum)?.kit; // キット＝ch10のprogram change（ABILITYでも同じキットで鳴る）
+    if (kit) dtrack.instrument.number = kit;
+    addNotes(dtrack, drums);
   }
   return midi.toArray();
 }

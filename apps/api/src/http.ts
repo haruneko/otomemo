@@ -414,6 +414,7 @@ export function buildHttp(core: Core): FastifyInstance {
     // 意味：rel(=score-floor)が閾値未満の弱いhitは落とす（無意味クエリ＝全員横並びを排除）。
     const semIds = new Set<string>();
     const semantic: NonNullable<ReturnType<typeof core.getNeta>>[] = [];
+    let semanticOk = false; // cm-search が応答したか＝false は意味検索が使えず keyword-only に劣化（UIで告知）。
     try {
       // cm-search 不通時にハングしない（閉ポートが RST を返さない環境=WSL2 等では OS connect が
       // ~11s ブロック＝AbortSignal では connect 中断が効かない）。2s で応答を切り上げてキーワード
@@ -425,6 +426,7 @@ export function buildHttp(core: Core): FastifyInstance {
         new Promise<never>((_, rej) => setTimeout(() => rej(new Error("cm-search timeout")), 2000)),
       ])) as Response;
       if (res.ok) {
+        semanticOk = true; // 応答あり＝意味検索は生きている（hit 0 でも「使えている」）。
         const hits = (await res.json()) as { neta_id: string; score: number; rel?: number }[];
         for (const h of hits) {
           if ((h.rel ?? 0) < SEM_MIN_REL) continue;
@@ -436,13 +438,16 @@ export function buildHttp(core: Core): FastifyInstance {
         }
       }
     } catch {
-      // 意味検索が落ちていてもキーワードだけで返す
+      // 意味検索が落ちていてもキーワードだけで返す（semanticOk=false のまま＝UIで劣化を告知）
     }
 
-    return [
-      ...keyword.map((n) => ({ ...n, matchType: semIds.has(n.id) ? "both" : "exact" })),
-      ...semantic.filter((n) => !kwIds.has(n.id)).map((n) => ({ ...n, matchType: "semantic" })),
-    ];
+    return {
+      items: [
+        ...keyword.map((n) => ({ ...n, matchType: semIds.has(n.id) ? "both" : "exact" })),
+        ...semantic.filter((n) => !kwIds.has(n.id)).map((n) => ({ ...n, matchType: "semantic" })),
+      ],
+      semanticOk,
+    };
   });
 
   // --- asset（#77 ファイル資産。SoundFont を全体で1個読む等）---

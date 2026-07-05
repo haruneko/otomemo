@@ -201,6 +201,13 @@ button:disabled {
 .filters .search-main {
   flex: 1;
 }
+/* 意味検索(cm-search)不通時の控えめな告知＝黙って keyword-only に劣化する誤解を防ぐ。 */
+.search-degraded {
+  font-size: 0.74rem;
+  color: var(--k-lyric, #f0c544);
+  padding: 2px 2px 0;
+  line-height: 1.4;
+}
 .filter-toggle {
   position: relative;
   flex: 0 0 auto;

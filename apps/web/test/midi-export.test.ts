@@ -43,6 +43,23 @@ describe("MIDI出力の正しさ検証", () => {
     expect(m.tracks[0]!.notes.map((n) => n.midi)).toEqual([36, 38]);
   });
 
+  it("合成：ドラムとピッチ楽器が混在したら別トラックに分離（ピッチは非ch9・ドラムはch10）", () => {
+    // 監査 SG-04：以前は1音でも drum があるとトラック全体を ch9 固定し、メロ/ベースがドラム音源で鳴った。
+    const notes = [
+      { pitch: 60, start: 0, dur: 1 }, // メロ
+      { pitch: 64, start: 1, dur: 1 }, // メロ
+      { pitch: 36, start: 0, dur: 0.25, drum: true, kit: 0 }, // キック
+      { pitch: 38, start: 1, dur: 0.25, drum: true, kit: 0 }, // スネア
+    ];
+    const m = new Midi(notesToMidi(notes, 120, "4/4", 4).buffer as ArrayBuffer);
+    expect(m.tracks.length).toBe(2); // ピッチ＋ドラムの2トラック
+    const pitched = m.tracks.find((t) => t.channel !== 9)!;
+    const drum = m.tracks.find((t) => t.channel === 9)!;
+    expect(pitched.notes.map((n) => n.midi)).toEqual([60, 64]); // ピッチ楽器は非ch9
+    expect(pitched.instrument.number).toBe(4); // program 反映
+    expect(drum.notes.map((n) => n.midi)).toEqual([36, 38]); // ドラムは ch10
+  });
+
   it("多トラック：レーン別にトラック分け＋名前＋program、ドラムのみch10、空レーンは省く", () => {
     const tracks = [
       { name: "Melody", program: 0, notes: [{ pitch: 72, start: 0, dur: 1 }] },
