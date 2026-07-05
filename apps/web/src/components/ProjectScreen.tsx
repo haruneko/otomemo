@@ -28,12 +28,14 @@ export function ProjectScreen({
   onOpenSession,
   onStartChat,
   onCreateSong,
+  onDeleted,
 }: {
   project: string;
   onOpenNeta: (neta: Neta) => void;
   onOpenSession: (thread: string) => void;
   onStartChat: (seed: string) => void; // この曲についての新規会話を始める（seed=最初の一言・空可）
   onCreateSong: () => void; // 器の中で曲を新規に組む（左レールに戻らず完結）
+  onDeleted?: () => void; // 器を削除した後（ホームへ戻る・一覧更新）
 }) {
   const [songs, setSongs] = useState<Neta[]>([]); // kind=song/section
   const [files, setFiles] = useState<ProjectFile[]>([]);
@@ -131,6 +133,19 @@ export function ProjectScreen({
     setSeed("");
   }
 
+  // 器を削除＝所属タグを外すだけ（ネタは消えず未仕分けに残る）。中身があれば件数を明示して確認。
+  async function deleteProject() {
+    const n = songs.length;
+    const warn =
+      `器「${project}」を削除します。\n` +
+      (n > 0
+        ? `中の曲・パーツ(${n}件+)は削除されず「未仕分け」に残ります（器のラベルと説明だけ消えます）。`
+        : "（説明・指示だけの空の器です。ネタは影響しません。）");
+    if (!window.confirm(warn)) return;
+    await api.deleteProject(project).catch(() => {});
+    onDeleted?.();
+  }
+
   return (
     <div className="project-screen" aria-label="project-screen">
       <div className="ps-titlebar">
@@ -173,6 +188,14 @@ export function ProjectScreen({
           <div className="ps-meta-actions">
             <button className="primary" onClick={() => void saveMeta()}>
               保存
+            </button>
+            <button
+              className="ps-delete"
+              aria-label="delete-project"
+              title="この器を削除（ネタは未仕分けに残る）"
+              onClick={() => void deleteProject()}
+            >
+              器を削除
             </button>
           </div>
         </div>

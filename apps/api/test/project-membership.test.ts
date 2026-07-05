@@ -64,3 +64,27 @@ describe("projectCounts(P1)＝チップ用の件数", () => {
     expect(c.projects).toEqual([{ name: "空器", count: 0 }]);
   });
 });
+
+describe("deleteProject＝器を消す（ネタは残す・未仕分けへ）", () => {
+  it("空の器（説明だけ）は行削除で一覧から消える", () => {
+    core.setProject("空器", { description: "中身なし" });
+    expect(core.listProjectNames()).toContain("空器");
+    expect(core.deleteProject("空器")).toEqual({ unassigned: 0 });
+    expect(core.listProjectNames()).not.toContain("空器");
+  });
+
+  it("中身のある器を消すと prj: タグが外れネタは未仕分けに残る（削除しない）", () => {
+    const a = core.createNeta({ kind: "melody", tags: ["prj:夏", "疾走"] });
+    const b = core.createNeta({ kind: "bass", tags: ["prj:夏"] });
+    core.setProject("夏", { description: "夏の曲" });
+    expect(core.deleteProject("夏")).toEqual({ unassigned: 2 });
+    // 器は消える
+    expect(core.listProjectNames()).not.toContain("夏");
+    expect(core.listNeta({ tags: ["prj:夏"] })).toHaveLength(0);
+    // ネタは残る＝未仕分けへ。意味タグ(疾走)は温存。
+    expect(core.getNeta(a.id)!.tags).toContain("疾走");
+    expect(core.getNeta(a.id)!.tags).not.toContain("prj:夏");
+    const un = core.listNeta({ unassigned: true }).map((n) => n.id);
+    expect(un).toEqual(expect.arrayContaining([a.id, b.id]));
+  });
+});

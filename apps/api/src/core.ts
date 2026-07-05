@@ -450,6 +450,19 @@ export class Core {
   getProject(name: string): Project | null {
     return this.project.getProject(name);
   }
+  // 器を削除＝所属タグ(prj:name)を全ネタから外す（ネタは残る＝未仕分けへ）＋説明/指示 overlay を消す。
+  // ネタ自体は消さない（破壊的でない）。返り＝未仕分けに戻ったネタ数。空の器も row 削除で消える。
+  deleteProject(name: string): { unassigned: number } {
+    const tag = PROJECT_TAG_PREFIX + name;
+    const ids = this.db
+      .prepare(`SELECT nt.neta_id AS id FROM neta_tag nt JOIN tag t ON t.id=nt.tag_id WHERE t.name=?`)
+      .all(tag) as { id: string }[];
+    this.db.transaction(() => {
+      for (const { id } of ids) this.neta.removeTag(id, tag);
+      this.project.deleteProject(name);
+    })();
+    return { unassigned: ids.length };
+  }
   setProject(name: string, patch: { description?: string | null; instructions?: string | null }): Project {
     return this.project.setProject(name, patch);
   }

@@ -50,4 +50,9 @@ export class ProjectRepo {
       });
     return this.getProject(name)!;
   }
+
+  // 器の説明/指示 overlay を削除（所属タグ prj: の除去は Core 側で・ネタ自体は残す）。
+  deleteProject(name: string): void {
+    this.db.prepare(`DELETE FROM project WHERE name=?`).run(name);
+  }
 }

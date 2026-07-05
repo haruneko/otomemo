@@ -552,6 +552,11 @@ export function buildHttp(core: Core): FastifyInstance {
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
     return core.setProject(name, p.data);
   });
+  // 器の削除（所属タグを外す＝ネタは残す・未仕分けへ／説明・指示 overlay を消す）。
+  app.delete("/projects/:name", async (req) => {
+    const { name } = req.params as { name: string };
+    return core.deleteProject(name);
+  });
 
   // --- schedule（#80 proactive: 継続研究/収集を見てない間に進める）---
   app.post("/schedule", async (req, reply) => {

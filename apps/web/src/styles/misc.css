@@ -282,6 +282,20 @@ details.theme summary {
 .ps-meta-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+/* 器の削除＝破壊寄りなので控えめ＋危険色。編集パネル内にのみ置く（誤爆しにくい）。 */
+.ps-delete {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--k-rhythm, #e8533f);
+  border: 1px solid var(--k-rhythm, #e8533f);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ps-delete:hover {
+  background: color-mix(in srgb, var(--k-rhythm, #e8533f) 16%, transparent);
 }
 /* 起点入力（主役）：チャットを始める */
 .ps-starter {

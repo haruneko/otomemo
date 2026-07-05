@@ -246,6 +246,9 @@ export const api = {
   getProject: (name: string) => http<Project>(`/projects/${encodeURIComponent(name)}`),
   setProject: (name: string, meta: { description?: string | null; instructions?: string | null }) =>
     http<Project>(`/projects/${encodeURIComponent(name)}`, { method: "POST", body: JSON.stringify(meta) }),
+  // 器を削除（所属タグを外す＝ネタは残す・未仕分けへ／説明・指示 overlay を消す）。返り＝未仕分けに戻った数。
+  deleteProject: (name: string) =>
+    http<{ unassigned: number }>(`/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
   linkAsset: (id: string, asset_id: string, role: "source" | "attachment" | "render" = "attachment") =>
     http<{ ok: boolean }>(`/neta/${id}/assets`, { method: "POST", body: JSON.stringify({ asset_id, role }) }),
 

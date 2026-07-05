@@ -721,6 +721,13 @@ export function App() {
                 setProjectView(false);
                 void newSong();
               }}
+              onDeleted={() => {
+                // 器を消したらホーム(すべて)へ戻り、器チップ一覧と本文を更新。
+                setProjectView(false);
+                setActiveProject("");
+                loadProjects();
+                void reload();
+              }}
             />
           ) : active ? (
             <NetaDialog
