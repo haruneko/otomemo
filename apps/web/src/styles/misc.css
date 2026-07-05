@@ -534,3 +534,7 @@ details.theme summary {
 .awb-nudge { min-width: 44px; min-height: 44px; background: #1b1e23; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; }
 .awb-cut .tb-tool { min-height: 40px; }
 .awb-cut input { min-height: 38px; }
+
+/* #S10 再生開始位置(seek)カーソル＋ロールはタップでシーク */
+.awb-seek { position: absolute; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--accent) 60%, #fff); opacity: 0.85; pointer-events: none; z-index: 2; }
+.awb-strip { cursor: pointer; }

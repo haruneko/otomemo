@@ -1,7 +1,7 @@
 // #S10 アナリーゼ・ワークベンチ：音源解析(analysis ネタ)を「メロ・ピアノロール＋コード＋小節線」で見て、
 // 小節頭アンカーを合わせ（自動が最善・ダメなら手動）、区間を切り出して弾けるコード進行ネタにする編集面。
 // 検算＝合成メロ＋コード＋クリックを鳴らす（原曲録音は鳴らさない・派生ノート＝著30-4圏）。スマホ対応（button/onClick）。
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { api, type Neta } from "../api";
 import { playNotes, type PlaybackHandle } from "../audio";
 import type { Note } from "../music";
@@ -56,6 +56,19 @@ function secToBeat(bt: number[], t: number): number {
 
 const PXB = 48; // 1拍のpx（PianoRoll の 1拍=48px に合わせる＝密度整合）
 
+// BTC の細切れ（Am→Am7→Am の揺れ）を **連続同一ルートでマージ**し変な分割を解消。
+// 代表 quality＝マージ区間で累積が最長のラベル。N/X は落とす。
+function mergeChords(timeline: Seg[]): Seg[] {
+  const runs: { s: number; e: number; root: number; quals: Record<string, number> }[] = [];
+  for (const [s, e, lab] of timeline) {
+    const p = parseBtc(lab); if (!p) continue;
+    const prev = runs[runs.length - 1];
+    if (prev && prev.root === p.root) { prev.e = e; prev.quals[lab] = (prev.quals[lab] ?? 0) + (e - s); }
+    else runs.push({ s, e, root: p.root, quals: { [lab]: e - s } });
+  }
+  return runs.map((r) => [r.s, r.e, Object.entries(r.quals).sort((a, b) => b[1] - a[1])[0]![0]] as Seg);
+}
+
 // 秒→最寄ビート index（アンカーが格子上に無くても見失わない・B2）。
 function nearestIdx(bt: number[], t: number): number {
   if (!bt.length) return 0;
@@ -80,13 +93,18 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   const rafRef = useRef<number>(0);
   const startRef = useRef(0);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [seekBeat, setSeekBeat] = useState(0); // 再生開始位置（ロールをタップで指定）
+
+  // ★画面を閉じたら（unmount）再生を必ず止める（編集画面と同じ＝閉じたら鳴り止む）。
+  useEffect(() => () => { handleRef.current?.stop(); if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
 
   const anchorBeat = useMemo(() => secToBeat(bt, anchorT), [bt, anchorT]);
   // アンカー基準のビート位置（小節頭=0,meter,2*meter…）
   const b = (t: number) => secToBeat(bt, t) - anchorBeat;
 
   const mel = c.raw?.melody_notes ?? [];
-  const chords = c.raw?.chords_timeline ?? [];
+  const chords = useMemo(() => mergeChords(c.raw?.chords_timeline ?? []), [c.raw?.chords_timeline]); // 変な分割をマージ
   const dur = c.meta?.duration_sec ?? (bt[bt.length - 1] ?? 30);
   const totalBeat = Math.max(4, Math.ceil(b(dur)));
   const totalBars = Math.ceil(totalBeat / meter);
@@ -110,38 +128,45 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   const ROWH = 9;
   const clampMidi = (m: number) => Math.min(hiMidi, Math.max(loMidi, m));
 
-  // --- 再生：メロ＋コード＋クリックを1本の Note[] にして鳴らす（beat座標・constant bpm＝内部整合で検算）---
-  function buildNotes(): Note[] {
+  // --- 再生：メロ＋コード＋クリックを1本の Note[] に。seek(開始拍)以降だけを -seek シフトして鳴らす ---
+  function buildNotes(from: number): Note[] {
     const out: Note[] = [];
     for (const [s, e, midi] of mel) {
-      const st = b(s); const d = Math.max(0.1, b(e) - st);
-      if (st >= -1) out.push({ pitch: midi, start: Math.max(0, st), dur: d, program: 73 }); // 73=flute
+      const st = b(s) - from; const d = Math.max(0.1, b(e) - b(s));
+      if (st + d > 0) out.push({ pitch: midi, start: Math.max(0, st), dur: d, program: 73 }); // 73=flute
     }
     for (const [s, e, lab] of chords) {
       const p = parseBtc(lab); if (!p) continue;
-      const st = b(s); const d = Math.max(0.2, b(e) - st);
-      if (st < -1) continue;
+      const st = b(s) - from; const d = Math.max(0.2, b(e) - b(s));
+      if (st + d <= 0) continue;
       for (const iv of p.iv) out.push({ pitch: 48 + p.root + iv, start: Math.max(0, st), dur: d, program: 0 }); // 0=piano
     }
-    for (let beat = 0; beat <= totalBeat; beat++) { // クリック（小節頭=強・他拍=弱）
+    for (let beat = Math.ceil(from); beat <= totalBeat; beat++) { // クリック（小節頭=強・他拍=弱）
       const down = beat % meter === 0;
-      out.push({ pitch: down ? 37 : 42, start: beat, dur: 0.1, drum: true, vel: down ? 110 : 60 });
+      out.push({ pitch: down ? 37 : 42, start: beat - from, dur: 0.1, drum: true, vel: down ? 110 : 60 });
     }
     return out;
   }
-  // 再生プレイヘッド：constant bpm 前提で performance.now から拍位置を割り、ref直書きで動かす（G1）。
+  // 再生プレイヘッド：constant bpm 前提で performance.now から拍位置を割り、ref直書きで動かす（seek起点）。
   function stopPh() { if (rafRef.current) cancelAnimationFrame(rafRef.current); if (phRef.current) phRef.current.style.display = "none"; }
-  function tick() {
-    const beat = ((performance.now() - startRef.current) / 1000) * (bpm / 60);
+  function tick(from: number) {
+    const beat = from + ((performance.now() - startRef.current) / 1000) * (bpm / 60);
     if (phRef.current) { phRef.current.style.left = `${beat * PXB}px`; phRef.current.style.display = beat <= totalBeat ? "block" : "none"; }
-    if (beat < totalBeat + 0.5) rafRef.current = requestAnimationFrame(tick);
+    if (beat < totalBeat + 0.5) rafRef.current = requestAnimationFrame(() => tick(from));
   }
   async function togglePlay() {
     if (playing) { handleRef.current?.stop(); stopPh(); setPlaying(false); return; }
     setPlaying(true);
     startRef.current = performance.now();
-    tick();
-    handleRef.current = await playNotes(buildNotes(), bpm, { onEnd: () => { stopPh(); setPlaying(false); } });
+    tick(seekBeat);
+    handleRef.current = await playNotes(buildNotes(seekBeat), bpm, { onEnd: () => { stopPh(); setPlaying(false); } });
+  }
+  // ロールをタップ＝そこを再生開始位置(seek)に。再生中なら止めて位置だけ更新。
+  function onSeek(e: ReactMouseEvent) {
+    const rect = stripRef.current?.getBoundingClientRect(); if (!rect) return;
+    const beat = Math.max(0, Math.min(totalBeat, (e.clientX - rect.left) / PXB));
+    setSeekBeat(beat);
+    if (playing) { handleRef.current?.stop(); stopPh(); setPlaying(false); }
   }
 
   function nudgeAnchor(dir: 1 | -1) {
@@ -206,7 +231,7 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
 
       {/* ロール：横スクロール。上=コード、下=メロピアノロール、縦線=小節/拍 */}
       <div className="awb-roll">
-        <div className="awb-strip" style={{ width: `${totalBeat * PXB}px`, height: `${44 + rows * ROWH + 10}px` }}>
+        <div ref={stripRef} className="awb-strip" onClick={onSeek} style={{ width: `${totalBeat * PXB}px`, height: `${44 + rows * ROWH + 10}px` }}>
           {/* 小節線・拍線 */}
           {Array.from({ length: totalBeat + 1 }, (_v, i) => (
             <div key={"g" + i} className={"awb-grid" + (i % meter === 0 ? " bar" : "")} style={{ left: `${i * PXB}px` }}>
@@ -232,6 +257,7 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
               return <div key={"m" + i} className="awb-note" style={{ left: `${left}px`, width: `${w}px`, top: `${(hiMidi - clampMidi(midi)) * ROWH}px`, height: `${ROWH - 1}px` }} />;
             })}
           </div>
+          <div className="awb-seek" style={{ left: `${seekBeat * PXB}px` }} title="再生開始位置" />
           <div ref={phRef} className="awb-playhead" style={{ display: "none" }} />
         </div>
       </div>

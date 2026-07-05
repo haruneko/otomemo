@@ -190,8 +190,10 @@ export function reapResults(core: Core): number {
     const timeline = (facts.chords_timeline ?? facts.chords) as [number, number, string][] | undefined;
     const meter = typeof facts.meter === "number" && facts.meter > 0 ? facts.meter : 4;
     const beatTimes = Array.isArray(facts.beat_times) ? facts.beat_times : [];
-    const changes = Array.isArray(timeline) ? timeline.filter((c) => c[2] !== "N" && c[2] !== "X").map((c) => c[0]) : [];
-    const offset = autoDownbeatOffset(beatTimes, changes, meter); // 小節頭の自動推定＝初期アンカー
+    const segs = Array.isArray(timeline) ? timeline.filter((c) => c[2] !== "N" && c[2] !== "X") : [];
+    const changes = segs.map((c) => c[0]);
+    const weights = segs.map((c) => c[1] - c[0]); // コード継続長で重み付け＝長く鳴る和音の頭を小節頭と見なしやすく
+    const offset = autoDownbeatOffset(beatTimes, changes, meter, weights); // 小節頭の自動推定＝初期アンカー
     core.createNeta({
       kind: "analysis",
       title: `アナリーゼ: ${parsed.title ?? "音源"}`,
