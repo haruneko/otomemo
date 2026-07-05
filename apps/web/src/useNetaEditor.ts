@@ -185,11 +185,12 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   // kind ごとの保存パッチ（C基準保存・調/拍はヒント）。
   function savePatch(): NetaPatch {
     if (isRelBass)
-      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, mode, tempo, bars: Math.max(1, Math.round(bassSteps / 16)) };
-    if (isMelody || isBass) return { content: { notes, program }, key, mode, tempo, bars: Math.ceil(len / bpb) };
-    if (isChordPat) return { content: { ...chordPat, program }, key, mode, tempo }; // コード楽器＝自前音色
-    if (isChord) return { content: { chords }, key, mode, tempo }; // 進行は抽象＝program持たない(CP1)
-    if (isRhythm) return { content: { rhythm }, tempo };
+      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
+    // meter は単体パートでも保存＝roll のグリッドと MIDI 拍子ヘッダに効く（container 限定を解消・監査 MB-05）。
+    if (isMelody || isBass) return { content: { notes, program }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
+    if (isChordPat) return { content: { ...chordPat, program }, key, mode, tempo, meter }; // コード楽器＝自前音色
+    if (isChord) return { content: { chords }, key, mode, tempo, meter }; // 進行は抽象＝program持たない(CP1)
+    if (isRhythm) return { content: { rhythm }, tempo, meter };
     if (isContainer) return { key, mode, tempo, meter };
     return {};
   }

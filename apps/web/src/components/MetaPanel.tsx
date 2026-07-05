@@ -108,7 +108,9 @@ export function MetaPanel(p: {
                 調を推定
               </button>
             )}
-            {f.isContainer && (
+            {(f.isMusic || f.isContainer) && (
+              // 拍子はテンポ(showMeta)と同じく全ての拍グリッドkindで編集可＝単体のメロ/ベース等も
+              // 6/8 等に切替できる（roll のグリッドと MIDI 拍子ヘッダに反映）。旧=container限定は非対称の見落とし。
               <label className="meta">
                 拍子
                 <select aria-label="meter" value={p.meter} onChange={(e) => p.setMeter(e.target.value)}>

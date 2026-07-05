@@ -87,6 +87,8 @@ describe("NetaDialog", () => {
     const tempoInput = screen.getByLabelText("tempo");
     await userEvent.clear(tempoInput);
     await userEvent.type(tempoInput, "140");
+    // 拍子は単体メロ編集でも変えられる（旧=container限定の非対称を解消・監査 MB-05）。
+    await userEvent.selectOptions(screen.getByLabelText("meter"), "6/8");
     await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];
@@ -94,7 +96,7 @@ describe("NetaDialog", () => {
     expect(patch.key).toBe(9);
     expect(patch.mode).toBe("minor"); // A短として保存（メロ配置の相対移調に効く）
     expect(patch.tempo).toBe(140);
-    expect(patch.bars).toBe(4); // 既定16拍 = 4小節
+    expect(patch.meter).toBe("6/8"); // 単体メロでも拍子を保存
   });
 
   it("transport: play→pause→rewind drives playhead (#57/#58/#59)", async () => {
