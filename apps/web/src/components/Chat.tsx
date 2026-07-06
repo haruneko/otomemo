@@ -428,10 +428,23 @@ export function Chat({
     pushMsg({ role: "ai", text: "知見として保存しました" });
   }
 
-  // #70 履歴クリア（サーバ＋画面）。失敗してもメモリだけクリア＝従来挙動。
+  // #70 履歴クリア（サーバ＋画面）。✕の隣で誤爆しやすいので確認を挟む（監査 MED）。失敗してもメモリだけクリア。
   function clearHistory() {
+    if (!window.confirm("この会話の履歴を消しますか？（元に戻せません）")) return;
     setMsgs([]);
     void api.clearChatThread(thread).catch(() => {});
+  }
+
+  // スレッド(会話)ごと削除＝一覧から消える。今開いてるのを消したら新規会話へ。API は既存(DELETE /chat/:thread)。
+  function deleteSession(id: string) {
+    if (!window.confirm("この会話を削除しますか？")) return;
+    void api
+      .deleteChatThread(id)
+      .then(() => {
+        setSessions((ss) => ss.filter((x) => x.thread !== id));
+        if (id === thread) newSession();
+      })
+      .catch(() => {});
   }
 
   // 会話セッション：一覧を開く／新規作成／切替（フリーChatのみ）。
@@ -469,7 +482,8 @@ export function Chat({
             </button>
           </div>
           <div className="chat-actions">
-            {!target && (
+            {/* 会話一覧を開いている間はパネル側に＋/✕があるので外側の ☰＋🗑 は隠す（二重操作を解消・監査 LOW）。 */}
+            {!target && !showSessions && (
               <>
                 <button aria-label="sessions" title="会話一覧" onClick={openSessions}>
                   ☰
@@ -479,9 +493,11 @@ export function Chat({
                 </button>
               </>
             )}
-            <button aria-label="clear-history" title="履歴を消す" onClick={clearHistory}>
-              🗑
-            </button>
+            {!showSessions && (
+              <button aria-label="clear-history" title="履歴を消す" onClick={clearHistory}>
+                🗑
+              </button>
+            )}
             <button aria-label="close" onClick={onClose}>
               ✕
             </button>
@@ -502,19 +518,19 @@ export function Chat({
               </p>
             )}
             {sessions.map((s) => (
-              <button
-                key={s.thread}
-                type="button"
-                className={"chat-session-item" + (s.thread === thread ? " on" : "")}
-                onClick={() => pickSession(s.thread)}
-              >
-                <span className="chat-session-title">
-                  {s.title ?? s.preview ?? (s.thread === "global" ? "(最初の会話)" : "(無題の会話)")}
-                </span>
-                <span className="muted">
-                  {s.last ? new Date(s.last).toLocaleString() : "新規"} · {s.count}
-                </span>
-              </button>
+              <div key={s.thread} className={"chat-session-item" + (s.thread === thread ? " on" : "")}>
+                <button type="button" className="chat-session-pick" onClick={() => pickSession(s.thread)}>
+                  <span className="chat-session-title">
+                    {s.title ?? s.preview ?? (s.thread === "global" ? "(最初の会話)" : "(無題の会話)")}
+                  </span>
+                  <span className="muted">
+                    {s.last ? new Date(s.last).toLocaleString() : "新規"} · {s.count}
+                  </span>
+                </button>
+                <button type="button" className="chat-session-del" aria-label="delete-session" title="この会話を削除" onClick={() => deleteSession(s.thread)}>
+                  🗑
+                </button>
+              </div>
             ))}
           </div>
         )}

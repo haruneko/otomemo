@@ -4,10 +4,13 @@ body:has(.dialog-backdrop) .chat-bubble {
   display: none;
 }
 @media (max-width: 820px) {
-  /* モバイルで mainpane が主役（編集 or プロジェクト画面）の間はバブルを隠す＝下端トランスポートや
-     最下段カードに被らない。プロジェクト画面は自前の会話起点があるので冗長でもある。ホーム(ネタ帳)では出す。 */
+  /* モバイルで編集/プロジェクト中も Chat に到達できるようバブルは残す（作曲相談は編集中こそ要る）。
+     下端トランスポートに被らないよう上へ逃がし少し小さく。以前は display:none で到達不能だった（監査 HIGH）。 */
   main:has(.workspace.mv-pane) .chat-bubble {
-    display: none;
+    bottom: 80px;
+    width: 46px;
+    height: 46px;
+    opacity: 0.94;
   }
 }
 
@@ -242,9 +245,17 @@ body:has(.dialog-backdrop) {
   justify-self: end;
   max-width: 85%;
 }
+/* AI の返信＝主役。以前は muted 0.85rem で自分の発言より地味だった（監査：inverted emphasis）。
+   左寄せバブル＋通常の文字色/サイズで、聞いた答えがちゃんと主役に見えるように。 */
 .chat-msg.ai .chat-text {
-  color: var(--muted);
-  font-size: 0.85rem;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  justify-self: start;
+  max-width: 92%;
+  font-size: 0.92rem;
+  line-height: 1.5;
 }
 /* #68 ネタ作成後の 開く/試聴 アクション */
 .chat-neta-actions {

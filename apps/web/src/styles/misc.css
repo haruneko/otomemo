@@ -201,22 +201,43 @@ details.theme summary {
 }
 .chat-session-item {
   display: flex;
-  flex-direction: column;
+  align-items: stretch;
   gap: 2px;
-  text-align: left;
-  padding: 0.5rem;
   background: #16181d;
   border: 1px solid #2a2d33;
   border-radius: 6px;
-  cursor: pointer;
-  color: inherit;
-  min-width: 0; /* グリッド子を列内に収める＝タイトルの ellipsis を効かせる */
+  min-width: 0; /* 子を列内に収める＝タイトルの ellipsis を効かせる */
 }
 .chat-session-item.on {
   border-color: var(--accent);
 }
 .chat-session-item:hover {
   background: #20242b;
+}
+.chat-session-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+.chat-session-del {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+.chat-session-del:hover {
+  color: #e66;
 }
 .chat-session-title {
   white-space: nowrap;
