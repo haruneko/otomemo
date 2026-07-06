@@ -70,22 +70,24 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
           <div className="study-section-h">曲ごとのコア・ループ（曲内で繰り返す＝曲の顔）</div>
           <div className="study-commons">
             {songs.map((s, si) => {
-              const loop = s.coreLoops?.[0]; // count 降順→length 降順の先頭＝一番回るループ
-              const key = `song-${si}`;
+              // count 降順→length 降順。4連(一番回る)＋8連(大きい周回)を両方見せる＝曲の構造が分かる。
+              const loops = Array.isArray(s.coreLoops) ? s.coreLoops : [];
               return (
-                <div key={key} className="study-common study-song">
-                  <div className="study-song-l">
-                    <div className="study-songname">{s.title}{keyLabel(s.key, s.mode)}</div>
-                    <div className="study-prog">
-                      {loop ? loop.example.map(chordName).join(" → ") : <span className="muted">反復ループなし</span>}
-                    </div>
-                  </div>
-                  {loop && <span className="study-song-count">{loop.length}和音<br />×{loop.count}回</span>}
-                  {loop && (
-                    <button className={"bs-btn study-play" + (playKey === key ? " on" : "")} aria-label={`play-song-${si}`} onClick={() => play(loop.example, key)}>
-                      {playKey === key ? "■" : "▶"} 試聴
-                    </button>
-                  )}
+                <div key={`song-${si}`} className="study-common study-song">
+                  <div className="study-songname">{s.title}{keyLabel(s.key, s.mode)}</div>
+                  {loops.length === 0 && <div className="study-prog"><span className="muted">反復ループなし</span></div>}
+                  {loops.map((lp, li) => {
+                    const key = `song-${si}-${li}`;
+                    return (
+                      <div key={li} className="study-loop">
+                        <span className="study-prog">{lp.example.map(chordName).join(" → ")}</span>
+                        <span className="study-loop-meta">{lp.length}和音 ×{lp.count}</span>
+                        <button className={"bs-btn study-play" + (playKey === key ? " on" : "")} aria-label={`play-song-${si}-${li}`} onClick={() => play(lp.example, key)}>
+                          {playKey === key ? "■" : "▶"}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
