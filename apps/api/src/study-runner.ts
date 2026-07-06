@@ -11,7 +11,7 @@ import { claudeShot } from "./research-runner";
 import { fetchAudioFromUrl, analyzeAudioFile } from "./audio-analyze";
 import { beginJobProc, endJobProc } from "./job-procs";
 import { chordSequenceFromTimeline } from "./audio-chords";
-import { commonProgressions, resolveTonic } from "./common-progressions";
+import { commonProgressions, songCoreLoops, type CoreLoop } from "./common-progressions";
 import type { Core } from "./core";
 import type { Job } from "./types";
 
@@ -54,21 +54,28 @@ export function cleanProse(prose: string): string {
   return prose.trim();
 }
 
-// facts → { root, quality }[] 抽出（chords_timeline / chords どちらでも）
-function extractChords(facts: unknown): { root: number; quality: string }[] {
+// facts → { root, quality, dur }[] 抽出（chords_timeline / chords どちらでも）。dur＝調判定/ループ検出に要る。
+function extractChords(facts: unknown): { root: number; quality: string; dur: number }[] {
   const f = (facts ?? {}) as { chords_timeline?: unknown; chords?: unknown };
   return chordSequenceFromTimeline(f.chords_timeline ?? f.chords);
 }
 
 /**
  * Claude に渡す横断統合プロンプト。生配列は渡さない（タイムアウト回避・#S11 設計）。
- * 共通進行の度数要約と stats だけを渡す。
+ * ★主役＝各曲の「曲内で繰り返されるコア・ループ」。共通進行(頻度)は補助（汎用の繋ぎに注意）。
  */
 export function studyPrompt(
   topic: string,
   stats: { songs: number; keys: Record<string, number>; modes: Record<string, number> },
+  songsLoops: { title: string; loops: { degrees: string[]; count: number }[] }[],
   topCommon: { degrees: string[]; songCount: number; songs: string[] }[],
 ): string {
+  const loopSummary = songsLoops
+    .map((s) => {
+      const top = s.loops[0];
+      return `- ${s.title}: ${top ? `コア・ループ [${top.degrees.join(" → ")}] ×${top.count}回` : "反復ループなし"}`;
+    })
+    .join("\n");
   const commonSummary = topCommon.slice(0, 5)
     .map((c, i) =>
       `${i + 1}. 度数列 [${c.degrees.join(" → ")}] (${c.songCount}曲中に共通: ${c.songs.slice(0, 3).join(", ")}…)`,
@@ -76,11 +83,14 @@ export function studyPrompt(
     .join("\n");
   return (
     "作曲研究者として、以下の横断解析結果を日本語の研究所見にまとめて。\n" +
-    "【重要】生データの丸写し禁止。コード進行の手癖・特徴・音楽的傾向を作曲視点で語る。\n" +
-    "最後に「この研究から得られる作曲の教訓」を1〜2行。前置き不要、所見文だけ。\n\n" +
+    "【最重要】各曲の『曲内で繰り返されるコア・ループ』が主役＝その曲の顔。まずこれらを見て、作曲者の\n" +
+    "手癖(共有される型)と各曲の個性(逸脱)の両方を語る。手癖の単位は歌手でなく作曲者＝対象が単一作曲者か・\n" +
+    "核が立つか立たないかも明示する。共通コード進行(下)は補助＝『どの曲にも出る汎用の繋ぎ』を拾いがちな点に注意。\n" +
+    "生データの丸写し禁止。最後に「この研究から得られる作曲の教訓」を1〜2行。前置き不要、所見文だけ。\n\n" +
     `# テーマ: ${topic}\n` +
     `# 解析曲数: ${stats.songs}曲 / モード分布: ${JSON.stringify(stats.modes)}\n` +
-    `# 共通コード進行(度数):\n${commonSummary || "（共通進行なし）"}`
+    `# 各曲のコア・ループ(主役):\n${loopSummary || "（なし）"}\n\n` +
+    `# 共通コード進行(補助・度数):\n${commonSummary || "（共通進行なし）"}`
   );
 }
 
@@ -107,13 +117,18 @@ export async function runStudyJob(
     const topic = typeof p.topic === "string" && p.topic ? p.topic : (job.instruction ?? "研究");
     const works = Array.isArray(p.works) ? p.works : [];
 
-    // ①各楽曲を解析してコード列を収集（コードレンズ）
-    const songs: { title: string; chords: { root: number; quality: string }[] }[] = [];
+    // ①各楽曲を解析してコード列を収集。★主役＝曲内反復ループ(songCoreLoops)。共通進行は補助。
+    const songs: { title: string; chords: { root: number; quality: string; dur?: number }[] }[] = [];
     const members: { title: string; url?: string; key: number | null; mode: string | null }[] = [];
+    // per-song データ（StudyView 主役＋再解析回避のため生 chords(dur込)を保持）
+    const songsData: {
+      title: string; url?: string; key: number | null; mode: string | null;
+      coreLoops: CoreLoop[]; chords: { root: number; quality: string; dur: number }[];
+    }[] = [];
 
     for (const work of works) {
       if (signal.aborted) throw new Error("停止しました");
-      let chords: { root: number; quality: string }[] = [];
+      let chords: { root: number; quality: string; dur: number }[] = [];
       if (work.audioUrl || work.audio_b64) {
         try {
           const facts = work.audio_b64
@@ -127,21 +142,23 @@ export async function runStudyJob(
         }
       }
       songs.push({ title: work.title, chords });
-      // per-song の調＝集計と同じ resolveTonic（継続長ヒートマップ）で決める。StudyView で「千本桜＝D短調」等を出す。
-      const t = chords.length ? resolveTonic(chords) : null;
-      members.push({ title: work.title, url: work.audioUrl, key: t ? t.tonic : null, mode: t ? t.mode : null });
+      // ★曲内コア・ループ＝主レンズ。調(dur重み)もここで確定＝StudyViewで「Northern lights＝A短調」等。
+      const scl = chords.length ? songCoreLoops(chords) : null;
+      const key = scl ? scl.tonic : null;
+      const mode = scl ? scl.mode : null;
+      members.push({ title: work.title, url: work.audioUrl, key, mode });
+      songsData.push({ title: work.title, url: work.audioUrl, key, mode, coreLoops: scl ? scl.loops : [], chords });
     }
 
-    // ②共通進行を集計（決定的純関数）
+    // ②共通進行を集計（補助レンズ＝"共有される最小公倍数"を見る用）。songCount>=2 のみ上限200。
     const result = commonProgressions(songs);
-    // ★保存は"共通"(songCount>=2)だけに絞る＝単曲固有(songCount=1)は研究の産物でなくノイズ（StudyViewでも隠す）。
-    //   同一作家大量カタログで肥大しないよう上限200でハードキャップ（既にsongCount降順ソート済＝上位=真の共通）。
     const commonToStore = result.common.filter((e) => e.songCount >= 2).slice(0, 200);
 
-    // ③横断統合（Claude 1回・生配列は渡さない）
+    // ③横断統合（Claude 1回・生配列は渡さない）。主役＝各曲コア・ループ、補助＝共通進行。
+    const songsLoops = songsData.map((s) => ({ title: s.title, loops: s.coreLoops }));
     let prose = "";
     try {
-      prose = cleanProse((await shot(studyPrompt(topic, result.stats, result.common), 120_000, signal)).trim());
+      prose = cleanProse((await shot(studyPrompt(topic, result.stats, songsLoops, result.common), 120_000, signal)).trim());
     } catch (e) {
       if (signal.aborted) throw e; // 停止=失敗として上位へ
       prose = "（所見の自動生成に失敗＝再生成できます。集計データは揃っています）";
@@ -150,7 +167,8 @@ export async function runStudyJob(
     core.completeJob(job.id, {
       topic,
       members,
-      common: commonToStore,
+      songs: songsData, // ★主役＝各曲のコア・ループ＋生 chords(dur込・再解析回避)
+      common: commonToStore, // 補助
       stats: result.stats,
       prose,
       title: `研究: ${topic}`,

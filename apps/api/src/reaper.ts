@@ -240,7 +240,7 @@ export function reapResults(core: Core): number {
     .all() as { id: string; result: string | null }[];
   for (const r of studyRows) {
     let parsed: {
-      topic?: string; members?: unknown; common?: { degrees: string[]; example: { root: number; quality: string; start: number; dur: number }[]; songCount: number; songs: string[] }[];
+      topic?: string; members?: unknown; songs?: unknown; common?: { degrees: string[]; example: { root: number; quality: string; start: number; dur: number }[]; songCount: number; songs: string[] }[];
       stats?: unknown; prose?: string; title?: string
     };
     try {
@@ -252,7 +252,7 @@ export function reapResults(core: Core): number {
       core.db.prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`).run(r.id);
       continue;
     }
-    // study ネタ（主出力）
+    // study ネタ（主出力）。songs=各曲のコア・ループ＋生chords(主役・#S11改)、common=補助。
     const studyNeta = core.createNeta({
       kind: "study",
       title: parsed.title ?? `研究: ${parsed.topic ?? ""}`,
@@ -260,6 +260,7 @@ export function reapResults(core: Core): number {
       content: {
         topic: parsed.topic ?? "",
         members: parsed.members ?? [],
+        songs: parsed.songs ?? [],
         common: parsed.common ?? [],
         stats: parsed.stats ?? {},
         prose: parsed.prose ?? "",
