@@ -17,6 +17,7 @@ import { Icon } from "./components/Icon";
 import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
 import { AnalysisWorkbench } from "./components/AnalysisWorkbench";
+import { StudyView } from "./components/StudyView";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
@@ -798,6 +799,8 @@ export function App() {
               onChanged={() => void reload()}
               onClose={() => setActive(null)}
             />
+          ) : active && active.kind === "study" ? (
+            <StudyView key={active.id} neta={active} onClose={() => setActive(null)} />
           ) : active ? (
             <NetaDialog
               key={active.id} /* ネタを切り替えたら作り直して内部状態を新ネタで初期化 */
