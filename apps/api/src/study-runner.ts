@@ -41,6 +41,19 @@ async function analyzeB64(b64: string, filename: string, signal?: AbortSignal): 
   }
 }
 
+// prose の後始末：所見を書く Claude は project の CLAUDE.md を継承するので、末尾に
+// 「docs/research に格納しますか」等の“ワークフロー meta”を足しがち。水平線(---)以降の
+// 末尾ブロックが meta（docs/research・格納・README・索引 を含む）なら切り落とす。所見本文は残す。
+export function cleanProse(prose: string): string {
+  const parts = prose.split(/\n-{3,}\s*\n/); // 水平線で分割
+  if (parts.length < 2) return prose.trim();
+  const tail = parts[parts.length - 1] ?? "";
+  if (/docs\/research|格納しますか|README|索引|\.md[)）]/.test(tail)) {
+    return parts.slice(0, -1).join("\n---\n").trim(); // meta 末尾だけ除去
+  }
+  return prose.trim();
+}
+
 // facts → { root, quality }[] 抽出（chords_timeline / chords どちらでも）
 function extractChords(facts: unknown): { root: number; quality: string }[] {
   const f = (facts ?? {}) as { chords_timeline?: unknown; chords?: unknown };
@@ -128,7 +141,7 @@ export async function runStudyJob(
     // ③横断統合（Claude 1回・生配列は渡さない）
     let prose = "";
     try {
-      prose = (await shot(studyPrompt(topic, result.stats, result.common), 120_000, signal)).trim();
+      prose = cleanProse((await shot(studyPrompt(topic, result.stats, result.common), 120_000, signal)).trim());
     } catch (e) {
       if (signal.aborted) throw e; // 停止=失敗として上位へ
       prose = "（所見の自動生成に失敗＝再生成できます。集計データは揃っています）";
