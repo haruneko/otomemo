@@ -239,8 +239,11 @@ export function reapResults(core: Core): number {
     )
     .all() as { id: string; result: string | null }[];
   for (const r of studyRows) {
+    type Slot = { root: number; quality: string; start: number; dur: number };
     let parsed: {
-      topic?: string; artist?: string; members?: unknown; songs?: unknown; common?: { degrees: string[]; example: { root: number; quality: string; start: number; dur: number }[]; songCount: number; songs: string[] }[];
+      topic?: string; artist?: string; members?: unknown;
+      songs?: { title?: string; coreLoops?: { example: Slot[]; length: number; count: number }[] }[];
+      common?: { degrees: string[]; example: Slot[]; songCount: number; songs: string[] }[];
       stats?: unknown; prose?: string; title?: string
     };
     try {
@@ -273,16 +276,17 @@ export function reapResults(core: Core): number {
       from_job: r.id,
     });
     n += 1;
-    // 共通進行の出口 chord_progression ネタ（songCount>=2 の上位5件まで）＝これも研究プロジェクトへ。
-    const common = Array.isArray(parsed.common) ? parsed.common : [];
-    const topCommon = common.filter((c) => c.songCount >= 2).slice(0, 5);
-    for (const entry of topCommon) {
-      if (!Array.isArray(entry.example) || entry.example.length < 2) continue;
+    // 出口の弾ける chord_progression ネタ＝各曲の「コア・ループ」（主レンズ由来＝美味しいフック）。研究プロジェクトへ。
+    // 旧＝common(補助・汎用の繋ぎ)由来だったのを主レンズに揃える（#S11改）。1曲につき最頻ループ1本。
+    const songs = Array.isArray(parsed.songs) ? parsed.songs : [];
+    for (const s of songs) {
+      const loop = Array.isArray(s?.coreLoops) ? s.coreLoops[0] : null; // count 降順の先頭＝一番回るループ
+      if (!loop || !Array.isArray(loop.example) || loop.example.length < 2) continue;
       core.createNeta({
         kind: "chord_progression",
-        title: `研究: ${parsed.topic ?? ""} 共通進行（${entry.songCount}曲/${entry.songs.slice(0, 3).join("/")}…）`,
-        content: { chords: entry.example },
-        tags: ["研究", "共通", "prj:研究", ...(artist ? [artist] : [])],
+        title: `研究: ${s.title ?? ""} のコア・ループ（${loop.length}和音×${loop.count}回）`,
+        content: { chords: loop.example },
+        tags: ["研究", "ループ", "prj:研究", ...(artist ? [artist] : [])],
         from_job: r.id,
       });
       n += 1;
