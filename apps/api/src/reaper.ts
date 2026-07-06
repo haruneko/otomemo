@@ -240,7 +240,7 @@ export function reapResults(core: Core): number {
     .all() as { id: string; result: string | null }[];
   for (const r of studyRows) {
     let parsed: {
-      topic?: string; members?: unknown; songs?: unknown; common?: { degrees: string[]; example: { root: number; quality: string; start: number; dur: number }[]; songCount: number; songs: string[] }[];
+      topic?: string; artist?: string; members?: unknown; songs?: unknown; common?: { degrees: string[]; example: { root: number; quality: string; start: number; dur: number }[]; songCount: number; songs: string[] }[];
       stats?: unknown; prose?: string; title?: string
     };
     try {
@@ -252,6 +252,9 @@ export function reapResults(core: Core): number {
       core.db.prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`).run(r.id);
       continue;
     }
+    // 研究ネタは研究プロジェクト(prj:研究)へ自動所属＋研究タグ＋アーティストタグ＝探しやすく（ユーザー要望）。
+    const artist = typeof parsed.artist === "string" && parsed.artist.trim() ? parsed.artist.trim() : null;
+    const studyTags = ["研究", "prj:研究", ...(artist ? [artist] : [])];
     // study ネタ（主出力）。songs=各曲のコア・ループ＋生chords(主役・#S11改)、common=補助。
     const studyNeta = core.createNeta({
       kind: "study",
@@ -259,17 +262,18 @@ export function reapResults(core: Core): number {
       text: parsed.prose ?? "",
       content: {
         topic: parsed.topic ?? "",
+        artist: artist ?? "",
         members: parsed.members ?? [],
         songs: parsed.songs ?? [],
         common: parsed.common ?? [],
         stats: parsed.stats ?? {},
         prose: parsed.prose ?? "",
       },
-      tags: ["研究"],
+      tags: studyTags,
       from_job: r.id,
     });
     n += 1;
-    // 共通進行の出口 chord_progression ネタ（songCount>=2 の上位5件まで）
+    // 共通進行の出口 chord_progression ネタ（songCount>=2 の上位5件まで）＝これも研究プロジェクトへ。
     const common = Array.isArray(parsed.common) ? parsed.common : [];
     const topCommon = common.filter((c) => c.songCount >= 2).slice(0, 5);
     for (const entry of topCommon) {
@@ -278,7 +282,7 @@ export function reapResults(core: Core): number {
         kind: "chord_progression",
         title: `研究: ${parsed.topic ?? ""} 共通進行（${entry.songCount}曲/${entry.songs.slice(0, 3).join("/")}…）`,
         content: { chords: entry.example },
-        tags: ["研究", "共通"],
+        tags: ["研究", "共通", "prj:研究", ...(artist ? [artist] : [])],
         from_job: r.id,
       });
       n += 1;

@@ -658,6 +658,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       description: "作家/ジャンルを横断して共通コード進行の手癖を抜く。works に曲名と音源URL を渡せば裏で解析＋集計→study ネタ＋弾ける chord_progression ネタがトレイ📥に届く。URL は WebSearch で見つけてから渡す（YouTube等）。重い(数分)ので『投げてトレイで受け取る』形。lenses 省略でコードレンズ（v1のみ）。",
       inputSchema: {
         topic: z.string().describe("研究テーマ（例: 「畑亜貴の手癖」「J-POP王道バラード」）"),
+        artist: z.string().optional().describe("研究対象のアーティスト/作曲者名＝アーティストタグに付く（例 SURFACE / 林原めぐみ）。手癖は作曲者単位が本筋。同一作曲者なら渡す。クロス作家/ジャンルなら省略可"),
         works: z.array(
           z.object({
             title: z.string().describe("曲名/作品名"),
@@ -667,8 +668,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         lenses: z.array(z.string()).optional().describe("分析レンズ（省略=コードのみ。v1は'chords'のみ対応）"),
       },
     },
-    async ({ topic, works, lenses }) => {
-      const job = core.enqueueJob({ intent: "study", params: { topic, works, lenses } });
+    async ({ topic, artist, works, lenses }) => {
+      const job = core.enqueueJob({ intent: "study", params: { topic, artist, works, lenses } });
       return ok({ jobId: job.id, status: "queued", note: `「${topic}」の研究を裏で開始しました。数分後にトレイ📥と study ネタに届きます（待たずに戻ってOK）。` });
     },
   );

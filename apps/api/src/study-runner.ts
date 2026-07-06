@@ -111,10 +111,12 @@ export async function runStudyJob(
   try {
     const p = (job.params ?? {}) as {
       topic?: string;
+      artist?: string; // 研究対象のアーティスト/作曲者名＝アーティストタグ用（省略可）
       works?: { title: string; audioUrl?: string; audio_b64?: string }[];
       lenses?: string[];
     };
     const topic = typeof p.topic === "string" && p.topic ? p.topic : (job.instruction ?? "研究");
+    const artist = typeof p.artist === "string" && p.artist.trim() ? p.artist.trim() : undefined;
     const works = Array.isArray(p.works) ? p.works : [];
 
     // ①各楽曲を解析してコード列を収集。★主役＝曲内反復ループ(songCoreLoops)。共通進行は補助。
@@ -166,6 +168,7 @@ export async function runStudyJob(
 
     core.completeJob(job.id, {
       topic,
+      artist, // アーティストタグ用（reaper が付ける）
       members,
       songs: songsData, // ★主役＝各曲のコア・ループ＋生 chords(dur込・再解析回避)
       common: commonToStore, // 補助

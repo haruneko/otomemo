@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { openDb } from "../src/db";
 import { Core } from "../src/core";
 import { runStudyJob, studyPrompt, cleanProse } from "../src/study-runner";
+import { reapResults } from "../src/reaper";
 import { killJobProc, isJobProcRunning } from "../src/job-procs";
 
 let core: Core;
@@ -103,6 +104,43 @@ describe("runStudyJob（analyze + shot を注入）", () => {
     expect(result.prose).toContain("i-VI-III-VII");
     expect(result.title).toContain("ポップバラード");
     expect(Array.isArray(result.common)).toBe(true);
+  });
+
+  it("研究プロジェクト自動所属＝reaperがstudyネタに 研究/prj:研究/アーティスト タグを付ける", async () => {
+    const job = core.enqueueJob({
+      intent: "study",
+      params: {
+        topic: "SURFACEの手癖", artist: "SURFACE",
+        works: [
+          { title: "曲A", audioUrl: "https://example.com/a.mp3" },
+          { title: "曲B", audioUrl: "https://example.com/b.mp3" },
+        ],
+      },
+    });
+    const claimed = core.claimQueued(["study"])!;
+    await runStudyJob(core, claimed, async (u: string) => (u.includes("a.mp3") ? amFCGFacts() : emCGDFacts()), async () => "所見");
+    expect(core.getJob(job.id)!.status).toBe("done");
+    reapResults(core);
+    const neta = core.listNeta({ kind: "study", scope: "all" }).find((s) => s.title?.includes("SURFACE"));
+    expect(neta).toBeDefined();
+    expect(neta!.tags).toContain("研究");
+    expect(neta!.tags).toContain("prj:研究"); // 研究プロジェクトへ自動所属
+    expect(neta!.tags).toContain("SURFACE");  // アーティストタグ
+  });
+
+  it("artist 省略なら アーティストタグ無し（研究/prj:研究 は付く）", async () => {
+    const job = core.enqueueJob({
+      intent: "study",
+      params: { topic: "ジャンル横断研究", works: [{ title: "曲A", audioUrl: "https://example.com/a.mp3" }, { title: "曲B", audioUrl: "https://example.com/b.mp3" }] },
+    });
+    const claimed = core.claimQueued(["study"])!;
+    await runStudyJob(core, claimed, async (u: string) => (u.includes("a.mp3") ? amFCGFacts() : emCGDFacts()), async () => "所見");
+    expect(core.getJob(job.id)!.status).toBe("done");
+    reapResults(core);
+    const neta = core.listNeta({ kind: "study", scope: "all" }).find((s) => s.title?.includes("ジャンル"));
+    expect(neta).toBeDefined();
+    expect(neta!.tags).toContain("研究");
+    expect(neta!.tags.filter((t) => t.startsWith("prj:"))).toEqual(["prj:研究"]); // 研究プロジェクトのみ
   });
 
   it("audioUrl なし曲はスキップ（解析しない）", async () => {
