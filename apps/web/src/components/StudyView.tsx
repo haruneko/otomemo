@@ -53,6 +53,8 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
         <span className="meta">{c.stats?.songs ?? members.length}曲 · {modeStr}</span>
       </div>
 
+      {/* 内側スクロール body（.mainpane-editor は overflow:hidden の固定枠＝直下に流すと prose が潰れ下部が届かない）。 */}
+      <div className="study-body">
       {c.prose && <div className="study-prose chat-md">{c.prose}</div>}
 
       {/* ★主役：曲ごとのコア・ループ（曲内で繰り返す＝曲の顔） */}
@@ -64,14 +66,14 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
               const loop = s.coreLoops?.[0]; // count 降順→length 降順の先頭＝一番回るループ
               const key = `song-${si}`;
               return (
-                <div key={key} className="study-common">
-                  <div className="study-prog">
-                    {loop ? loop.example.map(chordName).join(" → ") : <span className="muted">反復ループなし</span>}
+                <div key={key} className="study-common study-song">
+                  <div className="study-song-l">
+                    <div className="study-songname">{s.title}{keyLabel(s.key, s.mode)}</div>
+                    <div className="study-prog">
+                      {loop ? loop.example.map(chordName).join(" → ") : <span className="muted">反復ループなし</span>}
+                    </div>
                   </div>
-                  <div className="study-prog-meta">
-                    <span className="study-count">{s.title}{keyLabel(s.key, s.mode)}</span>
-                    {loop && <span className="study-songs">{loop.length}和音ループ ×{loop.count}回</span>}
-                  </div>
+                  {loop && <span className="study-song-count">{loop.length}和音<br />×{loop.count}回</span>}
                   {loop && (
                     <button className={"bs-btn study-play" + (playKey === key ? " on" : "")} aria-label={`play-song-${si}`} onClick={() => play(loop.example, key)}>
                       {playKey === key ? "■" : "▶"} 試聴
@@ -109,6 +111,7 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
       <ul className="study-members">
         {members.map((m, i) => <li key={i}>{m.title}{keyLabel(m.key, m.mode)}</li>)}
       </ul>
+      </div>
     </div>
   );
 }
