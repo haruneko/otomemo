@@ -19,7 +19,10 @@ const chordName = (c: { root: number; quality: string }) => `${ROOTS[((c.root % 
 
 export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }) {
   const c = (neta.content ?? {}) as Content;
-  const common = Array.isArray(c.common) ? c.common : [];
+  const allCommon = Array.isArray(c.common) ? c.common : [];
+  // ★"共通"＝2曲以上に出るものだけ（songCount>=2）。長い進行は1曲固有になりがち＝それを共通扱いしない。
+  // 並びは既に songCount 降順→長さ降順なので、真の共通(長め優先)が上に来る。上位24件に頭打ち。
+  const common = allCommon.filter((e) => e.songCount >= 2).slice(0, 24);
   const members = Array.isArray(c.members) ? c.members : [];
   const handleRef = useRef<PlaybackHandle | null>(null);
   const [playingIdx, setPlayingIdx] = useState(-1);
@@ -45,7 +48,7 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
 
       {c.prose && <div className="study-prose chat-md">{c.prose}</div>}
 
-      <div className="study-section-h">共通コード進行（何曲に出るか）</div>
+      <div className="study-section-h">共通コード進行（何曲に出るか）{allCommon.length > common.length ? ` ・上位${common.length}/${allCommon.length}件` : ""}</div>
       <div className="study-commons">
         {common.length === 0 && <p className="muted">共通進行は見つかりませんでした</p>}
         {common.map((e, i) => (
