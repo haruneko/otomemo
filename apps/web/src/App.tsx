@@ -119,29 +119,33 @@ export function App() {
     if (projectView) { setProjectView(false); return true; }
     return false;
   };
-  const overlayDepth =
-    (trayOpen ? 1 : 0) + (chatOpen ? 1 : 0) + navStack.length + (active ? 1 : 0) + (projectView ? 1 : 0);
-  const overlayDepthRef = useRef(0); overlayDepthRef.current = overlayDepth;
+  // ★単一 guard 方式（層の"数"を数えない）：オーバーレイが1つでも開いていれば guard を"1件だけ"積む。
+  //   戻る(popstate)で1レイヤ閉じ、まだ開いていれば reconcile が再 arm する。数を数える旧方式は
+  //   非同期オープン(newSong の await reload 中に depth が一瞬0になる)で guard がズレてアプリを早期に抜ける
+  //   バグがあった（監査 BUG-1）。bool の armed にしたので瞬間的な 0→再オープンでも壊れない。
+  const anyOpen = trayOpen || chatOpen || navStack.length > 0 || !!active || projectView;
+  const anyOpenRef = useRef(false); anyOpenRef.current = anyOpen;
   const closeTopRef = useRef(closeTop); closeTopRef.current = closeTop;
-  const histRef = useRef(0); // 積んだ guard 数
-  const trimRef = useRef(0); // 自前で history.back() した保留数（その popstate は消費のみで閉じない）
+  const armedRef = useRef(false); // guard を1件積んでいるか
+  const skipRef = useRef(0);      // 自前 history.back() の保留分（その popstate は閉じずに消費）
   useEffect(() => {
     const onPop = () => {
-      if (trimRef.current > 0) { trimRef.current -= 1; histRef.current = Math.max(0, histRef.current - 1); return; }
-      histRef.current = Math.max(0, histRef.current - 1);
-      if (overlayDepthRef.current > 0) closeTopRef.current(); // 1レイヤ閉じる
+      if (skipRef.current > 0) { skipRef.current -= 1; return; } // 自前の戻し＝消費のみ
+      armedRef.current = false; // ユーザーの戻る＝guard1件が消費された
+      if (anyOpenRef.current) closeTopRef.current(); // 1レイヤ閉じる（まだ開いていれば下の effect が再 arm）
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+  // ★毎レンダで reconcile（ref ガードで冪等）。[anyOpen] 依存だと closeTop が active→projectView へ
+  //   すり替えて anyOpen が true のまま変わらない時に再 arm されず、戻るで guard が枯れてアプリを抜けた（BUG-1）。
   useEffect(() => {
-    const effective = histRef.current - trimRef.current; // 実効 guard 数
-    if (effective < overlayDepth) {
-      for (let i = effective; i < overlayDepth; i++) { window.history.pushState({ cmOverlay: true }, ""); histRef.current += 1; }
-    } else if (effective > overlayDepth) {
-      for (let i = overlayDepth; i < effective; i++) { trimRef.current += 1; window.history.back(); }
+    if (anyOpen && !armedRef.current) {
+      window.history.pushState({ cmOverlay: true }, ""); armedRef.current = true; // 開いてるのに guard 無→積む
+    } else if (!anyOpen && armedRef.current) {
+      skipRef.current += 1; armedRef.current = false; window.history.back(); // 全部閉じた→余った guard を消費
     }
-  }, [overlayDepth]);
+  });
 
   const [railOpen, setRailOpen] = useState(true);
   const isMobile = useIsMobile();
