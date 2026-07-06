@@ -800,6 +800,39 @@ P5 切出→chord_progression ネタ＋Claude 所見。
 9. **v1 との共存/移行**：旧 audio_analyze(知見ネタ) → 新(analysis＋asset)。両立か置換か。
 10. **量子化を python(basic-pitch) か TS(pyin 量子化) か**＝P1 の実装位置。
 
+#### 決定：アナリーゼ研究フレームワーク＝コーパス × レンズ（#S11・2026-07-06・要件確定→設計）
+**背景**：単曲ワークベンチ(#S10)は"おもちゃ"。実用＝**作家/ジャンル横断で共通の手癖を抜く「研究」**。研究は
+**歌詞／コード／構成／メロ…と見る軸(レンズ)が変わる（全部のことも）**＝コード限定の集計は雑。一般フレームワークにする。
+**ランタイムの脳＝Sonnet**（発見＋統合文）、**実装は適材適所**（Opus/Sonnetサブエージェント使い分け）。
+
+**中核の気づき**：研究の主目的（共通コード進行）は**度数正規化すれば調も拍子も無関係**（Amの曲もCの曲も `i-VI-III-VII`）。
+＝研究は**ワークベンチ/アンカー/拍子と切り離せる**（コード列を度数化してクロス曲n-gramを数えるだけ）＝単曲解析より軽い。
+
+**研究モデル＝コーパス × レンズ**：
+- **新 kind `study`**。content＝`{topic, corpus:[{title,sources:{audio?,lyrics?,chart?}}], lenses:[…], findings:{レンズ別の袋},
+  outputs:[弾ける/使える抽出], prose:横断統合文}`。**findings はレンズ別**＝レンズ追加で袋が増えるだけ（拡張に強い）。
+- **レンズ＝プラグイン**：`{sources(要る元ネタ), perWork(raw→features), aggregate(features[]→共通+stats), outputs, method(決定的/Claude/混合)}`。
+  `lenses/` に1レンズ1ファイル、registry で引く。元ネタもやり方もレンズごとに非対称でよい（コード=決定的、歌詞=Claude寄り）。
+
+**サガ（投げて→裏で→トレイ）**：`study` ジョブ params`{topic, works:[{title,audioUrl?…}], lenses:[…]}`。runner＝
+①work×lens の元ネタ収集（コード/構成/メロ→audio解析、歌詞→歌詞fetch）②レンズ別 aggregate（決定的は関数・Claude寄りは
+claudeShot）③**横断統合(Claude 1回)**→ study ネタ＋出口ネタをトレイ。停止/削除＝既存 job-procs。
+**Sonnet(ランタイム)** ＝チャットで「畑亜貴を6曲研究」→ WebSearch で works＋URL 発見＋レンズ判断→ `start_study` 一発。あとは裏。
+
+**レンズ（確定）**：
+- **v1実装＝コード＋構成**（どちらも audio 解析1本から）：
+  - **コード**（決定的）：`chordsFromTimeline`＋`mergeChords`→`detectKeyFromChords`で調→**度数正規化**→クロス曲 n-gram(2-4和音)
+    を「何曲に出るか」で頻度カウント→共通進行。出口＝代表キーで実音レンダした**弾ける chord_progression ネタ**（tags:[研究,共通]）。
+  - **構成**（半決定的）：※audio のセクション検出は今 gap＝**v1 は"コードのループ並び"から構成を導く**（`extractLoops` 再利用
+    ＝どの進行ループがどう並ぶ/繰り返すか＝作家のアレンジ型）。全音 section 検出(allin1級)は後の上積み。
+- **設計済・defer**：**歌詞**（元ネタ=歌詞ソース未確保で v1 外す・確保でき次第プラグイン）／**メロ**（melody_notes から輪郭/音域/リズム傾向・後）。
+
+**コーパス収集＝Sonnet 全自動**（曲名だけで WebSearch→URL）。リスク＝曲選び/URL が Sonnet まかせ＝**結果に人が目を通す前提**。
+
+**TDD**：`commonProgressions`（度数化＋クロス曲 n-gram 頻度・純関数）先行／構成レンズ（ループ並び・純関数）／`study-runner`
+（N解析→集計→prose→study/進行ネタ）／`start_study` verb（allowlist 一致）。既存資産再利用：`chordsFromTimeline`/`mergeChords`
+相当・`detectKeyFromChords`・度数変換(`normalizeToC`/key-degree)・`extractLoops`・`findProgressions`。
+
 #### 決定：MCP の道具を「目的」で再設計（#101・2026-06-24・#100 の具体化）
 ユースケースは `docs/usecases-compose.md`（U1-U21・生きた文書）。**白紙サブエージェント（既存39ツールを見ずに導出）＋実在39との突合**で収束。
 - **問題**：現MCPは39ツール＝**機械動作名**（gen_chords/substitute_chord/fit_to_chords/emotion_shift…）。ユーザーの**目的の言い方**（後ろをオープンに／合わせて／きれいに）と噛まず、Claude が「"オープン"はどれ？」を逆算＝彷徨いの源。**目的で命名し直す＋数を絞る。**
