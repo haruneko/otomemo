@@ -33,6 +33,7 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
   const members = Array.isArray(c.members) ? c.members : [];
   const handleRef = useRef<PlaybackHandle | null>(null);
   const [playKey, setPlayKey] = useState<string | null>(null); // 曲/共通を独立に鳴らせるよう文字列キー
+  const [showProse, setShowProse] = useState(false); // 既定=畳む＝長い所見でも主役ループを最初に見せる
 
   function play(example: Slot[], key: string) {
     handleRef.current?.stop();
@@ -55,7 +56,13 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
 
       {/* 内側スクロール body（.mainpane-editor は overflow:hidden の固定枠＝直下に流すと prose が潰れ下部が届かない）。 */}
       <div className="study-body">
-      {c.prose && <div className="study-prose chat-md">{c.prose}</div>}
+      {/* 所見は既定で畳む＝主役の曲ごとループを最初に見せる（長文で下に埋もれない）。 */}
+      {c.prose && (
+        <button className="bs-btn study-prose-toggle" aria-label="toggle-prose" onClick={() => setShowProse((v) => !v)}>
+          所見（手癖の考察）{showProse ? "▲" : "▼"}
+        </button>
+      )}
+      {c.prose && showProse && <div className="study-prose chat-md">{c.prose}</div>}
 
       {/* ★主役：曲ごとのコア・ループ（曲内で繰り返す＝曲の顔） */}
       {songs.length > 0 && (

@@ -546,6 +546,7 @@ details.theme summary {
    flex で prose が潰れ下部が touch スクロールで届かない。block+overflow auto の1本スクロールに集約。 */
 .study-body { flex: 1; min-height: 0; overflow-y: auto; }
 .study-body > * + * { margin-top: 8px; }
+.study-prose-toggle { align-self: flex-start; width: fit-content; }
 .study-prose { background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 0.9rem; }
 .study-section-h { font-size: 0.8rem; color: var(--muted); margin-top: 6px; border-bottom: 1px solid var(--line); padding-bottom: 3px; }
 .study-commons { display: grid; gap: 6px; }
