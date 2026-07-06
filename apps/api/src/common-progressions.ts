@@ -27,15 +27,33 @@ const PC_NAME: Record<number, string> = {
   6: "F#", 7: "G", 8: "G#", 9: "A", 10: "A#", 11: "B",
 };
 
-// 度数トークン列 → 実音コード列（2拍/コードの模式的スキーマ）。
-// ★度数は detectKeyFromChords が返す tonic 基準＝相対**長調**フレーム（Am-F-C-G も C major(tonic0) と検出）。
-//   なので **tonic=0(C長調フレーム)** でレンダすると vi-IV-I-V → Am-F-C-G と自然な実音に戻る（tonic=9だとF#m-D-A-Eにズレる）。
+// ★相対長調/短調のあいまいさを、曲全体のコード分布（ヒートマップ）で解消して「メイン調」を決める。
+//   detectKeyFromChords は音集合から調ペアを出すが Am↔C を同点で長調に倒す。そこで**トニック和音の出現重み**
+//   （長調トニック Kmaj の major三和音 vs 相対短調 Kmin の minor三和音）を比べ、first/last をボーナス（開始/解決先＝トニック）。
+export function resolveTonic(chords: { root: number; quality: string }[]): { tonic: number; mode: "major" | "minor" } {
+  if (chords.length === 0) return { tonic: 0, mode: "major" };
+  const det = detectKeyFromChords(chords)[0] ?? { key: 0, mode: "major" as const };
+  const Kmaj = det.mode === "major" ? det.key : ((det.key + 3) % 12); // 相対ペアの長調ルート
+  const Kmin = (Kmaj + 9) % 12; // 相対短調ルート（長調の6度下）
+  const isMajT = (c: { root: number; quality: string }) =>
+    c.root === Kmaj && (c.quality === "" || c.quality === "maj7" || c.quality === "6" || c.quality === "7" || c.quality.startsWith("sus"));
+  const isMinT = (c: { root: number; quality: string }) =>
+    c.root === Kmin && (c.quality === "m" || c.quality === "m7" || c.quality === "m6");
+  let wMaj = 0, wMin = 0;
+  for (const c of chords) { if (isMajT(c)) wMaj += 1; else if (isMinT(c)) wMin += 1; } // 分布（出現数）
+  for (const c of [chords[0]!, chords[chords.length - 1]!]) { if (isMajT(c)) wMaj += 2; else if (isMinT(c)) wMin += 2; } // 最初/最後は強め
+  return wMin > wMaj ? { tonic: Kmin, mode: "minor" } : { tonic: Kmaj, mode: "major" };
+}
+
+// 度数トークン列 → 実音コード列（2拍/コード）。度数は「メイン調相対」（短調曲は i=0:m）。
+// 実音化の基準キーはモードに合わせる：短調フレーム(0:m を含む)は **A minor(tonic9)**、長調は **C major(tonic0)** で自然な実音へ。
 function renderExample(degrees: string[]): ChordSlot[] {
+  const renderTonic = degrees.includes("0:m") ? 9 : 0; // 短調=Am基準 / 長調=C基準
   return degrees.map((d, i) => {
     const sep = d.indexOf(":");
     const deg = parseInt(d.slice(0, sep), 10);
     const quality = d.slice(sep + 1);
-    const root = ((deg % 12) + 12) % 12; // tonic=0(C長調フレーム)で実音へ戻す
+    const root = (((deg + renderTonic) % 12) + 12) % 12;
     return { root, quality, start: i * 2, dur: 2 };
   });
 }
@@ -69,10 +87,7 @@ export function commonProgressions(
       stats.keys["C"] = (stats.keys["C"] ?? 0) + 1;
       continue;
     }
-    const cands = detectKeyFromChords(song.chords);
-    const det = cands[0] ?? { key: 0, mode: "major" as const, score: 0 };
-    const tonic = det.key;
-    const mode = det.mode;
+    const { tonic, mode } = resolveTonic(song.chords); // ★分布でメイン調＆長短を決める
 
     const keyName = PC_NAME[tonic] ?? String(tonic);
     stats.keys[keyName] = (stats.keys[keyName] ?? 0) + 1;

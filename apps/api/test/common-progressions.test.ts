@@ -19,9 +19,9 @@ describe("commonProgressions（横断曲 n-gram 頻度）", () => {
     expect(found4!.degrees[0]).toMatch(/:m$/); // minor quality が末尾
   });
 
-  // example render は **C長調フレーム(tonic=0)**。detectKeyFromChords は Am-F-C-G を C major と検出＝度数は
-  // 相対長調フレーム ["9:m","5:","0:","7:"]（vi-IV-I-V）。tonic=0 で戻すと元の **Am-F-C-G** に（自然な実音・弾ける）。
-  it("example は degree を C長調フレームで実音化＝Am-F-C-G に戻る（弾ける自然なキー）", () => {
+  // メイン調相対（resolveTonic）：Am-F-C-G は分布＋first(Am)から **A minor** と判定＝度数は短調フレーム
+  // ["0:m","8:","3:","10:"]（i-VI-III-VII）。example は短調基準(Am)で実音化＝元の **Am-F-C-G** に戻る（弾ける自然な進行）。
+  it("メイン調相対（短調フレーム i-VI-III-VII）＋ example は Am-F-C-G に戻る", () => {
     const songs = [
       { title: "Am曲", chords: [{ root: 9, quality: "m" }, { root: 5, quality: "" }, { root: 0, quality: "" }, { root: 7, quality: "" }] },
       { title: "Em曲", chords: [{ root: 4, quality: "m" }, { root: 0, quality: "" }, { root: 7, quality: "" }, { root: 2, quality: "" }] },
@@ -29,15 +29,12 @@ describe("commonProgressions（横断曲 n-gram 頻度）", () => {
     const { common } = commonProgressions(songs);
     const top4 = common.find((c) => c.degrees.length === 4 && c.songCount === 2);
     expect(top4).toBeDefined();
+    // 短調フレーム＝トニックが 0:m（i）で始まる
+    expect(top4!.degrees[0]).toBe("0:m");
     const ex = top4!.example;
-    // ★実音が Am-F-C-G（root 9,5,0,7 / 先頭が minor）＝作家研究として弾ける自然な進行
+    // 実音が Am-F-C-G（root 9,5,0,7 / 先頭が minor）＝弾ける自然な進行
     expect(ex.map((e) => e.root)).toEqual([9, 5, 0, 7]);
     expect(ex.map((e) => e.quality)).toEqual(["m", "", "", ""]);
-    // degree token から計算できることを検証：deg%12 === root
-    for (const [i, e] of ex.entries()) {
-      const deg = parseInt(top4!.degrees[i]!.split(":")[0]!, 10);
-      expect(e.root).toBe(((deg % 12) + 12) % 12);
-    }
     // start/dur が設定されている
     expect(ex[0]!.start).toBe(0);
     expect(ex[0]!.dur).toBeGreaterThan(0);
