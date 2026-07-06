@@ -162,6 +162,9 @@ export class ChatSession {
     const sessionArg = this.mode === "resume" ? ["--resume", this.sid] : ["--session-id", this.sid];
     const args = [
       "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+      // #① 逐次表示：部分メッセージ(content_block_delta/text_delta)を流させる＝文字がタラタラ出る。
+      //   無いと assistant ブロックを塊で1個吐くだけ＝スピナー→一括ドンになる（手触りの安っぽさの元）。
+      "--include-partial-messages",
       ...sessionArg,
       "--mcp-config", mcpConfig, "--strict-mcp-config",
       "--tools", ...CHAT_TOOLS, "--allowedTools", ...CHAT_TOOLS,
@@ -170,7 +173,9 @@ export class ChatSession {
     ];
     const env = { ...process.env, CM_DB: this.dbPath, PATH: childPath };
     // detached=新プロセスグループ。worker(start_new_session=True)と同じ＝claude が孫(stdio MCP)を正しく spawn/管理できる。
-    const proc = spawn("claude", args, { cwd: this.cwd, env, detached: true });
+    // ★e2e：CM_FAKE_CLAUDE=<exec> の時は実 claude の代わりにフェイク(stream-json 契約を模す)を起動＝決定的に検証できる。
+    const bin = process.env.CM_FAKE_CLAUDE || "claude";
+    const proc = spawn(bin, args, { cwd: this.cwd, env, detached: true });
     this.proc = proc;
     this.mcpReady = false;
     this.sawNoConv = false;

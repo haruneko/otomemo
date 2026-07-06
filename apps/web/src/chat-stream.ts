@@ -2,7 +2,8 @@
 // 脳は Claude＝自然文(text)＋ツール選択(tool_use)を出す。web は描くだけ。判別ユニオン(#61)は廃止（#100）。
 
 export type TurnAction =
-  | { kind: "text"; text: string } // assistant の自然文（このステップの全文。stream-json は非partial）
+  | { kind: "textDelta"; text: string } // #① 部分テキスト（--include-partial-messages の content_block_delta）＝加算して逐次表示
+  | { kind: "text"; text: string } // assistant の自然文（このステップの全文＝確定形。デルタが来ない古い経路の主役）
   | { kind: "tool"; name: string; label: string; id?: string } // tool_use＝今なにしてるかの実況（id で result と突合）
   | { kind: "toolResult"; id?: string; payload: unknown } // tool_result＝候補/書込の中身
   | { kind: "result"; text: string; isError: boolean }; // ターン確定（最終テキスト／失敗）
@@ -34,6 +35,8 @@ type Ev = {
   result?: string;
   is_error?: boolean;
   error?: string;
+  // #① --include-partial-messages のラッパー（type:"stream_event"）。中の Anthropic 生イベント。
+  event?: { type?: string; delta?: { type?: string; text?: string }; [k: string]: unknown };
   [k: string]: unknown;
 };
 
@@ -51,6 +54,14 @@ function parseToolResult(content: unknown): unknown {
 
 /** stream-json の1イベント → 0..n の UI アクション。 */
 export function parseTurnEvent(ev: Ev): TurnAction[] {
+  // #① 部分メッセージ：content_block_delta の text_delta だけ拾って逐次加算する（他の生イベントは描画対象外）。
+  if (ev?.type === "stream_event") {
+    const inner = ev.event;
+    if (inner?.type === "content_block_delta" && inner.delta?.type === "text_delta" && inner.delta.text) {
+      return [{ kind: "textDelta", text: inner.delta.text }];
+    }
+    return [];
+  }
   if (ev?.type === "assistant") {
     const out: TurnAction[] = [];
     for (const b of ev.message?.content ?? []) {

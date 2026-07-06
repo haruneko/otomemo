@@ -50,6 +50,17 @@ describe("parseTurnEvent", () => {
     expect(parseTurnEvent({ type: "system", subtype: "init", tools: [] })).toEqual([]);
     expect(parseTurnEvent({ type: "assistant", message: { content: [{ type: "text", text: "" }] } })).toEqual([]);
   });
+  it("#① stream_event の content_block_delta(text_delta) → textDelta（加算用）", () => {
+    const ev = { type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "こん" } } };
+    expect(parseTurnEvent(ev)).toEqual<TurnAction[]>([{ kind: "textDelta", text: "こん" }]);
+  });
+  it("#① stream_event の非テキスト系(block_start/stop・message_delta)は無視", () => {
+    expect(parseTurnEvent({ type: "stream_event", event: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } })).toEqual([]);
+    expect(parseTurnEvent({ type: "stream_event", event: { type: "content_block_stop", index: 0 } })).toEqual([]);
+    expect(parseTurnEvent({ type: "stream_event", event: { type: "message_delta", delta: {} } })).toEqual([]);
+    // 空デルタは描画対象外（無音イベントで再描画しない）。
+    expect(parseTurnEvent({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "" } } })).toEqual([]);
+  });
   it("tool_use は id も載せる（tool_result と突合するため）", () => {
     const ev = { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "generate", input: {} }] } };
     expect(parseTurnEvent(ev)).toEqual<TurnAction[]>([{ kind: "tool", name: "generate", label: "作ってる", id: "t1" }]);

@@ -148,6 +148,9 @@ export function Chat({
   const [inflight, setInflight] = useState(0); // 裏で実行中のジョブ数（リロードで待ち状態が消えても可視化）。
   const [loaded, setLoaded] = useState(false); // #70 履歴ロード完了（自動初回提案はこの後）
   const started = useRef(false);
+  // #② 再アタッチのレース対策：開いた直後に「自分でターンを始めたか」。true の間は再アタッチの
+  //   永続取り直し(reloadMsgs)を抑止＝走り出した楽観表示(ユーザー発言/streamText)を潰さない。
+  const localTurn = useRef(false);
   const alive = useAlive(); // ワーカー待ちは長い＝閉じた後に setState しないためのガード（poll.ts 共通）
 
   // busy の間（特に分解前の「考え中」planning）に経過秒を刻む＝無進捗の沈黙をなくす。
@@ -244,6 +247,7 @@ export function Chat({
     let alive = true;
     setMsgs([]);
     started.current = false;
+    localTurn.current = false; // 開き直し＝この後に自分で始めたターンだけを再アタッチの抑止対象にする
     setLoaded(false);
     void api
       .listChatMessages(thread)
@@ -278,20 +282,27 @@ export function Chat({
       // これをしないと、走行中でないのに consumeTurn を走らせて streamText 等を空クリアし、直後に始まった
       // 送信の途中表示を消してしまう＝新規チャットの一つ目の回答が尻切れトンボになる（回帰の原因）。
       let live = false;
-      try { live = (await api.chatTurnStatus(thread)).live; } catch { /* 取得失敗＝再アタッチしない */ }
-      if (cancelled || !live) return;
-      const { out, cards, sawAny } = await consumeTurn(
+      try { live = (await api.chatTurnStatus(thread)).live; } catch { return; /* 取得失敗＝何もしない */ }
+      if (cancelled) return;
+      if (!live) {
+        // #② 走行中でない：remount がターン完了と競合し、履歴ロードが「永続化される前」に走ると締めの
+        //   assistant 返信を取りこぼす（＝完成返信が一瞬どころか丸ごと消える）。確定済みを取り直して塞ぐ。
+        //   サーバは persist→endTurn 順＝not-live なら永続化は必ず済んでいる。冪等な再取得。
+        //   ただし開いた直後に自分でターンを始めていたら触らない（楽観表示を潰さない）。
+        if (!localTurn.current) await reloadMsgs();
+        return;
+      }
+      const { sawAny } = await consumeTurn(
         (cb) => api.chatTurnLiveStream(thread, cb),
         () => { if (!cancelled) { started.current = true; setBusy(true); } }, // 走行中ターン検知→busy表示
       );
       if (cancelled) return;
-      if (sawAny) {
-        setBusy(false);
-        if (out || cards.length) {
-          renderMsg({ role: "ai", text: out || undefined, saveable: out || undefined, cards: cards.length ? cards : undefined });
-        }
-        onChanged?.();
-      }
+      // #② 走行中ターンを最後まで購読した／その間に完了した、どちらでも締めはサーバが永続化済み
+      //   （consumeTurn は SSE の done で解決＝サーバの persist→endTurn の後）。非永続の renderMsg で
+      //   暫定追加せず、永続を取り直して確定描画に一本化＝「完成返信が一瞬消える」チラつきを断つ。
+      if (sawAny) await reloadMsgs();
+      setBusy(false);
+      onChanged?.();
     })();
     return () => { cancelled = true; };
     // loaded/thread が変わった時だけ（＝開いた/切替えた時）。busy 依存にすると送信の度に再アタッチしてしまう。
@@ -317,6 +328,7 @@ export function Chat({
     const toolNames = new Map<string, string>(); // tool_use id → name（tool_result と突合）
     const cards: ToolCard[] = [];
     let acc = "";
+    let sawDelta = false; // #① 部分デルタを見たか。見た後は full assistant ブロックで acc を上書きしない（逆戻り防止）。
     let finalText = "";
     let errored = false;
     let sawAny = false;
@@ -325,7 +337,9 @@ export function Chat({
         if (!alive.current) return;
         if (!sawAny) { sawAny = true; onFirst?.(); }
         for (const a of parseTurnEvent(ev as Parameters<typeof parseTurnEvent>[0])) {
-          if (a.kind === "text") { acc = a.text; setStreamText(acc); }
+          // #① 部分テキストは加算＝文字がタラタラ増える。full text ブロック(下)はデルタが来ない古い経路の主役。
+          if (a.kind === "textDelta") { sawDelta = true; acc += a.text; setStreamText(acc); }
+          else if (a.kind === "text") { if (!sawDelta) { acc = a.text; setStreamText(acc); } }
           else if (a.kind === "tool") { setThinkLabel(a.label); if (a.id) toolNames.set(a.id, a.name); }
           else if (a.kind === "toolResult") {
             const name = a.id ? toolNames.get(a.id) : undefined;
@@ -352,6 +366,7 @@ export function Chat({
   // research モードはユーザー文を「リサーチ依頼」にだけ薄く包む（脳は持たない＝Claude が自由に調べ/記録）。
   // ★assistant 返信の永続化はサーバ側（/turn 完了時）＝閉じても消えない。ここは画面表示だけ（renderMsg）。
   async function runStream(text: string) {
+    localTurn.current = true; // #② これ以降、再アタッチの永続取り直しはこの楽観表示を潰さない
     pushMsg({ role: "user", text }); // ユーザー発言は即永続化（開始時＝切断前に残る）
     setBusy(true);
     const sendText =
