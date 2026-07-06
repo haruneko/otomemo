@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { commonProgressions, renderFrameTonic, resolveTonic } from "../src/common-progressions";
+import { commonProgressions, renderFrameTonic, resolveTonic, songCoreLoops } from "../src/common-progressions";
 
 describe("renderFrameTonic（実音化フレームのモード判定）", () => {
   it("窓に短調トニック 0:m があれば Am枠(9)", () => {
@@ -14,6 +14,51 @@ describe("renderFrameTonic（実音化フレームのモード判定）", () => 
   });
   it("トニックも Aeolian色も無ければ既定 C枠(0)", () => {
     expect(renderFrameTonic(["5:", "7:", "5:", "7:"])).toBe(0);
+  });
+});
+
+describe("songCoreLoops（曲内反復ループ＝#S11改の主レンズ）", () => {
+  // Am-F-C-G を4回繰り返す曲＝コア・ループは4連 ×4、度数[0:m 8: 3: 10:]、実音Am-F-C-G
+  it("繰り返す4連ループを回数付きで拾う（dur重み調で度数化）", () => {
+    const loop = [{ root: 9, quality: "m" }, { root: 5, quality: "" }, { root: 0, quality: "" }, { root: 7, quality: "" }];
+    const chords = [...loop, ...loop, ...loop, ...loop]; // 4周
+    const { tonic, mode, loops } = songCoreLoops(chords);
+    expect(tonic).toBe(9); // A minor（Amが最頻＋first bonus）
+    expect(mode).toBe("minor");
+    const l4 = loops.find((l) => l.length === 4);
+    expect(l4).toBeDefined();
+    expect(l4!.count).toBe(4); // 曲内で4回
+    expect(l4!.degrees).toEqual(["0:m", "8:", "3:", "10:"]); // i-♭VI-♭III-♭VII
+    expect(l4!.example.map((e) => e.root)).toEqual([9, 5, 0, 7]); // Am枠で実音化＝Am-F-C-G
+  });
+
+  // 2連断片は主役にしない＝返すのは4連/8連のみ（被覆=回数×長さ の贔屓を避ける実測バグ対策）
+  it("2連は返さない（4連/8連のみ）", () => {
+    const loop = [{ root: 9, quality: "m" }, { root: 5, quality: "" }, { root: 0, quality: "" }, { root: 7, quality: "" }];
+    const chords = [...loop, ...loop, ...loop];
+    const { loops } = songCoreLoops(chords);
+    expect(loops.every((l) => l.length === 4 || l.length === 8)).toBe(true);
+  });
+
+  // 反復が無ければ（各コード1回きり）ループ無し
+  it("反復が無ければ loops=[]", () => {
+    const chords = [{ root: 0, quality: "" }, { root: 2, quality: "" }, { root: 4, quality: "" }, { root: 5, quality: "" }, { root: 7, quality: "" }];
+    const { loops } = songCoreLoops(chords);
+    expect(loops).toEqual([]);
+  });
+
+  // 8連ループも拾う（8和音の型を2周）
+  it("8連ループを拾う", () => {
+    const loop8 = [
+      { root: 9, quality: "m" }, { root: 5, quality: "" }, { root: 0, quality: "" }, { root: 7, quality: "" },
+      { root: 9, quality: "m" }, { root: 5, quality: "" }, { root: 2, quality: "m" }, { root: 7, quality: "" },
+    ];
+    const chords = [...loop8, ...loop8]; // 2周
+    const { loops } = songCoreLoops(chords);
+    const l8 = loops.find((l) => l.length === 8);
+    expect(l8).toBeDefined();
+    expect(l8!.count).toBe(2);
+    expect(l8!.degrees).toHaveLength(8);
   });
 });
 

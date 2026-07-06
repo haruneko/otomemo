@@ -168,3 +168,53 @@ export function commonProgressions(
 
   return { common, stats };
 }
+
+// ── #S11改（2026-07-06・実測駆動）：主レンズ＝曲内反復ループ ──────────────────────
+// クロス曲頻度(commonProgressions)は「どの短調曲にも出る汎用の繋ぎ(♭VI–♭VII–i)」を上位に出す＝美味しくない。
+// 曲の個性＝「1曲の中で繰り返される進行(サビ/コア・ループ)」。それを曲ごとに拾うのが songCoreLoops。
+// 詳細＝docs/research/2026-07-06-within-song-loop-lens.md ／ design.md「#S11改」。
+export interface CoreLoop {
+  degrees: string[];    // 度数shape（メイン調相対・key不変で曲間比較できる）
+  example: ChordSlot[]; // 実音レンダ（弾ける・renderFrameTonic 枠）
+  length: number;       // ループ長（4 or 8）
+  count: number;        // 曲内での出現回数（>=2＝反復してる）
+}
+export interface SongCoreLoopsResult {
+  tonic: number;
+  mode: "major" | "minor";
+  loops: CoreLoop[];    // count 降順 → length 降順。反復が無ければ空。
+}
+
+/**
+ * 1曲のコード列（コード変化列＝chordSequenceFromTimeline 相当）から「曲内で最も繰り返される進行」を拾う。
+ * 各長さ L∈lengths の最頻 n-gram（count>=2）＝コア・ループ。
+ * ★`被覆=回数×長さ` は使わない（2連断片を過剰贔屓する実測バグ）＝「最頻の 4連/8連」で見る。
+ * ★調は dur重み resolveTonic（出現数重みはループ先頭の ♭VI を主音と誤検出＝実測で確認）。
+ */
+export function songCoreLoops(
+  chords: { root: number; quality: string; dur?: number }[],
+  lengths: number[] = [4, 8],
+): SongCoreLoopsResult {
+  const { tonic, mode } = resolveTonic(chords); // dur重み（正）
+  const seq = chords.map((c) => `${c.root}:${c.quality}`); // 絶対コード列（コード変化ごと）
+  const loops: CoreLoop[] = [];
+  for (const L of lengths) {
+    const cnt = new Map<string, number>();
+    for (let i = 0; i + L <= seq.length; i++) {
+      const k = seq.slice(i, i + L).join("|");
+      cnt.set(k, (cnt.get(k) ?? 0) + 1);
+    }
+    let best: { k: string; n: number } | null = null;
+    for (const [k, n] of cnt) if (!best || n > best.n) best = { k, n };
+    if (best && best.n >= 2) {
+      const degrees = best.k.split("|").map((t) => {
+        const r = parseInt(t, 10);
+        const q = t.slice(t.indexOf(":") + 1);
+        return `${((r - tonic) % 12 + 12) % 12}:${q}`;
+      });
+      loops.push({ degrees, example: renderExample(degrees), length: L, count: best.n });
+    }
+  }
+  loops.sort((a, b) => b.count - a.count || b.length - a.length);
+  return { tonic, mode, loops };
+}
