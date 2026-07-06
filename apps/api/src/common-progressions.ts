@@ -41,13 +41,14 @@ function renderExample(degrees: string[]): ChordSlot[] {
 }
 
 /**
- * 複数曲のコード列を度数正規化し、クロス曲 n-gram (n=2,3,4) の頻度を集計する。
+ * 複数曲のコード列を度数正規化し、クロス曲 n-gram (n=4,8=フレーズ長) の頻度を集計する。
  *
  * @param songs - {title, chords:[{root,quality}]} の配列。root は絶対ピッチクラス 0-11。
  * @returns common（songCount 降順 → n 長降順 → 合計出現数降順）＋ stats。
  */
 export function commonProgressions(
   songs: { title: string; chords: { root: number; quality: string }[] }[],
+  lengths: number[] = [4, 8], // 進行の長さ＝フレーズ単位（4個 or 8個の連続）。断片(2-3)は拾わない。
 ): CommonProgressionsResult {
   const stats = {
     songs: songs.length,
@@ -91,15 +92,16 @@ export function commonProgressions(
   }
   const ngramMap = new Map<string, NGramData>();
 
+  const minLen = Math.min(...lengths);
   for (const song of songData) {
     const { title, degs } = song;
-    if (degs.length < 2) continue; // 1コード以下では2-gram作れない
+    if (degs.length < minLen) continue; // 最短フレーズ長に満たない曲は n-gram 無し
 
     // このソングに出る各 n-gram とその出現数
     const occThisSong = new Map<string, number>(); // key → 出現数（in this song）
     const presentInSong = new Set<string>(); // key（distinct set per song）
 
-    for (const n of [2, 3, 4] as const) {
+    for (const n of lengths) {
       for (let i = 0; i <= degs.length - n; i++) {
         const slice = degs.slice(i, i + n);
         const key = slice.join("|"); // "|" で連結（":" が品質に使われても干渉しない）
