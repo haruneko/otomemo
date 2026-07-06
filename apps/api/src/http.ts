@@ -36,6 +36,19 @@ import { beginTurn, pushTurnEvent, endTurn, attachTurn, isTurnLive, DONE } from 
 import { killJobProc } from "./job-procs";
 import { rankRecommendations } from "./music/recommend";
 
+// 一覧(GET /neta)は巨大content を落として初回ロードを軽くする。study(共通進行1000超)や analysis(生MIR配列)は
+// 1件で数百KB＝89件で~2MB がモバイル初期表示に丸ごと乗って重かった。閾値超は content:null にし、開いた時に
+// GET /neta/:id で全文を取り直す（web の openTop/drillNeta が content==null なら再取得）。music の小content
+// (一覧のMiniRoll/試聴で使う)は閾値以下なので残る。閾値は最大級のmelody/進行(数KB)より十分上に置く。
+const LIST_CONTENT_MAX_BYTES = 32768;
+function stripHeavyListContent<T extends { content: unknown }>(items: T[]): T[] {
+  return items.map((n) => {
+    if (n.content == null) return n;
+    const size = Buffer.byteLength(JSON.stringify(n.content), "utf8");
+    return size > LIST_CONTENT_MAX_BYTES ? { ...n, content: null } : n;
+  });
+}
+
 // #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
 function assetsDir(): string {
   return (
@@ -113,7 +126,7 @@ export function buildHttp(core: Core): FastifyInstance {
 
   app.get("/neta", async (req) => {
     const q = req.query as Record<string, string | undefined>;
-    return core.listNeta({
+    return stripHeavyListContent(core.listNeta({
       kind: q.kind,
       mode: q.mode,
       meter: q.meter,
@@ -126,7 +139,7 @@ export function buildHttp(core: Core): FastifyInstance {
 
       limit: q.limit ? Number(q.limit) : undefined,
       offset: q.offset ? Number(q.offset) : undefined,
-    });
+    }));
   });
 
   // #20 ピッカーおすすめ＝コーパス(library)から拍子/調で関連数件だけ返す（生1781を選ばせない）。

@@ -80,15 +80,23 @@ export function App() {
   const [active, setActive] = useState<Neta | null>(null);
   // Section から子ネタへ潜った履歴（← 戻るで親 Section に戻す）。トップ階層の open は空にする。
   const [navStack, setNavStack] = useState<Neta[]>([]);
-  // トップ階層で開く（一覧/Chat/プロジェクト）＝履歴をリセット。
+  // 一覧(GET /neta)は巨大content(study/analysis 等)を content:null に落として初回ロードを軽くしている。
+  // エディタは全文が要る(StudyView=content.common / AnalysisWorkbench=content.raw)ので、開く時に content が
+  // 欠けていれば /neta/:id で取り直す。小さい music content は一覧にも載っているので追加取得は起きない。
+  const ensureFullContent = async (n: Neta): Promise<Neta> =>
+    n.content == null ? ((await api.getNeta(n.id).catch(() => null)) ?? n) : n;
+  // トップ階層で開く（一覧/Chat/プロジェクト）＝履歴をリセット。content 欠けは全文を取り直してから開く
+  // （AnalysisWorkbench は content 前提で初期化するため null で開けない）。
   const openTop = (n: Neta) => {
     setNavStack([]);
-    setActive(n);
+    if (n.content == null) void ensureFullContent(n).then(setActive);
+    else setActive(n);
   };
   // 潜る（Section のブロックから子ネタへ）＝今の active を積んでから開く。
   const drillNeta = (n: Neta) => {
     setNavStack((s) => (active ? [...s, active] : s));
-    setActive(n);
+    if (n.content == null) void ensureFullContent(n).then(setActive);
+    else setActive(n);
   };
   const [railOpen, setRailOpen] = useState(true);
   const isMobile = useIsMobile();

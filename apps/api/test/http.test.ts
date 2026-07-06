@@ -188,4 +188,27 @@ describe("http auth gate (#36)", () => {
     rel = (await app.inject({ method: "GET", url: `/neta/${a.id}/relations` })).json();
     expect(rel.length).toBe(0);
   });
+
+  // 初回ロード軽量化：一覧(GET /neta)は巨大content(study/analysis 等)を content:null に落とす。
+  // 全文は開いた時に GET /neta/:id で取る。小さい music content(一覧のMiniRoll/試聴で使う)は残す。
+  it("GET /neta omits heavy content but /neta/:id returns full content", async () => {
+    const heavy = { blob: "x".repeat(40000) }; // 40KB > 32KB 閾値
+    const study = (
+      await app.inject({ method: "POST", url: "/neta", payload: { kind: "study", title: "big", content: heavy } })
+    ).json();
+    const small = { notes: [{ pitch: 60, start: 0, dur: 1 }] };
+    const mel = (
+      await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", title: "mel", content: small } })
+    ).json();
+
+    const list = (await app.inject({ method: "GET", url: "/neta" })).json() as { id: string; content: unknown }[];
+    const listStudy = list.find((n) => n.id === study.id)!;
+    const listMel = list.find((n) => n.id === mel.id)!;
+    expect(listStudy.content).toBeNull(); // 重いので一覧では落とす
+    expect(listMel.content).toEqual(small); // 軽いメロは一覧でも残す
+
+    // 全文は個別取得で復元できる（エディタはこちらで開く）。
+    const full = (await app.inject({ method: "GET", url: `/neta/${study.id}` })).json();
+    expect(full.content).toEqual(heavy);
+  });
 });

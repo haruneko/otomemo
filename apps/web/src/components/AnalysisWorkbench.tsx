@@ -78,7 +78,7 @@ function nearestIdx(bt: number[], t: number): number {
 }
 
 export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; onChanged?: () => void; onClose: () => void }) {
-  const c = neta.content as Content;
+  const c = (neta.content ?? {}) as Content; // 一覧は content を落とすので開く時に全文取得済み。念のため null 安全に。
   const bpm = c.meta?.bpm ?? 120;
   const meter = c.meta?.meter && c.meta.meter > 0 ? c.meta.meter : 4;
   const bt = c.raw?.beat_times ?? [];
