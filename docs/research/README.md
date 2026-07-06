@@ -44,6 +44,7 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [2026-06-22-key-degree-tech](2026-06-22-key-degree-tech.md) — コード進行→調→度数 変換の要素技術
 
 ## 横断研究(study)＝クロス曲の共通進行(#S11)
+- [2026-07-06-within-song-loop-lens](2026-07-06-within-song-loop-lens.md) — **レンズ転換の実測**＝「曲間頻度」は全曲の最小公倍数(♭VI–♭VII–i)だけ見せ各曲の色を平均で消す欠陥。**曲内反復ループ**でSURFACE4曲を見ると2曲は本当に♭VI–♭VII–i循環がフック、残り2曲は曲間レンズが消してた個性(本物のV／ジャジーmaj7ループ)が出た。手法の罠2つ(被覆=回数×長さは2連断片を贔屓／保存にdur落とすと調が出現数重みに劣化し誤検出)も記録。**設計提案=study主レンズをper-song core loopへ＋生コード列(dur込)保存**
 - [2026-07-06-surface-shiina-study](2026-07-06-surface-shiina-study.md) — **同一バンド版**＝SURFACE(椎名慶治)5曲(それじゃあバイバイ/さぁ/ゴーイングmy上へ/その先にあるもの/君の声で)公式音源。手癖＝**♭VI–♭VII–i の3和音を回転・振動＋iv(下属マイナー)で湿り気**・ドミナント/導音なし。**ボカロ民族調と同じ Aeolian 核土台の上に個人署名(iv/振動形)が乗る**＝スタイル土台×個人手癖を対象選びで撃ち分けられると実証。同時に study 3修正(per-song調表示/common キャップ/renderFrameTonic モード対応レンダ)＋prose meta除去(cleanProse)を実データ検証
 - [2026-07-06-vocaloid-folk-study](2026-07-06-vocaloid-folk-study.md) — #S11研究フレームの**初本番**＝民族調ボカロ5曲(千本桜/マトリョシカ/結ンデ〜/六兆年/威風堂々)をYouTube→Demucs→BTC→度数化→クロスn-gram。**別作家3人が `i–♭VI–♭VII` 循環で一致**＝スタイルの共通文法(V/導音回避のエオリアン・ケーデンス)。同時に**長短判定修正(resolveTonic=継続長ヒートマップ)を実データ検証**＝5曲全て正しく短調→度数が揃い一致が成立(調判定の質が集計の質に直結)。穴3つ=members per-song key未載/common無制限保存(1387)/renderExample窓依存フレーム
 
