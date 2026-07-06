@@ -48,10 +48,21 @@ export function resolveTonic(chords: { root: number; quality: string; dur?: numb
   return { tonic: parseInt(r!, 10), mode: m === "m" ? "minor" : "major" };
 }
 
+// 度数トークン列 → 実音化の基準トニック（PC）。短調フレーム=**A minor(9)** / 長調=**C major(0)**。
+// ★窓依存の穴の対策：4/8連の"回転窓"にトニック(0:*)が入らない事がある。0:m があれば当然短調。
+//   無くても、♭III/♭VI/♭VII(3:/8:/10:)の major が居て I(0:)が居ないなら Aeolian＝短調フレームと判断する
+//   （例 [8: 3: 8: 10:]＝♭VI-♭III-♭VI-♭VII は明らかに短調なのに旧実装は C長調枠で G#… と誤表示していた）。
+export function renderFrameTonic(degrees: string[]): number {
+  if (degrees.includes("0:m")) return 9;                    // 短調トニックが窓内＝確定で Am 枠
+  const hasMajorTonic = degrees.some((d) => d === "0:" || d.startsWith("0:maj") || d.startsWith("0:6") || d.startsWith("0:sus"));
+  if (hasMajorTonic) return 0;                              // 長調トニックが窓内＝C 枠
+  const aeolianColor = degrees.some((d) => d === "3:" || d === "8:" || d === "10:"); // ♭III/♭VI/♭VII(major)
+  return aeolianColor ? 9 : 0;                              // トニック不在の回転窓＝色で推定（Aeolian→Am枠）
+}
+
 // 度数トークン列 → 実音コード列（2拍/コード）。度数は「メイン調相対」（短調曲は i=0:m）。
-// 実音化の基準キーはモードに合わせる：短調フレーム(0:m を含む)は **A minor(tonic9)**、長調は **C major(tonic0)** で自然な実音へ。
 function renderExample(degrees: string[]): ChordSlot[] {
-  const renderTonic = degrees.includes("0:m") ? 9 : 0; // 短調=Am基準 / 長調=C基準
+  const renderTonic = renderFrameTonic(degrees); // モード対応で自然な実音枠を選ぶ
   return degrees.map((d, i) => {
     const sep = d.indexOf(":");
     const deg = parseInt(d.slice(0, sep), 10);

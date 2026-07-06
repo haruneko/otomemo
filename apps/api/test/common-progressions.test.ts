@@ -1,5 +1,33 @@
 import { describe, it, expect } from "vitest";
-import { commonProgressions } from "../src/common-progressions";
+import { commonProgressions, renderFrameTonic, resolveTonic } from "../src/common-progressions";
+
+describe("renderFrameTonic（実音化フレームのモード判定）", () => {
+  it("窓に短調トニック 0:m があれば Am枠(9)", () => {
+    expect(renderFrameTonic(["0:m", "8:", "10:", "0:m"])).toBe(9);
+  });
+  it("窓に長調トニック 0: があれば C枠(0)", () => {
+    expect(renderFrameTonic(["0:", "5:", "7:", "0:"])).toBe(0);
+  });
+  it("トニック不在でも ♭VI/♭VII/♭III(major)が居れば Aeolian→Am枠(9)＝回転窓の穴対策", () => {
+    // [8: 3: 8: 10:] = ♭VI-♭III-♭VI-♭VII（短調なのに旧実装は C長調枠で G#… と誤表示していた）
+    expect(renderFrameTonic(["8:", "3:", "8:", "10:"])).toBe(9);
+  });
+  it("トニックも Aeolian色も無ければ既定 C枠(0)", () => {
+    expect(renderFrameTonic(["5:", "7:", "5:", "7:"])).toBe(0);
+  });
+});
+
+describe("resolveTonic（継続長ヒートマップで最も強い三和音）", () => {
+  it("Dm が最長なら D minor（相対長調 F へ流れない）", () => {
+    const chords = [
+      { root: 2, quality: "m", dur: 40 }, // Dm 長い
+      { root: 10, quality: "", dur: 8 },  // B♭
+      { root: 5, quality: "", dur: 8 },   // F
+      { root: 0, quality: "", dur: 8 },   // C
+    ];
+    expect(resolveTonic(chords)).toEqual({ tonic: 2, mode: "minor" });
+  });
+});
 
 describe("commonProgressions（横断曲 n-gram 頻度）", () => {
   // (a) 2曲が異なる調でも同じ度数列（i-VI-III-VII）に正規化される

@@ -11,7 +11,7 @@ import { claudeShot } from "./research-runner";
 import { fetchAudioFromUrl, analyzeAudioFile } from "./audio-analyze";
 import { beginJobProc, endJobProc } from "./job-procs";
 import { chordSequenceFromTimeline } from "./audio-chords";
-import { commonProgressions } from "./common-progressions";
+import { commonProgressions, resolveTonic } from "./common-progressions";
 import type { Core } from "./core";
 import type { Job } from "./types";
 
@@ -114,11 +114,16 @@ export async function runStudyJob(
         }
       }
       songs.push({ title: work.title, chords });
-      members.push({ title: work.title, url: work.audioUrl, key: null, mode: null });
+      // per-song の調＝集計と同じ resolveTonic（継続長ヒートマップ）で決める。StudyView で「千本桜＝D短調」等を出す。
+      const t = chords.length ? resolveTonic(chords) : null;
+      members.push({ title: work.title, url: work.audioUrl, key: t ? t.tonic : null, mode: t ? t.mode : null });
     }
 
     // ②共通進行を集計（決定的純関数）
     const result = commonProgressions(songs);
+    // ★保存は"共通"(songCount>=2)だけに絞る＝単曲固有(songCount=1)は研究の産物でなくノイズ（StudyViewでも隠す）。
+    //   同一作家大量カタログで肥大しないよう上限200でハードキャップ（既にsongCount降順ソート済＝上位=真の共通）。
+    const commonToStore = result.common.filter((e) => e.songCount >= 2).slice(0, 200);
 
     // ③横断統合（Claude 1回・生配列は渡さない）
     let prose = "";
@@ -132,7 +137,7 @@ export async function runStudyJob(
     core.completeJob(job.id, {
       topic,
       members,
-      common: result.common,
+      common: commonToStore,
       stats: result.stats,
       prose,
       title: `研究: ${topic}`,
