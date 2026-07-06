@@ -98,6 +98,51 @@ export function App() {
     if (n.content == null) void ensureFullContent(n).then(setActive);
     else setActive(n);
   };
+
+  // Android/ブラウザの「戻る」で最前面の画面を1つ閉じる（アプリを抜けない）。オーバーレイ数だけ
+  // history に guard を積み、popstate（戻る）で1レイヤ閉じる。UIの×で閉じた分は自前で history.back()
+  // して guard を消費（trim）。優先順＝トレイ > チャット > 潜り(navStack) > 編集(active) > プロジェクト画面。
+  const closeTop = (): boolean => {
+    if (trayOpen) { setTrayOpen(false); return true; }
+    if (chatOpen) { setChatOpen(false); setChatTarget(undefined); setGearMode(false); return true; }
+    if (navStack.length) {
+      const parent = navStack[navStack.length - 1]!;
+      setNavStack(navStack.slice(0, -1));
+      void api.getNeta(parent.id).then((fresh) => setActive(fresh ?? parent)).catch(() => setActive(parent));
+      return true;
+    }
+    if (active) {
+      setActive(null);
+      if (fromProject) { setProjectView(true); setFromProject(false); }
+      return true;
+    }
+    if (projectView) { setProjectView(false); return true; }
+    return false;
+  };
+  const overlayDepth =
+    (trayOpen ? 1 : 0) + (chatOpen ? 1 : 0) + navStack.length + (active ? 1 : 0) + (projectView ? 1 : 0);
+  const overlayDepthRef = useRef(0); overlayDepthRef.current = overlayDepth;
+  const closeTopRef = useRef(closeTop); closeTopRef.current = closeTop;
+  const histRef = useRef(0); // 積んだ guard 数
+  const trimRef = useRef(0); // 自前で history.back() した保留数（その popstate は消費のみで閉じない）
+  useEffect(() => {
+    const onPop = () => {
+      if (trimRef.current > 0) { trimRef.current -= 1; histRef.current = Math.max(0, histRef.current - 1); return; }
+      histRef.current = Math.max(0, histRef.current - 1);
+      if (overlayDepthRef.current > 0) closeTopRef.current(); // 1レイヤ閉じる
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  useEffect(() => {
+    const effective = histRef.current - trimRef.current; // 実効 guard 数
+    if (effective < overlayDepth) {
+      for (let i = effective; i < overlayDepth; i++) { window.history.pushState({ cmOverlay: true }, ""); histRef.current += 1; }
+    } else if (effective > overlayDepth) {
+      for (let i = overlayDepth; i < effective; i++) { trimRef.current += 1; window.history.back(); }
+    }
+  }, [overlayDepth]);
+
   const [railOpen, setRailOpen] = useState(true);
   const isMobile = useIsMobile();
   const [composeSignal, setComposeSignal] = useState(0); // D&D配置でSectionEditorを再読込
