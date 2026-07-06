@@ -19,6 +19,47 @@ export function pcFromKeyName(name: unknown): number | null {
 }
 
 /**
+ * #S11 コードレンズ用：chords_timeline → 全曲マージ済みコード列（拍量子化・最大長制限なし）。
+ * 連続同一ルートは1つに畳む（quality = 秒数累積で最長の representative）。
+ * N/X（無和音）や不正セグメントは飛ばす。`chordsFromTimeline` の全曲版・研究/集計向け。
+ */
+export function chordSequenceFromTimeline(timeline: unknown): { root: number; quality: string; dur: number }[] {
+  if (!Array.isArray(timeline)) return [];
+  // ルート別に同じ連続を畳む。quality は最長累積（秒）を採用。
+  type Run = { root: number; qualDurs: Map<string, number> };
+  const runs: Run[] = [];
+  for (const seg of timeline) {
+    if (!Array.isArray(seg) || seg.length < 3) continue;
+    const start = Number(seg[0]);
+    const end = Number(seg[1]);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    const parsed = parseChordSymbol(String(seg[2] ?? "").replace(":", "")); // "A:min"→"Amin"
+    if (!parsed) continue; // N/X/解釈不能は無和音として飛ばす
+    const dur = end - start;
+    const last = runs[runs.length - 1];
+    if (last && last.root === parsed.root) {
+      // 同ルートの連続→1つのランに蓄積（quality ごとに秒数を足す）
+      last.qualDurs.set(parsed.quality, (last.qualDurs.get(parsed.quality) ?? 0) + dur);
+    } else {
+      const qualDurs = new Map<string, number>();
+      qualDurs.set(parsed.quality, dur);
+      runs.push({ root: parsed.root, qualDurs });
+    }
+  }
+  // 各ランの代表 quality = 最長累積。dur = そのルートに居た総秒（トニック判定のヒートマップ重み用）。
+  return runs.map((run) => {
+    let bestQual = "";
+    let bestDur = -1;
+    let total = 0;
+    for (const [q, d] of run.qualDurs) {
+      total += d;
+      if (d > bestDur) { bestDur = d; bestQual = q; }
+    }
+    return { root: run.root, quality: bestQual, dur: total };
+  });
+}
+
+/**
  * chords_timeline → chord_progression の chords。連続同一コードは1つに畳み、各長さを bpm で拍量子化。
  * N/X(無和音)や不正セグメントは飛ばす。maxBeats で先頭抜粋（弾き直せる長さに頭打ち）。
  */

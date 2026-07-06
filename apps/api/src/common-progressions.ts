@@ -1,7 +1,6 @@
 // #S11 コードレンズ（chord lens）の純関数。複数曲のコード列を度数正規化し、
 // クロス曲 n-gram 頻度を集計する。調も拍子も無関係（度数化済み）＝研究の核心。
 // TDD 先行（common-progressions.test.ts）。
-import { detectKeyFromChords } from "./music";
 
 export interface ChordSlot { root: number; quality: string; start: number; dur: number }
 
@@ -27,22 +26,26 @@ const PC_NAME: Record<number, string> = {
   6: "F#", 7: "G", 8: "G#", 9: "A", 10: "A#", 11: "B",
 };
 
-// ★相対長調/短調のあいまいさを、曲全体のコード分布（ヒートマップ）で解消して「メイン調」を決める。
-//   detectKeyFromChords は音集合から調ペアを出すが Am↔C を同点で長調に倒す。そこで**トニック和音の出現重み**
-//   （長調トニック Kmaj の major三和音 vs 相対短調 Kmin の minor三和音）を比べ、first/last をボーナス（開始/解決先＝トニック）。
-export function resolveTonic(chords: { root: number; quality: string }[]): { tonic: number; mode: "major" | "minor" } {
+// ★「メイン調＆長短」を曲全体のコード分布（ヒートマップ）で決める。相対長短(Gm↔B♭)は音集合では
+//   区別不能なので、**最も強い三和音**（root+長短）を実測から選ぶ＝トニック。重み＝各コードの**継続長(dur)**
+//   （無ければ出現数）＝「長く鳴る/居座る和音＝調の中心」。開始/解決先(first/last)は弱いボーナス。
+//   ※相対ペアに縛らないので Dm 中心(D Phrygian 的)も拾える（DeepSea＝Dm が最長→D minor）。
+const _isMinQ = (q: string) => q === "m" || q === "m7" || q === "m6";
+const _isMajQ = (q: string) => q === "" || q === "maj7" || q === "6" || q === "7" || q.startsWith("sus");
+export function resolveTonic(chords: { root: number; quality: string; dur?: number }[]): { tonic: number; mode: "major" | "minor" } {
   if (chords.length === 0) return { tonic: 0, mode: "major" };
-  const det = detectKeyFromChords(chords)[0] ?? { key: 0, mode: "major" as const };
-  const Kmaj = det.mode === "major" ? det.key : ((det.key + 3) % 12); // 相対ペアの長調ルート
-  const Kmin = (Kmaj + 9) % 12; // 相対短調ルート（長調の6度下）
-  const isMajT = (c: { root: number; quality: string }) =>
-    c.root === Kmaj && (c.quality === "" || c.quality === "maj7" || c.quality === "6" || c.quality === "7" || c.quality.startsWith("sus"));
-  const isMinT = (c: { root: number; quality: string }) =>
-    c.root === Kmin && (c.quality === "m" || c.quality === "m7" || c.quality === "m6");
-  let wMaj = 0, wMin = 0;
-  for (const c of chords) { if (isMajT(c)) wMaj += 1; else if (isMinT(c)) wMin += 1; } // 分布（出現数）
-  for (const c of [chords[0]!, chords[chords.length - 1]!]) { if (isMajT(c)) wMaj += 2; else if (isMinT(c)) wMin += 2; } // 最初/最後は強め
-  return wMin > wMaj ? { tonic: Kmin, mode: "minor" } : { tonic: Kmaj, mode: "major" };
+  const score = new Map<string, number>(); // "root:m"/"root:M" → 重み
+  const add = (root: number, min: boolean, x: number) => { const k = `${root}:${min ? "m" : "M"}`; score.set(k, (score.get(k) ?? 0) + x); };
+  const put = (c: { root: number; quality: string; dur?: number }, x: number) => {
+    if (_isMinQ(c.quality)) add(c.root, true, x); else if (_isMajQ(c.quality)) add(c.root, false, x);
+  };
+  for (const c of chords) put(c, typeof c.dur === "number" && c.dur > 0 ? c.dur : 1); // 分布（継続長 or 出現数）
+  put(chords[0]!, 0.6); // 開始はトニックになりやすい
+  put(chords[chords.length - 1]!, 0.3); // 解決先も
+  let bestK = "0:M", best = -1;
+  for (const [k, v] of score) if (v > best) { best = v; bestK = k; }
+  const [r, m] = bestK.split(":");
+  return { tonic: parseInt(r!, 10), mode: m === "m" ? "minor" : "major" };
 }
 
 // 度数トークン列 → 実音コード列（2拍/コード）。度数は「メイン調相対」（短調曲は i=0:m）。
@@ -65,7 +68,7 @@ function renderExample(degrees: string[]): ChordSlot[] {
  * @returns common（songCount 降順 → n 長降順 → 合計出現数降順）＋ stats。
  */
 export function commonProgressions(
-  songs: { title: string; chords: { root: number; quality: string }[] }[],
+  songs: { title: string; chords: { root: number; quality: string; dur?: number }[] }[],
   lengths: number[] = [4, 8], // 進行の長さ＝フレーズ単位（4個 or 8個の連続）。断片(2-3)は拾わない。
 ): CommonProgressionsResult {
   const stats = {
