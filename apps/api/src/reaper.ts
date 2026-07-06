@@ -228,6 +228,63 @@ export function reapResults(core: Core): number {
     }
   }
 
+  // #S11 study（研究）：done の {topic,members,common,stats,prose,title} を study ネタ化。
+  // 共通進行（common[].example）は songCount>=2 のもの上位を chord_progression ネタとして出口に。
+  // 即回収（web は待つ）＝stale ガードなし。
+  const studyRows = core.db
+    .prepare(
+      `SELECT j.id, j.result_summary AS result FROM job j
+         WHERE j.status='done' AND j.intent='study'
+           AND NOT EXISTS (SELECT 1 FROM job_result r WHERE r.job_id = j.id)`,
+    )
+    .all() as { id: string; result: string | null }[];
+  for (const r of studyRows) {
+    let parsed: {
+      topic?: string; members?: unknown; common?: { degrees: string[]; example: { root: number; quality: string; start: number; dur: number }[]; songCount: number; songs: string[] }[];
+      stats?: unknown; prose?: string; title?: string
+    };
+    try {
+      parsed = JSON.parse(r.result ?? "{}") as typeof parsed;
+    } catch {
+      parsed = {};
+    }
+    if (!parsed.prose && !Array.isArray(parsed.common)) {
+      core.db.prepare(`INSERT INTO job_result (job_id, neta_id, ord, role) VALUES (?, NULL, 0, 'empty')`).run(r.id);
+      continue;
+    }
+    // study ネタ（主出力）
+    const studyNeta = core.createNeta({
+      kind: "study",
+      title: parsed.title ?? `研究: ${parsed.topic ?? ""}`,
+      text: parsed.prose ?? "",
+      content: {
+        topic: parsed.topic ?? "",
+        members: parsed.members ?? [],
+        common: parsed.common ?? [],
+        stats: parsed.stats ?? {},
+        prose: parsed.prose ?? "",
+      },
+      tags: ["研究"],
+      from_job: r.id,
+    });
+    n += 1;
+    // 共通進行の出口 chord_progression ネタ（songCount>=2 の上位5件まで）
+    const common = Array.isArray(parsed.common) ? parsed.common : [];
+    const topCommon = common.filter((c) => c.songCount >= 2).slice(0, 5);
+    for (const entry of topCommon) {
+      if (!Array.isArray(entry.example) || entry.example.length < 2) continue;
+      core.createNeta({
+        kind: "chord_progression",
+        title: `研究: ${parsed.topic ?? ""} 共通進行（${entry.songCount}曲/${entry.songs.slice(0, 3).join("/")}…）`,
+        content: { chords: entry.example },
+        tags: ["研究", "共通"],
+        from_job: r.id,
+      });
+      n += 1;
+    }
+    postChatResult(core, null, studyNeta); // chat 発ジョブ対応（study は現状グローバル）
+  }
+
   // #81 MIDI取り込み：done の import_midi の result.tracks を melody/rhythm ネタに分割materialize。
   // web は自分でネタ化しない（投げて受け取る）ので stale ガード無しで即回収。
   const midiRows = core.db

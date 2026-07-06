@@ -649,6 +649,29 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       return ok(neta);
     },
   );
+  // #S11 横断研究（コードレンズ）：複数曲を音源解析して共通コード進行を抽出→study ネタ＋出口ネタ。
+  // Sonnet が WebSearch で works+URL を揃えて渡す→裏で走り→トレイ📥で受け取る。
+  server.registerTool(
+    "start_study",
+    {
+      title: "横断研究を開始（複数曲の共通コード進行）",
+      description: "作家/ジャンルを横断して共通コード進行の手癖を抜く。works に曲名と音源URL を渡せば裏で解析＋集計→study ネタ＋弾ける chord_progression ネタがトレイ📥に届く。URL は WebSearch で見つけてから渡す（YouTube等）。重い(数分)ので『投げてトレイで受け取る』形。lenses 省略でコードレンズ（v1のみ）。",
+      inputSchema: {
+        topic: z.string().describe("研究テーマ（例: 「畑亜貴の手癖」「J-POP王道バラード」）"),
+        works: z.array(
+          z.object({
+            title: z.string().describe("曲名/作品名"),
+            audioUrl: z.string().optional().describe("音源URL（YouTube等）。ない場合はコード列なしで集計"),
+          }),
+        ).describe("研究対象の曲一覧（2〜10曲推奨）"),
+        lenses: z.array(z.string()).optional().describe("分析レンズ（省略=コードのみ。v1は'chords'のみ対応）"),
+      },
+    },
+    async ({ topic, works, lenses }) => {
+      const job = core.enqueueJob({ intent: "study", params: { topic, works, lenses } });
+      return ok({ jobId: job.id, status: "queued", note: `「${topic}」の研究を裏で開始しました。数分後にトレイ📥と study ネタに届きます（待たずに戻ってOK）。` });
+    },
+  );
   server.registerTool(
     "generate",
     { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝fit を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional() } },

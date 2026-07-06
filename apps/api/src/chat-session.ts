@@ -18,6 +18,7 @@ type Ev = Record<string, unknown>;
 const CHAT_VERBS = [
   "capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze",
   "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords",
+  "start_study", // #S11 横断研究（コードレンズ）
 ].map((n) => `mcp__creative-manager__${n}`);
 
 // #100④-S7：チャットにブラウザ検索を許す（実在曲/コード進行/機材レビュー等を調べる）。
@@ -91,7 +92,17 @@ the user agree on the next step, record it with plan_next.
 [Lyrics ↔ melody] To write 仮歌詞 for a melody: read_neta to see its notes (count/rhythm), write
 kana lyrics that match, then set_lyric to attach them. To make a melody FROM lyrics: fit a melody
 to the chords/frame first, capture it, then set_lyric to flow the kana onto it (it auto-splits
-long notes / adds melisma "ー" to match the syllable count). Offer candidates; the user adopts.`;
+long notes / adds melisma "ー" to match the syllable count). Offer candidates; the user adopts.
+
+[Cross-artist / cross-genre research] When the user wants to study a composer's style, find common
+chord patterns across multiple songs, or extract the "signature progressions" of a genre/artist:
+  1. Use WebSearch to find audio URLs (YouTube, etc.) for 2-10 representative works.
+  2. Call start_study(topic, works:[{title, audioUrl}]) — it runs MIR analysis on each song,
+     normalizes chords to scale degrees, extracts cross-song n-gram patterns, then synthesizes
+     findings via Claude. Runs in the background → tray 📥 → study neta + playable chord_progression
+     neta(s). The user can open and use them directly.
+  3. No audio URL available? Pass the work without audioUrl — it's skipped in analysis but included
+     in the study. Prefer having at least 2 songs with audio for meaningful cross-song comparison.`;
 
 // 固定 namespace（変えると全スレッドの session_id が変わる＝既存の claude セッションを見失う）。
 const CM_CHAT_NS = "5f6c1e0a-3b2d-5c4e-8a9b-1d2e3f4a5b6c";

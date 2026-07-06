@@ -6,6 +6,7 @@ import { buildHttp } from "./http";
 import { runResearchJob } from "./research-runner";
 import { parseMidiImport } from "./midi-import";
 import { runAudioAnalyzeJob } from "./audio-analyze";
+import { runStudyJob } from "./study-runner";
 
 // CM_DB 未指定なら **リポジトリルートの data/cm.sqlite を絶対パスで**（cwd 依存で apps/api/data 等に
 // rogue DB を作る事故を断つ・docs/design「アーキ是正 決定4」）。import.meta.dirname=apps/api/src。
@@ -74,6 +75,7 @@ setInterval(() => {
   pumpImportMidi();
   pumpResearch();
   pumpAudioAnalyze();
+  pumpStudy();
 }, 5000).unref();
 
 // ① アナリーゼ consumer＝audio_analyze を1件ずつ実行（分離が重い＝直列・research とは別 busy）。
@@ -116,6 +118,27 @@ function pumpImportMidi(): void {
       core.failJob(job.id, e instanceof Error ? e.message : String(e));
     }
   }
+}
+
+// #S11 study の consumer＝study ジョブを1件ずつ実行。audio_analyze と同様に重い（音源DL＋解析）＝直列。
+// runStudyJob が done/failed に確定→次tickで reaper が study/chord_progression ネタ化しトレイへ。
+let studyBusy = false;
+function pumpStudy(): void {
+  if (studyBusy) return;
+  let job;
+  try {
+    job = core.claimQueued(["study"]);
+  } catch (e) {
+    console.error("study claim error", e);
+    return;
+  }
+  if (!job) return;
+  studyBusy = true;
+  console.log(`study: running job ${job.id}`);
+  void runStudyJob(core, job).finally(() => {
+    studyBusy = false;
+    console.log(`study: job ${job.id} settled`);
+  });
 }
 
 // #30 継続調査の consumer＝api が queued の research/collect を1件ずつ claude で実行（worker 置換）。
