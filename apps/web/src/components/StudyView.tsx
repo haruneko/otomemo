@@ -83,7 +83,7 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
                         <span className="study-prog">{lp.example.map(chordName).join(" → ")}</span>
                         <span className="study-loop-meta">{lp.length}和音 ×{lp.count}</span>
                         <button className={"bs-btn study-play" + (playKey === key ? " on" : "")} aria-label={`play-song-${si}-${li}`} onClick={() => play(lp.example, key)}>
-                          {playKey === key ? "■" : "▶"}
+                          {playKey === key ? "■" : "▶"} 試聴
                         </button>
                       </div>
                     );

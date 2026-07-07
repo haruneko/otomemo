@@ -4,6 +4,7 @@ import { api, type Neta, type ChatMessage, type ChatThread } from "../api";
 import { playNotes, notesForContent } from "../music";
 import { MUSIC_KINDS, KIND_LABEL } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
+import { Icon } from "./Icon";
 import { parseTurnEvent, toolCardFromResult, type ToolCard, type ToolCardItem } from "../chat-stream";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,12 +22,21 @@ function ChatText({ text, ai }: { text: string; ai: boolean }) {
 interface Msg {
   role: "user" | "ai";
   text?: string;
-  saveable?: string;
   neta?: Neta; // #68 作成したネタ（開く/試聴リンク用）
   cards?: ToolCard[]; // #100④-S3b turn 中の tool_use 結果（生成候補/書込）
   netas?: { id: string; kind?: string; title?: string }[]; // #S8 サーバが永続化した「このターンで作られたネタ」参照（開き直しで復元）
 }
 type Mode = "consult" | "research";
+
+// 「知見化」ボタンの出し分け：1行の相槌にまで出すとノイズ＝実質のある返信だけに絞る（監査 LOW）。
+// 複数行（箇条書き/段落）＝構造ある説明、または一定の長さ＝まとまった解説を「知見」とみなす。
+// テキスト基準にすることで、履歴復元/再アタッチで saveable が無い返信にも一貫して出る（永続と表示の一本化）。
+const KNOWLEDGE_MIN_CHARS = 40;
+function isKnowledgeWorthy(text?: string): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  return t.includes("\n") || t.length >= KNOWLEDGE_MIN_CHARS;
+}
 
 // #100④-S3b turn 中の tool 結果カード。候補（generate/fit…）＝試聴＋保存／書込（capture）＝開く＋取り消す(可逆)。
 function ChatToolCard({
@@ -202,7 +212,7 @@ export function Chat({
   const thread = gear ? "gear" : (target?.id ?? sessionId); // ④ 機材は固定グローバルthread
 
   // #70 永続化（後退ゼロ）：保存に失敗してもメモリだけで従来どおり動く。
-  // 構造化ペイロード（neta/saveable/cards）は data へ畳む。
+  // 構造化ペイロード（neta/cards/netas）は data へ畳む。
   function persistMsg(m: Msg) {
     const { role, text, ...rest } = m;
     const data = Object.keys(rest).length ? rest : undefined;
@@ -376,7 +386,7 @@ export function Chat({
     const { out, cards, errored } = await consumeTurn((cb) => api.chatTurnStream(thread, sendText, cb));
     setBusy(false);
     if (out || cards.length) {
-      renderMsg({ role: "ai", text: out || undefined, saveable: out || undefined, cards: cards.length ? cards : undefined });
+      renderMsg({ role: "ai", text: out || undefined, cards: cards.length ? cards : undefined });
     } else {
       // 空/失敗はサーバも永続化しない（out空）→次に開いても残らない。ここはその場の案内だけ。
       renderMsg({ role: "ai", text: errored ? "うまくいきませんでした（もう一度試してください）" : "（応答がありませんでした）" });
@@ -510,7 +520,7 @@ export function Chat({
             )}
             {!showSessions && (
               <button aria-label="clear-history" title="履歴を消す" onClick={clearHistory}>
-                🗑
+                <Icon name="trash" size={18} />
               </button>
             )}
             <button aria-label="close" onClick={onClose}>
@@ -543,7 +553,7 @@ export function Chat({
                   </span>
                 </button>
                 <button type="button" className="chat-session-del" aria-label="delete-session" title="この会話を削除" onClick={() => deleteSession(s.thread)}>
-                  🗑
+                  <Icon name="trash" size={16} />
                 </button>
               </div>
             ))}
@@ -577,8 +587,8 @@ export function Chat({
               {m.cards?.map((card, k) => (
                 <ChatToolCard key={k} card={card} onOpen={openNeta} onSaveItem={saveCandidate} onUndo={undoWrite} />
               ))}
-              {m.saveable && (
-                <button type="button" className="bs-btn" onClick={() => void saveKnowledge(m.saveable!)}>
+              {m.role === "ai" && isKnowledgeWorthy(m.text) && (
+                <button type="button" className="bs-btn" onClick={() => void saveKnowledge(m.text!)}>
                   知見化
                 </button>
               )}

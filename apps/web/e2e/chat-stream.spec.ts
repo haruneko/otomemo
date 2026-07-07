@@ -36,6 +36,10 @@ test.describe("chat streaming & reattach", () => {
     // 途中は非空（デルタが届いた）かつ最終より短い（尻切れでなく成長した）＝逐次表示の決定的証拠。
     expect(early).toBeGreaterThan(0);
     expect(early).toBeLessThan(finalLen);
+
+    // 実質のある返信（40字超・フェイク返信は57字）には「知見化」が出る（1行の相槌には出さない出し分け）。
+    // ※ global スレッドは実行内で履歴が積まれ得るので、最後の返信内に絞って検証。
+    await expect(finalMsg.getByRole("button", { name: "知見化" })).toBeVisible();
   });
 
   // ②-a 生成中に離脱→即復帰（走行中ターンへ再アタッチ）：締めの返信が消えず確定メッセージに残る。
@@ -68,6 +72,9 @@ test.describe("chat streaming & reattach", () => {
 
     await page.getByRole("button", { name: "chat", exact: true }).click();
     await expect(page.getByLabel("chat-input")).toBeVisible();
-    await expect(page.locator(".chat-msg.ai").last()).toContainText(END_MARK, { timeout: 8000 });
+    const restored = page.locator(".chat-msg.ai").last();
+    await expect(restored).toContainText(END_MARK, { timeout: 8000 });
+    // 復元(reloadMsgs)された返信にも「知見化」が出る＝テキスト基準の出し分け（旧 saveable 方式では出なかった）。
+    await expect(restored.getByRole("button", { name: "知見化" })).toBeVisible();
   });
 });
