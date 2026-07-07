@@ -9,7 +9,6 @@ mkdir -p "$DEST"
 
 # 既存の手起動(start-all.sh の nohup プロセス)が居たら止める（systemd と二重に動かさない）。
 pkill -f "pnpm --filter @cm/api (dev|start)" 2>/dev/null || true
-pkill -f "bin/cm-worker" 2>/dev/null || true
 pkill -f "bin/cm-search" 2>/dev/null || true
 
 cp "$HERE"/cm-*.service "$HERE"/cm-*.timer "$DEST"/
@@ -22,7 +21,7 @@ if [ ! -f "$HOME/.config/creative-manager.env" ]; then
 fi
 
 systemctl --user daemon-reload
-systemctl --user enable --now cm-api.service cm-search.service cm-worker.service
+systemctl --user enable --now cm-api.service cm-search.service
 systemctl --user enable --now cm-backup.timer
 # 再起動後も動かす（ログインしてなくても常駐）。一度だけ。
 loginctl enable-linger "$USER" 2>/dev/null || echo "  (linger 設定は権限次第。sudo loginctl enable-linger $USER が要るかも)"

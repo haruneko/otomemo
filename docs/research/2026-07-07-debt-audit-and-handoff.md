@@ -43,8 +43,8 @@
 |---|------|---------|
 | D5 | **Lint不在**（ESLint/フォーマッタ設定が一切ない）。strict TSが最後の砦になっている | ESLint flat config＋最小ルール（未使用import・no-explicit-any警告程度）を導入し、既存コードは一括autofix＋手動0にはこだわらない。CIがないので `pnpm lint` をテストと並ぶ習慣に |
 | D6 | **UI巨大コンポーネント**：`App.tsx`（957行）・`SectionEditor.tsx`（908行）。backlog既載（SectionEditor分割=リファクタ大） | 挙動不変の機械的分割（SectionEditor→PlacePicker等の抽出はbacklogに分割案あり。SongStatus分離が前例）。App.tsx は画面遷移状態をhooks/子に降ろす。**e2eが19本あるので分割後の回帰確認に使う** |
-| D7 | **`apps/api/_feas_*.ts` 6本（約490行）の死にコード**。ビルド外だが誤読ノイズ | 削除。根拠となる知見は `docs/research/melody-generation.md` に既に残っているため消して問題ない |
-| D8 | **systemd 死にユニット**：`deploy/systemd/` に撤去済み `cm-worker.service` と廃止済み `cm-music-mcp` 参照が残り、install.sh が実行体不在のユニットを入れようとする（backlog 2026-07-07摘出済） | install.sh/ユニット定義から2つを除去し、生存2ユニット（cm-api/cm-search）に揃える。ついでに D9 と同時着手が自然 |
+| D7 | **`apps/api/_feas_*.ts` 6本（約490行）の死にコード**。ビルド外だが誤読ノイズ | ✅**完了（2026-07-07）**：6本削除（参照ゼロを grep で確認）。知見は `docs/research/` に既存 |
+| D8 | **systemd 死にユニット**：`deploy/systemd/` に撤去済み `cm-worker.service` と廃止済み `cm-music-mcp` 参照が残り、install.sh が実行体不在のユニットを入れようとする（backlog 2026-07-07摘出済） | ✅**完了（2026-07-07）**：`cm-worker.service` 削除＋install.sh の cm-worker 参照2箇所除去。生存＝cm-api/cm-search/cm-backup |
 | D9 | **systemd 自動起動が未インストール**＝母艦再起動でスタック落ち・手起動（backlog既載・ユーザー方針「最後でよい」） | `--user` enable を実施。ユーザー方針を尊重しつつ D8 とセットなら安い |
 
 ### 1-3. 低：気づいたら拾う程度
