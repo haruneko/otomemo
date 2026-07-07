@@ -142,40 +142,48 @@ def separate_stems(audio, work):
             p = os.path.join(work, f"{name}.wav"); sf.write(p, mono, sr); paths[name] = p
     return paths
 
-# --- ドラム stem → オンセット検出＋帯域分類（kick/snare/hihat）。#S12 perception 層。 ---
+# --- ドラム stem → 多帯域独立オンセット検出（kick/snare/hihat）。#S12改 perception 層。 ---
 # 生オンセット [[t_sec, "kick"|"snare"|"hihat", strength]] を返すだけ＝拍子/量子化/折り畳みは TS純関数側。
-def drum_onsets(drums_wav):
+# v1(単一onset検出→帯域比で排他分類)は同時発音(kick+hihat等)が1ラベルに潰れ hihat が全曲最少になる
+# 実測バグ＝v2で**帯域ごとに独立検出**（同時刻に複数kindを許す）。包絡は帯域内95%tileで正規化し、
+# **クロス帯域優勢ゲート**（同時刻の最強帯域の一定割合未満のピーク＝ブリード）で漏れ誤検出を落とす。
+# 帯域/ゲートは実3曲（LostMemory/DeepSea/SURFACE）の較正で選定＝research/2026-07-08-drum-pattern-extraction.md
+_DRUM_BANDS = {"kick": (25, 110), "snare": (250, 1500), "hihat": (6000, None)}
+_DRUM_DOMINANCE = {"kick": 0.5, "snare": 0.6, "hihat": 0.4}
+
+def drum_onsets(drums_wav, delta=0.20, min_strength=0.12):
     y, sr = librosa.load(drums_wav, mono=True)
     if y.size == 0:
         return []
-    env = librosa.onset.onset_strength(y=y, sr=sr)
-    tenv = librosa.times_like(env, sr=sr)
-    ons = librosa.onset.onset_detect(onset_envelope=env, sr=sr, backtrack=True, units="time")
-    win = int(0.05 * sr)  # 50ms 窓で帯域エネルギー比を見る
+    hop = 512
+    S = np.abs(librosa.stft(y, n_fft=2048, hop_length=hop))
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
+    envs, peaks = {}, {}
+    for kind, (lo, hi) in _DRUM_BANDS.items():
+        hi = hi or sr / 2
+        m = (freqs >= lo) & (freqs < hi)
+        sub = librosa.amplitude_to_db(S[m], ref=np.max)
+        env = librosa.onset.onset_strength(S=sub, sr=sr, hop_length=hop)
+        ref = float(np.percentile(env[env > 0], 95)) if np.any(env > 0) else 1.0
+        envs[kind] = env / (ref + 1e-9)
+        peaks[kind] = librosa.util.peak_pick(envs[kind], pre_max=3, post_max=3,
+                                             pre_avg=5, post_avg=5, delta=delta, wait=2)
     out = []
-    for t in ons:
-        i0 = int(t * sr)
-        seg = y[i0:i0 + win]
-        if seg.size < 16:
-            continue
-        spec = np.abs(np.fft.rfft(seg * np.hanning(seg.size))) ** 2
-        freqs = np.fft.rfftfreq(seg.size, 1.0 / sr)
-        def band(lo, hi):
-            return float(np.sum(spec[(freqs >= lo) & (freqs < hi)]))
-        e_low = band(20, 150); e_mid = band(150, 3000); e_high = band(6000, sr / 2)
-        tot = e_low + e_mid + e_high + 1e-9
-        rl, rm, rh = e_low / tot, e_mid / tot, e_high / tot
-        # 低域優勢=kick／高域優勢かつ低域小=hihat／それ以外(広帯域ノイズ)=snare
-        if rl >= rm and rl >= rh and rl > 0.4:
-            kind = "kick"
-        elif rh >= rm and rl < 0.15:
-            kind = "hihat"
-        else:
-            kind = "snare"
-        k = int(np.argmin(np.abs(tenv - t)))
-        strength = float(env[k]) if k < env.size else 1.0
-        out.append([round(float(t), 3), kind, round(strength, 3)])
-    return out
+    kinds = list(_DRUM_BANDS)
+    for kind in kinds:
+        env = envs[kind]
+        n = len(env)
+        for f in peaks[kind]:
+            s = float(env[f])
+            if s < min_strength:
+                continue
+            f0, f1 = max(0, f - 1), min(n, f + 2)
+            vmax = max(float(envs[k2][f0:f1].max()) for k2 in kinds)
+            if s < _DRUM_DOMINANCE[kind] * vmax:
+                continue  # 他帯域が圧倒的＝ブリードとみなす
+            t = librosa.frames_to_time(f, sr=sr, hop_length=hop)
+            out.append([round(float(t), 3), kind, round(s, 3)])
+    return sorted(out, key=lambda x: x[0])
 
 def main():
     audio = os.path.abspath(sys.argv[1])
