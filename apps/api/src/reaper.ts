@@ -205,7 +205,7 @@ export function reapResults(core: Core): number {
     let meterConf = userMeter ? 1 : 0;
     if (!userMeter && grid) {
       const est = estimateMeterDownbeat(grid, drumOnsets);
-      if (est.confidence >= 0.5) { meter = est.meter; offset = est.offset; meterSource = "drums"; meterConf = est.confidence; }
+      if (est.confidence >= 0.3) { meter = est.meter; offset = est.offset; meterSource = "drums"; meterConf = est.confidence; }
     }
     core.createNeta({
       kind: "analysis",
@@ -226,7 +226,7 @@ export function reapResults(core: Core): number {
     });
     n += 1;
     // #S12 ドラムパターンを弾き直せる rhythm 候補ネタに（meter が確定＝ユーザー指定 or ドラム高信頼の時だけ折り畳む）。
-    if (grid && (userMeter || meterConf >= 0.5)) {
+    if (grid && (userMeter || meterConf >= 0.3)) {
       const rc = drumOnsetsToRhythm(grid, drumOnsets, offset, meter);
       if (rc.lanes.length) {
         core.createNeta({

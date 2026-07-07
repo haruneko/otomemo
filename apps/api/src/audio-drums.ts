@@ -1,7 +1,7 @@
 // #S12 ドラム抽出の interpretation 層（純関数）。Python(perception)が出す生オンセット
 // (drum_onsets = [t_sec, "kick"|"snare"|"hihat", strength]) と実ビート時刻から、
-//  ① 拍子/ダウンビート位相を推定（キック=小節頭・スネア=バックビート）
-//  ② オンセット→拍位置→16分量子化→多数決で1小節ループへ折り畳み → rhythm content
+//  ① ドラムに揃えた剛体16分グリッド → ② 拍子=パターンの自己相似(何step周期で繰り返すか)＋
+//     ダウンビート位相 → ③ 16分量子化→小節多数決で1小節ループへ折り畳み → rhythm content
 // を導く。音モデル（分離器/ADT）を差し替えても facts 契約の内側で完結＝この層のテストは不変。
 // 「自動が最善・ダメなら人」＝低信頼は呼び出し側が手動フォールバックに落とす（design #S12）。
 
@@ -12,7 +12,7 @@ export type DrumOnset = readonly [t: number, kind: string, strength: number];
 export interface MeterEstimate {
   meter: number; // 1小節の拍数（3/4/6）
   offset: number; // ダウンビート位相＝どのビートindexが小節頭か（0..meter-1）
-  confidence: number; // 0..1。テンプレ一致率。低いほど手動へ落とすべき
+  confidence: number; // 0..1。自己相似の強さ×証拠量。低いほど手動へ落とすべき（変拍子→低い）
 }
 
 const KIND_MIDI: Record<DrumKind, { name: string; midi: number }> = {
@@ -20,10 +20,7 @@ const KIND_MIDI: Record<DrumKind, { name: string; midi: number }> = {
   snare: { name: "Snare", midi: 38 },
   hihat: { name: "HiHat", midi: 42 },
 };
-// 拍子ごとのバックビート位置（小節頭=0を除く「スネアが乗りやすい拍」）。
-// m=3 はワルツ＝バックビート弱い＝[2]のみ／m=4 は 2,4拍(=index1,3)／m=6 は index3。
-const BACKBEAT: Record<number, number[]> = { 3: [2], 4: [1, 3], 6: [3] };
-// 4/4 が圧倒的多数＝近差は普通拍子へ寄せる緩い事前分布（2拍子/8拍子は候補に入れない＝backbeatの2周期曖昧を回避）。
+// 4/4 が圧倒的多数＝近差は普通拍子へ寄せる緩い事前分布（2拍子/8拍子は候補に入れない＝半分周期の曖昧を回避）。
 const METER_PRIOR: Record<number, number> = { 3: 0.98, 4: 1.0, 6: 0.9 };
 
 const normKind = (k: string): DrumKind | null =>
@@ -131,54 +128,56 @@ export function estimateGrid(beatTimes: number[], onsets: DrumOnset[]): Grid {
 const rigidBeatPos = (grid: Grid, t: number): number => (t - grid.origin) / grid.beatPeriod;
 
 /**
- * 拍子とダウンビート位相を推定。キックが小節頭(0)・スネアがバックビートに乗る度合いを
- * (meter, phase) の総当たりで採点し、最良を返す。confidence=キック/スネア質量のうち
- * テンプレ位置に乗った割合（×meter事前分布）。オンセットが乏しければ confidence≈0。
+ * 拍子とダウンビートを、雑な統計テンプレでなく**構造**から出す（説明が効くヒューリスティック）：
+ *  ① 全オンセットを16分stepへスナップし、レーン別(kick/snare/hihat)の活動ベクトルを作る。
+ *  ② 拍子＝そのパターンが**何step周期で自己相似か**（bar長 L=m*4 でのレーン別自己相関が最大の m）。
+ *     ＝「小節でパターンが繰り返す」度合いで決める＝キックが頭・スネアが2/4、等の仮定に依存しない。
+ *  ③ ダウンビート＝小節に畳んでキックが最も小節頭に乗る拍位相（キック=頭 は位相決めだけの弱い前提）。
+ * confidence＝自己相似の強さ × 証拠量。オンセットが乏しければ 0。
  */
 export function estimateMeterDownbeat(
   grid: Grid,
   onsets: DrumOnset[],
   candidates: number[] = [4, 3, 6],
 ): MeterEstimate {
-  // 剛体グリッド上で各オンセットを最寄ビートindexへ＋種別/強さ。
   const pts = onsets
-    .map(([t, k, s]) => ({ beat: Math.round(rigidBeatPos(grid, t)), kind: normKind(k), w: s > 0 ? s : 1 }))
-    .filter((p): p is { beat: number; kind: DrumKind; w: number } => p.kind !== null);
+    .map(([t, k, s]) => ({ step: Math.round(rigidBeatPos(grid, t) * 4), kind: normKind(k), w: s > 0 ? s : 1 }))
+    .filter((p): p is { step: number; kind: DrumKind; w: number } => p.kind !== null && p.step >= 0);
   const ks = pts.filter((p) => p.kind === "kick" || p.kind === "snare");
-  const ksMass = ks.reduce((a, p) => a + p.w, 0);
-  if (ksMass <= 0) return { meter: 4, offset: 0, confidence: 0 };
-
-  const kickMass = pts.filter((p) => p.kind === "kick").reduce((a, p) => a + p.w, 0) || 1;
-  const snareMass = pts.filter((p) => p.kind === "snare").reduce((a, p) => a + p.w, 0) || 1;
-  let best = { meter: 4, offset: 0, above: 0 };
-  let bestRaw = -Infinity;
-  for (const m of candidates) {
-    const backset = BACKBEAT[m] ?? [];
-    const backN = backset.length;
-    const backSetObj = new Set(backset);
-    for (let p = 0; p < m; p++) {
-      let kickDown = 0, snareBack = 0;
-      for (const { beat, kind, w } of pts) {
-        const wb = (((beat - p) % m) + m) % m;
-        if (kind === "kick") { if (wb === 0) kickDown += w; }
-        else if (kind === "snare") { if (backSetObj.has(wb)) snareBack += w; }
-      }
-      // 偶然超過で採点＝拍数バイアスを除く。キックが頭に偏る度合い＋スネアがバックビートに偏る度合い。
-      // 偶然＝キックは 1/m が頭に、スネアは backN/m がバックビートに落ちる。
-      const kickAbove = kickDown / kickMass - 1 / m;
-      const snareAbove = snareBack / snareMass - backN / m;
-      const above = kickAbove + snareAbove; // 「テンプレに偶然以上に乗った」総合度合い（-..+）
-      const raw = above * (METER_PRIOR[m] ?? 1);
-      if (raw > bestRaw) {
-        bestRaw = raw;
-        best = { meter: m, offset: p, above };
-      }
+  if (!ks.length) return { meter: 4, offset: 0, confidence: 0 };
+  // ① レーン別の16分活動ベクトル（全曲）
+  const maxStep = Math.max(...pts.map((p) => p.step));
+  const lane: Record<DrumKind, number[]> = {
+    kick: new Array(maxStep + 1).fill(0), snare: new Array(maxStep + 1).fill(0), hihat: new Array(maxStep + 1).fill(0),
+  };
+  for (const { step, kind, w } of pts) lane[kind][step] = (lane[kind][step] ?? 0) + w;
+  // ② 自己相似：レーン別に i と i+L を掛け合わせた正規化相関＝「小節でパターンが繰り返す」度合い。
+  //    活動量だけの相関だとキック/スネアの区別が消えるので、レーンごとに掛ける（種類も一致を要求）。
+  const auto = (L: number): number => {
+    if (L <= 0 || L >= maxStep + 1) return 0;
+    let num = 0, e0 = 0, eL = 0;
+    for (const v of [lane.kick, lane.snare, lane.hihat]) {
+      for (let i = 0; i + L < v.length; i++) { num += v[i]! * v[i + L]!; e0 += v[i]! * v[i]!; eL += v[i + L]! * v[i + L]!; }
     }
+    return num / (Math.sqrt(e0 * eL) + 1e-9);
+  };
+  let meter = 4, simBest = -Infinity, sim = 0;
+  for (const m of candidates) {
+    const a = auto(m * 4);
+    const s = a * (METER_PRIOR[m] ?? 1);
+    if (s > simBest) { simBest = s; meter = m; sim = a; }
   }
-  // confidence＝偶然超過(0..)を 0..1 へ（最大理論値≈1でsaturate）×証拠量の飽和（少数オンセットの過信を防ぐ）。
+  // ③ ダウンビート＝キックが小節頭に最も乗る拍位相（拍単位）
+  const kicks = pts.filter((p) => p.kind === "kick");
+  let offset = 0, phBest = -1;
+  for (let p = 0; p < meter; p++) {
+    let m0 = 0;
+    for (const kk of kicks) { const beat = Math.round(kk.step / 4); if (((((beat - p) % meter) + meter) % meter) === 0) m0 += kk.w; }
+    if (m0 > phBest) { phBest = m0; offset = p; }
+  }
   const evidence = Math.min(1, ks.length / 12);
-  const confidence = Math.max(0, Math.min(1, best.above * 2 * evidence));
-  return { meter: best.meter, offset: best.offset, confidence };
+  const confidence = Math.max(0, Math.min(1, Math.max(0, sim) * evidence));
+  return { meter, offset, confidence };
 }
 
 export interface RhythmContentLite {
@@ -188,22 +187,22 @@ export interface RhythmContentLite {
 
 /**
  * オンセット→拍位置→16分step量子化→小節をまたいで多数決で1小節ループへ折り畳み。
- * 各 lane×step は「オンセットのある小節のうち出現率 >= majority」なら採用（フィル/雑音を落とす）。
- * steps = meter*4（4/4→16・3/4→12・6→24）。
+ * 各 lane×step は「ドラムのある小節のうち出現率 >= majority」なら採用（フィル/雑音を落とす）。
+ * 既定 0.35＝曲全体を畳むと各小節でパターンが変わり過半数に届きにくい＝「候補」を出す寄り
+ * （仕上げは人間・design #S12）。steps = meter*4（4/4→16・3/4→12・6→24）。
  */
 export function drumOnsetsToRhythm(
   grid: Grid,
   onsets: DrumOnset[],
   offset: number,
   meter: number,
-  majority = 0.5,
+  majority = 0.35,
 ): RhythmContentLite {
   const stepsPerBar = meter * 4;
   // kind → (bar集合, step→出現小節集合)
   const laneOrder: DrumKind[] = ["kick", "snare", "hihat"];
   const counts: Record<DrumKind, Map<number, Set<number>>> = { kick: new Map(), snare: new Map(), hihat: new Map() };
   const barsWithOnset = new Set<number>();
-  let maxBar = -1;
   for (const [t, k, s] of onsets) {
     const kind = normKind(k);
     if (!kind || s < 0) continue;
@@ -216,9 +215,9 @@ export function drumOnsetsToRhythm(
     if (!counts[kind].has(step)) counts[kind].set(step, new Set());
     counts[kind].get(step)!.add(bar);
     barsWithOnset.add(bar);
-    maxBar = Math.max(maxBar, bar);
   }
-  const barCount = maxBar + 1;
+  // 分母＝ドラムのある小節数（無音のイントロ/間奏で薄めない）。
+  const barCount = barsWithOnset.size;
   const lanes: RhythmContentLite["lanes"] = [];
   if (barCount <= 0) return { steps: stepsPerBar, lanes };
   for (const kind of laneOrder) {
