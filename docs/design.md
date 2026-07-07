@@ -808,6 +808,34 @@ P5 切出→chord_progression ネタ＋Claude 所見。
 9. **v1 との共存/移行**：旧 audio_analyze(知見ネタ) → 新(analysis＋asset)。両立か置換か。
 10. **量子化を python(basic-pitch) か TS(pyin 量子化) か**＝P1 の実装位置。
 
+#### 決定：ドラム/ベース抽出＝捨てているstemを拾う＋ドラムから拍/拍子の土台（#S12・2026-07-07・要件確定→設計）
+**背景/芯**：`_audio_poc/analyze.py` は htdemucs で4stem（vocals/drums/bass/other）を計算しているのに **vocals しか使わず drums/bass を捨てている**（追加の分離コストゼロで拾える）。また **meter は未検出（ユーザー指定・既定4/4）・downbeat はコード変化ヒューリスティックのみ**（`audio-grid.ts autoDownbeatOffset`）＝リズムの土台がグラグラ。**キック/スネアは最強のオンセット証拠**なので、ここから拍/ダウンビート/拍子の土台を固め、その上に他パートを載せる。詳細な候補比較・ライセンスは research/2026-07-07-drums-bass-extraction-plan.md（本節は決定＝上位）。
+
+**体験原則**：#S10と同じ「**自動が最善・ダメなら人**」。機械は候補まで・仕上げは人間＝**完璧不要、そこそこの下書きで価値**。
+
+**層分け（設計原則）**：**Python=perception**（生オンセット/生ノートを facts に出すだけ）／**TS純関数=interpretation**（meter推定・量子化・度数化・ループ折り畳み）。→ 音モデル（分離器/ADT/ピッチ検出）の差し替えが **facts 契約の内側で完結**し、TS側テストは差し替え後も正解のまま。
+
+**facts 追加（後方互換＝追加のみ）**：
+- `drum_onsets: [[t_sec, "kick"|"snare"|"hihat", strength], …]`（**meter 無関係＝常に出す**）。
+- `bass_notes: [[start_sec, end_sec, midi], …]`（bass stem に pyin＝ボーカルと同じRLEノート化を帯域変更で流用）。
+
+**meter/downbeat 自動（TS純関数 `audio-drums.ts`）**：
+- 候補 meter＝**{3, 4, 6}**（**6拍子はオーナーがメイン使用＝一級候補**）。キック=小節頭・スネア=バックビート・小節周期の自己相関で `{meter, offset, confidence}` を採点。
+- **5/7拍子・変拍子は分析対象外**（オーナー確定：作曲では使うが解析では使わない）＝**低信頼→手動アンカーへ逃がす**（無理に4/4と言い張らない）。overlay の `anchors` は既に per-anchor meter＝**変拍子は人がアンカーを置けば追従**（#S10 既存設計と整合）。
+- **契約変更**：`params.meter` の意味を「未指定/0 = 自動、>0 = ユーザー指定で常に優先」に拡張（現行 `audio-analyze.ts`/`mcp.ts` の既定4→0=auto）。**ユーザー指定は常に上書き優先**。
+- 低信頼時は既存 `autoDownbeatOffset`（コード変化）へフォールバック。ドラム由来 offset は**コード変化より強い証拠**として anchors 初期値を置換。
+
+**ネタ化（reaper の audio_analyze 分岐に追加）**：
+- **rhythmネタ**：`drumOnsetsToRhythm`＝オンセット→拍位置(beat_times線形補間)→16分step量子化→**多数決で1〜2小節ループに折り畳み**→ `{rhythm:{steps, lanes:[{name,midi,hits}]}}`（`midi-import.ts drumRhythm` と同形）。**折り畳みは meter 確定時のみ**（低信頼なら生オンセットは残すがネタ化は控えめ／手動区間指定後）。
+- **bassネタ**：`bass_notes`→グリッド量子化→`chords_timeline` から各時点コードを引き **pc−ルート音程→度数**（R/3/5/7/8/approach）→ループ折り畳み→ `{mode:"relative", steps, pattern, preview_chords}`。写像不能音は最近傍度数or棄却、mapped_ratio を信頼度に。絶対 `bass_notes` は analysis.raw に保存。
+- title「アナリーゼ: X のドラム/ベース（候補）」・tags `["アナリーゼ","候補"]`・tempo/meter 付き。受け皿（rhythm/相対bassスキーマ・`hasMusic` 両対応）は既存＝流し込むだけ。
+
+**モデルは差し替え可能・良し悪しは計測で決める**：分離器＝**htdemucs 既定**＋A/B枠（htdemucs_ft／将来 RoFormer系。ただし**RoFormer重み・BeatNet=非商用の恐れ／Chordino=GPL＝製品NG**、コアの demucs/librosa は MIT/ISC 商用OK）。ドラム分類＝**帯域ヒューリスティック自前(v1)**（追加依存ゼロ・土台用途に十分）→計測でADTOF等へ昇格。ベースピッチ＝**pyin(v1)**→basic-pitch とF値A/B。
+
+**検証（正解が実在する領域＝メロ生成と違い計測が機能）**：フルF値harnessは不要。**知ってる曲を流して耳/目で照合**。役割分担＝**DeepSea.mp3(6拍子メイン+5スパイス)＝ドラム"オンセット抽出層"の検証**（meter無関係）／**4/4の既知曲(SURFACE等・YouTubeからyt-dlp)＝"ループ折り畳み+meter層"の検証**。後で分離器/検出器をA/Bする時のみ既知曲2-3で当たり/外れをメモる程度。
+
+**フェーズ**：手1＝ドラム→拍/ダウンビート/拍子の土台＋rhythmネタ（`analyze.py`にstem保存+drum_onsets／新`audio-drums.ts`純関数TDD／reaper配線）。手2＝ベース→相対度数bassネタ（新`audio-bass.ts`）。着手は**TS純関数のテスト先行**（合成オンセットで赤→緑）→Python perception→既知曲で納得チェック。
+
 #### 決定：アナリーゼ研究フレームワーク＝コーパス × レンズ（#S11・2026-07-06・要件確定→設計）
 **背景**：単曲ワークベンチ(#S10)は"おもちゃ"。実用＝**作家/ジャンル横断で共通の手癖を抜く「研究」**。研究は
 **歌詞／コード／構成／メロ…と見る軸(レンズ)が変わる（全部のことも）**＝コード限定の集計は雑。一般フレームワークにする。
