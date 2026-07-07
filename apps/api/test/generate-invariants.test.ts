@@ -56,7 +56,7 @@ describe("genMelody 不変条件", () => {
           }
         }
       }
-  });
+  }, 30000); // 全 frame×seed の網羅で数秒かかる＝`pnpm -r test` の並行負荷でも既定5sで落ちないよう余裕を持たせる
 
   it("決定性：同一(frame,chords,seed)は同一出力", () => {
     const chords: Chord[] = [{ root: 0, quality: "", start: 0, dur: 8 }];
