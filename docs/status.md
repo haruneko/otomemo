@@ -69,7 +69,7 @@
 
 - **agentic Chat(#86 S2b) の full-loop が遅い**：claude -p の多段ツール使用で数分。`--max-turns`(既定8・env `CM_AGENTIC_MAX_TURNS`)で上限化済み。要チューニング（重い時は dispatch にフォールバック）。MCP tool-use 自体は S2a で実機実証(roots 0,5,10,0)。
 - **アーキ是正(2026-06-23・4監査→確定 design参照)＝S0-S5 完了**：S0止血/S1契約SSOT(schemas.ts・kindレジストリ)/S2音楽ドメインTS一本化(生成TS化・cm-music-mcp廃止**5→4**・Python domain削除・worker は/music委譲)/S3 core層分離(reaper/scheduler・reap原子化)/S4 systemd化(+health/backup timer/公開ガード)/S5フロント分割(music.ts→audio.ts／poll.ts でジョブ待ち統合＋アンマウントガード／NetaDialog→KindEditorBody＋save平坦化／styles.css→6ファイル)。**S0-S5 完了**。api181/web116/worker62緑・4プロセス稼働・全push済。
-- **常駐サービス＝✅systemd化済(S4)**：`deploy/systemd/` の cm-api/cm-worker/cm-search.service で自動再起動。**3プロセス**(api:8787 単一オリジン＋音楽ドメインTS `/music`／worker ヘッドレス／cm-search:8788)。**cm-music-mcp(:8790)は廃止**(S2)。
+- **常駐サービス**：**2プロセス**(api:8787 単一オリジン＋音楽ドメインTS `/music`＋MCP宿主＋ジョブ消化／cm-search:8788 意味検索＝残る唯一のPython)。**旧 cm-worker(Pythonジョブワーカー)は撤去済(2026-07-05)・cm-music-mcp(:8790)は廃止(S2)**。systemd ユニットは `deploy/systemd/` に**定義済だが未インストール**（`--user` enable 未実施＝母艦再起動で手起動が要る・backlog／死にユニット cm-worker.service 剪定は負債D8）。
 - **バックアップ＝✅自動化済(S4)**：`cm-backup.timer`＋`scripts/backup.sh`(sqlite backup API・世代14・data/backups/)。
 - **agentic Chat の音楽ツール＝api `/music` HTTP 経由**(cm-music-mcp廃止・S2)。worker は生成/判定を api に委譲。到達不可時は dispatch 経路（ルール生成）にフォールバック＝後退ゼロ。
 - **生成はルール優先・Claudeは音符に触らない**（#86確定）：Claude=言葉→構造化リクエストの翻訳＋判定読み、記号エンジン=音符づくり＋当てはまり判定。

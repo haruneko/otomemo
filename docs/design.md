@@ -12,7 +12,7 @@
 - **メロ崩し**：`genFromEssence(…, {strength, blendWith})`（崩し強度＋複数参照ブレンド）。**MCP `reshape` に `mode:"deform"`** で露出（L416 の reshape 記述は emotion のみで古い）。research 2026-06-29-melody-corpus-and-deform。
 - **音符プレビュー**：エディタで音符配置/鍵盤タップ→`previewNote` 即発音（web/audio.ts・PianoRoll/Rhythm/ChordPattern/BassStep）。
 - **モバイル土台**：編集面を可視 dvh に収め底のトランスポートが潜らない＋横スクロールの左ラベル/鍵盤 sticky（全エディタ）。
-- **MCP/HTTP**：`convert` は公開済（L413(4) の「未公開」は古い）。`#101` の「CUT」宣言した旧ジョブ系ツールは**まだ並存**（撤去未了）。`/projects*`・`/chat/:thread/meta|turn`・`DELETE /chat/:thread` は本書の一覧に未掲載。`/schedule` に PATCH は無い。
+- **MCP/HTTP**：`convert` は公開済（L413(4) の「未公開」は古い）。`#101` の「CUT」宣言した旧ジョブ系ツール（`create_job`/`list_jobs`/`get_job`/`get_job_results`）は、**chat面（surface="chat"＝10 verbs）では非公開＝ユーザー到達不可**。full面（既定・test互換）には当面残す＝**legacy維持を正式決定（2026-07-07）**、コード撤去は backlog（`mcp.ts` の `if(legacy)` を畳む別タスク）。`/projects*`・`/chat/:thread/meta|turn`・`DELETE /chat/:thread` は本書の一覧に未掲載。`/schedule` に PATCH は無い。
 - **コーパス**：library は U-FRET進行315に加え **メロパターン irish186/pop1139/game100 投入済**（L596「データ未収集」前提は古い）。質の検証（耳）が残。
 
 ## アーキテクチャ是正方針（2026-06-23・4監査→ユーザー確定）
@@ -26,6 +26,7 @@
 - Python に残すのは**信号処理のみ**：cm-search（埋め込み）、mp3解析(librosa)、MIDI取込(mido)、pyopenjtalk、Claude プランナー（翻訳役）。
 - 生成（gen_chords/melody/bass/drums/named・fit_to_chords・melody_similarity）の TS 実装を新設し、本番生成経路を TS MCP ツール呼び出しへ切替。**MCP は creative-manager(TS) 1本**に集約（agentic Claude が見るのは1サーバ1言語）。プロセスは 5→4 に。
 - **"追い抜き完了"の定義（これが満たされるまで Python ドメインは消さない）**：①TS生成エンジン完成 ②TS↔Python の**クロス言語ゴールデン一致テスト**が緑（analyze_fit/analyze_progression/detect_key/progressions/相対bass解決）③本番経路が TS 経由に切替済。免罪符化していた「フォークリフトしない＝無期限共存」をこの完了条件で締める。
+  - **→ ✅完了（S2・2026-07-05）**：3条件を満たし、**cm-music-mcp(:8790) と Python ドメイン実装は削除済**。現構成は **2プロセス（api:8787＋cm-search:8788＝残る唯一のPython）**。上の「消さない」条件は**達成済＝Python ドメインは撤去完了**（本節は条件記録として残す）。
 - **生成エンジンの不変条件（property test で固定＝分割/改修の安全網）**：乱数は seed で再現的だが byte 等価は約束しない。代わりに次の **musical 不変条件**を `generate.ts` の契約として固定する（#5 分割で挙動を壊さない土台）。
   - **決定性**：同一 `(frame, chords, seed)` は同一出力（gen_chords/melody/bass/drums/chord_pattern/from_essence 全て）。
   - **音域**：メロは本体音 `start>=0` を `[60,84]` に収める（オクターブ折り返しは**ピッチクラス保存**＝ハモりを壊さない意図的処理。輪郭保存は**約束しない**）。弱起(pickup)のみ拍0前に負start で1度下にはみ出してよい。ベースは低域。全 pitch は有限整数。

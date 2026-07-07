@@ -17,7 +17,7 @@
 2. **メロ最優先なのにメロの"足場"が空白** — スケール/コードトーンのロール上ハイライト（`PianoRoll.tsx` 色分け無）・ベロシティ編集（`PianoRoll.tsx:21`「一律100」）・メトロノーム/カウントイン・**対称⇔非対称フレーズ選択（ユーザー明言"ないとダメ"）**（`skeleton.ts:19` 固定2小節句）が全て未実装。
 3. **要件coreの "対照を引く" と "変換(6/8化)" が MCP でスタブ** — `mcp.ts:769` contrast＝`未対応(③-5)`、`mcp.ts:749` convert＝`未実装(③-4)`。requirements L134/L119 が chat 面で塞がれている。
 
-**doc乖離（コード変更ゼロで是正すべき）**：worker `import_midi` は既に api へ移植済（`midi-import.ts`＋`main.ts:108`）＝worker Python は実質 cm-search のみ。にもかかわらず `backlog.md:122`／`architecture.md:38`／status が「移植が残る」と古い。楽譜表示(VexFlow/OSMD)・systemd自動起動も architecture が挙げるが未導入。
+**doc乖離（コード変更ゼロで是正すべき）**：worker `import_midi` は既に api へ移植済（`midi-import.ts`＋`main.ts:108`）＝worker Python は実質 cm-search のみ。にもかかわらず `backlog.md:122`／`architecture.md:38`／status が「移植が残る」と古い。楽譜表示(VexFlow/OSMD)・systemd自動起動も architecture が挙げるが未導入。**→ ✅是正済（P0-d・commit 2bc0e8c）：backlog.md/architecture.md L38/status.md を「worker撤去済・2プロセス」に更新済み。本段落の乖離指摘自体が解消済（この記述は履歴として残す）。**
 
 **25項目のギャップ表**（要約・詳細は監査原文）：#1評価未接続/#2対照/#3変換/#4複数小節継続/#5メロbrush-up①〜⑦/#6和声brush-up①〜⑩/#7非対称フレーズ/#8スケール音ハイライト/#9ベロシティ/#10メトロノーム/#11 undo(コンテナ)/#12版管理/#13音声書出/#14MusicXML書出/#15楽譜表示/#16楽譜入力/#17仮歌/#18アルペジエータ/#19簡易ミックス/#20ノート編集v2/#21情報収集のパーソナライズ/#22 mp3整理・コード検出/#23 DAW橋渡し/#24 reshape range拡張/#25 generate role/structure。
 
