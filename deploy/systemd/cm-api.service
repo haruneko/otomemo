@@ -9,8 +9,10 @@ WorkingDirectory=%h/projects/creative_manager
 # CM_HOST / CM_TOKEN は ~/.config/creative-manager.env に（任意・無くても起動）。
 EnvironmentFile=-%h/.config/creative-manager.env
 Environment=CM_DB=%h/projects/creative_manager/data/cm.sqlite
-# bash -lc でユーザー PATH(pnpm/node) を解決。exec で systemd が実 PID を追える。
-ExecStart=/usr/bin/env bash -lc 'exec pnpm --filter @cm/api start'
+# pnpm(~/.local/share/pnpm) も node(nvm) も .bashrc 側で PATH に入るため、非対話ログイン
+# シェル(bash -lc)では読まれない。nvm.sh を明示 source し pnpm home を前置して解決する。
+# exec で systemd が実 PID を追える。
+ExecStart=/usr/bin/env bash -lc 'export PATH="$HOME/.local/share/pnpm:$HOME/.local/bin:$PATH"; [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh"; exec pnpm --filter @cm/api start'
 Restart=on-failure
 RestartSec=3
 
