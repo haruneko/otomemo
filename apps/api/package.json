@@ -10,6 +10,7 @@
     "mcp": "tsx src/mcp-stdio.ts"
   },
   "dependencies": {
+    "@cm/music-core": "workspace:*",
     "@fastify/multipart": "^10.0.0",
     "@fastify/static": "^9.1.3",
     "@modelcontextprotocol/sdk": "^1.13.0",

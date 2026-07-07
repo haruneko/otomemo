@@ -1,5 +1,9 @@
 import { Midi } from "@tonejs/midi";
 import { Chord as TonalChord, Note as TonalNote } from "tonal";
+// 不変の音楽知識（音名・コード品質→インターバル）は @cm/music-core が SSOT（負債D3・design 決定2b）。
+// PITCH_NAMES は re-export して既存の web import 面（useNetaEditor 等）を不変に保つ。
+import { PITCH_NAMES, QUALITY_INTERVALS } from "@cm/music-core";
+export { PITCH_NAMES };
 
 // 音楽的中身（docs/design.md #16）。pitch は C基準のMIDI番号、start/dur は拍。
 export interface Note {
@@ -13,9 +17,7 @@ export interface Note {
   kit?: number; // ドラムキット(GM bank128 preset番号 0=Standard)。アコ/エレキ選択＝drumノートに付与。
 }
 
-// 12音名（シャープ表記・SSOT）。調名/コード根/ピアノロール鍵盤/コード楽器で共有。
-export const PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-// MIDIノート番号→音名（MIDI 60=C4）。負値も安全（(m%12+12)%12）。
+// MIDIノート番号→音名（MIDI 60=C4）。負値も安全（(m%12+12)%12）。PITCH_NAMES は @cm/music-core。
 export const pitchName = (midi: number) => `${PITCH_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 
 export interface MelodyContent {
@@ -242,20 +244,7 @@ export interface RelativeBassContent {
 const BASS_FLOOR = 28; // E1（エレキ4弦ベースの最低音）
 const BASS_STEP_TO_BEAT = 0.25; // 1step=16分=0.25拍
 
-// コード品質 → ルートからの半音インターバル。**api `theory.ts` の QUALITY_INTERVALS とキー集合一致**
-// （SSOT・design「決定A」。property test で担保）。
-const QUALITY_INTERVALS: Record<string, number[]> = {
-  "": [0, 4, 7], maj: [0, 4, 7], m: [0, 3, 7], min: [0, 3, 7],
-  dim: [0, 3, 6], aug: [0, 4, 8], sus4: [0, 5, 7], sus2: [0, 2, 7],
-  "7": [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10], m7b5: [0, 3, 6, 10],
-  dim7: [0, 3, 6, 9], aug7: [0, 4, 8, 10], "7b5": [0, 4, 6, 10], mM7: [0, 3, 7, 11], "7sus4": [0, 5, 7, 10],
-  "6": [0, 4, 7, 9], m6: [0, 3, 7, 9],
-  "9": [0, 4, 7, 10, 2], maj9: [0, 4, 7, 11, 2], m9: [0, 3, 7, 10, 2], add9: [0, 4, 7, 2],
-  "69": [0, 4, 7, 9, 2], m69: [0, 3, 7, 9, 2],
-  "7b9": [0, 4, 7, 10, 1], "7#9": [0, 4, 7, 10, 3], "7#11": [0, 4, 7, 10, 6],
-  "13": [0, 4, 7, 10, 2, 9], "11": [0, 4, 7, 10, 2, 5], m11: [0, 3, 7, 10, 2, 5],
-  m13: [0, 3, 7, 10, 2, 9], maj13: [0, 4, 7, 11, 2, 9], "maj7#11": [0, 4, 7, 11, 6],
-};
+// コード品質 → ルートからの半音インターバルは @cm/music-core の QUALITY_INTERVALS が SSOT（負債D3）。
 const DEGREE_CHORD_INDEX: Record<string, number> = { "3": 1, "5": 2, "7": 3 };
 
 // ピッチクラス(0-11)を最低オクターブ帯 E1..D#2(28..39) の代表音 MIDI へ。

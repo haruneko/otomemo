@@ -38,6 +38,7 @@
 - neta/job/scope 等の契約は **zod スキーマを `apps/api/src/schemas.ts` に1本化**し `z.infer` で型導出、http と mcp が import（現状 core型/http zod/mcp zod の三重定義・http listのscope無検証キャストを解消）。
 - **kind レジストリ**（kind→{label,music?,container?,filterable?,lane?}）を1つ作り、散在する KINDS/FILTER_KINDS/MUSIC_KINDS/CONTAINER_KINDS/KIND_LABEL/LANES を統合。
 - web は `apps/api/src/music` を **workspace 依存で実 import**（QUALITY_INTERVALS/KEY_NAMES/Note型/相対bass解決の web↔api 重複を解消）。`api.ts` の Neta/NetaPatch をサーバ types と突合（NetaPatch に meter/mode 欠落・scope 任意化を是正）。
+  - **→ 洗練（決定2b・2026-07-07・負債D3）**：web が api の全面（DB/Fastify/MCPを含む）に結合するのは過剰。**不変の音楽知識だけを共有する専用パッケージ `packages/music-core`（`@cm/music-core`）を新設**し api/web 両方が参照する。DB疎結合方針は維持＝**共有は「不変の音楽知識」に限定**（`PITCH_NAMES`＝旧 web `PITCH_NAMES`/api `KEY_NAMES` の同一配列、`QUALITY_INTERVALS`＝34品質の完全一致テーブル、純粋派生 `normRoot`/`chordPcs`）。api `theory.ts` は同名を re-export して既存 import 面を不変に保つ。web `music.ts` は自前の重複リテラルを撤去し package を import。property test（chord-quality）で pc 解決の等価を担保。相対bass解決・Note型・生成器など**アプリ固有ロジックは共有しない**（結合を最小に）。
 
 ### 決定3：core.ts の層分離
 - `Core`(1071行) を永続層 Repo 群（Neta/Edge/Job/Asset/Schedule/Chat）へ分割。**reapResults / tickSchedules は独立モジュール**（Reaper/Scheduler・intent→materializer 登録テーブル）へ。design#15「TS=生産者」に対し reap が消費者化している事実を構造で可視化する。

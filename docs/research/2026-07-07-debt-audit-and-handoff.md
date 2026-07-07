@@ -34,7 +34,7 @@
 |---|------|---------|
 | D1 | **`apps/web/src/audio.ts`（665行）が無テスト＋`any` 31件集中**。再生＝毎回使う中核なのにリスクが二重 | ✅**完了（2026-07-07）**：純関数（`drumKey`/`velToMidi`抽出/`drumDetune`/`drumNameFor`/`resolveSF2Ctor`/`preset*`）を切り出し `audio.test.ts`(24)追加。`preset*`の`any`3件を`PresetLike`型で撤去、Tone/smplr由来のリスクある`any`は残置。挙動不変（式は移動のみ）・web 40ファイル311緑・tsc緑 |
 | D2 | ~~**`apps/api/src/reaper.ts`（414行）が無テスト**。常駐Claudeプロセスのライフサイクル制御~~ | ✅**完了＋監査是正（2026-07-07）**：実コード確認で監査の前提が誤りと判明＝`reaper.ts` は**プロセス制御ではなくジョブ結果→ネタ化の消費者**で、materialize分岐は `job.test.ts`(28)＋audio-analyze/research-runner/midi-import で**既に厚くテスト済**。未カバーだった純粋ヘルパの境界（フラット/ダブル臨時記号キー・frame検証）を直接テスト化＝`keyToPc`/`frameVals`/`hasMusic` を export し `reaper-helpers.test.ts`(19)を追加。**常駐Claudeプロセス制御は別ファイル（reaperではない）** |
-| D3 | **音楽定数・理論ロジックの api↔web 二重実装**（PITCH_NAMES/KEY_NAMESが同一配列を別名で二重定義、コード品質テーブル、transpose系）。片方だけ直すと挙動がズレる | 空の `packages/` に `@cm/music-core`（純粋定数＋純関数のみ）を新設し両者から参照。DB疎結合方針は維持＝**共有するのは不変の音楽知識だけ**。design.md に決定を先に書く |
+| D3 | **音楽定数・理論ロジックの api↔web 二重実装**（PITCH_NAMES/KEY_NAMESが同一配列を別名で二重定義、コード品質テーブル、transpose系）。片方だけ直すと挙動がズレる | ✅**完了（2026-07-07）**：`packages/music-core`（`@cm/music-core`）を新設し不変知識（PITCH_NAMES/QUALITY_INTERVALS〔34品質・移設前に完全一致を実証〕/normRoot/chordPcs）を SSOT化。api `theory.ts` は re-export で import 面不変、web `music.ts` は重複リテラル撤去。design 決定2b に記載。music-core 10＋api 559＋web 311 緑・両tsc緑。相対bass/生成器等アプリ固有は共有せず結合最小 |
 | D4 | **docs間の乖離**（§2に列挙）。SDDの権威が腐る最短経路 | ✅**完了（2026-07-07）**：§2の5件＋追加発見1件を是正済（コード変更なし・doc編集のみ） |
 
 ### 1-2. 中：開発速度・保守性に効くもの
@@ -51,7 +51,7 @@
 
 - `apps/worker` の命名と実体（cm-search専用）の不一致 → リネームは参照更新が広いので、まず pyproject の description と README 記述の整合だけでも可。
 - `_dogfood_ui/` の未追跡ファイル（Playwrightスクショツール＋PNG群）→ .gitignore に追加 or `tools/` へ整理。
-- `pnpm-workspace.yaml` の `packages/*` glob 空振り → D3 で自然解消。
+- ~~`pnpm-workspace.yaml` の `packages/*` glob 空振り~~ → ✅D3 で解消（`packages/music-core` が入った）。
 - backlog「片付け」節・「ドッグフード由来」節の小物（kindColor SSOT・childDur共通化・絵文字→SVG・検索0件ヒント等）→ backlog参照。
 - ~~**`project-workspace` → main のマージ**（5コミット滞留）~~ → **解消済（2026-07-07）**：単一ブランチ運用へ統一し main に畳んだ（§0参照）。
 
