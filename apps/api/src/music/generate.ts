@@ -18,6 +18,8 @@ import {
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
 import { genMotifMelody, genMotifMelodyV2, completeMelody, loadMotifModel16, scalePitchList, loadSkeletonModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
+import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -493,6 +495,52 @@ export function genMelody(
   if (notes.length === 0) notes.push({ pitch: 72, start: 0, dur: 1 }); // 全休は避ける
   const label = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
   return { items: [{ kind: "melody", content: { notes }, label }], edges: [] };
+}
+
+// P1 自己進化ループ（design 次期計画・#12-M）：メロを1本に潰さず「多め生成→らしさで並べ替え→多様な top-k」で返す。
+//  ・各 genMelody 出力は内部で修復pass済（半音クラッシュ矯正/gap-fill/NCT解決/句末カデンツ）＝floorは既に担保。
+//  ・ランク軸＝corpusTypicality(E-corpus＝自分/コーパスらしさ)。**E-rule総合点ではランクしない**（gaming回避・self-check-log）。
+//  ・多様性＝melodySimilarity で似すぎ(≥SIM_MAX)を飛ばす。総合スコアは返さない（哲学：候補まで・仕上げは人間）。
+//  ・seed 明示時は決定的な単一を尊重（従来どおり）。corpusModel 無指定なら生成順のまま多様選別だけ効かせる。
+type MelNote = { pitch: number; start: number; dur: number };
+const CAND_SIM_MAX = 0.9; // これ以上似た候補は同一視して落とす（移調不変の類似度）
+export function genMelodyCandidates(
+  frame?: Frame | null,
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  seed?: number | null,
+  opts?: Parameters<typeof genMelody>[3] & { corpusModel?: { rhythm: BarRhythmModel; move: MoveModel } | null; k?: number; n?: number },
+): GenResult {
+  const k = Math.max(1, opts?.k ?? 3);
+  const n = Math.max(k, opts?.n ?? 8);
+  if (seed != null) return genMelody(frame, chords, seed, opts); // 明示 seed＝1本を決定的に
+  const f = normalizeFrame(frame);
+  const info = meterInfo(f.meter);
+  const cands: { notes: MelNote[]; typ: number }[] = [];
+  const seen = new Set<string>();
+  for (let s = 1; s <= n; s++) {
+    const notes = (genMelody(frame, chords, s, opts).items[0]?.content as { notes?: MelNote[] } | undefined)?.notes;
+    if (!notes || notes.length === 0) continue;
+    const key = notes.map((x) => `${x.pitch}@${round3(x.start)}`).join(","); // 完全重複を捨てる
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const typ = opts?.corpusModel
+      ? corpusTypicality(notes, opts.corpusModel, { beatsPerBar: info.beatsPerBar, eighthsPerBar: info.beatsPerBar * 2 }).score
+      : 0;
+    cands.push({ notes, typ });
+  }
+  if (cands.length === 0) return genMelody(frame, chords, 1, opts); // 保険（全経路空はまず無い）
+  cands.sort((a, b) => b.typ - a.typ); // らしさ順（corpusModel 無ければ全 typ=0＝生成順のまま）
+  const picked: { notes: MelNote[]; typ: number }[] = [];
+  for (const c of cands) { // 多様な top-k：既採用と似すぎは飛ばす
+    if (picked.length >= k) break;
+    if (picked.every((p) => melodySimilarity(p.notes, c.notes) < CAND_SIM_MAX)) picked.push(c);
+  }
+  for (const c of cands) { // 似すぎ除外で k に満たなければ順位順で充填
+    if (picked.length >= k) break;
+    if (!picked.includes(c)) picked.push(c);
+  }
+  const base = (f.mood ? f.mood + "メロ" : "メロディ");
+  return { items: picked.map((c, i) => ({ kind: "melody", content: { notes: c.notes }, label: `${base}案${i + 1}`.slice(0, 24) })), edges: [] };
 }
 
 // pitch を「指定ピッチクラス」の最近傍音へ（カデンツ度数への着地）。音域clamp。

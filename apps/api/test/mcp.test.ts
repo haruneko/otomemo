@@ -198,6 +198,25 @@ describe("purpose tool surface (#101)", () => {
     expect(textOf(r)).toContain("notes");
   });
 
+  it("P1：fit(target:melody) は1本に潰さず複数の候補を返す（自己進化ループ）", async () => {
+    const { client } = await connect();
+    const chords = [
+      { root: 0, quality: "", start: 0, dur: 4 }, { root: 9, quality: "m", start: 4, dur: 4 },
+      { root: 5, quality: "", start: 8, dur: 4 }, { root: 7, quality: "", start: 12, dur: 4 },
+    ];
+    const r = JSON.parse(textOf(await client.callTool({ name: "fit", arguments: { target: "melody", frame: { bars: 4, meter: "4/4", key: 0 }, chords } })));
+    expect(Array.isArray(r.items)).toBe(true);
+    expect(r.items.length).toBeGreaterThanOrEqual(2); // 候補（1本に潰さない）
+    for (const it of r.items) {
+      expect(it.kind).toBe("melody");
+      expect((it.content.notes as unknown[]).length).toBeGreaterThan(0);
+      expect(it.score).toBeUndefined(); // 総合スコアは出さない（哲学：候補まで）
+    }
+    // seed 明示は決定的な単一（従来の1本）。
+    const one = JSON.parse(textOf(await client.callTool({ name: "fit", arguments: { target: "melody", frame: { bars: 4, meter: "4/4", key: 0 }, chords, seed: 3 } })));
+    expect(one.items.length).toBe(1);
+  });
+
   it("③ song_state で曲の状態を読み、plan_next で次の一手を残せる", async () => {
     const { client } = await connect();
     const song = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "song", title: "曲" } })));
