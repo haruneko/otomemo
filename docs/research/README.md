@@ -60,7 +60,8 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [consistency-review](consistency-review.md) — 整合監査（研究findings ↔ 設計#12-M ↔ 実装）
 - [research-program](research-program.md) — 大計画（研究プログラム・発散リスト）
 - [2026-07-07-next-dev-plan](2026-07-07-next-dev-plan.md) — **次期開発計画**＝機能ギャップ監査(docs×実コード突合・25項目 file:line 実証)＋方向づけ(キーストーン=自作mp3の資産化)の統合。芯＝「生成器を増やすより足場を組む」(可視化/評価FB/書きやすさ/自分らしさの燃料)。段階=P0足場即効(スケール音ハイライト/非対称フレーズ/評価器接続)→P1自己進化ループ常設→P2自作コーパス→P3メロ層操作。最痛点=**評価器E-rule/E-corpusが完成済だが未接続**
-- [2026-07-07-debt-audit-and-handoff](2026-07-07-debt-audit-and-handoff.md) — **負債監査＋Opus向けハンドオフ**＝docs×実コード両面監査の統合1枚。負債D1〜D9優先度付き(audio.ts/reaper.ts無テスト・音楽定数の api↔web 二重実装・Lint不在・docs乖離5件・死にコード/死にユニット)＋不足機能グループA〜E＋ロードマップ現在地(P0完/P1本体済・残=P0-b非対称/P2自作mp3)＋作業パックの切り出し方。入口はこの doc → 各正典
+- [2026-07-07-debt-audit-and-handoff](2026-07-07-debt-audit-and-handoff.md) — **負債監査＋Opus向けハンドオフ**＝docs×実コード両面監査の統合1枚。負債D1〜D9優先度付き(audio.ts/reaper.ts無テスト・音楽定数の api↔web 二重実装・Lint不在・docs乖離5件・死にコード/死にユニット)＋不足機能グループA〜E＋ロードマップ現在地(P0完/P1本体済・残=P0-b非対称/P2自作mp3)＋作業パックの切り出し方。入口はこの doc → 各正典。**追記(2026-07-07)：負債 D1〜D9 全消化済（片付け/テスト補強/music-core集約/Lint/巨大コンポ分割/systemd自動起動）**
+- [2026-07-07-audio-to-neta-extraction-map](2026-07-07-audio-to-neta-extraction-map.md) — **音源→ネタ化 抽出マップ**（実コード読解＋外部ツール調査）。ネタ種別ごとに「今 取ってる/捨ててる×候補ミドルウェア/AI(出典・ライセンス付き)」を一覧化。現状=夢の4〜5割(上澄みは取れるが**構成/多パート化/木への組み立てが穴**)。芯=聴き取り層は音モデル天井(LLM無関係)・**LLMが効くのは生fact→ネタの木への組み立て層のみ**。最大ROI=allin1で構成を足す＋捨ててるdemucs bass/drums stemを拾う。ライセンス地雷=Chordino/essentia(GPL/AGPL)回避、コアは demucs/BTC/librosa で商用OK
 
 ## E2E・受け入れテスト
 - [chat-e2e-2026-07-05](chat-e2e-2026-07-05.md) — チャット機能の初回通しE2E（既存会話履歴の発掘＋新経路のライブ実行）。**BUG#1(高・修正済)＝chat面14 verbとallowlistの不一致で③次の一手/②歌詞↔メロが自動拒否で黙って死亡**／BUG#2(中)＝曲名アナリーゼの期待ズレ(チャットにMIR無し・二次情報を"解析済"に見せる)／BUG#3/4(低)＝孤児スレッド・role不整合。合格＝作曲/Web検索/song_state/歌詞流し込み/停止/切断永続化。感想＝相棒として想像以上・落とし穴は「登録したのに許可してない」型でE2Eの価値が出た
