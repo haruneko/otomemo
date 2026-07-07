@@ -591,7 +591,7 @@ export function genMotifMelodyV2(
   const varyTail = (M: Motif16, r: () => number): Motif16 => {
     const k = Math.max(2, Math.ceil(M.ons.length / 2));
     const mv = M.mv.slice(0, k);
-    let rdir = r() < 0.5 ? 1 : -1;
+    const rdir = r() < 0.5 ? 1 : -1;
     for (let i = k; i < M.ons.length; i++) {
       if (M.run[i]) { mv.push(rdir); continue; }
       let m = weightedPickNum(moveTrans.get(clamp7(mv[i - 1]!)) ?? new Map(), r);

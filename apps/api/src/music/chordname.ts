@@ -6,7 +6,7 @@ export type ParsedChord = { root: number; quality: string };
 
 /** 接尾辞 → 基底 quality（QUALITY_INTERVALS の語彙）。複雑なテンションは三和音/7thへ縮約。 */
 function normalizeQuality(suffixRaw: string): string {
-  let s = suffixRaw.trim();
+  const s = suffixRaw.trim();
   // 装飾を除去：オンコードのベース(/X)は呼び出し側で除去済み前提。add系/テンション数字を落とす前に種別判定。
   // ※ M7(大文字=メジャー7) と m7(小文字=マイナー7) は大文字小文字が命＝/i を使わない。
   const isMaj7 = /maj7/i.test(s) || /(^|[^A-Za-z])M7/.test(s) || /[△Δ]7?/.test(s);
@@ -34,6 +34,7 @@ function normalizeQuality(suffixRaw: string): string {
 /** "A#m7" や "C/G"(オンコード) → {root, quality}。解釈不能は null。 */
 export function parseChordSymbol(name: string): ParsedChord | null {
   if (!name) return null;
+  // eslint-disable-next-line no-irregular-whitespace -- 全角スペース(U+3000)/BOM(U+FEFF)を除去する意図的な正規表現
   let s = String(name).trim().replace(/　/g, "").replace(/^[﻿\s]+/, "");
   if (!s) return null;
   // N.C.（無音）等は無視

@@ -584,7 +584,7 @@ function applyPhrasing(
   for (const ph of phrases) {
     const end = ph.startBeat + ph.beats;
     const cut = end - breathLen(ph.strongBreath, bias); // ここ以降は息継ぎ（無音）にする
-    let inPh = notes.filter((n) => n.start >= ph.startBeat - 1e-6 && n.start < end - 1e-6);
+    const inPh = notes.filter((n) => n.start >= ph.startBeat - 1e-6 && n.start < end - 1e-6);
     if (inPh.length === 0) continue;
     // 息継ぎ窓（cut以降）に始まる音は落とす。全部落ちるなら先頭1音は残す。
     let kept = inPh.filter((n) => n.start < cut - 1e-6);

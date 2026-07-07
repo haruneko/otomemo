@@ -41,7 +41,7 @@
 
 | # | 負債 | 修整方針 |
 |---|------|---------|
-| D5 | **Lint不在**（ESLint/フォーマッタ設定が一切ない）。strict TSが最後の砦になっている | ESLint flat config＋最小ルール（未使用import・no-explicit-any警告程度）を導入し、既存コードは一括autofix＋手動0にはこだわらない。CIがないので `pnpm lint` をテストと並ぶ習慣に |
+| D5 | **Lint不在**（ESLint/フォーマッタ設定が一切ない）。strict TSが最後の砦になっている | ✅**完了（2026-07-07）**：ルートに ESLint flat config（`eslint.config.js`）＋`pnpm lint`/`lint:fix`。@eslint/js＋typescript-eslint recommended＋eslint-plugin-react-hooks（web）。方針＝最小＝様式(no-explicit-any/no-unused-vars/no-unused-expressions/カンマ/no-useless-escape)は**warn**、本物のバグ相当(react-hooks/rules-of-hooks・no-irregular-whitespace)は**error**。autofixで prefer-const 3件を修正。**現状 0 errors/91 warnings で `pnpm lint` は exit 0**。手動0にはこだわらない＝warnは漸進的に |
 | D6 | **UI巨大コンポーネント**：`App.tsx`（957行）・`SectionEditor.tsx`（908行）。backlog既載（SectionEditor分割=リファクタ大） | 挙動不変の機械的分割（SectionEditor→PlacePicker等の抽出はbacklogに分割案あり。SongStatus分離が前例）。App.tsx は画面遷移状態をhooks/子に降ろす。**e2eが19本あるので分割後の回帰確認に使う** |
 | D7 | **`apps/api/_feas_*.ts` 6本（約490行）の死にコード**。ビルド外だが誤読ノイズ | ✅**完了（2026-07-07）**：6本削除（参照ゼロを grep で確認）。知見は `docs/research/` に既存 |
 | D8 | **systemd 死にユニット**：`deploy/systemd/` に撤去済み `cm-worker.service` と廃止済み `cm-music-mcp` 参照が残り、install.sh が実行体不在のユニットを入れようとする（backlog 2026-07-07摘出済） | ✅**完了（2026-07-07）**：`cm-worker.service` 削除＋install.sh の cm-worker 参照2箇所除去。生存＝cm-api/cm-search/cm-backup |
