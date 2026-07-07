@@ -21,7 +21,7 @@
 | スケッチ・再生 | ✅ | 4要素エディタ、Tone.js＋SF2再生、プレイヘッド・トランスポート、section/song合成、GM音色(再生↔書出一致 #47) |
 | ドラム再生 | 🟡 | ✅速度/音高/チョーク #84 S0-S3＋S4 ベロシティ層。**✅ピッチ異常修正(2026-06-29: root=overridingRootKey??叩いた鍵・ride2+8等を断つ)**。**✅キット選択 アコ/エレキ(2026-06-29: buildGmDrumMap(preset)パラメタ化・RhythmContent.kit→再生&MIDI ch10 program・Standard不変=回帰ゼロ・全キット実在サンプル解決を構造確認)**。研究=research/2026-06-29-drum-sound-resolution.md。残=新キットの音の試聴調整・Standardのregex一掃(任意・要A/B) |
 | DAW往復・過去資産 | 🟡 | ✅MIDI書出、MIDI取込(worker分割 melody/rhythm #81)、歌詞取込。⬜コード自動検出、mp3整理、ABILITY往復は基本のみ |
-| 投げて受け取る | ✅ | ジョブ→worker→reap→トレイ、plan分解・継続・通知強度・waiting/question #45、定期スケジューラ #80、フォーム質問パネル #85S3 |
+| 投げて受け取る | ✅ | ジョブ→**api内consumer**→reap→トレイ（旧Python worker撤去済2026-07-05＝research/import_midi/生成は api が消化）、plan分解・継続・通知強度・waiting/question #45、定期スケジューラ #80、フォーム質問パネル #85S3 |
 | AI生成 枠＋動作＋構造 #85 | 🟡 | ✅枠(6/8効く)、gen_variations(N個・items+edges)、condition(音数/コード)、verb(fetch/transform/gen_lyric)、文章＋パネル導線。✅方向確認(confirm) |
 | 音楽理論層 #86 | 🟡 | ✅判定(analyze_fit/detect_key/analyze_progression)、ルール生成(chords/melody/bass/drums/pair)、Chat入口(dispatch・実機)、正規化層、agentic Chat。✅補正(fit_to_chords)・✅類似度・✅ルール基線実測。**生成はTS `apps/api/src/music` 一本化**(cm-music-mcp廃止・S2是正) |
 | メロ生成 高度化 | ✅ | **S1-S3**(骨格優先=フレーズ/句末息継ぎ/カデンツ着地/頂点アーチ≈0.62/滑り込み倚音/弱拍経過刺繍/位置駆動変奏・6/8ネイティブ・弱起・度数内部モデル degree.ts/meter.ts/skeleton.ts)＋**S4-S5連想**(melodyEssence/多層melodySimilarity/similarMelodies retrieval/genFromEssence=エッセンス→違うメロ/normalizeToC)。研究=docs/research/melody-generation.md。残=メロコーパスのデータ収集 |
