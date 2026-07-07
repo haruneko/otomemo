@@ -38,4 +38,28 @@ describe("フレーズ骨格プランナ skeleton.ts（契約・design #12-M）"
     expect(ph[ph.length - 1]!.cadenceDegree).toBe(1);
     expect(ph[ph.length - 1]!.isLast).toBe(true);
   });
+
+  // P0-b：対称⇔非対称フレーズ選択（ユーザー明言"ないとダメ"）。既定=対称（後方互換）。
+  it("既定は対称（従来どおり2小節句）＝後退ゼロ", () => {
+    expect(planSkeleton(8, "4/4").map((p) => p.beats)).toEqual([8, 8, 8, 8]); // 2小節×4拍 ×4
+  });
+  it("非対称：8小節→3+3+2（square脱却・各句は小節×4拍）", () => {
+    const ph = planSkeleton(8, "4/4", { phrasing: "asymmetric" });
+    expect(ph.map((p) => p.beats / 4)).toEqual([3, 3, 2]); // 小節数で 3+3+2
+    expect(ph[ph.length - 1]!.cadenceDegree).toBe(1); // 最終は主音で閉じる（不変）
+    expect(ph[ph.length - 1]!.isLast).toBe(true);
+    expect(ph[0]!.startBeat).toBe(0);
+    expect(ph[1]!.startBeat).toBe(12); // 3小節×4拍
+  });
+  it("非対称：5→3+2 / 6→3+3 / 7→3+4（1小節の弱い端句は前へ吸収）", () => {
+    expect(planSkeleton(5, "4/4", { phrasing: "asymmetric" }).map((p) => p.beats / 4)).toEqual([3, 2]);
+    expect(planSkeleton(6, "4/4", { phrasing: "asymmetric" }).map((p) => p.beats / 4)).toEqual([3, 3]);
+    expect(planSkeleton(7, "4/4", { phrasing: "asymmetric" }).map((p) => p.beats / 4)).toEqual([3, 4]);
+  });
+  it("非対称でも全小節を消費する（合計＝bars）", () => {
+    for (const b of [3, 4, 5, 6, 7, 8, 9, 12]) {
+      const sum = planSkeleton(b, "4/4", { phrasing: "asymmetric" }).reduce((s, p) => s + p.beats / 4, 0);
+      expect(sum, `bars=${b}`).toBe(b);
+    }
+  });
 });

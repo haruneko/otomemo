@@ -345,7 +345,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; partial?: { pitch: number; start?: number; dur?: number }[] }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。partial=補完(completion)の種=部分メロ
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[] }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -438,7 +438,7 @@ export function genMelody(
 
   // 変奏は句機能で**位置駆動**（S3a・spec§10.5）：後楽節頭=模続(sequence)、句末バー=終止寄せ、他=反復。
   // ＝lookback でモチーフを明示反復しつつ、楽節の役割で発展させる（乱数でばらさない）。
-  const phrases = planSkeleton(bars, f.meter);
+  const phrases = planSkeleton(bars, f.meter, { phrasing: opts?.phrasing });
   const barVar = (bar: number): VarKind => {
     if (bar === 0) return "repeat"; // basic idea
     const bBeat = bar * perBar;
@@ -476,7 +476,7 @@ export function genMelody(
 
   // 骨格層（S1c・spec§10.5-10.6）：句末で①カデンツ度数に着地②息継ぎ（末尾を切って休符）。
   // モチーフ反復・拍頭コードトーンは保ったまま、上に「呼吸」を被せる。
-  applyPhrasing(notes, scaleArr, bias, f.meter, bars, lo, hi);
+  applyPhrasing(notes, scaleArr, bias, f.meter, bars, lo, hi, opts?.phrasing);
 
   // 弱起（S1d・spec§10.3）：拍0の前に upbeat を前置し、最初のダウンビート音へ歩進で滑り込む。
   // 拍0=曲頭の位置は保つ（負start＝前にはみ出す。compositeNotes/再生は既に負start対応）。
@@ -527,9 +527,10 @@ function applyPhrasing(
   bars: number,
   lo: number,
   hi: number,
+  phrasing?: "symmetric" | "asymmetric",
 ): void {
   if (notes.length === 0) return;
-  const phrases = planSkeleton(bars, meter);
+  const phrases = planSkeleton(bars, meter, { phrasing });
   notes.sort((a, b) => a.start - b.start);
   const keep: { pitch: number; start: number; dur: number }[] = [];
   for (const ph of phrases) {

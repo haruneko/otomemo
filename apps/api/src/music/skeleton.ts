@@ -12,16 +12,43 @@ export interface Phrase {
   isLast: boolean;
 }
 
+// P0-b：句割りパターン（小節数の配列）。対称＝2小節句（square）／非対称＝3小節基調の不等分割。
+// 合計は必ず total に一致。末尾の1小節だけ残る弱い端句は直前へ吸収する（[..,3,1]→[..,4]）。
+function symmetricBars(total: number): number[] {
+  const phraseBars = total >= 2 ? 2 : 1; // 既定2小節phrase（1小節しか無ければ1）
+  const out: number[] = [];
+  for (let bar = 0; bar < total; ) {
+    const p = Math.min(phraseBars, total - bar);
+    out.push(p);
+    bar += p;
+  }
+  return out;
+}
+function asymmetricBars(total: number): number[] {
+  if (total <= 2) return [total];
+  const out: number[] = [];
+  for (let rem = total; rem > 0; ) {
+    const p = rem >= 3 ? 3 : rem;
+    out.push(p);
+    rem -= p;
+  }
+  if (out.length >= 2 && out[out.length - 1] === 1) {
+    out[out.length - 2]! += 1; // 1小節端句を前へ吸収＝弱い独り立ちを避ける
+    out.pop();
+  }
+  return out;
+}
+
 // 2小節=phrase、4小節=period(antecedent+consequent)。前楽節末=属音(問い)、後楽節/最終=主音(答え)。
-export function planSkeleton(bars: number, meter?: string | null): Phrase[] {
+// opts.phrasing="asymmetric" で非対称な句割り（既定=対称＝従来どおり・後方互換）。
+export function planSkeleton(bars: number, meter?: string | null, opts: { phrasing?: "symmetric" | "asymmetric" } = {}): Phrase[] {
   const bpb = meterInfo(meter).beatsPerBar;
   const total = Math.max(1, Math.trunc(bars));
-  const phraseBars = total >= 2 ? 2 : 1; // 既定2小節phrase（1小節しか無ければ1）
+  const pattern = opts.phrasing === "asymmetric" ? asymmetricBars(total) : symmetricBars(total);
   const out: Phrase[] = [];
   let bar = 0;
   let idx = 0;
-  while (bar < total) {
-    const pBars = Math.min(phraseBars, total - bar);
+  for (const pBars of pattern) {
     const periodPos = idx % 2; // 0=前楽節, 1=後楽節（4小節period）
     const isLast = bar + pBars >= total;
     // 役割：period内 前=antecedent(属音=問い)／後=consequent(主音=答え)。最終は必ず主音。
