@@ -101,7 +101,7 @@ export async function runAudioAnalyzeJob(
   try {
     const p = (job.params ?? {}) as { audio_b64?: string; filename?: string; url?: string; meter?: number; bpm?: number };
     const label = p.filename || p.url || "アナリーゼ";
-    const meter = typeof p.meter === "number" && p.meter > 0 ? p.meter : 4; // ユーザー指定拍子（既定4/4）
+    const meter = typeof p.meter === "number" && p.meter > 0 ? p.meter : 0; // #S12 未指定=0(auto)＝ドラムから拍子推定（reaper）。>0はユーザー指定で常に優先
     const bpmHint = typeof p.bpm === "number" && p.bpm > 0 ? p.bpm : 0; // 任意のBPMヒント（拍検出を固定・綺麗に）
     let audioPath: string;
     if (p.url) {

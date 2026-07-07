@@ -5,6 +5,7 @@ import type { Core } from "./core";
 import type { Neta, NetaInput } from "./types";
 import { chordsFromTimeline, pcFromKeyName } from "./audio-chords";
 import { autoDownbeatOffset } from "./audio-grid";
+import { estimateMeterDownbeat, drumOnsetsToRhythm, meterString, type DrumOnset } from "./audio-drums";
 
 // チャット発のジョブは params.chat_thread を持つ。その場合、生成結果を**サーバ側で**そのスレッドの
 // チャットメッセージとして記録する＝クライアントが待ち中に離脱/リロードしても結果が必ずチャットに残る
@@ -186,21 +187,33 @@ export function reapResults(core: Core): number {
     const facts = (parsed.facts ?? {}) as {
       bpm?: number; meter?: number; key?: { key?: string; mode?: string }; vocal_range?: unknown; duration_sec?: number;
       beat_times?: number[]; melody_notes?: unknown; melody_f0?: unknown; chords_timeline?: unknown; chords?: unknown;
+      drum_onsets?: unknown;
     };
     const timeline = (facts.chords_timeline ?? facts.chords) as [number, number, string][] | undefined;
-    const meter = typeof facts.meter === "number" && facts.meter > 0 ? facts.meter : 4;
     const beatTimes = Array.isArray(facts.beat_times) ? facts.beat_times : [];
     const segs = Array.isArray(timeline) ? timeline.filter((c) => c[2] !== "N" && c[2] !== "X") : [];
     const changes = segs.map((c) => c[0]);
     const weights = segs.map((c) => c[1] - c[0]); // コード継続長で重み付け＝長く鳴る和音の頭を小節頭と見なしやすく
-    const offset = autoDownbeatOffset(beatTimes, changes, meter, weights); // 小節頭の自動推定＝初期アンカー
+    // #S12 拍子/ダウンビートの土台：ユーザー指定(>0)は常に優先。未指定(0=auto)は**ドラムのキック/スネア**から
+    // 推定（キック=小節頭・スネア=バックビート）。低信頼ならコード変化ヒューリスティックへフォールバック。
+    const drumOnsets = (Array.isArray(facts.drum_onsets) ? facts.drum_onsets : []) as DrumOnset[];
+    const userMeter = typeof facts.meter === "number" && facts.meter > 0 ? facts.meter : 0;
+    let meter = userMeter || 4;
+    let offset = autoDownbeatOffset(beatTimes, changes, meter, weights); // 既定＝コード由来
+    let meterSource: "user" | "drums" | "chords" = userMeter ? "user" : "chords";
+    let meterConf = userMeter ? 1 : 0;
+    if (!userMeter && drumOnsets.length && beatTimes.length) {
+      const est = estimateMeterDownbeat(beatTimes, drumOnsets);
+      if (est.confidence >= 0.5) { meter = est.meter; offset = est.offset; meterSource = "drums"; meterConf = est.confidence; }
+    }
     core.createNeta({
       kind: "analysis",
       title: `アナリーゼ: ${parsed.title ?? "音源"}`,
       text: parsed.prose ?? "",
       content: {
-        meta: { bpm: facts.bpm ?? null, meter, key: facts.key ?? null, vocal_range: facts.vocal_range ?? null, duration_sec: facts.duration_sec ?? null },
-        raw: { beat_times: beatTimes, melody_notes: facts.melody_notes ?? [], melody_f0: facts.melody_f0 ?? [], chords_timeline: timeline ?? [] },
+        meta: { bpm: facts.bpm ?? null, meter, key: facts.key ?? null, vocal_range: facts.vocal_range ?? null, duration_sec: facts.duration_sec ?? null,
+          meter_detected: { meter, confidence: Math.round(meterConf * 100) / 100, source: meterSource } }, // #S12 拍子の出所と信頼度
+        raw: { beat_times: beatTimes, melody_notes: facts.melody_notes ?? [], melody_f0: facts.melody_f0 ?? [], chords_timeline: timeline ?? [], drum_onsets: drumOnsets },
         overlay: { anchors: [{ t_sec: beatTimes[offset] ?? 0, meter, bar_no: 1 }], cuts: [], chord_edits: [], sections: [] },
         prose: parsed.prose ?? "",
       },
@@ -211,6 +224,22 @@ export function reapResults(core: Core): number {
       from_job: r.id,
     });
     n += 1;
+    // #S12 ドラムパターンを弾き直せる rhythm 候補ネタに（meter が確定＝ユーザー指定 or ドラム高信頼の時だけ折り畳む）。
+    if (drumOnsets.length && (userMeter || meterConf >= 0.5)) {
+      const rc = drumOnsetsToRhythm(drumOnsets, beatTimes, offset, meter);
+      if (rc.lanes.length) {
+        core.createNeta({
+          kind: "rhythm",
+          title: `アナリーゼ: ${parsed.title ?? "音源"} のドラム（候補）`,
+          content: { rhythm: rc },
+          tempo: typeof facts.bpm === "number" ? Math.round(facts.bpm) : null,
+          meter: meterString(meter),
+          tags: ["アナリーゼ", "候補"],
+          from_job: r.id,
+        });
+        n += 1;
+      }
+    }
     // 学習の出口（usecases-chat ①）：検出コードを**弾き直せる chord_progression 候補ネタ**にも落とす（即使える冒頭抜粋）。
     const chords = chordsFromTimeline(timeline, typeof facts.bpm === "number" ? facts.bpm : 120);
     if (chords.length >= 2) {

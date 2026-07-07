@@ -24,4 +24,11 @@ apps/web/e2e/__screenshots__/
 apps/web/.cache/
 
 _quarantine/
-_audio_poc/
+# _audio_poc: Python ソース(*.py)は追跡（#S12で本流化＝戦略柱の版管理）、巨大依存/生成物は無視。
+_audio_poc/.venv/
+_audio_poc/__pycache__/
+_audio_poc/BTC-ISMIR19/
+_audio_poc/*.wav
+_audio_poc/*.pt
+_audio_poc/*.mp3
+_audio_poc/*.mid

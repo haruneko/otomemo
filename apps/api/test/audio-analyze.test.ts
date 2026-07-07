@@ -58,6 +58,44 @@ describe("① アナリーゼ（audio_analyze）", () => {
     expect(chords.map((c) => `${c.root}:${c.quality}`)).toEqual(["9:m", "0:", "2:7"]); // Am C D7＝弾ける
   });
 
+  it("#S12 drum_onsets があれば拍子を自動検出し rhythm 候補ネタを出す（meter未指定=auto）", async () => {
+    const core = new Core(openDb(":memory:"));
+    core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    // 120bpm・16ビート(=4小節4/4)。kick=偶数拍・snare=奇数拍・hihat=毎拍。meter は渡さない=auto。
+    const bt = Array.from({ length: 16 }, (_, i) => i * 0.5);
+    const drum: [number, string, number][] = [];
+    for (let b = 0; b < 16; b++) {
+      drum.push([bt[b]!, b % 2 === 0 ? "kick" : "snare", 1]);
+      drum.push([bt[b]!, "hihat", 1]);
+    }
+    const fakeAnalyze = async () => ({
+      bpm: 120, key: { key: "C", mode: "major" }, beat_times: bt, drum_onsets: drum,
+      chords_timeline: [[0, 4, "C"], [4, 8, "G"]],
+    });
+    await runAudioAnalyzeJob(core, claimed, async () => "四つ打ち", fakeAnalyze);
+    // analysis＋コード候補＋rhythm候補 の3枚
+    expect(core.reapResults()).toBeGreaterThanOrEqual(3);
+    // analysis の拍子はドラムから自動検出＝4
+    const an = core.listNeta({ kind: "analysis", scope: "all", limit: 5 })[0]!;
+    const meta = (an.content as { meta: { meter: number; meter_detected: { meter: number; source: string; confidence: number } } }).meta;
+    expect(meta.meter).toBe(4);
+    expect(meta.meter_detected.source).toBe("drums");
+    expect(meta.meter_detected.confidence).toBeGreaterThan(0.5);
+    // rhythm 候補ネタ＝正しい形（steps=16・kick[0,8]/snare[4,12]/hihat[0,4,8,12]）
+    const rh = core.listNeta({ kind: "rhythm", scope: "all", limit: 5 });
+    expect(rh.length).toBe(1);
+    expect(rh[0]!.title).toContain("ドラム");
+    expect(rh[0]!.meter).toBe("4/4");
+    expect(rh[0]!.tags).toEqual(expect.arrayContaining(["アナリーゼ", "候補"]));
+    const rc = (rh[0]!.content as { rhythm: { steps: number; lanes: { name: string; hits: number[] }[] } }).rhythm;
+    expect(rc.steps).toBe(16);
+    const lane = (nm: string) => rc.lanes.find((l) => l.name === nm)!.hits;
+    expect(lane("Kick")).toEqual([0, 8]);
+    expect(lane("Snare")).toEqual([4, 12]);
+    expect(lane("HiHat")).toEqual([0, 4, 8, 12]);
+  });
+
   it("解析が失敗したら failed＋error（無言で消さない・音源は削除）", async () => {
     const core = new Core(openDb(":memory:"));
     core.enqueueJob({ intent: "audio_analyze", params: { filename: "x.mp3", audio_b64: "" } });
