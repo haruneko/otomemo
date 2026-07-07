@@ -29,7 +29,7 @@ function postChatResult(core: Core, paramsJson: string | null, neta: Neta): void
   });
 }
 
-function hasMusic(content: unknown): boolean {
+export function hasMusic(content: unknown): boolean {
   const c = content as {
     notes?: unknown[];
     chords?: unknown[];
@@ -47,7 +47,7 @@ function hasMusic(content: unknown): boolean {
 // #85 S1 枠（frame）抽出：ジョブ params の `frame` を生成ネタに付ける値へ（断片のヒント key/meter/tempo/bars/mood）。
 type FrameVals = Partial<Pick<NetaInput, "key" | "meter" | "tempo" | "bars" | "mood">>;
 const KEY_NAME_PC: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-function keyToPc(k: unknown): number | undefined {
+export function keyToPc(k: unknown): number | undefined {
   if (typeof k === "number" && k >= 0 && k <= 11) return k;
   if (typeof k === "string" && k) {
     let pc = KEY_NAME_PC[k[0]!.toUpperCase()];
@@ -60,7 +60,7 @@ function keyToPc(k: unknown): number | undefined {
   }
   return undefined;
 }
-function frameVals(frame: unknown): FrameVals {
+export function frameVals(frame: unknown): FrameVals {
   if (!frame || typeof frame !== "object") return {};
   const f = frame as Record<string, unknown>;
   const out: FrameVals = {};
