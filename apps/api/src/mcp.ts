@@ -23,6 +23,7 @@ import {
   genNamedProgression,
 } from "./music";
 import { learnStepWeightsFromLibrary, learnMotifModelFromLibrary } from "./music/corpusBias";
+import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
 import { splitMora, flowLyric, type LNote } from "./lyric";
 import { analyzeProgressionFromUfret, extractSongTitle } from "./ingest-ufret";
 import { meterInfo } from "./music/meter";
@@ -774,8 +775,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "analyze",
-    { title: "判る（同定/説明/当てはまり）", description: "これ何進行?/なぜ?/調は?/合ってる?。全生成・修正の土台。", inputSchema: { question: z.enum(["fit", "identify", "key", "explain", "progression"]), chords: chordsSchema.optional(), notes: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional() } },
-    async ({ question, chords, notes, key, mode }) => {
+    { title: "判る（同定/説明/当てはまり/メロ品質）", description: "これ何進行?/なぜ?/調は?/合ってる?/このメロ変じゃない?。全生成・修正の土台。", inputSchema: { question: z.enum(["fit", "identify", "key", "explain", "progression", "melody"]), chords: chordsSchema.optional(), notes: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), meter: z.string().optional().describe("拍子（例 4/4・6/8）。melody 評価の強拍判定に使う") } },
+    async ({ question, chords, notes, key, mode, meter }) => {
       if (question === "fit") {
         if (!notes || !chords) return err("analyze fit は notes と chords");
         return ok(analyzeFit(notes, chords, key));
@@ -783,6 +784,15 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       if (question === "key") {
         if (!notes) return err("analyze key は notes");
         return ok(detectKeyFromNotes(notes));
+      }
+      if (question === "melody") {
+        // P0-c：規則ベースのメロ評価＝{score, metrics(項目別), critique(弱い規則の言語化)}。
+        // 総合scoreは"変なメロ検出ガード"の目安であって、良し悪しの断は人間（哲学：機械は足場まで）。
+        if (!notes) return err("analyze melody は notes");
+        // notesSchema は start/dur 任意。評価器は必須なので既定補完（禁則跳躍/順次/頂点/終止は pitch のみ・
+        // 強拍コードトーン/息継ぎだけ start/dur を使う＝省略時は控えめに既定）。
+        const mnotes = notes.map((n, i) => ({ pitch: n.pitch, start: n.start ?? i, dur: n.dur ?? 1 }));
+        return ok(evalMelody(mnotes, { chords, key, meter }));
       }
       if (!chords) return err(`analyze ${question} は chords`);
       if (question === "identify") return ok(identifyProgression(chords, key !== undefined ? { key } : {}));

@@ -165,6 +165,39 @@ describe("purpose tool surface (#101)", () => {
     expect(ana).toBeTruthy();
   });
 
+  it("analyze(question:melody) で E-rule 評価（項目別critique＋変なメロ検出）を返す", async () => {
+    const { client } = await connect();
+    const chords = [{ root: 0, quality: "", start: 0, dur: 4 }]; // C
+    // 良メロ：順次中心・アーチ・主音(C=60)終止・強拍コードトーン。
+    const good = [
+      { pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 1, dur: 1 },
+      { pitch: 64, start: 2, dur: 1 }, { pitch: 62, start: 3, dur: 0.5 },
+      { pitch: 60, start: 3.5, dur: 0.5 },
+    ];
+    // 悪メロ：三全音/大跳躍だらけ・非和声音・主音で終わらない。
+    const bad = [
+      { pitch: 60, start: 0, dur: 1 }, { pitch: 66, start: 1, dur: 1 },
+      { pitch: 61, start: 2, dur: 1 }, { pitch: 67, start: 3, dur: 1 },
+    ];
+    const rg = JSON.parse(textOf(await client.callTool({ name: "analyze", arguments: { question: "melody", notes: good, chords, key: 0, meter: "4/4" } })));
+    const rb = JSON.parse(textOf(await client.callTool({ name: "analyze", arguments: { question: "melody", notes: bad, chords, key: 0, meter: "4/4" } })));
+    // 契約：score / metrics / critique を返す。
+    expect(typeof rg.score).toBe("number");
+    expect(rg.metrics).toBeTruthy();
+    expect(Array.isArray(rg.critique)).toBe(true);
+    // 変なメロ検出：良メロ > 悪メロ、悪メロは禁則跳躍で減点。
+    expect(rg.score).toBeGreaterThan(rb.score);
+    expect(rb.metrics.noForbiddenLeaps).toBeLessThan(1);
+    expect(rg.metrics.cadenceClose).toBe(1); // 主音終止を検出
+  });
+
+  it("analyze(question:melody) は notes 必須（無ければ誠実にエラー）", async () => {
+    const { client } = await connect();
+    const r = await client.callTool({ name: "analyze", arguments: { question: "melody" } });
+    expect((r as { isError?: boolean }).isError).toBe(true);
+    expect(textOf(r)).toContain("notes");
+  });
+
   it("③ song_state で曲の状態を読み、plan_next で次の一手を残せる", async () => {
     const { client } = await connect();
     const song = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "song", title: "曲" } })));
