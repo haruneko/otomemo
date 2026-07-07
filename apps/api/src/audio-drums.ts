@@ -21,7 +21,8 @@ const KIND_MIDI: Record<DrumKind, { name: string; midi: number }> = {
   hihat: { name: "HiHat", midi: 42 },
 };
 // 拍子ごとのバックビート位置（小節頭=0を除く「スネアが乗りやすい拍」）。
-const BACKBEAT: Record<number, number[]> = { 3: [1, 2], 4: [1, 3], 6: [3] };
+// m=3 はワルツ＝バックビート弱い＝[2]のみ／m=4 は 2,4拍(=index1,3)／m=6 は index3。
+const BACKBEAT: Record<number, number[]> = { 3: [2], 4: [1, 3], 6: [3] };
 // 4/4 が圧倒的多数＝近差は普通拍子へ寄せる緩い事前分布（2拍子/8拍子は候補に入れない＝backbeatの2周期曖昧を回避）。
 const METER_PRIOR: Record<number, number> = { 3: 0.98, 4: 1.0, 6: 0.9 };
 
@@ -70,33 +71,36 @@ export function estimateMeterDownbeat(
   const ksMass = ks.reduce((a, p) => a + p.w, 0);
   if (ksMass <= 0 || beatTimes.length < 4) return { meter: 4, offset: 0, confidence: 0 };
 
-  let best = { meter: 4, offset: 0, hit: 0 };
-  let bestRaw = -1;
+  const kickMass = pts.filter((p) => p.kind === "kick").reduce((a, p) => a + p.w, 0) || 1;
+  const snareMass = pts.filter((p) => p.kind === "snare").reduce((a, p) => a + p.w, 0) || 1;
+  let best = { meter: 4, offset: 0, above: 0 };
+  let bestRaw = -Infinity;
   for (const m of candidates) {
-    const backset = new Set(BACKBEAT[m] ?? []);
+    const backset = BACKBEAT[m] ?? [];
+    const backN = backset.size ?? backset.length;
+    const backSetObj = new Set(backset);
     for (let p = 0; p < m; p++) {
-      let hit = 0; // テンプレに乗った質量（キック@頭 ＋ スネア@バックビート）
-      let miss = 0; // 逆位置（キック@バックビート・スネア@頭）＝位相の反証
+      let kickDown = 0, snareBack = 0;
       for (const { beat, kind, w } of pts) {
         const wb = (((beat - p) % m) + m) % m;
-        if (kind === "kick") {
-          if (wb === 0) hit += w;
-          else if (backset.has(wb)) miss += w * 0.5;
-        } else if (kind === "snare") {
-          if (backset.has(wb)) hit += w;
-          else if (wb === 0) miss += w * 0.5;
-        }
+        if (kind === "kick") { if (wb === 0) kickDown += w; }
+        else if (kind === "snare") { if (backSetObj.has(wb)) snareBack += w; }
       }
-      const raw = (hit - miss) * (METER_PRIOR[m] ?? 1);
+      // 偶然超過で採点＝拍数バイアスを除く。キックが頭に偏る度合い＋スネアがバックビートに偏る度合い。
+      // 偶然＝キックは 1/m が頭に、スネアは backN/m がバックビートに落ちる。
+      const kickAbove = kickDown / kickMass - 1 / m;
+      const snareAbove = snareBack / snareMass - backN / m;
+      const above = kickAbove + snareAbove; // 「テンプレに偶然以上に乗った」総合度合い（-..+）
+      const raw = above * (METER_PRIOR[m] ?? 1);
       if (raw > bestRaw) {
         bestRaw = raw;
-        best = { meter: m, offset: p, hit };
+        best = { meter: m, offset: p, above };
       }
     }
   }
-  // confidence＝テンプレ一致率 × 証拠量の飽和（少数オンセットでの過信を防ぐ＝~2小節分でsaturate）。
-  const evidence = Math.min(1, ks.length / 8);
-  const confidence = Math.max(0, Math.min(1, (best.hit / ksMass) * evidence));
+  // confidence＝偶然超過(0..)を 0..1 へ（最大理論値≈1でsaturate）×証拠量の飽和（少数オンセットの過信を防ぐ）。
+  const evidence = Math.min(1, ks.length / 12);
+  const confidence = Math.max(0, Math.min(1, best.above * 2 * evidence));
   return { meter: best.meter, offset: best.offset, confidence };
 }
 
