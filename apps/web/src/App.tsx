@@ -21,8 +21,8 @@ import { StudyView } from "./components/StudyView";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
-import { parseMusicXml } from "./musicxml";
-import { HummingRecorder } from "./components/HummingRecorder";
+import { useIsMobile } from "./useIsMobile";
+import { ImportPanel } from "./components/ImportPanel";
 import { Chat } from "./components/Chat";
 import { Tray } from "./components/Tray";
 import { ProjectScreen } from "./components/ProjectScreen";
@@ -30,24 +30,8 @@ import { flushOutbox } from "./outbox";
 import { projectTag } from "./project";
 
 const ACTIVE_PROJECT_KEY = "cm-active-project";
-
-
-// モバイル土台：狭い画面か（≤820px、base.css のブレークポイントと一致）。リサイズ追従。
-const MOBILE_MQ = "(max-width: 820px)";
 // アプリ表示名（ヘッダ左のロゴ）。リポジトリ名(sketch-it)とは別。「音メモ＝手早く音を出してメモ」。
 const APP_NAME = "Otomemo";
-function useIsMobile(): boolean {
-  const has = typeof window !== "undefined" && typeof window.matchMedia === "function";
-  const [m, setM] = useState(() => has && window.matchMedia(MOBILE_MQ).matches);
-  useEffect(() => {
-    if (!has) return; // jsdom 等 matchMedia 無し＝デスクトップ既定
-    const mq = window.matchMedia(MOBILE_MQ);
-    const on = () => setM(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, [has]);
-  return m;
-}
 
 export function App() {
   const [items, setItems] = useState<(Neta & { matchType?: string })[]>([]);
@@ -241,105 +225,9 @@ export function App() {
   const reorderable =
     scope === "project" && !unassignedOnly && !q.trim() && !kindFilter && !moodFilter.trim();
 
-  // #10: 過去資産の一括取込（複数ファイル）
-  // #81 MIDIはworker(mido)でトラック×チャンネル分割→melody/rhythmネタ化。
-  // base64でジョブに載せ、workerが分割→reaperがネタ化。jobのdoneを待って一覧へ反映。
-  const [importing, setImporting] = useState(false);
+  // 過去資産の取込パネル（MIDI/楽譜/音源/URL/歌詞/ハミング）は <ImportPanel> に分離（負債D6）。
+  // App が持つのは開閉状態だけ（トグルタイルは create タイル群に残す）。
   const [importOpen, setImportOpen] = useState(false); // 取込ボタン群を畳む（既定=閉）
-  const [analyzeUrlText, setAnalyzeUrlText] = useState(""); // ① 音源アナリーゼの URL 入力
-  async function importMidi(files: FileList | null) {
-    if (!files) return;
-    setImporting(true);
-    try {
-      const ids: string[] = [];
-      for (const file of Array.from(files)) {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        let bin = "";
-        for (const b of bytes) bin += String.fromCharCode(b);
-        const job = await api.createJob({
-          intent: "import_midi",
-          params: { midi_b64: btoa(bin), filename: file.name },
-        });
-        ids.push(job.id);
-      }
-      // 分割→reaper反映を待つ（mido は速い・reaperは5s間隔）。最大~12s、毎秒reload。
-      for (let i = 0; i < 12; i++) {
-        await new Promise((r) => setTimeout(r, 1000));
-        await reload();
-        const st = await Promise.all(
-          ids.map((id) => api.getJob(id).then((j) => j.status).catch(() => "")),
-        );
-        if (st.every((s) => s === "done" || s === "failed")) {
-          await new Promise((r) => setTimeout(r, 600));
-          await reload();
-          break;
-        }
-      }
-    } finally {
-      setImporting(false);
-    }
-  }
-  // ① 音源アナリーゼ：ファイル or URL → audio_analyze job（裏で分離+MIR+Claude統合）→ 受信トレイに知見ネタ。
-  // 音源は解析後にサーバ側で削除（著30-4＝派生事実のみ残す）。
-  async function analyzeAudio(files: FileList | null) {
-    if (!files || !files.length) return;
-    setImporting(true);
-    try {
-      for (const file of Array.from(files)) {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        let bin = "";
-        for (const b of bytes) bin += String.fromCharCode(b);
-        await api.createJob({ intent: "audio_analyze", params: { audio_b64: btoa(bin), filename: file.name } });
-      }
-      setImportOpen(false);
-    } finally {
-      setImporting(false);
-    }
-  }
-  async function analyzeAudioUrl() {
-    const u = analyzeUrlText.trim();
-    if (!u) return;
-    await api.createJob({ intent: "audio_analyze", params: { url: u } }).catch(() => {});
-    setAnalyzeUrlText("");
-    setImportOpen(false);
-  }
-
-  // #56 楽譜(MusicXML)取込：ローカルで解析→melodyネタ化（worker不要）。
-  async function importScore(files: FileList | null) {
-    if (!files) return;
-    setImporting(true);
-    try {
-      for (const file of Array.from(files)) {
-        try {
-          const notes = parseMusicXml(await file.text());
-          if (notes.length) {
-            await api.createNeta({
-              kind: "melody",
-              title: file.name.replace(/\.(musicxml|xml)$/i, ""),
-              content: { notes },
-              tags: projectTags,
-            });
-          }
-        } catch {
-          /* 1ファイルの失敗で全体を止めない */
-        }
-      }
-      await reload();
-    } finally {
-      setImporting(false);
-    }
-  }
-  async function importLyrics(files: FileList | null) {
-    if (!files) return;
-    for (const file of Array.from(files)) {
-      const parts = (await file.text())
-        .split(/\n\s*\n/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const p of parts) await api.createNeta({ kind: "lyric", text: p, tags: projectTags });
-    }
-    await reload();
-  }
 
   const openChat = (target?: Neta, seed = "") => {
     setGearMode(false);
@@ -621,75 +509,7 @@ export function App() {
               <span>取込 {importOpen ? "▲" : "▾"}</span>
             </button>
           </div>
-          {importOpen && (
-          <div className="notebook-actions">
-            <label className="import-btn">
-              {importing ? "取り込み中…" : "MIDI取込"}
-              <input
-                type="file"
-                accept=".mid,.midi"
-                multiple
-                hidden
-                disabled={importing}
-                onChange={async (e) => {
-                  await importMidi(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <label className="import-btn">
-              楽譜取込
-              <input
-                type="file"
-                accept=".musicxml,.xml"
-                multiple
-                hidden
-                disabled={importing}
-                onChange={async (e) => {
-                  await importScore(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <HummingRecorder onCreated={() => void reload()} />
-            <label className="import-btn" title="音源を分離→BPM/調/コード/音域を解析しアナリーゼ文を受信トレイへ（音源は解析後に削除）">
-              {importing ? "解析中…" : "🎵 音源アナリーゼ"}
-              <input
-                type="file"
-                accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
-                hidden
-                disabled={importing}
-                onChange={async (e) => {
-                  await analyzeAudio(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <input
-              className="import-url"
-              aria-label="analyze-url"
-              placeholder="URLでアナリーゼ(YouTube等・best-effort)"
-              value={analyzeUrlText}
-              onChange={(e) => setAnalyzeUrlText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void analyzeAudioUrl();
-              }}
-            />
-            <label className="import-btn">
-              歌詞取込
-              <input
-                type="file"
-                accept=".txt,text/plain"
-                multiple
-                hidden
-                onChange={async (e) => {
-                  await importLyrics(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-          )}
+          <ImportPanel importOpen={importOpen} setImportOpen={setImportOpen} reload={reload} projectTags={projectTags} />
           {/* 案1：スコープ＋器を1行に統合。すべて/未仕分け/器＝作業ネタの絞り込み、区切りの先の
               「ライブラリ」＝連想元の参考素材（別の場所・全プロジェクト共有）。 */}
           <div className="project-picker proj-chips" role="tablist" aria-label="scope" ref={chipsRef}>
