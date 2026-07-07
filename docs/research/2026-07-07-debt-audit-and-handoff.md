@@ -32,7 +32,7 @@
 
 | # | 負債 | 修整方針 |
 |---|------|---------|
-| D1 | **`apps/web/src/audio.ts`（665行）が無テスト＋`any` 31件集中**。再生＝毎回使う中核なのにリスクが二重 | 純ロジック（スケジューリング・ノート変換）を副作用から切り出してユニットテスト先行。`any`はTone.js/soundfont2の型不足由来なので、最低限のローカル型定義で境界を固める。全面書き直しはしない |
+| D1 | **`apps/web/src/audio.ts`（665行）が無テスト＋`any` 31件集中**。再生＝毎回使う中核なのにリスクが二重 | ✅**完了（2026-07-07）**：純関数（`drumKey`/`velToMidi`抽出/`drumDetune`/`drumNameFor`/`resolveSF2Ctor`/`preset*`）を切り出し `audio.test.ts`(24)追加。`preset*`の`any`3件を`PresetLike`型で撤去、Tone/smplr由来のリスクある`any`は残置。挙動不変（式は移動のみ）・web 40ファイル311緑・tsc緑 |
 | D2 | ~~**`apps/api/src/reaper.ts`（414行）が無テスト**。常駐Claudeプロセスのライフサイクル制御~~ | ✅**完了＋監査是正（2026-07-07）**：実コード確認で監査の前提が誤りと判明＝`reaper.ts` は**プロセス制御ではなくジョブ結果→ネタ化の消費者**で、materialize分岐は `job.test.ts`(28)＋audio-analyze/research-runner/midi-import で**既に厚くテスト済**。未カバーだった純粋ヘルパの境界（フラット/ダブル臨時記号キー・frame検証）を直接テスト化＝`keyToPc`/`frameVals`/`hasMusic` を export し `reaper-helpers.test.ts`(19)を追加。**常駐Claudeプロセス制御は別ファイル（reaperではない）** |
 | D3 | **音楽定数・理論ロジックの api↔web 二重実装**（PITCH_NAMES/KEY_NAMESが同一配列を別名で二重定義、コード品質テーブル、transpose系）。片方だけ直すと挙動がズレる | 空の `packages/` に `@cm/music-core`（純粋定数＋純関数のみ）を新設し両者から参照。DB疎結合方針は維持＝**共有するのは不変の音楽知識だけ**。design.md に決定を先に書く |
 | D4 | **docs間の乖離**（§2に列挙）。SDDの権威が腐る最短経路 | ✅**完了（2026-07-07）**：§2の5件＋追加発見1件を是正済（コード変更なし・doc編集のみ） |

@@ -53,6 +53,10 @@ function dbg(...args: unknown[]): void {
 // ドラム音声マップのキー＝(キット, GM番号)。同じ番号でもキット違いで別サンプル。
 export const drumKey = (kit: number, pitch: number): number => (kit << 8) | pitch;
 
+// velocity(0..1) → MIDI velocity(0..127)。SF2 sampler(smplr)は 0..127 を要求。
+// 再生ディスパッチ(playEvent)の変換を純関数へ切り出し＝挙動不変・テスト可能。
+export const velToMidi = (vel: number): number => Math.round(vel * 127);
+
 // 1音の発音ディスパッチ（テスト可能に切り出し）。
 // ドラム: SF2にマッチ楽器があればそれ、無ければ簡易キット(membrane/noise)。
 // 旋律: SF2があればそれ、無ければ poly シンセ。SF2 は absolute time(秒)・velocity 0..127。
@@ -76,7 +80,7 @@ export function playEvent(
       ds.sampler.start({
         note: ds.note,
         time,
-        velocity: Math.round(ev.vel * 127),
+        velocity: velToMidi(ev.vel),
         loop: false,
         detune: ds.detune,
         ...(ds.stopId ? { stopId: ds.stopId } : {}), // #84 S3: 同 exclusiveClass を相互チョーク
@@ -92,7 +96,7 @@ export function playEvent(
     // #section音色: この音の program に対応する旋律 sampler（無ければ既定 sf）
     const inst = melodicByProg?.get(ev.program ?? defaultProg) ?? sf;
     dbg("note pitch", ev.pitch, "via sf2-melodic prog", ev.program ?? defaultProg);
-    inst.start({ note: ev.pitch, time, duration: ev.durSec, velocity: Math.round(ev.vel * 127) });
+    inst.start({ note: ev.pitch, time, duration: ev.durSec, velocity: velToMidi(ev.vel) });
   } else {
     // SF2 未ロード時の純シンセ・フォールバック（後退ゼロ＝必ず鳴る）。診断ログを出して
     // 「フォールバックでも送る音高は入力と一致」を SF2 非依存に検証可能にする（#103）。
@@ -148,9 +152,17 @@ function resetSfCaches(): void {
   prewarmDone = false; // SF2が変わったら先読みもやり直し
 }
 
-const presetBank = (p: any): number => p?.header?.bank ?? p?.bank ?? 0;
-const presetNum = (p: any): number => p?.header?.preset ?? p?.preset ?? 0;
-const presetName = (p: any): string | undefined => p?.header?.name ?? p?.name;
+// SF2 プリセットの bank/preset/name は header 直下か直属かパーサ差がある。両対応の安全アクセサ。
+// 引数は soundfont2 のプリセット様オブジェクト（最小ローカル型で any を撤去）。
+type PresetLike = {
+  header?: { bank?: number; preset?: number; name?: string };
+  bank?: number;
+  preset?: number;
+  name?: string;
+};
+export const presetBank = (p: PresetLike): number => p?.header?.bank ?? p?.bank ?? 0;
+export const presetNum = (p: PresetLike): number => p?.header?.preset ?? p?.preset ?? 0;
+export const presetName = (p: PresetLike): string | undefined => p?.header?.name ?? p?.name;
 
 // #55c GM program(0-127) → SF2 旋律楽器名。bank0/preset=program のプリセットが参照する
 // instrument 名を返す（instrumentNames に在るもの）。無ければ null。
@@ -231,7 +243,7 @@ export function setActiveSoundFont(url: string | null): void {
 }
 
 // soundfont2 のUMD/ESM差を吸収（named/default どちらでも SoundFont2 クラスを取り出す）。
-function resolveSF2Ctor(mod: any): any {
+export function resolveSF2Ctor(mod: any): any {
   return mod?.SoundFont2 ?? mod?.default?.SoundFont2 ?? mod?.default ?? mod;
 }
 
