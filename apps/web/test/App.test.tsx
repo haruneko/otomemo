@@ -45,4 +45,21 @@ describe("App", () => {
     expect(screen.getByRole("dialog", { name: "settings" })).toBeInTheDocument();
     expect(screen.getByText("テーマ（色）")).toBeInTheDocument();
   });
+
+  // 負債D6 の分割回帰：取込パネルを <ImportPanel> に切り出したので、トグルで実際に
+  // パネル(取込各手段)が現れることを確認＝配線が壊れていないことの回帰ネット。
+  it("toggles the import panel (ImportPanel 分割の回帰)", async () => {
+    render(<App />);
+    // 既定は畳まれていて中身は出ていない。
+    expect(screen.queryByLabelText("analyze-url")).toBeNull();
+    await userEvent.click(screen.getByLabelText("toggle-import"));
+    // 取込の各手段が現れる（MIDI/楽譜/音源URL/歌詞）。
+    expect(screen.getByLabelText("analyze-url")).toBeInTheDocument();
+    expect(screen.getByText("MIDI取込")).toBeInTheDocument();
+    expect(screen.getByText("楽譜取込")).toBeInTheDocument();
+    expect(screen.getByText("歌詞取込")).toBeInTheDocument();
+    // もう一度押すと畳まれる。
+    await userEvent.click(screen.getByLabelText("toggle-import"));
+    expect(screen.queryByLabelText("analyze-url")).toBeNull();
+  });
 });
