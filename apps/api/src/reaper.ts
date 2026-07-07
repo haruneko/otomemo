@@ -5,7 +5,7 @@ import type { Core } from "./core";
 import type { Neta, NetaInput } from "./types";
 import { chordsFromTimeline, pcFromKeyName } from "./audio-chords";
 import { autoDownbeatOffset } from "./audio-grid";
-import { estimateMeterDownbeat, drumOnsetsToRhythm, meterString, type DrumOnset } from "./audio-drums";
+import { estimateGrid, estimateMeterDownbeat, drumOnsetsToRhythm, meterString, type DrumOnset } from "./audio-drums";
 
 // チャット発のジョブは params.chat_thread を持つ。その場合、生成結果を**サーバ側で**そのスレッドの
 // チャットメッセージとして記録する＝クライアントが待ち中に離脱/リロードしても結果が必ずチャットに残る
@@ -197,13 +197,14 @@ export function reapResults(core: Core): number {
     // #S12 拍子/ダウンビートの土台：ユーザー指定(>0)は常に優先。未指定(0=auto)は**ドラムのキック/スネア**から
     // 推定（キック=小節頭・スネア=バックビート）。低信頼ならコード変化ヒューリスティックへフォールバック。
     const drumOnsets = (Array.isArray(facts.drum_onsets) ? facts.drum_onsets : []) as DrumOnset[];
+    const grid = drumOnsets.length && beatTimes.length ? estimateGrid(beatTimes, drumOnsets) : null; // ドラム由来の剛体グリッド
     const userMeter = typeof facts.meter === "number" && facts.meter > 0 ? facts.meter : 0;
     let meter = userMeter || 4;
     let offset = autoDownbeatOffset(beatTimes, changes, meter, weights); // 既定＝コード由来
     let meterSource: "user" | "drums" | "chords" = userMeter ? "user" : "chords";
     let meterConf = userMeter ? 1 : 0;
-    if (!userMeter && drumOnsets.length && beatTimes.length) {
-      const est = estimateMeterDownbeat(beatTimes, drumOnsets);
+    if (!userMeter && grid) {
+      const est = estimateMeterDownbeat(grid, drumOnsets);
       if (est.confidence >= 0.5) { meter = est.meter; offset = est.offset; meterSource = "drums"; meterConf = est.confidence; }
     }
     core.createNeta({
@@ -225,8 +226,8 @@ export function reapResults(core: Core): number {
     });
     n += 1;
     // #S12 ドラムパターンを弾き直せる rhythm 候補ネタに（meter が確定＝ユーザー指定 or ドラム高信頼の時だけ折り畳む）。
-    if (drumOnsets.length && (userMeter || meterConf >= 0.5)) {
-      const rc = drumOnsetsToRhythm(drumOnsets, beatTimes, offset, meter);
+    if (grid && (userMeter || meterConf >= 0.5)) {
+      const rc = drumOnsetsToRhythm(grid, drumOnsets, offset, meter);
       if (rc.lanes.length) {
         core.createNeta({
           kind: "rhythm",

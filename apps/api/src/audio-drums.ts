@@ -53,23 +53,100 @@ export function beatPositionOf(beatTimes: number[], t: number): number {
   return lo + (t - beatTimes[lo]!) / span;
 }
 
+export interface Grid {
+  origin: number; // step0(=あるビート)の時刻(秒)
+  beatPeriod: number; // 1拍の秒数（定テンポ）。16分=beatPeriod/4
+}
+
+/**
+ * ドラムに揃えた**定テンポの剛体グリッド**を推定。librosa の拍は1拍ずつ検出で揺れる＝16分量子化に
+ * 精度不足（onsetが隣stepへ滲む）。対策＝拍間隔の中央値で一定テンポにし、位相をキック/スネアが16分
+ * 格子に最も乗る所へ合わせる（ドラム＝時計）。打ち込み/定テンポ曲で滲みを消す。
+ */
+export function estimateGrid(beatTimes: number[], onsets: DrumOnset[]): Grid {
+  const n = beatTimes.length;
+  if (n < 2) return { origin: beatTimes[0] ?? 0, beatPeriod: 0.5 };
+  const diffs: number[] = [];
+  for (let i = 1; i < n; i++) diffs.push(beatTimes[i]! - beatTimes[i - 1]!);
+  diffs.sort((a, b) => a - b);
+  const bp0 = diffs[Math.floor(diffs.length / 2)] || 0.5; // librosa 拍間隔の中央値＝テンポの当たり（位相は当てにしない）
+  const ks = onsets
+    .map(([t, k, s]) => ({ t, kind: normKind(k), w: s > 0 ? s : 1 }))
+    .filter((p) => p.kind === "kick" || p.kind === "snare");
+  if (!ks.length) return { origin: beatTimes[0]!, beatPeriod: bp0 };
+  // コムフィルタ＝周期も位相もドラム(キック/スネア)から直接探索。librosa の拍は位相がドラムとズレる
+  // （実測：キックが拍格子から中央値0.24拍ズレ）ので、拍間隔中央値は「テンポの範囲」の当たりにだけ使い、
+  // その近傍(±13%)で16分格子にオンセットが最も乗る (周期,位相) を選ぶ。テンポ2倍/半分の別解を避ける。
+  let best = { period: bp0, origin: beatTimes[0]!, score: -Infinity };
+  const pLo = bp0 * 0.87, pHi = bp0 * 1.13, pStep = bp0 * 0.004;
+  for (let period = pLo; period <= pHi; period += pStep) {
+    const sixteenth = period / 4;
+    const PH = 48;
+    for (let j = 0; j < PH; j++) {
+      const origin = (j / PH) * sixteenth; // 位相は16分1つ分を刻む（絶対原点は0基準でよい）
+      let score = 0;
+      for (const { t, w } of ks) {
+        const q = (t - origin) / sixteenth;
+        score += w * (1 - 2 * Math.abs(q - Math.round(q))); // 最寄16分に近いほど+
+      }
+      if (score > best.score) best = { period, origin, score };
+    }
+  }
+  // 精緻化：粗gridの16分index k に対し t≈origin+k*(period/4) をインライアで重み付き最小二乗回帰。
+  // 粗探索の刻み由来のドリフト（全曲で累積すると致命的）を消し、テンポ/位相を実データにピタリ合わせる。
+  let origin = best.origin, period = best.period;
+  for (let iter = 0; iter < 3; iter++) {
+    const s16 = period / 4;
+    const inl = ks
+      .map(({ t, w }) => ({ k: Math.round((t - origin) / s16), t, w }))
+      .filter((p) => Math.abs(p.t - (origin + p.k * s16)) / s16 < 0.25); // 16分の1/4以内＝格子に乗ってる点
+    if (inl.length < 4) break;
+    const W = inl.reduce((a, p) => a + p.w, 0);
+    const mk = inl.reduce((a, p) => a + p.w * p.k, 0) / W;
+    const mt = inl.reduce((a, p) => a + p.w * p.t, 0) / W;
+    const cov = inl.reduce((a, p) => a + p.w * (p.k - mk) * (p.t - mt), 0);
+    const varK = inl.reduce((a, p) => a + p.w * (p.k - mk) * (p.k - mk), 0);
+    if (varK <= 1e-9) break;
+    const b = cov / varK; // = sixteenth
+    origin = mt - b * mk;
+    period = b * 4;
+  }
+  // 16分位相の4通り曖昧を解消：キック/スネアが「拍(step%4==0)」に最も乗る位相へ寄せる
+  // （拍だけに onset がある時にどの16分が拍かを一意化＝step番号を安定させる）。
+  const s16 = period / 4;
+  let bestShift = 0, bestMass = -1;
+  for (let sh = 0; sh < 4; sh++) {
+    let mass = 0;
+    for (const { t, w } of ks) {
+      const step = Math.round((t - (origin + sh * s16)) / s16);
+      if ((((step % 4) + 4) % 4) === 0) mass += w;
+    }
+    if (mass > bestMass) { bestMass = mass; bestShift = sh; }
+  }
+  origin += bestShift * s16;
+  return { origin, beatPeriod: period };
+}
+
+/** 剛体グリッド上の実数ビート位置（=(t-origin)/beatPeriod）。beatPositionOf の剛体版・滲み低減。 */
+const rigidBeatPos = (grid: Grid, t: number): number => (t - grid.origin) / grid.beatPeriod;
+
 /**
  * 拍子とダウンビート位相を推定。キックが小節頭(0)・スネアがバックビートに乗る度合いを
  * (meter, phase) の総当たりで採点し、最良を返す。confidence=キック/スネア質量のうち
  * テンプレ位置に乗った割合（×meter事前分布）。オンセットが乏しければ confidence≈0。
  */
 export function estimateMeterDownbeat(
-  beatTimes: number[],
+  grid: Grid,
   onsets: DrumOnset[],
   candidates: number[] = [4, 3, 6],
 ): MeterEstimate {
-  // 各オンセットを最寄ビートindexへ＋種別/強さ。
+  // 剛体グリッド上で各オンセットを最寄ビートindexへ＋種別/強さ。
   const pts = onsets
-    .map(([t, k, s]) => ({ beat: Math.round(beatPositionOf(beatTimes, t)), kind: normKind(k), w: s > 0 ? s : 1 }))
+    .map(([t, k, s]) => ({ beat: Math.round(rigidBeatPos(grid, t)), kind: normKind(k), w: s > 0 ? s : 1 }))
     .filter((p): p is { beat: number; kind: DrumKind; w: number } => p.kind !== null);
   const ks = pts.filter((p) => p.kind === "kick" || p.kind === "snare");
   const ksMass = ks.reduce((a, p) => a + p.w, 0);
-  if (ksMass <= 0 || beatTimes.length < 4) return { meter: 4, offset: 0, confidence: 0 };
+  if (ksMass <= 0) return { meter: 4, offset: 0, confidence: 0 };
 
   const kickMass = pts.filter((p) => p.kind === "kick").reduce((a, p) => a + p.w, 0) || 1;
   const snareMass = pts.filter((p) => p.kind === "snare").reduce((a, p) => a + p.w, 0) || 1;
@@ -77,7 +154,7 @@ export function estimateMeterDownbeat(
   let bestRaw = -Infinity;
   for (const m of candidates) {
     const backset = BACKBEAT[m] ?? [];
-    const backN = backset.size ?? backset.length;
+    const backN = backset.length;
     const backSetObj = new Set(backset);
     for (let p = 0; p < m; p++) {
       let kickDown = 0, snareBack = 0;
@@ -115,8 +192,8 @@ export interface RhythmContentLite {
  * steps = meter*4（4/4→16・3/4→12・6→24）。
  */
 export function drumOnsetsToRhythm(
+  grid: Grid,
   onsets: DrumOnset[],
-  beatTimes: number[],
   offset: number,
   meter: number,
   majority = 0.5,
@@ -130,7 +207,7 @@ export function drumOnsetsToRhythm(
   for (const [t, k, s] of onsets) {
     const kind = normKind(k);
     if (!kind || s < 0) continue;
-    const rel = beatPositionOf(beatTimes, t) - offset;
+    const rel = rigidBeatPos(grid, t) - offset;
     if (rel < -0.5) continue; // 最初のダウンビートより前は捨てる
     const bar = Math.floor((rel + 1e-6) / meter);
     if (bar < 0) continue;
