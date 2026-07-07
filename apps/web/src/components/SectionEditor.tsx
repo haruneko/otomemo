@@ -1,42 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useDroppable } from "@dnd-kit/core";
-import { api, type Neta, type CompositionNode } from "../api";
-import { KIND_LABEL, kindColor } from "../kinds";
+import { api, type Neta } from "../api";
+import { KIND_LABEL } from "../kinds";
 import { fitReportText } from "../fitReport";
 import { isProjectTag, projectName } from "../project";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
-
-// レーンの1セル＝ドロップ先（#52②c）。kind が合えばカードを落として配置。
-function LaneCell({
-  laneKey,
-  kinds,
-  bar,
-  position,
-  row,
-  onTap,
-  disabled,
-}: {
-  laneKey: string;
-  kinds: readonly string[];
-  bar: number;
-  position: number;
-  row?: number; // ② コード楽器の行（D&Dドロップ時の ord に使う）
-  onTap: (position: number) => void;
-  disabled?: boolean; // 単一パートが埋まってる＝置けない（CV3）
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: `cell-${laneKey}-${bar}`, data: { kinds, position, row }, disabled });
-  return (
-    <button
-      ref={setNodeRef}
-      type="button"
-      className={"lane-cell" + (isOver ? " over" : "") + (disabled ? " locked" : "")}
-      aria-label={`place-${laneKey}-${bar}`}
-      disabled={disabled}
-      onClick={() => !disabled && onTap(position)}
-    />
-  );
-}
 import {
   notesForContent,
   compositeNotes,
@@ -44,132 +12,28 @@ import {
   downloadMultitrackMidi,
   playNotes,
   beatsPerBar,
-  PITCH_NAMES,
   type Note,
   type PlaybackHandle,
 } from "../music";
 import { MiniRoll } from "./MiniRoll";
-import { KindIcon } from "./KindIcon";
 import { Icon } from "./Icon";
 import { harmonyVoice } from "../harmony";
-
-// 配置タイムライン（design #19）。section/song を メロ/コード/ベース/リズムの4レーン×小節 で組む。
-// レーンは子の kind から導出（スキーマ変更なし）。空セルをタップ→ネタを選んで置く。
-// 調/テンポは section が支配。rhythm(ドラム)は移調しない。
-// レーン順＝層モデル（進行が一番上→メロ→コード楽器→ベース→リズム→ネスト）。
-// 配置は「占有セルのみ不可」＝同じ位置に二重で置けないだけ（別小節には自由に置ける・CV3 是正）。
-// ②（2026-07-03）コード楽器は2レーン（ピアノ＋パッド等を同時に鳴らす）。同 kind の行識別は
-// placement の `ord`（0=1／1=2）で行う（ord は並び/zヒントで本質非依存）。row を持つレーンは
-// laneChildren を rowOf で絞る。再生は元々全 chord_pattern 子を鳴らすので発音側は変更不要。
-type LaneDef = { key: string; label: string; kinds: readonly string[]; row?: number };
-// #5 container kind でレーンを差し替え（宣言済み階層 Project⊃Song⊃section⊃leaf）。
-// section＝パート専用（入れ子廃止）。song＝section を並べる編成（[section] のみ）。
-const SECTION_LANES: readonly LaneDef[] = [
-  { key: "chord", label: "コード進行", kinds: ["chord", "chord_progression"] },
-  { key: "melody", label: "メロ", kinds: ["melody"] },
-  { key: "chord_pattern", label: "コード楽器1", kinds: ["chord_pattern"], row: 0 },
-  { key: "chord_pattern2", label: "コード楽器2", kinds: ["chord_pattern"], row: 1 },
-  { key: "bass", label: "ベース", kinds: ["bass"] },
-  { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
-];
-const SONG_LANES: readonly LaneDef[] = [
-  { key: "section", label: "セクション", kinds: ["section"] }, // song は section を時間順に並べる
-];
-const lanesForKind = (kind: string): readonly LaneDef[] => (kind === "song" ? SONG_LANES : SECTION_LANES);
-const MIN_BARS = 8;
-const SECTION_MAX_BARS = 32; // section 尺の上限（1ブロック＝Aメロ/サビ等）
-const SONG_MAX_BARS = 64; // song 尺の上限（section を複数並べる編成）
-const maxBarsForKind = (kind: string): number => (kind === "song" ? SONG_MAX_BARS : SECTION_MAX_BARS);
-// ピッカー種別タブの色＝作成タイルと揃える（種別色・アイコン+ラベル）。chord_pattern は chord 色。
-const LANE_COLOR: Record<string, string> = {
-  chord: "var(--k-chord)",
-  melody: "var(--k-melody)",
-  chord_pattern: "var(--k-chord)",
-  chord_pattern2: "var(--k-chord)",
-  bass: "var(--k-bass)",
-  rhythm: "var(--k-rhythm)",
-  section: "var(--k-section)",
-};
-// MIDIトラック名は ASCII に（@tonejs/midi は名前を Latin-1 で書く＝日本語だと DAW で文字化け）。
-const LANE_MIDI_NAME: Record<string, string> = {
-  chord: "Chord",
-  melody: "Melody",
-  chord_pattern: "Keys 1",
-  chord_pattern2: "Keys 2",
-  bass: "Bass",
-  rhythm: "Drums",
-  section: "Section",
-};
-
-type Lane = LaneDef;
-type Child = CompositionNode["children"][number];
-
-// ③ ループ伸ばしのタイル位置＝元ブロック(fromPos)の後ろに unit 刻みで反復。
-// 各コピー p は「ドラッグがその**中点(p+unit/2)を過ぎた**」＝半分まで引いたら確定（p+unit/2<endBeat）。
-// かつ「コピー全体がグリッド total に収まる(p+unit<=total)」こと。
-// ＝開始を過ぎた瞬間に全長が飛び出す（後ろに飛び出し過ぎ・オーナー指摘）のを防ぐ＝半分引いてから入る。
-export function loopPositions(fromPos: number, unit: number, endBeat: number, total: number): number[] {
-  const out: number[] = [];
-  if (unit <= 0) return out;
-  for (let p = fromPos + unit; p + unit <= total + 1e-6; p += unit) {
-    if (p + unit / 2 >= endBeat - 1e-6) break; // まだ中点まで引いてない＝置かない
-    out.push(Math.round(p * 1e6) / 1e6);
-  }
-  return out;
-}
-
-// 区間 [aPos,aPos+aDur) と [bPos,bPos+bDur) が重なるか（端が接するだけは重なり無し）。
-// 配置/ループの重複ガード＝「点」でなく「尺」で判定＝マルチ小節ネタのはみ出し重複を防ぐ（純関数=テスト対象）。
-export function spanOverlaps(aPos: number, aDur: number, bPos: number, bDur: number): boolean {
-  return aPos < bPos + bDur - 1e-6 && bPos < aPos + aDur - 1e-6;
-}
-
-// #83/#55 曲(song)の段階・次の一手パネル。song overlay を読み込み、編集して保存（blur時）。
-function SongStatus({ netaId }: { netaId: string }) {
-  const [stage, setStage] = useState("");
-  const [nextAction, setNextAction] = useState("");
-  const [saved, setSaved] = useState(false);
-  useEffect(() => {
-    let live = true;
-    void api.getSong(netaId).then((s) => {
-      if (live && s) {
-        setStage(s.stage ?? "");
-        setNextAction(s.next_action ?? "");
-      }
-    });
-    return () => {
-      live = false;
-    };
-  }, [netaId]);
-  async function save() {
-    await api.updateSong(netaId, { stage: stage || null, next_action: nextAction || null });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  }
-  return (
-    <div className="song-status">
-      <label>
-        段階
-        <input
-          value={stage}
-          placeholder="ラフ / アレンジ / 詞 / ミックス…"
-          onChange={(e) => setStage(e.target.value)}
-          onBlur={save}
-        />
-      </label>
-      <label>
-        次の一手
-        <input
-          value={nextAction}
-          placeholder="サビのメロを詰める…"
-          onChange={(e) => setNextAction(e.target.value)}
-          onBlur={save}
-        />
-      </label>
-      {saved && <span className="song-status-saved">✓</span>}
-    </div>
-  );
-}
+// 巨大コンポの機械分割（負債D6）＝挙動不変。レーン定義/尺定数/純関数/LaneCell/SongStatus/PlacePicker を分離。
+import { LaneCell } from "./LaneCell";
+import { SongStatus } from "./SongStatus";
+import { PlacePicker } from "./PlacePicker";
+import {
+  type Lane,
+  type Child,
+  lanesForKind,
+  maxBarsForKind,
+  MIN_BARS,
+  LANE_MIDI_NAME,
+  loopPositions,
+  spanOverlaps,
+} from "./sectionLanes";
+// テストが従来 SectionEditor から import している純関数は再export して import 面を不変に保つ。
+export { loopPositions, spanOverlaps } from "./sectionLanes";
 
 export function SectionEditor({
   neta,
@@ -214,16 +78,7 @@ export function SectionEditor({
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
   const liveMeter = meter ?? neta.meter ?? undefined;
   const liveTitle = (title ?? neta.title ?? "").trim(); // 生成/作成/MIDI名に使うライブタイトル
-  // ネタの所属プロジェクト（prj: タグ由来）。母集団を器で絞る（A）に使う。
-  const netaProjects = (n: Neta) => (n.tags ?? []).filter(isProjectTag).map(projectName);
-  // ピッカーの相性（B）：拍子一致（bpb比較）。meter 未指定(null)は"不特定"＝中立で表示（断片を隠さない）。
-  const sameMeter = (n: Neta) => n.meter == null || beatsPerBar(n.meter) === BPB;
-  const fifthsPos = (pc: number) => (((pc * 7) % 12) + 12) % 12;
-  const keyDist = (n: Neta) => {
-    if (n.key == null) return 3; // keyless＝中立（一致と不一致の中間）
-    const d = Math.abs(fifthsPos(n.key) - fifthsPos(keyPc));
-    return Math.min(d, 12 - d);
-  };
+  // 絞り込み/相性(拍子・調)の純ロジックは PlacePicker 側に内包（機械分割・負債D6）。
   const BPB = beatsPerBar(liveMeter); // 1小節の拍数（#51・編集中はprop優先）
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
@@ -771,129 +626,24 @@ export function SectionEditor({
       )}
 
       {picker && (
-        <div className="dialog-backdrop" onClick={() => setPicker(null)}>
-          <div
-            className="dialog"
-            role="dialog"
-            aria-label="place-picker"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* ヘッダ＝どこに置くかのパンくず（Section ▸ パート ▸ 小節）。"に置く"は自明なので削り、
-                位置だけ軽く。Section名は長ければ省略＝1行を保つ。 */}
-            <header className="picker-head">
-              <span className="picker-crumb">
-                <span className="crumb-sec">{liveTitle || KIND_LABEL[neta.kind]}</span>
-                <span className="crumb-sep" aria-hidden="true">▸</span>
-                {/* 置く種別＝色付きアイコン＋パート名（アイコンだけだと分かりにくい・オーナー）。 */}
-                <span className="crumb-kind" style={{ color: LANE_COLOR[picker.lane.key] ?? "var(--accent)" }}>
-                  <KindIcon kind={picker.lane.kinds[0]!} />
-                  <span className="crumb-kind-label">{picker.lane.label}</span>
-                </span>
-                <span className="crumb-sep" aria-hidden="true">▸</span>
-                <span className="crumb-fix">{picker.position / BPB + 1}小節目</span>
-              </span>
-              <button aria-label="close" onClick={() => setPicker(null)}>
-                ✕
-              </button>
-            </header>
-            {/* 種別タブは撤去＝タップしたレーンに固定（別パートはそのレーンのセルをタップ）。
-                今なにを置くかはヘッダの色付きアイコンで示す（オーナー）。 */}
-            {/* 絞り込み＝検索を主役に、その下に元ネタ(器)＋拍子一致のみを1行で。ラベルは"絞り込み"文脈で
-                自明なので付けない（オーナー）。生コーパスは出さない＝自作から選ぶ。 */}
-            <div className="picker-search-row">
-              <input
-                aria-label="picker-search"
-                className="editor-tags"
-                placeholder="絞り込み…（曲名・アーティスト）"
-                value={pq}
-                onChange={(e) => setPq(e.target.value)}
-              />
-            </div>
-            <div className="picker-filter-row">
-              <select aria-label="picker-source" value={pickerSource} onChange={(e) => setPickerSource(e.target.value)}>
-                <option value="">自作すべて</option>
-                {[...new Set(picker.all.flatMap(netaProjects))].sort().map((pj) => (
-                  <option key={pj} value={pj}>{pj}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className={"picker-meter-btn" + (!pickerOtherMeter ? " on" : "")}
-                aria-label="picker-other-meter"
-                aria-pressed={!pickerOtherMeter}
-                title={pickerOtherMeter ? "拍子一致のみに絞る" : "拍子違いも出す"}
-                onClick={() => setPickerOtherMeter((v) => !v)}
-              >
-                拍子一致のみ
-              </button>
-            </div>
-            {/* 探して無ければ作る：このレーンの kind で新規作成→配置→編集へ。 */}
-            <button type="button" className="picker-create" aria-label="picker-create" onClick={() => void createInLane()}>
-              ＋ {pq.trim() ? `「${pq.trim()}」を` : ""}新しい{picker.lane.label}を作る
-            </button>
-            {/* #20 おすすめ（コーパス）＝拍子/調に合う数件だけ横並び。生1781は出さず推薦経由で。
-                tap＝placeAt が library→project にコピーして配置（元コーパスは汚さない）。 */}
-            {pickerRecs.length > 0 && (
-              <div className="picker-recs" aria-label="picker-recs">
-                <span className="picker-recs-head muted">おすすめ（コーパス）</span>
-                <div className="picker-recs-strip">
-                  {pickerRecs.map((n) => (
-                    <div key={n.id} className="picker-rec" data-kind={n.kind} style={{ ["--k" as string]: kindColor(n.kind) }}>
-                      <button
-                        type="button"
-                        className="picker-rec-tap"
-                        aria-label={`picker-rec-${n.id}`}
-                        title={n.title ?? n.text ?? "(無題)"}
-                        onClick={() => void placeAt(n)}
-                      >
-                        <MiniRoll neta={n} />
-                        <span className="picker-rec-label">{n.title ?? n.text ?? "コーパス"}</span>
-                      </button>
-                      <button type="button" className="picker-play" aria-label={`preview-${n.id}`} title="試聴" onClick={() => void previewNeta(n)}>▶</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="picker-list">
-              {(() => {
-                const q = pq.toLowerCase();
-                const list = picker.all
-                  .filter(
-                    (n) =>
-                      inLane(picker.lane, n.kind) &&
-                      n.id !== neta.id &&
-                      n.scope !== "library" && // コーパスは直接出さない（推薦経由・Phase2）
-                      (pickerSource === "" || netaProjects(n).includes(pickerSource)) && // A: 母集団を器で絞る
-                      (pickerOtherMeter || sameMeter(n)) && // B: 拍子一致のみ（既定）
-                      (n.title ?? n.text ?? "").toLowerCase().includes(q),
-                  )
-                  // B: 調が近い順→最近順（拍子は既に一致で絞れている）。
-                  .sort((a, b) => keyDist(a) - keyDist(b) || (b.created ?? "").localeCompare(a.created ?? ""));
-                if (list.length === 0)
-                  return <p className="muted">置ける{picker.lane.label}のネタがありません（元/拍子の条件を緩めるか、＋新規作成）</p>;
-                return list.map((n) => (
-                  <div key={n.id} className="picker-item" data-kind={n.kind} style={{ ["--k" as string]: kindColor(n.kind) }}>
-                    <button type="button" className="picker-item-tap" aria-label={`place-${n.id}`} onClick={() => void placeAt(n)}>
-                      <div className="picker-item-roll">
-                        <MiniRoll neta={n} />
-                      </div>
-                      <div className="picker-item-meta">
-                        <strong>{n.title ?? n.text ?? "(無題)"}</strong>
-                        <span className="muted">
-                          {KIND_LABEL[n.kind] ?? n.kind}
-                          {n.mood ? ` · ${n.mood}` : ""}
-                          {n.key != null ? ` · ${PITCH_NAMES[n.key]}` : ""}
-                        </span>
-                      </div>
-                    </button>
-                    <button type="button" className="picker-play" aria-label={`preview-${n.id}`} title="試聴" onClick={() => void previewNeta(n)}>▶</button>
-                  </div>
-                ));
-              })()}
-            </div>
-          </div>
-        </div>
+        <PlacePicker
+          picker={picker}
+          neta={neta}
+          liveTitle={liveTitle}
+          BPB={BPB}
+          keyPc={keyPc}
+          pq={pq}
+          setPq={setPq}
+          pickerSource={pickerSource}
+          setPickerSource={setPickerSource}
+          pickerOtherMeter={pickerOtherMeter}
+          setPickerOtherMeter={setPickerOtherMeter}
+          pickerRecs={pickerRecs}
+          placeAt={placeAt}
+          previewNeta={previewNeta}
+          createInLane={createInLane}
+          onClose={() => setPicker(null)}
+        />
       )}
       <TransportBar
         state={tp.state}
