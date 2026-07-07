@@ -40,6 +40,7 @@ export interface KindEditorBodyProps {
   text: string;
   setText: (s: string) => void;
   keyPc: number; // 調（'key' は React 予約 prop なので keyPc）
+  mode: string; // 長調/短調（"major"/"minor"）＝P0-a スケール音ハイライトの判定に使う
   tempo: number;
   meter: string;
   title?: string; // 編集中ライブタイトル（section の生成/MIDI名に使う・stale活性対策）
@@ -210,6 +211,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     low={isBass ? 28 : undefined}
                     high={isBass ? 55 : undefined}
                     enableLyric={isMelody}
+                    keyRoot={p.keyPc}
+                    keyMode={p.mode}
                     mode={p.rollMode}
                     ghostNotes={p.candidate ? p.notes : undefined}
                     readOnly={!!p.candidate}

@@ -926,6 +926,15 @@
 .proll-row.black .proll-cell { background: #14171b; }
 .proll-row.black .proll-cell.pickup { background: #0f1115; }
 
+/* P0-a：調内音ハイライト（keyRoot 指定時のみ付く）。「外し音を避ける」足場＝調内は明るく・調外は退く。
+   グリッド(beat/bar 線)を壊さないよう、レーンは inset box-shadow の薄い陰影／鍵盤列で主音・調外を明示。 */
+.proll-row.out-scale .proll-lane { box-shadow: inset 0 0 0 999px rgba(0, 0, 0, 0.28); } /* 調外レーンは沈める */
+.proll-row.in-scale .proll-lane { box-shadow: inset 0 0 0 999px rgba(58, 109, 240, 0.06); } /* 調内はほのかにアクセント */
+.proll-row.tonic .proll-lane { box-shadow: inset 0 0 0 999px rgba(58, 109, 240, 0.12); } /* 主音行は少し強く */
+.proll-key.out-scale { opacity: 0.4; } /* 調外の鍵盤ラベルは退かせる＝調内が自然に主役 */
+.proll-key.tonic { background: var(--accent); color: #fff; font-weight: 700; } /* 主音＝アンカーとして明示 */
+.proll-key.tonic.black { color: #fff; }
+
 /* コード楽器パターン エディタ（CP3）：voicing コントロール行。 */
 /* コード楽器：コントロール群（枠の外）＋グリッド（横スクロール枠）を縦に。min-width:0 で
    子がビューポートを超えて広がらない＝モバイルで横はみ出さない。 */

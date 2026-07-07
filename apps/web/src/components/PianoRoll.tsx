@@ -13,6 +13,14 @@ const KEY_PX = 40; // .proll-key の幅
 
 const noteName = pitchName; // 音名（SSOT: music.pitchName）
 const isBlack = (p: number) => PITCH_NAMES[((p % 12) + 12) % 12]!.includes("#");
+const pc = (p: number) => (((p % 12) + 12) % 12); // ピッチクラス0-11
+// P0-a：調内音ハイライト＝メジャー/自然的マイナーの音度集合。主音からの半音間隔。
+const SCALE_IVS: Record<string, number[]> = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10] };
+function scalePcSet(root?: number, mode?: string): Set<number> | null {
+  if (root == null || !Number.isFinite(root)) return null;
+  const ivs = SCALE_IVS[mode === "minor" ? "minor" : "major"]!;
+  return new Set(ivs.map((i) => pc(root + i)));
+}
 
 const DEFAULT_LOW = 60; // C4
 const DEFAULT_HIGH = 83; // B5
@@ -43,6 +51,8 @@ export function PianoRoll({
   ghostNotes,
   readOnly = false,
   meter,
+  keyRoot,
+  keyMode,
 }: {
 
   notes: Note[];
@@ -58,6 +68,8 @@ export function PianoRoll({
   mode?: "draw" | "select" | "erase"; // 描く/選ぶ/消す（トグルは KindEditorBody 側＝同じ行に・Section と同流儀）
   ghostNotes?: Note[]; // 崩し候補モード：元メロを半透明ゴーストで重ねる（比較用・非操作）
   readOnly?: boolean; // 候補レビュー中は編集不可（クリックで足さない）
+  keyRoot?: number; // P0-a 調の主音(0-11)。指定時、行を調内音でハイライト＝「外し音を避ける」足場。
+  keyMode?: string; // "major"/"minor"（既定=major）。短調は自然的短音階で判定。
 }) {
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
@@ -82,6 +94,8 @@ export function PianoRoll({
     for (let p = hi; p >= lo; p--) arr.push(p);
     return arr;
   }, [rangeNotes, low, high]);
+  // P0-a：調内音の集合（keyRoot 指定時のみ）。行の色分けに使う＝どの音が調の内/外か一目で分かる足場。
+  const scalePcs = useMemo(() => scalePcSet(keyRoot, keyMode), [keyRoot, keyMode]);
   // 弱起ぶんの lead-in（拍0の前）。指定 pickup と既存の負 start を両方包む。拍0=ダウンビートは固定。
   const pre = useMemo(
     () => Math.max(0, pickup, Math.ceil(-Math.min(0, ...rangeNotes.map((n) => n.start)))),
@@ -225,10 +239,19 @@ export function PianoRoll({
           ref={playheadRef}
           style={{ left: `calc(${KEY_PX}px + var(--phb, 0) * ${SUBDIV * CELL_PX}px)` }}
         />
-        {pitches.map((p) => (
-          <div className={"proll-row" + (isBlack(p) ? " black" : " white")} key={p} role="row">
+        {pitches.map((p) => {
+          // P0-a：調が分かっている時だけ、行を「主音/調内/調外」で色分け（未指定＝従来どおり無着色）。
+          const scaleCls = scalePcs
+            ? keyRoot != null && pc(p) === pc(keyRoot)
+              ? " tonic"
+              : scalePcs.has(pc(p))
+                ? " in-scale"
+                : " out-scale"
+            : "";
+          return (
+          <div className={"proll-row" + (isBlack(p) ? " black" : " white") + scaleCls} key={p} role="row">
             <div
-              className={"proll-key" + (isBlack(p) ? " black" : " white")}
+              className={"proll-key" + (isBlack(p) ? " black" : " white") + scaleCls}
               role="button"
               aria-label={`key-${noteName(p)}`}
               onClick={() => void previewNote({ pitch: p, start: 0, dur: 0.5 })}
@@ -283,7 +306,8 @@ export function PianoRoll({
                 ))}
             </div>
           </div>
-        ))}
+          );
+        })}
         {notes.some((n) => n.syllable) && (
           <div className="proll-lyric-lane" aria-label="lyrics">
             <div className="proll-lyric-key" aria-hidden="true">詞</div>
