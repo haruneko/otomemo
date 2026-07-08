@@ -1,6 +1,7 @@
 import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
 import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA } from "./motifModelData";
 import { chordPcs } from "./theory";
+import { classifyNCT, isResolvedNct } from "./degree";
 // 有機メロの再帰モデル・層2＝joint cell（design #12-M S8 / research findings）。
 // メロの中身を「度数move@slot(8分0/1)」記号で表し、骨格move(次拍への度数差)で条件づけて学習・サンプル。
 // 全部「度数＋相対位置」＝テンポ/調 非依存。手当て(ランダム規則)を全廃し、データの条件付き分布で動かす。
@@ -502,7 +503,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -831,6 +832,48 @@ export function genMotifMelodyV2(
   // ⑤ 検証＝④が作り得る禁則を最終修正（D1: 「直した禁則の再導入」をパイプの最後で締める）。
   // 終止保護分岐(直前音を動かす)が i-2 との間に新禁則を作り得るため、有界ループで収束させる（実測: 2回で960/960）。
   for (let k = 0; k < 3; k++) fixForbidden();
+
+  // ── 表情パス＝強拍非和声(expression ノブ・design#12-M Step1・2026-07-09)──
+  // 後処理①が強拍をほぼ100%コードトーンにする＝綺麗すぎ(実曲57-90%)。確率 expr で強拍CTを
+  // 「次音(コード音)へ歩進解決する非和声」＝倚音(appoggiatura)/掛留(suspension)へ置換する。
+  // 保証：classifyNCT で other(孤立)を弾き・隣接の禁則を作らず・終止音と句頭(i=0)は不変・単一頂点を保つ。
+  const expr = Math.max(0, Math.min(1, opts.expression ?? 0));
+  if (expr > 0 && notes.length > 2) {
+    const er = makeRng(seed + 17);
+    const clampBar = (b: number): number => Math.max(0, Math.min(bars - 1, b));
+    // classifyNCT/CT判定は bar 単位のコード（chordRootsPerBar/chordQuals）で統一＝生成器と評価が揃う。
+    const chordOf = (b: number): { root: number; quality: string } => ({ root: (chordRootsPerBar[clampBar(b)] ?? tonicPc) % 12, quality: chordQuals[clampBar(b)] ?? "" });
+    const pcsBar = (b: number): number[] => { const c = chordOf(b); return chordPcs(c.root, c.quality); };
+    const hiPitch = Math.max(...notes.map((n) => n.pitch)); // 単一頂点保護＝これ以上に上げない
+    const locked = new Set<number>(); // 隣接強拍を両方変換すると解決先が動いて相手が孤立化＝解決音(i+1)をロック
+    for (let i = 1; i < notes.length - 1; i++) { // i=0(句頭)と最終音(終止)は保護＝触らない
+      if (locked.has(i)) continue; // 直前の変換の解決音＝動かさない
+      const t = notes[i]!.start;
+      if (!onStrong(t)) continue;
+      const bar = barOf(t);
+      const pcs = pcsBar(bar);
+      const cur = notes[i]!.pitch;
+      if (!pcs.includes(((cur % 12) + 12) % 12)) continue; // 既に非和声＝対象外(二重掛けしない)
+      const prev = notes[i - 1]!.pitch, next = notes[i + 1]!.pitch;
+      // 解決の受けが要る：次音がコード音でなければ倚音として成立しない
+      if (!pcsBar(barOf(notes[i + 1]!.start)).includes(((next % 12) + 12) % 12)) continue;
+      if (er() >= expr) continue;
+      const L = spAt(bar);
+      // 候補：既定は解決音(next)の1スケール度上＝もたれて下行歩進解決する倚音。
+      let cand = clampScale(L, nearestIdx(L, next) + 1);
+      // 掛留：直前音が非和声にでき、かつ歩進で次へ解決するなら前音を保持(held→stepOut)。
+      const prevPc = ((prev % 12) + 12) % 12, dPN = Math.abs(prev - next);
+      if (!pcs.includes(prevPc) && dPN >= 1 && dPN <= 2) cand = prev;
+      const candPc = ((cand % 12) + 12) % 12, dCN = Math.abs(cand - next);
+      if (pcs.includes(candPc)) continue; // 結局コード音＝意味なし
+      if (dCN < 1 || dCN > 2) continue; // 次へ歩進解決でない
+      if (cand >= hiPitch) continue; // 単一頂点＝頂点に並ぶ/超える置換はしない
+      if (isForbiddenIv(Math.abs(cand - prev)) || isForbiddenIv(dCN)) continue; // 禁則を作らない
+      if (!isResolvedNct(classifyNCT(prev, cand, next, chordOf(bar)))) continue; // other(孤立)を弾く
+      notes[i]!.pitch = cand;
+      locked.add(i + 1); // 解決音は以降の変換で動かさない（相手を孤立させない）
+    }
+  }
 
   // swing(2026-07-08 ノブ・design#12-M＝S7「跳ねるボタン」)：8分裏(小節内 x.5)を 0.5+swing/6 へ後段タイムマップ
   // （swing=1で3連の2/3位置）。16分裏(.25/.75)は据え置き。6/8(compound)は既にjigの跳ねを持つ＝対象外。

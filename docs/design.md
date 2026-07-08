@@ -1156,6 +1156,17 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **後処理パスの保証則**：V2 の後処理は**全パスが終止音を保護**し、パス間で直したものを再導入しない（順序＝強拍CT→禁則→回収→頂点＋最終検証）。
 - 根拠＝監査所見（2026-07-08 セッション・A/B/C/D クラスタ）。実装は Task #2〜#10 で TDD。
 
+→ **V2表情層＝強拍非和声ノブ `expression`（2026-07-09・理論不足総点検 Step1）**。full＝`docs/research/2026-07-09-melody-theory-gaps-and-plan.md`。
+**問題**：後処理①（強拍を無条件コードトーン化）で**強拍CT率がほぼ100%**＝実曲57-90%（POP909実測57%）に対し綺麗すぎ＝「自動生成感」の主因のひとつ。倚音/掛留を能動配置する機構は v1/legacy にしか無く V2 主経路で効かない（`classifyNCT`/`isResolvedNct` は degree.ts に完備だが V2 未使用）。
+**正準**：
+- **`expression` 0..1**（既定 undefined＝0＝**従来完全一致**・回帰ゼロ）。V2 後処理⑤（最終禁則検証）の**後**・swing 後段の**前**に「表情パス」を1本追加。決定的（`makeRng(seed+定数)`）。
+- **対象＝強拍のコードトーンのうち「次音が順次(≤2半音)先でその時点のコード音」の位置**（＝解決先が保証される所だけ）。確率 `expr` で:
+  - **掛留(suspension)**：直前音が候補と同ピッチにできる時＝前音を保持して強拍で非和声にし歩進解決（`classifyNCT` の `held && stepOut`）。
+  - **倚音(appoggiatura)**：それ以外＝解決音（次音）の**1スケール度上**（`spAt` 準拠＝導音小節は和声的短音階）に置く＝もたれて歩進解決。
+- **保証**：置換前に `classifyNCT`（degree.ts）で判定し `isResolvedNct`（≠"other"）を満たす候補のみ採用。隣接音との `isForbiddenIv`（三全音/7度/8度超）チェックで**禁則を再導入しない**。**終止音・句末着地は不変**（後処理規約(a) を継承）。強拍がコード音でない（既に非和声）位置・解決先が非CTの位置は触らない。
+- **E-rule との関係**：`expression>0` で `chordToneStrong`（evalMelody）が下がるのは**仕様**（総合点で1本に潰さない原則＝gaming回避の再確認）。ランク軸は E-corpus のみ据え置き。
+- **配線**：`genMotifMelodyV2` opts `expression`→`genMelody`(density/swing と同格の透過)→`gen_melody`(MCP/HTTP)→SectionEditor UI。既定＝未指定＝従来挙動。**耳確認ポイント**＝expr 0/0.3/0.6 聴き比べ（もたれ感／気持ち悪い掛留の有無）で既定値昇格は別コミット。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 
