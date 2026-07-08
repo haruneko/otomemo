@@ -69,7 +69,11 @@ export function evalMelody(notes: Note[], opts: { chords?: Chord[]; key?: number
   if (opts.chords?.length) {
     const info = meterInfo(opts.meter ?? "4/4");
     const bar = info.beatsPerBar;
-    const chAt = (t: number) => { const c = opts.chords!.find((x) => t >= (x.start ?? 0) - 1e-6 && t < (x.start ?? 0) + (x.dur ?? bar)); return c ? chordPcs(rootPc(c.root), c.quality ?? "") : null; };
+    // H6(2026-07-08)：start無しの素のコード列（[Am,F,G,C]等）は全部 start=0 に潰れ、後半の強拍が
+    // 常に先頭コードで採点されていた→ start が全欠なら1小節刻みで並べて解釈。
+    const noStarts = opts.chords.every((x) => x.start === undefined || x.start === null);
+    const chSeq = noStarts ? opts.chords.map((x, i) => ({ ...x, start: i * bar, dur: x.dur ?? bar })) : opts.chords;
+    const chAt = (t: number) => { const c = chSeq.find((x) => t >= (x.start ?? 0) - 1e-6 && t < (x.start ?? 0) + (x.dur ?? bar)); return c ? chordPcs(rootPc(c.root), c.quality ?? "") : null; };
     let ct = 0, tot = 0;
     for (const n of ns) {
       const inBar = ((n.start % bar) + bar) % bar;

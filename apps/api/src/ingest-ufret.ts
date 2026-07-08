@@ -107,6 +107,27 @@ export function analyzeProgressionFromUfret(
   };
 }
 
+/** L13(2026-07-08)：fetch_chords（サイト取得＝実キー・project）の進行を、ingest と同一規約
+ * （C正規化・key=0・scope=library・取込タグ）で連想コーパスにも複製するための素材を作る。
+ * 旧: fetch は実キー×project 保存のみ＝find_progressions(libraryフィルタ)から不可視だった。 */
+export function fetchedToLibraryInput(
+  prog: { chords: { root: number; quality: string; start: number; dur: number }[]; key: number; mode: "major" | "minor" },
+  songTitle: string,
+  url: string,
+): ProgressionInput {
+  const cChords = prog.chords.map((c) => ({ ...c, root: (((c.root - prog.key) % 12) + 12) % 12 }));
+  return {
+    kind: "chord_progression",
+    title: `${songTitle}（取得）`,
+    key: 0,
+    mode: prog.mode,
+    meter: "4/4",
+    scope: "library",
+    content: { chords: cChords, source: { artist: "", song: songTitle, url } },
+    tags: ["取込", "取得", prog.mode === "minor" ? "切ない" : "明るい"],
+  };
+}
+
 /** 1曲の HTML → 進行neta 素材（ループごと・C基準度数・タグ・出典）。 */
 export function songToProgressions(html: string, meta: SongMeta): ProgressionInput[] {
   const chords = linesToChords(extractUfretLines(html));

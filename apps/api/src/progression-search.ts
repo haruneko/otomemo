@@ -7,7 +7,8 @@ import { toDegrees, detectKeyFromChords, type Chord } from "./music";
 import { bestRotationSimilarity } from "./music/identify";
 
 export type ProgQuery = { tags?: string[]; like?: { chords: Chord[]; key?: number }; limit?: number };
-export type ProgHit = { id: string; title: string | null; score: number; similarity: number; matchedTags: string[] };
+// L14(2026-07-08)：chords/key を同梱＝ヒットの中身を見るのに read_neta 往復が要らない。
+export type ProgHit = { id: string; title: string | null; score: number; similarity: number; matchedTags: string[]; chords?: Chord[]; key?: number | null };
 
 const POPULAR = new Set(["ヒット", "定番"]);
 
@@ -42,6 +43,8 @@ export function findProgressions(core: Core, query: ProgQuery): ProgHit[] {
       score: Math.round(score * 1000) / 1000,
       similarity: Math.round(similarity * 1000) / 1000,
       matchedTags,
+      chords: (n.content as { chords?: Chord[] } | null)?.chords,
+      key: n.key ?? null,
     });
   }
   hits.sort((a, b) => b.score - a.score);

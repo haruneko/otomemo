@@ -59,6 +59,17 @@ describe("evalMelody（規則ベース自動評価＝耳なし反復の土台）
     expect(a.score).toBeGreaterThan(b.score); // 定番の方が「らしい」
     expect(a.score).toBeGreaterThanOrEqual(0); expect(a.score).toBeLessThanOrEqual(1);
   });
+  it("H6: start無しの素のコード列は1小節刻みで解釈＝後半の強拍を先頭コードで誤採点しない", () => {
+    // bar1=Am 上で A を歌う＝正しくコードトーン。旧: 全コードstart=0扱い→bar1もC(先頭)で採点されA=非CT。
+    const mel = [
+      { pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 2, dur: 1 }, // bar0: C上で C,E
+      { pitch: 69, start: 4, dur: 1 }, { pitch: 72, start: 6, dur: 1 }, // bar1: Am上で A,C
+    ];
+    const bare = [{ root: 0, quality: "" }, { root: 9, quality: "m" }]; // start無し
+    const r = evalMelody(mel, { chords: bare, key: 0, meter: "4/4" });
+    expect(r.metrics.chordToneStrong).toBe(1);
+  });
+
   it("F2: 6/8等の非対応グリッドではリズム項を評価しない（旧: 全ミス平滑床の定数で水増し）", () => {
     const model = {
       rhythm: learnBarRhythms(["x.x.x.x."]), // 学習は4/4の8枠のみ

@@ -97,6 +97,29 @@ describe("U-FRET 取込", () => {
 });
 
 import { analyzeProgressionFromUfret } from "../src/ingest-ufret";
+describe("L13: fetchedToLibraryInput（fetch_chords→連想コーパスへの複製・ingestと同一規約）", () => {
+  it("C正規化・key=0・scope=library・取込タグ＝find_progressionsに見える形", async () => {
+    const { fetchedToLibraryInput } = await import("../src/ingest-ufret");
+    const prog = {
+      chords: [
+        { root: 7, quality: "", start: 0, dur: 2 }, { root: 0, quality: "", start: 2, dur: 2 },
+        { root: 2, quality: "", start: 4, dur: 2 }, { root: 7, quality: "", start: 6, dur: 2 },
+      ], // G-C-D-G＝GのI-IV-V-I
+      key: 7,
+      mode: "major" as const,
+    };
+    const input = fetchedToLibraryInput(prog, "テスト曲", "https://example.com/x");
+    expect(input.scope).toBe("library");
+    expect(input.key).toBe(0);
+    expect(input.tags).toContain("取込");
+    // C正規化＝G(7)始まりが 0 始まりに
+    const cs = (input.content as { chords: { root: number }[] }).chords;
+    expect(cs[0]!.root).toBe(0);
+    expect(cs[1]!.root).toBe(5);
+    expect(cs[2]!.root).toBe(7);
+  });
+});
+
 describe("analyzeProgressionFromUfret（サイト取得＝実キーの進行・アナリーゼ用）", () => {
   it("U-FRET html → 実音のコード進行（C基準にしない）＋キー検出", () => {
     const html = `<script>ufret_chord_datas = ${JSON.stringify([

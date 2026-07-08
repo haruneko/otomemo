@@ -40,6 +40,14 @@ describe("findProgressions（進行の連想retrieval）", () => {
     expect(findProgressions(core, { tags: ["存在しないタグ"] })).toEqual([]);
   });
 
+  it("L14: ヒットに進行本体(chords/key)を含む＝read_neta往復なしで中身が見える", () => {
+    core.createNeta({ scope: "library", kind: "chord_progression", title: "本体つき", key: 0, content: chords([[0, ""], [5, ""], [7, ""]]), tags: ["明るい"] });
+    const hits = findProgressions(core, { tags: ["明るい"] });
+    expect(hits[0]!.chords).toBeTruthy();
+    expect(hits[0]!.chords!.length).toBe(3);
+    expect(hits[0]!.key).toBe(0);
+  });
+
   it("I1a: like.key 未指定でも調を推定して照合＝G調の I-IV-V が C正規化DBに当たる（旧: 絶対pcで照合し外れ）", () => {
     core.createNeta({ scope: "library", kind: "chord_progression", title: "145", key: 0, content: chords([[0, ""], [5, ""], [7, ""]]), tags: [] });
     const hits = findProgressions(core, { like: { chords: [{ root: 7, quality: "" }, { root: 0, quality: "" }, { root: 2, quality: "" }] } }); // G-C-D＝GのI-IV-V

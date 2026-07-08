@@ -26,7 +26,7 @@ import {
 import { learnStepWeightsFromLibrary, learnMotifModelFromLibrary } from "./music/corpusBias";
 import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
 import { splitMora, flowLyric, type LNote } from "./lyric";
-import { analyzeProgressionFromUfret, extractSongTitle } from "./ingest-ufret";
+import { analyzeProgressionFromUfret, extractSongTitle, fetchedToLibraryInput } from "./ingest-ufret";
 import { meterInfo } from "./music/meter";
 import { findProgressions } from "./progression-search";
 import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
@@ -669,6 +669,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         meter: "4/4",
         tags: ["アナリーゼ", "取得"],
       });
+      // L13(2026-07-08)：ingestと同一規約(C正規化/library/取込)で連想コーパスにも複製＝find_progressionsから見える。
+      core.createNeta(fetchedToLibraryInput(prog, songTitle, url));
       return ok(neta);
     },
   );
