@@ -497,7 +497,15 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   server.registerTool(
     "complete_melody",
     { title: "メロディを補完", description: "部分メロ(先頭数小節)を種に、そのモチーフを発展させて frame.bars 全体まで埋める（補完=completion）。notes の小節は実音を保持し、残りを A'/B(反行)/A'' 発展で生成。決定的(seed)・著作権セーフ(ユーザー自作の発展)。", inputSchema: { notes: notesSchema.describe("部分メロ＝発展の種（先頭1-2小節想定）"), chords: chordsSchema, frame: frameSchema, seed: z.number().int().optional() } },
-    async ({ notes, chords, frame, seed }) => ok(genMelody(frame, chords, seed, { useV2: true, partial: notes })),
+    async ({ notes, chords, frame, seed }) => {
+      const res = genMelody(frame, chords, seed, { useV2: true, partial: notes });
+      // G3(2026-07-08)：V2補完の対応外(4/4・6/8以外 or chords無し)では partial が黙って捨てられ
+      // 新規生成になっていた＝補完のつもりが別メロ。可視化してClaudeがユーザーに伝えられるように。
+      const mi = meterInfo(frame?.meter);
+      if ((notes?.length ?? 0) > 0 && !((mi.beatsPerBar === 4 || mi.grouping === "compound") && (chords?.length ?? 0) > 0))
+        (res as typeof res & { note?: string }).note = "この条件(拍子/コード無し)ではV2補完が未対応のため、部分メロを引き継がず新規生成になっています。4/4か6/8で chords を渡すと補完されます";
+      return ok(res);
+    },
   );
   server.registerTool(
     "gen_bass",

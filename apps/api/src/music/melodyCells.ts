@@ -831,9 +831,13 @@ export function completeMelody(
   // partial 無し＝通常 V2（回帰：補完を呼んでも種が無ければ素の生成と一致）。
   if (ns.length === 0) return genMotifMelodyV2(chordPcsPerBar, chordRootsPerBar, chordQuals, scalePitches, motif16, { seed: opts.seed, tonicPc: opts.tonicPc, minor: opts.minor, skelModel: opts.skelModel, compound: opts.compound });
   const maxEnd = Math.max(...ns.map((n) => n.start + (n.dur ?? 0.25)));
-  const coveredBars = Math.max(1, Math.min(bars, Math.ceil(maxEnd / barLen - 1e-6))); // partial が覆う小節数（残りを埋める）
-  const mb = Math.max(1, Math.min(4, coveredBars)); // モチーフ/ブロック長＝partial 長に合わせる
-  const seedMotif = extractMotif16(ns, barLen);
+  const coveredBars = Math.max(1, Math.min(bars, Math.ceil(maxEnd / barLen - 1e-6))); // partial が覆う小節数（実音保持の範囲）
+  // G1(2026-07-08)：モチーフ長と種は「完全に埋まった小節」基準。半端小節(小節途中で終わる partial)を
+  // そのまま種に使うと、空白がモチーフに焼き込まれ全ブロックに大穴が反復されていた（旧: 3.5拍無音×4回等）。
+  const fullBarsCovered = Math.floor(maxEnd / barLen + 1e-6);
+  const mb = Math.max(1, Math.min(4, Math.max(1, fullBarsCovered)));
+  const seedSrc = fullBarsCovered >= 1 ? ns.filter((n) => n.start < fullBarsCovered * barLen - 1e-6) : ns;
+  const seedMotif = extractMotif16(seedSrc.length ? seedSrc : ns, barLen);
   const head: Note[] = ns.map((n) => ({ pitch: n.pitch, start: n.start, dur: Math.max(0.25, n.dur ?? 0.25) })); // partial は実音保持
   if (coveredBars >= bars) return head; // partial が全体を覆う＝埋める余地なし
   // V2 を seedMotif で回す（block0=種・以降=発展）。先頭ブロック(=partial 区間)は捨て、tail のみ採用。
@@ -841,12 +845,24 @@ export function completeMelody(
     seed: opts.seed, tonicPc: opts.tonicPc, minor: opts.minor, skelModel: opts.skelModel, compound: opts.compound,
     motifBars: mb, seedMotif, keepFirstBlocks: 1,
   });
-  const cut = coveredBars * barLen;
-  const tail = full.filter((n) => n.start >= cut - 1e-6);
-  // 接続(best-effort)：tail 先頭が partial 末尾から1oct超で跳ねたら、近いオクターブへ寄せる（滑らかに継続）。
+  // G1: 半端小節がある時は「完全小節境界」から maxEnd 以降を採用＝境界小節の残りを発展ブロックで埋める
+  // （stub の実音とは maxEnd フィルタで重ねない）。半端が無ければ従来どおり coveredBars 境界。
+  const cut = (fullBarsCovered >= 1 && fullBarsCovered < coveredBars ? fullBarsCovered : coveredBars) * barLen;
+  const tail = full.filter((n) => n.start >= cut - 1e-6 && n.start >= maxEnd - 1e-6);
+  // 接続(best-effort)：tail 先頭が partial 末尾から1oct超で跳ねたら、tail **全体**を近いオクターブへ寄せる
+  // （G2: 旧は先頭1音だけ補正→2音目への新オクターブ跳躍を作っていた。全体shiftなら内部音程を保存）。
+  // ちょうど1octはオクターブ跳躍＝協和として許容。音域を出る音が生じるshiftはしない（従来挙動へfallback）。
   if (tail.length && head.length) {
     const iv = tail[0]!.pitch - head[head.length - 1]!.pitch;
-    if (Math.abs(iv) > 12) tail[0]!.pitch = clampScale(scalePitches, nearestIdx(scalePitches, tail[0]!.pitch) - Math.sign(iv) * 7);
+    if (Math.abs(iv) > 12) {
+      const shift = -Math.sign(iv) * 12 * Math.floor((Math.abs(iv) - 1) / 12);
+      const lo = scalePitches[0] ?? 48, hi = scalePitches[scalePitches.length - 1] ?? 84;
+      if (tail.every((n) => n.pitch + shift >= lo && n.pitch + shift <= hi)) {
+        for (const n of tail) n.pitch += shift;
+      } else {
+        tail[0]!.pitch = clampScale(scalePitches, nearestIdx(scalePitches, tail[0]!.pitch) - Math.sign(iv) * 7);
+      }
+    }
   }
   return [...head, ...tail];
 }
