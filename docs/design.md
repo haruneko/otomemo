@@ -1176,6 +1176,18 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **配線**：`gen_melody`(MCP) に `phrasing` enum を追加（従来欠落）／http は既存の phrasing 透過を symmetric も受けるよう拡張。既定＝未指定＝従来挙動。
 - **今回のスコープ**：表面の句末着地のみ（対称=問い/答えの明確化・非対称=不等分割の呼吸）。**骨格(genSkeletonFromModel の u%2 固定句末)の句割り追従**と**骨格休符(句頭遅延入場・#9)**は続く別コミット（第2段階）。**耳確認**＝symmetric で「前楽節末が問いに聞こえるか」・asymmetric で「3+3+2 の呼吸になるか」。
 
+→ **カデンツ選択器＝genChords の終止型（2026-07-09・理論不足総点検 Step3）**。harmony-cadence-theory.md 盲点①②の正準化。
+**問題**：終止は完全終止(V→I)一択で、半終止/偽終止/変終止の型が無い＝セクション接続（Aメロ末で開く・偽終止で続く感）が作れない。
+**正準**：
+- **`cadence:"full"|"half"|"deceptive"|"plagal"`**（既定 undefined＝full＝**従来完全一致**）。genChords が degrees 確定後（隣接重複回避の後）に末尾1-2和音を型で上書き：
+  - **full**＝従来（penult=D / final=I）。
+  - **half**＝final=**V**（開いて止める）／penult=IV（predominant）。
+  - **deceptive**＝penult=**V**→final=**vi**（長調 vi・短調 ♭VI）＝偽終止。
+  - **plagal**＝penult=**IV**→final=I＝変終止（アーメン終止）。
+  - 先頭 `degrees[0]=1` は保護（penult 上書きは index≥1 のみ）。funcs は degree 確定後は未使用ゆえ degrees のみ上書き。
+- **メロは追従不要で自動整合**：render の終止着地は既に **B1和声追従**（最終コードに主音があれば主音・無ければ最寄りコード音・design 短調ドミナント節）。よって half（final=V＝主音無し）は自動で 2̂/5̂ の開きに、deceptive（final=vi＝主音を含む）は主音が **vi の3度** として鳴る＝理論通りの偽終止に、メロ側の変更なしで乗る。
+- **配線**：`gen_chords`(MCP/HTTP) に `cadence` enum。既定＝未指定＝従来。**ユースケース**＝Aメロ末=half・1番サビ末=deceptive・ラスト=full。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

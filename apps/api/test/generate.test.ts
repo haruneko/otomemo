@@ -45,6 +45,48 @@ describe("genChords（機能和声ルール）", () => {
     expect(jazzy.some((c) => /7/.test(c.quality))).toBe(true);
     expect(plain.every((c) => !/7/.test(c.quality))).toBe(true);
   });
+
+  // ── Step3（2026-07-09・design#12-M）：カデンツ選択器 ──
+  const lastRoots = (opts: { bars?: number; mood?: string; key?: number; cadence?: "full" | "half" | "deceptive" | "plagal" }) => {
+    const { cadence, ...frame } = opts;
+    const ch = (genChords({ bars: 8, ...frame }, 5, cadence).items[0]!.content as { chords: { root: number; quality: string }[] }).chords;
+    return { pen: ch[ch.length - 2]!, fin: ch[ch.length - 1]! };
+  };
+
+  it("Step3① cadence未指定=full=従来完全一致（回帰ゼロ）", () => {
+    for (const mood of ["明るい", "切ない", "おしゃれ"]) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const base = JSON.stringify(genChords({ bars: 8, mood }, seed).items[0]!.content);
+        expect(JSON.stringify(genChords({ bars: 8, mood }, seed, "full").items[0]!.content), `${mood} seed=${seed}`).toBe(base);
+        expect(JSON.stringify(genChords({ bars: 8, mood }, seed, undefined).items[0]!.content), `${mood} seed=${seed} undef`).toBe(base);
+      }
+    }
+  });
+
+  it("Step3② half=V終わり／deceptive=V→vi(長調)・V→♭VI(短調)／plagal=IV→I（key=C）", () => {
+    // 長調C：V=G(7), vi=Am(9,m), IV=F(5), I=C(0)
+    expect(lastRoots({ key: 0, mood: "明るい", cadence: "half" }).fin.root).toBe(7); // 終止=V(G)
+    const dec = lastRoots({ key: 0, mood: "明るい", cadence: "deceptive" });
+    expect(dec.pen.root).toBe(7); // penult=V
+    expect(dec.fin).toEqual(expect.objectContaining({ root: 9, quality: "m" })); // 偽終止=vi(Am)
+    const pl = lastRoots({ key: 0, mood: "明るい", cadence: "plagal" });
+    expect(pl.pen.root).toBe(5); // penult=IV(F)
+    expect(pl.fin.root).toBe(0); // 変終止=I(C)
+    // 短調：deceptive の final=♭VI（Cm→ root 8 major）
+    const decMin = lastRoots({ key: 0, mood: "切ない", cadence: "deceptive" });
+    expect(decMin.fin.root).toBe(8); // ♭VI（A♭）
+  });
+
+  it("Step3③ メロは追従不要でカデンツに自動整合（half=V終わりは主音を強制しない・B1）", async () => {
+    const { genMelody } = await import("../src/music/generate");
+    const frame = { key: 0, bars: 8, mood: "明るい" };
+    const ch = (genChords(frame, 5, "half").items[0]!.content as { chords: { root: number; quality: string; start: number; dur: number }[] }).chords;
+    const notes = (genMelody(frame, ch, 5, { useV2: true }).items[0]!.content as { notes: { pitch: number; start: number }[] }).notes;
+    const last = notes[notes.length - 1]!;
+    const pc = ((last.pitch % 12) + 12) % 12;
+    // 最終コード=V(G)=pcs{7,11,2}。終止音はその構成音（主音C=0を強制しない＝半終止の開き）。
+    expect([7, 11, 2].includes(pc), `終止音pc=${pc}∈V`).toBe(true);
+  });
 });
 
 describe("genMelody（コードトーン拘束＋リズム図形）", () => {

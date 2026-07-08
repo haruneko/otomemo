@@ -90,7 +90,7 @@ const barsOf = (frame: Frame): number =>
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 /** 機能和声ルールでコード進行を生成（T始まり・T終わり）。返り #85 items 形。 */
-export function genChords(frame?: Frame | null, seed?: number | null): GenResult {
+export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal"): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
@@ -125,6 +125,14 @@ export function genChords(frame?: Frame | null, seed?: number | null): GenResult
   if (degrees.length > 2 && degrees[1] === degrees[0]) {
     const alt = FUNC_DEGREES[funcs[1]!]!.find((c) => c !== degrees[1]);
     if (alt !== undefined) degrees[1] = alt;
+  }
+  // Step3(2026-07-09 design#12-M)：カデンツ選択器＝末尾1-2和音を型で上書き（既定 full/undefined=従来一致）。
+  // funcs は degree 確定後は未使用ゆえ degrees のみ上書き。先頭 degrees[0]=1 は保護（penult は index≥1 のみ）。
+  if (cadence && cadence !== "full" && bars >= 2) {
+    const last = degrees.length - 1, pen = last - 1;
+    if (cadence === "half") { degrees[last] = 5; if (pen >= 1) degrees[pen] = 4; }              // 半終止＝IV→V(開いて止める)
+    else if (cadence === "deceptive") { degrees[last] = 6; if (pen >= 1) degrees[pen] = 5; }    // 偽終止＝V→vi(長調)/V→♭VI(短調)
+    else if (cadence === "plagal") { degrees[last] = 1; if (pen >= 1) degrees[pen] = 4; }        // 変終止＝IV→I(アーメン)
   }
 
   // I3b: mood がコードの「色」に効く＝おしゃれ/ジャズ/夜系は7thパレット（旧: moodは長短切替のみで進行が不変）。

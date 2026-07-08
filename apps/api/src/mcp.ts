@@ -488,8 +488,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   // 生成（ルールベース・決定的記号エンジン・TS一本化＝cm-music の gen_* を置換）。frame=key/meter/bars/mood。
   server.registerTool(
     "gen_chords",
-    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・frame.key の実音で返る）。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
-    async ({ frame, seed }) => ok(genChords(frame, seed)),
+    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・frame.key の実音で返る）。cadence=終止型(full=完全/half=半終止=V止め/deceptive=偽終止=V→vi/plagal=変終止=IV→I)。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), cadence: z.enum(["full", "half", "deceptive", "plagal"]).optional().describe("終止型。half=Aメロ末の開き/deceptive=続く感(偽終止)/plagal=アーメン終止。未指定=完全終止(従来)") } },
+    async ({ frame, seed, cadence }) => ok(genChords(frame, seed, cadence)),
   );
   server.registerTool(
     "gen_melody",
