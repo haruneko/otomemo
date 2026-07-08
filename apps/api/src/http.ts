@@ -30,6 +30,8 @@ import {
   harmonize,
   parseChordSymbol,
 } from "./music";
+import { analyzeVoiceLeading } from "./music/voiceLeading";
+import { normRoot } from "./music/theory";
 import { findProgressions } from "./progression-search";
 import { getChatSession, stopChatSession } from "./chat-session";
 import { beginTurn, pushTurnEvent, endTurn, attachTurn, isTurnLive, DONE } from "./chat-live";
@@ -206,6 +208,11 @@ export function buildHttp(core: Core): FastifyInstance {
         case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
+        case "analyze_voiceleading": { // #8：メロ×低音の声部進行レンズ（bass明示 or chordsのルートを低域で代用）
+          const mel = asNotes(b.melody ?? b.notes);
+          const low = Array.isArray(b.bass) && b.bass.length ? asNotes(b.bass) : asChords(b.chords).map((c: { root?: number | string; start?: number; dur?: number }) => ({ pitch: 36 + normRoot(c.root ?? 0), start: c.start ?? 0, dur: c.dur ?? 1 }));
+          return analyzeVoiceLeading(mel, low);
+        }
         case "fit_to_chords": return fitToChords(asNotes(b.melody), asChords(b.chords), b.key);
         case "detect_key": return detectKeyFromNotes(asNotes(b.notes ?? b.melody));
         case "detect_key_candidates": return { candidates: detectKeyCandidatesFromNotes(asNotes(b.notes ?? b.melody), b.top ?? 4) };

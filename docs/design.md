@@ -1196,6 +1196,8 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **評価目標**（sixteenth-rhythm.md）：16分音価率 44-56%・16分onset連続率~66%・孤立16分は稀。**Phase3（データ）**＝POP909量子化再計測で位置別run確率/前借り位置率を `motifModelData.ts` に同梱しヒューリスティック重みを学習分布へ差替（別コミット・要ローカルPOP909）。
 - **配線**：V2 opts `runs`/`push`→genMelody→gen_melody(MCP/HTTP)→UI。既定＝未指定＝従来。**耳確認必須**（density/swing 同様）＝runs 0/0.4/0.8 × push 0/0.5 マトリクスを実機で。既定値は据え置き0・推奨プリセットのみ doc化。
 
+→ **メロ×低音の声部進行レンズ（2026-07-09・理論不足総点検 #8・分析のみ）**。backlog和声③「完全に未監視」への回答。`analyzeVoiceLeading(upper, lower)`（voiceLeading.ts）＝並行完全5度/8度・直行(隠伏)5度/8度・声部交差を数え score(1-違反/機会) を返す**分析レンズ（生成非介入）**。`analyze question="voiceleading"`（MCP）＋ http `analyze_voiceleading`。bass 明示 or chords のルートを低域(36+pc)で代用。良し悪しの断は人間（機械は指摘まで＝設計思想）。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

@@ -25,6 +25,8 @@ import {
 } from "./music";
 import { learnStepWeightsFromLibrary, learnMotifModelFromLibrary } from "./music/corpusBias";
 import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
+import { analyzeVoiceLeading } from "./music/voiceLeading"; // #8：メロ×低音の声部進行レンズ（並行/隠伏5度8度・声部交差）
+import { normRoot } from "./music/theory";
 import { splitMora, flowLyric, type LNote } from "./lyric";
 import { analyzeProgressionFromUfret, extractSongTitle, fetchedToLibraryInput } from "./ingest-ufret";
 import { meterInfo } from "./music/meter";
@@ -803,8 +805,19 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "analyze",
-    { title: "判る（同定/説明/当てはまり/メロ品質）", description: "これ何進行?/なぜ?/調は?/合ってる?/このメロ変じゃない?。全生成・修正の土台。", inputSchema: { question: z.enum(["fit", "identify", "key", "explain", "progression", "melody"]), chords: chordsSchema.optional(), notes: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), meter: z.string().optional().describe("拍子（例 4/4・6/8）。melody 評価の強拍判定に使う") } },
-    async ({ question, chords, notes, key, mode, meter }) => {
+    { title: "判る（同定/説明/当てはまり/メロ品質/声部進行）", description: "これ何進行?/なぜ?/調は?/合ってる?/このメロ変じゃない?/メロと低音の声部進行は綺麗?。全生成・修正の土台。", inputSchema: { question: z.enum(["fit", "identify", "key", "explain", "progression", "melody", "voiceleading"]), chords: chordsSchema.optional(), notes: notesSchema.optional(), bass: notesSchema.optional().describe("低音（ベース）。voiceleading で notes(メロ) と対で使う。無ければ chords のルートを低域で代用"), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), meter: z.string().optional().describe("拍子（例 4/4・6/8）。melody 評価の強拍判定に使う") } },
+    async ({ question, chords, notes, bass, key, mode, meter }) => {
+      if (question === "voiceleading") {
+        // #8(2026-07-09)：メロ×低音の対位法違反(並行/隠伏5度8度・声部交差)を数える分析レンズ（生成非介入）。
+        if (!notes) return err("analyze voiceleading は notes(メロ)");
+        const mel = notes.map((n, i) => ({ pitch: n.pitch, start: n.start ?? i, dur: n.dur ?? 1 }));
+        // bass 明示が最良。無ければ chords のルートを C2 域(36-47)で代用（各コード区間の頭に置く）。
+        const low = bass?.length
+          ? bass.map((n, i) => ({ pitch: n.pitch, start: n.start ?? i, dur: n.dur ?? 1 }))
+          : (chords ?? []).map((c) => { const pc = normRoot(c.root ?? 0); return { pitch: 36 + pc, start: c.start ?? 0, dur: c.dur ?? 1 }; });
+        if (!low.length) return err("analyze voiceleading は bass か chords が必要");
+        return ok(analyzeVoiceLeading(mel, low));
+      }
       if (question === "fit") {
         if (!notes || !chords) return err("analyze fit は notes と chords");
         return ok(analyzeFit(notes, chords, key));
