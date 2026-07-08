@@ -183,6 +183,24 @@ def drum_onsets(drums_wav, delta=0.20, min_strength=0.12):
                 continue  # 他帯域が圧倒的＝ブリードとみなす
             t = librosa.frames_to_time(f, sr=sr, hop_length=hop)
             out.append([round(float(t), 3), kind, round(s, 3)])
+    # クラッシュ：高域(6kHz+)の**長い減衰**でハット(短い)と区別。セクション頭に入る＝小節頭(1拍目)の
+    # 強い位相アンカー＋区間境界のマーカー（オーナー指摘）。減衰0.30s以上＋90%tile超のラウドさ。
+    hi = freqs >= 6000
+    envhi = S[hi].sum(axis=0)
+    ost = librosa.onset.onset_strength(S=librosa.amplitude_to_db(S[hi], ref=np.max), sr=sr, hop_length=hop)
+    onf = librosa.onset.onset_detect(onset_envelope=ost, sr=sr, hop_length=hop, units="frames", delta=0.3, wait=2)
+    p90 = float(np.percentile(envhi, 90)) if envhi.size and np.any(envhi > 0) else 1.0
+    nhi = len(envhi)
+    for f in onf:
+        peak = float(envhi[f:f + 3].max()) if f < nhi else 0.0
+        thr = 0.35 * peak
+        j = f
+        while j < nhi and envhi[j] > thr:
+            j += 1
+        decay = (j - f) * hop / sr
+        if decay >= 0.30 and peak >= p90:
+            t = librosa.frames_to_time(f, sr=sr, hop_length=hop)
+            out.append([round(float(t), 3), "crash", round(min(9.0, peak / (p90 + 1e-9)), 3)])
     return sorted(out, key=lambda x: x[0])
 
 def main():
