@@ -1,12 +1,14 @@
 // 連想エンジン 機構④：継続（次のコード候補）。機能文法 T→S/D, S→D, D→T のベースライン（データ不要）。
 // 「この進行の次は？/サビへ緊張を作る」の足場。質は進行間の遷移統計（コーパス）で上がる＝今は素朴版（confirm-list）。
-import { type Degree } from "./theory";
+import { type Degree, DIATONIC_CHORDS_MAJOR, DIATONIC_CHORDS_MINOR } from "./theory";
 import { functionOf, type Mode, type Func } from "./function";
 
-const DIA_MAJOR: [number, string][] = [[0, ""], [2, "m"], [4, "m"], [5, ""], [7, ""], [9, "m"], [11, "dim"]];
-const DIA_MINOR: [number, string][] = [[0, "m"], [2, "dim"], [3, ""], [5, "m"], [7, "m"], [8, ""], [10, ""]];
+// ダイアトニック＝theory.ts の正準表（短調はV7/vii°込み＝生成側と一致・A4統一 2026-07-08）。
+const DIA_MAJOR = DIATONIC_CHORDS_MAJOR;
+const DIA_MINOR = DIATONIC_CHORDS_MINOR;
 // 機能の遷移選好（worker _FUNC_NEXT を簡約）：トニックは離れ、サブドミ→ドミナント、ドミナント→解決。
-const NEXT_FUNC: Record<Func, Func[]> = { T: ["S", "D"], S: ["D", "T"], D: ["T"], "?": ["T", "S", "D"] };
+// SUB＝短調の♭VII(下主音・旋法)：i の後などに来やすく、i へ戻る（♭VI–♭VII–i ループ系）。
+const NEXT_FUNC: Record<Func, Func[]> = { T: ["S", "D", "SUB"], S: ["D", "T", "SUB"], D: ["T"], SUB: ["T", "S"], "?": ["T", "S", "D", "SUB"] };
 
 export type NextCandidate = { degree: number; quality: string; function: Func; why: string };
 
@@ -14,6 +16,7 @@ function whyFor(from: Func, to: Func): string {
   if (to === "D") return "ドミナントへ＝緊張を高める（サビ前・締めに効く）";
   if (to === "T") return from === "D" ? "ドミナント→トニックで解決" : "トニックへ＝落ち着く";
   if (to === "S") return "サブドミナントへ＝展開を広げる";
+  if (to === "SUB") return "♭VII（下主音）へ＝旋法的な広がり（エオリアン循環）";
   return "次の機能へ";
 }
 

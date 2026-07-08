@@ -2,14 +2,14 @@
 // 小節ごとに、ダイアトニックコードを「その小節のメロ音をどれだけ支えるか」で採点し上位を返す。
 // 注：質は進行間の遷移統計（コーパス）で上がる＝今はコーパス非依存の素朴版（confirm-list）。
 import { type Note } from "./fit";
-import { chordPcs } from "./theory";
+import { chordPcs, DIATONIC_CHORDS_MAJOR, DIATONIC_CHORDS_MINOR } from "./theory";
 
 export type ChordCandidate = { root: number; quality: string; score: number };
 export type HarmonizeBar = { bar: number; start: number; candidates: ChordCandidate[] };
 
-// ダイアトニック三和音（度数, 品質）。
-const DIATONIC_MAJOR: [number, string][] = [[0, ""], [2, "m"], [4, "m"], [5, ""], [7, ""], [9, "m"], [11, "dim"]];
-const DIATONIC_MINOR: [number, string][] = [[0, "m"], [2, "dim"], [3, ""], [5, "m"], [7, "m"], [8, ""], [10, ""]];
+// ダイアトニック和音＝theory.ts の正準表（短調はV7/vii°込み＝生成側と一致・A4統一 2026-07-08）。
+const DIATONIC_MAJOR = DIATONIC_CHORDS_MAJOR;
+const DIATONIC_MINOR = DIATONIC_CHORDS_MINOR;
 
 const onBeat = (s: number) => Math.abs(s - Math.round(s)) < 1e-6;
 

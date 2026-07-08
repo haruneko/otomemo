@@ -66,4 +66,15 @@ describe("chordPcs", () => {
   it("未知 quality はトライアド扱い", () => {
     expect(chordPcs(0, "no-such-quality").slice().sort((a, b) => a - b)).toEqual([0, 4, 7]);
   });
+  it("品質エイリアス（min7/min/M7/°等）を正準品質に解決＝マイナーが黙ってメジャー化しない（2026-07-08 総点検）", () => {
+    expect(chordPcs(9, "min7").slice().sort((a, b) => a - b)).toEqual([0, 4, 7, 9]); // Am7＝A C E G（旧: {9,1,4}＝Aメジャー化）
+    expect(chordPcs(9, "min").slice().sort((a, b) => a - b)).toEqual([0, 4, 9]); // Am
+    expect(chordPcs(0, "M7").slice().sort((a, b) => a - b)).toEqual([0, 4, 7, 11]); // CM7=Cmaj7
+    expect(chordPcs(0, "°").slice().sort((a, b) => a - b)).toEqual([0, 3, 6]); // C°=Cdim
+    expect(chordPcs(0, "ø").slice().sort((a, b) => a - b)).toEqual([0, 3, 6, 10]); // Cø=Cm7b5
+    expect(chordPcs(0, "+").slice().sort((a, b) => a - b)).toEqual([0, 4, 8]); // C+=Caug
+  });
+  it("未知でも短調系接頭(m/min/dim)ならマイナートライアドへフォールバック", () => {
+    expect(chordPcs(0, "m-unknown-xx").slice().sort((a, b) => a - b)).toEqual([0, 3, 7]);
+  });
 });

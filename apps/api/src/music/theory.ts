@@ -16,6 +16,12 @@ export const KS_MINOR = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.
 // スケール（worker theory.py と一致）。
 export const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
 export const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10];
+
+// 調のダイアトニック和音パレット [度数(半音), 品質]。**単一の正準表**＝harmonize/continuation/substitute で共有
+// （旧: 3モジュールが別コピーで短調Vの品質が不一致＝生成E7 vs 提案Em の往復矛盾。design#12-M 2026-07-08）。
+// 短調は「V7維持・メロ追従」方針＝和声的短音階のドミナント(V7=7:"7"・vii°=11:"dim")込み＋自然系(♭VII=10:"")。
+export const DIATONIC_CHORDS_MAJOR: [number, string][] = [[0, ""], [2, "m"], [4, "m"], [5, ""], [7, ""], [9, "m"], [11, "dim"]];
+export const DIATONIC_CHORDS_MINOR: [number, string][] = [[0, "m"], [2, "dim"], [3, ""], [5, "m"], [7, "7"], [8, ""], [10, ""], [11, "dim"]];
 // KEY_NAMES は音名配列（PITCH_NAMES）と同一＝@cm/music-core の1本を別名で公開。
 export const KEY_NAMES = PITCH_NAMES;
 

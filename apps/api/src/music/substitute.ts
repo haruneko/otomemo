@@ -1,6 +1,6 @@
 // 連想エンジン：代替コード。機能代理/相対/セカンダリードミナント/裏コード/同主調借用 を決定的に列挙。
 // 「3つ目のコードの代替は？」「ベタ→ひねる」の合法手出し。データ不要・S2の機能(functionOf)を使う。
-import { type Degree } from "./theory";
+import { type Degree, DIATONIC_CHORDS_MAJOR, DIATONIC_CHORDS_MINOR } from "./theory";
 import { functionOf, type Mode } from "./function";
 
 export type Substitute = { degree: number; quality: string; kind: string; why: string };
@@ -8,9 +8,9 @@ export type Substitute = { degree: number; quality: string; kind: string; why: s
 const norm = (x: number) => ((Math.trunc(x) % 12) + 12) % 12;
 const isMinorQuality = (q: string) => /^(m|min|dim)/.test(q) && !/^maj/.test(q);
 
-// ダイアトニックの三和音品質（機能代理の品質源）。
-const DIATONIC_MAJOR: Record<number, string> = { 0: "", 2: "m", 4: "m", 5: "", 7: "", 9: "m", 11: "dim" };
-const DIATONIC_MINOR: Record<number, string> = { 0: "m", 2: "dim", 3: "", 5: "m", 7: "m", 8: "", 10: "" };
+// ダイアトニックの品質源＝theory.ts の正準表（短調はV7/vii°込み・♭VIIはSUB化でVの代理から外れる。A4/A8統一 2026-07-08）。
+const DIATONIC_MAJOR: Record<number, string> = Object.fromEntries(DIATONIC_CHORDS_MAJOR);
+const DIATONIC_MINOR: Record<number, string> = Object.fromEntries(DIATONIC_CHORDS_MINOR);
 // 同主調からの借用（機能別・メジャー調に短調側を借りる定番）。S=iv, D=bVII, T=bVI。
 const MODAL_BORROW: Record<string, [number, string][]> = { S: [[5, "m"]], D: [[10, ""]], T: [[8, ""]] };
 

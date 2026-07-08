@@ -116,11 +116,28 @@ export function realizeMelody(skeleton: number[], model: MelodyCellModel, scaleP
   return out;
 }
 
-// 音階列の中で、指定pc集合のいずれかに該当し target に最も近いピッチ（同距離は低い方）。
-function nearestPitchWithPc(target: number, pcs: number[], scalePitches: number[]): number {
+// A2/A3(2026-07-08・design#12-M 短調V7方針)：コード音は調外でも歌える＝pc集合の最近接ピッチを
+// **半音空間**で探す（範囲[lo,hi]・同距離は低い方）。旧: スケール∩コードで探すため短調Vの導音(G#)や
+// セカンダリードミナントの色音(B♭ over C7)に構造的に乗れなかった。
+export function nearestChordTonePitch(target: number, pcs: number[], lo: number, hi: number): number {
   let best = target, bd = Infinity;
-  for (const p of scalePitches) { if (!pcs.includes(((p % 12) + 12) % 12)) continue; const d = Math.abs(p - target); if (d < bd) { bd = d; best = p; } }
-  return best;
+  const tpc = ((target % 12) + 12) % 12;
+  for (const pc of pcs) {
+    const up = target + ((((pc % 12) + 12) % 12) - tpc + 12) % 12; // target以上の最寄り同pc
+    for (const cand of [up - 12, up]) {
+      if (cand < lo || cand > hi) continue;
+      const d = Math.abs(cand - target);
+      if (d < bd) { bd = d; best = cand; }
+    }
+  }
+  return bd === Infinity ? target : best;
+}
+
+// 音階列の中で、指定pc集合のいずれかに該当し target に最も近いピッチ（同距離は低い方）。
+// A3統一：実体は nearestChordTonePitch（音域はスケール列の端）＝コード音なら調外も可。
+function nearestPitchWithPc(target: number, pcs: number[], scalePitches: number[]): number {
+  if (!pcs.length) return target;
+  return nearestChordTonePitch(target, pcs, scalePitches[0] ?? 48, scalePitches[scalePitches.length - 1] ?? 84);
 }
 
 // C1(2026-07-08)：句頭アンカー＝骨格(beat索引・長さbars*bpb)から「ブロック頭barのdownbeat＝skel[bar*bpb]」を引く。
@@ -513,6 +530,13 @@ export function genMotifMelodyV2(
     if (pre && pre.length) return pre;
     return chordPcs((chordRootsPerBar[b] ?? tonicPc) % 12, chordQuals[b] ?? "");
   };
+  // A2/A3(2026-07-08)：短調でコードが導音(7̂)を含む小節は、経過音側も ♭7̂→導音 に持ち上げた
+  // 「和声的短音階」列で歩く＝V7上の G♮(♭7̂) と G#(導音) の半音衝突を構造的に防ぐ（design#12-M）。
+  const leadPc = (tonicPc + 11) % 12, subtPc = (tonicPc + 10) % 12;
+  const spRaised = minor ? sp.map((p) => ((((p % 12) + 12) % 12) === subtPc ? p + 1 : p)) : sp;
+  const barHasLead = (bar: number): boolean => minor && pcsOfBar(bar).includes(leadPc);
+  const spAt = (bar: number): number[] => (barHasLead(bar) ? spRaised : sp);
+  const barOf = (t: number): number => Math.floor(t / barLen);
 
   // モチーフ生成＝16分リズムパターンを2小節ぶん抽選し、各onsetへ move（run=16分走句は方向保持・他はMarkov）。
   const mkMotif = (r: () => number): Motif16 | null => {
@@ -613,8 +637,10 @@ export function genMotifMelodyV2(
 
   // 近景レンダ＝コミットした輪郭(move)を辿る。強拍(onMain)は「輪郭が指す音の最近コードトーン」＝形を保ち和声に乗る。
   // 16分走句はスカラーsnap。toTonic で句末をトニックへ着地。tr=音域移高(弧の+5等)。
-  const snapSc = (c: number): number => { let b = c, bd = 99; for (const q of sp) { const d = Math.abs(q - c); if (d < bd) { bd = d; b = q; } } return b; };
-  const ctOf = (c: number, pc: number[]): number => { let b = c, bd = 99; for (const q of sp) { if (!pc.includes(((q % 12) + 12) % 12)) continue; const d = Math.abs(q - c); if (d < bd) { bd = d; b = q; } } return b; };
+  const snapList = (c: number, list: number[]): number => { let b = c, bd = 99; for (const q of list) { const d = Math.abs(q - c); if (d < bd) { bd = d; b = q; } } return b; };
+  const snapSc = (c: number): number => snapList(c, sp);
+  // A2/A3: 強拍のCTスナップは半音空間＝導音/色音にも乗れる（旧: スケール∩コード）。
+  const ctOf = (c: number, pc: number[]): number => (pc.length ? nearestChordTonePitch(c, pc, sp[0] ?? 48, sp[sp.length - 1] ?? 84) : snapSc(c));
   const render = (M: Motif16, bar0: number, anchor: number, tr: number, toTonic: boolean): Note[] => {
     const out: Note[] = [];
     let prev = anchor + tr;
@@ -634,8 +660,9 @@ export function genMotifMelodyV2(
         p = b;
       } else {
         const want = prev + M.mv[i]!;
-        p = onMain ? ctOf(want, pcs) : snapSc(want);
-        if (p === prev) p = snapSc(prev + (M.mv[i]! >= 0 ? 1 : -1));
+        const L = spAt(barOf(t)); // 弱拍の歩行も導音小節では和声的短音階（A2/A3）
+        p = onMain ? ctOf(want, pcs) : snapList(want, L);
+        if (p === prev) p = snapList(prev + (M.mv[i]! >= 0 ? 1 : -1), L);
       }
       out.push({ pitch: p, start: t, dur: compound ? 0.5 : 0.25 });
       prev = p;
@@ -683,7 +710,8 @@ export function genMotifMelodyV2(
   // ── 自己チェック(E-rule)対策の後処理：①強拍CT ②禁則跳躍除去 ③跳躍回収(gap-fill) ④単一頂点 ──
   const strongPos = compound ? [0, 1.5] : [0, 2];
   const onStrong = (t: number): boolean => { const ib = ((t % barLen) + barLen) % barLen; return strongPos.some((p) => Math.abs(ib - p) < 0.12); };
-  const ctP = (pitch: number, pcs: number[]): number => { let b = pitch, bd = 99; for (const q of sp) { if (!pcs.includes(((q % 12) + 12) % 12)) continue; const d = Math.abs(q - pitch); if (d < bd) { bd = d; b = q; } } return b; };
+  // A2/A3: 後処理のCTスナップも半音空間（ctOfと同実装）＝導音/色音に乗れる。スケール歩行は導音小節で spRaised（spAt）。
+  const ctP = (pitch: number, pcs: number[]): number => ctOf(pitch, pcs);
   // ② 禁則跳躍(三全音6/7度10,11/8度超)→同方向2スケール段(≈3度)に縮める。③ 跳躍(|≥5|半音)後は逆向きstepで回収。2pass。
   for (let pass = 0; pass < 2; pass++) {
     for (let i = 1; i < notes.length; i++) {
@@ -691,9 +719,11 @@ export function genMotifMelodyV2(
       if (a === 6 || a === 10 || a === 11 || a > 12) {
         if (i === notes.length - 1) {
           // 終止保護（B3・design#12-M 2026-07-08）：最終音(着地)は動かさず、直前音を着地の2スケール段手前へ寄せる。
-          notes[i - 1]!.pitch = clampScale(sp, nearestIdx(sp, notes[i]!.pitch) - (Math.sign(iv) || 1) * 2);
+          const L = spAt(barOf(notes[i - 1]!.start));
+          notes[i - 1]!.pitch = clampScale(L, nearestIdx(L, notes[i]!.pitch) - (Math.sign(iv) || 1) * 2);
         } else {
-          notes[i]!.pitch = clampScale(sp, nearestIdx(sp, notes[i - 1]!.pitch) + (Math.sign(iv) || 1) * 2);
+          const L = spAt(barOf(notes[i]!.start));
+          notes[i]!.pitch = clampScale(L, nearestIdx(L, notes[i - 1]!.pitch) + (Math.sign(iv) || 1) * 2);
         }
       }
     }
@@ -703,16 +733,17 @@ export function genMotifMelodyV2(
         const nx = notes[i + 1]!.pitch - notes[i]!.pitch;
         if (!(Math.sign(nx) === -Math.sign(iv) && Math.abs(nx) <= 2) && i + 1 < notes.length - 1) { // 句末(最後)は触らない＝終止保護
           const target = notes[i]!.pitch - (Math.sign(iv) || 1) * 1.5;
-          notes[i + 1]!.pitch = onStrong(notes[i + 1]!.start) ? ctP(target, pcsOfBar(Math.floor(notes[i + 1]!.start / barLen))) : clampScale(sp, nearestIdx(sp, target));
+          const L = spAt(barOf(notes[i + 1]!.start));
+          notes[i + 1]!.pitch = onStrong(notes[i + 1]!.start) ? ctP(target, pcsOfBar(barOf(notes[i + 1]!.start))) : clampScale(L, nearestIdx(L, target));
         }
       }
     }
   }
   // ① 強拍をコードトーンへ（句末トニック着地は保持＝最後の音は触らない）。
-  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) notes[i]!.pitch = ctP(notes[i]!.pitch, pcsOfBar(Math.floor(notes[i]!.start / barLen)));
+  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) notes[i]!.pitch = ctP(notes[i]!.pitch, pcsOfBar(barOf(notes[i]!.start)));
   // ④ 単一頂点＝最高音が複数なら後続をスケール1段下げ（アーチ明確化）。
   const hi = Math.max(...notes.map((n) => n.pitch)), peaks = notes.filter((n, idx) => n.pitch === hi && idx < notes.length - 1); // 句末は除外＝終止保護
-  if (peaks.length > 1) for (let k = 1; k < peaks.length; k++) peaks[k]!.pitch = clampScale(sp, nearestIdx(sp, hi) - 1);
+  if (peaks.length > 1) for (let k = 1; k < peaks.length; k++) { const L = spAt(barOf(peaks[k]!.start)); peaks[k]!.pitch = clampScale(L, nearestIdx(L, hi) - 1); }
   return notes;
 }
 

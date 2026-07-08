@@ -47,17 +47,20 @@ describe("cadenceOf（終止の型）", () => {
 });
 
 describe("マイナー調・非ダイア・境界（S2 acceptor 指摘の穴埋め）", () => {
-  it("マイナー：i/bIII/bVI=T, ii/iv=S, v/bVII=D", () => {
+  // 2026-07-08 正準変更（design#12-M 短調ドミナント方針）：♭VII=SUB(下主音)・vii°=D・終止判定は品質込み。
+  // 旧仕様（♭VII="D"・v→i=authentic）は総点検で誤りと確定（♭VII→iを完全終止と誤ラベル等）＝本テストを新正準へ更新。
+  it("マイナー：i/bIII/bVI=T, ii/iv=S, V/vii°=D, ♭VII=SUB", () => {
     expect(functionOf(0, "minor")).toBe("T");
     expect(functionOf(3, "minor")).toBe("T");
     expect(functionOf(8, "minor")).toBe("T");
     expect(functionOf(5, "minor")).toBe("S");
     expect(functionOf(7, "minor")).toBe("D");
-    expect(functionOf(10, "minor")).toBe("D");
+    expect(functionOf(11, "minor")).toBe("D");
+    expect(functionOf(10, "minor")).toBe("SUB");
   });
-  it("マイナー authentic（v→i）と deceptive（V→bVI）", () => {
+  it("マイナー modal（v→i＝導音なし）と deceptive（V→bVI）", () => {
     const deg = (xs: [number, string][]) => xs.map(([degree, quality]) => ({ degree, quality }));
-    expect(cadenceOf(deg([[5, ""], [7, "m"], [0, "m"]]), "minor").type).toBe("authentic");
+    expect(cadenceOf(deg([[5, ""], [7, "m"], [0, "m"]]), "minor").type).toBe("modal");
     expect(cadenceOf(deg([[5, ""], [7, ""], [8, ""]]), "minor").type).toBe("deceptive");
   });
   it("非ダイア roman（#IV・dim=°）", () => {

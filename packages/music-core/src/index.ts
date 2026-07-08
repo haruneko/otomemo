@@ -68,9 +68,24 @@ export function normRoot(root: number | string): number {
   return ((base % 12) + 12) % 12;
 }
 
-/** コードの構成ピッチクラス（0-11）。未知 quality はトライアド扱い。 */
+// 品質エイリアス（表記ゆれ→QUALITY_INTERVALS の正準キー）。2026-07-08 総点検：未知品質が黙って
+// メジャートライアドに落ち「min7」等のマイナーコードがメジャー化していた（旧: メロ側のスケール∩コード
+// スナップで偶然隠蔽＝コード音優先スナップ化で露出）。
+const QUALITY_ALIASES: Record<string, string> = {
+  min: "m", min7: "m7", mi: "m", mi7: "m7", "-": "m", "-7": "m7",
+  M7: "maj7", "△": "maj7", "△7": "maj7", Maj7: "maj7",
+  "°": "dim", "°7": "dim7", o: "dim", o7: "dim7", "ø": "m7b5", "ø7": "m7b5",
+  "+": "aug", minmaj7: "mM7", mmaj7: "mM7", "m(maj7)": "mM7",
+};
+
+/** コードの構成ピッチクラス（0-11）。エイリアス解決→未知 quality は短調系接頭ならマイナー、他はメジャートライアド扱い。 */
 export function chordPcs(root: number | string, quality: string): number[] {
   const r = normRoot(root);
-  const ivals = QUALITY_INTERVALS[quality] ?? [0, 4, 7];
+  const q = quality ?? "";
+  const alias = QUALITY_ALIASES[q];
+  const ivals =
+    QUALITY_INTERVALS[q] ??
+    (alias !== undefined ? QUALITY_INTERVALS[alias] : undefined) ??
+    (/^(m|min|dim)/.test(q) && !/^maj/i.test(q) ? [0, 3, 7] : [0, 4, 7]);
   return ivals.map((i) => (r + i) % 12);
 }

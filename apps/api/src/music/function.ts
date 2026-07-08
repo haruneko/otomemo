@@ -4,8 +4,11 @@ import { type Chord, type Degree } from "./theory";
 import { toDegrees, detectKeyFromChords } from "./index";
 
 export type Mode = "major" | "minor";
-export type Func = "T" | "S" | "D" | "?";
-export type CadenceType = "authentic" | "plagal" | "half" | "deceptive" | "none";
+// SUB＝短調の♭VII(下主音・subtonic)。旧は"D"扱い＝♭VII→iを完全終止と誤ラベル・substituteがV⇔♭VIIを
+// 機能代理扱いする温床だった（A5/A8・design#12-M 2026-07-08）。
+export type Func = "T" | "S" | "D" | "SUB" | "?";
+// modal＝導音を持たない旋法終止（短調の ♭VII→i / v→i）。authentic とは区別する。
+export type CadenceType = "authentic" | "plagal" | "half" | "deceptive" | "modal" | "none";
 
 // 度数(0-11・調主音から半音) → ローマ数字の基底。ダイアトニックは素の数字、非ダイアトニックは臨時記号。
 const MAJOR_ROMAN: Record<number, string> = {
@@ -15,9 +18,10 @@ const MINOR_ROMAN: Record<number, string> = {
   0: "I", 1: "bII", 2: "II", 3: "III", 4: "#III", 5: "IV", 6: "#IV", 7: "V", 8: "VI", 9: "#VI", 10: "VII", 11: "#VII",
 };
 
-// 機能：メジャー I/iii/vi=T, ii/IV=S, V/vii=D。マイナー i/bIII/bVI=T, ii/iv=S, v/bVII=D。非ダイアは ?。
+// 機能：メジャー I/iii/vi=T, ii/IV=S, V/vii=D。マイナー i/bIII/bVI=T, ii/iv=S, V/vii°=D, ♭VII=SUB。非ダイアは ?。
+// 短調に 11(vii°)=D を追加（旧: 本物の導音ドミナントが"?"＝終止が検出されなかった・A6）。
 const MAJOR_FUNC: Record<number, Func> = { 0: "T", 4: "T", 9: "T", 2: "S", 5: "S", 7: "D", 11: "D" };
-const MINOR_FUNC: Record<number, Func> = { 0: "T", 3: "T", 8: "T", 2: "S", 5: "S", 7: "D", 10: "D" };
+const MINOR_FUNC: Record<number, Func> = { 0: "T", 3: "T", 8: "T", 2: "S", 5: "S", 7: "D", 11: "D", 10: "SUB" };
 
 export function functionOf(degree: number, mode: Mode = "major"): Func {
   const d = ((Math.trunc(degree) % 12) + 12) % 12;
@@ -41,20 +45,36 @@ export function romanOf(deg: Degree, mode: Mode = "major"): string {
   return base + suffix;
 }
 
-/** 終止（最後の2和音）の型を判定。代替・つなぎ・「終わり風？」の足場。 */
+// 品質が「導音を持つドミナント系」か＝長三和音/7/maj7等（m/min/dim系でない）。短調のv(m)を弾く鍵。
+function isDomQuality(q: string): boolean {
+  const s = q || "";
+  return !/^(m|min|dim)/.test(s) || /^maj/.test(s);
+}
+// 「本物のドミナント」＝導音を持つ和音：V系(度数7・長/属系品質) or vii°(度数11・dim/♭5系)。
+function isRealDominant(deg: Degree): boolean {
+  const d = ((deg.degree % 12) + 12) % 12;
+  if (d === 7) return isDomQuality(deg.quality || "");
+  if (d === 11) return /dim|b5/.test(deg.quality || "");
+  return false;
+}
+
+/** 終止（最後の2和音）の型を判定。**品質込み**＝♭VII→i/v→i は modal・V7→i/vii°→i は authentic
+ *（旧: 度数の機能ラベルだけ見て ♭VII→i を authentic、♭VII終わりを half と誤ラベル。A5/A6/A7・2026-07-08）。 */
 export function cadenceOf(degrees: Degree[], mode: Mode = "major"): { type: CadenceType; at: number } {
   const n = (degrees ?? []).length;
   if (n < 2) return { type: "none", at: -1 };
   const prev = degrees[n - 2]!;
   const last = degrees[n - 1]!;
   const at = n - 2;
-  const pf = functionOf(prev.degree, mode);
   const ld = ((last.degree % 12) + 12) % 12;
   const pd = ((prev.degree % 12) + 12) % 12;
-  if (pf === "D" && ld === 0) return { type: "authentic", at }; // V(系)→I
-  if (pd === 5 && ld === 0) return { type: "plagal", at }; // IV→I
-  if (pd === 7 && (ld === 9 || (functionOf(ld, mode) === "T" && ld !== 0))) return { type: "deceptive", at }; // V→vi 等
-  if (functionOf(ld, mode) === "D") return { type: "half", at }; // …→V
+  if (ld === 0) {
+    if (isRealDominant(prev)) return { type: "authentic", at }; // V(7)→I / vii°→I
+    if (pd === 5) return { type: "plagal", at }; // IV/iv→I
+    if (mode === "minor" && (pd === 10 || pd === 7)) return { type: "modal", at }; // ♭VII→i / v(m)→i＝導音なし
+  }
+  if (pd === 7 && isDomQuality(prev.quality || "") && (ld === 9 || (functionOf(ld, mode) === "T" && ld !== 0))) return { type: "deceptive", at }; // V→vi / V→♭VI
+  if (isRealDominant(last)) return { type: "half", at }; // …→V（♭VII終わりは half にしない）
   return { type: "none", at: -1 };
 }
 
