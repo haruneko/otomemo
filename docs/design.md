@@ -1167,6 +1167,15 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **E-rule との関係**：`expression>0` で `chordToneStrong`（evalMelody）が下がるのは**仕様**（総合点で1本に潰さない原則＝gaming回避の再確認）。ランク軸は E-corpus のみ据え置き。
 - **配線**：`genMotifMelodyV2` opts `expression`→`genMelody`(density/swing と同格の透過)→`gen_melody`(MCP/HTTP)→SectionEditor UI。既定＝未指定＝従来挙動。**耳確認ポイント**＝expr 0/0.3/0.6 聴き比べ（もたれ感／気持ち悪い掛留の有無）で既定値昇格は別コミット。
 
+→ **句構造(P0-b)のV2配線＝対称⇔非対称フレーズ選択（2026-07-09・理論不足総点検 Step2）**。full＝`docs/research/2026-07-09-melody-theory-gaps-and-plan.md`。
+**問題**：`planSkeleton`（skeleton.ts＝問い/答え・句末カデンツ度数・対称/非対称を返す完成品）は **legacy 専用でV2主経路では死んでいた**。V2は最終ブロックのみ主音着地・中間句は流れっぱなし＝句の「呼吸(息継ぎ・問いと答え)」が無い。`gen_melody`(MCP) は phrasing を受けず**チャット到達不能**（next-dev-plan P0-b の残作業）。
+**正準（実装上の設計判断）**：
+- **`phrasing:"symmetric"|"asymmetric"`**（既定 undefined＝**従来完全一致**＝phrases を渡さない）。generate.ts V2分岐で `planSkeleton(bars, meter, {phrasing})` を呼び、`{startBeat, beats, cadenceDegree, isLast}[]` を `genMotifMelodyV2` へ渡す。
+- **句末着地は「ブロックに紐づけず、句境界の実 beat で後処理後に行う独立パス」**（当初計画の「固定ブロック末で着地」は非対称でブロック(mb=2)と句割り([3,3,2]等)がズレるため棄却）。パスは後処理⑤の後・expression の前に置き、各句の**最終onset**を cadenceDegree のピッチクラス（1=主音／5=属音=半終止の開き）へスナップ＝**B1 の和声追従セマンティクスを踏襲**（そのpcがコードにあれば採用・無ければ最寄りコード音）。approach音との禁則は `placeNonForbidden` で回収（着地は保護）。単一頂点維持（hiPitch超え禁止）。
+- **expression との相互作用**：cadence 着地音は expression の変換対象から除外（構造着地が勝つ）。決定的。
+- **配線**：`gen_melody`(MCP) に `phrasing` enum を追加（従来欠落）／http は既存の phrasing 透過を symmetric も受けるよう拡張。既定＝未指定＝従来挙動。
+- **今回のスコープ**：表面の句末着地のみ（対称=問い/答えの明確化・非対称=不等分割の呼吸）。**骨格(genSkeletonFromModel の u%2 固定句末)の句割り追従**と**骨格休符(句頭遅延入場・#9)**は続く別コミット（第2段階）。**耳確認**＝symmetric で「前楽節末が問いに聞こえるか」・asymmetric で「3+3+2 の呼吸になるか」。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

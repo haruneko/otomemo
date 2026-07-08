@@ -503,7 +503,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[] } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -833,6 +833,37 @@ export function genMotifMelodyV2(
   // 終止保護分岐(直前音を動かす)が i-2 との間に新禁則を作り得るため、有界ループで収束させる（実測: 2回で960/960）。
   for (let k = 0; k < 3; k++) fixForbidden();
 
+  // ── 句末カデンツ着地パス（phrases・design#12-M Step2/P0-b・2026-07-09）──
+  // planSkeleton の句割りを受け、各句の最終onsetを cadenceDegree のpc（1=主音/5=属音=半終止の開き）へ着地。
+  // ブロックに紐づけず「句境界の実beat」で行う＝対称/非対称どちらも正しい位置で呼吸。B1和声追従＝
+  // そのpcがコードにあれば採用・無ければ最寄りコード音。approach音の禁則は着地保護で直前音を動かして回収。
+  const cadenceIdx = new Set<number>();
+  if (opts.phrases && opts.phrases.length) {
+    const hiP = Math.max(...notes.map((n) => n.pitch)); // 単一頂点維持＝着地は頂点を超えない
+    const cadPc = (deg: number): number => (((tonicPc + (deg === 5 ? 7 : deg === 2 ? 2 : 0)) % 12) + 12) % 12; // 1=主音/5=属音/2=上主音
+    for (const ph of opts.phrases) {
+      const endBeat = ph.startBeat + ph.beats;
+      let li = -1;
+      for (let i = 0; i < notes.length; i++) if (notes[i]!.start >= ph.startBeat - 1e-6 && notes[i]!.start < endBeat - 1e-6) li = i;
+      if (li < 0) continue;
+      const t = notes[li]!.start, cur = notes[li]!.pitch, pcs = pcsAtT(t), want = cadPc(ph.cadenceDegree);
+      let np: number;
+      if (!pcs.length || pcs.includes(want)) { // cadence pc がコードにある＝そのpcへ着地
+        let b = cur, bd = 99;
+        for (const q of sp) { if (((q % 12) + 12) % 12 !== want) continue; if (Math.abs(q - cur) < bd) { bd = Math.abs(q - cur); b = q; } }
+        np = b;
+      } else np = ctP(cur, pcs); // 無ければ最寄りコード音（B1＝V終わりの開き等）
+      while (np > hiP && np - 12 >= (sp[0] ?? 48)) np -= 12; // 頂点超えはオクターブ下げ（pc保持・単一頂点維持）
+      notes[li]!.pitch = np;
+      cadenceIdx.add(li);
+      // 着地への禁則跳躍は着地を保護し直前音を寄せて回収（終止保護と同流儀）。
+      if (li > 0 && isForbiddenIv(Math.abs(np - notes[li - 1]!.pitch))) {
+        const anchors = [np, ...(li - 2 >= 0 ? [notes[li - 2]!.pitch] : [])];
+        placeNonForbidden(li - 1, np - (Math.sign(np - notes[li - 1]!.pitch) || 1) * 3, anchors);
+      }
+    }
+  }
+
   // ── 表情パス＝強拍非和声(expression ノブ・design#12-M Step1・2026-07-09)──
   // 後処理①が強拍をほぼ100%コードトーンにする＝綺麗すぎ(実曲57-90%)。確率 expr で強拍CTを
   // 「次音(コード音)へ歩進解決する非和声」＝倚音(appoggiatura)/掛留(suspension)へ置換する。
@@ -847,7 +878,7 @@ export function genMotifMelodyV2(
     const hiPitch = Math.max(...notes.map((n) => n.pitch)); // 単一頂点保護＝これ以上に上げない
     const locked = new Set<number>(); // 隣接強拍を両方変換すると解決先が動いて相手が孤立化＝解決音(i+1)をロック
     for (let i = 1; i < notes.length - 1; i++) { // i=0(句頭)と最終音(終止)は保護＝触らない
-      if (locked.has(i)) continue; // 直前の変換の解決音＝動かさない
+      if (locked.has(i) || cadenceIdx.has(i)) continue; // 直前の変換の解決音／句末カデンツ着地は動かさない
       const t = notes[i]!.start;
       if (!onStrong(t)) continue;
       const bar = barOf(t);

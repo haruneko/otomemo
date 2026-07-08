@@ -192,7 +192,7 @@ export function buildHttp(core: Core): FastifyInstance {
           return genMelody(b.frame, asChords(b.chords), b.seed, {
             useV2: true, density: num(b.density), swing: num(b.swing), expression: num(b.expression),
             repetition: num(b.repetition), rangeSteps: num(b.rangeSteps), motifBars: num(b.motifBars),
-            phrasing: b.phrasing === "asymmetric" ? "asymmetric" : undefined,
+            phrasing: b.phrasing === "asymmetric" ? "asymmetric" : b.phrasing === "symmetric" ? "symmetric" : undefined,
           });
         }
         case "gen_from_essence": return genFromEssence(asNotes(b.ref ?? b.melody), b.frame, asChords(b.chords), b.seed, {

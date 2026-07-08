@@ -117,11 +117,12 @@ legacy 専用。V2 は (i) `genSkeletonFromModel` 内の `u%2===1` 固定 phrase
 - `planSkeleton` を V2 の句SSOTに。generate.ts V2分岐（`:433-476`）で
   `planSkeleton(bars, f.meter, { phrasing: opts?.phrasing })` → Phrase[] を
   `phrases?: { startBar; bars; role; cadenceDegree; isLast }[]` 形式で `genMotifMelodyV2` 新optsへ。
-- **第1段階（今回）**: ブロック割り（mb均一）は従来のまま、**句末の効きだけ** phrase 準拠＝
-  (a) 句末barを含むブロックの最終onsetを cadenceDegree で着地（1=従来tonicロジック `:683-689` を一般化／
-  5=属音pcを同型の最寄り探索・B1コード追従ガード共用）
-  (b) `genSkeletonFromModel` に `phraseEndSlots?: number[]` を渡し `:267/:274` の固定判定を句割り由来へ（未指定=従来）
-  (c) 句末息継ぎ＝句末0.5-1拍にかかる音のdurを切る（render `:707-712` の gap切りと同じ流儀）
+- **第1段階（実装済 2026-07-09・当初案から改訂）**: 「固定ブロック末で着地」は非対称でブロック(mb=2)と句割り([3,3,2]等)がズレるため**棄却**。
+  代わりに **句末着地を「ブロックに紐づけない独立パス」として句境界の実beatで、後処理⑤の後・expressionの前に実行**
+  （expression と同じ配置＝実証済みパターン）。各句の**最終onset**を cadenceDegree のpc（1=主音/5=属音）へ B1和声追従で着地
+  （そのpcがコードにあれば採用・無ければ最寄りコード音）。approach音の禁則は着地保護で `placeNonForbidden` 回収・単一頂点維持。
+  expression は cadence 着地indexを除外。＝**対称/非対称どちらも正しい位置で呼吸**。gen_melody(MCP)に phrasing enum を追加（従来欠落）。
+  正典＝design#12-M「句構造(P0-b)のV2配線」。**残（第2段階）**＝骨格(genSkeletonFromModel の u%2 固定句末)の句割り追従＋骨格休符(#9)。
 - **骨格休符**: `skeletonRest?: number`（0..1・既定0=off）。v1 `:314-324` を移植し SKELETON_REST_BY_POS を
   **句頭相対スロット**で引く（v1は曲頭相対＝句が取れなかったため。ここが移植時の改良点）。
   notes組立後（`:740` sort直後・後処理①の前）に rest域onset drop＋直前音dur切り。
