@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   extractDrumPattern,
+  transcribeFullSong,
   meterString,
   type DrumOnset,
 } from "../src/audio-drums";
@@ -182,6 +183,40 @@ describe("extractDrumPattern（グレースフルな諦め）", () => {
     const r = extractDrumPattern(beatTimes, onsets, { forceMeter: 4 });
     expect(r.meter).toBe(4);
     expect(r.rhythm.steps).toBe(16);
+  });
+});
+
+describe("transcribeFullSong（全曲書き起こし＝畳まない・小節ごとの実パターン）", () => {
+  it("小節0-3と4-7で叩きが違う曲→各小節の生パターンをそのまま書き起こす（折り畳まない）", () => {
+    // 前半4小節=8ビート(kick1,3)／後半4小節=4つ打ち(kick0,1,2,3)。hihatは全小節8分。
+    const bpm = 120, bp = 60 / bpm, meter = 4;
+    const onsets: DrumOnset[] = [];
+    for (let bar = 0; bar < 8; bar++) {
+      const kicks = bar < 4 ? [0, 2] : [0, 1, 2, 3];
+      for (const b of kicks) onsets.push([(bar * meter + b) * bp, "kick", 1]);
+      for (const b of [1, 3]) onsets.push([(bar * meter + b) * bp, "snare", 1]);
+      for (const b of [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]) onsets.push([(bar * meter + b) * bp, "hihat", 1]);
+    }
+    onsets.sort((a, b) => a[0] - b[0]);
+    const beatTimes = Array.from({ length: 8 * meter + 4 }, (_, i) => i * bp);
+    const t = transcribeFullSong(beatTimes, onsets, { meter: 4, sub: 4, downbeat: 0 })!;
+    expect(t).not.toBeNull();
+    expect(t.bars).toBe(8);
+    expect(t.steps).toBe(128); // 8小節×16
+    // 前半小節=kick[0,8]・後半小節=kick[0,4,8,12]＝畳まず別々に出る
+    expect(t.barPatterns[0]!.kick).toEqual([0, 8]);
+    expect(t.barPatterns[4]!.kick).toEqual([0, 4, 8, 12]);
+    expect(t.barPatterns[0]!.snare).toEqual([4, 12]);
+    // 全曲通しの hits（小節2のキックは step 32,40）
+    const kick = t.lanes.find((l) => l.name === "Kick")!.hits;
+    expect(kick.slice(0, 4)).toEqual([0, 8, 16, 24]); // 小節0,1 の kick（各[0,8]）
+    expect(kick).toContain(64); // 小節4 の頭
+    expect(kick).toContain(68); // 小節4 の step4（4つ打ち）
+  });
+
+  it("downbeat未確定なら null（＝書き起こさない）", () => {
+    const beatTimes = Array.from({ length: 16 }, (_, i) => i * 0.5);
+    expect(transcribeFullSong(beatTimes, [[0, "kick", 1]], { meter: 4, sub: 4, downbeat: null })).toBeNull();
   });
 });
 

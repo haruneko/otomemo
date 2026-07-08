@@ -514,3 +514,106 @@ export function extractDrumPattern(
   }
   return res;
 }
+
+// ---------------------------------------------------------------------------
+// 全曲書き起こし（#S12改2・2026-07-08）
+// 理想＝1小節ループでなく「曲の実ドラムを最後まで書き起こす」。ループ折り畳みは拍子/downbeat/
+// グリッドをロバストに決めるための**内部中間物**であって出力ではない（曲の中にループは存在しない）。
+// ここは extractDrumPattern が確定した (meter, sub, downbeat) の上で、**局所テンポを積分して全曲の
+// 連続グリッド**を作り（実録音のドリフトを局所テンポ追従で吸収）、**実オンセットを各小節へ量子化**する
+// ＝畳まない・タイル展開しない。各小節の生パターンも返す（後段の音楽的区間分解の入力）。
+// ---------------------------------------------------------------------------
+export interface FullTranscription {
+  meter: number;
+  sub: 3 | 4;
+  bars: number; // 総小節数
+  steps: number; // 全曲の16分step数 = bars*meter*4
+  lanes: { name: string; midi: number; hits: number[] }[]; // hits=全曲通しの16分step index
+  barPatterns: Record<DrumKind, number[]>[]; // 各小節の16分step集合（0..bars-1・区間分解用）
+}
+
+/** 窓の局所テンポ(period/sub=16分秒)を時間で線形補間する曲線。 */
+function sixteenthCurve(wins: LocalWindow[], sub: 3 | 4): (t: number) => number {
+  const ctrl = wins.map((w) => ({ t: (w.t0 + w.t1) / 2, s: w.period / sub })).sort((a, b) => a.t - b.t);
+  return (t: number): number => {
+    if (t <= ctrl[0]!.t) return ctrl[0]!.s;
+    if (t >= ctrl[ctrl.length - 1]!.t) return ctrl[ctrl.length - 1]!.s;
+    let lo = 0, hi = ctrl.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (ctrl[mid]!.t <= t) lo = mid; else hi = mid; }
+    const f = (t - ctrl[lo]!.t) / (ctrl[hi]!.t - ctrl[lo]!.t || 1);
+    return ctrl[lo]!.s + f * (ctrl[hi]!.s - ctrl[lo]!.s);
+  };
+}
+
+const SWING16 = [0, 1, 3]; // 3連{0,1,2}→16分{0,1,3}（シャッフルの標準近似）
+
+export function transcribeFullSong(
+  beatTimes: number[],
+  onsets: DrumOnset[],
+  grid: { meter: number; sub: 3 | 4; downbeat: number | null },
+): FullTranscription | null {
+  if (grid.downbeat == null) return null;
+  const { meter, sub, downbeat } = grid;
+  const diffs: number[] = [];
+  for (let i = 1; i < beatTimes.length; i++) diffs.push(beatTimes[i]! - beatTimes[i - 1]!);
+  diffs.sort((a, b) => a - b);
+  const hint = diffs[Math.floor(diffs.length / 2)] || 0.5;
+  let wins = localWindows(onsets, hint);
+  if (wins.length < 3) wins = localWindows(onsets, hint, 8, 4);
+  if (!wins.length) return null;
+
+  const s16 = sixteenthCurve(wins, sub);
+  // 全オンセットを時刻順に。局所テンポの逆数を台形積分して φ(t)=downbeatからの累積16分step数。
+  const pts = onsets
+    .map(([t, k]) => ({ t, kind: normKind(k) }))
+    .filter((p): p is { t: number; kind: DrumKind } => p.kind !== null)
+    .sort((a, b) => a.t - b.t);
+  if (!pts.length) return null;
+  const cum = new Array<number>(pts.length).fill(0);
+  for (let i = 1; i < pts.length; i++) {
+    const dt = pts[i]!.t - pts[i - 1]!.t;
+    cum[i] = cum[i - 1]! + dt * 0.5 * (1 / s16(pts[i - 1]!.t) + 1 / s16(pts[i]!.t)); // 台形則
+  }
+  // downbeat 位置の累積値（φ(downbeat)=0 になるようオフセット）。cum は pts に対してだけ持つので線形補間。
+  const phiAt = (t: number): number => {
+    if (t <= pts[0]!.t) return cum[0]! - (pts[0]!.t - t) / s16(pts[0]!.t);
+    if (t >= pts[pts.length - 1]!.t) return cum[pts.length - 1]! + (t - pts[pts.length - 1]!.t) / s16(t);
+    let lo = 0, hi = pts.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (pts[mid]!.t <= t) lo = mid; else hi = mid; }
+    const f = (t - pts[lo]!.t) / (pts[hi]!.t - pts[lo]!.t || 1);
+    return cum[lo]! + f * (cum[hi]! - cum[lo]!);
+  };
+  const phiDb = phiAt(downbeat);
+
+  const subPerBar = meter * sub;
+  const steps16PerBar = meter * 4;
+  // onset → (bar, 16分step)。downbeat=step0=bar0。pickup(前)は落とす（v1）。
+  const barHits: Record<DrumKind, Set<number>>[] = [];
+  const ensureBar = (bar: number) => {
+    while (barHits.length <= bar) barHits.push({ kick: new Set(), snare: new Set(), hihat: new Set() });
+    return barHits[bar]!;
+  };
+  for (let i = 0; i < pts.length; i++) {
+    const gstep = Math.round(cum[i]! - phiDb); // グローバルsub-step
+    if (gstep < 0) continue;
+    const bar = Math.floor(gstep / subPerBar);
+    const subInBar = gstep % subPerBar;
+    const step16 = sub === 4 ? subInBar : Math.floor(subInBar / 3) * 4 + SWING16[subInBar % 3]!;
+    ensureBar(bar)[pts[i]!.kind].add(step16);
+  }
+  const bars = barHits.length;
+  if (!bars) return null;
+  const barPatterns: FullTranscription["barPatterns"] = barHits.map((b) => ({
+    kick: [...b.kick].sort((x, y) => x - y),
+    snare: [...b.snare].sort((x, y) => x - y),
+    hihat: [...b.hihat].sort((x, y) => x - y),
+  }));
+  // 全曲通しの hits（bar*steps16PerBar + step16）
+  const lanes: FullTranscription["lanes"] = [];
+  for (const kind of LANES) {
+    const hits: number[] = [];
+    for (let bar = 0; bar < bars; bar++) for (const s of barPatterns[bar]![kind]) hits.push(bar * steps16PerBar + s);
+    if (hits.length) lanes.push({ ...KIND_MIDI[kind], hits: hits.sort((a, b) => a - b) });
+  }
+  return { meter, sub, bars, steps: bars * steps16PerBar, lanes, barPatterns };
+}
