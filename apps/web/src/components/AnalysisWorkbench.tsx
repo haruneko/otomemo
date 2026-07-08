@@ -14,10 +14,11 @@ interface Facts {
   chords_timeline: Seg[];
 }
 interface Anchor { t_sec: number; meter: number; bar_no: number }
+interface Section { from_t: number; to_t: number; label: string } // #S12改3 crash由来の区間境界（秒）＝reaperが materialize
 interface Content {
   meta: { bpm: number | null; meter: number; key: { key?: string; mode?: string } | null; vocal_range?: unknown; duration_sec?: number | null };
   raw: Facts;
-  overlay: { anchors: Anchor[]; cuts: unknown[]; chord_edits: unknown[]; sections: unknown[] };
+  overlay: { anchors: Anchor[]; cuts: unknown[]; chord_edits: unknown[]; sections: Section[] };
   prose: string;
 }
 
@@ -258,6 +259,16 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
               {i % meter === 0 && <span className="awb-barno">{i / meter + 1}</span>}
             </div>
           ))}
+          {/* #S12改3 区間境界（crash由来）：破線の縦線＋ラベル。名付け(Aメロ/サビ)は人間・機械は境界だけ。 */}
+          {(c.overlay?.sections ?? []).map((s, i) => {
+            if (b(s.to_t) * PXB <= 0) return null; // 完全にアンカー手前＝描かない
+            const left = Math.max(0, b(s.from_t) * PXB);
+            return (
+              <div key={"sec" + i} className="awb-section" style={{ left: `${left}px` }}>
+                <span className="awb-section-label" title={s.label}>{s.label}</span>
+              </div>
+            );
+          })}
           {/* コードレーン（拍そろえ済み chordBeats・左端 straddle は可視幅だけ＝重なり回避） */}
           <div className="awb-chords">
             {chordBeats.map((cb, i) => {
