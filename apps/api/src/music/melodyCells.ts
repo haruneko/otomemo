@@ -502,7 +502,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[] } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -530,13 +530,16 @@ export function genMotifMelodyV2(
     if (pre && pre.length) return pre;
     return chordPcs((chordRootsPerBar[b] ?? tonicPc) % 12, chordQuals[b] ?? "");
   };
+  const barOf = (t: number): number => Math.floor(t / barLen);
+  // C3(2026-07-08)：小節内コードチェンジ対応＝時刻ベースのコード参照（generate.ts が chordAt の閉包を渡す）。
+  // 未指定は従来どおり小節頭サンプル。骨格(roots per bar)は小節単位のまま＝構造レベルは主和音で足りる。
+  const pcsAtT = (t: number): number[] => opts.chordPcsAt?.(t) ?? pcsOfBar(barOf(t));
   // A2/A3(2026-07-08)：短調でコードが導音(7̂)を含む小節は、経過音側も ♭7̂→導音 に持ち上げた
   // 「和声的短音階」列で歩く＝V7上の G♮(♭7̂) と G#(導音) の半音衝突を構造的に防ぐ（design#12-M）。
   const leadPc = (tonicPc + 11) % 12, subtPc = (tonicPc + 10) % 12;
   const spRaised = minor ? sp.map((p) => ((((p % 12) + 12) % 12) === subtPc ? p + 1 : p)) : sp;
-  const barHasLead = (bar: number): boolean => minor && pcsOfBar(bar).includes(leadPc);
+  const barHasLead = (bar: number): boolean => { if (!minor) return false; for (let q = 0; q < barLen; q++) if (pcsAtT(bar * barLen + q).includes(leadPc)) return true; return false; };
   const spAt = (bar: number): number[] => (barHasLead(bar) ? spRaised : sp);
-  const barOf = (t: number): number => Math.floor(t / barLen);
 
   // モチーフ生成＝16分リズムパターンを2小節ぶん抽選し、各onsetへ move（run=16分走句は方向保持・他はMarkov）。
   const mkMotif = (r: () => number): Motif16 | null => {
@@ -652,7 +655,7 @@ export function genMotifMelodyV2(
       const onMain = compound
         ? (Math.abs(inbar) < 0.1 || Math.abs(inbar - 1.5) < 0.1)
         : (Math.abs(M.ons[i]! - Math.round(M.ons[i]! * 2) / 2) < 0.01 && !M.run[i]);
-      const pcs = pcsOfBar(Math.floor(t / barLen));
+      const pcs = pcsAtT(t); // C3: 時刻ベース＝小節内コードチェンジ追従
       let p: number;
       if (i === 0) p = ctOf(anchor, pcs);
       else if (toTonic && i === M.ons.length - 1) {
@@ -728,7 +731,7 @@ export function genMotifMelodyV2(
   const placeNear = (i: number, target: number): void => {
     const t = notes[i]!.start, bar = barOf(t);
     const L = spAt(bar);
-    notes[i]!.pitch = onStrong(t) ? ctP(target, pcsOfBar(bar)) : clampScale(L, nearestIdx(L, target));
+    notes[i]!.pitch = onStrong(t) ? ctP(target, pcsAtT(t)) : clampScale(L, nearestIdx(L, target));
   };
   const isForbiddenIv = (a: number): boolean => a === 6 || a === 10 || a === 11 || a > 12;
   // 禁則修正の置き先を「アンカー(隣接音)と禁則にならない」候補から選ぶ（dim和音等で最寄りコード音が
@@ -737,7 +740,7 @@ export function genMotifMelodyV2(
     const t = notes[i]!.start, bar = barOf(t);
     const cands: number[] = [];
     if (onStrong(t)) {
-      const pcs = pcsOfBar(bar);
+      const pcs = pcsAtT(t);
       for (let p = sp[0] ?? 48; p <= (sp[sp.length - 1] ?? 84); p++) if (pcs.includes(((p % 12) + 12) % 12)) cands.push(p);
     } else {
       cands.push(...spAt(bar));
@@ -752,7 +755,7 @@ export function genMotifMelodyV2(
     else placeNear(i, target);
   };
   // ① 強拍をコードトーンへ（句末着地は保持＝最後の音は触らない）。以降のパスは規約(b)でCT性を保つ。
-  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) notes[i]!.pitch = ctP(notes[i]!.pitch, pcsOfBar(barOf(notes[i]!.start)));
+  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) notes[i]!.pitch = ctP(notes[i]!.pitch, pcsAtT(notes[i]!.start));
   // ② 禁則跳躍(三全音6/10/11/8度超)→同方向≈3度に縮める。③ 跳躍(|≥5|半音)後は逆向きstepで回収。
   const fixForbidden = (): void => {
     for (let i = 1; i < notes.length; i++) {
@@ -795,7 +798,7 @@ export function genMotifMelodyV2(
       if (i === keeper) continue;
       const t = notes[i]!.start, bar = barOf(t);
       if (onStrong(t)) {
-        const pcs = pcsOfBar(bar);
+        const pcs = pcsAtT(t);
         let best = -1;
         for (let p = hi - 1; p >= (sp[0] ?? 48); p--) { if (pcs.includes(((p % 12) + 12) % 12)) { best = p; break; } } // hi未満の最寄りコード音
         const L = spAt(bar);
@@ -823,13 +826,13 @@ export function completeMelody(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; compound?: boolean } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; compound?: boolean; chordPcsAt?: (t: number) => number[] } = {},
 ): Note[] {
   const barLen = opts.compound ? 3 : 4;
   const bars = chordPcsPerBar.length;
   const ns = [...(partial ?? [])].filter((n) => Number.isFinite(n.pitch) && Number.isFinite(n.start)).sort((a, b) => a.start - b.start);
   // partial 無し＝通常 V2（回帰：補完を呼んでも種が無ければ素の生成と一致）。
-  if (ns.length === 0) return genMotifMelodyV2(chordPcsPerBar, chordRootsPerBar, chordQuals, scalePitches, motif16, { seed: opts.seed, tonicPc: opts.tonicPc, minor: opts.minor, skelModel: opts.skelModel, compound: opts.compound });
+  if (ns.length === 0) return genMotifMelodyV2(chordPcsPerBar, chordRootsPerBar, chordQuals, scalePitches, motif16, { seed: opts.seed, tonicPc: opts.tonicPc, minor: opts.minor, skelModel: opts.skelModel, compound: opts.compound, chordPcsAt: opts.chordPcsAt });
   const maxEnd = Math.max(...ns.map((n) => n.start + (n.dur ?? 0.25)));
   const coveredBars = Math.max(1, Math.min(bars, Math.ceil(maxEnd / barLen - 1e-6))); // partial が覆う小節数（実音保持の範囲）
   // G1(2026-07-08)：モチーフ長と種は「完全に埋まった小節」基準。半端小節(小節途中で終わる partial)を
@@ -843,7 +846,7 @@ export function completeMelody(
   // V2 を seedMotif で回す（block0=種・以降=発展）。先頭ブロック(=partial 区間)は捨て、tail のみ採用。
   const full = genMotifMelodyV2(chordPcsPerBar, chordRootsPerBar, chordQuals, scalePitches, motif16, {
     seed: opts.seed, tonicPc: opts.tonicPc, minor: opts.minor, skelModel: opts.skelModel, compound: opts.compound,
-    motifBars: mb, seedMotif, keepFirstBlocks: 1,
+    motifBars: mb, seedMotif, keepFirstBlocks: 1, chordPcsAt: opts.chordPcsAt,
   });
   // G1: 半端小節がある時は「完全小節境界」から maxEnd 以降を採用＝境界小節の残りを発展ブロックで埋める
   // （stub の実音とは maxEnd フィルタで重ねない）。半端が無ければ従来どおり coveredBars 境界。
