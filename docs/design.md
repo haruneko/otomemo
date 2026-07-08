@@ -1198,6 +1198,12 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 
 → **メロ×低音の声部進行レンズ（2026-07-09・理論不足総点検 #8・分析のみ）**。backlog和声③「完全に未監視」への回答。`analyzeVoiceLeading(upper, lower)`（voiceLeading.ts）＝並行完全5度/8度・直行(隠伏)5度/8度・声部交差を数え score(1-違反/機会) を返す**分析レンズ（生成非介入）**。`analyze question="voiceleading"`（MCP）＋ http `analyze_voiceleading`。bass 明示 or chords のルートを低域(36+pc)で代用。良し悪しの断は人間（機械は指摘まで＝設計思想）。
 
+→ **motif-driven前景＝自由材料の同音/跳躍（2026-07-09・理論不足総点検 Step5・本丸2）**。full＝motif-extraction.md §4.5。
+**問題**：前景が「ダルダル」＝実曲は自由材料に跳躍14%/同音23%あるが、gen は**跳躍ほぼ0%・同音を潰す**。犯人＝(1)全ブロックが単一モチーフ M の A/A'/B/A'' 派生で自由材料が無い (2)`mkMotif`/`varyTail` が同音(move=0)を ±1 に潰し・跳躍を2度にクランプ＝contour が均される。
+**正準**：
+- **`foreground` 0..1**（既定 0＝**従来完全一致**）＝自由材料の割合。派生ブロック(role≠0)を確率 `foreground` で `freeVary` に置換：M のリズムは保つ（コヒーレンス）が contour を引き直し、**同音(move=0)を潰さず・跳躍(|move|≥3)をクランプしない**＝実曲の「跳ぶ/留まる」を回復。禁則(三全音/7度/8度超)は後処理が従来通り除去＝**合法性は不変**・単一頂点維持。決定的（fg=0 では確率抽選の rng を引かない＝bit一致）。
+- **配線**：V2 opts `foreground`→genMelody→gen_melody(MCP/HTTP)→UI。既定＝未指定＝従来。**耳確認必須**（メロの性格が変わる＝churn回避のため既定 0 据え置き・推奨値は耳セッションで較正）。残（finer）＝motif占有率を実測値(23%)へ寄せる比率制御・リズム変形(augment/diminish)。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

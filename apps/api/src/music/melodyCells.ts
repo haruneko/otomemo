@@ -503,7 +503,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -665,6 +665,18 @@ export function genMotifMelodyV2(
 
   // 反行＝move を符号反転（B＝対比だが M から派生・輪郭が上下逆）。
   const invert = (M: Motif16): Motif16 => ({ ons: M.ons, mv: M.mv.map((m, i) => (i === 0 ? 0 : -m)), run: M.run });
+  // 自由材料(Step5・foreground)＝M のリズムは保ち contour を引き直す。varyTail と違い**同音(move=0)を潰さず
+  // 跳躍(|move|≥3)もクランプしない**＝実曲の「跳ぶ/留まる」を回復（ダルダル解消）。禁則は後処理が除去。
+  const freeVary = (M: Motif16, r: () => number): Motif16 => {
+    const k = Math.max(1, Math.ceil(M.ons.length / 3));
+    const mv = M.mv.slice(0, k);
+    for (let i = k; i < M.ons.length; i++) {
+      if (M.run[i]) { mv.push((mv[i - 1] ?? 0) >= 0 ? 1 : -1); continue; } // 走句は方向保持（従来同様）
+      const m = weightedPickNum(moveTrans.get(clamp7(mv[i - 1]!)) ?? new Map(), r); // 0も跳躍もそのまま採る
+      mv.push(m);
+    }
+    return { ons: M.ons, mv, run: M.run };
+  };
 
   // 近景レンダ＝コミットした輪郭(move)を辿る。強拍(onMain)は「輪郭が指す音の最近コードトーン」＝形を保ち和声に乗る。
   // 16分走句はスカラーsnap。toTonic で句末をトニックへ着地。tr=音域移高(弧の+5等)。
@@ -736,11 +748,13 @@ export function genMotifMelodyV2(
   const notes: Note[] = [];
   // 既定(kfb=0)＝従来の A/A'/B/A'' 循環。kfb>0＝先頭 kfb ブロックは A(M)、残りは varyTail(1)/invert(2)/M(3) を循環。
   const roleOf = (blk: number): number => (kfb > 0 ? (blk < kfb ? 0 : ((blk - kfb) % 3) + 1) : blk % 4);
+  const fg = Math.max(0, Math.min(1, opts.foreground ?? 0)); // Step5：自由材料の割合（0=従来・派生ブロックを確率で freeVary へ）
   for (let blk = 0; blk < nBlk; blk++) {
     const bar0 = blk * mb;
     const role = roleOf(blk);
     const last = blk === nBlk - 1;
-    const variant = role === 1 ? varyTail(M, r) : role === 2 ? invert(M) : M; // A / A'(尾変奏) / B(反行) / A''
+    let variant = role === 1 ? varyTail(M, r) : role === 2 ? invert(M) : M; // A / A'(尾変奏) / B(反行) / A''
+    if (fg > 0 && role !== 0 && !last && r() < fg) variant = freeVary(M, r); // 派生ブロックを自由材料に（fg=0では抽選しない＝bit一致）
     // 弧＝B塊を音域ピークへ。D5(2026-07-08): 半音+3直加算→スケール2段リフト＝調・キーに依らず一定の弧。
     const anchorBase = an(bar0);
     const anchor = role === 2 ? clampScale(sp, nearestIdx(sp, anchorBase) + 2) : anchorBase;
