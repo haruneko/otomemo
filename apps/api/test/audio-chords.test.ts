@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { chordsFromTimeline, chordSequenceFromTimeline, pcFromKeyName } from "../src/audio-chords";
+import { chordsFromTimeline, chordSequenceFromTimeline, pcFromKeyName, refineChordsWithBass } from "../src/audio-chords";
 
 describe("chordsFromTimeline（アナリーゼの学習の出口＝BTC timeline→弾ける chord_progression）", () => {
   it("N飛ばし・連続畳み・拍量子化（bpm120＝0.5s/beat）", () => {
@@ -82,5 +82,44 @@ describe("pcFromKeyName", () => {
     expect(pcFromKeyName("Bb")).toBe(10);
     expect(pcFromKeyName("よくわからん")).toBeNull();
     expect(pcFromKeyName(undefined)).toBeNull();
+  });
+});
+
+describe("refineChordsWithBass（#S12改3 ベースでコード精緻化＝(1)ルート補正/(2)転回検出）", () => {
+  // bpm120＝0.5s/beat。各コード2s。ベースは区間を満たす1音（frac≈1）で明示。
+  const chordTL = (labels: string[]) => labels.map((l, i) => [i * 2, i * 2 + 2, l] as [number, number, string]);
+  const bassFull = (pcs: number[]) => pcs.map((pc, i) => [i * 2, i * 2 + 2, 36 + pc] as [number, number, number]);
+
+  it("(2)転回：bass がコードトーン(≠ルート)なら slash（bass セット・source=slash）", () => {
+    // C(0,4,7): 区間0 bass=E(4)→C/E、区間1 bass=G(7)→C/G（bass違いで畳まれない）
+    const out = refineChordsWithBass(chordTL(["C", "C"]), [[0, 2, 36 + 4], [2, 4, 36 + 7]], 120);
+    expect(out).toEqual([ // 各2s=4拍(bpm120)。bass違いで畳まれず2枠。
+      { root: 0, quality: "", start: 0, dur: 4, bass: 4, source: "slash" },
+      { root: 0, quality: "", start: 4, dur: 4, bass: 7, source: "slash" },
+    ]);
+  });
+
+  it("bass==ルート → BTC確定（bass無し・source=btc）", () => {
+    const out = refineChordsWithBass(chordTL(["C"]), bassFull([0]), 120);
+    expect(out).toEqual([{ root: 0, quality: "", start: 0, dur: 4, source: "btc" }]);
+  });
+
+  it("(1)ルート補正：bass が非コードトーンで強支配→bass をルートへ（quality保持・source=bass-root）", () => {
+    // BTC=C(0,4,7) だが bass=A(9・非コードトーン)が全区間支配→Aへ再ルート
+    const out = refineChordsWithBass(chordTL(["C"]), bassFull([9]), 120);
+    expect(out).toEqual([{ root: 9, quality: "", start: 0, dur: 4, source: "bass-root" }]);
+  });
+
+  it("非コードトーンでも弱い(通過音)→BTC維持（誤補正しない）", () => {
+    // bassはA(9)だが区間2sのうち0.4sだけ(frac0.2<0.6)→補正しない
+    const out = refineChordsWithBass(chordTL(["C"]), [[0, 0.4, 36 + 9]], 120);
+    expect(out).toEqual([{ root: 0, quality: "", start: 0, dur: 4, source: "btc" }]);
+  });
+
+  it("ベース無し→従来どおり（全部 btc・chordsFromTimeline 相当）", () => {
+    const out = refineChordsWithBass(chordTL(["C", "G"]), [], 120);
+    expect(out.map((c) => ({ root: c.root, source: c.source }))).toEqual([
+      { root: 0, source: "btc" }, { root: 7, source: "btc" },
+    ]);
   });
 });

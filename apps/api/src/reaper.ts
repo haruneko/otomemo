@@ -3,7 +3,7 @@
 // Core の公開操作(createNeta/placeChild/link)＋db を使う。原子性は createNeta 内＋ジョブ単位トランザクション。
 import type { Core } from "./core";
 import type { Neta, NetaInput } from "./types";
-import { chordsFromTimeline, pcFromKeyName } from "./audio-chords";
+import { chordsFromTimeline, refineChordsWithBass, pcFromKeyName } from "./audio-chords";
 import { autoDownbeatOffset } from "./audio-grid";
 import { extractDrumPattern, extractSectionPatterns, meterString, type DrumOnset } from "./audio-drums";
 
@@ -290,7 +290,11 @@ export function reapResults(core: Core): number {
       }
     }
     // 学習の出口（usecases-chat ①）：検出コードを**弾き直せる chord_progression 候補ネタ**にも落とす（即使える冒頭抜粋）。
-    const chords = chordsFromTimeline(timeline, typeof facts.bpm === "number" ? facts.bpm : 120);
+    // #S12改3 ベースがあれば精緻化＝(2)転回(slash)/(1)ルート補正（フィジビリ2曲実証・bassは9割コードトーン）。無ければ従来。
+    const bpmForChord = typeof facts.bpm === "number" ? facts.bpm : 120;
+    const chords = bassNotes.length
+      ? refineChordsWithBass(timeline, bassNotes, bpmForChord)
+      : chordsFromTimeline(timeline, bpmForChord);
     if (chords.length >= 2) {
       core.createNeta({
         kind: "chord_progression",
