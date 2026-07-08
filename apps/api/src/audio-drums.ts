@@ -587,14 +587,55 @@ export function transcribeFullSong(
 
   const subPerBar = meter * sub;
   const steps16PerBar = meter * 4;
-  // onset → (bar, 16分step)。downbeat=step0=bar0。pickup(前)は落とす（v1）。
+  // 全オンセットのグローバルsub-step（downbeat基準・仮）
+  const gsteps = pts.map((_, i) => Math.round(cum[i]! - phiDb));
+  // downbeat位相の詰め（#S12改2・シンコペ対応）＝音楽的手がかりを役割分担して合体：
+  //  ・スネア=2/4拍(等) … 拍上＆半拍を固定。ただし 2拍↔4拍 対称＝**半小節の裏表は決まらない**。
+  //  ・crash=小節頭 … 半小節の裏表を割る**主役**。ただしロックの突っ込みで**8分早い**ことがある
+  //    ＝crash が「頭」か「頭の8分前」かの両方を許容してスコア（3/4,6/8は crash 主・スネア補）。
+  //  ・キック=小節頭 … 弱い補助。
+  const snareBeats = meter === 3 ? [1, 2] : meter === 6 ? [3] : [1, 3];
+  const snareTargets = snareBeats.map((b) => b * sub);
+  const eighth = Math.max(1, Math.round(sub / 2)); // 8分＝sub-step数（sub4→2）
+  const sHist = new Array<number>(subPerBar).fill(0);
+  const kHist = new Array<number>(subPerBar).fill(0);
+  const cHist = new Array<number>(subPerBar).fill(0);
+  for (let i = 0; i < pts.length; i++) {
+    if (gsteps[i]! < 0) continue;
+    const s = ((gsteps[i]! % subPerBar) + subPerBar) % subPerBar;
+    if (pts[i]!.kind === "snare") sHist[s] = sHist[s]! + 1;
+    else if (pts[i]!.kind === "kick") kHist[s] = kHist[s]! + 1;
+  }
+  // crash は normKind 外＝生 onsets から拾う（φは補間で得る）。
+  for (const [t, k, w] of onsets) {
+    if (k !== "crash") continue;
+    const g = Math.round(phiAt(t) - phiDb);
+    if (g < 0) continue;
+    const s = ((g % subPerBar) + subPerBar) % subPerBar;
+    cHist[s] = cHist[s]! + (w > 0 ? Math.min(3, w) : 1);
+  }
+  // crash 総量でスネア/crash の重みを決める（crashが十分あれば半小節はcrashが決める）。
+  const snMass = sHist.reduce((a, b) => a + b, 0) || 1;
+  const crMass = cHist.reduce((a, b) => a + b, 0);
+  const crW = crMass > 0 ? (2 * snMass) / crMass : 0; // crash 1個あたりの重み（半小節を割るのに十分効かせる）
+  const snW = meter === 4 ? 1 : 0.4; // 3/4,6/8 は crash 主・スネア補
+  let shift = 0, best = -Infinity;
+  for (let o = 0; o < subPerBar; o++) {
+    let sc = 0;
+    for (const tg of snareTargets) sc += snW * sHist[(tg + o) % subPerBar]!; // スネア→2/4拍（半拍・拍上）
+    // crash→小節頭 or その8分前（突っ込み）。半小節の裏表を割る主役。
+    sc += crW * (cHist[o % subPerBar]! + cHist[(o + subPerBar - eighth) % subPerBar]!);
+    sc += 0.3 * kHist[o % subPerBar]!; // キック→小節頭（弱い補助）
+    if (sc > best) { best = sc; shift = o; }
+  }
+  // onset → (bar, 16分step)。位相シフト適用。pickup(前)は落とす（v1）。
   const barHits: Record<DrumKind, Set<number>>[] = [];
   const ensureBar = (bar: number) => {
     while (barHits.length <= bar) barHits.push({ kick: new Set(), snare: new Set(), hihat: new Set() });
     return barHits[bar]!;
   };
   for (let i = 0; i < pts.length; i++) {
-    const gstep = Math.round(cum[i]! - phiDb); // グローバルsub-step
+    const gstep = gsteps[i]! - shift; // グローバルsub-step（位相補正後）
     if (gstep < 0) continue;
     const bar = Math.floor(gstep / subPerBar);
     const subInBar = gstep % subPerBar;
@@ -616,4 +657,67 @@ export function transcribeFullSong(
     if (hits.length) lanes.push({ ...KIND_MIDI[kind], hits: hits.sort((a, b) => a - b) });
   }
   return { meter, sub, bars, steps: bars * steps16PerBar, lanes, barPatterns };
+}
+
+// ---------------------------------------------------------------------------
+// 区間分解＝crashでセクションを切り、区間ごとに畳む（#S12改3・2026-07-08）
+// 理想＝全曲を音楽的区間に分解して各区間の綺麗なパターンをネタ化（オーナー）。
+// 全曲を1本の連続グリッドで書き起こすと周期誤差が累積してドリフト＝集約が滲む（実測）。
+// 対策＝**crashが入る所（=セクション頭）で区間に切り、各区間の onsets に extractDrumPattern を回す**。
+// 区間内は1グルーヴ＝そこでの「1小節畳み」は本物のグルーヴ（曲全体の1ループ化とは違う）。窓は各窓の
+// downbeat へ回して足す＝区間内ならドリフトも小さく、ノイズも区間平均で消える。crashが半小節の裏表も割る。
+// ---------------------------------------------------------------------------
+export interface DrumSection {
+  startSec: number;
+  endSec: number;
+  bars: number;
+  pattern: DrumPatternResult;
+}
+
+/** 近接crash（連打/同一ヒット）を統合したセクション境界時刻。 */
+function crashBoundaries(onsets: DrumOnset[], mergeSec = 1.5): number[] {
+  const cs = onsets.filter((o) => o[1] === "crash").map((o) => o[0]).sort((a, b) => a - b);
+  const b: number[] = [];
+  for (const t of cs) if (!b.length || t - b[b.length - 1]! > mergeSec) b.push(t);
+  return b;
+}
+
+export function extractSectionPatterns(
+  beatTimes: number[],
+  onsets: DrumOnset[],
+  opts: { minBars?: number } = {},
+): DrumSection[] {
+  if (!onsets.length) return [];
+  const whole = extractDrumPattern(beatTimes, onsets);
+  if (whole.downbeat == null || whole.bpm <= 0) return [];
+  const barLen = (60 / whole.bpm) * whole.meter;
+  const minBars = opts.minBars ?? 4;
+  const tMin = Math.min(...onsets.map((o) => o[0]));
+  const tMax = Math.max(...onsets.map((o) => o[0]));
+  // 境界＝crash。短すぎる区間は貪欲に前へ結合（境界を採らない）＝最低 minBars を保証。
+  const edges: number[] = [tMin];
+  for (const b of crashBoundaries(onsets)) {
+    if (b - edges[edges.length - 1]! >= minBars * barLen && tMax - b >= minBars * barLen * 0.5) edges.push(b);
+  }
+  edges.push(tMax);
+  // 各区間で extractDrumPattern（区間の拍子は全曲の meter を優先＝forceMeter）。
+  const secs: DrumSection[] = [];
+  for (let i = 0; i < edges.length - 1; i++) {
+    const t0 = edges[i]!, t1 = edges[i + 1]!;
+    const on = onsets.filter((o) => o[0] >= t0 - 1e-6 && o[0] < t1 + 1e-6);
+    const bt = beatTimes.filter((t) => t >= t0 - barLen && t <= t1 + barLen);
+    if (on.length < 12) continue;
+    const pat = extractDrumPattern(bt, on, { forceMeter: whole.meter });
+    secs.push({ startSec: Math.round(t0 * 100) / 100, endSec: Math.round(t1 * 100) / 100, bars: Math.round((t1 - t0) / barLen), pattern: pat });
+  }
+  // 連続で同じパターンの区間は結合（Aメロ×2 等）。
+  const same = (a: DrumSection, b: DrumSection) =>
+    JSON.stringify(a.pattern.rhythm.lanes) === JSON.stringify(b.pattern.rhythm.lanes);
+  const merged: DrumSection[] = [];
+  for (const s of secs) {
+    const last = merged[merged.length - 1];
+    if (last && same(last, s)) { last.endSec = s.endSec; last.bars += s.bars; }
+    else merged.push({ ...s });
+  }
+  return merged;
 }
