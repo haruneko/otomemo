@@ -1,5 +1,9 @@
 # メロディ生成＝音楽理論上の不足箇所と実装計画（2026-07-09）
 
+> **実装状況（2026-07-09 追記・本人が着手に転換）**：Step1〜5＋#8＋#9 を**全て実装・配線・UI露出まで完了**（コミット ac70d2a〜02d3388・api658緑/web312緑）。
+> 全ノブ既定＝従来bit一致（回帰ゼロ）。露出ノブ＝`expression`(表情)/`phrasing`(句割り)/`cadence`(genChords終止型)/`runs`(走句)/`push`(食い)/`foreground`(自由さ)/`breathe`(入り遅れ)＋`analyze voiceleading`。
+> **残**＝(a) 品質変更ノブの**耳セッションで既定値/プリセット較正**（expression/runs/push/foreground/breathe・churn回避で既定0据え置き中）(b) Step2第2段階＝骨格 genSkeletonFromModel の句割り追従（表面のカデンツ着地は済＝任意の磨き）(c) #6 テンション/avoid-note(B)・#7 旋法(C・P2後)(d) Step4 Phase3＝POP909量子化再計測でrun/前借り統計をデータ差替（要ローカルPOP909）。正典＝design#12-M。
+
 コード実読（melodyCells.ts / skeleton.ts / degree.ts / generate.ts / mcp.ts / evalMelody.ts ほか）と
 research doc 突合（motif-extraction / sixteenth-rhythm / self-check-log / 2026-07-07-next-dev-plan /
 harmony-cadence-theory / backlog）に基づく総点検。**この doc 単体で別モデルが実装に着手できる**ことを目的に、
