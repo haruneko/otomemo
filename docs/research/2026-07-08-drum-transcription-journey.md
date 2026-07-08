@@ -46,10 +46,13 @@
   （区間版へ移植予定）。
 
 ## 残り（次段）
-- **reaper 配線**：`extractSectionPatterns` を audio_analyze の materialize に繋ぎ、**区間ごとに rhythm ネタ**
-  （title「〜のドラム（Aメロ/サビ等）」・tempo/meter/セクション時刻）。区間ラベル(Aメロ/サビ)は今は時刻のみ。
-- **位相を区間版へ**：crash＋スネアの位相解決を extractSectionPatterns の各区間に効かせる（今は extractDrumPattern
-  内の窓位相まかせ）。オーナーの「2拍ズレ」は区間内なら crash で割れる想定＝要検証。
+- ~~**reaper 配線**~~ ✅**完了**：`extractSectionPatterns` を audio_analyze の materialize に接続。**区間の高信頼分だけ**
+  区間ごとに rhythm ネタ（title「〜のドラム（0:19–1:01・候補）」＝複数区間なら時刻レンジ／単一なら「候補」のみ・
+  tempo/meter/シャッフルタグ）。crash由来の区間境界は **analysis の `overlay.sections`** にも入れた＝ワークベンチに構造が出る／
+  人間が「Aメロ/サビ」に付け替える種（機械は境界だけ・名付けは人間＝設計思想どおり）。表示は秒を先に丸め（「4:60」防止）。
+  実LostMemory＝7区間中4区間ネタ化（低信頼の転換部3はゲート下）／高信頼区間はスネア2・4拍クリーン。api 580緑。
+- ~~**位相を区間版へ**~~ ✅**完了**（前コミット `crashResolveHalfBar`）：crash＋スネアの位相解決を各区間に。オーナーの「2拍ズレ」は
+  区間内で crash により割れることを実データで確認済（高信頼区間 `S:.... x... .... x...`）。
 - **3/4・6/8**：crash主・スネア補の重み（実装済）で流用可能か実曲で確認（DeepSeaは変拍子で不適・別の6拍子曲が要る）。
 - **SURFACE(シャッフル)の区間分解**：sub=3 の区間畳みが綺麗に出るか未検証。
 - **perception 底上げ**：全曲per-bar書き起こしを使う日が来たら ADT モデルが要る（区間平均なら現perceptionで足りる見込み）。

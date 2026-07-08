@@ -96,6 +96,40 @@ describe("① アナリーゼ（audio_analyze）", () => {
     expect(lane("HiHat")).toEqual([0, 4, 8, 12]);
   });
 
+  it("#S12改3 crashで区間が割れる曲＝区間ごとに別ドラムネタ＋overlay.sectionsに境界", async () => {
+    const core = new Core(openDb(":memory:"));
+    core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    // 前半16小節=8ビート / 後半16小節=四つ打ち。各区間頭(bar0/bar16)にcrash＝crashで2区間に割れる。
+    const bpm = 120, bp = 60 / bpm, meter = 4;
+    const drum: [number, string, number][] = [];
+    for (let bar = 0; bar < 32; bar++) {
+      const kicks = bar < 16 ? [0, 2] : [0, 1, 2, 3];
+      for (const b of kicks) drum.push([(bar * meter + b) * bp, "kick", 1]);
+      for (const b of [1, 3]) drum.push([(bar * meter + b) * bp, "snare", 1]);
+      for (const b of [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]) drum.push([(bar * meter + b) * bp, "hihat", 1]);
+    }
+    drum.push([0, "crash", 5], [16 * meter * bp, "crash", 5]);
+    drum.sort((a, b) => a[0] - b[0]);
+    const bt = Array.from({ length: 32 * meter + 4 }, (_, i) => i * bp);
+    const fakeAnalyze = async () => ({ bpm, key: { key: "C", mode: "major" }, beat_times: bt, drum_onsets: drum, chords_timeline: [[0, 4, "C"]] });
+    await runAudioAnalyzeJob(core, claimed, async () => "2区間", fakeAnalyze);
+    core.reapResults();
+    // 区間ごとに rhythm ネタ＝2枚（8ビート区間 / 四つ打ち区間）
+    const rh = core.listNeta({ kind: "rhythm", scope: "all", limit: 10 });
+    expect(rh.length).toBe(2);
+    // 複数区間なので title に時刻レンジ（0:00–…）
+    expect(rh.every((r) => /\d+:\d\d–\d+:\d\d/.test(r.title))).toBe(true);
+    const kicks = rh.map((r) => (r.content as { rhythm: { lanes: { name: string; hits: number[] }[] } }).rhythm.lanes.find((l) => l.name === "Kick")!.hits);
+    expect(kicks).toContainEqual([0, 8]);        // 8ビート区間
+    expect(kicks).toContainEqual([0, 4, 8, 12]); // 四つ打ち区間
+    // overlay.sections に crash 由来の区間境界（人間が Aメロ/サビ に付け替える種）
+    const an = core.listNeta({ kind: "analysis", scope: "all", limit: 5 })[0]!;
+    const secs = (an.content as { overlay: { sections: { from_t: number; to_t: number; label: string }[] } }).overlay.sections;
+    expect(secs.length).toBe(2);
+    expect(secs[0]!.to_t).toBeCloseTo(secs[1]!.from_t, 1); // 連続して曲を覆う
+  });
+
   it("解析が失敗したら failed＋error（無言で消さない・音源は削除）", async () => {
     const core = new Core(openDb(":memory:"));
     core.enqueueJob({ intent: "audio_analyze", params: { filename: "x.mp3", audio_b64: "" } });

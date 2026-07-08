@@ -5,7 +5,7 @@ import type { Core } from "./core";
 import type { Neta, NetaInput } from "./types";
 import { chordsFromTimeline, pcFromKeyName } from "./audio-chords";
 import { autoDownbeatOffset } from "./audio-grid";
-import { extractDrumPattern, meterString, type DrumOnset } from "./audio-drums";
+import { extractDrumPattern, extractSectionPatterns, meterString, type DrumOnset } from "./audio-drums";
 
 // チャット発のジョブは params.chat_thread を持つ。その場合、生成結果を**サーバ側で**そのスレッドの
 // チャットメッセージとして記録する＝クライアントが待ち中に離脱/リロードしても結果が必ずチャットに残る
@@ -213,6 +213,11 @@ export function reapResults(core: Core): number {
       meterConf = ext.confidence;
       if (ext.downbeat != null) anchorSec = ext.downbeat;
     }
+    // #S12改3 区間分解＝crashで区間を切り区間ごとに畳む→区間ごとの綺麗なドラムパターン（全曲1グリッドはドリフトで破綻）。
+    // meter確定（ユーザー指定 or ドラム高信頼）の時だけ。ドラム無/低信頼なら空＝区間ネタ無し（グレースフル）。
+    const secs = drumOnsets.length && beatTimes.length && (userMeter || (ext != null && ext.confidence >= 0.3))
+      ? extractSectionPatterns(beatTimes, drumOnsets) : [];
+    const mmss = (t: number) => { const s = Math.round(t); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }; // 秒を先に丸め＝「4:60」防止
     core.createNeta({
       kind: "analysis",
       title: `アナリーゼ: ${parsed.title ?? "音源"}`,
@@ -223,7 +228,9 @@ export function reapResults(core: Core): number {
           meter_detected: { meter, confidence: Math.round(meterConf * 100) / 100, source: meterSource,
             ...(ext ? { sub: ext.sub, template: ext.template } : {}) } },
         raw: { beat_times: beatTimes, melody_notes: facts.melody_notes ?? [], melody_f0: facts.melody_f0 ?? [], chords_timeline: timeline ?? [], drum_onsets: drumOnsets },
-        overlay: { anchors: [{ t_sec: anchorSec, meter, bar_no: 1 }], cuts: [], chord_edits: [], sections: [] },
+        overlay: { anchors: [{ t_sec: anchorSec, meter, bar_no: 1 }], cuts: [], chord_edits: [],
+          // #S12改3 crash由来の区間境界を構造ラベルの種に（Aメロ/サビ名は人間が付け替え＝機械は境界だけ）。
+          sections: secs.map((s) => ({ from_t: s.startSec, to_t: s.endSec, label: `区間 ${mmss(s.startSec)}–${mmss(s.endSec)}（${s.bars}小節）` })) },
         prose: parsed.prose ?? "",
       },
       tempo: typeof facts.bpm === "number" ? Math.round(facts.bpm) : null,
@@ -233,16 +240,22 @@ export function reapResults(core: Core): number {
       from_job: r.id,
     });
     n += 1;
-    // #S12改 ドラムパターンを弾き直せる rhythm 候補ネタに（meter 確定＝ユーザー指定 or ドラム高信頼の時だけ）。
+    // #S12改3 ドラムを**区間ごと**に弾き直せる rhythm 候補ネタへ（1小節ループ横展でなく、実区間の実グルーヴ）。
+    // 各区間は crash境界で切り区間内で畳む＝ドリフト無・区間平均でノイズ消。区間の高信頼分だけネタ化（グレースフル）。
     // sub=3（シャッフル）は 16分格子へスイング写像済＝既存 rhythm 契約(1step=16分)のまま。タグで明示。
-    if (ext && (userMeter || ext.confidence >= 0.3) && ext.rhythm.lanes.length) {
+    const bpmR = typeof facts.bpm === "number" ? Math.round(facts.bpm) : null;
+    const multi = secs.length > 1;
+    for (const s of secs) {
+      const p = s.pattern;
+      if (!(userMeter || p.confidence >= 0.3) || !p.rhythm.lanes.length) continue;
       core.createNeta({
         kind: "rhythm",
-        title: `アナリーゼ: ${parsed.title ?? "音源"} のドラム（候補）`,
-        content: { rhythm: ext.rhythm },
-        tempo: typeof facts.bpm === "number" ? Math.round(facts.bpm) : null,
-        meter: meterString(meter),
-        tags: ["アナリーゼ", "候補", ...(ext.sub === 3 ? ["シャッフル"] : [])],
+        // 区間名（Aメロ/サビ）は今は時刻＝人間が付け替え。単一区間なら括弧内は「候補」だけ。
+        title: `アナリーゼ: ${parsed.title ?? "音源"} のドラム（${multi ? `${mmss(s.startSec)}–${mmss(s.endSec)}・` : ""}候補）`,
+        content: { rhythm: p.rhythm },
+        tempo: bpmR,
+        meter: meterString(p.meter),
+        tags: ["アナリーゼ", "候補", ...(p.sub === 3 ? ["シャッフル"] : [])],
         from_job: r.id,
       });
       n += 1;
