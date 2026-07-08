@@ -127,7 +127,7 @@ export function nearestChordTonePitch(target: number, pcs: number[], lo: number,
     for (const cand of [up - 12, up]) {
       if (cand < lo || cand > hi) continue;
       const d = Math.abs(cand - target);
-      if (d < bd) { bd = d; best = cand; }
+      if (d < bd || (d === bd && cand < best)) { bd = d; best = cand; } // 同距離は低い方＝pcs順に依らず決定的
     }
   }
   return bd === Infinity ? target : best;
@@ -641,9 +641,10 @@ export function genMotifMelodyV2(
   const snapSc = (c: number): number => snapList(c, sp);
   // A2/A3: 強拍のCTスナップは半音空間＝導音/色音にも乗れる（旧: スケール∩コード）。
   const ctOf = (c: number, pc: number[]): number => (pc.length ? nearestChordTonePitch(c, pc, sp[0] ?? 48, sp[sp.length - 1] ?? 84) : snapSc(c));
-  const render = (M: Motif16, bar0: number, anchor: number, tr: number, toTonic: boolean): Note[] => {
+  // anchor は呼び手で弧のリフト済み（D5: 旧 tr=半音直加算→スケール段リフトへ）。
+  const render = (M: Motif16, bar0: number, anchor: number, toTonic: boolean): Note[] => {
     const out: Note[] = [];
-    let prev = anchor + tr;
+    let prev = anchor;
     for (let i = 0; i < M.ons.length; i++) {
       const t = bar0 * barLen + M.ons[i]!;
       // 強拍(onMain)：4/4=8分グリッド上かつ非走句／6/8=付点四分ビート頭(inbar 0 と 1.5)。ここは輪郭が指す音の最近CTに乗せる。
@@ -653,7 +654,7 @@ export function genMotifMelodyV2(
         : (Math.abs(M.ons[i]! - Math.round(M.ons[i]! * 2) / 2) < 0.01 && !M.run[i]);
       const pcs = pcsOfBar(Math.floor(t / barLen));
       let p: number;
-      if (i === 0) p = ctOf(anchor + tr, pcs);
+      if (i === 0) p = ctOf(anchor, pcs);
       else if (toTonic && i === M.ons.length - 1) {
         // B1(2026-07-08 design#12-M)：終止はコードを見て着地＝主音が最終コードに含まれる時のみ主音。
         // 含まれない時(V終わりのユーザー進行等)は最寄りのコード音（主音強制=未解決sus4を回避・半終止らしい開き）。
@@ -702,54 +703,112 @@ export function genMotifMelodyV2(
   const an = (bar: number): number => blockAnchorFromSkeleton(skel, bar, barLen, sp[Math.floor(sp.length / 2)] ?? 62);
   const nBlk = Math.ceil(bars / mb);
   const notes: Note[] = [];
+  // 既定(kfb=0)＝従来の A/A'/B/A'' 循環。kfb>0＝先頭 kfb ブロックは A(M)、残りは varyTail(1)/invert(2)/M(3) を循環。
+  const roleOf = (blk: number): number => (kfb > 0 ? (blk < kfb ? 0 : ((blk - kfb) % 3) + 1) : blk % 4);
   for (let blk = 0; blk < nBlk; blk++) {
     const bar0 = blk * mb;
-    // 既定(kfb=0)＝従来の A/A'/B/A'' 循環。kfb>0＝先頭 kfb ブロックは A(M)、残りは varyTail(1)/invert(2)/M(3) を循環。
-    const role = kfb > 0 ? (blk < kfb ? 0 : ((blk - kfb) % 3) + 1) : blk % 4;
+    const role = roleOf(blk);
     const last = blk === nBlk - 1;
     const variant = role === 1 ? varyTail(M, r) : role === 2 ? invert(M) : M; // A / A'(尾変奏) / B(反行) / A''
-    const tr = role === 2 ? 3 : 0; // 弧＝Bを音域ピーク(+3)へ（+5は音域広げ/多頂点になりがち＝自己チェックで -inRange/-singleClimax）
-    notes.push(...render(variant, bar0, an(bar0), tr, last));
+    // 弧＝B塊を音域ピークへ。D5(2026-07-08): 半音+3直加算→スケール2段リフト＝調・キーに依らず一定の弧。
+    const anchorBase = an(bar0);
+    const anchor = role === 2 ? clampScale(sp, nearestIdx(sp, anchorBase) + 2) : anchorBase;
+    notes.push(...render(variant, bar0, anchor, last));
   }
   notes.sort((a, b) => a.start - b.start);
 
-  // ── 自己チェック(E-rule)対策の後処理：①強拍CT ②禁則跳躍除去 ③跳躍回収(gap-fill) ④単一頂点 ──
+  // ── 自己チェック(E-rule)対策の後処理（D1-D4 再設計 2026-07-08・design#12-M）──
+  // 順序＝①強拍CT→②禁則→③gap-fill→④単一頂点→⑤検証。規約＝(a)全パス終止音保護（B3）
+  // (b)強拍を動かす時は必ずコード音内＝①の結果を後段が壊さない (c)④の頂点keeperはB塊(role=2)優先＝弧の意図を守る。
   const strongPos = compound ? [0, 1.5] : [0, 2];
   const onStrong = (t: number): boolean => { const ib = ((t % barLen) + barLen) % barLen; return strongPos.some((p) => Math.abs(ib - p) < 0.12); };
   // A2/A3: 後処理のCTスナップも半音空間（ctOfと同実装）＝導音/色音に乗れる。スケール歩行は導音小節で spRaised（spAt）。
   const ctP = (pitch: number, pcs: number[]): number => ctOf(pitch, pcs);
-  // ② 禁則跳躍(三全音6/7度10,11/8度超)→同方向2スケール段(≈3度)に縮める。③ 跳躍(|≥5|半音)後は逆向きstepで回収。2pass。
-  for (let pass = 0; pass < 2; pass++) {
+  // target 近傍へ置く：強拍=その小節のコード音／弱拍=スケール音（導音小節は和声的短音階）。
+  const placeNear = (i: number, target: number): void => {
+    const t = notes[i]!.start, bar = barOf(t);
+    const L = spAt(bar);
+    notes[i]!.pitch = onStrong(t) ? ctP(target, pcsOfBar(bar)) : clampScale(L, nearestIdx(L, target));
+  };
+  const isForbiddenIv = (a: number): boolean => a === 6 || a === 10 || a === 11 || a > 12;
+  // 禁則修正の置き先を「アンカー(隣接音)と禁則にならない」候補から選ぶ（dim和音等で最寄りコード音が
+  // また三全音＝不動点、を防ぐ）。候補：強拍=コード音（半音空間）／弱拍=スケール音。無ければ placeNear へ。
+  const placeNonForbidden = (i: number, target: number, anchors: number[]): void => {
+    const t = notes[i]!.start, bar = barOf(t);
+    const cands: number[] = [];
+    if (onStrong(t)) {
+      const pcs = pcsOfBar(bar);
+      for (let p = sp[0] ?? 48; p <= (sp[sp.length - 1] ?? 84); p++) if (pcs.includes(((p % 12) + 12) % 12)) cands.push(p);
+    } else {
+      cands.push(...spAt(bar));
+    }
+    let best = -1, bd = Infinity;
+    for (const c of cands) {
+      if (anchors.some((a) => isForbiddenIv(Math.abs(c - a)))) continue;
+      const d = Math.abs(c - target);
+      if (d < bd || (d === bd && c < best)) { bd = d; best = c; }
+    }
+    if (best >= 0) notes[i]!.pitch = best;
+    else placeNear(i, target);
+  };
+  // ① 強拍をコードトーンへ（句末着地は保持＝最後の音は触らない）。以降のパスは規約(b)でCT性を保つ。
+  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) notes[i]!.pitch = ctP(notes[i]!.pitch, pcsOfBar(barOf(notes[i]!.start)));
+  // ② 禁則跳躍(三全音6/10/11/8度超)→同方向≈3度に縮める。③ 跳躍(|≥5|半音)後は逆向きstepで回収。
+  const fixForbidden = (): void => {
     for (let i = 1; i < notes.length; i++) {
       const iv = notes[i]!.pitch - notes[i - 1]!.pitch, a = Math.abs(iv);
-      if (a === 6 || a === 10 || a === 11 || a > 12) {
+      if (isForbiddenIv(a)) {
         if (i === notes.length - 1) {
-          // 終止保護（B3・design#12-M 2026-07-08）：最終音(着地)は動かさず、直前音を着地の2スケール段手前へ寄せる。
-          const L = spAt(barOf(notes[i - 1]!.start));
-          notes[i - 1]!.pitch = clampScale(L, nearestIdx(L, notes[i]!.pitch) - (Math.sign(iv) || 1) * 2);
+          // 終止保護（B3）：最終音(着地)は動かさず、直前音を着地の手前(≈3度)へ寄せる。
+          // アンカー＝着地音と、さらに手前の音（i-2との間に新禁則を作らない）。
+          const anchors = [notes[i]!.pitch, ...(i - 2 >= 0 ? [notes[i - 2]!.pitch] : [])];
+          placeNonForbidden(i - 1, notes[i]!.pitch - (Math.sign(iv) || 1) * 3, anchors);
+          if (isForbiddenIv(Math.abs(notes[i]!.pitch - notes[i - 1]!.pitch)))
+            placeNonForbidden(i - 1, notes[i]!.pitch - (Math.sign(iv) || 1) * 3, [notes[i]!.pitch]); // 両立不能なら着地優先
         } else {
-          const L = spAt(barOf(notes[i]!.start));
-          notes[i]!.pitch = clampScale(L, nearestIdx(L, notes[i - 1]!.pitch) + (Math.sign(iv) || 1) * 2);
+          placeNonForbidden(i, notes[i - 1]!.pitch + (Math.sign(iv) || 1) * 3, [notes[i - 1]!.pitch]);
         }
       }
     }
+  };
+  const gapFill = (): void => {
     for (let i = 1; i < notes.length - 1; i++) {
       const iv = notes[i]!.pitch - notes[i - 1]!.pitch;
       if (Math.abs(iv) >= 5) {
         const nx = notes[i + 1]!.pitch - notes[i]!.pitch;
         if (!(Math.sign(nx) === -Math.sign(iv) && Math.abs(nx) <= 2) && i + 1 < notes.length - 1) { // 句末(最後)は触らない＝終止保護
-          const target = notes[i]!.pitch - (Math.sign(iv) || 1) * 1.5;
-          const L = spAt(barOf(notes[i + 1]!.start));
-          notes[i + 1]!.pitch = onStrong(notes[i + 1]!.start) ? ctP(target, pcsOfBar(barOf(notes[i + 1]!.start))) : clampScale(L, nearestIdx(L, target));
+          placeNear(i + 1, notes[i]!.pitch - (Math.sign(iv) || 1) * 1.5);
         }
       }
     }
+  };
+  for (let pass = 0; pass < 2; pass++) { fixForbidden(); gapFill(); }
+  // ④ 単一頂点＝keeperはB塊(弧のピーク・D3)優先→無ければ最初の頂点。他の頂点は「hi未満」へ：
+  //   強拍=hi未満の最寄りコード音（D2: 一律hi-1の台地でなく文脈で下げ、①のCT性も保つ）／弱拍=スケール1段下。
+  const hi = Math.max(...notes.map((n) => n.pitch));
+  const peakIdx: number[] = [];
+  for (let i = 0; i < notes.length - 1; i++) if (notes[i]!.pitch === hi) peakIdx.push(i); // 句末は除外＝終止保護
+  if (peakIdx.length > 1) {
+    const inB = (t: number): boolean => roleOf(Math.floor(barOf(t) / mb)) === 2;
+    const keeper = peakIdx.find((i) => inB(notes[i]!.start)) ?? peakIdx[0]!;
+    for (const i of peakIdx) {
+      if (i === keeper) continue;
+      const t = notes[i]!.start, bar = barOf(t);
+      if (onStrong(t)) {
+        const pcs = pcsOfBar(bar);
+        let best = -1;
+        for (let p = hi - 1; p >= (sp[0] ?? 48); p--) { if (pcs.includes(((p % 12) + 12) % 12)) { best = p; break; } } // hi未満の最寄りコード音
+        const L = spAt(bar);
+        notes[i]!.pitch = best >= 0 ? best : clampScale(L, nearestIdx(L, hi) - 1);
+      } else {
+        const L = spAt(bar);
+        notes[i]!.pitch = clampScale(L, nearestIdx(L, hi) - 1);
+      }
+    }
   }
-  // ① 強拍をコードトーンへ（句末トニック着地は保持＝最後の音は触らない）。
-  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) notes[i]!.pitch = ctP(notes[i]!.pitch, pcsOfBar(barOf(notes[i]!.start)));
-  // ④ 単一頂点＝最高音が複数なら後続をスケール1段下げ（アーチ明確化）。
-  const hi = Math.max(...notes.map((n) => n.pitch)), peaks = notes.filter((n, idx) => n.pitch === hi && idx < notes.length - 1); // 句末は除外＝終止保護
-  if (peaks.length > 1) for (let k = 1; k < peaks.length; k++) { const L = spAt(barOf(peaks[k]!.start)); peaks[k]!.pitch = clampScale(L, nearestIdx(L, hi) - 1); }
+  // ⑤ 検証＝④が作り得る禁則を最終修正（D1: 「直した禁則の再導入」をパイプの最後で締める）。
+  // 終止保護分岐(直前音を動かす)が i-2 との間に新禁則を作り得るため、有界ループで収束させる（実測: 2回で960/960）。
+  for (let k = 0; k < 3; k++) fixForbidden();
   return notes;
 }
 
