@@ -858,6 +858,7 @@ P5 切出→chord_progression ネタ＋Claude 所見。
 **ネタ化（reaper の audio_analyze 分岐に追加）**：
 - **rhythmネタ**：`drumOnsetsToRhythm`＝オンセット→拍位置(beat_times線形補間)→16分step量子化→**多数決で1〜2小節ループに折り畳み**→ `{rhythm:{steps, lanes:[{name,midi,hits}]}}`（`midi-import.ts drumRhythm` と同形）。**折り畳みは meter 確定時のみ**（低信頼なら生オンセットは残すがネタ化は控えめ／手動区間指定後）。
 - **bassネタ**：`bass_notes`→グリッド量子化→`chords_timeline` から各時点コードを引き **pc−ルート音程→度数**（R/3/5/7/8/approach）→ループ折り畳み→ `{mode:"relative", steps, pattern, preview_chords}`。写像不能音は最近傍度数or棄却、mapped_ratio を信頼度に。絶対 `bass_notes` は analysis.raw に保存。
+  - **→ 是正（2026-07-08・ドラム区間分解の原則に整合・SDD更新）**：上記「相対度数＋ループ折り畳み」は**保留（後段の任意リファイン）**。**採用＝絶対音・区間ごと**：`bass_notes`(秒)→拍へ変換→**ドラムと同じ区間境界(`extractSectionPatterns` の `secs`)で per-section の `{kind:"bass", content:{notes:[{pitch,start,dur}]}}` ネタ**（絶対音・低域・genBass絶対モードと同形）。理由＝(1)**メロ(vocal)は本質的に絶対音**なので絶対notes-区間で作れば **bass↔vocal で抽出機構が完全共有**（オーナー方針「ベースから始めてボーカルに展開」の最短路）(2)ドラムで確立した「1小節ループに畳まず全曲を区間分解・実音に忠実」と整合（L859のドラム「ループ折り畳み」記述も `extractSectionPatterns` に既に置換済＝[[2026-07-08-drum-transcription-journey]]）。相対度数bassは reuse/移調に効くので**別ネタ種の後段強化**として残す（コード精度が上がってから）。
 - title「アナリーゼ: X のドラム/ベース（候補）」・tags `["アナリーゼ","候補"]`・tempo/meter 付き。受け皿（rhythm/相対bassスキーマ・`hasMusic` 両対応）は既存＝流し込むだけ。
 
 **モデルは差し替え可能・良し悪しは計測で決める**：分離器＝**htdemucs 既定**＋A/B枠（htdemucs_ft／将来 RoFormer系。ただし**RoFormer重み・BeatNet=非商用の恐れ／Chordino=GPL＝製品NG**、コアの demucs/librosa は MIT/ISC 商用OK）。ドラム分類＝**帯域ヒューリスティック自前(v1)**（追加依存ゼロ・土台用途に十分）→計測でADTOF等へ昇格。ベースピッチ＝**pyin(v1)**→basic-pitch とF値A/B。

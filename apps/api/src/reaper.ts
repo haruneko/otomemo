@@ -187,7 +187,7 @@ export function reapResults(core: Core): number {
     const facts = (parsed.facts ?? {}) as {
       bpm?: number; meter?: number; key?: { key?: string; mode?: string }; vocal_range?: unknown; duration_sec?: number;
       beat_times?: number[]; melody_notes?: unknown; melody_f0?: unknown; chords_timeline?: unknown; chords?: unknown;
-      drum_onsets?: unknown;
+      drum_onsets?: unknown; bass_notes?: unknown;
     };
     const timeline = (facts.chords_timeline ?? facts.chords) as [number, number, string][] | undefined;
     const beatTimes = Array.isArray(facts.beat_times) ? facts.beat_times : [];
@@ -259,6 +259,35 @@ export function reapResults(core: Core): number {
         from_job: r.id,
       });
       n += 1;
+    }
+    // #S12改3 ベースも**区間ごとに絶対音ネタ**へ（design是正2026-07-08＝相対度数でなく絶対音・区間＝bass↔vocal 抽出機構を共有）。
+    // stem→pyin→bass_notes(秒) を、ドラムと同じ区間境界で拍へ写して {kind:"bass",{notes}}（genBass絶対モードと同形）。
+    // 区間頭を beat0 に（秒→拍は bpm 基準）。ドラム高信頼区間に揃えて出す（v1・ベースはコード精度底上げが本命でネタはおまけ）。
+    const bassNotes = (Array.isArray(facts.bass_notes) ? facts.bass_notes : []) as [number, number, number][];
+    if (bassNotes.length && bpmR) {
+      const secPerBeat = 60 / bpmR;
+      for (const s of secs) {
+        if (!(userMeter || s.pattern.confidence >= 0.3)) continue; // ドラム区間に相乗り（ノイズ区間で氾濫させない）
+        const notes: { pitch: number; start: number; dur: number }[] = [];
+        for (const [st, en, midi] of bassNotes) {
+          if (en <= s.startSec || st >= s.endSec) continue; // 区間外
+          const start = Math.max(0, st - s.startSec) / secPerBeat;
+          const dur = (Math.min(en, s.endSec) - Math.max(st, s.startSec)) / secPerBeat;
+          if (dur <= 1e-3) continue;
+          notes.push({ pitch: Math.round(midi), start: Math.round(start * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
+        }
+        if (!notes.length) continue;
+        core.createNeta({
+          kind: "bass",
+          title: `アナリーゼ: ${parsed.title ?? "音源"} のベース（${multi ? `${mmss(s.startSec)}–${mmss(s.endSec)}・` : ""}候補）`,
+          content: { notes },
+          tempo: bpmR,
+          meter: meterString(s.pattern.meter),
+          tags: ["アナリーゼ", "候補"],
+          from_job: r.id,
+        });
+        n += 1;
+      }
     }
     // 学習の出口（usecases-chat ①）：検出コードを**弾き直せる chord_progression 候補ネタ**にも落とす（即使える冒頭抜粋）。
     const chords = chordsFromTimeline(timeline, typeof facts.bpm === "number" ? facts.bpm : 120);

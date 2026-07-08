@@ -32,13 +32,17 @@ def estimate_key(y, sr):
         return {"key": _PC[cmaj[1]], "mode": "major", "confidence": round(cmaj[0],3)}
     return {"key": _PC[cmin[1]], "mode": "minor", "confidence": round(cmin[0],3)}
 
-# --- ボーカル pyin（f0/有声を1回だけ計算し音域とメロで共有）---
-def pyin_vocal(vocal_wav):
-    y, sr = librosa.load(vocal_wav, mono=True)
-    f0, voiced, vprob = librosa.pyin(y, fmin=65, fmax=1300, sr=sr)
+# --- stem pyin（単音ピッチ抽出＝**ボーカルもベースも同型**：fmin/fmax を帯域で差し替えるだけ。#S12改3）---
+def pyin_stem(wav, fmin, fmax):
+    y, sr = librosa.load(wav, mono=True)
+    f0, voiced, vprob = librosa.pyin(y, fmin=fmin, fmax=fmax, sr=sr)
     times = librosa.times_like(f0, sr=sr)  # 各フレームの時刻(秒)
     hop_sec = 512.0 / sr  # pyin 既定 hop_length=512
     return f0, voiced, times, hop_sec
+
+# ボーカル＝声域(C2≈65〜E6≈1300Hz)。音域とメロで共有。
+def pyin_vocal(vocal_wav):
+    return pyin_stem(vocal_wav, 65, 1300)
 
 # --- 音域：有声gate→5/95%tile clip→音名 ---
 def vocal_range(f0, voiced):
@@ -249,6 +253,14 @@ def main():
     # 5. ドラム：分離済み drums stem からオンセット検出＋帯域分類（#S12・拍子/量子化は TS 側）
     d_onsets = drum_onsets(stems["drums"]) if "drums" in stems else []
 
+    # 5.5 ベース：分離済み bass stem に**低域pyin**→ボーカルと同じRLE量子化（#S12改3・機構共有）。
+    #     帯域＝5弦B0≈31〜E4≈330Hz（実測でfmax400は倍音/ブリードを拾い G4等の外れ→330に締め）。単音・粒短め min_note_sec=0.06。
+    bass_notes = []
+    bass_wav = stems.get("bass", "")
+    if bass_wav and os.path.exists(bass_wav):
+        bf0, bvoiced, btimes, bhop = pyin_stem(bass_wav, 35, 330)
+        bass_notes = vocal_melody(bf0, bvoiced, btimes, bhop, min_note_sec=0.06)
+
     labs = [c[2] for c in chords]
     from collections import Counter
     freq = Counter(labs).most_common(12)
@@ -264,6 +276,7 @@ def main():
         "melody_f0": melody_f0,                      # [[t,hz|null]]＝生輪郭（量子化fallback表示）
         "chords_timeline": chords,                  # [start,end,label]（全体・切出は overlay 側）
         "drum_onsets": d_onsets,                     # #S12 [[t_sec, kick|snare|hihat, strength]]（生・拍子/量子化は TS）
+        "bass_notes": bass_notes,                    # #S12改3 [[start,end,midi]]＝低域pyin量子化ベース（TS側で区間絶対音ネタへ）
         "chord_labels_seq": labs[:120],
         "chord_freq_top": freq,
         "timing_sec": {"separate": round(t_sep,1), "chords": round(t_chord,1), "total": round(time.time()-t0,1)},

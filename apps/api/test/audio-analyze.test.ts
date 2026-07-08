@@ -130,6 +130,41 @@ describe("① アナリーゼ（audio_analyze）", () => {
     expect(secs[0]!.to_t).toBeCloseTo(secs[1]!.from_t, 1); // 連続して曲を覆う
   });
 
+  it("#S12改3 bass_notes があれば区間ごとに絶対音ベースネタ（秒→拍・区間頭=beat0）", async () => {
+    const core = new Core(openDb(":memory:"));
+    core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    const bpm = 120, bp = 60 / bpm, meter = 4; // 1拍=0.5s。1小節=2s。
+    const drum: [number, string, number][] = [];
+    for (let bar = 0; bar < 32; bar++) {
+      const kicks = bar < 16 ? [0, 2] : [0, 1, 2, 3];
+      for (const b of kicks) drum.push([(bar * meter + b) * bp, "kick", 1]);
+      for (const b of [1, 3]) drum.push([(bar * meter + b) * bp, "snare", 1]);
+      for (const b of [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]) drum.push([(bar * meter + b) * bp, "hihat", 1]);
+    }
+    drum.push([0, "crash", 5], [16 * meter * bp, "crash", 5]);
+    drum.sort((a, b) => a[0] - b[0]);
+    const bt = Array.from({ length: 32 * meter + 4 }, (_, i) => i * bp);
+    // ベース＝各小節頭に1音(2s=4拍長)・区間0(0-32s)は C2(36)・区間1(32-64s)は G2(43)
+    const bass: [number, number, number][] = [];
+    for (let bar = 0; bar < 32; bar++) { const t = bar * meter * bp; bass.push([t, t + 2, bar < 16 ? 36 : 43]); }
+    const fakeAnalyze = async () => ({ bpm, key: { key: "C", mode: "major" }, beat_times: bt, drum_onsets: drum, bass_notes: bass, chords_timeline: [[0, 4, "C"]] });
+    await runAudioAnalyzeJob(core, claimed, async () => "bass", fakeAnalyze);
+    core.reapResults();
+    const bn = core.listNeta({ kind: "bass", scope: "all", limit: 10 });
+    expect(bn.length).toBe(2); // 2区間ぶん
+    for (const b of bn) {
+      const notes = (b.content as { notes: { pitch: number; start: number; dur: number }[] }).notes;
+      expect(notes.length).toBeGreaterThan(0);
+      expect(notes[0]!.start).toBeCloseTo(0, 1); // 区間頭=beat0
+      expect(notes[0]!.dur).toBeCloseTo(4, 1);   // 2s=4拍
+      expect(notes.every((x) => x.pitch >= 28 && x.pitch <= 55)).toBe(true); // 低域
+    }
+    // 区間ごとにピッチが違う（C2 vs G2）＝区間で正しく切れてる
+    const pitchOf = (b: (typeof bn)[number]) => (b.content as { notes: { pitch: number }[] }).notes[0]!.pitch;
+    expect(new Set(bn.map(pitchOf)).size).toBe(2);
+  });
+
   it("解析が失敗したら failed＋error（無言で消さない・音源は削除）", async () => {
     const core = new Core(openDb(":memory:"));
     core.enqueueJob({ intent: "audio_analyze", params: { filename: "x.mp3", audio_b64: "" } });
