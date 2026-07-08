@@ -17,6 +17,11 @@
 2. **メロ最優先なのにメロの"足場"が空白** — スケール/コードトーンのロール上ハイライト（`PianoRoll.tsx` 色分け無）・ベロシティ編集（`PianoRoll.tsx:21`「一律100」）・メトロノーム/カウントイン・**対称⇔非対称フレーズ選択（ユーザー明言"ないとダメ"）**（`skeleton.ts:19` 固定2小節句）が全て未実装。
 3. **要件coreの "対照を引く" と "変換(6/8化)" が MCP でスタブ** — `mcp.ts:769` contrast＝`未対応(③-5)`、`mcp.ts:749` convert＝`未実装(③-4)`。requirements L134/L119 が chat 面で塞がれている。
 
+**→ ✅是正済（2026-07-08・実コード再検証 file:line 実証）：top痛点の #1 と #2の一部は既に解消。この top3 記述は監査時点(2026-07-07)の履歴として残す。**
+- **#1 評価未接続・自己進化ループ不在 → DONE**：`corpusTypicality` は自己進化ループのランクに使用（`generate.ts:527`）、`evalMelody` は MCP `analyze(question:"melody")` に露出（`mcp.ts:802`）。ループ本体 `genMelodyCandidates`（多め生成→らしさ順→多様top-k）は `generate.ts:507`、本番 `gen_melody`/`fit` が実呼出（`mcp.ts:491/705`）。＝P0-c/P1 の commit で本配線済。
+- **#2 スケールハイライト → DONE**（`PianoRoll.tsx:19,244` scalePcSet＋in/out-scale 着色、親供給 `KindEditorBody.tsx:214`）。**対称/非対称の基盤 → DONE**（`skeleton.ts:44` planSkeleton phrasing）だが**本番 verb 未露出**（`gen_melody` が phrasing を受けない `mcp.ts:488`）＝チャット到達不能が残作業。
+- **なお残OPEN（メロ足場）**：ベロシティ編集（`PianoRoll.tsx:29,125` 一律100）／コードトーン着色（進行追従・調ハイライトとは別・**メロ編集画面はコード文脈=`preview_chords`未投入で現状Section限定**）／編集面メトロノーム・カウントイン。#3(contrast/convert)は両OPENのまま（`mcp.ts:760,777`）。
+
 **doc乖離（コード変更ゼロで是正すべき）**：worker `import_midi` は既に api へ移植済（`midi-import.ts`＋`main.ts:108`）＝worker Python は実質 cm-search のみ。にもかかわらず `backlog.md:122`／`architecture.md:38`／status が「移植が残る」と古い。楽譜表示(VexFlow/OSMD)・systemd自動起動も architecture が挙げるが未導入。**→ ✅是正済（P0-d・commit 2bc0e8c）：backlog.md/architecture.md L38/status.md を「worker撤去済・2プロセス」に更新済み。本段落の乖離指摘自体が解消済（この記述は履歴として残す）。**
 
 **25項目のギャップ表**（要約・詳細は監査原文）：#1評価未接続/#2対照/#3変換/#4複数小節継続/#5メロbrush-up①〜⑦/#6和声brush-up①〜⑩/#7非対称フレーズ/#8スケール音ハイライト/#9ベロシティ/#10メトロノーム/#11 undo(コンテナ)/#12版管理/#13音声書出/#14MusicXML書出/#15楽譜表示/#16楽譜入力/#17仮歌/#18アルペジエータ/#19簡易ミックス/#20ノート編集v2/#21情報収集のパーソナライズ/#22 mp3整理・コード検出/#23 DAW橋渡し/#24 reshape range拡張/#25 generate role/structure。
