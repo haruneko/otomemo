@@ -118,7 +118,14 @@
   (2)bassがコードトーン(≠root)→**slash**(`bass`セット・source=slash)／(1)bassが**非コードトーン**かつ強支配(≥0.6)→**ルート補正**(bass_pcへ再root・quality保持・source=bass-root)。※転回を誤補正しないため補正は非コードトーン時のみ（裏取りの要点）。N/X空白穴埋め(#3)は対象外。
   reaper が bass_notes あれば chordsFromTimeline→refineChordsWithBass に切替。TDD 5・api 587緑。
   **実データ**：LostMemory=転回10/補正7/確定208（slash例 Am/C,G/B,E/G#=musical妥当）。**JAM=転回50/補正0**（melodic bassの転回を大量検出・誤補正ゼロ＝設計判断が機能）。
-- 残：#3(N空白穴埋め)は未着手（対象外指定）。転回/補正の web 表示（slash `bass` の描画/再生）は別途。
+- **web slash表示/再生＝既存で完備**（追加実装不要）：`ChordEditor.tsx:107` が `/G` 表示・`music.ts:139` が分数コードのオンベースを最低音に再生。＝reaper が `bass` を入れれば表示も再生も効く。
+- 残：#3(N空白穴埋め)は未着手（対象外指定）。
+
+## ボーカル(メロ)展開＝bass と共通機構で区間ネタ化（#S12改3・2026-07-08着地）
+- **共通ヘルパ化**：reaper の区間材化を `materializeSectionNotes(notesSec, kind, jaLabel)` に factor し、**bass と melody で共有**（オーナー方針「ベースから始めボーカルに展開」の実体＝perception `pyin_stem` に続き材化も共有）。
+- `facts.melody_notes`(秒・pyin vocal) → ドラム区間境界で `{kind:"melody",{notes}}`（vocal域保持）。＝**個人コーパス燃料の入口**（今まで analysis.raw に表示のみ→編集/再利用できる区間メロネタに）。
+- **実LostMemory通し**：17ネタ（analysis+区間ドラム5+区間ベース5+**区間メロ5**+コード）。メロは vocal域(midi中央60-69)。TDD melody 1・api 588緑。
+- 既知：メロ材化は pyin vocal のノイズをそのまま持つ（コーパスは統計ゆえ許容／リテラル非保存）。octave正規化は bass/melody 共通で後段。
 
 ## 残り（次段）
 - **ベース→コード精度**（#3・上記フィジビリ済＝有望）：ルート補正/転回検出/N空白穴埋め のどれから実装するか。

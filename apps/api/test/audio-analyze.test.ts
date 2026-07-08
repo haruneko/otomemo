@@ -165,6 +165,36 @@ describe("① アナリーゼ（audio_analyze）", () => {
     expect(new Set(bn.map(pitchOf)).size).toBe(2);
   });
 
+  it("#S12改3 melody_notes も同じ機構で区間ごとに melody ネタ（vocal 展開＝bassと共通）", async () => {
+    const core = new Core(openDb(":memory:"));
+    core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    const bpm = 120, bp = 60 / bpm, meter = 4;
+    const drum: [number, string, number][] = [];
+    for (let bar = 0; bar < 32; bar++) {
+      const kicks = bar < 16 ? [0, 2] : [0, 1, 2, 3];
+      for (const b of kicks) drum.push([(bar * meter + b) * bp, "kick", 1]);
+      for (const b of [1, 3]) drum.push([(bar * meter + b) * bp, "snare", 1]);
+      for (const b of [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]) drum.push([(bar * meter + b) * bp, "hihat", 1]);
+    }
+    drum.push([0, "crash", 5], [16 * meter * bp, "crash", 5]);
+    drum.sort((a, b) => a[0] - b[0]);
+    const bt = Array.from({ length: 32 * meter + 4 }, (_, i) => i * bp);
+    // メロ＝各小節頭に1音（vocal域 midi72=C5）
+    const mel: [number, number, number][] = [];
+    for (let bar = 0; bar < 32; bar++) { const t = bar * meter * bp; mel.push([t, t + 1, 72]); }
+    const fakeAnalyze = async () => ({ bpm, key: { key: "C", mode: "major" }, beat_times: bt, drum_onsets: drum, melody_notes: mel, chords_timeline: [[0, 4, "C"]] });
+    await runAudioAnalyzeJob(core, claimed, async () => "mel", fakeAnalyze);
+    core.reapResults();
+    const mn = core.listNeta({ kind: "melody", scope: "all", limit: 10 });
+    expect(mn.length).toBe(2); // 2区間ぶん
+    const notes0 = (mn[0]!.content as { notes: { pitch: number; start: number; dur: number }[] }).notes;
+    expect(notes0.length).toBeGreaterThan(0);
+    expect(notes0[0]!.start).toBeCloseTo(0, 1);         // 区間頭=beat0
+    expect(notes0.every((x) => x.pitch === 72)).toBe(true); // vocal域を保持
+    expect(mn[0]!.title).toContain("メロ");
+  });
+
   it("解析が失敗したら failed＋error（無言で消さない・音源は削除）", async () => {
     const core = new Core(openDb(":memory:"));
     core.enqueueJob({ intent: "audio_analyze", params: { filename: "x.mp3", audio_b64: "" } });

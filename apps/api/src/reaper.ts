@@ -260,16 +260,16 @@ export function reapResults(core: Core): number {
       });
       n += 1;
     }
-    // #S12改3 ベースも**区間ごとに絶対音ネタ**へ（design是正2026-07-08＝相対度数でなく絶対音・区間＝bass↔vocal 抽出機構を共有）。
-    // stem→pyin→bass_notes(秒) を、ドラムと同じ区間境界で拍へ写して {kind:"bass",{notes}}（genBass絶対モードと同形）。
-    // 区間頭を beat0 に（秒→拍は bpm 基準）。ドラム高信頼区間に揃えて出す（v1・ベースはコード精度底上げが本命でネタはおまけ）。
-    const bassNotes = (Array.isArray(facts.bass_notes) ? facts.bass_notes : []) as [number, number, number][];
-    if (bassNotes.length && bpmR) {
+    // #S12改3 stem→pyin→**区間ごとに絶対音ネタ**（bass/melody 共通機構＝design是正2026-07-08：相対度数でなく絶対音・区間）。
+    // notes(秒) を、ドラムと同じ区間境界で拍へ写して {kind,{notes}}（区間頭 beat0・秒→拍は bpm 基準）。ドラム高信頼区間に相乗り。
+    // vocal(メロ)は本質的に絶対音＝bass と全く同じ材化＝オーナー方針「ベースから始めボーカルに展開」の共有点。メロは個人コーパス燃料の入口。
+    const materializeSectionNotes = (notesSec: [number, number, number][], kind: "bass" | "melody", jaLabel: string) => {
+      if (!notesSec.length || !bpmR) return;
       const secPerBeat = 60 / bpmR;
       for (const s of secs) {
         if (!(userMeter || s.pattern.confidence >= 0.3)) continue; // ドラム区間に相乗り（ノイズ区間で氾濫させない）
         const notes: { pitch: number; start: number; dur: number }[] = [];
-        for (const [st, en, midi] of bassNotes) {
+        for (const [st, en, midi] of notesSec) {
           if (en <= s.startSec || st >= s.endSec) continue; // 区間外
           const start = Math.max(0, st - s.startSec) / secPerBeat;
           const dur = (Math.min(en, s.endSec) - Math.max(st, s.startSec)) / secPerBeat;
@@ -278,8 +278,8 @@ export function reapResults(core: Core): number {
         }
         if (!notes.length) continue;
         core.createNeta({
-          kind: "bass",
-          title: `アナリーゼ: ${parsed.title ?? "音源"} のベース（${multi ? `${mmss(s.startSec)}–${mmss(s.endSec)}・` : ""}候補）`,
+          kind,
+          title: `アナリーゼ: ${parsed.title ?? "音源"} の${jaLabel}（${multi ? `${mmss(s.startSec)}–${mmss(s.endSec)}・` : ""}候補）`,
           content: { notes },
           tempo: bpmR,
           meter: meterString(s.pattern.meter),
@@ -288,7 +288,11 @@ export function reapResults(core: Core): number {
         });
         n += 1;
       }
-    }
+    };
+    const bassNotes = (Array.isArray(facts.bass_notes) ? facts.bass_notes : []) as [number, number, number][];
+    materializeSectionNotes(bassNotes, "bass", "ベース");           // ベース＝コード精度の本命＋弾き直せる候補
+    const melodyNotesSec = (Array.isArray(facts.melody_notes) ? facts.melody_notes : []) as [number, number, number][];
+    materializeSectionNotes(melodyNotesSec, "melody", "メロ");       // メロ＝個人コーパス燃料の入口（vocal 展開・bass と同じ機構）
     // 学習の出口（usecases-chat ①）：検出コードを**弾き直せる chord_progression 候補ネタ**にも落とす（即使える冒頭抜粋）。
     // #S12改3 ベースがあれば精緻化＝(2)転回(slash)/(1)ルート補正（フィジビリ2曲実証・bassは9割コードトーン）。無ければ従来。
     const bpmForChord = typeof facts.bpm === "number" ? facts.bpm : 120;
