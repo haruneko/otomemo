@@ -478,7 +478,7 @@ export function genMelody(
 
   // 骨格層（S1c・spec§10.5-10.6）：句末で①カデンツ度数に着地②息継ぎ（末尾を切って休符）。
   // モチーフ反復・拍頭コードトーンは保ったまま、上に「呼吸」を被せる。
-  applyPhrasing(notes, scaleArr, bias, f.meter, bars, lo, hi, opts?.phrasing);
+  applyPhrasing(notes, scaleArr, bias, f.meter, bars, lo, hi, opts?.phrasing, chords);
 
   // 弱起（S1d・spec§10.3）：拍0の前に upbeat を前置し、最初のダウンビート音へ歩進で滑り込む。
   // 拍0=曲頭の位置は保つ（負start＝前にはみ出す。compositeNotes/再生は既に負start対応）。
@@ -576,6 +576,7 @@ function applyPhrasing(
   lo: number,
   hi: number,
   phrasing?: "symmetric" | "asymmetric",
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
 ): void {
   if (notes.length === 0) return;
   const phrases = planSkeleton(bars, meter, { phrasing });
@@ -591,8 +592,13 @@ function applyPhrasing(
     if (kept.length === 0) kept = [inPh[0]!];
     const last = kept[kept.length - 1]!;
     // 最終音をカデンツ度数(1=主音/5=属音…)のピッチクラスへ着地＝安定音で閉じる。
+    // B2(2026-07-08 design#12-M)：コードを見て着地＝カデンツ度数がその時点のコードに含まれる時のみ
+    // 度数snap、含まれない時は最寄りのコード音（IV上にG強制等のコード無視を解消）。
     const cadPc = ((scaleArr[(ph.cadenceDegree - 1) % scaleArr.length]! % 12) + 12) % 12;
-    last.pitch = snapToPc(last.pitch, cadPc, lo, hi);
+    const ch = chordAt(Math.floor(last.start), chords);
+    const chPcs = ch ? chordPcs(normRoot(ch.root ?? 0), ch.quality ?? "") : null;
+    if (!chPcs || chPcs.length === 0 || chPcs.includes(cadPc)) last.pitch = snapToPc(last.pitch, cadPc, lo, hi);
+    else last.pitch = snapTo(last.pitch, new Set(chPcs), lo, hi);
     // 末尾を cut までに収めて以降を休符に（息継ぎ）。
     last.dur = Math.max(0.25, Math.min(last.dur, Math.round((cut - last.start) * 1000) / 1000));
     for (const n of kept) keep.push(n);

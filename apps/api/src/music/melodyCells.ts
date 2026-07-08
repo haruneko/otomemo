@@ -655,9 +655,15 @@ export function genMotifMelodyV2(
       let p: number;
       if (i === 0) p = ctOf(anchor + tr, pcs);
       else if (toTonic && i === M.ons.length - 1) {
-        let b = prev, bd = 99;
-        for (const q of sp) { if (((q % 12) + 12) % 12 !== tonicPc) continue; if (Math.abs(q - prev) < bd) { bd = Math.abs(q - prev); b = q; } }
-        p = b;
+        // B1(2026-07-08 design#12-M)：終止はコードを見て着地＝主音が最終コードに含まれる時のみ主音。
+        // 含まれない時(V終わりのユーザー進行等)は最寄りのコード音（主音強制=未解決sus4を回避・半終止らしい開き）。
+        if (!pcs.length || pcs.includes(tonicPc)) {
+          let b = prev, bd = 99;
+          for (const q of sp) { if (((q % 12) + 12) % 12 !== tonicPc) continue; if (Math.abs(q - prev) < bd) { bd = Math.abs(q - prev); b = q; } }
+          p = b;
+        } else {
+          p = ctOf(prev, pcs);
+        }
       } else {
         const want = prev + M.mv[i]!;
         const L = spAt(barOf(t)); // 弱拍の歩行も導音小節では和声的短音階（A2/A3）

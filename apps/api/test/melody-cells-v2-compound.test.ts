@@ -58,7 +58,7 @@ describe("genMotifMelodyV2 compound（6/8＝骨格流用＋6/8リズム＋強拍
     expect(JSON.stringify(gen(14))).not.toBe(JSON.stringify(gen(21)));
   });
 
-  it("⑤ 発展：B(5-6小節)は A(1-2小節)と輪郭が異なる／A''句末はトニック着地", () => {
+  it("⑤ 発展：B(5-6小節)は A(1-2小節)と輪郭が異なる／A''句末はその時点のコード構成音に着地", () => {
     const notes = gen(14);
     const contour = (b0: number) => {
       const seg = notes.filter((n) => n.start >= b0 * BAR && n.start < (b0 + 2) * BAR).sort((a, b) => a.start - b.start);
@@ -71,8 +71,10 @@ describe("genMotifMelodyV2 compound（6/8＝骨格流用＋6/8リズム＋強拍
     expect(a.length).toBeGreaterThan(0);
     expect(b.length).toBeGreaterThan(0);
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+    // B1(2026-07-08)：終止音は「その時点のコード」の構成音（最終小節=G7ならトニック強制せずV構成音）。
     const last = notes[notes.length - 1]!;
-    expect(((last.pitch % 12) + 12) % 12).toBe(0);
+    const bar = Math.min(pcsPerBar.length - 1, Math.floor(last.start / BAR));
+    expect(pcsPerBar[bar]!.includes(((last.pitch % 12) + 12) % 12)).toBe(true);
   });
 
   it("⑥ 4/4経路は不変：compound未指定なら従来の4/4挙動（小節=4拍・16分位置あり得る）", () => {

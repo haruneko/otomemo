@@ -165,6 +165,22 @@ describe("genFromEssence 不変条件", () => {
     const b = notesOf(genFromEssence(ref, { bars: 2 }, chords, 9));
     expect(b).toEqual(a);
   });
+  it("旧経路の句末着地もコード追従（B2）＝G7で終わる進行の最終音はG7構成音", () => {
+    const chords: Chord[] = [
+      { root: 0, quality: "", start: 0, dur: 4 },
+      { root: 5, quality: "", start: 4, dur: 4 },
+      { root: 7, quality: "7", start: 8, dur: 8 },
+    ];
+    const g7 = new Set([7, 11, 2, 5]);
+    for (const seed of [2, 5, 9]) {
+      const r = genMelody({ key: 0, bars: 4 }, chords, seed); // useV2なし＝旧経路(applyPhrasing)
+      const notes = notesOf(r).sort((a, b) => a.start - b.start);
+      const last = notes[notes.length - 1]!;
+      const pc = ((last.pitch % 12) + 12) % 12;
+      expect(g7.has(pc), `seed=${seed}: 句末pc=${pc}（度数snapのコード無視は理論破綻）`).toBe(true);
+    }
+  });
+
   it("frame.key を尊重する＝F#メジャーの曲なら経過音も F#メジャースケール内（E1回帰）", () => {
     // 拍頭以外(小数start)はコードsnapを通らず素のスケール歩行＝キー無視バグ(常にC)だと C 調の音が混ざる。
     const ref = [
