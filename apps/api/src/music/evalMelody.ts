@@ -96,21 +96,29 @@ export function corpusTypicality(notes: Note[], model: { rhythm: BarRhythmModel;
   if (ns.length < 2) return { score: 0, rhythmTypicality: 0, moveTypicality: 0 };
   const bpb = opts.beatsPerBar ?? 4;
   const epb = opts.eighthsPerBar ?? 8;
-  // ① リズム：小節ごとの onset 列を学習語彙の確率で（ε平滑）
-  const rTot = [...model.rhythm.patterns.values()].reduce((a, b) => a + b, 0) || 1;
-  const V = Math.max(1, model.rhythm.patterns.size);
-  const byBar = new Map<number, Set<number>>();
-  for (const n of ns) { const bar = Math.floor(n.start / bpb); const slot = Math.round((n.start - bar * bpb) * 2); if (slot >= 0 && slot < epb) (byBar.get(bar) ?? byBar.set(bar, new Set()).get(bar)!).add(slot); }
-  let rLog = 0, rN = 0;
-  for (const [, slots] of byBar) { const g = Array(epb).fill("."); for (const s of slots) g[s] = "x"; const p = ((model.rhythm.patterns.get(g.join("")) ?? 0) + 0.5) / (rTot + 0.5 * V); rLog += Math.log(p); rN++; }
-  const rhythmTypicality = rN ? Math.exp(rLog / rN) * V : 0; // ×V で「一様より上か」を正規化（>1 で平均以上）
+  // F2(2026-07-08)：リズム語彙は4/4の8枠で学習済（corpusBias 8分binning）。他グリッド(6/8=6枠等)は
+  // 全ミス＝平滑床の定数でスコアを水増しするだけなので、リズム項は「判定不能=0」としmoveのみで測る。
+  const rhythmSupported = epb === 8 && bpb === 4;
+  let rhythmTypicality = 0;
+  if (rhythmSupported) {
+    // ① リズム：小節ごとの onset 列を学習語彙の確率で（ε平滑）
+    const rTot = [...model.rhythm.patterns.values()].reduce((a, b) => a + b, 0) || 1;
+    const V = Math.max(1, model.rhythm.patterns.size);
+    const byBar = new Map<number, Set<number>>();
+    for (const n of ns) { const bar = Math.floor(n.start / bpb); const slot = Math.round((n.start - bar * bpb) * 2); if (slot >= 0 && slot < epb) (byBar.get(bar) ?? byBar.set(bar, new Set()).get(bar)!).add(slot); }
+    let rLog = 0, rN = 0;
+    for (const [, slots] of byBar) { const g = Array(epb).fill("."); for (const s of slots) g[s] = "x"; const p = ((model.rhythm.patterns.get(g.join("")) ?? 0) + 0.5) / (rTot + 0.5 * V); rLog += Math.log(p); rN++; }
+    rhythmTypicality = rN ? Math.exp(rLog / rN) * V : 0; // ×V で「一様より上か」を正規化（>1 で平均以上）
+  }
   // ② move：onset間の半音move を P(m2|m1) で（ε平滑）
   const mv: number[] = []; for (let i = 1; i < ns.length; i++) mv.push(Math.max(-7, Math.min(7, ns[i]!.pitch - ns[i - 1]!.pitch)));
   let mLog = 0, mN = 0;
   for (let i = 1; i < mv.length; i++) { const h = model.move.trans.get(mv[i - 1]!); const tot = h ? [...h.values()].reduce((a, b) => a + b, 0) : 0; const p = ((h?.get(mv[i]!) ?? 0) + 0.3) / (tot + 0.3 * 15); mLog += Math.log(p); mN++; }
   const moveTypicality = mN ? Math.exp(mLog / mN) * 15 : 0; // ×15（move語彙幅）で正規化
-  // 0..1 へ：典型度(>1=平均以上)を squash
+  // 0..1 へ：典型度(>1=平均以上)を squash。リズム項が判定不能なグリッドでは move のみ。
   const sq = (x: number) => x / (1 + x);
-  const score = sq(Math.sqrt(Math.max(0, rhythmTypicality) * Math.max(0, moveTypicality)));
+  const score = rhythmSupported
+    ? sq(Math.sqrt(Math.max(0, rhythmTypicality) * Math.max(0, moveTypicality)))
+    : sq(Math.max(0, moveTypicality));
   return { score, rhythmTypicality, moveTypicality };
 }

@@ -165,6 +165,29 @@ describe("genFromEssence 不変条件", () => {
     const b = notesOf(genFromEssence(ref, { bars: 2 }, chords, 9));
     expect(b).toEqual(a);
   });
+  it("F4: styleコーパス(motifModel)がV2生成に効く＝渡すと出力が変わる（旧: V2で無視）", async () => {
+    const { learnBarRhythms, learnMoveTransitions } = await import("../src/music/melodyCells");
+    const chords: Chord[] = [
+      { root: 0, quality: "", start: 0, dur: 8 },
+      { root: 7, quality: "", start: 8, dur: 8 },
+      { root: 0, quality: "", start: 16, dur: 16 },
+    ];
+    const model = {
+      rhythm: learnBarRhythms(["x...x...", "x...x..."]), // 極端に疎（2onset/小節）＝既定16分語彙と別世界
+      move: learnMoveTransitions([[60, 72, 60, 72, 60]]), // 跳躍だらけ＝既定と別分布
+    };
+    const a = genMelody({ key: 0, bars: 8 }, chords, 7, { useV2: true });
+    const b = genMelody({ key: 0, bars: 8 }, chords, 7, { useV2: true, motifModel: model });
+    expect(JSON.stringify(a.items[0]!.content)).not.toBe(JSON.stringify(b.items[0]!.content));
+  });
+
+  it("F4/C4: repetition が V2 骨格に効く＝0 と 1 で出力が変わる（旧: V2で無視）", () => {
+    const chords: Chord[] = [{ root: 0, quality: "", start: 0, dur: 32 }];
+    const a = genMelody({ key: 0, bars: 8 }, chords, 7, { useV2: true, repetition: 0 });
+    const b = genMelody({ key: 0, bars: 8 }, chords, 7, { useV2: true, repetition: 1 });
+    expect(JSON.stringify(a.items[0]!.content)).not.toBe(JSON.stringify(b.items[0]!.content));
+  });
+
   it("旧経路の句末着地もコード追従（B2）＝G7で終わる進行の最終音はG7構成音", () => {
     const chords: Chord[] = [
       { root: 0, quality: "", start: 0, dur: 4 },

@@ -59,6 +59,20 @@ describe("evalMelody（規則ベース自動評価＝耳なし反復の土台）
     expect(a.score).toBeGreaterThan(b.score); // 定番の方が「らしい」
     expect(a.score).toBeGreaterThanOrEqual(0); expect(a.score).toBeLessThanOrEqual(1);
   });
+  it("F2: 6/8等の非対応グリッドではリズム項を評価しない（旧: 全ミス平滑床の定数で水増し）", () => {
+    const model = {
+      rhythm: learnBarRhythms(["x.x.x.x."]), // 学習は4/4の8枠のみ
+      move: learnMoveTransitions([[60, 62, 64, 65, 67, 65, 64, 62, 60]]),
+    };
+    const notes68 = [
+      { pitch: 60, start: 0, dur: 0.5 }, { pitch: 62, start: 0.5, dur: 0.5 }, { pitch: 64, start: 1, dur: 0.5 },
+      { pitch: 65, start: 1.5, dur: 0.5 }, { pitch: 67, start: 2, dur: 1 },
+    ];
+    const r = corpusTypicality(notes68, model, { beatsPerBar: 3, eighthsPerBar: 6 });
+    expect(r.rhythmTypicality).toBe(0); // 語彙グリッド不一致＝リズムは判定不能を明示
+    expect(r.score).toBeGreaterThan(0); // move のみで「らしさ順」は機能する
+  });
+
   it("metrics は各指標 0..1・score も 0..1", () => {
     const r = evalMelody([{ pitch: 72, start: 0, dur: 1 }, { pitch: 74, start: 1, dur: 1 }], { chords, key: 0, meter: "4/4" });
     for (const v of Object.values(r.metrics)) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1); }

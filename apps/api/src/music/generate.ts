@@ -406,7 +406,29 @@ export function genMelody(
       qualsPerBar.push(qual);
       chordPcsPerBar.push(ch ? chordPcs(root, qual) : scaleArr.map((d) => ((d % 12) + 12) % 12));
     }
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, loadMotifModel16(), { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
+    // F4(2026-07-08)：styleコーパス(motifModel)をV2に反映（旧: V2で無視＝styleがランクにしか効かない）。
+    // move遷移＝学習分布で置換（ランク軸corpusTypicalityと同じ統計＝生成と評価が揃う）。
+    // リズム＝8分8枠語彙を16枠へ拡張し、既定16分語彙と質量50/50でブレンド（バイアスであって置換ではない）。
+    let m16 = loadMotifModel16();
+    if (opts.motifModel) {
+      const up: Record<string, number> = {};
+      for (const [p8, w] of opts.motifModel.rhythm.patterns) {
+        const g = Array(16).fill(".");
+        for (let k2 = 0; k2 < 8 && k2 < p8.length; k2++) if (p8[k2] === "x") g[k2 * 2] = "x";
+        const key16 = g.join("");
+        up[key16] = (up[key16] ?? 0) + w;
+      }
+      const upTot = Object.values(up).reduce((a, b) => a + b, 0);
+      if (upTot > 0) {
+        const baseTot = Object.values(m16.rhythm16).reduce((a, b) => a + b, 0) || 1;
+        const blended: Record<string, number> = { ...m16.rhythm16 };
+        for (const [k2, w] of Object.entries(up)) blended[k2] = (blended[k2] ?? 0) + (w / upTot) * baseTot;
+        m16 = { rhythm16: blended, move: opts.motifModel.move };
+      } else {
+        m16 = { rhythm16: m16.rhythm16, move: opts.motifModel.move };
+      }
+    }
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound, repetition: opts.repetition, rangeSteps: opts.rangeSteps }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
@@ -520,7 +542,7 @@ export function genMelodyCandidates(
   for (let s = 1; s <= n; s++) {
     const notes = (genMelody(frame, chords, s, opts).items[0]?.content as { notes?: MelNote[] } | undefined)?.notes;
     if (!notes || notes.length === 0) continue;
-    const key = notes.map((x) => `${x.pitch}@${round3(x.start)}`).join(","); // 完全重複を捨てる
+    const key = notes.map((x) => `${x.pitch}@${round3(x.start)}:${round3(x.dur)}`).join(","); // 完全重複を捨てる（F3: durも同一性に含める＝リズム違い候補を殺さない）
     if (seen.has(key)) continue;
     seen.add(key);
     const typ = opts?.corpusModel
