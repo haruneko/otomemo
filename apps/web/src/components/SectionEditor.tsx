@@ -75,6 +75,8 @@ export function SectionEditor({
   const [genBusy, setGenBusy] = useState(false);
   const [density, setDensity] = useState(0.5); // メロの細かさ 0=疎〜1=細かい（耳FB 2026-07-08）
   const [swing, setSwing] = useState(0); // メロの跳ね 0=ストレート〜1=シャッフル
+  const [expression, setExpression] = useState(0); // メロの表情 0=素直〜1=もたれ(強拍に倚音/掛留)（Step1 2026-07-09）
+  const [phrasing, setPhrasing] = useState<"" | "symmetric" | "asymmetric">(""); // 句割り 空=従来/対称(問い→答え)/非対称(3+3+2の呼吸)（Step2/P0-b 2026-07-09）
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
@@ -339,7 +341,7 @@ export function SectionEditor({
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       };
-      if (part.op === "gen_melody") { body.density = density; body.swing = swing; }
+      if (part.op === "gen_melody") { body.density = density; body.swing = swing; body.expression = expression; if (phrasing) body.phrasing = phrasing; }
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
       if (item) setCand({ kind: item.kind, content: item.content });
@@ -487,6 +489,19 @@ export function SectionEditor({
                         <span>跳ね</span>
                         <input type="range" min={0} max={1} step={0.1} value={swing} onChange={(e) => setSwing(Number(e.target.value))} />
                         <span className="knob-val">{swing < 0.1 ? "—" : swing > 0.66 ? "強" : "跳"}</span>
+                      </label>
+                      <label className="knob-row" aria-label="expression">
+                        <span>表情</span>
+                        <input type="range" min={0} max={1} step={0.1} value={expression} onChange={(e) => setExpression(Number(e.target.value))} />
+                        <span className="knob-val">{expression < 0.1 ? "素直" : expression > 0.66 ? "濃" : "もたれ"}</span>
+                      </label>
+                      <label className="knob-row" aria-label="phrasing">
+                        <span>句割り</span>
+                        <select value={phrasing} onChange={(e) => setPhrasing(e.target.value as "" | "symmetric" | "asymmetric")}>
+                          <option value="">従来</option>
+                          <option value="symmetric">対称(問→答)</option>
+                          <option value="asymmetric">非対称(3+3+2)</option>
+                        </select>
                       </label>
                     </div>
                   )}
