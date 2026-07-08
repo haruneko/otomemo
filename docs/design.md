@@ -1204,6 +1204,10 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **`foreground` 0..1**（既定 0＝**従来完全一致**）＝自由材料の割合。派生ブロック(role≠0)を確率 `foreground` で `freeVary` に置換：M のリズムは保つ（コヒーレンス）が contour を引き直し、**同音(move=0)を潰さず・跳躍(|move|≥3)をクランプしない**＝実曲の「跳ぶ/留まる」を回復。禁則(三全音/7度/8度超)は後処理が従来通り除去＝**合法性は不変**・単一頂点維持。決定的（fg=0 では確率抽選の rng を引かない＝bit一致）。
 - **配線**：V2 opts `foreground`→genMelody→gen_melody(MCP/HTTP)→UI。既定＝未指定＝従来。**耳確認必須**（メロの性格が変わる＝churn回避のため既定 0 据え置き・推奨値は耳セッションで較正）。残（finer）＝motif占有率を実測値(23%)へ寄せる比率制御・リズム変形(augment/diminish)。
 
+→ **骨格休符＝句頭遅延入場（2026-07-09・理論不足総点検 #9）**。full＝melody-heuristics/self-check-log。
+**問題**：V2 は常時鳴りっぱなしで「入りの遅れ」が無い（実曲は曲頭/句頭の86%が休符・遅延入場＝呼吸）。
+**正準**：**`breathe` 0..1**（既定 0＝**従来一致**）＝各句（phrases 指定時）またはブロックの**冒頭 breathe×1.5拍**の onset を drop＝遅延入場。句を空にしない（全部が窓内なら残す）・最終音は保護・決定的（rng不使用）。phrasing 併用が本領（句頭ごとに呼吸）。V2 opts→gen_melody(MCP/HTTP)→UI「入り遅れ」ノブ。**耳確認**＝入りの遅れが気持ちいいか（既定0据え置き）。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

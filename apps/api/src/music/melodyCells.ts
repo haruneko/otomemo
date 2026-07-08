@@ -503,7 +503,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -761,6 +761,25 @@ export function genMotifMelodyV2(
     notes.push(...render(variant, bar0, anchor, last));
   }
   notes.sort((a, b) => a.start - b.start);
+
+  // ── 句頭遅延入場(#9・breathe・2026-07-09)：句頭の onset を落として「入りの遅れ」＝呼吸を作る（実曲86%が曲頭休）──
+  // 各句(無ければブロック)の冒頭 breathe*1.5拍ぶんの onset を drop。句を空にしない・最終音は保護。既定0=drop無し=bit一致。
+  const breathe = Math.max(0, Math.min(1, opts.breathe ?? 0));
+  if (breathe > 0 && notes.length > 2) {
+    const delay = breathe * 1.5;
+    const ranges = opts.phrases && opts.phrases.length
+      ? opts.phrases.map((p) => ({ s: p.startBeat, e: p.startBeat + p.beats }))
+      : Array.from({ length: nBlk }, (_, b) => ({ s: b * mb * barLen, e: (b + 1) * mb * barLen }));
+    const lastIdx = notes.length - 1;
+    const drop = new Set<number>();
+    for (const { s, e } of ranges) {
+      const idxs = notes.map((n, i) => [i, n.start] as [number, number]).filter(([, t]) => t >= s - 1e-6 && t < e - 1e-6).sort((a, b) => a[1] - b[1]);
+      if (idxs.length < 2) continue; // 1音以下の句は触らない（空防止）
+      if (!idxs.some(([, t]) => t >= s + delay - 1e-6)) continue; // 全部が遅延窓内なら残す（句を空にしない）
+      for (const [i, t] of idxs) if (t < s + delay - 1e-6 && i !== lastIdx) drop.add(i); // 冒頭窓内を drop（最終音は保護）
+    }
+    if (drop.size) { const kept = notes.filter((_, i) => !drop.has(i)); notes.length = 0; notes.push(...kept); }
+  }
 
   // ── 自己チェック(E-rule)対策の後処理（D1-D4 再設計 2026-07-08・design#12-M）──
   // 順序＝①強拍CT→②禁則→③gap-fill→④単一頂点→⑤検証。規約＝(a)全パス終止音保護（B3）
