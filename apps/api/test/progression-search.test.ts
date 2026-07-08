@@ -39,4 +39,16 @@ describe("findProgressions（進行の連想retrieval）", () => {
     core.createNeta({ scope: "library", kind: "chord_progression", title: "x", content: chords([[0, ""]]), tags: ["明るい"] });
     expect(findProgressions(core, { tags: ["存在しないタグ"] })).toEqual([]);
   });
+
+  it("I1a: like.key 未指定でも調を推定して照合＝G調の I-IV-V が C正規化DBに当たる（旧: 絶対pcで照合し外れ）", () => {
+    core.createNeta({ scope: "library", kind: "chord_progression", title: "145", key: 0, content: chords([[0, ""], [5, ""], [7, ""]]), tags: [] });
+    const hits = findProgressions(core, { like: { chords: [{ root: 7, quality: "" }, { root: 0, quality: "" }, { root: 2, quality: "" }] } }); // G-C-D＝GのI-IV-V
+    expect(hits[0]!.similarity).toBeGreaterThan(0.9);
+  });
+
+  it("I1b: 回転不変＝開始位置ずれのループを同一視（identifyと同じ扱い）", () => {
+    core.createNeta({ scope: "library", kind: "chord_progression", title: "エオリアン", key: 0, content: chords([[0, "m"], [8, ""], [10, ""]]), tags: [] });
+    const hits = findProgressions(core, { like: { chords: [{ root: 8, quality: "" }, { root: 10, quality: "" }, { root: 0, quality: "m" }], key: 0 } }); // ♭VI-♭VII-i＝回転形
+    expect(hits[0]!.similarity).toBeGreaterThan(0.9);
+  });
 });

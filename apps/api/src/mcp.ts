@@ -154,10 +154,17 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     {
       title: "進行の名前あて",
       description:
-        "コード進行が定番進行（丸の内/カノン/小室/王道/ツーファイブ/ブルース）のどれに近いかを近い順に返す。回転・移調に強い。調未指定なら推定。「これ何進行？」に。",
+        "コード進行が定番進行（丸の内/カノン/小室/王道/アクシス/エオリアン/ツーファイブ/ブルース）のどれに近いかを近い順に返す。回転・移調に強い。調未指定なら推定。「これ何進行？」に。",
       inputSchema: { chords: chordsSchema, key: z.number().int().min(0).max(11).optional() },
     },
-    async ({ chords, key }) => ok(identifyProgression(chords, key !== undefined ? { key } : {})),
+    async ({ chords, key }) => {
+      const res = identifyProgression(chords, key !== undefined ? { key } : {});
+      // I2(2026-07-08)：類似度floor無しで常に「何かに当たる」誤断定を可視化＝確度低は明示（無関係2コードでも0.667が出る）。
+      const top = res[0]?.similarity ?? 0;
+      const payload: { results: typeof res; note?: string } = { results: res };
+      if (top < 0.8) payload.note = `確度低（最上位でも類似度${top}）＝どの定番進行にも十分近くない。参考程度に`;
+      return ok(payload);
+    },
   );
 
   server.registerTool(

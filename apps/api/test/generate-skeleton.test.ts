@@ -57,7 +57,9 @@ describe("S6-a planSkeletonTones：和声連動の連結骨格＋頂点一音", 
       let sum = 0;
       for (let i = 1; i < skel.length; i++) sum += Math.abs(skel[i]! - skel[i - 1]!);
       const mean = sum / Math.max(1, skel.length - 1);
-      expect(mean, `平均跳躍 ${c.meter}/${c.mood}/${c.bars}#${c.seed}K${c.key} = ${mean.toFixed(1)}`).toBeLessThanOrEqual(7);
+      // 閾値7→7.5(2026-07-08)：I3で終止前がV固定になり、4小節ケースの一部でコードトーン間隔が僅かに
+      // 広がる（V→Iの締め自体は正しい）。経験的な滑らかさガードなので0.5だけ緩め、彷徨い検出は維持。
+      expect(mean, `平均跳躍 ${c.meter}/${c.mood}/${c.bars}#${c.seed}K${c.key} = ${mean.toFixed(1)}`).toBeLessThanOrEqual(7.5);
     }
   });
 

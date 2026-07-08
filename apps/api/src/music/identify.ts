@@ -7,13 +7,14 @@ import { NAMED_PROGRESSIONS } from "./progressions";
 export type IdentifyResult = { name: string; similarity: number; key: number; mode: "major" | "minor" };
 
 // 距離→類似度 0..1（melody_similarity と同じ正規化：1=同型）。
-function similarity(a: Degree[], b: Degree[]): number {
+export function similarity(a: Degree[], b: Degree[]): number {
   const denom = 2 * Math.max(a.length, b.length, 1);
   return Math.max(0, 1 - progressionDistance(a, b) / denom);
 }
 
 // 名前付き進行の全回転に対する最大類似度（ループ進行は開始位置が任意なので回転不変にする）。
-function bestRotationSimilarity(user: Degree[], named: Degree[]): number {
+// I1(2026-07-08): progression-search(find_progressions) からも共用＝identify と同じ扱い。
+export function bestRotationSimilarity(user: Degree[], named: Degree[]): number {
   let best = 0;
   for (let r = 0; r < named.length; r++) {
     const rot = named.slice(r).concat(named.slice(0, r));

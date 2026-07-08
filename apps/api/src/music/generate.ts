@@ -28,6 +28,13 @@ const DIATONIC_MAJOR: Record<number, [number, string]> = {
 const DIATONIC_MINOR: Record<number, [number, string]> = {
   1: [0, "m"], 2: [2, "dim"], 3: [3, ""], 4: [5, "m"], 5: [7, "7"], 6: [8, ""], 7: [10, ""],
 };
+// I3b(2026-07-08)：カラー系mood用の7thパレット（おしゃれ/ジャズ/夜系）。短調Vは従来からV7。
+const DIATONIC_MAJOR7: Record<number, [number, string]> = {
+  1: [0, "maj7"], 2: [2, "m7"], 3: [4, "m7"], 4: [5, "maj7"], 5: [7, "7"], 6: [9, "m7"], 7: [11, "m7b5"],
+};
+const DIATONIC_MINOR7: Record<number, [number, string]> = {
+  1: [0, "m7"], 2: [2, "m7b5"], 3: [3, "maj7"], 4: [5, "m7"], 5: [7, "7"], 6: [8, "maj7"], 7: [10, "7"],
+};
 const FUNC_DEGREES: Record<string, number[]> = { T: [1, 6, 3], S: [4, 2], D: [5, 7] };
 const FUNC_NEXT: Record<string, string[]> = {
   T: ["S", "S", "D", "D", "T"],
@@ -88,15 +95,36 @@ export function genChords(frame?: Frame | null, seed?: number | null): GenResult
   const funcs: string[] = ["T"];
   for (let i = 0; i < bars - 1; i++) funcs.push(rng.choice(FUNC_NEXT[funcs[funcs.length - 1]!]!));
   if (bars >= 2) funcs[funcs.length - 1] = "T";
-  const degrees: number[] = funcs.map((fn) => {
+  // I3/H9(2026-07-08)：終止前はドミナント準備＝V(まれにvii°)→I で締める（旧: iii→I 等の腰砕けや C→C を許容）。
+  if (bars >= 3) funcs[funcs.length - 2] = "D";
+  const degrees: number[] = [];
+  for (let i = 0; i < funcs.length; i++) {
+    const fn = funcs[i]!;
     const cands = FUNC_DEGREES[fn]!;
-    return rng.choices(cands, [3, 2, 1].slice(0, cands.length));
-  });
+    // D機能は V を厚く（裸の vii°/dim ブロックはレア＝実用進行の比率へ）。
+    const w = fn === "D" ? [5, 1] : [3, 2, 1];
+    let d = rng.choices(cands, w.slice(0, cands.length));
+    // 隣接同度数の回避：同じなら同機能の別候補へシフト（無ければ許容）。
+    if (i > 0 && d === degrees[i - 1] && cands.length > 1) {
+      const alt = cands.find((c) => c !== d);
+      if (alt !== undefined) d = alt;
+    }
+    degrees.push(d);
+  }
   degrees[0] = 1;
   if (bars >= 2) degrees[degrees.length - 1] = 1;
+  // 先頭の強制(1)で隣接重複が再発した場合は同機能の別候補へ（bars=2 の I,I は両端強制なので許容）。
+  if (degrees.length > 2 && degrees[1] === degrees[0]) {
+    const alt = FUNC_DEGREES[funcs[1]!]!.find((c) => c !== degrees[1]);
+    if (alt !== undefined) degrees[1] = alt;
+  }
 
+  // I3b: mood がコードの「色」に効く＝おしゃれ/ジャズ/夜系は7thパレット（旧: moodは長短切替のみで進行が不変）。
+  // 「切ない」は従来どおり素の短調（長短切替の正準語＝色付けしない）。
+  const colorful = /おしゃれ|オシャレ|ジャズ|jazz|都会|夜|しっとり|大人/.test(mood);
+  const table7 = minor ? DIATONIC_MINOR7 : DIATONIC_MAJOR7;
   const chords = degrees.map((deg, i) => {
-    const [root, quality] = table[deg]!;
+    const [root, quality] = (colorful ? table7 : table)[deg]!;
     return { root: (root + key) % 12, quality, start: round3(i * bpb), dur: round3(bpb) };
   });
   const label = (mood ? mood + "コード進行" : minor ? "マイナーの進行" : "コード進行").slice(0, 24);

@@ -90,7 +90,9 @@ describe("mcp tool layer", () => {
       { root: 5, quality: "" }, { root: 0, quality: "" }, { root: 5, quality: "" }, { root: 7, quality: "" },
     ];
     const id = await client.callTool({ name: "identify_progression", arguments: { chords: canon, key: 0 } });
-    expect(JSON.parse(textOf(id))[0].name).toBe("カノン");
+    const idBody = JSON.parse(textOf(id)) as { results: { name: string; similarity: number }[]; note?: string };
+    expect(idBody.results[0]!.name).toBe("カノン"); // I2(2026-07-08): 形を {results, note?} に＝確度低を明示できる
+    expect(idBody.note).toBeUndefined(); // 完全一致＝確度低noteなし
 
     const an = await client.callTool({ name: "analyze_progression", arguments: { chords: canon, key: 0, mode: "major" } });
     expect(JSON.parse(textOf(an)).degrees[0].function).toBe("T");

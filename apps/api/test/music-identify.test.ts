@@ -41,4 +41,19 @@ describe("identifyProgression（名前あて）", () => {
     const r = identifyProgression(weird, { key: 0 });
     expect(r[0].similarity).toBeLessThan(0.6);
   });
+
+  it("I2: G調の I-V-vi-IV(G-D-Em-C) はアクシスと同定＝小室(回転近似)に化けない（監査実測ケース）", () => {
+    const gAxis = [{ root: 7, quality: "" }, { root: 2, quality: "" }, { root: 4, quality: "m" }, { root: 0, quality: "" }];
+    const r = identifyProgression(gAxis); // key未指定
+    expect(r[0]!.name).toBe("アクシス");
+    expect(r[0]!.similarity).toBeGreaterThan(0.95);
+    expect(r[0]!.key).toBe(7); // 検出調も G
+  });
+
+  it("I2: 短調のエオリアン循環 i-♭VI-♭VII も同定できる（ボカロ民族調studyの核進行）", () => {
+    const aeol = [{ root: 9, quality: "m" }, { root: 5, quality: "" }, { root: 7, quality: "" }]; // Am-F-G
+    const r = identifyProgression(aeol, { key: 9, mode: "minor" });
+    expect(r[0]!.name).toBe("エオリアン");
+    expect(r[0]!.similarity).toBeGreaterThan(0.95);
+  });
 });

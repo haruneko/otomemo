@@ -37,6 +37,20 @@ export const NAMED_PROGRESSIONS: NamedProgression[] = [
     ], // FM7-G7-Em7-Am7
   },
   {
+    name: "アクシス",
+    aliases: ["axis", "1564", "ポップパンク", "I-V-vi-IV"],
+    degrees: [
+      { degree: 0, quality: "" }, { degree: 7, quality: "" }, { degree: 9, quality: "m" }, { degree: 5, quality: "" },
+    ], // C-G-Am-F（洋楽4コード定番。2026-07-08 追加＝GのI-V-vi-IVが小室に誤同定される監査ケースの解消）
+  },
+  {
+    name: "エオリアン",
+    aliases: ["aeolian", "民族調", "i-bVI-bVII"],
+    degrees: [
+      { degree: 0, quality: "m" }, { degree: 8, quality: "" }, { degree: 10, quality: "" },
+    ], // Am-F-G（短調エオリアン循環＝ボカロ民族調/SURFACE studyで頻出の核進行。2026-07-08 追加）
+  },
+  {
     name: "ツーファイブ",
     aliases: ["2-5-1", "251", "ii-V-I"],
     degrees: [

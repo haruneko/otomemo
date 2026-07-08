@@ -3,7 +3,8 @@
 // core(DB) と music ドメイン(度数化/距離)を束ねる。薄いコーパスでは弱い候補しか出ない＝捏造はしない。
 import type { Core } from "./core";
 import type { Neta } from "./types";
-import { toDegrees, progressionDistance, type Chord } from "./music";
+import { toDegrees, detectKeyFromChords, type Chord } from "./music";
+import { bestRotationSimilarity } from "./music/identify";
 
 export type ProgQuery = { tags?: string[]; like?: { chords: Chord[]; key?: number }; limit?: number };
 export type ProgHit = { id: string; title: string | null; score: number; similarity: number; matchedTags: string[] };
@@ -16,7 +17,10 @@ export function findProgressions(core: Core, query: ProgQuery): ProgHit[] {
   // 連想は「ライブラリ」（連想元コーパス）から引く（作業中ネタは混ぜない・design）。
   const all: Neta[] = core.listNeta({ kind: "chord_progression", scope: "library", limit: 5000 });
   const wantTags = query.tags ?? [];
-  const likeDeg = query.like ? toDegrees(query.like.chords, query.like.key ?? 0) : null;
+  // I1a(2026-07-08)：like.key 未指定なら推定（DBはC正規化＝クエリ側だけ絶対pcだと同型でも外れていた。
+  // identify_progression と同じ扱い）。
+  const likeKey = query.like ? (query.like.key ?? detectKeyFromChords(query.like.chords, 1)[0]?.key ?? 0) : 0;
+  const likeDeg = query.like ? toDegrees(query.like.chords, likeKey) : null;
   const hits: ProgHit[] = [];
   for (const n of all) {
     const matchedTags = wantTags.filter((t) => n.tags.includes(t));
@@ -26,8 +30,8 @@ export function findProgressions(core: Core, query: ProgQuery): ProgHit[] {
       const chords = (n.content as { chords?: Chord[] } | null)?.chords;
       if (Array.isArray(chords) && chords.length) {
         const deg = toDegrees(chords, n.key ?? 0);
-        const denom = 2 * Math.max(deg.length, likeDeg.length, 1);
-        similarity = Math.max(0, 1 - progressionDistance(deg, likeDeg) / denom);
+        // I1b: 回転不変＝ループ進行の開始位置ずれを同一視（identify と共用ヘルパ）。
+        similarity = bestRotationSimilarity(likeDeg, deg);
       }
     }
     const pop = n.tags.some((t) => POPULAR.has(t)) ? 0.5 : 0;

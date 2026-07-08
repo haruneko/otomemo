@@ -21,6 +21,30 @@ describe("genChords（機能和声ルール）", () => {
     const { items } = genChords({ bars: 99 }, 1);
     expect((items[0]!.content as { chords: unknown[] }).chords.length).toBe(16);
   });
+
+  it("I3a: 隣接同和音(C→C等)を出さない・終止前はドミナント準備（bars>=3）", () => {
+    for (const mood of ["明るい", "切ない"]) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const { items } = genChords({ bars: 8, mood }, seed);
+        const chords = (items[0]!.content as { chords: { root: number; quality: string }[] }).chords;
+        for (let i = 1; i < chords.length; i++) {
+          const same = chords[i]!.root === chords[i - 1]!.root && chords[i]!.quality === chords[i - 1]!.quality;
+          expect(same, `${mood} seed=${seed} i=${i}: 隣接同和音`).toBe(false);
+        }
+        const pen = chords[chords.length - 2]!;
+        // 終止前＝メジャーは V/vii°。マイナーは V7 中心＋♭VII(モーダル終止＝エオリアン循環の正当な締め)も許容。
+        const okPen = mood === "切ない" ? [7, 10, 11] : [7, 11];
+        expect(okPen.includes(pen.root), `${mood} seed=${seed}: 終止前=D機能 got ${pen.root}`).toBe(true);
+      }
+    }
+  });
+
+  it("I3b: mood がコードの色に効く＝おしゃれ系は7thパレット・明るいは三和音（旧: moodは長短切替のみ）", () => {
+    const plain = (genChords({ bars: 8, mood: "明るい" }, 5).items[0]!.content as { chords: { quality: string }[] }).chords;
+    const jazzy = (genChords({ bars: 8, mood: "おしゃれ" }, 5).items[0]!.content as { chords: { quality: string }[] }).chords;
+    expect(jazzy.some((c) => /7/.test(c.quality))).toBe(true);
+    expect(plain.every((c) => !/7/.test(c.quality))).toBe(true);
+  });
 });
 
 describe("genMelody（コードトーン拘束＋リズム図形）", () => {
