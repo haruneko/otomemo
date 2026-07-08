@@ -502,7 +502,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[] } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -515,12 +515,20 @@ export function genMotifMelodyV2(
   // 骨格/move/選別/発展/弧は共通。差し替えるのは「リズム語彙・時間map・onset上下限・孤立フィルタ・跳ね(dur)」のみ（_68.ts 忠実）。
   const compound = opts.compound ?? false;
   const barLen = compound ? 3 : 4; // 1小節の四分数
-  // 6/8リズム＝設計重み付き6枠パターンを抽選（RHYTHM68_DATA）。runningはやや強め＝jig寄り。
+  // density(2026-07-08 ノブ・design#12-M)：リズム語彙を音数で再重み付け＝細かさの制御（0=疎〜1=密・未指定=従来分布）。
+  const dens = opts.density === undefined ? undefined : Math.max(0, Math.min(1, opts.density));
+  const densW = (onsets: number): number => (dens === undefined ? 1 : Math.pow(onsets + 1, (dens - 0.5) * 4));
+  const rhythmVocab: Record<string, number> = dens === undefined
+    ? motif16.rhythm16
+    : Object.fromEntries(Object.entries(motif16.rhythm16).map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length)]));
+
+  // 6/8リズム＝設計重み付き6枠パターンを抽選（RHYTHM68_DATA）。runningはやや強め＝jig寄り。density対応。
   const pick68 = (r: () => number): string => {
-    const tot = RHYTHM68_DATA.reduce((a, b) => a + b[1], 0);
+    const rows = RHYTHM68_DATA.map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length)] as [string, number]);
+    const tot = rows.reduce((a, b) => a + b[1], 0);
     let x = r() * tot;
-    for (const [p, w] of RHYTHM68_DATA) { x -= w; if (x <= 0) return p; }
-    return RHYTHM68_DATA[0]![0];
+    for (const [p, w] of rows) { x -= w; if (x <= 0) return p; }
+    return rows[0]![0];
   };
 
   // 各barのコード構成pc（chordPcsPerBar 優先・無ければ root/quality から復元）。
@@ -555,13 +563,16 @@ export function genMotifMelodyV2(
           ons.push(t);
         }
       }
-      if (ons.length < 2 * mb || ons.length > 5 * mb) return null;
+      // density: 受け入れ音数帯を可変（未指定=従来 2..5/小節）。疎側は間隔許容も広げる（棄却飢餓→既定モチーフ固定化を防ぐ）。
+      const lo68 = dens === undefined ? 2 * mb : Math.max(1 * mb, Math.round((1 + 2.5 * dens) * mb));
+      const hi68 = dens === undefined ? 5 * mb : Math.max(lo68 + 1, Math.round((3 + 3.5 * dens) * mb));
+      if (ons.length < lo68 || ons.length > hi68) return null;
       const g = ons.slice(1).map((t, i) => t - ons[i]!);
-      if (g.length && Math.max(...g) > 1.6) return null;
+      if (g.length && Math.max(...g) > (dens === undefined ? 1.6 : 1.6 + (1 - dens) * 1.2)) return null;
     } else {
       // 4/4：1小節=16分16枠。t=bar*4+s*0.25。末尾~1.5拍は息継ぎ。
       for (let bar = 0; bar < mb; bar++) {
-        const p = weightedPickRec(motif16.rhythm16, r);
+        const p = weightedPickRec(rhythmVocab, r);
         for (let s = 0; s < 16; s++) {
           if (p[s] !== "x") continue;
           const t = bar * 4 + s * 0.25;
@@ -569,10 +580,14 @@ export function genMotifMelodyV2(
           ons.push(t);
         }
       }
-      if (ons.length < 2 * mb || ons.length > 4 * mb) return null;
+      // density: 受け入れ音数帯を可変（未指定=従来 2..4/小節）。
+      const loN = dens === undefined ? 2 * mb : Math.max(1 * mb, Math.round((1 + 2 * dens) * mb));
+      const hiN = dens === undefined ? 4 * mb : Math.max(loN + 1, Math.round((2.5 + 4 * dens) * mb));
+      if (ons.length < loN || ons.length > hiN) return null;
       if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
       const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
-      if (_gap.length && Math.max(..._gap) > Math.max(2.0, mb)) return null; // 孤立音(大間隔)モチーフは棄却＝繋がった塊のみ（長尺ほど内部restは許容）
+      const gapCap = dens === undefined ? Math.max(2.0, mb) : Math.max(2.0, mb, 2 + (1 - dens) * 2);
+      if (_gap.length && Math.max(..._gap) > gapCap) return null; // 孤立音(大間隔)モチーフは棄却＝繋がった塊のみ（長尺ほど内部restは許容）
     }
     // 16分走句(run)＝4/4のみ（隣接0.25）。6/8は8分グリッドゆえ走句概念なし＝全false（_68 と同じ純Markov contour）。
     const run = compound ? ons.map(() => false) : ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
@@ -608,7 +623,11 @@ export function genMotifMelodyV2(
     const endRet = Math.abs(cums[cums.length - 1]!);
     const peakMid = Math.abs(peakAt / (M.mv.length - 1) - 0.55);
     // 16分過多(動き細かい)・密度過多(細切れ)・大間隔(孤立音)・頭の遅れ(先頭無音)を減点＝歌える/繋がった塊を選ぶ。
-    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - 0.8 * Math.max(0, runN - 2) - 0.7 * n16 - 0.4 * endRet - 2 * peakMid - 0.4 * Math.max(0, M.ons.length - 3 * mb) - 1.3 * Math.max(0, maxGap - 1.5) - 0.6 * Math.max(0, firstOns - 1);
+    // density指定時は 16分/走句ペナルティを密度に連動（密=許す/疎=強く抑制）・音数は目標密度への距離で採点。
+    const n16Pen = dens === undefined ? 0.7 : 1.4 * (1 - dens);
+    const runPen = dens === undefined ? 0.8 : 1.6 * (1 - dens);
+    const lenPen = dens === undefined ? 0.4 * Math.max(0, M.ons.length - 3 * mb) : 0.4 * Math.abs(M.ons.length - (1.5 + 3.5 * dens) * mb);
+    return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - runPen * Math.max(0, runN - 2) - n16Pen * n16 - 0.4 * endRet - 2 * peakMid - lenPen - 1.3 * Math.max(0, maxGap - 1.5) - 0.6 * Math.max(0, firstOns - 1);
   };
 
   // 選別＝12個生成しスコア最良を採用（クソ乱数排除）。全滅時は安全な既定モチーフ。
@@ -812,6 +831,21 @@ export function genMotifMelodyV2(
   // ⑤ 検証＝④が作り得る禁則を最終修正（D1: 「直した禁則の再導入」をパイプの最後で締める）。
   // 終止保護分岐(直前音を動かす)が i-2 との間に新禁則を作り得るため、有界ループで収束させる（実測: 2回で960/960）。
   for (let k = 0; k < 3; k++) fixForbidden();
+
+  // swing(2026-07-08 ノブ・design#12-M＝S7「跳ねるボタン」)：8分裏(小節内 x.5)を 0.5+swing/6 へ後段タイムマップ
+  // （swing=1で3連の2/3位置）。16分裏(.25/.75)は据え置き。6/8(compound)は既にjigの跳ねを持つ＝対象外。
+  const sw = Math.max(0, Math.min(1, opts.swing ?? 0));
+  if (sw > 0 && !compound) {
+    for (const n of notes) {
+      const frac = ((n.start % 1) + 1) % 1;
+      if (Math.abs(frac - 0.5) < 0.01) n.start = Math.round((n.start + sw / 6) * 1000) / 1000;
+    }
+    notes.sort((a, b) => a.start - b.start);
+    for (let i = 0; i + 1 < notes.length; i++) {
+      const gap = notes[i + 1]!.start - notes[i]!.start;
+      if (gap > 0) notes[i]!.dur = Math.min(notes[i]!.dur, Math.round(gap * 1000) / 1000);
+    }
+  }
   return notes;
 }
 

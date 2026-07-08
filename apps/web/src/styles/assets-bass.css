@@ -656,6 +656,36 @@ article[aria-label="neta-card"].dragging {
   color: var(--muted);
   padding: 4px 4px 0;
 }
+/* メロ生成の細かさ・跳ねノブ（耳FB 2026-07-08）＝生成前に表情を人が絞る。 */
+.gen-knobs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px 2px;
+  border-top: 1px solid var(--line);
+  margin-top: 2px;
+}
+.knob-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.knob-row > span:first-child {
+  flex: 0 0 42px;
+}
+.knob-row input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 60px;
+  accent-color: var(--k-melody);
+}
+.knob-val {
+  flex: 0 0 22px;
+  text-align: right;
+  color: var(--fg);
+  font-weight: 600;
+}
 .tools-transpose {
   display: flex;
   flex-wrap: wrap;

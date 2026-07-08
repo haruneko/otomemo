@@ -44,6 +44,7 @@ const FUNC_NEXT: Record<string, string[]> = {
 
 export interface Frame {
   key?: number;
+  mode?: "major" | "minor"; // 一級の長短宣言（2026-07-08・design#12-M）。mood からの推定はフォールバック。
   meter?: string;
   tempo?: number;
   bars?: number;
@@ -64,9 +65,16 @@ export function normalizeFrame(frame?: Frame | null): Frame {
   if (typeof f.tempo === "number" && f.tempo > 0) out.tempo = f.tempo;
   if (typeof f.bars === "number") out.bars = Math.max(1, Math.min(16, Math.trunc(f.bars)));
   if (f.mood) out.mood = String(f.mood);
+  if (f.mode === "major" || f.mode === "minor") out.mode = f.mode; // 一級の長短（moodより優先）
   if (typeof f.pickup === "number" && f.pickup > 0) out.pickup = Math.min(2, f.pickup);
   if (typeof f.expression === "number") out.expression = Math.max(0, Math.min(1, f.expression));
   return out;
+}
+
+// 長短の決定＝frame.mode 優先・無ければ mood 推定（後方互換）。design#12-M 2026-07-08。
+export function isMinorFrame(f: Frame): boolean {
+  if (f.mode) return f.mode === "minor";
+  return isMinorMood(f.mood ?? "");
 }
 
 function beatsPerBar(meter?: string): number {
@@ -86,7 +94,7 @@ export function genChords(frame?: Frame | null, seed?: number | null): GenResult
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
-  const minor = isMinorMood(mood);
+  const minor = isMinorFrame(f); // mode一級・moodフォールバック（2026-07-08）
   const table = minor ? DIATONIC_MINOR : DIATONIC_MAJOR;
   const key = f.key ?? 0; // 実音で返す：度数表は C基準、最後に key で移調。
   const bars = barsOf(f);
@@ -375,12 +383,12 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[] }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね 0..1（2026-07-08ノブ・V2経路）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
-  const minor = isMinorMood(mood);
+  const minor = isMinorFrame(f); // mode一級・moodフォールバック（2026-07-08）
   const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major"); // 経過音も曲の調に乗せる（実音）。
   const scaleArr = scaleArray(scale);
   const bars = barsOf(f);
@@ -460,7 +468,7 @@ export function genMelody(
     }
     const scalePcsArr = scaleArr.map((d) => ((d % 12) + 12) % 12);
     const chordPcsAt = (t: number): number[] => { const c = chordAt(t, chords); return c ? chordPcs(normRoot(c.root ?? 0), c.quality ?? "") : scalePcsArr; }; // C3: 小節内チェンジ追従
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound, repetition: opts.repetition, rangeSteps: opts.rangeSteps, chordPcsAt }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound, repetition: opts.repetition, rangeSteps: opts.rangeSteps, chordPcsAt, density: opts.density, swing: opts.swing }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
@@ -812,7 +820,7 @@ export function genFromEssence(
   if (ns.length === 0) return genMelody(frame, chords, seed); // 参照無し＝通常生成
   const strength = Math.max(0, Math.min(1, opts?.strength ?? 0));
   const rng = new Rng(seed ?? 1);
-  const minor = isMinorMood(f.mood ?? "");
+  const minor = isMinorFrame(f); // mode一級・moodフォールバック（2026-07-08）
   const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major"); // E1: frame.key を尊重（旧: 常にC＝調外まみれ）
   const scaleArr = scaleArray(scale);
   const lo = 60;

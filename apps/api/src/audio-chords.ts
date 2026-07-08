@@ -51,7 +51,8 @@ export function refineChordsWithBass(
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
     const parsed = parseChordSymbol(String(seg[2] ?? "").replace(":", ""));
     if (!parsed) continue; // N/X は飛ばす
-    let root = parsed.root, quality = parsed.quality, slashBass: number | undefined, source: ChordSlot["source"] = "btc";
+    const quality = parsed.quality;
+    let root = parsed.root, slashBass: number | undefined, source: ChordSlot["source"] = "btc";
     const dom = bass.length ? dominantBassPc(bass, start, end) : null;
     if (dom && dom.pc !== root) {
       const tones = chordPcs(root, quality);

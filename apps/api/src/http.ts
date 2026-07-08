@@ -186,7 +186,15 @@ export function buildHttp(core: Core): FastifyInstance {
     try {
       switch (op) {
         case "gen_chords": return genChords(b.frame, b.seed);
-        case "gen_melody": return genMelody(b.frame, asChords(b.chords), b.seed);
+        case "gen_melody": {
+          // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。
+          const num = (x: unknown) => (typeof x === "number" ? x : undefined);
+          return genMelody(b.frame, asChords(b.chords), b.seed, {
+            useV2: true, density: num(b.density), swing: num(b.swing),
+            repetition: num(b.repetition), rangeSteps: num(b.rangeSteps), motifBars: num(b.motifBars),
+            phrasing: b.phrasing === "asymmetric" ? "asymmetric" : undefined,
+          });
+        }
         case "gen_from_essence": return genFromEssence(asNotes(b.ref ?? b.melody), b.frame, asChords(b.chords), b.seed, {
           strength: typeof b.strength === "number" ? b.strength : undefined,
           blendWith: Array.isArray(b.blendWith ?? b.refs) ? (b.blendWith ?? b.refs).map(asNotes) : undefined,

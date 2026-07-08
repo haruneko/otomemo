@@ -67,6 +67,7 @@ const frameSchema = z
     tempo: z.number().optional().describe("テンポ＝BPM（密度の判断にも使う）"),
     bars: z.number().int().optional().describe("小節数（1コール=この小節数の“1つ”の構造。1-16にクランプ）"),
     mood: z.string().optional().describe("雰囲気＝自由文字列。「切ない/悲し/dark/sad」等は短調・疎、「明るい/速い/ダンス」等は密に効く"),
+    mode: z.enum(["major", "minor"]).optional().describe("長短の明示（moodの推定より優先。セクション文脈の生成はこれを渡す）"),
   })
   .optional();
 const notesSchema = z
@@ -492,10 +493,10 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "gen_melody",
-    { title: "メロディを生成", description: "コードトーン拘束のメロを生成（拍頭=コードトーン）。chords を渡せば合わせる。style でコーパス(library)の歩幅統計にバイアス。repetition=動機反復の強さ(0-1)、rangeSteps=音域(音階ステップ・6度≈6)で利用時制約。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), style: z.string().optional().describe("コーパスstyle(irish/game等)。投入済みなら歩幅をその統計へ寄せる"), repetition: z.number().min(0).max(1).optional().describe("動機反復の強さ 0=反復なし〜1=強反復(既定0.85=やや強め)"), rangeSteps: z.number().int().min(2).max(20).optional().describe("骨格の音域(音階ステップ)。6度差に抑えるなら6"), motifBars: z.number().int().min(1).max(4).optional().describe("モチーフ/フレーズ長(小節)。1=短く反復多め/2=既定/4=長く展開的") } },
-    async ({ frame, chords, seed, style, repetition, rangeSteps, motifBars }) => {
+    { title: "メロディを生成", description: "コードトーン拘束のメロを生成（拍頭=コードトーン）。chords を渡せば合わせる。style でコーパス(library)の歩幅統計にバイアス。repetition=動機反復の強さ(0-1)、rangeSteps=音域(音階ステップ・6度≈6)で利用時制約。density=細かさ(0=疎〜1=細かい)、swing=跳ね(0=ストレート〜1=シャッフル)。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), style: z.string().optional().describe("コーパスstyle(irish/game等)。投入済みなら歩幅をその統計へ寄せる"), repetition: z.number().min(0).max(1).optional().describe("動機反復の強さ 0=反復なし〜1=強反復(既定0.85=やや強め)"), rangeSteps: z.number().int().min(2).max(20).optional().describe("骨格の音域(音階ステップ)。6度差に抑えるなら6"), motifBars: z.number().int().min(1).max(4).optional().describe("モチーフ/フレーズ長(小節)。1=短く反復多め/2=既定/4=長く展開的"), density: z.number().min(0).max(1).optional().describe("細かさ 0=疎(白玉寄り)〜1=細かい(16分多め)。未指定=コーパス分布"), swing: z.number().min(0).max(1).optional().describe("跳ね 0=ストレート〜1=シャッフル(8分裏が3連2/3へ)") } },
+    async ({ frame, chords, seed, style, repetition, rangeSteps, motifBars, density, swing }) => {
       const corpusModel = learnMotifModelFromLibrary(core, style); // P1：らしさ順ランクの軸（＝生成bias と同じ学習モデル）
-      const res = genMelodyCandidates(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, repetition, rangeSteps, motifBars, corpusModel });
+      const res = genMelodyCandidates(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, repetition, rangeSteps, motifBars, corpusModel, density, swing });
       // F1(2026-07-08)：style指定なのにコーパス未投入＝黙って既定劣化していたのを可視化（Claudeがユーザーに伝えられる）。
       if (style && !corpusModel) (res as typeof res & { note?: string }).note = `style「${style}」のコーパスが library に無いため既定モデルで生成（らしさ順ランクも既定＝生成順）`;
       return ok(res);

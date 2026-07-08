@@ -73,6 +73,8 @@ export function SectionEditor({
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
   const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
   const [genBusy, setGenBusy] = useState(false);
+  const [density, setDensity] = useState(0.5); // メロの細かさ 0=疎〜1=細かい（耳FB 2026-07-08）
+  const [swing, setSwing] = useState(0); // メロの跳ね 0=ストレート〜1=シャッフル
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
@@ -330,11 +332,15 @@ export function SectionEditor({
     if (part.needsChords && !chords.length) return;
     setGenBusy(true);
     try {
-      const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, {
-        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS },
+      // 2026-07-08 耳FB：section の mode を宣言（短調でメジャー生成＝濁りの主因）。メロは density/swing ノブも渡す。
+      const secMode: "major" | "minor" = (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major";
+      const body: Record<string, unknown> = {
+        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode },
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
-      });
+      };
+      if (part.op === "gen_melody") { body.density = density; body.swing = swing; }
+      const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
       if (item) setCand({ kind: item.kind, content: item.content });
     } finally {
@@ -396,6 +402,8 @@ export function SectionEditor({
       title: `${liveTitle || "曲"} ${lane?.label ?? cand.kind}`,
       content: cand.content,
       key: keyPc,
+      // 2026-07-08 耳FB：mode を宣言（placementLanding の前提）。旧: 未宣言でmajor既定→短調メロが配置で+3移調＝濁りの主因。
+      mode: (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major",
       tempo,
       meter: liveMeter,
       tags: neta.tags,
@@ -467,6 +475,21 @@ export function SectionEditor({
                       {genBusy ? "生成中…" : part.label}
                     </button>
                   ))}
+                  {/* メロの細かさ・跳ねノブ（耳FB 2026-07-08）＝ガチャの当たり幅を人が絞る。押す前に設定→メロ生成。 */}
+                  {sectionChords().length > 0 && (
+                    <div className="gen-knobs" onClick={(e) => e.stopPropagation()}>
+                      <label className="knob-row" aria-label="density">
+                        <span>細かさ</span>
+                        <input type="range" min={0} max={1} step={0.1} value={density} onChange={(e) => setDensity(Number(e.target.value))} />
+                        <span className="knob-val">{density < 0.34 ? "疎" : density > 0.66 ? "細" : "中"}</span>
+                      </label>
+                      <label className="knob-row" aria-label="swing">
+                        <span>跳ね</span>
+                        <input type="range" min={0} max={1} step={0.1} value={swing} onChange={(e) => setSwing(Number(e.target.value))} />
+                        <span className="knob-val">{swing < 0.1 ? "—" : swing > 0.66 ? "強" : "跳"}</span>
+                      </label>
+                    </div>
+                  )}
                   {melodyLaneNotes().length > 0 && (
                     <>
                       <div className="tools-sep">メロ加工</div>
