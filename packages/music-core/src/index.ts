@@ -78,6 +78,14 @@ const QUALITY_ALIASES: Record<string, string> = {
   "+": "aug", minmaj7: "mM7", mmaj7: "mM7", "m(maj7)": "mM7",
 };
 
+/** 品質の正準キー化（表記ゆれ→QUALITY_INTERVALS のキー）。未知はそのまま返す（呼び側でフォールバック）。 */
+export function canonicalQuality(quality: string): string {
+  const q = quality ?? "";
+  if (QUALITY_INTERVALS[q]) return q;
+  const a = QUALITY_ALIASES[q];
+  return a !== undefined ? a : q;
+}
+
 /** コードの構成ピッチクラス（0-11）。エイリアス解決→未知 quality は短調系接頭ならマイナー、他はメジャートライアド扱い。 */
 export function chordPcs(root: number | string, quality: string): number[] {
   const r = normRoot(root);

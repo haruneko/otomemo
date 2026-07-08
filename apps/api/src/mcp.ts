@@ -533,8 +533,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   // 当てはまり判定/補正/調推定/類似（cm-music-mcp の analysis を TS に集約＝S2 でcm-music廃止）。
   server.registerTool(
     "analyze_fit",
-    { title: "メロのコード当てはまり", description: "メロが各コードにどれだけ合うか（コードトーン/スケール/外し）を判定。", inputSchema: { melody: notesSchema, chords: chordsSchema, key: z.number().int().min(0).max(11).optional() } },
-    async ({ melody, chords, key }) => ok(analyzeFit(melody, chords, key)),
+    { title: "メロのコード当てはまり", description: "メロが各コードにどれだけ合うか（コードトーン/スケール/外し）を判定。", inputSchema: { melody: notesSchema, chords: chordsSchema, key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional().describe("長短の明示（未指定はkey/旋律から推定）") } },
+    async ({ melody, chords, key, mode }) => ok(analyzeFit(melody, chords, key, mode)),
   );
   server.registerTool(
     "fit_to_chords",

@@ -5,7 +5,7 @@ import { extractUfretLines, linesToChords, extractLoops, songToProgressions, ext
 describe("parseChordSymbol（コード名→root/quality）", () => {
   const cases: [string, number, string][] = [
     ["B", 11, ""], ["A#m", 10, "m"], ["G#m7", 8, "m7"], ["Emaj7", 4, "maj7"],
-    ["C", 0, ""], ["Dm7", 2, "m7"], ["G7", 7, "7"], ["C/G", 0, ""], ["Cm7-5", 0, "m7b5"],
+    ["C", 0, ""], ["Dm7", 2, "m7"], ["G7", 7, "7"], ["Cm7-5", 0, "m7b5"],
     ["Csus4", 0, "sus4"], ["Cadd9", 0, ""], ["Faug", 5, "aug"],
   ];
   it.each(cases)("%s → %i %s", (name, root, quality) => {
@@ -14,6 +14,29 @@ describe("parseChordSymbol（コード名→root/quality）", () => {
   it("N.C. などは null", () => {
     expect(parseChordSymbol("N.C.")).toBeNull();
     expect(parseChordSymbol("")).toBeNull();
+  });
+
+  it("H1: マイナーメジャー7th（CmM7/Cmmaj7/Cm(maj7)）→ mM7＝メジャー化しない（監査: maj7に誤縮約）", () => {
+    expect(parseChordSymbol("CmM7")).toEqual({ root: 0, quality: "mM7" });
+    expect(parseChordSymbol("Cmmaj7")).toEqual({ root: 0, quality: "mM7" });
+    expect(parseChordSymbol("Am(maj7)")).toEqual({ root: 9, quality: "mM7" });
+  });
+  it("H2: フルディミニッシュ（Cdim7/C°7）→ dim7＝減7音を落とさない（監査: dim三和音へ縮約）", () => {
+    expect(parseChordSymbol("Cdim7")).toEqual({ root: 0, quality: "dim7" });
+    expect(parseChordSymbol("C°7")).toEqual({ root: 0, quality: "dim7" });
+  });
+  it("H3: o/+ の過剰マッチ解消＝C7+5はaug7・素のoだけがdim（監査: 任意のo/+が誤爆）", () => {
+    expect(parseChordSymbol("C7+5")).toEqual({ root: 0, quality: "aug7" });
+    expect(parseChordSymbol("C7#5")).toEqual({ root: 0, quality: "aug7" });
+    expect(parseChordSymbol("Co")).toEqual({ root: 0, quality: "dim" });
+    expect(parseChordSymbol("Co7")).toEqual({ root: 0, quality: "dim7" });
+  });
+  it("M7: 分数コード＝ベースを捨てず bass に保持（C/E・ConE 両表記）", () => {
+    expect(parseChordSymbol("C/E")).toEqual({ root: 0, quality: "", bass: 4 });
+    expect(parseChordSymbol("ConE")).toEqual({ root: 0, quality: "", bass: 4 });
+    expect(parseChordSymbol("A/C#")).toEqual({ root: 9, quality: "", bass: 1 });
+    expect(parseChordSymbol("C/G")).toEqual({ root: 0, quality: "", bass: 7 });
+    expect(parseChordSymbol("Am7/G")).toEqual({ root: 9, quality: "m7", bass: 7 });
   });
 });
 

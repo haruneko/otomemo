@@ -12,6 +12,19 @@ describe("detectKeyFromNotes", () => {
 });
 
 describe("analyzeFit（当てはまり判定）", () => {
+  it("M8: key指定時はmodeを取り違えない＝A/E寄りのCメジャー旋律をCマイナー採点しない（監査ケース）", () => {
+    // A/E を厚く使う C メジャー旋律：ヒストグラムでは相対 A minor が上位に来やすい。
+    // 旧: keyPc=0 は尊重するが mode は検出値(minor)のまま→ scalePcs(0,"minor") で E/A/B がスケール外扱い。
+    const mel = [69, 64, 69, 71, 72, 76, 69, 64, 67, 69].map((pitch, i) => ({ pitch, start: i * 0.5, dur: 0.5 }));
+    const chords = [{ root: 0, quality: "", start: 0, dur: 8 }];
+    const r = analyzeFit(mel, chords, 0);
+    expect(r.mode).toBe("major");
+    expect(r.scaleOutsideRate).toBe(0); // 全音 C メジャー内
+    // mode 明示も通る
+    const r2 = analyzeFit(mel, chords, 0, "major");
+    expect(r2.mode).toBe("major");
+  });
+
   it("全部コードトーンなら inChordRate=1・高スコア", () => {
     const mel = [60, 64, 67].map((pitch, i) => ({ pitch, start: i, dur: 1 })); // C E G
     const r = analyzeFit(mel, C_CHORD, 0);

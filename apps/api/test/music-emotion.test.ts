@@ -24,4 +24,18 @@ describe("emotionShift（単体コードの感情シフト）", () => {
     expect(r.every((x) => x.degree === 7)).toBe(true);
     expect(r.some((x) => x.quality === "")).toBe(false);
   });
+
+  it("M9: よくある品質で黙って空にならない（darker: m7/dim・brighter: sus4/6/dim7＝監査実測の空振り）", () => {
+    expect(emotionShift({ degree: 9, quality: "m7" }, "darker").length).toBeGreaterThan(0); // 「Am7を切なく」
+    expect(emotionShift({ degree: 0, quality: "dim" }, "darker").length).toBeGreaterThan(0);
+    expect(emotionShift({ degree: 0, quality: "m7b5" }, "darker").length).toBeGreaterThan(0);
+    expect(emotionShift({ degree: 0, quality: "sus4" }, "brighter").length).toBeGreaterThan(0);
+    expect(emotionShift({ degree: 0, quality: "6" }, "brighter").length).toBeGreaterThan(0);
+    expect(emotionShift({ degree: 0, quality: "dim7" }, "brighter").length).toBeGreaterThan(0);
+    expect(emotionShift({ degree: 0, quality: "aug" }, "brighter").length).toBeGreaterThan(0);
+  });
+
+  it("M9: 表記ゆれ品質（min7等）もエイリアス解決してシフトできる", () => {
+    expect(has(emotionShift({ degree: 9, quality: "min7" }, "brighter"), 9, "maj7")).toBe(true);
+  });
 });

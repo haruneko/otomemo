@@ -62,7 +62,7 @@ const chordLabel = (c: Chord) => `${KEY_NAMES[normRoot(c.root)]}${c.quality ?? "
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
 /** メロが各コードに当てはまっているかを定量化（worker analyze_fit の移植・純TS）。 */
-export function analyzeFit(melody: Note[], chords: Chord[], key?: number): FitResult {
+export function analyzeFit(melody: Note[], chords: Chord[], key?: number, modeOpt?: "major" | "minor"): FitResult {
   const notes = (melody ?? [])
     .filter((n) => typeof n.pitch === "number")
     .sort((a, b) => Number(a.start ?? 0) - Number(b.start ?? 0));
@@ -71,7 +71,24 @@ export function analyzeFit(melody: Note[], chords: Chord[], key?: number): FitRe
   }
   const det = detectKeyFromNotes(notes);
   const keyPc = key === undefined ? det.key : normRoot(key);
-  const mode = det.mode;
+  // M8(2026-07-08)：key指定時にmodeだけ検出値を使うと相対調誤検出で誤採点（A/E寄りのCメジャー旋律を
+  // Cマイナー採点＝E/A/Bがスケール外扱い）。優先＝①明示mode ②候補中の同keyPcのmode ③スケール適合の良い方。
+  let mode: "major" | "minor";
+  if (modeOpt) mode = modeOpt;
+  else if (key === undefined) mode = det.mode;
+  else {
+    const cand = detectKeyCandidatesFromNotes(notes, 4).find((c) => c.key === keyPc);
+    if (cand) mode = cand.mode;
+    else {
+      const outsideOf = (mm: "major" | "minor"): number => {
+        const s = scalePcs(keyPc, mm);
+        let o = 0;
+        for (const n of notes) if (!s.has(((n.pitch % 12) + 12) % 12)) o++;
+        return o;
+      };
+      mode = outsideOf("major") <= outsideOf("minor") ? "major" : "minor";
+    }
+  }
   const sc = scalePcs(keyPc, mode);
 
   let covered = 0;
