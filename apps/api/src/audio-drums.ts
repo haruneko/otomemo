@@ -682,6 +682,36 @@ function crashBoundaries(onsets: DrumOnset[], mergeSec = 1.5): number[] {
   return b;
 }
 
+/**
+ * crash で半小節の裏表を解決（#S12改3・オーナー指摘の「2拍ズレ」）。スネア=2/4拍は 2拍↔4拍 対称で
+ * どちらが小節頭か決まらない。crash は小節頭に入る（ロックの突っ込みで**8分早い**ことも許容）＝
+ * crash がパターンの downbeat と半小節点のどちらに寄るか投票し、半小節点なら**パターンを半小節回す**。
+ */
+function crashResolveHalfBar(pat: DrumPatternResult, onsets: DrumOnset[]): DrumPatternResult {
+  if (pat.downbeat == null || pat.bpm <= 0) return pat;
+  const barLen = (60 / pat.bpm) * pat.meter;
+  const eighth = barLen / (pat.meter * 2); // 8分（秒）
+  const crashes = onsets.filter((o) => o[1] === "crash").map((o) => o[0]);
+  if (!crashes.length) return pat;
+  const wrap = (x: number) => x - Math.floor(x);
+  let vote0 = 0, voteH = 0; // 0=downbeat / H=半小節点
+  for (const ct of crashes) {
+    let bestDist = Infinity, target = 0;
+    for (const cand of [ct, ct + eighth]) { // crash が小節頭 or 8分早い突っ込み
+      const ph = wrap((cand - pat.downbeat) / barLen);
+      const d0 = Math.min(ph, 1 - ph), dH = Math.abs(ph - 0.5);
+      if (d0 < bestDist) { bestDist = d0; target = 0; }
+      if (dH < bestDist) { bestDist = dH; target = 1; }
+    }
+    if (bestDist < 0.15) { if (target === 0) vote0++; else voteH++; }
+  }
+  if (voteH <= vote0) return pat;
+  // downbeat が半小節ズレ＝パターンを半小節(=meter*2 の16分step)回す＋downbeat を半小節後ろへ。
+  const half = pat.meter * 2, spb = pat.meter * 4;
+  const lanes = pat.rhythm.lanes.map((l) => ({ ...l, hits: l.hits.map((h) => (h + half) % spb).sort((a, b) => a - b) }));
+  return { ...pat, downbeat: pat.downbeat + barLen / 2, rhythm: { ...pat.rhythm, lanes } };
+}
+
 export function extractSectionPatterns(
   beatTimes: number[],
   onsets: DrumOnset[],
@@ -707,7 +737,7 @@ export function extractSectionPatterns(
     const on = onsets.filter((o) => o[0] >= t0 - 1e-6 && o[0] < t1 + 1e-6);
     const bt = beatTimes.filter((t) => t >= t0 - barLen && t <= t1 + barLen);
     if (on.length < 12) continue;
-    const pat = extractDrumPattern(bt, on, { forceMeter: whole.meter });
+    const pat = crashResolveHalfBar(extractDrumPattern(bt, on, { forceMeter: whole.meter }), on); // crashで半小節裏表を解決
     secs.push({ startSec: Math.round(t0 * 100) / 100, endSec: Math.round(t1 * 100) / 100, bars: Math.round((t1 - t0) / barLen), pattern: pat });
   }
   // 連続で同じパターンの区間は結合（Aメロ×2 等）。
