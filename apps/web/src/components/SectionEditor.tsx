@@ -77,6 +77,8 @@ export function SectionEditor({
   const [swing, setSwing] = useState(0); // メロの跳ね 0=ストレート〜1=シャッフル
   const [expression, setExpression] = useState(0); // メロの表情 0=素直〜1=もたれ(強拍に倚音/掛留)（Step1 2026-07-09）
   const [phrasing, setPhrasing] = useState<"" | "symmetric" | "asymmetric">(""); // 句割り 空=従来/対称(問い→答え)/非対称(3+3+2の呼吸)（Step2/P0-b 2026-07-09）
+  const [runs, setRuns] = useState(0); // メロの走句 0=なし〜1=16分連続が出やすい（Step4 2026-07-09）
+  const [push, setPush] = useState(0); // メロの前借り(食い) 0=なし〜1=1,2,3拍を16分前へ（Step4 2026-07-09）
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
@@ -341,7 +343,7 @@ export function SectionEditor({
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       };
-      if (part.op === "gen_melody") { body.density = density; body.swing = swing; body.expression = expression; if (phrasing) body.phrasing = phrasing; }
+      if (part.op === "gen_melody") { body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; if (phrasing) body.phrasing = phrasing; }
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
       if (item) setCand({ kind: item.kind, content: item.content });
@@ -494,6 +496,16 @@ export function SectionEditor({
                         <span>表情</span>
                         <input type="range" min={0} max={1} step={0.1} value={expression} onChange={(e) => setExpression(Number(e.target.value))} />
                         <span className="knob-val">{expression < 0.1 ? "素直" : expression > 0.66 ? "濃" : "もたれ"}</span>
+                      </label>
+                      <label className="knob-row" aria-label="runs">
+                        <span>走句</span>
+                        <input type="range" min={0} max={1} step={0.1} value={runs} onChange={(e) => setRuns(Number(e.target.value))} />
+                        <span className="knob-val">{runs < 0.1 ? "—" : runs > 0.66 ? "多" : "走"}</span>
+                      </label>
+                      <label className="knob-row" aria-label="push">
+                        <span>食い</span>
+                        <input type="range" min={0} max={1} step={0.1} value={push} onChange={(e) => setPush(Number(e.target.value))} />
+                        <span className="knob-val">{push < 0.1 ? "—" : push > 0.66 ? "強" : "食"}</span>
                       </label>
                       <label className="knob-row" aria-label="phrasing">
                         <span>句割り</span>

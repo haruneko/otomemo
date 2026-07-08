@@ -503,7 +503,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[] } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -519,9 +519,14 @@ export function genMotifMelodyV2(
   // density(2026-07-08 ノブ・design#12-M)：リズム語彙を音数で再重み付け＝細かさの制御（0=疎〜1=密・未指定=従来分布）。
   const dens = opts.density === undefined ? undefined : Math.max(0, Math.min(1, opts.density));
   const densW = (onsets: number): number => (dens === undefined ? 1 : Math.pow(onsets + 1, (dens - 0.5) * 4));
-  const rhythmVocab: Record<string, number> = dens === undefined
+  // runs(2026-07-09 Step4・design#12-M)：走句の出やすさ。語彙を「隣接16分ペア数」で再重み付け＋選別ペナルティを減衰。
+  // 未指定=従来分布。16分0%の犯人は語彙でなく選別抑圧なので、抑圧を解除して狙って走句を出す（新ピッチ論理なし）。
+  const rns = opts.runs === undefined ? undefined : Math.max(0, Math.min(1, opts.runs));
+  const runPairs = (p: string): number => { let c = 0; for (let i = 0; i + 1 < p.length; i++) if (p[i] === "x" && p[i + 1] === "x") c++; return c; };
+  const runW = (p: string): number => (rns === undefined ? 1 : Math.pow(runPairs(p) + 1, rns * 1.5));
+  const rhythmVocab: Record<string, number> = dens === undefined && rns === undefined
     ? motif16.rhythm16
-    : Object.fromEntries(Object.entries(motif16.rhythm16).map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length)]));
+    : Object.fromEntries(Object.entries(motif16.rhythm16).map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length) * runW(p)]));
 
   // 6/8リズム＝設計重み付き6枠パターンを抽選（RHYTHM68_DATA）。runningはやや強め＝jig寄り。density対応。
   const pick68 = (r: () => number): string => {
@@ -583,7 +588,8 @@ export function genMotifMelodyV2(
       }
       // density: 受け入れ音数帯を可変（未指定=従来 2..4/小節）。
       const loN = dens === undefined ? 2 * mb : Math.max(1 * mb, Math.round((1 + 2 * dens) * mb));
-      const hiN = dens === undefined ? 4 * mb : Math.max(loN + 1, Math.round((2.5 + 4 * dens) * mb));
+      const hiN0 = dens === undefined ? 4 * mb : Math.max(loN + 1, Math.round((2.5 + 4 * dens) * mb));
+      const hiN = rns === undefined ? hiN0 : hiN0 + Math.round(rns * 3 * mb); // runs＝走句ぶん受入音数を拡張
       if (ons.length < loN || ons.length > hiN) return null;
       if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
       const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
@@ -625,9 +631,11 @@ export function genMotifMelodyV2(
     const peakMid = Math.abs(peakAt / (M.mv.length - 1) - 0.55);
     // 16分過多(動き細かい)・密度過多(細切れ)・大間隔(孤立音)・頭の遅れ(先頭無音)を減点＝歌える/繋がった塊を選ぶ。
     // density指定時は 16分/走句ペナルティを密度に連動（密=許す/疎=強く抑制）・音数は目標密度への距離で採点。
-    const n16Pen = dens === undefined ? 0.7 : 1.4 * (1 - dens);
-    const runPen = dens === undefined ? 0.8 : 1.6 * (1 - dens);
-    const lenPen = dens === undefined ? 0.4 * Math.max(0, M.ons.length - 3 * mb) : 0.4 * Math.abs(M.ons.length - (1.5 + 3.5 * dens) * mb);
+    const runDamp = rns === undefined ? 1 : 1 - 0.85 * rns; // runs＝16分/走句ペナルティを減衰＝走句を許す
+    const n16Pen = (dens === undefined ? 0.7 : 1.4 * (1 - dens)) * runDamp;
+    const runPen = (dens === undefined ? 0.8 : 1.6 * (1 - dens)) * runDamp;
+    const lenTarget = (dens === undefined ? 3 : 1.5 + 3.5 * dens) * mb + (rns === undefined ? 0 : rns * 3 * mb);
+    const lenPen = dens === undefined && rns === undefined ? 0.4 * Math.max(0, M.ons.length - 3 * mb) : 0.4 * Math.abs(M.ons.length - lenTarget);
     return -Math.abs(range - 5) - Math.abs(dirs - 2) - 2 * Math.max(0, leaps - 1) - runPen * Math.max(0, runN - 2) - n16Pen * n16 - 0.4 * endRet - 2 * peakMid - lenPen - 1.3 * Math.max(0, maxGap - 1.5) - 0.6 * Math.max(0, firstOns - 1);
   };
 
@@ -904,6 +912,17 @@ export function genMotifMelodyV2(
       notes[i]!.pitch = cand;
       locked.add(i + 1); // 解決音は以降の変換で動かさない（相手を孤立させない）
     }
+  }
+
+  // push(2026-07-09 Step4・design#12-M)：division-level syncopation＝前借り(食い)。既存 anticipate(位置固定・タイ・
+  // 終端不変)で毎小節同じ拍を16分ぶん前へ。push量で対象拍を可変(0.33=3拍/0.66=1,3拍/1=1,2,3拍)。6/8は対象外。
+  const push = Math.max(0, Math.min(1, opts.push ?? 0));
+  if (push > 0 && !compound && notes.length > 1) {
+    const beats = push > 0.75 ? [0, 1, 2] : push > 0.4 ? [0, 2] : [2];
+    const lastN = notes[notes.length - 1]!, sStart = lastN.start, sDur = lastN.dur; // 終止は前借りしない＝保護
+    anticipate(notes, { beats, offset: 0.25 });
+    lastN.start = sStart; lastN.dur = sDur;
+    notes.sort((a, b) => a.start - b.start);
   }
 
   // swing(2026-07-08 ノブ・design#12-M＝S7「跳ねるボタン」)：8分裏(小節内 x.5)を 0.5+swing/6 へ後段タイムマップ

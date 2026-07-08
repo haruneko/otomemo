@@ -1188,6 +1188,14 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **メロは追従不要で自動整合**：render の終止着地は既に **B1和声追従**（最終コードに主音があれば主音・無ければ最寄りコード音・design 短調ドミナント節）。よって half（final=V＝主音無し）は自動で 2̂/5̂ の開きに、deceptive（final=vi＝主音を含む）は主音が **vi の3度** として鳴る＝理論通りの偽終止に、メロ側の変更なしで乗る。
 - **配線**：`gen_chords`(MCP/HTTP) に `cadence` enum。既定＝未指定＝従来。**ユースケース**＝Aメロ末=half・1番サビ末=deceptive・ラスト=full。
 
+→ **16分細分＝走句(runs)と前借り(push)（2026-07-09・理論不足総点検 Step4・本丸1）**。full＝sixteenth-rhythm.md。
+**現状認識**：語彙 RHYTHM16_DATA は16分裏slot・走句パターンを**既に含む**。gen出力の16分ほぼ0%（実曲44-56%）の原因は**語彙でなく選別抑圧**＝score の `n16Pen`/`runPen`（16分裏・走句を減点）＋受入音数上限。density は総量ノブで「走句らしさ(連続16分)」「前借り(食い)」を狙って出せない。
+**正準（Phase1-2＝データ不要・Phase3データは後）**：
+- **`runs` 0..1**（既定 undefined＝従来一致）＝走句の出やすさ。効き：(a) rhythmVocab を**走句含有量**（隣接16分ペア数）で再重み付け `w * pow(runPairs+1, runs*k)`（density の densW と同型・積で合成） (b) score の `n16Pen`/`runPen` を runs で減衰（`*(1-0.85·runs)`） (c) 受入音数上限 hiN と lenPen 目標を runs で拡張。**ピッチ論理は新設しない**＝既存の走句処理（run→方向保持 `render/mkMotif`・run後 gap-fill）に乗るだけ。
+- **`push` 0..1**（既定 0＝従来一致）＝division-level syncopation（前借り・食い）。既存 `anticipate`（位置固定・タイ・終端不変）を V2 後段（swing の直前）に適用＝**毎小節同じ拍を16分ぶん前へ**。push 量で対象拍数を可変（0.33で3拍目・0.66で1,3拍・1で1,2,3拍）。compound(6/8) は対象外。
+- **評価目標**（sixteenth-rhythm.md）：16分音価率 44-56%・16分onset連続率~66%・孤立16分は稀。**Phase3（データ）**＝POP909量子化再計測で位置別run確率/前借り位置率を `motifModelData.ts` に同梱しヒューリスティック重みを学習分布へ差替（別コミット・要ローカルPOP909）。
+- **配線**：V2 opts `runs`/`push`→genMelody→gen_melody(MCP/HTTP)→UI。既定＝未指定＝従来。**耳確認必須**（density/swing 同様）＝runs 0/0.4/0.8 × push 0/0.5 マトリクスを実機で。既定値は据え置き0・推奨プリセットのみ doc化。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 
