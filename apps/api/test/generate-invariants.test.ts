@@ -165,4 +165,19 @@ describe("genFromEssence 不変条件", () => {
     const b = notesOf(genFromEssence(ref, { bars: 2 }, chords, 9));
     expect(b).toEqual(a);
   });
+  it("frame.key を尊重する＝F#メジャーの曲なら経過音も F#メジャースケール内（E1回帰）", () => {
+    // 拍頭以外(小数start)はコードsnapを通らず素のスケール歩行＝キー無視バグ(常にC)だと C 調の音が混ざる。
+    const ref = [
+      { pitch: 66, start: 0, dur: 0.5 },
+      { pitch: 68, start: 0.5, dur: 0.5 },
+      { pitch: 70, start: 1.5, dur: 0.5 },
+      { pitch: 68, start: 2.5, dur: 0.5 },
+      { pitch: 66, start: 3.5, dur: 0.5 },
+    ];
+    const chords: Chord[] = [{ root: 6, quality: "", start: 0, dur: 8 }]; // F#
+    const fsMajor = new Set([6, 8, 10, 11, 1, 3, 5]);
+    const out = notesOf(genFromEssence(ref, { bars: 2, key: 6 }, chords, 5));
+    expect(out.length).toBeGreaterThan(0);
+    for (const n of out) expect(fsMajor.has(((n.pitch % 12) + 12) % 12)).toBe(true);
+  });
 });

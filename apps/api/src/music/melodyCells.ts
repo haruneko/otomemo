@@ -123,6 +123,12 @@ function nearestPitchWithPc(target: number, pcs: number[], scalePitches: number[
   return best;
 }
 
+// C1(2026-07-08)：句頭アンカー＝骨格(beat索引・長さbars*bpb)から「ブロック頭barのdownbeat＝skel[bar*bpb]」を引く。
+// 旧バグ＝skel[bar]（bar番号をbeat扱い）でアンカーが曲頭数拍に縮退・構造線後半が未使用だった。
+export function blockAnchorFromSkeleton(skel: number[], bar: number, beatsPerBar: number, fallback: number): number {
+  return skel[Math.min(skel.length - 1, bar * beatsPerBar)] ?? fallback;
+}
+
 // motif リズム＝1小節(8分8枠)の onset 列(x=onset/.=無)を語彙化（計測：1小節8分は語彙250・80%を97種で覆える＝学習可）。
 // 2小節・16分は爆発するので motif の単位は「1小節8分」。これを sample→反復＝groove/coherence が pattern 自体から出る。
 export interface BarRhythmModel { patterns: Map<string, number> }
@@ -653,12 +659,14 @@ export function genMotifMelodyV2(
   };
 
   // 骨格＝genSkeletonFromModel（句頭アンカー）。発展＝2小節ブロックで A/A'/B(反行+弧)/A''(トニック着地) を循環。
-  const skel = genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: 4, strongQuarters: [0, 2], start: 62 });
+  // C1/C2(2026-07-08)：骨格は beat索引(bars*bpb)＝アンカーは「ブロック頭barのdownbeat＝skel[bar*bpb]」で引く
+  // （旧: skel[bar]＝bar番号をbeat扱い＝曲頭数拍に縮退・Urlinie後半が未使用）。6/8 は bpb=3 で生成（旧: 4/4決め打ち）。
+  const skel = genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: compound ? [0, 1.5] : [0, 2], start: 62 });
   const r = makeRng(seed + 5);
   // seedMotif 指定時は genBest をスキップしてそれを M に（補完=与モチーフを発展）。既定(未指定)は現挙動と完全一致。
   const M = opts.seedMotif ?? genBest(r);
   const kfb = Math.max(0, Math.floor(opts.keepFirstBlocks ?? 0)); // >0：先頭 kfb ブロックは素材(A=M)・以降を A'/B/A'' 発展
-  const an = (bar: number): number => skel[Math.min(skel.length - 1, bar)] ?? sp[Math.floor(sp.length / 2)] ?? 62;
+  const an = (bar: number): number => blockAnchorFromSkeleton(skel, bar, barLen, sp[Math.floor(sp.length / 2)] ?? 62);
   const nBlk = Math.ceil(bars / mb);
   const notes: Note[] = [];
   for (let blk = 0; blk < nBlk; blk++) {
@@ -680,7 +688,14 @@ export function genMotifMelodyV2(
   for (let pass = 0; pass < 2; pass++) {
     for (let i = 1; i < notes.length; i++) {
       const iv = notes[i]!.pitch - notes[i - 1]!.pitch, a = Math.abs(iv);
-      if (a === 6 || a === 10 || a === 11 || a > 12) notes[i]!.pitch = clampScale(sp, nearestIdx(sp, notes[i - 1]!.pitch) + (Math.sign(iv) || 1) * 2);
+      if (a === 6 || a === 10 || a === 11 || a > 12) {
+        if (i === notes.length - 1) {
+          // 終止保護（B3・design#12-M 2026-07-08）：最終音(着地)は動かさず、直前音を着地の2スケール段手前へ寄せる。
+          notes[i - 1]!.pitch = clampScale(sp, nearestIdx(sp, notes[i]!.pitch) - (Math.sign(iv) || 1) * 2);
+        } else {
+          notes[i]!.pitch = clampScale(sp, nearestIdx(sp, notes[i - 1]!.pitch) + (Math.sign(iv) || 1) * 2);
+        }
+      }
     }
     for (let i = 1; i < notes.length - 1; i++) {
       const iv = notes[i]!.pitch - notes[i - 1]!.pitch;

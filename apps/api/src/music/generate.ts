@@ -753,7 +753,7 @@ export function genFromEssence(
   const strength = Math.max(0, Math.min(1, opts?.strength ?? 0));
   const rng = new Rng(seed ?? 1);
   const minor = isMinorMood(f.mood ?? "");
-  const scale = scalePcs(0, minor ? "minor" : "major");
+  const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major"); // E1: frame.key を尊重（旧: 常にC＝調外まみれ）
   const scaleArr = scaleArray(scale);
   const lo = 60;
   const hi = 84;
