@@ -712,6 +712,24 @@ function crashResolveHalfBar(pat: DrumPatternResult, onsets: DrumOnset[]): DrumP
   return { ...pat, downbeat: pat.downbeat + barLen / 2, rhythm: { ...pat.rhythm, lanes } };
 }
 
+const CRASH_MIDI = { name: "Crash", midi: 49 }; // GM Crash Cymbal 1
+/** 区間の crash を pattern 格子(downbeat基準・steps=meter*4)へ畳んで Crash レーンの hit step を返す。
+ *  crash は疎で区間頭に集まる＝単発の外れは閾値で落とし、頭(step0付近)へ集まる分を載せる。 */
+function crashLaneSteps(secOnsets: DrumOnset[], downbeat: number, barLen: number, steps: number): number[] {
+  const crashes = secOnsets.filter((o) => normKind(o[1]) === null && o[1] === "crash").map((o) => o[0]);
+  if (!crashes.length || barLen <= 0) return [];
+  const hist = new Array<number>(steps).fill(0);
+  for (const tc of crashes) {
+    const ph = (((tc - downbeat) % barLen) + barLen) % barLen; // [0,barLen)
+    const idx = Math.round((ph / barLen) * steps) % steps;
+    hist[idx] = (hist[idx] ?? 0) + 1;
+  }
+  const max = Math.max(...hist);
+  const out: number[] = [];
+  for (let i = 0; i < steps; i++) if (hist[i]! >= Math.max(1, 0.4 * max)) out.push(i); // 頭は必ず・散発の外れは落とす
+  return out;
+}
+
 export function extractSectionPatterns(
   beatTimes: number[],
   onsets: DrumOnset[],
@@ -737,7 +755,12 @@ export function extractSectionPatterns(
     const on = onsets.filter((o) => o[0] >= t0 - 1e-6 && o[0] < t1 + 1e-6);
     const bt = beatTimes.filter((t) => t >= t0 - barLen && t <= t1 + barLen);
     if (on.length < 12) continue;
-    const pat = crashResolveHalfBar(extractDrumPattern(bt, on, { forceMeter: whole.meter }), on); // crashで半小節裏表を解決
+    let pat = crashResolveHalfBar(extractDrumPattern(bt, on, { forceMeter: whole.meter }), on); // crashで半小節裏表を解決
+    // Crash レーン＝区間頭の一発を弾き直せるよう pattern に載せる（crashは構造の手がかり兼演奏音）。
+    if (pat.downbeat != null && pat.bpm > 0) {
+      const crashHits = crashLaneSteps(on, pat.downbeat, (60 / pat.bpm) * pat.meter, pat.rhythm.steps);
+      if (crashHits.length) pat = { ...pat, rhythm: { ...pat.rhythm, lanes: [...pat.rhythm.lanes, { ...CRASH_MIDI, hits: crashHits }] } };
+    }
     secs.push({ startSec: Math.round(t0 * 100) / 100, endSec: Math.round(t1 * 100) / 100, bars: Math.round((t1 - t0) / barLen), pattern: pat });
   }
   // 連続で同じパターンの区間は結合（Aメロ×2 等）。
