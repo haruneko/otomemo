@@ -255,24 +255,30 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   // 制約① rangeSteps＝構造線の音域(音階ステップ)。6度差≈5-6。既定12(≒1.7oct)。主音やや下〜上に窓。
   const span = Math.max(2, opts.rangeSteps ?? 10);
   const lo = tonicIdx - Math.round(span * 0.35), hi = tonicIdx + Math.round(span * 0.5), cl = (i: number) => Math.max(lo, Math.min(hi, i)); // 上方向を抑える（主音の上に5度程度＝climb抑制）
-  // 声部進行：前音に最寄りのオクターブ＋**中心(主音レジスタ)へ寄せる**＝音域端へのドリフト→大跳躍を防ぐ。
-  const idxOf = (deg: number, pi: number) => { let best = cl(tonicIdx + deg), bdL = Infinity; for (let oc = -2; oc <= 2; oc++) { const i2 = tonicIdx + deg + 7 * oc; if (i2 < lo || i2 > hi) continue; const d = Math.abs(i2 - pi) + 0.7 * Math.abs(i2 - tonicIdx); if (d < bdL) { bdL = d; best = i2; } } return best; };
+  const nuAll = Math.max(1, Math.ceil(slots.length / spu));
+  // 脱平面化(2026-07-09 批判レビューCP)：構造線を「主音平面」でなく **Kopfton→主音の下降(Urlinie近似)** へ。
+  // ctr(u)=曲頭 tonic+kopf(≈3度上)から曲末 tonic へ線形下降。声部進行の引きをこの ctr へ（旧: 主音レジスタへ 0.7 の
+  // 強い引き→全部主音へ潰れていた＝実測 主音pc43%/同音44%）。引きを 0.3 へ弱め、度数サンプルが素直に立つように。
+  const kopf = Math.min(hi - tonicIdx, Math.max(2, Math.round(span * 0.4))); // Kopfton の高さ(音階ステップ・≈5̂)
+  const ctrOf = (u: number) => cl(tonicIdx + Math.round(kopf * (nuAll > 1 ? 1 - u / (nuAll - 1) : 0)));
+  // 声部進行：前音に最寄りのオクターブ＋**構造線 ctr へ緩く寄せる**（旧: 主音へ強く寄せ平面化）。
+  const idxOf = (deg: number, pi: number, ctr: number) => { let best = cl(tonicIdx + deg), bdL = Infinity; for (let oc = -2; oc <= 2; oc++) { const i2 = tonicIdx + deg + 7 * oc; if (i2 < lo || i2 > hi) continue; const d = Math.abs(i2 - pi) + 0.2 * Math.abs(i2 - ctr); if (d < bdL) { bdL = d; best = i2; } } return best; };
   // 制約② repetition＝反復強度 0=反復なし(隣接31%)〜1=強反復(61%)。既定0.85(≒58%・耳で「弱い」解消・実曲42%超だが裸の骨格は他の同一性手掛りが無い分 強めが要る)。
   const rep = opts.repetition ?? 0.85;
   const useMotif = opts.motif !== false && rep > 0;
   const I: number[] = new Array(slots.length).fill(tonicIdx);
   const smp = (cr: number, pv: number) => ((sampleSkelDeg(model, cr, pv, r) % 7) + 7) % 7;
-  let pv = -1, pi = tonicIdx, hA: number[] | null = null, hB: number[] | null = null;
-  const nu = Math.ceil(slots.length / spu);
+  let pv = -1, pi = ctrOf(0), hA: number[] | null = null, hB: number[] | null = null; // 開始は Kopfton レジスタ（旧: 主音）
+  const nu = nuAll;
   for (let u = 0; u < nu; u++) {
-    const base = u * spu, reuse = !useMotif ? null : (u % 4 === 1 ? hA : u % 4 === 3 ? hB : null), phraseEnd = u % 2 === 1;
+    const base = u * spu, reuse = !useMotif ? null : (u % 4 === 1 ? hA : u % 4 === 3 ? hB : null), phraseEnd = u % 2 === 1, lastU = u === nu - 1, ctr = ctrOf(u);
     for (let s = 0; s < spu && base + s < slots.length; s++) {
       const cr = slots[base + s]!.cr;
       let idx: number;
-      if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi);
+      if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi, ctr);
       else if (s < spu - 1) { // 頭＝動機の反復。repetition＝「頭の正確なステップ移動を反復」する確率。残りはfresh＝varied反復。
-        idx = r() < rep ? cl(pi + (reuse[s] ?? 0)) : idxOf(smp(cr, pv), pi);
-      } else idx = phraseEnd ? idxOf(0, pi) : idxOf(smp(cr, pv), pi); // 尾：句末=主音(答え)
+        idx = r() < rep ? cl(pi + (reuse[s] ?? 0)) : idxOf(smp(cr, pv), pi, ctr);
+      } else idx = lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 尾：最終句=主音(答え)／中間句末=5̂(問い＝開き・旧: 全句末を主音強制で平面化)
       I[base + s] = idx; pi = idx; pv = ((idx - tonicIdx) % 7 + 7) % 7;
     }
     if (useMotif && u % 4 === 0) { hA = [0]; for (let s = 1; s < spu; s++) hA.push((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx)); } // 連続ステップ移動(符号付き大きさ)を記録＝正確な輪郭の反復用
