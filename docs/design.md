@@ -250,6 +250,7 @@
 - 表示への波及：一覧カードは、断片なら kind/mood/tags/見た目、section/song なら tempo/meter/key を出す（断片に確定キーを出さない）。
 - **音色**：musical neta は楽器を持つ＝**General MIDI プログラム番号**（メロ/コード/ドラム。ドラムはGM打楽器/ch10）。再生はGM SoundFont、書き出しは MIDI のプログラムチェンジへ（再生と書き出しが一致）。UIの選択パレットは少数キュレートでよい（保存はGM準拠）。bass の既定音色はフィンガーベース(33)。
 - **合成再生の音色（実装 2026-06-22）**：section/song の合成再生は `compositeNotes` が**子(パート)毎に program を Note に付与**し、再生は **program 毎の旋律サンプラー**（smplrは1サンプラー1楽器・再生時startなので per-note 切替不可→program毎のサンプラーを用意・SF2パースは共有）で各パートの音色を保つ。書き出し(多トラックMIDI)も lane 毎にトラック分け。
+- **マスターバス＋ミキサー（実装 2026-07-09・音割れ対策）**：従来は全音源が個別に `destination` 直結＝出口で合算し 0dBFS 超でハードクリップ（ひずみ）。**全経路を1本のマスターへ集約**＝各パートゲイン(melody/chord/bass/drums)→マスターゲイン→**リミッター(DynamicsCompressor ブリックウォール -1dB)**→destination。天井を持つので何音重なっても割れない。生Web Audioで構築し Tone(`.connect`)・smplr(`destination`オプション)双方を接続（`audio.ts ensureMaster`・共有rawContextに一度だけ・冪等）。パート振り分けは `Note.part`（compositeNotes が kind から付与）を `prepareMelodicSamplers`（**パート別サンプラー**＝各パートゲインに接続）と `playEvent` が使う。単体再生は part 無し→melody。音量は `getMix/setMixVolume`＝localStorage `cm.mix`（既定 master0.8/melody1/chord0.8/bass0.9/drums0.8）、UIは再生バーの🔉`MixerControl`。**契約：新しい音源ノードは必ず `ensureMaster(Tone, part)` 経由で繋ぐ（`toDestination()` 直結禁止）**。
 - **歌詞の流し込み**：歌詞neta をメロのノートに音節割り当て（`syllable`）してタイムラインに流せる。
 - **コントロールカーブは無し**：CC/オートメーション/ピッチベンド/エクスプレッション等は持たない。content は ノート(pitch/start/dur/vel)＋楽器 のみ。
 - **velocity**：ノート単位で持つ（default 100）。MIDI標準＆書き出しに要る"基盤データ"なのでフィールドは今持つ（コストほぼ0）。編集・ヒューマナイズUIは feature work（後）。
