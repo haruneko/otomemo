@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDismiss } from "../useDismiss";
 import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api, type Neta } from "../api";
@@ -46,6 +47,10 @@ export function NetaCard({
   const [moreOpen, setMoreOpen] = useState(false);
   // P3: 器ピッカーの開閉（入れ先はフィルタと独立＝どの器へでも入れられる）。
   const [assignOpen, setAssignOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const assignRef = useRef<HTMLDivElement>(null);
+  useDismiss(moreRef, moreOpen, useCallback(() => setMoreOpen(false), [])); // 外タップ/Escで閉じる
+  useDismiss(assignRef, assignOpen, useCallback(() => setAssignOpen(false), []));
   // 手動並べ替え(sortable)＋セクションのレーンへドラッグ配置(#52②c)を1つのハンドルで兼ねる。
   // 一覧内で別カードにドロップ→reorder（App.onDragEnd）／レーンにドロップ→placeChild。
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -145,7 +150,7 @@ export function NetaCard({
 
   const assignMenu =
     scope === "project" ? (
-      <div className="assign-wrap">
+      <div className="assign-wrap" ref={assignRef}>
         <button
           className="bs-btn"
           aria-label={`assign-${neta.id}`}
@@ -270,7 +275,7 @@ export function NetaCard({
           ) : null;
         })()}
       </div>
-      <div className="bs-tools">
+      <div className="bs-tools" ref={moreRef}>
         {playBtn}
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
           相談

@@ -18,6 +18,7 @@ import {
 import { MiniRoll } from "./MiniRoll";
 import { Icon } from "./Icon";
 import { harmonyVoice } from "../harmony";
+import { useDismiss } from "../useDismiss";
 // 巨大コンポの機械分割（負債D6）＝挙動不変。レーン定義/尺定数/純関数/LaneCell/SongStatus/PlacePicker を分離。
 import { LaneCell } from "./LaneCell";
 import { SongStatus } from "./SongStatus";
@@ -66,6 +67,8 @@ export function SectionEditor({
   const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
   const [eraseMode, setEraseMode] = useState(false); // 消しゴムモード＝ブロックtapで外す（PianoRollの描く/選ぶと同じモード流儀）
   const [toolsOpen, setToolsOpen] = useState(false); // いじる▾ メニュー（生成/ハモリ/書き出しを集約・メロ編集画面と整合・⑤）
+  const toolsRef = useRef<HTMLDivElement>(null);
+  useDismiss(toolsRef, toolsOpen, useCallback(() => setToolsOpen(false), [])); // 外タップ/Escで閉じる
   const [knobHelp, setKnobHelp] = useState(false); // ？で各つまみの一行説明を一括展開（スマホはホバー説明が出ない・耳FB 2026-07-09）
   const previewPlay = useRef<PlaybackHandle | null>(null); // ピッカー項目の試聴（配置前に耳で確認）
   // #5 container kind でレーン/尺を差し替え（song=section を並べる編成・section=パート専用）。
@@ -461,7 +464,7 @@ export function SectionEditor({
           </button>
         </div>
         <span className="tb-divider" aria-hidden="true" />
-        <div className="assign-wrap">
+        <div className="assign-wrap" ref={toolsRef}>
           <button
             type="button"
             className={"tb-tool tools-btn" + (toolsOpen ? " on" : "")}

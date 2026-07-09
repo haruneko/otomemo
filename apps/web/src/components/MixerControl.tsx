@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { getMix, setMixVolume, type MixPart } from "../audio";
+import { useDismiss } from "../useDismiss";
 import { Icon } from "./Icon";
 
 // 再生バーの音量コントロール（音割れ対策・耳FB 2026-07-09）。🔉ボタンで小さなミキサーを開閉。
@@ -12,6 +13,8 @@ export function MixerControl() {
   const [open, setOpen] = useState(false);
   const [, force] = useState(0); // スライダー操作で再描画（値は audio.ts が真実）
   const mix = useRef(getMix());
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useDismiss(wrapRef, open, useCallback(() => setOpen(false), [])); // 外タップ/Escで閉じる
   const set = (key: "master" | MixPart, v: number) => {
     setMixVolume(key, v);
     mix.current = getMix();
@@ -20,7 +23,7 @@ export function MixerControl() {
   const pct = (v: number) => `${Math.round(v * 100)}`;
 
   return (
-    <div className="mixer-wrap">
+    <div className="mixer-wrap" ref={wrapRef}>
       <button
         type="button"
         className={"tp-btn" + (open ? " on" : "")}

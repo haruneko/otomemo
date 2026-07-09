@@ -1,6 +1,7 @@
 // NetaDialog のエディタ本体（kind 別ディスパッチ）を分離（アーキ是正 S5）。
 // メロ/ベース(絶対・相対)/コード/リズム/コンテナ/テキスト の描画。状態は親(NetaDialog)が所有し props で受ける。
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useDismiss } from "../useDismiss";
 import { api } from "../api";
 import { Icon } from "./Icon";
 import { moraLines } from "../lyrics";
@@ -65,6 +66,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
   const { isMelody, isBass, isChord, isRhythm, isContainer, isRelBass } = p.flags;
   const tp = p.tp;
   const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
+  useDismiss(toolsRef, toolsOpen, useCallback(() => setToolsOpen(false), [])); // 外タップ/Escで閉じる
   const [simReport, setSimReport] = useState<string | null>(null);
   // トランスポーズ（①道具・純クライアント＝Undo可）。全ノートのピッチを移動。
   const transpose = (d: number) =>
@@ -133,7 +136,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     {isMelody && !p.candidate && (
                       <>
                         <span className="tb-divider" aria-hidden="true" />
-                        <div className="assign-wrap">
+                        <div className="assign-wrap" ref={toolsRef}>
                           <button
                             type="button"
                             className={"tb-tool tools-btn" + (toolsOpen ? " on" : "")}
