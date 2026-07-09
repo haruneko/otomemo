@@ -55,6 +55,7 @@ export function SectionEditor({
   onOpenNeta?: (n: Neta) => void; // ブロックタップ→子ネタを編集画面で開く（潜る）
 }) {
   const [children, setChildren] = useState<Child[]>([]);
+  const [loadErr, setLoadErr] = useState(false); // getComposition 失敗時＝空白で固まらず再試行を出す（perf耳FB 2026-07-09）
   const [picker, setPicker] = useState<{ lane: Lane; position: number; all: Neta[] } | null>(null);
   // ③ 右端ドラッグでループ伸ばし中のプレビュー（fromPos〜endBeat をゴースト表示）。
   const [drag, setDrag] = useState<{ childId: string; laneKey: string; fromPos: number; unit: number; endBeat: number } | null>(null);
@@ -120,8 +121,13 @@ export function SectionEditor({
   }, [tp.playPause]);
 
   const load = useCallback(async () => {
-    const tree = await api.getComposition(neta.id);
-    setChildren(tree.children);
+    try {
+      setLoadErr(false);
+      const tree = await api.getComposition(neta.id);
+      setChildren(tree.children);
+    } catch {
+      setLoadErr(true); // 取得失敗＝白画面で固まらせず、下の再試行バーで復帰できる
+    }
   }, [neta.id]);
   useEffect(() => {
     void load();
@@ -565,6 +571,11 @@ export function SectionEditor({
           )}
         </div>
       </div>
+      {loadErr && (
+        <p className="fit-report" aria-label="load-error" onClick={() => void load()}>
+          読み込みに失敗しました <span className="muted">（タップで再試行）</span>
+        </p>
+      )}
       {fitReport && (
         <p className="fit-report" aria-label="fit-report" onClick={() => setFitReport(null)}>
           {fitReport} <span className="muted">（タップで消す）</span>

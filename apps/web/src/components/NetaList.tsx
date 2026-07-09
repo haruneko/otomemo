@@ -5,7 +5,7 @@ import { api, type Neta } from "../api";
 import { useAlive } from "../poll";
 import { MUSIC_KINDS, CONTAINER_KINDS, KIND_LABEL } from "../kinds";
 import { isProjectTag } from "../project";
-import { MiniRoll, SectionMini } from "./MiniRoll";
+import { MiniRoll, SectionMini, LazyPreview } from "./MiniRoll";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { KindIcon } from "./KindIcon";
 import {
@@ -252,7 +252,9 @@ export function NetaCard({
         </header>
         <div className="body">{label}</div>
         <ErrorBoundary fallback={<p className="section-mini-empty muted">（概形を表示できませんでした）</p>}>
-          {CONTAINER_KINDS.includes(neta.kind) ? <SectionMini neta={neta} /> : <MiniRoll neta={neta} />}
+          <LazyPreview>
+            {CONTAINER_KINDS.includes(neta.kind) ? <SectionMini neta={neta} /> : <MiniRoll neta={neta} />}
+          </LazyPreview>
         </ErrorBoundary>
         {/* プロジェクト所属(prj:)は別軸＝ピッカーに出すので意味タグのチップ列からは外す */}
         {(() => {

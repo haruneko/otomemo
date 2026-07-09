@@ -1,6 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { notesForContent, beatsPerBar } from "../music";
 import { api, type Neta, type CompositionNode } from "../api";
+
+// 画面に入ったカードだけプレビューを描画・取得する遅延マウント（perf 耳FB 2026-07-09）。
+// 一覧は100枚規模＝全カードが即 SVG描画＋SectionMini の getComposition を撃つと初回展開が数秒重い
+// （実測: 一覧4.3s/初回セクション展開2.5s・CPU6倍絞り）。一度可視になったら保持＝再取得のちらつき回避。
+// プレースホルダで高さを確保しスクロール飛びを防ぐ。IntersectionObserver 無い環境は即描画にフォールバック。
+export function LazyPreview({ children, minHeight = 40 }: { children: ReactNode; minHeight?: number }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (shown) return;
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setShown(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (ents) => {
+        if (ents.some((e) => e.isIntersecting)) {
+          setShown(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" }, // 見える少し手前で先読み描画＝スクロールで空白が見えない
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [shown]);
+  return (
+    <div ref={ref} className="lazy-preview" style={shown ? undefined : { minHeight }}>
+      {shown ? children : null}
+    </div>
+  );
+}
 
 // #48: カードにメロ/コード/ベース/リズムの概形（小さなピアノロール）を出す。音楽以外は何も描かない。
 // notes を渡すと content の代わりにそれを描く（section/song ブロック＝合成した概形を出す用・#5）。
