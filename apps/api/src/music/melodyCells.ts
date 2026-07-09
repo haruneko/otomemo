@@ -801,6 +801,11 @@ export function genMotifMelodyV2(
     notes[i]!.pitch = onStrong(t) ? ctP(target, pcsAtT(t)) : clampScale(L, nearestIdx(L, target));
   };
   const isForbiddenIv = (a: number): boolean => a === 6 || a === 10 || a === 11 || a > 12;
+  // 和声考慮(2026-07-09 批判レビュー・跳躍B)：両端がコード音の跳躍は「アルペジオ」＝三全音/7度でも正当
+  // （属7の 3-♭7 三全音・コード内7度）。禁則除去/gap-fill回収の対象外にする＝和声盲の禁則で潰さない。
+  // 8度超(>12)は歌えない声域跳躍なので免除しない（この関数の外＝下の呼び出しで a<=12 のみ免除）。
+  const pcAt = (p: number): number => ((p % 12) + 12) % 12;
+  const bothChordTones = (i: number): boolean => i >= 1 && pcsAtT(notes[i - 1]!.start).includes(pcAt(notes[i - 1]!.pitch)) && pcsAtT(notes[i]!.start).includes(pcAt(notes[i]!.pitch));
   // 禁則修正の置き先を「アンカー(隣接音)と禁則にならない」候補から選ぶ（dim和音等で最寄りコード音が
   // また三全音＝不動点、を防ぐ）。候補：強拍=コード音（半音空間）／弱拍=スケール音。無ければ placeNear へ。
   const placeNonForbidden = (i: number, target: number, anchors: number[]): void => {
@@ -827,7 +832,7 @@ export function genMotifMelodyV2(
   const fixForbidden = (): void => {
     for (let i = 1; i < notes.length; i++) {
       const iv = notes[i]!.pitch - notes[i - 1]!.pitch, a = Math.abs(iv);
-      if (isForbiddenIv(a)) {
+      if (isForbiddenIv(a) && !(a <= 12 && bothChordTones(i))) { // 両端コード音のアルペジオ跳躍(≤8度)は許可
         if (i === notes.length - 1) {
           // 終止保護（B3）：最終音(着地)は動かさず、直前音を着地の手前(≈3度)へ寄せる。
           // アンカー＝着地音と、さらに手前の音（i-2との間に新禁則を作らない）。
@@ -844,7 +849,7 @@ export function genMotifMelodyV2(
   const gapFill = (): void => {
     for (let i = 1; i < notes.length - 1; i++) {
       const iv = notes[i]!.pitch - notes[i - 1]!.pitch;
-      if (Math.abs(iv) >= 5) {
+      if (Math.abs(iv) >= 5 && !bothChordTones(i)) { // 両端コード音のアルペジオ跳躍は回収しない（跳ねっぱなしを許す）
         const nx = notes[i + 1]!.pitch - notes[i]!.pitch;
         if (!(Math.sign(nx) === -Math.sign(iv) && Math.abs(nx) <= 2) && i + 1 < notes.length - 1) { // 句末(最後)は触らない＝終止保護
           placeNear(i + 1, notes[i]!.pitch - (Math.sign(iv) || 1) * 1.5);
@@ -950,6 +955,36 @@ export function genMotifMelodyV2(
       if (!isResolvedNct(classifyNCT(prev, cand, next, chordOf(bar)))) continue; // other(孤立)を弾く
       notes[i]!.pitch = cand;
       locked.add(i + 1); // 解決音は以降の変換で動かさない（相手を孤立させない）
+    }
+  }
+
+  // ── 弱拍の露出した濁り(avoid note)掃除(2026-07-09 批判レビュー・コード外音A2)──
+  // 弱拍がスケール歩行で「コード音の半音上(m2/m9)」に居座る**偶発的な濁り**だけを最寄りの安全音へ寄せる。
+  // 短い順次の経過音(passing＝両側step同方向)は**色気なので残す**（掃除しすぎ＝無菌化に逆戻り＝避ける）。
+  // 強拍/終止/句頭/カデンツ着地/表情NCT は不変。決定ルール(rng不使用)。禁則・単一頂点は保護。
+  {
+    const hiA = Math.max(...notes.map((n) => n.pitch));
+    const isClash = (p: number, t: number): boolean => { const c = pcsAtT(t); const pc = pcAt(p); return !c.includes(pc) && c.includes((pc + 11) % 12); }; // コード音の半音上に居る
+    for (let i = 1; i < notes.length - 1; i++) {
+      const t = notes[i]!.start;
+      if (onStrong(t) || cadenceIdx.has(i)) continue; // 弱拍のみ・カデンツ着地は不変
+      if (notes[i]!.pitch === hiA) continue; // 頂点音は動かさない（単一頂点保護）
+      if (!isClash(notes[i]!.pitch, t)) continue; // コード音 or 非濁り＝そのまま
+      const prev = notes[i - 1]!.pitch, next = notes[i + 1]!.pitch, cur = notes[i]!.pitch;
+      const din = cur - prev, dout = next - cur;
+      // 短い順次の経過音(両側 step≤2・同方向)は色気＝残す。露出(跳躍入り/出・刺繍で濁る)だけ掃除。
+      if (Math.abs(din) >= 1 && Math.abs(din) <= 2 && Math.abs(dout) >= 1 && Math.abs(dout) <= 2 && Math.sign(din) === Math.sign(dout)) continue;
+      const L = spAt(barOf(t));
+      let best = -1, bd = 99;
+      for (const q of L) {
+        if (q >= hiA) continue; // 単一頂点保護（頂点に並ばない）
+        if (q === prev || q === next) continue; // 隣と同音＝足踏みは作らない（掃除で無菌化しない）
+        if (isClash(q, t)) continue; // 別の濁りへは動かさない
+        if (isForbiddenIv(Math.abs(q - prev)) || isForbiddenIv(Math.abs(next - q))) continue; // 禁則を作らない
+        const d = Math.abs(q - cur);
+        if (d < bd || (d === bd && q > best)) { bd = d; best = q; } // 最寄り・同距離なら上を採る
+      }
+      if (best >= 0) notes[i]!.pitch = best; // 安全な非足踏み候補が無ければ濁りは残す（悪化させない）
     }
   }
 
