@@ -234,6 +234,7 @@ function resetSfCaches(): void {
   sfLoadPromise = null; // SF2 変更で進行中ロードの共有も破棄（旧URLの結果を新URLに使い回さない）
   sfDrumCache.clear();
   sfMelodicCache.clear(); // #section音色: program毎の旋律samplerもSF2変更で破棄
+  sfBufCache.clear(); // SF2 fetch 在庫も破棄（URL変更で古いバイトを使い回さない）
   prewarmDone = false; // SF2が変わったら先読みもやり直し
 }
 
@@ -341,8 +342,38 @@ export function resolveSF2Ctor(mod: any): any {
   return mod?.SoundFont2 ?? mod?.default?.SoundFont2 ?? mod?.default ?? mod;
 }
 
-// SF2 を1個生成。createSoundfont は url 単位でパース結果をキャッシュ＝再パースしない。
+// SF2 本体の「一度だけDL」共有（耳FB 2026-07-09・実測で判明した致命傷の修正）。
+// smplr 1.0.0 の Soundfont2 loader は storage を無視して **global `fetch(url)` を直叩き**する。旋律＋
+// ドラム十数本の sampler を prewarm/再生で同時生成すると、同じ 31MB SF2 を**十数回同時DL**（実測 12回
+// =370MB・キャッシュ由来0）し音出しが激遅に。しかも 31MB は大きすぎてブラウザHTTPキャッシュに乗らず
+// 逐次でも再DL（実測）。対策＝**global fetch を SF2 URL だけ横取り**し、1回DLした ArrayBuffer を全 sampler
+// で共有（他URLは素通し）。ネット転送は1本分に収束。parse も createSoundfont で url 単位1回。
+const sfBufCache = new Map<string, Promise<ArrayBuffer>>();
+let origFetch: typeof fetch | null = null;
+function ensureFetchDedup(): void {
+  if (origFetch) return;
+  origFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = ((input: any, init?: any): Promise<any> => {
+    const url = typeof input === "string" ? input : (input && input.url) || undefined;
+    const shared = url ? sfBufCache.get(url) : undefined;
+    // SF2本体URLだけ横取り＝共有バッファを返す（smplrは res.arrayBuffer() だけ使う）。他は素通し。
+    if (shared) return shared.then((buf) => ({ ok: true, status: 200, arrayBuffer: () => Promise.resolve(buf) }));
+    return origFetch!(input, init);
+  }) as typeof fetch;
+}
+function primeSf2(url: string): Promise<ArrayBuffer> {
+  ensureFetchDedup();
+  let p = sfBufCache.get(url);
+  if (!p) {
+    p = origFetch!(url).then((r) => r.arrayBuffer()); // 実DLは origFetch で1回だけ
+    sfBufCache.set(url, p);
+  }
+  return p;
+}
+
+// SF2 を1個生成。本体DLは primeSf2 で url 単位1回、parse は createSoundfont で url 単位1回。
 async function makeSampler(url: string, Tone: any, part: MixPart = "melody"): Promise<any> {
+  primeSf2(url); // ★ SF2 URL を横取り登録＝smplr 内の fetch(url) は共有バッファを受け取り再DLしない
   const [smplr, sf2mod] = await Promise.all([import("smplr"), import("soundfont2")]);
   const Soundfont2 = (smplr as any).Soundfont2;
   const SoundFont2 = resolveSF2Ctor(sf2mod);

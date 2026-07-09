@@ -277,18 +277,26 @@ export function App() {
   useEffect(() => {
     applyColors(loadColors());
     // #55a/#55c 選択中SoundFontを再生に反映（設定を開かなくても効く）。消えた/古いidは最新へ自己修復。
-    // #84 SoundFont 先読み。ただし温めは Tone/smplr(合計~410KB) の動的import を誘発する。ロード直後や
-    // アイドルタイマで走らせると初期描画/一覧展開と帯域・CPUを奪い合い重い（perf 耳FB 2026-07-09・実測）。
-    // ブラウザは gesture 前に音を鳴らせない＝初期に温める必然は無い。**最初のタップ(gesture)で一度だけ**温める
-    // ＝Tone をランディングから完全に外し、タイマの当たり外れも消す。以降は冪等 no-op。
+    // #84 SoundFont 先読み。温めは Tone/smplr(~410KB)＋SF2本体の fetch/decode を誘発するので、
+    // ロード直後(初期描画とバンドルパースに競合)に走らせない。かといって「最初のタップまで待つ」だと
+    // 温めが再生直前に始まり**初回の音出しが遅い**（耳FB 2026-07-09）。折衷＝**初期描画が済んだ後の
+    // アイドルで裏読み開始**＝初期表示は軽いまま、再生する頃には温まっている。加えて最初のタップでも
+    // 温める(アイドルより早く操作が来た時の保険)。warmed で二重起動を防ぐ（冪等）。
     let warmed = false;
-    const onFirst = () => {
+    const warm = () => {
       if (warmed) return;
       warmed = true;
       void initSoundFont().then(() => void prewarmSoundFont());
     };
-    window.addEventListener("pointerdown", onFirst, { once: false });
-    return () => window.removeEventListener("pointerdown", onFirst);
+    window.addEventListener("pointerdown", warm);
+    const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    const idle = typeof ric === "function" ? ric(warm, { timeout: 2000 }) : (setTimeout(warm, 1200) as unknown as number);
+    return () => {
+      window.removeEventListener("pointerdown", warm);
+      const cic = (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+      if (typeof cic === "function") cic(idle);
+      else clearTimeout(idle);
+    };
   }, []);
 
   // チップ列で選択中(.on)が端に隠れないよう可視域へ（レビュー M-4）。
