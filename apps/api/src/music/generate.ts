@@ -94,7 +94,7 @@ const barsOf = (frame: Frame): number =>
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 /** 機能和声ルールでコード進行を生成（T始まり・T終わり）。返り #85 items 形。 */
-export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal"): GenResult {
+export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal", opts?: { borrow?: number; secondaryDom?: number }): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
@@ -143,10 +143,15 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
   // 「切ない」は従来どおり素の短調（長短切替の正準語＝色付けしない）。
   const colorful = /おしゃれ|オシャレ|ジャズ|jazz|都会|夜|しっとり|大人/.test(mood);
   const table7 = minor ? DIATONIC_MINOR7 : DIATONIC_MAJOR7;
-  const chords = degrees.map((deg, i) => {
-    const [root, quality] = (colorful ? table7 : table)[deg]!;
-    return { root: (root + key) % 12, quality, start: round3(i * bpb), dur: round3(bpb) };
-  });
+  // C基準の (root,quality) を先に作り、色ノブ(borrow/secondaryDom)で差し替えてから実音移調（既定OFF=bit一致）。
+  const base = degrees.map((deg) => { const [root, quality] = (colorful ? table7 : table)[deg]!; return { root, quality }; });
+  // borrow(2026-07-09 監査C)：長調のサブドミナント IV を借用短調 iv(♭6→5 の切なさ・SDm)へ確率で差替。
+  const borrow = Math.max(0, Math.min(1, opts?.borrow ?? 0));
+  if (borrow > 0 && !minor) for (let i = 1; i < base.length - 1; i++) if (degrees[i] === 4 && rng.next() < borrow) base[i] = { root: 5, quality: colorful ? "m7" : "m" };
+  // secondaryDom(2026-07-09 監査C)：非トニック和音の直前を V/x（完全5度上の dom7）へ差替＝二次ドミナント(接着・丸サIII7=V/vi)。
+  const secondaryDom = Math.max(0, Math.min(1, opts?.secondaryDom ?? 0));
+  if (secondaryDom > 0) for (let i = 1; i < base.length - 1; i++) { const nx = base[i + 1]!; if (((nx.root % 12) + 12) % 12 !== 0 && rng.next() < secondaryDom) base[i] = { root: ((nx.root + 7) % 12 + 12) % 12, quality: "7" }; }
+  const chords = base.map((c, i) => ({ root: (c.root + key) % 12, quality: c.quality, start: round3(i * bpb), dur: round3(bpb) }));
   const label = (mood ? mood + "コード進行" : minor ? "マイナーの進行" : "コード進行").slice(0, 24);
   return { items: [{ kind: "chord_progression", content: { chords }, label }], edges: [] };
 }

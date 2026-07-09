@@ -181,7 +181,7 @@ export function buildHttp(core: Core): FastifyInstance {
     };
     try {
       switch (op) {
-        case "gen_chords": return genChords(b.frame, b.seed, b.cadence === "half" || b.cadence === "deceptive" || b.cadence === "plagal" ? b.cadence : undefined);
+        case "gen_chords": { const num = (x: unknown) => (typeof x === "number" ? x : undefined); return genChords(b.frame, b.seed, b.cadence === "half" || b.cadence === "deceptive" || b.cadence === "plagal" ? b.cadence : undefined, { borrow: num(b.borrow), secondaryDom: num(b.secondaryDom) }); }
         case "gen_melody": {
           // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);

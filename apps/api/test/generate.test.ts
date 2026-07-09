@@ -78,6 +78,43 @@ describe("genChords（機能和声ルール）", () => {
     expect(decMin.fin.root).toBe(8); // ♭VI（A♭）
   });
 
+  it("C① borrow/secondaryDom 未指定・空opts＝従来bit一致（回帰ゼロ）", () => {
+    for (const mood of ["明るい", "切ない", "おしゃれ"]) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const base = JSON.stringify(genChords({ bars: 8, mood }, seed).items[0]!.content);
+        expect(JSON.stringify(genChords({ bars: 8, mood }, seed, undefined, {}).items[0]!.content), `${mood}#${seed}`).toBe(base);
+      }
+    }
+  });
+
+  it("C② borrow=1で長調にサブドミナントマイナー iv(Fm=root5,m) が出る", () => {
+    const countIv = (borrow: number) => {
+      let c = 0;
+      for (let seed = 1; seed <= 40; seed++) {
+        const ch = (genChords({ key: 0, bars: 8, mood: "明るい" }, seed, undefined, { borrow }).items[0]!.content as { chords: { root: number; quality: string }[] }).chords;
+        c += ch.filter((x) => x.root === 5 && x.quality === "m").length; // Fm=iv借用
+      }
+      return c;
+    };
+    expect(countIv(0), "既定は借用iv=0（Fmは長調ダイアトニックに無い）").toBe(0);
+    expect(countIv(1), "borrow=1でiv(Fm)が出る").toBeGreaterThan(0);
+  });
+
+  it("C③ secondaryDom=1で二次ドミナント(非ダイアトニックのdom7)が出る", () => {
+    const diatonicMajRoots = new Set([0, 2, 4, 5, 7, 9, 11]);
+    const countSecD = (secondaryDom: number) => {
+      let c = 0;
+      for (let seed = 1; seed <= 40; seed++) {
+        const ch = (genChords({ key: 0, bars: 8, mood: "明るい" }, seed, undefined, { secondaryDom }).items[0]!.content as { chords: { root: number; quality: string }[] }).chords;
+        // V/x = dom7 で、ダイアトニックのV(G7=root7)以外＝二次ドミナント
+        c += ch.filter((x) => x.quality === "7" && x.root !== 7).length;
+      }
+      return c;
+    };
+    expect(countSecD(1), "secondaryDom=1で非ダイアトニックのdom7(二次ドミナント)が出る").toBeGreaterThan(0);
+    // メロ自動整合（B1）：二次ドミナントの色音にメロが乗れる＝別途analyze_fitで担保（ここは和声のみ検証）
+  });
+
   it("Step3③ メロは追従不要でカデンツに自動整合（half=V終わりは主音を強制しない・B1）", async () => {
     const { genMelody } = await import("../src/music/generate");
     const frame = { key: 0, bars: 8, mood: "明るい" };
