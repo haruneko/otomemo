@@ -703,12 +703,12 @@ export function genMotifMelodyV2(
   // 断片化(fragmentation・sentence継続部・2026-07-09 D本丸)：Mの**先頭半小節セル**(逐語)を、ブロックを通して
   // 半小節ごとに反復＝断片の畳み掛け＝密度が増え「加速→カデンツ」の推進(起承転結の"転")。freeVary(再生成)でなく
   // 逐語サブセル抽出＝覚えられる動機の同一性を保つ（理論評価: 継続に freeVary厳禁）。onsetは16分格子上に乗る。
-  const fragment = (M: Motif16): Motif16 => {
+  const fragment = (M: Motif16, bb: number = mb): Motif16 => {
     const half = barLen / 2;
     const cell = M.ons.filter((t) => t < half); // 先頭半小節のサブセル
     if (cell.length < 1) return M;
     const cmv = cell.map((_, i) => M.mv[i] ?? 0), crun = cell.map((_, i) => M.run[i] ?? false);
-    const ons: number[] = [], mv: number[] = [], run: boolean[] = [], total = mb * barLen;
+    const ons: number[] = [], mv: number[] = [], run: boolean[] = [], total = bb * barLen;
     for (let off = 0; off + half <= total - 0.5; off += half) cell.forEach((t, i) => { ons.push(off + t); mv.push(cmv[i]!); run.push(crun[i]!); }); // 末尾~0.5拍は息継ぎ
     return ons.length ? { ons, mv, run } : M;
   };
@@ -791,25 +791,37 @@ export function genMotifMelodyV2(
   // 機能割当。可変長は使わない(理論/実装評価: 過程が形式を生む・容器は最後)。既定(form未指定)=従来AABA=bit一致。
   // 展開技法として sequence(Mの輪郭を移高して再生=最も可聴なpop展開)と fragment(継続の畳み掛け=加速)を導入。
   const sentence = opts.form === "sentence";
-  const sRole = (blk: number): "bi" | "seq" | "frag" | "cad" => (blk === nBlk - 1 ? "cad" : blk === 0 ? "bi" : blk === 1 ? "seq" : "frag"); // 提示/移高反復/継続断片/カデンツ
-  for (let blk = 0; blk < nBlk; blk++) {
-    const bar0 = blk * mb;
-    const last = blk === nBlk - 1;
+  // 可変長ブロック(監査D本丸・容器・2026-07-09)：phrases 指定時は句を1ブロックとし**句長のモチーフ**で作る
+  // （[3,3,2]なら3小節/3小節/2小節ブロック＝真の非対称）。既定/補完(phrases無し or seedMotif)は従来の固定mb・単一M
+  // ＝bit一致・rng draw順を保つ。長さ別モチーフ辞書(motifByLen)で同一長は基底を共有＝発展で同一性。
+  const varLen = !!(opts.phrases && opts.phrases.length && !opts.seedMotif);
+  const blocks: { bar0: number; bars: number }[] = varLen
+    ? opts.phrases!.map((p) => ({ bar0: Math.floor(p.startBeat / barLen), bars: Math.max(1, Math.round(p.beats / barLen)) }))
+    : Array.from({ length: nBlk }, (_, i) => ({ bar0: i * mb, bars: mb }));
+  const motifByLen = new Map<number, Motif16>();
+  const motifFor = (L: number): Motif16 => { if (!varLen) return M; let mm = motifByLen.get(L); if (!mm) { mm = genBest(r, L); motifByLen.set(L, mm); } return mm; };
+  const nB = blocks.length;
+  const sRole = (i: number): "bi" | "seq" | "frag" | "cad" => (i === nB - 1 ? "cad" : i === 0 ? "bi" : i === 1 ? "seq" : "frag"); // 提示/移高反復/継続断片/カデンツ
+  const bBlockBars = new Set<number>(); // 単一頂点のB塊(弧のピーク)判定用
+  for (let bi = 0; bi < nB; bi++) {
+    const bar0 = blocks[bi]!.bar0, L = blocks[bi]!.bars, last = bi === nB - 1;
+    const rbb = varLen ? L : mb; // render/断片の長さ（既定=mb でbit一致）
+    const Mi = motifFor(L);
     let variant: Motif16, anchor: number;
     if (sentence) {
-      const fn = sRole(blk);
-      variant = fn === "frag" ? fragment(M) : M; // bi/seq/cad=覚えられる動機M(逐語)、継続=断片化
+      const fn = sRole(bi);
+      variant = fn === "frag" ? fragment(Mi, rbb) : Mi; // bi/seq/cad=覚えられる動機M(逐語)、継続=断片化
       const ab = an(bar0);
       anchor = fn === "seq" ? clampScale(sp, nearestIdx(sp, ab) + 2) : ab; // 反復は2スケール段 移高=sequence(同一性＋運動)
-      notes.push(...render(variant, bar0, anchor, last));
     } else {
-      const role = roleOf(blk);
-      variant = role === 1 ? varyTail(M, r) : role === 2 ? invert(M) : M; // A / A'(尾変奏) / B(反行) / A''
-      if (fg > 0 && role !== 0 && !last && r() < fg) variant = freeVary(M, r); // 派生ブロックを自由材料に（fg=0では抽選しない＝bit一致）
+      const role = roleOf(bi);
+      variant = role === 1 ? varyTail(Mi, r) : role === 2 ? invert(Mi) : Mi; // A / A'(尾変奏) / B(反行) / A''
+      if (fg > 0 && role !== 0 && !last && r() < fg) variant = freeVary(Mi, r); // 派生ブロックを自由材料に（fg=0では抽選しない＝bit一致）
       const anchorBase = an(bar0);
       anchor = role === 2 ? clampScale(sp, nearestIdx(sp, anchorBase) + 2) : anchorBase; // 弧＝B塊を音域ピークへ
-      notes.push(...render(variant, bar0, anchor, last));
+      if (role === 2) for (let b = bar0; b < bar0 + L; b++) bBlockBars.add(b);
     }
+    notes.push(...render(variant, bar0, anchor, last, rbb));
   }
   notes.sort((a, b) => a.start - b.start);
 
@@ -926,7 +938,7 @@ export function genMotifMelodyV2(
   const peakIdx: number[] = [];
   for (let i = 0; i < notes.length - 1; i++) if (notes[i]!.pitch === hi) peakIdx.push(i); // 句末は除外＝終止保護
   if (peakIdx.length > 1) {
-    const inB = (t: number): boolean => roleOf(Math.floor(barOf(t) / mb)) === 2;
+    const inB = (t: number): boolean => bBlockBars.has(barOf(t)); // B塊(弧のピーク)＝可変長対応（旧: roleOf(floor(bar/mb)) と既定一致）
     const keeper = peakIdx.find((i) => inB(notes[i]!.start)) ?? peakIdx[0]!;
     for (const i of peakIdx) {
       if (i === keeper) continue;

@@ -80,6 +80,23 @@ describe("genMelody 不変条件", () => {
     }
   });
 
+  it("可変長ブロック(asymmetric [3,3,2])：空尾破綻なし・不変条件・決定的（2026-07-09 D本丸容器）", () => {
+    const chords: Chord[] = Array.from({ length: 8 }, (_, i) => ({ root: [0, 9, 5, 7, 0, 9, 5, 7][i]!, quality: i % 4 === 1 ? "m" : "", start: i * 4, dur: 4 }));
+    for (let seed = 1; seed <= 40; seed++) {
+      const notes = notesOf(genMelody({ key: 0, bars: 8, meter: "4/4" }, chords, seed, { useV2: true, phrasing: "asymmetric" }));
+      expect(notes.length, `#${seed} 非空`).toBeGreaterThan(0);
+      // 空尾破綻なし＝最後の音が終盤(bar6以降)にある（3小節モチーフの埋め草不足で末尾がスカスカにならない）。
+      const last = notes[notes.length - 1]!;
+      expect(last.start, `#${seed} 末尾まで音がある(空尾破綻なし)`).toBeGreaterThanOrEqual(24);
+      // 音域・決定性・昇順
+      for (const n of notes) { expect(n.pitch).toBeGreaterThanOrEqual(50); expect(n.pitch).toBeLessThanOrEqual(80); }
+      for (let i = 1; i < notes.length; i++) expect(notes[i]!.start).toBeGreaterThanOrEqual(notes[i - 1]!.start);
+    }
+    const a = notesOf(genMelody({ key: 0, bars: 8, meter: "4/4" }, chords, 7, { useV2: true, phrasing: "asymmetric" }));
+    const b = notesOf(genMelody({ key: 0, bars: 8, meter: "4/4" }, chords, 7, { useV2: true, phrasing: "asymmetric" }));
+    expect(b).toEqual(a); // 決定的
+  });
+
   it("決定性：同一(frame,chords,seed)は同一出力", () => {
     const chords: Chord[] = [{ root: 0, quality: "", start: 0, dur: 8 }];
     for (const seed of SEEDS) {
