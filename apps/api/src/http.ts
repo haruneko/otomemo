@@ -32,6 +32,7 @@ import {
 } from "./music";
 import { analyzeVoiceLeading } from "./music/voiceLeading";
 import { normRoot } from "./music/theory";
+import { assetsDir } from "./audio-asset";
 import { findProgressions } from "./progression-search";
 import { getChatSession, stopChatSession } from "./chat-session";
 import { beginTurn, pushTurnEvent, endTurn, attachTurn, isTurnLive, DONE } from "./chat-live";
@@ -51,13 +52,6 @@ function stripHeavyListContent<T extends { content: unknown }>(items: T[]): T[] 
   });
 }
 
-// #77 asset(SoundFont等)の実体保存先。CM_DB と同階層の assets/（env で上書き可）。
-function assetsDir(): string {
-  return (
-    process.env.CM_ASSETS_DIR ??
-    (process.env.CM_DB ? join(dirname(process.env.CM_DB), "assets") : join("data", "assets"))
-  );
-}
 
 // neta/job 入力スキーマは SSOT(schemas.ts)から import（http/mcp/型で共有・三重定義を排す）。
 

@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { claudeShot } from "./research-runner";
 import { fetchAudioFromUrl, analyzeAudioFile } from "./audio-analyze";
 import { beginJobProc, endJobProc } from "./job-procs";
+import { saveAudioAsset } from "./audio-asset";
 import { chordSequenceFromTimeline } from "./audio-chords";
 import { commonProgressions, songCoreLoops, type CoreLoop } from "./common-progressions";
 import type { Core } from "./core";
@@ -128,11 +129,16 @@ export async function runStudyJob(
       coreLoops: CoreLoop[]; chords: { root: number; quality: string; dur: number }[];
     }[] = [];
 
+    const audioAssets: { title: string; asset_id: string }[] = []; // P2：アップロード音源を asset 化（reaper が study ネタへ source リンク）
     for (const work of works) {
       if (signal.aborted) throw new Error("停止しました");
       let chords: { root: number; quality: string; dur: number }[] = [];
       if (work.audioUrl || work.audio_b64) {
         try {
+          if (work.audio_b64) {
+            const bytes = Buffer.from(work.audio_b64, "base64");
+            if (bytes.length > 0) audioAssets.push({ title: work.title, asset_id: saveAudioAsset(core, bytes, work.title) });
+          }
           const facts = work.audio_b64
             ? await analyzeB64(work.audio_b64, work.title, signal) // ローカル/アップロード音源（yt-dlp不要）
             : await analyze(work.audioUrl!, signal);               // URL（yt-dlp・注入可）
@@ -175,10 +181,12 @@ export async function runStudyJob(
       stats: result.stats,
       prose,
       title: `研究: ${topic}`,
+      audioAssets, // P2：アップロード音源の asset（reaper が study ネタへ source リンク）
     });
   } catch (e) {
     core.failJob(job.id, e instanceof Error ? e.message : String(e));
   } finally {
+    core.stripJobAudio(job.id); // P2：params の base64 を除去（asset へ保存済み・done後に残さない）
     endJobProc(job.id);
   }
 }

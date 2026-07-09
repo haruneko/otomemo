@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { claudeShot } from "./research-runner";
 import { beginJobProc, endJobProc } from "./job-procs";
+import { saveAudioAsset } from "./audio-asset";
 import type { Core } from "./core";
 import type { Job } from "./types";
 
@@ -104,11 +105,15 @@ export async function runAudioAnalyzeJob(
     const meter = typeof p.meter === "number" && p.meter > 0 ? p.meter : 0; // #S12 未指定=0(auto)＝ドラムから拍子推定（reaper）。>0はユーザー指定で常に優先
     const bpmHint = typeof p.bpm === "number" && p.bpm > 0 ? p.bpm : 0; // 任意のBPMヒント（拍検出を固定・綺麗に）
     let audioPath: string;
+    let audioAssetId: string | undefined;
     if (p.url) {
       audioPath = await fetchAudioFromUrl(p.url, dir, signal);
     } else {
       audioPath = join(dir, (p.filename || "audio.mp3").replace(/[^\w.\-]/g, "_"));
-      writeFileSync(audioPath, Buffer.from(p.audio_b64 ?? "", "base64"));
+      const bytes = Buffer.from(p.audio_b64 ?? "", "base64");
+      writeFileSync(audioPath, bytes);
+      // P2(design#16)：アップロード音源は asset(重複排除)へ保存＝params の base64 に頼らず残す。
+      if (bytes.length > 0) audioAssetId = saveAudioAsset(core, bytes, label);
     }
     const facts = await analyze(audioPath, dir, meter, bpmHint, signal);
     // ★重いMIRが済んだら prose 失敗でも facts は残す（prose は二次的・タイムアウトで全部捨てない）。
@@ -119,11 +124,12 @@ export async function runAudioAnalyzeJob(
       if (signal.aborted) throw e; // 停止/削除は失敗として扱う
       prose = "（所見の自動生成に失敗＝再生成できます。実測データは揃っています）";
     }
-    core.completeJob(job.id, { facts, prose, title: label });
+    core.completeJob(job.id, { facts, prose, title: label, audio_asset_id: audioAssetId });
   } catch (e) {
     core.failJob(job.id, e instanceof Error ? e.message : String(e));
   } finally {
     rmSync(dir, { recursive: true, force: true }); // 音源・stem を削除（30-4：派生事実のみ残す）
+    core.stripJobAudio(job.id); // P2：params の base64 を除去（asset へ保存済み・done後に残さない）
     endJobProc(job.id);
   }
 }

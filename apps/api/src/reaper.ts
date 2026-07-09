@@ -172,9 +172,9 @@ export function reapResults(core: Core): number {
     )
     .all() as { id: string; result: string | null }[];
   for (const r of audioRows) {
-    let parsed: { facts?: unknown; prose?: string; title?: string };
+    let parsed: { facts?: unknown; prose?: string; title?: string; audio_asset_id?: string };
     try {
-      parsed = JSON.parse(r.result ?? "{}") as { facts?: unknown; prose?: string; title?: string };
+      parsed = JSON.parse(r.result ?? "{}") as { facts?: unknown; prose?: string; title?: string; audio_asset_id?: string };
     } catch {
       parsed = {};
     }
@@ -218,7 +218,7 @@ export function reapResults(core: Core): number {
     const secs = drumOnsets.length && beatTimes.length && (userMeter || (ext != null && ext.confidence >= 0.3))
       ? extractSectionPatterns(beatTimes, drumOnsets) : [];
     const mmss = (t: number) => { const s = Math.round(t); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }; // 秒を先に丸め＝「4:60」防止
-    core.createNeta({
+    const analysisNeta = core.createNeta({
       kind: "analysis",
       title: `アナリーゼ: ${parsed.title ?? "音源"}`,
       text: parsed.prose ?? "",
@@ -239,6 +239,8 @@ export function reapResults(core: Core): number {
       tags: ["アナリーゼ"],
       from_job: r.id,
     });
+    // P2(design#16)：解析の元音源(asset)を analysis ネタへ source リンク＝「その解析の元音源」を辿れる。
+    if (parsed.audio_asset_id) core.linkAsset(analysisNeta.id, parsed.audio_asset_id, "source");
     n += 1;
     // #S12改3 ドラムを**区間ごと**に弾き直せる rhythm 候補ネタへ（1小節ループ横展でなく、実区間の実グルーヴ）。
     // 各区間は crash境界で切り区間内で畳む＝ドリフト無・区間平均でノイズ消。区間の高信頼分だけネタ化（グレースフル）。
@@ -330,7 +332,8 @@ export function reapResults(core: Core): number {
       topic?: string; artist?: string; members?: unknown;
       songs?: { title?: string; coreLoops?: { example: Slot[]; length: number; count: number }[] }[];
       common?: { degrees: string[]; example: Slot[]; songCount: number; songs: string[] }[];
-      stats?: unknown; prose?: string; title?: string
+      stats?: unknown; prose?: string; title?: string;
+      audioAssets?: { title: string; asset_id: string }[];
     };
     try {
       parsed = JSON.parse(r.result ?? "{}") as typeof parsed;
@@ -361,6 +364,8 @@ export function reapResults(core: Core): number {
       tags: studyTags,
       from_job: r.id,
     });
+    // P2(design#16)：研究対象のアップロード音源(asset)を study ネタへ source リンク（複数曲）。
+    if (Array.isArray(parsed.audioAssets)) for (const a of parsed.audioAssets) if (a?.asset_id) core.linkAsset(studyNeta.id, a.asset_id, "source");
     n += 1;
     // 出口の弾ける chord_progression ネタ＝各曲の「コア・ループ」（主レンズ由来＝美味しいフック）。研究プロジェクトへ。
     // 旧＝common(補助・汎用の繋ぎ)由来だったのを主レンズに揃える（#S11改）。1曲につき最頻ループ1本。

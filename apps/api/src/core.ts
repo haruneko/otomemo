@@ -267,6 +267,10 @@ export class Core {
   getJob(id: string): Job | null {
     return this.job.getJob(id);
   }
+  // P2：処理後に params から base64 音源を除去（asset へ保存済み前提・design#16）。
+  stripJobAudio(id: string): void {
+    this.job.stripAudioParams(id);
+  }
   // api 内 consumer（research 実行器）用：claim(queued→running)/complete(done+result)/fail。
   claimQueued(intents: string[]): Job | null {
     return this.job.claimQueued(intents);

@@ -77,6 +77,24 @@ export class JobRepo {
     })();
   }
 
+  // P2(2026-07-09 design#16)：処理後に params から base64 音源を除去（asset へ保存済み前提）。
+  // done/fail 後に base64 が残らない＝DB 肥大の恒久防止。他の params（title/meter/asset_id 等）は温存。
+  stripAudioParams(jobId: string): void {
+    const row = this.db.prepare(`SELECT params FROM job WHERE id=?`).get(jobId) as { params: string | null } | undefined;
+    if (!row?.params) return;
+    let p: Record<string, unknown>;
+    try { p = JSON.parse(row.params) as Record<string, unknown>; } catch { return; }
+    let changed = false;
+    if (typeof p.audio_b64 === "string") { delete p.audio_b64; changed = true; }
+    if (Array.isArray(p.works)) {
+      p.works = (p.works as Record<string, unknown>[]).map((w) => {
+        if (typeof w.audio_b64 === "string") { changed = true; const { audio_b64, ...rest } = w; return rest; }
+        return w;
+      });
+    }
+    if (changed) this.db.prepare(`UPDATE job SET params=@params, updated=@u WHERE id=@id`).run({ id: jobId, params: JSON.stringify(p), u: now() });
+  }
+
   getJobResults(jobId: string): JobResult[] {
     return this.db
       .prepare(`SELECT neta_id, role FROM job_result WHERE job_id = ? ORDER BY ord`)
