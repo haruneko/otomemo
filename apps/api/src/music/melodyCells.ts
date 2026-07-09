@@ -827,7 +827,24 @@ export function genMotifMelodyV2(
     else placeNear(i, target);
   };
   // ① 強拍をコードトーンへ（句末着地は保持＝最後の音は触らない）。以降のパスは規約(b)でCT性を保つ。
-  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) notes[i]!.pitch = ctP(notes[i]!.pitch, pcsAtT(notes[i]!.start));
+  // anti-unison(2026-07-09 監査B)：snap結果が直前音と同一ピッチになる時だけ「同pc以外の最寄りコード音(禁則を
+  // 作らない)」を選ぶ＝強拍CT不変量・禁則ガードを保ったまま snap衝突の足踏みを散らす（同音28→21%実測）。
+  for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) {
+    const pcs = pcsAtT(notes[i]!.start), tgt = notes[i]!.pitch;
+    let p = ctP(tgt, pcs);
+    if (i > 0 && p === notes[i - 1]!.pitch) { // 直前と同音＝別のコード音へ
+      let best = -1, bd = Infinity;
+      for (let q = sp[0] ?? 48; q <= (sp[sp.length - 1] ?? 84); q++) {
+        if (!pcs.includes(((q % 12) + 12) % 12)) continue; // コード音のみ（CT不変量保持）
+        if (q === notes[i - 1]!.pitch) continue; // 直前と同音は避ける
+        if (isForbiddenIv(Math.abs(q - notes[i - 1]!.pitch))) continue; // 禁則を作らない
+        const d = Math.abs(q - tgt);
+        if (d < bd) { bd = d; best = q; }
+      }
+      if (best >= 0) p = best; // 見つからなければ従来snap（悪化させない）
+    }
+    notes[i]!.pitch = p;
+  }
   // ② 禁則跳躍(三全音6/10/11/8度超)→同方向≈3度に縮める。③ 跳躍(|≥5|半音)後は逆向きstepで回収。
   const fixForbidden = (): void => {
     for (let i = 1; i < notes.length; i++) {
