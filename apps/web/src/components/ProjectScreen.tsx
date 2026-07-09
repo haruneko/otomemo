@@ -1,7 +1,8 @@
 // プロジェクト＝一曲(or組曲)の器の「画面」（Claude Projects 風ランディング・メインペーン埋め込み）。
 // 上＝この曲について会話を始める起点、下＝会話/曲・セクション（左）とファイル＝知識（右）。
 // 要件「一曲（または組曲）の器にまとめる」/ design「プロジェクト＝…ホーム」。データは既存テーブルの読み。
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDismiss } from "../useDismiss";
 import { api, type Neta, type ProjectFile, type ChatThread, type Project, type Job } from "../api";
 import { projectTag } from "../project";
 import { Icon } from "./Icon";
@@ -47,6 +48,8 @@ export function ProjectScreen({
   const [descDraft, setDescDraft] = useState("");
   const [instrDraft, setInstrDraft] = useState("");
   const [importing, setImporting] = useState(false); // 未仕分け会話の取り込みパネル
+  const importRef = useRef<HTMLElement>(null);
+  useDismiss(importRef, importing, useCallback(() => setImporting(false), [])); // 外タップ/Escで閉じる
   const [unsorted, setUnsorted] = useState<ChatThread[]>([]);
 
   // 器の中身（曲/ファイル/会話/ジョブ）を読み直す。変更操作（改名/削除）後にも呼ぶ。
@@ -242,7 +245,7 @@ export function ProjectScreen({
             </section>
           )}
 
-          <section className="ps-block" aria-label="sessions">
+          <section className="ps-block" aria-label="sessions" ref={importRef}>
             <h3 className="ps-block-head">
               <span>会話 <span className="muted">{sessions.length}</span></span>
               <button type="button" className="ps-add" aria-label="import-session" onClick={() => void openImport()}>
