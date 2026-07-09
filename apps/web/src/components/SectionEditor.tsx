@@ -81,6 +81,7 @@ export function SectionEditor({
   const [push, setPush] = useState(0); // メロの前借り(食い) 0=なし〜1=1,2,3拍を16分前へ（Step4 2026-07-09）
   const [foreground, setForeground] = useState(0); // 前景の自由度 0=反復中心〜1=自由材料(同音/跳躍)多め（Step5 2026-07-09）
   const [breathe, setBreathe] = useState(0); // 句頭の遅延入場(息継ぎ) 0=なし〜1=各句頭を空けて入る（#9 2026-07-09）
+  const [humanize, setHumanize] = useState(0); // 人間味(グルーヴ) 0=機械的〜1=強弱＋微小タイミング揺れ（監査E 2026-07-09）
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
@@ -345,7 +346,7 @@ export function SectionEditor({
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       };
-      if (part.op === "gen_melody") { body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; if (phrasing) body.phrasing = phrasing; }
+      if (part.op === "gen_melody") { body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; }
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
       if (item) setCand({ kind: item.kind, content: item.content });
@@ -508,6 +509,11 @@ export function SectionEditor({
                         <span>食い</span>
                         <input type="range" min={0} max={1} step={0.1} value={push} onChange={(e) => setPush(Number(e.target.value))} />
                         <span className="knob-val">{push < 0.1 ? "—" : push > 0.66 ? "強" : "食"}</span>
+                      </label>
+                      <label className="knob-row" aria-label="humanize">
+                        <span>人間味</span>
+                        <input type="range" min={0} max={1} step={0.1} value={humanize} onChange={(e) => setHumanize(Number(e.target.value))} />
+                        <span className="knob-val">{humanize < 0.1 ? "—" : humanize > 0.66 ? "強" : "揺"}</span>
                       </label>
                       <label className="knob-row" aria-label="foreground">
                         <span>自由さ</span>

@@ -1237,6 +1237,10 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 
 → **コード色気 C0d＝短調テーブルSSOT（2026-07-09・5領域監査C）**。genChords のローカル短調表は度数7=♭VII で、`FUNC_DEGREES.D=[5,7]` が**♭VII(subtonic・導音なし)をドミナント位置に置いていた**（自前解析器 `function.ts`＝♭VII=SUB と往復矛盾・実測で終止前♭VII 11%）。→ 短調の D機能を **V7/vii°**（`dcands`＝短調 D=[5,8]・度数8=vii°を表に追加）に。♭VII は D から外れ loop ノブでのみ登場。長調 D=[5,7]（度数7=vii°）は不変。実測：終止前♭VII 0/40・vii° 21/40＝生成が解析器と一致。テスト I3a の短調許容を [7,11] に締めて固定。→ **色ノブ borrow/secondaryDom（2026-07-09）**：genChords に `opts:{borrow,secondaryDom}`（既定OFF=bit一致）。C基準 (root,quality) を作った後、`borrow`＝長調の IV を **iv(サブドミナントマイナー＝切なさ)** へ確率差替、`secondaryDom`＝非トニック和音の直前を **V/x(完全5度上のdom7＝二次ドミナント・接着)** へ確率差替。実音移調はその後。メロは B1和声追従で自動整合＝メロ側改修不要。gen_chords(MCP/HTTP)に露出。残＝loop(♭VI-♭VII-i循環・NAMED_PROGRESSIONS骨格＝別機構で後段)。
 
+→ **グルーヴの器＝humanize（velocity＋微小タイミング揺れ・2026-07-09・5領域監査E）**。監査で「平坦の正体＝microtiming 0%・velocity 0%（グルーヴ本体が無い）」と実測。swing/push は決定的位置写像＝人間的揺れではない。
+- **`humanize` 0..1**（既定0＝**velフィールドを付けず start不変＝bit一致**）。V2 の swing 後段に1パス：velocity（強拍やや強/裏やや弱＋LRC相関乱歩・55-118）と microtiming（±~0.03拍のLRC相関ズレ・句頭/終止は不変・前音を越えない）。決定的（makeRng）。`Note.vel?` を追加＝web/MIDI は既に `n.vel ?? 100` 対応。
+- V2 opts→gen_melody(MCP/HTTP)→SectionEditor「人間味」ノブ。**耳確認**＝揺れ量/velカーブの当たり（器は客観・値は耳）。残＝12分割グリッド(3連)は別機構で後段。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

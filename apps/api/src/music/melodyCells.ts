@@ -19,7 +19,7 @@ const nearestIdx = (sp: number[], pitch: number): number => {
 };
 const clampScale = (sp: number[], i: number): number => sp[Math.max(0, Math.min(sp.length - 1, i))]!;
 
-type Note = { pitch: number; start: number; dur: number };
+type Note = { pitch: number; start: number; dur: number; vel?: number };
 
 // cell 記号 = 1拍の2つの8分slotを ";" 区切りで表す。各 token：
 //   数字=onset(その度数の新音) / "s"=sustain(前音を伸ばす) / "r"=rest(休符=前音をここで切る)。
@@ -509,7 +509,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -1029,6 +1029,29 @@ export function genMotifMelodyV2(
       const gap = notes[i + 1]!.start - notes[i]!.start;
       if (gap > 0) notes[i]!.dur = Math.min(notes[i]!.dur, Math.round(gap * 1000) / 1000);
     }
+  }
+
+  // humanize(2026-07-09 監査E)：グルーヴの本体＝velocity(強弱)＋微小タイミング揺れ。決定的(makeRng)・LRC相関
+  // (前の揺れに相関する乱歩＝無相関ランダムより人間的・Hennig)。既定0＝velフィールドを付けず start 不変＝bit一致。
+  // web/MIDI は n.vel ?? 100 で既に対応。終止音・句頭は timing を動かさない。
+  const hum = Math.max(0, Math.min(1, opts.humanize ?? 0));
+  if (hum > 0 && notes.length > 0) {
+    const hr = makeRng(seed + 29);
+    const decay = 0.6; // 相関の強さ（LRC近似）
+    let te = 0, ve = 0;
+    for (let i = 0; i < notes.length; i++) {
+      const n = notes[i]!;
+      ve = decay * ve + (1 - decay) * (hr() * 2 - 1); // velocity の相関乱歩
+      const posBoost = onStrong(n.start) ? 8 : -4; // 強拍やや強・裏やや弱
+      n.vel = Math.max(55, Math.min(118, Math.round(96 + posBoost + hum * ve * 18)));
+      if (i > 0 && i < notes.length - 1) { // 句頭(0)・終止(last)は timing 不変
+        te = decay * te + (1 - decay) * (hr() * 2 - 1);
+        const ns = Math.round((n.start + hum * te * 0.03) * 1000) / 1000; // ±~0.03拍(=約15ms@120)
+        if (ns > notes[i - 1]!.start + 0.02) n.start = ns; // 前音を越えない
+      }
+    }
+    notes.sort((a, b) => a.start - b.start);
+    for (let i = 0; i + 1 < notes.length; i++) { const g = notes[i + 1]!.start - notes[i]!.start; if (g > 0) notes[i]!.dur = Math.min(notes[i]!.dur, Math.round(g * 1000) / 1000); }
   }
   return notes;
 }

@@ -186,7 +186,7 @@ export function buildHttp(core: Core): FastifyInstance {
           // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
           return genMelody(b.frame, asChords(b.chords), b.seed, {
-            useV2: true, density: num(b.density), swing: num(b.swing), expression: num(b.expression), runs: num(b.runs), push: num(b.push), foreground: num(b.foreground), breathe: num(b.breathe),
+            useV2: true, density: num(b.density), swing: num(b.swing), expression: num(b.expression), runs: num(b.runs), push: num(b.push), foreground: num(b.foreground), breathe: num(b.breathe), humanize: num(b.humanize),
             repetition: num(b.repetition), rangeSteps: num(b.rangeSteps), motifBars: num(b.motifBars),
             phrasing: b.phrasing === "asymmetric" ? "asymmetric" : b.phrasing === "symmetric" ? "symmetric" : undefined,
           });
