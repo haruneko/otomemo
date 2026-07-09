@@ -58,6 +58,26 @@ describe("genMelody 不変条件", () => {
       }
   }, 30000); // 全 frame×seed の網羅で数秒かかる＝`pnpm -r test` の並行負荷でも既定5sで落ちないよう余裕を持たせる
 
+  it("V2 register は tonic中心窓 [tp-5, tp+12]（2026-07-09 Round2/P1・主音を音域最下端に置かない）", () => {
+    const chords: Chord[] = [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 5, quality: "", start: 4, dur: 4 }, { root: 7, quality: "", start: 8, dur: 4 }, { root: 0, quality: "", start: 12, dur: 4 }];
+    for (const key of [0, 7, 9, 2, 11]) {
+      const tp = 60 + ((key % 12) + 12) % 12;
+      let sawBelowTonic = false;
+      for (const seed of SEEDS) {
+        const notes = notesOf(genMelody({ key, bars: 4, meter: "4/4" }, chords.map((c) => ({ ...c, root: (c.root + key) % 12 })), seed, { useV2: true }));
+        expect(notes.length, `非空 key=${key}#${seed}`).toBeGreaterThan(0);
+        for (const n of notes) {
+          if (n.start < 0) continue; // 弱起は別
+          expect(n.pitch, `V2下限 key=${key}#${seed}`).toBeGreaterThanOrEqual(tp - 5);
+          expect(n.pitch, `V2上限 key=${key}#${seed}`).toBeLessThanOrEqual(tp + 12);
+          if (((n.pitch % 12) + 12) % 12 !== tp % 12 && n.pitch < tp) sawBelowTonic = true;
+        }
+      }
+      // 主音の下に音が出る＝床にピン留めされていない（脱平面化が production に届いている証拠）
+      expect(sawBelowTonic, `key=${key}: 主音の下にメロが出る`).toBe(true);
+    }
+  });
+
   it("決定性：同一(frame,chords,seed)は同一出力", () => {
     const chords: Chord[] = [{ root: 0, quality: "", start: 0, dur: 8 }];
     for (const seed of SEEDS) {

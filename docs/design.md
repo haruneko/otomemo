@@ -1215,6 +1215,11 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **表情の既定較正(P0a)**：V2 の `expression` 既定を 0→**mood/frame由来(0.2-0.3・既定0.25)**に結線（legacy `applyExpression` と同ロジック）。強拍CTを 100%→実曲帯へ寄せる。
 - **実測（40seed×3進行）**：主音pc 43→37%・強拍CT 100→87%・同音 44→38%・音域 9.6→11.0・distinct 5.6→5.9・**phrasing実効 62→72%（脱平面化で句割りが効くようになった）**。全て実曲分布方向。**最終確定は耳セッション**（数値は分布の裏取り・総合点最適化ではない）。残（次Round）＝禁則跳躍の確率的softening・和声語彙の生成接続・旋法一級化・avoid-note。
 
+→ **批判レビュー修正ループ Round2＝register窓の tonic中心化（2026-07-09・方針は評価サブエージェントで検証済）**。Round1再レビューで「脱平面化は骨格生成器では正しいが production に届かない＝`genMelody` の絶対音域 `[60,84]` が長調で tonic を最下端に置き、下降を主音に叩き戻す（長調 主音48%/音域8.4・短調は逆に彷徨い音域15）」と実測判明。
+- **修正**：V2分岐の `sp` を `scalePitchList(scale, tp-5, tp+12)`（tp=60+tonicPc・tonic を下から約1/3・約17半音）に。**下流clampは全て `sp[0]/sp[last]` 参照＝sp差し替えで render/後処理/頂点/カデンツが追従**（別の絶対clampは無い＝評価で確認）。P2(同音是正の独立パス)は不要＝P1で自然減（実測）。P3(禁則softening)は耳セッション送り。短調 主音15%は register でなく和声起因（tonicが chord-tone の小節が少ない）＝registerで追わない。
+- **実測（モード別・40seed）**：長調 主音48→28%・同音45→27%・音域8.4→12.2／短調 音域15→12.5・distinct 6.6・phrasing実効72→81%。seed1 の「主音13連張り付き」→主音の下(B3/G3/A3)へ動く実旋律に。**主音の下に出る＝弱起でなく本体**＝V2 register 契約を不変条件テストで固定（`[tp-5,tp+12]`・legacy は[60,84]据え置き）。
+- 併せて `http.ts` の `assemble`（全パート生成）のメロを V2化（旧: legacy でメロ改善が届いていなかった）。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

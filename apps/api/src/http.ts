@@ -246,7 +246,7 @@ export function buildHttp(core: Core): FastifyInstance {
     };
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
     if (want.has("chord_pattern")) place("chord_pattern", genChordPattern(frame, b.seed).items[0]!.content, "コード楽器");
-    if (want.has("melody")) place("melody", genMelody(frame, chords, b.seed).items[0]!.content, "メロ");
+    if (want.has("melody")) place("melody", genMelody(frame, chords, b.seed, { useV2: true }).items[0]!.content, "メロ"); // V2化(2026-07-09 評価指摘: assembleだけ旧経路でメロ改善が届いていなかった)
     if (want.has("bass")) place("bass", genBass(frame, chords, b.seed).items[0]!.content, "ベース");
     if (want.has("rhythm")) place("rhythm", genDrums(frame, b.seed).items[0]!.content, "ドラム");
     return { section: core.getNeta(section.id), composition: core.getComposition(section.id) };

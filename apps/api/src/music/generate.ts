@@ -439,7 +439,12 @@ export function genMelody(
   // A2レシピ経路（docs/research/melody-recipe-validated.md）：4/4＋chords＋bars≥1＋useV2 時。
   // 骨格(句頭アンカー)＋モチーフ選別＋輪郭駆動＋発展(A/A'/B反行+弧/A'')。旧経路は下に残す（回帰防止）。
   if (opts?.useV2 && (bpb === 4 || compound) && (chords?.length ?? 0) > 0 && bars >= 1) {
-    const sp = scalePitchList(scale, lo, hi);
+    // register窓を tonic中心に(2026-07-09 批判レビューRound2/P1)：旧 [60,84] は長調で tonic を音域最下端に
+    // 置き、脱平面化した骨格の下降を主音に叩き戻していた（実測 長調 主音48%/音域8.4）。tonic を下から約1/3
+    // (下5・上12=約17半音≒音域12)に置く＝両モードで主音25-35・音域9-12へ。下流clampは全て sp[0]/sp[last] 参照
+    // ＝sp 差し替えで render/後処理/頂点/カデンツが追従（別の絶対clampは無い＝評価で確認）。V2分岐のみ。
+    const tpBase = 60 + ((((f.key ?? 0) % 12) + 12) % 12);
+    const sp = scalePitchList(scale, tpBase - 5, tpBase + 12);
     const chordPcsPerBar: number[][] = [];
     const rootsPerBar: number[] = [];
     const qualsPerBar: string[] = [];
