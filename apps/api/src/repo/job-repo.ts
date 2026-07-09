@@ -148,7 +148,9 @@ export class JobRepo {
     if (q.status) (where.push(`status = @status`), (params.status = q.status));
     if (q.target) (where.push(`target_neta_id = @target`), (params.target = q.target));
     params.limit = q.limit ?? 100;
-    const sql = `SELECT * FROM job ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created DESC LIMIT @limit`;
+    // 性能(2026-07-09 design#16)：一覧は params を引かない（study/audio_analyze の base64 音声＝最大24MB を
+    // 15秒ポーリングで引き回していた）。rowToJob は params 列が無ければ null にする＝UIは params 未使用で無改修。
+    const sql = `SELECT ${JOB_LIST_COLS} FROM job ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY created DESC LIMIT @limit`;
     return (this.db.prepare(sql).all(params) as Record<string, unknown>[]).map(rowToJob);
   }
 
@@ -156,7 +158,7 @@ export class JobRepo {
   listForProjectTag(projectTag: string, limit = 50): Job[] {
     const rows = this.db
       .prepare(
-        `SELECT j.* FROM job j
+        `SELECT ${JOB_LIST_COLS_J} FROM job j
          JOIN neta_tag nt ON nt.neta_id = j.target_neta_id
          JOIN tag t       ON t.id = nt.tag_id AND t.name = @tag
          ORDER BY j.created DESC LIMIT @limit`,
@@ -165,6 +167,10 @@ export class JobRepo {
     return rows.map(rowToJob);
   }
 }
+
+// 一覧用の列（job テーブルから params を除外＝重い base64 を払い出さない）。詳細は SELECT * のまま。
+const JOB_LIST_COLS = "id, target_neta_id, level, intent, instruction, status, priority, progress, notify_level, parent_job_id, question, result_summary, error, created, updated";
+const JOB_LIST_COLS_J = JOB_LIST_COLS.split(", ").map((c) => "j." + c).join(", ");
 
 function rowToJob(row: Record<string, unknown>): Job {
   return {

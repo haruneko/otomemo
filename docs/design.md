@@ -107,6 +107,7 @@
 - **`chat_thread`(thread PK, project, title, created, updated)** — 会話セッションを器(プロジェクト)に束ねる薄表（2026-06-28「プロジェクト＝器」B案）。
 - **`project`(name PK, description, instructions, created, updated)** — プロジェクト実体（器の説明＋AIへの指示。instructions は会話の system prompt に注入）。
 - `job`(id, target_neta_id, instruction, type[壁打ち/部分生成/作例/研究/収集/発展], status[queued/running/done/needs_decision/failed], progress, notify_level, created, updated) — 投げた仕事。対象は常に `neta_id`。
+  - **job の読み出し契約（性能・2026-07-09）**：`params`（study/audio_analyze では base64 音声＝1件最大24MB）を **一覧経路（`listJobs`/`listForProjectTag`＝GET /jobs・get_jobs・/projects/:project/jobs）は返さない**（明示列指定で `params` を除外）。ジョブ処理経路（`getJob`/`claimQueued`＝ランナー）と reaper 独自SQLは `params` を保持。UI（App のポーリング/Tray）は `params` を使わない＝改修不要。実測：`GET /jobs?status=done` が 87.6MB/1.1s → ~1.7MB/23ms（約50倍）。※base64 を params に永続保存しない設計（asset 参照化）＋既存肥大の回収(VACUUM)は backlog。
 - `job_result`(job_id, neta_id, order) — ジョブの生成物（複数可）。生成物も neta。受理時に対象へ compose/relation で繋ぐ。**reap の冪等性は「job_id に job_result 行が在るか」で判定**するので、**ネタ削除では job_result 行を消さない**（`deleteNeta` は `neta_id` を NULL にしてから削除＝CASCADE 道連れを防ぐ。実装 2026-06-22・#97）。これを破ると削除した生成ネタが reap で蘇生する。
 
 ### #14 で後回し

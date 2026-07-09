@@ -26,6 +26,19 @@ describe("job queue (producer side)", () => {
     expect(core.listJobs({ status: "done" }).length).toBe(0);
   });
 
+  it("一覧経路は重い params を返さない・詳細経路(getJob)は返す（性能契約 2026-07-09）", () => {
+    const big = "A".repeat(100000); // 巨大 params（base64 音声の代役）
+    const j = core.enqueueJob({ intent: "audio_analyze", params: { audio_b64: big, filename: "x.mp3" } });
+    // 一覧（listJobs）は params を落とす＝ポーリングの払い出しを軽くする
+    const listed = core.listJobs({ status: "queued" }).find((x) => x.id === j.id)!;
+    expect(listed, "一覧に載る").toBeTruthy();
+    expect(listed.params, "一覧では params=null（重い音声を引き回さない）").toBeNull();
+    expect(listed.status).toBe("queued"); // メタは保持
+    expect(listed.intent).toBe("audio_analyze");
+    // 詳細（getJob）は params を保持＝ランナーが処理に使える
+    expect((core.getJob(j.id)!.params as { audio_b64: string }).audio_b64).toBe(big);
+  });
+
   it("records job_result and links to target when from_job is given", () => {
     const target = core.createNeta({ kind: "lyric", text: "夜" });
     const job = core.enqueueJob({ intent: "suggest", target_neta_id: target.id });

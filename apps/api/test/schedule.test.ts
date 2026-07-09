@@ -24,7 +24,8 @@ describe("schedule (#80 proactive)", () => {
     expect(j).toBeTruthy();
     expect(j!.target_neta_id).toBe(theme.id);
     expect(j!.instruction).toBe("シティポップのコード"); // テーマ=対象ネタ名
-    expect((j!.params as { schedule_id?: string }).schedule_id).toBe(s.id);
+    // params は一覧経路では返らない（性能契約 2026-07-09）＝詳細(getJob)で確認する。
+    expect((core.getJob(j!.id)!.params as { schedule_id?: string }).schedule_id).toBe(s.id);
   });
 
   it("does not re-enqueue while a prior job is still pending (spam防止)", () => {
