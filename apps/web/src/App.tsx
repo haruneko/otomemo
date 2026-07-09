@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -16,16 +16,18 @@ import { KindIcon } from "./components/KindIcon";
 import { Icon } from "./components/Icon";
 import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
-import { AnalysisWorkbench } from "./components/AnalysisWorkbench";
-import { StudyView } from "./components/StudyView";
 import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
 import { useIsMobile } from "./useIsMobile";
 import { ImportPanel } from "./components/ImportPanel";
-import { Chat } from "./components/Chat";
-import { Tray } from "./components/Tray";
-import { ProjectScreen } from "./components/ProjectScreen";
+// 重い二次画面は遅延ロード＝初回バンドルを軽くする（perf 耳FB 2026-07-09。Chatはreact-markdown 170KB）。
+// NetaDialog(セクション/メロ編集の本体)は最頻操作なので**同梱のまま**＝開く時に取得待ちを出さない。
+const AnalysisWorkbench = lazy(() => import("./components/AnalysisWorkbench").then((m) => ({ default: m.AnalysisWorkbench })));
+const StudyView = lazy(() => import("./components/StudyView").then((m) => ({ default: m.StudyView })));
+const Chat = lazy(() => import("./components/Chat").then((m) => ({ default: m.Chat })));
+const Tray = lazy(() => import("./components/Tray").then((m) => ({ default: m.Tray })));
+const ProjectScreen = lazy(() => import("./components/ProjectScreen").then((m) => ({ default: m.ProjectScreen })));
 import { flushOutbox } from "./outbox";
 import { projectTag } from "./project";
 
@@ -275,12 +277,17 @@ export function App() {
   useEffect(() => {
     applyColors(loadColors());
     // #55a/#55c 選択中SoundFontを再生に反映（設定を開かなくても効く）。消えた/古いidは最新へ自己修復。
-    // #84 先読みは **画面ロード時**に実行（SF2の fetch/decode は suspended ctx で可能＝gesture 不要）。
-    // URL は initSoundFont で非同期確定するので、その後に温める＝初回再生はもう warm。冪等。
-    void initSoundFont().then(() => void prewarmSoundFont());
-    // 念のためのリトライ網（ロード時に URL 未取得/失敗でも、最初の操作で温め直す。冪等＝成功後no-op）。
-    const onFirst = () => void prewarmSoundFont();
-    window.addEventListener("pointerdown", onFirst);
+    // #84 SoundFont 先読み。ただし温めは Tone/smplr(合計~410KB) の動的import を誘発する。ロード直後や
+    // アイドルタイマで走らせると初期描画/一覧展開と帯域・CPUを奪い合い重い（perf 耳FB 2026-07-09・実測）。
+    // ブラウザは gesture 前に音を鳴らせない＝初期に温める必然は無い。**最初のタップ(gesture)で一度だけ**温める
+    // ＝Tone をランディングから完全に外し、タイマの当たり外れも消す。以降は冪等 no-op。
+    let warmed = false;
+    const onFirst = () => {
+      if (warmed) return;
+      warmed = true;
+      void initSoundFont().then(() => void prewarmSoundFont());
+    };
+    window.addEventListener("pointerdown", onFirst, { once: false });
     return () => window.removeEventListener("pointerdown", onFirst);
   }, []);
 
@@ -643,6 +650,7 @@ export function App() {
           />
         </aside>
         <section className="mainpane" aria-label="mainpane">
+          <Suspense fallback={<div className="mainpane-empty"><p className="muted">読み込み中…</p></div>}>
           {projectView && activeProject ? (
             <ProjectScreen
               project={activeProject}
@@ -710,6 +718,7 @@ export function App() {
               </button>
             </div>
           )}
+          </Suspense>
         </section>
         </div>
       </DndContext>
@@ -724,6 +733,7 @@ export function App() {
         </button>
       )}
       {chatOpen && (
+        <Suspense fallback={null}>
         <Chat
           target={chatTarget}
           gear={gearMode} // ④ 機材モード（全曲共通）
@@ -738,8 +748,10 @@ export function App() {
           onChanged={() => void reload()}
           onOpenNeta={(n) => openTop(n)} // #68 Chatからネタを開く
         />
+        </Suspense>
       )}
       {trayOpen && (
+        <Suspense fallback={null}>
         <Tray
           onClose={() => setTrayOpen(false)}
           onOpenNeta={(n) => {
@@ -752,6 +764,7 @@ export function App() {
             else openChat();
           }}
         />
+        </Suspense>
       )}
       {settingsOpen && (
         <div className="dialog-backdrop" onClick={() => setSettingsOpen(false)}>
