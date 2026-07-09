@@ -1243,6 +1243,11 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 
 → **曲の形 D-P1＝骨格が句割りを見る（2026-07-09・5領域監査D）**。監査で「phrasing実効80%は化粧＝非対称で変わるのは句末1-2音・**骨格が句割りを見ていない**」と実測。→ `genSkeletonFromModel` に `phraseEnds?:{bar,deg}[]` を渡し、unit尾のバーが句末なら**句のカデンツ度数**へ着地（対称=各unit尾に整合／非対称=unit尾に落ちる句末のみ・可変長ブロックP2は別）。genMotifMelodyV2 が opts.phrases から phraseEnds を算出。**未指定=従来 u%2 の 5̂/1̂＝bit一致**。実測：非対称 vs 既定が **14/30→40/40 seed で変化・平均8音/8小節が変わる**（化粧→構造的）。Round1-3の脱平面化/registerと直交。残（本丸）＝**可変長ブロックP2**（blockループを句長駆動へ）・sequence/diminution・sentence テンプレ＝別の focused session＋耳。
 
+→ **曲の形 本丸＝sentence形式(移高反復＋断片化)（2026-07-09・2方向評価で方針転換）**。監査Dの「四角さ」に対し、当初案(可変長ブロック)を**2方向評価が棄却**：理論「容器(長さ)は形式を生まない・過程(断片化+sequence→カデンツ)が生む」／実装「可変長はfallbackモチーフ非スケールで15%破綻＋骨格格子が2小節固定で不十分」＝**両者が「過程を固定グリッド上で先に・可変長は最後」に収束**。
+- **`form:"sentence"`**（既定 undefined＝**従来AABA=bit一致**）：固定2小節グリッド上でブロックに機能を割当＝**提示(bi=M)→反復(sequence=Mの輪郭を2スケール段 移高して再生)→継続(fragment=Mの先頭半小節セルを逐語で畳み掛け＝密度↑=加速)→カデンツ(既存toTonic)**＝起承転結。可変長ブロックは使わない（容器リスク回避）。
+- **sequence**＝最も可聴なpop展開(同一性＋運動・anchor移高で実現)。**fragment**＝継続の推進(先頭サブセルの逐語反復＝freeVary禁止で覚えられる動機の同一性を保つ)。後処理(強拍CT/禁則/単一頂点/カデンツ)は位置ベースで生存。
+- 実測：継続部(bar4-5)の密度が上がる(1.5→2.8＝加速)・30/30で既定と変化・終止着地/禁則(アルペジオ除く)ゼロ/単一頂点 維持。V2 opts→gen_melody(MCP/HTTP)→SectionEditor「形式」ノブ。**耳確認**＝起承転結に聞こえるか(gestaltは耳)。残＝可変長ブロック[3,3,2]（容器・最後・任意・要fallbackスケール＋骨格格子のphrase駆動化）・period/diminutionの精緻化。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

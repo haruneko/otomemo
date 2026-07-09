@@ -404,7 +404,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence" }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -502,7 +502,7 @@ export function genMelody(
     // 表情の既定較正(2026-07-09 批判レビューP0a)：V2既定が expression=0＝強拍CT100%(無菌の極・実曲57%)だった。
     // frame.expression 明示＞mood既定(0.15-0.3)＞既定0.25。legacy(applyExpression)と同じロジックをV2へ結線。
     const exprDefault = opts.expression ?? (typeof f.expression === "number" ? f.expression : bias.long >= 1.5 ? 0.3 : bias.busy >= 1.5 ? 0.2 : 0.25);
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound, repetition: opts.repetition, rangeSteps: opts.rangeSteps, chordPcsAt, density: opts.density, swing: opts.swing, expression: exprDefault, phrases, runs: opts.runs, push: opts.push, foreground: opts.foreground, breathe: opts.breathe, humanize: opts.humanize }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound, repetition: opts.repetition, rangeSteps: opts.rangeSteps, chordPcsAt, density: opts.density, swing: opts.swing, expression: exprDefault, phrases, runs: opts.runs, push: opts.push, foreground: opts.foreground, breathe: opts.breathe, humanize: opts.humanize, form: opts.form }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);

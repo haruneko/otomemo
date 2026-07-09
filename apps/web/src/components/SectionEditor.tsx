@@ -82,6 +82,7 @@ export function SectionEditor({
   const [foreground, setForeground] = useState(0); // 前景の自由度 0=反復中心〜1=自由材料(同音/跳躍)多め（Step5 2026-07-09）
   const [breathe, setBreathe] = useState(0); // 句頭の遅延入場(息継ぎ) 0=なし〜1=各句頭を空けて入る（#9 2026-07-09）
   const [humanize, setHumanize] = useState(0); // 人間味(グルーヴ) 0=機械的〜1=強弱＋微小タイミング揺れ（監査E 2026-07-09）
+  const [form, setForm] = useState<"" | "sentence">(""); // 形式 空=従来AABA/文=sentence(提示→反復→継続断片化→カデンツ=起承転結)（D本丸 2026-07-09）
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
@@ -346,7 +347,7 @@ export function SectionEditor({
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       };
-      if (part.op === "gen_melody") { body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; }
+      if (part.op === "gen_melody") { body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form; }
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
       if (item) setCand({ kind: item.kind, content: item.content });
@@ -531,6 +532,13 @@ export function SectionEditor({
                           <option value="">従来</option>
                           <option value="symmetric">対称(問→答)</option>
                           <option value="asymmetric">非対称(3+3+2)</option>
+                        </select>
+                      </label>
+                      <label className="knob-row" aria-label="form">
+                        <span>形式</span>
+                        <select value={form} onChange={(e) => setForm(e.target.value as "" | "sentence")}>
+                          <option value="">従来</option>
+                          <option value="sentence">起承転結(文)</option>
                         </select>
                       </label>
                     </div>
