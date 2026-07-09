@@ -568,7 +568,8 @@ export function genMotifMelodyV2(
   const spAt = (bar: number): number[] => (barHasLead(bar) ? spRaised : sp);
 
   // モチーフ生成＝16分リズムパターンを2小節ぶん抽選し、各onsetへ move（run=16分走句は方向保持・他はMarkov）。
-  const mkMotif = (r: () => number): Motif16 | null => {
+  const mkMotif = (r: () => number, bb: number = mb): Motif16 | null => {
+    const mb = bb; // プロトタイプ：ブロック長でパラメータ化（クロージャ mb を局所退避）
     const ons: number[] = [];
     if (compound) {
       // 6/8：1小節=8分6枠(3+3)。t=bar*3+e*0.5。末尾~0.75拍は息継ぎ。onset上下限 2*mb..5*mb・孤立フィルタ>1.6。
@@ -627,7 +628,8 @@ export function genMotifMelodyV2(
   };
 
   // スコア＝range4-6・方向転換~2・跳躍≤1・16分走句少・明確なピーク(中央やや後)・始点付近に戻る・音数~6。
-  const score = (M: Motif16): number => {
+  const score = (M: Motif16, bb: number = mb): number => {
+    const mb = bb;
     let cum = 0, hi = 0, lo = 0, peakAt = 0; const cums = [0];
     for (let i = 1; i < M.mv.length; i++) { cum += M.mv[i]!; cums.push(cum); if (cum > hi) { hi = cum; peakAt = i; } lo = Math.min(lo, cum); }
     const range = hi - lo;
@@ -652,9 +654,12 @@ export function genMotifMelodyV2(
   };
 
   // 選別＝12個生成しスコア最良を採用（クソ乱数排除）。全滅時は安全な既定モチーフ。
-  const genBest = (r: () => number): Motif16 => {
-    let best: Motif16 | null = null, bs = -1e9;
-    for (let i = 0; i < 12; i++) { const m = mkMotif(r); if (!m) continue; const s = score(m); if (s > bs) { bs = s; best = m; } }
+  const genBest = (r: () => number, bb: number = mb): Motif16 => {
+    let best: Motif16 | null = null, bs = -1e9, nnull = 0;
+    for (let i = 0; i < 12; i++) { const m = mkMotif(r, bb); if (!m) { nnull++; continue; } const s = score(m, bb); if (s > bs) { bs = s; best = m; } }
+    const g = (globalThis as any); g.__gbCalls = (g.__gbCalls ?? 0) + 1; g.__gbNull = (g.__gbNull ?? 0) + nnull; if (!best) g.__gbFallback = (g.__gbFallback ?? 0) + 1;
+    (g.__gbBB = g.__gbBB ?? {})[bb] = [...(g.__gbBB[bb] ?? [0, 0, 0])].map((v, k) => v + (k === 0 ? 1 : k === 1 ? nnull : (best ? 0 : 1)));
+    if (best) (g.__gbLen = g.__gbLen ?? {})[bb] = [...(g.__gbLen[bb] ?? [0, 0])].map((v, k) => v + (k === 0 ? 1 : best!.ons.length));
     return best ?? (compound
       ? { ons: [0, 0.5, 1, 1.5, 2.5], mv: [0, 1, 1, -1, 2], run: [false, false, false, false, false] }
       : { ons: [0.5, 1, 1.5, 2.5, 3], mv: [0, 2, -1, 2, -1], run: [false, false, false, false, false] });
@@ -697,7 +702,8 @@ export function genMotifMelodyV2(
   // A2/A3: 強拍のCTスナップは半音空間＝導音/色音にも乗れる（旧: スケール∩コード）。
   const ctOf = (c: number, pc: number[]): number => (pc.length ? nearestChordTonePitch(c, pc, sp[0] ?? 48, sp[sp.length - 1] ?? 84) : snapSc(c));
   // anchor は呼び手で弧のリフト済み（D5: 旧 tr=半音直加算→スケール段リフトへ）。
-  const render = (M: Motif16, bar0: number, anchor: number, toTonic: boolean): Note[] => {
+  const render = (M: Motif16, bar0: number, anchor: number, toTonic: boolean, bb: number = mb): Note[] => {
+    const mb = bb;
     const out: Note[] = [];
     let prev = anchor;
     for (let i = 0; i < M.ons.length; i++) {

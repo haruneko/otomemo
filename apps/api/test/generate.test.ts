@@ -115,6 +115,16 @@ describe("genChords（機能和声ルール）", () => {
     // メロ自動整合（B1）：二次ドミナントの色音にメロが乗れる＝別途analyze_fitで担保（ここは和声のみ検証）
   });
 
+  it("C④ loop=true で循環進行（短調 i-♭VI-♭VII エオリアン／長調 I-V-vi-IV アクシス）", () => {
+    const maj = (genChords({ key: 0, bars: 6, mood: "明るい" }, 5, undefined, { loop: true }).items[0]!.content as { chords: { root: number; quality: string }[] }).chords;
+    expect(maj.map((c) => c.root)).toEqual([0, 7, 9, 5, 0, 7]); // I-V-vi-IV 循環（C-G-Am-F-C-G）
+    const min = (genChords({ key: 0, bars: 6, mood: "切ない" }, 5, undefined, { loop: true }).items[0]!.content as { chords: { root: number; quality: string }[] }).chords;
+    expect(min.map((c) => c.root)).toEqual([0, 8, 10, 0, 8, 10]); // i-♭VI-♭VII 循環（Cm-A♭-B♭）
+    expect(min[0]!.quality).toBe("m"); // i は短三和音
+    // loop は末尾を主音に強制しない＝閉じずに回す
+    expect(min[min.length - 1]!.root).toBe(10); // ♭VII で開いて終わる
+  });
+
   it("Step3③ メロは追従不要でカデンツに自動整合（half=V終わりは主音を強制しない・B1）", async () => {
     const { genMelody } = await import("../src/music/generate");
     const frame = { key: 0, bars: 8, mood: "明るい" };

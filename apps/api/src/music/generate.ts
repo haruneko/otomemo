@@ -94,7 +94,7 @@ const barsOf = (frame: Frame): number =>
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 /** 機能和声ルールでコード進行を生成（T始まり・T終わり）。返り #85 items 形。 */
-export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal", opts?: { borrow?: number; secondaryDom?: number }): GenResult {
+export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal", opts?: { borrow?: number; secondaryDom?: number; loop?: boolean }): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
@@ -130,9 +130,13 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
     const alt = dcands(funcs[1]!, minor).find((c) => c !== degrees[1]);
     if (alt !== undefined) degrees[1] = alt;
   }
+  // loop(2026-07-09 監査C)：閉じずに回す循環進行＝短調エオリアン(i-♭VI-♭VII)／長調アクシス(I-V-vi-IV)。
+  // degree列を循環パターンで上書き（T-S-Dマルコフでなく循環）。cadence とは排他（loop時は終止型を掛けない）。
+  const loop = opts?.loop ?? false;
+  if (loop) { const cyc = minor ? [1, 6, 7] : [1, 5, 6, 4]; for (let i = 0; i < degrees.length; i++) degrees[i] = cyc[i % cyc.length]!; }
   // Step3(2026-07-09 design#12-M)：カデンツ選択器＝末尾1-2和音を型で上書き（既定 full/undefined=従来一致）。
   // funcs は degree 確定後は未使用ゆえ degrees のみ上書き。先頭 degrees[0]=1 は保護（penult は index≥1 のみ）。
-  if (cadence && cadence !== "full" && bars >= 2) {
+  if (!loop && cadence && cadence !== "full" && bars >= 2) {
     const last = degrees.length - 1, pen = last - 1;
     if (cadence === "half") { degrees[last] = 5; if (pen >= 1) degrees[pen] = 4; }              // 半終止＝IV→V(開いて止める)
     else if (cadence === "deceptive") { degrees[last] = 6; if (pen >= 1) degrees[pen] = 5; }    // 偽終止＝V→vi(長調)/V→♭VI(短調)
