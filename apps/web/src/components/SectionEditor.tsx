@@ -66,6 +66,7 @@ export function SectionEditor({
   const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
   const [eraseMode, setEraseMode] = useState(false); // 消しゴムモード＝ブロックtapで外す（PianoRollの描く/選ぶと同じモード流儀）
   const [toolsOpen, setToolsOpen] = useState(false); // いじる▾ メニュー（生成/ハモリ/書き出しを集約・メロ編集画面と整合・⑤）
+  const [knobHelp, setKnobHelp] = useState(false); // ？で各つまみの一行説明を一括展開（スマホはホバー説明が出ない・耳FB 2026-07-09）
   const previewPlay = useRef<PlaybackHandle | null>(null); // ピッカー項目の試聴（配置前に耳で確認）
   // #5 container kind でレーン/尺を差し替え（song=section を並べる編成・section=パート専用）。
   const isSong = neta.kind === "song";
@@ -492,46 +493,64 @@ export function SectionEditor({
                   {/* メロの細かさ・跳ねノブ（耳FB 2026-07-08）＝ガチャの当たり幅を人が絞る。押す前に設定→メロ生成。 */}
                   {sectionChords().length > 0 && (
                     <div className="gen-knobs" onClick={(e) => e.stopPropagation()}>
+                      {/* ？＝各つまみの一行説明を一括で開閉（スマホはtitleホバーが出ないため）。既定は畳んで薄く。 */}
+                      <button
+                        type="button"
+                        className={"knob-help-toggle" + (knobHelp ? " on" : "")}
+                        aria-label="knob-help-toggle"
+                        aria-pressed={knobHelp}
+                        onClick={() => setKnobHelp((v) => !v)}
+                      >
+                        {knobHelp ? "？ 説明を隠す" : "？ 各つまみの説明"}
+                      </button>
                       <label className="knob-row" aria-label="density">
                         <span>細かさ</span>
                         <input type="range" min={0} max={1} step={0.1} value={density} onChange={(e) => setDensity(Number(e.target.value))} />
                         <span className="knob-val">{density < 0.34 ? "疎" : density > 0.66 ? "細" : "中"}</span>
                       </label>
+                      {knobHelp && <small className="knob-help">音数（疎↔細かい）</small>}
                       <label className="knob-row" aria-label="swing">
                         <span>跳ね</span>
                         <input type="range" min={0} max={1} step={0.1} value={swing} onChange={(e) => setSwing(Number(e.target.value))} />
                         <span className="knob-val">{swing < 0.1 ? "—" : swing > 0.66 ? "強" : "跳"}</span>
                       </label>
+                      {knobHelp && <small className="knob-help">リズムの跳ね（ストレート↔シャッフル）</small>}
                       <label className="knob-row" aria-label="expression">
                         <span>表情</span>
                         <input type="range" min={0} max={1} step={0.1} value={expression} onChange={(e) => setExpression(Number(e.target.value))} />
                         <span className="knob-val">{expression < 0.1 ? "素直" : expression > 0.66 ? "濃" : "もたれ"}</span>
                       </label>
+                      {knobHelp && <small className="knob-help">強拍のタメ・もたれ（素直↔倚音や掛留）</small>}
                       <label className="knob-row" aria-label="runs">
                         <span>走句</span>
                         <input type="range" min={0} max={1} step={0.1} value={runs} onChange={(e) => setRuns(Number(e.target.value))} />
                         <span className="knob-val">{runs < 0.1 ? "—" : runs > 0.66 ? "多" : "走"}</span>
                       </label>
+                      {knobHelp && <small className="knob-help">16分の走り（速い連なりの出やすさ）</small>}
                       <label className="knob-row" aria-label="push">
                         <span>食い</span>
                         <input type="range" min={0} max={1} step={0.1} value={push} onChange={(e) => setPush(Number(e.target.value))} />
                         <span className="knob-val">{push < 0.1 ? "—" : push > 0.66 ? "強" : "食"}</span>
                       </label>
+                      {knobHelp && <small className="knob-help">拍を食うシンコペ（頭を少し前へ）</small>}
                       <label className="knob-row" aria-label="humanize">
                         <span>人間味</span>
                         <input type="range" min={0} max={1} step={0.1} value={humanize} onChange={(e) => setHumanize(Number(e.target.value))} />
                         <span className="knob-val">{humanize < 0.1 ? "—" : humanize > 0.66 ? "強" : "揺"}</span>
                       </label>
+                      {knobHelp && <small className="knob-help">強弱と微妙なタイミング揺れ（機械的↔人間っぽく）</small>}
                       <label className="knob-row" aria-label="foreground">
                         <span>自由さ</span>
                         <input type="range" min={0} max={1} step={0.1} value={foreground} onChange={(e) => setForeground(Number(e.target.value))} />
                         <span className="knob-val">{foreground < 0.1 ? "反復" : foreground > 0.66 ? "自由" : "混"}</span>
                       </label>
+                      {knobHelp && <small className="knob-help">反復↔冒険（跳んだ音・自由な材料を混ぜる）</small>}
                       <label className="knob-row" aria-label="breathe">
                         <span>入り遅れ</span>
                         <input type="range" min={0} max={1} step={0.1} value={breathe} onChange={(e) => setBreathe(Number(e.target.value))} />
                         <span className="knob-val">{breathe < 0.1 ? "—" : breathe > 0.66 ? "遅" : "息"}</span>
                       </label>
+                      {knobHelp && <small className="knob-help">句アタマを少し遅らせる（息継ぎ感）</small>}
                       <label className="knob-row" aria-label="phrasing">
                         <span>句割り</span>
                         <select value={phrasing} onChange={(e) => setPhrasing(e.target.value as "" | "symmetric" | "asymmetric")}>
@@ -540,6 +559,7 @@ export function SectionEditor({
                           <option value="asymmetric">非対称(3+3+2)</option>
                         </select>
                       </label>
+                      {knobHelp && <small className="knob-help">フレーズの分け方（問い→答え／3+3+2の呼吸）</small>}
                       <label className="knob-row" aria-label="form">
                         <span>形式</span>
                         <select value={form} onChange={(e) => setForm(e.target.value as "" | "sentence")}>
@@ -547,6 +567,7 @@ export function SectionEditor({
                           <option value="sentence">起承転結(文)</option>
                         </select>
                       </label>
+                      {knobHelp && <small className="knob-help">曲の展開の型（提示→反復→畳み掛け→まとめ＝起承転結）</small>}
                     </div>
                   )}
                   {melodyLaneNotes().length > 0 && (
