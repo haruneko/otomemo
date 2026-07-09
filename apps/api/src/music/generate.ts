@@ -443,7 +443,10 @@ export function genMelody(
     // 置き、脱平面化した骨格の下降を主音に叩き戻していた（実測 長調 主音48%/音域8.4）。tonic を下から約1/3
     // (下5・上12=約17半音≒音域12)に置く＝両モードで主音25-35・音域9-12へ。下流clampは全て sp[0]/sp[last] 参照
     // ＝sp 差し替えで render/後処理/頂点/カデンツが追従（別の絶対clampは無い＝評価で確認）。V2分岐のみ。
-    const tpBase = 60 + ((((f.key ?? 0) % 12) + 12) % 12);
+    // tessitura をキー安定に(2026-07-09 Round3/P3a・回帰修正)：tp=60+pc だと C調G3-C5/B調F#4-B5と
+    // 絶対高さが1oct滑走しB5金切り域まで届いた。tonic相対は保ったまま**両端だけ飽和**（[60,65]にclamp）＝
+    // 再ピン留め無し・全キーで音域/主音を維持しつつ ceiling 79→76・B5天井を消す（評価で全キー実測・Option D）。
+    const tpBase = Math.max(60, Math.min(65, 60 + ((((f.key ?? 0) % 12) + 12) % 12)));
     const sp = scalePitchList(scale, tpBase - 5, tpBase + 12);
     const chordPcsPerBar: number[][] = [];
     const rootsPerBar: number[] = [];

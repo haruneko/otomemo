@@ -1220,6 +1220,11 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **実測（モード別・40seed）**：長調 主音48→28%・同音45→27%・音域8.4→12.2／短調 音域15→12.5・distinct 6.6・phrasing実効72→81%。seed1 の「主音13連張り付き」→主音の下(B3/G3/A3)へ動く実旋律に。**主音の下に出る＝弱起でなく本体**＝V2 register 契約を不変条件テストで固定（`[tp-5,tp+12]`・legacy は[60,84]据え置き）。
 - 併せて `http.ts` の `assemble`（全パート生成）のメロを V2化（旧: legacy でメロ改善が届いていなかった）。
 
+→ **批判レビュー修正ループ Round3＝tessitura のキー安定化（回帰修正・2026-07-09・方針は評価で検証）**。Round2再レビューで「Round2が持ち込んだ回帰＝`tp=60+tonicPc` が絶対高さをキーで1oct滑走させ、B調でB5金切り域まで届く」と実測判明。方針評価で Option A(fold)/B(固定窓)/C を**全却下**（A/Cはspread減らず境界キー崩壊、B は高tonicキーで floor再ピン留め復活＝Round1の轍）。
+- **修正（Option D・1行）**：`tpBase = clamp(60+tonicPc, 60, 65)`＝tonic相対は保ったまま滑走の**両端だけ飽和**。ceiling 79→76（B5消滅）・floor spread 11→8.2・**再ピン/seam/churn ゼロ・Round2の全キー品質(主音/音域)を維持**（評価で全キー実測）。
+- **耳セッション送り（客観ラウンドでは触らない）**：expression 既定(0.25→実曲57%には~0.7要)の引き上げ、`leapLicense`(禁則跳躍0%の緩和)。特に leapLicense は「器だけ」でも後処理⑤`for k<3 fixForbidden()` が無条件再除去する no-op 罠＋gap-fill確率化が跳躍回収を切る逆効果があり、**耳セッションで通し配線＋試聴しながら**入れるのが正着（評価判断）。
+- **修正ループ3周の総括**：Round1骨格脱平面化→Round2 register中心化(主音48→28%・同音45→27%)→Round3回帰是正。**このループの価値は「悪い修正(A/B/C・leapLicense器のみ)を評価ステップで止めた」ことにもある**。残る最大乖離＝強拍CT89%(実曲57)は耳ゲート案件。full＝`docs/research/2026-07-09-melody-chord-critical-review.md`。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 
