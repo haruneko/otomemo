@@ -237,7 +237,7 @@ function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, 
   return h && h.size ? weightedPickNum(h, r) : 0;
 }
 // コード根(調相対pc)列＋学習モデル → 骨格ピッチ列(bars*beatsPerBar)。各強拍で度数をサンプルし声部進行で配置、次強拍まで保持。
-export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number } = {}): number[] {
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[] } = {}): number[] {
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
   const bpb = opts.beatsPerBar ?? 4;
   const strongQ = opts.strongQuarters ?? [0, 2];
@@ -270,15 +270,21 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   const smp = (cr: number, pv: number) => ((sampleSkelDeg(model, cr, pv, r) % 7) + 7) % 7;
   let pv = -1, pi = ctrOf(0), hA: number[] | null = null, hB: number[] | null = null; // 開始は Kopfton レジスタ（旧: 主音）
   const nu = nuAll;
+  // D-P1(2026-07-09 監査D)：句割りを骨格に伝える。phraseEnds 指定時は unit尾のバーが句末なら句のカデンツ度数へ着地
+  // （対称=各unit尾に整合／非対称=unit尾に落ちる句末のみ・可変長ブロックP2は別）。未指定=従来 u%2 の 5̂/1̂（bit一致）。
+  const pe = opts.phraseEnds;
   for (let u = 0; u < nu; u++) {
     const base = u * spu, reuse = !useMotif ? null : (u % 4 === 1 ? hA : u % 4 === 3 ? hB : null), phraseEnd = u % 2 === 1, lastU = u === nu - 1, ctr = ctrOf(u);
+    const tailBar = Math.floor((slots[Math.min(base + spu - 1, slots.length - 1)]!.beat) / bpb);
+    const peHit = pe?.find((x) => x.bar === tailBar); // この unit尾のバーが句末か
     for (let s = 0; s < spu && base + s < slots.length; s++) {
       const cr = slots[base + s]!.cr;
       let idx: number;
       if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi, ctr);
       else if (s < spu - 1) { // 頭＝動機の反復。repetition＝「頭の正確なステップ移動を反復」する確率。残りはfresh＝varied反復。
         idx = r() < rep ? cl(pi + (reuse[s] ?? 0)) : idxOf(smp(cr, pv), pi, ctr);
-      } else idx = lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 尾：最終句=主音(答え)／中間句末=5̂(問い＝開き・旧: 全句末を主音強制で平面化)
+      } else if (pe) idx = lastU ? idxOf(0, pi, tonicIdx) : peHit ? idxOf(peHit.deg, pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 句割り駆動：句末は cadence度数着地・非句末は自由
+      else idx = lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 従来：最終=主音/中間句末=5̂
       I[base + s] = idx; pi = idx; pv = ((idx - tonicIdx) % 7 + 7) % 7;
     }
     if (useMotif && u % 4 === 0) { hA = [0]; for (let s = 1; s < spu; s++) hA.push((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx)); } // 連続ステップ移動(符号付き大きさ)を記録＝正確な輪郭の反復用
@@ -744,7 +750,9 @@ export function genMotifMelodyV2(
   // 骨格＝genSkeletonFromModel（句頭アンカー）。発展＝2小節ブロックで A/A'/B(反行+弧)/A''(トニック着地) を循環。
   // C1/C2(2026-07-08)：骨格は beat索引(bars*bpb)＝アンカーは「ブロック頭barのdownbeat＝skel[bar*bpb]」で引く
   // （旧: skel[bar]＝bar番号をbeat扱い＝曲頭数拍に縮退・Urlinie後半が未使用）。6/8 は bpb=3 で生成（旧: 4/4決め打ち）。
-  const skel = genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: compound ? [0, 1.5] : [0, 2], start: 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps }); // C4/F4: 骨格ノブをV2でも透過
+  // D-P1(2026-07-09 監査D)：phrases 指定時は句末バー＋カデンツ度数を骨格へ渡す＝骨格が句割りを見る（未指定=従来）。
+  const phraseEnds = opts.phrases?.map((p) => ({ bar: Math.max(0, Math.floor((p.startBeat + p.beats - 0.001) / barLen)), deg: p.cadenceDegree === 5 ? 4 : p.cadenceDegree === 2 ? 1 : 0 }));
+  const skel = genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: compound ? [0, 1.5] : [0, 2], start: 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds }); // C4/F4: 骨格ノブをV2でも透過
   const r = makeRng(seed + 5);
   // seedMotif 指定時は genBest をスキップしてそれを M に（補完=与モチーフを発展）。既定(未指定)は現挙動と完全一致。
   const M = opts.seedMotif ?? genBest(r);

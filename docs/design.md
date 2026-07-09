@@ -1241,6 +1241,8 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **`humanize` 0..1**（既定0＝**velフィールドを付けず start不変＝bit一致**）。V2 の swing 後段に1パス：velocity（強拍やや強/裏やや弱＋LRC相関乱歩・55-118）と microtiming（±~0.03拍のLRC相関ズレ・句頭/終止は不変・前音を越えない）。決定的（makeRng）。`Note.vel?` を追加＝web/MIDI は既に `n.vel ?? 100` 対応。
 - V2 opts→gen_melody(MCP/HTTP)→SectionEditor「人間味」ノブ。**耳確認**＝揺れ量/velカーブの当たり（器は客観・値は耳）。残＝12分割グリッド(3連)は別機構で後段。
 
+→ **曲の形 D-P1＝骨格が句割りを見る（2026-07-09・5領域監査D）**。監査で「phrasing実効80%は化粧＝非対称で変わるのは句末1-2音・**骨格が句割りを見ていない**」と実測。→ `genSkeletonFromModel` に `phraseEnds?:{bar,deg}[]` を渡し、unit尾のバーが句末なら**句のカデンツ度数**へ着地（対称=各unit尾に整合／非対称=unit尾に落ちる句末のみ・可変長ブロックP2は別）。genMotifMelodyV2 が opts.phrases から phraseEnds を算出。**未指定=従来 u%2 の 5̂/1̂＝bit一致**。実測：非対称 vs 既定が **14/30→40/40 seed で変化・平均8音/8小節が変わる**（化粧→構造的）。Round1-3の脱平面化/registerと直交。残（本丸）＝**可変長ブロックP2**（blockループを句長駆動へ）・sequence/diminution・sentence テンプレ＝別の focused session＋耳。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 
