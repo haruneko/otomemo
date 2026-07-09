@@ -32,9 +32,10 @@ describe("genChords（機能和声ルール）", () => {
           expect(same, `${mood} seed=${seed} i=${i}: 隣接同和音`).toBe(false);
         }
         const pen = chords[chords.length - 2]!;
-        // 終止前＝メジャーは V/vii°。マイナーは V7 中心＋♭VII(モーダル終止＝エオリアン循環の正当な締め)も許容。
-        const okPen = mood === "切ない" ? [7, 10, 11] : [7, 11];
-        expect(okPen.includes(pen.root), `${mood} seed=${seed}: 終止前=D機能 got ${pen.root}`).toBe(true);
+        // 終止前＝D機能。長調 V/vii°、短調も V7/vii°（C0d 2026-07-09: ♭VII=subtonic は D位置に置かない＝
+        // 生成が解析器 function.ts と一致。♭VII は loop ノブでのみ登場）。
+        const okPen = [7, 11];
+        expect(okPen.includes(pen.root), `${mood} seed=${seed}: 終止前=D機能(V/vii°) got ${pen.root}`).toBe(true);
       }
     }
   });

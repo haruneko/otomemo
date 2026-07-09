@@ -1235,6 +1235,8 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **正準**：①の強拍snapで、結果が**直前音と同一ピッチ**になる時だけ「同pc以外の最寄りコード音（禁則を作らない）」を選ぶ＝**強拍CT不変量・禁則ガードを保持**したまま足踏みを散らす。②以降は触らない（後段相互干渉＝前回A2掃除の轍を避ける）。句末着地(最後の音)は従来通り不変。
 - **実測（監査プロト・40seed×3進行）**：同音 28.5→**21.4%**（長調20%・短調25%）・強拍CT88.8→88.5%(維持)・禁則0.7%(不変)・distinct/音域は微増。目安23%に着地。**着地後に単発耳確認1回**（連打の自然さが痩せていないか）。
 
+→ **コード色気 C0d＝短調テーブルSSOT（2026-07-09・5領域監査C）**。genChords のローカル短調表は度数7=♭VII で、`FUNC_DEGREES.D=[5,7]` が**♭VII(subtonic・導音なし)をドミナント位置に置いていた**（自前解析器 `function.ts`＝♭VII=SUB と往復矛盾・実測で終止前♭VII 11%）。→ 短調の D機能を **V7/vii°**（`dcands`＝短調 D=[5,8]・度数8=vii°を表に追加）に。♭VII は D から外れ loop ノブでのみ登場。長調 D=[5,7]（度数7=vii°）は不変。実測：終止前♭VII 0/40・vii° 21/40＝生成が解析器と一致。テスト I3a の短調許容を [7,11] に締めて固定。次＝borrow/loop/secondaryDom ノブ（既存 substitute.ts/progressions.ts を後段接続・既定OFFでbit一致）。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

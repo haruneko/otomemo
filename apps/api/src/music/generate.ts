@@ -26,16 +26,20 @@ const DIATONIC_MAJOR: Record<number, [number, string]> = {
   1: [0, ""], 2: [2, "m"], 3: [4, "m"], 4: [5, ""], 5: [7, ""], 6: [9, "m"], 7: [11, "dim"],
 };
 const DIATONIC_MINOR: Record<number, [number, string]> = {
-  1: [0, "m"], 2: [2, "dim"], 3: [3, ""], 4: [5, "m"], 5: [7, "7"], 6: [8, ""], 7: [10, ""],
+  1: [0, "m"], 2: [2, "dim"], 3: [3, ""], 4: [5, "m"], 5: [7, "7"], 6: [8, ""], 7: [10, ""], 8: [11, "dim"], // 8=vii°(導音の減和音・和声的短調のD)
 };
 // I3b(2026-07-08)：カラー系mood用の7thパレット（おしゃれ/ジャズ/夜系）。短調Vは従来からV7。
 const DIATONIC_MAJOR7: Record<number, [number, string]> = {
   1: [0, "maj7"], 2: [2, "m7"], 3: [4, "m7"], 4: [5, "maj7"], 5: [7, "7"], 6: [9, "m7"], 7: [11, "m7b5"],
 };
 const DIATONIC_MINOR7: Record<number, [number, string]> = {
-  1: [0, "m7"], 2: [2, "m7b5"], 3: [3, "maj7"], 4: [5, "m7"], 5: [7, "7"], 6: [8, "maj7"], 7: [10, "7"],
+  1: [0, "m7"], 2: [2, "m7b5"], 3: [3, "maj7"], 4: [5, "m7"], 5: [7, "7"], 6: [8, "maj7"], 7: [10, "7"], 8: [11, "m7b5"], // 8=vii°(m7b5=導音の減7)
 };
 const FUNC_DEGREES: Record<string, number[]> = { T: [1, 6, 3], S: [4, 2], D: [5, 7] };
+// C0d(2026-07-09 監査C・短調SSOT)：短調のD機能は V7/vii°（両方導音を含む真のドミナント）。旧: D=[5,7] で
+// 度数7=♭VII(subtonic・導音なし)を誤ってドミナント位置に置いていた（自前解析器 function.ts=SUB と往復矛盾）。
+// ♭VII(度数7)は D から外す＝loop ノブ(♭VI-♭VII-i)でのみ登場。長調 D=[5,7]は度数7=vii°(dim)で正しく不変。
+const dcands = (fn: string, minor: boolean): number[] => (fn === "D" && minor ? [5, 8] : FUNC_DEGREES[fn]!);
 const FUNC_NEXT: Record<string, string[]> = {
   T: ["S", "S", "D", "D", "T"],
   S: ["D", "D", "D", "S", "T"],
@@ -108,7 +112,7 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
   const degrees: number[] = [];
   for (let i = 0; i < funcs.length; i++) {
     const fn = funcs[i]!;
-    const cands = FUNC_DEGREES[fn]!;
+    const cands = dcands(fn, minor);
     // D機能は V を厚く（裸の vii°/dim ブロックはレア＝実用進行の比率へ）。
     const w = fn === "D" ? [5, 1] : [3, 2, 1];
     let d = rng.choices(cands, w.slice(0, cands.length));
@@ -123,7 +127,7 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
   if (bars >= 2) degrees[degrees.length - 1] = 1;
   // 先頭の強制(1)で隣接重複が再発した場合は同機能の別候補へ（bars=2 の I,I は両端強制なので許容）。
   if (degrees.length > 2 && degrees[1] === degrees[0]) {
-    const alt = FUNC_DEGREES[funcs[1]!]!.find((c) => c !== degrees[1]);
+    const alt = dcands(funcs[1]!, minor).find((c) => c !== degrees[1]);
     if (alt !== undefined) degrees[1] = alt;
   }
   // Step3(2026-07-09 design#12-M)：カデンツ選択器＝末尾1-2和音を型で上書き（既定 full/undefined=従来一致）。
