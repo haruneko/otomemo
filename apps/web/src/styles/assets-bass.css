@@ -630,8 +630,22 @@ article[aria-label="neta-card"].dragging {
 .tools-menu {
   flex-direction: column;
   align-items: stretch;
+  /* assign-menu 由来の flex-wrap:wrap は縦カラム＋高さ上限で2カラム目へ折り返し、
+     MIDI等が右へあふれる。単一列に固定してスクロールさせる（耳FB 2026-07-09）。 */
+  flex-wrap: nowrap;
   min-width: 168px;
   gap: 4px;
+  /* ノブが10個に増え縦に伸びた＝再生バー裏で下(句割り/形式)が見切れる。
+     画面高に収めてスクロール可にする（耳FB 2026-07-09・モバイル）。 */
+  max-height: min(66vh, 520px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 「いじる」ボタンは左寄せ配置で右端≈228px。right:0起点で240px左へ伸ばすと
+     画面左に約12pxこぼれる（Playwright実測 x=-11.5）。幅を詰めて画面内に収める。 */
+  max-width: min(216px, calc(100vw - 16px));
+  /* 下端固定の再生バー(.transport z-index:6)より上に重ねる＝メニュー末尾(形式/書き出し)が
+     再生バーに突き抜かれず見える・押せる（耳FB 2026-07-09）。 */
+  z-index: 7;
 }
 .tool-item {
   text-align: left;
@@ -671,9 +685,17 @@ article[aria-label="neta-card"].dragging {
   gap: 6px;
   font-size: 0.74rem;
   color: var(--muted);
+  min-width: 0; /* 中の select/slider が縮めるように（はみ出し防止） */
 }
 .knob-row > span:first-child {
-  flex: 0 0 42px;
+  flex: 0 0 56px; /* 「入り遅れ」等4文字ラベルが見切れないよう拡幅（耳FB 2026-07-09） */
+  white-space: nowrap;
+}
+/* 句割り/形式の select は最長の選択肢に合わせて広がりパネルをはみ出す＝縮小＆省略表示。 */
+.knob-row select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 .knob-row input[type="range"] {
   flex: 1 1 auto;
