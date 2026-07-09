@@ -15,7 +15,11 @@ export interface Note {
   drum?: boolean; // GMドラム＝打楽器シンセで鳴らす（melodic synthだと低すぎて聞こえない）
   program?: number; // #section音色: 合成再生で子(パート)ごとの GM音色を保つ（compositeNotesが付与）
   kit?: number; // ドラムキット(GM bank128 preset番号 0=Standard)。アコ/エレキ選択＝drumノートに付与。
+  part?: MixPart; // ミキサーのパート（合成再生で compositeNotes が付与）。パート別ゲインへ振り分ける。
 }
+
+// ミキサーのパート＝メロ/コード/ベース/ドラム（音量バランスと音割れ対策のパート別ゲイン・耳FB 2026-07-09）。
+export type MixPart = "melody" | "chord" | "bass" | "drums";
 
 // MIDIノート番号→音名（MIDI 60=C4）。負値も安全（(m%12+12)%12）。PITCH_NAMES は @cm/music-core。
 export const pitchName = (midi: number) => `${PITCH_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
@@ -554,6 +558,8 @@ export function compositeNotes(
     // 担う・CP1）。和声の解決文脈は上の sectionChords から既に供給済み＝役目は保持。
     if (kind === "chord" || kind === "chord_progression") return [];
     const isRhythm = kind === "rhythm";
+    // ミキサーのパート＝kind から決定（コード楽器→chord・rhythm→drums・bass→bass・他→melody）。
+    const part: MixPart = kind === "bass" ? "bass" : kind === "rhythm" ? "drums" : kind === "chord_pattern" ? "chord" : "melody";
     // パートの音色（GM program）。bass は既定フィンガーベース。他は content.program か既定0。
     const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : 0));
     if (kind === "bass" && isRelativeBass(c.node.neta.content)) {
@@ -563,6 +569,7 @@ export function compositeNotes(
         ...n,
         start: n.start + c.position,
         program: prog,
+        part,
       }));
     }
     if (kind === "chord_pattern" && isChordPattern(c.node.neta.content)) {
@@ -572,6 +579,7 @@ export function compositeNotes(
         ...n,
         start: n.start + c.position,
         program: prog,
+        part,
       }));
     }
     // メロは**旋法を保った相対移調**（短調メロ→section調号の相対短調等）。コード/ベース絶対は
@@ -586,6 +594,7 @@ export function compositeNotes(
       pitch: isRhythm ? n.pitch : n.pitch + shift,
       start: n.start + c.position,
       program: prog,
+      part,
     }));
   });
 }
@@ -763,6 +772,7 @@ export interface ScheduledNote {
   vel: number; // 0..1
   program?: number; // #section音色: per-note の GM音色（合成再生でパート毎に切替）
   kit?: number; // ドラムキット(GM bank128 preset)。drum 音の解決でこのキットのサンプルを使う。
+  part?: MixPart; // ミキサーのパート（合成再生で付与）。パート別ゲインへ振り分ける。
 }
 
 const MEMBRANE_DUR = 0.15;
@@ -776,9 +786,9 @@ export function scheduleTimes(notes: Note[], bpm = 120): ScheduledNote[] {
     const vel = (n.vel ?? 100) / 127;
     if (n.drum) {
       const voice: Voice = n.pitch <= 41 ? "membrane" : "noise";
-      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel, kit: n.kit };
+      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel, kit: n.kit, part: n.part ?? "drums" };
     }
-    return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel, program: n.program };
+    return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel, program: n.program, part: n.part };
   });
 }
 

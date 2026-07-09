@@ -151,6 +151,13 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M12 14v6" />
         </svg>
       );
+    case "volume": // 🔉 スピーカー＋音波（音量ミキサー）
+      return (
+        <svg {...s}>
+          <path {...st} d="M4 9v6h3l5 4V5L7 9z" />
+          <path {...st} d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" />
+        </svg>
+      );
     default:
       return null;
   }

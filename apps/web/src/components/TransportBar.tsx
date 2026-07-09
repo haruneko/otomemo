@@ -1,6 +1,7 @@
 import { type Ref } from "react";
 import { type TransportState } from "../useTransport";
 import { Icon } from "./Icon";
+import { MixerControl } from "./MixerControl";
 
 // #59 下端固定トランスポート。⏮頭出し / ▶⇄⏸ / 🔁ループ / 小節:拍。タップ標的44px。
 export function TransportBar({
@@ -66,6 +67,7 @@ export function TransportBar({
       <span className="transport-time" aria-label="position" ref={timeRef}>
         1:1
       </span>
+      <MixerControl />
     </div>
   );
 }

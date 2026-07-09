@@ -3,6 +3,7 @@
 // Tone/smplr/soundfont2 は再生時のみ動的import（テストで読み込まない）。
 import {
   type Note,
+  type MixPart,
   type ChordEntry,
   type RhythmContent,
   type CompositeChild,
@@ -34,6 +35,90 @@ interface PlayOpts {
 // 単一再生：グローバル Transport を奪い合うので、現在の音源を1組だけ保持し再利用/破棄。
 type Kit = { poly: any; membrane: any; noise: any };
 let currentKit: Kit | null = null;
+
+// ── マスターバス（音割れ対策・耳FB 2026-07-09）──────────────────────────
+// 従来は全音源が個別に destination 直結＝出口で単純合算し、同時発音が 0dBFS を超えるとハードクリップ
+// （オーバードライブ的ひずみ）。全経路を1本のマスター(パート別ゲイン→全体ゲイン→リミッター→出口)へ
+// 集約する。リミッターが天井を作り**何音重なっても割れない**。生Web Audioで組む＝Tone/smplr 双方が
+// ネイティブノードとして繋げる（Toneは.connect(node)、smplrは destination オプション）。
+export type { MixPart }; // music.ts の型を UI へ再輸出（MixerControl 等）
+const MIX_PARTS: MixPart[] = ["melody", "chord", "bass", "drums"];
+const VOL_KEY = "cm.mix"; // localStorage: { master:number, melody, chord, bass, drums }
+type MixState = { master: number } & Record<MixPart, number>;
+const DEFAULT_MIX: MixState = { master: 0.8, melody: 1, chord: 0.8, bass: 0.9, drums: 0.8 };
+
+function loadMix(): MixState {
+  try {
+    const raw = globalThis.localStorage?.getItem(VOL_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<MixState>;
+      const clamp = (v: unknown, d: number) => (typeof v === "number" && v >= 0 && v <= 2 ? v : d);
+      return {
+        master: clamp(p.master, DEFAULT_MIX.master),
+        melody: clamp(p.melody, DEFAULT_MIX.melody),
+        chord: clamp(p.chord, DEFAULT_MIX.chord),
+        bass: clamp(p.bass, DEFAULT_MIX.bass),
+        drums: clamp(p.drums, DEFAULT_MIX.drums),
+      };
+    }
+  } catch {
+    /* localStorage 不可環境（テスト等）は既定 */
+  }
+  return { ...DEFAULT_MIX };
+}
+let mix: MixState = loadMix();
+
+// マスターチェーンのノード（生成は再生開始時・lazy）。part ゲイン→ master ゲイン→ limiter→ destination。
+let masterCtx: AudioContext | null = null;
+let masterGain: GainNode | null = null;
+let partGains: Record<MixPart, GainNode> | null = null;
+
+// 共有 AudioContext 上にマスターチェーンを一度だけ構築し、指定パートの入口ノードを返す。
+export function ensureMaster(Tone: any, part: MixPart = "melody"): AudioNode {
+  const ctx: AudioContext = Tone.getContext().rawContext;
+  if (!masterGain || masterCtx !== ctx) {
+    masterCtx = ctx;
+    masterGain = ctx.createGain();
+    masterGain.gain.value = mix.master;
+    // リミッター＝DynamicsCompressor をブリックウォール設定（天井 -1dBFS）。何音重なっても超えさせない。
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -1;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.1;
+    masterGain.connect(limiter);
+    limiter.connect(ctx.destination);
+    const pg = {} as Record<MixPart, GainNode>;
+    for (const p of MIX_PARTS) {
+      const g = ctx.createGain();
+      g.gain.value = mix[p];
+      g.connect(masterGain);
+      pg[p] = g;
+    }
+    partGains = pg;
+  }
+  return partGains![part];
+}
+
+export function getMix(): MixState {
+  return { ...mix };
+}
+// 全体/パート音量を反映（再生中でも即時・冪等）。localStorage に保存。
+export function setMixVolume(key: "master" | MixPart, v: number): void {
+  const val = Math.max(0, Math.min(2, v));
+  mix = { ...mix, [key]: val };
+  try {
+    globalThis.localStorage?.setItem(VOL_KEY, JSON.stringify(mix));
+  } catch {
+    /* 保存不可は無視（音は効く） */
+  }
+  if (key === "master") {
+    if (masterGain) masterGain.gain.value = val;
+  } else if (partGains) {
+    partGains[key].gain.value = val;
+  }
+}
 
 // 再生の診断ログ。localStorage 'cm.debugAudio'='1' か window.__cmAudioDebug で有効（既定OFF）。
 function audioDbgOn(): boolean {
@@ -67,7 +152,7 @@ export function playEvent(
   kit: Kit,
   Tone: any,
   drumKits?: Map<number, DrumVoice>,
-  melodicByProg?: Map<number, any>, // #section音色: program毎の旋律 sampler（無ければ sf）
+  melodicByPart?: Map<MixPart, any>, // #section音色/ミキサー: パート毎の旋律 sampler（無ければ sf）
   defaultProg = 0,
 ): void {
   if (ev.voice === "membrane" || ev.voice === "noise") {
@@ -93,9 +178,9 @@ export function playEvent(
       kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
     }
   } else if (sf) {
-    // #section音色: この音の program に対応する旋律 sampler（無ければ既定 sf）
-    const inst = melodicByProg?.get(ev.program ?? defaultProg) ?? sf;
-    dbg("note pitch", ev.pitch, "via sf2-melodic prog", ev.program ?? defaultProg);
+    // #section音色/ミキサー: この音のパートに対応する旋律 sampler（無ければ既定 sf=melody）
+    const inst = melodicByPart?.get(ev.part ?? "melody") ?? sf;
+    dbg("note pitch", ev.pitch, "via sf2-melodic part", ev.part ?? "melody");
     inst.start({ note: ev.pitch, time, duration: ev.durSec, velocity: velToMidi(ev.vel) });
   } else {
     // SF2 未ロード時の純シンセ・フォールバック（後退ゼロ＝必ず鳴る）。診断ログを出して
@@ -201,36 +286,45 @@ async function setMelodicInstrument(sampler: any, program: number): Promise<void
 
 // #section音色: 合成再生で**パート毎(program毎)の旋律 sampler** を用意。
 // 既定 program は sfSampler を再利用、他は program 専用 sampler を作りキャッシュ（ドラムcacheと同方式）。
-const sfMelodicCache = new Map<number, any>(); // program → 旋律 sampler
+const sfMelodicCache = new Map<string, any>(); // `${part}:${program}` → 旋律 sampler（パート別ゲイン接続）
+// 旋律 sampler を**パート別**に用意（ミキサーのパート別ゲインに繋ぐため・耳FB 2026-07-09）。
+// 各パートは1 program（compositeNotes が melody/chord/bass で別 program を付与）。同じ program でも
+// パートが違えば別インスタンス＝別ゲイン。melody かつ既定 program は sfSampler(melody gain 接続済)を再利用。
 async function prepareMelodicSamplers(
   notes: Note[],
   Tone: any,
   defaultProg: number,
   sf: any,
-): Promise<Map<number, any>> {
-  const map = new Map<number, any>();
+): Promise<Map<MixPart, any>> {
+  const map = new Map<MixPart, any>();
   if (!sf || !activeSfUrl) return map;
-  const progs = new Set<number>();
-  for (const n of notes) if (!n.drum) progs.add(n.program ?? defaultProg);
-  for (const prog of progs) {
-    if (prog === defaultProg) {
-      map.set(prog, sf); // 既定は ensureSoundFont 済みの sfSampler
+  // パート→そのパートの program（最初に見た音の program で確定）。part 無し(単体再生)は "melody" 扱い。
+  const partProg = new Map<MixPart, number>();
+  for (const n of notes) {
+    if (n.drum) continue;
+    const part = n.part ?? "melody";
+    if (!partProg.has(part)) partProg.set(part, n.program ?? defaultProg);
+  }
+  for (const [part, prog] of partProg) {
+    if (part === "melody" && prog === defaultProg) {
+      map.set(part, sf); // 既定 melody は sfSampler（既に melody gain 接続済）
       continue;
     }
-    let s = sfMelodicCache.get(prog);
+    const cacheKey = `${part}:${prog}`;
+    let s = sfMelodicCache.get(cacheKey);
     if (!s) {
       try {
-        s = await makeSampler(activeSfUrl, Tone);
+        s = await makeSampler(activeSfUrl, Tone, part); // このパートのゲインへ接続
         await s.ready;
         const want = melodicInstrumentName(prog);
         if (want) await s.loadInstrument(want);
-        sfMelodicCache.set(prog, s);
+        sfMelodicCache.set(cacheKey, s);
       } catch (e) {
-        dbg("melodic sampler load failed program", prog, e);
-        continue; // 失敗した program は既定sfにフォールバック
+        dbg("melodic sampler load failed part/prog", part, prog, e);
+        continue; // 失敗パートは既定sf(melody)にフォールバック
       }
     }
-    map.set(prog, s);
+    map.set(part, s);
   }
   return map;
 }
@@ -248,13 +342,14 @@ export function resolveSF2Ctor(mod: any): any {
 }
 
 // SF2 を1個生成。createSoundfont は url 単位でパース結果をキャッシュ＝再パースしない。
-async function makeSampler(url: string, Tone: any): Promise<any> {
+async function makeSampler(url: string, Tone: any, part: MixPart = "melody"): Promise<any> {
   const [smplr, sf2mod] = await Promise.all([import("smplr"), import("soundfont2")]);
   const Soundfont2 = (smplr as any).Soundfont2;
   const SoundFont2 = resolveSF2Ctor(sf2mod);
   sfCtx = Tone.getContext().rawContext;
   return Soundfont2(sfCtx, {
     url,
+    destination: ensureMaster(Tone, part), // 出口直結でなくマスターバス経由（音割れ対策・パート別ゲイン）
     createSoundfont: (data: Uint8Array) => {
       if (sfParsedUrl === url && sfParsed) return sfParsed;
       sfParsed = new SoundFont2(data);
@@ -450,7 +545,7 @@ async function loadDrumSampler(name: string, Tone: any): Promise<any | null> {
   if (!activeSfUrl) return null;
   if (sfDrumCache.has(name)) return sfDrumCache.get(name);
   try {
-    const s = await makeSampler(activeSfUrl, Tone);
+    const s = await makeSampler(activeSfUrl, Tone, "drums"); // ドラムは drums パートゲインへ
     await s.ready;
     await s.loadInstrument(name);
     sfDrumCache.set(name, s);
@@ -530,17 +625,17 @@ export async function probeSoundFont(): Promise<{
 
 // 単発プレビュー用フォールバック（SF2 未ロード時）。生成→発音→少し後に dispose（ノード蓄積を防ぐ）。
 function previewFallbackMelodic(Tone: any, pitch: number, vel: number, now: number): void {
-  const s = new Tone.Synth().toDestination();
+  const s = new Tone.Synth().connect(ensureMaster(Tone, "melody"));
   s.triggerAttackRelease(Tone.Frequency(pitch, "midi").toNote(), 0.4, now, vel);
   setTimeout(() => { try { s.dispose(); } catch { /* already disposed */ } }, 700);
 }
 function previewFallbackDrum(Tone: any, pitch: number, vel: number, now: number): void {
   if (pitch <= 41) {
-    const m = new Tone.MembraneSynth().toDestination();
+    const m = new Tone.MembraneSynth().connect(ensureMaster(Tone, "drums"));
     m.triggerAttackRelease(Tone.Frequency(pitch, "midi").toFrequency(), 0.15, now, vel);
     setTimeout(() => { try { m.dispose(); } catch { /* */ } }, 500);
   } else {
-    const n = new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.12, sustain: 0 } }).toDestination();
+    const n = new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.12, sustain: 0 } }).connect(ensureMaster(Tone, "drums"));
     n.triggerAttackRelease(0.05, now, vel);
     setTimeout(() => { try { n.dispose(); } catch { /* */ } }, 400);
   }
@@ -569,8 +664,8 @@ export async function previewNote(note: Note): Promise<void> {
       return;
     }
     if (sf) {
-      const byProg = await prepareMelodicSamplers([note], Tone, note.program ?? 0, sf);
-      const inst = byProg.get(note.program ?? 0) ?? sf;
+      const byPart = await prepareMelodicSamplers([note], Tone, note.program ?? 0, sf);
+      const inst = byPart.get(note.part ?? "melody") ?? sf;
       inst.start({ note: note.pitch, time: now, duration: 0.45, velocity: vel127 });
       return;
     }
@@ -604,7 +699,7 @@ export async function playNotes(
   const sf = await ensureSoundFont(Tone, defaultProg, false);
   const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number, DrumVoice>();
   // #section音色: パート毎(program毎)の旋律 sampler を用意（合成再生で音色を保つ）
-  const melodicByProg = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<number, any>();
+  const melodicByPart = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<MixPart, any>();
   dbg(
     "playNotes engine=",
     sf ? "sf2" : "fallback-synth",
@@ -619,16 +714,16 @@ export async function playNotes(
   );
 
   const kit: Kit = {
-    poly: new Tone.PolySynth(Tone.Synth).toDestination(),
-    membrane: new Tone.MembraneSynth().toDestination(),
-    noise: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.12, sustain: 0 } }).toDestination(),
+    poly: new Tone.PolySynth(Tone.Synth).connect(ensureMaster(Tone, "melody")),
+    membrane: new Tone.MembraneSynth().connect(ensureMaster(Tone, "drums")),
+    noise: new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.12, sustain: 0 } }).connect(ensureMaster(Tone, "drums")),
   };
   currentKit = kit;
 
   transport.bpm.value = bpm;
   for (const ev of scheduleTimes(notes, bpm)) {
     transport.schedule(
-      (time: number) => playEvent(ev, time, sf, kit, Tone, drumKits, melodicByProg, defaultProg),
+      (time: number) => playEvent(ev, time, sf, kit, Tone, drumKits, melodicByPart, defaultProg),
       ev.time,
     );
   }
@@ -650,7 +745,7 @@ export async function playNotes(
       disposeKit();
       try {
         sf?.stop(); // SF2 の鳴っている音も止める（尾を切る。サンプラ自体は再利用のため破棄しない）
-        for (const s of melodicByProg.values()) s?.stop?.(); // #section音色: 各パートsamplerも止める
+        for (const s of melodicByPart.values()) s?.stop?.(); // #section音色: 各パートsamplerも止める
         for (const ds of drumKits.values()) ds.sampler?.stop?.();
       } catch {
         /* noop */
