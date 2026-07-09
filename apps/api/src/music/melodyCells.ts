@@ -655,14 +655,20 @@ export function genMotifMelodyV2(
 
   // 選別＝12個生成しスコア最良を採用（クソ乱数排除）。全滅時は安全な既定モチーフ。
   const genBest = (r: () => number, bb: number = mb): Motif16 => {
-    let best: Motif16 | null = null, bs = -1e9, nnull = 0;
-    for (let i = 0; i < 12; i++) { const m = mkMotif(r, bb); if (!m) { nnull++; continue; } const s = score(m, bb); if (s > bs) { bs = s; best = m; } }
-    const g = (globalThis as any); g.__gbCalls = (g.__gbCalls ?? 0) + 1; g.__gbNull = (g.__gbNull ?? 0) + nnull; if (!best) g.__gbFallback = (g.__gbFallback ?? 0) + 1;
-    (g.__gbBB = g.__gbBB ?? {})[bb] = [...(g.__gbBB[bb] ?? [0, 0, 0])].map((v, k) => v + (k === 0 ? 1 : k === 1 ? nnull : (best ? 0 : 1)));
-    if (best) (g.__gbLen = g.__gbLen ?? {})[bb] = [...(g.__gbLen[bb] ?? [0, 0])].map((v, k) => v + (k === 0 ? 1 : best!.ons.length));
-    return best ?? (compound
+    let best: Motif16 | null = null, bs = -1e9;
+    for (let i = 0; i < 12; i++) { const m = mkMotif(r, bb); if (!m) continue; const s = score(m, bb); if (s > bs) { bs = s; best = m; } }
+    if (best) return best;
+    // 全滅時の安全な既定モチーフ。bb>2(可変長の長尺ブロック)は blockBars でスケールして空尾破綻を防ぐ（監査D実装評価）。
+    // bb≤2 は従来の 2小節ハードコード（既定 path の bit一致を保つ）。
+    if (bb > 2) {
+      const ons: number[] = [], mv: number[] = [], run: boolean[] = [];
+      const beats = compound ? [0, 1, 2] : [0.5, 1.5, 2.5]; // 1小節ぶんの安全onset
+      for (let bar = 0; bar < bb; bar++) for (const o of beats) { const t = bar * barLen + o; if (t < bb * barLen - (compound ? 0.75 : 1.5)) { ons.push(t); mv.push(ons.length === 1 ? 0 : (ons.length % 2 ? 1 : -1)); run.push(false); } }
+      if (ons.length) return { ons, mv, run };
+    }
+    return compound
       ? { ons: [0, 0.5, 1, 1.5, 2.5], mv: [0, 1, 1, -1, 2], run: [false, false, false, false, false] }
-      : { ons: [0.5, 1, 1.5, 2.5, 3], mv: [0, 2, -1, 2, -1], run: [false, false, false, false, false] });
+      : { ons: [0.5, 1, 1.5, 2.5, 3], mv: [0, 2, -1, 2, -1], run: [false, false, false, false, false] };
   };
 
   // 尾変奏＝前半を保持し後半の move を引き直す（A'＝問いに対する変化した答え）。
