@@ -842,24 +842,29 @@ export function genMotifMelodyV2(
       if (bl != null && (((pc - bl) % 12 + 12) % 12) === 1) pen += 3;
       return pen;
     };
-    // k選択＝置き場所で和声適応。カデンツ着地(最優先)＋強拍の質＋音域＋同ラベルヒステリシス＋継目跳躍(w4)。
-    const kPrev = prior ? prior.k : 0;
-    let bestK = 0, bestCost = Infinity;
-    for (let k = -4; k <= 4; k++) {
-      let strongPen = 0, rangeMiss = 0, cadMiss = 0;
-      for (let i = 0; i < M.ons.length; i++) {
-        if (baseIdx + k + deg[i]! < 0 || baseIdx + k + deg[i]! > L.length - 1) rangeMiss++;
-        if (onMainAt(i)) strongPen += strongQual(pitchAt(k, i), bar0 * barLen + M.ons[i]!);
+    // k選択＝置き場所で和声適応。同ラベル既出(A/A''の回帰)は初回の k を**そのまま再利用**＝逐語反復（M10自己相関・
+    // フック回収点）。初回のみ探索：カデンツ着地(最優先)＋強拍の質＋音域＋前ブロック終端跳躍(w4)。
+    let bestK: number;
+    if (prior) {
+      bestK = prior.k; // 同ラベル＝初回の baseIdx/k を literal 再利用＝A==A'==A''（renderPreserve出力が一致・和声差は後処理が吸収）
+    } else {
+      bestK = 0; let bestCost = Infinity;
+      for (let k = -4; k <= 4; k++) {
+        let strongPen = 0, rangeMiss = 0, cadMiss = 0;
+        for (let i = 0; i < M.ons.length; i++) {
+          if (baseIdx + k + deg[i]! < 0 || baseIdx + k + deg[i]! > L.length - 1) rangeMiss++;
+          if (onMainAt(i)) strongPen += strongQual(pitchAt(k, i), bar0 * barLen + M.ons[i]!);
+        }
+        if (toTonic) {
+          const li = M.ons.length - 1, pcs = pcsAtT(bar0 * barLen + M.ons[li]!);
+          cadMiss = pcs.length && !pcs.includes(((pitchAt(k, li) % 12) + 12) % 12) ? 1 : 0; // カデンツ>動機＝終音は和声着地(強)
+        }
+        const seam = prevPreserveEnd == null ? 0 : Math.max(0, Math.abs(pitchAt(k, 0) - prevPreserveEnd) - 7) / 2; // w4：前ブロック終端との跳躍(>5度)を抑制
+        const cost = 100 * cadMiss + 2 * strongPen + 5 * rangeMiss + seam;
+        if (cost < bestCost) { bestCost = cost; bestK = k; }
       }
-      if (toTonic) {
-        const li = M.ons.length - 1, pcs = pcsAtT(bar0 * barLen + M.ons[li]!);
-        cadMiss = pcs.length && !pcs.includes(((pitchAt(k, li) % 12) + 12) % 12) ? 1 : 0; // カデンツ>動機＝終音は和声着地(強)
-      }
-      const seam = prevPreserveEnd == null ? 0 : Math.max(0, Math.abs(pitchAt(k, 0) - prevPreserveEnd) - 7) / 2; // w4：前ブロック終端との跳躍(>5度)を抑制
-      const cost = 100 * cadMiss + 2 * strongPen + 5 * rangeMiss + 2 * Math.abs(k - kPrev) + seam; // w5ヒステリシス＝同ラベル同k
-      if (cost < bestCost) { bestCost = cost; bestK = k; }
+      placeByLabel.set(label, { baseIdx, k: bestK }); // 初回のみ記録＝以降の同ラベルはこの anchor/k を再利用
     }
-    if (!prior) placeByLabel.set(label, { baseIdx, k: bestK }); // 初回のみ記録＝以降の同ラベルは初回anchor/kを再利用
     const out: Note[] = [];
     for (let i = 0; i < M.ons.length; i++) {
       const t = bar0 * barLen + M.ons[i]!;
@@ -979,7 +984,10 @@ export function genMotifMelodyV2(
       label = fn;
     } else {
       const role = roleOf(bi);
-      variant = role === 1 ? varyTail(Mi, r) : role === 2 ? invert(Mi) : Mi; // A / A'(尾変奏) / B(反行) / A''
+      // preserve×hook＝反復音フックは「提示→逐語反復(basic ideaの反復)→対比→回帰」が本領（Caplin sentence・理論#3）。
+      // 初回反復(A')を尾変奏でなく逐語(exact)にする＝動機の同一性を最も可聴に宣言。B(反行)/A''は従来。preserve時のみ＝bit一致。
+      const exactFirstRep = preserve && hk > 0 && role === 1;
+      variant = exactFirstRep ? Mi : role === 1 ? varyTail(Mi, r) : role === 2 ? invert(Mi) : Mi; // A / A'(preserve+hook=逐語 / 他=尾変奏) / B(反行) / A''
       if (fg > 0 && role !== 0 && !last && r() < fg) variant = freeVary(Mi, r); // 派生ブロックを自由材料に（fg=0では抽選しない＝bit一致）
       const anchorBase = an(bar0);
       anchor = role === 2 ? clampScale(sp, nearestIdx(sp, anchorBase) + 2) : anchorBase; // 弧＝B塊を音域ピークへ
