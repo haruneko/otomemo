@@ -62,4 +62,28 @@ describe("フレーズ骨格プランナ skeleton.ts（契約・design #12-M）"
       expect(sum, `bars=${b}`).toBe(b);
     }
   });
+
+  // 対策2-A（2026-07-11・句パターン辞書＝終止位置の単峰解消）
+  it("period：8小節→[4,4]（4小節句・終止が半分＝長い塊）・最終主音", () => {
+    const ph = planSkeleton(8, "4/4", { phrasing: "period" });
+    expect(ph.map((p) => p.beats / 4)).toEqual([4, 4]); // 4小節句が2つ
+    expect(ph.length).toBe(2); // 終止は2箇所（symmetric は4箇所）
+    expect(ph[ph.length - 1]!.cadenceDegree).toBe(1);
+    expect(ph[ph.length - 1]!.isLast).toBe(true);
+  });
+  it("sentence：8小節→[2,2,4]（短短長＝畳み掛け→長い解放）・最終句が最長・主音", () => {
+    const ph = planSkeleton(8, "4/4", { phrasing: "sentence" });
+    expect(ph.map((p) => p.beats / 4)).toEqual([2, 2, 4]);
+    expect(ph[2]!.beats / 4).toBe(4); // 最終句が4小節＝最長の解放
+    expect(ph[2]!.cadenceDegree).toBe(1);
+    expect(ph[2]!.isLast).toBe(true);
+  });
+  it("period/sentence でも全小節を消費する（合計＝bars・端数吸収）", () => {
+    for (const mode of ["period", "sentence"] as const) {
+      for (const b of [2, 4, 5, 6, 7, 8, 9, 12, 16]) {
+        const sum = planSkeleton(b, "4/4", { phrasing: mode }).reduce((s, p) => s + p.beats / 4, 0);
+        expect(sum, `${mode} bars=${b}`).toBe(b);
+      }
+    }
+  });
 });

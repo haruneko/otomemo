@@ -38,13 +38,30 @@ function asymmetricBars(total: number): number[] {
   }
   return out;
 }
+// 対策2-A（2026-07-11・句パターン辞書＝終止位置の単峰解消）：基本ユニットをタイル敷きし端数を吸収。
+// period＝[4,4]（4小節句・句読点が半分）／sentence＝[2,2,4]（短短長・Caplin・畳み掛け→長い解放）。
+function tileBars(total: number, unit: number[]): number[] {
+  const sum = unit.reduce((a, b) => a + b, 0);
+  const out: number[] = [];
+  let rem = total;
+  while (rem >= sum) { out.push(...unit); rem -= sum; }
+  if (rem > 0) {
+    if (out.length && rem <= 1) out[out.length - 1]! += rem; // 1小節端は前句へ吸収
+    else out.push(rem);
+  }
+  return out.length ? out : [total];
+}
 
 // 2小節=phrase、4小節=period(antecedent+consequent)。前楽節末=属音(問い)、後楽節/最終=主音(答え)。
 // opts.phrasing="asymmetric" で非対称な句割り（既定=対称＝従来どおり・後方互換）。
-export function planSkeleton(bars: number, meter?: string | null, opts: { phrasing?: "symmetric" | "asymmetric" } = {}): Phrase[] {
+export function planSkeleton(bars: number, meter?: string | null, opts: { phrasing?: "symmetric" | "asymmetric" | "period" | "sentence" } = {}): Phrase[] {
   const bpb = meterInfo(meter).beatsPerBar;
   const total = Math.max(1, Math.trunc(bars));
-  const pattern = opts.phrasing === "asymmetric" ? asymmetricBars(total) : symmetricBars(total);
+  const pattern =
+    opts.phrasing === "asymmetric" ? asymmetricBars(total)
+    : opts.phrasing === "period" ? tileBars(total, [4]) // [4,4]＝4小節句（終止が半分・長い塊）
+    : opts.phrasing === "sentence" ? tileBars(total, [2, 2, 4]) // 短短長＝Caplin sentence（畳み掛け→長い解放）
+    : symmetricBars(total);
   const out: Phrase[] = [];
   let bar = 0;
   let idx = 0;

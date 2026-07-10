@@ -189,7 +189,7 @@ export function buildHttp(core: Core): FastifyInstance {
           return genMelody(b.frame, asChords(b.chords), b.seed, {
             useV2: true, density: num(b.density), swing: num(b.swing), expression: num(b.expression), runs: num(b.runs), push: num(b.push), foreground: num(b.foreground), breathe: num(b.breathe), humanize: num(b.humanize), form: b.form === "sentence" ? "sentence" : undefined, registerShift: num(b.registerShift), // registerShift 明示（セクション役割文脈は frame.section から自動・明示ノブが勝つ）
             repetition: num(b.repetition), rangeSteps: num(b.rangeSteps), motifBars: num(b.motifBars),
-            phrasing: b.phrasing === "asymmetric" ? "asymmetric" : b.phrasing === "symmetric" ? "symmetric" : undefined,
+            phrasing: (["symmetric", "asymmetric", "period", "sentence"] as const).includes(b.phrasing as never) ? (b.phrasing as "symmetric" | "asymmetric" | "period" | "sentence") : undefined,
             bass: bassN.length ? bassN : undefined, counter: num(b.counter),
             drums: b.drums, drumLock: num(b.drumLock), backbeat: num(b.backbeat), converse: num(b.converse), // ドラム結線（design「gen_melody×ドラム結線」・不正/係数0は genMelody 側で従来と bit 一致）
             hook: num(b.hook), articulation: num(b.articulation), inflect: num(b.inflect), motifMode: b.motifMode === "preserve" ? "preserve" : undefined, // 反復音モチーフ（design「動機保存レンダ」・既定/不正は従来 bit 一致）

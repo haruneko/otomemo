@@ -121,7 +121,7 @@ function normalizeSection(section?: SectionContext | null): SectionContext | und
 // 「未指定ノブの既定値差し替え」であり、明示ノブ＞role プリセット＞従来既定。undefined のノブは触らない。
 type PresetKnobs = {
   density?: number; registerShift?: number; repetition?: number; motifBars?: number;
-  breathe?: number; expression?: number; foreground?: number; phrasing?: "symmetric" | "asymmetric";
+  breathe?: number; expression?: number; foreground?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence";
   flow?: number; pickup?: number; arc?: "arch"; // 2026-07-11 句フレージング（塊の連結・弱起・山なり弧）。既定は role 経由でのみ発火
 };
 // flow=塊の連結＋句末/最終音の長音化（ぶつ切れ解消）。pickup=弱起（句頭を前へ）。arc=山なり弧（登って落ちる・サビ向き）。
@@ -130,7 +130,7 @@ const SECTION_PRESETS: Record<SectionRole, PresetKnobs> = {
   intro: { density: 0.3, registerShift: -2, breathe: 0.5, flow: 0.3 },
   verse: { density: 0.45, registerShift: 0, repetition: 0.85, motifBars: 2, breathe: 0.3, expression: 0.25, foreground: 0.3, phrasing: "symmetric", flow: 0.35, pickup: 0.5 },
   prechorus: { density: 0.55, registerShift: 2, repetition: 0.9, motifBars: 1, breathe: 0, expression: 0.25, foreground: 0.15, phrasing: "asymmetric", flow: 0.45, pickup: 0.5, arc: "arch" },
-  chorus: { density: 0.65, registerShift: 4, repetition: 0.9, motifBars: 2, breathe: 0.1, expression: 0.15, foreground: 0.1, phrasing: "symmetric", flow: 0.6, pickup: 0.5, arc: "arch" },
+  chorus: { density: 0.65, registerShift: 4, repetition: 0.9, motifBars: 2, breathe: 0.1, expression: 0.15, foreground: 0.1, phrasing: "sentence", flow: 0.6, pickup: 0.5, arc: "arch" }, // sentence[2,2,4]＝句読点を減らし最後に長い解放（旧symmetricは2小節毎に終止＝サビが句読点だらけの是正）
   bridge: { density: 0.5, registerShift: 0, repetition: 0.6, motifBars: 2, breathe: 0.3, expression: 0.4, foreground: 0.5, phrasing: "asymmetric", flow: 0.35 },
   interlude: { density: 0.4, registerShift: 0, breathe: 0.3, flow: 0.3 },
   outro: { density: 0.3, registerShift: -2, breathe: 0.5, flow: 0.4 },
@@ -486,7 +486,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch" }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch" }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -795,7 +795,7 @@ function applyPhrasing(
   bars: number,
   lo: number,
   hi: number,
-  phrasing?: "symmetric" | "asymmetric",
+  phrasing?: "symmetric" | "asymmetric" | "period" | "sentence",
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
 ): void {
   if (notes.length === 0) return;

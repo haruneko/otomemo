@@ -37,7 +37,7 @@ import {
 export { loopPositions, spanOverlaps } from "./sectionLanes";
 
 // P4（2026-07-10・UX再設計）：メロ生成プリセット＝13ノブを"当たり"の組に畳む主動線。値は param-clarity doc §5.1（0/未指定=非送信=bit一致）。
-type PresetV = { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric"; form?: "" | "sentence"; flow?: number; pickup?: number };
+type PresetV = { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric" | "period" | "sentence"; form?: "" | "sentence"; flow?: number; pickup?: number };
 const MELODY_PRESETS: { name: string; label: string; v: PresetV }[] = [
   { name: "plain", label: "おまかせ", v: { density: 0.5 } }, // density は常時送信＝未タッチ既定(0.5)に合わせる＝「おまかせ」=従来生成（監査F1）
   { name: "soft", label: "しっとり", v: { density: 0.3, expression: 0.5, foreground: 0.2, breathe: 0.4 } },
@@ -97,7 +97,7 @@ export function SectionEditor({
   const [density, setDensity] = useState(0.5); // メロの細かさ 0=疎〜1=細かい（耳FB 2026-07-08）
   const [swing, setSwing] = useState(0); // メロの跳ね 0=ストレート〜1=シャッフル
   const [expression, setExpression] = useState(0); // メロの表情 0=素直〜1=もたれ(強拍に倚音/掛留)（Step1 2026-07-09）
-  const [phrasing, setPhrasing] = useState<"" | "symmetric" | "asymmetric">(""); // 句割り 空=従来/対称(問い→答え)/非対称(3+3+2の呼吸)（Step2/P0-b 2026-07-09）
+  const [phrasing, setPhrasing] = useState<"" | "symmetric" | "asymmetric" | "period" | "sentence">(""); // 句割り 空=従来/対称(問い→答え)/非対称(3+3+2の呼吸)（Step2/P0-b 2026-07-09）
   const [runs, setRuns] = useState(0); // メロの走句 0=なし〜1=16分連続が出やすい（Step4 2026-07-09）
   const [push, setPush] = useState(0); // メロの前借り(食い) 0=なし〜1=1,2,3拍を16分前へ（Step4 2026-07-09）
   const [foreground, setForeground] = useState(0); // 前景の自由度 0=反復中心〜1=自由材料(同音/跳躍)多め（Step5 2026-07-09）
@@ -701,10 +701,12 @@ export function SectionEditor({
                         <div className="knob-group-h">フレーズの組み立て</div>
                         <label className="knob-row" aria-label="phrasing">
                           <span className="knob-name">句割り</span>
-                          <select value={phrasing} onChange={(e) => { setPhrasing(e.target.value as "" | "symmetric" | "asymmetric"); setPreset(""); }}>
+                          <select value={phrasing} onChange={(e) => { setPhrasing(e.target.value as "" | "symmetric" | "asymmetric" | "period" | "sentence"); setPreset(""); }}>
                             <option value="">おまかせ</option>
                             <option value="symmetric">対称(問→答)</option>
                             <option value="asymmetric">非対称(3+3+2)</option>
+                            <option value="period">4小節句[4,4]</option>
+                            <option value="sentence">短短長[2,2,4]</option>
                           </select>
                         </label>
                         <label className="knob-row" aria-label="form">
