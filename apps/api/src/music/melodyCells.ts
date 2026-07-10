@@ -812,22 +812,30 @@ export function genMotifMelodyV2(
   // 和声適応はkの選択のみ＝強拍CT/カデンツ着地/音域/ヒステリシスのコスト最小。mv を「スケール段」として解釈。
   const preserve = opts.motifMode === "preserve";
   const inflectN = Math.max(0, Math.min(1, opts.inflect ?? 0));
-  let kPrevPreserve = 0; // 単純ヒステリシス（前ブロックのkを引きずる＝A/A''の音高一致に効く・理論#6）
-  const renderPreserve = (M: Motif16, bar0: number, toTonic: boolean, bb: number = mb): Note[] => {
+  const placeByLabel = new Map<string, { baseIdx: number; k: number }>(); // ラベル別＝同素材ブロック(A/A'')は初回の(anchor,k)を再利用＝回帰が同音高で戻る（理論#6・M10自己相関＝フック回収点）
+  let prevPreserveEnd: number | null = null; // 前ブロック終端pitch＝w4(継目跳躍)コスト用
+  const renderPreserve = (M: Motif16, bar0: number, toTonic: boolean, label: string, bb: number = mb): Note[] => {
     const mbp = bb;
-    const deg = motifDegrees(M.mv);
-    const baseIdx = nearestIdx(sp, an(bar0));
+    // genBest動機の mv はコーパスの半音遷移＝そのまま段にすると跳躍が膨張(P5→オクターブ)。半音→スケール段へ換算（理論眼②）。
+    // 同度(0)と輪郭符号は保存＝反復音・同一性は不変、跳躍だけ実音楽の段幅に収める。round(|m|*7/12)＝1,2→1段/3,4→2/5→3/7→4/12→7。
+    // seedMotif（ユーザー/補完由来）の mv は既に「スケール段」意図ゆえ換算しない（A A B C A の -2 は3度下＝2段のまま）。
+    const stepMv = opts.seedMotif ? M.mv : M.mv.map((m) => (m === 0 ? 0 : Math.sign(m) * Math.max(1, Math.round((Math.abs(m) * 7) / 12))));
+    const deg = motifDegrees(stepMv);
+    const L = spAt(barOf(bar0 * barLen)); // 短調の導音/色音小節は和声的短音階（sp でなく spAt）
+    const prior = placeByLabel.get(label); // 同ラベル既出なら anchor を再利用＝A''がAと同音高で戻る
+    const baseIdx = prior ? prior.baseIdx : nearestIdx(L, an(bar0));
     const onMainAt = (i: number): boolean => {
       const inbar = ((M.ons[i]! % barLen) + barLen) % barLen;
       return compound ? (Math.abs(inbar) < 0.1 || Math.abs(inbar - 1.5) < 0.1) : (Math.abs(M.ons[i]! - Math.round(M.ons[i]! * 2) / 2) < 0.01 && !M.run[i]);
     };
-    const pitchAt = (k: number, i: number): number => clampScale(sp, baseIdx + k + deg[i]!);
-    // k選択＝置き場所で和声適応。カデンツ着地(最優先)＋強拍CT率＋音域＋前ブロックからのヒステリシス。
+    const pitchAt = (k: number, i: number): number => clampScale(L, baseIdx + k + deg[i]!);
+    // k選択＝置き場所で和声適応。カデンツ着地(最優先)＋強拍CT率＋音域＋同ラベルヒステリシス＋継目跳躍(w4)。
+    const kPrev = prior ? prior.k : 0;
     let bestK = 0, bestCost = Infinity;
     for (let k = -4; k <= 4; k++) {
       let strongMiss = 0, rangeMiss = 0, cadMiss = 0;
       for (let i = 0; i < M.ons.length; i++) {
-        if (baseIdx + k + deg[i]! < 0 || baseIdx + k + deg[i]! > sp.length - 1) rangeMiss++;
+        if (baseIdx + k + deg[i]! < 0 || baseIdx + k + deg[i]! > L.length - 1) rangeMiss++;
         if (onMainAt(i)) {
           const pcs = pcsAtT(bar0 * barLen + M.ons[i]!);
           if (pcs.length && !pcs.includes(((pitchAt(k, i) % 12) + 12) % 12)) strongMiss++;
@@ -837,10 +845,11 @@ export function genMotifMelodyV2(
         const li = M.ons.length - 1, pcs = pcsAtT(bar0 * barLen + M.ons[li]!);
         cadMiss = pcs.length && !pcs.includes(((pitchAt(k, li) % 12) + 12) % 12) ? 1 : 0; // カデンツ>動機＝終音は和声着地
       }
-      const cost = 100 * cadMiss + 3 * strongMiss + 5 * rangeMiss + 0.5 * Math.abs(k - kPrevPreserve);
+      const seam = prevPreserveEnd == null ? 0 : Math.max(0, Math.abs(pitchAt(k, 0) - prevPreserveEnd) - 7) / 2; // w4：前ブロック終端との跳躍(>5度)を抑制
+      const cost = 100 * cadMiss + 3 * strongMiss + 5 * rangeMiss + 2 * Math.abs(k - kPrev) + seam; // w5ヒステリシス強化(0.5→2)＝同ラベル同k
       if (cost < bestCost) { bestCost = cost; bestK = k; }
     }
-    kPrevPreserve = bestK;
+    if (!prior) placeByLabel.set(label, { baseIdx, k: bestK }); // 初回のみ記録＝以降の同ラベルは初回anchor/kを再利用
     const out: Note[] = [];
     for (let i = 0; i < M.ons.length; i++) {
       const t = bar0 * barLen + M.ons[i]!;
@@ -848,13 +857,14 @@ export function genMotifMelodyV2(
       // inflect：末尾1音のみ±1段の適応変奏（フォールバック＝tonal answer・末尾は可変・理論足す#1）。既定0=無効。
       if (inflectN > 0 && i === M.ons.length - 1 && !toTonic) {
         const pcs = pcsAtT(t);
-        if (pcs.length && !pcs.includes(((p % 12) + 12) % 12)) { const up = clampScale(sp, nearestIdx(sp, p) + 1); if (pcs.includes(((up % 12) + 12) % 12)) p = up; else { const dn = clampScale(sp, nearestIdx(sp, p) - 1); if (pcs.includes(((dn % 12) + 12) % 12)) p = dn; } }
+        if (pcs.length && !pcs.includes(((p % 12) + 12) % 12)) { const up = clampScale(L, nearestIdx(L, p) + 1); if (pcs.includes(((up % 12) + 12) % 12)) p = up; else { const dn = clampScale(L, nearestIdx(L, p) - 1); if (pcs.includes(((dn % 12) + 12) % 12)) p = dn; } }
       }
       const isRep = (i > 0 && deg[i] === deg[i - 1]) || (i < M.ons.length - 1 && deg[i + 1] === deg[i]); // 反復音グループ＝保護対象
       const note = { pitch: p, start: t, dur: compound ? 0.5 : 0.25 } as Note & { _mp?: boolean };
       if (isRep) note._mp = true;
       out.push(note);
     }
+    if (out.length) prevPreserveEnd = out[out.length - 1]!.pitch; // w4：次ブロックの継目跳躍コスト用
     // dur（render と同一＝ジグ跳ね/4-4息継ぎ）。
     if (compound) { for (let i = 0; i < out.length; i++) { const g = (out[i + 1]?.start ?? (bar0 + mbp) * 3) - out[i]!.start; const onM = Math.abs(out[i]!.start % 1.5) < 0.1; out[i]!.dur = g > 1.0 ? Math.min(g, onM ? 1.2 : 0.55) : Math.min(g, onM ? 1.4 : 0.55); } }
     else { for (let i = 0; i < out.length; i++) { const gap = (out[i + 1]?.start ?? (bar0 + mbp) * 4) - out[i]!.start; const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25; out[i]!.dur = gap > 1.4 ? Math.min(gap, onB ? 1.6 : 1.05) : Math.min(gap, 2); } }
@@ -870,6 +880,12 @@ export function genMotifMelodyV2(
   const r = makeRng(seed + 5);
   // seedMotif 指定時は genBest をスキップしてそれを M に（補完=与モチーフを発展）。既定(未指定)は現挙動と完全一致。
   const M = opts.seedMotif ?? genBest(r);
+  // hook床(Phase2案B・理論眼①)：preserve×hook≥0.5 で動機に反復音ペアが1組も無い時、句頭に1組注入＝「hookを上げたのに
+  // フックが1個も出ない博打」を無くす。preserve かつ seedMotif無し かつ hook強い時のみ＝既定/非preserveは無改変＝bit一致。
+  if (preserve && hk >= 0.5 && !opts.seedMotif && M.mv.length >= 3 && !M.mv.slice(1).some((m) => m === 0)) {
+    const j = M.run[1] ? (M.run[2] ? -1 : 2) : 1; // 走句でない早い位置（句頭アンカー＝ラーラ）
+    if (j > 0) M.mv[j] = 0;
+  }
   const kfb = Math.max(0, Math.floor(opts.keepFirstBlocks ?? 0)); // >0：先頭 kfb ブロックは素材(A=M)・以降を A'/B/A'' 発展
   const an = (bar: number): number => blockAnchorFromSkeleton(skel, bar, barLen, sp[Math.floor(sp.length / 2)] ?? 62);
   const nBlk = Math.ceil(bars / mb);
@@ -944,12 +960,13 @@ export function genMotifMelodyV2(
     const bar0 = blocks[bi]!.bar0, L = blocks[bi]!.bars, last = bi === nB - 1;
     const rbb = varLen ? L : mb; // render/断片の長さ（既定=mb でbit一致）
     const Mi = motifFor(L);
-    let variant: Motif16, anchor: number;
+    let variant: Motif16, anchor: number, label: string;
     if (sentence) {
       const fn = sRole(bi);
       variant = fn === "frag" ? fragment(Mi, rbb) : Mi; // bi/seq/cad=覚えられる動機M(逐語)、継続=断片化
       const ab = an(bar0);
       anchor = fn === "seq" ? clampScale(sp, nearestIdx(sp, ab) + 2) : ab; // 反復は2スケール段 移高=sequence(同一性＋運動)
+      label = fn;
     } else {
       const role = roleOf(bi);
       variant = role === 1 ? varyTail(Mi, r) : role === 2 ? invert(Mi) : Mi; // A / A'(尾変奏) / B(反行) / A''
@@ -957,9 +974,10 @@ export function genMotifMelodyV2(
       const anchorBase = an(bar0);
       anchor = role === 2 ? clampScale(sp, nearestIdx(sp, anchorBase) + 2) : anchorBase; // 弧＝B塊を音域ピークへ
       if (role === 2) for (let b = bar0; b < bar0 + L; b++) bBlockBars.add(b);
+      label = role === 2 ? "B" : "A"; // A/A'/A''は同素材＝同ラベル(同k優先)、Bは別（ヒステリシス用）
     }
     if (densBar) variant = applyConverse(variant, convScale(bar0, L), rbb); // C: ブロック単位の密度相補（densBar無し＝経路に入らない）
-    notes.push(...(preserve ? renderPreserve(variant, bar0, last, rbb) : render(variant, bar0, anchor, last, rbb)));
+    notes.push(...(preserve ? renderPreserve(variant, bar0, last, label, rbb) : render(variant, bar0, anchor, last, rbb)));
   }
   notes.sort((a, b) => a.start - b.start);
 
@@ -1027,7 +1045,7 @@ export function genMotifMelodyV2(
       if (d < bd || (d === bd && c < best)) { bd = d; best = c; }
     }
     if (best >= 0) notes[i]!.pitch = best;
-    else placeNear(i, target);
+    else placeNear(i, target, force); // force伝播＝禁則掃除のフォールバックでも保護に優先（コードレビュー#1・default空集合ゆえbit一致）
   };
   // ── 対位バイアス（メロ×ベース・design「gen_melody×ベース結線」・research/2026-07-10-melody-bass-counterpoint.md）──
   // 評価器 analyzeVoiceLeading の指標（並行/隠伏5度8度・b9・反行）を snap の選好関数へ転用。効かせるのは
@@ -1126,9 +1144,10 @@ export function genMotifMelodyV2(
   for (let i = 0; i < notes.length - 1; i++) if (notes[i]!.pitch === hi) peakIdx.push(i); // 句末は除外＝終止保護
   if (peakIdx.length > 1) {
     const inB = (t: number): boolean => bBlockBars.has(barOf(t)); // B塊(弧のピーク)＝可変長対応（旧: roleOf(floor(bar/mb)) と既定一致）
-    const keeper = peakIdx.find((i) => inB(notes[i]!.start)) ?? peakIdx[0]!;
+    // 単一頂点keeperは保護反復音を優先（§4b・preserveは複数平頂点が正常＝反復音フックは足場型）。無ければ従来のB塊/先頭。
+    const keeper = peakIdx.find((i) => motifProtected.has(i)) ?? peakIdx.find((i) => inB(notes[i]!.start)) ?? peakIdx[0]!;
     for (const i of peakIdx) {
-      if (i === keeper) continue;
+      if (i === keeper || motifProtected.has(i)) continue; // §4b：保護反復音は平坦化しない（default空集合＝bit一致）
       const t = notes[i]!.start, bar = barOf(t);
       if (onStrong(t)) {
         const pcs = pcsAtT(t);
@@ -1175,6 +1194,9 @@ export function genMotifMelodyV2(
         placeNonForbidden(li - 1, np - (Math.sign(np - notes[li - 1]!.pitch) || 1) * 3, anchors);
       }
     }
+    // カデンツ着地は li→li+1（次句頭）の跳躍を無検査＝preserve+phrases で三全音が残る穴（コードレビュー#3）。
+    // preserve のみ着地後に禁則掃除を1回（default は経路に入らず bit一致・既存の穴は別スコープ）。
+    if (preserve) fixForbidden();
   }
 
   // ── 表情パス＝強拍非和声(expression ノブ・design#12-M Step1・2026-07-09)──
