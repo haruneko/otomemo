@@ -495,6 +495,29 @@ describe("SectionEditor (3-lane timeline)", () => {
     await waitFor(() => expect(music).toHaveBeenCalled());
     expect((music.mock.calls[0]![1] as Record<string, unknown>).density).toBeCloseTo(0.5);
   });
+  it("gen_melody＝最小音符を選ぶと finest を送る／おまかせ(既定)は未送信（高BPM対策・オーナーFB）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody")); // おまかせ既定
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    expect((music.mock.calls[0]![1] as Record<string, unknown>).finest).toBeUndefined();
+    music.mockClear();
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    await userEvent.selectOptions(screen.getByLabelText("finest"), "eighth");
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    expect((music.mock.calls[0]![1] as Record<string, unknown>).finest).toBe("eighth");
+  });
   it("gen_melody＝対位群はベースレーンが無いと出ない（文脈依存・グレーアウトすら見せない）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),

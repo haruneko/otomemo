@@ -523,7 +523,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve" } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth" } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -547,6 +547,9 @@ export function genMotifMelodyV2(
   // 単一r()ドロー形（下 :625/:686 で使用）＝hook=0 で u<0（常偽）→従来の u<0.5?1:-1 と同一の1回消費＝bit一致（コード#1）。
   const hk = Math.max(0, Math.min(1, opts.hook ?? 0));
   const hookKeep = (frac: number): number => (hk <= 0 ? 0 : hk * (0.3 + 0.7 * Math.abs(2 * frac - 1)));
+  // finest(2026-07-10・オーナーFB)：最小音符の上限＝これより細かい onset を弾く。高BPMで16分が速すぎ潰れるのを防ぐ。
+  // 16分格子の slot 単位で判定＝eighth は奇数slot(16分裏)を、quarter は 4の倍数以外を落とす。未指定=無制限=従来。
+  const finSkip = (s: number): boolean => (opts.finest === "eighth" ? s % 2 !== 0 : opts.finest === "quarter" ? s % 4 !== 0 : false);
   const runPairs = (p: string): number => { let c = 0; for (let i = 0; i + 1 < p.length; i++) if (p[i] === "x" && p[i + 1] === "x") c++; return c; };
   const runW = (p: string): number => (rns === undefined ? 1 : Math.pow(runPairs(p) + 1, rns * 1.5));
   const rhythmVocab: Record<string, number> = dens === undefined && rns === undefined
@@ -591,7 +594,7 @@ export function genMotifMelodyV2(
       for (let bar = 0; bar < mb; bar++) {
         const p = pick68u(r);
         for (let s = 0; s < 12; s++) {
-          if (p[s] !== "x") continue;
+          if (p[s] !== "x" || finSkip(s)) continue; // finest＝最小音符上限より細かい onset を弾く
           const t = bar * 3 + s * 0.25;
           if (t >= mb * 3 - 0.75) continue;
           ons.push(t);
@@ -609,7 +612,7 @@ export function genMotifMelodyV2(
       for (let bar = 0; bar < mb; bar++) {
         const p = weightedPickRec(rhythmVocab, r);
         for (let s = 0; s < 16; s++) {
-          if (p[s] !== "x") continue;
+          if (p[s] !== "x" || finSkip(s)) continue; // finest＝最小音符上限より細かい onset を弾く
           const t = bar * 4 + s * 0.25;
           if (t >= mb * 4 - 1.5) continue; // 末尾~1.5拍は息継ぎ
           ons.push(t);
@@ -620,7 +623,7 @@ export function genMotifMelodyV2(
       const hiN0 = dens === undefined ? 4 * mb : Math.max(loN + 1, Math.round((2.5 + 4 * dens) * mb));
       const hiN = rns === undefined ? hiN0 : hiN0 + Math.round(rns * 3 * mb); // runs＝走句ぶん受入音数を拡張
       if (ons.length < loN || ons.length > hiN) return null;
-      if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(0.25, ons[0]!);
+      if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(opts.finest === "eighth" || opts.finest === "quarter" ? 0.5 : 0.25, ons[0]!); // finest時は16分(0.25)へ動かさない
       const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
       const gapCap = dens === undefined ? Math.max(2.0, mb) : Math.max(2.0, mb, 2 + (1 - dens) * 2);
       if (_gap.length && Math.max(..._gap) > gapCap) return null; // 孤立音(大間隔)モチーフは棄却＝繋がった塊のみ（長尺ほど内部restは許容）

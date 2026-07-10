@@ -193,6 +193,7 @@ export function buildHttp(core: Core): FastifyInstance {
             bass: bassN.length ? bassN : undefined, counter: num(b.counter),
             drums: b.drums, drumLock: num(b.drumLock), backbeat: num(b.backbeat), converse: num(b.converse), // ドラム結線（design「gen_melody×ドラム結線」・不正/係数0は genMelody 側で従来と bit 一致）
             hook: num(b.hook), articulation: num(b.articulation), inflect: num(b.inflect), motifMode: b.motifMode === "preserve" ? "preserve" : undefined, // 反復音モチーフ（design「動機保存レンダ」・既定/不正は従来 bit 一致）
+            finest: b.finest === "quarter" ? "quarter" : b.finest === "eighth" ? "eighth" : undefined, // 最小音符（高BPMの16分潰れ対策・未指定=テンポ連動）
           });
         }
         case "gen_from_essence": return genFromEssence(asNotes(b.ref ?? b.melody), b.frame, asChords(b.chords), b.seed, {

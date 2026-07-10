@@ -110,6 +110,8 @@ export function SectionEditor({
   // articulation=連打のmicropause/切り＝「ソッソッ」が1本に潰れず聞こえる。両方既定0＝未送信＝従来bit一致。
   const [hook, setHook] = useState(0);
   const [articulation, setArticulation] = useState(0);
+  // 最小音符（2026-07-10・オーナーFB）：これより細かい音を出さない上限。""=おまかせ(テンポ連動＝高BPMで自動8分)。
+  const [finest, setFinest] = useState<"" | "quarter" | "eighth">("");
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）＝既定は畳む（ノブの壁の解消）
   // P4（2026-07-10・UX再設計）：プリセット主役＝13ノブを"当たり"の組に畳む。値は param-clarity doc §5.1（0/未指定=非送信=bit一致）。
   const [preset, setPreset] = useState<string>(""); // 選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）
@@ -485,6 +487,7 @@ export function SectionEditor({
         // articulation=連打の切り。両方 0＝未送信＝従来 bit一致。
         if (hook > 0) { body.hook = hook; body.motifMode = "preserve"; }
         if (articulation > 0) body.articulation = articulation;
+        if (finest) body.finest = finest; // 最小音符（""=おまかせ＝未送信＝テンポ連動）
         // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3（推奨＝B のみ弱く）。
         // drumLock/converse は 0＝耳較正待ち（渡さない）。レーン無し＝渡さない＝従来どおり。UI ノブ露出は後続タスク。
         const drums = sectionDrums();
@@ -672,6 +675,14 @@ export function SectionEditor({
                         {sliderRow("swing", "跳ね", swing, setSwing, "まっすぐ", "はねる", "swing")}
                         {segRow("runs", "駆け上がり", "16分の走り", runs, setRuns, "runs")}
                         {segRow("push", "前ノリ", "拍を食う", push, setPush, "push")}
+                        <label className="knob-row">
+                          <span className="knob-name">最小音符<small>速い曲は粗く</small></span>
+                          <select aria-label="finest" value={finest} onChange={(e) => { setFinest(e.target.value as "" | "quarter" | "eighth"); setPreset(""); }}>
+                            <option value="">おまかせ(速さ連動)</option>
+                            <option value="quarter">4分まで</option>
+                            <option value="eighth">8分まで</option>
+                          </select>
+                        </label>
                         <div className="knob-group-h">歌い回し</div>
                         {segRow("expression", "タメ", "強拍のもたれ", expression, setExpression, "expression")}
                         {segRow("hook", "口ずさみ", "反復音フック", hook, setHook, "hook")}
