@@ -1,10 +1,12 @@
 # メロの「塊の長さ・終止位置・音価」が硬い＝ぶつ切れ問題：実測と直す方針（2026-07-10・Stage1-2 実装済 2026-07-11）
 
-> **実装ログ（2026-07-11）**：Stage1・Stage2 を実装（コミット b2dbb02 / ebf49f2 / e0337b6）。
-> - **Stage1（対策1-B/3-A/5）**＝`melodyCells.genMotifMelodyV2` に後段パスとして `flow`（塊の連結＋句末/最終音の長音化＝dur天井1.6突破。flow0.7で最長dur 1.6→4.4拍・≥8拍塊 0%→27%）、`pickup`（弱起・句頭を前の息継ぎへ最大0.75拍タイ）、`arc:"arch"`（構造線を Kopfton→主音 下降から sin の山なりへ・`genSkeletonFromModel`）。いずれも onset/mv不変 or 骨格のみ、**既定0/未指定=bit一致**。
+> **実装ログ（2026-07-11）**：Stage1・Stage2＋息継ぎ保全＋統計上限是正を実装（b2dbb02 / ebf49f2 / e0337b6 / b0d80e6 / 4a2686a）。
+> - **Stage1（対策1-B/3-A/5）**＝`melodyCells.genMotifMelodyV2` に後段パスとして `flow`（塊の連結＋句末/最終音の長音化＝dur天井1.6突破）、`pickup`（弱起・句頭を前の息継ぎへ最大0.75拍タイ）、`arc:"arch"`（構造線を Kopfton→主音 下降から sin の山なりへ・`genSkeletonFromModel`）。いずれも onset/mv不変 or 骨格のみ、**既定0/未指定=bit一致**。
+> - **息継ぎ保全（オーナーFB「息継ぎが無いのもダメ」・b0d80e6）**＝flow が gap を無差別に埋め全レガート化していたのを修正。各句末境界の近傍で「実際の息継ぎ＝最大の無音gap」を1つ選び保護（pickup で句頭がずれても gap 実位置で拾う）。保護gap は次onsetの 1.0拍手前で歌い終える＝money note は伸ばし・詰まった音は短縮して息を彫る。chorus 8小節で **息ゼロtune 0/16**・平均2.1本・≥8拍塊 40%・最長4.0拍を維持。
 > - **Stage2（対策2-A）**＝`skeleton.planSkeleton` に句パターン辞書 `period=[4,4]` / `sentence=[2,2,4]`（`tileBars` でタイル＋端数吸収）。終止位置の単峰を解消。
-> - **配線**＝role プリセット（`generate.ts SECTION_PRESETS`）で自動発火。chorus=`sentence`+flow0.6+pickup0.5+arch、verse/prechorus/bridge も flow/pickup。http/mcp `gen_melody`・web いじる（つなぎ/歌い出しスライダー＋句割りselect＋「伸びやか」プリセット）に露出。
-> - **未着手**＝対策2-C 着地位置ジッタ（句内最終onsetの5.0-7.5拍ばらし）、対策6 sentence×長着地の型完成、Stage4 データ基盤（dur cap是正・句長分布学習）。耳較正（flow/pickup/arc/preset の最終値）はオーナー実機で。
+> - **統計上限是正（対策3-C・4a2686a）**＝`phrase.scoreDurations` の音長上限が2拍固定で実メロの白玉（付点2分3・全音符4）が統計から欠落していたのを 4拍へ。密な句は med×3 で不変＝遅い句のみ白玉。**既存DBは旧上限で取込済＝外部ソース(POP909等・非リポジトリ)で再構築して初めて反映**。evalMelody は規則ベースで長音を減点しない（干渉なし）。
+> - **配線**＝role プリセット（`generate.ts SECTION_PRESETS`）で自動発火。chorus=`sentence`+flow0.6+pickup0.5+arch。http/mcp `gen_melody`・web いじる（つなぎ/歌い出しスライダー＋句割りselect＋「伸びやか」プリセット）に露出。
+> - **未着手**＝対策2-C 着地位置ジッタ（句内最終onsetの5.0-7.5拍ばらし）、対策6 sentence×長着地の型完成、対策2-B 句長分布学習＋**コーパス再構築**（外部ソース必要）、耳較正（flow/pickup/arc/preset の最終値）はオーナー実機で。
 
 オーナーの問い：**「実際の歌メロに比べて塊が短くぶつ切れ・終止が機械的・音価も一律で、サビに使える長く流れる形が出ない。直せる所を自分で見つけて方針を立てて」**。
 実コード（`apps/api/src/music/melodyCells.ts` の `genMotifMelodyV2` 系）を精読し、自前コーパス（POP909由来・pop 1106フレーズ／4/4）と生成出力（既定＋サビ相当プリセット・各48フレーズ）を**同じ物差しで実測**して原因を確定した。
