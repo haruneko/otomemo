@@ -76,7 +76,11 @@ export function SectionEditor({
   const LANES = lanesForKind(neta.kind);
   const MAX_BARS = maxBarsForKind(neta.kind);
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
-  const [cand, setCand] = useState<{ kind: string; content: unknown } | null>(null);
+  // P2（2026-07-10・UX再設計）：候補を単数→配列(トレイ)＝複数を並べて比較・keep。cid=React key＋keep追跡。
+  type Cand = { kind: string; content: unknown; cid: number };
+  const [cands, setCands] = useState<Cand[]>([]);
+  const [keptCids, setKeptCids] = useState<Set<number>>(new Set());
+  const candId = useRef(0);
   const [genBusy, setGenBusy] = useState(false);
   const [density, setDensity] = useState(0.5); // メロの細かさ 0=疎〜1=細かい（耳FB 2026-07-08）
   const [swing, setSwing] = useState(0); // メロの跳ね 0=ストレート〜1=シャッフル
@@ -434,7 +438,7 @@ export function SectionEditor({
       }
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
-      if (item) setCand({ kind: item.kind, content: item.content });
+      if (item) pushCand({ kind: item.kind, content: item.content });
     } finally {
       setGenBusy(false);
     }
@@ -451,7 +455,7 @@ export function SectionEditor({
     const mel = melodyLaneNotes();
     if (!mel.length) return;
     lastPartRef.current = null; // 決定的＝別案なし
-    setCand({ kind: "melody", content: { notes: harmonyVoice(mel, keyPc, isMinor, degSteps) } });
+    setSingleCand({ kind: "melody", content: { notes: harmonyVoice(mel, keyPc, isMinor, degSteps) } });
   }
   // コードに合わせる（fit_to_chords）：メロの各音を近いコードトーンへ寄せた候補。
   async function fitToChords() {
@@ -462,7 +466,7 @@ export function SectionEditor({
     try {
       const r = await api.music<{ notes: Note[] }>("fit_to_chords", { melody: mel, chords, key: keyPc });
       lastPartRef.current = null;
-      if (r.notes?.length) setCand({ kind: "melody", content: { notes: r.notes } });
+      if (r.notes?.length) setSingleCand({ kind: "melody", content: { notes: r.notes } });
     } finally {
       setGenBusy(false);
     }
@@ -479,20 +483,24 @@ export function SectionEditor({
     );
     setFitReport(fitReportText(r));
   }
-  async function auditionCandidate() {
+  // 候補を追加（生成/別案は同種を積む・別種は入れ替え）／単発（ハモリ・崩し）は1件で置換。
+  const pushCand = (c: { kind: string; content: unknown }) =>
+    setCands((prev) => (prev.length && prev[0]!.kind !== c.kind ? [{ ...c, cid: candId.current++ }] : [...prev, { ...c, cid: candId.current++ }]));
+  const setSingleCand = (c: { kind: string; content: unknown }) => setCands([{ ...c, cid: candId.current++ }]);
+  const toggleKeep = (cid: number) => setKeptCids((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
+  const removeCand = (cid: number) => { setCands((prev) => prev.filter((c) => c.cid !== cid)); setKeptCids((prev) => { const n = new Set(prev); n.delete(cid); return n; }); };
+  async function auditionCandidate(c: Cand) {
     candPlay.current?.stop();
-    if (!cand) return;
-    const ns = notesForContent(cand.kind, cand.content);
-    if (ns.length) candPlay.current = await playNotes(ns, tempo, { program: progForKind(cand.kind) });
+    const ns = notesForContent(c.kind, c.content);
+    if (ns.length) candPlay.current = await playNotes(ns, tempo, { program: progForKind(c.kind) });
   }
-  async function placeCandidate() {
-    if (!cand) return;
+  async function placeCandidate(c: Cand) {
     candPlay.current?.stop();
-    const lane = laneOf(cand.kind);
+    const lane = laneOf(c.kind);
     const created = await api.createNeta({
-      kind: cand.kind,
-      title: `${liveTitle || "曲"} ${lane?.label ?? cand.kind}`,
-      content: cand.content,
+      kind: c.kind,
+      title: `${liveTitle || "曲"} ${lane?.label ?? c.kind}`,
+      content: c.content,
       key: keyPc,
       // 2026-07-08 耳FB：mode を宣言（placementLanding の前提）。旧: 未宣言でmajor既定→短調メロが配置で+3移調＝濁りの主因。
       mode: (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major",
@@ -503,19 +511,20 @@ export function SectionEditor({
     // 再生成メロ＝置換：同レーンで新メロ(位置0)と尺が重なる既存子を先に外す＝二重化を防ぐ
     // （placeAt は重なりを拒否するが、生成候補は「置く」＝差し替え意図なので拒否でなく既存を退ける）。
     if (lane) {
-      const dur = contentDur(cand.kind, cand.content);
-      for (const c of laneChildren(lane)) {
-        if (spanOverlaps(0, dur, c.position, childDur(c))) await api.removeChild(neta.id, c.node.neta.id, c.position);
+      const dur = contentDur(c.kind, c.content);
+      for (const ch of laneChildren(lane)) {
+        if (spanOverlaps(0, dur, ch.position, childDur(ch))) await api.removeChild(neta.id, ch.node.neta.id, ch.position);
       }
     }
     await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
-    setCand(null);
+    removeCand(c.cid); // 置いた候補はトレイから外す（他候補・keepは残す）
     await load();
     onChanged?.();
   }
   function closeCandidate() {
     candPlay.current?.stop();
-    setCand(null);
+    setCands([]);
+    setKeptCids(new Set());
   }
 
   // 合成：子を section の調へ移調（rhythm除く）＋位置オフセット（共有: compositeNotes）
@@ -560,7 +569,7 @@ export function SectionEditor({
           {toolsOpen && (
             <div className="assign-menu to-right tools-menu" aria-label="tools-menu">
               {/* 生成/ハモリはパートを作る道具＝section 専用。song(編成)は書き出しのみ（#5）。 */}
-              {!cand && !isSong && (
+              {cands.length === 0 && !isSong && (
                 <>
                   <div className="tools-sep">この進行に生成</div>
                   {GEN_PARTS.filter((part) => !part.needsChords || sectionChords().length > 0).map((part) => (
@@ -724,37 +733,45 @@ export function SectionEditor({
         </p>
       )}
 
-      {cand && (
+      {cands.length > 0 && (
         <div
           className="reshape-bar"
           aria-label="part-candidate"
-          style={{ ["--k" as string]: `var(--k-${cand.kind === "chord_progression" ? "chord" : cand.kind})` }}
+          style={{ ["--k" as string]: `var(--k-${cands[0]!.kind === "chord_progression" ? "chord" : cands[0]!.kind})` }}
         >
-          <span className="reshape-label">{laneOf(cand.kind)?.label ?? cand.kind}候補（この進行に生成）</span>
-          {/* P1（2026-07-10・UX再設計）：候補を"ネタの見た目"で見せる＝MiniRoll＋長さ/音数。音を聴く前に目で選べる。 */}
-          {(() => {
-            const cn = notesForContent(cand.kind, cand.content);
-            if (!cn.length) return null;
-            const bars = Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6));
-            return (
-              <span className="cand-preview" aria-label="candidate-preview">
-                <MiniRoll neta={neta} notes={cn} />
-                <span className="cand-meta">{bars}小節・{cn.length}音</span>
-              </span>
-            );
-          })()}
-          <button type="button" className="tb-tool" aria-label="audition-candidate" onClick={() => void auditionCandidate()}>
-            ▶試聴
-          </button>
-          <button type="button" className="tb-tool" disabled={genBusy} onClick={() => lastPartRef.current && void genPart(lastPartRef.current)}>
-            {genBusy ? "…" : "別案"}
-          </button>
-          <button type="button" className="tb-tool primary" aria-label="place-candidate" onClick={() => void placeCandidate()}>
-            {laneOf(cand.kind)?.label ?? ""}レーンに置く
-          </button>
-          <button type="button" className="tb-tool" aria-label="close-candidate" onClick={closeCandidate}>
-            閉じる
-          </button>
+          <span className="reshape-label">
+            {laneOf(cands[0]!.kind)?.label ?? cands[0]!.kind}候補 {cands.length}件（この進行に生成・見て選ぶ）
+          </span>
+          {/* P2（2026-07-10・UX再設計）：候補を横スクロールのトレイで並べて比較。各カード＝MiniRoll＋メタ＋試聴/keep/置く/捨てる。 */}
+          <div className="cand-tray" aria-label="candidate-tray">
+            {cands.map((c) => {
+              const cn = notesForContent(c.kind, c.content);
+              const bars = cn.length ? Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6)) : 0;
+              const kept = keptCids.has(c.cid);
+              return (
+                <div key={c.cid} className={"cand-card" + (kept ? " kept" : "")} aria-label="candidate-card">
+                  {cn.length > 0 && (
+                    <span className="cand-preview" aria-label="candidate-preview">
+                      <MiniRoll neta={neta} notes={cn} />
+                      <span className="cand-meta">{bars}小節・{cn.length}音{kept ? " ♡" : ""}</span>
+                    </span>
+                  )}
+                  <div className="cand-actions">
+                    <button type="button" className="tb-tool" aria-label="audition-candidate" title="試聴" onClick={() => void auditionCandidate(c)}>▶</button>
+                    <button type="button" className="tb-tool" aria-label="keep-candidate" aria-pressed={kept} title="気に入ったら残す" onClick={() => toggleKeep(c.cid)}>{kept ? "♥" : "♡"}</button>
+                    <button type="button" className="tb-tool primary" aria-label="place-candidate" title="レーンに置く" onClick={() => void placeCandidate(c)}>＋置く</button>
+                    <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => removeCand(c.cid)}>🗑</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="cand-tray-foot">
+            <button type="button" className="tb-tool" aria-label="more-candidates" disabled={genBusy} onClick={() => lastPartRef.current && void genPart(lastPartRef.current)}>
+              {genBusy ? "…" : "🎲 もっと"}
+            </button>
+            <button type="button" className="tb-tool" aria-label="close-candidate" onClick={closeCandidate}>閉じる</button>
+          </div>
         </div>
       )}
 

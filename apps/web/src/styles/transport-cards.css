@@ -725,6 +725,53 @@
   color: var(--muted);
   white-space: nowrap;
 }
+/* P2（2026-07-10）：候補トレイ＝横スクロールで複数候補を並べて比較 */
+.cand-tray {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scroll-snap-type: x proximity;
+}
+.cand-card {
+  flex: 0 0 auto;
+  width: 190px;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--k, var(--accent)) 40%, transparent);
+  border-radius: 6px;
+  background: #14171b;
+}
+.cand-card.kept {
+  border-color: var(--k, var(--accent));
+  box-shadow: 0 0 0 1px var(--k, var(--accent)) inset;
+}
+.cand-card .cand-preview {
+  width: 100%;
+}
+.cand-card .mini-roll {
+  height: 40px;
+}
+.cand-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: space-between;
+}
+.cand-actions .tb-tool {
+  flex: 1;
+  padding: 3px 4px;
+  font-size: 0.72rem;
+}
+.cand-tray-foot {
+  width: 100%;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
 .reshape-strength {
   display: inline-flex;
   gap: 2px;

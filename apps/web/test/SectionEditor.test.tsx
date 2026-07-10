@@ -126,6 +126,32 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(within(preview).getByLabelText("mini-preview")).toBeInTheDocument(); // 候補内に MiniRoll(svg)
     expect(within(preview).getByText(/音$/)).toBeInTheDocument(); // 「◯小節・◯音」メタ
   });
+  it("P2 候補トレイ：もっとで候補が積み上がり比較できる／keepでマーク／捨てるで減る", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 1, dur: 1 }] } }] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await screen.findByLabelText("candidate-tray");
+    expect(screen.getAllByLabelText("candidate-card")).toHaveLength(1);
+    // 「もっと」で2件目が積まれる（上書きでなく比較できる）
+    await userEvent.click(screen.getByLabelText("more-candidates"));
+    await waitFor(() => expect(screen.getAllByLabelText("candidate-card")).toHaveLength(2));
+    // keep でマーク（♡→♥）
+    const keeps = screen.getAllByLabelText("keep-candidate");
+    await userEvent.click(keeps[0]!);
+    expect(keeps[0]!).toHaveAttribute("aria-pressed", "true");
+    // 捨てるで1件減る
+    await userEvent.click(screen.getAllByLabelText("drop-candidate")[1]!);
+    await waitFor(() => expect(screen.getAllByLabelText("candidate-card")).toHaveLength(1));
+  });
   it("いじる▾に生成・書き出しを集約＝閉じてる間は隠れ、開くと現れる（⑤ メロ編集画面と整合）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
