@@ -70,6 +70,17 @@ const frameSchema = z
     bars: z.number().int().optional().describe("小節数（1コール=この小節数の“1つ”の構造。1-16にクランプ）"),
     mood: z.string().optional().describe("雰囲気＝自由文字列。「切ない/悲し/dark/sad」等は短調・疎、「明るい/速い/ダンス」等は密に効く"),
     mode: z.enum(["major", "minor"]).optional().describe("長短の明示（moodの推定より優先。セクション文脈の生成はこれを渡す）"),
+    section: z
+      .object({
+        role: z.enum(["intro", "verse", "prechorus", "chorus", "bridge", "interlude", "outro"]).optional().describe("セクション役割。これを書くだけで役割別プリセット（サビ=高音域+高密度、Aメロ=控えめ 等）が自動で効く。明示ノブ（density等）があればそちらが勝つ。mood(雰囲気)とは直交する構造上の位置"),
+        prevRole: z.enum(["intro", "verse", "prechorus", "chorus", "bridge", "interlude", "outro"]).optional().describe("直前セクションの役割（接続の判断材料）"),
+        nextRole: z.enum(["intro", "verse", "prechorus", "chorus", "bridge", "interlude", "outro"]).optional().describe("直後セクションの役割（末尾の開き/締めの判断材料）"),
+        seedMotif: z.array(z.object({ pitch: z.number(), start: z.number().optional(), dur: z.number().optional() })).optional().describe("前セクションの代表モチーフ（実音ノート列）。渡すと先頭ブロックがこの動機を種に再展開＝verse↔chorus のモチーフ共有"),
+        prevEndPitch: z.number().optional().describe("前セクション最終音のMIDI番号（骨格開始音の近傍＝接続を滑らかに）"),
+        energy: z.number().min(0).max(1).optional().describe("0..1。明示時のみ density/registerShift のプリセットを線形スケール（0.5=既定値）。曲全体アークの自動適用はしない"),
+      })
+      .optional()
+      .describe("セクション役割文脈（2026-07-10）。role を書くだけで役割別プリセットが効く。未指定＝従来動作"),
   })
   .optional();
 const notesSchema = z

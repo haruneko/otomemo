@@ -187,7 +187,7 @@ export function buildHttp(core: Core): FastifyInstance {
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
           const bassN = asNotes(b.bass); // 対位バイアス＝ベーストラックのnotes（design「gen_melody×ベース結線」）
           return genMelody(b.frame, asChords(b.chords), b.seed, {
-            useV2: true, density: num(b.density), swing: num(b.swing), expression: num(b.expression), runs: num(b.runs), push: num(b.push), foreground: num(b.foreground), breathe: num(b.breathe), humanize: num(b.humanize), form: b.form === "sentence" ? "sentence" : undefined,
+            useV2: true, density: num(b.density), swing: num(b.swing), expression: num(b.expression), runs: num(b.runs), push: num(b.push), foreground: num(b.foreground), breathe: num(b.breathe), humanize: num(b.humanize), form: b.form === "sentence" ? "sentence" : undefined, registerShift: num(b.registerShift), // registerShift 明示（セクション役割文脈は frame.section から自動・明示ノブが勝つ）
             repetition: num(b.repetition), rangeSteps: num(b.rangeSteps), motifBars: num(b.motifBars),
             phrasing: b.phrasing === "asymmetric" ? "asymmetric" : b.phrasing === "symmetric" ? "symmetric" : undefined,
             bass: bassN.length ? bassN : undefined, counter: num(b.counter),

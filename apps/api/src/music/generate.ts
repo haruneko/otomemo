@@ -17,7 +17,7 @@ import {
   BASS_FIGS,
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
-import { genMotifMelody, genMotifMelodyV2, completeMelody, loadMotifModel16, scalePitchList, loadSkeletonModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { genMotifMelody, genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
@@ -47,6 +47,17 @@ const FUNC_NEXT: Record<string, string[]> = {
   D: ["T", "T", "T", "D"],
 };
 
+// セクション役割（構造上の位置。mood=雰囲気とは直交）。研究doc 2026-07-10-section-role-framing.md §4-1。
+export type SectionRole = "intro" | "verse" | "prechorus" | "chorus" | "bridge" | "interlude" | "outro";
+export interface SectionContext {
+  role?: SectionRole; // このセクションの役割（ノブ既定値の差し替え元）
+  prevRole?: SectionRole; // 直前セクションの役割（接続の判断材料・現状は保持のみ）
+  nextRole?: SectionRole; // 直後セクションの役割（末尾の開き/締めの判断材料・現状は保持のみ）
+  seedMotif?: { pitch: number; start?: number; dur?: number }[]; // 前セクションの代表モチーフ（実音）。extractMotif16→V2 opts.seedMotif
+  prevEndPitch?: number; // 前セクション最終音（骨格開始音の近傍候補＝genSkeletonFromModel opts.start へ）
+  energy?: number; // 0..1。未指定＝role の既定値をそのまま。明示時のみ density/registerShift を線形スケール（0.5=表の値）。
+}
+
 export interface Frame {
   key?: number;
   mode?: "major" | "minor"; // 一級の長短宣言（2026-07-08・design#12-M）。mood からの推定はフォールバック。
@@ -56,6 +67,7 @@ export interface Frame {
   mood?: string;
   pickup?: number; // 弱起（アウフタクト）：拍0の前に置く拍数（0=無し）。
   expression?: number; // 素直⇔表情ノブ（0..1）：強拍に倚音等の滑り込みを置く頻度。既定は mood で控えめ。
+  section?: SectionContext; // セクション役割文脈（2026-07-10）。未指定＝従来 bit 一致。design #12-M「セクション役割の一級化」。
 }
 export interface GenResult {
   items: { kind: string; content: unknown; label: string }[];
@@ -73,6 +85,72 @@ export function normalizeFrame(frame?: Frame | null): Frame {
   if (f.mode === "major" || f.mode === "minor") out.mode = f.mode; // 一級の長短（moodより優先）
   if (typeof f.pickup === "number" && f.pickup > 0) out.pickup = Math.min(2, f.pickup);
   if (typeof f.expression === "number") out.expression = Math.max(0, Math.min(1, f.expression));
+  const sec = normalizeSection(f.section);
+  if (sec) out.section = sec;
+  return out;
+}
+
+// セクション役割の別表記を正準へ（pre_chorus/pre-chorus/pre chorus→prechorus 等）。不正は undefined（黙って落とす）。
+const SECTION_ROLES = new Set<SectionRole>(["intro", "verse", "prechorus", "chorus", "bridge", "interlude", "outro"]);
+function normalizeRole(role?: unknown): SectionRole | undefined {
+  if (typeof role !== "string") return undefined;
+  const k = role.toLowerCase().replace(/[\s_-]+/g, "");
+  const r = (k === "prechorus" ? "prechorus" : k) as SectionRole;
+  return SECTION_ROLES.has(r) ? r : undefined;
+}
+// section の頑健化＝不正 role/enum外は落とす（meter 頑健化と同方針）。全フィールド空なら undefined（＝section 無し扱い＝bit一致）。
+function normalizeSection(section?: SectionContext | null): SectionContext | undefined {
+  if (!section || typeof section !== "object") return undefined;
+  const out: SectionContext = {};
+  const role = normalizeRole(section.role);
+  if (role) out.role = role;
+  const prevRole = normalizeRole(section.prevRole);
+  if (prevRole) out.prevRole = prevRole;
+  const nextRole = normalizeRole(section.nextRole);
+  if (nextRole) out.nextRole = nextRole;
+  if (Array.isArray(section.seedMotif)) {
+    const sm = section.seedMotif.filter((n) => n && Number.isFinite(n.pitch) && Number.isFinite(n.start ?? 0));
+    if (sm.length) out.seedMotif = sm.map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: n.dur }));
+  }
+  if (typeof section.prevEndPitch === "number" && Number.isFinite(section.prevEndPitch)) out.prevEndPitch = section.prevEndPitch;
+  if (typeof section.energy === "number" && Number.isFinite(section.energy)) out.energy = Math.max(0, Math.min(1, section.energy));
+  return Object.keys(out).length ? out : undefined;
+}
+
+// 役割→既存ノブのプリセット（初期値・全て耳較正前提。研究doc §4-2）。値は energy=0.5 相当の基準値。
+// 「未指定ノブの既定値差し替え」であり、明示ノブ＞role プリセット＞従来既定。undefined のノブは触らない。
+type PresetKnobs = {
+  density?: number; registerShift?: number; repetition?: number; motifBars?: number;
+  breathe?: number; expression?: number; foreground?: number; phrasing?: "symmetric" | "asymmetric";
+};
+const SECTION_PRESETS: Record<SectionRole, PresetKnobs> = {
+  intro: { density: 0.3, registerShift: -2, breathe: 0.5 },
+  verse: { density: 0.45, registerShift: 0, repetition: 0.85, motifBars: 2, breathe: 0.3, expression: 0.25, foreground: 0.3, phrasing: "symmetric" },
+  prechorus: { density: 0.55, registerShift: 2, repetition: 0.9, motifBars: 1, breathe: 0, expression: 0.25, foreground: 0.15, phrasing: "asymmetric" },
+  chorus: { density: 0.65, registerShift: 4, repetition: 0.9, motifBars: 2, breathe: 0.1, expression: 0.15, foreground: 0.1, phrasing: "symmetric" },
+  bridge: { density: 0.5, registerShift: 0, repetition: 0.6, motifBars: 2, breathe: 0.3, expression: 0.4, foreground: 0.5, phrasing: "asymmetric" },
+  interlude: { density: 0.4, registerShift: 0, breathe: 0.3 },
+  outro: { density: 0.3, registerShift: -2, breathe: 0.5 },
+};
+
+// role プリセットを opts の「undefined のノブにだけ」被せる（明示ノブが勝つ）。energy 明示時のみ density/registerShift を線形スケール。
+// role が無い section（seedMotif/prevEndPitch のみ）は opts をそのまま返す＝プリセット非適用。
+function applySectionPreset<T extends PresetKnobs>(opts: T, section?: SectionContext): T {
+  const role = section?.role;
+  if (!role) return opts;
+  const preset = SECTION_PRESETS[role];
+  const energy = section?.energy;
+  const scaleDens = (v: number) => (energy === undefined ? v : Math.max(0, Math.min(1, 0.5 + (v - 0.5) * (energy / 0.5))));
+  const scaleReg = (v: number) => (energy === undefined ? v : Math.round(v * (energy / 0.5)));
+  // energy スケール後のプリセット値。opts の明示ノブが undefined の所にだけ被せる（明示ノブが勝つ）。
+  const filled: PresetKnobs = { ...preset };
+  if (preset.density !== undefined) filled.density = scaleDens(preset.density);
+  if (preset.registerShift !== undefined) filled.registerShift = scaleReg(preset.registerShift);
+  const out = { ...opts } as T;
+  const cur = out as PresetKnobs;
+  for (const k of Object.keys(filled) as (keyof PresetKnobs)[]) {
+    if (cur[k] === undefined && filled[k] !== undefined) (cur as Record<string, unknown>)[k] = filled[k];
+  }
   return out;
 }
 
@@ -405,7 +483,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -457,10 +535,16 @@ export function genMelody(
     // 置き、脱平面化した骨格の下降を主音に叩き戻していた（実測 長調 主音48%/音域8.4）。tonic を下から約1/3
     // (下5・上12=約17半音≒音域12)に置く＝両モードで主音25-35・音域9-12へ。下流clampは全て sp[0]/sp[last] 参照
     // ＝sp 差し替えで render/後処理/頂点/カデンツが追従（別の絶対clampは無い＝評価で確認）。V2分岐のみ。
+    // セクション役割プリセット（2026-07-10・design#12-M「セクション役割の一級化」）：role があれば
+    // 「未指定ノブの既定値」を差し替える（明示ノブ＞role プリセット＞従来既定）。role 無し＝so===opts＝bit一致。
+    const so = applySectionPreset(opts ?? {}, f.section);
     // tessitura をキー安定に(2026-07-09 Round3/P3a・回帰修正)：tp=60+pc だと C調G3-C5/B調F#4-B5と
     // 絶対高さが1oct滑走しB5金切り域まで届いた。tonic相対は保ったまま**両端だけ飽和**（[60,65]にclamp）＝
     // 再ピン留め無し・全キーで音域/主音を維持しつつ ceiling 79→76・B5天井を消す（評価で全キー実測・Option D）。
-    const tpBase = Math.max(60, Math.min(65, 60 + ((((f.key ?? 0) % 12) + 12) % 12)));
+    // registerShift(2026-07-10)：セクション役割（chorus=+4 等）で音域中心を半音シフト。**飽和必須**（Round3 の
+    // B5金切り域の轍＝tpBase' を [58,70] にクランプ＝ceiling は tpBase'+12 ≤ 82）。shift=0＝tpBase 不変＝bit一致。
+    const tpBase0 = Math.max(60, Math.min(65, 60 + ((((f.key ?? 0) % 12) + 12) % 12)));
+    const tpBase = Math.max(58, Math.min(70, tpBase0 + (so.registerShift ?? 0)));
     const sp = scalePitchList(scale, tpBase - 5, tpBase + 12);
     const chordPcsPerBar: number[][] = [];
     const rootsPerBar: number[] = [];
@@ -499,14 +583,15 @@ export function genMelody(
     const scalePcsArr = scaleArr.map((d) => ((d % 12) + 12) % 12);
     const chordPcsAt = (t: number): number[] => { const c = chordAt(t, chords); return c ? chordPcs(normRoot(c.root ?? 0), c.quality ?? "") : scalePcsArr; }; // C3: 小節内チェンジ追従
     // P0-b(Step2)：phrasing 指定時のみ planSkeleton の句割りをV2へ渡す（未指定=phrases無し=従来bit一致）。
-    const phrases = opts.phrasing ? planSkeleton(bars, f.meter, { phrasing: opts.phrasing }).map((p) => ({ startBeat: p.startBeat, beats: p.beats, cadenceDegree: p.cadenceDegree })) : undefined;
+    const phrases = so.phrasing ? planSkeleton(bars, f.meter, { phrasing: so.phrasing }).map((p) => ({ startBeat: p.startBeat, beats: p.beats, cadenceDegree: p.cadenceDegree })) : undefined;
     // 表情の既定較正(2026-07-09 批判レビューP0a)：V2既定が expression=0＝強拍CT100%(無菌の極・実曲57%)だった。
     // frame.expression 明示＞mood既定(0.15-0.3)＞既定0.25。legacy(applyExpression)と同じロジックをV2へ結線。
-    const exprDefault = opts.expression ?? (typeof f.expression === "number" ? f.expression : bias.long >= 1.5 ? 0.3 : bias.busy >= 1.5 ? 0.2 : 0.25);
+    // so.expression＝明示 opts.expression ＞ role プリセット（applySectionPreset で埋め済）。
+    const exprDefault = so.expression ?? (typeof f.expression === "number" ? f.expression : bias.long >= 1.5 ? 0.3 : bias.busy >= 1.5 ? 0.2 : 0.25);
     // 対位バイアス（design「gen_melody×ベース結線」2026-07-10）：bass notes→bassPitchAt(t) 閉包（chordPcsAt と同パターン・
     // 標本化は voiceLeading.ts の pitchAt を共用＝評価と生成で同じ低音）。bass無し or counter=0 は undefined＝従来 bit 一致。
-    const bassSorted = (opts.counter ?? 0) > 0 && opts.bass && opts.bass.length
-      ? opts.bass.filter((n) => Number.isFinite(n.pitch) && Number.isFinite(n.start ?? 0)).map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: n.dur ?? 1 })).sort((a, b) => a.start - b.start)
+    const bassSorted = (so.counter ?? 0) > 0 && so.bass && so.bass.length
+      ? so.bass.filter((n) => Number.isFinite(n.pitch) && Number.isFinite(n.start ?? 0)).map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: n.dur ?? 1 })).sort((a, b) => a.start - b.start)
       : null;
     const bassPitchAt = bassSorted && bassSorted.length ? (t: number): number | null => pitchAt(bassSorted, t) : undefined;
     // ドラム結線（design「gen_melody×ドラム結線」2026-07-10）：DrumsInput を防御パース（gen_bass と共用 parseDrums）
@@ -514,8 +599,8 @@ export function genMelody(
     // (steps×beatsPerStep)が小節長の整数倍でない時は drums 無し扱い（gen_bass の不一致→従来経路と同方針）。
     // 全係数0 or drums 無し＝V2 へ drums を渡さない＝各段スキップ＝bit一致（構造的保証）。
     let drumsV2: { kick: number[]; snare: number[]; densityByBar: number[] } | undefined;
-    if ((opts.drumLock ?? 0) > 0 || (opts.backbeat ?? 0) > 0 || (opts.converse ?? 0) > 0) {
-      const dr = parseDrums(opts.drums);
+    if ((so.drumLock ?? 0) > 0 || (so.backbeat ?? 0) > 0 || (so.converse ?? 0) > 0) {
+      const dr = parseDrums(so.drums);
       const span = dr ? dr.steps * dr.bps : 0;
       const spanBars = span > 0 ? span / perBar : 0;
       if (dr && spanBars >= 1 - 1e-6 && Math.abs(spanBars - Math.round(spanBars)) < 1e-6) {
@@ -533,7 +618,12 @@ export function genMelody(
         drumsV2 = { kick, snare, densityByBar };
       }
     }
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound, repetition: opts.repetition, rangeSteps: opts.rangeSteps, chordPcsAt, density: opts.density, swing: opts.swing, expression: exprDefault, phrases, runs: opts.runs, push: opts.push, foreground: opts.foreground, breathe: opts.breathe, humanize: opts.humanize, form: opts.form, bassPitchAt, counter: opts.counter, drums: drumsV2, drumLock: opts.drumLock, backbeat: opts.backbeat, converse: opts.converse }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
+    // モチーフ共有（design#12-M「セクション役割の一級化」2026-07-10）：前セクションの実音モチーフ（section.seedMotif）
+    // を extractMotif16 で Motif16 化し V2 の種に（keepFirstBlocks は渡さない＝先頭ブロックが種 M＝同じ動機の別レンダリング）。
+    // 接続：section.prevEndPitch を骨格開始音 skelStart へ（未指定=62=bit一致）。role とは独立に seedMotif/prevEndPitch で発火。
+    const seedMotif = f.section?.seedMotif && f.section.seedMotif.length ? extractMotif16(f.section.seedMotif.map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: n.dur })), compound ? 3 : 4) : undefined;
+    const skelStart = typeof f.section?.prevEndPitch === "number" ? f.section.prevEndPitch : undefined;
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: so.skelModel ?? loadSkeletonModel(minor), motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);

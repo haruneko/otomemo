@@ -170,6 +170,31 @@ export interface Frame {
 6. **フックの明示機構**（サビ頭2小節のリズム逐語反復を1番/2番で固定する等）は今回の3点構成の外。seedMotif＋repetition 高で近似できるかを先に実測してから判断。
 7. **日本ポップでの数値再較正**：POP909/Billboard の統計は方向の根拠。自作コーパス（P2 トラック・句辞書 ~1523）にセクションラベルを足せば同じ統計（役割別 register/密度/終止）を自前で取れる＝将来の較正パス。
 
+### ⑤-実装確定（2026-07-10・SDD+TDD で実装済）
+
+調査 ①〜④ を実装に落とした確定事項（正準は design #12-M「セクション役割の一級化」・コードは `generate.ts`/`melodyCells.ts`/`mcp.ts`/`http.ts`/`SectionEditor.tsx`）。
+
+- **Frame 拡張**：`section?: SectionContext {role?, prevRole?, nextRole?, seedMotif?, prevEndPitch?, energy?}`。`SectionRole = intro|verse|prechorus|chorus|bridge|interlude|outro`。`normalizeFrame`→`normalizeSection` が別表記（`pre_chorus`/`pre-chorus`/大文字）を `prechorus` 等へ吸収し enum 外は黙って落とす。全フィールド空の section は undefined 化（＝bit一致）。
+- **プリセット表の最終初期値**（`SECTION_PRESETS`・energy=0.5 基準・全て耳較正前提）：
+
+  | ノブ | intro | verse | prechorus | chorus | bridge | interlude | outro |
+  |---|---|---|---|---|---|---|---|
+  | density | 0.3 | 0.45 | 0.55 | **0.65** | 0.5 | 0.4 | 0.3 |
+  | registerShift | −2 | 0 | +2 | **+4** | 0 | 0 | −2 |
+  | repetition | — | 0.85 | 0.9 | 0.9 | 0.6 | — | — |
+  | motifBars | 2 | 2 | 1 | 2 | 2 | — | — |
+  | breathe | 0.5 | 0.3 | 0 | 0.1 | 0.3 | 0.3 | 0.5 |
+  | expression | 0.15 | 0.25 | 0.25 | 0.15 | 0.4 | — | — |
+  | foreground | — | 0.3 | 0.15 | 0.1 | 0.5 | — | — |
+  | phrasing | — | symmetric | asymmetric | symmetric | asymmetric | — | — |
+
+  §4-2 の範囲（chorus registerShift「+3〜5」等）から中央〜やや保守で単一値を採用。chorus motifBars は 1–2 のうち 2（フック反復の可聴性優先）。`applySectionPreset` は **opts で undefined のノブにだけ**被せる＝**明示ノブ＞role プリセット＞従来既定**。role が無い section（seedMotif/prevEndPitch のみ）は preset 非適用。
+- **registerShift の飽和仕様（★確定）**：`tpBase0 = clamp(60+tonicPc, 60, 65)`（従来）→ `tpBase = clamp(tpBase0 + registerShift, 58, 70)`。sp 窓上端 = `tpBase+12 ≤ 82`＝**Round3 の B5(83) 金切り域を再導入しない**。registerShift=0＝tpBase 不変＝bit一致。`registerShift` は `genMelody` opts の一級ノブでもあり、明示指定が preset に勝つ（飽和テストの直接レバー＝巨大シフトで最高音 ≤ 82 を確認）。`energy` 明示時のみ density/registerShift を線形スケール（`0.5+(v-0.5)*energy/0.5`／`round(v*energy/0.5)`）。**曲全体アークの自動適用はしない**（⑤-4 の結論どおり提案止まり）。
+- **seedMotif 配線の経路（★確定）**：`f.section.seedMotif`（実音）→ `extractMotif16(notes, compound?3:4)` → `genMotifMelodyV2` opts `seedMotif`。**`keepFirstBlocks` は渡さない（=0）**＝先頭ブロック(role 0=A) が種 M そのもの＝「同じ動機の別レンダリング」。role とは独立に seedMotif 有無で発火（role 無しでもモチーフ共有可）。接続は `section.prevEndPitch` → 新 opts `skelStart` → `genSkeletonFromModel` opts `start`（未指定=62=bit一致）。**テストで先頭ブロックの onset 集合が `extractMotif16(seed).ons` と一致することを固定**（②の懸念「seedMotif-only の V2 経路の意味論」を仕様化）。
+- **配線点**：`genMelody` V2 分岐（`applySectionPreset` + registerShift 飽和 + extractMotif16）／MCP `frameSchema.section`（role を書くだけで効く旨を description に明示）／http `gen_melody`・`/gen/section` は frame 透過（section は frame に載る・explicit `registerShift` も透過）／web `SectionEditor.genPart()` は Section ネタ tags `role:` を読み `frame.section.role` へ。
+- **テスト**：`apps/api/test/section-context.test.ts` に (a)未指定=bit一致 (b)明示ノブ＞プリセット (c)chorus register↑＋飽和 (d)seedMotif 配線 (e)verse/chorus の density 既定差 (f)決定性 ＋ role 頑健化（不正 role/別表記）。**api 736・web 317 全緑・tsc クリーン**。
+- **残（耳較正パス）**：プリセット値と registerShift 量の 40seed×role 分布実測＋耳セッション（③③）。ロール入力 UX（tags `role:` の SectionEditor 表示・title 推定）と prev/next 自動導出（song children）と曲テンプレは**後続タスク（スコープ外）**。
+
 ### 参考（一次出典まとめ）
 - van Balen et al. 2013 (ISMIR): https://archives.ismir.net/ismir2013/paper/000180.pdf
 - Dai, Zhang, Dannenberg 2020 (CSMC+MuMe): https://arxiv.org/abs/2010.07518

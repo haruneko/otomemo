@@ -398,8 +398,13 @@ export function SectionEditor({
     try {
       // 2026-07-08 耳FB：section の mode を宣言（短調でメジャー生成＝濁りの主因）。メロは density/swing ノブも渡す。
       const secMode: "major" | "minor" = (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major";
+      // セクション役割（2026-07-10・design#12-M）：Section ネタ tags の `role:` を frame.section.role へ（無ければ渡さない＝従来）。
+      // 役割別プリセット（サビ=高音域+高密度 等）が API 側で効く。不正 role は normalizeFrame が黙って落とす。ロール入力 UI は後続。
+      const roleTag = (neta.tags ?? []).find((t) => t.startsWith("role:"))?.slice(5);
+      const frame: Record<string, unknown> = { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode };
+      if (roleTag) frame.section = { role: roleTag };
       const body: Record<string, unknown> = {
-        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode },
+        frame,
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       };
