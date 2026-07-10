@@ -829,24 +829,34 @@ export function genMotifMelodyV2(
       return compound ? (Math.abs(inbar) < 0.1 || Math.abs(inbar - 1.5) < 0.1) : (Math.abs(M.ons[i]! - Math.round(M.ons[i]! * 2) / 2) < 0.01 && !M.run[i]);
     };
     const pitchAt = (k: number, i: number): number => clampScale(L, baseIdx + k + deg[i]!);
-    // k選択＝置き場所で和声適応。カデンツ着地(最優先)＋強拍CT率＋音域＋同ラベルヒステリシス＋継目跳躍(w4)。
+    // 強拍の和声適合を「率」でなく「質」で測る（理論T5）：CT=0／非CTでも2度以内(倚音)=軽く／b9/avoid・対ベースb9=重く。
+    const strongQual = (p: number, t: number): number => {
+      const pc = ((p % 12) + 12) % 12, pcs = pcsAtT(t);
+      let pen = 0;
+      if (pcs.length && !pcs.includes(pc)) {
+        const b9chord = pcs.includes((pc + 11) % 12); // pc の半音下がコード音＝pc は m9/avoid（メジャー上の4度等）
+        let minChrom = 12; for (const c of pcs) { const d = Math.min(((pc - c) % 12 + 12) % 12, ((c - pc) % 12 + 12) % 12); if (d < minChrom) minChrom = d; }
+        pen += b9chord ? 4 : (minChrom <= 2 ? 1 : 3); // 2度以内(倚音)は軽い・遠い非CTは重い
+      }
+      const bl = opts.bassPitchAt?.(t); // w2：対ベース b9 衝突を罰（bassPitchAt 無し＝0）
+      if (bl != null && (((pc - bl) % 12 + 12) % 12) === 1) pen += 3;
+      return pen;
+    };
+    // k選択＝置き場所で和声適応。カデンツ着地(最優先)＋強拍の質＋音域＋同ラベルヒステリシス＋継目跳躍(w4)。
     const kPrev = prior ? prior.k : 0;
     let bestK = 0, bestCost = Infinity;
     for (let k = -4; k <= 4; k++) {
-      let strongMiss = 0, rangeMiss = 0, cadMiss = 0;
+      let strongPen = 0, rangeMiss = 0, cadMiss = 0;
       for (let i = 0; i < M.ons.length; i++) {
         if (baseIdx + k + deg[i]! < 0 || baseIdx + k + deg[i]! > L.length - 1) rangeMiss++;
-        if (onMainAt(i)) {
-          const pcs = pcsAtT(bar0 * barLen + M.ons[i]!);
-          if (pcs.length && !pcs.includes(((pitchAt(k, i) % 12) + 12) % 12)) strongMiss++;
-        }
+        if (onMainAt(i)) strongPen += strongQual(pitchAt(k, i), bar0 * barLen + M.ons[i]!);
       }
       if (toTonic) {
         const li = M.ons.length - 1, pcs = pcsAtT(bar0 * barLen + M.ons[li]!);
-        cadMiss = pcs.length && !pcs.includes(((pitchAt(k, li) % 12) + 12) % 12) ? 1 : 0; // カデンツ>動機＝終音は和声着地
+        cadMiss = pcs.length && !pcs.includes(((pitchAt(k, li) % 12) + 12) % 12) ? 1 : 0; // カデンツ>動機＝終音は和声着地(強)
       }
       const seam = prevPreserveEnd == null ? 0 : Math.max(0, Math.abs(pitchAt(k, 0) - prevPreserveEnd) - 7) / 2; // w4：前ブロック終端との跳躍(>5度)を抑制
-      const cost = 100 * cadMiss + 3 * strongMiss + 5 * rangeMiss + 2 * Math.abs(k - kPrev) + seam; // w5ヒステリシス強化(0.5→2)＝同ラベル同k
+      const cost = 100 * cadMiss + 2 * strongPen + 5 * rangeMiss + 2 * Math.abs(k - kPrev) + seam; // w5ヒステリシス＝同ラベル同k
       if (cost < bestCost) { bestCost = cost; bestK = k; }
     }
     if (!prior) placeByLabel.set(label, { baseIdx, k: bestK }); // 初回のみ記録＝以降の同ラベルは初回anchor/kを再利用
@@ -1419,6 +1429,7 @@ export function completeMelody(
   const full = genMotifMelodyV2(chordPcsPerBar, chordRootsPerBar, chordQuals, scalePitches, motif16, {
     seed: opts.seed, tonicPc: opts.tonicPc, minor: opts.minor, skelModel: opts.skelModel, compound: opts.compound,
     motifBars: mb, seedMotif, keepFirstBlocks: 1, chordPcsAt: opts.chordPcsAt,
+    motifMode: "preserve", // Phase2案B・design§5：補完はユーザー動機の同一性を保つ＝preserve既定（partial有り経路のみ・空partialは上の従来V2で一致）
   });
   // G1: 半端小節がある時は「完全小節境界」から maxEnd 以降を採用＝境界小節の残りを発展ブロックで埋める
   // （stub の実音とは maxEnd フィルタで重ねない）。半端が無ければ従来どおり coveredBars 境界。
