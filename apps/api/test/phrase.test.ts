@@ -118,9 +118,18 @@ describe("scoreDurations（演奏音長→楽譜長の復元）", () => {
     const sc = scoreDurations([{ pitch: 60, start: 0.05, dur: 0.4 }, { pitch: 62, start: 0.97, dur: 0.4 }]);
     expect(sc.map((n) => n.start)).toEqual([0, 1]); // 0.05→0, 0.97→1
   });
-  it("長すぎる間は 二分音符(2拍)以下に抑える（休符を1音にしない）", () => {
+  it("長すぎる間は 全音符(4拍)以下に抑える（休符を1音にしない・対策3-C）", () => {
     const sc = scoreDurations([{ pitch: 60, start: 0, dur: 0.2 }, { pitch: 62, start: 10, dur: 1 }]);
-    expect(sc[0]!.dur).toBe(2); // 0→10 の間でも 二分音符=2 で頭打ち
+    expect(sc[0]!.dur).toBe(4); // 0→10 の間でも 全音符=4 で頭打ち（旧上限2＝白玉欠落の是正）
+  });
+  it("遅い/疎な句では白玉(付点2分3・全音符4)が復元される＝統計に長音が入る（対策3-C）", () => {
+    // 4分IOI×数音の後に長く伸ばす句＝med=1.5→maxDur=min(4,4.5)=4。最終前の長い間が全音符4として記録。
+    const sc = scoreDurations([
+      { pitch: 60, start: 0, dur: 0.5 }, { pitch: 62, start: 1.5, dur: 0.5 },
+      { pitch: 64, start: 3, dur: 0.5 }, { pitch: 65, start: 7, dur: 0.5 },
+    ]);
+    expect(sc[2]!.dur).toBe(4); // 3→7 の4拍＝全音符（旧は2で頭打ち）
+    expect(Math.max(...sc.map((n) => n.dur))).toBeGreaterThan(2); // 統計に2拍超が入る
   });
   it("密なフレーズ（8分中心）では最長音もフレーズ相対で短く（中央値×3≦）", () => {
     // IOI=0.5(8分)中心 → maxDur=min(2, 1.5)=1.5。長い間があっても1.5止まり。

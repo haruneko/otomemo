@@ -63,9 +63,12 @@ export function isStandardMeter(meter?: string | null): boolean {
 }
 
 // 演奏MIDIの音長は楽譜長でない（スタッカート＝短く切れる）。**フレーズ単位**で楽譜長を復元：
-// オンセットをグリッド量子化→各音を次の音の頭までレガート→ただし**上限＝min(二分音符=2拍, フレーズ内IOI中央値×3)**
-// で抑え（休符を1音にしない／密なフレーズで不相応に長くしない）→**音楽的音価にスナップ**（付点8分・付点4分含む）。
-const MUSICAL_DUR = [0.25, 0.5, 0.75, 1, 1.5, 2];
+// オンセットをグリッド量子化→各音を次の音の頭までレガート→ただし**上限＝min(全音符=4拍, フレーズ内IOI中央値×3)**
+// で抑え（休符を1音にしない／密なフレーズで不相応に長くしない）→**音楽的音価にスナップ**（付点8分・付点4分・付点2分含む）。
+// 上限は旧 2拍（二分音符）だったが実メロの句末白玉/長音（付点2分3・全音符4）が統計から丸ごと欠落する原因だった
+// （research 2026-07-10 対策3-C＝統計データの誤り）。4拍へ引き上げ＝**遅い/疎な句でのみ**白玉が記録される（med×3で密な句は不変）。
+// ※既存コーパスDBはこの上限で取り込み済＝**再取り込み(再構築)して初めて反映**される。
+const MUSICAL_DUR = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
 export function scoreDurations(notes: Note[], grid = 0.25): Note[] {
   const ns = [...notes].sort((a, b) => a.start - b.start); // 弱起(負start)も保持
   if (!ns.length) return [];
@@ -76,7 +79,7 @@ export function scoreDurations(notes: Note[], grid = 0.25): Note[] {
   for (let i = 1; i < onsets.length; i++) if (onsets[i]! - onsets[i - 1]! > 0) iois.push(onsets[i]! - onsets[i - 1]!);
   iois.sort((a, b) => a - b);
   const med = iois.length ? iois[Math.floor(iois.length / 2)]! : 0.5;
-  const maxDur = Math.max(grid, Math.min(2, med * 3)); // 二分音符以下 ＆ フレーズ相対
+  const maxDur = Math.max(grid, Math.min(4, med * 3)); // 全音符以下 ＆ フレーズ相対（旧上限2＝白玉欠落を是正・対策3-C）
   const snap = (d: number): number => {
     const c = Math.min(d, maxDur);
     let best = MUSICAL_DUR[0]!;
