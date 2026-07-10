@@ -39,15 +39,16 @@ describe("genMotifMelodyV2 compound（6/8＝骨格流用＋6/8リズム＋強拍
     expect(ct.length / strong.length).toBeGreaterThan(0.5);
   });
 
-  it("③ 全 onset が 6/8グリッド(0.5刻み)・小節境界=3拍・範囲 0..bars*3 に収まる（昇順）", () => {
+  it("③ 全 onset が 6/8の16分12枠グリッド(0.25刻み)・小節境界=3拍・範囲 0..bars*3 に収まる（昇順）", () => {
+    // 2026-07-10 統一：6/8基底を8分6枠→16分12枠へ。既定でも格子は0.25刻み（ただし既定は8分主体＝⑬で担保）。
     const bars = 8;
     const notes = gen(14, bars);
     for (const n of notes) {
       expect(n.start).toBeGreaterThanOrEqual(0);
       expect(n.start).toBeLessThan(bars * BAR);
-      // 8分グリッド＝0.5の倍数
-      expect(Math.abs(n.start * 2 - Math.round(n.start * 2))).toBeLessThan(1e-6);
-      // 小節内位置は 0..2.5（1小節=3拍＝6八分枠の手前）
+      // 16分12枠グリッド＝0.25の倍数
+      expect(Math.abs(n.start * 4 - Math.round(n.start * 4))).toBeLessThan(1e-6);
+      // 小節内位置は 0..2.75（1小節=3拍＝12の16分枠の手前）
       expect(inBar(n.start)).toBeLessThan(BAR - 1e-9);
     }
     for (let i = 1; i < notes.length; i++) expect(notes[i]!.start).toBeGreaterThanOrEqual(notes[i - 1]!.start);
@@ -94,7 +95,7 @@ describe("generate.genMelody 配線（6/8 frame → compound V2 経路）", () =
     expect(notes.length).toBeGreaterThan(0);
     for (const n of notes) {
       expect(n.start).toBeLessThan(8 * 3 + 1e-6); // 6/8＝1小節3拍
-      expect(Math.abs(n.start * 2 - Math.round(n.start * 2))).toBeLessThan(1e-6); // 8分グリッド
+      expect(Math.abs(n.start * 4 - Math.round(n.start * 4))).toBeLessThan(1e-6); // 16分12枠グリッド（統一）
     }
   });
   it("⑧ meter=4/4 は不変（従来V2＝1小節4拍）", () => {
@@ -106,18 +107,31 @@ describe("generate.genMelody 配線（6/8 frame → compound V2 経路）", () =
   });
 });
 
-// ── 2026-07-10：6/8（compound）で runs>0 のとき16分が出る（12枠グリッド拡張） ──
-// 4/4と違い6/8はグリッド(8分6枠)/語彙のレベルで16分が不在＝runsノブがno-op だった。
-// runs>0 指定時のみ compound の mkMotif を16分12枠(t=bar*3+s*0.25)へ切替。未指定=従来6枠 bit一致。
-describe("genMotifMelodyV2 compound × runs（6/8で16分＝12枠グリッド拡張）", () => {
+// ── 2026-07-10：6/8を16分12枠へ統一（常時基底・runsは再重み付け）＝4/4と同型 ──
+// 旧「8分6枠＋runs時だけ12枠」の二重グリッドを廃止。既定は8分主体語が優勢で16分は稀、runsで漸増（grid切替なし）。
+describe("genMotifMelodyV2 compound × runs（6/8＝16分12枠常時基底・runsで走句漸増）", () => {
   const genR = (seed: number, o: { runs?: number; density?: number }, bars = 8) =>
     genMotifMelodyV2(pcsPerBar.slice(0, bars), ROOTS.slice(0, bars), QUALS.slice(0, bars), sp, motif16, { seed, tonicPc: 0, minor: false, compound: true, ...o });
   const is16Off = (t: number) => Math.abs(((t * 4) % 2) - 1) < 0.1; // 8分格子外(.25/.75)＝16分
 
-  it("⑨ runs 未指定＝従来6/8 bit一致（回帰ゼロ）", () => {
+  it("⑨ runs 未指定＝決定的（同seed同出力）・gen() と一致", () => {
     for (let seed = 1; seed <= 20; seed++) {
       expect(JSON.stringify(genR(seed, {})), `seed=${seed}`).toBe(JSON.stringify(gen(seed)));
     }
+  });
+
+  it("⑬ 既定(runs未指定)は8分主体＝16分率が低い（<0.05）／runsで単調に増える", () => {
+    const rate = (o: { runs?: number }) => {
+      let tot = 0, off = 0;
+      for (let seed = 1; seed <= 40; seed++) {
+        for (const n of genR(seed, o)) { tot++; if (is16Off(n.start)) off++; }
+      }
+      return off / tot;
+    };
+    const base = rate({}), r4 = rate({ runs: 0.4 }), r8 = rate({ runs: 0.8 });
+    expect(base, `既定16分率(${base.toFixed(3)})<0.05＝8分主体`).toBeLessThan(0.05);
+    expect(r4, `runs0.4(${r4.toFixed(3)})>=既定`).toBeGreaterThanOrEqual(base);
+    expect(r8, `runs0.8(${r8.toFixed(3)})>runs0.4`).toBeGreaterThan(r4);
   });
 
   it("⑩ runs=1・seed sweep で16分onset率>0.1・走句性(隣接0.25ペア)が出る", () => {

@@ -1,5 +1,5 @@
 import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
-import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA, RHYTHM68X_DATA } from "./motifModelData";
+import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA } from "./motifModelData";
 import { chordPcs } from "./theory";
 import { classifyNCT, isResolvedNct } from "./degree";
 // 有機メロの再帰モデル・層2＝joint cell（design #12-M S8 / research findings）。
@@ -540,18 +540,10 @@ export function genMotifMelodyV2(
     ? motif16.rhythm16
     : Object.fromEntries(Object.entries(motif16.rhythm16).map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length) * runW(p)]));
 
-  // 6/8リズム＝設計重み付き6枠パターンを抽選（RHYTHM68_DATA）。runningはやや強め＝jig寄り。density対応。
-  const pick68 = (r: () => number): string => {
-    const rows = RHYTHM68_DATA.map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length)] as [string, number]);
-    const tot = rows.reduce((a, b) => a + b[1], 0);
-    let x = r() * tot;
-    for (const [p, w] of rows) { x -= w; if (x <= 0) return p; }
-    return rows[0]![0];
-  };
-  // 6/8走句(runs>0)＝16分12枠語彙（RHYTHM68X_DATA）を densW×runW で再重み付けして抽選。
-  // runW は4/4と同型（隣接16分ペア数で増幅）＝runs高値ほど走句パターンが優勢。runs未指定ではこの経路に入らない。
-  const pick68x = (r: () => number): string => {
-    const rows = RHYTHM68X_DATA.map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length) * runW(p)] as [string, number]);
+  // 6/8リズム＝統一12枠語彙（RHYTHM68_DATA・16分基底）を densW×runW で再重み付けして抽選＝4/4 rhythmVocab と同型。
+  // runW は runs未指定で ≡1 ＝既定は8分主体語が優勢。runs>0 で隣接16分ペア語（走句）が増幅。jig性格は語彙重みが担う。
+  const pick68u = (r: () => number): string => {
+    const rows = RHYTHM68_DATA.map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length) * runW(p)] as [string, number]);
     const tot = rows.reduce((a, b) => a + b[1], 0);
     let x = r() * tot;
     for (const [p, w] of rows) { x -= w; if (x <= 0) return p; }
@@ -581,26 +573,15 @@ export function genMotifMelodyV2(
     const mb = bb; // プロトタイプ：ブロック長でパラメータ化（クロージャ mb を局所退避）
     const ons: number[] = [];
     if (compound) {
-      // 6/8：runs未指定=8分6枠(3+3・t=bar*3+e*0.5)＝bit一致。runs>0=16分12枠(t=bar*3+s*0.25)へ切替＝走句を出す。
-      // 末尾~0.75拍は息継ぎ。onset上下限 2*mb..5*mb（runsで上限拡張）・孤立フィルタ>1.6。
-      const x16 = rns !== undefined; // 12枠グリッド（16分細分）を使うか
+      // 6/8：16分12枠を常時基底(t=bar*3+s*0.25)＝4/4(16枠)と同型。runsは pick68u の語彙再重み付けで走句を増やす（grid切替なし）。
+      // 末尾~0.75拍は息継ぎ。onset上下限 2*mb..5*mb（runsで上限拡張）・孤立フィルタ>1.6。既定は8分主体語が優勢＝密度は上がらない。
       for (let bar = 0; bar < mb; bar++) {
-        if (x16) {
-          const p = pick68x(r);
-          for (let s = 0; s < 12; s++) {
-            if (p[s] !== "x") continue;
-            const t = bar * 3 + s * 0.25;
-            if (t >= mb * 3 - 0.75) continue;
-            ons.push(t);
-          }
-        } else {
-          const p = pick68(r);
-          for (let e = 0; e < 6; e++) {
-            if (p[e] !== "x") continue;
-            const t = bar * 3 + e * 0.5;
-            if (t >= mb * 3 - 0.75) continue;
-            ons.push(t);
-          }
+        const p = pick68u(r);
+        for (let s = 0; s < 12; s++) {
+          if (p[s] !== "x") continue;
+          const t = bar * 3 + s * 0.25;
+          if (t >= mb * 3 - 0.75) continue;
+          ons.push(t);
         }
       }
       // density: 受け入れ音数帯を可変（未指定=従来 2..5/小節）。疎側は間隔許容も広げる（棄却飢餓→既定モチーフ固定化を防ぐ）。
