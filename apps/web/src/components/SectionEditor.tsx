@@ -88,6 +88,10 @@ export function SectionEditor({
   const [breathe, setBreathe] = useState(0); // 句頭の遅延入場(息継ぎ) 0=なし〜1=各句頭を空けて入る（#9 2026-07-09）
   const [humanize, setHumanize] = useState(0); // 人間味(グルーヴ) 0=機械的〜1=強弱＋微小タイミング揺れ（監査E 2026-07-09）
   const [form, setForm] = useState<"" | "sentence">(""); // 形式 空=従来AABA/文=sentence(提示→反復→継続断片化→カデンツ=起承転結)（D本丸 2026-07-09）
+  // 対位（メロがベースを見て並行5度8度/b9を避ける）＝固定0.3自動送信を廃し UI で選択（2026-07-10・menu整理）。
+  // 空=OFF（未送信＝従来bit一致）／weak0.2・mid0.4・strong0.7（推奨帯0.2-0.4＋強め）。bassレーン非在時は disabled。
+  const [counter, setCounter] = useState<"" | "weak" | "mid" | "strong">("");
+  const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）＝既定は畳む（ノブの壁の解消）
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
@@ -410,10 +414,11 @@ export function SectionEditor({
       };
       if (part.op === "gen_melody") {
         body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form;
-        // 対位バイアス（design「gen_melody×ベース結線」）：ベースレーンがあれば notes を渡し counter=0.3（推奨較正）。
-        // ベース無し＝渡さない＝従来どおり。UI ノブでの counter 露出は後続タスク。
+        // 対位バイアス（design「gen_melody×ベース結線」）：UI の「対位」を ON にした時だけ bass を渡し counter を送る。
+        // 既定 OFF（未送信）＝従来 bit一致（旧・bass 在れば固定0.3 の自動送信は既定挙動を無言で変えていたので廃止）。
         const bass = sectionBass();
-        if (bass.length) { body.bass = bass; body.counter = 0.3; }
+        const counterVal = counter === "weak" ? 0.2 : counter === "mid" ? 0.4 : counter === "strong" ? 0.7 : 0;
+        if (counterVal > 0 && bass.length) { body.bass = bass; body.counter = counterVal; }
         // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3（推奨＝B のみ弱く）。
         // drumLock/converse は 0＝耳較正待ち（渡さない）。レーン無し＝渡さない＝従来どおり。UI ノブ露出は後続タスク。
         const drums = sectionDrums();
@@ -599,6 +604,17 @@ export function SectionEditor({
                         <span className="knob-val">{runs < 0.1 ? "—" : runs > 0.66 ? "多" : "走"}</span>
                       </label>
                       {knobHelp && <small className="knob-help">16分の走り（速い連なりの出やすさ）</small>}
+                      {/* 詳細段（progressive disclosure）＝よく使う4つ(細かさ/跳ね/表情/走句)の下に畳む。既定は閉じてノブの壁を解消。 */}
+                      <button
+                        type="button"
+                        className={"knob-details-toggle" + (detailsOpen ? " on" : "")}
+                        aria-label="knob-details-toggle"
+                        aria-expanded={detailsOpen}
+                        onClick={() => setDetailsOpen((v) => !v)}
+                      >
+                        {detailsOpen ? "▾ 詳細を隠す" : "▸ 詳細"}
+                      </button>
+                      {detailsOpen && <>
                       <label className="knob-row" aria-label="push">
                         <span>食い</span>
                         <input type="range" min={0} max={1} step={0.1} value={push} onChange={(e) => setPush(Number(e.target.value))} />
@@ -640,6 +656,18 @@ export function SectionEditor({
                         </select>
                       </label>
                       {knobHelp && <small className="knob-help">曲の展開の型（提示→反復→畳み掛け→まとめ＝起承転結）</small>}
+                      {/* 対位（メロがベースを見て並行完全音程/b9を避ける）＝要望②。bassレーンが無いと相手がいないので disabled。 */}
+                      <label className="knob-row">
+                        <span>対位</span>
+                        <select aria-label="counter" value={counter} onChange={(e) => setCounter(e.target.value as "" | "weak" | "mid" | "strong")} disabled={sectionBass().length === 0} title={sectionBass().length === 0 ? "ベースレーンが必要です" : "ベースに対して反行/斜行し並行を避ける"}>
+                          <option value="">OFF</option>
+                          <option value="weak">弱</option>
+                          <option value="mid">中</option>
+                          <option value="strong">強</option>
+                        </select>
+                      </label>
+                      {knobHelp && <small className="knob-help">ベースを見て並行5度/8度を避ける（要ベースレーン・弱0.2/中0.4/強0.7）</small>}
+                      </>}
                     </div>
                   )}
                   {melodyLaneNotes().length > 0 && (

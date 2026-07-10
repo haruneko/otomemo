@@ -300,7 +300,8 @@ describe("SectionEditor (3-lane timeline)", () => {
     await screen.findByLabelText("place-melody-15"); // 48拍÷3拍=16小節ぶんのセルがある
     expect(Number(screen.getByLabelText("bars-count").textContent)).toBeGreaterThanOrEqual(16);
   });
-  it("gen_melody＝ベースレーンの notes を対位入力として body に渡す（bass＋counter=0.3・design「gen_melody×ベース結線」）", async () => {
+  it("gen_melody＝対位はUI選択（2026-07-10・menu整理）：既定OFFはbass在っても bass/counter を渡さない（bit一致）", async () => {
+    // 旧：bass 在れば固定0.3を自動送信＝既定挙動を無言で変えていた。新：既定OFF（未送信）＝bit一致の鉄則へ是正。
     music.mockReset();
     music.mockResolvedValue({ items: [] });
     getComposition.mockResolvedValue({
@@ -317,8 +318,62 @@ describe("SectionEditor (3-lane timeline)", () => {
     await waitFor(() => expect(music).toHaveBeenCalled());
     const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
     expect(op).toBe("gen_melody");
-    expect(body.bass).toEqual([{ pitch: 36, start: 0, dur: 1 }, { pitch: 43, start: 2, dur: 1 }]); // 位置0＝オフセット無しでそのまま
-    expect(body.counter).toBeCloseTo(0.3); // 推奨較正（research 2026-07-10-melody-bass-counterpoint）
+    expect(body.bass).toBeUndefined(); // 対位OFF（既定）＝相手を渡さない
+    expect(body.counter).toBeUndefined();
+  });
+  it("gen_melody＝対位ONを選ぶと bass＋counter(中=0.4)を渡す（詳細段でユーザーが選択）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+        { position: 0, ord: 0, node: { neta: mk("b1", "bass", { content: { notes: [{ pitch: 36, start: 0, dur: 1 }, { pitch: 43, start: 2, dur: 1 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-b1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("knob-details-toggle")); // 詳細段を開く
+    await userEvent.selectOptions(screen.getByLabelText("counter"), "mid"); // 対位=中
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.bass).toEqual([{ pitch: 36, start: 0, dur: 1 }, { pitch: 43, start: 2, dur: 1 }]);
+    expect(body.counter).toBeCloseTo(0.4); // 中=0.4（弱0.2/中0.4/強0.7）
+  });
+  it("メロノブ＝詳細段は既定で畳まれ、基本(細かさ/走句)は出る／詳細(食い/対位)はトグルで現れる", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    expect(screen.getByLabelText("density")).toBeInTheDocument(); // 基本段は常時
+    expect(screen.getByLabelText("runs")).toBeInTheDocument();
+    expect(screen.queryByLabelText("push")).toBeNull(); // 詳細段は畳まれている
+    expect(screen.queryByLabelText("counter")).toBeNull();
+    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    expect(screen.getByLabelText("push")).toBeInTheDocument(); // 展開で現れる
+    expect(screen.getByLabelText("counter")).toBeInTheDocument();
+  });
+  it("gen_melody＝対位selectはベースレーンが無いと disabled（相手がいない）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    expect(screen.getByLabelText("counter")).toBeDisabled();
   });
   it("gen_melody＝ベースレーンが空なら bass/counter を渡さない（従来どおり＝bit一致の鉄則）", async () => {
     music.mockReset();
