@@ -126,6 +126,23 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(within(preview).getByLabelText("mini-preview")).toBeInTheDocument(); // 候補内に MiniRoll(svg)
     expect(within(preview).getByText(/音$/)).toBeInTheDocument(); // 「◯小節・◯音」メタ
   });
+  it("句フレージング：つなぎ(flow)スライダーを上げると gen_melody に flow が乗る（2026-07-11）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("knob-details-toggle")); // 詳細段を開く
+    fireEvent.change(screen.getByLabelText("flow"), { target: { value: "0.7" } }); // つなぎ=0.7
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ flow: 0.7 })));
+  });
   it("P2 候補トレイ：もっとで候補が積み上がり比較できる／keepでマーク／捨てるで減る", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 1, dur: 1 }] } }] });

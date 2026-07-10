@@ -37,15 +37,16 @@ import {
 export { loopPositions, spanOverlaps } from "./sectionLanes";
 
 // P4（2026-07-10・UX再設計）：メロ生成プリセット＝13ノブを"当たり"の組に畳む主動線。値は param-clarity doc §5.1（0/未指定=非送信=bit一致）。
-type PresetV = { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric"; form?: "" | "sentence" };
+type PresetV = { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric"; form?: "" | "sentence"; flow?: number; pickup?: number };
 const MELODY_PRESETS: { name: string; label: string; v: PresetV }[] = [
   { name: "plain", label: "おまかせ", v: { density: 0.5 } }, // density は常時送信＝未タッチ既定(0.5)に合わせる＝「おまかせ」=従来生成（監査F1）
   { name: "soft", label: "しっとり", v: { density: 0.3, expression: 0.5, foreground: 0.2, breathe: 0.4 } },
   { name: "bounce", label: "跳ねる", v: { density: 0.5, swing: 0.6, runs: 0.2, expression: 0.2, push: 0.3 } },
   { name: "run", label: "走る", v: { density: 0.8, swing: 0.1, runs: 0.7, expression: 0.2, push: 0.3 } },
   { name: "sparkle", label: "きらきら", v: { density: 0.7, swing: 0.2, runs: 0.5, expression: 0.4, foreground: 0.5 } },
-  { name: "song", label: "歌もの", v: { density: 0.45, swing: 0.15, runs: 0.1, expression: 0.3, hook: 0.5, articulation: 0.4, phrasing: "symmetric" } },
-  { name: "hook", label: "口ずさめる", v: { density: 0.4, swing: 0.1, expression: 0.2, hook: 0.8, articulation: 0.6, foreground: 0.1 } },
+  { name: "song", label: "歌もの", v: { density: 0.45, swing: 0.15, runs: 0.1, expression: 0.3, hook: 0.5, articulation: 0.4, phrasing: "symmetric", flow: 0.5, pickup: 0.5 } },
+  { name: "hook", label: "口ずさめる", v: { density: 0.4, swing: 0.1, expression: 0.2, hook: 0.8, articulation: 0.6, foreground: 0.1, flow: 0.4, pickup: 0.5 } },
+  { name: "sustain", label: "伸びやか", v: { density: 0.4, expression: 0.3, flow: 0.75, pickup: 0.5, foreground: 0.15 } }, // 塊を長く連結＝サビ向き（2026-07-11 句フレージング）
 ];
 
 export function SectionEditor({
@@ -110,6 +111,10 @@ export function SectionEditor({
   // articulation=連打のmicropause/切り＝「ソッソッ」が1本に潰れず聞こえる。両方既定0＝未送信＝従来bit一致。
   const [hook, setHook] = useState(0);
   const [articulation, setArticulation] = useState(0);
+  // 句フレージング（2026-07-11・オーナーFB「塊がぶつ切れ」）：flow=塊の連結/長音（穴を白玉で埋め句末を伸ばす）、
+  // pickup=弱起（句頭を前へ出しダウンビートへタイ）。両方 0＝未送信＝従来bit一致。role プリセットでは自動発火。
+  const [flow, setFlow] = useState(0);
+  const [pickup, setPickup] = useState(0);
   // 最小音符（2026-07-10・オーナーFB）：これより細かい音を出さない上限。""=おまかせ(テンポ連動＝高BPMで自動8分)。
   const [finest, setFinest] = useState<"" | "quarter" | "eighth">("");
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）＝既定は畳む（ノブの壁の解消）
@@ -118,9 +123,10 @@ export function SectionEditor({
   // P5（2026-07-10・UX再設計）：サイコロ＝プリセットを中心にノブをランダムに振る。ロックしたノブは固定して振る＝ばらつき×制御。
   const [lockedKnobs, setLockedKnobs] = useState<Set<string>>(new Set());
   const toggleLock = (k: string) => setLockedKnobs((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
-  const applyPreset = (name: string, v: { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric"; form?: "" | "sentence" }) => {
+  const applyPreset = (name: string, v: PresetV) => {
     setDensity(v.density ?? 0); setSwing(v.swing ?? 0); setRuns(v.runs ?? 0); setExpression(v.expression ?? 0); setPush(v.push ?? 0);
     setHook(v.hook ?? 0); setArticulation(v.articulation ?? 0); setForeground(v.foreground ?? 0); setBreathe(v.breathe ?? 0);
+    setFlow(v.flow ?? 0); setPickup(v.pickup ?? 0);
     setPhrasing(v.phrasing ?? ""); setForm(v.form ?? ""); setPreset(name);
   };
   // OFF/弱/中/強 の4段＝値をバケット表示（プリセットの連続値も正しい段に光る）＋タップで代表値へスナップ。手で触るとプリセット選択は外す。
@@ -154,6 +160,7 @@ export function SectionEditor({
     const j = (cur: number, key: string) => (lockedKnobs.has(key) ? cur : Math.max(0, Math.min(1, Math.round((cur + (Math.random() * 0.6 - 0.3)) * 10) / 10)));
     setDensity((d) => j(d, "density")); setSwing((s) => j(s, "swing")); setRuns((r) => j(r, "runs")); setExpression((e) => j(e, "expression"));
     setPush((p) => j(p, "push")); setHook((h) => j(h, "hook")); setArticulation((a) => j(a, "articulation")); setForeground((f) => j(f, "foreground")); setBreathe((b) => j(b, "breathe"));
+    setFlow((f) => j(f, "flow")); setPickup((p) => j(p, "pickup"));
     setPreset("");
   };
   const candPlay = useRef<PlaybackHandle | null>(null);
@@ -488,6 +495,9 @@ export function SectionEditor({
         if (hook > 0) { body.hook = hook; body.motifMode = "preserve"; }
         if (articulation > 0) body.articulation = articulation;
         if (finest) body.finest = finest; // 最小音符（""=おまかせ＝未送信＝テンポ連動）
+        // 句フレージング（2026-07-11）：flow=連結/長音・pickup=弱起。0＝未送信＝従来 bit一致。
+        if (flow > 0) body.flow = flow;
+        if (pickup > 0) body.pickup = pickup;
         // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3（推奨＝B のみ弱く）。
         // drumLock/converse は 0＝耳較正待ち（渡さない）。レーン無し＝渡さない＝従来どおり。UI ノブ露出は後続タスク。
         const drums = sectionDrums();
@@ -705,6 +715,8 @@ export function SectionEditor({
                           </select>
                         </label>
                         {segRow("breathe", "息継ぎ", "句アタマの間", breathe, setBreathe, "breathe")}
+                        {sliderRow("flow", "つなぎ", flow, setFlow, "ぶつ切れ", "長く連結", "flow")}
+                        {sliderRow("pickup", "歌い出し", pickup, setPickup, "拍アタマ", "弱起(食い込み)", "pickup")}
                         {sectionBass().length > 0 && <>
                           <div className="knob-group-h">他パートとの絡み</div>
                           <div className="knob-seg" aria-label="counter">
