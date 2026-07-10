@@ -1377,17 +1377,45 @@ export function genMotifMelodyV2(
     notes.sort((a, b) => a.start - b.start);
   }
 
-  // ── flow(2026-07-11・オーナーFB「塊がぶつ切れ」)：塊の連結＋句末/最終音の長音化＝穴(息継ぎ)を白玉に変える ──
+  // ── flow(2026-07-11・オーナーFB「塊がぶつ切れ」→「でも息継ぎが無いのもダメ」)：句内は連結・句末は息を残す ──
   // 症状（research 2026-07-10-melody-phrasing-length-direction）＝各ブロック末尾に息継ぎが焼き込まれ長い塊/白玉が出ない。
-  // 後段で dur のみ延長（onset/pitch/mv 不変＝反復・和声後処理・既存ノブと無干渉）。各音を次onset(最終音はセクション末)まで
-  // flow*4拍を上限に伸ばす＝flow高で連結＋句末着地が money note 化。既定0＝dur不変＝bit一致（Stage1・後段のみ・最小）。
+  // だが gap を無差別に埋めると句末の息まで消え全レガート化＝逆に不自然。so **句内の穴だけ連結・句末境界は息を残す**：
+  //   ・句内 gap → 次onsetまで連結（flow*4拍上限）＝塊が伸び白玉が出る
+  //   ・句末境界（phrases 各句末／無指定は4小節毎にフォールバック）→ 境界の breathAmt 手前まで＝money note→息継ぎ
+  //   ・曲末（最終音）→ セクション末まで鳴らす（末尾は息不要）
+  // 後段で dur のみ延長（onset/pitch/mv 不変＝反復・和声後処理・既存ノブと無干渉）。既定0＝dur不変＝bit一致。
   const flow = Math.max(0, Math.min(1, opts.flow ?? 0));
   if (flow > 0 && notes.length > 0) {
     const secEnd = bars * barLen;
+    // interior 句末境界（曲末は除く＝末尾は鳴らし切る）。phrases 指定＝各句末／無指定＝4小節毎にフォールバック。
+    const bounds = (opts.phrases && opts.phrases.length
+      ? opts.phrases.map((p) => p.startBeat + p.beats)
+      : Array.from({ length: Math.max(0, Math.ceil(bars / 4) - 1) }, (_, k) => (k + 1) * 4 * barLen)
+    ).filter((b) => b < secEnd - 1e-6);
+    const breathAmt = 1.0; // 句末に残す息（拍）＝money note はこの手前まで伸ばし、以降は無音で歌い終える
+    // 各句末境界の近傍で「実際の息継ぎ（最大の無音gap）」を1つ選び保護＝pickup で句頭が境界前へずれても gap の実位置で拾う。
+    const keep = new Set<number>();
+    for (const pb of bounds) {
+      let bestI = -1, bestGap = 0;
+      for (let i = 0; i + 1 < notes.length; i++) {
+        const gStart = notes[i]!.start + notes[i]!.dur, gEnd = notes[i + 1]!.start, g = gEnd - gStart;
+        if (gEnd > pb - 2.5 && gStart < pb + 0.5 && g > bestGap) { bestGap = g; bestI = i; } // 境界近傍[pb-2.5,pb+0.5]の最大gap
+      }
+      if (bestI >= 0) keep.add(bestI); // その音の後ろの息は埋めない（句末の呼吸）
+    }
     for (let i = 0; i < notes.length; i++) {
+      const cur = notes[i]!;
       const nextStart = i + 1 < notes.length ? notes[i + 1]!.start : secEnd;
-      const gap = nextStart - (notes[i]!.start + notes[i]!.dur);
-      if (gap > 0.01) notes[i]!.dur = Math.round((notes[i]!.dur + Math.min(gap, flow * 4)) * 1000) / 1000;
+      const curEnd = cur.start + cur.dur;
+      let newDur: number;
+      if (keep.has(i)) {
+        // 句末＝必ず息を残す。次onsetの breathAmt 手前で歌い終える＝money note は伸ばし・詰まった音は短縮して息を彫る。
+        newDur = Math.max(0.25, Math.min(nextStart - breathAmt, curEnd + flow * 4) - cur.start);
+      } else {
+        newDur = Math.min(nextStart, curEnd + flow * 4) - cur.start; // 句内・曲末＝次onset(末尾はセクション末)まで連結（延長のみ）
+        if (newDur < cur.dur) newDur = cur.dur;
+      }
+      if (Math.abs(newDur - cur.dur) > 0.01) cur.dur = Math.round(newDur * 1000) / 1000;
     }
   }
 
