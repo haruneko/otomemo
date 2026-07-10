@@ -460,6 +460,12 @@ describe("SectionEditor (3-lane timeline)", () => {
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("knob-details-toggle"));
     expect(screen.getByLabelText("runs-mid")).toHaveAttribute("aria-pressed", "true");
+    // 「おまかせ」＝density 0.5(未タッチ既定)へ戻る＝従来生成（監査F1）
+    music.mockClear();
+    await userEvent.click(screen.getByLabelText("preset-plain"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    expect((music.mock.calls[0]![1] as Record<string, unknown>).density).toBeCloseTo(0.5);
   });
   it("gen_melody＝対位群はベースレーンが無いと出ない（文脈依存・グレーアウトすら見せない）", async () => {
     getComposition.mockResolvedValue({

@@ -39,7 +39,7 @@ export { loopPositions, spanOverlaps } from "./sectionLanes";
 // P4（2026-07-10・UX再設計）：メロ生成プリセット＝13ノブを"当たり"の組に畳む主動線。値は param-clarity doc §5.1（0/未指定=非送信=bit一致）。
 type PresetV = { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric"; form?: "" | "sentence" };
 const MELODY_PRESETS: { name: string; label: string; v: PresetV }[] = [
-  { name: "plain", label: "おまかせ", v: {} },
+  { name: "plain", label: "おまかせ", v: { density: 0.5 } }, // density は常時送信＝未タッチ既定(0.5)に合わせる＝「おまかせ」=従来生成（監査F1）
   { name: "soft", label: "しっとり", v: { density: 0.3, expression: 0.5, foreground: 0.2, breathe: 0.4 } },
   { name: "bounce", label: "跳ねる", v: { density: 0.5, swing: 0.6, runs: 0.2, expression: 0.2, push: 0.3 } },
   { name: "run", label: "走る", v: { density: 0.8, swing: 0.1, runs: 0.7, expression: 0.2, push: 0.3 } },
@@ -137,16 +137,17 @@ export function SectionEditor({
       </span>
     </div>
   );
-  // 両端スライダー行（連続量）。耳語の両端ラベル。aria は input に付与（getByLabelText で拾える）。
-  const sliderRow = (aria: string, label: string, val: number, set: (n: number) => void, lo: string, hi: string) => (
+  // 両端スライダー行（連続量）。耳語の両端ラベル。aria は input に付与（getByLabelText で拾える）。lock=🔒でサイコロから守る（F3）。
+  const sliderRow = (aria: string, label: string, val: number, set: (n: number) => void, lo: string, hi: string, lock?: string) => (
     <label className="knob-row">
       <span className="knob-name">{label}</span>
       <span className="knob-end">{lo}</span>
       <input aria-label={aria} type="range" min={0} max={1} step={0.1} value={val} onChange={(e) => { set(Number(e.target.value)); setPreset(""); }} />
       <span className="knob-end">{hi}</span>
+      {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={(e) => { e.preventDefault(); toggleLock(lock); }}>{lockedKnobs.has(lock) ? "🔒" : "🔓"}</button>}
     </label>
   );
-  // 🎲：ロックしていないノブを現在値±0.3でランダムに振る（当たりの周辺探索）。0.1刻み・[0,1]。
+  // 🎲：ロックしていないノブを現在値±0.3でランダムに振る（当たりの周辺探索）。0.1刻み・[0,1]。全ロック可能ノブが対象（人間味は仕上げレイヤーで対象外）。
   const rollDice = () => {
     const j = (cur: number, key: string) => (lockedKnobs.has(key) ? cur : Math.max(0, Math.min(1, Math.round((cur + (Math.random() * 0.6 - 0.3)) * 10) / 10)));
     setDensity((d) => j(d, "density")); setSwing((s) => j(s, "swing")); setRuns((r) => j(r, "runs")); setExpression((e) => j(e, "expression"));
@@ -538,8 +539,8 @@ export function SectionEditor({
   }
   // 候補を追加（生成/別案は同種を積む・別種は入れ替え）／単発（ハモリ・崩し）は1件で置換。
   const pushCand = (c: { kind: string; content: unknown }) =>
-    setCands((prev) => (prev.length && prev[0]!.kind !== c.kind ? [{ ...c, cid: candId.current++ }] : [...prev, { ...c, cid: candId.current++ }]));
-  const setSingleCand = (c: { kind: string; content: unknown }) => setCands([{ ...c, cid: candId.current++ }]);
+    setCands((prev) => { if (prev.length && prev[0]!.kind !== c.kind) { setKeptCids(new Set()); return [{ ...c, cid: candId.current++ }]; } return [...prev, { ...c, cid: candId.current++ }]; });
+  const setSingleCand = (c: { kind: string; content: unknown }) => { setKeptCids(new Set()); setCands([{ ...c, cid: candId.current++ }]); }; // 別種入替＝keep掃除（監査F4）
   const toggleKeep = (cid: number) => setKeptCids((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
   const removeCand = (cid: number) => { setCands((prev) => prev.filter((c) => c.cid !== cid)); setKeptCids((prev) => { const n = new Set(prev); n.delete(cid); return n; }); };
   async function auditionCandidate(c: Cand) {
@@ -659,15 +660,15 @@ export function SectionEditor({
                       </button>
                       {detailsOpen && <>
                         <div className="knob-group-h">リズムのノリ</div>
-                        {sliderRow("density", "細かさ", density, setDensity, "スカスカ", "ぎっしり")}
-                        {sliderRow("swing", "跳ね", swing, setSwing, "まっすぐ", "はねる")}
+                        {sliderRow("density", "細かさ", density, setDensity, "スカスカ", "ぎっしり", "density")}
+                        {sliderRow("swing", "跳ね", swing, setSwing, "まっすぐ", "はねる", "swing")}
                         {segRow("runs", "駆け上がり", "16分の走り", runs, setRuns, "runs")}
                         {segRow("push", "前ノリ", "拍を食う", push, setPush, "push")}
                         <div className="knob-group-h">歌い回し</div>
                         {segRow("expression", "タメ", "強拍のもたれ", expression, setExpression, "expression")}
                         {segRow("hook", "口ずさみ", "反復音フック", hook, setHook, "hook")}
-                        {sliderRow("foreground", "冒険度", foreground, setForeground, "おなじみ", "冒険")}
-                        {sliderRow("articulation", "歯切れ", articulation, setArticulation, "なめらか", "くっきり")}
+                        {sliderRow("foreground", "冒険度", foreground, setForeground, "おなじみ", "冒険", "foreground")}
+                        {sliderRow("articulation", "歯切れ", articulation, setArticulation, "なめらか", "くっきり", "articulation")}
                         <div className="knob-group-h">フレーズの組み立て</div>
                         <label className="knob-row" aria-label="phrasing">
                           <span className="knob-name">句割り</span>
