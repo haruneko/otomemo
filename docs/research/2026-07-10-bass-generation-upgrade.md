@@ -1,6 +1,6 @@
 # ベース生成の強化：ドラムに噛む・音楽的なベースラインの理論裏取り
 
-目的＝`genBass`（`apps/api/src/music/generate.ts:919-953`）を「ドラムに噛む・音楽的なベースライン」へ強化するための理論裏取り。将来 `gen_bass` に**ドラムのステップ列（genDrums 出力＝16分グリッドの kick/snare lanes）を入力**として渡す前提。**実装はしない＝調査とドキュメント化のみ**。最終更新 2026-07-10。
+目的＝`genBass`（`apps/api/src/music/generate.ts:919-953`）を「ドラムに噛む・音楽的なベースライン」へ強化するための理論裏取り。将来 `gen_bass` に**ドラムのステップ列（genDrums 出力＝16分グリッドの kick/snare lanes）を入力**として渡す前提。~~実装はしない＝調査とドキュメント化のみ~~ → **④の D/A+B/C は実装済（2026-07-10・design「gen_bass×ドラム結線」・テスト＝`apps/api/test/gen-bass-drums.test.ts`）**。最終更新 2026-07-10。
 
 姉妹doc：[2026-07-10-melody-groove-drum-interaction](2026-07-10-melody-groove-drum-interaction.md)（メロ×ドラム）。**本docは同じ設計原理を踏襲**＝①既定=係数0で従来bit一致②「揃えすぎ禁止」（Keil participatory discrepancies／phenomenal accent 理論、詳細は姉妹docの[②理論](2026-07-10-melody-groove-drum-interaction.md#-理論キーワード別各に出典url)）③ドラム content 無しなら全て無効。他関連：[2026-07-07-drums-bass-extraction-plan](2026-07-07-drums-bass-extraction-plan.md)（実録音からのベース抽出＝本docの「生成」の逆方向）・[sixteenth-rhythm](sixteenth-rhythm.md)（シンコペの2段モデル）。
 
@@ -148,6 +148,15 @@ for each note n:
 ---
 
 ## ⑤ 残論点・要検証
+
+> **実装で確定した事項（2026-07-10）**：
+> - シグネチャ＝`genBass(frame, chords, seed, drums?, opts?)`・ノブ既定0・**drums 無し or 係数0で従来 bit 一致**（fig 経路を丸ごと温存する第二経路＋段ごと独立 Rng（gate=seed+29/approach=seed+101・humanize の makeRng(seed+29) 流儀）で構造的に保証。全既存テスト無変更で緑）。
+> - **アンカー（=ルート強制）の判定**＝「小節内最初のオンセット」or「直前オンセットとルート pc が変わった」（拍位置でなくルート変化でチェンジ頭を検出＝小節内チェンジにも自然に効く）。
+> - **kickLock<0（逆相）は手動符号のみ**＝fourOnFloor 自動検出（残論点2）は未実装のまま（現行 genDrums が4つ打ちを出さないため死にパス回避を優先）。
+> - **交互ベースの5度下（残論点4）は kickLock 経路に入れていない**＝5度は常に上（root+7実音）。従来経路の `(root+7)%12` 窓張り付けは bit 一致のため不変＝下5度はそこに残る（気になれば別途）。
+> - **snareGap は compound(6/8) でも有効**（beatsPerStep 自己記述換算）。kickLock/approach は 4/4系のみ＋ドラムの `steps×beatsPerStep` が拍子と一致する時のみ（防御）。
+> - **段の適用順＝C(approach)→D(gate)**（本doc④どおり）。approach の「短音価≤1拍」判定は**ゲート前のレガート dur**で行う＝ゲートは確率的で切れない場合もあるため、露出保守側（切れる前提で長い接近音を許さない）。
+> - 結線＝`/music/gen_bass`・MCP `gen_bass`（drums＋ノブ露出）・`POST /gen/section`（**rhythm を先に生成→bass へ渡す依存順を確立**・body `bass:{kickLock,snareGap,approach}`）。web UI 露出は別タスク。
 
 1. **kickLock の既定値と上限**＝「完全一致は死ぬ」の定量化。1小節あたりキック採用数の上限や差分保証（ベースにしか無い音を最低1つ）をどう入れるか、耳で較正（理論スコアでは測れない＝[melody-eval-ceiling]）。
 2. **オフビート語彙の発動条件**＝fourOnFloor 検出だけで良いか、mood（EDM/ダンス系）も条件に足すか。現行 genDrums は4つ打ちを出さない（王道8ビート系のみ）＝当面死にパスになる可能性。

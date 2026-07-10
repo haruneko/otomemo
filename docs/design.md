@@ -269,6 +269,12 @@
 - **gen_bass**：出力 kind を melody→**bass**（絶対モード）に。relative 生成は将来。
 - **スライス**：**S1=kind追加＋絶対モード**（低域 PianoRoll・bass レーン・色・gen_bass の kind・notesForContent）→ **S2=相対モード**（解決エンジン[band配置/approach]＋ステップ度数エディタ＋`preview_chords`＋section のコードに解決）。両方を出すが S1→S2 の順で実装。
 - **つんのめり(アンティシペーション・2026-06-23)**：相対ベースで**裏拍始まりかつ次のダウンビートを跨いで伸びる音**は、始点でなく**跨いだ先のダウンビートのコード**で度数解決（例 2拍裏から四分→3拍目表のコード基準）。4/4ロックの押し感。`resolveRelativeBass` 実装済。
+- **gen_bass×ドラム結線（2026-07-10・理論の正準＝`docs/research/2026-07-10-bass-generation-upgrade.md`）**：「リズムは低音が運ぶ」（Hove 2014/Lenc 2018）＝ベースこそドラム結線の本命。`genBass(frame, chords, seed, drums?, opts?)` に **ドラム入力**（genDrums content＝`{rhythm:{steps,bars,beatsPerStep,lanes:[{name,midi,hits,vel?}]}}`・Kick=midi36/Snare=midi38・1小節分を各小節に敷いて解釈）＋**3ノブ** `kickLock`(-1..1 符号付き)/`snareGap`(0..1)/`approach`(0..1)。**鉄則＝drums 無し or 全係数0で従来と bit 一致**（fig 語彙経路は温存＝新経路の「追加」であって置換でない。melodyCells の push/swing/humanize と同じ流儀＝各段は独立 seed 派生 Rng・係数0は段を丸ごとスキップ）。
+  - **kickLock>0＝キック骨格（A）**：小節ごとに オンセット＝`{step0("the one"・キック不在でも)} ∪ {キックstep を確率 kickLock で採用}`。揃えすぎ禁止＝busy mood は キックに無い8分裏を p0.3 で追加（ベース側の差分）、sparse mood は前半のみ（支え）。dur＝次オンセットまで（レガート基準）。**kickLock<0＝逆相（A'）**：キックに**無い**8分裏へ確率 |kickLock| で配置（4つ打ち×裏8分＝Robert Miles 型。fourOnFloor 自動切替は残論点＝当面は符号の手動指定）。**6/8(compound) は A/C 対象外＝従来経路**（push/swing と同じ除外方針）。ドラムの `steps×beatsPerStep` が frame の拍子と合わない時も従来経路（防御）。
+  - **ピッチ規則（B・kickLock経路のみ）**：アンカー（小節内最初のオンセット・コードチェンジ頭）＝ルート（36+pc）。間＝root/5度/オクターブの重み選択で **5度は原則上＝root実音+7**（従来の `(root+7)%12` 窓張り付けは root=G で5度が下に出て持続時 6/4 的＝是正）。音域窓 **33..55**（A1..G3・オクターブ跳躍を可能に）。**従来経路の窓 36..47 は不変＝bit一致**。
+  - **approach（C）**：各コードチェンジの直前**最後のオンセット**を確率 approach で接近音（半音下/上・全音下→次ルート着地＝「beat4=接近・beat1=ターゲット」）。**弱拍・dur≤1拍・チェンジ1.5拍以内**に限定＝強拍/長音への out-of-key 露出ガード。
+  - **snareGap（D）**：スネア位置を跨ぐ音の **dur をスネア頭で切る**（確率 snareGap・onset列は不変・最小 dur 0.25 保証）＝2・4に穴を空けて backbeat を抜く（"leave a hole on 2 and 4"）。beatsPerStep 自己記述換算なので唯一 compound でも有効。
+  - **結線**：`/music/gen_bass`（drums＋ノブ＋seed 透過）・MCP `gen_bass`（同）・**`POST /gen/section`＝rhythm を先に生成→bass へ渡す依存順を確立**（body `bass:{kickLock,snareGap,approach}` でノブ指定可。rhythm を parts に含まない時は drums 無し＝従来）。web UI 露出は別タスク。ゴーストノートは bass notes が vel 未対応のためスコープ外（先行条件＝vel 追加＋synth の鳴り確認）。
 
 ### コード実現層（コンピング／アルペジオ・2026-06-23・要件「実現層」）
 **問題**：`chord_progression`（和声＝抽象）が `program`（音色）を持つのは概念の混線。**和声=何か** と **楽器がどう鳴らすか** を分ける。

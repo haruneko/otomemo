@@ -197,7 +197,10 @@ export function buildHttp(core: Core): FastifyInstance {
         });
         case "melody_essence": return melodyEssence(asNotes(b.notes ?? b.melody));
         case "normalize_to_c": return { notes: normalizeToC(asNotes(b.notes ?? b.melody), b.key) };
-        case "gen_bass": return genBass(b.frame, asChords(b.chords));
+        case "gen_bass": { // drums＋ノブ透過（design「gen_bass×ドラム結線」。drums 無し/係数0＝従来 bit 一致）
+          const num = (x: unknown) => (typeof x === "number" ? x : undefined);
+          return genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach) });
+        }
         case "gen_drums": return genDrums(b.frame, b.seed);
         case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
@@ -230,7 +233,7 @@ export function buildHttp(core: Core): FastifyInstance {
   // gen→compose ワンショット（dogfood P4）：コードを土台に各パートを生成→ネタ化→section に合成、を1コール。
   // 「叩き台を一発で組む」。決定的(seed)。返り＝section ネタ＋合成木。全部 project・tags:["生成"]。
   app.post("/gen/section", async (req) => {
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[] };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number } };
     const frame = b.frame ?? {};
     const key = typeof frame.key === "number" ? frame.key : 0;
     // part 名は素直な別名も受ける（chords→chord_progression, drums→rhythm 等）。指定の揺れで落とさない。
@@ -247,8 +250,10 @@ export function buildHttp(core: Core): FastifyInstance {
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
     if (want.has("chord_pattern")) place("chord_pattern", genChordPattern(frame, b.seed).items[0]!.content, "コード楽器");
     if (want.has("melody")) place("melody", genMelody(frame, chords, b.seed, { useV2: true }).items[0]!.content, "メロ"); // V2化(2026-07-09 評価指摘: assembleだけ旧経路でメロ改善が届いていなかった)
-    if (want.has("bass")) place("bass", genBass(frame, chords, b.seed).items[0]!.content, "ベース");
-    if (want.has("rhythm")) place("rhythm", genDrums(frame, b.seed).items[0]!.content, "ドラム");
+    // ドラム→ベースの依存順（design「gen_bass×ドラム結線」）：rhythm を先に生成し bass へ渡す（無ければ従来）。
+    const drums = want.has("rhythm") ? genDrums(frame, b.seed).items[0]!.content : undefined;
+    if (want.has("bass")) place("bass", genBass(frame, chords, b.seed, drums as Parameters<typeof genBass>[3], b.bass).items[0]!.content, "ベース");
+    if (want.has("rhythm")) place("rhythm", drums, "ドラム");
     return { section: core.getNeta(section.id), composition: core.getComposition(section.id) };
   });
 

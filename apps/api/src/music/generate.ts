@@ -915,11 +915,40 @@ export function genChordPattern(frame?: Frame | null, seed?: number | null): Gen
   return { items: [{ kind: "chord_pattern", content, label: "コード楽器" }], edges: [] };
 }
 
-/** ベースライン（強拍=ルート・弱拍=5度/オクターブ）＋**リズム図形**。C2基準低域。 */
+// ドラム入力（genDrums content と同形）＝gen_bass のドラム結線用（design「gen_bass×ドラム結線」2026-07-10）。
+export interface DrumsInput {
+  rhythm?: {
+    steps?: number;
+    bars?: number;
+    beatsPerStep?: number;
+    lanes?: { name?: string; midi?: number; hits?: number[]; vel?: number }[];
+  } | null;
+}
+// drums content から kick/snare の step 集合を防御的に取り出す（不正は null＝従来経路）。
+function parseDrums(drums?: DrumsInput | null): { steps: number; bps: number; kick: number[]; snare: number[] } | null {
+  const r = drums?.rhythm;
+  if (!r || !Array.isArray(r.lanes)) return null;
+  const steps = Number(r.steps);
+  const bps = Number(r.beatsPerStep);
+  if (!Number.isFinite(steps) || steps <= 0 || !Number.isFinite(bps) || bps <= 0) return null;
+  const laneOf = (midi: number, name: string): number[] => {
+    const lane = r.lanes!.find((l) => l?.midi === midi || l?.name === name);
+    const hits = Array.isArray(lane?.hits) ? lane!.hits! : [];
+    return [...new Set(hits.filter((s) => Number.isInteger(s) && s >= 0 && s < steps))].sort((a, b) => a - b);
+  };
+  return { steps: Math.trunc(steps), bps, kick: laneOf(36, "Kick"), snare: laneOf(38, "Snare") };
+}
+
+/** ベースライン（強拍=ルート・弱拍=5度/オクターブ）＋**リズム図形**。C2基準低域。
+ * drums＋opts（kickLock/snareGap/approach・各既定0）＝ドラムに噛む強化（design「gen_bass×ドラム結線」・
+ * research/2026-07-10-bass-generation-upgrade.md）。**drums 無し or 全係数0 は従来と bit 一致**（fig 経路温存＝
+ * 第二経路の追加。melodyCells push/swing/humanize と同じ流儀＝係数0は段ごとスキップ・段は独立 seed 派生 Rng）。 */
 export function genBass(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
+  drums?: DrumsInput | null,
+  opts?: { kickLock?: number; snareGap?: number; approach?: number },
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
@@ -931,23 +960,110 @@ export function genBass(
   const perBar = bpb;
   const bias = densityBias(f.mood ?? "", f.tempo);
   const notes: { pitch: number; start: number; dur: number }[] = [];
-  let beat = 0;
-  while (beat < total - 1e-9) {
-    const onBar = beat % perBar === 0;
-    const fig = pickFig(rng, bassFigs, bias, total - beat, true); // ベースは毎拍頭から発音
-    const ch = chordAt(Math.floor(beat), chords);
-    const root = ch ? normRoot(ch.root ?? 0) : (f.key ?? 0); // chord 不在時も曲の調を主音に。
-    fig.on.forEach(([off, durRaw], i) => {
-      const t = beat + off;
-      const dur = Math.min(durRaw, total - t);
-      if (dur <= 0) return;
-      // 拍頭(小節/拍の頭)=ルート、間=5度。たまにオクターブ上で動きを。
-      const fifth = (root + 7) % 12;
-      const pc = off === 0 && (onBar || i === 0) ? root : rng.next() < 0.5 ? fifth : root;
-      notes.push({ pitch: 36 + pc, start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
-    });
-    beat += fig.span;
+  // ドラム結線のゲート：drums content が無ければ全ノブ無効＝従来経路（鉄則）。
+  const dr = parseDrums(drums);
+  const kickLock = dr ? Math.max(-1, Math.min(1, opts?.kickLock ?? 0)) : 0;
+  const snareGap = dr ? Math.max(0, Math.min(1, opts?.snareGap ?? 0)) : 0;
+  const approach = dr ? Math.max(0, Math.min(1, opts?.approach ?? 0)) : 0;
+  // A/A' キック骨格＝4/4系のみ・ドラムの1小節長が拍子と一致する時のみ（6/8 は push/swing と同じ除外方針）。
+  const kickPath = !!dr && kickLock !== 0 && info.grouping !== "compound" && Math.abs(dr.steps * dr.bps - perBar) < 1e-6;
+
+  if (kickPath) {
+    // --- A: キック骨格（kickLock>0）／A': 逆相＝キックの居ない8分裏（kickLock<0） ---
+    const kickSet = new Set(dr!.kick);
+    const off8 = Array.from({ length: Math.floor(dr!.steps / 4) }, (_, i) => i * 4 + 2); // 8分裏 step（4/4=2,6,10,14）
+    for (let bar = 0; bar < bars; bar++) {
+      const base = bar * perBar;
+      const stepSet = new Set<number>();
+      if (kickLock > 0) {
+        stepSet.add(0); // "the one"＝小節頭は常に弾く（キック不在でも）
+        for (const s of dr!.kick) if (rng.next() < kickLock) stepSet.add(s); // キック骨格の確率採用
+        // 差分保証（揃えすぎ禁止）：busy はキックに無い8分裏を確率追加＝ベース側の差分。sparse は前半のみ＝支え。
+        if (bias.busy >= 1.5) for (const s of off8) if (!kickSet.has(s) && rng.next() < 0.3) stepSet.add(s);
+        if (bias.long >= 1.5) for (const s of [...stepSet]) if (s >= dr!.steps / 2) stepSet.delete(s);
+      } else {
+        const cand = off8.filter((s) => !kickSet.has(s)); // 逆相＝キックの居ない8分裏（Robert Miles 型）
+        for (const s of cand) if (rng.next() < -kickLock) stepSet.add(s);
+        if (stepSet.size === 0) stepSet.add(cand[0] ?? 2); // 小節を空にしない
+      }
+      const ons = [...stepSet].sort((a, b) => a - b);
+      let prevRoot = -1;
+      ons.forEach((s, i) => {
+        const t = base + s * dr!.bps;
+        const next = i + 1 < ons.length ? base + ons[i + 1]! * dr!.bps : base + perBar; // レガート基準
+        const dur = Math.min(next, total) - t;
+        if (dur <= 0) return;
+        const ch = chordAt(Math.floor(t), chords);
+        const root = ch ? normRoot(ch.root ?? 0) : (f.key ?? 0);
+        const rootP = 36 + root; // ルートは従来と同じ帯（C2..B2）
+        let pitch: number;
+        if (i === 0 || root !== prevRoot) pitch = rootP; // アンカー＝小節内最初 or チェンジ頭＝ルート
+        else {
+          // B: 間＝R/5度/オクターブ。5度は原則「上」＝root+7 実音（(root+7)%12 の窓張り付けで下に出る転回を是正）。
+          const cand = [rootP, rootP + 7, rootP + 12].filter((p) => p <= 55); // 窓 33..55（A1..G3）
+          const w = [2, 1.5, bias.busy >= 1.5 ? 1.2 : 0.6].slice(0, cand.length);
+          pitch = rng.choices(cand, w);
+        }
+        prevRoot = root;
+        notes.push({ pitch: Math.max(33, Math.min(55, pitch)), start: round3(t), dur: round3(dur) });
+      });
+    }
+  } else {
+    // --- 従来経路（fig 語彙・drums 無し/係数0/6-8/不一致 はここ＝bit一致の要） ---
+    let beat = 0;
+    while (beat < total - 1e-9) {
+      const onBar = beat % perBar === 0;
+      const fig = pickFig(rng, bassFigs, bias, total - beat, true); // ベースは毎拍頭から発音
+      const ch = chordAt(Math.floor(beat), chords);
+      const root = ch ? normRoot(ch.root ?? 0) : (f.key ?? 0); // chord 不在時も曲の調を主音に。
+      fig.on.forEach(([off, durRaw], i) => {
+        const t = beat + off;
+        const dur = Math.min(durRaw, total - t);
+        if (dur <= 0) return;
+        // 拍頭(小節/拍の頭)=ルート、間=5度。たまにオクターブ上で動きを。
+        const fifth = (root + 7) % 12;
+        const pc = off === 0 && (onBar || i === 0) ? root : rng.next() < 0.5 ? fifth : root;
+        notes.push({ pitch: 36 + pc, start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
+      });
+      beat += fig.span;
+    }
   }
+
+  // --- C: アプローチノート（approach>0・4/4系のみ）：チェンジ直前の最後のオンセットを接近音→次ルート着地。
+  // 弱拍・短音価・チェンジ1.5拍以内に限定（out-of-key 露出ガード）。独立 Rng＝他段の列を乱さない。
+  if (approach > 0 && info.grouping !== "compound" && notes.length > 0) {
+    const aRng = new Rng((seed ?? 42) + 101);
+    for (const c of chords ?? []) {
+      const cs = Number(c.start ?? 0);
+      if (!(cs > 0) || cs >= total - 1e-9) continue;
+      let idx = -1;
+      for (let i = 0; i < notes.length; i++) { if (notes[i]!.start < cs - 1e-6) idx = i; else break; } // notes は昇順
+      if (idx < 0) continue;
+      const n = notes[idx]!;
+      const pos = n.start % perBar;
+      const strong = Number.isInteger(pos) && pos % 2 === 0; // 4/4 の 1・3拍頭＝強拍
+      if (strong || n.dur > 1 + 1e-6 || cs - n.start > 1.5 + 1e-6) continue;
+      if (aRng.next() >= approach) continue;
+      const target = 36 + normRoot(c.root ?? 0); // beat1=ターゲット（次ルート）
+      n.pitch = Math.max(33, Math.min(55, aRng.choice([target - 1, target + 1, target - 2]))); // 半音下/上・全音下
+    }
+  }
+
+  // --- D: スネアゲート（snareGap>0）：onset 列は不変、スネア頭を跨ぐ音の dur を切る＝2・4に穴（backbeat が抜ける）。
+  // beatsPerStep 自己記述換算なので compound でも有効。最小 dur 0.25（16分）保証。
+  if (snareGap > 0 && dr!.snare.length > 0 && notes.length > 0) {
+    const gRng = new Rng((seed ?? 42) + 29);
+    const dbar = dr!.steps * dr!.bps; // ドラム1小節の拍長（frame と独立に自己記述）
+    const snareBeats: number[] = [];
+    for (let k = 0; k * dbar < total - 1e-9; k++) for (const s of dr!.snare) { const t = k * dbar + s * dr!.bps; if (t < total - 1e-9) snareBeats.push(t); }
+    snareBeats.sort((a, b) => a - b);
+    for (const n of notes) {
+      const next = snareBeats.find((t) => t > n.start + 1e-6);
+      if (next === undefined) continue;
+      if (n.start + n.dur > next + 1e-6 && gRng.next() < snareGap) n.dur = round3(Math.max(0.25, next - n.start));
+    }
+  }
+
   if (notes.length === 0) notes.push({ pitch: 36, start: 0, dur: 1 });
   return { items: [{ kind: "bass", content: { notes }, label: "ベース" }], edges: [] };
 }

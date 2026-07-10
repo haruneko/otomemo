@@ -517,10 +517,22 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       return ok(res);
     },
   );
+  // gen_bass のドラム入力（gen_drums の content と同形）＝design「gen_bass×ドラム結線」2026-07-10。
+  const drumsSchema = z
+    .object({
+      rhythm: z.object({
+        steps: z.number().int().describe("1小節のステップ数（16分グリッド。4/4=16, 6/8=12）"),
+        bars: z.number().int().optional(),
+        beatsPerStep: z.number().describe("1ステップ=何拍か（step→拍の換算。4/4なら0.25）"),
+        lanes: z.array(z.object({ name: z.string().optional(), midi: z.number().int().optional(), hits: z.array(z.number().int()), vel: z.number().optional() })).describe("Kick=midi36/Snare=midi38 のレーンを読む"),
+      }),
+    })
+    .optional()
+    .describe("gen_drums の content をそのまま渡す（同じ composition のドラムにベースを噛ませる）。無ければ従来生成");
   server.registerTool(
     "gen_bass",
-    { title: "ベースを生成", description: "強拍ルート/弱拍5度のベースライン（C2基準低域・コードに合う）。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional() } },
-    async ({ frame, chords }) => ok(genBass(frame, chords)),
+    { title: "ベースを生成", description: "強拍ルート/弱拍5度のベースライン（C2基準低域・コードに合う）。drums(gen_drums の content)を渡すとドラムに噛む：kickLock=キック骨格の採用率(負=逆相・キック裏8分)、snareGap=スネア(2,4拍)頭で音価を切りbackbeatを抜く、approach=コードチェンジ直前を半音/全音接近→次ルート着地。全て既定0=従来。6/8はkickLock/approach対象外。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), drums: drumsSchema, kickLock: z.number().min(-1).max(1).optional().describe("キック骨格 -1..1。正=キックstepにオンセットを乗せる率(小節頭は常に弾く)、負=逆相(キックに無い8分裏へ)。0=従来fig経路"), snareGap: z.number().min(0).max(1).optional().describe("スネア頭で音価を切る強さ 0..1（onset不変・最小dur16分）＝2・4に穴を空けてスネアを抜く"), approach: z.number().min(0).max(1).optional().describe("コードチェンジ直前の接近音化率 0..1（弱拍・短音のみ＝半音上下/全音下→次ルート着地）") } },
+    async ({ frame, chords, seed, drums, kickLock, snareGap, approach }) => ok(genBass(frame, chords, seed, drums, { kickLock, snareGap, approach })),
   );
   server.registerTool(
     "gen_drums",
