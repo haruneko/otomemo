@@ -620,8 +620,15 @@ export function SectionEditor({
           >
             <Icon name="wand" size={16} /> いじる ▾
           </button>
+          {toolsOpen && <div className="tools-backdrop" aria-hidden="true" onClick={() => setToolsOpen(false)} />}
           {toolsOpen && (
             <div className="assign-menu to-right tools-menu" aria-label="tools-menu">
+              {/* P3（2026-07-10・UX再設計）：モバイルは下から迫り上がるシート。掴み＋見出し＋閉じる（CSSで sheet 化）。 */}
+              <div className="sheet-head">
+                <span className="sheet-grab" aria-hidden="true" />
+                <span className="sheet-title">いじる</span>
+                <button type="button" className="sheet-close" aria-label="close-tools" onClick={() => setToolsOpen(false)}>✕</button>
+              </div>
               {/* 生成/ハモリはパートを作る道具＝section 専用。song(編成)は書き出しのみ（#5）。 */}
               {cands.length === 0 && !isSong && (
                 <>

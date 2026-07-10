@@ -647,6 +647,54 @@ article[aria-label="neta-card"].dragging {
      再生バーに突き抜かれず見える・押せる（耳FB 2026-07-09）。 */
   z-index: 7;
 }
+/* P3（2026-07-10・UX再設計）：シートのヘッダ(掴み/見出し/閉じる)＋暗幕。既定(PC)は非表示＝従来ドロップダウン。 */
+.tools-backdrop { display: none; }
+.tools-menu .sheet-head { display: none; }
+.sheet-grab { width: 38px; height: 4px; border-radius: 99px; background: var(--line); }
+.sheet-close { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; width: 30px; height: 30px; }
+/* モバイル＝ドロップダウンでなく「下から迫り上がる生成シート」。z-index戦争/幅216/右見切れを撤去。 */
+@media (max-width: 640px) {
+  .tools-menu {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    max-height: 82vh;
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+    padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+    box-shadow: 0 -18px 40px -18px rgba(0, 0, 0, 0.7);
+    z-index: 9;
+    animation: sheet-up 0.18s ease-out;
+  }
+  .tools-menu .sheet-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    background: var(--card);
+    padding: 8px 2px 6px;
+    margin: 0 -4px 2px;
+    z-index: 1;
+  }
+  .tools-menu .sheet-head .sheet-grab { position: absolute; left: 50%; top: 5px; transform: translateX(-50%); }
+  .tools-menu .sheet-head .sheet-title { font-weight: 700; font-size: 0.9rem; margin-top: 4px; }
+  .tools-menu .sheet-head .sheet-close { margin-left: auto; margin-top: 2px; }
+  .tools-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 8;
+  }
+}
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .tools-menu { animation: none; } }
 .tool-item {
   text-align: left;
   font-size: 0.82rem;

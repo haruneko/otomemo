@@ -152,6 +152,15 @@ describe("SectionEditor (3-lane timeline)", () => {
     await userEvent.click(screen.getAllByLabelText("drop-candidate")[1]!);
     await waitFor(() => expect(screen.getAllByLabelText("candidate-card")).toHaveLength(1));
   });
+  it("P3 いじるシート：ヘッダの閉じるボタンで閉じる（ボトムシート化）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    await userEvent.click(screen.getByLabelText("tools"));
+    expect(screen.getByLabelText("tools-menu")).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("close-tools"));
+    expect(screen.queryByLabelText("tools-menu")).toBeNull(); // シートが閉じる
+  });
   it("いじる▾に生成・書き出しを集約＝閉じてる間は隠れ、開くと現れる（⑤ メロ編集画面と整合）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
