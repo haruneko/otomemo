@@ -245,7 +245,7 @@ function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, 
   return h && h.size ? weightedPickNum(h, r) : 0;
 }
 // コード根(調相対pc)列＋学習モデル → 骨格ピッチ列(bars*beatsPerBar)。各強拍で度数をサンプルし声部進行で配置、次強拍まで保持。
-export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[] } = {}): number[] {
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch" } = {}): number[] {
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
   const bpb = opts.beatsPerBar ?? 4;
   const strongQ = opts.strongQuarters ?? [0, 2];
@@ -268,7 +268,13 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   // ctr(u)=曲頭 tonic+kopf(≈3度上)から曲末 tonic へ線形下降。声部進行の引きをこの ctr へ（旧: 主音レジスタへ 0.7 の
   // 強い引き→全部主音へ潰れていた＝実測 主音pc43%/同音44%）。引きを 0.3 へ弱め、度数サンプルが素直に立つように。
   const kopf = Math.min(hi - tonicIdx, Math.max(2, Math.round(span * 0.4))); // Kopfton の高さ(音階ステップ・≈5̂)
-  const ctrOf = (u: number) => cl(tonicIdx + Math.round(kopf * (nuAll > 1 ? 1 - u / (nuAll - 1) : 0)));
+  // arc："arch"＝下降線でなく **山なり**（sin：句頭tonic→中間で頂点kopf→句末tonic）。実メロのサビは登って落ちる弧が多い
+  // （research 2026-07-10 頂点位置 0.09→実0.32 の是正）。既定(未指定)＝従来の Kopfton→主音 下降＝bit一致。
+  const ctrOf = (u: number) => {
+    const frac = nuAll > 1 ? u / (nuAll - 1) : 0;
+    const shape = opts.arc === "arch" ? Math.sin(Math.PI * frac) : 1 - frac;
+    return cl(tonicIdx + Math.round(kopf * shape));
+  };
   // 声部進行：前音に最寄りのオクターブ＋**構造線 ctr へ緩く寄せる**（旧: 主音へ強く寄せ平面化）。
   const idxOf = (deg: number, pi: number, ctr: number) => { let best = cl(tonicIdx + deg), bdL = Infinity; for (let oc = -2; oc <= 2; oc++) { const i2 = tonicIdx + deg + 7 * oc; if (i2 < lo || i2 > hi) continue; const d = Math.abs(i2 - pi) + 0.2 * Math.abs(i2 - ctr); if (d < bdL) { bdL = d; best = i2; } } return best; };
   // 制約② repetition＝反復強度 0=反復なし(隣接31%)〜1=強反復(61%)。既定0.85(≒58%・耳で「弱い」解消・実曲42%超だが裸の骨格は他の同一性手掛りが無い分 強めが要る)。
@@ -523,7 +529,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth" } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch" } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -895,7 +901,7 @@ export function genMotifMelodyV2(
   // （旧: skel[bar]＝bar番号をbeat扱い＝曲頭数拍に縮退・Urlinie後半が未使用）。6/8 は bpb=3 で生成（旧: 4/4決め打ち）。
   // D-P1(2026-07-09 監査D)：phrases 指定時は句末バー＋カデンツ度数を骨格へ渡す＝骨格が句割りを見る（未指定=従来）。
   const phraseEnds = opts.phrases?.map((p) => ({ bar: Math.max(0, Math.floor((p.startBeat + p.beats - 0.001) / barLen)), deg: p.cadenceDegree === 5 ? 4 : p.cadenceDegree === 2 ? 1 : 0 }));
-  const skel = genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: compound ? [0, 1.5] : [0, 2], start: opts.skelStart ?? 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds }); // C4/F4: 骨格ノブをV2でも透過。skelStart=前セクション最終音の近傍（section.prevEndPitch・未指定=62=bit一致）
+  const skel = genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: compound ? [0, 1.5] : [0, 2], start: opts.skelStart ?? 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds, arc: opts.arc }); // C4/F4: 骨格ノブをV2でも透過。skelStart=前セクション最終音の近傍（section.prevEndPitch・未指定=62=bit一致）
   const r = makeRng(seed + 5);
   // seedMotif 指定時は genBest をスキップしてそれを M に（補完=与モチーフを発展）。既定(未指定)は現挙動と完全一致。
   const M = opts.seedMotif ?? genBest(r);
@@ -1349,6 +1355,39 @@ export function genMotifMelodyV2(
     for (let i = 0; i + 1 < notes.length; i++) {
       const gap = notes[i + 1]!.start - notes[i]!.start;
       if (gap > 0) notes[i]!.dur = Math.min(notes[i]!.dur, Math.round(gap * 1000) / 1000);
+    }
+  }
+
+  // ── pickup(2026-07-11・弱起・アウフタクト)：句頭の最初の音を前の息継ぎ窓へ少し出す＝実メロ70%/生成0%の埋め ──
+  // 句頭(phrases 指定は各句頭・無ければブロック境界)の音を前へずらしダウンビートへタイ。曲頭は除外・onset1点移動のみ＝反復を壊さない。
+  // flow より前＝息継ぎ窓が残っているうちに借りる。既定0＝不変＝bit一致。
+  const pickup = Math.max(0, Math.min(1, opts.pickup ?? 0));
+  if (pickup > 0 && notes.length > 2) {
+    const headBeats = opts.phrases && opts.phrases.length ? opts.phrases.map((p) => p.startBeat).filter((b) => b > 0.1) : Array.from({ length: Math.max(0, nBlk - 1) }, (_, k) => (k + 1) * mb * barLen);
+    for (const hb of headBeats) {
+      const hi = notes.findIndex((n) => n.start >= hb - 1e-6 && n.start - hb < 0.6);
+      if (hi <= 0) continue;
+      const prev = notes[hi - 1]!;
+      const room = notes[hi]!.start - (prev.start + prev.dur);
+      const shift = Math.min(pickup, Math.max(0, room - 0.1), 0.75); // 弱起量（最大0.75拍・前音手前0.1は残す）
+      if (shift < 0.1) continue;
+      notes[hi]!.start = Math.round((notes[hi]!.start - shift) * 1000) / 1000;
+      notes[hi]!.dur = Math.round((notes[hi]!.dur + shift) * 1000) / 1000; // ダウンビートまでタイ
+    }
+    notes.sort((a, b) => a.start - b.start);
+  }
+
+  // ── flow(2026-07-11・オーナーFB「塊がぶつ切れ」)：塊の連結＋句末/最終音の長音化＝穴(息継ぎ)を白玉に変える ──
+  // 症状（research 2026-07-10-melody-phrasing-length-direction）＝各ブロック末尾に息継ぎが焼き込まれ長い塊/白玉が出ない。
+  // 後段で dur のみ延長（onset/pitch/mv 不変＝反復・和声後処理・既存ノブと無干渉）。各音を次onset(最終音はセクション末)まで
+  // flow*4拍を上限に伸ばす＝flow高で連結＋句末着地が money note 化。既定0＝dur不変＝bit一致（Stage1・後段のみ・最小）。
+  const flow = Math.max(0, Math.min(1, opts.flow ?? 0));
+  if (flow > 0 && notes.length > 0) {
+    const secEnd = bars * barLen;
+    for (let i = 0; i < notes.length; i++) {
+      const nextStart = i + 1 < notes.length ? notes[i + 1]!.start : secEnd;
+      const gap = nextStart - (notes[i]!.start + notes[i]!.dur);
+      if (gap > 0.01) notes[i]!.dur = Math.round((notes[i]!.dur + Math.min(gap, flow * 4)) * 1000) / 1000;
     }
   }
 

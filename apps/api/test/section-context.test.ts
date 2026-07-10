@@ -165,4 +165,23 @@ describe("セクション役割文脈（frame.section）", () => {
     const canon = notesOf(genMelody({ key: 0, bars: 8, section: { role: "prechorus" } }, CH, 6, V2));
     expect(alias).toEqual(canon);
   });
+
+  // (g) 句フレージング（2026-07-11）：role=chorus は flow/pickup/arc が発火し、role無しより連続歌唱の塊が長くなる
+  const longestSeg = (ns: N[]) => {
+    const s = [...ns].sort((a, b) => a.start - b.start);
+    let best = 0, segStart = s[0]!.start, prevEnd = s[0]!.start + s[0]!.dur;
+    for (let i = 1; i < s.length; i++) {
+      if (s[i]!.start - prevEnd > 0.5) { best = Math.max(best, prevEnd - segStart); segStart = s[i]!.start; }
+      prevEnd = Math.max(prevEnd, s[i]!.start + s[i]!.dur);
+    }
+    return Math.max(best, prevEnd - segStart);
+  };
+  it("(g) role=chorus は句フレージングが効き、連続歌唱塊が role無しより長い（flow 発火）", () => {
+    let noRole = 0, chorus = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      noRole += longestSeg(notesOf(genMelody({ key: 0, bars: 8 }, CH, seed, V2)));
+      chorus += longestSeg(notesOf(genMelody({ key: 0, bars: 8, section: { role: "chorus" } }, CH, seed, V2)));
+    }
+    expect(chorus).toBeGreaterThan(noRole * 1.3); // 塊が明確に長い（穴が白玉で埋まる）
+  });
 });
