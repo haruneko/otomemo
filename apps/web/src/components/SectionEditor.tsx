@@ -487,6 +487,14 @@ export function SectionEditor({
       meter: liveMeter,
       tags: neta.tags,
     });
+    // 再生成メロ＝置換：同レーンで新メロ(位置0)と尺が重なる既存子を先に外す＝二重化を防ぐ
+    // （placeAt は重なりを拒否するが、生成候補は「置く」＝差し替え意図なので拒否でなく既存を退ける）。
+    if (lane) {
+      const dur = contentDur(cand.kind, cand.content);
+      for (const c of laneChildren(lane)) {
+        if (spanOverlaps(0, dur, c.position, childDur(c))) await api.removeChild(neta.id, c.node.neta.id, c.position);
+      }
+    }
     await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
     setCand(null);
     await load();
