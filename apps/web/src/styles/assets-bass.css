@@ -781,6 +781,22 @@ article[aria-label="neta-card"].dragging {
   font-weight: 600;
 }
 /* P4/P5（2026-07-10・UX再設計）：プリセット主役＋🎲サイコロ＋耳語ラベルの群 */
+/* E2E[中]：詳細トグルは既定 button の青プライマリで最も目立ち、実際の主action(生成)より前に出ていた＝控えめに（優先度是正）。 */
+.knob-details-toggle {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-weight: 500;
+  font-size: 0.78rem;
+  padding: 5px 11px;
+  margin: 2px 0;
+}
+.knob-details-toggle.on {
+  color: var(--k-melody);
+  border-color: var(--k-melody);
+}
 .preset-head {
   display: flex;
   align-items: flex-start;

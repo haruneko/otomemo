@@ -630,7 +630,8 @@ export function SectionEditor({
                 <button type="button" className="sheet-close" aria-label="close-tools" onClick={() => setToolsOpen(false)}>✕</button>
               </div>
               {/* 生成/ハモリはパートを作る道具＝section 専用。song(編成)は書き出しのみ（#5）。 */}
-              {cands.length === 0 && !isSong && (
+              {/* E2E[高]：候補生成中もプリセット/生成ボタンを出す＝別プリセットで作り直しがワンタップ（旧: 候補ありで生成UI丸ごと非表示＝多段操作）。候補は別パネル(トレイ)で並行表示。 */}
+              {!isSong && (
                 <>
                   <div className="tools-sep">この進行に生成</div>
                   {GEN_PARTS.filter((part) => !part.needsChords || sectionChords().length > 0).map((part) => (

@@ -152,6 +152,25 @@ describe("SectionEditor (3-lane timeline)", () => {
     await userEvent.click(screen.getAllByLabelText("drop-candidate")[1]!);
     await waitFor(() => expect(screen.getAllByLabelText("candidate-card")).toHaveLength(1));
   });
+  it("E2E[高] 候補があっても生成UI(プリセット/生成ボタン)は消えない＝別プリセットで作り直せる", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await screen.findByLabelText("candidate-tray"); // 候補が出た
+    await userEvent.click(screen.getByLabelText("tools")); // シートを開き直す
+    // 旧: 候補ありで生成UI丸ごと非表示だった。今: プリセット/生成ボタンが残り、別プリセットで作り直せる。
+    expect(screen.getByLabelText("melody-presets")).toBeInTheDocument();
+    expect(screen.getByLabelText("gen-gen_melody")).toBeInTheDocument();
+  });
   it("P3 いじるシート：ヘッダの閉じるボタンで閉じる（ボトムシート化）", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);

@@ -8,6 +8,11 @@ body:has(.dialog-backdrop) .chat-bubble {
 body:has(.mixer-pop) .chat-bubble {
   display: none;
 }
+/* E2E[中]：いじる生成シート/候補パネル表示中はバブルが被って操作不能（詳細ノブ・ロック・transport）＝隠す。閉じれば即戻る。 */
+body:has(.tools-backdrop) .chat-bubble,
+body:has(.reshape-bar) .chat-bubble {
+  display: none;
+}
 @media (max-width: 820px) {
   /* モバイルで編集/プロジェクト中も Chat に到達できるようバブルは残す（作曲相談は編集中こそ要る）。
      下端トランスポートに被らないよう上へ逃がし少し小さく。以前は display:none で到達不能だった（監査 HIGH）。 */
