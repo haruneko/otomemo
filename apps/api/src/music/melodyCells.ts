@@ -18,6 +18,14 @@ const nearestIdx = (sp: number[], pitch: number): number => {
   return bi;
 };
 const clampScale = (sp: number[], i: number): number => sp[Math.max(0, Math.min(sp.length - 1, i))]!;
+// 動機の度数列（絶対形）を mv（差分）から遅延導出＝deg[0]=0 の開始音アンカー・cumsum（Phase2案B・U1）。
+// mv を source-of-truth に保ち、preserve レンダの実現点でのみ導出＝二重表現の同期崩壊を構造的に回避（コード#2）。
+// 同度(deg[i]===deg[i-1])＝反復音・回帰が第一級で表現される。invert(mv→-mv)は deg→-deg に自動追従。
+export const motifDegrees = (mv: number[]): number[] => {
+  const deg: number[] = []; let c = 0;
+  for (let i = 0; i < mv.length; i++) { c += i === 0 ? 0 : mv[i]!; deg.push(c); }
+  return deg;
+};
 
 type Note = { pitch: number; start: number; dur: number; vel?: number };
 
@@ -515,7 +523,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve" } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -534,6 +542,11 @@ export function genMotifMelodyV2(
   // runs(2026-07-09 Step4・design#12-M)：走句の出やすさ。語彙を「隣接16分ペア数」で再重み付け＋選別ペナルティを減衰。
   // 未指定=従来分布。16分0%の犯人は語彙でなく選別抑圧なので、抑圧を解除して狙って走句を出す（新ピッチ論理なし）。
   const rns = opts.runs === undefined ? undefined : Math.max(0, Math.min(1, opts.runs));
+  // hook(2026-07-10・Phase2案B・U2)：反復音(move=0)を動機の骨として保持する強さ。既定0＝従来通り必ず±1へ潰す＝bit一致。
+  // hookKeep は「位置重み付き」＝句頭/句末(frac 0/1)で高く・中間(0.5)で低い（一律確率は"どもり"を作る＝理論#4）。
+  // 単一r()ドロー形（下 :625/:686 で使用）＝hook=0 で u<0（常偽）→従来の u<0.5?1:-1 と同一の1回消費＝bit一致（コード#1）。
+  const hk = Math.max(0, Math.min(1, opts.hook ?? 0));
+  const hookKeep = (frac: number): number => (hk <= 0 ? 0 : hk * (0.3 + 0.7 * Math.abs(2 * frac - 1)));
   const runPairs = (p: string): number => { let c = 0; for (let i = 0; i + 1 < p.length; i++) if (p[i] === "x" && p[i + 1] === "x") c++; return c; };
   const runW = (p: string): number => (rns === undefined ? 1 : Math.pow(runPairs(p) + 1, rns * 1.5));
   const rhythmVocab: Record<string, number> = dens === undefined && rns === undefined
@@ -616,15 +629,21 @@ export function genMotifMelodyV2(
     // runs>0の12枠のみ隣接16分が生じ走句になる（既存の run方向保持・gap-fill にそのまま乗る＝新ピッチ論理なし）。
     const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
     const mv: number[] = [0];
-    let rdir = r() < 0.5 ? 1 : -1, leaps = 0;
+    let rdir = r() < 0.5 ? 1 : -1, leaps = 0, zeroRun = 0;
     for (let i = 1; i < ons.length; i++) {
       let m: number;
       if (run[i]) { if (!run[i - 1]) rdir = r() < 0.5 ? 1 : -1; m = rdir; }
       else {
         m = weightedPickNum(moveTrans.get(clamp7(mv[i - 1]!)) ?? new Map(), r);
-        if (m === 0) m = r() < 0.5 ? 1 : -1;
+        if (m === 0) {
+          // hook：単一r()ドロー。hook=0 は従来通り必ず±1（u<0 常偽）＝bit一致。hook>0 は位置重み＋連打上限2で反復音を保持。
+          const u = r();
+          const keep = hk > 0 && zeroRun < 2 && u < hookKeep((i - 1) / Math.max(1, ons.length - 1));
+          m = keep ? 0 : (u < 0.5 ? 1 : -1);
+        }
         if (Math.abs(m) >= 3) { if (leaps >= 1) m = Math.sign(m); else leaps++; }
       }
+      zeroRun = m === 0 ? zeroRun + 1 : 0;
       mv.push(m);
     }
     for (let i = 1; i < mv.length - 1; i++) if (Math.abs(mv[i]!) >= 3) mv[i + 1] = -Math.sign(mv[i]!) * Math.abs(mv[i + 1]! || 1); // 跳躍後は逆向き(gap-fill)
@@ -680,11 +699,16 @@ export function genMotifMelodyV2(
     const k = Math.max(2, Math.ceil(M.ons.length / 2));
     const mv = M.mv.slice(0, k);
     const rdir = r() < 0.5 ? 1 : -1;
+    let zeroRun = 0;
     for (let i = k; i < M.ons.length; i++) {
-      if (M.run[i]) { mv.push(rdir); continue; }
+      if (M.run[i]) { mv.push(rdir); zeroRun = 0; continue; }
       let m = weightedPickNum(moveTrans.get(clamp7(mv[i - 1]!)) ?? new Map(), r);
-      if (m === 0) m = r() < 0.5 ? 1 : -1;
+      if (m === 0) {
+        const u = r(); // hook 単一ドロー（hook=0 でbit一致）
+        m = (hk > 0 && zeroRun < 2 && u < hookKeep((i - 1) / Math.max(1, M.ons.length - 1))) ? 0 : (u < 0.5 ? 1 : -1);
+      }
       if (Math.abs(m) >= 3) m = Math.sign(m) * 2;
+      zeroRun = m === 0 ? zeroRun + 1 : 0;
       mv.push(m);
     }
     return { ons: M.ons, mv, run: M.run };
