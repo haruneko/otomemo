@@ -36,6 +36,18 @@ import {
 // テストが従来 SectionEditor から import している純関数は再export して import 面を不変に保つ。
 export { loopPositions, spanOverlaps } from "./sectionLanes";
 
+// P4（2026-07-10・UX再設計）：メロ生成プリセット＝13ノブを"当たり"の組に畳む主動線。値は param-clarity doc §5.1（0/未指定=非送信=bit一致）。
+type PresetV = { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric"; form?: "" | "sentence" };
+const MELODY_PRESETS: { name: string; label: string; v: PresetV }[] = [
+  { name: "plain", label: "おまかせ", v: {} },
+  { name: "soft", label: "しっとり", v: { density: 0.3, expression: 0.5, foreground: 0.2, breathe: 0.4 } },
+  { name: "bounce", label: "跳ねる", v: { density: 0.5, swing: 0.6, runs: 0.2, expression: 0.2, push: 0.3 } },
+  { name: "run", label: "走る", v: { density: 0.8, swing: 0.1, runs: 0.7, expression: 0.2, push: 0.3 } },
+  { name: "sparkle", label: "きらきら", v: { density: 0.7, swing: 0.2, runs: 0.5, expression: 0.4, foreground: 0.5 } },
+  { name: "song", label: "歌もの", v: { density: 0.45, swing: 0.15, runs: 0.1, expression: 0.3, hook: 0.5, articulation: 0.4, phrasing: "symmetric" } },
+  { name: "hook", label: "口ずさめる", v: { density: 0.4, swing: 0.1, expression: 0.2, hook: 0.8, articulation: 0.6, foreground: 0.1 } },
+];
+
 export function SectionEditor({
   neta,
   keyPc,
@@ -69,7 +81,6 @@ export function SectionEditor({
   const [toolsOpen, setToolsOpen] = useState(false); // いじる▾ メニュー（生成/ハモリ/書き出しを集約・メロ編集画面と整合・⑤）
   const toolsRef = useRef<HTMLDivElement>(null);
   useDismiss(toolsRef, toolsOpen, useCallback(() => setToolsOpen(false), [])); // 外タップ/Escで閉じる
-  const [knobHelp, setKnobHelp] = useState(false); // ？で各つまみの一行説明を一括展開（スマホはホバー説明が出ない・耳FB 2026-07-09）
   const previewPlay = useRef<PlaybackHandle | null>(null); // ピッカー項目の試聴（配置前に耳で確認）
   // #5 container kind でレーン/尺を差し替え（song=section を並べる編成・section=パート専用）。
   const isSong = neta.kind === "song";
@@ -100,6 +111,48 @@ export function SectionEditor({
   const [hook, setHook] = useState(0);
   const [articulation, setArticulation] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）＝既定は畳む（ノブの壁の解消）
+  // P4（2026-07-10・UX再設計）：プリセット主役＝13ノブを"当たり"の組に畳む。値は param-clarity doc §5.1（0/未指定=非送信=bit一致）。
+  const [preset, setPreset] = useState<string>(""); // 選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）
+  // P5（2026-07-10・UX再設計）：サイコロ＝プリセットを中心にノブをランダムに振る。ロックしたノブは固定して振る＝ばらつき×制御。
+  const [lockedKnobs, setLockedKnobs] = useState<Set<string>>(new Set());
+  const toggleLock = (k: string) => setLockedKnobs((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const applyPreset = (name: string, v: { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric"; form?: "" | "sentence" }) => {
+    setDensity(v.density ?? 0); setSwing(v.swing ?? 0); setRuns(v.runs ?? 0); setExpression(v.expression ?? 0); setPush(v.push ?? 0);
+    setHook(v.hook ?? 0); setArticulation(v.articulation ?? 0); setForeground(v.foreground ?? 0); setBreathe(v.breathe ?? 0);
+    setPhrasing(v.phrasing ?? ""); setForm(v.form ?? ""); setPreset(name);
+  };
+  // OFF/弱/中/強 の4段＝値をバケット表示（プリセットの連続値も正しい段に光る）＋タップで代表値へスナップ。手で触るとプリセット選択は外す。
+  const bucket = (v: number) => (v < 0.15 ? 0 : v < 0.45 ? 1 : v < 0.75 ? 2 : 3);
+  const SEG4: [string, number][] = [["OFF", 0], ["弱", 0.3], ["中", 0.6], ["強", 0.9]];
+  // OFF/弱/中/強 のセグメント行（数値ノブ）。lock=🎲サイコロで固定するノブ（P5）。
+  const SEG_LV = ["off", "weak", "mid", "strong"];
+  const segRow = (aria: string, label: string, sub: string, val: number, set: (n: number) => void, lock?: string) => (
+    <div className="knob-seg" role="group" aria-label={aria}>
+      <span className="knob-name">{label}<small>{sub}</small></span>
+      <span className="seg-ctl">
+        {SEG4.map(([lab, v], i) => (
+          <button key={lab} type="button" className={"seg-b" + (bucket(val) === i ? " on" : "")} aria-label={`${aria}-${SEG_LV[i]}`} aria-pressed={bucket(val) === i} onClick={() => { set(v); setPreset(""); }}>{lab}</button>
+        ))}
+        {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={() => toggleLock(lock)}>{lockedKnobs.has(lock) ? "🔒" : "🔓"}</button>}
+      </span>
+    </div>
+  );
+  // 両端スライダー行（連続量）。耳語の両端ラベル。aria は input に付与（getByLabelText で拾える）。
+  const sliderRow = (aria: string, label: string, val: number, set: (n: number) => void, lo: string, hi: string) => (
+    <label className="knob-row">
+      <span className="knob-name">{label}</span>
+      <span className="knob-end">{lo}</span>
+      <input aria-label={aria} type="range" min={0} max={1} step={0.1} value={val} onChange={(e) => { set(Number(e.target.value)); setPreset(""); }} />
+      <span className="knob-end">{hi}</span>
+    </label>
+  );
+  // 🎲：ロックしていないノブを現在値±0.3でランダムに振る（当たりの周辺探索）。0.1刻み・[0,1]。
+  const rollDice = () => {
+    const j = (cur: number, key: string) => (lockedKnobs.has(key) ? cur : Math.max(0, Math.min(1, Math.round((cur + (Math.random() * 0.6 - 0.3)) * 10) / 10)));
+    setDensity((d) => j(d, "density")); setSwing((s) => j(s, "swing")); setRuns((r) => j(r, "runs")); setExpression((e) => j(e, "expression"));
+    setPush((p) => j(p, "push")); setHook((h) => j(h, "hook")); setArticulation((a) => j(a, "articulation")); setForeground((f) => j(f, "foreground")); setBreathe((b) => j(b, "breathe"));
+    setPreset("");
+  };
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
@@ -584,44 +637,17 @@ export function SectionEditor({
                       {genBusy ? "生成中…" : part.label}
                     </button>
                   ))}
-                  {/* メロの細かさ・跳ねノブ（耳FB 2026-07-08）＝ガチャの当たり幅を人が絞る。押す前に設定→メロ生成。 */}
+                  {/* P4/P5（2026-07-10・UX再設計）：プリセット主役＋🎲サイコロ＋耳語ラベルの詳細（群でまとめる）。押す前に設定→生成。 */}
                   {sectionChords().length > 0 && (
                     <div className="gen-knobs" onClick={(e) => e.stopPropagation()}>
-                      {/* ？＝各つまみの一行説明を一括で開閉（スマホはtitleホバーが出ないため）。既定は畳んで薄く。 */}
-                      <button
-                        type="button"
-                        className={"knob-help-toggle" + (knobHelp ? " on" : "")}
-                        aria-label="knob-help-toggle"
-                        aria-pressed={knobHelp}
-                        onClick={() => setKnobHelp((v) => !v)}
-                      >
-                        {knobHelp ? "？ 説明を隠す" : "？ 各つまみの説明"}
-                      </button>
-                      <label className="knob-row" aria-label="density">
-                        <span>細かさ</span>
-                        <input type="range" min={0} max={1} step={0.1} value={density} onChange={(e) => setDensity(Number(e.target.value))} />
-                        <span className="knob-val">{density < 0.34 ? "疎" : density > 0.66 ? "細" : "中"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">音数（疎↔細かい）</small>}
-                      <label className="knob-row" aria-label="swing">
-                        <span>跳ね</span>
-                        <input type="range" min={0} max={1} step={0.1} value={swing} onChange={(e) => setSwing(Number(e.target.value))} />
-                        <span className="knob-val">{swing < 0.1 ? "—" : swing > 0.66 ? "強" : "跳"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">リズムの跳ね（ストレート↔シャッフル）</small>}
-                      <label className="knob-row" aria-label="expression">
-                        <span>表情</span>
-                        <input type="range" min={0} max={1} step={0.1} value={expression} onChange={(e) => setExpression(Number(e.target.value))} />
-                        <span className="knob-val">{expression < 0.1 ? "素直" : expression > 0.66 ? "濃" : "もたれ"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">強拍のタメ・もたれ（素直↔倚音や掛留）</small>}
-                      <label className="knob-row" aria-label="runs">
-                        <span>走句</span>
-                        <input type="range" min={0} max={1} step={0.1} value={runs} onChange={(e) => setRuns(Number(e.target.value))} />
-                        <span className="knob-val">{runs < 0.1 ? "—" : runs > 0.66 ? "多" : "走"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">16分の走り（速い連なりの出やすさ）</small>}
-                      {/* 詳細段（progressive disclosure）＝よく使う4つ(細かさ/跳ね/表情/走句)の下に畳む。既定は閉じてノブの壁を解消。 */}
+                      <div className="preset-head">
+                        <div className="preset-row" aria-label="melody-presets">
+                          {MELODY_PRESETS.map((p) => (
+                            <button key={p.name} type="button" className={"chip" + (preset === p.name ? " on" : "")} aria-label={`preset-${p.name}`} aria-pressed={preset === p.name} onClick={() => applyPreset(p.name, p.v)}>{p.label}</button>
+                          ))}
+                        </div>
+                        <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（🔒は固定）" onClick={rollDice}>🎲</button>
+                      </div>
                       <button
                         type="button"
                         className={"knob-details-toggle" + (detailsOpen ? " on" : "")}
@@ -629,74 +655,49 @@ export function SectionEditor({
                         aria-expanded={detailsOpen}
                         onClick={() => setDetailsOpen((v) => !v)}
                       >
-                        {detailsOpen ? "▾ 詳細を隠す" : "▸ 詳細"}
+                        {detailsOpen ? "▾ 細かく設定する" : "▸ 細かく設定する"}
                       </button>
                       {detailsOpen && <>
-                      <label className="knob-row" aria-label="push">
-                        <span>食い</span>
-                        <input type="range" min={0} max={1} step={0.1} value={push} onChange={(e) => setPush(Number(e.target.value))} />
-                        <span className="knob-val">{push < 0.1 ? "—" : push > 0.66 ? "強" : "食"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">拍を食うシンコペ（頭を少し前へ）</small>}
-                      <label className="knob-row" aria-label="humanize">
-                        <span>人間味</span>
-                        <input type="range" min={0} max={1} step={0.1} value={humanize} onChange={(e) => setHumanize(Number(e.target.value))} />
-                        <span className="knob-val">{humanize < 0.1 ? "—" : humanize > 0.66 ? "強" : "揺"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">強弱と微妙なタイミング揺れ（機械的↔人間っぽく）</small>}
-                      <label className="knob-row" aria-label="foreground">
-                        <span>自由さ</span>
-                        <input type="range" min={0} max={1} step={0.1} value={foreground} onChange={(e) => setForeground(Number(e.target.value))} />
-                        <span className="knob-val">{foreground < 0.1 ? "反復" : foreground > 0.66 ? "自由" : "混"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">反復↔冒険（跳んだ音・自由な材料を混ぜる）</small>}
-                      <label className="knob-row" aria-label="breathe">
-                        <span>入り遅れ</span>
-                        <input type="range" min={0} max={1} step={0.1} value={breathe} onChange={(e) => setBreathe(Number(e.target.value))} />
-                        <span className="knob-val">{breathe < 0.1 ? "—" : breathe > 0.66 ? "遅" : "息"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">句アタマを少し遅らせる（息継ぎ感）</small>}
-                      <label className="knob-row" aria-label="phrasing">
-                        <span>句割り</span>
-                        <select value={phrasing} onChange={(e) => setPhrasing(e.target.value as "" | "symmetric" | "asymmetric")}>
-                          <option value="">従来</option>
-                          <option value="symmetric">対称(問→答)</option>
-                          <option value="asymmetric">非対称(3+3+2)</option>
-                        </select>
-                      </label>
-                      {knobHelp && <small className="knob-help">フレーズの分け方（問い→答え／3+3+2の呼吸）</small>}
-                      <label className="knob-row" aria-label="form">
-                        <span>形式</span>
-                        <select value={form} onChange={(e) => setForm(e.target.value as "" | "sentence")}>
-                          <option value="">従来</option>
-                          <option value="sentence">起承転結(文)</option>
-                        </select>
-                      </label>
-                      {knobHelp && <small className="knob-help">曲の展開の型（提示→反復→畳み掛け→まとめ＝起承転結）</small>}
-                      {/* 対位（メロがベースを見て並行完全音程/b9を避ける）＝要望②。bassレーンが無いと相手がいないので disabled。 */}
-                      <label className="knob-row">
-                        <span>対位</span>
-                        <select aria-label="counter" value={counter} onChange={(e) => setCounter(e.target.value as "" | "weak" | "mid" | "strong")} disabled={sectionBass().length === 0} title={sectionBass().length === 0 ? "ベースレーンが必要です" : "ベースに対して反行/斜行し並行を避ける"}>
-                          <option value="">OFF</option>
-                          <option value="weak">弱</option>
-                          <option value="mid">中</option>
-                          <option value="strong">強</option>
-                        </select>
-                      </label>
-                      {knobHelp && <small className="knob-help">ベースを見て並行5度/8度を避ける（要ベースレーン・弱0.2/中0.4/強0.7）</small>}
-                      {/* 反復音モチーフ（Phase2案B）：hook>0 で動機保存レンダ＝ラーラ/ソッソッの反復音フックが出る。 */}
-                      <label className="knob-row">
-                        <span>反復音</span>
-                        <input aria-label="hook" type="range" min={0} max={1} step={0.1} value={hook} onChange={(e) => setHook(Number(e.target.value))} />
-                        <span className="knob-val">{hook < 0.1 ? "—" : hook > 0.66 ? "強" : "反"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">同音の反復フック（ラーラ/ソッソッ）を動機として保持＝歌える手癖。0=従来</small>}
-                      <label className="knob-row">
-                        <span>発音</span>
-                        <input aria-label="articulation" type="range" min={0} max={1} step={0.1} value={articulation} onChange={(e) => setArticulation(Number(e.target.value))} />
-                        <span className="knob-val">{articulation < 0.1 ? "—" : articulation > 0.66 ? "歯切" : "切"}</span>
-                      </label>
-                      {knobHelp && <small className="knob-help">連打を短く切って隙間を作る（レガート↔スタッカート）＝反復音が1本に潰れず聞こえる</small>}
+                        <div className="knob-group-h">リズムのノリ</div>
+                        {sliderRow("density", "細かさ", density, setDensity, "スカスカ", "ぎっしり")}
+                        {sliderRow("swing", "跳ね", swing, setSwing, "まっすぐ", "はねる")}
+                        {segRow("runs", "駆け上がり", "16分の走り", runs, setRuns, "runs")}
+                        {segRow("push", "前ノリ", "拍を食う", push, setPush, "push")}
+                        <div className="knob-group-h">歌い回し</div>
+                        {segRow("expression", "タメ", "強拍のもたれ", expression, setExpression, "expression")}
+                        {segRow("hook", "口ずさみ", "反復音フック", hook, setHook, "hook")}
+                        {sliderRow("foreground", "冒険度", foreground, setForeground, "おなじみ", "冒険")}
+                        {sliderRow("articulation", "歯切れ", articulation, setArticulation, "なめらか", "くっきり")}
+                        <div className="knob-group-h">フレーズの組み立て</div>
+                        <label className="knob-row" aria-label="phrasing">
+                          <span className="knob-name">句割り</span>
+                          <select value={phrasing} onChange={(e) => { setPhrasing(e.target.value as "" | "symmetric" | "asymmetric"); setPreset(""); }}>
+                            <option value="">おまかせ</option>
+                            <option value="symmetric">対称(問→答)</option>
+                            <option value="asymmetric">非対称(3+3+2)</option>
+                          </select>
+                        </label>
+                        <label className="knob-row" aria-label="form">
+                          <span className="knob-name">展開</span>
+                          <select value={form} onChange={(e) => { setForm(e.target.value as "" | "sentence"); setPreset(""); }}>
+                            <option value="">おまかせ</option>
+                            <option value="sentence">起承転結(文)</option>
+                          </select>
+                        </label>
+                        {segRow("breathe", "息継ぎ", "句アタマの間", breathe, setBreathe, "breathe")}
+                        {sectionBass().length > 0 && <>
+                          <div className="knob-group-h">他パートとの絡み</div>
+                          <div className="knob-seg" aria-label="counter">
+                            <span className="knob-name">ベースをよける<small>並行5度8度を避ける</small></span>
+                            <span className="seg-ctl">
+                              {([["OFF", ""], ["弱", "weak"], ["中", "mid"], ["強", "strong"]] as [string, "" | "weak" | "mid" | "strong"][]).map(([lab, v]) => (
+                                <button key={v || "off"} type="button" className={"seg-b" + (counter === v ? " on" : "")} aria-label={`counter-${v || "off"}`} aria-pressed={counter === v} onClick={() => { setCounter(v); setPreset(""); }}>{lab}</button>
+                              ))}
+                            </span>
+                          </div>
+                        </>}
+                        <div className="knob-group-h">人間味・仕上げ</div>
+                        {sliderRow("humanize", "人間味", humanize, setHumanize, "きっちり", "揺らぐ")}
                       </>}
                     </div>
                   )}

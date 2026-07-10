@@ -382,14 +382,14 @@ describe("SectionEditor (3-lane timeline)", () => {
     await screen.findByLabelText("block-b1@0");
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("knob-details-toggle")); // 詳細段を開く
-    await userEvent.selectOptions(screen.getByLabelText("counter"), "mid"); // 対位=中
+    await userEvent.click(screen.getByLabelText("counter-mid")); // 対位=中（セグメント）
     await userEvent.click(screen.getByLabelText("gen-gen_melody"));
     await waitFor(() => expect(music).toHaveBeenCalled());
     const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
     expect(body.bass).toEqual([{ pitch: 36, start: 0, dur: 1 }, { pitch: 43, start: 2, dur: 1 }]);
     expect(body.counter).toBeCloseTo(0.4); // 中=0.4（弱0.2/中0.4/強0.7）
   });
-  it("メロノブ＝詳細段は既定で畳まれ、基本(細かさ/走句)は出る／詳細(食い/対位)はトグルで現れる", async () => {
+  it("メロノブ＝プリセットは常時・ノブは詳細に畳む／対位群はベース在時のみ（P4）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
       children: [
@@ -399,13 +399,13 @@ describe("SectionEditor (3-lane timeline)", () => {
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
-    expect(screen.getByLabelText("density")).toBeInTheDocument(); // 基本段は常時
-    expect(screen.getByLabelText("runs")).toBeInTheDocument();
-    expect(screen.queryByLabelText("push")).toBeNull(); // 詳細段は畳まれている
-    expect(screen.queryByLabelText("counter")).toBeNull();
+    expect(screen.getByLabelText("melody-presets")).toBeInTheDocument(); // プリセットは常時（主動線）
+    expect(screen.queryByLabelText("density")).toBeNull(); // ノブは詳細に畳まれている
+    expect(screen.queryByLabelText("runs-off")).toBeNull();
     await userEvent.click(screen.getByLabelText("knob-details-toggle"));
-    expect(screen.getByLabelText("push")).toBeInTheDocument(); // 展開で現れる
-    expect(screen.getByLabelText("counter")).toBeInTheDocument();
+    expect(screen.getByLabelText("density")).toBeInTheDocument(); // 展開で現れる
+    expect(screen.getByLabelText("runs-off")).toBeInTheDocument(); // 駆け上がり(セグメント)
+    expect(screen.queryByLabelText("counter-off")).toBeNull(); // ベース無し＝対位群は出さない(文脈依存・グレーアウトすらしない)
   });
   it("gen_melody＝反復音(hook)ONで motifMode:preserve＋hook を送る／articulation も（詳細段・Phase2案B）", async () => {
     music.mockReset();
@@ -429,16 +429,16 @@ describe("SectionEditor (3-lane timeline)", () => {
     music.mockClear();
     await userEvent.click(screen.getByLabelText("tools")); // 生成で閉じたツール列を開き直す
     await userEvent.click(screen.getByLabelText("knob-details-toggle"));
-    fireEvent.change(screen.getByLabelText("hook"), { target: { value: "0.7" } });
-    fireEvent.change(screen.getByLabelText("articulation"), { target: { value: "0.5" } });
+    await userEvent.click(screen.getByLabelText("hook-strong")); // 口ずさみ=強（セグメント→0.9）
+    fireEvent.change(screen.getByLabelText("articulation"), { target: { value: "0.5" } }); // 歯切れ=スライダー
     await userEvent.click(screen.getByLabelText("gen-gen_melody"));
     await waitFor(() => expect(music).toHaveBeenCalled());
     body = music.mock.calls[0]![1] as Record<string, unknown>;
     expect(body.motifMode).toBe("preserve");
-    expect(body.hook).toBeCloseTo(0.7);
+    expect(body.hook).toBeCloseTo(0.9);
     expect(body.articulation).toBeCloseTo(0.5);
   });
-  it("gen_melody＝対位selectはベースレーンが無いと disabled（相手がいない）", async () => {
+  it("P4/P5 プリセット「走る」で駆け上がり=強・生成bodyにその値が乗る／🎲でロック外が変わる", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });
     getComposition.mockResolvedValue({
@@ -450,8 +450,29 @@ describe("SectionEditor (3-lane timeline)", () => {
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("preset-run")); // 「走る」＝runs0.7/density0.8…
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const body = music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.runs).toBeCloseTo(0.7); // プリセット値がそのまま送られる
+    expect(body.density).toBeCloseTo(0.8);
+    // 詳細を開くと駆け上がり(runs=0.7)セグメントは「中」バケット(0.45〜0.75)に光る
+    await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("knob-details-toggle"));
-    expect(screen.getByLabelText("counter")).toBeDisabled();
+    expect(screen.getByLabelText("runs-mid")).toHaveAttribute("aria-pressed", "true");
+  });
+  it("gen_melody＝対位群はベースレーンが無いと出ない（文脈依存・グレーアウトすら見せない）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    expect(screen.queryByLabelText("counter-off")).toBeNull();
   });
   it("gen_melody＝ベースレーンが空なら bass/counter を渡さない（従来どおり＝bit一致の鉄則）", async () => {
     music.mockReset();
