@@ -8,3 +8,21 @@ export const MOVE_TRANS_DATA: Record<string, Record<string, number>> = {"0":{"0"
 // RHYTHM68_DATA＝6/8(複合2拍子)の1小節=8分6枠(3+3)の onset パターン(x=onset/.=無)＋設計重み。
 // コーパス由来でなく設計値（jig/アイリッシュ寄りに running と駆動を強め・薄いx..x..等は弱め）。4/4のRHYTHM16とは別系。
 export const RHYTHM68_DATA: [string, number][] = [["x..x..",2],["x..xxx",4],["xxxx..",3],["xx.x..",2],["x.xx.x",4],["x..x.x",3],["xxxxxx",3],["x.xxx.",3],["xxx.xx",3],["x.xxxx",2],["xx.xxx",2]];
+
+// RHYTHM68X_DATA＝6/8の1小節=16分12枠(3+3の各拍を16分細分)の onset パターン(x=onset/.=無)＋設計重み。
+// runs>0 指定時のみ compound の mkMotif がこの語彙を使う（未指定=6枠 RHYTHM68_DATA verbatim＝bit一致）。
+// 枠位置 p の時刻＝p*0.25拍。8分位置=偶数枠(0,2,4,6,8,10)、16分裏=奇数枠。強拍=枠0/6（付点四分の頭）。
+// コーパス由来でなく設計値：plainな8分列を基底に、16分ペア割り(隣接xx)と拍を埋める走句をジグ寄りに配した。
+// runW(隣接16分ペア数)で走句語が増幅されるので、runs高値ほど走句パターンが優勢になる。
+export const RHYTHM68X_DATA: [string, number][] = [
+  ["x.x.x.x.x.x.", 3], // 6八分（plain・走句なし）
+  ["x.....x.....", 2], // 2付点四分（骨太）
+  ["x.x...x.x...", 2], // 疎（plain）
+  ["xxx.x.x.x.x.", 4], // 拍1頭を16分2つに割る走句
+  ["x.x.xxx.x.x.", 4], // 拍2(1.5)手前へ走る16分（ジグの押し）
+  ["x.x.x.xxx.x.", 3], // 拍2頭の16分割り
+  ["x.x.x.x.xxx.", 3], // 小節末で次拍へ走る16分
+  ["xx.x.xx.x.x.", 3], // 2箇所の短い16分ペア
+  ["x.xx.x.xx.x.", 3], // 経過16分を散らす
+  ["xxxxx.x.x.x.", 2], // 頭で5連の16分走句（強め・稀）
+];

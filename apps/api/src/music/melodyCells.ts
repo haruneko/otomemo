@@ -1,5 +1,5 @@
 import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
-import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA } from "./motifModelData";
+import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA, RHYTHM68X_DATA } from "./motifModelData";
 import { chordPcs } from "./theory";
 import { classifyNCT, isResolvedNct } from "./degree";
 // 有機メロの再帰モデル・層2＝joint cell（design #12-M S8 / research findings）。
@@ -548,6 +548,15 @@ export function genMotifMelodyV2(
     for (const [p, w] of rows) { x -= w; if (x <= 0) return p; }
     return rows[0]![0];
   };
+  // 6/8走句(runs>0)＝16分12枠語彙（RHYTHM68X_DATA）を densW×runW で再重み付けして抽選。
+  // runW は4/4と同型（隣接16分ペア数で増幅）＝runs高値ほど走句パターンが優勢。runs未指定ではこの経路に入らない。
+  const pick68x = (r: () => number): string => {
+    const rows = RHYTHM68X_DATA.map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length) * runW(p)] as [string, number]);
+    const tot = rows.reduce((a, b) => a + b[1], 0);
+    let x = r() * tot;
+    for (const [p, w] of rows) { x -= w; if (x <= 0) return p; }
+    return rows[0]![0];
+  };
 
   // 各barのコード構成pc（chordPcsPerBar 優先・無ければ root/quality から復元）。
   const pcsOfBar = (bar: number): number[] => {
@@ -572,19 +581,32 @@ export function genMotifMelodyV2(
     const mb = bb; // プロトタイプ：ブロック長でパラメータ化（クロージャ mb を局所退避）
     const ons: number[] = [];
     if (compound) {
-      // 6/8：1小節=8分6枠(3+3)。t=bar*3+e*0.5。末尾~0.75拍は息継ぎ。onset上下限 2*mb..5*mb・孤立フィルタ>1.6。
+      // 6/8：runs未指定=8分6枠(3+3・t=bar*3+e*0.5)＝bit一致。runs>0=16分12枠(t=bar*3+s*0.25)へ切替＝走句を出す。
+      // 末尾~0.75拍は息継ぎ。onset上下限 2*mb..5*mb（runsで上限拡張）・孤立フィルタ>1.6。
+      const x16 = rns !== undefined; // 12枠グリッド（16分細分）を使うか
       for (let bar = 0; bar < mb; bar++) {
-        const p = pick68(r);
-        for (let e = 0; e < 6; e++) {
-          if (p[e] !== "x") continue;
-          const t = bar * 3 + e * 0.5;
-          if (t >= mb * 3 - 0.75) continue;
-          ons.push(t);
+        if (x16) {
+          const p = pick68x(r);
+          for (let s = 0; s < 12; s++) {
+            if (p[s] !== "x") continue;
+            const t = bar * 3 + s * 0.25;
+            if (t >= mb * 3 - 0.75) continue;
+            ons.push(t);
+          }
+        } else {
+          const p = pick68(r);
+          for (let e = 0; e < 6; e++) {
+            if (p[e] !== "x") continue;
+            const t = bar * 3 + e * 0.5;
+            if (t >= mb * 3 - 0.75) continue;
+            ons.push(t);
+          }
         }
       }
       // density: 受け入れ音数帯を可変（未指定=従来 2..5/小節）。疎側は間隔許容も広げる（棄却飢餓→既定モチーフ固定化を防ぐ）。
       const lo68 = dens === undefined ? 2 * mb : Math.max(1 * mb, Math.round((1 + 2.5 * dens) * mb));
-      const hi68 = dens === undefined ? 5 * mb : Math.max(lo68 + 1, Math.round((3 + 3.5 * dens) * mb));
+      const hi68b = dens === undefined ? 5 * mb : Math.max(lo68 + 1, Math.round((3 + 3.5 * dens) * mb));
+      const hi68 = rns === undefined ? hi68b : hi68b + Math.round(rns * 4 * mb); // runs＝走句ぶん受入音数を拡張
       if (ons.length < lo68 || ons.length > hi68) return null;
       const g = ons.slice(1).map((t, i) => t - ons[i]!);
       if (g.length && Math.max(...g) > (dens === undefined ? 1.6 : 1.6 + (1 - dens) * 1.2)) return null;
@@ -609,8 +631,9 @@ export function genMotifMelodyV2(
       const gapCap = dens === undefined ? Math.max(2.0, mb) : Math.max(2.0, mb, 2 + (1 - dens) * 2);
       if (_gap.length && Math.max(..._gap) > gapCap) return null; // 孤立音(大間隔)モチーフは棄却＝繋がった塊のみ（長尺ほど内部restは許容）
     }
-    // 16分走句(run)＝4/4のみ（隣接0.25）。6/8は8分グリッドゆえ走句概念なし＝全false（_68 と同じ純Markov contour）。
-    const run = compound ? ons.map(() => false) : ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
+    // 16分走句(run)＝隣接0.25判定。4/4は常時。6/8はruns未指定=8分格子(≥0.5)ゆえ全false＝bit一致、
+    // runs>0の12枠のみ隣接16分が生じ走句になる（既存の run方向保持・gap-fill にそのまま乗る＝新ピッチ論理なし）。
+    const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
     const mv: number[] = [0];
     let rdir = r() < 0.5 ? 1 : -1, leaps = 0;
     for (let i = 1; i < ons.length; i++) {

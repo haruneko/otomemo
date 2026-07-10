@@ -105,3 +105,67 @@ describe("generate.genMelody 配線（6/8 frame → compound V2 経路）", () =
     expect(notes.some((n) => n.start >= 24)).toBe(true); // 4拍×8小節へ展開
   });
 });
+
+// ── 2026-07-10：6/8（compound）で runs>0 のとき16分が出る（12枠グリッド拡張） ──
+// 4/4と違い6/8はグリッド(8分6枠)/語彙のレベルで16分が不在＝runsノブがno-op だった。
+// runs>0 指定時のみ compound の mkMotif を16分12枠(t=bar*3+s*0.25)へ切替。未指定=従来6枠 bit一致。
+describe("genMotifMelodyV2 compound × runs（6/8で16分＝12枠グリッド拡張）", () => {
+  const genR = (seed: number, o: { runs?: number; density?: number }, bars = 8) =>
+    genMotifMelodyV2(pcsPerBar.slice(0, bars), ROOTS.slice(0, bars), QUALS.slice(0, bars), sp, motif16, { seed, tonicPc: 0, minor: false, compound: true, ...o });
+  const is16Off = (t: number) => Math.abs(((t * 4) % 2) - 1) < 0.1; // 8分格子外(.25/.75)＝16分
+
+  it("⑨ runs 未指定＝従来6/8 bit一致（回帰ゼロ）", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      expect(JSON.stringify(genR(seed, {})), `seed=${seed}`).toBe(JSON.stringify(gen(seed)));
+    }
+  });
+
+  it("⑩ runs=1・seed sweep で16分onset率>0.1・走句性(隣接0.25ペア)が出る", () => {
+    let tot = 0, off = 0, adj = 0, offN = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const starts = genR(seed, { runs: 1 }).map((n) => n.start).sort((a, b) => a - b);
+      for (let i = 0; i < starts.length; i++) {
+        tot++;
+        if (is16Off(starts[i]!)) {
+          off++; offN++;
+          if ((i > 0 && starts[i]! - starts[i - 1]! <= 0.26) || (i < starts.length - 1 && starts[i + 1]! - starts[i]! <= 0.26)) adj++;
+        }
+      }
+    }
+    expect(off / tot, `16分率(${(off / tot).toFixed(3)})>0.1`).toBeGreaterThan(0.1);
+    expect(offN ? adj / offN : 0, `16分の隣接率(${offN ? (adj / offN).toFixed(3) : 0})>0.5＝走句`).toBeGreaterThan(0.5);
+  });
+
+  it("⑪ runs=1でも決定的・音域維持・onset昇順・dur>0で音が次を食わない", () => {
+    for (const runs of [0.5, 1]) {
+      expect(JSON.stringify(genR(14, { runs }))).toBe(JSON.stringify(genR(14, { runs })));
+      for (let seed = 1; seed <= 20; seed++) {
+        const notes = genR(seed, { runs });
+        expect(notes.length).toBeGreaterThan(0);
+        for (const n of notes) {
+          expect(n.pitch).toBeGreaterThanOrEqual(58);
+          expect(n.pitch).toBeLessThanOrEqual(83);
+          expect(n.dur).toBeGreaterThan(0);
+        }
+        for (let i = 1; i < notes.length; i++) {
+          expect(notes[i]!.start).toBeGreaterThanOrEqual(notes[i - 1]!.start);
+          // 前音の dur が次の onset を跨がない（16分ペアがジグ跳ねで潰れない）
+          expect(notes[i - 1]!.start + notes[i - 1]!.dur).toBeLessThanOrEqual(notes[i]!.start + 1e-6);
+        }
+      }
+    }
+  });
+
+  it("⑫ runs=1・6/8でも全音がscale内・強拍コードトーン率>0.5（12枠でも品質不変）", () => {
+    const notes = genR(14, { runs: 1 });
+    const scaleSet = new Set(sp.map((p) => ((p % 12) + 12) % 12));
+    for (const n of notes) expect(scaleSet.has(((n.pitch % 12) + 12) % 12)).toBe(true);
+    const strong = notes.filter((n) => isStrong(n.start));
+    const ct = strong.filter((n) => {
+      const bar = Math.min(pcsPerBar.length - 1, Math.floor(n.start / BAR));
+      return pcsPerBar[bar]!.includes(((n.pitch % 12) + 12) % 12);
+    });
+    expect(strong.length).toBeGreaterThan(0);
+    expect(ct.length / strong.length).toBeGreaterThan(0.5);
+  });
+});
