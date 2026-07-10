@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
@@ -105,6 +105,27 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(onOpenNeta).not.toHaveBeenCalled(); // 消しゴム中は編集を開かない
   });
 
+  it("P1 候補の視覚プレビュー：生成候補が MiniRoll＋長さ/音数で見える（UX再設計・2026-07-10）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 1, dur: 1 }, { pitch: 67, start: 2, dur: 2 }] } }] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    // 生成前は候補パネル無し
+    expect(screen.queryByLabelText("part-candidate")).toBeNull();
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    // 候補パネルに MiniRoll(mini-preview) と 長さ/音数メタが出る＝音を聴く前に目で選べる
+    await screen.findByLabelText("part-candidate");
+    const preview = screen.getByLabelText("candidate-preview");
+    expect(within(preview).getByLabelText("mini-preview")).toBeInTheDocument(); // 候補内に MiniRoll(svg)
+    expect(within(preview).getByText(/音$/)).toBeInTheDocument(); // 「◯小節・◯音」メタ
+  });
   it("いじる▾に生成・書き出しを集約＝閉じてる間は隠れ、開くと現れる（⑤ メロ編集画面と整合）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),

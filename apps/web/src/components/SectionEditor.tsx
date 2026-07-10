@@ -731,6 +731,18 @@ export function SectionEditor({
           style={{ ["--k" as string]: `var(--k-${cand.kind === "chord_progression" ? "chord" : cand.kind})` }}
         >
           <span className="reshape-label">{laneOf(cand.kind)?.label ?? cand.kind}候補（この進行に生成）</span>
+          {/* P1（2026-07-10・UX再設計）：候補を"ネタの見た目"で見せる＝MiniRoll＋長さ/音数。音を聴く前に目で選べる。 */}
+          {(() => {
+            const cn = notesForContent(cand.kind, cand.content);
+            if (!cn.length) return null;
+            const bars = Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6));
+            return (
+              <span className="cand-preview" aria-label="candidate-preview">
+                <MiniRoll neta={neta} notes={cn} />
+                <span className="cand-meta">{bars}小節・{cn.length}音</span>
+              </span>
+            );
+          })()}
           <button type="button" className="tb-tool" aria-label="audition-candidate" onClick={() => void auditionCandidate()}>
             ▶試聴
           </button>

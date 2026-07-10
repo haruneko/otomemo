@@ -703,6 +703,28 @@
   color: var(--muted);
   width: 100%; /* ラベルは1行占有＝操作ボタンは次行に固まる（PCで間延びしない・レビュー M-3） */
 }
+/* P1（2026-07-10・UX再設計）：候補の見た目プレビュー＝MiniRoll＋メタを1行占有で目立たせる */
+.cand-preview {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cand-preview .mini-roll {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  background: #14171b;
+  border-radius: 4px;
+}
+.cand-preview .mini-roll rect {
+  fill: var(--k, var(--accent));
+}
+.cand-meta {
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .reshape-strength {
   display: inline-flex;
   gap: 2px;
