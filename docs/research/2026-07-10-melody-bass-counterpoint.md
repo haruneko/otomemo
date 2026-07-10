@@ -166,7 +166,14 @@ counterpointRewrite(notes, bass, coef):
 6. **将来のベース高域化**＝ベースが 48-59 域で動く生成になったら low interval limit ガード（メロ－ベース間 m2/m3 が E3 以下）と声部交差ガードが実効化する。voiceCrossings が0でなくなった時が導入タイミング。
 7. **他者コーパスでの実測**＝POP909 等からメロ×ベース（無ければメロ×コードルート）の運動比率（反行/斜行/類似/並行）と同時 b9 率の**統計のみ**抽出→ counter 既定強度と W 比の教師に（リテラル旋律非保存・著作権方針どおり）。
 
----
+### ⑤-補：実装で確定した事項（2026-07-10 実装・design「gen_melody×ベース結線」・テスト＝`apps/api/test/gen-melody-bass.test.ts`）
+
+1. **W較正（残論点1に回答）**：比は④どおり（並行:隠伏:b9:反行＝3:1.5:4:0.5）、**絶対値は×2**＝`W_PAR=6, W_DIR=3, W_B9=8, W_CONTRA=1`。理由＝距離項は半音単位の整数差で、`counter×W > 1` を超えて初めて snap 先が動く。④の原値(3/1.5/4/0.5)だと推奨帯 0.2-0.4 が **tie-break のみで実質無効**（40seed実測：counter=0.3 で違反 35→35）。×2 で counter=0.2 から効く。実測（I-vi-IV-V 8小節×40seed・ベース=拍頭ルート+3拍3度）：並行+隠伏違反 35→23(counter0.2)→22(0.3)→17(1.0)、強拍b9（ペダルB fixture・非終止）23→12(0.3)→3(1.0)、反行率 0.538→0.566(1.0)、**pitch変更は 2.2%(0.2)〜3.5%(1.0) のみ＝反復は構造的に無傷**（onset/dur はコード上 bit 不変）。耳確認（0/0.3/1.0 の3水準・同一seed）は未了＝残。
+2. **標本化（残論点2に回答）**：`voiceLeading.ts` の `pitchAt` を **export して生成側と共用**で確定。prevBass は「直前メロ onset 時刻の pitchAt」＝評価器の隣接標本と同義。
+3. **並行「持続」の判定（残論点3に回答）**：評価器と同一条件 `sameDir && iv0==iv1∈{0,7}` で確定（連続窓カウントは持たない＝iv0側の一致が「前の標本も同音程だった」を意味し実質1機会の持続判定）。
+4. **擬似ベース駆動（残論点4に回答）**：**採用しない**＝bass 明示時のみ有効。さらに強い契約に確定：**bass 有りでも counter=0 なら bit 一致**（④の「b9掃除は bass 有りで常時 on」案は退け、挿入点C も `counter>0 && bass` ゲート＝「係数0で従来と bit 一致」の鉄則を単純に保つ）。
+5. **挿入点の確定**：A（後処理①の距離式＝本命）＋C（弱拍掃除の対ベースb9）の2点のみ実装。**挿入点B（render内 ctOf）は不要だった**＝A だけで違反-51%/b9-87%(counter=1) の効きが出た（③-5 の「パスを増やさない」判断が正しかった）。i==0（句頭・直前音なし）は運動項が定義できないため **b9項のみ**の簡約 counterTerm。
+6. **結線の確定**：`genMelody` opts `bass`/`counter` → `/music/gen_melody`（bass=配列 or `{notes}`）→ MCP `gen_melody` → `/gen/section`（**rhythm→bass→melody の依存順**・body `melody:{counter}`・未指定=0=bit一致）→ web SectionEditor `sectionBass()`（bass レーン連結・相対bassはコードレーンで実音化）＋ **counter=0.3 固定**。counter の UI ノブ露出と耳較正は後続タスク。
 
 ## 出典（本文内URLの再掲・グループ別）
 - **対位法の運動規則**：[OMT First-Species Counterpoint](https://viva.pressbooks.pub/openmusictheory/chapter/first-species-counterpoint/)／[Wikibooks First Species](https://en.wikibooks.org/wiki/Counterpoint/First_Species)／[Wikiversity First species](https://en.wikiversity.org/wiki/Counterpoint/First_species_counterpoint)

@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong } =
+const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, music } =
   vi.hoisted(() => ({
     getComposition: vi.fn(),
     listNeta: vi.fn(),
@@ -14,9 +14,10 @@ const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta,
     recommend: vi.fn(),
     getSong: vi.fn(),
     updateSong: vi.fn(),
+    music: vi.fn(),
   }));
 vi.mock("../src/api", () => ({
-  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong },
+  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, music },
 }));
 
 import { SectionEditor, loopPositions, spanOverlaps } from "../src/components/SectionEditor";
@@ -299,6 +300,45 @@ describe("SectionEditor (3-lane timeline)", () => {
     await screen.findByLabelText("place-melody-15"); // 48拍÷3拍=16小節ぶんのセルがある
     expect(Number(screen.getByLabelText("bars-count").textContent)).toBeGreaterThanOrEqual(16);
   });
+  it("gen_melody＝ベースレーンの notes を対位入力として body に渡す（bass＋counter=0.3・design「gen_melody×ベース結線」）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+        { position: 0, ord: 0, node: { neta: mk("b1", "bass", { content: { notes: [{ pitch: 36, start: 0, dur: 1 }, { pitch: 43, start: 2, dur: 1 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-b1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_melody");
+    expect(body.bass).toEqual([{ pitch: 36, start: 0, dur: 1 }, { pitch: 43, start: 2, dur: 1 }]); // 位置0＝オフセット無しでそのまま
+    expect(body.counter).toBeCloseTo(0.3); // 推奨較正（research 2026-07-10-melody-bass-counterpoint）
+  });
+  it("gen_melody＝ベースレーンが空なら bass/counter を渡さない（従来どおり＝bit一致の鉄則）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.bass).toBeUndefined();
+    expect(body.counter).toBeUndefined();
+  });
+
   it("sizes bars by meter — 6/8 bar1 = position 3 (#51)", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section", { meter: "6/8" }), children: [] });
     listNeta.mockResolvedValue([mk("c2", "melody", { title: "M" })]);

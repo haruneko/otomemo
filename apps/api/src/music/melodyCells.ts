@@ -515,7 +515,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence" } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; bassPitchAt?: (t: number) => number | null; counter?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -883,19 +883,60 @@ export function genMotifMelodyV2(
     if (best >= 0) notes[i]!.pitch = best;
     else placeNear(i, target);
   };
+  // ── 対位バイアス（メロ×ベース・design「gen_melody×ベース結線」・research/2026-07-10-melody-bass-counterpoint.md）──
+  // 評価器 analyzeVoiceLeading の指標（並行/隠伏5度8度・b9・反行）を snap の選好関数へ転用。効かせるのは
+  // ①強拍CTスナップの距離式と 弱拍掃除の対ベースb9 の2点のみ＝onset/dur と mv列（輪郭）は不変＝反復を壊さない。
+  // 鉄則：counter=0 or bass無し＝対位経路に入らない＝従来と bit 一致（構造的保証）。
+  const counter = Math.max(0, Math.min(1, opts.counter ?? 0));
+  const bassAt = counter > 0 && opts.bassPitchAt ? opts.bassPitchAt : undefined;
+  // 重みの比は理論（research④＝並行3:隠伏1.5:b9 4:反行0.5）。絶対値は counter スイープの実測で×2 較正
+  // （距離項=半音。counter*W が 1 を超えて初めて snap 先が動く＝旧値だと 0.2-0.4 帯が tie-break のみで無効だった。
+  // ×2 で counter=0.2 から効き、counter=1 でも pitch 変更 ~2%＝反復は壊れない・実測は research doc ⑤）。
+  const W_PAR = 6, W_DIR = 3, W_B9 = 8, W_CONTRA = 1;
+  const counterTerm = (c: number, t: number, prevMel: number, prevT: number): number => {
+    const bl = bassAt!(t);
+    if (bl == null) return 0;
+    const pb = bassAt!(prevT) ?? bl; // 直前標本＝評価器と同じ隣接遷移（pitchAt を共用）
+    const iv1 = (((c - bl) % 12) + 12) % 12, iv0 = (((prevMel - pb) % 12) + 12) % 12;
+    const du = c - prevMel, dl = bl - pb;
+    const sameDir = du !== 0 && dl !== 0 && Math.sign(du) === Math.sign(dl);
+    let pen = 0;
+    if (sameDir && iv0 === iv1 && (iv1 === 0 || iv1 === 7)) pen += W_PAR; // 並行完全協和＝「持続」のみ罰（単発は許す）
+    else if (sameDir && Math.abs(du) > 2 && (iv1 === 0 || iv1 === 7)) pen += W_DIR; // 隠伏＝同方向＋上声跳躍で完全協和へ突入
+    if (iv1 === 1) pen += W_B9; // 対ベース実音の b9（強拍snap文脈＝持続音）
+    if (dl !== 0 && du !== 0 && Math.sign(du) === -Math.sign(dl)) pen -= W_CONTRA; // 反行ボーナス（罰でなく負項）
+    return pen;
+  };
   // ① 強拍をコードトーンへ（句末着地は保持＝最後の音は触らない）。以降のパスは規約(b)でCT性を保つ。
   // anti-unison(2026-07-09 監査B)：snap結果が直前音と同一ピッチになる時だけ「同pc以外の最寄りコード音(禁則を
   // 作らない)」を選ぶ＝強拍CT不変量・禁則ガードを保ったまま snap衝突の足踏みを散らす（同音28→21%実測）。
+  // 対位（bassAt 有り）：候補コード音 q を d=|q-tgt|+counter*counterTerm で argmin＝「どのコード音か」の選好だけ変わる。
+  // i==0（直前音なし）は運動項が定義できないため b9（同時発音）項のみ＝簡約 counterTerm。
   for (let i = 0; i < notes.length - 1; i++) if (onStrong(notes[i]!.start)) {
     const pcs = pcsAtT(notes[i]!.start), tgt = notes[i]!.pitch;
+    const cTerm = (q: number): number => {
+      if (!bassAt) return 0;
+      if (i > 0) return counter * counterTerm(q, notes[i]!.start, notes[i - 1]!.pitch, notes[i - 1]!.start);
+      const bl = bassAt(notes[i]!.start);
+      return bl != null && (((q - bl) % 12) + 12) % 12 === 1 ? counter * W_B9 : 0; // 句頭＝b9のみ罰
+    };
     let p = ctP(tgt, pcs);
+    if (bassAt) { // 対位経路＝候補列挙＋距離最小化（tie-break は昇順走査の先着＝低い方＝ctOf と同じ）
+      let best = -1, bd = Infinity;
+      for (let q = sp[0] ?? 48; q <= (sp[sp.length - 1] ?? 84); q++) {
+        if (!pcs.includes(((q % 12) + 12) % 12)) continue; // コード音のみ（CT不変量保持）
+        const d = Math.abs(q - tgt) + cTerm(q);
+        if (d < bd) { bd = d; best = q; }
+      }
+      if (best >= 0) p = best;
+    }
     if (i > 0 && p === notes[i - 1]!.pitch) { // 直前と同音＝別のコード音へ
       let best = -1, bd = Infinity;
       for (let q = sp[0] ?? 48; q <= (sp[sp.length - 1] ?? 84); q++) {
         if (!pcs.includes(((q % 12) + 12) % 12)) continue; // コード音のみ（CT不変量保持）
         if (q === notes[i - 1]!.pitch) continue; // 直前と同音は避ける
         if (isForbiddenIv(Math.abs(q - notes[i - 1]!.pitch))) continue; // 禁則を作らない
-        const d = Math.abs(q - tgt);
+        const d = Math.abs(q - tgt) + cTerm(q); // 対位項も同式（bassAt 無し＝0＝従来）
         if (d < bd) { bd = d; best = q; }
       }
       if (best >= 0) p = best; // 見つからなければ従来snap（悪化させない）
@@ -1039,11 +1080,15 @@ export function genMotifMelodyV2(
   {
     const hiA = Math.max(...notes.map((n) => n.pitch));
     const isClash = (p: number, t: number): boolean => { const c = pcsAtT(t); const pc = pcAt(p); return !c.includes(pc) && c.includes((pc + 11) % 12); }; // コード音の半音上に居る
+    // 対ベース実音の b9（挿入点C・design「gen_melody×ベース結線」）：既存 isClash は「コードpcの半音上」しか
+    // 見えない＝ベースが5度等を弾いている瞬間の衝突が盲点。非コード音かつベース実音の半音上(m9)を濁りに追加。
+    // bassAt 無し（bass未指定 or counter=0）＝常に false＝従来と bit 一致。passing 免除・安全候補防御は共用。
+    const isClashBass = (p: number, t: number): boolean => { if (!bassAt) return false; const bl = bassAt(t); return bl != null && !pcsAtT(t).includes(pcAt(p)) && (((p - bl) % 12) + 12) % 12 === 1; };
     for (let i = 1; i < notes.length - 1; i++) {
       const t = notes[i]!.start;
       if (onStrong(t) || cadenceIdx.has(i)) continue; // 弱拍のみ・カデンツ着地は不変
       if (notes[i]!.pitch === hiA) continue; // 頂点音は動かさない（単一頂点保護）
-      if (!isClash(notes[i]!.pitch, t)) continue; // コード音 or 非濁り＝そのまま
+      if (!isClash(notes[i]!.pitch, t) && !isClashBass(notes[i]!.pitch, t)) continue; // コード音 or 非濁り＝そのまま
       const prev = notes[i - 1]!.pitch, next = notes[i + 1]!.pitch, cur = notes[i]!.pitch;
       const din = cur - prev, dout = next - cur;
       // 短い順次の経過音(両側 step≤2・同方向)は色気＝残す。露出(跳躍入り/出・刺繍で濁る)だけ掃除。
@@ -1053,7 +1098,7 @@ export function genMotifMelodyV2(
       for (const q of L) {
         if (q >= hiA) continue; // 単一頂点保護（頂点に並ばない）
         if (q === prev || q === next) continue; // 隣と同音＝足踏みは作らない（掃除で無菌化しない）
-        if (isClash(q, t)) continue; // 別の濁りへは動かさない
+        if (isClash(q, t) || isClashBass(q, t)) continue; // 別の濁り（対ベースb9含む）へは動かさない
         if (isForbiddenIv(Math.abs(q - prev)) || isForbiddenIv(Math.abs(next - q))) continue; // 禁則を作らない
         const d = Math.abs(q - cur);
         if (d < bd || (d === bd && q > best)) { bd = d; best = q; } // 最寄り・同距離なら上を採る

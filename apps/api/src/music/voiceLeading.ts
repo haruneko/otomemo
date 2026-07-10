@@ -13,7 +13,8 @@ export interface VoiceLeadingReport {
 }
 
 // 時刻 t で鳴っている音（start≤t<start+dur の最後の音）。無ければ最寄り直前。
-function pitchAt(sorted: Note[], t: number): number | null {
+// export＝生成側（gen_melody の対位バイアス・2026-07-10）と標本化を共用＝評価と生成で同じ低音を見る。
+export function pitchAt(sorted: Note[], t: number): number | null {
   let p: number | null = null;
   for (const n of sorted) { if (n.start <= t + 1e-6) p = n.pitch; else break; }
   return p;

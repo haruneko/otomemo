@@ -336,6 +336,18 @@ export function SectionEditor({
     }
     return out.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
   }
+  // ベースレーンの notes を1本に連結（sectionChords と同じ流儀＝子を小節位置ぶんオフセット）。
+  // メロ生成の対位入力（design「gen_melody×ベース結線」）。相対 bass はコードレーンに当てて実音化。
+  function sectionBass(): Note[] {
+    const bassLane = LANES.find((l) => l.key === "bass")!;
+    const chords = sectionChords().map((c) => ({ root: c.root ?? 0, quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? BPB }));
+    const out: Note[] = [];
+    for (const c of laneChildren(bassLane)) {
+      const offset = (c.position ?? 0) * BPB;
+      for (const n of notesForContent("bass", c.node.neta.content, { key: keyPc, chords })) out.push({ ...n, start: n.start + offset });
+    }
+    return out.sort((a, b) => a.start - b.start);
+  }
   // 生成パーツ（この進行に◯）。メロ/ベースはコードが要る、ドラムは frame だけ。
   const GEN_PARTS = [
     { label: "メロ", op: "gen_melody", needsChords: true },
@@ -357,7 +369,13 @@ export function SectionEditor({
         chords,
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       };
-      if (part.op === "gen_melody") { body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form; }
+      if (part.op === "gen_melody") {
+        body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form;
+        // 対位バイアス（design「gen_melody×ベース結線」）：ベースレーンがあれば notes を渡し counter=0.3（推奨較正）。
+        // ベース無し＝渡さない＝従来どおり。UI ノブでの counter 露出は後続タスク。
+        const bass = sectionBass();
+        if (bass.length) { body.bass = bass; body.counter = 0.3; }
+      }
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
       if (item) setCand({ kind: item.kind, content: item.content });
