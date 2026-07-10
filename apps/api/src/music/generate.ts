@@ -405,7 +405,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -509,7 +509,31 @@ export function genMelody(
       ? opts.bass.filter((n) => Number.isFinite(n.pitch) && Number.isFinite(n.start ?? 0)).map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: n.dur ?? 1 })).sort((a, b) => a.start - b.start)
       : null;
     const bassPitchAt = bassSorted && bassSorted.length ? (t: number): number | null => pitchAt(bassSorted, t) : undefined;
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound, repetition: opts.repetition, rangeSteps: opts.rangeSteps, chordPcsAt, density: opts.density, swing: opts.swing, expression: exprDefault, phrases, runs: opts.runs, push: opts.push, foreground: opts.foreground, breathe: opts.breathe, humanize: opts.humanize, form: opts.form, bassPitchAt, counter: opts.counter }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
+    // ドラム結線（design「gen_melody×ドラム結線」2026-07-10）：DrumsInput を防御パース（gen_bass と共用 parseDrums）
+    // →セクション全長へタイルした**絶対拍**の kick/snare＋小節別加重密度(kick+snare+0.3*hihat)。パターン長
+    // (steps×beatsPerStep)が小節長の整数倍でない時は drums 無し扱い（gen_bass の不一致→従来経路と同方針）。
+    // 全係数0 or drums 無し＝V2 へ drums を渡さない＝各段スキップ＝bit一致（構造的保証）。
+    let drumsV2: { kick: number[]; snare: number[]; densityByBar: number[] } | undefined;
+    if ((opts.drumLock ?? 0) > 0 || (opts.backbeat ?? 0) > 0 || (opts.converse ?? 0) > 0) {
+      const dr = parseDrums(opts.drums);
+      const span = dr ? dr.steps * dr.bps : 0;
+      const spanBars = span > 0 ? span / perBar : 0;
+      if (dr && spanBars >= 1 - 1e-6 && Math.abs(spanBars - Math.round(spanBars)) < 1e-6) {
+        const sb = Math.max(1, Math.round(spanBars));
+        const kick: number[] = [], snare: number[] = [], densityByBar: number[] = [];
+        for (let bar = 0; bar < bars; bar++) {
+          const w0 = (bar % sb) * perBar; // この小節が読むドラムパターン窓 [w0, w0+perBar)
+          const inWin = (s: number): number | null => { const t = s * dr.bps; return t >= w0 - 1e-9 && t < w0 + perBar - 1e-9 ? bar * perBar + (t - w0) : null; };
+          let k = 0, s2 = 0, h = 0;
+          for (const s of dr.kick) { const t = inWin(s); if (t != null) { kick.push(t); k++; } }
+          for (const s of dr.snare) { const t = inWin(s); if (t != null) { snare.push(t); s2++; } }
+          for (const s of dr.hihat) if (inWin(s) != null) h++;
+          densityByBar.push(k + s2 + 0.3 * h);
+        }
+        drumsV2 = { kick, snare, densityByBar };
+      }
+    }
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), motifBars: opts.motifBars, compound, repetition: opts.repetition, rangeSteps: opts.rangeSteps, chordPcsAt, density: opts.density, swing: opts.swing, expression: exprDefault, phrases, runs: opts.runs, push: opts.push, foreground: opts.foreground, breathe: opts.breathe, humanize: opts.humanize, form: opts.form, bassPitchAt, counter: opts.counter, drums: drumsV2, drumLock: opts.drumLock, backbeat: opts.backbeat, converse: opts.converse }); // compound=6/8等＝V2を6/8リズム(3+3八分)・bar=3拍で駆動（骨格/moveは4/4学習を流用）
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
@@ -931,8 +955,9 @@ export interface DrumsInput {
     lanes?: { name?: string; midi?: number; hits?: number[]; vel?: number }[];
   } | null;
 }
-// drums content から kick/snare の step 集合を防御的に取り出す（不正は null＝従来経路）。
-function parseDrums(drums?: DrumsInput | null): { steps: number; bps: number; kick: number[]; snare: number[] } | null {
+// drums content から kick/snare/hihat の step 集合を防御的に取り出す（不正は null＝従来経路）。
+// hihat（midi42/44/46・複数レーン合算）は gen_melody×ドラム結線の密度相補（converse・重み0.3）用＝gen_bass は不使用。
+function parseDrums(drums?: DrumsInput | null): { steps: number; bps: number; kick: number[]; snare: number[]; hihat: number[] } | null {
   const r = drums?.rhythm;
   if (!r || !Array.isArray(r.lanes)) return null;
   const steps = Number(r.steps);
@@ -943,7 +968,15 @@ function parseDrums(drums?: DrumsInput | null): { steps: number; bps: number; ki
     const hits = Array.isArray(lane?.hits) ? lane!.hits! : [];
     return [...new Set(hits.filter((s) => Number.isInteger(s) && s >= 0 && s < steps))].sort((a, b) => a - b);
   };
-  return { steps: Math.trunc(steps), bps, kick: laneOf(36, "Kick"), snare: laneOf(38, "Snare") };
+  const laneAll = (midis: number[], names: string[]): number[] => {
+    const set = new Set<number>();
+    for (const l of r.lanes!) {
+      if (!l || !((l.midi != null && midis.includes(l.midi)) || (l.name != null && names.includes(l.name)))) continue;
+      for (const s of Array.isArray(l.hits) ? l.hits : []) if (Number.isInteger(s) && s >= 0 && s < steps) set.add(s);
+    }
+    return [...set].sort((a, b) => a - b);
+  };
+  return { steps: Math.trunc(steps), bps, kick: laneOf(36, "Kick"), snare: laneOf(38, "Snare"), hihat: laneAll([42, 44, 46], ["HiHat", "OpenHat", "ClosedHat"]) };
 }
 
 /** ベースライン（強拍=ルート・弱拍=5度/オクターブ）＋**リズム図形**。C2基準低域。

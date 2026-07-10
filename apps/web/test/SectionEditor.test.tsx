@@ -338,6 +338,75 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(body.bass).toBeUndefined();
     expect(body.counter).toBeUndefined();
   });
+  it("gen_melody＝リズムレーンの step 列をドラム入力として body に渡す（drums＋backbeat=0.3・design「gen_melody×ドラム結線」）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    const rhythm = { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [
+      { name: "Kick", midi: 36, hits: [0, 7, 8], vel: 115 },
+      { name: "Snare", midi: 38, hits: [4, 12], vel: 105 },
+    ] };
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+        { position: 0, ord: 0, node: { neta: mk("r1", "rhythm", { content: { rhythm } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-r1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_melody");
+    // 位置0＝オフセット無し＝そのままの step 列（DrumsInput 形＝{rhythm:{steps,bars,beatsPerStep,lanes}}）
+    expect(body.drums).toEqual({ rhythm: { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [
+      { name: "Kick", midi: 36, hits: [0, 7, 8], vel: 115 },
+      { name: "Snare", midi: 38, hits: [4, 12], vel: 105 },
+    ] } });
+    expect(body.backbeat).toBeCloseTo(0.3); // 推奨既定＝Bのみ弱く（research 2026-07-10-melody-groove-drum-interaction）
+    expect(body.drumLock).toBeUndefined(); // A/C は耳較正待ち＝渡さない（0＝従来）
+    expect(body.converse).toBeUndefined();
+  });
+  it("gen_melody＝リズムレーンの複数配置は位置(拍)オフセットで1本のグリッドへマージされる", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    const rhythm = { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [{ name: "Kick", midi: 36, hits: [0, 8] }] };
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+        { position: 0, ord: 0, node: { neta: mk("r1", "rhythm", { content: { rhythm } }), children: [] } },
+        { position: 4, ord: 0, node: { neta: mk("r1", "rhythm", { content: { rhythm } }), children: [] } }, // ループ配置＝2小節目（拍4）
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-r1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    // 拍4＝step16 オフセット→ steps=32（2小節）・Kick hits=[0,8,16,24]
+    expect(body.drums).toEqual({ rhythm: { steps: 32, bars: 2, beatsPerStep: 0.25, lanes: [{ name: "Kick", midi: 36, hits: [0, 8, 16, 24], vel: undefined }] } });
+  });
+  it("gen_melody＝リズムレーンが空なら drums/backbeat を渡さない（従来どおり＝bit一致の鉄則）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.drums).toBeUndefined();
+    expect(body.backbeat).toBeUndefined();
+  });
 
   it("sizes bars by meter — 6/8 bar1 = position 3 (#51)", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section", { meter: "6/8" }), children: [] });

@@ -515,7 +515,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; bassPitchAt?: (t: number) => number | null; counter?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -800,6 +800,53 @@ export function genMotifMelodyV2(
     : Array.from({ length: nBlk }, (_, i) => ({ bar0: i * mb, bars: mb }));
   const motifByLen = new Map<number, Motif16>();
   const motifFor = (L: number): Motif16 => { if (!varLen) return M; let mm = motifByLen.get(L); if (!mm) { mm = genBest(r, L); motifByLen.set(L, mm); } return mm; };
+  // ── C: 密度の相補（converse・design「gen_melody×ドラム結線」・research/2026-07-10-melody-groove-drum-interaction.md）──
+  // 小節ごとのドラム密度(densityByBar=kick+snare+0.3*hihat)をブロック単位（＝句境界を跨がない）で平均し、
+  // 中央値比 rel から scale=clamp(1−converse×(rel−1)×K, 0.7, 1.3)（K=0.3＝弱いバイアス）。実現＝ブロックの
+  // motif 写像への**決定的な onset 追加/削除**（rng不使用・基底モチーフ共有＝A/A''の同一性維持・先頭/末尾 onset
+  // 保持＝句頭/終止安全）。converse=0 or densityByBar無し or compound＝経路に入らない＝bit一致。
+  // 一様密度（genDrums の1小節パターン等）は rel=1＝scale=1＝無変化＝これも bit 一致。
+  const conv = Math.max(0, Math.min(1, opts.converse ?? 0));
+  const densBar = !compound && conv > 0 && opts.drums?.densityByBar?.length ? opts.drums.densityByBar : null;
+  const densMed = (() => { if (!densBar) return 0; const a = [...densBar].sort((x, y) => x - y); return a.length % 2 ? a[(a.length - 1) / 2]! : (a[a.length / 2 - 1]! + a[a.length / 2]!) / 2; })();
+  const convScale = (bar0: number, L: number): number => {
+    if (!densBar || !(densMed > 0)) return 1;
+    let s = 0, n = 0;
+    for (let b = bar0; b < bar0 + L && b < densBar.length; b++) { s += densBar[b]!; n++; }
+    if (!n) return 1;
+    return Math.max(0.7, Math.min(1.3, 1 - conv * (s / n / densMed - 1) * 0.3));
+  };
+  const applyConverse = (Mv: Motif16, scale: number, bb: number): Motif16 => {
+    const target = Math.max(2, Math.round(Mv.ons.length * scale));
+    if (target === Mv.ons.length || Mv.ons.length < 3) return Mv;
+    const ons = [...Mv.ons], mv = [...Mv.mv], run = [...Mv.run];
+    if (target < ons.length) {
+      // 間引き＝弱位置優先（16分裏>8分裏>拍頭）・先頭/末尾は保持。削った move は消える＝輪郭が僅かに縮む
+      // （弱バイアスの範囲・跳躍の合成は後処理②fixForbidden/③gapFill が回収）。同重みは後ろ側から。
+      const weight = (t: number): number => { const q = Math.round(t * 4) % 4; return q === 1 || q === 3 ? 3 : q === 2 ? 2 : 1; };
+      const idxs = ons.map((_, i) => i).filter((i) => i > 0 && i < ons.length - 1)
+        .sort((a, b) => weight(ons[b]!) - weight(ons[a]!) || b - a)
+        .slice(0, ons.length - target)
+        .sort((a, b) => b - a);
+      for (const i of idxs) { ons.splice(i, 1); mv.splice(i, 1); run.splice(i, 1); }
+    } else {
+      // 追い足し＝最大ギャップ(≥1拍)の中点を8分格子へ・隣接歩進(±1=前moveの向き)＝gap-fill流儀。
+      // 置けない（詰まっている/端に寄る）ならそこで止める＝無理に詰めない（弱バイアス）。
+      let add = target - ons.length, guard = 0;
+      while (add > 0 && guard++ < 16) {
+        let gi = -1, gw = 1.0 - 1e-6;
+        for (let i = 0; i + 1 < ons.length; i++) { const g = ons[i + 1]! - ons[i]!; if (g > gw) { gw = g; gi = i; } }
+        if (gi < 0) break;
+        const t = Math.round((ons[gi]! + gw / 2) * 2) / 2;
+        if (!(t > ons[gi]! + 0.26 && t < ons[gi + 1]! - 0.26 && t < bb * barLen - 1.5)) break;
+        ons.splice(gi + 1, 0, t);
+        mv.splice(gi + 1, 0, (mv[gi] ?? 0) >= 0 ? 1 : -1);
+        run.splice(gi + 1, 0, false);
+        add--;
+      }
+    }
+    return { ons, mv, run };
+  };
   const nB = blocks.length;
   const sRole = (i: number): "bi" | "seq" | "frag" | "cad" => (i === nB - 1 ? "cad" : i === 0 ? "bi" : i === 1 ? "seq" : "frag"); // 提示/移高反復/継続断片/カデンツ
   const bBlockBars = new Set<number>(); // 単一頂点のB塊(弧のピーク)判定用
@@ -821,6 +868,7 @@ export function genMotifMelodyV2(
       anchor = role === 2 ? clampScale(sp, nearestIdx(sp, anchorBase) + 2) : anchorBase; // 弧＝B塊を音域ピークへ
       if (role === 2) for (let b = bar0; b < bar0 + L; b++) bBlockBars.add(b);
     }
+    if (densBar) variant = applyConverse(variant, convScale(bar0, L), rbb); // C: ブロック単位の密度相補（densBar無し＝経路に入らない）
     notes.push(...render(variant, bar0, anchor, last, rbb));
   }
   notes.sort((a, b) => a.start - b.start);
@@ -1107,6 +1155,35 @@ export function genMotifMelodyV2(
     }
   }
 
+  // ── A: キック食い（drumLock・design「gen_melody×ドラム結線」）＝push の対象拍を「実キック位置」で駆動する精緻化。
+  // 対象＝拍頭ちょうどの音のうち「その拍頭の16分前(step-1)に実キックが食っている」拍のみ。確率 drumLock で16分前借り
+  // （dur+=0.25 のタイ＝終端不変・前音は詰める＝anticipate と同式）。保護＝曲頭(i=0)/終止(last)は push と同じ。
+  // 上限＝前借り≤2/小節（全整列＝ユニゾン化ガード・research③-A）。push との合成＝**音単位の排他（実効max）**：
+  // ここで食った音は拍頭から外れ、後段 push の対象から構造的に外れる＝一音は最大1回・0.25拍しか前借りされない。
+  // drumLock=0 or kick無し or compound＝丸ごとスキップ＝bit一致。rng は独立派生(seed+61)＝他段の列を乱さない。
+  const dLock = Math.max(0, Math.min(1, opts.drumLock ?? 0));
+  const dKick = opts.drums?.kick ?? [];
+  if (dLock > 0 && !compound && dKick.length > 0 && notes.length > 2) {
+    const kr = makeRng(seed + 61);
+    const k16 = new Set(dKick.map((t) => Math.round(t * 4)));
+    const pulled = new Map<number, number>(); // bar → この段の前借り数
+    for (let i = 1; i < notes.length - 1; i++) { // 曲頭・終止は保護
+      const n = notes[i]!;
+      if (Math.abs(n.start - Math.round(n.start)) > 0.01) continue; // 拍頭ちょうどのみ
+      const beat = Math.round(n.start);
+      if (!k16.has(beat * 4 - 1)) continue; // 16分前に実キックが食っている拍のみ
+      const bar = Math.floor(beat / barLen);
+      if ((pulled.get(bar) ?? 0) >= 2) continue; // 上限≤2/小節
+      if (kr() >= dLock) continue;
+      const prev = notes[i - 1]!, ns = beat - 0.25;
+      if (ns <= prev.start + 0.1) continue; // 前音を越えない
+      n.dur += n.start - ns; n.start = ns; // タイで跨ぐ＝終端不変
+      if (prev.start + prev.dur > ns) prev.dur = Math.max(0.1, ns - prev.start); // 前音を詰める
+      pulled.set(bar, (pulled.get(bar) ?? 0) + 1);
+    }
+    notes.sort((a, b) => a.start - b.start);
+  }
+
   // push(2026-07-09 Step4・design#12-M)：division-level syncopation＝前借り(食い)。既存 anticipate(位置固定・タイ・
   // 終端不変)で毎小節同じ拍を16分ぶん前へ。push量で対象拍を可変(0.33=3拍/0.66=1,3拍/1=1,2,3拍)。6/8は対象外。
   const push = Math.max(0, Math.min(1, opts.push ?? 0));
@@ -1154,6 +1231,23 @@ export function genMotifMelodyV2(
     }
     notes.sort((a, b) => a.start - b.start);
     for (let i = 0; i + 1 < notes.length; i++) { const g = notes[i + 1]!.start - notes[i]!.start; if (g > 0) notes[i]!.dur = Math.min(notes[i]!.dur, Math.round(g * 1000) / 1000); }
+  }
+
+  // ── B: バックビート・アクセント（backbeat・design「gen_melody×ドラム結線」）＝velocity のみ・onset/pitch/dur 不変
+  // （最低リスク＝research③-B）。humanize の posBoost（メトリカル強拍±）に対する第2項＝**ドラム実在位置**のブースト：
+  // スネア位置+12/キック位置+6 を backbeat 倍して加算（16分グリッドへ round して照合＝humanize/swing/前借り後の
+  // 位置でも噛む）。humanize 無しでも単独で効く（基底 vel ?? 100＝web/MIDI の既定と同じ・非該当音は vel を付けない）。
+  // backbeat=0 or kick/snare無し or compound＝丸ごとスキップ＝bit一致。決定的（rng不使用）。
+  const bkb = Math.max(0, Math.min(1, opts.backbeat ?? 0));
+  const dSnare = opts.drums?.snare ?? [], dKickB = opts.drums?.kick ?? [];
+  if (bkb > 0 && !compound && (dSnare.length > 0 || dKickB.length > 0)) {
+    const s16 = new Set(dSnare.map((t) => Math.round(t * 4)));
+    const kb16 = new Set(dKickB.map((t) => Math.round(t * 4)));
+    for (const n of notes) {
+      const st = Math.round(n.start * 4);
+      const boost = s16.has(st) ? 12 : kb16.has(st) ? 6 : 0;
+      if (boost > 0) n.vel = Math.max(55, Math.min(118, Math.round((n.vel ?? 100) + bkb * boost)));
+    }
   }
   return notes;
 }

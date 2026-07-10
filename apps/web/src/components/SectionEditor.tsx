@@ -348,6 +348,40 @@ export function SectionEditor({
     }
     return out.sort((a, b) => a.start - b.start);
   }
+  // リズム(ドラム)レーンの子を1本の step グリッドへマージ（design「gen_melody×ドラム結線」）。
+  // content 形＝genDrums 出力 {rhythm:{steps,beatsPerStep,lanes}}。子ごとに hits を配置位置(拍÷beatsPerStep)ぶん
+  // オフセットし、レーン(midi|name)単位で合算（位置＝拍解釈は compositeNotes と同じ）。beatsPerStep が先頭子と
+  // 異なる子・不正 content は捨てる（防御）。レーンが空なら null＝gen_melody へ渡さない＝従来。
+  function sectionDrums(): { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: { name?: string; midi?: number; hits: number[]; vel?: number }[] } } | null {
+    type DrumRhythm = { steps?: number; bars?: number; beatsPerStep?: number; lanes?: { name?: string; midi?: number; hits?: number[]; vel?: number }[] };
+    const lane = LANES.find((l) => l.key === "rhythm");
+    if (!lane) return null;
+    let bps = 0;
+    let endStep = 0;
+    const merged = new Map<string, { name?: string; midi?: number; hits: Set<number>; vel?: number }>();
+    for (const c of laneChildren(lane)) {
+      const r = (c.node.neta.content as { rhythm?: DrumRhythm } | null)?.rhythm;
+      if (!r || !Array.isArray(r.lanes) || !r.steps || !r.beatsPerStep || r.steps <= 0 || r.beatsPerStep <= 0) continue;
+      if (!bps) bps = r.beatsPerStep;
+      if (Math.abs(r.beatsPerStep - bps) > 1e-9) continue; // グリッド解像度が混在＝合算不能な子は捨てる
+      const off = Math.round((c.position ?? 0) / bps); // 配置位置(拍)→step オフセット
+      for (const l of r.lanes) {
+        const key = `${l.midi ?? ""}|${l.name ?? ""}`;
+        const m = merged.get(key) ?? merged.set(key, { name: l.name, midi: l.midi, hits: new Set(), vel: l.vel }).get(key)!;
+        for (const h of l.hits ?? []) if (Number.isInteger(h) && h >= 0 && h < r.steps) m.hits.add(off + h);
+      }
+      endStep = Math.max(endStep, off + r.steps);
+    }
+    if (!bps || !endStep || !merged.size) return null;
+    return {
+      rhythm: {
+        steps: endStep,
+        bars: Math.max(1, Math.round((endStep * bps) / BPB)),
+        beatsPerStep: bps,
+        lanes: [...merged.values()].map((l) => ({ name: l.name, midi: l.midi, hits: [...l.hits].sort((a, b) => a - b), vel: l.vel })),
+      },
+    };
+  }
   // 生成パーツ（この進行に◯）。メロ/ベースはコードが要る、ドラムは frame だけ。
   const GEN_PARTS = [
     { label: "メロ", op: "gen_melody", needsChords: true },
@@ -375,6 +409,10 @@ export function SectionEditor({
         // ベース無し＝渡さない＝従来どおり。UI ノブでの counter 露出は後続タスク。
         const bass = sectionBass();
         if (bass.length) { body.bass = bass; body.counter = 0.3; }
+        // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3（推奨＝B のみ弱く）。
+        // drumLock/converse は 0＝耳較正待ち（渡さない）。レーン無し＝渡さない＝従来どおり。UI ノブ露出は後続タスク。
+        const drums = sectionDrums();
+        if (drums) { body.drums = drums; body.backbeat = 0.3; }
       }
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
