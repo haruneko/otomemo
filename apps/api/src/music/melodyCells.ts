@@ -751,8 +751,15 @@ export function genMotifMelodyV2(
       } else {
         const want = prev + M.mv[i]!;
         const L = spAt(barOf(t)); // 弱拍の歩行も導音小節では和声的短音階（A2/A3）
-        p = onMain ? ctOf(want, pcs) : snapList(want, L);
-        if (p === prev) p = snapList(prev + (M.mv[i]! >= 0 ? 1 : -1), L);
+        if (rns !== undefined && M.run[i] && !onMain) {
+          // 走句(runs)＝半音±1の `want` を snapList すると全音境界で prev に戻り同音潰れ（タイブレーク先着＝低い方）。
+          // 走句音だけ「prev のスケール段から ±1段」で確実に隣接スケール音へ進める＝スカラー走句（clampScale/nearestIdx）。
+          // runs未指定/非走句/強拍(onMain)は現行 snap のまま＝bit一致・強拍CT・弧・終止は無改変。生成側 rdir=±1 の意味を段移動へ解釈するだけ。
+          p = clampScale(L, nearestIdx(L, prev) + (M.mv[i]! >= 0 ? 1 : -1));
+        } else {
+          p = onMain ? ctOf(want, pcs) : snapList(want, L);
+          if (p === prev) p = snapList(prev + (M.mv[i]! >= 0 ? 1 : -1), L);
+        }
       }
       out.push({ pitch: p, start: t, dur: compound ? 0.5 : 0.25 });
       prev = p;

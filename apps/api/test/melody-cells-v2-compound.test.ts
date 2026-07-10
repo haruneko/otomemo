@@ -182,4 +182,22 @@ describe("genMotifMelodyV2 compound × runs（6/8＝16分12枠常時基底・run
     expect(strong.length).toBeGreaterThan(0);
     expect(ct.length / strong.length).toBeGreaterThan(0.5);
   });
+
+  it("⑭ 走句がスケール的に繋がる＝16分連鎖の同音潰れが少ない・順次が多い（2026-07-10 案B・6/8）", () => {
+    let chain = 0, rep = 0, step = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const notes = genR(seed, { runs: 1 }).sort((a, b) => a.start - b.start);
+      for (let i = 1; i < notes.length; i++) {
+        if (notes[i]!.start - notes[i - 1]!.start <= 0.26) {
+          chain++;
+          const d = Math.abs(notes[i]!.pitch - notes[i - 1]!.pitch);
+          if (d === 0) rep++;
+          if (d >= 1 && d <= 2) step++;
+        }
+      }
+    }
+    expect(chain, "16分連鎖が実在").toBeGreaterThan(50);
+    expect(rep / chain, `同音率(${(rep / chain).toFixed(3)})<0.25（従来~0.42から半減以下）`).toBeLessThan(0.25);
+    expect(step / chain, `順次(1-2半音)率(${(step / chain).toFixed(3)})>0.7`).toBeGreaterThan(0.7);
+  });
 });
