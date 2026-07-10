@@ -448,7 +448,13 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
     const start = Math.round(step * BASS_STEP_TO_BEAT * 1000) / 1000;
     const dur = Math.round(Math.max(1, hits[h]!.dur) * BASS_STEP_TO_BEAT * 1000) / 1000; // 各音の指定長さ
     if (dur <= 0) continue;
-    const ch = bassChordAt(start, chords);
+    // つんのめり(アンティシペーション)：裏拍始まりでダウンビートを跨いで伸びる音は、跨いだ先のダウンビートの
+    // コードで解決する＝「音の終わる方の拍でコードを決める」＝シンコペ分だけコードが先取り（bass 側と同ロジック・
+    // 2026-07-10 オーナーFB：コード楽器にだけ抜けていた）。ジャストの音は従来どおり start のコード。
+    const nextBeat = Math.floor(start + 1e-9) + 1;
+    const offBeat = Math.abs(start - Math.round(start)) > 1e-9;
+    const refBeat = offBeat && nextBeat < start + dur - 1e-9 ? nextBeat : start;
+    const ch = bassChordAt(refBeat, chords);
     const root = ch ? ch.root : ((key % 12) + 12) % 12;
     const quality = ch ? ch.quality : "";
     const voiced = voiceChord(root, quality, v);

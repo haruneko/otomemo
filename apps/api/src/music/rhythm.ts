@@ -52,13 +52,18 @@ export const COMPOUND_BASS_FIGS: RhyFig[] = [
   { on: [[0, 0.5], [0.5, 0.5], [1, 0.5]], span: 1.5, w: 0.8, busy: true }, // 八分3つ（歩き）
 ];
 
-// mood/tempo から「密度バイアス」。切ない/遅い=長音・休符寄り、明るい/速い=細分寄り。
+// mood/tempo から「密度バイアス」。切ない/遅い=長音・休符寄り、元気=細分寄り。
+// テンポは"ノリ"でなく"1拍の実時間"を決める＝高BPMほど16分が速すぎて潰れる。旧仕様は tempo≥130 で busy=2.0 と
+// **逆向き**(速い曲ほど細かく)だった(オーナーFB 2026-07-10・170bpmで16分だらけ)。テンポは mood と分離し、
+// 高BPMは"長音寄り"へ倒して可読性を守る（細分は元気moodが担当）。しきい値=速い曲の16分の速さで決める。
 export function densityBias(mood: string, tempo?: number): { busy: number; long: number; rest: number } {
-  const sparse = isMinorMood(mood) || /バラード|ballad|遅|slow|静|アンビ|ambient/.test(mood.toLowerCase());
-  const fast =
-    /明る|元気|アップ|upbeat|fast|速|ダンス|dance|ポップ|pop/.test(mood.toLowerCase()) || (tempo ?? 0) >= 130;
-  if (fast) return { busy: 2.0, long: 0.4, rest: 0.6 };
-  if (sparse) return { busy: 0.5, long: 1.8, rest: 1.4 };
+  const m = mood.toLowerCase();
+  const t = tempo ?? 0;
+  const slow = isMinorMood(mood) || /バラード|ballad|遅|slow|静|アンビ|ambient/.test(m);
+  const energetic = /明る|元気|アップ|upbeat|fast|速|ダンス|dance|ポップ|pop/.test(m);
+  if (t >= 150) return { busy: 0.5, long: 1.6, rest: 0.8 }; // 高BPM＝1拍が短い＝16分は速すぎ＝長音寄り(旧: busy2.0の逆向きを是正)
+  if (energetic) return { busy: 2.0, long: 0.4, rest: 0.6 }; // 元気mood＝細分寄り(テンポでなく性格で)
+  if (slow) return { busy: 0.5, long: 1.8, rest: 1.4 };
   return { busy: 1, long: 1, rest: 1 };
 }
 

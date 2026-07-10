@@ -378,6 +378,17 @@ describe("music", () => {
       const atG = notes.filter((n) => n.start === 2).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
       expect(atG).toEqual([2, 7, 11]); // G B D = pc 7,11,2
     });
+    it("アンティシペーション：ダウンビートを跨ぐ食い(裏拍)は次コードを先取り（bass と同ロジック・2026-07-10 オーナーFB）", () => {
+      // C(0-4拍) → G(4-8拍)。step14=3.5拍(裏)で dur4step=1拍＝4拍目を跨ぐ ⇒ そのコードは"次のG"を先取り。
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }];
+      const synced = resolveChordPattern(cp({ steps: 32, hits: [{ step: 14, dur: 4 }] }), chords, 0);
+      const pcs = synced.filter((n) => Math.abs(n.start - 3.5) < 1e-6).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
+      expect(pcs).toEqual([2, 7, 11]); // 3.5拍の食いは G(先取り)＝pc 7,11,2（旧: C=0,4,7 のまま鳴っていた）
+      // ジャスト（跨がない）音は従来どおり start のコード＝C
+      const just = resolveChordPattern(cp({ steps: 32, hits: [{ step: 8, dur: 4 }] }), chords, 0); // step8=2拍・1拍ぶん＝4拍跨がない
+      const justPcs = just.filter((n) => Math.abs(n.start - 2) < 1e-6).map((n) => ((n.pitch % 12) + 12) % 12).sort((a, b) => a - b);
+      expect(justPcs).toEqual([0, 4, 7]); // 2拍はまだ C（先取りしない）
+    });
     it("合成(CP5)：section の進行に解決して鳴る（chord_progression→chord_pattern）", () => {
       const children = [
         { position: 0, node: { neta: { kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }] } } } },
