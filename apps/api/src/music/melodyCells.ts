@@ -816,10 +816,11 @@ export function genMotifMelodyV2(
   let prevPreserveEnd: number | null = null; // 前ブロック終端pitch＝w4(継目跳躍)コスト用
   const renderPreserve = (M: Motif16, bar0: number, toTonic: boolean, label: string, bb: number = mb): Note[] => {
     const mbp = bb;
-    // genBest動機の mv はコーパスの半音遷移＝そのまま段にすると跳躍が膨張(P5→オクターブ)。半音→スケール段へ換算（理論眼②）。
-    // 同度(0)と輪郭符号は保存＝反復音・同一性は不変、跳躍だけ実音楽の段幅に収める。round(|m|*7/12)＝1,2→1段/3,4→2/5→3/7→4/12→7。
-    // seedMotif（ユーザー/補完由来）の mv は既に「スケール段」意図ゆえ換算しない（A A B C A の -2 は3度下＝2段のまま）。
-    const stepMv = opts.seedMotif ? M.mv : M.mv.map((m) => (m === 0 ? 0 : Math.sign(m) * Math.max(1, Math.round((Math.abs(m) * 7) / 12))));
+    // mv はエンジン共通で「半音差」（genBest の moveTrans も extractMotif16 の clamp7 も半音）。そのまま段にすると跳躍が
+    // 膨張(P5→オクターブ)＝半音→スケール段へ換算（理論眼②・監査指摘）。round(|m|*7/12)＝1,2→1段/3,4→2/5→3/7→4/12→7。
+    // 同度(0)と輪郭符号は保存＝反復音・同一性は不変、跳躍だけ実音楽の段幅に収める。seedMotif も半音表記で渡す（例外なし＝
+    // 補完 extractMotif16 の種も正しく換算＝tail の膨張を解消）。
+    const stepMv = M.mv.map((m) => (m === 0 ? 0 : Math.sign(m) * Math.max(1, Math.round((Math.abs(m) * 7) / 12))));
     const deg = motifDegrees(stepMv);
     const L = spAt(barOf(bar0 * barLen)); // 短調の導音/色音小節は和声的短音階（sp でなく spAt）
     const prior = placeByLabel.get(label); // 同ラベル既出なら anchor を再利用＝A''がAと同音高で戻る
