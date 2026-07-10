@@ -979,7 +979,10 @@ export function genMotifMelodyV2(
     return { ons, mv, run };
   };
   const nB = blocks.length;
-  const sRole = (i: number): "bi" | "seq" | "frag" | "cad" => (i === nB - 1 ? "cad" : i === 0 ? "bi" : i === 1 ? "seq" : "frag"); // 提示/移高反復/継続断片/カデンツ
+  // 提示(bi)→反復(seq)→…→継続断片(frag・カデンツ直前1つ)→カデンツ(cad)。対策6（2026-07-11）＝断片化は「継続部＝
+  // カデンツ直前」に限定（Caplin：presentation は基本動機＋反復で伸ばし、fragmentation は解放=cad と対で最後に畳み掛ける）。
+  // 旧＝中間ブロック全部 frag（長尺で提示が消え畳み掛けっぱなし）。nB=4（8小節）は bi/seq/frag/cad で従来一致。
+  const sRole = (i: number): "bi" | "seq" | "frag" | "cad" => (i === nB - 1 ? "cad" : i === 0 ? "bi" : i === nB - 2 ? "frag" : "seq");
   const bBlockBars = new Set<number>(); // 単一頂点のB塊(弧のピーク)判定用
   for (let bi = 0; bi < nB; bi++) {
     const bar0 = blocks[bi]!.bar0, L = blocks[bi]!.bars, last = bi === nB - 1;
