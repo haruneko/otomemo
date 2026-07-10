@@ -1392,24 +1392,32 @@ export function genMotifMelodyV2(
       ? opts.phrases.map((p) => p.startBeat + p.beats)
       : Array.from({ length: Math.max(0, Math.ceil(bars / 4) - 1) }, (_, k) => (k + 1) * 4 * barLen)
     ).filter((b) => b < secEnd - 1e-6);
-    const breathAmt = 1.0; // 句末に残す息（拍）＝money note はこの手前まで伸ばし、以降は無音で歌い終える
+    // 対策2-C（着地位置ジッタ・2026-07-11）：句末の息量をseed決定的に句ごとにばらす＝終止の来る位置の単峰を崩す
+    // （女性終止＝早めに歌い終え息長め ↔ 歌い切り＝息短め）。0.75〜2.5拍。main r() を汚さず独立ハッシュで再現的。
+    const jitBreath = (k: number): number => {
+      let x = (seed * 374761393 + (k + 1) * 668265263) >>> 0;
+      x = ((x ^ (x >>> 13)) * 1274126177) >>> 0;
+      const u = ((x ^ (x >>> 16)) >>> 0) / 4294967296; // [0,1)
+      return 0.75 + u * 1.75; // [0.75, 2.5]
+    };
     // 各句末境界の近傍で「実際の息継ぎ（最大の無音gap）」を1つ選び保護＝pickup で句頭が境界前へずれても gap の実位置で拾う。
-    const keep = new Set<number>();
-    for (const pb of bounds) {
+    const breathOf = new Map<number, number>(); // 保護する音index → その句末に残す息量（ジッタ済）
+    bounds.forEach((pb, k) => {
       let bestI = -1, bestGap = 0;
       for (let i = 0; i + 1 < notes.length; i++) {
         const gStart = notes[i]!.start + notes[i]!.dur, gEnd = notes[i + 1]!.start, g = gEnd - gStart;
         if (gEnd > pb - 2.5 && gStart < pb + 0.5 && g > bestGap) { bestGap = g; bestI = i; } // 境界近傍[pb-2.5,pb+0.5]の最大gap
       }
-      if (bestI >= 0) keep.add(bestI); // その音の後ろの息は埋めない（句末の呼吸）
-    }
+      if (bestI >= 0) breathOf.set(bestI, jitBreath(k)); // その音の後ろの息は埋めない（句末の呼吸・息量は句ごとにばらす）
+    });
     for (let i = 0; i < notes.length; i++) {
       const cur = notes[i]!;
       const nextStart = i + 1 < notes.length ? notes[i + 1]!.start : secEnd;
       const curEnd = cur.start + cur.dur;
       let newDur: number;
-      if (keep.has(i)) {
+      if (breathOf.has(i)) {
         // 句末＝必ず息を残す。次onsetの breathAmt 手前で歌い終える＝money note は伸ばし・詰まった音は短縮して息を彫る。
+        const breathAmt = breathOf.get(i)!;
         newDur = Math.max(0.25, Math.min(nextStart - breathAmt, curEnd + flow * 4) - cur.start);
       } else {
         newDur = Math.min(nextStart, curEnd + flow * 4) - cur.start; // 句内・曲末＝次onset(末尾はセクション末)まで連結（延長のみ）
