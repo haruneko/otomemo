@@ -91,6 +91,10 @@ export function SectionEditor({
   // 対位（メロがベースを見て並行5度8度/b9を避ける）＝固定0.3自動送信を廃し UI で選択（2026-07-10・menu整理）。
   // 空=OFF（未送信＝従来bit一致）／weak0.2・mid0.4・strong0.7（推奨帯0.2-0.4＋強め）。bassレーン非在時は disabled。
   const [counter, setCounter] = useState<"" | "weak" | "mid" | "strong">("");
+  // 反復音モチーフ（Phase2案B・2026-07-10）：hook>0 で motifMode:preserve＋hook を送る（hookはpreserve下でのみ本領）。
+  // articulation=連打のmicropause/切り＝「ソッソッ」が1本に潰れず聞こえる。両方既定0＝未送信＝従来bit一致。
+  const [hook, setHook] = useState(0);
+  const [articulation, setArticulation] = useState(0);
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）＝既定は畳む（ノブの壁の解消）
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
@@ -419,6 +423,10 @@ export function SectionEditor({
         const bass = sectionBass();
         const counterVal = counter === "weak" ? 0.2 : counter === "mid" ? 0.4 : counter === "strong" ? 0.7 : 0;
         if (counterVal > 0 && bass.length) { body.bass = bass; body.counter = counterVal; }
+        // 反復音モチーフ（design「動機保存レンダ」）：hook>0 で motifMode:preserve＋hook を送る（hookはpreserve下でのみ本領）。
+        // articulation=連打の切り。両方 0＝未送信＝従来 bit一致。
+        if (hook > 0) { body.hook = hook; body.motifMode = "preserve"; }
+        if (articulation > 0) body.articulation = articulation;
         // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3（推奨＝B のみ弱く）。
         // drumLock/converse は 0＝耳較正待ち（渡さない）。レーン無し＝渡さない＝従来どおり。UI ノブ露出は後続タスク。
         const drums = sectionDrums();
@@ -667,6 +675,19 @@ export function SectionEditor({
                         </select>
                       </label>
                       {knobHelp && <small className="knob-help">ベースを見て並行5度/8度を避ける（要ベースレーン・弱0.2/中0.4/強0.7）</small>}
+                      {/* 反復音モチーフ（Phase2案B）：hook>0 で動機保存レンダ＝ラーラ/ソッソッの反復音フックが出る。 */}
+                      <label className="knob-row">
+                        <span>反復音</span>
+                        <input aria-label="hook" type="range" min={0} max={1} step={0.1} value={hook} onChange={(e) => setHook(Number(e.target.value))} />
+                        <span className="knob-val">{hook < 0.1 ? "—" : hook > 0.66 ? "強" : "反"}</span>
+                      </label>
+                      {knobHelp && <small className="knob-help">同音の反復フック（ラーラ/ソッソッ）を動機として保持＝歌える手癖。0=従来</small>}
+                      <label className="knob-row">
+                        <span>発音</span>
+                        <input aria-label="articulation" type="range" min={0} max={1} step={0.1} value={articulation} onChange={(e) => setArticulation(Number(e.target.value))} />
+                        <span className="knob-val">{articulation < 0.1 ? "—" : articulation > 0.66 ? "歯切" : "切"}</span>
+                      </label>
+                      {knobHelp && <small className="knob-help">連打を短く切って隙間を作る（レガート↔スタッカート）＝反復音が1本に潰れず聞こえる</small>}
                       </>}
                     </div>
                   )}

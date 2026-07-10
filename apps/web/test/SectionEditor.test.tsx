@@ -360,6 +360,37 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(screen.getByLabelText("push")).toBeInTheDocument(); // 展開で現れる
     expect(screen.getByLabelText("counter")).toBeInTheDocument();
   });
+  it("gen_melody＝反復音(hook)ONで motifMode:preserve＋hook を送る／articulation も（詳細段・Phase2案B）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    // 既定（詳細を開かない＝hook 0）は preserve/hook を送らない＝bit一致
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    let body = music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.hook).toBeUndefined();
+    expect(body.motifMode).toBeUndefined();
+    // 反復音スライダーを上げると motifMode:preserve＋hook を送る
+    music.mockClear();
+    await userEvent.click(screen.getByLabelText("tools")); // 生成で閉じたツール列を開き直す
+    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    fireEvent.change(screen.getByLabelText("hook"), { target: { value: "0.7" } });
+    fireEvent.change(screen.getByLabelText("articulation"), { target: { value: "0.5" } });
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    body = music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.motifMode).toBe("preserve");
+    expect(body.hook).toBeCloseTo(0.7);
+    expect(body.articulation).toBeCloseTo(0.5);
+  });
   it("gen_melody＝対位selectはベースレーンが無いと disabled（相手がいない）", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });
