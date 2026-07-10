@@ -1369,6 +1369,21 @@ export function genMotifMelodyV2(
       if (boost > 0) n.vel = Math.max(55, Math.min(118, Math.round((n.vel ?? 100) + bkb * boost)));
     }
   }
+
+  // ── アーティキュレーション後段（Phase2案B U6・2026-07-10・理論眼④）──
+  // 反復音連打はレガートだと1本の長音に潰れる（Bresin 2001＝micropause必須）。articulation で dur を縮め隙間を作る。
+  // 反復音＝強めに切る(micropause)＋連打頭アクセント。他音＝軽くスタッカート。既定0＝dur/vel無変更＝bit一致。決定的。
+  const art = Math.max(0, Math.min(1, opts.articulation ?? 0));
+  if (art > 0 && notes.length > 1) {
+    for (let i = 0; i < notes.length; i++) {
+      const ioi = (notes[i + 1]?.start ?? notes[i]!.start + notes[i]!.dur) - notes[i]!.start;
+      if (ioi <= 0) continue;
+      const isRep = i + 1 < notes.length && notes[i + 1]!.pitch === notes[i]!.pitch; // 次音が同pitch＝連打
+      const factor = isRep ? 1 - art * 0.4 : 1 - art * 0.25; // 反復音は深く切る（gap≥0.4·IOI@art=1）・他は軽く
+      notes[i]!.dur = Math.min(notes[i]!.dur, Math.max(0.05, ioi * factor)); // gap 下限 0.05拍
+      if (isRep) notes[i]!.vel = Math.max(55, Math.min(118, Math.round((notes[i]!.vel ?? 100) + art * 10))); // 連打頭アクセント
+    }
+  }
   return notes;
 }
 
