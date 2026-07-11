@@ -2,8 +2,30 @@ import { Midi } from "@tonejs/midi";
 import { Chord as TonalChord, Note as TonalNote } from "tonal";
 // 不変の音楽知識（音名・コード品質→インターバル）は @cm/music-core が SSOT（負債D3・design 決定2b）。
 // PITCH_NAMES は re-export して既存の web import 面（useNetaEditor 等）を不変に保つ。
-import { PITCH_NAMES, QUALITY_INTERVALS } from "@cm/music-core";
-export { PITCH_NAMES };
+import { PITCH_NAMES, QUALITY_INTERVALS, applyFeel, type Feel } from "@cm/music-core";
+export { PITCH_NAMES, applyFeel };
+export type { Feel };
+
+// フィール層（design.md「フィール層分離」）：スイング/微小タイミングは再生・書き出し境界で **applyFeel**
+// を通す非破壊タイムマップ。SSOTのnotesは常にストレート。6/8等 compound はスイング対象外＝meter から判定。
+export function isCompoundMeter(meter?: string | null): boolean {
+  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
+  if (!m) return false;
+  const n = Number(m[1]), d = Number(m[2]);
+  return d === 8 && n % 3 === 0 && n >= 6; // 6/8・9/8・12/8＝複合拍子
+}
+// notes に feel を適用（meter から compound を導出）。feel 無しは恒等＝ストレートのまま。
+export function feelNotes(notes: Note[], feel: Feel | null | undefined, meter?: string | null): Note[] {
+  return feel ? applyFeel(notes, feel, { compound: isCompoundMeter(meter) }) : notes;
+}
+// content から feel を読む（トラック＝melody等の content.feel／セクション＝section content.feel）。無ければ undefined。
+export function feelOf(content: unknown): Feel | undefined {
+  if (content && typeof content === "object") {
+    const f = (content as { feel?: Feel }).feel;
+    if (f && typeof f === "object") return f;
+  }
+  return undefined;
+}
 
 // 音楽的中身（docs/design.md #16）。pitch は C基準のMIDI番号、start/dur は拍。
 export interface Note {
@@ -650,6 +672,7 @@ export function notesToMidi(
   bpm = 120,
   meter?: string | null,
   program?: number,
+  feel?: Feel | null,
 ): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);
@@ -661,10 +684,12 @@ export function notesToMidi(
       track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
     }
   };
+  // 書き出し境界＝feel を適用（跳ねて聞こえる performance MIDI／feel 無しはストレートのまま＝従来一致）。
+  const feltAll = feelNotes(notes, feel, meter);
   // ドラムとピッチ楽器は GM 上ch分けが必須（ch10=ドラム）。混在時は別トラックに分離＝1トラックに
   // 全部押し込んで ch9 固定にすると、ピッチ楽器が DAW でドラム音源で鳴る破綻を防ぐ（監査 SG-04）。
-  const drums = notes.filter((n) => n.drum);
-  const pitched = notes.filter((n) => !n.drum);
+  const drums = feltAll.filter((n) => n.drum);
+  const pitched = feltAll.filter((n) => !n.drum);
   if (pitched.length || drums.length === 0) {
     const track = midi.addTrack(); // 純ドラムでない限りピッチ用トラック（空 notes でも従来通り1トラック出す）
     if (program !== undefined) track.instrument.number = program;
@@ -689,7 +714,7 @@ export interface MidiTrackSpec {
   name?: string;
   kit?: number; // ドラムトラックのキット（ch10 program）。
 }
-export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null): Uint8Array {
+export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null, feel?: Feel | null): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);
   const ts = meterPair(meter);
@@ -704,7 +729,7 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
       const kit = t.kit ?? t.notes.find((n) => n.drum)?.kit;
       if (kit) track.instrument.number = kit;
     } else if (t.program !== undefined) track.instrument.number = t.program;
-    for (const n of t.notes) {
+    for (const n of feelNotes(t.notes, feel, meter)) { // 各トラックに同一 feel＝アンサンブルで揃って跳ねる
       track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
     }
   }
@@ -731,8 +756,9 @@ export function downloadMultitrackMidi(
   filename = "section.mid",
   bpm = 120,
   meter?: string | null,
+  feel?: Feel | null,
 ): void {
-  const blob = new Blob([tracksToMidi(tracks, bpm, meter) as BlobPart], { type: "audio/midi" });
+  const blob = new Blob([tracksToMidi(tracks, bpm, meter, feel) as BlobPart], { type: "audio/midi" });
   triggerDownload(blob, filename);
 }
 
@@ -759,8 +785,9 @@ export function downloadMidi(
   bpm = 120,
   meter?: string | null,
   program?: number,
+  feel?: Feel | null,
 ): void {
-  const blob = new Blob([notesToMidi(notes, bpm, meter, program) as BlobPart], {
+  const blob = new Blob([notesToMidi(notes, bpm, meter, program, feel) as BlobPart], {
     type: "audio/midi",
   });
   triggerDownload(blob, filename);

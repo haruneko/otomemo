@@ -15,6 +15,8 @@ import {
   rhythmToNotes,
   programOf,
   scheduleTimes,
+  applyFeel,
+  type Feel,
   totalSec,
   loopRange,
   DRUMS,
@@ -30,6 +32,8 @@ interface PlayOpts {
   loop?: { startBeat: number; endBeat: number };
   onEnd?: () => void;
   program?: number; // #55c SF2旋律の音色（GM program）。未指定は0（ピアノ）。
+  feel?: Feel | null; // フィール層：再生境界で applyFeel（スイング/微小タイミング）。未指定＝ストレート＝従来一致。
+  compound?: boolean; // 6/8等＝スイング対象外（feel.swing skip）。
 }
 
 // 単一再生：グローバル Transport を奪い合うので、現在の音源を1組だけ保持し再利用/破棄。
@@ -714,6 +718,9 @@ export async function playNotes(
   bpm = 120,
   opts: PlayOpts = {},
 ): Promise<PlaybackHandle> {
+  // フィール層：再生境界で feel を適用（スイング/微小タイミング）。SSOTのnotesはストレート・ここで跳ねさせる。
+  // 未指定＝恒等＝従来一致。start/dur のみ変わるので samplers（pitch/program/part 依存）には無影響。
+  if (opts.feel) notes = applyFeel(notes, opts.feel, { compound: opts.compound });
   const Tone = await import("tone");
   await Tone.start();
   const transport = Tone.getTransport();
