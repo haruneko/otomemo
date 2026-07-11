@@ -11,12 +11,13 @@ import { ChordEditor } from "./ChordEditor";
 import { ChordPatternEditor } from "./ChordPatternEditor";
 import { RhythmEditor } from "./RhythmEditor";
 import { SectionEditor } from "./SectionEditor";
+import { SkeletonEditor } from "./SkeletonEditor";
 import type { Neta } from "../api";
-import type { Note, ChordEntry, RhythmContent, BassStep, ChordPatternContent } from "../music";
+import type { Note, ChordEntry, RhythmContent, BassStep, ChordPatternContent, SkeletonBreakpoint } from "../music";
 
 export interface KindEditorBodyProps {
   neta: Neta;
-  flags: { isMelody: boolean; isBass: boolean; isChord: boolean; isChordPat: boolean; isRhythm: boolean; isContainer: boolean; isRelBass: boolean };
+  flags: { isMelody: boolean; isBass: boolean; isChord: boolean; isChordPat: boolean; isRhythm: boolean; isSkel: boolean; isContainer: boolean; isRelBass: boolean };
   // 状態と setter（親所有）
   notes: Note[];
   setNotes: (n: Note[]) => void;
@@ -34,6 +35,18 @@ export interface KindEditorBodyProps {
   setBassMode: (m: "absolute" | "relative") => void;
   rollMode: "draw" | "select" | "erase";
   setRollMode: (v: "draw" | "select" | "erase") => void;
+  // 骨格（design #20 S2）
+  tones?: SkeletonBreakpoint[];
+  setTones?: (t: SkeletonBreakpoint[]) => void;
+  skelBass?: SkeletonBreakpoint[];
+  setSkelBass?: (b: SkeletonBreakpoint[]) => void;
+  phrases?: { endBeat: number; cadence?: string }[];
+  setPhrases?: (p: { endBeat: number; cadence?: string }[]) => void;
+  skelBars?: number;
+  setSkelBars?: (n: number) => void;
+  skelChords?: ChordEntry[];
+  skelCounter?: boolean;
+  setSkelCounter?: (v: boolean) => void;
   len: number;
   setLen: (n: number) => void;
   pickup: number; // 弱起（lead-in拍数）
@@ -231,6 +244,34 @@ export function KindEditorBody(p: KindEditorBodyProps) {
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />
       ) : isRhythm ? (
         <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
+      ) : p.flags.isSkel ? (
+        <div className="melody-input">
+          {/* 描く/選ぶ/消す（メロと同じモード流儀）。骨格の点は次点/句境界まで支配。 */}
+          <div className="roll-toolbar">
+            <div className="proll-modes">
+              <button type="button" aria-label="mode-draw" title="描く（打点/移動）" className={p.rollMode === "draw" ? "on" : ""} onClick={() => p.setRollMode("draw")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor" /></svg>
+              </button>
+              <button type="button" aria-label="mode-select" title="選ぶ（選択して編集）" className={p.rollMode === "select" ? "on" : ""} onClick={() => p.setRollMode("select")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3.5 3" /></svg>
+              </button>
+              <button type="button" aria-label="mode-erase" title="消す（点タップで削除）" className={p.rollMode === "erase" ? "on" : ""} onClick={() => p.setRollMode("erase")}>
+                <Icon name="eraser" size={18} />
+              </button>
+            </div>
+          </div>
+          <SkeletonEditor
+            tones={p.tones ?? []} setTones={p.setTones!}
+            bass={p.skelBass ?? []} setBass={p.setSkelBass!}
+            phrases={p.phrases ?? []} setPhrases={p.setPhrases!}
+            bars={p.skelBars ?? 4} setBars={p.setSkelBars}
+            meter={p.meter} keyPc={p.keyPc} keyMode={p.mode}
+            chords={p.skelChords ?? []}
+            rollMode={p.rollMode}
+            counterpoint={p.skelCounter ?? true} setCounterpoint={p.setSkelCounter ?? (() => {})}
+            playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef}
+          />
+        </div>
       ) : isContainer ? (
         <SectionEditor
           neta={p.neta}

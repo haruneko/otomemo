@@ -14,6 +14,8 @@ import {
   beatsPerBar,
   feelOf,
   isCompoundMeter,
+  skeletonPreviewNotes,
+  isSkeleton,
   type Feel,
   type Note,
   type PlaybackHandle,
@@ -168,6 +170,8 @@ export function SectionEditor({
   };
   const candPlay = useRef<PlaybackHandle | null>(null);
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
+  // 骨格から吹く（design #20 S2）：この id が入っている間 gen_melody に skeletonNetaId を渡し、置いたら realized_from を張る。
+  const blowSkelRef = useRef<string | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
   const liveMeter = meter ?? neta.meter ?? undefined;
   const liveTitle = (title ?? neta.title ?? "").trim(); // 生成/作成/MIDI名に使うライブタイトル
@@ -471,7 +475,8 @@ export function SectionEditor({
     if (genBusy) return;
     lastPartRef.current = part;
     const chords = sectionChords();
-    if (part.needsChords && !chords.length) return;
+    // 骨格から吹く時は骨格が構造を担うのでコード無しでも可（skeletonNetaId 注入）。
+    if (part.needsChords && !chords.length && !blowSkelRef.current) return;
     setGenBusy(true);
     try {
       // 2026-07-08 耳FB：section の mode を宣言（短調でメジャー生成＝濁りの主因）。メロは density/swing ノブも渡す。
@@ -488,6 +493,8 @@ export function SectionEditor({
       };
       if (part.op === "gen_melody") {
         body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form;
+        // 骨格から吹く（design #20 S2）：骨格neta を注入＝構造線を共有し表面(リズム/装飾)だけ変える。
+        if (blowSkelRef.current) body.skeletonNetaId = blowSkelRef.current;
         // 対位バイアス（design「gen_melody×ベース結線」）：UI の「対位」を ON にした時だけ bass を渡し counter を送る。
         // 既定 OFF（未送信）＝従来 bit一致（旧・bass 在れば固定0.3 の自動送信は既定挙動を無言で変えていたので廃止）。
         const bass = sectionBass();
@@ -509,6 +516,54 @@ export function SectionEditor({
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
       if (item) pushCand({ kind: item.kind, content: item.content });
+    } finally {
+      setGenBusy(false);
+    }
+  }
+  // 骨格を生成（design #20 S2・いじる▾）：gen_skeleton→候補トレイ→＋置くで骨格レーンへ。破壊上書きしない。
+  async function genSkeleton() {
+    if (genBusy) return;
+    blowSkelRef.current = null; // 通常生成＝吹く紐付けを解除
+    lastPartRef.current = null;
+    setGenBusy(true);
+    try {
+      const secMode: "major" | "minor" = (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major";
+      const r = await api.music<{ items: { kind: string; content: unknown }[] }>("gen_skeleton", {
+        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode },
+        chords: sectionChords(),
+        seed: Math.floor(Math.random() * 1e6),
+      });
+      const item = r.items?.[0];
+      if (item) pushCand({ kind: item.kind, content: item.content });
+    } finally {
+      setGenBusy(false);
+    }
+  }
+  // 骨格ブロック[吹く▶]（design #20 S2）：gen_melody(skeletonNetaId)→メロ候補トレイ→＋置くで新メロ＋realized_from。
+  function blowSkeleton(child: Child) {
+    blowSkelRef.current = child.node.neta.id;
+    void genPart(GEN_PARTS[0]); // メロを骨格から吹く（skeletonNetaId は genPart 内で body へ）
+  }
+  // 骨格からコードを推定（design #20 S2・harmonize）：骨格の白玉→harmonize→chord_progression 候補→＋置くでコードレーンへ。
+  async function estimateChords(child: Child) {
+    if (genBusy) return;
+    const content = child.node.neta.content;
+    if (!isSkeleton(content)) return;
+    const notes = skeletonPreviewNotes(content, BPB);
+    if (!notes.length) return;
+    blowSkelRef.current = null;
+    lastPartRef.current = null;
+    setGenBusy(true);
+    try {
+      const secMode: "major" | "minor" = (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major";
+      const bars = await api.music<{ bar: number; start: number; candidates: { root: number; quality: string; score: number }[] }[]>(
+        "harmonize",
+        { melody: notes, key: keyPc, mode: secMode, barBeats: BPB },
+      );
+      const chords = (bars ?? [])
+        .filter((bar) => bar.candidates?.length)
+        .map((bar) => ({ root: bar.candidates[0]!.root, quality: bar.candidates[0]!.quality, start: bar.start, dur: BPB }));
+      if (chords.length) setSingleCand({ kind: "chord_progression", content: { chords } });
     } finally {
       setGenBusy(false);
     }
@@ -587,12 +642,15 @@ export function SectionEditor({
       }
     }
     await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
+    // 骨格から吹いたメロ＝realized_from(メロ→骨格) を張る（design #20 S2・骨格に戻って直せる）。
+    if (blowSkelRef.current && c.kind === "melody") await api.link(created.id, blowSkelRef.current, "realized_from").catch(() => {});
     removeCand(c.cid); // 置いた候補はトレイから外す（他候補・keepは残す）
     await load();
     onChanged?.();
   }
   function closeCandidate() {
     candPlay.current?.stop();
+    blowSkelRef.current = null;
     setCands([]);
     setKeptCids(new Set());
   }
@@ -663,11 +721,15 @@ export function SectionEditor({
                       className="tool-item"
                       aria-label={`gen-${part.op}`}
                       disabled={genBusy}
-                      onClick={() => { setToolsOpen(false); void genPart(part); }}
+                      onClick={() => { setToolsOpen(false); blowSkelRef.current = null; void genPart(part); }}
                     >
                       {genBusy ? "生成中…" : part.label}
                     </button>
                   ))}
+                  {/* 骨格を生成（design #20 S2）：構造線(2声骨格)を機械に叩き台で出す→骨格レーンへ。 */}
+                  <button type="button" className="tool-item" aria-label="gen-skeleton" disabled={genBusy} onClick={() => { setToolsOpen(false); void genSkeleton(); }}>
+                    {genBusy ? "生成中…" : "骨格"}
+                  </button>
                   {/* P4/P5（2026-07-10・UX再設計）：プリセット主役＋🎲サイコロ＋耳語ラベルの詳細（群でまとめる）。押す前に設定→生成。 */}
                   {sectionChords().length > 0 && (
                     <div className="gen-knobs" onClick={(e) => e.stopPropagation()}>
@@ -872,6 +934,15 @@ export function SectionEditor({
                   <span className="lane-block-label">
                     {c.node.neta.title ?? c.node.neta.text ?? KIND_LABEL[c.node.neta.kind] ?? c.node.neta.kind}
                   </span>
+                  {/* 骨格ブロック（design #20 S2）：吹く▶＝gen_melody(skeletonNetaId)／コード無し時はコードを推定(harmonize)。 */}
+                  {!eraseMode && c.node.neta.kind === "skeleton" && (
+                    <span className="skel-block-actions">
+                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-${c.node.neta.id}`} title="この骨格からメロを吹く" onClick={(e) => { e.stopPropagation(); blowSkeleton(c); }}>吹く▶</span>
+                      {sectionChords().length === 0 && (
+                        <span role="button" tabIndex={0} className="skel-estimate" aria-label={`estimate-${c.node.neta.id}`} title="骨格からコードを推定（harmonize）" onClick={(e) => { e.stopPropagation(); void estimateChords(c); }}>コードを推定</span>
+                      )}
+                    </span>
+                  )}
                   {/* ③ 右端グリップ＝ドラッグでループ伸ばし。消しゴム中は無効（誤操作防止）。 */}
                   {!eraseMode && (
                     <span

@@ -1,0 +1,65 @@
+/* 骨格エディタ（design #20 S2）。方式C＝常時2声・ベース折返し表示。mock の視覚語彙を app のテーマ変数へ移植。 */
+:root { --k-skeleton: #7fb8d4; } /* theme.ts が JS で上書きするが、初期描画/テストの fallback */
+
+.skeleton-editor { display: flex; flex-direction: column; gap: 6px; }
+
+.skel-toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 9px; }
+.skel-grp { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; }
+.skel-grp > button { background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 0.74rem; cursor: pointer; }
+.skel-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.skel-seg button { background: #22252b; color: var(--muted); border: 0; padding: 4px 9px; font-size: 0.74rem; cursor: pointer; border-left: 1px solid var(--line); }
+.skel-seg button:first-child { border-left: 0; }
+.skel-seg button.on { background: var(--accent); color: #fff; }
+.skel-selbar { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.skel-selbar button { background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+.skel-selbar button:disabled { opacity: 0.5; cursor: default; }
+
+.skel-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.68rem; align-items: center; }
+.skel-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.skel-legend .sw { width: 16px; height: 8px; border-radius: 2px; display: inline-block; }
+.skel-legend .sw-dash { background: transparent; border: 1px dashed color-mix(in srgb, var(--k-bass) 75%, #fff); }
+
+/* スクロール枠は .proll の流儀（横スクロール・playhead は左40px+ppb） */
+.skel-scroll { border: 1px solid var(--line); border-radius: 8px; background: #15171b; overflow: auto; max-height: 64vh; position: relative; }
+.skel-phrases { display: flex; position: sticky; top: 0; z-index: 6; background: #191c21; border-bottom: 1px solid #2a2d33; }
+.skel-gutter { flex: 0 0 40px; width: 40px; position: sticky; left: 0; z-index: 2; background: #191c21; font-size: 0.6rem; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+.skel-phrase-zone { position: relative; height: 24px; }
+.skel-phrase-chip { position: absolute; top: 2px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.62rem; color: var(--fg); background: color-mix(in srgb, var(--k-skeleton) 20%, #1b1e23); border: 1px solid color-mix(in srgb, var(--k-skeleton) 55%, var(--line)); border-radius: 5px; cursor: pointer; overflow: hidden; }
+.skel-phrase-handle { position: absolute; top: 0; height: 24px; width: 12px; margin-left: -6px; cursor: ew-resize; z-index: 3; touch-action: none; }
+.skel-phrase-handle::after { content: ""; position: absolute; left: 5px; top: 2px; bottom: 2px; width: 2px; background: color-mix(in srgb, var(--k-skeleton) 70%, #fff); }
+
+.skel-body { display: flex; }
+.skel-keycol { flex: 0 0 40px; width: 40px; position: sticky; left: 0; z-index: 5; background: #15171b; }
+.skel-key { font-size: 8px; line-height: 13px; text-align: right; padding-right: 3px; border: 1px solid #24272e; user-select: none; cursor: pointer; }
+.skel-key.white { background: #d7dae0; color: #2a2d33; }
+.skel-key.black { background: #2a2d33; color: #9aa0aa; }
+.skel-key.tonic { background: var(--accent); color: #fff; font-weight: 700; }
+.skel-zone { position: relative; touch-action: none; }
+
+.skel-hl { position: absolute; left: 0; right: 0; background: rgba(58, 109, 240, 0.06); pointer-events: none; }
+.skel-hl.tonic { background: rgba(58, 109, 240, 0.13); }
+.skel-band { position: absolute; height: 6px; border-radius: 3px; pointer-events: none; }
+.skel-band.mel { background: var(--k-melody); }
+.skel-band.bass { background: var(--k-bass); }
+.skel-band.bass.derived { background: transparent; border: 1px dashed color-mix(in srgb, var(--k-bass) 75%, #fff); opacity: 0.6; }
+.skel-rest-hatch { position: absolute; top: 0; bottom: 0; pointer-events: none; background: repeating-linear-gradient(45deg, rgba(154, 160, 170, 0.18) 0 5px, transparent 5px 10px); border-left: 1px dashed rgba(154, 160, 170, 0.5); border-right: 1px dashed rgba(154, 160, 170, 0.5); }
+.skel-pt { position: absolute; width: 13px; height: 13px; margin-left: -6px; margin-top: -6px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.85); cursor: grab; z-index: 4; touch-action: none; }
+.skel-pt.mel { background: var(--k-melody); }
+.skel-pt.bass { background: var(--k-bass); }
+.skel-pt.sel { outline: 2px solid #ffd24a; outline-offset: 1px; z-index: 6; }
+.skel-pt.erasing { outline: 1.5px dashed var(--k-rhythm); }
+.skel-badge { position: absolute; font-size: 8px; line-height: 1; padding: 1px 3px; border-radius: 3px; background: #1b1e23; border: 1px solid var(--line); color: var(--muted); z-index: 5; pointer-events: none; white-space: nowrap; }
+.skel-badge.diss { color: #fff; background: var(--k-section); border-color: var(--k-section); }
+.skel-warn { position: absolute; z-index: 7; font-size: 11px; pointer-events: none; filter: drop-shadow(0 1px 1px #000); }
+.skel-warn.cross { color: var(--k-rhythm); }
+
+.skel-rest-strip { display: flex; position: sticky; bottom: 0; z-index: 6; background: #191c21; border-top: 1px solid #2a2d33; cursor: pointer; touch-action: none; }
+.skel-rest-zone { position: relative; height: 22px; flex: 1; }
+.skel-rest-mark { position: absolute; top: 2px; height: 18px; background: color-mix(in srgb, var(--muted) 30%, #1b1e23); border: 1px solid var(--muted); border-radius: 4px; font-size: 0.6rem; color: var(--fg); display: flex; align-items: center; justify-content: center; }
+
+/* セクションの骨格ブロック内アクション（吹く▶ / コードを推定） */
+.skel-block-actions { position: absolute; top: 2px; right: 3px; z-index: 3; display: flex; gap: 3px; }
+.skel-blow, .skel-estimate { background: rgba(0, 0, 0, 0.42); border: 1px solid rgba(255, 255, 255, 0.4); color: #fff; border-radius: 5px; font-size: 0.6rem; padding: 1px 5px; cursor: pointer; white-space: nowrap; }
+
+/* realized_from の関連チップ（RelationsPanel・タップで開く） */
+.relations .rel-item.realized { border-color: var(--k-skeleton); color: var(--k-skeleton); cursor: pointer; }

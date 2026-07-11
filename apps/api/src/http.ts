@@ -10,6 +10,7 @@ import { netaInputSchema, netaPatchSchema, jobInputSchema, scopeEnum, scopeQuery
 import {
   genChords,
   genMelody,
+  genSkeletonCandidates,
   genFromEssence,
   genChordPattern,
   genBass,
@@ -31,6 +32,8 @@ import {
   parseChordSymbol,
 } from "./music";
 import { analyzeVoiceLeading } from "./music/voiceLeading";
+import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20 S2）
+import { meterInfo } from "./music/meter";
 import { normRoot } from "./music/theory";
 import { assetsDir } from "./audio-asset";
 import { findProgressions } from "./progression-search";
@@ -186,7 +189,17 @@ export function buildHttp(core: Core): FastifyInstance {
           // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
           const bassN = asNotes(b.bass); // 対位バイアス＝ベーストラックのnotes（design「gen_melody×ベース結線」）
-          return genMelody(b.frame, asChords(b.chords), b.seed, {
+          // 骨格注入（design #20 S2）：skeletonNetaId 指定時はその neta の content を SkeletonContent として読み検証し注入（MCP 経路と同契約）。
+          let skeleton: SkeletonContent | undefined;
+          if (typeof b.skeletonNetaId === "string") {
+            const sn = core.getNeta(b.skeletonNetaId);
+            if (!sn) return reply.code(400).send({ error: `skeleton neta ${b.skeletonNetaId} not found` });
+            if (sn.kind !== "skeleton") return reply.code(400).send({ error: `neta ${b.skeletonNetaId} is kind=${sn.kind}, not skeleton` });
+            const errs = validateSkeletonContent(sn.content, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
+            if (errs.length) return reply.code(400).send({ error: `invalid skeleton content: ${errs.join("; ")}` });
+            skeleton = sn.content as SkeletonContent;
+          }
+          const res = genMelody(b.frame, asChords(b.chords), b.seed, {
             useV2: true, density: num(b.density), swing: num(b.swing), expression: num(b.expression), runs: num(b.runs), push: num(b.push), foreground: num(b.foreground), breathe: num(b.breathe), humanize: num(b.humanize), form: b.form === "sentence" ? "sentence" : undefined, registerShift: num(b.registerShift), // registerShift 明示（セクション役割文脈は frame.section から自動・明示ノブが勝つ）
             repetition: num(b.repetition), rangeSteps: num(b.rangeSteps), motifBars: num(b.motifBars),
             phrasing: (["symmetric", "asymmetric", "period", "sentence"] as const).includes(b.phrasing as never) ? (b.phrasing as "symmetric" | "asymmetric" | "period" | "sentence") : undefined,
@@ -195,7 +208,11 @@ export function buildHttp(core: Core): FastifyInstance {
             hook: num(b.hook), articulation: num(b.articulation), inflect: num(b.inflect), motifMode: b.motifMode === "preserve" ? "preserve" : undefined, // 反復音モチーフ（design「動機保存レンダ」・既定/不正は従来 bit 一致）
             finest: b.finest === "quarter" ? "quarter" : b.finest === "eighth" ? "eighth" : undefined, // 最小音符（高BPMの16分潰れ対策・未指定=テンポ連動）
             flow: num(b.flow), pickup: num(b.pickup), arc: b.arc === "arch" ? "arch" : undefined, // 句フレージング（連結/長音・弱起・山なり弧・2026-07-11・未指定=従来 bit 一致・role で自動発火）
+            skeleton, // 骨格から吹き直す（design #20・未指定=従来 bit 一致）
           });
+          // capture 後に link(メロ, 骨格, "realized_from") を張れるよう id をエコー（design #20・MCP 経路と同じ）。
+          if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string;
+          return res;
         }
         case "gen_from_essence": return genFromEssence(asNotes(b.ref ?? b.melody), b.frame, asChords(b.chords), b.seed, {
           strength: typeof b.strength === "number" ? b.strength : undefined,
@@ -207,6 +224,10 @@ export function buildHttp(core: Core): FastifyInstance {
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
           return genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach) });
         }
+        case "gen_skeleton": // 骨格候補（design #20 S2・構造線→ブレークポイント列）。phrasing=句割り。
+          return genSkeletonCandidates(b.frame, asChords(b.chords), b.seed, {
+            phrasing: (["symmetric", "asymmetric", "period", "sentence"] as const).includes(b.phrasing as never) ? (b.phrasing as "symmetric" | "asymmetric" | "period" | "sentence") : undefined,
+          });
         case "gen_drums": return genDrums(b.frame, b.seed);
         case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);

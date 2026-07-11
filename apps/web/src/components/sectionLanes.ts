@@ -12,6 +12,7 @@ export type Child = CompositionNode["children"][number];
 // section＝パート専用（入れ子廃止）。song＝section を並べる編成（[section] のみ）。
 const SECTION_LANES: readonly LaneDef[] = [
   { key: "chord", label: "コード進行", kinds: ["chord", "chord_progression"] },
+  { key: "skeleton", label: "骨格", kinds: ["skeleton"] }, // design #20：コードとメロの間（合成無音・MiniRoll白玉）
   { key: "melody", label: "メロ", kinds: ["melody"] },
   { key: "chord_pattern", label: "コード楽器1", kinds: ["chord_pattern"], row: 0 },
   { key: "chord_pattern2", label: "コード楽器2", kinds: ["chord_pattern"], row: 1 },
@@ -30,6 +31,7 @@ export const maxBarsForKind = (kind: string): number => (kind === "song" ? SONG_
 // ピッカー種別タブの色＝作成タイルと揃える（種別色）。chord_pattern は chord 色。
 export const LANE_COLOR: Record<string, string> = {
   chord: "var(--k-chord)",
+  skeleton: "var(--k-skeleton)",
   melody: "var(--k-melody)",
   chord_pattern: "var(--k-chord)",
   chord_pattern2: "var(--k-chord)",
@@ -40,6 +42,7 @@ export const LANE_COLOR: Record<string, string> = {
 // MIDIトラック名は ASCII に（@tonejs/midi は名前を Latin-1 で書く＝日本語だと DAW で文字化け）。
 export const LANE_MIDI_NAME: Record<string, string> = {
   chord: "Chord",
+  skeleton: "Skeleton", // 合成無音＝書き出しトラックには乗らない（notes空で filter される）
   melody: "Melody",
   chord_pattern: "Keys 1",
   chord_pattern2: "Keys 2",

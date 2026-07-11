@@ -76,6 +76,7 @@ export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import(".
 // 各レーンは編集画面タイムラインと同じ種別色で塗る（単色オレンジの壁を避け、パートを見分ける）。
 const MINI_LANES: { label: string; kinds: string[]; color: string }[] = [
   { label: "メロ", kinds: ["melody"], color: "--k-melody" },
+  { label: "骨格", kinds: ["skeleton"], color: "--k-skeleton" }, // design #20：合成無音だがレーンは見える
   { label: "コード", kinds: ["chord", "chord_progression", "chord_pattern"], color: "--k-chord" },
   { label: "ベース", kinds: ["bass"], color: "--k-bass" },
   { label: "リズム", kinds: ["rhythm"], color: "--k-rhythm" },

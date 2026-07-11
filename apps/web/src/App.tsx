@@ -493,6 +493,7 @@ export function App() {
               );
               const PARTS = [
                 ["melody", "メロ", "新しいメロ", "var(--k-melody)"],
+                ["skeleton", "骨格", "新しい骨格", "var(--k-skeleton, #7fb8d4)"],
                 ["chord_progression", "コード", "新しいコード進行", "var(--k-chord)"],
                 ["bass", "ベース", "新しいベース", "var(--k-bass)"],
                 ["rhythm", "リズム", "新しいリズム", "var(--k-rhythm)"],

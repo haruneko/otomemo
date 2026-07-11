@@ -68,7 +68,12 @@ export function NetaDialog({
       />
       <KindEditorBody
         neta={neta}
-        flags={{ isMelody: f.isMelody, isBass: f.isBass, isChord: f.isChord, isChordPat: f.isChordPat, isRhythm: f.isRhythm, isContainer: f.isContainer, isRelBass: f.isRelBass }}
+        flags={{ isMelody: f.isMelody, isBass: f.isBass, isChord: f.isChord, isChordPat: f.isChordPat, isRhythm: f.isRhythm, isSkel: f.isSkel, isContainer: f.isContainer, isRelBass: f.isRelBass }}
+        tones={ed.tones} setTones={ed.setTones}
+        skelBass={ed.skelBass} setSkelBass={ed.setSkelBass}
+        phrases={ed.phrases} setPhrases={ed.setPhrases}
+        skelBars={ed.skelBars} setSkelBars={ed.setSkelBars}
+        skelChords={ed.skelChords} skelCounter={ed.skelCounter} setSkelCounter={ed.setSkelCounter}
         notes={ed.notes} setNotes={ed.setNotes}
         chordPat={ed.chordPat} setChordPat={ed.setChordPat}
         chords={ed.chords} setChords={ed.setChords}
@@ -102,7 +107,7 @@ export function NetaDialog({
           canRedo={ed.editHist.canRedo}
         />
       )}
-      <RelationsPanel rels={ed.rels} />
+      <RelationsPanel rels={ed.rels} onOpenNeta={onOpenNeta} />
     </div>
   );
 }

@@ -20,13 +20,17 @@ import {
   emptyChordPattern,
   feelOf,
   isCompoundMeter,
+  isSkeleton,
   PITCH_NAMES as KEY_NAMES,
   type Note,
   type ChordEntry,
   type RhythmContent,
   type BassStep,
   type ChordPatternContent,
+  type SkeletonBreakpoint,
+  type SkeletonContent,
 } from "./music";
+import { skeletonPlaybackNotes } from "./skeletonEdit";
 
 export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged?: () => void }) {
   const { onClose, onChanged } = opts;
@@ -78,6 +82,15 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   // 弱起（アウフタクト）：拍0の前の lead-in 拍数。既存の負 start を包む値で初期化。
   const [pickup, setPickup] = useState(() => Math.max(0, Math.ceil(-Math.min(0, ...notesOf(neta.content).map((n) => n.start)))));
   const [chordPat, setChordPat] = useState<ChordPatternContent>(() => (isChordPattern(neta.content) ? neta.content : emptyChordPattern()));
+  // 骨格（design #20 S2）：ブレークポイント列 tones/bass ＋句 phrases。合成では無音・単体は白玉/対位法プレビュー。
+  const skel0 = isSkeleton(neta.content) ? neta.content : null;
+  const [tones, setTones] = useState<SkeletonBreakpoint[]>(skel0?.tones ?? []);
+  const [skelBass, setSkelBass] = useState<SkeletonBreakpoint[]>(skel0?.bass ?? []);
+  const [phrases, setPhrases] = useState<{ endBeat: number; cadence?: string }[]>(skel0?.phrases ?? []);
+  const [skelBars, setSkelBars] = useState<number>(skel0?.bars ?? Math.max(2, neta.bars ?? 4));
+  // 骨格の単体プレビュー用コード（preview_chords）＝導出ベースの源。無ければ空（key の tonic 相当は導出しない）。
+  const skelChords: ChordEntry[] = isSkeleton(neta.content) ? chordsOf((neta.content as { preview_chords?: unknown }).preview_chords ? { chords: (neta.content as { preview_chords?: unknown }).preview_chords } : {}) : [];
+  const [skelCounter, setSkelCounter] = useState(true); // 再生＝対位法(ベース+1oct)既定
   const [busy, setBusy] = useState(false);
   const [rels, setRels] = useState<{ type: string; neta: Neta | null }[]>([]);
   const [schedId, setSchedId] = useState<string | null>(null); // #80 継続調査スケジュール
@@ -86,8 +99,9 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
   const isChordPat = neta.kind === "chord_pattern"; // CP3 コード楽器パターン（進行に解決する相対型）
   const isRhythm = neta.kind === "rhythm";
+  const isSkel = neta.kind === "skeleton"; // 骨格層の一級化（design #20）
   const isContainer = neta.kind === "section" || neta.kind === "song";
-  const isMusic = isMelody || isBass || isChord || isChordPat || isRhythm;
+  const isMusic = isMelody || isBass || isChord || isChordPat || isRhythm || isSkel;
   const isRelBass = isBass && bassMode === "relative"; // #bass S2 相対モード
   // 弱起ぶんの lead-in（指定 pickup と既存の負 start を包む）。ソロ再生はこの分だけ前へずらして鳴らす
   // ＝弱起→ダウンビートの順で聞こえる（PianoRoll も同じ pre で描画）。
@@ -100,11 +114,13 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     ? resolveRelativeBass(bassPattern, [], key)
     : isChordPat
       ? resolveChordPattern(chordPat, [], key) // 単体プレビュー＝key の tonic コードに解決
-      : isMelody || isBass
-        ? activeNotes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る
-        : isChord
-          ? chordsToNotes(chords)
-          : rhythmToNotes(rhythm);
+      : isSkel
+        ? skeletonPlaybackNotes({ bars: skelBars, tones, bass: skelBass, phrases }, { counterpoint: skelCounter, chords: skelChords, beatsPerBar: bpb, melProgram: program }) // 骨格＝2声(対位法/実音)
+        : isMelody || isBass
+          ? activeNotes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る
+          : isChord
+            ? chordsToNotes(chords)
+            : rhythmToNotes(rhythm);
 
   // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。
   const span = Math.max(len, ...playable.map((n) => Math.ceil(n.start + n.dur)));
@@ -117,7 +133,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   });
 
   // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。
-  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, key, mode, tempo, program, len, pickup };
+  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, len, pickup };
   const applySnapshot = useCallback((s: typeof snapshot) => {
     setNotes(s.notes);
     setChords(s.chords);
@@ -125,6 +141,10 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     setBassPattern(s.bassPattern);
     setBassSteps(s.bassSteps);
     setChordPat(s.chordPat);
+    setTones(s.tones);
+    setSkelBass(s.skelBass);
+    setPhrases(s.phrases);
+    setSkelBars(s.skelBars);
     setKey(s.key);
     setMode(s.mode);
     setTempo(s.tempo);
@@ -192,6 +212,14 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
       return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
     // meter は単体パートでも保存＝roll のグリッドと MIDI 拍子ヘッダに効く（container 限定を解消・監査 MB-05）。
     if (isMelody || isBass) return { content: { notes, program }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
+    if (isSkel) {
+      // 骨格＝ブレークポイント列（dur無し）。bass/phrases は空なら省く。preview_chords は導出ベースの源として保持。
+      const content: SkeletonContent & { preview_chords?: ChordEntry[] } = { bars: skelBars, tones };
+      if (skelBass.length) content.bass = skelBass;
+      if (phrases.length) content.phrases = phrases;
+      if (skelChords.length) content.preview_chords = skelChords;
+      return { content, key, mode, tempo, meter, bars: skelBars };
+    }
     if (isChordPat) return { content: { ...chordPat, program }, key, mode, tempo, meter }; // コード楽器＝自前音色
     if (isChord) return { content: { chords }, key, mode, tempo, meter }; // 進行は抽象＝program持たない(CP1)
     if (isRhythm) return { content: { rhythm }, tempo, meter };
@@ -369,7 +397,9 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
 
   return {
     // フラグ
-    flags: { isMelody, isBass, isChord, isChordPat, isRhythm, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, hasChords: chords.length > 0 },
+    flags: { isMelody, isBass, isChord, isChordPat, isRhythm, isSkel, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, hasChords: chords.length > 0 },
+    // 骨格（design #20 S2）
+    tones, setTones, skelBass, setSkelBass, phrases, setPhrases, skelBars, setSkelBars, skelChords, skelCounter, setSkelCounter,
     // 値＋setter
     title, setTitle, text, setText, tags, setTags, mood, setMood,
     key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram,

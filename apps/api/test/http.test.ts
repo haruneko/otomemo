@@ -212,3 +212,33 @@ describe("http auth gate (#36)", () => {
     expect(full.content).toEqual(heavy);
   });
 });
+
+// 骨格層の一級化（design #20 S2）：HTTP /music 経路に gen_skeleton と gen_melody(skeletonNetaId) を露出。
+describe("skeleton music routes (#20 S2)", () => {
+  it("POST /music/gen_skeleton＝骨格候補（items[].content=SkeletonContent）", async () => {
+    const r = await app.inject({ method: "POST", url: "/music/gen_skeleton", payload: { frame: { key: 0, meter: "4/4", bars: 4 }, seed: 1 } });
+    expect(r.statusCode).toBe(200);
+    const item = r.json().items[0];
+    expect(item.kind).toBe("skeleton");
+    expect(Array.isArray(item.content.tones)).toBe(true);
+    expect(item.content.bars).toBe(4);
+  });
+
+  it("POST /music/gen_melody（skeletonNetaId）＝骨格注入＋id エコー", async () => {
+    const skel = (await app.inject({
+      method: "POST",
+      url: "/neta",
+      payload: { kind: "skeleton", content: { bars: 2, tones: [{ start: 0, pitch: 64 }, { start: 4, pitch: 67 }] } },
+    })).json();
+    const r = await app.inject({ method: "POST", url: "/music/gen_melody", payload: { frame: { key: 0, meter: "4/4", bars: 2 }, seed: 3, skeletonNetaId: skel.id } });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().skeletonNetaId).toBe(skel.id);
+    expect(r.json().items[0].kind).toBe("melody");
+  });
+
+  it("非skeleton の id は 400", async () => {
+    const mel = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody" } })).json();
+    const r = await app.inject({ method: "POST", url: "/music/gen_melody", payload: { frame: { key: 0, meter: "4/4", bars: 2 }, skeletonNetaId: mel.id } });
+    expect(r.statusCode).toBe(400);
+  });
+});
