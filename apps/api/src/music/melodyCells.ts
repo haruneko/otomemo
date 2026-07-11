@@ -440,7 +440,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; restMask?: { start: number; end: number }[] } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; restMask?: { start: number; end: number }[] } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -452,7 +452,13 @@ export function genMotifMelodyV2(
   // 拍子分岐：既定=4/4（1小節=4四分・16分16枠グリッド）。compound=6/8等（1小節=3四分・8分6枠グリッド・3+3）。
   // 骨格/move/選別/発展/弧は共通。差し替えるのは「リズム語彙・時間map・onset上下限・孤立フィルタ・跳ね(dur)」のみ（_68.ts 忠実）。
   const compound = opts.compound ?? false;
-  const barLen = compound ? 3 : 4; // 1小節の四分数
+  // J2a(design #20・Task#13)：直進系(simple)は barLen=beatsPerBar へ一般化（4/4→4・3/4→3・6/4→6）。
+  // compound(6/8/9/8/12/8) は据え置き＝barLen=3 固定（付点四分2群を1小節扱い）。既存は値が変わらず bit一致。
+  const barLen = compound ? 3 : (opts.beatsPerBar ?? 4); // 1小節の四分数
+  const bScale = barLen / 4; // 拍あたり密度を保存する線形スケール（barLen=4 で ×1.0＝IEEE754 厳密不変＝bit一致）
+  // 強拍（骨格柱／後処理CT／表情／濁り掃除／単一頂点）＝meterInfo strongPositions に一致。
+  // 4/4→[0,2]（bit一致）・6/8→[0,1.5]（据え置き）・3/4→[0]（拍1のみ・柱1本の割り切り）・6/4→[0,3]（3+3）。
+  const strongPos = compound ? [0, 1.5] : barLen === 3 ? [0] : barLen === 6 ? [0, 3] : [0, 2];
   // density(2026-07-08 ノブ・design#12-M)：リズム語彙を音数で再重み付け＝細かさの制御（0=疎〜1=密・未指定=従来分布）。
   const dens = opts.density === undefined ? undefined : Math.max(0, Math.min(1, opts.density));
   const densW = (onsets: number): number => (dens === undefined ? 1 : Math.pow(onsets + 1, (dens - 0.5) * 4));
@@ -525,20 +531,27 @@ export function genMotifMelodyV2(
       const g = ons.slice(1).map((t, i) => t - ons[i]!);
       if (g.length && Math.max(...g) > (dens === undefined ? 1.6 : 1.6 + (1 - dens) * 1.2)) return null;
     } else {
-      // 4/4：1小節=16分16枠。t=bar*4+s*0.25。末尾~1.5拍は息継ぎ。
+      // 直進系(simple)：1小節=16分(barLen*4)枠。4/4=16枠1抽選/小節（従来・bit一致）。
+      // J2a：3/4=RHYTHM16 の先頭3拍(12枠)を切り出し1抽選/小節。6/4=3+3＝12枠を bar内 +0/+3拍へ2抽選。
+      // barLen=4 は groupsPerBar=1/groupBeats=4/groupSlots=16＝t=bar*4+s*0.25・1抽選＝元コードと厳密同順（bit一致）。
+      const groupsPerBar = barLen === 6 ? 2 : 1; // 6/4 = 3+3
+      const groupBeats = barLen === 4 ? 4 : 3; // 切り出し幅（4/4 は4拍語彙をそのまま）
+      const groupSlots = groupBeats * 4; // 16 or 12
       for (let bar = 0; bar < mb; bar++) {
-        const p = weightedPickRec(rhythmVocab, r);
-        for (let s = 0; s < 16; s++) {
-          if (p[s] !== "x" || finSkip(s)) continue; // finest＝最小音符上限より細かい onset を弾く
-          const t = bar * 4 + s * 0.25;
-          if (t >= mb * 4 - 1.5) continue; // 末尾~1.5拍は息継ぎ
-          ons.push(t);
+        for (let g = 0; g < groupsPerBar; g++) {
+          const p = weightedPickRec(rhythmVocab, r);
+          for (let s = 0; s < groupSlots; s++) {
+            if (p[s] !== "x" || finSkip(s)) continue; // finest＝最小音符上限より細かい onset を弾く
+            const t = bar * barLen + g * groupBeats + s * 0.25;
+            if (t >= mb * barLen - 1.5) continue; // 末尾~1.5拍は息継ぎ（ブロック単位・拍子非依存）
+            ons.push(t);
+          }
         }
       }
-      // density: 受け入れ音数帯を可変（未指定=従来 2..4/小節）。
-      const loN = dens === undefined ? 2 * mb : Math.max(1 * mb, Math.round((1 + 2 * dens) * mb));
-      const hiN0 = dens === undefined ? 4 * mb : Math.max(loN + 1, Math.round((2.5 + 4 * dens) * mb));
-      const hiN = rns === undefined ? hiN0 : hiN0 + Math.round(rns * 3 * mb); // runs＝走句ぶん受入音数を拡張
+      // density: 受け入れ音数帯を可変（未指定=従来 2..4/小節）。bScale で拍あたり密度を保存（barLen=4 で厳密不変）。
+      const loN = dens === undefined ? 2 * mb * bScale : Math.max(1 * mb * bScale, Math.round((1 + 2 * dens) * mb * bScale));
+      const hiN0 = dens === undefined ? 4 * mb * bScale : Math.max(loN + 1, Math.round((2.5 + 4 * dens) * mb * bScale));
+      const hiN = rns === undefined ? hiN0 : hiN0 + Math.round(rns * 3 * mb * bScale); // runs＝走句ぶん受入音数を拡張
       if (ons.length < loN || ons.length > hiN) return null;
       if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(opts.finest === "eighth" || opts.finest === "quarter" ? 0.5 : 0.25, ons[0]!); // finest時は16分(0.25)へ動かさない
       const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
@@ -814,7 +827,7 @@ export function genMotifMelodyV2(
   const phraseEnds = opts.phrases?.map((p) => ({ bar: Math.max(0, Math.floor((p.startBeat + p.beats - 0.001) / barLen)), deg: p.cadenceDegree === 5 ? 4 : p.cadenceDegree === 2 ? 1 : 0 }));
   // 骨格注入（design #20）：opts.skel（人間製/機械候補の SkeletonContent 由来・1拍粒度 number[]）が来たら
   // genSkeletonFromModel をバイパスしてそれを構造線に使う。未指定＝従来どおりモデル生成＝bit一致。
-  const skel = opts.skel ?? genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: compound ? [0, 1.5] : [0, 2], start: opts.skelStart ?? 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds, arc: opts.arc }); // C4/F4: 骨格ノブをV2でも透過。skelStart=前セクション最終音の近傍（section.prevEndPitch・未指定=62=bit一致）
+  const skel = opts.skel ?? genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: strongPos, start: opts.skelStart ?? 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds, arc: opts.arc }); // C4/F4: 骨格ノブをV2でも透過。skelStart=前セクション最終音の近傍（section.prevEndPitch・未指定=62=bit一致）
   const r = makeRng(seed + 5);
   // seedMotif 指定時は genBest をスキップしてそれを M に（補完=与モチーフを発展）。既定(未指定)は現挙動と完全一致。
   const M = opts.seedMotif ?? genBest(r);
@@ -953,7 +966,7 @@ export function genMotifMelodyV2(
   // ── 自己チェック(E-rule)対策の後処理（D1-D4 再設計 2026-07-08・design#12-M）──
   // 順序＝①強拍CT→②禁則→③gap-fill→④単一頂点→⑤検証。規約＝(a)全パス終止音保護（B3）
   // (b)強拍を動かす時は必ずコード音内＝①の結果を後段が壊さない (c)④の頂点keeperはB塊(role=2)優先＝弧の意図を守る。
-  const strongPos = compound ? [0, 1.5] : [0, 2];
+  // strongPos は関数冒頭で meterInfo strongPositions に一致させ定義済（4/4[0,2]・6/8[0,1.5]・3/4[0]・6/4[0,3]）。
   const onStrong = (t: number): boolean => { const ib = ((t % barLen) + barLen) % barLen; return strongPos.some((p) => Math.abs(ib - p) < 0.12); };
   // A2/A3: 後処理のCTスナップも半音空間（ctOfと同実装）＝導音/色音に乗れる。スケール歩行は導音小節で spRaised（spAt）。
   const ctP = (pitch: number, pcs: number[]): number => ctOf(pitch, pcs);

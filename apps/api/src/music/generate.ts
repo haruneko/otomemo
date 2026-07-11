@@ -546,7 +546,9 @@ export function genMelody(
 
   // A2レシピ経路（docs/research/melody-recipe-validated.md）：4/4＋chords＋bars≥1＋useV2 時。
   // 骨格(句頭アンカー)＋モチーフ選別＋輪郭駆動＋発展(A/A'/B反行+弧/A'')。旧経路は下に残す（回帰防止）。
-  if (opts?.useV2 && (bpb === 4 || compound) && (chords?.length ?? 0) > 0 && bars >= 1) {
+  // J2a(design #20・Task#13)：3/4(bpb=3)・6/4(bpb=6) を eligible に追加＝旧経路④の受け皿。非複合の
+  // bpb=3 は 3/4 のみ・bpb=6 は 6/4（3/2 も同扱い）。compound(6/8系) は従来どおり別に true。既存は不変=bit一致。
+  if (opts?.useV2 && (bpb === 3 || bpb === 4 || bpb === 6 || compound) && (chords?.length ?? 0) > 0 && bars >= 1) {
     // register窓を tonic中心に(2026-07-09 批判レビューRound2/P1)：旧 [60,84] は長調で tonic を音域最下端に
     // 置き、脱平面化した骨格の下降を主音に叩き戻していた（実測 長調 主音48%/音域8.4）。tonic を下から約1/3
     // (下5・上12=約17半音≒音域12)に置く＝両モードで主音25-35・音域9-12へ。下流clampは全て sp[0]/sp[last] 参照
@@ -554,6 +556,9 @@ export function genMelody(
     // セクション役割プリセット（2026-07-10・design#12-M「セクション役割の一級化」）：role があれば
     // 「未指定ノブの既定値」を差し替える（明示ノブ＞role プリセット＞従来既定）。role 無し＝so===opts＝bit一致。
     const so = applySectionPreset(opts ?? {}, f.section);
+    // J2a：V2 内部の barLen＝compound は3固定・直進系は beatsPerBar（4/4→4・3/4→3・6/4→6）。
+    // 骨格アダプタ（skeletonToV2Skel/skeletonPhrasesToV2/skeletonRestMask）と genMotifMelodyV2 へ一貫して渡す。
+    const barLen = compound ? 3 : bpb;
     // tessitura をキー安定に(2026-07-09 Round3/P3a・回帰修正)：tp=60+pc だと C調G3-C5/B調F#4-B5と
     // 絶対高さが1oct滑走しB5金切り域まで届いた。tonic相対は保ったまま**両端だけ飽和**（[60,65]にclamp）＝
     // 再ピン留め無し・全キーで音域/主音を維持しつつ ceiling 79→76・B5天井を消す（評価で全キー実測・Option D）。
@@ -601,7 +606,7 @@ export function genMelody(
     // P0-b(Step2)：phrasing 指定時のみ planSkeleton の句割りをV2へ渡す（未指定=phrases無し=従来bit一致）。
     // S3a(design #20)：骨格に phrases があれば frame phrasing 由来より**骨格の句割りを優先**（骨格が構造の権威）。
     // 骨格 phrases 無し＝従来（frame phrasing 由来 or undefined）＝bit一致。beat 単位は V2 の barLen（compound?3:4）に合わせる。
-    const skelPhrases = opts?.skeleton ? skeletonPhrasesToV2(opts.skeleton, { beatsPerBar: compound ? 3 : 4 }) : undefined;
+    const skelPhrases = opts?.skeleton ? skeletonPhrasesToV2(opts.skeleton, { beatsPerBar: barLen }) : undefined;
     const phrases = skelPhrases ?? (so.phrasing ? planSkeleton(bars, f.meter, { phrasing: so.phrasing }).map((p) => ({ startBeat: p.startBeat, beats: p.beats, cadenceDegree: p.cadenceDegree })) : undefined);
     // 表情の既定較正(2026-07-09 批判レビューP0a)：V2既定が expression=0＝強拍CT100%(無菌の極・実曲57%)だった。
     // frame.expression 明示＞mood既定(0.15-0.3)＞既定0.25。legacy(applyExpression)と同じロジックをV2へ結線。
@@ -640,16 +645,15 @@ export function genMelody(
     // モチーフ共有（design#12-M「セクション役割の一級化」2026-07-10）：前セクションの実音モチーフ（section.seedMotif）
     // を extractMotif16 で Motif16 化し V2 の種に（keepFirstBlocks は渡さない＝先頭ブロックが種 M＝同じ動機の別レンダリング）。
     // 接続：section.prevEndPitch を骨格開始音 skelStart へ（未指定=62=bit一致）。role とは独立に seedMotif/prevEndPitch で発火。
-    const seedMotif = f.section?.seedMotif && f.section.seedMotif.length ? extractMotif16(f.section.seedMotif.map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: n.dur })), compound ? 3 : 4) : undefined;
+    const seedMotif = f.section?.seedMotif && f.section.seedMotif.length ? extractMotif16(f.section.seedMotif.map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: n.dur })), barLen) : undefined;
     const skelStart = typeof f.section?.prevEndPitch === "number" ? f.section.prevEndPitch : undefined;
     // 骨格注入（design #20）：opts.skeleton 指定時は SkeletonContent を 1拍粒度 number[] へアダプト（bpb=barLen）し
     // V2 の構造線に差し込む＝genSkeletonFromModel をバイパス。未指定＝skel undefined＝従来生成＝bit一致。
-    const barLen = compound ? 3 : 4;
     const injectedSkel = opts?.skeleton ? skeletonToV2Skel(opts.skeleton, { beatsPerBar: barLen, fallbackPitch: sp[Math.floor(sp.length / 2)] ?? 62 }) : undefined;
     // 骨格休符の表面抑制（design #20 S3b）：pitch:null 区間の restマスクを渡し、V2 が最終出力で当該区間の表面音を落とす。
     // 休符なし骨格 or 骨格未指定＝空/undefined＝V2側で丸ごとスキップ＝bit一致。
     const restMaskV2 = opts?.skeleton ? skeletonRestMask(opts.skeleton, { beatsPerBar: barLen }) : undefined;
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: so.skelModel ?? loadSkeletonModel(minor), skel: injectedSkel, restMask: restMaskV2 && restMaskV2.length ? restMaskV2 : undefined, motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse, hook: so.hook, articulation: so.articulation, inflect: so.inflect, motifMode: so.motifMode, finest: so.finest ?? ((f.tempo ?? 0) >= 150 ? "eighth" : undefined), flow: so.flow, pickup: so.pickup, arc: so.arc }); // finest＝最小音符。未指定はテンポ連動(≥150で8分上限＝高BPMの16分潰れを自動回避・オーナーFB)。明示が勝つ
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, beatsPerBar: barLen, skelModel: so.skelModel ?? loadSkeletonModel(minor), skel: injectedSkel, restMask: restMaskV2 && restMaskV2.length ? restMaskV2 : undefined, motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse, hook: so.hook, articulation: so.articulation, inflect: so.inflect, motifMode: so.motifMode, finest: so.finest ?? ((f.tempo ?? 0) >= 150 ? "eighth" : undefined), flow: so.flow, pickup: so.pickup, arc: so.arc }); // finest＝最小音符。未指定はテンポ連動(≥150で8分上限＝高BPMの16分潰れを自動回避・オーナーFB)。明示が勝つ
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
@@ -807,7 +811,9 @@ export function genSkeletonCandidates(
   const bars = barsOf(f);
   const info = meterInfo(f.meter);
   const compound = info.grouping === "compound";
-  const barLen = compound ? 3 : 4;
+  // J2a：gen_skeleton も V2 と同じ barLen/強拍で 3/4・6/4 対応（4/4=4・6/8=3 は不変=bit一致）。
+  const barLen = compound ? 3 : info.beatsPerBar;
+  const strongQuarters = compound ? [0, 1.5] : barLen === 3 ? [0] : barLen === 6 ? [0, 3] : [0, 2];
   const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
   const tpBase = Math.max(60, Math.min(65, 60 + tonicPc)); // V2 と同じ tonic中心の音域窓＝注入時にレジスタが揃う
   const sp = scalePitchList(scale, tpBase - 5, tpBase + 12);
@@ -823,7 +829,7 @@ export function genSkeletonCandidates(
   const phrasesOut = phrases.map((p) => ({ endBeat: p.startBeat + p.beats, cadence: p.isLast ? "full" : p.cadenceDegree === 5 ? "half" : "full" }));
   const model = loadSkeletonModel(minor);
   const build = (s: number): SkeletonContent => {
-    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters: compound ? [0, 1.5] : [0, 2], start: 62, phraseEnds });
+    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters, start: 62, phraseEnds });
     return { bars, tones: skelArrayToBreakpoints(skel), phrases: phrasesOut };
   };
   const label = "骨格";
