@@ -95,6 +95,10 @@ describe("genMotifMelodyV2 6/4（barLen=6・3+3群・強拍=拍1,4）", () => {
     expect(JSON.stringify(gen(6, 14))).toBe(JSON.stringify(gen(6, 14)));
     expect(JSON.stringify(gen(6, 14))).not.toBe(JSON.stringify(gen(6, 21)));
   });
+  it("⑧b dur>0（Task#17 回帰＝ブロック末フォールバックの *4 ハードコードで負dur が出ていた）", () => {
+    // 元bug は bars=1/seed=7 で start=10/dur=-2 を出した＝その近傍 seed×小 bars を明示スイープ（網羅は invariants 側）。
+    for (const bars of [1, 2, 4]) for (let seed = 1; seed <= 12; seed++) for (const n of gen(6, seed, bars)) expect(n.dur, `6/4 seed=${seed} bars=${bars} start=${n.start}`).toBeGreaterThan(0);
+  }, 15000);
 });
 
 // ── 回帰：4/4・6/8 の bit 一致（beatsPerBar 追加が既存を壊さない） ─────────────────

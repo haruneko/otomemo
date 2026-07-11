@@ -39,9 +39,9 @@ describe("genMelody 不変条件", () => {
   // 非空・有限整数・決定的な妥当メロを返す。V2 の音域窓は tonic中心（key0 で約[55,72]・folding/pickupで前後）
   // ＝旧④の [60,84] ハードコードでなく広めの [48,84] で「暴れない」を担保する。
   it("対応拍子×mood×bars×seed：非空・有限整数・妥当音域[48,84]", () => {
-    // 注：6/4 は V2(genMotifMelodyV2)に**既知の負dur bug**（3+3群の末尾で start=10/dur=-2 等・bars 非依存・
-    // J2a Task#13 由来＝J3 のスコープ外＝backlog へ）。ここでは 4/4・3/4・6/8 の健全側のみ担保する。
-    const OK_METERS = ["4/4", "3/4", "6/8", "bogus", ""]; // bogus/空=4/4扱い
+    // Task#17(2026-07-12)：J2a由来の 6/4 負dur bug（render/renderPreserve のブロック末フォールバックが
+    // barLen=4 ハードコード）を是正済み＝6/4 も担保対象に復帰。
+    const OK_METERS = ["4/4", "3/4", "6/4", "6/8", "bogus", ""]; // bogus/空=4/4扱い
     for (const meter of OK_METERS)
       for (const mood of MOODS)
         for (const bars of BARS)

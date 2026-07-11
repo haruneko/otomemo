@@ -731,8 +731,10 @@ export function genMotifMelodyV2(
       }
     } else {
       // 句末で音を切り息継ぎ：大gap(>1.4)のみ on拍1.6/裏1.05で切る（少しレガート＝つなげる）・短gapは詰める。
+      // Task#17(2026-07-12)：ブロック末フォールバックは *4 ハードコードでなく *barLen＝6/4(barLen=6)で末端が
+      // 実ブロック末より手前になり負gap→負dur になっていたのを根治（barLen=4 は値同一＝bit一致・3/4=barLen3も整合）。
       for (let i = 0; i < out.length; i++) {
-        const gap = (out[i + 1]?.start ?? (bar0 + mb) * 4) - out[i]!.start;
+        const gap = (out[i + 1]?.start ?? (bar0 + mb) * barLen) - out[i]!.start;
         const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25;
         out[i]!.dur = gap > 1.4 ? Math.min(gap, onB ? 1.6 : 1.05) : Math.min(gap, 2);
       }
@@ -817,7 +819,7 @@ export function genMotifMelodyV2(
     if (out.length) prevPreserveEnd = out[out.length - 1]!.pitch; // w4：次ブロックの継目跳躍コスト用
     // dur（render と同一＝ジグ跳ね/4-4息継ぎ）。
     if (compound) { for (let i = 0; i < out.length; i++) { const g = (out[i + 1]?.start ?? (bar0 + mbp) * 3) - out[i]!.start; const onM = Math.abs(out[i]!.start % 1.5) < 0.1; out[i]!.dur = g > 1.0 ? Math.min(g, onM ? 1.2 : 0.55) : Math.min(g, onM ? 1.4 : 0.55); } }
-    else { for (let i = 0; i < out.length; i++) { const gap = (out[i + 1]?.start ?? (bar0 + mbp) * 4) - out[i]!.start; const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25; out[i]!.dur = gap > 1.4 ? Math.min(gap, onB ? 1.6 : 1.05) : Math.min(gap, 2); } }
+    else { for (let i = 0; i < out.length; i++) { const gap = (out[i + 1]?.start ?? (bar0 + mbp) * barLen) - out[i]!.start; const onB = Math.abs(out[i]!.start - Math.floor(out[i]!.start / 2) * 2) < 0.25; out[i]!.dur = gap > 1.4 ? Math.min(gap, onB ? 1.6 : 1.05) : Math.min(gap, 2); } } // Task#17: *4→*barLen（6/4 負dur根治・barLen=4は同値=bit一致）
     return out;
   };
 
