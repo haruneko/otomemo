@@ -76,3 +76,32 @@ describe("MIDI出力の正しさ検証", () => {
     expect(m.tracks[2]!.channel).toBe(9); // リズムだけch10
   });
 });
+
+import { feelOf, isCompoundMeter } from "../src/music";
+describe("フィール層＝書き出し境界で applyFeel（スイング・非破壊）", () => {
+  const spb = 60 / 120;
+  it("feel なし＝ストレート（8分裏 x.5 のまま）", () => {
+    const notes = [{ pitch: 60, start: 0, dur: 0.5 }, { pitch: 62, start: 0.5, dur: 0.5 }];
+    const m = new Midi(notesToMidi(notes, 120, "4/4").buffer as ArrayBuffer);
+    const times = m.tracks[0]!.notes.map((n) => n.time);
+    expect(times[1]).toBeCloseTo(0.5 * spb, 4); // 0.5拍のまま
+  });
+  it("feel.swing=1＝8分裏が 2/3 拍へ跳ねる（notes 自体は不変・書き出し時のみ）", () => {
+    const notes = [{ pitch: 60, start: 0, dur: 0.5 }, { pitch: 62, start: 0.5, dur: 0.5 }];
+    const m = new Midi(notesToMidi(notes, 120, "4/4", 0, { swing: 1 }).buffer as ArrayBuffer);
+    const times = m.tracks[0]!.notes.map((n) => n.time);
+    expect(times[1]).toBeCloseTo((2 / 3) * spb, 3); // 0.5→2/3 に跳ねる
+    expect(notes[1]!.start).toBe(0.5); // 入力 notes は不変（純関数・SSOTストレート維持）
+  });
+  it("6/8（compound）＝スイングskip（書き出しストレート）", () => {
+    const notes = [{ pitch: 60, start: 0.5, dur: 0.5 }];
+    const m = new Midi(notesToMidi(notes, 120, "6/8", 0, { swing: 1 }).buffer as ArrayBuffer);
+    expect(m.tracks[0]!.notes[0]!.time).toBeCloseTo(0.5 * spb, 4);
+  });
+  it("feelOf＝content.feel を読む／isCompoundMeter", () => {
+    expect(feelOf({ notes: [], feel: { swing: 0.6 } })).toEqual({ swing: 0.6 });
+    expect(feelOf({ notes: [] })).toBeUndefined();
+    expect(isCompoundMeter("6/8")).toBe(true);
+    expect(isCompoundMeter("4/4")).toBe(false);
+  });
+});
