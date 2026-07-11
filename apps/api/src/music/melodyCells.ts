@@ -2,9 +2,7 @@ import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } 
 import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA } from "./motifModelData";
 import { chordPcs } from "./theory";
 import { classifyNCT, isResolvedNct } from "./degree";
-// 有機メロの再帰モデル・層2＝joint cell（design #12-M S8 / research findings）。
-// メロの中身を「度数move@slot(8分0/1)」記号で表し、骨格move(次拍への度数差)で条件づけて学習・サンプル。
-// 全部「度数＋相対位置」＝テンポ/調 非依存。手当て(ランダム規則)を全廃し、データの条件付き分布で動かす。
+import { type Note } from "@cm/music-core"; // 音符基本形の SSOT（負債#10・Note型一元化）
 
 // 音階ピッチ列（その調の音だけ昇順）。move=この列上のインデックス差＝音階度。
 export function scalePitchList(scale: Set<number>, lo = 48, hi = 84): number[] {
@@ -27,102 +25,15 @@ export const motifDegrees = (mv: number[]): number[] => {
   return deg;
 };
 
-type Note = { pitch: number; start: number; dur: number; vel?: number };
-
-// cell 記号 = 1拍の2つの8分slotを ";" 区切りで表す。各 token：
-//   数字=onset(その度数の新音) / "s"=sustain(前音を伸ばす) / "r"=rest(休符=前音をここで切る)。
-//   例 "0;2"=ド・ミ(8分2つ)、"0;s"=四分(ド伸ばし)、"0;r"=8分ド＋8分休、"r;r"=空拍(休)、"s;s"=保持。
-// onset/sustain/rest を持つので、伸ばし・息継ぎ(休符)が表現できる（旧 move@slot から拡張）。
-type Slot = { kind: "onset"; move: number } | { kind: "sustain" } | { kind: "rest" };
-export function parseCell(cell: string): Slot[] {
-  return cell.split(";").map((t): Slot => (t === "s" ? { kind: "sustain" } : t === "r" || t === "" ? { kind: "rest" } : { kind: "onset", move: Number(t) }));
-}
-
-// 1拍ぶんの onset 音だけを返す（sustain/rest は音を作らない＝跨ぎ/休は realizeMelody が精算）。
-export function cellToNotes(cell: string, anchorPitch: number, scalePitches: number[], beatStart: number): Note[] {
-  const base = nearestIdx(scalePitches, anchorPitch);
-  const out: Note[] = [];
-  parseCell(cell).forEach((s, i) => { if (s.kind === "onset" && Number.isFinite(s.move)) out.push({ pitch: clampScale(scalePitches, base + s.move), start: beatStart + i * 0.5, dur: 0.5 }); });
-  return out;
-}
-
-// 学習結果：骨格move(±3クランプ)別の cell 頻度。
-export interface MelodyCellModel { byMove: Map<number, Map<string, number>> }
-const clamp3 = (x: number): number => Math.max(-3, Math.min(3, x));
-
-// units＝{骨格move, その拍のcell} の列 → 条件づけ頻度を数える（リズム細胞と同じ「数えるだけ」）。
-export function learnMelodyCells(units: { move: number; cell: string }[]): MelodyCellModel {
-  const byMove = new Map<number, Map<string, number>>();
-  for (const u of units) {
-    const mv = clamp3(u.move);
-    const m = byMove.get(mv) ?? byMove.set(mv, new Map()).get(mv)!;
-    m.set(u.cell, (m.get(u.cell) ?? 0) + 1);
-  }
-  return { byMove };
-}
-
+// 決定的 RNG（線形合同法）＝seed から [0,1) 列を再現。sampleBarRhythm 等 production の重み付き抽選で使う。
 function makeRng(seed: number): () => number { let s = (seed >>> 0) || 1; return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 0xffffffff; }; }
+// 文字列キー分布からの重み付き抽選（sampleBarRhythm が使用）。
 function weightedPick(dist: Map<string, number>, r: () => number): string {
   const e = [...dist.entries()];
   const tot = e.reduce((a, b) => a + b[1], 0);
   let x = r() * tot;
   for (const [k, c] of e) { x -= c; if (x <= 0) return k; }
   return e[e.length - 1]![0];
-}
-
-// 骨格move に条件づけて cell をサンプル。該当moveが無ければ最寄りmoveへfallback（空で落ちない）。
-export function sampleCell(model: MelodyCellModel, move: number, seed: number): string {
-  const mv = clamp3(move);
-  let dist = model.byMove.get(mv);
-  if (!dist || dist.size === 0) {
-    for (let d = 1; d <= 6 && (!dist || dist.size === 0); d++) dist = model.byMove.get(clamp3(mv + d)) ?? model.byMove.get(clamp3(mv - d));
-  }
-  if (!dist || dist.size === 0) return "0;r"; // 正準記法(拍頭onset＋ウラ休)。旧 "0@0" は parseCell で NaN になる
-  return weightedPick(dist, makeRng(seed));
-}
-
-// 骨格（1拍ごとの音）＋モデル → 音符列。各拍で「次拍へのmove(度数差)」に条件づけて cell をサンプルし展開。
-// 8分slot列(onset/sustain/rest)に直してから音符化：onset=新音開始／sustain=前音継続／rest=前音をそこで切り無音。
-// ＝伸ばし(長音)・休符(息継ぎ)が出る＝「毎拍べったり」でなく小さなパーツの繋ぎになる。
-// 骨格の各拍に載せる cell 列を生成。motifBeats 指定で「前半 motifBeats 拍をモチーフとして後半が周期的に再利用」
-// ＝モチーフ(リズム＋contour)を**コミットして反復**（毎拍fresh sampleの“ランダムウォーク感”を解消・identity が立つ）。
-export function genCells(skeleton: number[], model: MelodyCellModel, scalePitches: number[], opts: { seed?: number; motifBeats?: number } = {}): string[] {
-  const seed = opts.seed ?? 1;
-  const idx = (p: number) => nearestIdx(scalePitches, p);
-  const cells: string[] = [];
-  for (let i = 0; i < skeleton.length; i++) {
-    if (opts.motifBeats && i >= opts.motifBeats) { cells.push(cells[i % opts.motifBeats]!); continue; } // モチーフ再利用
-    const move = i + 1 < skeleton.length ? idx(skeleton[i + 1]!) - idx(skeleton[i]!) : 0;
-    cells.push(sampleCell(model, move, seed + i));
-  }
-  return cells;
-}
-
-export function realizeMelody(skeleton: number[], model: MelodyCellModel, scalePitches: number[], opts: { seed?: number; startBeat?: number; motifBeats?: number } = {}): Note[] {
-  const startBeat = opts.startBeat ?? 0;
-  const idx = (p: number) => nearestIdx(scalePitches, p);
-  const cells = genCells(skeleton, model, scalePitches, opts);
-  type Ev = { kind: "onset" | "sustain" | "rest"; pitch?: number; time: number };
-  const evs: Ev[] = [];
-  for (let i = 0; i < skeleton.length; i++) {
-    const slots = parseCell(cells[i]!);
-    for (let s = 0; s < 2; s++) {
-      const tk = slots[s] ?? { kind: "rest" as const };
-      const time = startBeat + i + s * 0.5;
-      if (tk.kind === "onset" && Number.isFinite(tk.move)) evs.push({ kind: "onset", pitch: clampScale(scalePitches, idx(skeleton[i]!) + tk.move), time });
-      else evs.push({ kind: tk.kind === "sustain" ? "sustain" : "rest", time }); // 非有限moveは休扱い（防御）
-    }
-  }
-  const out: Note[] = [];
-  let cur: Note | null = null;
-  const close = (t: number) => { if (cur) { cur.dur = Math.max(0.25, t - cur.start); out.push(cur); cur = null; } };
-  for (const e of evs) {
-    if (e.kind === "onset") { close(e.time); cur = { pitch: e.pitch!, start: e.time, dur: 0.5 }; }
-    else if (e.kind === "rest") close(e.time); // 休＝前音を切って無音
-    // sustain は何もしない＝cur が伸びる
-  }
-  close(startBeat + skeleton.length);
-  return out;
 }
 
 // A2/A3(2026-07-08・design#12-M 短調V7方針)：コード音は調外でも歌える＝pc集合の最近接ピッチを
