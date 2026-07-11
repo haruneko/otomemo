@@ -17,7 +17,7 @@ import {
   BASS_FIGS,
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
-import { genMotifMelody, genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
 import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, explicitBassSegments, foldBassPitch, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる（notes はストレート）
@@ -328,7 +328,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skeleton?: SkeletonContent; rhythmParts?: RhythmPartsOpt }, // motifModel/skelModel=コーパス学習（③経路・#16で撤去予定）。rhythmParts=リズムパーツ層L1/L2（design #20 S4-1/S4-2・rotate=小節ローテ／placement=小節明示（placement>rotate>L0）／custom=インラインパーツ・未指定=bit一致）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
+  opts?: { motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skeleton?: SkeletonContent; rhythmParts?: RhythmPartsOpt }, // motifModel/skelModel=コーパス学習（V2経路が消費＝③genMotifMelodyはJ4/#16で撤去済み）。rhythmParts=リズムパーツ層L1/L2（design #20 S4-1/S4-2・rotate=小節ローテ／placement=小節明示（placement>rotate>L0）／custom=インラインパーツ・未指定=bit一致）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -498,29 +498,12 @@ export function genMelody(
   };
   if (opts?.useV2 && (bpb === 3 || bpb === 4 || bpb === 6 || compound) && bars >= 1) return runV2();
 
-  // 新パイプライン（motif-rhythm＋Markov contour＋snap・design#12-M S7/S8）：4/4＋motifModel＋chords 時。
-  // ＝コーパスで学んだ「1小節リズム語彙」と「move遷移(gap-fill)」でモチーフを生成・反復。無指定/他拍子は下の旧経路へ。
-  if (opts?.motifModel && bpb === 4 && (chords?.length ?? 0) > 0 && bars >= 1) {
-    const sp = scalePitchList(scale, lo, hi);
-    const chordPcsPerBar: number[][] = [];
-    for (let bar = 0; bar < bars; bar++) {
-      const ch = chordAt(bar * perBar, chords);
-      chordPcsPerBar.push(ch ? chordPcs(ch.root ?? 0, ch.quality ?? "") : scaleArr.map((d) => ((d % 12) + 12) % 12));
-    }
-    const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
-    const mNotes = genMotifMelody(chordPcsPerBar, sp, opts.motifModel.rhythm, opts.motifModel.move, { seed: seed ?? 1, tonicPc, fifthPc: (tonicPc + 7) % 12, ending: "close", skelModel: opts.skelModel ?? loadSkeletonModel(minor), appoggiatura: opts.appoggiatura ?? 0.5, repetition: opts.repetition, rangeSteps: opts.rangeSteps }); // 既定=同梱学習骨格(長短別)＋倚音0.5。repetition/rangeSteps=利用時制約
-    if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
-    if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
-    const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
-    // フィール層（2026-07-11・旧経路）：swing/humanize は content.feel に載せる（opts 直参照＝so 無し）。
-    const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 1);
-    return { items: [{ kind: "melody", content: feel ? { notes: mNotes, feel } : { notes: mNotes }, label: lbl }], edges: [] };
-  }
-
-  // ④撤去後の最終フォールバック（J3・design #20 Task#15）：旧ルールベース経路④（buildMotif/placeMotif/
-  // planSkeletonTones/applyPhrasing/applyExpression/decorateWeak/recoverLeaps/enforceResolution）を撤去し、
-  // メロ生成を V2 に一本化した。ここへ到達＝①補完/②useV2/③motifModel いずれのゲートも外れたケース
-  // ＝(i) useV2 を渡さない直呼び（本番は全経路 useV2:true＝主にテスト） (ii) useV2 だが V2 非対応の変拍子。
+  // ③④撤去後の最終フォールバック（J3=④撤去/J4=③撤去・design #20 Task#15/#16）：旧ルールベース経路④
+  // （buildMotif/planSkeletonTones/applyPhrasing/applyExpression/decorateWeak 等）と③ motifModel 経路
+  // （genMotifMelody・melodyCells.ts）を撤去し、メロ生成を V2（genMotifMelodyV2）に一本化した。ここへ到達＝
+  // ①補完/②useV2 いずれのゲートも外れたケース＝(i) useV2 を渡さない直呼び（本番は全経路 useV2:true＝主にテスト。
+  // motifModel 指定だが useV2:false もここ＝V2 が motifModel を消費するので corpusModel は活きる） (ii) useV2 だが
+  // V2 非対応の変拍子。
   // 方針＝V2 対応拍子（4/4・3/4・6/4・6/8系複合）は **非partial で V2 を回す**＝品質を本線に揃える（partial
   // 指定でゲートを外れたケースも種は捨てて新規生成＝design #20 J3 の受け皿一本化）。
   if ((bpb === 3 || bpb === 4 || bpb === 6 || compound) && bars >= 1) return runV2();

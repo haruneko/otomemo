@@ -230,6 +230,27 @@ describe("genFromEssence 不変条件", () => {
     const b = genMelody({ key: 0, bars: 8 }, chords, 7, { useV2: true, motifModel: model });
     expect(JSON.stringify(a.items[0]!.content)).not.toBe(JSON.stringify(b.items[0]!.content));
   });
+  it("J4: ③撤去後＝motifModel+useV2:false+4/4 は V2 フォールバックへ落ちる（useV2:true と bit 一致＝③の受け皿確認）", async () => {
+    const { learnBarRhythms, learnMoveTransitions } = await import("../src/music/melodyCells");
+    const chords: Chord[] = [
+      { root: 0, quality: "", start: 0, dur: 8 },
+      { root: 7, quality: "", start: 8, dur: 8 },
+      { root: 0, quality: "", start: 16, dur: 16 },
+    ];
+    const model = {
+      rhythm: learnBarRhythms(["x...x...", "x...x..."]),
+      move: learnMoveTransitions([[60, 72, 60, 72, 60]]),
+    };
+    // ③（genMotifMelody）撤去後、useV2 未指定でも motifModel+4/4 は最終フォールバック runV2() へ落ちる。
+    // useV2:true（②）も useV2:false（④フォールバック）も同一の runV2() を同一 opts で呼ぶ＝バイト等価。
+    const v2 = genMelody({ key: 0, bars: 8 }, chords, 7, { useV2: true, motifModel: model });
+    const fb = genMelody({ key: 0, bars: 8 }, chords, 7, { useV2: false, motifModel: model });
+    expect(JSON.stringify(fb.items[0]!.content)).toBe(JSON.stringify(v2.items[0]!.content));
+    // 受け皿として妥当＝音が出て音域内に収まる。
+    const notes = (fb.items[0]!.content as { notes: { pitch: number }[] }).notes;
+    expect(notes.length).toBeGreaterThan(0);
+    for (const n of notes) { expect(n.pitch).toBeGreaterThanOrEqual(48); expect(n.pitch).toBeLessThanOrEqual(84); }
+  });
 
   it("F4/C4: repetition が V2 骨格に効く＝0 と 1 で出力が変わる（旧: V2で無視）", () => {
     const chords: Chord[] = [{ root: 0, quality: "", start: 0, dur: 32 }];

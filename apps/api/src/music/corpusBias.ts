@@ -8,10 +8,10 @@ type Note = { pitch: number; start?: number; dur?: number };
 
 // 注（J3・2026-07-11 Task#15）：learnStepWeights / learnStepWeightsFromLibrary / cScaleArr は撤去。
 // これらは旧経路④のモチーフ歩幅バイアス（genMelody opts.stepWeights）専用で、④撤去＝V2 一本化により死んだ。
-// 生成のコーパスバイアスは learnMotifModelFromLibrary（V2/③が消費する rhythm+move モデル）に一元化。
+// 生成のコーパスバイアスは learnMotifModelFromLibrary（V2 が消費する rhythm+move モデル）に一元化。
 
 // library の melody から motif モデル（1小節8分リズム語彙＋move遷移 P(m2|m1)＝gap-fill）を学習。
-// genMotifMelody 用。コーパス未投入なら null（呼び側が旧経路へ degrade）。
+// V2（genMotifMelodyV2）の motifModel 用。コーパス未投入なら null（呼び側は既定16分語彙で生成）。
 export function learnMotifModelFromLibrary(core: Core, style?: string): { rhythm: BarRhythmModel; move: MoveModel } | null {
   const mels = core.listNeta({ kind: "melody", scope: "library", tags: style ? [style] : undefined, limit: 99999 });
   const seqs: number[][] = [];
