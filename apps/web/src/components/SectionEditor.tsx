@@ -99,7 +99,9 @@ export function SectionEditor({
   const MAX_BARS = maxBarsForKind(neta.kind);
   // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
   // P2（2026-07-10・UX再設計）：候補を単数→配列(トレイ)＝複数を並べて比較・keep。cid=React key＋keep追跡。
-  type Cand = { kind: string; content: unknown; cid: number };
+  // 骨格から吹いた候補は自分の骨格id(skeletonNetaId)を持つ＝置く時に realized_from を張る相手が候補ごとに確定
+  // （旧・画面横断の可変 ref blowSkelRef は撒き漏れで誤リンク/誤注入の恐れ→候補に明示保持する構造へ・design #20 小掃除）。
+  type Cand = { kind: string; content: unknown; cid: number; skeletonNetaId?: string };
   const [cands, setCands] = useState<Cand[]>([]);
   const [keptCids, setKeptCids] = useState<Set<number>>(new Set());
   const candId = useRef(0);
@@ -174,9 +176,8 @@ export function SectionEditor({
     setPreset("");
   };
   const candPlay = useRef<PlaybackHandle | null>(null);
-  const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string } | null>(null);
-  // 骨格から吹く（design #20 S2）：この id が入っている間 gen_melody に skeletonNetaId を渡し、置いたら realized_from を張る。
-  const blowSkelRef = useRef<string | null>(null);
+  // 直近の生成呼び出し（「🎲 もっと」で同条件再生成）。骨格から吹いた時は skeletonNetaId も保持し再現する。
+  const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string; skeletonNetaId?: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
   const liveMeter = meter ?? neta.meter ?? undefined;
   const liveTitle = (title ?? neta.title ?? "").trim(); // 生成/作成/MIDI名に使うライブタイトル
@@ -479,12 +480,12 @@ export function SectionEditor({
     { label: "ドラム", op: "gen_drums", needsChords: false },
   ] as const;
   const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : 0);
-  async function genPart(part: { op: string; needsChords: boolean; label: string }) {
+  async function genPart(part: { op: string; needsChords: boolean; label: string }, opts?: { skeletonNetaId?: string }) {
     if (genBusy) return;
-    lastPartRef.current = part;
+    lastPartRef.current = { ...part, skeletonNetaId: opts?.skeletonNetaId };
     const chords = sectionChords();
     // 骨格から吹く時は骨格が構造を担うのでコード無しでも可（skeletonNetaId 注入）。
-    if (part.needsChords && !chords.length && !blowSkelRef.current) return;
+    if (part.needsChords && !chords.length && !opts?.skeletonNetaId) return;
     setGenBusy(true);
     try {
       // 2026-07-08 耳FB：section の mode を宣言（短調でメジャー生成＝濁りの主因）。メロは density/swing ノブも渡す。
@@ -502,7 +503,7 @@ export function SectionEditor({
       if (part.op === "gen_melody") {
         body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form;
         // 骨格から吹く（design #20 S2）：骨格neta を注入＝構造線を共有し表面(リズム/装飾)だけ変える。
-        if (blowSkelRef.current) body.skeletonNetaId = blowSkelRef.current;
+        if (opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;
         // 対位バイアス（design「gen_melody×ベース結線」）：UI の「対位」を ON にした時だけ bass を渡し counter を送る。
         // 既定 OFF（未送信）＝従来 bit一致（旧・bass 在れば固定0.3 の自動送信は既定挙動を無言で変えていたので廃止）。
         const bass = sectionBass();
@@ -523,7 +524,8 @@ export function SectionEditor({
       }
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
-      if (item) pushCand({ kind: item.kind, content: item.content });
+      // 候補に骨格コンテキストを持たせる＝置く時に realized_from を張る相手が候補ごとに確定（ref の撒き漏れを排す）。
+      if (item) pushCand({ kind: item.kind, content: item.content, skeletonNetaId: opts?.skeletonNetaId });
     } finally {
       setGenBusy(false);
     }
@@ -531,7 +533,6 @@ export function SectionEditor({
   // 骨格を生成（design #20 S2・いじる▾）：gen_skeleton→候補トレイ→＋置くで骨格レーンへ。破壊上書きしない。
   async function genSkeleton() {
     if (genBusy) return;
-    blowSkelRef.current = null; // 通常生成＝吹く紐付けを解除
     lastPartRef.current = null;
     setGenBusy(true);
     try {
@@ -549,8 +550,8 @@ export function SectionEditor({
   }
   // 骨格ブロック[吹く▶]（design #20 S2）：gen_melody(skeletonNetaId)→メロ候補トレイ→＋置くで新メロ＋realized_from。
   function blowSkeleton(child: Child) {
-    blowSkelRef.current = child.node.neta.id;
-    void genPart(GEN_PARTS[0]); // メロを骨格から吹く（skeletonNetaId は genPart 内で body へ）
+    // 骨格コンテキストを明示引数で渡す＝候補に紐付き、置く時に realized_from を張る（画面横断の可変 ref を廃止）。
+    void genPart(GEN_PARTS[0], { skeletonNetaId: child.node.neta.id });
   }
   // 骨格からコードを推定（design #20 S2・harmonize）：骨格の白玉→harmonize→chord_progression 候補→＋置くでコードレーンへ。
   async function estimateChords(child: Child) {
@@ -559,7 +560,6 @@ export function SectionEditor({
     if (!isSkeleton(content)) return;
     const notes = skeletonPreviewNotes(content, BPB);
     if (!notes.length) return;
-    blowSkelRef.current = null;
     lastPartRef.current = null;
     setGenBusy(true);
     try {
@@ -617,7 +617,7 @@ export function SectionEditor({
     setFitReport(fitReportText(r));
   }
   // 候補を追加（生成/別案は同種を積む・別種は入れ替え）／単発（ハモリ・崩し）は1件で置換。
-  const pushCand = (c: { kind: string; content: unknown }) =>
+  const pushCand = (c: { kind: string; content: unknown; skeletonNetaId?: string }) =>
     setCands((prev) => { if (prev.length && prev[0]!.kind !== c.kind) { setKeptCids(new Set()); return [{ ...c, cid: candId.current++ }]; } return [...prev, { ...c, cid: candId.current++ }]; });
   const setSingleCand = (c: { kind: string; content: unknown }) => { setKeptCids(new Set()); setCands([{ ...c, cid: candId.current++ }]); }; // 別種入替＝keep掃除（監査F4）
   const toggleKeep = (cid: number) => setKeptCids((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
@@ -650,15 +650,14 @@ export function SectionEditor({
       }
     }
     await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
-    // 骨格から吹いたメロ＝realized_from(メロ→骨格) を張る（design #20 S2・骨格に戻って直せる）。
-    if (blowSkelRef.current && c.kind === "melody") await api.link(created.id, blowSkelRef.current, "realized_from").catch(() => {});
+    // 骨格から吹いたメロ＝realized_from(メロ→骨格) を張る（design #20 S2・骨格に戻って直せる）。候補が自分の骨格idを持つ。
+    if (c.skeletonNetaId && c.kind === "melody") await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
     removeCand(c.cid); // 置いた候補はトレイから外す（他候補・keepは残す）
     await load();
     onChanged?.();
   }
   function closeCandidate() {
     candPlay.current?.stop();
-    blowSkelRef.current = null;
     setCands([]);
     setKeptCids(new Set());
   }
@@ -760,7 +759,7 @@ export function SectionEditor({
                       className="tool-item"
                       aria-label={`gen-${part.op}`}
                       disabled={genBusy}
-                      onClick={() => { setToolsOpen(false); blowSkelRef.current = null; void genPart(part); }}
+                      onClick={() => { setToolsOpen(false); void genPart(part); }}
                     >
                       {genBusy ? "生成中…" : part.label}
                     </button>
@@ -929,7 +928,7 @@ export function SectionEditor({
             })}
           </div>
           <div className="cand-tray-foot">
-            <button type="button" className="tb-tool" aria-label="more-candidates" disabled={genBusy} onClick={() => lastPartRef.current && void genPart(lastPartRef.current)}>
+            <button type="button" className="tb-tool" aria-label="more-candidates" disabled={genBusy} onClick={() => lastPartRef.current && void genPart(lastPartRef.current, { skeletonNetaId: lastPartRef.current.skeletonNetaId })}>
               {genBusy ? "…" : "🎲 もっと"}
             </button>
             <button type="button" className="tb-tool" aria-label="close-candidate" onClick={closeCandidate}>閉じる</button>

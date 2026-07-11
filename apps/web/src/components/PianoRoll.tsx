@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Ref } from "react";
-import { beatsPerBar, pitchName, PITCH_NAMES, type Note } from "../music";
+import { beatsPerBar, pitchName, pc, isBlack, scalePcSet, type Note } from "../music";
 import { previewNote } from "../audio";
 import { flowLyric, splitMora } from "../lyrics";
 import { nudgeNotes, duplicateSel, deleteSel, copySel, pasteNotes } from "../noteEdit";
@@ -12,15 +12,7 @@ const CELL_PX = 12; // .proll-cell の幅。1拍=SUBDIV*CELL_PX で playhead を
 const KEY_PX = 40; // .proll-key の幅
 
 const noteName = pitchName; // 音名（SSOT: music.pitchName）
-const isBlack = (p: number) => PITCH_NAMES[((p % 12) + 12) % 12]!.includes("#");
-const pc = (p: number) => (((p % 12) + 12) % 12); // ピッチクラス0-11
-// P0-a：調内音ハイライト＝メジャー/自然的マイナーの音度集合。主音からの半音間隔。
-const SCALE_IVS: Record<string, number[]> = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10] };
-function scalePcSet(root?: number, mode?: string): Set<number> | null {
-  if (root == null || !Number.isFinite(root)) return null;
-  const ivs = SCALE_IVS[mode === "minor" ? "minor" : "major"]!;
-  return new Set(ivs.map((i) => pc(root + i)));
-}
+// pc/isBlack/scalePcSet は music.ts の共通実装（SkeletonEditor と共有・SSOT）。
 
 const DEFAULT_LOW = 60; // C4
 const DEFAULT_HIGH = 83; // B5

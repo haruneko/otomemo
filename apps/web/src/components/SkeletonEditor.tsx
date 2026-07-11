@@ -3,7 +3,7 @@
 // 打点は **click ベース**＝タッチのスクロールでは click が発火しない（PianoRoll の <button onClick> と同方式）。
 // さらに pointerdown からの移動閾値(isTap)＋pointercancel の保険＝スクロールでは絶対に点が置かれない（オーナーFB 2026-07-11）。
 import { useEffect, useMemo, useRef, useState, type Ref } from "react";
-import { pitchName, PITCH_NAMES, beatsPerBar, skeletonPreviewNotes, playNotes, type ChordEntry, type SkeletonBreakpoint, type SkeletonContent, type PlaybackHandle } from "../music";
+import { pitchName, pc, isBlack, scalePcSet, beatsPerBar, skeletonPreviewNotes, playNotes, type ChordEntry, type SkeletonBreakpoint, type SkeletonContent, type PlaybackHandle } from "../music";
 import { previewNote } from "../audio";
 import { api, type Neta } from "../api";
 import { MiniRoll } from "./MiniRoll";
@@ -32,10 +32,7 @@ const CAND_NETA = { id: "", kind: "skeleton", tags: [] } as unknown as Neta;
 
 const PPB = 44; // 1拍の px 幅
 const ROWH = 13; // 1行(半音)の px 高さ
-const isBlack = (p: number) => PITCH_NAMES[((p % 12) + 12) % 12]!.includes("#");
-const pc = (p: number) => (((p % 12) + 12) % 12);
-const MAJ = [0, 2, 4, 5, 7, 9, 11];
-const MINtones = [0, 2, 3, 5, 7, 8, 10];
+// pc/isBlack/scalePcSet は music.ts の共通実装（PianoRoll と共有・SSOT）。
 
 type Voice = "melody" | "bass";
 type SkelCand = { tones: SkeletonBreakpoint[]; bass?: SkeletonBreakpoint[]; phrases?: { endBeat: number; cadence?: string }[]; bars: number; label?: string };
@@ -92,7 +89,7 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
   const W = total * PPB, H = rows * ROWH;
   const yOf = (pitch: number) => (range.hi - pitch) * ROWH;
 
-  const scaleSet = useMemo(() => new Set((p.keyMode === "minor" ? MINtones : MAJ).map((i) => pc(p.keyPc + i))), [p.keyPc, p.keyMode]);
+  const scaleSet = useMemo(() => scalePcSet(p.keyPc, p.keyMode) ?? new Set<number>(), [p.keyPc, p.keyMode]);
   const bassSegs = useMemo(() => effectiveBassSegments(p.bass, p.chords, phrases, total), [p.bass, p.chords, phrases, total]);
   const cp = useMemo(
     () => analyzeCounterpoint(p.tones, (b) => effectiveBassAt(b, p.bass, p.chords, phrases, total)),

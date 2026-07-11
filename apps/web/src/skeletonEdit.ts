@@ -168,18 +168,7 @@ export function analyzeCounterpoint(mel: SkeletonBreakpoint[], bassAt: (beat: nu
   return out;
 }
 
-// --- noteEdit アダプタ（選択編集流用）：tones→Note[] 写像（dur=0＝durを持たない）・null点はプレースホルダ ---
-export function pointsToNotes(points: SkeletonBreakpoint[]): Note[] {
-  return sortPts(points).map((p) => ({ pitch: p.pitch ?? 60, start: p.start, dur: 0 }));
-}
-// Note[]→点：dur を破棄し、元の点（同index）が null なら null を復元。
-export function notesToPoints(notes: Note[], original: SkeletonBreakpoint[]): SkeletonBreakpoint[] {
-  const orig = sortPts(original);
-  return sortPts(
-    notes.map((n, i) => ({ start: r3(n.start), pitch: orig[i]?.pitch === null ? null : n.pitch })),
-  );
-}
-// 選択(index集合)を音程/拍で移動（null点は音程不動）。noteEdit.nudgeNotes と同流儀。
+// 選択(index集合)を音程/拍で移動（null点は音程不動）。noteEdit.nudgeNotes と同流儀（skeletonEdit 独自実装）。
 export function nudgePoints(points: SkeletonBreakpoint[], sel: Set<number>, dPitch: number, dBeats: number, total: number): SkeletonBreakpoint[] {
   const pts = sortPts(points);
   return sortPts(

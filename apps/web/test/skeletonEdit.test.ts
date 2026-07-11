@@ -17,8 +17,6 @@ import {
   intervalBadge,
   isStrongBeat,
   analyzeCounterpoint,
-  pointsToNotes,
-  notesToPoints,
   nudgePoints,
   deletePoints,
   skeletonPlaybackNotes,
@@ -206,17 +204,8 @@ describe("analyzeCounterpoint（指摘のみ）", () => {
   });
 });
 
-describe("noteEdit アダプタ（tones→Note[]写像・dur破棄・null保持）", () => {
+describe("選択編集（skeletonEdit 独自実装・noteEdit と同流儀＝nudge/削除）", () => {
   const pts: SkeletonBreakpoint[] = [{ start: 0, pitch: 60 }, { start: 2, pitch: null }, { start: 4, pitch: 67 }];
-  it("pointsToNotes＝durを持たない(0)・null点はプレースホルダpitch", () => {
-    const ns = pointsToNotes(pts);
-    expect(ns.map((n) => n.dur)).toEqual([0, 0, 0]);
-    expect(ns.map((n) => n.start)).toEqual([0, 2, 4]);
-  });
-  it("round-trip＝durを破棄しnull点を復元", () => {
-    const ns = pointsToNotes(pts);
-    expect(notesToPoints(ns, pts)).toEqual(pts);
-  });
   it("nudgePoints＝選択(index)を音程/拍で移動・null点は音程不動", () => {
     const out = nudgePoints(pts, new Set([0, 1]), 2, 1, 32);
     expect(out[0]).toEqual({ start: 1, pitch: 62 }); // +2半音,+1拍

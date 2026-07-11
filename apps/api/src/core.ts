@@ -258,6 +258,10 @@ export class Core {
   getRelations(id: string): Relation[] {
     return this.relation.getRelations(id);
   }
+  // 逆向きの連関（このネタを to に持つ from 側）。骨格→表面化済みメロの見える化に使う（design #20）。
+  getBacklinks(id: string, type?: string): { from: string; type: string }[] {
+    return this.relation.getBacklinks(id, type);
+  }
 
   // --- ジョブ（投げて→進めて→受け取る。生産側）---
 

@@ -362,7 +362,11 @@ export function buildHttp(core: Core): FastifyInstance {
 
   app.get("/neta/:id/relations", async (req) => {
     const { id } = req.params as { id: string };
-    return core.getRelations(id).map((r) => ({ type: r.type, neta: core.getNeta(r.to) }));
+    const out = core.getRelations(id).map((r) => ({ type: r.type, neta: core.getNeta(r.to) }));
+    // realized_from の逆向き（骨格→表面化済みメロ）も見せる＝骨格側から辿れる（design #20 見える化）。
+    // 骨格netaは realized_from の outgoing を持たない（メロ→骨格向きに張るため）ので重複しない。
+    const back = core.getBacklinks(id, "realized_from").map((r) => ({ type: r.type, neta: core.getNeta(r.from) }));
+    return [...out, ...back];
   });
 
   app.post("/compose", async (req, reply) => {

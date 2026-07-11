@@ -55,6 +55,11 @@ describe("mcp gen_skeleton / gen_melody skeleton injection (design #20)", () => 
     await client.callTool({ name: "link", arguments: { from: melNeta.id, to: captured.id, type: "realized_from" } });
     const rels = core.getRelations(melNeta.id);
     expect(rels.some((r) => r.type === "realized_from" && r.to === captured.id)).toBe(true);
+    // 骨格側からは逆引き（getBacklinks）で表面化済みメロへ辿れる（design #20 見える化・双方向）。
+    const back = core.getBacklinks(captured.id, "realized_from");
+    expect(back.some((r) => r.type === "realized_from" && r.from === melNeta.id)).toBe(true);
+    // 骨格は realized_from の outgoing を持たない（メロ→骨格向きに張るため）。
+    expect(core.getRelations(captured.id).some((r) => r.type === "realized_from")).toBe(false);
   });
 
   it("gen_melody(skeletonNetaId) errors on a non-skeleton neta", async () => {

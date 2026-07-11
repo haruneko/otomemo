@@ -22,4 +22,17 @@ export class RelationRepo {
       .prepare(`SELECT to_id AS "to", type FROM relation_edge WHERE from_id = ? ORDER BY type, to_id`)
       .all(id) as Relation[];
   }
+
+  // 逆向き（このネタを to に持つ from 側）。realized_from は「メロ→骨格」で張るため、骨格側から
+  // 表面化済みメロ一覧へ辿るにはこの逆引きが要る（design #20 見える化・双方向）。type 未指定=全種。
+  getBacklinks(id: string, type?: string): { from: string; type: string }[] {
+    const rows = type
+      ? this.db
+          .prepare(`SELECT from_id AS "from", type FROM relation_edge WHERE to_id = ? AND type = ? ORDER BY type, from_id`)
+          .all(id, type)
+      : this.db
+          .prepare(`SELECT from_id AS "from", type FROM relation_edge WHERE to_id = ? ORDER BY type, from_id`)
+          .all(id);
+    return rows as { from: string; type: string }[];
+  }
 }

@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, music } =
+const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, music, link } =
   vi.hoisted(() => ({
     getComposition: vi.fn(),
     listNeta: vi.fn(),
@@ -15,9 +15,10 @@ const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta,
     getSong: vi.fn(),
     updateSong: vi.fn(),
     music: vi.fn(),
+    link: vi.fn(),
   }));
 vi.mock("../src/api", () => ({
-  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, music },
+  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, music, link },
 }));
 
 import { SectionEditor, loopPositions, spanOverlaps } from "../src/components/SectionEditor";
@@ -674,6 +675,53 @@ describe("骨格「鳴らす」トグル（耳確認・オーナーFB 2026-07-11
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-c1@0");
     expect(screen.queryByLabelText("skeleton-audible")).toBeNull();
+  });
+});
+
+describe("骨格から吹く→realized_from（design #20・候補が骨格idを持つ＝可変ref撤去の回帰ガード）", () => {
+  beforeEach(() => {
+    recommend.mockResolvedValue([]);
+    getSong.mockResolvedValue(null);
+    music.mockReset();
+    createNeta.mockReset();
+    placeChild.mockReset();
+    link.mockReset();
+    link.mockResolvedValue({ ok: true });
+    placeChild.mockResolvedValue({});
+  });
+  const skelChild = {
+    position: 0,
+    ord: 0,
+    node: { neta: mk("sk1", "skeleton", { content: { bars: 2, tones: [{ start: 0, pitch: 64 }] } }), children: [] },
+  };
+
+  it("骨格ブロック[吹く▶]→gen_melody に skeletonNetaId が乗る／置くと realized_from(メロ→骨格)を張る", async () => {
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    createNeta.mockResolvedValue(mk("newmel", "melody"));
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [skelChild] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await userEvent.click(await screen.findByLabelText("blow-sk1"));
+    // コード無しでも骨格が構造を担うので生成される＋ skeletonNetaId が注入される
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ skeletonNetaId: "sk1" })));
+    await userEvent.click(await screen.findByLabelText("place-candidate"));
+    // 置いた新メロ→骨格へ realized_from を張る（骨格に戻って直せる）
+    await waitFor(() => expect(link).toHaveBeenCalledWith("newmel", "sk1", "realized_from"));
+  });
+
+  it("通常のメロ生成（骨格由来でない候補）は realized_from を張らない＝ref撒き漏れの誤リンク無し", async () => {
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    createNeta.mockResolvedValue(mk("newmel2", "melody"));
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } }],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await userEvent.click(await screen.findByLabelText("place-candidate"));
+    await waitFor(() => expect(placeChild).toHaveBeenCalled());
+    expect(link).not.toHaveBeenCalled(); // 骨格idを持たない候補＝リンクしない
   });
 });
 

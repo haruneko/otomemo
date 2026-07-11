@@ -189,6 +189,19 @@ describe("http auth gate (#36)", () => {
     expect(rel.length).toBe(0);
   });
 
+  it("realized_from は双方向で見える＝メロ側は骨格へ・骨格側はメロへ辿れる（design #20 見える化）", async () => {
+    const skel = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "skeleton", title: "骨格" } })).json();
+    const mel = (await app.inject({ method: "POST", url: "/neta", payload: { kind: "melody", title: "吹いたメロ" } })).json();
+    // realized_from は「メロ→骨格」向きに張る（api 実装済みの向き）。
+    await app.inject({ method: "POST", url: "/relation", payload: { from: mel.id, to: skel.id, type: "realized_from" } });
+    // メロ側＝outgoing で骨格が見える（「← 元の骨格」）。
+    const fromMel = (await app.inject({ method: "GET", url: `/neta/${mel.id}/relations` })).json();
+    expect(fromMel).toContainEqual(expect.objectContaining({ type: "realized_from", neta: expect.objectContaining({ id: skel.id }) }));
+    // 骨格側＝逆引きでメロが見える（「→ 吹いたメロ」）。逆向き結線が無いと空になる回帰ガード。
+    const fromSkel = (await app.inject({ method: "GET", url: `/neta/${skel.id}/relations` })).json();
+    expect(fromSkel).toContainEqual(expect.objectContaining({ type: "realized_from", neta: expect.objectContaining({ id: mel.id }) }));
+  });
+
   // 初回ロード軽量化：一覧(GET /neta)は巨大content(study/analysis 等)を content:null に落とす。
   // 全文は開いた時に GET /neta/:id で取る。小さい music content(一覧のMiniRoll/試聴で使う)は残す。
   it("GET /neta omits heavy content but /neta/:id returns full content", async () => {

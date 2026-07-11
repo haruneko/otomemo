@@ -46,6 +46,18 @@ export type MixPart = "melody" | "chord" | "bass" | "drums";
 // MIDIノート番号→音名（MIDI 60=C4）。負値も安全（(m%12+12)%12）。PITCH_NAMES は @cm/music-core。
 export const pitchName = (midi: number) => `${PITCH_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 
+// ピアノロール共通（PianoRoll/SkeletonEditor で重複していた低リスク純関数を集約・SSOT）。
+export const pc = (p: number) => (((p % 12) + 12) % 12); // ピッチクラス 0-11（負値も安全）
+export const isBlack = (p: number) => PITCH_NAMES[pc(p)]!.includes("#"); // 黒鍵か（#を含む音名）
+// 調内音ハイライト＝メジャー/自然的マイナーの音度集合（主音からの半音間隔）。P0-a。
+export const SCALE_IVS: Record<string, number[]> = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10] };
+// 調内音のピッチクラス集合（root=主音pc・mode）。root 未指定/非数は null（描画側でハイライト無し）。
+export function scalePcSet(root?: number, mode?: string): Set<number> | null {
+  if (root == null || !Number.isFinite(root)) return null;
+  const ivs = SCALE_IVS[mode === "minor" ? "minor" : "major"]!;
+  return new Set(ivs.map((i) => pc(root + i)));
+}
+
 export interface MelodyContent {
   notes: Note[];
 }
