@@ -1403,6 +1403,13 @@ export function genMotifMelodyV2(
       }
       if (bestI >= 0) breathOf.set(bestI, jitBreath(k)); // その音の後ろの息は埋めない（句末の呼吸・息量は句ごとにばらす）
     });
+    // 和声ガード（2026-07-11・オーナーFB「flowで不協和」）：延長がコード変わり目をまたいで**非和声かつ半音衝突**に
+    // なる手前で歌い終える（＝跨いだ先で濁る音は境界で切る）。和声音＝共通音なら跨いで伸ばしてよい（切らない）。
+    const pcHalfClash = (pc: number, pcs: number[]): boolean => pcs.length > 0 && !pcs.includes(pc) && pcs.some((p) => { const d = (((pc - p) % 12) + 12) % 12; return d === 1 || d === 11; });
+    const dissoCap = (pc: number, curEnd: number, target: number): number => {
+      for (let t = Math.ceil(curEnd * 2 - 1e-6) / 2; t < target - 1e-6; t += 0.5) if (pcHalfClash(pc, pcsAtT(t))) return t; // 変わり目(curEnd以降の拍/半拍境界)で衝突なら手前で切る
+      return target;
+    };
     for (let i = 0; i < notes.length; i++) {
       const cur = notes[i]!;
       const nextStart = i + 1 < notes.length ? notes[i + 1]!.start : secEnd;
@@ -1416,7 +1423,8 @@ export function genMotifMelodyV2(
         newDur = Math.min(nextStart, curEnd + flow * 4) - cur.start; // 句内・曲末＝次onset(末尾はセクション末)まで連結（延長のみ）
         if (newDur < cur.dur) newDur = cur.dur;
       }
-      if (Math.abs(newDur - cur.dur) > 0.01) cur.dur = Math.round(newDur * 1000) / 1000;
+      newDur = dissoCap((((cur.pitch % 12) + 12) % 12), curEnd, cur.start + newDur) - cur.start; // コード衝突の手前で頭打ち
+      if (Math.abs(newDur - cur.dur) > 0.01 && newDur >= 0.1) cur.dur = Math.round(newDur * 1000) / 1000;
     }
   }
 

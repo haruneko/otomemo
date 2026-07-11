@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import { genMelody, genChords } from "../src/music/generate";
 import { extractMotif16 } from "../src/music/melodyCells";
 import { applyFeel } from "@cm/music-core"; // feel層：swing は content.feel に載り applyFeel で跳ねる（notes はストレート）
+import { chordPcs } from "../src/music/theory"; // flow の和声ガード検証（コード跨ぎ半音衝突）
 
 type N = { pitch: number; start: number; dur: number };
 const notesOf = (r: { items: { content: unknown }[] }): N[] => (r.items[0]!.content as { notes: N[] }).notes;
@@ -33,6 +34,31 @@ describe("frame.mode 一級化（短調セクションの生成文脈）", () =>
     const r = genChords({ bars: 4, key: 9, mode: "minor" }, 3);
     const c0 = (r.items[0]!.content as { chords: { root: number; quality: string }[] }).chords[0]!;
     expect(c0).toEqual(expect.objectContaining({ root: 9, quality: "m" }));
+  });
+});
+
+describe("flow の和声ガード＝延長がコード変わり目で半音衝突しない（2026-07-11・オーナーFB「不協和」）", () => {
+  // 2拍ごとに変わる進行＝flow の延長が境界を頻繁に跨ぐ。flow の和声ガードで、跨いだ先で非和声かつ半音衝突する音を増やさない。
+  const PROG = [0, 2, 5, 7, 9, 5, 7, 0].flatMap((root, i) => [{ root, quality: root === 7 ? "7" : root === 2 || root === 9 ? "m" : "", start: i * 4, dur: 4 }]);
+  const crossClashes = (notes: N[]): number => {
+    const cp = PROG.map((c) => ({ s: c.start, pcs: chordPcs(c.root, c.quality) }));
+    let n = 0;
+    for (const x of notes) {
+      const end = x.start + x.dur, pc = ((x.pitch % 12) + 12) % 12;
+      for (const c of cp) if (c.s > x.start + 0.05 && c.s < end - 0.05) { if (!c.pcs.includes(pc) && c.pcs.some((p) => Math.min(((pc - p) % 12 + 12) % 12, ((p - pc) % 12 + 12) % 12) === 1)) n++; break; }
+    }
+    return n;
+  };
+  it("flow=0.8 のコード跨ぎ半音衝突は plain＋わずか以内（延長が濁りを跨がない・長音は保つ）", () => {
+    let plain = 0, flow = 0, maxDur = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      plain += crossClashes(notesOf(genMelody({ key: 0, bars: 8 }, PROG, seed, { useV2: true, density: 0.6 })));
+      const nf = notesOf(genMelody({ key: 0, bars: 8 }, PROG, seed, { useV2: true, density: 0.6, flow: 0.8 }));
+      flow += crossClashes(nf);
+      maxDur = Math.max(maxDur, ...nf.map((x) => x.dur));
+    }
+    expect(flow, `flow衝突${flow} > plain${plain}+3（flowが不協和を増やしている）`).toBeLessThanOrEqual(plain + 3); // 残差=導音解決等の正当な跨ぎのみ
+    expect(maxDur, "和声ガードで長音が消えた").toBeGreaterThan(2.5); // 長音（money note）は保たれる
   });
 });
 
