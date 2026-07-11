@@ -112,6 +112,42 @@ export function skeletonToV2Skel(content: SkeletonContent, opts: { beatsPerBar?:
   return out;
 }
 
+// V2 句割りアダプタ（design #20 S3a）：骨格の phrases（句末拍 endBeat 列）→ genMotifMelodyV2 が使う
+// phrases 表現 {startBeat, beats, cadenceDegree}[]（可変長ブロック・breathe句頭遅延・句末カデンツ着地の受け口）。
+// endBeat 列で [0,total] を分割＝startBeat=前句末（先頭0）・beats=区間長。cadence ラベル→着地度数：
+// half=5(属音・半終止)/full=1(主音・完全終止)/無指定・未知=位置既定（最終句=1主音・非最終=5属音＝planSkeleton慣習）。
+// phrases 無し（未指定/空）＝undefined を返す＝呼び出し側は従来 frame phrasing 由来へフォールバック＝bit一致。
+export function skeletonPhrasesToV2(
+  content: SkeletonContent,
+  opts: { beatsPerBar?: number } = {},
+): { startBeat: number; beats: number; cadenceDegree: number }[] | undefined {
+  const phrases = content.phrases;
+  if (!phrases || phrases.length === 0) return undefined;
+  const bpb = opts.beatsPerBar ?? 4;
+  const total = content.bars * bpb;
+  const sorted = [...phrases].sort((a, b) => a.endBeat - b.endBeat);
+  const out: { startBeat: number; beats: number; cadenceDegree: number }[] = [];
+  let prev = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const end = Math.min(sorted[i]!.endBeat, total);
+    if (end <= prev + 1e-9) continue; // 非増加/重複/範囲外は握り潰す（防御・validate済みでも安全側）
+    out.push({ startBeat: prev, beats: end - prev, cadenceDegree: cadenceToDegree(sorted[i]!.cadence, i === sorted.length - 1) });
+    prev = end;
+  }
+  // 末尾の未被覆区間（最後の endBeat < total）＝残りを1句として主音で閉じる（防御・通常は endBeat 末=total）。
+  if (prev < total - 1e-9) out.push({ startBeat: prev, beats: total - prev, cadenceDegree: 1 });
+  return out.length ? out : undefined;
+}
+
+// 終止ラベル→着地度数。V2 が解する 5(属音)/2(上主音)/その他(主音) へ寄せる。無指定/未知は位置で既定。
+function cadenceToDegree(cadence: string | undefined, isLast: boolean): number {
+  const c = (cadence ?? "").trim().toLowerCase();
+  if (c === "half" || c === "hc" || c === "half_cadence") return 5;
+  if (c === "full" || c === "authentic" || c === "perfect" || c === "pac" || c === "iac" || c === "full_cadence") return 1;
+  if (c === "supertonic" || c === "2") return 2;
+  return isLast ? 1 : 5; // planSkeleton慣習：最終句=主音（答え）/非最終句=属音（問い）
+}
+
 // 逆変換：genSkeletonFromModel の返り（1拍粒度・保持済み number[]）→ ブレークポイント列。
 // ピッチが直前拍から変わる位置にだけ点を置く＝dur を持たない骨格へ圧縮。
 export function skelArrayToBreakpoints(skel: number[]): SkeletonBreakpoint[] {

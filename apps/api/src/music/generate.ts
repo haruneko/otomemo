@@ -18,7 +18,7 @@ import {
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
 import { genMotifMelody, genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
-import { skeletonToV2Skel, skelArrayToBreakpoints, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
+import { skeletonToV2Skel, skeletonPhrasesToV2, skelArrayToBreakpoints, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type Feel } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる（notes はストレート）
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
@@ -599,7 +599,10 @@ export function genMelody(
     const scalePcsArr = scaleArr.map((d) => ((d % 12) + 12) % 12);
     const chordPcsAt = (t: number): number[] => { const c = chordAt(t, chords); return c ? chordPcs(normRoot(c.root ?? 0), c.quality ?? "") : scalePcsArr; }; // C3: 小節内チェンジ追従
     // P0-b(Step2)：phrasing 指定時のみ planSkeleton の句割りをV2へ渡す（未指定=phrases無し=従来bit一致）。
-    const phrases = so.phrasing ? planSkeleton(bars, f.meter, { phrasing: so.phrasing }).map((p) => ({ startBeat: p.startBeat, beats: p.beats, cadenceDegree: p.cadenceDegree })) : undefined;
+    // S3a(design #20)：骨格に phrases があれば frame phrasing 由来より**骨格の句割りを優先**（骨格が構造の権威）。
+    // 骨格 phrases 無し＝従来（frame phrasing 由来 or undefined）＝bit一致。beat 単位は V2 の barLen（compound?3:4）に合わせる。
+    const skelPhrases = opts?.skeleton ? skeletonPhrasesToV2(opts.skeleton, { beatsPerBar: compound ? 3 : 4 }) : undefined;
+    const phrases = skelPhrases ?? (so.phrasing ? planSkeleton(bars, f.meter, { phrasing: so.phrasing }).map((p) => ({ startBeat: p.startBeat, beats: p.beats, cadenceDegree: p.cadenceDegree })) : undefined);
     // 表情の既定較正(2026-07-09 批判レビューP0a)：V2既定が expression=0＝強拍CT100%(無菌の極・実曲57%)だった。
     // frame.expression 明示＞mood既定(0.15-0.3)＞既定0.25。legacy(applyExpression)と同じロジックをV2へ結線。
     // so.expression＝明示 opts.expression ＞ role プリセット（applySectionPreset で埋め済）。

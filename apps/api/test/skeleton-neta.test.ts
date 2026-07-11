@@ -3,6 +3,7 @@ import {
   validateSkeletonContent,
   expandDominion,
   skeletonToV2Skel,
+  skeletonPhrasesToV2,
   skelArrayToBreakpoints,
   type SkeletonContent,
 } from "../src/music/skeletonNeta";
@@ -73,6 +74,46 @@ describe("skeletonToV2Skel adapter (→ 1拍粒度 number[])", () => {
   });
 });
 
+describe("skeletonPhrasesToV2 (骨格句割り→V2 phrases・design #20 S3a)", () => {
+  it("phrases 無しは undefined（frame phrasing へフォールバック＝bit一致）", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }] };
+    expect(skeletonPhrasesToV2(c, { beatsPerBar: 4 })).toBeUndefined();
+    expect(skeletonPhrasesToV2({ ...c, phrases: [] }, { beatsPerBar: 4 })).toBeUndefined();
+  });
+  it("endBeat 列で [0,total] を分割し startBeat/beats を写す（無指定は位置既定＝非最終5/最終1）", () => {
+    const c: SkeletonContent = { bars: 4, tones: [{ start: 0, pitch: 60 }], phrases: [{ endBeat: 8 }, { endBeat: 16 }] };
+    expect(skeletonPhrasesToV2(c, { beatsPerBar: 4 })).toEqual([
+      { startBeat: 0, beats: 8, cadenceDegree: 5 }, // 非最終・無指定＝属音（問い＝planSkeleton慣習）
+      { startBeat: 8, beats: 8, cadenceDegree: 1 }, // 最終・無指定＝主音（答え）
+    ]);
+  });
+  it("cadence ラベル half=5 / full=1 を着地度数へ写す", () => {
+    const c: SkeletonContent = { bars: 4, tones: [{ start: 0, pitch: 60 }], phrases: [{ endBeat: 8, cadence: "half" }, { endBeat: 16, cadence: "full" }] };
+    expect(skeletonPhrasesToV2(c, { beatsPerBar: 4 })!.map((p) => p.cadenceDegree)).toEqual([5, 1]);
+  });
+  it("非対称な句割り（1小節＋3小節）を可変長ブロックへ渡せる形にする", () => {
+    const c: SkeletonContent = { bars: 4, tones: [{ start: 0, pitch: 60 }], phrases: [{ endBeat: 4 }, { endBeat: 16 }] };
+    expect(skeletonPhrasesToV2(c, { beatsPerBar: 4 })).toEqual([
+      { startBeat: 0, beats: 4, cadenceDegree: 5 },
+      { startBeat: 4, beats: 12, cadenceDegree: 1 },
+    ]);
+  });
+  it("最後の endBeat が total 未満なら残りを主音の句として補う（防御）", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], phrases: [{ endBeat: 4 }] };
+    expect(skeletonPhrasesToV2(c, { beatsPerBar: 4 })).toEqual([
+      { startBeat: 0, beats: 4, cadenceDegree: 1 }, // 単一＝最終扱い→主音
+      { startBeat: 4, beats: 4, cadenceDegree: 1 }, // 未被覆区間の補填句
+    ]);
+  });
+  it("複合拍子（6/8＝bpb3）の拍単位で写す", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], phrases: [{ endBeat: 3 }, { endBeat: 6 }] };
+    expect(skeletonPhrasesToV2(c, { beatsPerBar: 3 })).toEqual([
+      { startBeat: 0, beats: 3, cadenceDegree: 5 },
+      { startBeat: 3, beats: 3, cadenceDegree: 1 },
+    ]);
+  });
+});
+
 describe("skelArrayToBreakpoints (逆変換) round-trips with the adapter", () => {
   it("compresses a held per-beat array into breakpoints at changes", () => {
     const bp = skelArrayToBreakpoints([60, 60, 64, 64, 64, 62, 62, 62]);
@@ -109,6 +150,36 @@ describe("gen_melody skeleton injection (design #20)", () => {
     // 決定的：同じ骨格＋同 seed は同じ結果
     const again = genMelody(frame, chords4, 7, { useV2: true, skeleton });
     expect(notesOf(injected)).toEqual(notesOf(again));
+  });
+
+  // S3a：骨格 phrases（句境界）の V2 結線。可変長ブロック/breathe/句末カデンツ着地の受け口へ渡る。
+  it("phrases 無しの骨格は S1 挙動と不変（空配列もフォールバック＝bit一致）", () => {
+    const tones = [{ start: 0, pitch: 72 }, { start: 8, pitch: 74 }];
+    const a = genMelody(frame, chords4, 7, { useV2: true, skeleton: { bars: 4, tones } });
+    const b = genMelody(frame, chords4, 7, { useV2: true, skeleton: { bars: 4, tones, phrases: [] } });
+    expect(notesOf(a)).toEqual(notesOf(b));
+  });
+
+  it("骨格 phrases が V2 に効く＝句割り有無で出力が変わる・決定的（S3a）", () => {
+    const tones = [{ start: 0, pitch: 72 }, { start: 8, pitch: 74 }];
+    const noPh: SkeletonContent = { bars: 4, tones };
+    // 非対称な句割り [1小節,3小節]＝可変長ブロックを発火（frame phrasing 由来の対称ブロックと異なる）
+    const withPh: SkeletonContent = { bars: 4, tones, phrases: [{ endBeat: 4, cadence: "half" }, { endBeat: 16, cadence: "full" }] };
+    const a = genMelody(frame, chords4, 7, { useV2: true, skeleton: noPh });
+    const b = genMelody(frame, chords4, 7, { useV2: true, skeleton: withPh });
+    expect(notesOf(a)).not.toEqual(notesOf(b));
+    const bAgain = genMelody(frame, chords4, 7, { useV2: true, skeleton: withPh });
+    expect(notesOf(b)).toEqual(notesOf(bAgain));
+  });
+
+  it("骨格句割りは breathe（句頭遅延入場）を句境界で動かす（S3a）", () => {
+    const tones = [{ start: 0, pitch: 72 }, { start: 8, pitch: 74 }];
+    // breathe>0 で句頭の onset を落とす。境界が beat4（骨格句割り）か既定ブロック（beat8）かで落ちる位置が変わる。
+    const sym: SkeletonContent = { bars: 4, tones, phrases: [{ endBeat: 8 }, { endBeat: 16 }] };
+    const asym: SkeletonContent = { bars: 4, tones, phrases: [{ endBeat: 4 }, { endBeat: 16 }] };
+    const a = genMelody(frame, chords4, 7, { useV2: true, skeleton: sym, breathe: 0.6 });
+    const b = genMelody(frame, chords4, 7, { useV2: true, skeleton: asym, breathe: 0.6 });
+    expect(notesOf(a)).not.toEqual(notesOf(b));
   });
 });
 
