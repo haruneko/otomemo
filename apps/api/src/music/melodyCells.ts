@@ -1348,11 +1348,19 @@ export function genMotifMelodyV2(
 
   // swing(2026-07-08 ノブ・design#12-M＝S7「跳ねるボタン」)：8分裏(小節内 x.5)を 0.5+swing/6 へ後段タイムマップ
   // （swing=1で3連の2/3位置）。16分裏(.25/.75)は据え置き。6/8(compound)は既にjigの跳ねを持つ＝対象外。
+  // 衝突ガード(2026-07-11・オーナーFB「JRockのリズムが崩れる」)：8分裏(x.5)の直後に16分(x.75)があると、x.65 まで
+  // 振った瞬間 16分と 0.10拍で衝突しフラム状の極短音になる（swing×16分連の相互作用）。8分裏に16分が続く所は
+  // **そもそも跳ねられない**ので跳ねを見送りストレートに保つ＝**次onsetまで0.4拍以上の余地がある8分裏だけ跳ねる**。
+  // 16分の無い所（余地あり）は従来どおりフルスウィング＝聞こえは不変。
   const sw = Math.max(0, Math.min(1, opts.swing ?? 0));
   if (sw > 0 && !compound) {
-    for (const n of notes) {
-      const frac = ((n.start % 1) + 1) % 1;
-      if (Math.abs(frac - 0.5) < 0.01) n.start = Math.round((n.start + sw / 6) * 1000) / 1000;
+    const SWING_ROOM = 0.4; // 8分裏を跳ねるのに要る次onsetまでの最小余地（未満＝直後に16分＝ストレート維持）
+    for (let i = 0; i < notes.length; i++) {
+      const frac = ((notes[i]!.start % 1) + 1) % 1;
+      if (Math.abs(frac - 0.5) >= 0.01) continue;
+      const nextStart = i + 1 < notes.length ? notes[i + 1]!.start : Infinity; // 16分(x.75)は動かないので原位置=最終位置
+      if (nextStart - notes[i]!.start < SWING_ROOM) continue; // 直後に16分＝跳ねない（フラム回避・ストレート維持）
+      notes[i]!.start = Math.round((notes[i]!.start + sw / 6) * 1000) / 1000;
     }
     notes.sort((a, b) => a.start - b.start);
     for (let i = 0; i + 1 < notes.length; i++) {
