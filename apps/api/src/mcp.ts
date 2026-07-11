@@ -789,7 +789,9 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         // P1 自己進化ループ：1本に潰さず「多め生成→らしさ(E-corpus)順→多様な top-k」で候補を返す。
         // corpusModel＝ライブラリ学習(自分/コーパスらしさ)。seed 明示時は決定的な単一（従来どおり）。
         const corpusModel = learnMotifModelFromLibrary(core, style);
-        return ok(genMelodyCandidates(frame, chords, seed, { stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, corpusModel })); // コードに合う新規メロ候補(U3・style でコーパス bias)
+        // J2c(2026-07-11)：useV2:true＝gen_melody と同じ本線へ（従来この経路だけ useV2 無し＝旧経路③④に落ちていた。
+        // fit のメロ候補の質を V2 に揃える意図的変更。4/4|複合拍+chords はV2・ゲート外れは従来どおりフォールバック）。
+        return ok(genMelodyCandidates(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, corpusModel })); // コードに合う新規メロ候補(U3・style でコーパス bias)
       }
       if (target === "bass") {
         if (!chords) return err("fit bass は基準 chords が必須");

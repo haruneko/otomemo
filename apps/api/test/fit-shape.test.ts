@@ -48,6 +48,15 @@ describe("C③ fit は全 target で items 形に統一", () => {
     expect(p.items[0].content.notes.length).toBeGreaterThan(0);
   });
 
+  it("target=melody・新規メロは V2 本線に乗る（J2c 2026-07-11＝useV2 無しで旧経路③④に落ちていた是正）", async () => {
+    const { client } = await connect();
+    const args = { target: "melody", frame: { meter: "4/4", bars: 2 }, chords: CHORDS, seed: 7 };
+    const p = payload(await client.callTool({ name: "fit", arguments: args }));
+    // gen_melody（常に useV2:true）と同一 seed・同一入力で同一ノートになる＝同じ本線を通っている証拠。
+    const g = payload(await client.callTool({ name: "gen_melody", arguments: { frame: { meter: "4/4", bars: 2 }, chords: CHORDS, seed: 7 } }));
+    expect(JSON.stringify(p.items[0].content.notes)).toBe(JSON.stringify(g.items[0].content.notes));
+  });
+
   it("target=bass：items 形", async () => {
     const { client } = await connect();
     const p = payload(await client.callTool({ name: "fit", arguments: { target: "bass", frame: { meter: "4/4", bars: 2 }, chords: CHORDS } }));
