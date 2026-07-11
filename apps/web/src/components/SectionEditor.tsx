@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Neta } from "../api";
 import { KIND_LABEL } from "../kinds";
-import { fitReportText } from "../fitReport";
 import { isProjectTag, projectName } from "../project";
 import { useTransport } from "../useTransport";
 import { TransportBar } from "./TransportBar";
@@ -10,11 +9,9 @@ import {
   compositeNotes,
   downloadMidi,
   downloadMultitrackMidi,
-  playNotes,
   beatsPerBar,
   feelOf,
   isCompoundMeter,
-  skeletonPreviewNotes,
   isSkeleton,
   chordsOf,
   harmonyPlacementShift,
@@ -22,17 +19,18 @@ import {
   type ChordEntry,
   type Feel,
   type Note,
-  type PlaybackHandle,
 } from "../music";
 import { skeletonEarNotes } from "../skeletonEdit";
 import { MiniRoll } from "./MiniRoll";
 import { Icon } from "./Icon";
-import { harmonyVoice } from "../harmony";
 import { useDismiss } from "../useDismiss";
-// 巨大コンポの機械分割（負債D6）＝挙動不変。レーン定義/尺定数/純関数/LaneCell/SongStatus/PlacePicker を分離。
+// 巨大コンポの機械分割（負債D6→Task#2）＝挙動不変。レーン定義/尺定数/純関数/LaneCell/SongStatus/PlacePicker、
+// および 生成/ハモリ道具(useMelodyGen)・配置ピッカー(usePlacePicker) を分離。
 import { LaneCell } from "./LaneCell";
 import { SongStatus } from "./SongStatus";
 import { PlacePicker } from "./PlacePicker";
+import { useMelodyGen, MELODY_PRESETS, GEN_PARTS } from "../useMelodyGen";
+import { usePlacePicker } from "../usePlacePicker";
 import {
   type Lane,
   type Child,
@@ -45,19 +43,6 @@ import {
 } from "./sectionLanes";
 // テストが従来 SectionEditor から import している純関数は再export して import 面を不変に保つ。
 export { loopPositions, spanOverlaps } from "./sectionLanes";
-
-// P4（2026-07-10・UX再設計）：メロ生成プリセット＝13ノブを"当たり"の組に畳む主動線。値は param-clarity doc §5.1（0/未指定=非送信=bit一致）。
-type PresetV = { density?: number; swing?: number; runs?: number; expression?: number; push?: number; hook?: number; articulation?: number; foreground?: number; breathe?: number; phrasing?: "" | "symmetric" | "asymmetric" | "period" | "sentence"; form?: "" | "sentence"; flow?: number; pickup?: number };
-const MELODY_PRESETS: { name: string; label: string; v: PresetV }[] = [
-  { name: "plain", label: "おまかせ", v: { density: 0.5 } }, // density は常時送信＝未タッチ既定(0.5)に合わせる＝「おまかせ」=従来生成（監査F1）
-  { name: "soft", label: "しっとり", v: { density: 0.3, expression: 0.5, foreground: 0.2, breathe: 0.4 } },
-  { name: "bounce", label: "跳ねる", v: { density: 0.5, swing: 0.6, runs: 0.2, expression: 0.2, push: 0.3 } },
-  { name: "run", label: "走る", v: { density: 0.8, swing: 0.1, runs: 0.7, expression: 0.2, push: 0.3 } },
-  { name: "sparkle", label: "きらきら", v: { density: 0.7, swing: 0.2, runs: 0.5, expression: 0.4, foreground: 0.5 } },
-  { name: "song", label: "歌もの", v: { density: 0.45, swing: 0.15, runs: 0.1, expression: 0.3, hook: 0.5, articulation: 0.4, phrasing: "symmetric", flow: 0.5, pickup: 0.5 } },
-  { name: "hook", label: "口ずさめる", v: { density: 0.4, swing: 0.1, expression: 0.2, hook: 0.8, articulation: 0.6, foreground: 0.1, flow: 0.4, pickup: 0.5 } },
-  { name: "sustain", label: "伸びやか", v: { density: 0.4, expression: 0.3, flow: 0.75, pickup: 0.5, foreground: 0.15 } }, // 塊を長く連結＝サビ向き（2026-07-11 句フレージング）
-];
 
 export function SectionEditor({
   neta,
@@ -80,108 +65,19 @@ export function SectionEditor({
 }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [loadErr, setLoadErr] = useState(false); // getComposition 失敗時＝空白で固まらず再試行を出す（perf耳FB 2026-07-09）
-  const [picker, setPicker] = useState<{ lane: Lane; position: number; all: Neta[] } | null>(null);
   // ③ 右端ドラッグでループ伸ばし中のプレビュー（fromPos〜endBeat をゴースト表示）。
   const [drag, setDrag] = useState<{ childId: string; laneKey: string; fromPos: number; unit: number; endBeat: number } | null>(null);
-  const [pq, setPq] = useState(""); // ピッカーの絞り込み
-  const [pickerRecs, setPickerRecs] = useState<Neta[]>([]); // #20 おすすめ（コーパス）＝拍子/調で数件
-  // ピッカーの母集団を器で絞る（A）＝どのプロジェクトのネタから選ぶか（""=自作すべて）。
-  const [pickerSource, setPickerSource] = useState<string>("");
-  const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
   const [eraseMode, setEraseMode] = useState(false); // 消しゴムモード＝ブロックtapで外す（PianoRollの描く/選ぶと同じモード流儀）
   const [toolsOpen, setToolsOpen] = useState(false); // いじる▾ メニュー（生成/ハモリ/書き出しを集約・メロ編集画面と整合・⑤）
   const toolsRef = useRef<HTMLDivElement>(null);
   useDismiss(toolsRef, toolsOpen, useCallback(() => setToolsOpen(false), [])); // 外タップ/Escで閉じる
-  const previewPlay = useRef<PlaybackHandle | null>(null); // ピッカー項目の試聴（配置前に耳で確認）
   // #5 container kind でレーン/尺を差し替え（song=section を並べる編成・section=パート専用）。
   const isSong = neta.kind === "song";
   const LANES = lanesForKind(neta.kind);
   const MAX_BARS = maxBarsForKind(neta.kind);
-  // ②文脈系：この進行に◯を生成（section のコード＋frame から候補→試聴→レーンに置く）。
-  // P2（2026-07-10・UX再設計）：候補を単数→配列(トレイ)＝複数を並べて比較・keep。cid=React key＋keep追跡。
-  // 骨格から吹いた候補は自分の骨格id(skeletonNetaId)を持つ＝置く時に realized_from を張る相手が候補ごとに確定
-  // （旧・画面横断の可変 ref blowSkelRef は撒き漏れで誤リンク/誤注入の恐れ→候補に明示保持する構造へ・design #20 小掃除）。
-  type Cand = { kind: string; content: unknown; cid: number; skeletonNetaId?: string };
-  const [cands, setCands] = useState<Cand[]>([]);
-  const [keptCids, setKeptCids] = useState<Set<number>>(new Set());
-  const candId = useRef(0);
-  const [genBusy, setGenBusy] = useState(false);
-  const [density, setDensity] = useState(0.5); // メロの細かさ 0=疎〜1=細かい（耳FB 2026-07-08）
-  const [swing, setSwing] = useState(0); // メロの跳ね 0=ストレート〜1=シャッフル
-  const [expression, setExpression] = useState(0); // メロの表情 0=素直〜1=もたれ(強拍に倚音/掛留)（Step1 2026-07-09）
-  const [phrasing, setPhrasing] = useState<"" | "symmetric" | "asymmetric" | "period" | "sentence">(""); // 句割り 空=従来/対称(問い→答え)/非対称(3+3+2の呼吸)（Step2/P0-b 2026-07-09）
-  const [runs, setRuns] = useState(0); // メロの走句 0=なし〜1=16分連続が出やすい（Step4 2026-07-09）
-  const [push, setPush] = useState(0); // メロの前借り(食い) 0=なし〜1=1,2,3拍を16分前へ（Step4 2026-07-09）
-  const [foreground, setForeground] = useState(0); // 前景の自由度 0=反復中心〜1=自由材料(同音/跳躍)多め（Step5 2026-07-09）
-  const [breathe, setBreathe] = useState(0); // 句頭の遅延入場(息継ぎ) 0=なし〜1=各句頭を空けて入る（#9 2026-07-09）
-  const [humanize, setHumanize] = useState(0); // 人間味(グルーヴ) 0=機械的〜1=強弱＋微小タイミング揺れ（監査E 2026-07-09）
-  const [form, setForm] = useState<"" | "sentence">(""); // 形式 空=従来AABA/文=sentence(提示→反復→継続断片化→カデンツ=起承転結)（D本丸 2026-07-09）
-  // 対位（メロがベースを見て並行5度8度/b9を避ける）＝固定0.3自動送信を廃し UI で選択（2026-07-10・menu整理）。
-  // 空=OFF（未送信＝従来bit一致）／weak0.2・mid0.4・strong0.7（推奨帯0.2-0.4＋強め）。bassレーン非在時は disabled。
-  const [counter, setCounter] = useState<"" | "weak" | "mid" | "strong">("");
-  // 反復音モチーフ（Phase2案B・2026-07-10）：hook>0 で motifMode:preserve＋hook を送る（hookはpreserve下でのみ本領）。
-  // articulation=連打のmicropause/切り＝「ソッソッ」が1本に潰れず聞こえる。両方既定0＝未送信＝従来bit一致。
-  const [hook, setHook] = useState(0);
-  const [articulation, setArticulation] = useState(0);
-  // 句フレージング（2026-07-11・オーナーFB「塊がぶつ切れ」）：flow=塊の連結/長音（穴を白玉で埋め句末を伸ばす）、
-  // pickup=弱起（句頭を前へ出しダウンビートへタイ）。両方 0＝未送信＝従来bit一致。role プリセットでは自動発火。
-  const [flow, setFlow] = useState(0);
-  const [pickup, setPickup] = useState(0);
-  // 最小音符（2026-07-10・オーナーFB）：これより細かい音を出さない上限。""=おまかせ(テンポ連動＝高BPMで自動8分)。
-  const [finest, setFinest] = useState<"" | "quarter" | "eighth">("");
-  const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）＝既定は畳む（ノブの壁の解消）
-  // P4（2026-07-10・UX再設計）：プリセット主役＝13ノブを"当たり"の組に畳む。値は param-clarity doc §5.1（0/未指定=非送信=bit一致）。
-  const [preset, setPreset] = useState<string>(""); // 選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）
-  // P5（2026-07-10・UX再設計）：サイコロ＝プリセットを中心にノブをランダムに振る。ロックしたノブは固定して振る＝ばらつき×制御。
-  const [lockedKnobs, setLockedKnobs] = useState<Set<string>>(new Set());
-  const toggleLock = (k: string) => setLockedKnobs((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
-  const applyPreset = (name: string, v: PresetV) => {
-    setDensity(v.density ?? 0); setSwing(v.swing ?? 0); setRuns(v.runs ?? 0); setExpression(v.expression ?? 0); setPush(v.push ?? 0);
-    setHook(v.hook ?? 0); setArticulation(v.articulation ?? 0); setForeground(v.foreground ?? 0); setBreathe(v.breathe ?? 0);
-    setFlow(v.flow ?? 0); setPickup(v.pickup ?? 0);
-    setPhrasing(v.phrasing ?? ""); setForm(v.form ?? ""); setPreset(name);
-  };
-  // OFF/弱/中/強 の4段＝値をバケット表示（プリセットの連続値も正しい段に光る）＋タップで代表値へスナップ。手で触るとプリセット選択は外す。
-  const bucket = (v: number) => (v < 0.15 ? 0 : v < 0.45 ? 1 : v < 0.75 ? 2 : 3);
-  const SEG4: [string, number][] = [["OFF", 0], ["弱", 0.3], ["中", 0.6], ["強", 0.9]];
-  // OFF/弱/中/強 のセグメント行（数値ノブ）。lock=🎲サイコロで固定するノブ（P5）。
-  const SEG_LV = ["off", "weak", "mid", "strong"];
-  const segRow = (aria: string, label: string, sub: string, val: number, set: (n: number) => void, lock?: string) => (
-    <div className="knob-seg" role="group" aria-label={aria}>
-      <span className="knob-name">{label}<small>{sub}</small></span>
-      <span className="seg-ctl">
-        {SEG4.map(([lab, v], i) => (
-          <button key={lab} type="button" className={"seg-b" + (bucket(val) === i ? " on" : "")} aria-label={`${aria}-${SEG_LV[i]}`} aria-pressed={bucket(val) === i} onClick={() => { set(v); setPreset(""); }}>{lab}</button>
-        ))}
-        {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={() => toggleLock(lock)}>{lockedKnobs.has(lock) ? "🔒" : "🔓"}</button>}
-      </span>
-    </div>
-  );
-  // 両端スライダー行（連続量）。耳語の両端ラベル。aria は input に付与（getByLabelText で拾える）。lock=🔒でサイコロから守る（F3）。
-  const sliderRow = (aria: string, label: string, val: number, set: (n: number) => void, lo: string, hi: string, lock?: string) => (
-    <label className="knob-row">
-      <span className="knob-name">{label}</span>
-      <span className="knob-end">{lo}</span>
-      <input aria-label={aria} type="range" min={0} max={1} step={0.1} value={val} onChange={(e) => { set(Number(e.target.value)); setPreset(""); }} />
-      <span className="knob-end">{hi}</span>
-      {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={(e) => { e.preventDefault(); toggleLock(lock); }}>{lockedKnobs.has(lock) ? "🔒" : "🔓"}</button>}
-    </label>
-  );
-  // 🎲：ロックしていないノブを現在値±0.3でランダムに振る（当たりの周辺探索）。0.1刻み・[0,1]。全ロック可能ノブが対象（人間味は仕上げレイヤーで対象外）。
-  const rollDice = () => {
-    const j = (cur: number, key: string) => (lockedKnobs.has(key) ? cur : Math.max(0, Math.min(1, Math.round((cur + (Math.random() * 0.6 - 0.3)) * 10) / 10)));
-    setDensity((d) => j(d, "density")); setSwing((s) => j(s, "swing")); setRuns((r) => j(r, "runs")); setExpression((e) => j(e, "expression"));
-    setPush((p) => j(p, "push")); setHook((h) => j(h, "hook")); setArticulation((a) => j(a, "articulation")); setForeground((f) => j(f, "foreground")); setBreathe((b) => j(b, "breathe"));
-    setFlow((f) => j(f, "flow")); setPickup((p) => j(p, "pickup"));
-    setPreset("");
-  };
-  const candPlay = useRef<PlaybackHandle | null>(null);
-  // 直近の生成呼び出し（「🎲 もっと」で同条件再生成）。骨格から吹いた時は skeletonNetaId も保持し再現する。
-  const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string; skeletonNetaId?: string } | null>(null);
   // ライブの拍子（編集中の meter prop 優先。App の active(=neta prop) は stale なことがあるので neta.meter は使わない）。
   const liveMeter = meter ?? neta.meter ?? undefined;
   const liveTitle = (title ?? neta.title ?? "").trim(); // 生成/作成/MIDI名に使うライブタイトル
-  // 絞り込み/相性(拍子・調)の純ロジックは PlacePicker 側に内包（機械分割・負債D6）。
   const BPB = beatsPerBar(liveMeter); // 1小節の拍数（#51・編集中はprop優先）
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
@@ -269,78 +165,13 @@ export function SectionEditor({
     laneChildren(lane).some((c) => c.node.neta.id !== childId && spanOverlaps(pos, dur, c.position, childDur(c)));
   // この曲(section)が属する器＝母集団の既定ソース（A）。無ければ「自作すべて」。
   const sectionProjects = (neta.tags ?? []).filter(isProjectTag).map(projectName);
-  async function openPicker(lane: Lane, position: number) {
-    if (occupiedAt(lane, position)) return; // 既に埋まってる所には置かせない（CV3・占有セルのみ）
-    // 自作ネタのみ取得（コーパス=libraryは直接選ばせない＝推薦経由・Phase2/#20）。
-    const all = await api.listNeta({ scope: "project", limit: 2000 });
-    setPq("");
-    setPickerSource(sectionProjects[0] ?? ""); // 既定＝この曲の器
-    setPickerOtherMeter(false);
-    setPicker({ lane, position, all });
-  }
-  // #20 レーンに対応するコーパス種別（推薦できるのは melody / chord_progression のみ）。
-  const corpusKindFor = (lane: Lane): string | null =>
-    (lane.kinds as readonly string[]).includes("melody")
-      ? "melody"
-      : (lane.kinds as readonly string[]).includes("chord_progression")
-        ? "chord_progression"
-        : null;
-  // ピッカーを開く/種別タブを変えるたび、拍子・調に合うコーパスを数件だけ取得（生リストは出さない）。
-  useEffect(() => {
-    const ck = picker ? corpusKindFor(picker.lane) : null;
-    if (!ck) {
-      setPickerRecs([]);
-      return;
-    }
-    let live = true;
-    void api
-      .recommend(ck, { meter: liveMeter, key: keyPc, top: 6 })
-      .then((r) => live && setPickerRecs(r))
-      .catch(() => live && setPickerRecs([]));
-    return () => {
-      live = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picker?.lane.key, !!picker, liveMeter, keyPc]);
-  async function placeAt(child: Neta) {
-    if (!picker) return;
-    try {
-      // ライブラリ項目は project にコピーしてから配置（元コーパスを汚さない・編集はコピー側）。
-      const target = child.scope === "library" ? await api.copyNeta(child.id) : child;
-      const ord = picker.lane.row ?? 0; // ② コード楽器レーンは行を ord に。他は 0。
-      // 尺のはみ出し重複を防ぐ＝置くネタが同レーンの別ネタと重なるなら配置しない（点判定 occupiedAt の穴埋め）。
-      if (overlapsOtherInLane(picker.lane, target.id, picker.position, contentDur(target.kind, target.content))) {
-        setPicker(null);
-        return;
-      }
-      // 置く＝1小節ぶんだけ（小節別に別パターンを置ける）。繰り返したい時は右端ドラッグ(③)で。
-      // ※旧・自動末尾充填は撤去＝別リズムを小節別に置くと重なって ABBBBB になる問題の元だった。
-      await api.placeChild(neta.id, target.id, picker.position, ord);
-    } catch {
-      // section ネストで循環になる配置は core が拒否（400）→ そっと無視（配置しない）
-      setPicker(null);
-      return;
-    }
-    setPicker(null);
-    await load();
-    onChanged?.();
-  }
+  const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : 0);
+
   async function remove(childId: string, position?: number) {
     await api.removeChild(neta.id, childId, position);
     await load();
     onChanged?.();
   }
-  // ピッカー項目の試聴＝配置前に耳で確認（相対bass/コード楽器は section の調で解決して鳴らす）。
-  async function previewNeta(n: Neta) {
-    previewPlay.current?.stop();
-    const notes = notesForContent(n.kind, n.content, { key: n.key ?? keyPc });
-    if (notes.length) previewPlay.current = await playNotes(notes, tempo, { program: progForKind(n.kind) });
-  }
-  // ピッカーを閉じたら試聴を止める（鳴りっぱなし防止）。
-  useEffect(() => {
-    if (!picker) previewPlay.current?.stop();
-  }, [picker]);
-  useEffect(() => () => previewPlay.current?.stop(), []);
 
   // ブロック操作＝消しゴム中は tap で外す／通常は tap で子ネタを編集（潜る）。右端グリップ(③伸ばし)は別。
   // 「モードで tap の意味が変わる」＝PianoRoll の描く/選ぶと同じ流儀（紛らわしい長押し=外すは撤去）。
@@ -351,20 +182,6 @@ export function SectionEditor({
       return;
     }
     onOpenNeta?.(c.node.neta); // 通常：tap＝子ネタを編集画面で開く（潜る）
-  }
-  // ピッカーの「＋新規作成」：このレーンの kind で空ネタを作って配置→そのまま編集を開く
-  //（探して無ければ作る導線）。コード進行は chord_progression を既定に。
-  async function createInLane() {
-    if (!picker) return;
-    const kinds = picker.lane.kinds;
-    const kind = kinds.includes("chord_progression") ? "chord_progression" : kinds[0]!;
-    // 作る部品に section のライブ拍子を刻む＝単体編集でも6/8で表示される（評価バグ②）。
-    const created = await api.createNeta({ kind, title: pq.trim() || undefined, meter: liveMeter });
-    await api.placeChild(neta.id, created.id, picker.position, picker.lane.row ?? 0).catch(() => {});
-    setPicker(null);
-    await load();
-    onChanged?.();
-    onOpenNeta?.(created); // 作ったらすぐ中身を描けるよう編集へ
   }
 
   // ③ 右端ドラッグでループ伸ばし＝同じ子を小節境界のループ単位でタイル反復配置（compose_edge は
@@ -473,194 +290,23 @@ export function SectionEditor({
       },
     };
   }
-  // 生成パーツ（この進行に◯）。メロ/ベースはコードが要る、ドラムは frame だけ。
-  const GEN_PARTS = [
-    { label: "メロ", op: "gen_melody", needsChords: true },
-    { label: "ベース", op: "gen_bass", needsChords: true },
-    { label: "ドラム", op: "gen_drums", needsChords: false },
-  ] as const;
-  const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : 0);
-  async function genPart(part: { op: string; needsChords: boolean; label: string }, opts?: { skeletonNetaId?: string }) {
-    if (genBusy) return;
-    lastPartRef.current = { ...part, skeletonNetaId: opts?.skeletonNetaId };
-    const chords = sectionChords();
-    // 骨格から吹く時は骨格が構造を担うのでコード無しでも可（skeletonNetaId 注入）。
-    if (part.needsChords && !chords.length && !opts?.skeletonNetaId) return;
-    setGenBusy(true);
-    try {
-      // 2026-07-08 耳FB：section の mode を宣言（短調でメジャー生成＝濁りの主因）。メロは density/swing ノブも渡す。
-      const secMode: "major" | "minor" = (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major";
-      // セクション役割（2026-07-10・design#12-M）：Section ネタ tags の `role:` を frame.section.role へ（無ければ渡さない＝従来）。
-      // 役割別プリセット（サビ=高音域+高密度 等）が API 側で効く。不正 role は normalizeFrame が黙って落とす。ロール入力 UI は後続。
-      const roleTag = (neta.tags ?? []).find((t) => t.startsWith("role:"))?.slice(5);
-      const frame: Record<string, unknown> = { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode };
-      if (roleTag) frame.section = { role: roleTag };
-      const body: Record<string, unknown> = {
-        frame,
-        chords,
-        seed: Math.floor(Math.random() * 1e6), // 押すたび別案
-      };
-      if (part.op === "gen_melody") {
-        body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form;
-        // 骨格から吹く（design #20 S2）：骨格neta を注入＝構造線を共有し表面(リズム/装飾)だけ変える。
-        if (opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;
-        // 対位バイアス（design「gen_melody×ベース結線」）：UI の「対位」を ON にした時だけ bass を渡し counter を送る。
-        // 既定 OFF（未送信）＝従来 bit一致（旧・bass 在れば固定0.3 の自動送信は既定挙動を無言で変えていたので廃止）。
-        const bass = sectionBass();
-        const counterVal = counter === "weak" ? 0.2 : counter === "mid" ? 0.4 : counter === "strong" ? 0.7 : 0;
-        if (counterVal > 0 && bass.length) { body.bass = bass; body.counter = counterVal; }
-        // 反復音モチーフ（design「動機保存レンダ」）：hook>0 で motifMode:preserve＋hook を送る（hookはpreserve下でのみ本領）。
-        // articulation=連打の切り。両方 0＝未送信＝従来 bit一致。
-        if (hook > 0) { body.hook = hook; body.motifMode = "preserve"; }
-        if (articulation > 0) body.articulation = articulation;
-        if (finest) body.finest = finest; // 最小音符（""=おまかせ＝未送信＝テンポ連動）
-        // 句フレージング（2026-07-11）：flow=連結/長音・pickup=弱起。0＝未送信＝従来 bit一致。
-        if (flow > 0) body.flow = flow;
-        if (pickup > 0) body.pickup = pickup;
-        // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3（推奨＝B のみ弱く）。
-        // drumLock/converse は 0＝耳較正待ち（渡さない）。レーン無し＝渡さない＝従来どおり。UI ノブ露出は後続タスク。
-        const drums = sectionDrums();
-        if (drums) { body.drums = drums; body.backbeat = 0.3; }
-      }
-      const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
-      const item = r.items?.[0];
-      // 候補に骨格コンテキストを持たせる＝置く時に realized_from を張る相手が候補ごとに確定（ref の撒き漏れを排す）。
-      if (item) pushCand({ kind: item.kind, content: item.content, skeletonNetaId: opts?.skeletonNetaId });
-    } finally {
-      setGenBusy(false);
-    }
-  }
-  // 骨格を生成（design #20 S2・いじる▾）：gen_skeleton→候補トレイ→＋置くで骨格レーンへ。破壊上書きしない。
-  async function genSkeleton() {
-    if (genBusy) return;
-    lastPartRef.current = null;
-    setGenBusy(true);
-    try {
-      const secMode: "major" | "minor" = (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major";
-      const r = await api.music<{ items: { kind: string; content: unknown }[] }>("gen_skeleton", {
-        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode },
-        chords: sectionChords(),
-        seed: Math.floor(Math.random() * 1e6),
-      });
-      const item = r.items?.[0];
-      if (item) pushCand({ kind: item.kind, content: item.content });
-    } finally {
-      setGenBusy(false);
-    }
-  }
-  // 骨格ブロック[吹く▶]（design #20 S2）：gen_melody(skeletonNetaId)→メロ候補トレイ→＋置くで新メロ＋realized_from。
-  function blowSkeleton(child: Child) {
-    // 骨格コンテキストを明示引数で渡す＝候補に紐付き、置く時に realized_from を張る（画面横断の可変 ref を廃止）。
-    void genPart(GEN_PARTS[0], { skeletonNetaId: child.node.neta.id });
-  }
-  // 骨格からコードを推定（design #20 S2・harmonize）：骨格の白玉→harmonize→chord_progression 候補→＋置くでコードレーンへ。
-  async function estimateChords(child: Child) {
-    if (genBusy) return;
-    const content = child.node.neta.content;
-    if (!isSkeleton(content)) return;
-    const notes = skeletonPreviewNotes(content, BPB);
-    if (!notes.length) return;
-    lastPartRef.current = null;
-    setGenBusy(true);
-    try {
-      const secMode: "major" | "minor" = (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major";
-      const bars = await api.music<{ bar: number; start: number; candidates: { root: number; quality: string; score: number }[] }[]>(
-        "harmonize",
-        { melody: notes, key: keyPc, mode: secMode, barBeats: BPB },
-      );
-      const chords = (bars ?? [])
-        .filter((bar) => bar.candidates?.length)
-        .map((bar) => ({ root: bar.candidates[0]!.root, quality: bar.candidates[0]!.quality, start: bar.start, dur: BPB }));
-      if (chords.length) setSingleCand({ kind: "chord_progression", content: { chords } });
-    } finally {
-      setGenBusy(false);
-    }
-  }
-  // メロレーンの（最初の）メロ notes＝ハモリ/fit の入力。
-  function melodyLaneNotes(): Note[] {
-    const ml = LANES.find((l) => l.key === "melody")!;
-    const c = laneChildren(ml)[0];
-    return c ? notesForContent("melody", c.node.neta.content) : [];
-  }
-  const isMinor = (neta.mode ?? "").toLowerCase().includes("min");
-  // ハモリ（上/下＝並行第2声部・調内平行3度・決定的）。候補→メロレーンに置く（原メロと重なって鳴る）。
-  function makeHarmony(degSteps: number) {
-    const mel = melodyLaneNotes();
-    if (!mel.length) return;
-    lastPartRef.current = null; // 決定的＝別案なし
-    setSingleCand({ kind: "melody", content: { notes: harmonyVoice(mel, keyPc, isMinor, degSteps) } });
-  }
-  // コードに合わせる（fit_to_chords）：メロの各音を近いコードトーンへ寄せた候補。
-  async function fitToChords() {
-    const mel = melodyLaneNotes();
-    const chords = sectionChords();
-    if (!mel.length || !chords.length || genBusy) return;
-    setGenBusy(true);
-    try {
-      const r = await api.music<{ notes: Note[] }>("fit_to_chords", { melody: mel, chords, key: keyPc });
-      lastPartRef.current = null;
-      if (r.notes?.length) setSingleCand({ kind: "melody", content: { notes: r.notes } });
-    } finally {
-      setGenBusy(false);
-    }
-  }
-  // 噛み合い診断（analyze_fit・読むだけ）：メロ×コードの当てはまりを一言で。
-  const [fitReport, setFitReport] = useState<string | null>(null);
-  async function analyzeFit() {
-    const mel = melodyLaneNotes();
-    const chords = sectionChords();
-    if (!mel.length || !chords.length) return;
-    const r = await api.music<{ score: number; inChordRate: number; issues?: { msg: string }[] }>(
-      "analyze_fit",
-      { melody: mel, chords, key: keyPc },
-    );
-    setFitReport(fitReportText(r));
-  }
-  // 候補を追加（生成/別案は同種を積む・別種は入れ替え）／単発（ハモリ・崩し）は1件で置換。
-  const pushCand = (c: { kind: string; content: unknown; skeletonNetaId?: string }) =>
-    setCands((prev) => { if (prev.length && prev[0]!.kind !== c.kind) { setKeptCids(new Set()); return [{ ...c, cid: candId.current++ }]; } return [...prev, { ...c, cid: candId.current++ }]; });
-  const setSingleCand = (c: { kind: string; content: unknown }) => { setKeptCids(new Set()); setCands([{ ...c, cid: candId.current++ }]); }; // 別種入替＝keep掃除（監査F4）
-  const toggleKeep = (cid: number) => setKeptCids((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
-  const removeCand = (cid: number) => { setCands((prev) => prev.filter((c) => c.cid !== cid)); setKeptCids((prev) => { const n = new Set(prev); n.delete(cid); return n; }); };
-  async function auditionCandidate(c: Cand) {
-    candPlay.current?.stop();
-    const ns = notesForContent(c.kind, c.content);
-    if (ns.length) candPlay.current = await playNotes(ns, tempo, { program: progForKind(c.kind) });
-  }
-  async function placeCandidate(c: Cand) {
-    candPlay.current?.stop();
-    const lane = laneOf(c.kind);
-    const created = await api.createNeta({
-      kind: c.kind,
-      title: `${liveTitle || "曲"} ${lane?.label ?? c.kind}`,
-      content: c.content,
-      key: keyPc,
-      // 2026-07-08 耳FB：mode を宣言（placementLanding の前提）。旧: 未宣言でmajor既定→短調メロが配置で+3移調＝濁りの主因。
-      mode: (neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major",
-      tempo,
-      meter: liveMeter,
-      tags: neta.tags,
-    });
-    // 再生成メロ＝置換：同レーンで新メロ(位置0)と尺が重なる既存子を先に外す＝二重化を防ぐ
-    // （placeAt は重なりを拒否するが、生成候補は「置く」＝差し替え意図なので拒否でなく既存を退ける）。
-    if (lane) {
-      const dur = contentDur(c.kind, c.content);
-      for (const ch of laneChildren(lane)) {
-        if (spanOverlaps(0, dur, ch.position, childDur(ch))) await api.removeChild(neta.id, ch.node.neta.id, ch.position);
-      }
-    }
-    await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
-    // 骨格から吹いたメロ＝realized_from(メロ→骨格) を張る（design #20 S2・骨格に戻って直せる）。候補が自分の骨格idを持つ。
-    if (c.skeletonNetaId && c.kind === "melody") await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
-    removeCand(c.cid); // 置いた候補はトレイから外す（他候補・keepは残す）
-    await load();
-    onChanged?.();
-  }
-  function closeCandidate() {
-    candPlay.current?.stop();
-    setCands([]);
-    setKeptCids(new Set());
-  }
+
+  // 生成/ハモリ道具（いじる▾）＝メロ生成ノブ・候補トレイ・ハモリ/fit（Task#2 で useMelodyGen に分離）。
+  // section 文脈を関数で渡す＝当コンポが state を持ち、フックは純粋に近い（挙動不変）。
+  const gen = useMelodyGen({
+    neta, keyPc, tempo, liveMeter, liveTitle, BARS, BPB,
+    lanes: LANES, laneChildren, laneOf,
+    sectionChords, sectionBass, sectionDrums,
+    contentDur, childDur, progForKind,
+    reload: load, onChanged,
+  });
+  // 配置ピッカー（空セルタップ→ネタを選んで置く）＝Task#2 で usePlacePicker に分離。
+  const pk = usePlacePicker({
+    neta, keyPc, tempo, liveMeter,
+    occupiedAt, overlapsOtherInLane, contentDur,
+    sectionProjects, progForKind,
+    reload: load, onChanged, onOpenNeta,
+  });
 
   // 合成：子を section の調へ移調（rhythm除く）＋位置オフセット（共有: compositeNotes）
   function composite(): Note[] {
@@ -758,15 +404,15 @@ export function SectionEditor({
                       type="button"
                       className="tool-item"
                       aria-label={`gen-${part.op}`}
-                      disabled={genBusy}
-                      onClick={() => { setToolsOpen(false); void genPart(part); }}
+                      disabled={gen.genBusy}
+                      onClick={() => { setToolsOpen(false); void gen.genPart(part); }}
                     >
-                      {genBusy ? "生成中…" : part.label}
+                      {gen.genBusy ? "生成中…" : part.label}
                     </button>
                   ))}
                   {/* 骨格を生成（design #20 S2）：構造線(2声骨格)を機械に叩き台で出す→骨格レーンへ。 */}
-                  <button type="button" className="tool-item" aria-label="gen-skeleton" disabled={genBusy} onClick={() => { setToolsOpen(false); void genSkeleton(); }}>
-                    {genBusy ? "生成中…" : "骨格"}
+                  <button type="button" className="tool-item" aria-label="gen-skeleton" disabled={gen.genBusy} onClick={() => { setToolsOpen(false); void gen.genSkeleton(); }}>
+                    {gen.genBusy ? "生成中…" : "骨格"}
                   </button>
                   {/* P4/P5（2026-07-10・UX再設計）：プリセット主役＋🎲サイコロ＋耳語ラベルの詳細（群でまとめる）。押す前に設定→生成。 */}
                   {sectionChords().length > 0 && (
@@ -774,43 +420,43 @@ export function SectionEditor({
                       <div className="preset-head">
                         <div className="preset-row" aria-label="melody-presets">
                           {MELODY_PRESETS.map((p) => (
-                            <button key={p.name} type="button" className={"chip" + (preset === p.name ? " on" : "")} aria-label={`preset-${p.name}`} aria-pressed={preset === p.name} onClick={() => applyPreset(p.name, p.v)}>{p.label}</button>
+                            <button key={p.name} type="button" className={"chip" + (gen.preset === p.name ? " on" : "")} aria-label={`preset-${p.name}`} aria-pressed={gen.preset === p.name} onClick={() => gen.applyPreset(p.name, p.v)}>{p.label}</button>
                           ))}
                         </div>
-                        <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（🔒は固定）" onClick={rollDice}>🎲</button>
+                        <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（🔒は固定）" onClick={gen.rollDice}>🎲</button>
                       </div>
                       <button
                         type="button"
-                        className={"knob-details-toggle" + (detailsOpen ? " on" : "")}
+                        className={"knob-details-toggle" + (gen.detailsOpen ? " on" : "")}
                         aria-label="knob-details-toggle"
-                        aria-expanded={detailsOpen}
-                        onClick={() => setDetailsOpen((v) => !v)}
+                        aria-expanded={gen.detailsOpen}
+                        onClick={() => gen.setDetailsOpen((v) => !v)}
                       >
-                        {detailsOpen ? "▾ 細かく設定する" : "▸ 細かく設定する"}
+                        {gen.detailsOpen ? "▾ 細かく設定する" : "▸ 細かく設定する"}
                       </button>
-                      {detailsOpen && <>
+                      {gen.detailsOpen && <>
                         <div className="knob-group-h">リズムのノリ</div>
-                        {sliderRow("density", "細かさ", density, setDensity, "スカスカ", "ぎっしり", "density")}
-                        {sliderRow("swing", "跳ね", swing, setSwing, "まっすぐ", "はねる", "swing")}
-                        {segRow("runs", "駆け上がり", "16分の走り", runs, setRuns, "runs")}
-                        {segRow("push", "前ノリ", "拍を食う", push, setPush, "push")}
+                        {gen.sliderRow("density", "細かさ", gen.density, gen.setDensity, "スカスカ", "ぎっしり", "density")}
+                        {gen.sliderRow("swing", "跳ね", gen.swing, gen.setSwing, "まっすぐ", "はねる", "swing")}
+                        {gen.segRow("runs", "駆け上がり", "16分の走り", gen.runs, gen.setRuns, "runs")}
+                        {gen.segRow("push", "前ノリ", "拍を食う", gen.push, gen.setPush, "push")}
                         <label className="knob-row">
                           <span className="knob-name">最小音符<small>速い曲は粗く</small></span>
-                          <select aria-label="finest" value={finest} onChange={(e) => { setFinest(e.target.value as "" | "quarter" | "eighth"); setPreset(""); }}>
+                          <select aria-label="finest" value={gen.finest} onChange={(e) => { gen.setFinest(e.target.value as "" | "quarter" | "eighth"); gen.setPreset(""); }}>
                             <option value="">おまかせ(速さ連動)</option>
                             <option value="quarter">4分まで</option>
                             <option value="eighth">8分まで</option>
                           </select>
                         </label>
                         <div className="knob-group-h">歌い回し</div>
-                        {segRow("expression", "タメ", "強拍のもたれ", expression, setExpression, "expression")}
-                        {segRow("hook", "口ずさみ", "反復音フック", hook, setHook, "hook")}
-                        {sliderRow("foreground", "冒険度", foreground, setForeground, "おなじみ", "冒険", "foreground")}
-                        {sliderRow("articulation", "歯切れ", articulation, setArticulation, "なめらか", "くっきり", "articulation")}
+                        {gen.segRow("expression", "タメ", "強拍のもたれ", gen.expression, gen.setExpression, "expression")}
+                        {gen.segRow("hook", "口ずさみ", "反復音フック", gen.hook, gen.setHook, "hook")}
+                        {gen.sliderRow("foreground", "冒険度", gen.foreground, gen.setForeground, "おなじみ", "冒険", "foreground")}
+                        {gen.sliderRow("articulation", "歯切れ", gen.articulation, gen.setArticulation, "なめらか", "くっきり", "articulation")}
                         <div className="knob-group-h">フレーズの組み立て</div>
                         <label className="knob-row" aria-label="phrasing">
                           <span className="knob-name">句割り</span>
-                          <select value={phrasing} onChange={(e) => { setPhrasing(e.target.value as "" | "symmetric" | "asymmetric" | "period" | "sentence"); setPreset(""); }}>
+                          <select value={gen.phrasing} onChange={(e) => { gen.setPhrasing(e.target.value as "" | "symmetric" | "asymmetric" | "period" | "sentence"); gen.setPreset(""); }}>
                             <option value="">おまかせ</option>
                             <option value="symmetric">対称(問→答)</option>
                             <option value="asymmetric">非対称(3+3+2)</option>
@@ -820,39 +466,39 @@ export function SectionEditor({
                         </label>
                         <label className="knob-row" aria-label="form">
                           <span className="knob-name">展開</span>
-                          <select value={form} onChange={(e) => { setForm(e.target.value as "" | "sentence"); setPreset(""); }}>
+                          <select value={gen.form} onChange={(e) => { gen.setForm(e.target.value as "" | "sentence"); gen.setPreset(""); }}>
                             <option value="">おまかせ</option>
                             <option value="sentence">起承転結(文)</option>
                           </select>
                         </label>
-                        {segRow("breathe", "息継ぎ", "句アタマの間", breathe, setBreathe, "breathe")}
-                        {sliderRow("flow", "つなぎ", flow, setFlow, "ぶつ切れ", "長く連結", "flow")}
-                        {sliderRow("pickup", "歌い出し", pickup, setPickup, "拍アタマ", "弱起(食い込み)", "pickup")}
+                        {gen.segRow("breathe", "息継ぎ", "句アタマの間", gen.breathe, gen.setBreathe, "breathe")}
+                        {gen.sliderRow("flow", "つなぎ", gen.flow, gen.setFlow, "ぶつ切れ", "長く連結", "flow")}
+                        {gen.sliderRow("pickup", "歌い出し", gen.pickup, gen.setPickup, "拍アタマ", "弱起(食い込み)", "pickup")}
                         {sectionBass().length > 0 && <>
                           <div className="knob-group-h">他パートとの絡み</div>
                           <div className="knob-seg" aria-label="counter">
                             <span className="knob-name">ベースをよける<small>並行5度8度を避ける</small></span>
                             <span className="seg-ctl">
                               {([["OFF", ""], ["弱", "weak"], ["中", "mid"], ["強", "strong"]] as [string, "" | "weak" | "mid" | "strong"][]).map(([lab, v]) => (
-                                <button key={v || "off"} type="button" className={"seg-b" + (counter === v ? " on" : "")} aria-label={`counter-${v || "off"}`} aria-pressed={counter === v} onClick={() => { setCounter(v); setPreset(""); }}>{lab}</button>
+                                <button key={v || "off"} type="button" className={"seg-b" + (gen.counter === v ? " on" : "")} aria-label={`counter-${v || "off"}`} aria-pressed={gen.counter === v} onClick={() => { gen.setCounter(v); gen.setPreset(""); }}>{lab}</button>
                               ))}
                             </span>
                           </div>
                         </>}
                         <div className="knob-group-h">人間味・仕上げ</div>
-                        {sliderRow("humanize", "人間味", humanize, setHumanize, "きっちり", "揺らぐ")}
+                        {gen.sliderRow("humanize", "人間味", gen.humanize, gen.setHumanize, "きっちり", "揺らぐ")}
                       </>}
                     </div>
                   )}
-                  {melodyLaneNotes().length > 0 && (
+                  {gen.melodyLaneNotes().length > 0 && (
                     <>
                       <div className="tools-sep">メロ加工</div>
-                      <button type="button" className="tool-item" aria-label="harmony-up" title="調内で平行3度上の第2声部" onClick={() => { setToolsOpen(false); makeHarmony(2); }}>上ハモ</button>
-                      <button type="button" className="tool-item" aria-label="harmony-down" title="調内で平行3度下の第2声部" onClick={() => { setToolsOpen(false); makeHarmony(-2); }}>下ハモ</button>
+                      <button type="button" className="tool-item" aria-label="harmony-up" title="調内で平行3度上の第2声部" onClick={() => { setToolsOpen(false); gen.makeHarmony(2); }}>上ハモ</button>
+                      <button type="button" className="tool-item" aria-label="harmony-down" title="調内で平行3度下の第2声部" onClick={() => { setToolsOpen(false); gen.makeHarmony(-2); }}>下ハモ</button>
                       {sectionChords().length > 0 && (
                         <>
-                          <button type="button" className="tool-item" aria-label="fit-to-chords" title="メロの各音を近いコードトーンへ寄せる" disabled={genBusy} onClick={() => { setToolsOpen(false); void fitToChords(); }}>コードに合わせる</button>
-                          <button type="button" className="tool-item" aria-label="analyze-fit" title="メロとコードの噛み合いを診断（読むだけ）" onClick={() => { setToolsOpen(false); void analyzeFit(); }}>噛み合い診断</button>
+                          <button type="button" className="tool-item" aria-label="fit-to-chords" title="メロの各音を近いコードトーンへ寄せる" disabled={gen.genBusy} onClick={() => { setToolsOpen(false); void gen.fitToChords(); }}>コードに合わせる</button>
+                          <button type="button" className="tool-item" aria-label="analyze-fit" title="メロとコードの噛み合いを診断（読むだけ）" onClick={() => { setToolsOpen(false); void gen.analyzeFit(); }}>噛み合い診断</button>
                         </>
                       )}
                     </>
@@ -888,27 +534,27 @@ export function SectionEditor({
           読み込みに失敗しました <span className="muted">（タップで再試行）</span>
         </p>
       )}
-      {fitReport && (
-        <p className="fit-report" aria-label="fit-report" onClick={() => setFitReport(null)}>
-          {fitReport} <span className="muted">（タップで消す）</span>
+      {gen.fitReport && (
+        <p className="fit-report" aria-label="fit-report" onClick={() => gen.setFitReport(null)}>
+          {gen.fitReport} <span className="muted">（タップで消す）</span>
         </p>
       )}
 
-      {cands.length > 0 && (
+      {gen.cands.length > 0 && (
         <div
           className="reshape-bar"
           aria-label="part-candidate"
-          style={{ ["--k" as string]: `var(--k-${cands[0]!.kind === "chord_progression" ? "chord" : cands[0]!.kind})` }}
+          style={{ ["--k" as string]: `var(--k-${gen.cands[0]!.kind === "chord_progression" ? "chord" : gen.cands[0]!.kind})` }}
         >
           <span className="reshape-label">
-            {laneOf(cands[0]!.kind)?.label ?? cands[0]!.kind}候補 {cands.length}件（この進行に生成・見て選ぶ）
+            {laneOf(gen.cands[0]!.kind)?.label ?? gen.cands[0]!.kind}候補 {gen.cands.length}件（この進行に生成・見て選ぶ）
           </span>
           {/* P2（2026-07-10・UX再設計）：候補を横スクロールのトレイで並べて比較。各カード＝MiniRoll＋メタ＋試聴/keep/置く/捨てる。 */}
           <div className="cand-tray" aria-label="candidate-tray">
-            {cands.map((c) => {
+            {gen.cands.map((c) => {
               const cn = notesForContent(c.kind, c.content);
               const bars = cn.length ? Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6)) : 0;
-              const kept = keptCids.has(c.cid);
+              const kept = gen.keptCids.has(c.cid);
               return (
                 <div key={c.cid} className={"cand-card" + (kept ? " kept" : "")} aria-label="candidate-card">
                   {cn.length > 0 && (
@@ -918,20 +564,20 @@ export function SectionEditor({
                     </span>
                   )}
                   <div className="cand-actions">
-                    <button type="button" className="tb-tool" aria-label="audition-candidate" title="試聴" onClick={() => void auditionCandidate(c)}>▶</button>
-                    <button type="button" className="tb-tool" aria-label="keep-candidate" aria-pressed={kept} title="気に入ったら残す" onClick={() => toggleKeep(c.cid)}>{kept ? "♥" : "♡"}</button>
-                    <button type="button" className="tb-tool primary" aria-label="place-candidate" title="レーンに置く" onClick={() => void placeCandidate(c)}>＋置く</button>
-                    <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => removeCand(c.cid)}>🗑</button>
+                    <button type="button" className="tb-tool" aria-label="audition-candidate" title="試聴" onClick={() => void gen.auditionCandidate(c)}>▶</button>
+                    <button type="button" className="tb-tool" aria-label="keep-candidate" aria-pressed={kept} title="気に入ったら残す" onClick={() => gen.toggleKeep(c.cid)}>{kept ? "♥" : "♡"}</button>
+                    <button type="button" className="tb-tool primary" aria-label="place-candidate" title="レーンに置く" onClick={() => void gen.placeCandidate(c)}>＋置く</button>
+                    <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => gen.removeCand(c.cid)}>🗑</button>
                   </div>
                 </div>
               );
             })}
           </div>
           <div className="cand-tray-foot">
-            <button type="button" className="tb-tool" aria-label="more-candidates" disabled={genBusy} onClick={() => lastPartRef.current && void genPart(lastPartRef.current, { skeletonNetaId: lastPartRef.current.skeletonNetaId })}>
-              {genBusy ? "…" : "🎲 もっと"}
+            <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
+              {gen.genBusy ? "…" : "🎲 もっと"}
             </button>
-            <button type="button" className="tb-tool" aria-label="close-candidate" onClick={closeCandidate}>閉じる</button>
+            <button type="button" className="tb-tool" aria-label="close-candidate" onClick={gen.closeCandidate}>閉じる</button>
           </div>
         </div>
       )}
@@ -968,7 +614,7 @@ export function SectionEditor({
                   position={b * BPB}
                   row={lane.row}
                   disabled={occupiedAt(lane, b * BPB)}
-                  onTap={(pos) => void openPicker(lane, pos)}
+                  onTap={(pos) => void pk.openPicker(lane, pos)}
                 />
               ))}
               {laneChildren(lane).map((c) => (
@@ -992,9 +638,9 @@ export function SectionEditor({
                   {/* 骨格ブロック（design #20 S2）：吹く▶＝gen_melody(skeletonNetaId)／コード無し時はコードを推定(harmonize)。 */}
                   {!eraseMode && c.node.neta.kind === "skeleton" && (
                     <span className="skel-block-actions">
-                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-${c.node.neta.id}`} title="この骨格からメロを吹く" onClick={(e) => { e.stopPropagation(); blowSkeleton(c); }}>吹く▶</span>
+                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-${c.node.neta.id}`} title="この骨格からメロを吹く" onClick={(e) => { e.stopPropagation(); gen.blowSkeleton(c); }}>吹く▶</span>
                       {sectionChords().length === 0 && (
-                        <span role="button" tabIndex={0} className="skel-estimate" aria-label={`estimate-${c.node.neta.id}`} title="骨格からコードを推定（harmonize）" onClick={(e) => { e.stopPropagation(); void estimateChords(c); }}>コードを推定</span>
+                        <span role="button" tabIndex={0} className="skel-estimate" aria-label={`estimate-${c.node.neta.id}`} title="骨格からコードを推定（harmonize）" onClick={(e) => { e.stopPropagation(); void gen.estimateChords(c); }}>コードを推定</span>
                       )}
                     </span>
                   )}
@@ -1053,24 +699,24 @@ export function SectionEditor({
         </div>
       )}
 
-      {picker && (
+      {pk.picker && (
         <PlacePicker
-          picker={picker}
+          picker={pk.picker}
           neta={neta}
           liveTitle={liveTitle}
           BPB={BPB}
           keyPc={keyPc}
-          pq={pq}
-          setPq={setPq}
-          pickerSource={pickerSource}
-          setPickerSource={setPickerSource}
-          pickerOtherMeter={pickerOtherMeter}
-          setPickerOtherMeter={setPickerOtherMeter}
-          pickerRecs={pickerRecs}
-          placeAt={placeAt}
-          previewNeta={previewNeta}
-          createInLane={createInLane}
-          onClose={() => setPicker(null)}
+          pq={pk.pq}
+          setPq={pk.setPq}
+          pickerSource={pk.pickerSource}
+          setPickerSource={pk.setPickerSource}
+          pickerOtherMeter={pk.pickerOtherMeter}
+          setPickerOtherMeter={pk.setPickerOtherMeter}
+          pickerRecs={pk.pickerRecs}
+          placeAt={pk.placeAt}
+          previewNeta={pk.previewNeta}
+          createInLane={pk.createInLane}
+          onClose={() => pk.setPicker(null)}
         />
       )}
       <TransportBar
