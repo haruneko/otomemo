@@ -38,7 +38,24 @@ export const GEN_PARTS = [
 
 export type ChordArg = { root?: number; quality?: string; start?: number; dur?: number };
 export type DrumsPayload = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: { name?: string; midi?: number; hits: number[]; vel?: number }[] } };
-export type Cand = { kind: string; content: unknown; cid: number; skeletonNetaId?: string };
+// 対位法レポート（design #20 S3d）：API が gen_melody/gen_bass 候補の meta に添付（読み取り専用・指摘のみ）。
+export type VoiceLeadingReport = { score: number; parallelFifths: number; parallelOctaves: number; directFifths: number; directOctaves: number; voiceCrossings: number };
+export type CandMeta = { voiceLeading?: VoiceLeadingReport; voiceLeadingSummary?: string };
+export type Cand = { kind: string; content: unknown; cid: number; skeletonNetaId?: string; meta?: CandMeta };
+
+// 候補カードの対位法バッジ（design #20 S3d）：違反があれば ⚠＋種別×件数を簡潔に、無ければ「対位OK」。
+// 「機械は指摘まで・禁止しない」＝score が低くても置ける（バッジは注意喚起のみ）。meta 無し＝null＝非表示。
+export function voiceLeadingBadge(meta?: CandMeta): { text: string; warn: boolean } | null {
+  const vl = meta?.voiceLeading;
+  if (!vl) return null;
+  const bits: string[] = [];
+  if (vl.parallelFifths) bits.push(`並5×${vl.parallelFifths}`);
+  if (vl.parallelOctaves) bits.push(`並8×${vl.parallelOctaves}`);
+  if (vl.directFifths) bits.push(`直5×${vl.directFifths}`);
+  if (vl.directOctaves) bits.push(`直8×${vl.directOctaves}`);
+  if (vl.voiceCrossings) bits.push(`交差×${vl.voiceCrossings}`);
+  return bits.length ? { text: `⚠${bits.join(" ")}`, warn: true } : { text: "対位OK", warn: false };
+}
 
 // section から渡される文脈（当フックは section 形状を知らずに済むよう関数で受ける）。
 export type MelodyGenCtx = {
@@ -181,10 +198,11 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       }
       // ベース表面化（design #20 S3c）：骨格の明示ベース区間を gen_bass が差し替える（明示無し=root導出=従来）。
       if (part.op === "gen_bass" && opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;
-      const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
+      const r = await api.music<{ items: { kind: string; content: unknown; meta?: CandMeta }[] }>(part.op, body);
       const item = r.items?.[0];
       // 候補に骨格コンテキストを持たせる＝置く時に realized_from を張る相手が候補ごとに確定（ref の撒き漏れを排す）。
-      if (item) pushCand({ kind: item.kind, content: item.content, skeletonNetaId: opts?.skeletonNetaId });
+      // meta＝対位法レポート（design #20 S3d・指摘のみ）を候補へ運ぶ＝カードにバッジ表示。
+      if (item) pushCand({ kind: item.kind, content: item.content, skeletonNetaId: opts?.skeletonNetaId, meta: item.meta });
     } finally {
       setGenBusy(false);
     }
@@ -277,7 +295,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     setFitReport(fitReportText(r));
   }
   // 候補を追加（生成/別案は同種を積む・別種は入れ替え）／単発（ハモリ・崩し）は1件で置換。
-  const pushCand = (c: { kind: string; content: unknown; skeletonNetaId?: string }) =>
+  const pushCand = (c: { kind: string; content: unknown; skeletonNetaId?: string; meta?: CandMeta }) =>
     setCands((prev) => { if (prev.length && prev[0]!.kind !== c.kind) { setKeptCids(new Set()); return [{ ...c, cid: candId.current++ }]; } return [...prev, { ...c, cid: candId.current++ }]; });
   const setSingleCand = (c: { kind: string; content: unknown }) => { setKeptCids(new Set()); setCands([{ ...c, cid: candId.current++ }]); }; // 別種入替＝keep掃除（監査F4）
   const toggleKeep = (cid: number) => setKeptCids((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });

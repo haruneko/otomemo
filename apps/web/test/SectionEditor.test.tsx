@@ -23,6 +23,17 @@ vi.mock("../src/api", () => ({
 
 import { SectionEditor, loopPositions, spanOverlaps } from "../src/components/SectionEditor";
 import { beatsPerBar } from "../src/music";
+import { voiceLeadingBadge } from "../src/useMelodyGen";
+
+describe("voiceLeadingBadge（対位法バッジ・design #20 S3d・指摘のみ）", () => {
+  const rep = (over: Partial<{ parallelFifths: number; parallelOctaves: number; directFifths: number; directOctaves: number; voiceCrossings: number }> = {}) =>
+    ({ voiceLeading: { score: 0.9, parallelFifths: 0, parallelOctaves: 0, directFifths: 0, directOctaves: 0, voiceCrossings: 0, ...over } });
+  it("meta 無し＝null（非表示）", () => { expect(voiceLeadingBadge(undefined)).toBeNull(); });
+  it("違反なし＝「対位OK」warn=false", () => { expect(voiceLeadingBadge(rep())).toEqual({ text: "対位OK", warn: false }); });
+  it("違反あり＝⚠＋種別×件数 warn=true", () => {
+    expect(voiceLeadingBadge(rep({ parallelFifths: 1, voiceCrossings: 2 }))).toEqual({ text: "⚠並5×1 交差×2", warn: true });
+  });
+});
 
 describe("spanOverlaps（尺の重なり判定＝配置/ループのはみ出し重複ガード）", () => {
   it("重なる／端が接するだけ／離れる を正しく判定", () => {
@@ -126,6 +137,31 @@ describe("SectionEditor (3-lane timeline)", () => {
     const preview = screen.getByLabelText("candidate-preview");
     expect(within(preview).getByLabelText("mini-preview")).toBeInTheDocument(); // 候補内に MiniRoll(svg)
     expect(within(preview).getByText(/音$/)).toBeInTheDocument(); // 「◯小節・◯音」メタ
+  });
+  it("S3d 対位法バッジ：候補 meta の voiceLeading を候補カードに表示（違反ありは⚠・design #20）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({
+      items: [{
+        kind: "melody",
+        content: { notes: [{ pitch: 67, start: 0, dur: 1 }, { pitch: 69, start: 1, dur: 1 }] },
+        meta: { voiceLeading: { score: 0.85, parallelFifths: 1, parallelOctaves: 0, directFifths: 0, directOctaves: 0, voiceCrossings: 0 }, voiceLeadingSummary: "並行5度1・score0.85" },
+      }],
+    });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await screen.findByLabelText("candidate-tray");
+    const badge = await screen.findByLabelText("voiceleading-badge");
+    expect(badge).toHaveTextContent("⚠並5×1"); // 違反ありは注意バッジ・禁止はしない（置くボタンは残る）
+    expect(badge).toHaveAttribute("title", "並行5度1・score0.85"); // 詳細はツールチップ
+    expect(screen.getByLabelText("place-candidate")).toBeInTheDocument(); // score低でも置ける
   });
   it("句フレージング：つなぎ(flow)スライダーを上げると gen_melody に flow が乗る（2026-07-11）", async () => {
     music.mockReset();

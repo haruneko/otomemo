@@ -29,6 +29,7 @@ import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベー
 import { analyzeVoiceLeading } from "./music/voiceLeading"; // #8：メロ×低音の声部進行レンズ（並行/隠伏5度8度・声部交差）
 import { normRoot } from "./music/theory";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20）
+import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { splitMora, flowLyric, type LNote } from "./lyric";
 import { analyzeProgressionFromUfret, extractSongTitle, fetchedToLibraryInput } from "./ingest-ufret";
 import { meterInfo } from "./music/meter";
@@ -535,6 +536,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         skeleton = sn.content as SkeletonContent;
       }
       const res = genMelodyCandidates(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, repetition, rangeSteps, motifBars, corpusModel, density, swing, expression, phrasing, runs, push, foreground, breathe, humanize, form, bass, counter, drums, backbeat, drumLock, converse, hook, articulation, inflect, motifMode, finest, flow, pickup, arc, skeleton });
+      // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
+      attachMelodyVoiceLeading(res, { bass, skeleton, chords, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
       // F1(2026-07-08)：style指定なのにコーパス未投入＝黙って既定劣化していたのを可視化（Claudeがユーザーに伝えられる）。
       if (style && !corpusModel) (res as typeof res & { note?: string }).note = `style「${style}」のコーパスが library に無いため既定モデルで生成（らしさ順ランクも既定＝生成順）`;
       // 骨格→メロの紐付けは capture 後（gen_melody は候補返しでまだ neta 化しない＝この時点で id が無い）。
@@ -576,6 +579,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         skeleton = sn.content as SkeletonContent;
       }
       const res = genBass(frame, chords, seed, drums, { kickLock, snareGap, approach, skeleton });
+      // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
+      attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
       // capture 後に link(ベース, 骨格, "realized_from") を張れるよう id をエコー（design #20・gen_melody と同じ）。
       if (skeletonNetaId) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = skeletonNetaId;
       return ok(res);

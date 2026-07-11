@@ -15,6 +15,9 @@ import { buildHttp } from "../src/http";
 
 type Note = { pitch: number; start: number; dur: number };
 const J = (x: unknown) => JSON.stringify(x);
+// S3d：HTTP は候補へ対位法レポート(meta)を加算する（読み取り専用・ノートは不変）。direct 呼び出しとの
+// bit一致（＝ノブ透過の回帰）はノート内容で見るので meta を剥がして比較する。
+const stripMeta = (x: unknown) => { const o = x as { items?: { meta?: unknown }[] }; return { ...o, items: (o.items ?? []).map(({ meta, ...it }) => it) }; };
 const motif16 = loadMotifModel16();
 
 // V2テストと同じ進行（I-vi-IV-V → I-vi-V-I・C major）。
@@ -206,16 +209,18 @@ describe("API 配線（/music/gen_melody・/gen/section の bass→melody 結線
       payload: { frame: { key: 0, bars: 8 }, chords, seed: 14, bass: BASS, counter: 0.7 },
     });
     expect(r.statusCode).toBe(200);
-    expect(J(r.json())).toBe(J(genMelody({ key: 0, bars: 8 }, chords, 14, { useV2: true, bass: BASS, counter: 0.7 })));
+    expect(J(stripMeta(r.json()))).toBe(J(genMelody({ key: 0, bars: 8 }, chords, 14, { useV2: true, bass: BASS, counter: 0.7 })));
+    // meta（対位法レポート）が加算されている＝S3d の露出
+    expect((r.json() as { items: { meta?: { voiceLeading?: unknown } }[] }).items[0]!.meta?.voiceLeading).toBeTruthy();
   });
   it("/music/gen_melody: bass={notes} 形も受ける・counter=0/bass無しは従来と一致（回帰）", async () => {
     const base = J(genMelody({ key: 0, bars: 8 }, chords, 14, { useV2: true }));
     const r0 = await app.inject({ method: "POST", url: "/music/gen_melody", payload: { frame: { key: 0, bars: 8 }, chords, seed: 14 } });
-    expect(J(r0.json())).toBe(base);
+    expect(J(stripMeta(r0.json()))).toBe(base);
     const r1 = await app.inject({ method: "POST", url: "/music/gen_melody", payload: { frame: { key: 0, bars: 8 }, chords, seed: 14, bass: { notes: BASS }, counter: 0 } });
-    expect(J(r1.json())).toBe(base);
+    expect(J(stripMeta(r1.json()))).toBe(base);
     const r2 = await app.inject({ method: "POST", url: "/music/gen_melody", payload: { frame: { key: 0, bars: 8 }, chords, seed: 14, bass: { notes: BASS }, counter: 0.7 } });
-    expect(J(r2.json())).toBe(J(genMelody({ key: 0, bars: 8 }, chords, 14, { useV2: true, bass: BASS, counter: 0.7 })));
+    expect(J(stripMeta(r2.json()))).toBe(J(genMelody({ key: 0, bars: 8 }, chords, 14, { useV2: true, bass: BASS, counter: 0.7 })));
   });
   it("/gen/section: melody:{counter} 指定で生成済みベースがメロへ渡る（bass→melody 依存順）", async () => {
     const frame = { bars: 4, meter: "4/4", key: 0 };

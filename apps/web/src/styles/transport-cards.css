@@ -725,6 +725,22 @@
   color: var(--muted);
   white-space: nowrap;
 }
+/* 対位法バッジ（design #20 S3d・指摘のみ）：違反ありは注意色、無ければ控えめ */
+.cand-vl {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  vertical-align: baseline;
+}
+.cand-vl.warn {
+  color: #ffcf6b;
+  background: color-mix(in srgb, #ffcf6b 16%, transparent);
+}
+.cand-vl.ok {
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+}
 /* P2（2026-07-10）：候補トレイ＝横スクロールで複数候補を並べて比較 */
 .cand-tray {
   width: 100%;

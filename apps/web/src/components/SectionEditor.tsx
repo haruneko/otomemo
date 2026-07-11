@@ -29,7 +29,7 @@ import { useDismiss } from "../useDismiss";
 import { LaneCell } from "./LaneCell";
 import { SongStatus } from "./SongStatus";
 import { PlacePicker } from "./PlacePicker";
-import { useMelodyGen, MELODY_PRESETS, GEN_PARTS } from "../useMelodyGen";
+import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, voiceLeadingBadge } from "../useMelodyGen";
 import { usePlacePicker } from "../usePlacePicker";
 import {
   type Lane,
@@ -555,12 +555,17 @@ export function SectionEditor({
               const cn = notesForContent(c.kind, c.content);
               const bars = cn.length ? Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6)) : 0;
               const kept = gen.keptCids.has(c.cid);
+              // 対位法バッジ（design #20 S3d・指摘のみ・禁止しない）：違反ありは ⚠＋種別、無ければ小さく「対位OK」。
+              const vl = voiceLeadingBadge(c.meta);
               return (
                 <div key={c.cid} className={"cand-card" + (kept ? " kept" : "")} aria-label="candidate-card">
                   {cn.length > 0 && (
                     <span className="cand-preview" aria-label="candidate-preview">
                       <MiniRoll neta={neta} notes={cn} />
-                      <span className="cand-meta">{bars}小節・{cn.length}音{kept ? " ♡" : ""}</span>
+                      <span className="cand-meta">
+                        {bars}小節・{cn.length}音{kept ? " ♡" : ""}
+                        {vl && <span className={"cand-vl" + (vl.warn ? " warn" : " ok")} aria-label="voiceleading-badge" title={c.meta?.voiceLeadingSummary}>{vl.text}</span>}
+                      </span>
                     </span>
                   )}
                   <div className="cand-actions">

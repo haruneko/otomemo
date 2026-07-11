@@ -33,6 +33,7 @@ import {
 } from "./music";
 import { analyzeVoiceLeading } from "./music/voiceLeading";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20 S2）
+import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { meterInfo } from "./music/meter";
 import { normRoot } from "./music/theory";
 import { assetsDir } from "./audio-asset";
@@ -210,6 +211,8 @@ export function buildHttp(core: Core): FastifyInstance {
             flow: num(b.flow), pickup: num(b.pickup), arc: b.arc === "arch" ? "arch" : undefined, // 句フレージング（連結/長音・弱起・山なり弧・2026-07-11・未指定=従来 bit 一致・role で自動発火）
             skeleton, // 骨格から吹き直す（design #20・未指定=従来 bit 一致）
           });
+          // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
+          attachMelodyVoiceLeading(res, { bass: bassN.length ? bassN : undefined, skeleton, chords: asChords(b.chords), beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           // capture 後に link(メロ, 骨格, "realized_from") を張れるよう id をエコー（design #20・MCP 経路と同じ）。
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string;
           return res;
@@ -233,6 +236,8 @@ export function buildHttp(core: Core): FastifyInstance {
             skeleton = sn.content as SkeletonContent;
           }
           const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton });
+          // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
+          attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string; // capture 後 link(ベース→骨格,"realized_from") 用にエコー
           return res;
         }

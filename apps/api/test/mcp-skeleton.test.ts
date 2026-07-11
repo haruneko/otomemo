@@ -94,4 +94,35 @@ describe("mcp gen_skeleton / gen_melody skeleton injection (design #20)", () => 
     expect(res.isError).toBe(true);
     expect(textOf(res)).toContain("not skeleton");
   });
+
+  // S3d：対位法レポートの生成側露出（analyzeVoiceLeading 転用・読み取り専用の meta 添付）。
+  it("gen_melody は chords があれば候補に voiceLeading メタを添付する（ノート不変）", async () => {
+    const { client } = await connect();
+    const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, chords, seed: 5 } })));
+    const it = out.items[0];
+    expect(it.content.notes.length).toBeGreaterThan(0);
+    expect(it.meta?.voiceLeading).toBeTruthy(); // score/違反件数の数値レポート
+    expect(typeof it.meta.voiceLeading.score).toBe("number");
+    expect(typeof it.meta.voiceLeadingSummary).toBe("string");
+  });
+
+  it("gen_melody は lower が無い（chords/bass/骨格明示 全て無し）なら meta を添付しない", async () => {
+    const { client } = await connect();
+    const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, seed: 5 } })));
+    expect(out.items[0].content.notes.length).toBeGreaterThan(0);
+    expect(out.items[0].meta).toBeUndefined();
+  });
+
+  it("gen_bass は骨格ありでベース候補に voiceLeading メタを添付（骨格 tones=上声）", async () => {
+    const { client } = await connect();
+    const skel = { bars: 2, tones: [{ start: 0, pitch: 60 }, { start: 4, pitch: 64 }], bass: [{ start: 0, pitch: 38 }] };
+    const captured = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "skeleton", content: skel } })));
+    const bassFrame = { bars: 2, meter: "4/4", key: 0 };
+    const bassChords = [{ root: 0, quality: "", start: 0, dur: 8 }];
+    const withSkel = JSON.parse(textOf(await client.callTool({ name: "gen_bass", arguments: { frame: bassFrame, chords: bassChords, seed: 42, skeletonNetaId: captured.id } })));
+    expect(withSkel.items[0].meta?.voiceLeading).toBeTruthy();
+    // 骨格無しの gen_bass はメタ無し（対位相手が無い）
+    const noSkel = JSON.parse(textOf(await client.callTool({ name: "gen_bass", arguments: { frame: bassFrame, chords: bassChords, seed: 42 } })));
+    expect(noSkel.items[0].meta).toBeUndefined();
+  });
 });
