@@ -1,6 +1,18 @@
 // @cm/music-core — 不変の音楽知識だけを api/web で共有する SSOT（負債D3・design 決定2b）。
 // ここに置くのは「移調不変・アプリ非依存の音楽定数と純粋派生」のみ。DB/Fastify/Tone/MCP など
-// アプリ固有の依存やロジック（相対bass解決・生成器・Note型）は**持ち込まない**（結合を最小に）。
+// アプリ固有の依存やロジック（相対bass解決・生成器）は**持ち込まない**（結合を最小に）。
+
+/** 音符の基本形（移調/テンポ不変の音楽データ）。旧: api/web の各所でローカル再定義していた
+ *  `{pitch,start,dur}` 級を1本化（負債#10・Note型一元化）。pitch=C基準MIDI番号・start/dur=拍。
+ *  アプリ固有の拡張フィールド（web の drum/program/part 等・api の channel 等）は各アプリ側で
+ *  `Note & {…}` の交差型 or `interface … extends Note` で足す＝ここには持ち込まない。 */
+export interface Note {
+  pitch: number;
+  start: number;
+  dur: number;
+  vel?: number;       // ベロシティ（省略時はデータ層/再生側の既定）
+  syllable?: string;  // 歌詞の音節割当（design #16）
+}
 
 /** ピッチクラス(0-11)の音名。旧 web `PITCH_NAMES` / api `KEY_NAMES` の同一配列を1本化。
  *  型は既存に合わせ `string[]`（web の `PITCH_NAMES.indexOf(root: string)` 等の互換のため as const にしない）。 */

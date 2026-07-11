@@ -1,6 +1,6 @@
 // メロ×低音の声部進行レンズ（分析のみ・生成非介入／backlog和声③「完全に未監視」への回答・2026-07-09）。
 // 対位法の客観違反＝並行完全5度/8度・直行(隠伏)5度/8度・声部交差 を数える。良し悪しの断は人間（機械は指摘まで）。
-type Note = { pitch: number; start: number; dur: number };
+import { type Note } from "@cm/music-core"; // 音符基本形の SSOT（負債#10・Note型一元化）
 
 export interface VoiceLeadingReport {
   score: number; // 1 - 違反/機会（0..1・高=綺麗）。機会ゼロは1。

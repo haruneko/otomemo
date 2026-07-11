@@ -4,8 +4,8 @@
 import { chordPcs, normRoot } from "./theory";
 import { meterInfo } from "./meter";
 import type { BarRhythmModel, MoveModel } from "./melodyCells";
+import { type Note } from "@cm/music-core"; // 音符基本形の SSOT（負債#10・Note型一元化）
 
-type Note = { pitch: number; start: number; dur: number };
 type Chord = { root?: number | string; quality?: string; start?: number; dur?: number };
 
 export interface MelodyEval { score: number; metrics: Record<string, number>; critique: string[] }

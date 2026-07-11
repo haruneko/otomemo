@@ -2,8 +2,7 @@
 // 拍子は ABC の M: / MIDI の time sig から確定（midi.meterOf）。変拍子・拍子変更は呼び側で捨てる。
 import { meterInfo } from "./meter";
 import { melodySimilarityLayered } from "./similarity";
-
-type Note = { pitch: number; start: number; dur: number };
+import { type Note } from "@cm/music-core"; // 音符基本形の SSOT（負債#10・Note型一元化）
 
 // パターン辞書の1エントリ：代表フレーズ＋出現回数（＝頻度＝バイアスの素）＋style＋調性(代表の mode)。
 export interface Pattern { notes: Note[]; count: number; style: string; mode?: "major" | "minor"; meter?: string }

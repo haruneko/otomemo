@@ -2,7 +2,7 @@ import { Midi } from "@tonejs/midi";
 import { Chord as TonalChord, Note as TonalNote } from "tonal";
 // 不変の音楽知識（音名・コード品質→インターバル）は @cm/music-core が SSOT（負債D3・design 決定2b）。
 // PITCH_NAMES は re-export して既存の web import 面（useNetaEditor 等）を不変に保つ。
-import { PITCH_NAMES, QUALITY_INTERVALS, applyFeel, type Feel } from "@cm/music-core";
+import { PITCH_NAMES, QUALITY_INTERVALS, applyFeel, type Feel, type Note as CoreNote } from "@cm/music-core";
 export { PITCH_NAMES, applyFeel };
 export type { Feel };
 
@@ -28,12 +28,9 @@ export function feelOf(content: unknown): Feel | undefined {
 }
 
 // 音楽的中身（docs/design.md #16）。pitch は C基準のMIDI番号、start/dur は拍。
-export interface Note {
-  pitch: number;
-  start: number;
-  dur: number;
-  vel?: number;
-  syllable?: string; // 歌詞の音節割当（design #16）。今はデータ枠のみ。
+export interface Note extends CoreNote {
+  // pitch / start / dur / vel? / syllable? は CoreNote（@cm/music-core・SSOT・負債#10）から継承。
+  // 以下は web 固有の再生/ミキサー用拡張（api には持ち込まない）。
   drum?: boolean; // GMドラム＝打楽器シンセで鳴らす（melodic synthだと低すぎて聞こえない）
   program?: number; // #section音色: 合成再生で子(パート)ごとの GM音色を保つ（compositeNotesが付与）
   kit?: number; // ドラムキット(GM bank128 preset番号 0=Standard)。アコ/エレキ選択＝drumノートに付与。

@@ -2,8 +2,10 @@
 // 各小節の「鳴っているピッチクラス（音長重み）」をコードテンプレートに照合して root×quality を当てる。
 import { QUALITY_INTERVALS, chordPcs } from "./theory";
 import { meterInfo } from "./meter";
+import { type Note as CoreNote } from "@cm/music-core"; // 音符基本形の SSOT（負債#10・Note型一元化）
 
-type Note = { pitch: number; start: number; dur: number; channel?: number };
+// channel 付き派生＝MIDI 検出のトラック識別（基本形に交差で足す）。
+type Note = CoreNote & { channel?: number };
 
 // 検出に使う品質（過剰に複雑なのは避ける）。
 const DETECT_QUALS = ["", "m", "7", "m7", "maj7", "dim", "sus4", "6", "m6"];
