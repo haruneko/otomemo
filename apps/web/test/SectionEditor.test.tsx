@@ -648,6 +648,35 @@ describe("SectionEditor (3-lane timeline)", () => {
   });
 });
 
+describe("骨格「鳴らす」トグル（耳確認・オーナーFB 2026-07-11）", () => {
+  beforeEach(() => {
+    recommend.mockResolvedValue([]);
+    getSong.mockResolvedValue(null);
+  });
+  const skelChild = {
+    position: 0,
+    ord: 0,
+    node: { neta: mk("sk1", "skeleton", { content: { bars: 2, tones: [{ start: 0, pitch: 64 }] } }), children: [] },
+  };
+  it("骨格レーンに子がある時だけトグルが出る・既定OFF→タップでON", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [skelChild] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    const btn = await screen.findByLabelText("skeleton-audible");
+    expect(btn.getAttribute("aria-pressed")).toBe("false"); // 既定OFF＝従来どおり無音
+    await userEvent.click(btn);
+    expect(btn.getAttribute("aria-pressed")).toBe("true"); // ONの間だけ再生に骨格2声が混ざる（書き出しは不変）
+  });
+  it("骨格レーンが空ならトグルは出ない", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("c1", "melody", { title: "メロ" }), children: [] } }],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-c1@0");
+    expect(screen.queryByLabelText("skeleton-audible")).toBeNull();
+  });
+});
+
 describe("beatsPerBar (#51)", () => {
   it("derives quarter-beats per bar from meter", () => {
     expect(beatsPerBar("4/4")).toBe(4);

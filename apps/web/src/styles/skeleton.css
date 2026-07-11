@@ -34,7 +34,9 @@
 .skel-key.white { background: #d7dae0; color: #2a2d33; }
 .skel-key.black { background: #2a2d33; color: #9aa0aa; }
 .skel-key.tonic { background: var(--accent); color: #fff; font-weight: 700; }
-.skel-zone { position: relative; touch-action: none; }
+/* ゾーンはパン可（touch-action 既定）＝ロールをスクロールできる。打点は click（タッチスクロールでは
+   発火しない＝PianoRollの<button onClick>と同性質）＋pointerdownからの移動閾値(isTap)の二重ガード。 */
+.skel-zone { position: relative; }
 
 .skel-hl { position: absolute; left: 0; right: 0; background: rgba(58, 109, 240, 0.06); pointer-events: none; }
 .skel-hl.tonic { background: rgba(58, 109, 240, 0.13); }
@@ -43,7 +45,8 @@
 .skel-band.bass { background: var(--k-bass); }
 .skel-band.bass.derived { background: transparent; border: 1px dashed color-mix(in srgb, var(--k-bass) 75%, #fff); opacity: 0.6; }
 .skel-rest-hatch { position: absolute; top: 0; bottom: 0; pointer-events: none; background: repeating-linear-gradient(45deg, rgba(154, 160, 170, 0.18) 0 5px, transparent 5px 10px); border-left: 1px dashed rgba(154, 160, 170, 0.5); border-right: 1px dashed rgba(154, 160, 170, 0.5); }
-.skel-pt { position: absolute; width: 13px; height: 13px; margin-left: -6px; margin-top: -6px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.85); cursor: grab; z-index: 4; touch-action: none; }
+.skel-pt { position: absolute; width: 13px; height: 13px; margin-left: -6px; margin-top: -6px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.85); cursor: grab; z-index: 4; }
+.skel-pt.draggable { touch-action: none; } /* 描くモードのみドラッグ優先（点からはスクロール不可）。消す/選ぶはパン可＋click */
 .skel-pt.mel { background: var(--k-melody); }
 .skel-pt.bass { background: var(--k-bass); }
 .skel-pt.sel { outline: 2px solid #ffd24a; outline-offset: 1px; z-index: 6; }
@@ -53,7 +56,7 @@
 .skel-warn { position: absolute; z-index: 7; font-size: 11px; pointer-events: none; filter: drop-shadow(0 1px 1px #000); }
 .skel-warn.cross { color: var(--k-rhythm); }
 
-.skel-rest-strip { display: flex; position: sticky; bottom: 0; z-index: 6; background: #191c21; border-top: 1px solid #2a2d33; cursor: pointer; touch-action: none; }
+.skel-rest-strip { display: flex; position: sticky; bottom: 0; z-index: 6; background: #191c21; border-top: 1px solid #2a2d33; cursor: pointer; } /* パン可＝スクロールで休符を作らない（click+isTap） */
 .skel-rest-zone { position: relative; height: 22px; flex: 1; }
 .skel-rest-mark { position: absolute; top: 2px; height: 18px; background: color-mix(in srgb, var(--muted) 30%, #1b1e23); border: 1px solid var(--muted); border-radius: 4px; font-size: 0.6rem; color: var(--fg); display: flex; align-items: center; justify-content: center; }
 

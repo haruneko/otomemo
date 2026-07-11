@@ -195,6 +195,19 @@ export function deletePoints(points: SkeletonBreakpoint[], sel: Set<number>): Sk
   return sortPts(points).filter((_, i) => !sel.has(i));
 }
 
+// --- タップとパンの区別（スクロール誤タップ対策・オーナーFB 2026-07-11） ---
+// pointerdown 位置からの移動が閾値内なら「静止タップ」。超えたらパン（スクロール）＝打点しない。
+// PianoRoll はセルが <button onClick>（タッチスクロールでは click が発火しない）＝同方式を click＋この保険で移植。
+export const TAP_SLOP = 8; // px。指ブレは許し、スクロールの初動は弾く
+export function isTap(dx: number, dy: number, slop = TAP_SLOP): boolean {
+  return Math.abs(dx) <= slop && Math.abs(dy) <= slop;
+}
+
+// 骨格の既定音色（オーナーFB 2026-07-11）：メロ=GM48 String Ensemble／ベース=GM42 Cello。
+// per-note program は scheduleTimes→playEvent がそのまま GM 音色へ解決する（合成再生と同機構）。
+export const SKEL_MEL_PROGRAM = 48;
+export const SKEL_BASS_PROGRAM = 42;
+
 // --- 再生の2声（対位法=ベース+1oct／実音=そのまま） ---
 export interface SkelPlayOpts { counterpoint: boolean; chords: ChordEntry[]; beatsPerBar?: number; bassOct?: number; melProgram?: number; bassProgram?: number }
 // メロ実音＋実効ベース（明示＋導出）を鳴らす Note 列。part で音色差別化（melody/bass）。
@@ -202,8 +215,8 @@ export function skeletonPlaybackNotes(content: SkeletonContent, opts: SkelPlayOp
   const bpb = opts.beatsPerBar ?? 4;
   const total = content.bars * bpb;
   const phrases = content.phrases ?? [];
-  const melProg = opts.melProgram ?? 0;
-  const bassProg = opts.bassProgram ?? 33;
+  const melProg = opts.melProgram ?? SKEL_MEL_PROGRAM;
+  const bassProg = opts.bassProgram ?? SKEL_BASS_PROGRAM;
   const mel: Note[] = skeletonPreviewNotes(content, bpb).map((n) => ({ ...n, program: melProg, part: "melody" as const }));
   // ベースのセグメント境界＝コード変わり目＋明示点＋句境界＋曲頭。
   const bounds = new Set<number>([0]);
@@ -224,4 +237,15 @@ export function skeletonPlaybackNotes(content: SkeletonContent, opts: SkelPlayOp
     else bass.push({ pitch, start: s, dur: e - s, program: bassProg, part: "bass" });
   }
   return [...mel, ...bass];
+}
+
+// --- セクション耳確認（オーナーFB 2026-07-11）：骨格レーン「鳴らす」トグルON時に合成再生へ混ぜる2声 ---
+// 合成は design #20 どおり無音のまま（compositeNotes 不変・MIDI書き出しにも入れない）。再生ノートにだけ足す。
+// shift＝配置先セクションへの移調半音（melodyPlacementShift 流儀・両声に同じだけ効く）。chords は
+// 呼び出し側でセクション実調・骨格位置相対に整えて渡す（導出ベースが同じ座標系で鳴るように）。
+export function skeletonEarNotes(content: SkeletonContent, opts: { chords: ChordEntry[]; shift?: number; beatsPerBar?: number }): Note[] {
+  const shift = opts.shift ?? 0;
+  const mv = (pts?: SkeletonBreakpoint[]) => pts?.map((t) => (t.pitch == null ? t : { ...t, pitch: t.pitch + shift }));
+  const shifted: SkeletonContent = { ...content, tones: mv(content.tones)!, ...(content.bass ? { bass: mv(content.bass) } : {}) };
+  return skeletonPlaybackNotes(shifted, { counterpoint: true, chords: opts.chords, beatsPerBar: opts.beatsPerBar });
 }

@@ -16,10 +16,15 @@ import {
   isCompoundMeter,
   skeletonPreviewNotes,
   isSkeleton,
+  chordsOf,
+  harmonyPlacementShift,
+  melodyPlacementShift,
+  type ChordEntry,
   type Feel,
   type Note,
   type PlaybackHandle,
 } from "../music";
+import { skeletonEarNotes } from "../skeletonEdit";
 import { MiniRoll } from "./MiniRoll";
 import { Icon } from "./Icon";
 import { harmonyVoice } from "../harmony";
@@ -190,8 +195,11 @@ export function SectionEditor({
     await api.updateNeta(neta.id, { bars: b }).catch(() => {});
     onChanged?.();
   }
+  // 骨格レーンの「鳴らす」トグル（耳確認・オーナーFB 2026-07-11）。既定OFF＝従来どおり無音。保存しない（セッション内のみ）。
+  const [skelAudible, setSkelAudible] = useState(false);
   // #49/#58/#59 トランスポート。合成結果を再生／プレイヘッドは TOTAL(グリッド全体)尺・拍子BPB。
-  const tp = useTransport(() => composite(), tempo, { scaleBeats: TOTAL, bpb: BPB, feel: sectionFeel(), compound: isCompoundMeter(liveMeter) });
+  // 再生ノートは playComposite＝骨格トグルONの間だけ骨格2声が混ざる（書き出しは composite のまま）。
+  const tp = useTransport(() => playComposite(), tempo, { scaleBeats: TOTAL, bpb: BPB, feel: sectionFeel(), compound: isCompoundMeter(liveMeter) });
 
   // Space=合成再生/一時停止（design #59）。入力中は無効。
   useEffect(() => {
@@ -659,6 +667,37 @@ export function SectionEditor({
   function composite(): Note[] {
     return compositeNotes(children, keyPc, neta.mode);
   }
+  // 骨格の耳確認（オーナーFB 2026-07-11）：「鳴らす」ON の間だけ再生に骨格2声（メロ実音＋実効ベース+1oct・
+  // Strings/Cello）を混ぜる＝ドラムと合わせて聞ける。**合成(composite)と MIDI 書き出しは不変＝無音のまま**。
+  // コードは compositeNotes と同じ key-aware 移調でセクション実調へ→骨格位置相対に。骨格自体はメロ配置規則で移調。
+  function earChords(): ChordEntry[] {
+    const chordLane = LANES.find((l) => l.key === "chord");
+    if (!chordLane) return [];
+    return laneChildren(chordLane).flatMap((c) => {
+      const shift = harmonyPlacementShift(keyPc, neta.mode, c.node.neta.mode, c.node.neta.key ?? 0);
+      return chordsOf(c.node.neta.content).map((ch) => ({
+        ...ch,
+        root: (((ch.root + shift) % 12) + 12) % 12,
+        start: ch.start + c.position,
+      }));
+    });
+  }
+  function skelEar(): Note[] {
+    const lane = LANES.find((l) => l.key === "skeleton");
+    if (!lane) return [];
+    const chords = earChords();
+    return laneChildren(lane).flatMap((c) => {
+      const content = c.node.neta.content;
+      if (!isSkeleton(content)) return [];
+      const shift = melodyPlacementShift(keyPc, neta.mode, c.node.neta.mode, c.node.neta.key ?? 0);
+      const rel = chords.map((ch) => ({ ...ch, start: ch.start - c.position })); // 骨格位置相対（導出ベースの座標系を揃える）
+      return skeletonEarNotes(content, { chords: rel, shift, beatsPerBar: BPB }).map((n) => ({ ...n, start: n.start + c.position }));
+    });
+  }
+  // 再生専用の合成＝トグルONなら骨格2声を足す。書き出し(downloadMidi/laneTracks)は composite のまま＝混入しない。
+  function playComposite(): Note[] {
+    return skelAudible ? [...composite(), ...skelEar()] : composite();
+  }
   // アンサンブル feel（design.md「フィール層分離」Stage4）：セクション内メロトラックの content.feel を
   // **全トラックに同一適用**＝スイングは声部単位でなく時間軸の共有性質（メロだけ跳ねる事故を避ける）。無ければストレート。
   function sectionFeel(): Feel | undefined {
@@ -827,6 +866,23 @@ export function SectionEditor({
             </div>
           )}
         </div>
+        {/* 骨格の耳確認トグル（オーナーFB 2026-07-11）：骨格レーンに子がある時だけ出す。ONの間だけ
+            再生に骨格2声（Strings）が混ざる＝ドラムと合わせて聞ける。書き出しには入らない。 */}
+        {(() => {
+          const skelLane = LANES.find((l) => l.key === "skeleton");
+          return skelLane && laneChildren(skelLane).length > 0 ? (
+            <button
+              type="button"
+              className={"tb-tool" + (skelAudible ? " on" : "")}
+              aria-label="skeleton-audible"
+              aria-pressed={skelAudible}
+              title="骨格を耳確認で鳴らす（再生のみ・MIDI書き出しには入らない）"
+              onClick={() => setSkelAudible((v) => !v)}
+            >
+              骨格を鳴らす{skelAudible ? "中" : ""}
+            </button>
+          ) : null;
+        })()}
       </div>
       {loadErr && (
         <p className="fit-report" aria-label="load-error" onClick={() => void load()}>

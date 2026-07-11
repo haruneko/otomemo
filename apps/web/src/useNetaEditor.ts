@@ -62,7 +62,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
   const bpb = beatsPerBar(meter); // 1小節の拍数（6/8=3・4/4=4）＝小節数/尺の換算に（評価修正B）
   const [program, setProgram] = useState<number>(
-    programOf(neta.content) ?? (neta.kind === "bass" ? 33 : 0), // #47 GM音色（bassは既定フィンガーベース）
+    programOf(neta.content) ?? (neta.kind === "bass" ? 33 : neta.kind === "skeleton" ? 48 : 0), // #47 GM音色（bass=フィンガーベース・骨格=Strings＝オーナーFB 2026-07-11）
   );
   const [rollMode, setRollMode] = useState<"draw" | "select" | "erase">("draw"); // ロールの描く/選ぶ/消す（同じ行に出す・Section と同流儀）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。

@@ -22,6 +22,9 @@ import {
   nudgePoints,
   deletePoints,
   skeletonPlaybackNotes,
+  skeletonEarNotes,
+  isTap,
+  TAP_SLOP,
 } from "../src/skeletonEdit";
 import type { SkeletonBreakpoint, SkeletonContent } from "../src/music";
 
@@ -238,6 +241,11 @@ describe("skeletonPlaybackNotes（対位法/実音の2声）", () => {
     // 明示ベース48が対位法で+12=60、支配は次点/曲末まで（1点→曲末8拍）
     expect(bass[0]!.pitch).toBe(60);
   });
+  it("音色既定＝メロ GM48(Strings)・ベース GM42(Cello)（オーナーFB 2026-07-11）", () => {
+    const ns = skeletonPlaybackNotes(content, { counterpoint: true, chords: [] });
+    expect(ns.find((n) => n.part === "melody")!.program).toBe(48);
+    expect(ns.find((n) => n.part === "bass")!.program).toBe(42);
+  });
   it("実音モード＝ベースはそのままの高さ", () => {
     const ns = skeletonPlaybackNotes(content, { counterpoint: false, chords: [] });
     expect(ns.filter((n) => n.part === "bass")[0]!.pitch).toBe(48);
@@ -247,5 +255,44 @@ describe("skeletonPlaybackNotes（対位法/実音の2声）", () => {
     const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
     const ns = skeletonPlaybackNotes(c, { counterpoint: false, chords });
     expect(ns.filter((n) => n.part === "bass")[0]!.pitch).toBe(36); // C2
+  });
+});
+
+describe("isTap（タップとパンの区別＝スクロール誤タップ対策・オーナーFB）", () => {
+  it("閾値内＝タップ", () => {
+    expect(isTap(0, 0)).toBe(true);
+    expect(isTap(TAP_SLOP - 1, 0)).toBe(true);
+    expect(isTap(-3, 4)).toBe(true);
+  });
+  it("閾値超え（縦横どちらでも）＝パン＝タップでない", () => {
+    expect(isTap(TAP_SLOP + 1, 0)).toBe(false);
+    expect(isTap(0, -TAP_SLOP - 1)).toBe(false);
+    expect(isTap(30, 40)).toBe(false);
+  });
+  it("カスタム閾値", () => {
+    expect(isTap(5, 0, 4)).toBe(false);
+    expect(isTap(3, 0, 4)).toBe(true);
+  });
+});
+
+describe("skeletonEarNotes（セクション耳確認＝合成再生への骨格2声ミックス）", () => {
+  const content: SkeletonContent = {
+    bars: 1,
+    tones: [{ start: 0, pitch: 64 }],
+    bass: [{ start: 0, pitch: 48 }],
+  };
+  it("shift で両声とも移調・対位法(+1oct)固定・Strings/Cello音色", () => {
+    const ns = skeletonEarNotes(content, { chords: [], shift: 2 });
+    const mel = ns.find((n) => n.part === "melody")!;
+    const bass = ns.find((n) => n.part === "bass")!;
+    expect(mel.pitch).toBe(66); // 64+2
+    expect(bass.pitch).toBe(62); // 48+2 +12(対位法)
+    expect(mel.program).toBe(48);
+    expect(bass.program).toBe(42);
+  });
+  it("shift 省略＝0（そのまま）・導出ベースはコードrootから（rootは呼び出し側で移調済み前提）", () => {
+    const c: SkeletonContent = { bars: 1, tones: [{ start: 0, pitch: 72 }] };
+    const ns = skeletonEarNotes(c, { chords: [{ root: 7, quality: "", start: 0, dur: 4 }] });
+    expect(ns.find((n) => n.part === "bass")!.pitch).toBe(43 + 12); // G2+対位法1oct
   });
 });

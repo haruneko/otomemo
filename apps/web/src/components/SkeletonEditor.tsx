@@ -1,9 +1,12 @@
 // 骨格エディタ（design #20 S2・方式C＝常時2声・ベース折返し表示）。PianoRoll を流用せず自前グリッドの
 // 薄いラッパー（既存メロ編集を一切壊さない）。純ロジックは skeletonEdit.ts へ委譲＝ここは描画/入力のみ。
-import { useMemo, useRef, useState, type Ref } from "react";
-import { pitchName, PITCH_NAMES, beatsPerBar, type ChordEntry, type SkeletonBreakpoint } from "../music";
+// 打点は **click ベース**＝タッチのスクロールでは click が発火しない（PianoRoll の <button onClick> と同方式）。
+// さらに pointerdown からの移動閾値(isTap)＋pointercancel の保険＝スクロールでは絶対に点が置かれない（オーナーFB 2026-07-11）。
+import { useEffect, useMemo, useRef, useState, type Ref } from "react";
+import { pitchName, PITCH_NAMES, beatsPerBar, skeletonPreviewNotes, playNotes, type ChordEntry, type SkeletonBreakpoint, type SkeletonContent, type PlaybackHandle } from "../music";
 import { previewNote } from "../audio";
-import { api } from "../api";
+import { api, type Neta } from "../api";
+import { MiniRoll } from "./MiniRoll";
 import {
   snapBeat,
   bandEnd,
@@ -19,7 +22,13 @@ import {
   analyzeCounterpoint,
   nudgePoints,
   deletePoints,
+  skeletonPlaybackNotes,
+  isTap,
+  SKEL_MEL_PROGRAM,
 } from "../skeletonEdit";
+
+// MiniRoll は notes を渡すと neta.content を見ない（合成プレビューと同じ使い方）＝候補カードのダミー。
+const CAND_NETA = { id: "", kind: "skeleton", tags: [] } as unknown as Neta;
 
 const PPB = 44; // 1拍の px 幅
 const ROWH = 13; // 1行(半音)の px 高さ
@@ -29,6 +38,7 @@ const MAJ = [0, 2, 4, 5, 7, 9, 11];
 const MINtones = [0, 2, 3, 5, 7, 8, 10];
 
 type Voice = "melody" | "bass";
+type SkelCand = { tones: SkeletonBreakpoint[]; bass?: SkeletonBreakpoint[]; phrases?: { endBeat: number; cadence?: string }[]; bars: number; label?: string };
 
 export interface SkeletonEditorProps {
   tones: SkeletonBreakpoint[];
@@ -46,6 +56,7 @@ export interface SkeletonEditorProps {
   rollMode: "draw" | "select" | "erase";
   counterpoint: boolean; // 再生モード（親所有・playable に効く）
   setCounterpoint: (v: boolean) => void;
+  tempo?: number; // 候補試聴のテンポ（未指定=120）
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
 }
@@ -55,8 +66,12 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
   const [inputVoice, setInputVoice] = useState<Voice>("melody"); // 新規打点の入力先（既存点は触った声部を直接編集）
   const [foldOct, setFoldOct] = useState(24); // ベース表示の畳み量（+2oct=24 / +3oct=36）
   const [selected, setSelected] = useState<Set<string>>(new Set()); // voice@start
-  const [cand, setCand] = useState<{ tones: SkeletonBreakpoint[]; bass?: SkeletonBreakpoint[]; phrases?: { endBeat: number; cadence?: string }[]; bars: number } | null>(null);
+  // 叩き台候補（複数案・reshape-bar/cand-tray 流儀）。採用で置換（state経由＝Undoで戻れる）。
+  const [cands, setCands] = useState<SkelCand[] | null>(null);
+  const [stubMsg, setStubMsg] = useState<string | null>(null); // 生成失敗/0件の可視化（黙って消えない）
   const [busy, setBusy] = useState(false);
+  const audRef = useRef<PlaybackHandle | null>(null); // 候補試聴（前の再生を止めてから）
+  useEffect(() => () => audRef.current?.stop(), []); // アンマウントで鳴りっぱなし防止
   const zoneRef = useRef<HTMLDivElement>(null);
 
   const bpb = beatsPerBar(p.meter);
@@ -97,9 +112,21 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
   const ptsOf = (v: Voice) => (v === "melody" ? p.tones : p.bass);
   const setPtsOf = (v: Voice, next: SkeletonBreakpoint[]) => (v === "melody" ? p.setTones(next) : p.setBass(next));
 
-  // ---- 空セルタップ＝ブレークポイント追加（入力先＝inputVoice） ----
-  function onZoneDown(e: React.PointerEvent) {
+  // ---- 空セルの静止タップ＝ブレークポイント追加（入力先＝inputVoice）。スクロールでは置かれない ----
+  // click ベース（タッチスクロールは click を発火しない＝PianoRoll の <button onClick> と同性質）＋
+  // pointerdown からの移動が TAP_SLOP 超なら無視（マウスのドラッグ後 click 対策）＋pointercancel で破棄
+  // （ブラウザがスクロールにジェスチャを奪った合図）。
+  const zoneDown = useRef<{ x: number; y: number } | null>(null);
+  function onZonePointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).dataset.pt) return; // 点は個別ハンドラ
+    zoneDown.current = { x: e.clientX, y: e.clientY };
+  }
+  function onZonePointerCancel() { zoneDown.current = null; } // スクロール＝タップでない
+  function onZoneClick(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).dataset.pt) return; // 点上の click（ドラッグ後含む）は無視
+    const d = zoneDown.current;
+    zoneDown.current = null;
+    if (!d || !isTap(e.clientX - d.x, e.clientY - d.y)) return; // パン（移動閾値超）＝打点しない
     if (p.rollMode !== "draw") { if (p.rollMode === "select") { setSelected(new Set()); } return; }
     const beat = snapBeat(beatFromX(e.clientX), snap, total);
     if (beat >= total - 1e-6) return;
@@ -107,19 +134,14 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
     const disp = v === "bass" ? foldOct : 0;
     const pitch = unfoldPitch(pitchFromY(e.clientY), disp);
     setPtsOf(v, upsertPoint(ptsOf(v), beat, pitch));
-    void previewNote({ pitch, start: 0, dur: 0.4 });
+    void previewNote({ pitch, start: 0, dur: 0.4, program: SKEL_MEL_PROGRAM });
   }
 
-  // ---- 点のドラッグ/選択/消去 ----
+  // ---- 点：draw=ドラッグ移動（pointerdown＋capture）／消す・選ぶ=click（スクロールでは発火しない） ----
   function onPointDown(e: React.PointerEvent, v: Voice, pt: SkeletonBreakpoint) {
     e.stopPropagation();
+    if (p.rollMode !== "draw") return; // 消す/選ぶは onPointClick（静止タップのみ）
     const disp = v === "bass" ? foldOct : 0;
-    if (p.rollMode === "erase") { setPtsOf(v, removePointAt(ptsOf(v), pt.start)); return; }
-    if (p.rollMode === "select") {
-      const k = v + "@" + pt.start;
-      setSelected((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
-      return;
-    }
     // draw＝ドラッグ移動（既存点はタッチした声部を直接編集）。ドラッグ中は開始時点の点集合から
     // 対象1点を除いた base に、現在位置で upsert＝毎moveの再レンダで stale になっても重複しない。
     const dot = e.currentTarget as HTMLElement;
@@ -132,6 +154,15 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
     };
     const up = () => { dot.removeEventListener("pointermove", move); dot.removeEventListener("pointerup", up); };
     dot.addEventListener("pointermove", move); dot.addEventListener("pointerup", up);
+  }
+  function onPointClick(e: React.MouseEvent, v: Voice, pt: SkeletonBreakpoint) {
+    e.stopPropagation();
+    if (p.rollMode === "erase") { setPtsOf(v, removePointAt(ptsOf(v), pt.start)); return; }
+    if (p.rollMode === "select") {
+      const k = v + "@" + pt.start;
+      setSelected((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+    }
+    // draw のドラッグ後 click は何もしない（移動は onPointDown 側で完了）
   }
 
   // ---- 句境界ドラッグ ----
@@ -150,8 +181,14 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
     p.setPhrases(p.phrases.map((x) => (x === ph ? { ...x, cadence: x.cadence === "full" ? "half" : "full" } : x)));
   }
 
-  // ---- 休ストリップ ----
-  function onRestDown(e: React.PointerEvent) {
+  // ---- 休ストリップ（ゾーンと同じ静止タップ判定＝スクロールで休符を作らない） ----
+  const restDown = useRef<{ x: number; y: number } | null>(null);
+  function onRestPointerDown(e: React.PointerEvent) { restDown.current = { x: e.clientX, y: e.clientY }; }
+  function onRestPointerCancel() { restDown.current = null; }
+  function onRestClick(e: React.MouseEvent) {
+    const d = restDown.current;
+    restDown.current = null;
+    if (!d || !isTap(e.clientX - d.x, e.clientY - d.y)) return;
     const beat = snapBeat(beatFromX(e.clientX), snap, total);
     if (beat >= total - 1e-6) return;
     setPtsOf(inputVoice, toggleRestAt(ptsOf(inputVoice), beat));
@@ -187,26 +224,46 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
     setSelected(new Set());
   }
 
-  // ---- 機械に叩き台（gen_skeleton→候補→採用で確定・破壊上書きしない） ----
+  // ---- 機械に叩き台（gen_skeleton→複数候補→試聴→採用で確定・破壊上書きしない） ----
+  // seed を送らない＝API が別 seed の複数案（既定3件）を返す。失敗/0件は stubMsg で可視化（黙って消えない）。
   async function genStub() {
     if (busy) return;
     setBusy(true);
+    setStubMsg(null);
     try {
-      const r = await api.music<{ items: { content: unknown }[] }>("gen_skeleton", {
+      const r = await api.music<{ items: { content: unknown; label?: string }[] }>("gen_skeleton", {
         frame: { key: p.keyPc, mode: p.keyMode, meter: p.meter, bars: p.bars },
-        seed: Math.floor(Math.random() * 1e6),
+        ...(p.chords.length ? { chords: p.chords } : {}),
       });
-      const c = r.items?.[0]?.content as { bars?: number; tones?: SkeletonBreakpoint[]; bass?: SkeletonBreakpoint[]; phrases?: { endBeat: number; cadence?: string }[] } | undefined;
-      if (c && Array.isArray(c.tones)) setCand({ bars: c.bars ?? p.bars, tones: c.tones, bass: c.bass, phrases: c.phrases });
-    } catch { /* 生成失敗は握りつぶす（叩き台は任意） */ } finally { setBusy(false); }
+      const list: SkelCand[] = (r.items ?? []).flatMap((it): SkelCand[] => {
+        const c = it.content as { bars?: number; tones?: SkeletonBreakpoint[]; bass?: SkeletonBreakpoint[]; phrases?: { endBeat: number; cadence?: string }[] } | undefined;
+        return c && Array.isArray(c.tones) ? [{ bars: c.bars ?? p.bars, tones: c.tones, bass: c.bass, phrases: c.phrases, label: it.label }] : [];
+      });
+      if (list.length) setCands(list);
+      else setStubMsg("叩き台の候補が返りませんでした（もう一度どうぞ）");
+    } catch {
+      setStubMsg("叩き台の生成に失敗（APIに繋がっていない可能性）");
+    } finally { setBusy(false); }
   }
-  function adoptStub() {
-    if (!cand) return;
-    p.setTones(cand.tones);
-    if (cand.bass) p.setBass(cand.bass);
-    if (cand.phrases) p.setPhrases(cand.phrases);
-    setCand(null);
+  const candContent = (c: SkelCand): SkeletonContent => ({ bars: c.bars, tones: c.tones, ...(c.bass ? { bass: c.bass } : {}), ...(c.phrases ? { phrases: c.phrases } : {}) });
+  // 試聴＝現在の再生モード（対位法/実音）とコード文脈で2声を鳴らす。前の試聴は止める。
+  async function auditionStub(c: SkelCand) {
+    audRef.current?.stop();
+    const ns = skeletonPlaybackNotes(candContent(c), { counterpoint: p.counterpoint, chords: p.chords, beatsPerBar: bpb });
+    if (ns.length) audRef.current = await playNotes(ns, p.tempo ?? 120);
+  }
+  // 採用＝置換（tones/bass/phrases は親 state 経由＝編集履歴 snapshot に乗る＝Undo で戻れる）。
+  function adoptStub(c: SkelCand) {
+    audRef.current?.stop();
+    p.setTones(c.tones);
+    p.setBass(c.bass ?? []);
+    if (c.phrases) p.setPhrases(c.phrases);
+    setCands(null);
     setSelected(new Set());
+  }
+  function closeStub() {
+    audRef.current?.stop();
+    setCands(null);
   }
 
   const seg = (opts: [string, number][], val: number, set: (v: number) => void, aria: string) => (
@@ -250,12 +307,36 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
         )}
       </div>
 
-      {cand && (
-        <div className="reshape-bar" aria-label="skeleton-candidate" style={{ ["--k" as string]: "var(--k-skeleton,#7fb8d4)" }}>
-          <span className="reshape-label">骨格の叩き台（{cand.tones.filter((t) => t.pitch != null).length}点・採用で置換／元は残る）</span>
-          <button type="button" className="tb-tool" aria-label="stub-again" disabled={busy} onClick={() => void genStub()}>別案</button>
-          <button type="button" className="tb-tool primary" aria-label="stub-adopt" onClick={adoptStub}>採用</button>
-          <button type="button" className="tb-tool" aria-label="stub-discard" onClick={() => setCand(null)}>破棄</button>
+      {/* 叩き台の候補トレイ（ボタン直下＝見つかる位置・cand-tray 流儀）：各案に 試聴▶／採用。採用=置換（Undoで戻せる）。 */}
+      {stubMsg && (
+        <p className="fit-report" aria-label="stub-message" onClick={() => setStubMsg(null)}>
+          {stubMsg} <span className="muted">（タップで消す）</span>
+        </p>
+      )}
+      {cands && (
+        <div className="reshape-bar" aria-label="skeleton-candidates" style={{ ["--k" as string]: "var(--k-skeleton, #7fb8d4)" }}>
+          <span className="reshape-label">骨格の叩き台 {cands.length}案（▶試聴 → 採用で置換・Undoで戻せる／今の骨格は採用するまで不変）</span>
+          <div className="cand-tray" aria-label="skeleton-cand-tray">
+            {cands.map((c, i) => {
+              const notes = skeletonPreviewNotes(candContent(c), bpb);
+              return (
+                <div key={i} className="cand-card" aria-label="skeleton-cand-card">
+                  <span className="cand-preview">
+                    <MiniRoll neta={CAND_NETA} notes={notes} />
+                    <span className="cand-meta">{c.label ?? `案${i + 1}`}・{c.tones.filter((t) => t.pitch != null).length}点</span>
+                  </span>
+                  <div className="cand-actions">
+                    <button type="button" className="tb-tool" aria-label={`stub-audition-${i}`} title="試聴" onClick={() => void auditionStub(c)}>▶</button>
+                    <button type="button" className="tb-tool primary" aria-label={`stub-adopt-${i}`} title="この案で置換（Undo可）" onClick={() => adoptStub(c)}>採用</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="cand-tray-foot">
+            <button type="button" className="tb-tool" aria-label="stub-again" disabled={busy} onClick={() => void genStub()}>{busy ? "…" : "🎲 別案"}</button>
+            <button type="button" className="tb-tool" aria-label="stub-close" onClick={closeStub}>閉じる</button>
+          </div>
         </div>
       )}
 
@@ -298,12 +379,12 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
         <div className="skel-body">
           <div className="skel-keycol">
             {Array.from({ length: rows }, (_, i) => range.hi - i).map((pt) => (
-              <div key={pt} className={"skel-key " + (isBlack(pt) ? "black" : "white") + (pc(pt) === pc(p.keyPc) ? " tonic" : "")} style={{ height: ROWH }} onClick={() => void previewNote({ pitch: pt, start: 0, dur: 0.5 })}>
+              <div key={pt} className={"skel-key " + (isBlack(pt) ? "black" : "white") + (pc(pt) === pc(p.keyPc) ? " tonic" : "")} style={{ height: ROWH }} onClick={() => void previewNote({ pitch: pt, start: 0, dur: 0.5, program: SKEL_MEL_PROGRAM })}>
                 {pitchName(pt)}
               </div>
             ))}
           </div>
-          <div className="skel-zone" ref={zoneRef} style={{ width: W, height: H, background: bg }} onPointerDown={onZoneDown}>
+          <div className="skel-zone" aria-label="skeleton-zone" ref={zoneRef} style={{ width: W, height: H, background: bg }} onPointerDown={onZonePointerDown} onPointerCancel={onZonePointerCancel} onClick={onZoneClick}>
             {/* スケール行ハイライト */}
             {Array.from({ length: rows }, (_, i) => range.hi - i).filter((pt) => scaleSet.has(pc(pt))).map((pt) => (
               <div key={"sc" + pt} className={"skel-hl" + (pc(pt) === pc(p.keyPc) ? " tonic" : "")} style={{ top: yOf(pt), height: ROWH }} />
@@ -339,18 +420,19 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
               );
             })}
             {/* 点（メロ＝実音／ベース＝畳み表示） */}
+            {/* draggable=draw時のみ touch-action:none（ドラッグ優先）。消す/選ぶは click＝スクロール可・誤爆なし。 */}
             {p.tones.map((pt) => pt.pitch != null && pt.pitch <= range.hi && pt.pitch >= range.lo && (
-              <span key={"mp" + pt.start} data-pt="1" className={"skel-pt mel" + (selected.has("melody@" + pt.start) ? " sel" : "") + (p.rollMode === "erase" ? " erasing" : "")}
-                style={{ left: pt.start * PPB, top: yOf(pt.pitch) + ROWH / 2 }} title={`${pitchName(pt.pitch)} @${pt.start}拍`} onPointerDown={(e) => onPointDown(e, "melody", pt)} />
+              <span key={"mp" + pt.start} data-pt="1" className={"skel-pt mel" + (p.rollMode === "draw" ? " draggable" : "") + (selected.has("melody@" + pt.start) ? " sel" : "") + (p.rollMode === "erase" ? " erasing" : "")}
+                style={{ left: pt.start * PPB, top: yOf(pt.pitch) + ROWH / 2 }} title={`${pitchName(pt.pitch)} @${pt.start}拍`} onPointerDown={(e) => onPointDown(e, "melody", pt)} onClick={(e) => onPointClick(e, "melody", pt)} />
             ))}
             {p.bass.map((pt) => pt.pitch != null && dispBass(pt.pitch) <= range.hi && dispBass(pt.pitch) >= range.lo && (
-              <span key={"bp" + pt.start} data-pt="1" className={"skel-pt bass" + (selected.has("bass@" + pt.start) ? " sel" : "") + (p.rollMode === "erase" ? " erasing" : "")}
-                style={{ left: pt.start * PPB, top: yOf(dispBass(pt.pitch)) + ROWH / 2 }} title={`${pitchName(pt.pitch)} @${pt.start}拍（実音・表示+${foldOct / 12}oct）`} onPointerDown={(e) => onPointDown(e, "bass", pt)} />
+              <span key={"bp" + pt.start} data-pt="1" className={"skel-pt bass" + (p.rollMode === "draw" ? " draggable" : "") + (selected.has("bass@" + pt.start) ? " sel" : "") + (p.rollMode === "erase" ? " erasing" : "")}
+                style={{ left: pt.start * PPB, top: yOf(dispBass(pt.pitch)) + ROWH / 2 }} title={`${pitchName(pt.pitch)} @${pt.start}拍（実音・表示+${foldOct / 12}oct）`} onPointerDown={(e) => onPointDown(e, "bass", pt)} onClick={(e) => onPointClick(e, "bass", pt)} />
             ))}
           </div>
         </div>
         {/* 休ストリップ */}
-        <div className="skel-rest-strip" aria-label="rest-strip" onPointerDown={onRestDown}>
+        <div className="skel-rest-strip" aria-label="rest-strip" onPointerDown={onRestPointerDown} onPointerCancel={onRestPointerCancel} onClick={onRestClick}>
           <div className="skel-gutter">休</div>
           <div className="skel-rest-zone" style={{ width: W }}>
             {ptsOf(inputVoice).filter((pt) => pt.pitch === null).map((pt) => {

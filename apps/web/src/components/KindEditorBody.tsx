@@ -269,6 +269,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
             chords={p.skelChords ?? []}
             rollMode={p.rollMode}
             counterpoint={p.skelCounter ?? true} setCounterpoint={p.setSkelCounter ?? (() => {})}
+            tempo={p.tempo}
             playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef}
           />
         </div>
