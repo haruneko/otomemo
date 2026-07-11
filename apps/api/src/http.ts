@@ -189,6 +189,14 @@ export function buildHttp(core: Core): FastifyInstance {
         case "gen_melody": {
           // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
+          // リズムパーツ層 L1（design #20 S4-1）：{ rotate: string[], placement?: [{bar,partId}] } を素直にサニタイズ。不正/空は undefined＝bit一致。
+          const parseRhythmParts = (x: unknown): { rotate?: string[]; placement?: { bar: number; partId: string }[] } | undefined => {
+            if (!x || typeof x !== "object") return undefined;
+            const o = x as { rotate?: unknown; placement?: unknown };
+            const rotate = Array.isArray(o.rotate) ? o.rotate.filter((s): s is string => typeof s === "string") : undefined;
+            const placement = Array.isArray(o.placement) ? o.placement.filter((p): p is { bar: number; partId: string } => !!p && typeof (p as { bar?: unknown }).bar === "number" && typeof (p as { partId?: unknown }).partId === "string") : undefined;
+            return (rotate && rotate.length) || (placement && placement.length) ? { rotate, placement } : undefined;
+          };
           const bassN = asNotes(b.bass); // 対位バイアス＝ベーストラックのnotes（design「gen_melody×ベース結線」）
           // 骨格注入（design #20 S2）：skeletonNetaId 指定時はその neta の content を SkeletonContent として読み検証し注入（MCP 経路と同契約）。
           let skeleton: SkeletonContent | undefined;
@@ -210,6 +218,7 @@ export function buildHttp(core: Core): FastifyInstance {
             finest: b.finest === "quarter" ? "quarter" : b.finest === "eighth" ? "eighth" : undefined, // 最小音符（高BPMの16分潰れ対策・未指定=テンポ連動）
             flow: num(b.flow), pickup: num(b.pickup), arc: b.arc === "arch" ? "arch" : undefined, // 句フレージング（連結/長音・弱起・山なり弧・2026-07-11・未指定=従来 bit 一致・role で自動発火）
             skeleton, // 骨格から吹き直す（design #20・未指定=従来 bit 一致）
+            rhythmParts: parseRhythmParts(b.rhythmParts), // リズムパーツ層 L1（design #20 S4-1・未指定/不正=bit一致）
           });
           // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
           attachMelodyVoiceLeading(res, { bass: bassN.length ? bassN : undefined, skeleton, chords: asChords(b.chords), beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });

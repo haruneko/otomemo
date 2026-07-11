@@ -1,5 +1,6 @@
 import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
 import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA } from "./motifModelData";
+import { RHYTHM_PART_PRESETS, partPatternOnsets, resolvePartIdAtBar } from "./rhythmParts"; // リズムパーツ層 L1（design #20 S4-1）
 import { chordPcs } from "./theory";
 import { classifyNCT, isResolvedNct } from "./degree";
 import { type Note } from "@cm/music-core"; // 音符基本形の SSOT（負債#10・Note型一元化）
@@ -440,7 +441,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; restMask?: { start: number; end: number }[] } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; restMask?: { start: number; end: number }[]; rhythmParts?: { rotate?: string[]; placement?: { bar: number; partId: string }[] } } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -904,6 +905,28 @@ export function genMotifMelodyV2(
     }
     return { ons, mv, run };
   };
+  // ── リズムパーツ層 L1（design #20 S4-1）：セクション割当ローテ＝出力小節に名前付きパーツを敷く ──
+  // 単一共有モチーフ M では絶対barのパーツを運べないため seam は「ブロックレンダ直前の variant 差し替え」。
+  // 各ブロック[bar0,L]の絶対barからパーツの onset 列を組み、輪郭(mv)は共有 Mi から巡回借用（rng不消費＝決定的・
+  // 動機の輪郭同一性を保つ）。密度受入帯(loN/hiN)/孤立ギャップ棄却/finestは mkMotif 内でしか効かない＝パーツ経路は
+  // 自動でバイパス＝パーツ優先。compound(6/8系)は16枠語彙とgridが違うため対象外＝無視（bit一致）。
+  const rp = opts.rhythmParts;
+  const partsActive = !compound && !!rp && (rp.rotate?.length ?? 0) > 0 && (rp.rotate ?? []).some((id) => RHYTHM_PART_PRESETS[id]);
+  const buildPartVariant = (Mi: Motif16, bar0: number, L: number): Motif16 | null => {
+    const ons: number[] = [];
+    for (let j = 0; j < L; j++) {
+      const partId = resolvePartIdAtBar(rp!.rotate, bar0 + j); // 絶対barでローテ（未知id/空は null＝その小節は無音節点）
+      if (!partId) continue;
+      for (const b of partPatternOnsets(RHYTHM_PART_PRESETS[partId]!, barLen)) ons.push(j * barLen + b); // ブロック相対拍
+    }
+    if (!ons.length) return null; // 全小節パーツ無し/全休符＝差し替えない（通常 variant のまま）
+    ons.sort((a, b) => a - b);
+    const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
+    const src = Mi.mv; // 輪郭は共有モチーフから巡回借用（i=0はアンカー＝0・以降は src[1..] を巡回）
+    const mv = ons.map((_, i) => (i === 0 ? 0 : (src[i] ?? src[1 + ((i - 1) % Math.max(1, src.length - 1))] ?? (i % 2 ? 1 : -1))));
+    return { ons, mv, run };
+  };
+
   const nB = blocks.length;
   // 提示(bi)→反復(seq)→…→継続断片(frag・カデンツ直前1つ)→カデンツ(cad)。対策6（2026-07-11）＝断片化は「継続部＝
   // カデンツ直前」に限定（Caplin：presentation は基本動機＋反復で伸ばし、fragmentation は解放=cad と対で最後に畳み掛ける）。
@@ -933,7 +956,8 @@ export function genMotifMelodyV2(
       if (role === 2) for (let b = bar0; b < bar0 + L; b++) bBlockBars.add(b);
       label = role === 2 ? "B" : "A"; // A/A'/A''は同素材＝同ラベル(同k優先)、Bは別（ヒステリシス用）
     }
-    if (densBar) variant = applyConverse(variant, convScale(bar0, L), rbb); // C: ブロック単位の密度相補（densBar無し＝経路に入らない）
+    if (densBar && !partsActive) variant = applyConverse(variant, convScale(bar0, L), rbb); // C: ブロック単位の密度相補（densBar無し/パーツ活性＝経路に入らない）
+    if (partsActive) { const pv = buildPartVariant(Mi, bar0, L); if (pv) variant = pv; } // S4-1: パーツで onset グリッドを敷く（onset無し＝差し替えない）
     notes.push(...(preserve ? renderPreserve(variant, bar0, last, label, rbb) : render(variant, bar0, anchor, last, rbb)));
   }
   notes.sort((a, b) => a.start - b.start);
@@ -1351,6 +1375,20 @@ export function genMotifMelodyV2(
       }
       newDur = dissoCap((((cur.pitch % 12) + 12) % 12), curEnd, cur.start + newDur) - cur.start; // コード衝突の手前で頭打ち
       if (Math.abs(newDur - cur.dur) > 0.01 && newDur >= 0.1) cur.dur = Math.round(newDur * 1000) / 1000;
+    }
+  }
+
+  // ── リズムパーツ層 L1（design #20 S4-1）：音価＝パターンの疎密が決める＝「次onsetまでの gap を dur で埋める」──
+  // render/flow の dur はキャップ(1.6/1.05拍等)で長音が出ない（backlog「音価不足」の根）。パーツ活性時のみ
+  // flow/articulation の後・restMask の前で dur を次onset（最終音はセクション末）まで上書き＝疎パーツが白玉/長音になる
+  // （agogic 対比）。articulation は先に走るので反復音 micropause は残る／restMask は後で休符区間を切る。
+  // パーツ非活性＝この上書きに入らない＝bit一致。
+  if (partsActive && notes.length) {
+    const secEnd = bars * barLen;
+    for (let i = 0; i < notes.length; i++) {
+      const next = i + 1 < notes.length ? notes[i + 1]!.start : secEnd;
+      const d = next - notes[i]!.start;
+      if (d > 0.05) notes[i]!.dur = Math.round(d * 1000) / 1000;
     }
   }
 

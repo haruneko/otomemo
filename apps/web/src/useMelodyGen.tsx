@@ -36,6 +36,21 @@ export const GEN_PARTS = [
   { label: "ドラム", op: "gen_drums", needsChords: false },
 ] as const;
 
+// リズムパーツ層 L1（design #20 S4-1）：プリセット id/label を web に複写（パターン本体は api 唯一持ち＝ids のみ参照）。
+// 押した順に rotate へ積み小節に敷く（ドラムパターン感覚）。未選択＝未送信＝bit一致。api rhythmParts.ts と id 一致必須。
+export const RHYTHM_PART_UI: { id: string; label: string }[] = [
+  { id: "whole", label: "白玉" },
+  { id: "half2", label: "二分×2" },
+  { id: "dotted", label: "付点タメ" },
+  { id: "quarters", label: "四分刻み" },
+  { id: "eighths", label: "8分刻み" },
+  { id: "driveHold", label: "刻み→タメ" },
+  { id: "sixteenths", label: "駆け16分" },
+  { id: "syncope", label: "シンコペ" },
+  { id: "offhead", label: "頭抜き" },
+  { id: "backbeat", label: "アフター" },
+];
+
 export type ChordArg = { root?: number; quality?: string; start?: number; dur?: number };
 export type DrumsPayload = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: { name?: string; midi?: number; hits: number[]; vel?: number }[] } };
 // 対位法レポート（design #20 S3d）：API が gen_melody/gen_bass 候補の meta に添付（読み取り専用・指摘のみ）。
@@ -106,6 +121,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [pickup, setPickup] = useState(0);
   // 最小音符（2026-07-10）：これより細かい音を出さない上限。""=おまかせ(テンポ連動)。
   const [finest, setFinest] = useState<"" | "quarter" | "eighth">("");
+  // リズムパーツ層 L1（design #20 S4-1）：選択した partId 群（押した順＝rotate）。空＝未送信＝従来抽選(bit一致)。
+  const [rhythmParts, setRhythmParts] = useState<string[]>([]);
+  const toggleRhythmPart = (id: string) => { setRhythmParts((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])); setPreset(""); };
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
   // P4：プリセット主役。選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）。
   const [preset, setPreset] = useState<string>("");
@@ -192,6 +210,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         // 句フレージング（2026-07-11）：flow=連結/長音・pickup=弱起。0＝未送信＝従来 bit一致。
         if (flow > 0) body.flow = flow;
         if (pickup > 0) body.pickup = pickup;
+        // リズムパーツ層 L1（design #20 S4-1）：選択があれば rotate として送る＝小節にパーツを敷く。空＝未送信＝bit一致。
+        if (rhythmParts.length) body.rhythmParts = { rotate: rhythmParts };
         // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3。
         const drums = ctx.sectionDrums();
         if (drums) { body.drums = drums; body.backbeat = 0.3; }
@@ -347,6 +367,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     foreground, setForeground, breathe, setBreathe, humanize, setHumanize, hook, setHook,
     articulation, setArticulation, flow, setFlow, pickup, setPickup,
     phrasing, setPhrasing, form, setForm, counter, setCounter, finest, setFinest,
+    rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,

@@ -898,6 +898,23 @@ article[aria-label="neta-card"].dragging {
   background: color-mix(in srgb, var(--k-melody) 14%, transparent);
   font-weight: 700;
 }
+/* リズムパーツ・ピッカー（design #20 S4-1）：多数のプリセットを折返し表示＝各ボタンは内容幅。 */
+.seg-ctl.seg-wrap {
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.seg-wrap .seg-b {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+}
+.seg-wrap .seg-b sup {
+  font-size: 0.55rem;
+  margin-left: 2px;
+  opacity: 0.8;
+}
+.knob-seg:has(.seg-wrap) {
+  align-items: flex-start;
+}
 .seg-lock {
   flex: 0 0 auto;
   padding: 5px 6px;

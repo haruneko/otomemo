@@ -29,7 +29,7 @@ import { useDismiss } from "../useDismiss";
 import { LaneCell } from "./LaneCell";
 import { SongStatus } from "./SongStatus";
 import { PlacePicker } from "./PlacePicker";
-import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, voiceLeadingBadge } from "../useMelodyGen";
+import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI, voiceLeadingBadge } from "../useMelodyGen";
 import { usePlacePicker } from "../usePlacePicker";
 import {
   type Lane,
@@ -448,6 +448,18 @@ export function SectionEditor({
                             <option value="eighth">8分まで</option>
                           </select>
                         </label>
+                        {/* リズムパーツ層 L1（design #20 S4-1）：プリセットを押した順に小節へローテで敷く。未選択=従来抽選 */}
+                        <div className="knob-seg" aria-label="rhythmParts">
+                          <span className="knob-name">リズムパーツ<small>小節に順に敷く(白玉=長音)</small></span>
+                          <span className="seg-ctl seg-wrap">
+                            {RHYTHM_PART_UI.map((rp) => {
+                              const idx = gen.rhythmParts.indexOf(rp.id);
+                              return (
+                                <button key={rp.id} type="button" className={"seg-b" + (idx >= 0 ? " on" : "")} aria-label={`rpart-${rp.id}`} aria-pressed={idx >= 0} title={idx >= 0 ? `${idx + 1}番目に敷く` : "小節に敷く"} onClick={() => gen.toggleRhythmPart(rp.id)}>{rp.label}{idx >= 0 ? <sup>{idx + 1}</sup> : null}</button>
+                              );
+                            })}
+                          </span>
+                        </div>
                         <div className="knob-group-h">歌い回し</div>
                         {gen.segRow("expression", "タメ", "強拍のもたれ", gen.expression, gen.setExpression, "expression")}
                         {gen.segRow("hook", "口ずさみ", "反復音フック", gen.hook, gen.setHook, "hook")}
