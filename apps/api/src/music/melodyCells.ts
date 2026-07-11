@@ -1,6 +1,6 @@
 import { SKELETON_MODEL_DATA, SKELETON_MODEL_MINOR_DATA, SKELETON_REST_BY_POS } from "./skeletonModelData";
 import { RHYTHM16_DATA, MOVE_TRANS_DATA, RHYTHM68_DATA } from "./motifModelData";
-import { RHYTHM_PART_PRESETS, partPatternOnsets, resolvePartIdAtBar } from "./rhythmParts"; // リズムパーツ層 L1（design #20 S4-1）
+import { RHYTHM_PART_PRESETS, partPatternOnsets, buildCustomPartMap, type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { chordPcs } from "./theory";
 import { classifyNCT, isResolvedNct } from "./degree";
 import { type Note } from "@cm/music-core"; // 音符基本形の SSOT（負債#10・Note型一元化）
@@ -441,7 +441,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; restMask?: { start: number; end: number }[]; rhythmParts?: { rotate?: string[]; placement?: { bar: number; partId: string }[] } } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -910,20 +910,57 @@ export function genMotifMelodyV2(
   // 各ブロック[bar0,L]の絶対barからパーツの onset 列を組み、輪郭(mv)は共有 Mi から巡回借用（rng不消費＝決定的・
   // 動機の輪郭同一性を保つ）。密度受入帯(loN/hiN)/孤立ギャップ棄却/finestは mkMotif 内でしか効かない＝パーツ経路は
   // 自動でバイパス＝パーツ優先。compound(6/8系)は16枠語彙とgridが違うため対象外＝無視（bit一致）。
+  // S4-2（Task#8）：per-bar 解決＝placement > rotate > L0（同一barにplacementが勝つ・無いbarはrotate・どちらも無ければ従来抽選=L0）。
+  // custom＝インラインパーツ（採取結果/手置きをプリセット外から）。partsActive＝rotate か placement のどちらかに known id が1つでもあれば活性。
   const rp = opts.rhythmParts;
-  const partsActive = !compound && !!rp && (rp.rotate?.length ?? 0) > 0 && (rp.rotate ?? []).some((id) => RHYTHM_PART_PRESETS[id]);
-  const buildPartVariant = (Mi: Motif16, bar0: number, L: number): Motif16 | null => {
-    const ons: number[] = [];
-    for (let j = 0; j < L; j++) {
-      const partId = resolvePartIdAtBar(rp!.rotate, bar0 + j); // 絶対barでローテ（未知id/空は null＝その小節は無音節点）
-      if (!partId) continue;
-      for (const b of partPatternOnsets(RHYTHM_PART_PRESETS[partId]!, barLen)) ons.push(j * barLen + b); // ブロック相対拍
+  const customMap = buildCustomPartMap(rp?.custom);
+  const knownId = (id: string | undefined): boolean => !!(id && (customMap[id] ?? RHYTHM_PART_PRESETS[id]));
+  const partsActive = !compound && !!rp && ((rp.rotate ?? []).some((id) => knownId(id)) || (rp.placement ?? []).some((p) => knownId(p?.partId)));
+  // per-bar 種別：{pat}=パーツ置換／"empty"=rotate が覆うが未知id（S4-1＝無音節点）／"l0"=どこも覆わない（従来抽選のまま残す）。
+  // rotate 非空＝全barを覆う（未知でも "empty"）＝l0 は生じない → 下の allPart 経路（S4-1 と bit 一致）に必ず入る。l0 は placement 単独（rotate無し）でのみ発生。
+  const resolveBar = (absBar: number): { pat: string } | "empty" | "l0" => {
+    if (rp!.placement && rp!.placement.length) {
+      let hit: string | undefined;
+      for (const p of rp!.placement) if (p && p.bar === absBar) hit = p.partId; // 後勝ち
+      if (hit !== undefined) { const pat = customMap[hit] ?? RHYTHM_PART_PRESETS[hit]; if (pat) return { pat }; } // 未知idは rotate/l0 へフォールスルー
     }
-    if (!ons.length) return null; // 全小節パーツ無し/全休符＝差し替えない（通常 variant のまま）
-    ons.sort((a, b) => a - b);
+    if (rp!.rotate && rp!.rotate.length) {
+      const id = rp!.rotate[((absBar % rp!.rotate.length) + rp!.rotate.length) % rp!.rotate.length];
+      const pat = id ? (customMap[id] ?? RHYTHM_PART_PRESETS[id]) : undefined;
+      return pat ? { pat } : "empty"; // rotate が覆う＝未知でも empty（S4-1 の「未知は無音節点」を保つ＝bit一致）
+    }
+    return "l0"; // rotate 無し・placement 未該当＝L0（従来抽選）
+  };
+  const buildPartVariant = (variant: Motif16, Mi: Motif16, bar0: number, L: number): Motif16 | null => {
+    const kinds = Array.from({ length: L }, (_, j) => resolveBar(bar0 + j));
+    const anyPart = kinds.some((k) => typeof k === "object");
+    if (!anyPart) return null; // このブロックにパーツ無し＝差し替えない（l0/empty のみ＝通常 variant のまま）
+    const hasL0 = kinds.some((k) => k === "l0");
+    if (!hasL0) {
+      // rotate 経路 or 全bar placement＝パーツ onset のみ・輪郭は Mi から巡回借用（S4-1 と bit 一致）。empty bar は onset 無し。
+      const ons: number[] = [];
+      for (let j = 0; j < L; j++) { const k = kinds[j]!; if (typeof k === "object") for (const b of partPatternOnsets(k.pat, barLen)) ons.push(j * barLen + b); }
+      if (!ons.length) return null;
+      ons.sort((a, b) => a - b);
+      const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
+      const src = Mi.mv; // 輪郭は共有モチーフから巡回借用（i=0はアンカー＝0・以降は src[1..] を巡回）
+      const mv = ons.map((_, i) => (i === 0 ? 0 : (src[i] ?? src[1 + ((i - 1) % Math.max(1, src.length - 1))] ?? (i % 2 ? 1 : -1))));
+      return { ons, mv, run };
+    }
+    // 混在（placement 疎・rotate 無し）：パーツ bar は置換、l0 bar は元 variant の onset/輪郭を残す（＝従来抽選をそのまま）。
+    const entries: { t: number; mv: number }[] = [];
+    for (let i = 0; i < variant.ons.length; i++) {
+      const t = variant.ons[i]!, barIdx = Math.floor(t / barLen);
+      if (barIdx >= 0 && barIdx < L && typeof kinds[barIdx] === "object") continue; // パーツ置換 bar の元 onset は落とす（empty は placement 単独では生じない）
+      entries.push({ t, mv: variant.mv[i] ?? 0 }); // l0 bar＝従来抽選の onset/輪郭を保持
+    }
+    const src = Mi.mv;
+    for (let j = 0; j < L; j++) { const k = kinds[j]!; if (typeof k !== "object") continue; const bo = partPatternOnsets(k.pat, barLen); for (let x = 0; x < bo.length; x++) entries.push({ t: j * barLen + bo[x]!, mv: src[1 + ((j + x) % Math.max(1, src.length - 1))] ?? (x % 2 ? 1 : -1) }); }
+    if (!entries.length) return null;
+    entries.sort((a, b) => a.t - b.t);
+    const ons = entries.map((e) => e.t);
     const run = ons.map((t, i) => (i > 0 && t - ons[i - 1]! <= 0.26) || (i < ons.length - 1 && ons[i + 1]! - t <= 0.26));
-    const src = Mi.mv; // 輪郭は共有モチーフから巡回借用（i=0はアンカー＝0・以降は src[1..] を巡回）
-    const mv = ons.map((_, i) => (i === 0 ? 0 : (src[i] ?? src[1 + ((i - 1) % Math.max(1, src.length - 1))] ?? (i % 2 ? 1 : -1))));
+    const mv = entries.map((e, i) => (i === 0 ? 0 : e.mv)); // 先頭はアンカー＝0
     return { ons, mv, run };
   };
 
@@ -957,7 +994,7 @@ export function genMotifMelodyV2(
       label = role === 2 ? "B" : "A"; // A/A'/A''は同素材＝同ラベル(同k優先)、Bは別（ヒステリシス用）
     }
     if (densBar && !partsActive) variant = applyConverse(variant, convScale(bar0, L), rbb); // C: ブロック単位の密度相補（densBar無し/パーツ活性＝経路に入らない）
-    if (partsActive) { const pv = buildPartVariant(Mi, bar0, L); if (pv) variant = pv; } // S4-1: パーツで onset グリッドを敷く（onset無し＝差し替えない）
+    if (partsActive) { const pv = buildPartVariant(variant, Mi, bar0, L); if (pv) variant = pv; } // S4-1/S4-2: パーツで onset グリッドを敷く（per-bar・l0 bar は元 variant 維持）
     notes.push(...(preserve ? renderPreserve(variant, bar0, last, label, rbb) : render(variant, bar0, anchor, last, rbb)));
   }
   notes.sort((a, b) => a.start - b.start);

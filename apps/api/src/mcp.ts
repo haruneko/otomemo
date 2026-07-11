@@ -33,6 +33,7 @@ import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceL
 import { splitMora, flowLyric, type LNote } from "./lyric";
 import { analyzeProgressionFromUfret, extractSongTitle, fetchedToLibraryInput } from "./ingest-ufret";
 import { meterInfo } from "./music/meter";
+import { sanitizeRhythmParts, extractRhythmPart } from "./music/rhythmParts"; // リズムパーツ層 L1/L2＋採取（design #20 S4-1/S4-2）
 import { findProgressions } from "./progression-search";
 import { netaInputShape, listQueryShape, scopeEnum } from "./schemas";
 
@@ -519,11 +520,12 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     })
     .optional()
     .describe("gen_drums の content をそのまま渡す（同じ composition のドラムに噛ませる）。無ければ従来生成");
-  // リズムパーツ層 L1（design #20 S4-1）：名前付きプリセット（whole/half2/dotted/quarters/eighths/driveHold/sixteenths/syncope/offhead/backbeat）を小節にローテで敷く。
+  // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）：名前付きプリセット（whole/half2/dotted/quarters/eighths/driveHold/sixteenths/syncope/offhead/backbeat）を小節にローテ or 明示で敷く。
   const rhythmPartsSchema = z
     .object({
-      rotate: z.array(z.string()).optional().describe("partId 配列を出力小節にローテ適用（bar i → rotate[i%len]）。疎パーツ(whole/half2/dotted)=白玉/長音になる"),
-      placement: z.array(z.object({ bar: z.number().int(), partId: z.string() })).optional().describe("小節ごとの明示指定（L2）。**予約＝未実装（#8）**"),
+      rotate: z.array(z.string()).optional().describe("L1＝partId 配列を出力小節にローテ適用（bar i → rotate[i%len]）。疎パーツ(whole/half2/dotted)=白玉/長音になる"),
+      placement: z.array(z.object({ bar: z.number().int(), partId: z.string() })).optional().describe("L2＝小節ごとの明示指定（bar 0始まり→partId）。**同一barはplacementがrotateに優先（placement>rotate>従来抽選）**。「2小節目だけ白玉に」等。未知id/範囲外barは無視"),
+      custom: z.array(z.object({ id: z.string(), pattern: z.string().regex(/^[x.]{16}$/) })).optional().describe("インラインパーツ＝任意idの16文字'x/.'パターン。rotate/placement からこのidを引ける（extract_rhythm_part の採取結果や手置きをプリセット外から渡す）。不正patternは無視"),
     })
     .optional()
     .describe("リズムパーツ＝1小節の16分オンセットパターンをセクションに敷く（ドラムパターン感覚）。骨格はそのまま表面リズムだけ差し替え。未指定=従来抽選(bit一致)");
@@ -543,7 +545,9 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         if (errs.length) return err(`invalid skeleton content: ${errs.join("; ")}`);
         skeleton = sn.content as SkeletonContent;
       }
-      const res = genMelodyCandidates(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, repetition, rangeSteps, motifBars, corpusModel, density, swing, expression, phrasing, runs, push, foreground, breathe, humanize, form, bass, counter, drums, backbeat, drumLock, converse, hook, articulation, inflect, motifMode, finest, flow, pickup, arc, skeleton, rhythmParts });
+      // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）：placement/custom を含めサニタイズ（範囲外bar/未知id/不正pattern無視・http と同経路）。未指定/効果ゼロ=undefined=bit一致。
+      const rp = sanitizeRhythmParts(rhythmParts, { bars: typeof frame?.bars === "number" ? frame.bars : undefined });
+      const res = genMelodyCandidates(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, repetition, rangeSteps, motifBars, corpusModel, density, swing, expression, phrasing, runs, push, foreground, breathe, humanize, form, bass, counter, drums, backbeat, drumLock, converse, hook, articulation, inflect, motifMode, finest, flow, pickup, arc, skeleton, rhythmParts: rp });
       // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
       attachMelodyVoiceLeading(res, { bass, skeleton, chords, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
       // F1(2026-07-08)：style指定なのにコーパス未投入＝黙って既定劣化していたのを可視化（Claudeがユーザーに伝えられる）。
@@ -553,6 +557,11 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       if (skeletonNetaId) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = skeletonNetaId;
       return ok(res);
     },
+  );
+  server.registerTool(
+    "extract_rhythm_part",
+    { title: "リズムパーツを採取", description: "既存メロの notes から指定小節の16分オンセットパターン('x/.'16文字)を採取する(design #20 S4-2・パーツ出所b)。返り pattern を gen_melody の rhythmParts.custom=[{id,pattern}] に渡し、rotate/placement からその id を引いて別セクションへリズムだけ再利用できる（骨格はそのまま表面リズムだけ移植）。", inputSchema: { notes: notesSchema, bar: z.number().int().min(0).describe("採取する小節（0始まり）"), beatsPerBar: z.number().int().min(1).max(12).optional().describe("1小節の拍数（既定4）。3=3/4は先頭12枠のみ"), frame: frameSchema.optional().describe("beatsPerBar 未指定時はここの meter から拍数を導く") } },
+    async ({ notes, bar, beatsPerBar, frame }) => ok({ pattern: extractRhythmPart(notes, bar, { beatsPerBar: beatsPerBar ?? meterInfo(frame?.meter).beatsPerBar }) }),
   );
   server.registerTool(
     "gen_skeleton",
