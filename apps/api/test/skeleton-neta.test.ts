@@ -3,6 +3,7 @@ import {
   validateSkeletonContent,
   expandDominion,
   skeletonToV2Skel,
+  skeletonRestMask,
   skeletonPhrasesToV2,
   skelArrayToBreakpoints,
   type SkeletonContent,
@@ -71,6 +72,26 @@ describe("skeletonToV2Skel adapter (→ 1拍粒度 number[])", () => {
     const c: SkeletonContent = { bars: 1, tones: [{ start: 0, pitch: 60 }, { start: 2, pitch: null }] };
     const skel = skeletonToV2Skel(c, { beatsPerBar: 4 });
     expect(skel).toEqual([60, 60, 60, 60]);
+  });
+});
+
+describe("skeletonRestMask (骨格休符→区間リスト・design #20 S3b)", () => {
+  it("pitch:null 区間だけを {start,end} で返す（実音区間は含めない）", () => {
+    const c: SkeletonContent = { bars: 1, tones: [{ start: 0, pitch: 60 }, { start: 2, pitch: null }] };
+    expect(skeletonRestMask(c, { beatsPerBar: 4 })).toEqual([{ start: 2, end: 4 }]);
+  });
+  it("句頭遅延入場＝先頭 pitch:null が休符区間になる", () => {
+    const c: SkeletonContent = { bars: 1, tones: [{ start: 0, pitch: null }, { start: 2, pitch: 67 }] };
+    expect(skeletonRestMask(c, { beatsPerBar: 4 })).toEqual([{ start: 0, end: 2 }]);
+  });
+  it("pitch:null が無ければ空配列（＝bit一致の入口）", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }, { start: 4, pitch: 67 }] };
+    expect(skeletonRestMask(c, { beatsPerBar: 4 })).toEqual([]);
+  });
+  it("句境界で切れた休符も拾う（複数区間）", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: null }, { start: 2, pitch: 60 }, { start: 5, pitch: null }], phrases: [{ endBeat: 4 }] };
+    // tone@0(null)→[0,2)、tone@2(60)は句末4で支配停止→実音、tone@5(null)→[5,8)
+    expect(skeletonRestMask(c, { beatsPerBar: 4 })).toEqual([{ start: 0, end: 2 }, { start: 5, end: 8 }]);
   });
 });
 
@@ -180,6 +201,43 @@ describe("gen_melody skeleton injection (design #20)", () => {
     const a = genMelody(frame, chords4, 7, { useV2: true, skeleton: sym, breathe: 0.6 });
     const b = genMelody(frame, chords4, 7, { useV2: true, skeleton: asym, breathe: 0.6 });
     expect(notesOf(a)).not.toEqual(notesOf(b));
+  });
+
+  // S3b：骨格休符(pitch:null)の表面音抑制（restマスク）。
+  const inRest = (t: number, rs: number, re: number) => t >= rs - 1e-6 && t < re - 1e-6;
+
+  it("骨格休符 pitch:null 区間に表面 onset が一切鳴らない（根治）", () => {
+    // beat[4,8) を骨格休符に：block頭(beat4)アンカーは carry-forward だが表面音は落ちる
+    const skeleton: SkeletonContent = { bars: 4, tones: [{ start: 0, pitch: 72 }, { start: 4, pitch: null }, { start: 8, pitch: 74 }] };
+    const notes = notesOf(genMelody(frame, chords4, 7, { useV2: true, skeleton }));
+    expect(notes.length).toBeGreaterThan(0);
+    for (const n of notes) expect(inRest(n.start, 4, 8), `onset@${n.start}`).toBe(false);
+    // 直前の音は休符区間頭(beat4)を越えて伸びない（区間頭で着地）
+    for (const n of notes) if (n.start < 4 - 1e-6) expect(n.start + n.dur).toBeLessThanOrEqual(4 + 1e-3);
+  });
+
+  it("休符なし骨格は S1 挙動と bit一致（restマスク空＝丸ごとスキップ）", () => {
+    const tones = [{ start: 0, pitch: 72 }, { start: 8, pitch: 74 }];
+    // 同一 tones を pitch:null 有り/無しで比較するのでなく、null無し骨格が restマスク経路で変化しないことを確認
+    const a = genMelody(frame, chords4, 11, { useV2: true, skeleton: { bars: 4, tones } });
+    const b = genMelody(frame, chords4, 11, { useV2: true, skeleton: { bars: 4, tones } });
+    expect(notesOf(a)).toEqual(notesOf(b));
+    // 休符を1つ入れると出力は変わる（表面音が落ちる方向）＝restマスクが効いている証拠
+    const withRest: SkeletonContent = { bars: 4, tones: [{ start: 0, pitch: 72 }, { start: 4, pitch: null }, { start: 8, pitch: 74 }] };
+    const c = genMelody(frame, chords4, 11, { useV2: true, skeleton: withRest });
+    expect(notesOf(c)).not.toEqual(notesOf(a));
+  });
+
+  it("breathe と休符マスクが二重に効いても休符区間は無音・決定的（S3b×S3a）", () => {
+    const skeleton: SkeletonContent = {
+      bars: 4,
+      tones: [{ start: 0, pitch: 72 }, { start: 4, pitch: null }, { start: 8, pitch: 74 }],
+      phrases: [{ endBeat: 8 }, { endBeat: 16 }],
+    };
+    const notes = notesOf(genMelody(frame, chords4, 7, { useV2: true, skeleton, breathe: 0.6 }));
+    for (const n of notes) expect(inRest(n.start, 4, 8), `onset@${n.start}`).toBe(false);
+    const again = notesOf(genMelody(frame, chords4, 7, { useV2: true, skeleton, breathe: 0.6 }));
+    expect(notes).toEqual(again);
   });
 });
 

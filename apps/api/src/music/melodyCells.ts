@@ -529,7 +529,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch" } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; restMask?: { start: number; end: number }[] } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -1477,6 +1477,25 @@ export function genMotifMelodyV2(
       notes[i]!.dur = Math.min(notes[i]!.dur, Math.max(0.05, ioi * factor)); // gap 下限 0.05拍
       if (isRep) notes[i]!.vel = Math.max(55, Math.min(118, Math.round((notes[i]!.vel ?? 100) + art * 10))); // 連打頭アクセント
     }
+  }
+
+  // ── 骨格休符マスク（design #20 S3b・2026-07-11）：骨格の pitch:null 区間＝「表面でも音を出さない」の根治。
+  // 全後処理（flow延長/humanize/articulation…）の後・returnの直前で当該区間の表面音を落とす。RNG不消費。
+  // ①onsetが休符区間内の音は drop（表面でも鳴らさない）②durが休符区間へ食い込む音は区間頭で切る（直前音の
+  // 自然な着地/減衰は殺さない）。restMask undefined/空＝骨格に休符なし or 骨格未指定＝丸ごとスキップ＝bit一致。
+  const restMask = opts.restMask;
+  if (restMask && restMask.length && notes.length) {
+    const inRest = (t: number): boolean => restMask.some((r) => t >= r.start - 1e-6 && t < r.end - 1e-6);
+    const kept: Note[] = [];
+    for (const n of notes) {
+      if (inRest(n.start)) continue; // 休符区間に入る onset は落とす
+      let end = n.start + n.dur;
+      for (const r of restMask) if (n.start < r.start - 1e-6 && end > r.start) end = Math.min(end, r.start); // 食い込む dur は区間頭で切る
+      const d = Math.max(0.05, end - n.start);
+      n.dur = Math.round(d * 1000) / 1000;
+      kept.push(n);
+    }
+    notes.length = 0; notes.push(...kept);
   }
   return notes;
 }

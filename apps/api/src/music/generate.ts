@@ -18,7 +18,7 @@ import {
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
 import { genMotifMelody, genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
-import { skeletonToV2Skel, skeletonPhrasesToV2, skelArrayToBreakpoints, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
+import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type Feel } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる（notes はストレート）
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
@@ -646,7 +646,10 @@ export function genMelody(
     // V2 の構造線に差し込む＝genSkeletonFromModel をバイパス。未指定＝skel undefined＝従来生成＝bit一致。
     const barLen = compound ? 3 : 4;
     const injectedSkel = opts?.skeleton ? skeletonToV2Skel(opts.skeleton, { beatsPerBar: barLen, fallbackPitch: sp[Math.floor(sp.length / 2)] ?? 62 }) : undefined;
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: so.skelModel ?? loadSkeletonModel(minor), skel: injectedSkel, motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse, hook: so.hook, articulation: so.articulation, inflect: so.inflect, motifMode: so.motifMode, finest: so.finest ?? ((f.tempo ?? 0) >= 150 ? "eighth" : undefined), flow: so.flow, pickup: so.pickup, arc: so.arc }); // finest＝最小音符。未指定はテンポ連動(≥150で8分上限＝高BPMの16分潰れを自動回避・オーナーFB)。明示が勝つ
+    // 骨格休符の表面抑制（design #20 S3b）：pitch:null 区間の restマスクを渡し、V2 が最終出力で当該区間の表面音を落とす。
+    // 休符なし骨格 or 骨格未指定＝空/undefined＝V2側で丸ごとスキップ＝bit一致。
+    const restMaskV2 = opts?.skeleton ? skeletonRestMask(opts.skeleton, { beatsPerBar: barLen }) : undefined;
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: so.skelModel ?? loadSkeletonModel(minor), skel: injectedSkel, restMask: restMaskV2 && restMaskV2.length ? restMaskV2 : undefined, motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse, hook: so.hook, articulation: so.articulation, inflect: so.inflect, motifMode: so.motifMode, finest: so.finest ?? ((f.tempo ?? 0) >= 150 ? "eighth" : undefined), flow: so.flow, pickup: so.pickup, arc: so.arc }); // finest＝最小音符。未指定はテンポ連動(≥150で8分上限＝高BPMの16分潰れを自動回避・オーナーFB)。明示が勝つ
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);

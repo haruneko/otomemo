@@ -7,7 +7,7 @@
 
 ## 骨格層（design #20）実装後の負債・残り（2026-07-11・S1/S2完了時点の棚卸し→同日Fable調査でTask #1-#11に組み直し）
 S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。残＝S3群(→#3-#6)/S4リズムパーツ(→#7-#8)/S5歌詞(→#9)。以下は実装中に確定した負債：
-- **骨格休符(pitch:null)が表面でまだ鳴る** → **#4**：V2アンカーがnull不可のためcarry-forward（skeletonNeta.ts skeletonToV2Skel）。根治＝breathe（句頭遅延入場）へ結線して休符区間の表面音を抑制。
+- ~~**骨格休符(pitch:null)が表面でまだ鳴る** → **#4**：V2アンカーがnull不可のためcarry-forward（skeletonNeta.ts skeletonToV2Skel）。根治＝breathe（句頭遅延入場）へ結線して休符区間の表面音を抑制。~~ **→ ✅S3b済 2026-07-11**：案A（restマスク別チャネル）＝skeletonRestMask で pitch:null 区間を抽出→genMotifMelodyV2 が最終出力で当該区間の onset drop＋食い込み dur を区間頭で切る。アンカーは carry-forward 据え置き（内部足場・耳に出ない）。休符なし骨格＝bit一致。design #20 S3b 参照。
 - **骨格phrasesがV2ブロック構造(A/A'/B展開)に未結線** → **#3**：ブロック割りは従来 phrasing ノブ由来のまま。骨格の句割りが本当に効くのはカデンツ着地とプレビュー切れ目まで。
 - **SectionEditor増改築のフィール劣化懸念（オーナー2026-07-11）** → **#2**：1087行・骨格レーン/トグル追加後の実測点検＋PlacePicker等の機械的分割。blowSkelRef（画面横断可変ref・genPartガードL487とrealized_fromリンクL654を条件付け）の安全化は **#1**。
 - **「noteEditアダプタ流用」は名目のみ** → **#1**：skeletonEdit.ts pointsToNotes/notesToPointsはデッドコード・実体はnudge/deleteのコピー再実装。design記述の是正込み。

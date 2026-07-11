@@ -97,6 +97,8 @@ export function expandDominion(content: SkeletonContent, opts: { beatsPerBar?: n
 // V2 骨格アダプタ：SkeletonContent → genMotifMelodyV2 が使う骨格表現（number[] 長さ bars*beatsPerBar・
 // 1拍粒度で支配音を保持＝genSkeletonFromModel の返り形と同一）。骨格休符/未支配区間は直前の実音を保持
 // （V2 の blockAnchorFromSkeleton はブロック頭の拍で anchor pitch を読む＝null を置けないため carry-forward）。
+// ※S3b：休符の「表面を鳴らさない」根治は別チャネル skeletonRestMask（下）が担う＝ここは生成の内部足場（アンカー）
+//   なので carry-forward のまま据え置く（アンカーは耳に直接出ない・最終出力で当該区間を抑制すれば無音になる）。
 export function skeletonToV2Skel(content: SkeletonContent, opts: { beatsPerBar?: number; fallbackPitch?: number } = {}): number[] {
   const bpb = opts.beatsPerBar ?? 4;
   const total = content.bars * bpb;
@@ -109,6 +111,18 @@ export function skeletonToV2Skel(content: SkeletonContent, opts: { beatsPerBar?:
     if (seg && seg.pitch != null) { out[b] = seg.pitch; lastReal = seg.pitch; }
     else out[b] = lastReal; // 休符/未支配＝直前の実音を anchor に流用
   }
+  return out;
+}
+
+// 骨格休符マスク（design #20 S3b）：SkeletonContent → pitch:null の支配区間を {start,end}[]（拍単位・昇順）で返す。
+// 「骨格に休符（句頭遅延入場などの間）がある区間＝表面でも音を出さない」の根治用チャネル。genMotifMelodyV2 の
+// restMask opts に渡し、全後処理の後（return直前）で①区間内 onset を落とす②区間へ食い込む dur を区間頭で切る。
+// pitch:null が無い骨格（＝従来）は空配列＝呼び出し側で丸ごとスキップ＝bit一致。beatsPerBar は V2 の barLen に合わせる。
+export function skeletonRestMask(content: SkeletonContent, opts: { beatsPerBar?: number } = {}): { start: number; end: number }[] {
+  const bpb = opts.beatsPerBar ?? 4;
+  const segs = expandDominion(content, { beatsPerBar: bpb });
+  const out: { start: number; end: number }[] = [];
+  for (const s of segs) if (s.pitch == null && s.dur > 1e-9) out.push({ start: s.start, end: s.start + s.dur });
   return out;
 }
 
