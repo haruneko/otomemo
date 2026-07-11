@@ -3,17 +3,19 @@
 スペック層（requirements/architecture/design）にも Task 機能にも載せきれない「いつかやる／保留」をここに貯める。
 着手したら Task 化して、ここからは消すか「→ #NN」と印を付ける。最終更新を都度書く。
 
-最終更新: 2026-07-11
+最終更新: 2026-07-11（骨格層セクションをTask #1-#11に組み直し）
 
-## 骨格層（design #20）実装後の負債・残り（2026-07-11・S1/S2完了時点の棚卸し）
-S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。残＝S3ベース表面化/S4リズムパーツ/S5歌詞（Task #3-#5）。以下は実装中に確定した負債：
-- **骨格休符(pitch:null)が表面でまだ鳴る**：V2アンカーがnull不可のためcarry-forward（skeletonNeta.ts skeletonToV2Skel）。根治＝breathe（句頭遅延入場）へ結線して休符区間の表面音を抑制。
-- **骨格phrasesがV2ブロック構造(A/A'/B展開)に未結線**：ブロック割りは従来 phrasing ノブ由来のまま。骨格の句割りが本当に効くのはカデンツ着地とプレビュー切れ目まで。
+## 骨格層（design #20）実装後の負債・残り（2026-07-11・S1/S2完了時点の棚卸し→同日Fable調査でTask #1-#11に組み直し）
+S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。残＝S3群(→#3-#6)/S4リズムパーツ(→#7-#8)/S5歌詞(→#9)。以下は実装中に確定した負債：
+- **骨格休符(pitch:null)が表面でまだ鳴る** → **#4**：V2アンカーがnull不可のためcarry-forward（skeletonNeta.ts skeletonToV2Skel）。根治＝breathe（句頭遅延入場）へ結線して休符区間の表面音を抑制。
+- **骨格phrasesがV2ブロック構造(A/A'/B展開)に未結線** → **#3**：ブロック割りは従来 phrasing ノブ由来のまま。骨格の句割りが本当に効くのはカデンツ着地とプレビュー切れ目まで。
+- **SectionEditor増改築のフィール劣化懸念（オーナー2026-07-11）** → **#2**：1087行・骨格レーン/トグル追加後の実測点検＋PlacePicker等の機械的分割。blowSkelRef（画面横断可変ref・genPartガードL487とrealized_fromリンクL654を条件付け）の安全化は **#1**。
+- **「noteEditアダプタ流用」は名目のみ** → **#1**：skeletonEdit.ts pointsToNotes/notesToPointsはデッドコード・実体はnudge/deleteのコピー再実装。design記述の是正込み。
 - **再生ベースoctノブ未露出**（対位法再生=+1oct固定）。オーナー要望は「表示再生とも調整可」＝表示側(+2/+3)のみ実装。聞きづらければ足す。
 - **導出→明示の境界則=暫定**（明示ベース点は次の明示点か句末まで支配・句末で導出に戻る）。耳較正で見直し可（design #20に明記）。
-- **SkeletonEditorがPianoRollと別実装**：意図的（PianoRoll無改変＝既存メロ編集への波及ゼロ）だが、操作系（タップ/パン区別・選択・nudge）が二重管理。安定後に共通化を検討。
+- **SkeletonEditorがPianoRollと別実装**：意図的（PianoRoll無改変＝既存メロ編集への波及ゼロ）だが、操作系（タップ/パン区別・選択・nudge）が二重管理。安定後に共通化を検討。低リスクな共通抽出（pc/isBlack/音階集合）のみ **#1** で先行。選択編集本体は同定単位が違う（index集合 vs voice@startキー・2声横断選択）＝共通化はselbar UI程度に留めるのが現実的（2026-07-11調査）。
 - **骨格の単体プレビュー用コード(preview_chords)が非state**＝エディタ内でコードを変えられない（導出ベースの源が固定）。
-- **メロ生成エンジンの大物負債（骨格層の動機そのもの・S1-S3安定後に着手）**：genMelodyに5経路がif並存（旧経路/motifModel/V2/補完/partial）・opts≈35がMCP/UI3層に伝播→**層別（骨格生成/表面化/装飾）ノブ再編＋旧経路撤去**。Note型が8ファイルでローカル再定義。倚音/掛留ロジック二重実装（applyExpression vs melodyCells 1235-）。melodyCells.ts冒頭の死にプロトタイプ（learnMelodyCells/cellToNotes等・テストからのみ参照）撤去。
+- **メロ生成エンジンの大物負債（骨格層の動機そのもの・S1-S3安定後に着手）** → **#10（死にプロト＋Note型）・#11（経路撤去＋ノブ再編・着手時に再分割）**：genMelody(generate.ts:498)に4経路がearly-return並存（補完/V2/motifModel/旧経路）・opts=40個がMCP/HTTP/web UIに伝播→**層別（骨格生成/表面化/装飾）ノブ再編＋旧経路撤去**。MCP/HTTPは常にuseV2:true＝motifModel/旧経路は本番不到達の疑い（撤去前に呼び出しグラフ全数確認が前提）。Note型は明示7ファイル＋匿名インライン十数箇所。倚音/掛留は実質三重実装（applyExpression generate.ts:947／V2 melodyCells.ts:1235-が実効／motifModel melodyCells.ts:390-455）＝V2を正に一元化。melodyCells.ts冒頭の死にプロトタイプ（32-130行付近・テストからのみ参照）撤去。
 - **音価(agogic)**：上の「音価バリエーション不足」項の(a)骨格に長音アンカー案は、骨格層ではdurを持たない設計（分割方式）にしたため**リズムパーツ層（S4）の長音パーツ**で実現する方針に変わった（design #20）。
 - **運用**：本番webはdist配信＝**コミットしてもUIは変わらない**。機能追加後は必ず `pnpm --filter web build`（2026-07-11に「ボタンがない」事故）。apiはtsx watchで自動反映。
 - **耳確認未消化**：フィール層（swing/humanize非破壊化・7/10-11分）と骨格S2の較正（強拍不協和の注意色の鳴り具合・導出→明示境界の手触り）。
