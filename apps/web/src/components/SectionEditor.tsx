@@ -639,6 +639,8 @@ export function SectionEditor({
                   {!eraseMode && c.node.neta.kind === "skeleton" && (
                     <span className="skel-block-actions">
                       <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-${c.node.neta.id}`} title="この骨格からメロを吹く" onClick={(e) => { e.stopPropagation(); gen.blowSkeleton(c); }}>吹く▶</span>
+                      {/* ベース表面化（design #20 S3c）：明示ベース点/休符がある骨格から実体ベースを吹く（無ければroot導出=従来ベース生成と同じ）。 */}
+                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-bass-${c.node.neta.id}`} title="この骨格からベースを吹く（明示ベース区間を反映）" onClick={(e) => { e.stopPropagation(); gen.blowSkeletonBass(c); }}>ベ▶</span>
                       {sectionChords().length === 0 && (
                         <span role="button" tabIndex={0} className="skel-estimate" aria-label={`estimate-${c.node.neta.id}`} title="骨格からコードを推定（harmonize）" onClick={(e) => { e.stopPropagation(); void gen.estimateChords(c); }}>コードを推定</span>
                       )}

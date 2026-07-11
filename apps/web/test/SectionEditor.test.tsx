@@ -708,6 +708,17 @@ describe("骨格から吹く→realized_from（design #20・候補が骨格idを
     await waitFor(() => expect(link).toHaveBeenCalledWith("newmel", "sk1", "realized_from"));
   });
 
+  it("骨格ブロック[ベ▶]→gen_bass に skeletonNetaId が乗る／置くと realized_from(ベース→骨格)を張る（S3c）", async () => {
+    music.mockResolvedValue({ items: [{ kind: "bass", content: { notes: [{ pitch: 36, start: 0, dur: 1 }] } }] });
+    createNeta.mockResolvedValue(mk("newbass", "bass"));
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [skelChild] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await userEvent.click(await screen.findByLabelText("blow-bass-sk1"));
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_bass", expect.objectContaining({ skeletonNetaId: "sk1" })));
+    await userEvent.click(await screen.findByLabelText("place-candidate"));
+    await waitFor(() => expect(link).toHaveBeenCalledWith("newbass", "sk1", "realized_from"));
+  });
+
   it("通常のメロ生成（骨格由来でない候補）は realized_from を張らない＝ref撒き漏れの誤リンク無し", async () => {
     music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
     createNeta.mockResolvedValue(mk("newmel2", "melody"));

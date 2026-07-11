@@ -179,6 +179,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         const drums = ctx.sectionDrums();
         if (drums) { body.drums = drums; body.backbeat = 0.3; }
       }
+      // ベース表面化（design #20 S3c）：骨格の明示ベース区間を gen_bass が差し替える（明示無し=root導出=従来）。
+      if (part.op === "gen_bass" && opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>(part.op, body);
       const item = r.items?.[0];
       // 候補に骨格コンテキストを持たせる＝置く時に realized_from を張る相手が候補ごとに確定（ref の撒き漏れを排す）。
@@ -207,6 +209,10 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // 骨格ブロック[吹く▶]（design #20 S2）：gen_melody(skeletonNetaId)→メロ候補トレイ→＋置くで新メロ＋realized_from。
   function blowSkeleton(child: Child) {
     void genPart(GEN_PARTS[0], { skeletonNetaId: child.node.neta.id });
+  }
+  // 骨格ブロック[ベース▶]（design #20 S3c）：gen_bass(skeletonNetaId)→ベース候補トレイ→＋置くで新ベース＋realized_from。
+  function blowSkeletonBass(child: Child) {
+    void genPart(GEN_PARTS[1], { skeletonNetaId: child.node.neta.id });
   }
   // 骨格からコードを推定（design #20 S2・harmonize）：骨格の白玉→harmonize→chord_progression 候補→＋置くでコードレーンへ。
   async function estimateChords(child: Child) {
@@ -303,8 +309,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       }
     }
     await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
-    // 骨格から吹いたメロ＝realized_from(メロ→骨格) を張る（design #20 S2）。候補が自分の骨格idを持つ。
-    if (c.skeletonNetaId && c.kind === "melody") await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
+    // 骨格から吹いたメロ/ベース＝realized_from(表面→骨格) を張る（design #20 S2/S3c）。候補が自分の骨格idを持つ。
+    if (c.skeletonNetaId && (c.kind === "melody" || c.kind === "bass")) await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
     removeCand(c.cid); // 置いた候補はトレイから外す（他候補・keepは残す）
     await ctx.reload();
     ctx.onChanged?.();
@@ -327,7 +333,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,
     // ハンドラ
-    genPart, genSkeleton, blowSkeleton, estimateChords,
+    genPart, genSkeleton, blowSkeleton, blowSkeletonBass, estimateChords,
     melodyLaneNotes, makeHarmony, fitToChords, analyzeFit, fitReport, setFitReport,
     auditionCandidate, placeCandidate, closeCandidate, toggleKeep, removeCand,
     lastPartRef,
