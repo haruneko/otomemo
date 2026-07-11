@@ -38,6 +38,16 @@ export function KindIcon({ kind }: { kind: string }) {
           <circle cx="18" cy="16.1" r="1.4" fill="currentColor" />
         </svg>
       );
+    case "skeleton": // 骨格＝構造線（節点を結ぶ折れ線・design #20）
+      return (
+        <svg {...s}>
+          <path d="M4 16 L10 8 L15 13 L20 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+          <circle cx="4" cy="16" r="2" fill="currentColor" />
+          <circle cx="10" cy="8" r="2" fill="currentColor" />
+          <circle cx="15" cy="13" r="2" fill="currentColor" />
+          <circle cx="20" cy="6" r="2" fill="currentColor" />
+        </svg>
+      );
     case "rhythm": // ステップグリッド（4マス）
       return (
         <svg {...s}>

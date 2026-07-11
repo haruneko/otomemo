@@ -17,7 +17,8 @@ import {
   BASS_FIGS,
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
-import { genMotifMelody, genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { genMotifMelody, genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { skeletonToV2Skel, skelArrayToBreakpoints, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type Feel } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる（notes はストレート）
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
@@ -498,7 +499,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch" }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
+  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skeleton?: SkeletonContent }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -638,7 +639,11 @@ export function genMelody(
     // 接続：section.prevEndPitch を骨格開始音 skelStart へ（未指定=62=bit一致）。role とは独立に seedMotif/prevEndPitch で発火。
     const seedMotif = f.section?.seedMotif && f.section.seedMotif.length ? extractMotif16(f.section.seedMotif.map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: n.dur })), compound ? 3 : 4) : undefined;
     const skelStart = typeof f.section?.prevEndPitch === "number" ? f.section.prevEndPitch : undefined;
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: so.skelModel ?? loadSkeletonModel(minor), motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse, hook: so.hook, articulation: so.articulation, inflect: so.inflect, motifMode: so.motifMode, finest: so.finest ?? ((f.tempo ?? 0) >= 150 ? "eighth" : undefined), flow: so.flow, pickup: so.pickup, arc: so.arc }); // finest＝最小音符。未指定はテンポ連動(≥150で8分上限＝高BPMの16分潰れを自動回避・オーナーFB)。明示が勝つ
+    // 骨格注入（design #20）：opts.skeleton 指定時は SkeletonContent を 1拍粒度 number[] へアダプト（bpb=barLen）し
+    // V2 の構造線に差し込む＝genSkeletonFromModel をバイパス。未指定＝skel undefined＝従来生成＝bit一致。
+    const barLen = compound ? 3 : 4;
+    const injectedSkel = opts?.skeleton ? skeletonToV2Skel(opts.skeleton, { beatsPerBar: barLen, fallbackPitch: sp[Math.floor(sp.length / 2)] ?? 62 }) : undefined;
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, skelModel: so.skelModel ?? loadSkeletonModel(minor), skel: injectedSkel, motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse, hook: so.hook, articulation: so.articulation, inflect: so.inflect, motifMode: so.motifMode, finest: so.finest ?? ((f.tempo ?? 0) >= 150 ? "eighth" : undefined), flow: so.flow, pickup: so.pickup, arc: so.arc }); // finest＝最小音符。未指定はテンポ連動(≥150で8分上限＝高BPMの16分潰れを自動回避・オーナーFB)。明示が勝つ
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
@@ -779,6 +784,59 @@ export function genMelodyCandidates(
   }
   const base = (f.mood ? f.mood + "メロ" : "メロディ");
   return { items: picked.map((c, i) => ({ kind: "melody", content: c.feel ? { notes: c.notes, feel: c.feel } : { notes: c.notes }, label: `${base}案${i + 1}`.slice(0, 24) })), edges: [] };
+}
+
+// 骨格の機械候補出し（design #20・「機械は候補まで」）。frame＋コード進行を受け、genSkeletonFromModel で
+// 構造線を引き planSkeleton で句割りを付け、SkeletonContent（ブレークポイント列）へ逆変換して複数 seed 分返す。
+// gen_chords/gen_melody と同じ items 配列の流儀。seed 明示＝1本を決定的に。
+export function genSkeletonCandidates(
+  frame?: Frame | null,
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  seed?: number | null,
+  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence" },
+): GenResult {
+  const f = normalizeFrame(frame);
+  const minor = isMinorFrame(f);
+  const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major");
+  const bars = barsOf(f);
+  const info = meterInfo(f.meter);
+  const compound = info.grouping === "compound";
+  const barLen = compound ? 3 : 4;
+  const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
+  const tpBase = Math.max(60, Math.min(65, 60 + tonicPc)); // V2 と同じ tonic中心の音域窓＝注入時にレジスタが揃う
+  const sp = scalePitchList(scale, tpBase - 5, tpBase + 12);
+  // 小節ごとのコード根（調相対でなく実 pc）。genSkeletonFromModel が調相対へ内部変換する。
+  const rootsPerBar: number[] = [];
+  for (let bar = 0; bar < bars; bar++) {
+    const ch = chordAt(bar * barLen, chords);
+    rootsPerBar.push(ch ? normRoot(ch.root ?? 0) : tonicPc);
+  }
+  // 句割り＝planSkeleton（未指定=対称）。骨格の phraseEnds（unit尾バー→カデンツ度数）と phrases（endBeat/cadence）両方に使う。
+  const phrases = planSkeleton(bars, f.meter, { phrasing: opts?.phrasing });
+  const phraseEnds = phrases.map((p) => ({ bar: Math.max(0, Math.floor((p.startBeat + p.beats - 0.001) / barLen)), deg: p.cadenceDegree === 5 ? 4 : p.cadenceDegree === 2 ? 1 : 0 }));
+  const phrasesOut = phrases.map((p) => ({ endBeat: p.startBeat + p.beats, cadence: p.isLast ? "full" : p.cadenceDegree === 5 ? "half" : "full" }));
+  const model = loadSkeletonModel(minor);
+  const build = (s: number): SkeletonContent => {
+    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters: compound ? [0, 1.5] : [0, 2], start: 62, phraseEnds });
+    return { bars, tones: skelArrayToBreakpoints(skel), phrases: phrasesOut };
+  };
+  const label = "骨格";
+  if (seed != null) {
+    return { items: [{ kind: "skeleton", content: build(seed), label }], edges: [] };
+  }
+  const k = Math.max(1, opts?.k ?? 3);
+  const n = Math.max(k, opts?.n ?? 8);
+  const seen = new Set<string>();
+  const items: { kind: string; content: unknown; label: string }[] = [];
+  for (let s = 1; s <= n && items.length < k; s++) {
+    const content = build(s);
+    const sig = content.tones.map((t) => `${t.start}:${t.pitch}`).join(",");
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    items.push({ kind: "skeleton", content, label: `${label}案${items.length + 1}` });
+  }
+  if (items.length === 0) items.push({ kind: "skeleton", content: build(1), label });
+  return { items, edges: [] };
 }
 
 // pitch を「指定ピッチクラス」の最近傍音へ（カデンツ度数への着地）。音域clamp。

@@ -20,6 +20,7 @@ export const KIND_DEFS: readonly KindDef[] = [
   { key: "chord_progression", label: "コード進行", music: true, capturable: true, filterable: true },
   { key: "chord_pattern", label: "コード楽器", music: true, capturable: true, filterable: true },
   { key: "rhythm", label: "リズム", music: true, capturable: true, filterable: true },
+  { key: "skeleton", label: "骨格", music: true, capturable: true, filterable: true }, // 骨格層の一級化（design #20）＝メロの構造線(Urlinie近似)。合成では無音・単体で白玉プレビュー
   { key: "theme", label: "テーマ", text: true, capturable: true, filterable: true },
   { key: "section", label: "セクション", container: true, capturable: true, filterable: true },
   { key: "song", label: "曲", container: true, capturable: true, filterable: true },

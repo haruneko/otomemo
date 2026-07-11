@@ -1,0 +1,140 @@
+import { describe, it, expect } from "vitest";
+import {
+  validateSkeletonContent,
+  expandDominion,
+  skeletonToV2Skel,
+  skelArrayToBreakpoints,
+  type SkeletonContent,
+} from "../src/music/skeletonNeta";
+import { genMelody, genSkeletonCandidates } from "../src/music/generate";
+
+// 骨格層の一級化（design #20）の content 契約・変換群のテスト（TDD）。
+
+describe("validateSkeletonContent", () => {
+  const good: SkeletonContent = {
+    bars: 4,
+    tones: [{ start: 0, pitch: 60 }, { start: 2, pitch: 64 }, { start: 8, pitch: 62 }],
+    phrases: [{ endBeat: 8, cadence: "half" }, { endBeat: 16, cadence: "full" }],
+  };
+  it("accepts a well-formed skeleton", () => {
+    expect(validateSkeletonContent(good)).toEqual([]);
+  });
+  it("rejects bars <= 0", () => {
+    expect(validateSkeletonContent({ ...good, bars: 0 }).some((e) => e.includes("bars"))).toBe(true);
+  });
+  it("rejects non-ascending tones", () => {
+    expect(validateSkeletonContent({ ...good, tones: [{ start: 2, pitch: 60 }, { start: 1, pitch: 62 }] }).some((e) => e.includes("ascending"))).toBe(true);
+  });
+  it("rejects out-of-range start", () => {
+    expect(validateSkeletonContent({ ...good, tones: [{ start: 99, pitch: 60 }] }).some((e) => e.includes("out of range"))).toBe(true);
+  });
+  it("accepts pitch:null (skeleton rest) but rejects bad pitch", () => {
+    expect(validateSkeletonContent({ bars: 2, tones: [{ start: 0, pitch: null }, { start: 2, pitch: 60 }] })).toEqual([]);
+    expect(validateSkeletonContent({ bars: 2, tones: [{ start: 0, pitch: 999 }] }).some((e) => e.includes("pitch"))).toBe(true);
+  });
+  it("empty tones is rejected", () => {
+    expect(validateSkeletonContent({ bars: 2, tones: [] }).some((e) => e.includes("non-empty"))).toBe(true);
+  });
+});
+
+describe("expandDominion (breakpoint→支配区間)", () => {
+  it("each tone dominates until the next breakpoint; last to song end", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }, { start: 3, pitch: 64 }] };
+    expect(expandDominion(c, { beatsPerBar: 4 })).toEqual([
+      { start: 0, dur: 3, pitch: 60 },
+      { start: 3, dur: 5, pitch: 64 }, // 3→8 (bars*bpb=8)
+    ]);
+  });
+  it("dominion does not cross a phrase boundary", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }, { start: 5, pitch: 62 }], phrases: [{ endBeat: 4 }] };
+    const segs = expandDominion(c, { beatsPerBar: 4 });
+    // tone@0 stops at phrase end 4 (not at next tone 5); gap [4,5) is left uncovered (rest)
+    expect(segs[0]).toEqual({ start: 0, dur: 4, pitch: 60 });
+    expect(segs[1]).toEqual({ start: 5, dur: 3, pitch: 62 });
+  });
+  it("carries null (rest) segment through", () => {
+    const c: SkeletonContent = { bars: 1, tones: [{ start: 0, pitch: null }, { start: 2, pitch: 60 }] };
+    const segs = expandDominion(c, { beatsPerBar: 4 });
+    expect(segs[0]).toEqual({ start: 0, dur: 2, pitch: null });
+    expect(segs[1]).toEqual({ start: 2, dur: 2, pitch: 60 });
+  });
+});
+
+describe("skeletonToV2Skel adapter (→ 1拍粒度 number[])", () => {
+  it("produces bars*beatsPerBar entries holding the dominating pitch", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }, { start: 4, pitch: 67 }] };
+    const skel = skeletonToV2Skel(c, { beatsPerBar: 4 });
+    expect(skel).toEqual([60, 60, 60, 60, 67, 67, 67, 67]);
+  });
+  it("carries the last real pitch through a rest (anchor needs a pitch)", () => {
+    const c: SkeletonContent = { bars: 1, tones: [{ start: 0, pitch: 60 }, { start: 2, pitch: null }] };
+    const skel = skeletonToV2Skel(c, { beatsPerBar: 4 });
+    expect(skel).toEqual([60, 60, 60, 60]);
+  });
+});
+
+describe("skelArrayToBreakpoints (逆変換) round-trips with the adapter", () => {
+  it("compresses a held per-beat array into breakpoints at changes", () => {
+    const bp = skelArrayToBreakpoints([60, 60, 64, 64, 64, 62, 62, 62]);
+    expect(bp).toEqual([{ start: 0, pitch: 60 }, { start: 2, pitch: 64 }, { start: 5, pitch: 62 }]);
+    // re-expanding the breakpoints reproduces the original array
+    const skel = skeletonToV2Skel({ bars: 2, tones: bp }, { beatsPerBar: 4 });
+    expect(skel).toEqual([60, 60, 64, 64, 64, 62, 62, 62]);
+  });
+});
+
+const chords4 = [
+  { root: 0, quality: "", start: 0, dur: 4 },
+  { root: 5, quality: "", start: 4, dur: 4 },
+  { root: 7, quality: "", start: 8, dur: 4 },
+  { root: 9, quality: "m", start: 12, dur: 4 },
+];
+const notesOf = (r: ReturnType<typeof genMelody>) => (r.items[0]!.content as { notes: { pitch: number; start: number; dur: number }[] }).notes;
+
+describe("gen_melody skeleton injection (design #20)", () => {
+  const frame = { key: 0, mode: "major" as const, meter: "4/4", bars: 4 };
+
+  it("未指定は既存出力とbit一致（回帰防止）", () => {
+    const a = genMelody(frame, chords4, 7, { useV2: true });
+    const b = genMelody(frame, chords4, 7, { useV2: true, skeleton: undefined });
+    expect(notesOf(a)).toEqual(notesOf(b));
+  });
+
+  it("骨格注入で構造線アンカーが変わり出力が変化する", () => {
+    const base = genMelody(frame, chords4, 7, { useV2: true });
+    // 高い一定の骨格を差し込む（block anchor が全部 76 付近へ）
+    const skeleton: SkeletonContent = { bars: 4, tones: [{ start: 0, pitch: 76 }, { start: 8, pitch: 74 }] };
+    const injected = genMelody(frame, chords4, 7, { useV2: true, skeleton });
+    expect(notesOf(injected)).not.toEqual(notesOf(base));
+    // 決定的：同じ骨格＋同 seed は同じ結果
+    const again = genMelody(frame, chords4, 7, { useV2: true, skeleton });
+    expect(notesOf(injected)).toEqual(notesOf(again));
+  });
+});
+
+describe("gen_skeleton candidates (機械は候補まで)", () => {
+  const frame = { key: 0, mode: "major" as const, meter: "4/4", bars: 4 };
+  it("複数案を kind=skeleton の SkeletonContent で返す", () => {
+    const res = genSkeletonCandidates(frame, chords4);
+    expect(res.items.length).toBeGreaterThanOrEqual(1);
+    for (const it of res.items) {
+      expect(it.kind).toBe("skeleton");
+      const c = it.content as SkeletonContent;
+      expect(c.bars).toBe(4);
+      expect(validateSkeletonContent(c)).toEqual([]);
+      expect(c.tones.length).toBeGreaterThan(0);
+      expect(c.phrases && c.phrases.length).toBeTruthy();
+    }
+  });
+  it("seed 明示は1案・決定的", () => {
+    const a = genSkeletonCandidates(frame, chords4, 3);
+    const b = genSkeletonCandidates(frame, chords4, 3);
+    expect(a.items.length).toBe(1);
+    expect(a.items[0]!.content).toEqual(b.items[0]!.content);
+  });
+  it("生成した骨格を注入すると gen_melody が回る（往復）", () => {
+    const skel = genSkeletonCandidates(frame, chords4, 3).items[0]!.content as SkeletonContent;
+    const mel = genMelody(frame, chords4, 5, { useV2: true, skeleton: skel });
+    expect(notesOf(mel).length).toBeGreaterThan(0);
+  });
+});

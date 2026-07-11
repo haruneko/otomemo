@@ -527,7 +527,33 @@ export interface BassContext {
   chords?: ChordEntry[];
 }
 
+// 骨格（design #20）：ブレークポイント列 content。dur を持たず各音は次の点/句末/曲末まで支配。
+export interface SkeletonBreakpoint { start: number; pitch: number | null }
+export interface SkeletonContent { bars: number; tones: SkeletonBreakpoint[]; bass?: SkeletonBreakpoint[]; phrases?: { endBeat: number; cadence?: string }[] }
+export function isSkeleton(content: unknown): content is SkeletonContent {
+  return !!content && typeof content === "object" && Array.isArray((content as SkeletonContent).tones) && typeof (content as SkeletonContent).bars === "number";
+}
+// 単体プレビュー：支配区間を白玉として鳴らす（各tone は start から次のブレークポイント/句末/曲末まで・pitch:null は無音）。
+// meter を持たない content 前提で bpb=4 既定（4/4）。
+export function skeletonPreviewNotes(content: SkeletonContent, beatsPerBarN = 4): Note[] {
+  const total = content.bars * beatsPerBarN;
+  const tones = [...content.tones].sort((a, b) => a.start - b.start);
+  const bounds = (content.phrases ?? []).map((p) => p.endBeat).filter((b) => b > 0 && b < total - 1e-9);
+  const out: Note[] = [];
+  for (let i = 0; i < tones.length; i++) {
+    const start = tones[i]!.start;
+    if (start >= total - 1e-9) break;
+    let end = i + 1 < tones.length ? tones[i + 1]!.start : total;
+    for (const pb of bounds) if (pb > start + 1e-9 && pb < end - 1e-9) end = pb; // 句をまたがない
+    if (end <= start + 1e-9 || tones[i]!.pitch == null) continue; // 骨格休符は無音
+    out.push({ pitch: tones[i]!.pitch!, start, dur: end - start });
+  }
+  return out;
+}
+
 export function notesForContent(kind: string, content: unknown, ctx?: BassContext): Note[] {
+  // 骨格＝単体プレビューは支配区間の白玉（design #20）。合成では compositeNotes 側で無音扱い。
+  if (kind === "skeleton" && isSkeleton(content)) return skeletonPreviewNotes(content);
   if (kind === "bass" && isRelativeBass(content)) {
     // 相対モード：コードに当てて実音高へ解決。chords が無ければ preview_chords→key の tonic。
     const chords = ctx?.chords ?? content.preview_chords ?? [];
@@ -584,7 +610,8 @@ export function compositeNotes(
     }
     // ①（2026-07-03）コード進行トラックは**無音の骨格**＝自分は発音しない（伴奏は chord_pattern が
     // 担う・CP1）。和声の解決文脈は上の sectionChords から既に供給済み＝役目は保持。
-    if (kind === "chord" || kind === "chord_progression") return [];
+    // 骨格ネタ(skeleton・design #20)も同様に合成では無音（構造線＝表面化して初めて鳴る・単体編集時のみ白玉プレビュー）。
+    if (kind === "chord" || kind === "chord_progression" || kind === "skeleton") return [];
     const isRhythm = kind === "rhythm";
     // ミキサーのパート＝kind から決定（コード楽器→chord・rhythm→drums・bass→bass・他→melody）。
     const part: MixPart = kind === "bass" ? "bass" : kind === "rhythm" ? "drums" : kind === "chord_pattern" ? "chord" : "melody";
