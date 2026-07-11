@@ -24,7 +24,7 @@ import {
   findSimilar,
   genNamedProgression,
 } from "./music";
-import { learnStepWeightsFromLibrary, learnMotifModelFromLibrary } from "./music/corpusBias";
+import { learnMotifModelFromLibrary } from "./music/corpusBias";
 import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
 import { analyzeVoiceLeading } from "./music/voiceLeading"; // #8：メロ×低音の声部進行レンズ（並行/隠伏5度8度・声部交差）
 import { normRoot } from "./music/theory";
@@ -547,7 +547,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       }
       // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）：placement/custom を含めサニタイズ（範囲外bar/未知id/不正pattern無視・http と同経路）。未指定/効果ゼロ=undefined=bit一致。
       const rp = sanitizeRhythmParts(rhythmParts, { bars: typeof frame?.bars === "number" ? frame.bars : undefined });
-      const res = genMelodyCandidates(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, repetition, rangeSteps, motifBars, corpusModel, density, swing, expression, phrasing, runs, push, foreground, breathe, humanize, form, bass, counter, drums, backbeat, drumLock, converse, hook, articulation, inflect, motifMode, finest, flow, pickup, arc, skeleton, rhythmParts: rp });
+      const res = genMelodyCandidates(frame, chords, seed, { useV2: true, motifModel: corpusModel ?? undefined, repetition, rangeSteps, motifBars, corpusModel, density, swing, expression, phrasing, runs, push, foreground, breathe, humanize, form, bass, counter, drums, backbeat, drumLock, converse, hook, articulation, inflect, motifMode, finest, flow, pickup, arc, skeleton, rhythmParts: rp });
       // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
       attachMelodyVoiceLeading(res, { bass, skeleton, chords, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
       // F1(2026-07-08)：style指定なのにコーパス未投入＝黙って既定劣化していたのを可視化（Claudeがユーザーに伝えられる）。
@@ -808,7 +808,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         const corpusModel = learnMotifModelFromLibrary(core, style);
         // J2c(2026-07-11)：useV2:true＝gen_melody と同じ本線へ（従来この経路だけ useV2 無し＝旧経路③④に落ちていた。
         // fit のメロ候補の質を V2 に揃える意図的変更。4/4|複合拍+chords はV2・ゲート外れは従来どおりフォールバック）。
-        return ok(genMelodyCandidates(frame, chords, seed, { useV2: true, stepWeights: learnStepWeightsFromLibrary(core, style) ?? undefined, motifModel: corpusModel ?? undefined, corpusModel })); // コードに合う新規メロ候補(U3・style でコーパス bias)
+        return ok(genMelodyCandidates(frame, chords, seed, { useV2: true, motifModel: corpusModel ?? undefined, corpusModel })); // コードに合う新規メロ候補(U3・style でコーパス bias)
       }
       if (target === "bass") {
         if (!chords) return err("fit bass は基準 chords が必須");

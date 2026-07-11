@@ -322,185 +322,13 @@ function snapTo(pitch: number, allowed: Set<number>, lo: number, hi: number): nu
   return Math.max(lo, Math.min(hi, best));
 }
 
-// モチーフ：1小節分の (相対start拍, dur拍) 列＋スケール度数コントゥア(各音の開始音からの歩幅)。
-interface Motif {
-  hits: { off: number; dur: number; step: number }[]; // step=モチーフ開始音からのスケール歩幅
-  span: number; // 消費拍数（=1小節）
-}
-
-// モチーフを1つ生成：リズム図形を小節幅まで並べ、各発音にスケール歩幅(コントゥア)を割り当て。
-// モチーフ輪郭の歩幅候補（スケール度）と既定重み。コーパス学習(corpusBias)で重みを差し替え可能。
-export const MOVES = [-2, -1, 0, 1, 2, 3] as const;
-export const DEFAULT_STEP_WEIGHTS = [0.6, 4, 1.2, 4, 0.6, 0.2]; // 順次(±1)を厚く＝滑らかさ。跳躍は控えめ。
-
-function buildMotif(
-  rng: Rng,
-  perBar: number,
-  bias: { busy: number; long: number; rest: number },
-  figs: RhyFig[] = MELODY_FIGS,
-  stepWeights: number[] = DEFAULT_STEP_WEIGHTS,
-): Motif {
-  const hits: { off: number; dur: number; step: number }[] = [];
-  let beat = 0;
-  let step = 0; // 累積スケール歩幅（開始音=0）
-  while (beat < perBar - 1e-9) {
-    const remain = perBar - beat;
-    const fig = pickFig(rng, figs, bias, remain, beat === 0); // 小節頭は必ず発音
-    for (const [off, durRaw] of fig.on) {
-      const t = beat + off;
-      if (t >= perBar) break;
-      const dur = Math.min(durRaw, perBar - t);
-      if (dur <= 0) continue;
-      // コントゥア：開始音(step=0)から順次中心に小さく上下。たまに跳躍。歩幅分布はコーパス学習で差替可。
-      if (hits.length > 0) {
-        const move = rng.choices(MOVES as unknown as number[], stepWeights);
-        step += move;
-        step = Math.max(-4, Math.min(6, step)); // 動機の音域を制限（覚えやすさ）
-      }
-      hits.push({ off: t, dur, step });
-    }
-    beat += fig.span;
-  }
-  if (hits.length === 0) hits.push({ off: 0, dur: 1, step: 0 });
-  return { hits, span: perBar };
-}
-
-// モチーフ生成は単発draw だと音数の分散が大きく mood 密度が安定しない。
-// 候補を数本引いて、busy mood なら音数最多／sparse mood なら最少を採用（密度を単調化）。
-// 反復は壊さない（採用された動機を全小節で使い回すのは従来通り）。
-function buildMotifSteered(
-  rng: Rng,
-  perBar: number,
-  bias: { busy: number; long: number; rest: number },
-  figs: RhyFig[] = MELODY_FIGS,
-  stepWeights: number[] = DEFAULT_STEP_WEIGHTS,
-): Motif {
-  const cands: Motif[] = [];
-  for (let i = 0; i < 3; i++) cands.push(buildMotif(rng, perBar, bias, figs, stepWeights));
-  const wantBusy = bias.busy >= 1.5;
-  const wantSparse = bias.long >= 1.5;
-  if (wantBusy) return cands.reduce((a, b) => (b.hits.length > a.hits.length ? b : a));
-  if (wantSparse) return cands.reduce((a, b) => (b.hits.length < a.hits.length ? b : a));
-  return cands[0]!; // 既定は最初の draw（決定的）
-}
-
-// バリエーション種：そのまま反復／移高(sequence)／反転／末尾変化。
-type VarKind = "repeat" | "seq_up" | "seq_down" | "invert" | "tail";
-
-// モチーフをある小節に配置：開始音をコードトーンにアンカーし、コントゥアを辿る。
-// 拍頭/コードチェンジはコードトーンにスナップ＝ハモる。variation で軽い変奏。
-function placeMotif(
-  motif: Motif,
-  barBeat: number,
-  total: number,
-  startPitch: number,
-  scaleArr: number[],
-  chords: { root?: number | string; quality?: string; start?: number; dur?: number }[] | undefined,
-  scale: Set<number>,
-  variation: VarKind,
-  lo: number,
-  hi: number,
-  strongSet: Set<number>, // 小節内の強拍位置（複合拍子で 1.5 等の非整数頭もコードトーンにスナップ）
-): { pitch: number; start: number; dur: number }[] {
-  const out: { pitch: number; start: number; dur: number }[] = [];
-  const base = toScaleDegree(startPitch, scaleArr);
-  const seqShift = variation === "seq_up" ? 1 : variation === "seq_down" ? -1 : 0;
-  const lastIdx = motif.hits.length - 1;
-  for (let i = 0; i < motif.hits.length; i++) {
-    const h = motif.hits[i]!;
-    const t = barBeat + h.off;
-    if (t >= total) break;
-    const dur = Math.min(h.dur, total - t);
-    if (dur <= 0) continue;
-    let step = h.step;
-    if (variation === "invert") step = -step; // 反転：コントゥアを上下逆に
-    if (variation === "tail" && i === lastIdx && lastIdx > 0) step = motif.hits[i - 1]!.step; // 末尾変化：終止を寄せる
-    step += seqShift; // 移高(sequence)：度数を1つ持ち上げ/下げ
-    let pitch = degreeToPitch(base.idx + step, base.oct, scaleArr);
-    // 拍頭・コードチェンジ位置はコードトーンへスナップ（ハモる）。複合拍子は強拍(1.5等)も含める。
-    const posInBar = Math.round((t - barBeat) * 1000) / 1000;
-    const onBeatHead = Number.isInteger(t) || strongSet.has(posInBar);
-    const ch = chordAt(Math.floor(t), chords);
-    const ctPcs = ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
-    const allowed = onBeatHead ? ctPcs : scale;
-    pitch = snapTo(pitch, allowed, lo, hi);
-    out.push({ pitch, start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
-  }
-  return out;
-}
-
-/** 骨格音プランナ（S6-a・spec §10.7）：各小節に「背骨の音」を1つ。和声連動（その小節のコードトーン）で、
- * **前の骨格音から繋がる**候補を選ぶ（彷徨い防止）＋頂点(≈0.62)に最高音を一音だけ立てる。決定的・純関数。
- * レジスタ包絡(archBase±archAmp)は"目標"として残し音域 magnitude を保つ＝既存アーチ/音域 property と両立。 */
-export function planSkeletonTones(
-  bars: number,
-  chords: { root?: number | string; quality?: string; start?: number; dur?: number }[] | undefined,
-  beatsPerBar: number,
-  scale: Set<number>,
-  opts: { lo?: number; hi?: number; archBase?: number; archAmp?: number } = {},
-): number[] {
-  const lo = opts.lo ?? 60;
-  const hi = opts.hi ?? 84;
-  const archBase = opts.archBase ?? 67;
-  const archAmp = opts.archAmp ?? 9;
-  const n = Math.max(1, Math.trunc(bars));
-  const climax = n <= 1 ? 0 : Math.round((n - 1) * 0.62);
-  // レジスタ目標＝上行接近→頂点(climax)→下行で閉じる包絡（旧 centerAt と同じ。音域 magnitude 維持）。
-  const target = (bar: number): number => {
-    if (n <= 1) return archBase + archAmp;
-    const downSpan = n - 1 - climax;
-    const x = bar <= climax ? (climax === 0 ? 1 : bar / climax) : downSpan <= 0 ? 1 : 1 - (bar - climax) / downSpan;
-    return archBase + archAmp * x;
-  };
-  const candsAt = (bar: number): number[] => {
-    const ch = chordAt(bar * beatsPerBar, chords);
-    const pcs = ch ? new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")) : scale;
-    const out: number[] = [];
-    for (let p = lo; p <= hi; p++) if (pcs.has(((p % 12) + 12) % 12)) out.push(p);
-    return out.length ? out : [Math.round(Math.max(lo, Math.min(hi, archBase)))];
-  };
-  const nearest = (cands: number[], to: number): number =>
-    cands.reduce((a, b) => (Math.abs(b - to) < Math.abs(a - to) ? b : a), cands[0]!);
-
-  const skel: number[] = [];
-  for (let bar = 0; bar < n; bar++) {
-    const cands = candsAt(bar);
-    const tgt = target(bar);
-    if (bar === 0) {
-      skel.push(nearest(cands, tgt));
-      continue;
-    }
-    const prev = skel[bar - 1]!;
-    // 連結優先：前の骨格音への近さ(主)＋アーチ目標への近さ(従)＝木の背骨が順次中心に繋がる（arpeggiate/passing の素地）。
-    let best = cands[0]!;
-    let bestScore = Infinity;
-    for (const c of cands) {
-      // 連結優先：前の骨格音への近さ(主)＋アーチ目標への近さ(従)＝木の背骨が順次中心に繋がる（arpeggiate/passing の素地）。
-      const score = Math.abs(c - prev) * 1.0 + Math.abs(c - tgt) * 0.5;
-      if (score < bestScore) {
-        bestScore = score;
-        best = c;
-      }
-    }
-    skel.push(best);
-  }
-  // 頂点を一音立てる：climax はアーチ目標へピン（レジスタ＝旧アーチ相当＝音域維持）。
-  skel[climax] = nearest(candsAt(climax), target(climax));
-  // 他小節が頂点を超えないようオクターブ下へ折る（pc保存＝コードトーン性は不変）→頂点を唯一の最高音に（#3）。
-  for (let bar = 0; bar < n; bar++) {
-    if (bar === climax) continue;
-    while (skel[bar]! >= skel[climax]! && skel[bar]! - 12 >= lo) skel[bar] = skel[bar]! - 12;
-  }
-  return skel;
-}
-
 /** モチーフ(動機)ベースのメロディ：短い動機を1つ作り、小節ごとに**骨格音**へアンカーして
  * 反復＋軽い変奏(移高/反転/末尾変化)で置き直す。拍頭=コードトーン・音域60..84・mood密度を維持。 */
 export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { stepWeights?: number[]; motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skeleton?: SkeletonContent; rhythmParts?: RhythmPartsOpt }, // stepWeights/motifModel/skelModel=コーパス学習（無指定＝旧経路）。rhythmParts=リズムパーツ層L1/L2（design #20 S4-1/S4-2・rotate=小節ローテ／placement=小節明示（placement>rotate>L0）／custom=インラインパーツ・未指定=bit一致）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
+  opts?: { motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; appoggiatura?: number; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skeleton?: SkeletonContent; rhythmParts?: RhythmPartsOpt }, // motifModel/skelModel=コーパス学習（③経路・#16で撤去予定）。rhythmParts=リズムパーツ層L1/L2（design #20 S4-1/S4-2・rotate=小節ローテ／placement=小節明示（placement>rotate>L0）／custom=インラインパーツ・未指定=bit一致）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -553,7 +381,8 @@ export function genMelody(
   // 旧経路④→V2 へ移す。chords 無しは下の rootsPerBar 合成ループが**全小節を key の主音根＋ダイアトニックpc集合**
   // で代用する（chordAt→null フォールバック・素直優先）。カデンツ着地/表情/濁り掃除はコード非依存の度数(主音/属音)
   // ＋ダイアトニック代用で機能する。chords 有り時は分岐値が不変(true→true)＝**bit一致**（明示回帰＋golden で実証）。
-  if (opts?.useV2 && (bpb === 3 || bpb === 4 || bpb === 6 || compound) && bars >= 1) {
+  // J3(design #20 Task#15)：V2 本体を関数化＝②useV2 明示ゲートと、④撤去後の最終フォールバックの両方から呼ぶ。
+  const runV2 = (): GenResult => {
     // register窓を tonic中心に(2026-07-09 批判レビューRound2/P1)：旧 [60,84] は長調で tonic を音域最下端に
     // 置き、脱平面化した骨格の下降を主音に叩き戻していた（実測 長調 主音48%/音域8.4）。tonic を下から約1/3
     // (下5・上12=約17半音≒音域12)に置く＝両モードで主音25-35・音域9-12へ。下流clampは全て sp[0]/sp[last] 参照
@@ -588,7 +417,7 @@ export function genMelody(
     // move遷移＝学習分布で置換（ランク軸corpusTypicalityと同じ統計＝生成と評価が揃う）。
     // リズム＝8分8枠語彙を16枠へ拡張し、既定16分語彙と質量50/50でブレンド（バイアスであって置換ではない）。
     let m16 = loadMotifModel16();
-    if (opts.motifModel) {
+    if (opts?.motifModel) {
       const up: Record<string, number> = {};
       for (const [p8, w] of opts.motifModel.rhythm.patterns) {
         const g = Array(16).fill(".");
@@ -666,7 +495,8 @@ export function genMelody(
     // 再生/書き出し境界の applyFeel が拍内単調ワープ＋微小揺れを掛ける。未指定(=0)＝feel 無し＝従来 bit一致。
     const feel = buildFeel(so.swing, so.humanize, seed ?? 1);
     return { items: [{ kind: "melody", content: feel ? { notes: mNotes, feel } : { notes: mNotes }, label: lbl }], edges: [] };
-  }
+  };
+  if (opts?.useV2 && (bpb === 3 || bpb === 4 || bpb === 6 || compound) && bars >= 1) return runV2();
 
   // 新パイプライン（motif-rhythm＋Markov contour＋snap・design#12-M S7/S8）：4/4＋motifModel＋chords 時。
   // ＝コーパスで学んだ「1小節リズム語彙」と「move遷移(gap-fill)」でモチーフを生成・反復。無指定/他拍子は下の旧経路へ。
@@ -687,71 +517,17 @@ export function genMelody(
     return { items: [{ kind: "melody", content: feel ? { notes: mNotes, feel } : { notes: mNotes }, label: lbl }], edges: [] };
   }
 
-  // 1) モチーフを1つ生成（seedで決定的・mood密度で音数を単調化・拍子ネイティブの図形）。
-  const motif = buildMotifSteered(rng, perBar, bias, figs, opts?.stepWeights ?? DEFAULT_STEP_WEIGHTS);
-
-  const notes: { pitch: number; start: number; dur: number }[] = [];
-  // 骨格音（S6-a・spec§10.7）：和声連動の「連結ピラー＋頂点一音」で背骨を決める。
-  // 旧＝幾何アーチに各小節を**独立**スナップ（彷徨い） → 新＝前の骨格音から繋がるコードトーンを選ぶ。
-  const skel = planSkeletonTones(bars, chords, perBar, scale, { lo, hi });
-
-  // 変奏は句機能で**位置駆動**（S3a・spec§10.5）：後楽節頭=模続(sequence)、句末バー=終止寄せ、他=反復。
-  // ＝lookback でモチーフを明示反復しつつ、楽節の役割で発展させる（乱数でばらさない）。
-  const phrases = planSkeleton(bars, f.meter, { phrasing: opts?.phrasing });
-  const barVar = (bar: number): VarKind => {
-    if (bar === 0) return "repeat"; // basic idea
-    const bBeat = bar * perBar;
-    const ph = phrases.find((p) => bBeat >= p.startBeat - 1e-6 && bBeat < p.startBeat + p.beats - 1e-6);
-    if (!ph) return "repeat";
-    const isFirst = Math.abs(bBeat - ph.startBeat) < 1e-6;
-    const isLast = bBeat + perBar >= ph.startBeat + ph.beats - 1e-6;
-    if (ph.role === "consequent" && isFirst) return "seq_up"; // 後楽節頭＝模続（応答）
-    if (isLast && !isFirst) return "tail"; // 句末バー＝終止へ寄せる
-    return "repeat";
-  };
-
-  for (let bar = 0; bar < bars; bar++) {
-    const barBeat = bar * perBar;
-    if (barBeat >= total) break;
-    // 各小節の開始音＝その小節の骨格音（コードトーン・前の背骨から連結・頂点一音）。
-    const startPitch = skel[bar] ?? 67;
-    const variation = barVar(bar);
-    const barNotes = placeMotif(motif, barBeat, total, startPitch, scaleArr, chords, scale, variation, lo, hi, strongSet);
-    // 背骨音の窓に**オクターブ折り返し**で閉じ込める（pc保存＝コードトーン性は不変・頂点を超えさせない・アーチ維持）。
-    const ceil = startPitch + 5;
-    const floor = startPitch - 8;
-    for (const n of barNotes) {
-      let p = n.pitch;
-      while (p > ceil && p - 12 >= lo) p -= 12;
-      while (p < floor && p + 12 <= hi) p += 12;
-      n.pitch = Math.max(lo, Math.min(hi, p));
-      notes.push(n);
-    }
-  }
-
-  // 跳躍後の順次反行（S2a・spec§7-5）：4度以上跳躍の直後の「弱拍」音は逆向き歩進に補正＝ギャップフィル。
-  recoverLeaps(notes, scaleArr, strongSet, perBar, lo, hi);
-  enforceResolution(notes, chords, lo, hi); // 孤立NCT掃除（カデンツ着地の前＝カデンツ音は消さない）
-
-  // 骨格層（S1c・spec§10.5-10.6）：句末で①カデンツ度数に着地②息継ぎ（末尾を切って休符）。
-  // モチーフ反復・拍頭コードトーンは保ったまま、上に「呼吸」を被せる。
-  applyPhrasing(notes, scaleArr, bias, f.meter, bars, lo, hi, opts?.phrasing, chords);
-
-  // 弱起（S1d・spec§10.3）：拍0の前に upbeat を前置し、最初のダウンビート音へ歩進で滑り込む。
-  // 拍0=曲頭の位置は保つ（負start＝前にはみ出す。compositeNotes/再生は既に負start対応）。
-  if ((f.pickup ?? 0) > 0 && notes.length > 0) prependPickup(notes, f.pickup!, scaleArr);
-
-  // 弱拍装飾（S3b）：コードトーンの周りで踊る（3度の間=経過/同音=刺繍）。滑り込みより前＝強拍は未変更。
-  decorateWeak(notes, scaleArr, strongSet, perBar, lo, hi);
-
-  // 滑り込み（S2b・spec§10.4）：**最後に**強拍へ倚音をもたせ直後の弱拍で下行解決＝もたれ/滑り込み。
-  // phrasing 後に置くので解決音が上書きされない。表情ノブ既定は控えめ（sparse=やや多め/busy=少なめ）。
-  const expr = typeof f.expression === "number" ? f.expression : bias.long >= 1.5 ? 0.3 : bias.busy >= 1.5 ? 0.15 : 0.2;
-  applyExpression(notes, chords, scaleArr, expr, rng, strongSet, perBar, lo, hi);
-
-  if (notes.length === 0) notes.push({ pitch: 72, start: 0, dur: 1 }); // 全休は避ける
-  const label = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
-  return { items: [{ kind: "melody", content: { notes }, label }], edges: [] };
+  // ④撤去後の最終フォールバック（J3・design #20 Task#15）：旧ルールベース経路④（buildMotif/placeMotif/
+  // planSkeletonTones/applyPhrasing/applyExpression/decorateWeak/recoverLeaps/enforceResolution）を撤去し、
+  // メロ生成を V2 に一本化した。ここへ到達＝①補完/②useV2/③motifModel いずれのゲートも外れたケース
+  // ＝(i) useV2 を渡さない直呼び（本番は全経路 useV2:true＝主にテスト） (ii) useV2 だが V2 非対応の変拍子。
+  // 方針＝V2 対応拍子（4/4・3/4・6/4・6/8系複合）は **非partial で V2 を回す**＝品質を本線に揃える（partial
+  // 指定でゲートを外れたケースも種は捨てて新規生成＝design #20 J3 の受け皿一本化）。
+  if ((bpb === 3 || bpb === 4 || bpb === 6 || compound) && bars >= 1) return runV2();
+  // (iii) V2 未対応の変拍子（2/4・5/4・7/8・7/4 等）：黙って壊さず**明示エラー**。V2 は当該 bpb では
+  // 総尺が合わない（実測＝bpb 5/7/3.5 で1小節ぶんの音が欠ける＝約7割しか埋まらない）＝丸め代用は不可。
+  // 変拍子メロ生成は低頻度と判断（オーナーは 3/6 拍子を明示・2/4 は 2/2=bpb4 で代替可）。design #20 J3 に明記。
+  throw new Error(`genMelody: 拍子「${f.meter ?? "4/4"}」（1小節${bpb}拍）は未対応です。対応拍子＝4/4・3/4・6/4・6/8系（複合拍）。`);
 }
 
 // P1 自己進化ループ（design 次期計画・#12-M）：メロを1本に潰さず「多め生成→らしさで並べ替え→多様な top-k」で返す。
@@ -856,70 +632,6 @@ export function genSkeletonCandidates(
   return { items, edges: [] };
 }
 
-// pitch を「指定ピッチクラス」の最近傍音へ（カデンツ度数への着地）。音域clamp。
-function snapToPc(pitch: number, pc: number, lo: number, hi: number): number {
-  let best = pitch;
-  let bestD = 99;
-  for (let p = lo; p <= hi; p++) {
-    if (((p % 12) + 12) % 12 !== pc) continue;
-    const d = Math.abs(p - pitch);
-    if (d < bestD) {
-      bestD = d;
-      best = p;
-    }
-  }
-  return best;
-}
-
-// 句末の息継ぎ長（拍）。period末/最終は長め。mood で sparse 長く・busy 短く。
-function breathLen(strong: boolean, bias: { busy: number; long: number; rest: number }): number {
-  let b = strong ? 1.0 : 0.5;
-  if (bias.long >= 1.5) b *= 1.5; // sparse（切ない/バラード）はより長く呼吸
-  else if (bias.busy >= 1.5) b *= 0.6; // busy（明るい/速い）は短め
-  return b;
-}
-
-// 骨格を音符列に適用（破壊的）：各 phrase の末尾を切って休符＝息継ぎ、最終音をカデンツ度数へ着地。
-function applyPhrasing(
-  notes: { pitch: number; start: number; dur: number }[],
-  scaleArr: number[],
-  bias: { busy: number; long: number; rest: number },
-  meter: string | undefined,
-  bars: number,
-  lo: number,
-  hi: number,
-  phrasing?: "symmetric" | "asymmetric" | "period" | "sentence",
-  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
-): void {
-  if (notes.length === 0) return;
-  const phrases = planSkeleton(bars, meter, { phrasing });
-  notes.sort((a, b) => a.start - b.start);
-  const keep: { pitch: number; start: number; dur: number }[] = [];
-  for (const ph of phrases) {
-    const end = ph.startBeat + ph.beats;
-    const cut = end - breathLen(ph.strongBreath, bias); // ここ以降は息継ぎ（無音）にする
-    const inPh = notes.filter((n) => n.start >= ph.startBeat - 1e-6 && n.start < end - 1e-6);
-    if (inPh.length === 0) continue;
-    // 息継ぎ窓（cut以降）に始まる音は落とす。全部落ちるなら先頭1音は残す。
-    let kept = inPh.filter((n) => n.start < cut - 1e-6);
-    if (kept.length === 0) kept = [inPh[0]!];
-    const last = kept[kept.length - 1]!;
-    // 最終音をカデンツ度数(1=主音/5=属音…)のピッチクラスへ着地＝安定音で閉じる。
-    // B2(2026-07-08 design#12-M)：コードを見て着地＝カデンツ度数がその時点のコードに含まれる時のみ
-    // 度数snap、含まれない時は最寄りのコード音（IV上にG強制等のコード無視を解消）。
-    const cadPc = ((scaleArr[(ph.cadenceDegree - 1) % scaleArr.length]! % 12) + 12) % 12;
-    const ch = chordAt(Math.floor(last.start), chords);
-    const chPcs = ch ? chordPcs(normRoot(ch.root ?? 0), ch.quality ?? "") : null;
-    if (!chPcs || chPcs.length === 0 || chPcs.includes(cadPc)) last.pitch = snapToPc(last.pitch, cadPc, lo, hi);
-    else last.pitch = snapTo(last.pitch, new Set(chPcs), lo, hi);
-    // 末尾を cut までに収めて以降を休符に（息継ぎ）。
-    last.dur = Math.max(0.25, Math.min(last.dur, Math.round((cut - last.start) * 1000) / 1000));
-    for (const n of kept) keep.push(n);
-  }
-  notes.length = 0;
-  for (const n of keep) notes.push(n);
-}
-
 // 弱起を前置（破壊的）：最初のダウンビート音の1スケール度下から歩進で滑り込む upbeat を負startで足す。
 function prependPickup(
   notes: { pitch: number; start: number; dur: number }[],
@@ -930,125 +642,6 @@ function prependPickup(
   const deg = toScaleDegree(first.pitch, scaleArr);
   const below = degreeToPitch(deg.idx - 1, deg.oct, scaleArr); // 1スケール度下＝歩進で滑り込む
   notes.push({ pitch: below, start: round3(-pickup), dur: round3(pickup) }); // 拍0の前（負start）
-}
-
-// 跳躍後の順次反行（gap-fill）：4度以上跳躍の直後の「弱拍」音を逆向き1スケール度の歩進に補正。
-// 強拍/カデンツ音は動かさない（コードトーン着地を壊さない）。
-function recoverLeaps(
-  notes: { pitch: number; start: number; dur: number }[],
-  scaleArr: number[],
-  strongSet: Set<number>,
-  perBar: number,
-  lo: number,
-  hi: number,
-): void {
-  notes.sort((a, b) => a.start - b.start);
-  const isStrong = (start: number): boolean => {
-    if (start < 0) return false;
-    const pos = Math.round((((start % perBar) + perBar) % perBar) * 1000) / 1000;
-    return Number.isInteger(start) || strongSet.has(pos);
-  };
-  for (let i = 1; i < notes.length - 1; i++) {
-    const leap = notes[i]!.pitch - notes[i - 1]!.pitch;
-    if (Math.abs(leap) < 5) continue; // 4度未満は跳躍扱いしない
-    const nxt = notes[i + 1]!;
-    if (isStrong(nxt.start)) continue; // 強拍/カデンツ音は保つ
-    const dir = leap > 0 ? -1 : 1; // 跳躍と逆向き
-    const d = toScaleDegree(notes[i]!.pitch, scaleArr);
-    nxt.pitch = Math.max(lo, Math.min(hi, degreeToPitch(d.idx + dir, d.oct, scaleArr)));
-  }
-}
-
-// 滑り込み能動生成（S2b・spec§10.4）：強拍のコードトーンを「1度上の非和声音(倚音)」に差し替え、
-// 直後の弱拍を元のコードトーンへ**下行歩進で解決**＝強拍にもたれて滑り込む表情。頻度＝表情ノブ。
-function applyExpression(
-  notes: { pitch: number; start: number; dur: number }[],
-  chords: { root?: number | string; quality?: string; start?: number; dur?: number }[] | undefined,
-  scaleArr: number[],
-  knob: number,
-  rng: Rng,
-  strongSet: Set<number>,
-  perBar: number,
-  lo: number,
-  hi: number,
-): void {
-  if (knob <= 0) return;
-  notes.sort((a, b) => a.start - b.start);
-  const isStrong = (start: number): boolean => {
-    if (start < 0) return false;
-    const pos = Math.round((((start % perBar) + perBar) % perBar) * 1000) / 1000;
-    return Number.isInteger(start) || strongSet.has(pos);
-  };
-  for (let i = 1; i < notes.length - 1; i++) {
-    const cur = notes[i]!;
-    const next = notes[i + 1]!;
-    if (!isStrong(cur.start) || isStrong(next.start)) continue; // 強拍にもたれ→弱拍で解決
-    const ch = chordAt(Math.floor(cur.start), chords);
-    if (!ch || !isChordTone(cur.pitch, ch)) continue;
-    if (rng.next() >= knob) continue;
-    const ct = cur.pitch;
-    const d = toScaleDegree(ct, scaleArr);
-    const appog = degreeToPitch(d.idx + 1, d.oct, scaleArr); // 1スケール度上＝倚音候補
-    if (appog < lo || appog > hi || isChordTone(appog, ch) || Math.abs(appog - ct) > 2) continue;
-    cur.pitch = appog; // 強拍に非和声音でもたれる
-    next.pitch = ct; // 下行歩進で元のコードトーンへ解決
-  }
-}
-
-// 解決保証（S2b・spec§7-6）：孤立した非和声音(classifyNCT="other"＝跳躍入り跳躍抜け等)を最近傍
-// コードトーンへ寄せて消す＝孤立NCTゼロ。経過/刺繍/倚音/掛留/逸音は解決を伴うので残す。
-function enforceResolution(
-  notes: { pitch: number; start: number; dur: number }[],
-  chords: { root?: number | string; quality?: string; start?: number; dur?: number }[] | undefined,
-  lo: number,
-  hi: number,
-): void {
-  notes.sort((a, b) => a.start - b.start);
-  for (let i = 0; i < notes.length; i++) {
-    const cur = notes[i]!;
-    const ch = chordAt(Math.floor(Math.max(0, cur.start)), chords);
-    if (!ch) continue;
-    const prev = i > 0 ? notes[i - 1]!.pitch : null;
-    const next = i < notes.length - 1 ? notes[i + 1]!.pitch : null;
-    if (classifyNCT(prev, cur.pitch, next, ch) === "other") {
-      cur.pitch = snapTo(cur.pitch, new Set(chordPcs(ch.root ?? 0, ch.quality ?? "")), lo, hi);
-    }
-  }
-}
-
-// 弱拍の装飾（S3b・spec§10.4）：コードトーンの周りで「踊る」。前後の音が3度なら間を**経過音**で埋め、
-// 同音なら**刺繍音**（歩進で離れて戻る）にする＝歩進で解決する正しい非和声音に。強拍/負startは触らない。
-function decorateWeak(
-  notes: { pitch: number; start: number; dur: number }[],
-  scaleArr: number[],
-  strongSet: Set<number>,
-  perBar: number,
-  lo: number,
-  hi: number,
-): void {
-  notes.sort((a, b) => a.start - b.start);
-  const isStrong = (start: number): boolean => {
-    if (start < 0) return false;
-    const pos = Math.round((((start % perBar) + perBar) % perBar) * 1000) / 1000;
-    return Number.isInteger(start) || strongSet.has(pos);
-  };
-  const step = (p: number, dir: number): number => {
-    const d = toScaleDegree(p, scaleArr);
-    return Math.max(lo, Math.min(hi, degreeToPitch(d.idx + dir, d.oct, scaleArr)));
-  };
-  for (let i = 1; i < notes.length - 1; i++) {
-    const cur = notes[i]!;
-    const prev = notes[i - 1]!.pitch;
-    const next = notes[i + 1]!.pitch;
-    if (isStrong(cur.start)) continue; // 強拍(骨格音)は保つ
-    if (notes[i + 1]!.start - cur.start > 1 || cur.start - notes[i - 1]!.start > 1) continue; // 近接のみ（句跨ぎ除外）
-    const d = next - prev;
-    if (Math.abs(d) === 3 || Math.abs(d) === 4) {
-      cur.pitch = step(prev, Math.sign(d)); // 3度の間＝経過音（前から1歩進、次へも1歩進で解決）
-    } else if (d === 0 && prev === cur.pitch) {
-      cur.pitch = step(prev, 1); // 静止(同音反復)＝上の刺繍音（離れて戻る）
-    }
-  }
 }
 
 /** エッセンス→"違うメロ"生成（S5a・北極星・spec§4）：参照メロの**リズム指紋＋輪郭(身振り)**を保ち、

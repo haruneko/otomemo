@@ -51,26 +51,6 @@ describe("C① genChords は key で移調される（実音で返す）", () =>
   });
 });
 
-describe("C① genMelody の経過音も調内（key スケールに乗る）", () => {
-  it("key=K でのスケール内音数 == key=0 でのスケール内音数（同 seed・移調 chords）", () => {
-    for (const f of frames())
-      for (const seed of SEEDS)
-        for (const K of KEYS) {
-          const chords0 = chordsOf(genChords({ ...f, key: 0 }, seed));
-          const chordsK = transpose(chords0, K);
-          const m0 = notesOf(genMelody({ ...f, key: 0 }, chords0, seed));
-          const mK = notesOf(genMelody({ ...f, key: K }, chordsK, seed));
-          const where = `${f.meter}/${f.mood}/${f.bars}#${seed} K=${K}`;
-          expect(mK.length, `音数一致: ${where}`).toBe(m0.length);
-          const sc0 = scalePcs(0, "major");
-          const scK = scalePcs(K, "major");
-          const in0 = m0.filter((n) => sc0.has(pc(n.pitch))).length;
-          const inK = mK.filter((n) => scK.has(pc(n.pitch))).length;
-          expect(inK, `スケール内音数の等価: ${where}`).toBe(in0);
-        }
-  });
-});
-
 describe("C① genBass は渡された（移調済）chords に追従する（回帰ガード）", () => {
   it("key=K・移調 chords のベース pc == key=0 のベース pc + K", () => {
     for (const f of frames())
