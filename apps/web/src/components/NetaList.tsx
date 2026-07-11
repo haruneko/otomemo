@@ -13,6 +13,8 @@ import {
   playNotes,
   notesForContent,
   compositeNotes,
+  feelOf,
+  isCompoundMeter,
   programOf,
   type Note,
   type PlaybackHandle,
@@ -80,6 +82,8 @@ export function NetaCard({
     setPlaying(true);
     handleRef.current = await playNotes(notes, neta.tempo ?? 120, {
       program,
+      feel: feelOf(neta.content), // フィール層：単一メロ card の content.feel でスイング（section card は SectionEditor 側で）。
+      compound: isCompoundMeter(neta.meter),
       onEnd: () => {
         setPlaying(false);
         handleRef.current = null;

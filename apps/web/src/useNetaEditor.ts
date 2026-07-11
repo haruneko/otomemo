@@ -18,6 +18,8 @@ import {
   isChordPattern,
   resolveChordPattern,
   emptyChordPattern,
+  feelOf,
+  isCompoundMeter,
   PITCH_NAMES as KEY_NAMES,
   type Note,
   type ChordEntry,
@@ -110,6 +112,8 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     scaleBeats: span,
     bpb: 4,
     program: isRhythm ? undefined : isChord ? 48 : program, // コード進行は抽象＝固定GM49(strings)・選択不可(CP1)
+    feel: feelOf(neta.content), // フィール層：この neta の content.feel でスイング/微小揺れ（無ければストレート）。
+    compound: isCompoundMeter(neta.meter),
   });
 
   // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。

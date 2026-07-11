@@ -12,6 +12,9 @@ import {
   downloadMultitrackMidi,
   playNotes,
   beatsPerBar,
+  feelOf,
+  isCompoundMeter,
+  type Feel,
   type Note,
   type PlaybackHandle,
 } from "../music";
@@ -184,7 +187,7 @@ export function SectionEditor({
     onChanged?.();
   }
   // #49/#58/#59 トランスポート。合成結果を再生／プレイヘッドは TOTAL(グリッド全体)尺・拍子BPB。
-  const tp = useTransport(() => composite(), tempo, { scaleBeats: TOTAL, bpb: BPB });
+  const tp = useTransport(() => composite(), tempo, { scaleBeats: TOTAL, bpb: BPB, feel: sectionFeel(), compound: isCompoundMeter(liveMeter) });
 
   // Space=合成再生/一時停止（design #59）。入力中は無効。
   useEffect(() => {
@@ -598,6 +601,12 @@ export function SectionEditor({
   function composite(): Note[] {
     return compositeNotes(children, keyPc, neta.mode);
   }
+  // アンサンブル feel（design.md「フィール層分離」Stage4）：セクション内メロトラックの content.feel を
+  // **全トラックに同一適用**＝スイングは声部単位でなく時間軸の共有性質（メロだけ跳ねる事故を避ける）。無ければストレート。
+  function sectionFeel(): Feel | undefined {
+    for (const c of children) { const f = feelOf(c.node.neta.content); if (f) return f; }
+    return undefined;
+  }
   // #55 多トラック書出：レーン(メロ/コード/ベース/リズム)別に1トラックずつ。空レーンは省く。
   function laneTracks() {
     return LANES.map((lane) => ({
@@ -751,8 +760,8 @@ export function SectionEditor({
                 </>
               )}
               <div className="tools-sep">書き出し</div>
-              <button type="button" className="tool-item" aria-label="export-midi" onClick={() => { setToolsOpen(false); downloadMidi(composite(), `${liveTitle || "section"}.mid`, tempo, liveMeter ?? null); }}>MIDI</button>
-              <button type="button" className="tool-item" aria-label="export-midi-split" title="メロ/コード/ベース/リズムを別トラックに" onClick={() => { setToolsOpen(false); downloadMultitrackMidi(laneTracks(), `${liveTitle || "section"}-tracks.mid`, tempo, liveMeter ?? null); }}>MIDI（分割）</button>
+              <button type="button" className="tool-item" aria-label="export-midi" onClick={() => { setToolsOpen(false); downloadMidi(composite(), `${liveTitle || "section"}.mid`, tempo, liveMeter ?? null, undefined, sectionFeel()); }}>MIDI</button>
+              <button type="button" className="tool-item" aria-label="export-midi-split" title="メロ/コード/ベース/リズムを別トラックに" onClick={() => { setToolsOpen(false); downloadMultitrackMidi(laneTracks(), `${liveTitle || "section"}-tracks.mid`, tempo, liveMeter ?? null, sectionFeel()); }}>MIDI（分割）</button>
             </div>
           )}
         </div>

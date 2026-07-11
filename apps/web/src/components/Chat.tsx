@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAlive } from "../poll";
 import { api, type Neta, type ChatMessage, type ChatThread } from "../api";
-import { playNotes, notesForContent } from "../music";
+import { playNotes, notesForContent, feelOf, isCompoundMeter } from "../music";
 import { MUSIC_KINDS, KIND_LABEL } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
 import { Icon } from "./Icon";
@@ -68,7 +68,7 @@ function ChatToolCard({
                   type="button"
                   className="bs-btn"
                   aria-label="play-candidate"
-                  onClick={() => void playNotes(notesForContent(it.kind, it.content, { key: 0 }), 120)}
+                  onClick={() => void playNotes(notesForContent(it.kind, it.content, { key: 0 }), 120, { feel: feelOf(it.content) })}
                 >
                   ▶ 試聴
                 </button>
@@ -437,7 +437,7 @@ export function Chat({
   // #68 試聴プレビュー（音楽kindのみ）
   function preview(neta: Neta) {
     // 相対bass は neta の key を tonic に解決して試聴（#bass S2）。
-    void playNotes(notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }), neta.tempo ?? 120);
+    void playNotes(notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }), neta.tempo ?? 120, { feel: feelOf(neta.content), compound: isCompoundMeter(neta.meter) });
   }
   // #S8 履歴復元のネタカード：スナップショット(id/kind/title)しか無いので、開く/試聴の直前に本体を取り直す。
   async function openNetaById(id: string) {
