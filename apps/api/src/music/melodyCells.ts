@@ -1346,28 +1346,10 @@ export function genMotifMelodyV2(
     notes.sort((a, b) => a.start - b.start);
   }
 
-  // swing(2026-07-08 ノブ・design#12-M＝S7「跳ねるボタン」)：8分裏(小節内 x.5)を 0.5+swing/6 へ後段タイムマップ
-  // （swing=1で3連の2/3位置）。16分裏(.25/.75)は据え置き。6/8(compound)は既にjigの跳ねを持つ＝対象外。
-  // 衝突ガード(2026-07-11・オーナーFB「JRockのリズムが崩れる」)：8分裏(x.5)の直後に16分(x.75)があると、x.65 まで
-  // 振った瞬間 16分と 0.10拍で衝突しフラム状の極短音になる（swing×16分連の相互作用）。8分裏に16分が続く所は
-  // **そもそも跳ねられない**ので跳ねを見送りストレートに保つ＝**次onsetまで0.4拍以上の余地がある8分裏だけ跳ねる**。
-  // 16分の無い所（余地あり）は従来どおりフルスウィング＝聞こえは不変。
-  const sw = Math.max(0, Math.min(1, opts.swing ?? 0));
-  if (sw > 0 && !compound) {
-    const SWING_ROOM = 0.4; // 8分裏を跳ねるのに要る次onsetまでの最小余地（未満＝直後に16分＝ストレート維持）
-    for (let i = 0; i < notes.length; i++) {
-      const frac = ((notes[i]!.start % 1) + 1) % 1;
-      if (Math.abs(frac - 0.5) >= 0.01) continue;
-      const nextStart = i + 1 < notes.length ? notes[i + 1]!.start : Infinity; // 16分(x.75)は動かないので原位置=最終位置
-      if (nextStart - notes[i]!.start < SWING_ROOM) continue; // 直後に16分＝跳ねない（フラム回避・ストレート維持）
-      notes[i]!.start = Math.round((notes[i]!.start + sw / 6) * 1000) / 1000;
-    }
-    notes.sort((a, b) => a.start - b.start);
-    for (let i = 0; i + 1 < notes.length; i++) {
-      const gap = notes[i + 1]!.start - notes[i]!.start;
-      if (gap > 0) notes[i]!.dur = Math.min(notes[i]!.dur, Math.round(gap * 1000) / 1000);
-    }
-  }
+  // swing はフィール層へ移行（2026-07-11・design.md「フィール層分離」／研究 2026-07-11-swing-feel-layer-audit）。
+  // 生成側は **notes をストレート格子のまま返し**、swing は content.feel に載せて再生/書き出し境界で applyFeel
+  // が拍内単調ワープを掛ける（16分は入れ子で跳ね衝突しない・往復編集可逆）。旧「x.5だけ後段書き換え＋衝突
+  // band-aid＋dur=gapクランプ」は撤去。opts.swing は generate.ts で content.feel.swing へ回す（ここでは不使用）。
 
   // ── pickup(2026-07-11・弱起・アウフタクト)：句頭の最初の音を前の息継ぎ窓へ少し出す＝実メロ70%/生成0%の埋め ──
   // 句頭(phrases 指定は各句頭・無ければブロック境界)の音を前へずらしダウンビートへタイ。曲頭は除外・onset1点移動のみ＝反復を壊さない。
@@ -1438,27 +1420,21 @@ export function genMotifMelodyV2(
     }
   }
 
-  // humanize(2026-07-09 監査E)：グルーヴの本体＝velocity(強弱)＋微小タイミング揺れ。決定的(makeRng)・LRC相関
-  // (前の揺れに相関する乱歩＝無相関ランダムより人間的・Hennig)。既定0＝velフィールドを付けず start 不変＝bit一致。
-  // web/MIDI は n.vel ?? 100 で既に対応。終止音・句頭は timing を動かさない。
+  // humanize(2026-07-09 監査E → 2026-07-11 feel層分離)：**velocity(強弱アクセント)はデータ層に残す**＝譜面に
+  // 書ける compositional 情報（backbeat が vel-only でデータ層にいるのと整合）。**タイミング揺れは feel 層へ移行**
+  // （applyFeel・content.feel.humanize＝ストレート格子を歪めない）。決定的(makeRng)・LRC相関(前の揺れに相関する乱歩)。
+  // 既定0＝velフィールドを付けず start 不変＝bit一致。web/MIDI は n.vel ?? 100 で既に対応。
   const hum = Math.max(0, Math.min(1, opts.humanize ?? 0));
   if (hum > 0 && notes.length > 0) {
     const hr = makeRng(seed + 29);
     const decay = 0.6; // 相関の強さ（LRC近似）
-    let te = 0, ve = 0;
-    for (let i = 0; i < notes.length; i++) {
-      const n = notes[i]!;
+    let ve = 0;
+    for (const n of notes) {
       ve = decay * ve + (1 - decay) * (hr() * 2 - 1); // velocity の相関乱歩
       const posBoost = onStrong(n.start) ? 8 : -4; // 強拍やや強・裏やや弱
       n.vel = Math.max(55, Math.min(118, Math.round(96 + posBoost + hum * ve * 18)));
-      if (i > 0 && i < notes.length - 1) { // 句頭(0)・終止(last)は timing 不変
-        te = decay * te + (1 - decay) * (hr() * 2 - 1);
-        const ns = Math.round((n.start + hum * te * 0.03) * 1000) / 1000; // ±~0.03拍(=約15ms@120)
-        if (ns > notes[i - 1]!.start + 0.02) n.start = ns; // 前音を越えない
-      }
     }
-    notes.sort((a, b) => a.start - b.start);
-    for (let i = 0; i + 1 < notes.length; i++) { const g = notes[i + 1]!.start - notes[i]!.start; if (g > 0) notes[i]!.dur = Math.min(notes[i]!.dur, Math.round(g * 1000) / 1000); }
+    // timing 揺れは applyFeel(content.feel.humanize) が担当＝ここでは start/dur 不変（SSOTストレート維持）。
   }
 
   // ── B: バックビート・アクセント（backbeat・design「gen_melody×ドラム結線」）＝velocity のみ・onset/pitch/dur 不変

@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 // 背景＝Section自動生成が (1)mode無しで短調でもメジャー生成 (2)配置でメロだけ+3移調 → 濁り/変な跳躍。
 import { genMelody, genChords } from "../src/music/generate";
 import { extractMotif16 } from "../src/music/melodyCells";
+import { applyFeel } from "@cm/music-core"; // feel層：swing は content.feel に載り applyFeel で跳ねる（notes はストレート）
 
 type N = { pitch: number; start: number; dur: number };
 const notesOf = (r: { items: { content: unknown }[] }): N[] => (r.items[0]!.content as { notes: N[] }).notes;
@@ -45,18 +46,21 @@ describe("density（細かさ）/ swing（跳ね）ノブ", () => {
     }
     expect(hi).toBeGreaterThan(lo * 1.2); // 明確な差（>20%）
   });
-  it("swing=1 で8分裏が 2/3 位置へ・音は重ならない", () => {
+  it("swing=1＝notes はストレートのまま content.feel.swing=1（焼かない）／applyFeel で8分裏が2/3へ・重ならない", () => {
+    // 2026-07-11 feel層分離：生成側は notes を歪めず content.feel に swing を載せる。跳ねは再生/書き出しの applyFeel が担当。
     for (const seed of [2, 7]) {
-      const notes = notesOf(genMelody({ key: 0, bars: 8 }, CHORDS, seed, { useV2: true, swing: 1 }));
-      const sorted = [...notes].sort((a, b) => a.start - b.start);
+      const content = genMelody({ key: 0, bars: 8 }, CHORDS, seed, { useV2: true, swing: 1 }).items[0]!.content as { notes: N[]; feel?: { swing?: number } };
+      expect(content.feel?.swing, `seed=${seed}: content.feel.swing に載る`).toBe(1);
+      const straight = [...content.notes].sort((a, b) => a.start - b.start);
+      expect(straight.some((n) => Math.abs(((n.start % 1) + 1) % 1 - 0.5) < 0.01), `seed=${seed}: notes はストレート＝素の8分裏が在る`).toBe(true);
+      // applyFeel を通すと8分裏(x.5)→2/3・単調ゆえ重ならない。
+      const felt = [...applyFeel(straight, content.feel)].sort((a, b) => a.start - b.start);
       let sawSwung = false;
-      for (let i = 0; i < sorted.length; i++) {
-        const frac = ((sorted[i]!.start % 1) + 1) % 1;
-        expect(Math.abs(frac - 0.5) < 0.01, `t=${sorted[i]!.start}: 素の8分裏が残っている`).toBe(false);
-        if (Math.abs(frac - 2 / 3) < 0.02) sawSwung = true;
-        if (i + 1 < sorted.length) expect(sorted[i]!.start + sorted[i]!.dur).toBeLessThanOrEqual(sorted[i + 1]!.start + 1e-6);
+      for (let i = 0; i < felt.length; i++) {
+        if (Math.abs(((felt[i]!.start % 1) + 1) % 1 - 2 / 3) < 0.02) sawSwung = true;
+        if (i + 1 < felt.length) expect(felt[i]!.start + felt[i]!.dur).toBeLessThanOrEqual(felt[i + 1]!.start + 1e-6);
       }
-      expect(sawSwung).toBe(true); // 跳ねた音が実在
+      expect(sawSwung, `seed=${seed}: applyFeel後に2/3位置の跳ね音`).toBe(true);
     }
   });
   it("ノブ未指定は従来挙動と一致（後方互換）", () => {

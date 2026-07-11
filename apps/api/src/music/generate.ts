@@ -18,6 +18,7 @@ import {
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
 import { genMotifMelody, genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { type Feel } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる（notes はストレート）
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
@@ -155,6 +156,17 @@ function applySectionPreset<T extends PresetKnobs>(opts: T, section?: SectionCon
     if (cur[k] === undefined && filled[k] !== undefined) (cur as Record<string, unknown>)[k] = filled[k];
   }
   return out;
+}
+
+// フィール層（2026-07-11・design.md「フィール層分離」）：swing/humanize を notes に焼かず content.feel へ。
+// 両方 0/未指定＝undefined＝feel キー無し＝従来 content 形（bit一致）。humanize 指定時のみ seed を載せる（決定的）。
+function buildFeel(swing?: number, humanize?: number, seed?: number): Feel | undefined {
+  const sw = Math.max(0, Math.min(1, swing ?? 0)), hm = Math.max(0, Math.min(1, humanize ?? 0));
+  if (sw <= 0 && hm <= 0) return undefined;
+  const f: Feel = {};
+  if (sw > 0) f.swing = sw;
+  if (hm > 0) { f.humanize = hm; f.seed = seed ?? 1; }
+  return f;
 }
 
 // 長短の決定＝frame.mode 優先・無ければ mood 推定（後方互換）。design#12-M 2026-07-08。
@@ -630,7 +642,10 @@ export function genMelody(
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
-    return { items: [{ kind: "melody", content: { notes: mNotes }, label: lbl }], edges: [] };
+    // フィール層（2026-07-11）：swing/humanize は notes に焼かず content.feel に載せる（notes はストレート）。
+    // 再生/書き出し境界の applyFeel が拍内単調ワープ＋微小揺れを掛ける。未指定(=0)＝feel 無し＝従来 bit一致。
+    const feel = buildFeel(so.swing, so.humanize, seed ?? 1);
+    return { items: [{ kind: "melody", content: feel ? { notes: mNotes, feel } : { notes: mNotes }, label: lbl }], edges: [] };
   }
 
   // 新パイプライン（motif-rhythm＋Markov contour＋snap・design#12-M S7/S8）：4/4＋motifModel＋chords 時。
@@ -647,7 +662,9 @@ export function genMelody(
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
-    return { items: [{ kind: "melody", content: { notes: mNotes }, label: lbl }], edges: [] };
+    // フィール層（2026-07-11・旧経路）：swing/humanize は content.feel に載せる（opts 直参照＝so 無し）。
+    const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 1);
+    return { items: [{ kind: "melody", content: feel ? { notes: mNotes, feel } : { notes: mNotes }, label: lbl }], edges: [] };
   }
 
   // 1) モチーフを1つ生成（seedで決定的・mood密度で音数を単調化・拍子ネイティブの図形）。
@@ -735,10 +752,11 @@ export function genMelodyCandidates(
   if (seed != null) return genMelody(frame, chords, seed, opts); // 明示 seed＝1本を決定的に
   const f = normalizeFrame(frame);
   const info = meterInfo(f.meter);
-  const cands: { notes: MelNote[]; typ: number }[] = [];
+  const cands: { notes: MelNote[]; typ: number; feel?: Feel }[] = [];
   const seen = new Set<string>();
   for (let s = 1; s <= n; s++) {
-    const notes = (genMelody(frame, chords, s, opts).items[0]?.content as { notes?: MelNote[] } | undefined)?.notes;
+    const c0 = genMelody(frame, chords, s, opts).items[0]?.content as { notes?: MelNote[]; feel?: Feel } | undefined;
+    const notes = c0?.notes;
     if (!notes || notes.length === 0) continue;
     const key = notes.map((x) => `${x.pitch}@${round3(x.start)}:${round3(x.dur)}`).join(","); // 完全重複を捨てる（F3: durも同一性に含める＝リズム違い候補を殺さない）
     if (seen.has(key)) continue;
@@ -746,11 +764,11 @@ export function genMelodyCandidates(
     const typ = opts?.corpusModel
       ? corpusTypicality(notes, opts.corpusModel, { beatsPerBar: info.beatsPerBar, eighthsPerBar: info.beatsPerBar * 2 }).score
       : 0;
-    cands.push({ notes, typ });
+    cands.push({ notes, typ, feel: c0?.feel }); // feel は content から引き継ぐ（ランクは straight notes で＝評価がスイングに歪まない）
   }
   if (cands.length === 0) return genMelody(frame, chords, 1, opts); // 保険（全経路空はまず無い）
   cands.sort((a, b) => b.typ - a.typ); // らしさ順（corpusModel 無ければ全 typ=0＝生成順のまま）
-  const picked: { notes: MelNote[]; typ: number }[] = [];
+  const picked: { notes: MelNote[]; typ: number; feel?: Feel }[] = [];
   for (const c of cands) { // 多様な top-k：既採用と似すぎは飛ばす
     if (picked.length >= k) break;
     if (picked.every((p) => melodySimilarity(p.notes, c.notes) < CAND_SIM_MAX)) picked.push(c);
@@ -760,7 +778,7 @@ export function genMelodyCandidates(
     if (!picked.includes(c)) picked.push(c);
   }
   const base = (f.mood ? f.mood + "メロ" : "メロディ");
-  return { items: picked.map((c, i) => ({ kind: "melody", content: { notes: c.notes }, label: `${base}案${i + 1}`.slice(0, 24) })), edges: [] };
+  return { items: picked.map((c, i) => ({ kind: "melody", content: c.feel ? { notes: c.notes, feel: c.feel } : { notes: c.notes }, label: `${base}案${i + 1}`.slice(0, 24) })), edges: [] };
 }
 
 // pitch を「指定ピッチクラス」の最近傍音へ（カデンツ度数への着地）。音域clamp。
