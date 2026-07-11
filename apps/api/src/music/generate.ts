@@ -548,7 +548,11 @@ export function genMelody(
   // 骨格(句頭アンカー)＋モチーフ選別＋輪郭駆動＋発展(A/A'/B反行+弧/A'')。旧経路は下に残す（回帰防止）。
   // J2a(design #20・Task#13)：3/4(bpb=3)・6/4(bpb=6) を eligible に追加＝旧経路④の受け皿。非複合の
   // bpb=3 は 3/4 のみ・bpb=6 は 6/4（3/2 も同扱い）。compound(6/8系) は従来どおり別に true。既存は不変=bit一致。
-  if (opts?.useV2 && (bpb === 3 || bpb === 4 || bpb === 6 || compound) && (chords?.length ?? 0) > 0 && bars >= 1) {
+  // J2b(design #20・Task#14)：chords 空でも V2 へ（`chords>0` ゲートを撤去）＝chordless メロ生成の受け皿を
+  // 旧経路④→V2 へ移す。chords 無しは下の rootsPerBar 合成ループが**全小節を key の主音根＋ダイアトニックpc集合**
+  // で代用する（chordAt→null フォールバック・素直優先）。カデンツ着地/表情/濁り掃除はコード非依存の度数(主音/属音)
+  // ＋ダイアトニック代用で機能する。chords 有り時は分岐値が不変(true→true)＝**bit一致**（明示回帰＋golden で実証）。
+  if (opts?.useV2 && (bpb === 3 || bpb === 4 || bpb === 6 || compound) && bars >= 1) {
     // register窓を tonic中心に(2026-07-09 批判レビューRound2/P1)：旧 [60,84] は長調で tonic を音域最下端に
     // 置き、脱平面化した骨格の下降を主音に叩き戻していた（実測 長調 主音48%/音域8.4）。tonic を下から約1/3
     // (下5・上12=約17半音≒音域12)に置く＝両モードで主音25-35・音域9-12へ。下流clampは全て sp[0]/sp[last] 参照
