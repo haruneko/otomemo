@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyFeel, warpTime, unwarpTime, type Feel } from "../src/music/feel";
+import { applyFeel, warpTime, unwarpTime, type Feel } from "../src/index";
 
 type Note = { pitch: number; start: number; dur: number; vel?: number };
 // ストレート格子のサンプル（8分＋16分混在＝衝突が起きうる素材）。
