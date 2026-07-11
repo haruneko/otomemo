@@ -1296,6 +1296,16 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **配線**：`genMelody` opts に `registerShift` 追加＋V2 分岐で `applySectionPreset`／`extractMotif16` を通す・MCP `frameSchema` に `section` 追加（description で「role を書くだけでプリセットが効く」ことを Claude 脳へ明示）・http `gen_melody`/`gen/section` は frame 透過（section は frame に載る）・web `SectionEditor.genPart()` は Section ネタ tags の `role:` を読み frame.section.role へ（tags に role 無し＝渡さない＝従来）。**ロール入力 UI・曲テンプレ・日本語 title 推定は後続タスク（スコープ外）**。
 - 数値は方向のみ実証・大きさ未実証＝40seed×role の分布実測＋耳セッションで較正（研究doc ⑤）。
 
+→ **フィール層分離＝スイング/微小タイミングは非破壊の feel 層（2026-07-11 確定・full＝`docs/research/2026-07-11-swing-feel-layer-audit.md`／音楽理論監査 by Fable）**。オーナー指摘「スイングはストレート譜面に後からかけるフィールのはず。生成時に `note.start` を書き換える現実装（上の `swing`＝1172）は作曲データを歪め16分と衝突する」が理論的に正しいと確定。**この項は 1172 の "8分裏を 0.5→0.5+swing/6 へ後段書き換え" 方式を正準として置換する**（S7 backlog `1147`／S8 `1157`「スイングは後段の打点マップ」に実装を合わせ直す＝上位に従う）。
+- **2つの誤りの是正**：(a)**層**＝スイングは performative（記譜=ストレート・演奏=跳ねが音楽の制度／MuseScore・Ableton Groove・Logic Q-Swing も全て非破壊・再生時適用）。(b)**写像**＝正しいスイングは**拍内の単調な区分線形タイムワープ**（`W(0)=0, W(0.5)=0.5+s/6, W(1)=1`・**start と end を両方**写像）。x.5 だけ動かす部分写像は非単調＝16分(x.75)との 0.10拍衝突（フラム）は必然。単調ワープなら 16分は自動的に入れ子で跳ね（s=1で {1/3, 5/6}）衝突は原理的に消え、逆写像 W⁻¹ が存在（quantize/往復編集が可逆）。
+- **正準アーキ**：**SSOT＝ストレート格子上の notes**（pitch/start/dur/vel）。**feel＝`{swing:0..1, swingUnit?:"eighth"|"sixteenth", humanize?:0..1, seed?}`** を content（トラック）／セクション共有で保持＝**notes に触れない宣言的パラメータ**。**`applyFeel(notes, feel, ctx{barLen,compound,tempo}): Note[]`**（純関数・決定的・単調ワープ＋humanizeタイミング揺れ）を**レンダ境界3点**（web再生スケジューラ・MIDI書き出し・API音声レンダ）に挿す。MIDI は feel 適用後を書く（ABILITY で鳴らして跳ねて聞こえるのが正＝performance MIDI／将来「ストレート書き出し」は適用しないだけで自明に追加可）。
+- **層の割り当て**：compositional（譜面に書ける＝push/drumLock=シンコペ・pickup=弱起・flow=音価・articulation・humanize velocity・backbeat アクセント）は**データ層に残す**（ただし格子上の値で書く＝⑥-2）。performative（swing・humanize タイミング揺れ）は**feel 層**。合成順序＝データ層 → feel: swing（系統的ワープ）→ humanize タイミング（確率揺れ・ワープ後の時間上）。
+- **アンサンブル一貫性**（配当）：feel をセクション/composition のプロパティにすれば**全トラック（メロ/ベース/ドラム/コード）が同一ワープに乗る**＝現状の「メロだけ跳ねてドラム/ベースはストレート」という様式的事故（監査③-4）が解消し、gen_bass/gen_drums への swing 複製実装が**不要**。トラック別オーバーライドは上書きで表現。
+- **段階（TDD・feel.ts 新設）**：①`applyFeel` 純関数＋テスト先行（単調性/16分入れ子/start・end両写像/compoundスキップ/feel無し=恒等=bit一致/W⁻¹∘W=id）→②消費者配線（web再生・MIDI・音声／web(JS)・api(TS)は同一テストベクタで契約固定）→③生成側切替（swing 後段・SWING_ROOM band-aid・swing用 dur=gapクランプ・humanize タイミング部を撤去し `content.feel` を書くだけに。humanize velocity はデータ層残留）→④アンサンブル feel（セクション共有）→⑤テンポ連動比/lay-back/走句ストレート拍ポリシー＝backlog。
+- **後方互換**：swing/humanize **未指定(=0)＝全段恒等＝bit一致**。swing>0 は notes がストレートになる＝**意図した bit破壊**（データ表現が変わるが聴感は同等以上・衝突消滅・長短レガート化・**耳確認必須**）。既存の跳ね済み保存データは feel 無し＝そのまま鳴る。
+- **副次バグの自動解消**（監査③-5/⑥）：backbeat の16分丸め照合が sw≥0.75 で抜ける／corpusTypicality ランクが swing 量で系統的に歪む（ノブ×評価の結託）／編集の非可逆・quantize不能／採譜側(audio-drums)との二重規格——**全て「notes は常にストレート」で消える**。「notes は常にストレート格子」を**契約として明文化**し fit/reshape/complete_melody 等 notes 再入力経路で担保（⑥-10）。
+- **暫定対症修正の撤去**：直前コミット `10c01b7` の swing 衝突ガード（SWING_ROOM=0.4＝「直後に16分がある8分裏は跳ねない」）は偶然ジャズ「走句ストレート」の粗い近似だが**層が誤り**＝Stage 3 で撤去。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 
