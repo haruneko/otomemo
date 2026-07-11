@@ -563,8 +563,23 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "gen_bass",
-    { title: "ベースを生成", description: "強拍ルート/弱拍5度のベースライン（C2基準低域・コードに合う）。drums(gen_drums の content)を渡すとドラムに噛む：kickLock=キック骨格の採用率(負=逆相・キック裏8分)、snareGap=スネア(2,4拍)頭で音価を切りbackbeatを抜く、approach=コードチェンジ直前を半音/全音接近→次ルート着地。全て既定0=従来。6/8はkickLock/approach対象外。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), drums: drumsSchema, kickLock: z.number().min(-1).max(1).optional().describe("キック骨格 -1..1。正=キックstepにオンセットを乗せる率(小節頭は常に弾く)、負=逆相(キックに無い8分裏へ)。0=従来fig経路"), snareGap: z.number().min(0).max(1).optional().describe("スネア頭で音価を切る強さ 0..1（onset不変・最小dur16分）＝2・4に穴を空けてスネアを抜く"), approach: z.number().min(0).max(1).optional().describe("コードチェンジ直前の接近音化率 0..1（弱拍・短音のみ＝半音上下/全音下→次ルート着地）") } },
-    async ({ frame, chords, seed, drums, kickLock, snareGap, approach }) => ok(genBass(frame, chords, seed, drums, { kickLock, snareGap, approach })),
+    { title: "ベースを生成", description: "強拍ルート/弱拍5度のベースライン（C2基準低域・コードに合う）。drums(gen_drums の content)を渡すとドラムに噛む：kickLock=キック骨格の採用率(負=逆相・キック裏8分)、snareGap=スネア(2,4拍)頭で音価を切りbackbeatを抜く、approach=コードチェンジ直前を半音/全音接近→次ルート着地。全て既定0=従来。6/8はkickLock/approach対象外。skeletonNetaId=骨格ネタのベース明示区間で表面化＝書いた区間(クリシェ/ペダル)だけベース音を上書き・省略区間はコード導出のまま(design #20)。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), drums: drumsSchema, kickLock: z.number().min(-1).max(1).optional().describe("キック骨格 -1..1。正=キックstepにオンセットを乗せる率(小節頭は常に弾く)、負=逆相(キックに無い8分裏へ)。0=従来fig経路"), snareGap: z.number().min(0).max(1).optional().describe("スネア頭で音価を切る強さ 0..1（onset不変・最小dur16分）＝2・4に穴を空けてスネアを抜く"), approach: z.number().min(0).max(1).optional().describe("コードチェンジ直前の接近音化率 0..1（弱拍・短音のみ＝半音上下/全音下→次ルート着地）"), skeletonNetaId: z.string().optional().describe("骨格ネタ(kind=skeleton)のid。骨格の明示ベース区間(bass)だけをベース音として上書き＝表面化(design #20)。骨格休符(pitch:null)区間はベースも鳴らさない。明示ゼロ/未指定=従来コード導出とbit一致。返りに skeletonNetaId が入る＝capture 後 link(ベース→骨格,\"realized_from\")") } },
+    async ({ frame, chords, seed, drums, kickLock, snareGap, approach, skeletonNetaId }) => {
+      // 骨格注入（design #20 S3c）：skeletonNetaId 指定時はその neta の content を SkeletonContent として読み検証し注入（gen_melody と同契約）。
+      let skeleton: SkeletonContent | undefined;
+      if (skeletonNetaId) {
+        const sn = core.getNeta(skeletonNetaId);
+        if (!sn) return err(`skeleton neta ${skeletonNetaId} not found`);
+        if (sn.kind !== "skeleton") return err(`neta ${skeletonNetaId} is kind=${sn.kind}, not skeleton`);
+        const errs = validateSkeletonContent(sn.content, { beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
+        if (errs.length) return err(`invalid skeleton content: ${errs.join("; ")}`);
+        skeleton = sn.content as SkeletonContent;
+      }
+      const res = genBass(frame, chords, seed, drums, { kickLock, snareGap, approach, skeleton });
+      // capture 後に link(ベース, 骨格, "realized_from") を張れるよう id をエコー（design #20・gen_melody と同じ）。
+      if (skeletonNetaId) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = skeletonNetaId;
+      return ok(res);
+    },
   );
   server.registerTool(
     "gen_drums",

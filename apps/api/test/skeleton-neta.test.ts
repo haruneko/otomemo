@@ -6,9 +6,11 @@ import {
   skeletonRestMask,
   skeletonPhrasesToV2,
   skelArrayToBreakpoints,
+  explicitBassSegments,
+  foldBassPitch,
   type SkeletonContent,
 } from "../src/music/skeletonNeta";
-import { genMelody, genSkeletonCandidates } from "../src/music/generate";
+import { genMelody, genSkeletonCandidates, genBass } from "../src/music/generate";
 
 // 骨格層の一級化（design #20）の content 契約・変換群のテスト（TDD）。
 
@@ -238,6 +240,116 @@ describe("gen_melody skeleton injection (design #20)", () => {
     for (const n of notes) expect(inRest(n.start, 4, 8), `onset@${n.start}`).toBe(false);
     const again = notesOf(genMelody(frame, chords4, 7, { useV2: true, skeleton, breathe: 0.6 }));
     expect(notes).toEqual(again);
+  });
+});
+
+// ---- S3c ベース表面化（gen_bass 骨格結線）----
+
+describe("explicitBassSegments (明示ベース支配区間・web explicitBassSegments と同一規則・design #20 S3c)", () => {
+  it("bass 未指定/空は空配列（＝全区間コード導出＝bit一致の入口）", () => {
+    expect(explicitBassSegments({ bars: 2, tones: [{ start: 0, pitch: 60 }] }, { beatsPerBar: 4 })).toEqual([]);
+    expect(explicitBassSegments({ bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [] }, { beatsPerBar: 4 })).toEqual([]);
+  });
+  it("単独の明示点は 2 拍だけ支配→以降は導出へ復帰", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 36 }] };
+    expect(explicitBassSegments(c, { beatsPerBar: 4 })).toEqual([{ start: 0, dur: 2, pitch: 36 }]);
+  });
+  it("明示点は次の明示点まで支配・最後の点は直前間隔ぶん支配", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 36 }, { start: 4, pitch: 41 }] };
+    // 0→4（次点）、4→8（直前間隔4ぶん・total8でクランプ）
+    expect(explicitBassSegments(c, { beatsPerBar: 4 })).toEqual([{ start: 0, dur: 4, pitch: 36 }, { start: 4, dur: 4, pitch: 41 }]);
+  });
+  it("最後の点の支配は直前間隔ぶん（曲末まで延ばさない＝expandDominion と異なる）", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 36 }, { start: 2, pitch: 41 }] };
+    // 0→2、2→4（直前間隔2ぶん）→[4,8) は導出へ戻る
+    expect(explicitBassSegments(c, { beatsPerBar: 4 })).toEqual([{ start: 0, dur: 2, pitch: 36 }, { start: 2, dur: 2, pitch: 41 }]);
+  });
+  it("句境界で支配を打ち切る（句末で導出に戻る）", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 36 }, { start: 5, pitch: 41 }], phrases: [{ endBeat: 4 }] };
+    // 0→4（句末で切れる・次点5でなく）／5→8（直前間隔5だが total8でクランプ）。[4,5) は空隙＝導出
+    expect(explicitBassSegments(c, { beatsPerBar: 4 })).toEqual([{ start: 0, dur: 4, pitch: 36 }, { start: 5, dur: 3, pitch: 41 }]);
+  });
+  it("pitch:null（骨格休符）区間もそのまま返す", () => {
+    const c: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: null }, { start: 4, pitch: 36 }] };
+    expect(explicitBassSegments(c, { beatsPerBar: 4 })).toEqual([{ start: 0, dur: 4, pitch: null }, { start: 4, dur: 4, pitch: 36 }]);
+  });
+});
+
+describe("foldBassPitch (明示ピッチを低域窓 33..55 へ畳む・design #20 S3c)", () => {
+  it("在域はそのまま", () => {
+    expect(foldBassPitch(40)).toBe(40);
+    expect(foldBassPitch(33)).toBe(33);
+    expect(foldBassPitch(55)).toBe(55);
+  });
+  it("高すぎ/低すぎはオクターブで最寄り域へ", () => {
+    expect(foldBassPitch(60)).toBe(48); // C4→C3
+    expect(foldBassPitch(72)).toBe(48); // C5→C3
+    expect(foldBassPitch(24)).toBe(36); // C1→C2
+  });
+});
+
+describe("genBass skeleton injection (ベース表面化・design #20 S3c)", () => {
+  const frame = { bars: 2, meter: "4/4", key: 0 };
+  const chords = [{ root: 0, quality: "", start: 0, dur: 8 }];
+  const bassNotes = (r: ReturnType<typeof genBass>) => (r.items[0]!.content as { notes: { pitch: number; start: number; dur: number }[] }).notes;
+
+  it("骨格未指定＝従来と bit一致", () => {
+    for (const seed of [1, 2, 42]) {
+      const base = JSON.stringify(bassNotes(genBass(frame, chords, seed)));
+      expect(JSON.stringify(bassNotes(genBass(frame, chords, seed, null, {})))).toBe(base);
+    }
+  });
+  it("骨格指定でも bass 未記入（tones/phrases のみ）なら従来と bit一致（明示点ゼロ＝全区間導出）", () => {
+    for (const seed of [1, 2, 42]) {
+      const base = JSON.stringify(bassNotes(genBass(frame, chords, seed)));
+      const skel: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }, { start: 4, pitch: 62 }], phrases: [{ endBeat: 4 }, { endBeat: 8 }] };
+      expect(JSON.stringify(bassNotes(genBass(frame, chords, seed, null, { skeleton: skel }))), `seed${seed}`).toBe(base);
+      // bass:[] も同じ
+      expect(JSON.stringify(bassNotes(genBass(frame, chords, seed, null, { skeleton: { ...skel, bass: [] } })))).toBe(base);
+    }
+  });
+  it("明示ベース区間の全オンセットが当該ベース音へ差し替わる（ペダル）", () => {
+    const seed = 42;
+    const base = bassNotes(genBass(frame, chords, seed));
+    // D=38（導出＝C root/G 5th では出ない値）を [0,2) に敷く
+    const skel: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 38 }] };
+    const got = bassNotes(genBass(frame, chords, seed, null, { skeleton: skel }));
+    // onset 集合（リズム）は不変
+    expect(got.map((n) => n.start)).toEqual(base.map((n) => n.start));
+    const inSeg = got.filter((n) => n.start >= 0 - 1e-9 && n.start < 2 - 1e-9);
+    expect(inSeg.length).toBeGreaterThan(0);
+    for (const n of inSeg) expect(n.pitch, `onset@${n.start}`).toBe(38);
+    // [2,8) は導出のまま（骨格前と一致）
+    const after = got.filter((n) => n.start >= 2 - 1e-9);
+    const afterBase = base.filter((n) => n.start >= 2 - 1e-9);
+    expect(after).toEqual(afterBase);
+  });
+  it("高い明示ピッチは低域窓へ畳んで差し替わる", () => {
+    const seed = 42;
+    const skel: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 62 }] }; // D4=62→窓内の最寄り D3=50
+    const got = bassNotes(genBass(frame, chords, seed, null, { skeleton: skel }));
+    for (const n of got.filter((n) => n.start < 2 - 1e-9)) expect(n.pitch).toBe(50);
+  });
+  it("骨格ベース休符 pitch:null 区間はベースも鳴らさない（onset 抑制）", () => {
+    const seed = 42;
+    const skel: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: null }, { start: 2, pitch: 36 }] };
+    const got = bassNotes(genBass(frame, chords, seed, null, { skeleton: skel }));
+    for (const n of got) expect(n.start >= 0 - 1e-9 && n.start < 2 - 1e-9, `onset@${n.start}`).toBe(false);
+    expect(got.length).toBeGreaterThan(0); // 全部は消えない
+  });
+  it("休符区間へ食い込む dur は区間頭で切る", () => {
+    const seed = 42;
+    // [0,2) 明示 36 → [2,4) 休符（最後の点2は直前間隔2ぶん支配）
+    const skel: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 36 }, { start: 2, pitch: null }] };
+    const got = bassNotes(genBass(frame, chords, seed, null, { skeleton: skel }));
+    for (const n of got) expect(n.start >= 2 - 1e-9 && n.start < 4 - 1e-9, `onset@${n.start}`).toBe(false); // 休符区間に onset 無し
+    for (const n of got) if (n.start < 2 - 1e-9) expect(n.start + n.dur, `dur@${n.start}`).toBeLessThanOrEqual(2 + 1e-6); // 休符頭を越えない
+  });
+  it("決定的：同じ骨格＋同 seed は同じ結果", () => {
+    const skel: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 38 }, { start: 4, pitch: 41 }] };
+    const a = bassNotes(genBass(frame, chords, 7, null, { skeleton: skel }));
+    const b = bassNotes(genBass(frame, chords, 7, null, { skeleton: skel }));
+    expect(a).toEqual(b);
   });
 });
 

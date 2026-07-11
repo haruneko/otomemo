@@ -69,4 +69,29 @@ describe("mcp gen_skeleton / gen_melody skeleton injection (design #20)", () => 
     expect(res.isError).toBe(true);
     expect(textOf(res)).toContain("not skeleton");
   });
+
+  // S3c：gen_bass の骨格結線（ベース表面化）。同契約＝skeletonNetaId 解決→注入→id エコー。
+  it("gen_bass(skeletonNetaId) injects an explicit bass region and echoes the id for linking", async () => {
+    const { client } = await connect();
+    const bassChords = [{ root: 0, quality: "", start: 0, dur: 8 }];
+    const bassFrame = { bars: 2, meter: "4/4", key: 0 };
+    // 明示ベース点（D2=38・[0,2) をペダル）を持つ骨格を capture
+    const skel = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 38 }] };
+    const captured = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "skeleton", content: skel } })));
+    const base = JSON.parse(textOf(await client.callTool({ name: "gen_bass", arguments: { frame: bassFrame, chords: bassChords, seed: 42 } })));
+    const withSkel = JSON.parse(textOf(await client.callTool({ name: "gen_bass", arguments: { frame: bassFrame, chords: bassChords, seed: 42, skeletonNetaId: captured.id } })));
+    expect(withSkel.skeletonNetaId).toBe(captured.id);
+    // [0,2) が 38 へ差し替わる＝骨格前と変わる
+    const notes = withSkel.items[0].content.notes as { pitch: number; start: number }[];
+    expect(JSON.stringify(notes)).not.toBe(JSON.stringify(base.items[0].content.notes));
+    for (const n of notes.filter((n) => n.start < 2 - 1e-9)) expect(n.pitch).toBe(38);
+  });
+
+  it("gen_bass(skeletonNetaId) errors on a non-skeleton neta", async () => {
+    const { client } = await connect();
+    const mel = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } } })));
+    const res = (await client.callTool({ name: "gen_bass", arguments: { frame, chords, seed: 5, skeletonNetaId: mel.id } })) as { isError?: boolean };
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toContain("not skeleton");
+  });
 });

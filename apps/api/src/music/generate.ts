@@ -18,7 +18,7 @@ import {
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
 import { genMotifMelody, genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
-import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
+import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, explicitBassSegments, foldBassPitch, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type Feel } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる（notes はストレート）
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
@@ -1163,7 +1163,7 @@ export function genBass(
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
   drums?: DrumsInput | null,
-  opts?: { kickLock?: number; snareGap?: number; approach?: number },
+  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent },
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
@@ -1276,6 +1276,30 @@ export function genBass(
       const next = snareBeats.find((t) => t > n.start + 1e-6);
       if (next === undefined) continue;
       if (n.start + n.dur > next + 1e-6 && gRng.next() < snareGap) n.dur = round3(Math.max(0.25, next - n.start));
+    }
+  }
+
+  // --- E: 骨格ベース表面化（design #20 S3c）：明示ベース区間のピッチを差し替え・骨格休符区間のオンセットを抑制。
+  // 全リズム後処理（approach/snareGap）の後に適用＝RNG 不消費・骨格の有無で生成/approach/snareGap は不変
+  // ＝明示点ゼロ（bass 未指定/空）なら segs 空で丸ごとスキップ＝従来と bit 一致（明示点がある場合のみ経路が変わる）。
+  const skelBass = opts?.skeleton;
+  if (skelBass && (skelBass.bass?.length ?? 0) > 0) {
+    const segs = explicitBassSegments(skelBass, { beatsPerBar: bpb });
+    if (segs.length) {
+      const rests = segs.filter((s) => s.pitch == null);
+      const kept: typeof notes = [];
+      for (const n of notes) {
+        const seg = segs.find((s) => n.start >= s.start - 1e-9 && n.start < s.start + s.dur - 1e-9);
+        if (seg) {
+          if (seg.pitch == null) continue; // 骨格ベース休符＝当該オンセットを鳴らさない
+          n.pitch = Math.max(33, Math.min(55, foldBassPitch(seg.pitch))); // 明示ピッチを低域窓へ畳む
+        }
+        // 休符区間へ食い込む dur は区間頭で切る（S3b と同思想・直前の音は休符頭で着地）。
+        for (const r of rests) if (r.start > n.start + 1e-9 && r.start < n.start + n.dur - 1e-9) n.dur = round3(r.start - n.start);
+        kept.push(n);
+      }
+      notes.length = 0;
+      notes.push(...kept);
     }
   }
 

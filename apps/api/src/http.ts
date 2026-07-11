@@ -222,7 +222,19 @@ export function buildHttp(core: Core): FastifyInstance {
         case "normalize_to_c": return { notes: normalizeToC(asNotes(b.notes ?? b.melody), b.key) };
         case "gen_bass": { // drums＋ノブ透過（design「gen_bass×ドラム結線」。drums 無し/係数0＝従来 bit 一致）
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
-          return genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach) });
+          // 骨格注入（design #20 S3c）：skeletonNetaId 指定時はその neta の content を SkeletonContent として読み検証し注入（gen_melody と同契約・明示ベースだけ上書き）。
+          let skeleton: SkeletonContent | undefined;
+          if (typeof b.skeletonNetaId === "string") {
+            const sn = core.getNeta(b.skeletonNetaId);
+            if (!sn) return reply.code(400).send({ error: `skeleton neta ${b.skeletonNetaId} not found` });
+            if (sn.kind !== "skeleton") return reply.code(400).send({ error: `neta ${b.skeletonNetaId} is kind=${sn.kind}, not skeleton` });
+            const errs = validateSkeletonContent(sn.content, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
+            if (errs.length) return reply.code(400).send({ error: `invalid skeleton content: ${errs.join("; ")}` });
+            skeleton = sn.content as SkeletonContent;
+          }
+          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton });
+          if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string; // capture 後 link(ベース→骨格,"realized_from") 用にエコー
+          return res;
         }
         case "gen_skeleton": // 骨格候補（design #20 S2・構造線→ブレークポイント列）。phrasing=句割り。
           return genSkeletonCandidates(b.frame, asChords(b.chords), b.seed, {

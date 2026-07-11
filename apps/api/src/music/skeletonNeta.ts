@@ -162,6 +162,40 @@ function cadenceToDegree(cadence: string | undefined, isLast: boolean): number {
   return isLast ? 1 : 5; // planSkeleton慣習：最終句=主音（答え）/非最終句=属音（問い）
 }
 
+// 明示ベースの支配区間（design #20 S3c＝ベース表面化）。**web の apps/web/src/skeletonEdit.ts の
+// explicitBassSegments と同一規則＝表示（web プレビュー）と生成（api genBass）で explicit/derived の切替が一致**。
+// 規則：各明示点は次の明示点まで支配。**最後の明示点は「直前間隔ぶん」だけ支配→以降は導出へ復帰**（単独点は2拍）
+// ＝単独ペダル点が曲全体を支配してしまう expandDominion(line:"bass") とは意図的に異なる（「書いた区間だけ上書き」）。
+// 句境界(endBeat)は支配を打ち切る＝句末で導出に戻る。pitch:null＝骨格ベース休符（当該区間はベースを鳴らさない）。
+// bass 未指定/空＝空配列＝呼び出し側（genBass）は全区間コード導出＝従来と bit 一致。
+export function explicitBassSegments(content: SkeletonContent, opts: { beatsPerBar?: number } = {}): SkeletonSegment[] {
+  const bpb = opts.beatsPerBar ?? 4;
+  const total = content.bars * bpb;
+  const pts = [...(content.bass ?? [])].sort((a, b) => a.start - b.start);
+  const bounds = (content.phrases ?? []).map((p) => p.endBeat);
+  const out: SkeletonSegment[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const s = pts[i]!.start;
+    if (s >= total - 1e-9) break;
+    // 次の明示点まで／最後の点は直前間隔ぶん（導出が復帰できる・単独点は2拍）。
+    let e = i + 1 < pts.length ? pts[i + 1]!.start : s + (pts.length > 1 ? s - pts[i - 1]!.start : 2);
+    e = Math.min(e, total);
+    for (const b of bounds) if (b > s + 1e-9 && b < e - 1e-9) e = b; // 句をまたがない＝句末で導出に戻る
+    if (e <= s + 1e-9) continue;
+    out.push({ start: s, dur: e - s, pitch: pts[i]!.pitch });
+  }
+  return out;
+}
+
+// 明示ベースピッチ（絶対 MIDI）を genBass の低域窓 [lo,hi]（既定 33..55＝A1..G3）へオクターブで畳む。
+// 在域なら保持・外なら最寄り oct へ寄せ、最後に clamp（web derivedBassPitch の C2 帯慣行に倣う低域化）。
+export function foldBassPitch(pitch: number, lo = 33, hi = 55): number {
+  let p = pitch;
+  while (p < lo) p += 12;
+  while (p > hi) p -= 12;
+  return Math.max(lo, Math.min(hi, p));
+}
+
 // 逆変換：genSkeletonFromModel の返り（1拍粒度・保持済み number[]）→ ブレークポイント列。
 // ピッチが直前拍から変わる位置にだけ点を置く＝dur を持たない骨格へ圧縮。
 export function skelArrayToBreakpoints(skel: number[]): SkeletonBreakpoint[] {
