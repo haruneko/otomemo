@@ -2,6 +2,8 @@
 
 最終更新: 2026-07-01
 
+> ⚠️ **陳腐化注意（2026-07-13）**：最終更新が2026-07-01で止まっており、下記「残タスクの正準」宣言は現運用と乖離（CLAUDE.md では**タスク＝Task機能**が正準・保留＝backlog.md・設計＝design.md）。本docは要棚卸し（削除/統合はオーナー判断・本文は保持）。
+
 このファイルが**残タスクの正準**。頭の中／揮発タスクで管理しない。着手・完了でここを更新する。
 凡例: ✅完了 / 🟡部分・留保 / ⬜未着手。acceptor列: design=design-acceptor要 / impl=impl-acceptor要 / —=不要。
 関連: 要件=`docs/requirements.md`、設計=`docs/design.md`、生成手法調査=`docs/research/2026-06-21-generation-methods.md`。

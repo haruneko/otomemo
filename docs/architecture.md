@@ -1,6 +1,6 @@
 # creative_manager アーキテクチャ・HOWメモ（v0.1）
 
-最終更新: 2026-06-24
+最終更新: 2026-07-13（systemd 自動起動の記述を実態＝2026-07-07導入済へ更新）
 
 要件は `docs/requirements.md`。ここは HOW（どう作るか）の決定ログ。決まったことだけ書き、未決は「未決・要調査」に置く。
 
@@ -35,7 +35,7 @@
 - 非同期ジョブ：SQLite上のジョブ表＋**api(TS)内のコンシューマ**＋スケジューラ（Redis等の追加インフラ無し）。※旧 Python ワーカーは 2026-07-05 撤去＝生成/研究/取込は api が消化。
 - 音：**Tone.js**（中核：テンポ/小節/スケジューリング/シンセ）＋ smplr/SoundFont（音色）＋ **@tonejs/midi**（MIDI入出力＝ABILITY書き出しも担う）。
 - 楽譜表示：**VexFlow / OpenSheetMusicDisplay**（"できれば"が現実的。楽譜"入力"は別途重い）。
-- 配置（実態 2026-06-23・アーキ是正S2/S4後）：K8-Plus の **WSL2(mirrored) 上で tsx/uv 起動**（Docker 不使用）。**2プロセス**（＋dev の vite）：api(:8787 単一オリジン＝web も配信／**音楽ドメインTS＝`/music`**／**creative-manager MCP の宿主**／**会話＝`claude -p` セッションを中継する薄いラッパー endpoint→web に SSE**／**ジョブ消化＝生成(決定的 `/gen/section`)・継続調査(`research-runner.ts`＝`claude -p` 一発)・MIDI取込(`midi-import.ts`＝@tonejs/midi)**)／cm-search(:8788 意味検索＝残る唯一のPython)。**cm-worker(旧ジョブワーカー)は撤去済(2026-07-05・worker脑撤去完了)**＝claude も job 消化も api(TS)へ。cm-music-mcp(:8790) も S2 で廃止。外は Tailscale serve/IP で tailnet 限定。**自動起動＝systemd ユニットは定義済だが未インストール**（`deploy/systemd/` に cm-api/worker/search＋backup.timer のユニットあり・`--user` enable は未実施＝母艦再起動で手起動が要る・backlog「systemd 自動起動」）。**起動は手動**（`pnpm --filter ./apps/api start` 等）が現状。
+- 配置（実態 2026-06-23・アーキ是正S2/S4後）：K8-Plus の **WSL2(mirrored) 上で tsx/uv 起動**（Docker 不使用）。**2プロセス**（＋dev の vite）：api(:8787 単一オリジン＝web も配信／**音楽ドメインTS＝`/music`**／**creative-manager MCP の宿主**／**会話＝`claude -p` セッションを中継する薄いラッパー endpoint→web に SSE**／**ジョブ消化＝生成(決定的 `/gen/section`)・継続調査(`research-runner.ts`＝`claude -p` 一発)・MIDI取込(`midi-import.ts`＝@tonejs/midi)**)／cm-search(:8788 意味検索＝残る唯一のPython)。**cm-worker(旧ジョブワーカー)は撤去済(2026-07-05・worker脑撤去完了)**＝claude も job 消化も api(TS)へ。cm-music-mcp(:8790) も S2 で廃止。外は Tailscale serve/IP で tailnet 限定。**自動起動＝systemd 導入済（2026-07-07）**：`deploy/systemd/install.sh` で cm-api/cm-search/cm-backup.timer を `--user` enable＋linger 設定（再起動・ログアウトでも生存。cm-worker ユニットは撤去に伴い剪定済＝backlog D8/D9 参照）。手動起動（`pnpm --filter ./apps/api start` 等）は開発時のみ。
 
 ## 解決済み（旧「未決・要調査」）
 - **ノート生成エンジン**（#12）→ **決定＋是正済(S2)**：Claude非依存の記号エンジン＝当てはまり保証つきの汎用生成＋判定。**実装は TypeScript `apps/api/src/music/`（生成・理論・analyze_fit・連想・名前付き進行）に一本化**（旧 Python/music21 の `cm-music` は廃止・music21 依存も除去）。**2026-06-24 是正（#100）**：この生成/判定面は **creative-manager MCP のツール**として公開し、**会話する Claude クライアントが直接叩く**（worker の手組みプロンプト＋判別ユニオンルーターは退役）。特定/名前/旋法/様式は Claude 知識へ（routing A は MCP の `gen_named_progression` 等で吸収）。詳細は design.md #12/#86/#100。
