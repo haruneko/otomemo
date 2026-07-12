@@ -102,6 +102,15 @@
 .desk-contact-badge.parallel { color: #ffd24a; border-color: #ffd24a; }
 .desk-contact-badge.cross { color: var(--k-rhythm); border-color: var(--k-rhythm); }
 .desk-contact-badge.rest { color: var(--muted); border-style: dashed; }
+/* D6 stale＝②のコード差替で対位が変わった接点。控えめなパルス（暫定既定・耳/手較正で見直し可＝handoff §5）。 */
+.desk-contact-badge.stale { box-shadow: 0 0 0 1px #ffd24a; animation: desk-stale-pulse 1.6s ease-in-out infinite; }
+@keyframes desk-stale-pulse { 0%, 100% { box-shadow: 0 0 0 1px #ffd24a; } 50% { box-shadow: 0 0 0 3px rgba(255, 210, 74, 0.45); } }
+@media (prefers-reduced-motion: reduce) { .desk-contact-badge.stale { animation: none; } }
+/* 「要確認×N」痕＝接点ガター。0 のときは出さない（要素ごと描かない）。 */
+.desk-contact-gutter { flex-direction: column; gap: 1px; }
+.desk-stale-mark { font-size: 0.5rem; color: #ffd24a; line-height: 1; white-space: nowrap; }
+/* stale ポップの前置き（②のコード変更で対位が変わった箇所）。 */
+.desk-contact-pop .dc-stale-note { margin: 0 0 6px; font-size: 0.7rem; color: #ffd24a; line-height: 1.35; }
 
 /* 説明ポップ（指摘のみ）＝fixed・画面外clamp 済。外タップ backdrop で閉じる。 */
 .desk-contact-backdrop { position: fixed; inset: 0; z-index: 40; }

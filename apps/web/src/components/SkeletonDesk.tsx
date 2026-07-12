@@ -16,7 +16,7 @@ import { useEditHistory } from "../history";
 import { useMelodyGen, voiceLeadingBadge, realizedMelodyCount, type Cand, type MelodyGenCtx } from "../useMelodyGen";
 import * as sctx from "../sectionContext";
 import { lanesForKind, MIN_BARS, maxBarsForKind, type Child, type Lane } from "./sectionLanes";
-import { deskLoadContent, deskSaveContent, contactText, contactDyadNotes } from "../deskContent";
+import { deskLoadContent, deskSaveContent, contactText, contactDyadNotes, staleContacts } from "../deskContent";
 import { stageAllNotes, stageLabels, type StageFocus } from "../deskStages";
 import { analyzeCounterpoint, effectiveBassAt, effectiveBassSegments, type MelCp } from "../skeletonEdit";
 import { chordChips, applyChordTrial, adoptedChordContent, chordName, type ChordSub, type ChordTrial } from "../deskChords";
@@ -88,6 +88,12 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   const [chordTrial, setChordTrial] = useState<ChordTrial | null>(null); // 試着中の差替（earChords への override・在庫は不変）
   const [chordBusy, setChordBusy] = useState(false); // 候補取得中
   const [chordUndo, setChordUndo] = useState<{ netaId: string; prevContent: unknown } | null>(null); // 直前採用の1手戻し（skeleton の↶↷とは別ドメイン）
+
+  // --- D6 B-lite「変化→耳」：②で採用されたコード区間（ブロックローカル）をセッション内で記録＝③接点の stale 判定源。
+  //   非永続（updateNeta しない・DB に持たない・閉じたら消える＝React state のみ）。編集来歴の永続追跡/クロスセクション
+  //   波及は backlog 送り（design S6 明記）。acknowledged＝試聴で確認した接点 start（stale から外す＝オオカミ少年化しない）。
+  const [editedChordRanges, setEditedChordRanges] = useState<{ start: number; end: number }[]>([]);
+  const [acknowledgedStale, setAcknowledgedStale] = useState<Set<number>>(new Set());
 
   // --- ④出口トレイ（D4）：吹く→試着→置く＋分岐スタック。 ---
   const [realizedRels, setRealizedRels] = useState<{ type: string; neta: Neta | null }[]>([]); // 焦点骨格の realized_from backlink（分岐スタック）
@@ -259,6 +265,13 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   //   ※ intervalBadge のテーブルを崇拝＝バッジ label は m.interval.label をそのまま出す（再実装しない）。
   const cp: MelCp[] = analyzeCounterpoint(tones, (b) => effectiveBassAt(b, bass, effChords, phrases, blockSpan));
 
+  // D6：接点ごとの stale フラグ。純関数（editedChordRanges 由来）から、試聴で確認済み（acknowledged）を差し引く＝
+  //   一度耳で確かめた接点は騒がない。骨格編集では editedChordRanges が増えない＝stale は立たない（②採用でのみ立つ）。
+  const staleFlags = staleContacts(editedChordRanges, cp).map((s, i) => s && !acknowledgedStale.has(cp[i]!.start));
+  const staleCount = staleFlags.reduce((n, s) => n + (s ? 1 : 0), 0);
+  // 試聴で確認＝その接点 start を acknowledged に入れ、以後 stale から外す（次に②で同区間を再採用すると再び立つ＝adopt で解除）。
+  const acknowledgeStale = (start: number) => setAcknowledgedStale((prev) => new Set(prev).add(start));
+
   // 範囲ブレース（D1.5）。既定＝ブロック全体 [0, blockSpan]。bars 伸縮でクランプ（窓が blockSpan を超えない）。
   const [range, setRange] = useState<{ startBeat: number; endBeat: number } | null>(null);
   const clampStart = Math.max(0, Math.min(range?.startBeat ?? 0, blockSpan - BPB));
@@ -399,14 +412,14 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
 
   // --- 接点タップ→説明ポップ（指摘のみ）＋「この瞬間だけ聴く」ダイアッド。 ---
   // ポップは fixed 配置＝タップした badge の画面座標を起点に、モバイル幅で画面外に出ないよう clamp。
-  const [contactPop, setContactPop] = useState<{ cp: MelCp; x: number; y: number } | null>(null);
+  const [contactPop, setContactPop] = useState<{ cp: MelCp; x: number; y: number; stale: boolean } | null>(null);
   const POP_W = 232; // ポップ幅（clamp 用・CSS と同値）
-  const onContactTap = (e: React.MouseEvent, m: MelCp) => {
+  const onContactTap = (e: React.MouseEvent, m: MelCp, stale: boolean) => {
     e.stopPropagation();
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = Math.max(8, Math.min(r.left, window.innerWidth - POP_W - 8)); // 画面外clamp（右端はみ出し防止）
     const y = Math.min(r.bottom + 4, window.innerHeight - 110); // 下端はみ出し防止
-    setContactPop({ cp: m, x, y });
+    setContactPop({ cp: m, x, y, stale });
   };
   // バッジ/ポップの属性色クラス（parallel/cross/rest/diss を dissonant より前＝説明文と同じ優先順位）。
   const contactClass = (m: MelCp): string =>
@@ -461,6 +474,12 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     const prevContent = target?.node.neta.content ?? null;
     const content = adoptedChordContent(prevContent, chip.netaChordIndex, chordTrial.sub, chip.shift);
     setChordUndo({ netaId: chip.netaId, prevContent });
+    // D6：採用（＝在庫を書き換えた瞬間）にだけ、差し替えたコードのブロックローカル区間を記録＝接点 cp の start と
+    //   同座標系（chip.entry.start は earChordsRel と同じブロック相対）。試着では記録しない（在庫不変の間は腐らない）。
+    const range = { start: chip.entry.start, end: chip.entry.start + chip.entry.dur };
+    setEditedChordRanges((prev) => [...prev, range]); // 重複は素直に許容（staleContacts は membership＝or で無害）
+    // 同区間に載る acknowledged は解除＝再採用でその接点が再び変わった＝もう一度「要確認」に戻す（見落とし防止）。
+    setAcknowledgedStale((prev) => new Set([...prev].filter((s) => !(s >= range.start - 1e-6 && s < range.end - 1e-6))));
     void api.updateNeta(chip.netaId, { content }).catch(() => {});
     // children を更新＝earChordsRel が採用後に。同 neta を複数配置していれば全箇所へ反映（共有ネタの正しい挙動）。
     setChildren((prev) => prev.map((c) => (c.node.neta.id === chip.netaId ? { ...c, node: { ...c.node, neta: { ...c.node.neta, content } } } : c)));
@@ -713,18 +732,26 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
       {/* 接点ストリップ（D2）：ロール直下・タップできる対位法要約行。バッジ label＝intervalBadge の label
           （m.interval.label＝再実装しない）。色＝属性（並行/交差/休符/不協和/協和）。scroll はロールと同期。 */}
       <div className="desk-contact" aria-label="desk-contact">
-        <div className="desk-contact-gutter" style={{ width: GUTTER }}>接点</div>
+        <div className="desk-contact-gutter" style={{ width: GUTTER }}>
+          <span>接点</span>
+          {/* D6：②のコード差替で対位が変わった（＝腐りうる）接点数。0 なら出さない。試聴で確認すると減る（騒がない）。 */}
+          {staleCount > 0 && (
+            <span className="desk-stale-mark" aria-label="stale-count" title="②のコード変更で対位が変わった接点。タップして確認できます。">
+              要確認×{staleCount}
+            </span>
+          )}
+        </div>
         <div className="desk-contact-viewport">
           <div className="desk-contact-zone" ref={contactZoneRef} style={{ width: blockSpan * PPB }}>
             {cp.map((m, i) => (
               <button
                 key={i}
                 type="button"
-                className={"desk-contact-badge " + contactClass(m)}
+                className={"desk-contact-badge " + contactClass(m) + (staleFlags[i] ? " stale" : "")}
                 aria-label={`contact-${i}`}
-                title="タップ＝説明＋この瞬間だけ聴く"
+                title={staleFlags[i] ? "②のコード変更で対位が変わった箇所＝タップして確認" : "タップ＝説明＋この瞬間だけ聴く"}
                 style={{ left: m.start * PPB }}
-                onClick={(e) => onContactTap(e, m)}
+                onClick={(e) => onContactTap(e, m, staleFlags[i] ?? false)}
               >
                 {m.interval ? m.interval.label : "—"}
               </button>
@@ -738,9 +765,23 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         <>
           <div className="desk-contact-backdrop" aria-hidden="true" onClick={() => setContactPop(null)} />
           <div className="desk-contact-pop" role="dialog" aria-label="contact-pop" style={{ left: contactPop.x, top: contactPop.y, width: POP_W }}>
+            {/* D6：stale＝②のコード変更で対位が変わった箇所の一言を前置き（指摘のみ・自動修正しない）。 */}
+            {contactPop.stale && <p className="dc-stale-note" aria-label="contact-stale-note">②のコード変更で対位が変わった箇所</p>}
             <p className="dc-text">{contactText(contactPop.cp)}</p>
-            <button type="button" className="dc-listen" aria-label="contact-listen" onClick={() => playContactDyad(contactPop.cp)}>
-              ♪ この瞬間だけ聴く
+            {/* 試聴＝D2 の playContactDyad をそのまま流用（差替後の現接点の2声）。stale はここで確認済み扱い＝以後騒がない。 */}
+            <button
+              type="button"
+              className="dc-listen"
+              aria-label="contact-listen"
+              onClick={() => {
+                playContactDyad(contactPop.cp);
+                if (contactPop.stale) {
+                  acknowledgeStale(contactPop.cp.start);
+                  setContactPop((p) => (p ? { ...p, stale: false } : p)); // このポップ表示も即「確認済み」へ
+                }
+              }}
+            >
+              {contactPop.stale ? "♪ 変化した瞬間を聴く" : "♪ この瞬間だけ聴く"}
             </button>
           </div>
         </>

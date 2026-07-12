@@ -133,6 +133,20 @@ export function contactText(m: MelCp): string {
   return `${m.interval.label}${weakPassing}。素直な響き。`;
 }
 
+// --- B-lite「変化→耳」：②のコード差替が③の詰めた対位を黙って腐らせる問題を **見せる**（design #20 S6・D6） -----
+// 思想（#20）：機械は指摘まで・自動修正はしない。②で編集された（採用された）コード区間を机のセッション内で記録し、
+//   ③の接点のうち **当該区間に載るもの** を stale（＝差替でこの拍の縦の相手が変わった＝要確認）と印す。
+//   ここは range membership だけの純関数（[機械]テスト対象）＝acknowledge（試聴で消える）は器側 React state。
+//
+// 判定：cp[i].start が editedRanges のいずれかの **半開区間 [start, end)** に載れば true。
+//   ・半開＝コードの支配（effectiveBassAt/dominionSegments）と同じ境界規約＝コード末端 start==end は次コード側。
+//   ・editedRanges 空＝全 false（②未編集・骨格だけ触った状態では立たない＝D6 の要件）。
+//   ・重複区間は素直に許容＝membership は or なので重なっても結果は変わらない（呼び側で dedup 不要）。
+export function staleContacts(editedRanges: { start: number; end: number }[], cp: MelCp[]): boolean[] {
+  const EPS = 1e-6;
+  return cp.map((m) => editedRanges.some((r) => m.start >= r.start - EPS && m.start < r.end - EPS));
+}
+
 // 「この瞬間だけ聴く」＝当該接点の **2音だけ**（メロ点＋実効ベース+1oct）を返す。ベッドは一切混ざらない
 //   ＝引数が MelCp 単体なので構造的に混入しようがない（handoff §3 D2 の要件）。program は骨格2声の音色
 //   （メロ=SKEL_MEL_PROGRAM / ベース=SKEL_BASS_PROGRAM）に揃える。持続（dur）は呼び出し側が previewNote の

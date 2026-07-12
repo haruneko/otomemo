@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deskLoadContent, deskSaveContent, deskLensNotes, sliceBedToWindow, contactText, contactDyadNotes } from "../src/deskContent";
+import { deskLoadContent, deskSaveContent, deskLensNotes, sliceBedToWindow, contactText, contactDyadNotes, staleContacts } from "../src/deskContent";
 import { LENS_FOLD, LENS_REAL } from "../src/deskLens";
 import { analyzeCounterpoint, intervalBadge, SKEL_MEL_PROGRAM, SKEL_BASS_PROGRAM, type MelCp } from "../src/skeletonEdit";
 import type { ChordEntry, Note, SkeletonContent, SkeletonBreakpoint } from "../src/music";
@@ -130,6 +130,34 @@ describe("deskLensNotes（畳み群＝fold のみ／実音群＝real）", () => 
       expect(realPlain.some((n) => n.program === 48 || n.program === 42)).toBe(true); // 骨格線が居る
       expect(realPlain.some((n) => n.pitch === 72)).toBe(true); // 現メロも居る
     });
+  });
+});
+
+// --- D6: staleContacts（②で採用したコード区間に載る接点だけ stale＝membership の純関数） --------------
+describe("staleContacts（編集区間に載る接点だけ true・半開 [start,end)）", () => {
+  // 接点3つ：start 0 / 4 / 6（ブロックローカル）。
+  const cp: MelCp[] = [
+    mkCp({ start: 0 }), mkCp({ start: 4 }), mkCp({ start: 6 }),
+  ];
+  it("編集区間に載る接点だけ true・区間外は false", () => {
+    // bar2 [4,8) を編集＝start 4/6 が stale・start 0 は非 stale。
+    expect(staleContacts([{ start: 4, end: 8 }], cp)).toEqual([false, true, true]);
+  });
+  it("editedRanges 空＝全 false（②未編集・骨格だけ触った状態）", () => {
+    expect(staleContacts([], cp)).toEqual([false, false, false]);
+  });
+  it("半開区間：start==range.start は載る・start==range.end は載らない（次コード側）", () => {
+    // [0,4)：start 0 は載る、start 4 は end==4 で載らない。
+    expect(staleContacts([{ start: 0, end: 4 }], cp)).toEqual([true, false, false]);
+  });
+  it("複数区間：いずれかに載れば true", () => {
+    expect(staleContacts([{ start: 0, end: 2 }, { start: 6, end: 8 }], cp)).toEqual([true, false, true]);
+  });
+  it("重複区間は素直に許容（membership は or＝結果は変わらない）", () => {
+    expect(staleContacts([{ start: 4, end: 8 }, { start: 4, end: 8 }], cp)).toEqual([false, true, true]);
+  });
+  it("接点空＝空配列", () => {
+    expect(staleContacts([{ start: 0, end: 8 }], [])).toEqual([]);
   });
 });
 
