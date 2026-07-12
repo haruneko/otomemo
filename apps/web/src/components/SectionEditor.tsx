@@ -12,10 +12,12 @@ import {
   beatsPerBar,
   feelOf,
   isCompoundMeter,
+  isSkeleton,
   type ChordEntry,
   type Feel,
   type Note,
 } from "../music";
+import type { SkeletonDeskTarget } from "./SkeletonDesk"; // 型のみ＝実行時依存なし（骨格ブロック→机の入口）
 import { MiniRoll } from "./MiniRoll";
 import { Icon } from "./Icon";
 import { useDismiss } from "../useDismiss";
@@ -49,6 +51,7 @@ export function SectionEditor({
   reloadSignal,
   onChanged,
   onOpenNeta,
+  onOpenSkeletonDesk,
   title,
 }: {
   neta: Neta;
@@ -59,6 +62,8 @@ export function SectionEditor({
   reloadSignal?: number; // 外部(D&D配置)からの再読込トリガ
   onChanged?: () => void;
   onOpenNeta?: (n: Neta) => void; // ブロックタップ→子ネタを編集画面で開く（潜る）
+  // #20 S6骨格の机：骨格ブロックタップ→机（全画面）で開く。未指定＝従来どおり onOpenNeta（潜る）。
+  onOpenSkeletonDesk?: (t: SkeletonDeskTarget) => void;
 }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [loadErr, setLoadErr] = useState(false); // getComposition 失敗時＝空白で固まらず再試行を出す（perf耳FB 2026-07-09）
@@ -165,6 +170,21 @@ export function SectionEditor({
     e.stopPropagation();
     if (eraseMode) {
       void remove(c.node.neta.id, c.position); // 消しゴム：tap 一発で外す
+      return;
+    }
+    // #20 S6骨格の机：骨格ブロックは机（全画面・ベッド上で編集）で開く。骨格以外は完全に従来どおり。
+    const isSkel = c.node.neta.kind === "skeleton" || isSkeleton(c.node.neta.content);
+    if (isSkel && onOpenSkeletonDesk) {
+      onOpenSkeletonDesk({
+        sectionId: neta.id,
+        sectionKey: keyPc,
+        sectionMode: neta.mode,
+        meter: liveMeter,
+        tempo,
+        skelNetaId: c.node.neta.id,
+        skelPosition: c.position,
+        skelOrd: c.ord,
+      });
       return;
     }
     onOpenNeta?.(c.node.neta); // 通常：tap＝子ネタを編集画面で開く（潜る）

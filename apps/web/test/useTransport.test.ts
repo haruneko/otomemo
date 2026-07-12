@@ -82,6 +82,30 @@ describe("useTransport (#59)", () => {
     expect(playNotes.mock.calls[1]![2].loop).toEqual({ startBeat: 0, endBeat: 2 });
   });
 
+  // #20 S6骨格の机：レンズ無停止切替。setLensGain は handle パススルーのみ＝begin（再スケジュール）を回さない。
+  it("lens gate: setLensGain passes through to handle without rescheduling; activeLens is forwarded to playNotes", async () => {
+    const setLensGain = vi.fn();
+    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), setLensGain });
+    const { result } = renderHook(() =>
+      useTransport(() => NOTES, 120, { scaleBeats: 4, activeLens: "fold" }),
+    );
+    await act(async () => {
+      result.current.playPause();
+    });
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(1));
+    // activeLens が playNotes opts に渡る（初期ゲート）。
+    expect(playNotes.mock.calls[0]![2].activeLens).toBe("fold");
+
+    // レンズトグル＝ゲート開閉のみ。playNotes は再度呼ばれない（＝再スケジュールしない＝位置が飛ばない）。
+    act(() => {
+      result.current.setLensGain("fold", false);
+      result.current.setLensGain("real", true);
+    });
+    expect(setLensGain).toHaveBeenCalledWith("fold", false);
+    expect(setLensGain).toHaveBeenCalledWith("real", true);
+    expect(playNotes).toHaveBeenCalledTimes(1); // ★begin を回避＝再生位置が保持される
+  });
+
   it("unmount stops playback (no rogue audio)", async () => {
     const stop = vi.fn();
     playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop });

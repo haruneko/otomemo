@@ -10,16 +10,19 @@ export type TransportState = "stopped" | "playing" | "paused";
 export function useTransport(
   getNotes: () => Note[],
   bpm: number,
-  opts: { scaleBeats: number; bpb?: number; program?: number; feel?: Feel | null; compound?: boolean },
+  // #20 S6骨格の机: activeLens は加算 optional。未指定＝従来完全一致（NetaDialog/SectionEditor 不変）。
+  // 指定時＝begin の playNotes へ渡し初期ゲート（そのレンズだけ開く）を効かせる＝レンズ印つき notes 用。
+  opts: { scaleBeats: number; bpb?: number; program?: number; feel?: Feel | null; compound?: boolean; activeLens?: string },
 ) {
   const { lineRef, timeRef, scrollerRef, beatRef, start: startPh, stop: stopPh } = usePlayhead();
   const handle = useRef<PlaybackHandle | null>(null);
   const [state, setState] = useState<TransportState>("stopped");
   const [loopOn, setLoopOn] = useState(false);
 
-  // 最新値を ref に退避＝コールバックを安定化（stale closure 回避）。
-  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound });
-  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound };
+  // 最新値を ref に退避＝コールバックを安定化（stale closure 回避）。activeLens も載せる＝再ループ時の
+  // 初期ゲート（そのレンズだけ開く）が最新のレンズ選択で正しく効く（無停止切替は begin を回さないので別経路）。
+  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens });
+  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens };
 
   const begin = useCallback(
     async (loop: boolean) => {
@@ -32,6 +35,7 @@ export function useTransport(
         program: c.program,
         feel: c.feel,
         compound: c.compound,
+        activeLens: c.activeLens, // #20 S6: notes にレンズ印がある時だけ意味を持つ（未指定＝全開＝従来）
         onEnd: () => {
           setState("stopped");
           stopPh();
@@ -71,6 +75,12 @@ export function useTransport(
     }
   }, [loopOn, state, begin]);
 
+  // #20 S6骨格の机: レンズ別ゲートを**再生を止めずに**開閉（handle パススルー）。begin を回さない＝
+  // 再スケジュールしない＝再生位置が飛ばない（無停止A/B の核）。停止中/レンズ層なしは handle 側で no-op。
+  const setLensGain = useCallback((lens: string, on: boolean) => {
+    handle.current?.setLensGain(lens, on);
+  }, []);
+
   // 別ネタへ切替/アンマウントで鳴りっぱなしを止める
   useEffect(() => () => handle.current?.stop(), []);
 
@@ -85,5 +95,6 @@ export function useTransport(
     playPause,
     rewind,
     toggleLoop,
+    setLensGain,
   };
 }

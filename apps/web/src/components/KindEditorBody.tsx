@@ -71,6 +71,7 @@ export interface KindEditorBodyProps {
   reloadSignal?: number;
   onChanged?: () => void;
   onOpenNeta?: (n: Neta) => void; // Section のブロックタップ→子ネタを開く（潜る）
+  onOpenSkeletonDesk?: (t: import("./SkeletonDesk").SkeletonDeskTarget) => void; // #20 S6：骨格ブロック→机
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
   tp: { lineRef: any; scrollerRef: any; beatRef: any; playing: boolean };
 }
@@ -283,6 +284,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           reloadSignal={p.reloadSignal}
           onChanged={p.onChanged}
           onOpenNeta={p.onOpenNeta}
+          onOpenSkeletonDesk={p.onOpenSkeletonDesk}
         />
       ) : (
         <div className="text-editor">

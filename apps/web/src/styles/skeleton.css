@@ -66,3 +66,17 @@
 
 /* realized_from の関連チップ（RelationsPanel・タップで開く） */
 .relations .rel-item.realized { border-color: var(--k-skeleton); color: var(--k-skeleton); cursor: pointer; }
+
+/* 骨格の机（design #20 S6 D1c）＝全画面。ヘッダ＋③前景（SkeletonEditor）＋固定下端トランスポート。 */
+.skeleton-desk { flex: 1; min-height: 0; }
+.skeleton-desk .skeleton-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.desk-header { display: flex; align-items: center; gap: 10px; padding: 4px 2px 8px; border-bottom: 1px solid var(--line); }
+.desk-header .hd-back { background: none; border: none; color: var(--fg); cursor: pointer; font-size: 0.9rem; padding: 2px 6px; }
+.desk-title { font-weight: 600; }
+.desk-meta { margin-left: auto; font-size: 0.72rem; white-space: nowrap; }
+.desk-transport { display: flex; align-items: center; gap: 6px; padding: 6px 4px; border-top: 1px solid var(--line); }
+.desk-transport .tb-tool { min-width: 34px; }
+.desk-lens.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.desk-lens.seg button { background: none; border: none; color: var(--muted); padding: 3px 12px; cursor: pointer; font-size: 0.8rem; }
+.desk-lens.seg button.on { background: var(--k-skeleton); color: #10141a; font-weight: 600; }
+.desk-time { font-variant-numeric: tabular-nums; min-width: 32px; text-align: center; }

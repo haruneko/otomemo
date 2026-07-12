@@ -102,6 +102,32 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(removeChild).not.toHaveBeenCalled(); // タップは外さない
   });
 
+  it("#20 S6：骨格ブロックタップ→onOpenSkeletonDesk（机）へ（潜らない）。target が正しい", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 4, ord: 0, node: { neta: mk("sk1", "skeleton", { content: { bars: 2, tones: [{ start: 0, pitch: 60 }] }, key: 2, mode: "major" }), children: [] } }],
+    });
+    const onOpenNeta = vi.fn();
+    const onOpenSkeletonDesk = vi.fn();
+    render(<SectionEditor neta={mk("s1", "section", { mode: "major" })} keyPc={0} tempo={120} meter="4/4" onOpenNeta={onOpenNeta} onOpenSkeletonDesk={onOpenSkeletonDesk} />);
+    await userEvent.click(await screen.findByLabelText("block-sk1@4"));
+    expect(onOpenSkeletonDesk).toHaveBeenCalledWith(
+      expect.objectContaining({ sectionId: "s1", sectionKey: 0, sectionMode: "major", meter: "4/4", tempo: 120, skelNetaId: "sk1", skelPosition: 4, skelOrd: 0 }),
+    );
+    expect(onOpenNeta).not.toHaveBeenCalled(); // 骨格は机へ＝潜らない
+  });
+
+  it("#20 S6：onOpenSkeletonDesk 未指定なら骨格も従来どおり onOpenNeta（後方互換）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("sk1", "skeleton", { content: { bars: 2, tones: [] } }), children: [] } }],
+    });
+    const onOpenNeta = vi.fn();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} onOpenNeta={onOpenNeta} />);
+    await userEvent.click(await screen.findByLabelText("block-sk1@0"));
+    expect(onOpenNeta).toHaveBeenCalledWith(expect.objectContaining({ id: "sk1" }));
+  });
+
   it("消しゴムモード＝ブロックtap一発で外す（通常はtap=編集・長押しは撤去）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),

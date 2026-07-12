@@ -12,12 +12,14 @@ export function NetaDialog({
   onClose,
   onChanged,
   onOpenNeta,
+  onOpenSkeletonDesk,
   reloadSignal,
 }: {
   neta: Neta;
   onClose: () => void;
   onChanged?: () => void;
   onOpenNeta?: (n: Neta) => void; // Section のブロックタップ→子ネタを開く（潜る）
+  onOpenSkeletonDesk?: (t: import("./SkeletonDesk").SkeletonDeskTarget) => void; // #20 S6：骨格ブロック→机
   reloadSignal?: number; // D&D配置などの外部更新でSectionEditorを再読込
 }) {
   const ed = useNetaEditor(neta, { onClose, onChanged });
@@ -90,7 +92,7 @@ export function NetaDialog({
         pickup={ed.pre} setPickup={ed.setPickup}
         text={ed.text} setText={ed.setText}
         keyPc={ed.key} mode={ed.mode} tempo={ed.tempo} meter={ed.meter} title={ed.title}
-        reloadSignal={reloadSignal} onChanged={onChanged} onOpenNeta={onOpenNeta}
+        reloadSignal={reloadSignal} onChanged={onChanged} onOpenNeta={onOpenNeta} onOpenSkeletonDesk={onOpenSkeletonDesk}
         tp={{ lineRef: ed.tp.lineRef, scrollerRef: ed.tp.scrollerRef, beatRef: ed.tp.beatRef, playing: ed.tp.playing }}
       />
       {f.isMusic && (

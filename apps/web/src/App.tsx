@@ -28,6 +28,9 @@ const StudyView = lazy(() => import("./components/StudyView").then((m) => ({ def
 const Chat = lazy(() => import("./components/Chat").then((m) => ({ default: m.Chat })));
 const Tray = lazy(() => import("./components/Tray").then((m) => ({ default: m.Tray })));
 const ProjectScreen = lazy(() => import("./components/ProjectScreen").then((m) => ({ default: m.ProjectScreen })));
+// #20 S6骨格の机：骨格ブロック→全画面の机（ベッド上で編集・レンズA/B）。二次画面＝遅延ロード。
+const SkeletonDesk = lazy(() => import("./components/SkeletonDesk").then((m) => ({ default: m.SkeletonDesk })));
+import type { SkeletonDeskTarget } from "./components/SkeletonDesk";
 import { flushOutbox } from "./outbox";
 import { projectTag } from "./project";
 
@@ -66,6 +69,8 @@ export function App() {
   const [active, setActive] = useState<Neta | null>(null);
   // Section から子ネタへ潜った履歴（← 戻るで親 Section に戻す）。トップ階層の open は空にする。
   const [navStack, setNavStack] = useState<Neta[]>([]);
+  // #20 S6骨格の机：骨格ブロック→全画面の机（active の SectionEditor の上に載る焦点）。
+  const [deskTarget, setDeskTarget] = useState<SkeletonDeskTarget | null>(null);
   // 一覧(GET /neta)は巨大content(study/analysis 等)を content:null に落として初回ロードを軽くしている。
   // エディタは全文が要る(StudyView=content.common / AnalysisWorkbench=content.raw)ので、開く時に content が
   // 欠けていれば /neta/:id で取り直す。小さい music content は一覧にも載っているので追加取得は起きない。
@@ -91,6 +96,7 @@ export function App() {
   const closeTop = (): boolean => {
     if (trayOpen) { setTrayOpen(false); return true; }
     if (chatOpen) { setChatOpen(false); setChatTarget(undefined); setGearMode(false); return true; }
+    if (deskTarget) { closeDesk(); return true; } // #20 S6：机を1レイヤとして戻るで閉じる（下の SectionEditor へ）
     if (navStack.length) {
       const parent = navStack[navStack.length - 1]!;
       setNavStack(navStack.slice(0, -1));
@@ -109,7 +115,7 @@ export function App() {
   //   戻る(popstate)で1レイヤ閉じ、まだ開いていれば reconcile が再 arm する。数を数える旧方式は
   //   非同期オープン(newSong の await reload 中に depth が一瞬0になる)で guard がズレてアプリを早期に抜ける
   //   バグがあった（監査 BUG-1）。bool の armed にしたので瞬間的な 0→再オープンでも壊れない。
-  const anyOpen = trayOpen || chatOpen || navStack.length > 0 || !!active || projectView;
+  const anyOpen = trayOpen || chatOpen || !!deskTarget || navStack.length > 0 || !!active || projectView;
   const anyOpenRef = useRef(false); anyOpenRef.current = anyOpen;
   const closeTopRef = useRef(closeTop); closeTopRef.current = closeTop;
   const armedRef = useRef(false); // guard を1件積んでいるか
@@ -136,6 +142,12 @@ export function App() {
   const [railOpen, setRailOpen] = useState(true);
   const isMobile = useIsMobile();
   const [composeSignal, setComposeSignal] = useState(0); // D&D配置でSectionEditorを再読込
+  // 机を閉じる＝焦点を落とし、下の SectionEditor を再読込（机での編集を反映）。deskTarget は closeTop/anyOpen
+  // より前で宣言する必要があるため上部（active/navStack 付近）に置く。
+  const closeDesk = useCallback(() => {
+    setDeskTarget(null);
+    setComposeSignal((v) => v + 1);
+  }, []);
 
   // ドラッグは5px動かしてから開始＝カードのクリック(開く)と両立（#52②c）
   // PC=5pxで即ドラッグ。スマホ=長押し(250ms)で掴む＝タップ再生/カードを開くとの誤爆回避。
@@ -662,7 +674,10 @@ export function App() {
         </aside>
         <section className="mainpane" aria-label="mainpane">
           <Suspense fallback={<div className="mainpane-empty"><p className="muted">読み込み中…</p></div>}>
-          {projectView && activeProject ? (
+          {deskTarget ? (
+            // #20 S6骨格の机（全画面）。開いている間は下の SectionEditor はアンマウント相当（handoff §2.2）。
+            <SkeletonDesk key={`${deskTarget.skelNetaId}@${deskTarget.skelPosition}`} {...deskTarget} onClose={closeDesk} />
+          ) : projectView && activeProject ? (
             <ProjectScreen
               project={activeProject}
               onOpenNeta={(n) => {
@@ -703,6 +718,7 @@ export function App() {
               neta={active}
               reloadSignal={composeSignal}
               onOpenNeta={drillNeta} /* Section のブロックタップ→子ネタへ潜る */
+              onOpenSkeletonDesk={(t) => setDeskTarget(t)} /* #20 S6：骨格ブロック→机（全画面） */
               onClose={() => {
                 if (navStack.length) {
                   // 潜っている途中＝親 Section に戻る（一覧に落とさない）。
