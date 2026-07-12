@@ -12,15 +12,10 @@ import {
   beatsPerBar,
   feelOf,
   isCompoundMeter,
-  isSkeleton,
-  chordsOf,
-  harmonyPlacementShift,
-  melodyPlacementShift,
   type ChordEntry,
   type Feel,
   type Note,
 } from "../music";
-import { skeletonEarNotes } from "../skeletonEdit";
 import { MiniRoll } from "./MiniRoll";
 import { Icon } from "./Icon";
 import { useDismiss } from "../useDismiss";
@@ -31,6 +26,8 @@ import { SongStatus } from "./SongStatus";
 import { PlacePicker } from "./PlacePicker";
 import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI, voiceLeadingBadge } from "../useMelodyGen";
 import { usePlacePicker } from "../usePlacePicker";
+// D0（design #20 S6）：セクション文脈の計算は純関数へ抽出（机 SkeletonDesk と共有）。ここは薄い委譲。
+import * as sctx from "../sectionContext";
 import {
   type Lane,
   type Child,
@@ -79,6 +76,17 @@ export function SectionEditor({
   const liveMeter = meter ?? neta.meter ?? undefined;
   const liveTitle = (title ?? neta.title ?? "").trim(); // 生成/作成/MIDI名に使うライブタイトル
   const BPB = beatsPerBar(liveMeter); // 1小節の拍数（#51・編集中はprop優先）
+  // D0（design #20 S6）：セクション文脈計算は sectionContext.ts の純関数へ委譲（机 D1 と共有）。
+  // 呼び出し名/シグネチャ/挙動を温存＝JSX・useMelodyGen・usePlacePicker への受け渡しは不変。
+  const secCtx: sctx.SectionCtx = { children, LANES, keyPc, mode: neta.mode, BPB };
+  const childDur = (c: Child): number => sctx.childDur(secCtx, c);
+  const contentDur = (kind: string, content: unknown): number => sctx.contentDur(secCtx, kind, content);
+  const laneChildren = (lane: Lane): Child[] => sctx.laneChildren(secCtx, lane);
+  const sectionChords = () => sctx.sectionChords(secCtx);
+  const sectionBass = (): Note[] => sctx.sectionBass(secCtx);
+  const sectionDrums = () => sctx.sectionDrums(secCtx);
+  const earChords = (): ChordEntry[] => sctx.earChords(secCtx);
+  const skelEar = (): Note[] => sctx.skelEar(secCtx);
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
   const contentEnd = children.length ? Math.max(0, ...children.map((c) => c.position + childDur(c))) : 0;
@@ -124,24 +132,8 @@ export function SectionEditor({
     void load();
   }, [load, reloadSignal]);
 
-  const inLane = (lane: Lane, kind: string) => (lane.kinds as readonly string[]).includes(kind);
-  const laneOf = (kind: string) => LANES.find((l) => inLane(l, kind));
-  // ② コード楽器の行＝ord（1→2レーン目、それ以外→1レーン目）。row 付きレーンはこの行で絞る。
-  const rowOf = (c: Child) => (c.ord === 1 ? 1 : 0);
-  const laneChildren = (lane: Lane) =>
-    children.filter((c) => inLane(lane, c.node.neta.kind) && (lane.row === undefined || rowOf(c) === lane.row));
+  const laneOf = (kind: string) => LANES.find((l) => sctx.inLane(l, kind));
   const others = children.filter((c) => !laneOf(c.node.neta.kind));
-
-  function childDur(c: Child): number {
-    const k = c.node.neta.kind;
-    // ネストした section/song＝中身の実長（子を再帰で畳む）＝1小節固定でなく本当の尺（評価修正A）。
-    if (k === "section" || k === "song") {
-      const kids = c.node.children ?? [];
-      return kids.length ? Math.max(...kids.map((kc) => kc.position + childDur(kc))) : BPB;
-    }
-    const ns = notesForContent(k, c.node.neta.content);
-    return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : BPB;
-  }
 
   // #5 song の section/song ブロック概形＝中身を合成した notes（ドラムは音域を乱すので除く）。
   // 単体パート(メロ/ベース等)は MiniRoll が content から描くので undefined（従来通り）。
@@ -154,12 +146,6 @@ export function SectionEditor({
   // その位置が既にブロックで埋まっているか（レーン全体でなく**占有セルだけ**不可＝別小節には置ける）。
   const occupiedAt = (lane: Lane, position: number) =>
     laneChildren(lane).some((c) => c.position <= position + 1e-6 && position < c.position + childDur(c) - 1e-6);
-  // 置くネタ自体の尺（leaf は実音の長さ・未知は1小節）。配置/ループの尺重複ガードに使う。
-  const contentDur = (kind: string, content: unknown): number => {
-    if (kind === "section" || kind === "song") return BPB; // ネストは picker では稀・保守的に1小節扱い
-    const ns = notesForContent(kind, content);
-    return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : BPB;
-  };
   // 同レーンの「別ネタ」と尺(スパン)が重なるか＝点判定 occupiedAt の穴(はみ出し重複)を塞ぐ。
   const overlapsOtherInLane = (lane: Lane, childId: string, pos: number, dur: number) =>
     laneChildren(lane).some((c) => c.node.neta.id !== childId && spanOverlaps(pos, dur, c.position, childDur(c)));
@@ -233,64 +219,6 @@ export function SectionEditor({
     onChanged?.();
   }
 
-  // ②文脈系：この進行にメロ。section のコード進行を1本に連結（各コード子を小節位置ぶんオフセット）。
-  function sectionChords() {
-    const chordLane = LANES.find((l) => l.key === "chord")!;
-    const out: { root?: number; quality?: string; start?: number; dur?: number }[] = [];
-    for (const c of laneChildren(chordLane)) {
-      const content = c.node.neta.content as { chords?: typeof out } | null;
-      const offset = (c.position ?? 0) * BPB;
-      for (const ch of content?.chords ?? []) out.push({ ...ch, start: (ch.start ?? 0) + offset });
-    }
-    return out.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
-  }
-  // ベースレーンの notes を1本に連結（sectionChords と同じ流儀＝子を小節位置ぶんオフセット）。
-  // メロ生成の対位入力（design「gen_melody×ベース結線」）。相対 bass はコードレーンに当てて実音化。
-  function sectionBass(): Note[] {
-    const bassLane = LANES.find((l) => l.key === "bass")!;
-    const chords = sectionChords().map((c) => ({ root: c.root ?? 0, quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? BPB }));
-    const out: Note[] = [];
-    for (const c of laneChildren(bassLane)) {
-      const offset = (c.position ?? 0) * BPB;
-      for (const n of notesForContent("bass", c.node.neta.content, { key: keyPc, chords })) out.push({ ...n, start: n.start + offset });
-    }
-    return out.sort((a, b) => a.start - b.start);
-  }
-  // リズム(ドラム)レーンの子を1本の step グリッドへマージ（design「gen_melody×ドラム結線」）。
-  // content 形＝genDrums 出力 {rhythm:{steps,beatsPerStep,lanes}}。子ごとに hits を配置位置(拍÷beatsPerStep)ぶん
-  // オフセットし、レーン(midi|name)単位で合算（位置＝拍解釈は compositeNotes と同じ）。beatsPerStep が先頭子と
-  // 異なる子・不正 content は捨てる（防御）。レーンが空なら null＝gen_melody へ渡さない＝従来。
-  function sectionDrums(): { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: { name?: string; midi?: number; hits: number[]; vel?: number }[] } } | null {
-    type DrumRhythm = { steps?: number; bars?: number; beatsPerStep?: number; lanes?: { name?: string; midi?: number; hits?: number[]; vel?: number }[] };
-    const lane = LANES.find((l) => l.key === "rhythm");
-    if (!lane) return null;
-    let bps = 0;
-    let endStep = 0;
-    const merged = new Map<string, { name?: string; midi?: number; hits: Set<number>; vel?: number }>();
-    for (const c of laneChildren(lane)) {
-      const r = (c.node.neta.content as { rhythm?: DrumRhythm } | null)?.rhythm;
-      if (!r || !Array.isArray(r.lanes) || !r.steps || !r.beatsPerStep || r.steps <= 0 || r.beatsPerStep <= 0) continue;
-      if (!bps) bps = r.beatsPerStep;
-      if (Math.abs(r.beatsPerStep - bps) > 1e-9) continue; // グリッド解像度が混在＝合算不能な子は捨てる
-      const off = Math.round((c.position ?? 0) / bps); // 配置位置(拍)→step オフセット
-      for (const l of r.lanes) {
-        const key = `${l.midi ?? ""}|${l.name ?? ""}`;
-        const m = merged.get(key) ?? merged.set(key, { name: l.name, midi: l.midi, hits: new Set(), vel: l.vel }).get(key)!;
-        for (const h of l.hits ?? []) if (Number.isInteger(h) && h >= 0 && h < r.steps) m.hits.add(off + h);
-      }
-      endStep = Math.max(endStep, off + r.steps);
-    }
-    if (!bps || !endStep || !merged.size) return null;
-    return {
-      rhythm: {
-        steps: endStep,
-        bars: Math.max(1, Math.round((endStep * bps) / BPB)),
-        beatsPerStep: bps,
-        lanes: [...merged.values()].map((l) => ({ name: l.name, midi: l.midi, hits: [...l.hits].sort((a, b) => a - b), vel: l.vel })),
-      },
-    };
-  }
-
   // 生成/ハモリ道具（いじる▾）＝メロ生成ノブ・候補トレイ・ハモリ/fit（Task#2 で useMelodyGen に分離）。
   // section 文脈を関数で渡す＝当コンポが state を持ち、フックは純粋に近い（挙動不変）。
   const gen = useMelodyGen({
@@ -314,31 +242,7 @@ export function SectionEditor({
   }
   // 骨格の耳確認（オーナーFB 2026-07-11）：「鳴らす」ON の間だけ再生に骨格2声（メロ実音＋実効ベース+1oct・
   // Strings/Cello）を混ぜる＝ドラムと合わせて聞ける。**合成(composite)と MIDI 書き出しは不変＝無音のまま**。
-  // コードは compositeNotes と同じ key-aware 移調でセクション実調へ→骨格位置相対に。骨格自体はメロ配置規則で移調。
-  function earChords(): ChordEntry[] {
-    const chordLane = LANES.find((l) => l.key === "chord");
-    if (!chordLane) return [];
-    return laneChildren(chordLane).flatMap((c) => {
-      const shift = harmonyPlacementShift(keyPc, neta.mode, c.node.neta.mode, c.node.neta.key ?? 0);
-      return chordsOf(c.node.neta.content).map((ch) => ({
-        ...ch,
-        root: (((ch.root + shift) % 12) + 12) % 12,
-        start: ch.start + c.position,
-      }));
-    });
-  }
-  function skelEar(): Note[] {
-    const lane = LANES.find((l) => l.key === "skeleton");
-    if (!lane) return [];
-    const chords = earChords();
-    return laneChildren(lane).flatMap((c) => {
-      const content = c.node.neta.content;
-      if (!isSkeleton(content)) return [];
-      const shift = melodyPlacementShift(keyPc, neta.mode, c.node.neta.mode, c.node.neta.key ?? 0);
-      const rel = chords.map((ch) => ({ ...ch, start: ch.start - c.position })); // 骨格位置相対（導出ベースの座標系を揃える）
-      return skeletonEarNotes(content, { chords: rel, shift, beatsPerBar: BPB }).map((n) => ({ ...n, start: n.start + c.position }));
-    });
-  }
+  // コードは compositeNotes と同じ key-aware 移調でセクション実調へ→骨格位置相対に（earChords/skelEar は sectionContext へ委譲・上部）。
   // 再生専用の合成＝トグルONなら骨格2声を足す。書き出し(downloadMidi/laneTracks)は composite のまま＝混入しない。
   function playComposite(): Note[] {
     return skelAudible ? [...composite(), ...skelEar()] : composite();
