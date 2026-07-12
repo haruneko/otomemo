@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>骨格の机フィール — 通しの縫い目（破れ→縫い方）</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#11141b;--panel:#1a1e2a;--panel2:#202634;--line:#2b3245;
+  --ink:#e9edf5;--dim:#96a0b5;--mel:#7ec8ff;--bass:#ffb27e;--pad:#9adbb2;
+  --ok:#8fe0a8;--warn:#ffd479;--bad:#ff8a8a;--acc:#8fb7ff;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.55}
+#app{max-width:430px;margin:0 auto;padding:12px 11px 60px}
+h1{font-size:16px;font-weight:700}
+.sub{color:var(--dim);font-size:11px}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+.lead{color:var(--dim);font-size:12px;margin:8px 0 12px;line-height:1.65}
+.lead b{color:var(--ink)}
+/* タブ */
+#tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:12px;position:sticky;top:0;background:var(--bg);padding:6px 0;z-index:5}
+#tabs button{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:7px 2px;text-align:center;font-size:11px}
+#tabs button .sv{display:block;font-size:9px;margin-top:2px}
+#tabs button.on{background:#233052;border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset;font-weight:700}
+.sev-crit{color:var(--bad)}.sev-str{color:var(--warn)}.sev-mid{color:var(--acc)}
+/* カード */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:11px}
+.card h2{font-size:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.pill{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid}
+.pill.crit{color:var(--bad);border-color:var(--bad);background:rgba(255,138,138,.08)}
+.pill.str{color:var(--warn);border-color:var(--warn);background:rgba(255,212,121,.08)}
+.pill.mid{color:var(--acc);border-color:var(--acc);background:rgba(143,183,255,.08)}
+.tear{background:rgba(255,138,138,.06);border-left:3px solid var(--bad);border-radius:0 8px 8px 0;padding:8px 10px;margin:9px 0;font-size:12.5px;line-height:1.6}
+.stitch{background:rgba(143,224,168,.06);border-left:3px solid var(--ok);border-radius:0 8px 8px 0;padding:8px 10px;margin:9px 0;font-size:12.5px;line-height:1.6}
+.verdict{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-top:9px;font-size:12px;line-height:1.6}
+.verdict b{color:var(--ok)}
+.k{color:var(--warn);font-weight:600}
+/* デモ枠 */
+.demo{background:#141826;border:1px solid var(--line);border-radius:10px;padding:11px;margin:10px 0}
+.demo .cap{font-size:10px;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{padding:7px 11px;font-size:12px;color:var(--dim)}
+.seg button.on{background:#2e3a5c;color:var(--ink);font-weight:600}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:12.5px}
+.btn.pri{background:#274069;border-color:#3c5f9a;color:#dbe8ff;font-weight:600}
+.btn.mini{padding:5px 9px;font-size:11.5px;border-radius:7px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rowb{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:9px}
+/* パネルA：ステージレール＋レンズ */
+.rail{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+.rail button{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 2px;text-align:center}
+.rail button .t{display:block;font-size:12px;font-weight:700}
+.rail button .n{display:block;font-size:9px;color:var(--dim)}
+.rail button.on{background:#233052;border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.lensbox{margin-top:11px;background:#161b28;border:1px solid var(--line);border-radius:10px;padding:10px}
+.lensbtns{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lensbtns button{flex:1;padding:10px 4px;font-size:13px;color:var(--dim)}
+.lensbtns button.on{background:#2e3a5c;color:var(--ink);font-weight:700}
+.lensbtns.bad{border-color:var(--bad)}
+.lensmean{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.6}
+.warnline{color:var(--bad);font-size:11.5px;margin-top:8px;line-height:1.6;display:flex;gap:6px}
+.okline{color:var(--ok);font-size:11.5px;margin-top:8px;line-height:1.6}
+/* パネルB：カスケード */
+.mini{position:relative;border:1px solid var(--line);border-radius:8px;background:#141826}
+.stalerail{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin:9px 0}
+.stalerail div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 2px;text-align:center;font-size:11px;position:relative}
+.stalerail div.foc{border-color:var(--acc)}
+.dot{position:absolute;top:-6px;right:-4px;background:var(--bad);color:#1a1010;font-size:9px;font-weight:700;border-radius:999px;padding:1px 5px}
+.banner{background:rgba(255,212,121,.09);border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:7px 9px;font-size:11.5px;margin-top:9px;line-height:1.55}
+/* パネルC：分岐在庫 */
+.flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
+.flow .node{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--ink)}
+.flow .node.sk{border-color:var(--mel);color:var(--mel)}
+.arrow{color:var(--dim)}
+.stack{margin-top:9px;padding-left:14px;border-left:2px dashed var(--mel)}
+.stack .m{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin:6px 0;font-size:12px;display:flex;justify-content:space-between;align-items:center}
+.stack .m .tag{font-size:10px;color:var(--dim)}
+/* パネルE：背骨 */
+.songtl{display:flex;gap:4px;margin:10px 0 4px}
+.songtl .sec{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;position:relative}
+.songtl .sec small{display:block;font-size:9px;color:var(--dim);font-weight:400}
+.songtl .sec.chorus{background:#2b2438;border-color:#6a5aa0}
+.seam-b{display:flex;justify-content:center;gap:110px;margin:2px 0 6px}
+.seam-b button{font-size:10px;color:var(--acc);text-decoration:underline dotted}
+.maptbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:8px}
+.maptbl td,.maptbl th{border:1px solid var(--line);padding:6px 7px;text-align:left;vertical-align:top}
+.maptbl th{color:var(--dim);font-weight:600;font-size:10px}
+.maptbl .yes{color:var(--ok)}.maptbl .weak{color:var(--warn)}.maptbl .no{color:var(--bad)}
+/* まとめ */
+#summary table{width:100%;border-collapse:collapse;font-size:11.5px}
+#summary td,#summary th{border:1px solid var(--line);padding:7px;text-align:left;vertical-align:top}
+#summary th{color:var(--dim);font-size:10px}
+[hidden]{display:none!important}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;background:#2e3a5c;border:1px solid var(--acc);border-radius:10px;padding:8px 14px;font-size:12px;z-index:40;max-width:90vw;text-align:center}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>骨格の机フィール — 通しの縫い目</h1>
+  <div class="sub">①ビート ②コード ③骨格 ④表面 ＋背骨（曲）へ広げたとき、フィールが破れる所だけを縫う</div>
+  <p class="lead">
+    机フィールの芯＝<b>①1つの机の4前景（画面遷移でなく焦点切替）</b>／<b>②共有ベッド＝ループ</b>／
+    <b>③聴きレンズ（ベッドの還元）</b>／<b>④点→即・耳（接点→ダイアッド）</b>／<b>⑤在庫不変（realized_from）</b>。
+    これを通しに広げると4か所で破れる。<b>全画面を描くのは価値が薄い</b>ので、破れる縫い目だけ「破れ→縫い方」を触れる形で示す。
+    綺麗に解けない所は正直に「フィールを見直せ」と書く（Eがそれ）。
+  </p>
+  <nav id="tabs"></nav>
+  <main id="panel"></main>
+</div>
+<div id="toast" hidden></div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let toastT=null;
+function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2000);}
+
+/* ---------- 最小シンセ（B=ダイアッド／E=遷移試聴） ---------- */
+let AC=null;const ac=()=>AC||(AC=new (window.AudioContext||window.webkitAudioContext)());
+const m2f=m=>440*Math.pow(2,(m-69)/12);
+function tone(t,m,dur,type,cut,vol){const c=ac(),o=c.createOscillator(),f=c.createBiquadFilter(),g=c.createGain();
+  o.type=type;o.frequency.value=m2f(m);f.type="lowpass";f.frequency.value=cut;
+  g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+0.04);
+  g.gain.setValueAtTime(vol,t+dur-0.08);g.gain.linearRampToValueAtTime(0.0001,t+dur+0.02);
+  o.connect(f);f.connect(g);g.connect(c.destination);o.start(t);o.stop(t+dur+0.05);}
+function dyad(mel,bass){const c=ac();c.resume();const t=c.currentTime+0.03;
+  tone(t,mel,1.1,"sawtooth",1700,0.10);tone(t,bass+12,1.1,"sawtooth",900,0.09);}
+function seq(notes){const c=ac();c.resume();let t=c.currentTime+0.04;
+  for(const n of notes){tone(t,n.p,n.d*0.5,n.b?"triangle":"sawtooth",n.b?800:1700,n.b?0.11:0.10);t+=n.d*0.5;}}
+const NN=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const nn=m=>NN[((m%12)+12)%12]+(Math.floor(m/12)-1);
+
+/* ====================================================================
+ * パネル定義
+ * ==================================================================== */
+const TABS=[
+  {id:"A",label:"A レンズ反転",sev:"crit",svl:"重大"},
+  {id:"B",label:"B 下流の腐り",sev:"crit",svl:"重大"},
+  {id:"C",label:"C ④は段でない",sev:"str",svl:"構造"},
+  {id:"E",label:"E 背骨は別楽器",sev:"crit",svl:"要見直し"},
+];
+let TAB="A";
+
+/* ---- 状態（各パネル） ---- */
+const A={stage:"3",mode:"ctx"};                       // ctx=文脈レンズ / uni=統一レンズ
+const B={swapped:false,signal:true,focus:null};       // signal=縫い方ON
+const C={mode:"branch"};                              // linear / branch
+const E={};
+
+/* ================= パネルA：レンズが①/背骨で反転する ================= */
+const STAGES={
+  "1":{t:"①",n:"ビート",focus:"ドラム",ctx:["パターン単体","ベッド"],
+       mean:"焦点＝ドラム。畳み側＝他を止めてパターンだけ солo／実音側＝フルベッド。<b>音程を畳む軸は無い</b>（無音程トラック）。",
+       uniBad:"統一レンズ「畳み」＝ドラムをクリック化＝<b>編集中のドラムを消す</b>。レンズが編集対象を潰す。"},
+  "2":{t:"②",n:"コード",focus:"コード/下声",ctx:["和声だけ","編成"],
+       mean:"焦点＝コード＝③の対位の相手。畳み側＝素の三和音＋導出ベースだけ／実音側＝ボイシング＋リズム。分数コードは下声を書く行為。",
+       uniBad:"「畳み(=2声還元)」はコード段では相手が自分自身＝意味が二重化。ラベルが実態と合わない。"},
+  "3":{t:"③",n:"骨格",focus:"骨格線",ctx:["畳み(2声)","実音"],
+       mean:"焦点＝骨格線（上声）。畳み＝実効ベースを+1octに畳んだ2声＋クリック（音程が読める）／実音＝編成に乗せる。<b>レンズの原型はここ</b>。",
+       uniBad:""},
+  "4":{t:"④",n:"表面",focus:"表面メロ候補",ctx:["畳み(2声)","実音"],
+       mean:"焦点＝吹いた候補メロ。③と同じ2択で機能する（候補をベッドの上で畳み/実音試聴）。",
+       uniBad:""},
+  "song":{t:"背骨",n:"曲",focus:"構成",ctx:["構造","フルミックス"],
+       mean:"焦点＝セクション構成。畳み側＝骨格/コード記号だけの俯瞰／実音側＝全部鳴らす。<b>対位の相手が曲全体では定まらない</b>＝2声還元は成り立たない。",
+       uniBad:"「畳み=2声還元」は曲レベルで対位相手が無い＝<b>意味を失う</b>。統一レンズはここで空回りする。"},
+};
+function panelA(){
+  const s=STAGES[A.stage];
+  const uni=A.mode==="uni";
+  const labels=uni?["畳み","実音"]:s.ctx;
+  const badHere=uni&&s.uniBad;
+  return `<div class="card">
+    <h2>A <span class="pill crit">重大</span> レンズが①・背骨で反転する</h2>
+    <div class="tear"><b>破れ：</b>レンズ＝「ベッドを焦点<b>以外</b>へ還元する」。だが①では<b>ベッドそのもの（ドラム）が焦点</b>。
+      統一［畳み/実音］を全段に貼ると、①では畳みが編集対象を消し、背骨では対位相手が無く空転する。③で気持ちいいレンズが端の段で反転する。</div>
+    <div class="stitch"><b>縫い方：</b>レンズを<b>ステージ相対＝「焦点以外を畳む」</b>と一般化。ラベルも段で読み替える。
+      ③④は不変（＝フィールのbit一致）、①②背骨は初めて意味を持つ。<b>レンズ定義がむしろ強くなる</b>。</div>
+    <div class="demo">
+      <div class="cap">触ってみる：段を選ぶ → レンズ制御の意味が変わる</div>
+      <div class="rail">${Object.entries(STAGES).map(([k,v])=>
+        `<button class="${A.stage===k?"on":""}" data-a="A-stage" data-v="${k}"><span class="t">${v.t}</span><span class="n">${v.n}</span></button>`).join("")}</div>
+      <div class="rowb"><span class="seg">
+        <button class="${A.mode==="uni"?"on":""}" data-a="A-mode" data-v="uni">統一レンズ（破れ）</button>
+        <button class="${A.mode==="ctx"?"on":""}" data-a="A-mode" data-v="ctx">文脈レンズ（縫い）</button>
+      </span></div>
+      <div class="lensbox">
+        <div class="sub">焦点＝<span class="k">${s.focus}</span>　トランスポート内のレンズ制御：</div>
+        <div class="lensbtns ${badHere?"bad":""}" style="margin-top:7px">
+          <button>${labels[0]}</button><button class="on">${labels[1]}</button></div>
+        <div class="lensmean">${uni?"意味：ベッドを畳む／実音（固定ラベル）":s.mean}</div>
+        ${badHere?`<div class="warnline">⚠ <span>${s.uniBad}</span></div>`
+          :(A.mode==="ctx"?`<div class="okline">✓ 焦点(${s.focus})は常に鳴らし、その周りを畳む＝どの段でも筋が通る</div>`:`<div class="okline">✓ ③④はもともと［畳み/実音］が正しい＝統一でも破れない</div>`)}
+      </div>
+    </div>
+    <div class="verdict"><b>判定＝縫える（レンズ定義の一般化）。</b>「畳み/実音」は<span class="k">③④の特殊ラベル</span>で、
+      正体は<b>「焦点以外を還元する」</b>。①=［パターン単体/ベッド］②=［和声だけ/編成］背骨=［構造/ミックス］。
+      実装：レンズは<code>{focusLayer, reduce()}</code>のステージ属性。<b>③④のreduce()は現行そのまま＝フィール不変</b>。</div>
+  </div>`;
+}
+
+/* ================= パネルB：上流編集が下流の詰めを黙って腐らせる ================= */
+/* 2セクション（A=Verse, B=Chorus）が同じコードネタ#c07を共有。bar2の骨格downbeat=C(60)。
+   bar2コード G→G/B（下声 G→B）。E over G=6度(協和)／E over B=4度(強拍・不協和) */
+const B_MEL=64; // 骨格 bar2 downbeat = E
+function bBass(){return B.swapped?47:43;}  // G/B→B2 / G→G2（pcで対位判定）
+const CONS=d=>d===0||d===3||d===4||d===7||d===8||d===9;
+function bInterval(bass){const bpc=((bass%12)+12)%12,d=((B_MEL-bpc)%12+12)%12;
+  const map={0:"8度",1:"2度",2:"2度",3:"3度",4:"3度",5:"4度",7:"5度",8:"6度",9:"6度"};
+  return{label:map[d]||d+"半音",cons:CONS(d),strong:true,d};}
+function panelB(){
+  const iv=bInterval(bBass());
+  const origCons=CONS(((B_MEL-((43%12)+12)%12)%12+12)%12); // G下声での協和
+  const bad=B.swapped&&origCons&&!iv.cons;
+  const staleN=(B.swapped&&B.signal)?1:0;
+  return `<div class="card">
+    <h2>B <span class="pill crit">重大</span> 上流編集が下流の詰めを黙って腐らせる（＋共有カスケード）</h2>
+    <div class="tear"><b>破れ：</b>层はDAG（コード→骨格→表面）。机は「編集がベッドに即流れる」＝<b>③の中では快感</b>。
+      だが②でコードを差し替えると、見ていない③の詰めた対位が<b>黙って無効化</b>される。しかもコードは共有ネタ＝
+      <b>別セクションの骨格まで一斉に腐る</b>（「他N箇所で使用」の罠は骨格だけでなく全層でカスケードする）。</div>
+    <div class="stitch"><b>縫い方：</b>点→耳を<b>変化→耳</b>へ拡張。上流編集はステージレール／セクションに<b>「要確認」痕</b>を残し、
+      戻ると<b>腐った接点だけが光り「変化した瞬間を聴く」</b>。共有先には<b>波及プレビュー</b>を出す。<b>直しは人間</b>（機械は指摘のみ）。</div>
+    <div class="demo">
+      <div class="cap">触ってみる：②で共有コードを差し替える → 下流がどう腐るか</div>
+      <div class="rowb">
+        <button class="btn ${B.swapped?"":"pri"}" data-a="B-swap">${B.swapped?"↩ G に戻す":"② bar2 の G→G/B に差替（共有 #c07）"}</button>
+        <span class="seg"><button class="${!B.signal?"on":""}" data-a="B-sig" data-v="0">痕なし(破れ)</button>
+          <button class="${B.signal?"on":""}" data-a="B-sig" data-v="1">痕あり(縫い)</button></span>
+      </div>
+      <div class="stalerail" style="margin-top:11px">
+        ${[["①","ビート"],["②","コード"]].map(x=>`<div>${x[0]}<br><span class="sub">${x[1]}</span></div>`).join("")}
+        <div class="foc">③<br><span class="sub">骨格A</span>${staleN?`<span class="dot">要確認${staleN}</span>`:""}</div>
+        <div>④<br><span class="sub">表面</span></div>
+        <div>背骨<br><span class="sub">曲</span>${staleN?`<span class="dot">B波及</span>`:""}</div>
+      </div>
+      <div class="sub" style="margin-top:4px">＝③A（今いる机）：Verse の骨格 bar2 downbeat = E</div>
+      <div class="mini" style="height:78px;margin-top:6px">
+        <svg width="100%" height="78" viewBox="0 0 380 78" preserveAspectRatio="none">
+          <line x1="95" y1="0" x2="95" y2="78" stroke="#2b3245"/><line x1="190" y1="0" x2="190" y2="78" stroke="#2b3245"/><line x1="285" y1="0" x2="285" y2="78" stroke="#2b3245"/>
+          <text x="6" y="14" font-size="9" fill="#5f6a84">bar1 F</text>
+          <text x="101" y="14" font-size="9" fill="${B.swapped?"#ffd479":"#5f6a84"}">bar2 ${B.swapped?"G/B":"G"}</text>
+          <text x="196" y="14" font-size="9" fill="#5f6a84">bar3 Em</text><text x="291" y="14" font-size="9" fill="#5f6a84">bar4 Am</text>
+          <rect x="120" y="30" width="16" height="10" rx="2" fill="#7ec8ff"/>
+          <text x="140" y="39" font-size="10" fill="${bad?"#ff8a8a":"#8fe0a8"}">${iv.label}${bad?"⚠":""}</text>
+          <line x1="95" y1="58" x2="190" y2="58" stroke="#ffb27e" stroke-width="2" ${B.swapped?"":'stroke-dasharray="3 3"'}/>
+          <text x="97" y="70" font-size="9" fill="#ffb27e">下声 ${nn(bBass())}</text>
+          ${(bad&&B.signal)?'<rect x="116" y="26" width="30" height="18" rx="3" fill="none" stroke="#ff8a8a" stroke-width="1.5"><animate attributeName="opacity" values="1;.3;1" dur="1s" repeatCount="indefinite"/></rect>':""}
+        </svg>
+      </div>
+      <div class="rowb">
+        <button class="btn mini" data-a="B-hear">▶ ${B.swapped?"変化した瞬間を聴く（E×"+nn(bBass())+"）":"この接点を聴く（E×G）"}</button>
+        ${bad?`<span class="sev-crit sub">強拍で 6度→4度 に悪化（詰めた協和が壊れた）</span>`:`<span class="sub">今は6度＝協和（詰め済み）</span>`}
+      </div>
+      ${(staleN)?`<div class="banner">⚠ この差替は共有コード #c07 経由で <b>サビ(Section B)</b> の骨格にも効く。B の机を開くと同じ痕が付いている（カスケード）。</div>`:""}
+      ${(B.swapped&&!B.signal)?`<div class="banner" style="border-color:var(--bad);color:var(--bad);background:rgba(255,138,138,.08)">痕なしモード：③にもサビにも<b>何の表示も出ない</b>＝黙って腐る。数日後に「なんか変」で発見する。</div>`:""}
+    </div>
+    <div class="verdict"><b>判定＝縫えるが実装コスト有り。</b>要るのは<span class="k">変更来歴</span>＝
+      「どの下流ネタがどのコード区間に依存するか」の追跡。<b>フィール側の縫いは軽い</b>（レレール痕＋接点パルス＋波及バナー＝点→耳の素直な拡張）。
+      正直な残り：<b>自動修正はしない</b>（機械は指摘まで）。ここは #20 の思想と一致＝腐りを<b>見せる</b>のが仕事。</div>
+  </div>`;
+}
+
+/* ================= パネルC：④は独立段でなく③の出口＋分岐在庫 ================= */
+function panelC(){
+  const linear=C.mode==="linear";
+  return `<div class="card">
+    <h2>C <span class="pill str">構造</span> ④は独立段でなく「③の出口」・在庫は分岐する</h2>
+    <div class="tear"><b>破れ：</b>ステージレール①→②→③→<b>④</b>は<b>④を③と並ぶ独立段</b>に見せる。だが表面化は
+      (a)③の机で候補を吹いて置く＝<b>③の出口</b>／(b)置いた後は<b>既存のメロ編集</b>＝別の器。さらに再度吹くと
+      <b>新netaが増える（realized_from・在庫は分岐）</b>。リニアな4段が分岐する在庫モデルと喧嘩する。</div>
+    <div class="stitch"><b>縫い方：</b>レールを<b>書く［①②③］＋出口［④］</b>に読み替える。④は③の机の中のトレイ＝
+      「吹く→試聴→置く」。置いた後は既存メロ編集へ受け渡し。骨格チップに<b>「→吹いたメロ N」の分岐スタック</b>を出す
+      （吹くたび増える・骨格は不変・手直し済みの旧メロは消えない）。</div>
+    <div class="demo">
+      <div class="cap">触ってみる：段の見せ方を切り替える</div>
+      <div class="rowb"><span class="seg">
+        <button class="${linear?"on":""}" data-a="C-mode" data-v="linear">リニア4段（破れ）</button>
+        <button class="${!linear?"on":""}" data-a="C-mode" data-v="branch">出口＋分岐在庫（縫い）</button>
+      </span></div>
+      ${linear?`
+        <div class="flow" style="margin-top:11px">
+          <span class="node">①ビート</span><span class="arrow">→</span><span class="node">②コード</span><span class="arrow">→</span>
+          <span class="node">③骨格</span><span class="arrow">→</span><span class="node" style="border-color:var(--bad);color:var(--bad)">④表面</span>
+        </div>
+        <div class="banner" style="border-color:var(--bad);color:var(--bad);background:rgba(255,138,138,.08);margin-top:11px">
+          ④が並列の段＝「戻って再度吹く」と手直し済み #m41 が消える誤解を招く。表面化は一方向の終点ではなく<b>③から何度も生える枝</b>。</div>
+      `:`
+        <div class="flow" style="margin-top:11px">
+          <span class="node">①ビート</span><span class="arrow">→</span><span class="node">②コード</span><span class="arrow">→</span>
+          <span class="node sk">③骨格 #s12</span><span class="arrow">⇢出口⇢</span><span class="node">④吹く</span>
+        </div>
+        <div class="stack">
+          <div class="sub">#s12 は不変。吹くたび realized_from で新netaが生える：</div>
+          <div class="m"><span>🎵 #m41 <span class="tag">置いた・手直し済</span></span><button class="btn mini" data-a="C-note">ノート編集へ</button></div>
+          <div class="m"><span>🎵 #m47 <span class="tag">再度吹いた（別候補）</span></span><button class="btn mini" data-a="C-note">ノート編集へ</button></div>
+          <div class="m" style="border-style:dashed;color:var(--dim)"><span>＋ もう一度吹く</span><span class="tag">#m41 は消えない</span></div>
+        </div>
+      `}
+    </div>
+    <div class="verdict"><b>判定＝縫える（レール意味の是正）。前回の自問「④は出口か」に決着＝出口。</b>
+      レールは<span class="k">書く3段＋出口</span>。④の実体は「③のトレイ」＋「既存メロ編集への受け渡し」＝<b>新画面を足さない</b>。
+      分岐在庫は骨格チップの「→吹いたメロ N」で可視化（getBacklinks・S3d realized_from の逆引き）。</div>
+  </div>`;
+}
+
+/* ================= パネルE：背骨（曲）では机フィールが別楽器 ================= */
+function panelE(){
+  return `<div class="card">
+    <h2>E <span class="pill crit">要見直し</span> 背骨（曲）は机の一前景ではない＝別楽器</h2>
+    <div class="tear"><b>破れ（正直に）：</b>机フィールは<b>セクション楽器</b>。曲レベルへ「同じ机の一前景」として広げると芯の3装置が壊れる——
+      <b>ループ</b>＝どの区間を回すか(生きる)／<b>レンズ</b>＝曲全体では対位相手が無く2声還元が空転(弱る)／
+      <b>接点→ダイアッド</b>＝<b>曲レベルの対位という対象が存在しない(消える)</b>。これを「机の第5前景」と偽るのが破れ。</div>
+    <div class="stitch"><b>縫い方＝明示的ギアチェンジ。</b>背骨は<b>別楽器</b>と認め、机と共有するのは
+      <b>トランスポート／ループ選択／在庫</b>だけ。曲固有の道具＝<b>セクション並べ・骨格/モチーフの再利用リンク・エネルギーの弧</b>。
+      芯の精神「点→耳」は死なせず<b>「縫い目→耳」＝遷移試聴</b>（前セクション末小節→次セクション頭小節を鳴らす）に翻訳する。</div>
+    <div class="demo">
+      <div class="cap">触ってみる：セクションの境（縫い目）を聴く＋再利用リンク</div>
+      <div class="songtl">
+        <div class="sec">A<small>Verse</small></div>
+        <div class="sec">A'<small>Verse2</small></div>
+        <div class="sec chorus">B<small>Chorus</small></div>
+      </div>
+      <div class="seam-b">
+        <button data-a="E-seam" data-v="aa">▶ A｜A' の遷移</button>
+        <button data-a="E-seam" data-v="ab">▶ A'｜B の遷移</button>
+      </div>
+      <div class="mini" style="height:34px">
+        <svg width="100%" height="34" viewBox="0 0 380 34" preserveAspectRatio="none">
+          <path d="M63 24 C 120 2, 250 2, 316 24" fill="none" stroke="#7ec8ff" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <circle cx="63" cy="24" r="3" fill="#7ec8ff"/><circle cx="316" cy="24" r="3" fill="#7ec8ff"/>
+          <text x="120" y="12" font-size="9" fill="#7ec8ff">骨格 #s12 を A と B で再利用（配置で移調）</text>
+        </svg>
+      </div>
+      <table class="maptbl">
+        <tr><th>机の装置</th><th>曲レベルでどうなるか</th></tr>
+        <tr><td>ループ</td><td class="yes">✓ 生きる＝「どの区間を回すか」（区間選択）</td></tr>
+        <tr><td>レンズ</td><td class="weak">△ 弱る＝［構造/フルミックス］。2声還元は対位相手が無く不成立</td></tr>
+        <tr><td>接点→ダイアッド</td><td class="no">✗ 消える＝曲レベルの対位という対象が無い → <b>遷移試聴</b>に翻訳</td></tr>
+        <tr><td>在庫不変・再利用</td><td class="yes">✓ 生きる＝骨格/モチーフのセクション間リンク（上の弧）</td></tr>
+      </table>
+    </div>
+    <div class="verdict" style="border-color:var(--warn)"><b style="color:var(--warn)">判定＝ここはフィールを見直せ（綺麗には解けない）。</b>
+      背骨を「机の第5前景」にするのは<span class="k">偽り</span>。机はセクション楽器・背骨は編成楽器＝<b>2つの楽器が
+      トランスポートと在庫を共有する</b>構図が正直。精神（点→耳）は<b>遷移試聴（縫い目→耳）</b>で残る。
+      曲固有＝section並べ・再利用リンク・energy弧（role/registerShift・§section-role-framing）。</div>
+  </div>`;
+}
+
+/* ---------- まとめ ---------- */
+function summary(){
+  return `<div class="card" id="summary">
+    <h2>縫い目まとめ（移行担当Fable向け）</h2>
+    <table>
+      <tr><th>縫い目</th><th>重大度</th><th>破れる理由</th><th>縫い方</th></tr>
+      <tr><td>A レンズ反転</td><td class="sev-crit">重大</td><td>①②背骨では「ベッド=焦点」でレンズが編集対象を潰す/空転</td><td>レンズ=「焦点以外を畳む」に一般化。③④不変</td></tr>
+      <tr><td>B 下流の腐り</td><td class="sev-crit">重大</td><td>層はDAG。上流編集が見ていない下流の対位を黙って無効化＋共有でカスケード</td><td>変更→耳：レール痕+接点パルス+波及バナー。要=変更来歴追跡。直しは人間</td></tr>
+      <tr><td>C ④は段でない</td><td class="sev-str">構造</td><td>リニア4段が分岐する在庫(realized_from)と喧嘩</td><td>書く[①②③]+出口[④]。骨格チップに分岐スタック</td></tr>
+      <tr><td>E 背骨は別楽器</td><td class="sev-crit">要見直し</td><td>レンズ/接点ダイアッドが曲レベルで意味を失う</td><td>ギアチェンジ=別楽器。共有はtransport/loop/在庫。点→耳は遷移試聴へ翻訳</td></tr>
+    </table>
+    <div class="verdict" style="margin-top:11px"><b>芯の一文：</b>机フィールは<b>セクション楽器として堅い</b>（③④は無傷）。
+      通しで破れるのは<b>端（①/背骨のレンズ）</b>と<b>層をまたぐ時間差（下流の腐り）</b>と<b>在庫の分岐（④）</b>。
+      A/B/Cは机の中で縫える。<b>Eだけは「同じ机」を諦めて2楽器構成にするのが正直</b>——ただし精神は遷移試聴で残る。</div>
+    <div class="verdict"><b>密度・粒度の種（破れなかった）：</b>
+      ①②④を足しても<b>390pxは破れない</b>＝前景切替（同時に1段だけ描く）が効くから。複数段を同画面に出そうとした時だけ破れる＝<b>前景規律を守れ</b>が結論。
+      タイムライン粒度（ドラム16分/骨格2拍/コード小節）は<b>同一beat軸の異なるsnapグリッド</b>＝標準DAWと同じで共存する（①内部の16分ペイントは①の課題・机の課題でない）。</div>
+  </div>`;
+}
+
+function render(){
+  $("tabs").innerHTML=TABS.map(t=>
+    `<button class="${TAB===t.id?"on":""}" data-a="tab" data-v="${t.id}">${t.label}<span class="sv sev-${t.sev}">${t.svl}</span></button>`).join("");
+  const p=$("panel");
+  p.innerHTML=(TAB==="A"?panelA():TAB==="B"?panelB():TAB==="C"?panelC():panelE())+summary();
+}
+
+document.addEventListener("click",e=>{
+  const el=e.target.closest("[data-a]");if(!el)return;
+  const a=el.dataset.a,v=el.dataset.v;
+  switch(a){
+    case"tab":TAB=v;render();window.scrollTo(0,0);break;
+    case"A-stage":A.stage=v;render();break;
+    case"A-mode":A.mode=v;render();break;
+    case"B-swap":B.swapped=!B.swapped;render();break;
+    case"B-sig":B.signal=v==="1";render();break;
+    case"B-hear":dyad(B_MEL,bBass());break;
+    case"C-mode":C.mode=v;render();break;
+    case"C-note":toast("既存のメロ・ノート編集へ受け渡し（机の外・別の器）");break;
+    case"E-seam":
+      if(v==="aa")seq([{p:67,d:1},{p:64,d:1.4,b:0},{p:64,d:1},{p:60,d:1.4,b:0}]);      // A末→A'頭
+      else seq([{p:64,d:1},{p:60,d:1.2,b:0},{p:72,d:1.6},{p:67,d:1.6,b:0}]);            // A'末→B頭(サビ上がる)
+      break;
+  }
+});
+render();
+</script>
+</body>
+</html>

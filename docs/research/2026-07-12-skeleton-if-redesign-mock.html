@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>骨格の机 — セクション文脈で骨格を書く（IF再設計モック）</title>
+<style>
+/* ================= 基本 ================= */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#11141b; --panel:#1a1e2a; --panel2:#202634; --line:#2b3245;
+  --ink:#e9edf5; --dim:#96a0b5; --faint:#5d6577;
+  --mel:#7ec8ff; --bass:#ffb27e; --pad:#9adbb2;
+  --ok:#8fe0a8; --warn:#ffd479; --bad:#ff8a8a; --acc:#8fb7ff;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.55}
+body{padding-bottom:118px} /* transport分 */
+#app{max-width:430px;margin:0 auto;padding:10px 10px 0}
+h1{font-size:15px;font-weight:700}
+.sub{color:var(--dim);font-size:11px}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11px;color:var(--dim)}
+.chip b{color:var(--ink);font-weight:600}
+/* ================= ステージレール ================= */
+#stagerail{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}
+#stagerail button{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 2px 6px;text-align:center}
+#stagerail button .n{display:block;font-size:10px;color:var(--dim)}
+#stagerail button .t{display:block;font-size:13px;font-weight:700;margin-top:1px}
+#stagerail button.on{background:#233052;border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+#stagerail button.done .n::after{content:" ✓";color:var(--ok)}
+/* ================= 汎用パーツ ================= */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
+.seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{padding:7px 10px;font-size:12px;color:var(--dim);min-width:44px}
+.seg button.on{background:#2e3a5c;color:var(--ink);font-weight:600}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px}
+.btn.pri{background:#274069;border-color:#3c5f9a;color:#dbe8ff;font-weight:600}
+.btn.mini{padding:5px 9px;font-size:12px;border-radius:8px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.note{color:var(--dim);font-size:11px;line-height:1.6;margin-top:6px}
+.badge-ok{color:var(--ok);font-size:11px}
+.badge-warn{color:var(--warn);font-size:11px}
+.badge-bad{color:var(--bad);font-size:11px}
+/* ================= 骨格の机（stage3） ================= */
+.scroller{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#141826}
+.rollwrap{position:relative}
+.ruler{position:relative;height:22px;border-bottom:1px solid var(--line)}
+.ruler .ph-chip{position:absolute;top:2px;height:18px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:10px;color:var(--acc);border-right:1.5px dashed var(--acc);background:rgba(143,183,255,.06)}
+.ruler .ph-chip button{color:var(--acc);font-size:10px;text-decoration:underline dotted}
+.reststrip{position:relative;height:20px;border-top:1px solid var(--line);display:flex}
+.reststrip button{flex:0 0 auto;border-right:1px solid #222738;color:#5d6577;font-size:9px;line-height:20px}
+.reststrip button.rest{background:repeating-linear-gradient(45deg,transparent 0 4px,rgba(150,160,181,.35) 4px 6px);color:var(--dim)}
+.contact{position:relative;height:24px;border-top:1px solid var(--line)}
+.contact .dot{position:absolute;top:4px;width:16px;height:16px;border-radius:50%;border:1.5px solid;font-size:0}
+.contact .dot.ok{border-color:var(--ok);background:rgba(143,224,168,.2)}
+.contact .dot.soft{border-color:#7c869c;background:rgba(124,134,156,.18)}
+.contact .dot.warn{border-color:var(--warn);background:rgba(255,212,121,.28)}
+.contact .dot.bad{border-color:var(--bad);background:rgba(255,138,138,.3)}
+.chordrow{position:relative;height:30px;border-top:1px solid var(--line)}
+.chordrow .cc{position:absolute;top:3px;bottom:3px;border-left:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;padding-left:6px}
+.chordrow .cc b{font-size:12px;color:var(--pad)}
+.chordrow .cc span{font-size:9px;color:var(--dim)}
+#ph{position:absolute;top:0;width:1.5px;background:#fff;opacity:.85;pointer-events:none;display:none}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:10px;color:var(--dim)}
+.legend i{font-style:normal}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.toolbar .lbl{font-size:10px;color:var(--dim);margin-right:-2px}
+/* 叩き台トレイ */
+.skc{border:1px dashed #3c5f9a;border-radius:10px;padding:8px;margin-top:8px;background:rgba(39,64,105,.15)}
+.skc .row{margin-bottom:6px}
+/* 実音オーバービュー */
+.ov{margin-top:10px}
+.ov .cap{font-size:10px;color:var(--dim);margin-bottom:3px;display:flex;justify-content:space-between}
+/* ================= 表面（stage4） ================= */
+.cand{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:8px}
+.cand .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.cand .hd b{font-size:13px}
+.placedbox{border:1px solid var(--ok);border-radius:10px;padding:10px;margin-top:10px;background:rgba(143,224,168,.07)}
+/* ================= トランスポート ================= */
+#transport{position:fixed;left:0;right:0;bottom:0;background:#161a26;border-top:1px solid var(--line);padding:8px 10px calc(10px + env(safe-area-inset-bottom));z-index:50}
+#transport .inner{max-width:430px;margin:0 auto}
+#transport .r1{display:flex;gap:8px;align-items:stretch}
+#btnPlay{flex:0 0 84px;background:#274069;border:1px solid #3c5f9a;border-radius:12px;font-size:15px;font-weight:700;color:#dbe8ff}
+#lensSeg{flex:1;display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+#lensSeg button{flex:1;padding:9px 4px;font-size:13px;color:var(--dim)}
+#lensSeg button.on{background:#2e3a5c;color:var(--ink);font-weight:700}
+#lensSeg button small{display:block;font-size:9px;font-weight:400;color:var(--dim)}
+#pos{flex:0 0 54px;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:12px}
+#lensNote{font-size:10px;color:var(--dim);margin-top:5px;text-align:center}
+/* ================= ポップオーバー/トースト ================= */
+#pop{position:fixed;left:50%;transform:translateX(-50%);bottom:112px;width:min(410px,calc(100vw - 16px));background:#222941;border:1px solid #3c5f9a;border-radius:12px;padding:12px;z-index:60;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#pop h3{font-size:13px;margin-bottom:4px}
+#pop p{font-size:12px;color:var(--dim);line-height:1.6}
+#pop .row{margin-top:8px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:130px;background:#2e3a5c;border:1px solid var(--acc);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:12px;z-index:70;max-width:90vw}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="row" style="justify-content:space-between">
+    <div>
+      <h1>サビ <span class="sub">8小節（表示は前半4小節）・C major・4/4・92</span></h1>
+      <div class="sub">骨格の机＝ループするベッドの上で構造線を書く（IF再設計モック）</div>
+    </div>
+  </header>
+  <nav id="stagerail"></nav>
+  <main id="stagebox"></main>
+</div>
+
+<div id="pop" hidden></div>
+<div id="toast" hidden></div>
+
+<footer id="transport">
+  <div class="inner">
+    <div class="r1">
+      <button id="btnPlay" data-act="play">▶ ループ</button>
+      <div id="lensSeg">
+        <button data-act="lens" data-v="fold">畳み<small>2声＋クリック</small></button>
+        <button data-act="lens" data-v="real">実音<small>編成に乗せる</small></button>
+      </div>
+      <div id="pos">1.1</div>
+    </div>
+    <div id="lensNote"></div>
+  </div>
+</footer>
+
+<script>
+"use strict";
+/* =====================================================================
+ * 骨格の机（Skeleton Desk）モック
+ *  - 1つのセクション＝1つのループ（ベッド）。4つのステージは「画面」でなく「前景」。
+ *  - ③骨格＝対位法の机：編集面は常に畳み表示・耳は「聴きレンズ」で畳み/実音を即切替。
+ *  - 音はWebAudioの簡易シンセ（メロ=弦風/ベース=チェロ風/パッド/ドラム/クリック）。
+ * ===================================================================== */
+
+/* ---------- 定数・状態 ---------- */
+const EPS = 1e-6;
+const BPM = 92, SPB = 60 / BPM, TOTAL = 16, BPB = 4; // 4小節ループ
+const PPB = 24, ROW = 13, TOPM = 77, BOTM = 59;      // ロール描画
+const ROWS = TOPM - BOTM + 1, W = TOTAL * PPB, H = ROWS * ROW;
+const FOLD_DISP = 24; // ベース表示の畳み（+2oct）
+const FOLD_EAR = 12;  // ベース畳み再生（+1oct＝隣接声域）
+const SCALE = new Set([0, 2, 4, 5, 7, 9, 11]); // C major
+const NN = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const noteName = m => NN[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+
+const SLOTS = [ // コード枠（4拍×4）。altsをタップで巡回＝②の編集が③のベッドへ流れる
+  [{label:"F",root:5,pcs:[5,9,0]},   {label:"Dm7",root:2,pcs:[2,5,9,0]}],
+  [{label:"G",root:7,pcs:[7,11,2]},  {label:"G/B",root:7,bassPc:11,pcs:[7,11,2]}],
+  [{label:"Em",root:4,pcs:[4,7,11]}, {label:"C",root:0,pcs:[0,4,7]}],
+  [{label:"Am",root:9,pcs:[9,0,4]},  {label:"F",root:5,pcs:[5,9,0]}],
+];
+const DRUMS = {
+  beat8:  {label:"8ビート",   kick:[0,2.5],      snare:[1,3], hatStep:0.5},
+  beat16: {label:"16ビート",  kick:[0,1.75,2.5], snare:[1,3], hatStep:0.25},
+  four:   {label:"4つ打ち",   kick:[0,1,2,3],    snare:[1,3], hatStep:0.5},
+};
+
+const S = {
+  stage: 3, lens: "fold", drums: "beat8", chordSel: [0,0,0,0],
+  // 骨格（初期値＝わざと拍4に並行5度を1つ仕込む：72/F=5度 → 74/G=5度）
+  tones: [
+    {start:0,pitch:69},{start:2,pitch:72},{start:4,pitch:74},{start:6,pitch:71},
+    {start:8,pitch:null},{start:10,pitch:67},{start:12,pitch:64},{start:14,pitch:72},
+  ],
+  bass: [], // 明示ベース（クリシェ等）＝空スタート。声部トグルで書ける
+  phrases: [{endBeat:8,cad:"半終止"},{endBeat:16,cad:"全終止"}],
+  snap: 2, voice: "mel", tool: "draw",
+  candOpen: false, candPreview: null, candSel: -1, // 骨格叩き台
+  trayOpen: false, surfPreview: -1, placed: false, placedFrom: -1, // 表面化
+  playing: false,
+};
+
+/* ---------- 骨格の純ロジック（skeletonEdit.ts の縮約移植） ---------- */
+const srt = a => [...a].sort((x,y) => x.start - y.start);
+function bandEnd(pts, s) {
+  let e = TOTAL;
+  for (const p of pts) if (p.start > s + EPS && p.start < e) e = p.start;
+  for (const ph of S.phrases) if (ph.endBeat > s + EPS && ph.endBeat < e) e = ph.endBeat;
+  return e;
+}
+function domSegs(points) { // 支配帯（null=休符も区間で返す）
+  const pts = srt(points), out = [];
+  for (const p of pts) {
+    if (p.start >= TOTAL - EPS) break;
+    const e = bandEnd(pts, p.start);
+    if (e <= p.start + EPS) continue;
+    out.push({start:p.start, end:e, pitch:p.pitch});
+  }
+  return out;
+}
+const chordAt = b => { const i = Math.max(0, Math.min(3, Math.floor(b/4))); return SLOTS[i][S.chordSel[i]]; };
+const dBassPitch = b => { const c = chordAt(b); const pc = c.bassPc ?? c.root; return 36 + ((pc%12)+12)%12; };
+function exBassSegs() { // 明示ベース区間（最後の点は直前間隔ぶん・句末で導出へ復帰）
+  const pts = srt(S.bass), out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const s = pts[i].start;
+    let e = i+1 < pts.length ? pts[i+1].start : s + (pts.length > 1 ? s - pts[i-1].start : 2);
+    e = Math.min(e, TOTAL);
+    for (const ph of S.phrases) if (ph.endBeat > s+EPS && ph.endBeat < e) e = ph.endBeat;
+    if (e <= s + EPS) continue;
+    out.push({start:s, end:e, pitch:pts[i].pitch});
+  }
+  return out;
+}
+function effBassAt(b) { // 実効ベース＝明示（null含む）＞導出
+  for (const g of exBassSegs()) if (b >= g.start - EPS && b < g.end - EPS) return g.pitch;
+  return dBassPitch(b);
+}
+function effBassSegs() { // 描画/畳み再生用の区間化
+  const ex = exBassSegs(), bs = new Set([0,4,8,12]);
+  for (const g of ex) { bs.add(g.start); bs.add(g.end); }
+  for (const ph of S.phrases) if (ph.endBeat < TOTAL - EPS) bs.add(ph.endBeat);
+  const st = [...bs].filter(b => b >= 0 && b < TOTAL - EPS).sort((a,b) => a-b);
+  const out = [];
+  for (let i = 0; i < st.length; i++) {
+    const s = st[i], e = i+1 < st.length ? st[i+1] : TOTAL;
+    if (e <= s + EPS) continue;
+    const mid = s + (e-s)/2;
+    const cov = ex.find(g => mid >= g.start - EPS && mid < g.end - EPS);
+    const src = cov ? "explicit" : "derived";
+    const p = cov ? cov.pitch : dBassPitch(mid);
+    if (p === null) continue;
+    const last = out[out.length-1];
+    if (last && last.pitch === p && last.src === src && Math.abs(last.end - s) < EPS) last.end = e;
+    else out.push({start:s, end:e, pitch:p, src});
+  }
+  return out;
+}
+/* 対位法（指摘のみ）：音程バッジ・強拍不協和・並行5/8・交差 */
+const DEG = {0:["8度",1],1:["2度",0],2:["2度",0],3:["3度",1],4:["3度",1],5:["4度",0],6:["♭5",0],7:["5度",1],8:["6度",1],9:["6度",1],10:["7度",0],11:["7度",0]};
+const ival = s => { const d = DEG[((Math.round(s)%12)+12)%12]; return {label:d[0], cons:!!d[1]}; };
+const strong = b => Math.abs(b % 2) < EPS;
+const activeTones = () => S.candPreview ? S.candPreview.tones : S.tones;
+function counterpoint() {
+  const pts = srt(activeTones()).filter(p => p.pitch !== null);
+  const out = []; let prev = null;
+  for (const p of pts) {
+    const bp = effBassAt(p.start);
+    if (bp === null) { out.push({start:p.start, mel:p.pitch, bass:null}); prev = null; continue; }
+    const iv = ival(p.pitch - bp);
+    const dis = !iv.cons && strong(p.start);
+    const cross = p.pitch < bp;
+    let par = "";
+    if (prev) {
+      const i1 = ((prev.mel - prev.bass) % 12 + 12) % 12, i2 = ((p.pitch - bp) % 12 + 12) % 12;
+      const same = (p.pitch - prev.mel > 0 && bp - prev.bass > 0) || (p.pitch - prev.mel < 0 && bp - prev.bass < 0);
+      if (same && i1 === i2 && (i2 === 7 || i2 === 0)) par = i2 === 7 ? "並5" : "並8";
+    }
+    out.push({start:p.start, mel:p.pitch, bass:bp, iv, dis, cross, par});
+    prev = {mel:p.pitch, bass:bp};
+  }
+  return out;
+}
+/* 編集操作 */
+function snapB(b) {
+  const v = S.snap > 0 ? Math.round(b / S.snap) * S.snap : Math.round(b * 4) / 4;
+  return Math.max(0, Math.min(TOTAL - 0.25, v));
+}
+function upsert(arr, beat, pitch) { // 同じ点をもう一度＝削除／同拍別音＝移動
+  const hit = arr.find(p => Math.abs(p.start - beat) < EPS);
+  if (hit) return srt(arr.map(p => p === hit ? (p.pitch === pitch ? null : {start:beat, pitch}) : p).filter(Boolean));
+  return srt([...arr, {start:beat, pitch}]);
+}
+function toggleRest(arr, beat) {
+  const hit = arr.find(p => Math.abs(p.start - beat) < EPS);
+  if (!hit) return srt([...arr, {start:beat, pitch:null}]);
+  if (hit.pitch === null) return arr.filter(p => p !== hit);
+  return srt(arr.map(p => p === hit ? {start:p.start, pitch:null} : p));
+}
+function eraseNear(arr, rawB) {
+  let bi = -1, bd = 0.8;
+  arr.forEach((p, i) => { const d = Math.abs(p.start - rawB); if (d < bd) { bd = d; bi = i; } });
+  return bi < 0 ? arr : arr.filter((_, i) => i !== bi);
+}
+
+/* ---------- 叩き台（骨格候補・モックはベイク済み2案） ---------- */
+const SKC = [
+  {label:"案A 上がって閉じる", tones:[{start:0,pitch:69},{start:2,pitch:72},{start:4,pitch:76},{start:6,pitch:74},{start:8,pitch:null},{start:10,pitch:72},{start:12,pitch:69},{start:14,pitch:72}]},
+  {label:"案B 素直に降りる（ウルリニエ風）", tones:[{start:0,pitch:74},{start:2,pitch:72},{start:4,pitch:71},{start:6,pitch:67},{start:8,pitch:67},{start:10,pitch:64},{start:12,pitch:64},{start:14,pitch:60}]},
+];
+
+/* ---------- 表面化候補（モックはベイク済み3案・本実装= gen_melody(skeletonNetaId)） ---------- */
+const SURF = [
+  {label:"なだらか（8分中心）", badge:{t:"対位OK", c:"ok"}, notes:[
+    {start:0,dur:1.5,pitch:69},{start:1.5,dur:0.5,pitch:71},{start:2,dur:1,pitch:72},{start:3,dur:0.5,pitch:71},{start:3.5,dur:0.5,pitch:72},
+    {start:4,dur:1.5,pitch:74},{start:5.5,dur:0.5,pitch:72},{start:6,dur:1,pitch:71},{start:7,dur:0.5,pitch:69},{start:7.5,dur:0.5,pitch:67},
+    {start:9,dur:1,pitch:64},{start:10,dur:1.5,pitch:67},{start:11.5,dur:0.5,pitch:69},
+    {start:12,dur:1,pitch:64},{start:13,dur:0.5,pitch:67},{start:13.5,dur:0.5,pitch:69},{start:14,dur:2,pitch:72},
+  ]},
+  {label:"跳ねる（付点）", badge:{t:"⚠並5×1", c:"warn"}, notes:[
+    {start:0,dur:0.75,pitch:69},{start:0.75,dur:0.25,pitch:69},{start:1,dur:1,pitch:71},{start:2,dur:1.5,pitch:72},{start:3.5,dur:0.5,pitch:74},
+    {start:4,dur:0.75,pitch:74},{start:4.75,dur:0.25,pitch:74},{start:5,dur:1,pitch:76},{start:6,dur:1.5,pitch:71},{start:7.5,dur:0.5,pitch:67},
+    {start:9,dur:0.75,pitch:67},{start:9.75,dur:0.25,pitch:67},{start:10,dur:1,pitch:67},{start:11,dur:1,pitch:71},
+    {start:12,dur:0.75,pitch:69},{start:12.75,dur:0.25,pitch:67},{start:13,dur:1,pitch:64},{start:14,dur:2,pitch:72},
+  ]},
+  {label:"駆ける（16分の走り）", badge:{t:"対位OK", c:"ok"}, notes:[
+    {start:0,dur:1,pitch:69},{start:1,dur:0.5,pitch:69},{start:1.5,dur:0.5,pitch:71},{start:2,dur:0.25,pitch:72},{start:2.25,dur:0.25,pitch:74},{start:2.5,dur:0.5,pitch:72},{start:3,dur:0.5,pitch:71},{start:3.5,dur:0.5,pitch:72},
+    {start:4,dur:1,pitch:74},{start:5,dur:0.25,pitch:74},{start:5.25,dur:0.25,pitch:76},{start:5.5,dur:0.25,pitch:74},{start:5.75,dur:0.25,pitch:72},{start:6,dur:1.5,pitch:71},{start:7.5,dur:0.5,pitch:67},
+    {start:9,dur:0.5,pitch:64},{start:9.5,dur:0.5,pitch:67},{start:10,dur:1,pitch:67},{start:11,dur:0.25,pitch:67},{start:11.25,dur:0.25,pitch:69},{start:11.5,dur:0.5,pitch:71},
+    {start:12,dur:1,pitch:64},{start:13,dur:0.25,pitch:64},{start:13.25,dur:0.25,pitch:67},{start:13.5,dur:0.5,pitch:69},{start:14,dur:2,pitch:72},
+  ]},
+];
+
+/* ---------- 音（WebAudio 簡易シンセ） ---------- */
+let AC = null, NBUF = null;
+function ac() { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); return AC; }
+const m2f = m => 440 * Math.pow(2, (m - 69) / 12);
+function nbuf() {
+  if (!NBUF) {
+    const c = ac();
+    NBUF = c.createBuffer(1, Math.floor(c.sampleRate * 0.5), c.sampleRate);
+    const d = NBUF.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  return NBUF;
+}
+function melNote(t, m, dur) { // 弦風（骨格線・実音）
+  const c = ac(), f = c.createBiquadFilter(), g = c.createGain();
+  f.type = "lowpass"; f.frequency.value = 1700; f.Q.value = 0.4;
+  const os = [0, 4].map(det => { const o = c.createOscillator(); o.type = "sawtooth"; o.frequency.value = m2f(m); o.detune.value = det; o.connect(f); return o; });
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.10, t + 0.05);
+  g.gain.setValueAtTime(0.10, Math.max(t + 0.06, t + dur - 0.12));
+  g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.03);
+  f.connect(g); g.connect(c.destination);
+  os.forEach(o => { o.start(t); o.stop(t + dur + 0.08); });
+}
+function bassNote(t, m, dur, sustain) { // sustain=チェロ風の線（畳み）／false=実音8分パルス
+  const c = ac(), o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
+  o.type = sustain ? "sawtooth" : "triangle"; o.frequency.value = m2f(m);
+  f.type = "lowpass"; f.frequency.value = sustain ? 900 : 600;
+  const v = sustain ? 0.10 : 0.14;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(v, t + (sustain ? 0.05 : 0.012));
+  g.gain.setValueAtTime(v, Math.max(t + 0.06, t + dur - 0.1));
+  g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.02);
+  o.connect(f); f.connect(g); g.connect(c.destination);
+  o.start(t); o.stop(t + dur + 0.06);
+}
+function padChord(t, pcs, dur) { // コード楽器（実音レンズのみ）
+  const c = ac();
+  for (const pc of pcs) {
+    const m = 48 + ((pc % 12) + 12) % 12;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "triangle"; o.frequency.value = m2f(m + 12);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.028, t + 0.09);
+    g.gain.setValueAtTime(0.028, t + dur - 0.25);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + 0.05);
+  }
+}
+function kick(t) {
+  const c = ac(), o = c.createOscillator(), g = c.createGain();
+  o.type = "sine";
+  o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.11);
+  g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 0.16);
+}
+function snare(t) {
+  const c = ac(), s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = nbuf(); f.type = "bandpass"; f.frequency.value = 1800; f.Q.value = 0.8;
+  g.gain.setValueAtTime(0.25, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  s.connect(f); f.connect(g); g.connect(c.destination); s.start(t); s.stop(t + 0.14);
+}
+function hat(t, accent) {
+  const c = ac(), s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = nbuf(); f.type = "highpass"; f.frequency.value = 7500;
+  const v = accent ? 0.12 : 0.06;
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+  s.connect(f); f.connect(g); g.connect(c.destination); s.start(t); s.stop(t + 0.05);
+}
+function click(t, accent) { // 畳みレンズの時間参照（4分クリック・小節頭アクセント）
+  const c = ac(), o = c.createOscillator(), g = c.createGain();
+  o.type = "square"; o.frequency.value = accent ? 1568 : 1046;
+  const v = accent ? 0.05 : 0.028;
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + 0.045);
+}
+
+/* ---------- スケジューラ（状態を都度読む＝レンズ切替/編集が回しながら効く） ---------- */
+let schedTimer = null, nextT = 0, nextB = 0, playT0 = 0;
+function scheduleBeat(b, t) {
+  const lens = S.lens;
+  // --- メロ（骨格 or 表面候補・常に実音） ---
+  if (S.stage === 4 && S.surfPreview >= 0) {
+    for (const n of SURF[S.surfPreview].notes)
+      if (Math.abs(n.start - b) < EPS) melNote(t, n.pitch, n.dur * SPB * 0.95);
+  } else {
+    for (const g of domSegs(activeTones()))
+      if (Math.abs(g.start - b) < EPS && g.pitch !== null) melNote(t, g.pitch, (g.end - g.start) * SPB * 0.92);
+  }
+  // --- ベース（畳み＝構造線を+1octで持続／実音＝実域で8分パルス） ---
+  if (lens === "fold") {
+    for (const g of effBassSegs())
+      if (Math.abs(g.start - b) < EPS) bassNote(t, g.pitch + FOLD_EAR, (g.end - g.start) * SPB * 0.9, true);
+  } else {
+    if (Math.abs(b * 2 - Math.round(b * 2)) < EPS) {
+      const p = effBassAt(b);
+      if (p !== null) bassNote(t, p, 0.42 * SPB, false);
+    }
+  }
+  // --- コード楽器（実音レンズのみ） ---
+  if (lens === "real" && Math.abs(b % 4) < EPS) padChord(t, chordAt(b).pcs, 3.9 * SPB);
+  // --- ドラム（実音＝選択パターン／畳み＝クリックに還元） ---
+  const bb = ((b % 4) + 4) % 4;
+  if (lens === "real") {
+    const d = DRUMS[S.drums];
+    if (d.kick.some(k => Math.abs(k - bb) < EPS)) kick(t);
+    if (d.snare.some(k => Math.abs(k - bb) < EPS)) snare(t);
+    if (Math.abs(bb / d.hatStep - Math.round(bb / d.hatStep)) < EPS) hat(t, Math.abs(bb % 1) < EPS);
+  } else {
+    if (Math.abs(bb - Math.round(bb)) < EPS) click(t, Math.abs(bb) < EPS);
+  }
+}
+function schedTick() {
+  const c = ac();
+  while (nextT < c.currentTime + 0.18) {
+    scheduleBeat(nextB, nextT);
+    nextB = Math.round((nextB + 0.25) * 4) / 4;
+    if (nextB >= TOTAL - EPS) nextB = 0;
+    nextT += 0.25 * SPB;
+  }
+}
+function startPlay() {
+  const c = ac();
+  c.resume();
+  nextB = 0; nextT = c.currentTime + 0.08; playT0 = nextT;
+  schedTick();
+  schedTimer = setInterval(schedTick, 40);
+  S.playing = true;
+  updateTransport();
+}
+function stopPlay() {
+  if (schedTimer) clearInterval(schedTimer);
+  schedTimer = null; S.playing = false;
+  updateTransport();
+}
+function curBeat() {
+  if (!S.playing || !AC) return 0;
+  const b = (AC.currentTime - playT0) / SPB;
+  return b < 0 ? 0 : b % TOTAL;
+}
+/* 「この瞬間を聴く」＝当該拍の2声だけ畳みで鳴らす（指摘→即・耳） */
+function playDyad(b) {
+  const cp = counterpoint().find(x => Math.abs(x.start - b) < EPS);
+  if (!cp || cp.bass == null) return;
+  const c = ac(); c.resume();
+  const t = c.currentTime + 0.03;
+  melNote(t, cp.mel, 1.1);
+  bassNote(t, cp.bass + FOLD_EAR, 1.1, true);
+}
+
+/* ---------- 描画 ---------- */
+const $ = id => document.getElementById(id);
+const rowY = m => (TOPM - m) * ROW;
+const rowYc = m => rowY(m) + ROW / 2;
+const clampRow = m => Math.max(BOTM, Math.min(TOPM, m));
+
+function rollSVG() {
+  const segs = domSegs(activeTones());
+  const cps = counterpoint();
+  const eb = effBassSegs();
+  let s = "";
+  // 行の下地（黒鍵行・スケール外を沈める）
+  for (let r = 0; r < ROWS; r++) {
+    const m = TOPM - r, pcv = ((m % 12) + 12) % 12;
+    const black = [1,3,6,8,10].includes(pcv);
+    s += '<rect x="0" y="' + (r*ROW) + '" width="' + W + '" height="' + ROW + '" fill="' + (black ? "#151926" : "#191e2c") + '"/>';
+    if (!SCALE.has(pcv)) s += '<rect x="0" y="' + (r*ROW) + '" width="' + W + '" height="' + ROW + '" fill="#000" opacity="0.16"/>';
+  }
+  // グリッド
+  for (let b = 0; b <= TOTAL; b++) {
+    const x = b * PPB, bar = b % 4 === 0;
+    s += '<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + H + '" stroke="' + (bar ? "#3a4360" : "#232a3d") + '" stroke-width="' + (bar ? 1.5 : 1) + '"/>';
+  }
+  // 句境界（点線・上のルーラーと対応）
+  for (const ph of S.phrases) if (ph.endBeat < TOTAL - EPS) {
+    const x = ph.endBeat * PPB;
+    s += '<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + H + '" stroke="#8fb7ff" stroke-width="1.5" stroke-dasharray="2 4" opacity="0.75"/>';
+  }
+  // C4/C5ラベル
+  for (const m of [60, 72]) if (m >= BOTM && m <= TOPM)
+    s += '<text x="3" y="' + (rowY(m) + ROW - 3) + '" font-size="9" fill="#5f6a84">' + noteName(m) + '</text>';
+  // 骨格休符（支配帯が斜線ハッチで切れる）
+  for (const g of segs) if (g.pitch === null) {
+    s += '<rect x="' + (g.start*PPB) + '" y="0" width="' + ((g.end-g.start)*PPB) + '" height="' + H + '" fill="url(#hatch)" opacity="0.55"/>' +
+         '<text x="' + (g.start*PPB + 4) + '" y="14" font-size="10" fill="#8891a0">休</text>';
+  }
+  // 実効ベース線（表示は+2oct畳み：点線=コード導出/実線=明示）
+  for (const g of eb) {
+    const dm = clampRow(g.pitch + FOLD_DISP), dy = rowYc(dm);
+    const solid = g.src === "explicit";
+    s += '<line x1="' + (g.start*PPB + 2) + '" y1="' + dy + '" x2="' + (g.end*PPB - 2) + '" y2="' + dy + '" stroke="#ffb27e" stroke-width="' + (solid ? 3 : 2) + '" ' + (solid ? "" : 'stroke-dasharray="4 3"') + ' opacity="' + (solid ? 0.95 : 0.55) + '"/>';
+    if (solid) s += '<rect x="' + (g.start*PPB - 4) + '" y="' + (dy - 4) + '" width="8" height="8" transform="rotate(45 ' + (g.start*PPB) + ' ' + dy + ')" fill="#ffb27e"/>';
+  }
+  // 叩き台プレビュー中＝現在の骨格をゴーストで残す（在庫は消えない、の可視化）
+  if (S.candPreview) for (const p of S.tones) if (p.pitch !== null)
+    s += '<circle cx="' + (p.start*PPB + 6) + '" cy="' + rowYc(p.pitch) + '" r="4.5" fill="none" stroke="#98a2b6" stroke-width="1.5" opacity="0.45"/>';
+  // メロ：支配帯▓＋打点■
+  for (const g of segs) if (g.pitch !== null) {
+    const yy = rowY(g.pitch);
+    s += '<rect x="' + (g.start*PPB) + '" y="' + (yy+2) + '" width="' + ((g.end-g.start)*PPB - 1) + '" height="' + (ROW-4) + '" rx="2" fill="#7ec8ff" opacity="0.20"/>' +
+         '<rect x="' + (g.start*PPB + 1) + '" y="' + (yy+1) + '" width="10" height="' + (ROW-2) + '" rx="2" fill="#7ec8ff"/>';
+  }
+  // 音程バッジ＋警告（並行は2点を線で結ぶ）
+  let prev = null;
+  for (const c of cps) {
+    if (c.bass == null) { prev = c; continue; }
+    const x = c.start * PPB + 1, yy = rowY(c.mel);
+    const col = (c.par || c.cross) ? "#ff8a8a" : (c.dis ? "#ffd479" : (c.iv.cons ? "#8fe0a8" : "#aab3c5"));
+    const lbl = (c.cross ? "✕" : "") + c.iv.label;
+    const ty = yy - 3 > 9 ? yy - 3 : yy + ROW + 9;
+    s += '<text x="' + (x + 13) + '" y="' + ty + '" font-size="9" fill="' + col + '">' + lbl + '</text>';
+    if (c.par && prev && prev.bass != null) {
+      const x1 = prev.start*PPB + 6, x2 = c.start*PPB + 6, y1 = rowYc(prev.mel), y2 = rowYc(c.mel);
+      s += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#ff8a8a" stroke-width="1.5" stroke-dasharray="3 2"/>' +
+           '<text x="' + ((x1+x2)/2 - 9) + '" y="' + (Math.min(y1,y2) - 4) + '" font-size="9" fill="#ff8a8a">' + c.par + '</text>';
+    }
+    prev = c;
+  }
+  return '<svg id="rollsvg" width="' + W + '" height="' + H + '" style="display:block;touch-action:pan-x pan-y">' +
+    '<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+    '<line x1="0" y1="0" x2="0" y2="6" stroke="#8891a0" stroke-width="1.2"/></pattern></defs>' + s + "</svg>";
+}
+
+function rulerHTML() {
+  let s = "", prevEnd = 0;
+  S.phrases.forEach((ph, i) => {
+    const x = prevEnd * PPB, w = (ph.endBeat - prevEnd) * PPB;
+    s += '<div class="ph-chip" style="left:' + x + 'px;width:' + w + 'px">句' + (i+1) +
+         '<button data-act="cad" data-i="' + i + '">' + ph.cad + '</button></div>';
+    prevEnd = ph.endBeat;
+  });
+  return '<div class="ruler" style="width:' + W + 'px">' + s + "</div>";
+}
+function restStripHTML() {
+  const arr = S.voice === "mel" ? S.tones : S.bass;
+  let s = "";
+  for (let b = 0; b < TOTAL; b++) {
+    const isRest = arr.some(p => Math.abs(p.start - b) < EPS && p.pitch === null);
+    s += '<button style="width:' + PPB + 'px" class="' + (isRest ? "rest" : "") + '" data-act="rest" data-b="' + b + '">' + (isRest ? "休" : "·") + "</button>";
+  }
+  return '<div class="reststrip" style="width:' + W + 'px" title="休ストリップ（armed声部にpitch:null）">' + s + "</div>";
+}
+function contactHTML() {
+  let s = "";
+  for (const c of counterpoint()) {
+    if (c.bass == null) continue;
+    const cls = (c.par || c.cross) ? "bad" : (c.dis ? "warn" : (c.iv.cons ? "ok" : "soft"));
+    s += '<button class="dot ' + cls + '" style="left:' + (c.start*PPB - 1) + 'px" data-act="cp" data-b="' + c.start + '">·</button>';
+  }
+  return '<div class="contact" style="width:' + W + 'px">' + s + "</div>";
+}
+function chordRowHTML() {
+  let s = "";
+  SLOTS.forEach((slot, i) => {
+    const c = slot[S.chordSel[i]];
+    const bassN = noteName(dBassPitch(i * 4));
+    s += '<button class="cc" style="left:' + (i*4*PPB) + 'px;width:' + (4*PPB) + 'px" data-act="stage" data-v="2"><b>' + c.label + "</b><span>導出ベース " + bassN + "</span></button>";
+  });
+  return '<div class="chordrow" style="width:' + W + 'px">' + s + "</div>";
+}
+function overviewSVG() { // 実音の座り（常設・非編集。編集面は畳みでも、実はここに常に見える）
+  const OW = 384, OH = 76;
+  const y = m => OH - ((m - 26) / (88 - 26)) * OH;
+  const x = b => (b / TOTAL) * OW;
+  let s = '<rect x="0" y="0" width="' + OW + '" height="' + OH + '" fill="#141826"/>';
+  // 低域注意ゾーン（low interval limit の目安）
+  s += '<rect x="0" y="' + y(43) + '" width="' + OW + '" height="' + (OH - y(43)) + '" fill="#ff8a8a" opacity="0.06"/>' +
+       '<text x="4" y="' + (OH - 4) + '" font-size="8" fill="#a06a6a">低域（音程が濁りやすい）</text>';
+  for (let b = 0; b <= TOTAL; b += 4) s += '<line x1="' + x(b) + '" y1="0" x2="' + x(b) + '" y2="' + OH + '" stroke="#232a3d"/>';
+  // コード楽器の帯（実音ボイシング域）
+  SLOTS.forEach((slot, i) => {
+    const c = slot[S.chordSel[i]];
+    const ms = c.pcs.map(pc => 60 + ((pc % 12) + 12) % 12);
+    const top = Math.max(...ms), bot = Math.min(...ms);
+    s += '<rect x="' + x(i*4) + '" y="' + y(top) + '" width="' + (OW/4 - 1) + '" height="' + Math.max(3, y(bot) - y(top)) + '" fill="#9adbb2" opacity="0.16"/>';
+  });
+  // ベース実音（点線=導出/実線=明示）
+  for (const g of effBassSegs())
+    s += '<line x1="' + x(g.start) + '" y1="' + y(g.pitch) + '" x2="' + x(g.end) + '" y2="' + y(g.pitch) + '" stroke="#ffb27e" stroke-width="2" ' + (g.src === "explicit" ? "" : 'stroke-dasharray="3 3"') + ' opacity="0.9"/>';
+  // 骨格メロ実音
+  for (const g of domSegs(activeTones())) if (g.pitch !== null)
+    s += '<line x1="' + x(g.start) + '" y1="' + y(g.pitch) + '" x2="' + x(g.end) + '" y2="' + y(g.pitch) + '" stroke="#7ec8ff" stroke-width="2.5"/>';
+  // ドラム目印（実音レンズのベッド）
+  const d = DRUMS[S.drums];
+  for (let bar = 0; bar < 4; bar++) for (const k of d.kick)
+    s += '<rect x="' + (x(bar*4 + k) - 1) + '" y="' + (OH - 5) + '" width="2.5" height="4" fill="#6b7590"/>';
+  return '<svg width="' + OW + '" height="' + OH + '" viewBox="0 0 ' + OW + " " + OH + '" style="width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:8px">' + s + "</svg>";
+}
+
+/* ---- ステージパネル ---- */
+function stage1HTML() {
+  let cards = "";
+  for (const [id, d] of Object.entries(DRUMS)) {
+    let viz = "";
+    for (let st = 0; st < 16; st++) {
+      const bb = st * 0.25;
+      const isK = d.kick.some(k => Math.abs(k - bb) < EPS);
+      const isS = d.snare.some(k => Math.abs(k - bb) < EPS);
+      const isH = Math.abs(bb / d.hatStep - Math.round(bb / d.hatStep)) < EPS;
+      const col = isK ? "#ffb27e" : isS ? "#8fb7ff" : isH ? "#3a4360" : "#232a3d";
+      viz += '<span style="display:inline-block;width:14px;height:' + (isK||isS ? 14 : 8) + 'px;margin:0 1px;border-radius:3px;background:' + col + ';vertical-align:bottom"></span>';
+    }
+    cards += '<button class="card" style="display:block;width:100%;text-align:left;' + (S.drums === id ? "border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset" : "") + '" data-act="drum" data-v="' + id + '">' +
+      '<div class="row" style="justify-content:space-between"><b>' + d.label + "</b>" + (S.drums === id ? '<span class="badge-ok">ベッドに敷いてある</span>' : "") + "</div>" +
+      '<div style="margin-top:6px">' + viz + "</div></button>";
+  }
+  return '<div class="card"><b>① ビート＝時間の器</b>' +
+    '<p class="note">ここで選んだビートが以降ぜんぶの段の「ベッド」に鳴る。骨格の段ではまだ細部は要らない＝無ければクリックで代用（畳みレンズは常にクリック）。</p></div>' + cards;
+}
+function stage2HTML() {
+  let chips = "";
+  SLOTS.forEach((slot, i) => {
+    const c = slot[S.chordSel[i]];
+    chips += '<button class="btn" style="flex:1;min-width:72px;text-align:center" data-act="chord" data-i="' + i + '">' +
+      '<div style="font-size:17px;font-weight:700;color:var(--pad)">' + c.label + "</div>" +
+      '<div class="sub">ベース ' + noteName(dBassPitch(i*4)) + "</div></button>";
+  });
+  return '<div class="card"><b>② コード＝ベッドの和声（＝対位の相手の正体）</b>' +
+    '<p class="note">タップで差し替え候補を巡回（モック）。<b>分数コード（G/B等）はベース音を変える＝③の対位の相手が変わる</b>。導出ベースはこの段からもう見えている。</p></div>' +
+    '<div class="card"><div class="row">' + chips + "</div>" +
+    '<p class="note">コード未定でもいい：③で骨格を先に書き「コードを推定(harmonize)」で逆流できる（2声先行・design #20）。</p></div>';
+}
+function skcTrayHTML() {
+  if (!S.candOpen) return "";
+  let rows = "";
+  SKC.forEach((c, i) => {
+    rows += '<button class="btn mini" style="' + (S.candSel === i ? "border-color:var(--acc);color:var(--ink)" : "") + '" data-act="skc-pick" data-i="' + i + '">' + (S.candSel === i ? "◉ " : "○ ") + c.label + "</button>";
+  });
+  return '<div class="skc"><div class="row" style="justify-content:space-between"><b style="font-size:12px">叩き台（gen_skeleton 候補）</b><span class="sub">回しながら試着＝ゴーストが今の骨格</span></div>' +
+    '<div class="row">' + rows + "</div>" +
+    '<div class="row"><button class="btn mini pri" data-act="skc-adopt"' + (S.candSel < 0 ? " disabled style='opacity:.4'" : "") + ">採用（在庫はUndoで戻せる想定）</button>" +
+    '<button class="btn mini" data-act="skc-phrase">句2だけ引き直す</button>' +
+    '<button class="btn mini" data-act="skc-close">閉じる</button></div></div>';
+}
+function stage3HTML() {
+  return (
+    '<div class="row" style="justify-content:space-between;margin-bottom:8px">' +
+      '<button class="chip" data-act="fork"><b>骨格 #s12</b>・他1箇所で使用</button>' +
+      '<button class="btn mini pri" data-act="skc-open">🎲 叩き台</button>' +
+    "</div>" +
+    '<div class="toolbar">' +
+      '<span class="lbl">スナップ</span><span class="seg">' +
+        ["2","1","0"].map(v => '<button class="' + (S.snap === +v ? "on" : "") + '" data-act="snap" data-v="' + v + '">' + (v === "0" ? "自由" : v + "拍") + "</button>").join("") + "</span>" +
+      '<span class="lbl">声部</span><span class="seg">' +
+        '<button class="' + (S.voice === "mel" ? "on" : "") + '" data-act="voice" data-v="mel" style="color:' + (S.voice === "mel" ? "var(--mel)" : "") + '">メロ</button>' +
+        '<button class="' + (S.voice === "bass" ? "on" : "") + '" data-act="voice" data-v="bass" style="color:' + (S.voice === "bass" ? "var(--bass)" : "") + '">ベース</button></span>' +
+      '<span class="seg">' +
+        '<button class="' + (S.tool === "draw" ? "on" : "") + '" data-act="tool" data-v="draw">打点</button>' +
+        '<button class="' + (S.tool === "erase" ? "on" : "") + '" data-act="tool" data-v="erase">消す</button></span>' +
+    "</div>" +
+    '<div class="scroller"><div class="rollwrap" style="width:' + W + 'px">' +
+      rulerHTML() + rollSVG() + restStripHTML() + contactHTML() + chordRowHTML() +
+      '<div id="ph" style="height:' + (22 + H + 20 + 24) + 'px"></div>' +
+    "</div></div>" +
+    '<div class="legend">' +
+      "<i>■打点＋▓支配帯（durなし）</i><i>斜線＝骨格休符</i>" +
+      '<i style="color:var(--bass)">━ ベース：点線=コード導出／実線=明示</i>' +
+      "<i>バッジ＝実音程(mod12)　" +
+      '<b style="color:var(--ok)">協和</b>／<b style="color:var(--warn)">強拍不協和</b>／<b style="color:var(--bad)">並行・交差</b></i>' +
+      "<i>表示は畳み（ベース+2oct）・畳み再生は+1oct・実の座りは下図</i>" +
+    "</div>" +
+    skcTrayHTML() +
+    '<div class="ov"><div class="cap"><span>実音の座り（常設・非編集）</span><span>青=骨格メロ／橙=ベース／緑帯=コード楽器</span></div>' + overviewSVG() + "</div>" +
+    '<p class="note">下の接点ドット＝対位の接点。タップで説明＋「この瞬間を聴く」。<b>指摘のみ・禁止しない</b>（掛留や倚音の種はむしろ味）。</p>'
+  );
+}
+function surfMiniSVG(notes) {
+  const MW = 384, MH = 72;
+  const y = m => ((78 - m) / (78 - 58)) * MH;
+  const x = b => (b / TOTAL) * MW;
+  let s = '<rect width="' + MW + '" height="' + MH + '" fill="#141826"/>';
+  for (let b = 0; b <= TOTAL; b += 4) s += '<line x1="' + x(b) + '" y1="0" x2="' + x(b) + '" y2="' + MH + '" stroke="#232a3d"/>';
+  for (const g of domSegs(S.tones)) if (g.pitch !== null) // 骨格ゴースト
+    s += '<line x1="' + x(g.start) + '" y1="' + y(g.pitch) + '" x2="' + x(g.end) + '" y2="' + y(g.pitch) + '" stroke="#98a2b6" stroke-width="4" opacity="0.28"/>';
+  for (const n of notes)
+    s += '<rect x="' + x(n.start) + '" y="' + (y(n.pitch) - 2.5) + '" width="' + Math.max(2, x(n.dur) - 1) + '" height="5" rx="2" fill="#7ec8ff"/>';
+  return '<svg width="' + MW + '" height="' + MH + '" viewBox="0 0 ' + MW + " " + MH + '" style="width:100%;height:auto;display:block;border-radius:6px">' + s + "</svg>";
+}
+function stage4HTML() {
+  let out = '<div class="card"><b>④ 表面化＝骨格から新しいメロを吹く</b>' +
+    '<p class="note">骨格は残る（在庫不変）。吹くたび新しいメロが生まれ <b>realized_from</b> で骨格に紐づく。候補はベッドの上で試聴＝置く前に文脈で聴ける。</p>' +
+    '<div style="margin-top:6px">' + surfMiniSVG([]) + '<div class="sub" style="margin-top:2px">灰＝この骨格（#s12）。ここから吹く。</div></div>' +
+    '<div class="row" style="margin-top:8px"><button class="btn pri" data-act="surf-gen">この骨格で吹く（候補3つ）</button>' +
+    '<button class="btn mini" data-act="stage" data-v="3">← 骨格に戻って直す</button></div></div>';
+  if (S.trayOpen) {
+    SURF.forEach((c, i) => {
+      const playing = S.surfPreview === i;
+      out += '<div class="cand"><div class="hd"><b>' + c.label + "</b><span class='badge-" + c.badge.c + "'>" + c.badge.t + "</span></div>" +
+        surfMiniSVG(c.notes) +
+        '<div class="row" style="margin-top:6px">' +
+        '<button class="btn mini' + (playing ? " pri" : "") + '" data-act="surf-audit" data-i="' + i + '">' + (playing ? "■ 停止" : "▶ ベッドで試聴") + "</button>" +
+        '<button class="btn mini pri" data-act="surf-place" data-i="' + i + '">＋ 置く</button>' +
+        '<span class="sub">レンズも効く（畳みで音程確認→実音で座り確認）</span></div></div>';
+    });
+  }
+  if (S.placed) {
+    out += '<div class="placedbox"><b class="badge-ok">✓ 新しいメロ #m41 を配置</b>' +
+      '<p class="note">骨格 #s12 は不変のまま。relation：<b>#m41 ─realized_from→ #s12</b>。表面を直すならノート編集、線から変えるなら骨格へ戻って吹き直し（旧メロは消えない）。</p>' +
+      '<div class="row" style="margin-top:6px"><button class="btn mini" data-act="stage" data-v="3">③ 骨格へ</button>' +
+      '<button class="btn mini" data-act="toast" data-msg="モック：本実装では歌詞に乗せた再分割（S5）へ続く">⑤ 歌詞に乗せる（未来）</button></div></div>';
+  }
+  return out;
+}
+function renderStage() {
+  const box = $("stagebox");
+  box.innerHTML = S.stage === 1 ? stage1HTML() : S.stage === 2 ? stage2HTML() : S.stage === 3 ? stage3HTML() : stage4HTML();
+  const svg = $("rollsvg");
+  if (svg) svg.onclick = onRollClick;
+}
+function renderRail() {
+  const names = [["①","ビート"],["②","コード"],["③","骨格"],["④","表面"]];
+  $("stagerail").innerHTML = names.map((n, i) =>
+    '<button class="' + (S.stage === i+1 ? "on" : "") + '" data-act="stage" data-v="' + (i+1) + '"><span class="n">' + n[0] + '</span><span class="t">' + n[1] + "</span></button>").join("");
+}
+function updateTransport() {
+  $("btnPlay").textContent = S.playing ? "■ 停止" : "▶ ループ";
+  document.querySelectorAll("#lensSeg button").forEach(b => b.classList.toggle("on", b.dataset.v === S.lens));
+  $("lensNote").textContent = S.lens === "fold"
+    ? "畳み＝ベッドを2声に還元：骨格線(実音)×実効ベース(+1oct)＋クリック。音程が聞き取れる形。再生中でも切替可"
+    : "実音＝編成に乗せる：ドラム/コード楽器/実域ベースの上に骨格線。座り・かぶり・低域の濁りを聴く。再生中でも切替可";
+}
+function renderAll() { renderRail(); renderStage(); updateTransport(); }
+
+/* ---------- 入力 ---------- */
+function onRollClick(e) {
+  const svg = $("rollsvg");
+  const r = svg.getBoundingClientRect();
+  const rawB = (e.clientX - r.left) / PPB;
+  const disp = TOPM - Math.floor((e.clientY - r.top) / ROW);
+  if (S.candPreview) { S.candPreview = null; S.candSel = -1; } // 編集し始めたら試着は解除
+  if (S.tool === "erase") {
+    if (S.voice === "mel") S.tones = eraseNear(S.tones, rawB); else S.bass = eraseNear(S.bass, rawB);
+  } else {
+    const b = snapB(rawB);
+    if (S.voice === "mel") S.tones = upsert(S.tones, b, disp);
+    else S.bass = upsert(S.bass, b, disp - FOLD_DISP); // 表示は畳み・保存は実音（unfold）
+  }
+  renderAll();
+}
+function showPop(html) { const p = $("pop"); p.innerHTML = html; p.hidden = false; }
+function hidePop() { $("pop").hidden = true; }
+let toastT = null;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2200);
+}
+function cpPop(b) {
+  const c = counterpoint().find(x => Math.abs(x.start - b) < EPS);
+  if (!c || c.bass == null) return;
+  let body;
+  if (c.par) body = "直前の点と並行" + c.par + "。2声の独立が薄れる型（tonal fusion）。<b>指摘のみ・禁止はしない</b>——狙いなら通してよし。";
+  else if (c.cross) body = "実音で声部交差（メロがベースの下）。畳み表示では見えにくいので実音レンズでも一度聴くのがおすすめ。";
+  else if (c.dis) body = "強拍の不協和（" + c.iv.label + "）。表面化で掛留/倚音として解決するなら味になる。骨格のまま残すなら意図の確認を。";
+  else if (!c.iv.cons) body = "弱拍の不協和（" + c.iv.label + "）＝経過的な扱いなら自然。";
+  else body = "協和（" + c.iv.label + "）。安定した接点。";
+  showPop('<h3>拍' + (b + 1) + "：メロ " + noteName(c.mel) + " × ベース " + noteName(c.bass) + "（" + c.iv.label + "）</h3><p>" + body + "</p>" +
+    '<div class="row"><button class="btn mini pri" data-act="dyad" data-b="' + b + '">▶ この瞬間だけ聴く（畳み）</button>' +
+    '<button class="btn mini" data-act="pop-close">閉じる</button></div>');
+}
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]");
+  if (!el) return;
+  const act = el.dataset.act, v = el.dataset.v, i = +el.dataset.i, b = parseFloat(el.dataset.b);
+  switch (act) {
+    case "stage": S.stage = +v; if (S.stage !== 4) S.surfPreview = -1; renderAll(); break;
+    case "lens": S.lens = v; updateTransport(); break; // 再生は止めない＝即A/B
+    case "play": S.playing ? stopPlay() : startPlay(); break;
+    case "drum": S.drums = v; renderAll(); break;
+    case "chord": S.chordSel[i] = (S.chordSel[i] + 1) % SLOTS[i].length; renderAll(); break;
+    case "cad": {
+      const ph = S.phrases[i];
+      ph.cad = ph.cad === "全終止" ? "半終止" : "全終止";
+      renderAll(); break;
+    }
+    case "snap": S.snap = +v; renderAll(); break;
+    case "voice": S.voice = v; renderAll(); break;
+    case "tool": S.tool = v; renderAll(); break;
+    case "rest": {
+      if (S.voice === "mel") S.tones = toggleRest(S.tones, b); else S.bass = toggleRest(S.bass, b);
+      renderAll(); break;
+    }
+    case "skc-open": S.candOpen = true; renderAll(); break;
+    case "skc-pick": S.candSel = i; S.candPreview = SKC[i]; if (!S.playing) startPlay(); renderAll(); break;
+    case "skc-adopt":
+      if (S.candSel >= 0) { S.tones = SKC[S.candSel].tones.map(p => ({...p})); }
+      S.candPreview = null; S.candSel = -1; S.candOpen = false;
+      toast("採用。前の骨格はUndo/履歴で戻れる想定（在庫を破壊上書きしない流儀）");
+      renderAll(); break;
+    case "skc-phrase": toast("モック：本実装では句2（後半2小節）だけ gen_skeleton を再抽選"); break;
+    case "skc-close": S.candPreview = null; S.candSel = -1; S.candOpen = false; renderAll(); break;
+    case "cp": cpPop(b); break;
+    case "dyad": playDyad(b); break;
+    case "pop-close": hidePop(); break;
+    case "fork":
+      showPop("<h3>骨格 #s12 は独立素材（他1箇所でも使用中）</h3>" +
+        "<p>この机での編集は<b>素材そのもの</b>を直す（配置の移調は保存時に外す＝往復可逆）。他の置き場も一緒に変わる。ここ専用にしたいときは複製して切り離す。</p>" +
+        '<div class="row"><button class="btn mini" data-act="toast" data-msg="モック：copy_neta で複製→この配置だけ差し替え">複製して切り離す</button>' +
+        '<button class="btn mini" data-act="pop-close">閉じる</button></div>');
+      break;
+    case "surf-gen": S.trayOpen = true; toast("モック：本実装＝gen_melody(skeletonNetaId)→候補に対位法レポート添付"); renderAll(); break;
+    case "surf-audit":
+      S.surfPreview = S.surfPreview === i ? -1 : i;
+      if (S.surfPreview >= 0 && !S.playing) startPlay();
+      renderAll(); break;
+    case "surf-place": S.placed = true; S.placedFrom = i; S.surfPreview = -1; renderAll(); break;
+    case "toast": toast(el.dataset.msg || "モック"); break;
+  }
+});
+
+/* 再生ヘッド＋位置表示（描画はSVG再構築せずtransformのみ） */
+function tickUI() {
+  const ph = $("ph"), pos = $("pos");
+  if (S.playing) {
+    const cb = curBeat();
+    if (ph) { ph.style.display = "block"; ph.style.left = (cb * PPB) + "px"; }
+    if (pos) pos.textContent = (Math.floor(cb / BPB) + 1) + "." + (Math.floor(cb % BPB) + 1);
+  } else {
+    if (ph) ph.style.display = "none";
+    if (pos) pos.textContent = "1.1";
+  }
+  requestAnimationFrame(tickUI);
+}
+
+renderAll();
+requestAnimationFrame(tickUI);
+</script>
+</body>
+</html>
