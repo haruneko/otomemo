@@ -56,14 +56,8 @@ export function sliceBedToWindow(notes: Note[], windowStart: number, span: numbe
   return out;
 }
 
-// ベッド＋レンズの再生 Note 列（**ブロックローカル座標**）。stateReal＝机の現 state（実調）。
-//   ・skelEar ＝ skeletonEarNotes(stateReal, {chords: earChordsRel, shift:0})。**+skelPosition しない**
-//     ＝ beat 0 起点のまま＝ SkeletonEditor のロールと一致＝プレイヘッドが揃う（D1.5 の核）。
-//   ・bed ＝ sliceBedToWindow(composite, skelPosition, bars*bpb)＝セクション全体 composite から骨格ブロックの
-//     窓を切り出しブロックローカルへ。composite は骨格を含まない（compositeNotes が skeleton を無音扱い＝従来）。
-//   ・fold 群 ＝ foldLensNotes(skelEar, bars, bpb)（2声＋クリック・クリックは bars 小節ぶん）。
-//   ・real 群 ＝ realLensNotes(bed, skelEar)（編成＋骨格線）。
-export function deskLensNotes(args: {
+// deskLensNotes / deskFoldReal の引数（D5 で deskStages.ts も同じ形を消費＝named 型に切り出し）。
+export interface DeskLensArgs {
   stateReal: SkeletonContent;
   earChordsRel: ChordEntry[]; // earChords（実調・セクション位置）を骨格ブロック相対（start − skelPosition）にした列
   composite: Note[];
@@ -71,13 +65,24 @@ export function deskLensNotes(args: {
   bars: number; // 骨格ブロックの小節数（=ロール幅／クリック尺／ベッド窓幅）
   bpb: number;
   previewMelody?: Note[] | null; // ④出口の試着（D4）：実音レンズのメロ枠を候補メロで差替（ブロックローカル・beat0起点）。
-}): LensNote[] {
+}
+
+// ベッド＋レンズの再生 Note 列を **fold 群 / real 群 に割った物**（**ブロックローカル座標**）。D5 で
+// レンズをステージ相対に一般化するとき、③④は「a＝fold群・b＝real群」をそのまま載せる＝bit一致の土台。
+//   ・skelEar ＝ skeletonEarNotes(stateReal, {chords: earChordsRel, shift:0})。**+skelPosition しない**
+//     ＝ beat 0 起点のまま＝ SkeletonEditor のロールと一致＝プレイヘッドが揃う（D1.5 の核）。
+//   ・bed ＝ sliceBedToWindow(composite, skelPosition, bars*bpb)＝セクション全体 composite から骨格ブロックの
+//     窓を切り出しブロックローカルへ。composite は骨格を含まない（compositeNotes が skeleton を無音扱い＝従来）。
+//   ・fold 群 ＝ foldLensNotes(skelEar, bars, bpb)（2声＋クリック・クリックは bars 小節ぶん）。
+//   ・real 群 ＝ realLensNotes(bed, skelEar)（編成＋骨格線）。previewMelody（D4）は real 群のみに効く。
+export function deskFoldReal(args: DeskLensArgs): { fold: LensNote[]; real: LensNote[] } {
   const skelEar: Note[] = skeletonEarNotes(args.stateReal, {
     chords: args.earChordsRel,
     shift: 0, // ★二重移調しない：state は既に実調
     beatsPerBar: args.bpb,
   });
   const bed = sliceBedToWindow(args.composite, args.skelPosition, args.bars * args.bpb);
+  const fold = foldLensNotes(skelEar, args.bars, args.bpb);
   // ④試着（D4）：実音レンズのメロ枠を候補で差し替える。候補メロは gen_melody(skeletonNetaId) 由来＝骨格と同じ
   //   ブロックローカル座標（beat0 起点）なので **オフセット無し**（skelEar と同座標）。skelPosition オフセットは
   //   しない＝ベッド/skelEar も既にブロックローカル（D1.5）だから（座標を揃える素直な判断）。
@@ -87,9 +92,16 @@ export function deskLensNotes(args: {
   if (args.previewMelody) {
     const bedNoMel = bed.filter((n) => n.part !== "melody");
     const cand: Note[] = args.previewMelody.map((n) => ({ ...n, part: "melody" }));
-    return [...foldLensNotes(skelEar, args.bars, args.bpb), ...realLensNotes([...bedNoMel, ...cand], [])];
+    return { fold, real: realLensNotes([...bedNoMel, ...cand], []) };
   }
-  return [...foldLensNotes(skelEar, args.bars, args.bpb), ...realLensNotes(bed, skelEar)];
+  return { fold, real: realLensNotes(bed, skelEar) };
+}
+
+// ③④の getNotes（畳み群＋実音群を最初から渡す＝activeLens でゲート）。D1〜D4 はこれを消費。
+// D5 のステージ相対（deskStages.stageLensSets）は skeleton/surface でこの出力と音符列 deepEqual（bit一致）。
+export function deskLensNotes(args: DeskLensArgs): LensNote[] {
+  const { fold, real } = deskFoldReal(args);
+  return [...fold, ...real];
 }
 
 // --- 接点（対位法）の説明文と「この瞬間だけ聴く」ダイアッド（design #20 S6・D2） ---------------------

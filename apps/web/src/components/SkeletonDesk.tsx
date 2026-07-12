@@ -16,7 +16,8 @@ import { useEditHistory } from "../history";
 import { useMelodyGen, voiceLeadingBadge, realizedMelodyCount, type Cand, type MelodyGenCtx } from "../useMelodyGen";
 import * as sctx from "../sectionContext";
 import { lanesForKind, MIN_BARS, maxBarsForKind, type Child, type Lane } from "./sectionLanes";
-import { deskLoadContent, deskSaveContent, deskLensNotes, contactText, contactDyadNotes } from "../deskContent";
+import { deskLoadContent, deskSaveContent, contactText, contactDyadNotes } from "../deskContent";
+import { stageAllNotes, stageLabels, type StageFocus } from "../deskStages";
 import { analyzeCounterpoint, effectiveBassAt, effectiveBassSegments, type MelCp } from "../skeletonEdit";
 import { chordChips, applyChordTrial, adoptedChordContent, chordName, type ChordSub, type ChordTrial } from "../deskChords";
 import { LENS_FOLD, LENS_REAL } from "../deskLens";
@@ -76,7 +77,10 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   const [bars, setBars] = useState(4);
   const [rollMode, setRollMode] = useState<"draw" | "select" | "erase">("draw");
   const [counterpoint, setCounterpoint] = useState(true); // SkeletonEditor 内トグル（候補試聴/凡例用）
-  const [activeLens, setActiveLens] = useState<string>(LENS_FOLD); // 既定＝畳み（音程が読める）
+  const [activeLens, setActiveLens] = useState<string>(LENS_FOLD); // 既定＝A群（LENS_FOLD）。ステージで意味が読み替わる
+  // D5: 聴きレンズの焦点ステージ（①ビート/②コード/③骨格/④表面）。既定＝skeleton＝起動時は現行③体験のまま。
+  //   レンズ2択のラベルと reduce（鳴らす音符列）が focusStage で読み替わる（seams A）。切替＝reloop（内容が変わる）。
+  const [focusStage, setFocusStage] = useState<StageFocus>("skeleton");
 
   // --- ②コード前景（D3）：試着はローカル state（在庫不変）。採用でのみ updateNeta が飛ぶ。 ---
   const [chordPop, setChordPop] = useState<{ chipIndex: number; x: number; y: number } | null>(null); // 開いているチップのポップ
@@ -261,15 +265,18 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   const clampEnd = Math.max(clampStart + BPB, Math.min(range?.endBeat ?? blockSpan, blockSpan));
   const effRange = { startBeat: clampStart, endBeat: clampEnd };
 
-  // --- ベッド＋レンズの再生 Note 列（純合成は deskContent へ委譲）。 ---
+  // --- ベッド＋レンズの再生 Note 列（純合成は deskStages へ委譲＝ステージ相対の a/b を両方渡す）。 ---
+  //   focusStage で reduce（鳴らす音符列）が読み替わる：③④＝deskLensNotes と bit一致・①ドラムのみ・②素の三和音。
+  //   両群を最初から返し activeLens（A=LENS_FOLD/B=LENS_REAL）でゲート＝無停止 A/B（audio.ts 2グループゲート据え置き）。
   const getNotes = useCallback((): Note[] => {
     if (!loaded) return [];
     const stateReal: SkeletonContent = { bars, tones, ...(bass.length ? { bass } : {}), ...(phrases.length ? { phrases } : {}) };
     // ④試着（D4）：候補メロが選ばれていれば実音レンズのメロ枠へ差し込む（ブロックローカル＝gen_melody(skeletonNetaId) 由来）。
     const previewMelody = candPreview ? notesForContent(candPreview.kind, candPreview.content) : null;
-    return deskLensNotes({
+    return stageAllNotes(focusStage, {
       stateReal,
       earChordsRel: effChords, // 試着中は override 済＝reloop（採用時）で次ループから音も追従。停止中に再生すれば即最新。
+      effChords, // ②「和声だけ」の簡易三和音の入力（試着 override 込の実効コード）
       composite: compositeNotes(children, sectionKey, sectionMode), // 骨格は無音（従来どおり）
       skelPosition, // ベッド窓の起点（skelEar 自体は beat 0 起点のまま＝ロール一致）
       bars, // 骨格ブロックの小節数（クリック尺／ベッド窓幅）
@@ -278,7 +285,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     });
     // earChordsRel/children 等は毎レンダ再計算＝useTransport が cfg ref で最新を読む（stale なし）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, bars, tones, bass, phrases, children, BPB, sectionKey, sectionMode, skelPosition, candPreview]);
+  }, [loaded, bars, tones, bass, phrases, children, BPB, sectionKey, sectionMode, skelPosition, candPreview, focusStage]);
 
   const tp = useTransport(getNotes, tempo, { scaleBeats: blockSpan, bpb: BPB, activeLens, range: effRange });
 
@@ -288,6 +295,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   const rulerZoneRef = useRef<HTMLDivElement>(null); // transform も beatFromClientX も同一要素（beat0=rect.left）
   const contactZoneRef = useRef<HTMLDivElement>(null); // 接点ストリップ（ルーラーと同じ scroll 同期＝ロール一致）
   const chordZoneRef = useRef<HTMLDivElement>(null); // ②コード前景（D3）＝ルーラー/接点と同じ scroll 同期＝ロール一致
+  const beatZoneRef = useRef<HTMLDivElement>(null); // ①ビート前景（D5）＝ルーラー/接点/②と同じ scroll 同期＝ロール一致
   useEffect(() => {
     const sc = (tp.scrollerRef as React.RefObject<HTMLDivElement>).current;
     const zone = rulerZoneRef.current;
@@ -297,6 +305,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
       zone.style.transform = tx;
       if (contactZoneRef.current) contactZoneRef.current.style.transform = tx; // 接点行もロールと同じだけ流す
       if (chordZoneRef.current) chordZoneRef.current.style.transform = tx; // ②コード行もロールと同じだけ流す
+      if (beatZoneRef.current) beatZoneRef.current.style.transform = tx; // ①ビート行もロールと同じだけ流す
     };
     sync();
     sc.addEventListener("scroll", sync, { passive: true });
@@ -349,6 +358,22 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     tp.setLensGain(next, true);
     setActiveLens(next);
   };
+
+  // D5: ステージ切替（焦点①→②等）＝reduce（鳴らす音符列）が変わる＝tp.reloop（再生継続・loop維持・位置はループ頭へ）。
+  //   レンズ内の A⇄B（toggleLens）とは別＝そちらは無停止ゲート。activeLens は据え置き（A/B の選択はステージ跨ぎで保つ）。
+  const changeStage = (next: StageFocus) => {
+    if (next === focusStage) return;
+    setFocusStage(next);
+    tp.reloop(); // 停止中は no-op・再生中は新ステージの reduce でループし直す
+  };
+  // 焦点ステージのレンズ2択ラベル（トランスポートのボタン表示が focusStage で読み替わる＝seams A の配線）。
+  const lensLabels = stageLabels(focusStage);
+
+  // D5: ①ビート前景（薄）＝リズムレーン子（ドラムブロック）の表示のみ。内部再設計しない・タップで潜る導線は
+  //   机に onOpenNeta が無い（D4 と同じ制約）＝今回は表示のみ（潜りは出さない）。①レンズ（パターン単体）は
+  //   下のステージレールで効く。座標＝ロールと同 PPB・同 scroll 同期（ブロック相対 position−skelPosition）。
+  const rhythmLane = LANES.find((l) => l.key === "rhythm");
+  const beatChildren = rhythmLane ? sctx.laneChildren(secCtx, rhythmLane) : [];
 
   // --- ④出口（D4）の操作：吹く→試着（ベッド上・無停止）→置く（skelPosition）。 ---
   // 吹く▶＝焦点骨格から表面メロを吹く（gen_melody(skeletonNetaId)→候補トレイ）。焦点が無ければ何もしない。
@@ -502,6 +527,30 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         </div>
       </div>
 
+      {/* D5 ステージレール：聴きレンズの焦点（①ビート/②コード/③骨格/④表面）。選択でトランスポートのレンズ2択の
+          ラベルと reduce が読み替わる（seams A）。切替＝reloop（再生継続・loop維持・位置はループ頭へ）。②③④の
+          既存行（コードチップ/ロール/接点/出口）は隠さない＝レールは「レンズの意味を決める焦点」の薄い追加。 */}
+      <div className="desk-stages" role="group" aria-label="desk-stages">
+        {([
+          ["beat", "①ビート"],
+          ["chord", "②コード"],
+          ["skeleton", "③骨格"],
+          ["surface", "④表面"],
+        ] as [StageFocus, string][]).map(([f, label]) => (
+          <button
+            key={f}
+            type="button"
+            className={"desk-stage" + (focusStage === f ? " on" : "")}
+            aria-label={`stage-${f}`}
+            aria-pressed={focusStage === f}
+            title={`聴きレンズの焦点＝${label}`}
+            onClick={() => changeStage(f)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* 範囲ブレースのルーラー（D1.5）：ロールと同 PPB・同スクロール。両端つまみで再生ループ窓を絞る。 */}
       <div className="desk-ruler" aria-label="desk-ruler">
         <div className="desk-ruler-gutter" style={{ width: GUTTER }}>窓</div>
@@ -517,6 +566,33 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
             <div className="desk-brace-region" aria-label="desk-brace-region" style={{ left: effRange.startBeat * PPB, width: (effRange.endBeat - effRange.startBeat) * PPB }} />
             <span className="desk-brace start" role="slider" aria-label="desk-brace-start" aria-valuenow={effRange.startBeat} title="ループ開始（小節境界スナップ）" style={{ left: effRange.startBeat * PPB }} onPointerDown={(e) => onBraceDown(e, "start")} />
             <span className="desk-brace end" role="slider" aria-label="desk-brace-end" aria-valuenow={effRange.endBeat} title="ループ終了（小節境界スナップ）" style={{ left: effRange.endBeat * PPB }} onPointerDown={(e) => onBraceDown(e, "end")} />
+          </div>
+        </div>
+      </div>
+
+      {/* ①ビート前景（D5・薄）：リズムレーン子（ドラムブロック）の表示のみ。座標＝ロールと同 PPB・同スクロール
+          （ブロック相対 position−skelPosition）。※タップで既存ドラムエディタへ潜る導線は机に onOpenNeta が無い
+          （D4 と同じ制約）＝今回は表示のみ。①レンズ「パターン単体」はステージレールで効く。 */}
+      <div className="desk-beat" aria-label="desk-beat">
+        <div className="desk-beat-gutter" style={{ width: GUTTER }}>ビート</div>
+        <div className="desk-beat-viewport">
+          <div className="desk-beat-zone" ref={beatZoneRef} style={{ width: blockSpan * PPB }}>
+            {beatChildren.length === 0 && <span className="desk-beat-empty muted">（リズム未配置）</span>}
+            {beatChildren.map((c, i) => {
+              const left = (c.position - skelPosition) * PPB;
+              const w = Math.max(8, sctx.childDur(secCtx, c) * PPB - 2);
+              return (
+                <span
+                  key={i}
+                  className="desk-beat-block"
+                  aria-label={`beat-block-${i}`}
+                  style={{ left, width: w }}
+                  title={c.node.neta.title ?? c.node.neta.text ?? "ドラム"}
+                >
+                  {(c.node.neta.title ?? c.node.neta.text ?? "ドラム").slice(0, 10)}
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -748,12 +824,14 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           ⏮
         </button>
         <span className="tb-divider" aria-hidden="true" />
+        {/* レンズ2択（A群=LENS_FOLD / B群=LENS_REAL）。aria-label は A/B ゲートで固定・表示ラベルは focusStage で
+            読み替わる（③④畳み|実音・①パターン単体|ベッド・②和声だけ|編成）＝seams A の「同じ1つの操作」。 */}
         <span className="desk-lens seg" role="group" aria-label="desk-lens">
-          <button type="button" className={activeLens === LENS_FOLD ? "on" : ""} aria-pressed={activeLens === LENS_FOLD} aria-label="lens-fold" title="畳み（2声＋クリックで音程を読む）" onClick={() => toggleLens(LENS_FOLD)}>
-            畳み
+          <button type="button" className={activeLens === LENS_FOLD ? "on" : ""} aria-pressed={activeLens === LENS_FOLD} aria-label="lens-fold" title={`${lensLabels[0]}（焦点を畳む/絞る側）`} onClick={() => toggleLens(LENS_FOLD)}>
+            {lensLabels[0]}
           </button>
-          <button type="button" className={activeLens === LENS_REAL ? "on" : ""} aria-pressed={activeLens === LENS_REAL} aria-label="lens-real" title="実音（編成の座り）" onClick={() => toggleLens(LENS_REAL)}>
-            実音
+          <button type="button" className={activeLens === LENS_REAL ? "on" : ""} aria-pressed={activeLens === LENS_REAL} aria-label="lens-real" title={`${lensLabels[1]}（フル/実音側）`} onClick={() => toggleLens(LENS_REAL)}>
+            {lensLabels[1]}
           </button>
         </span>
         <span className="tb-divider" aria-hidden="true" />
