@@ -759,9 +759,12 @@ export function genMotifMelodyV2(
   const varLen = !!(opts.phrases && opts.phrases.length && !opts.seedMotif);
   const blocks: { bar0: number; bars: number }[] = varLen
     ? opts.phrases!.map((p) => ({ bar0: Math.floor(p.startBeat / barLen), bars: Math.max(1, Math.round(p.beats / barLen)) }))
-    : Array.from({ length: nBlk }, (_, i) => ({ bar0: i * mb, bars: mb }));
+    : Array.from({ length: nBlk }, (_, i) => ({ bar0: i * mb, bars: Math.min(mb, bars - i * mb) })); // 最終ブロックを残小節にクランプ＝奇数小節 overrun 根治（bars が mb 倍数なら全 L=mb で bit 一致）
   const motifByLen = new Map<number, Motif16>();
-  const motifFor = (L: number): Motif16 => { if (!varLen) return M; let mm = motifByLen.get(L); if (!mm) { mm = genBest(r, L); motifByLen.set(L, mm); } return mm; };
+  // 非varLen＝既定は単一 M（L===mb で bit一致）。ただし奇数小節の最終 runt ブロック(L<mb)は L小節の動機を使う
+  // ＝2小節動機 M を runt に流すと onset が区間外へ出て overrun/負dur（機能e2e S1）。runt は last ブロックのみ＝
+  // genBest 抽選は全 non-runt レンダ後＝先頭ブロックの rng draw 順不変＝偶数小節/非runtは bit一致。
+  const motifFor = (L: number): Motif16 => { if (!varLen && L === mb) return M; let mm = motifByLen.get(L); if (!mm) { mm = genBest(r, L); motifByLen.set(L, mm); } return mm; };
   // ── C: 密度の相補（converse・design「gen_melody×ドラム結線」・research/2026-07-10-melody-groove-drum-interaction.md）──
   // 小節ごとのドラム密度(densityByBar=kick+snare+0.3*hihat)をブロック単位（＝句境界を跨がない）で平均し、
   // 中央値比 rel から scale=clamp(1−converse×(rel−1)×K, 0.7, 1.3)（K=0.3＝弱いバイアス）。実現＝ブロックの
@@ -876,7 +879,7 @@ export function genMotifMelodyV2(
   const bBlockBars = new Set<number>(); // 単一頂点のB塊(弧のピーク)判定用
   for (let bi = 0; bi < nB; bi++) {
     const bar0 = blocks[bi]!.bar0, L = blocks[bi]!.bars, last = bi === nB - 1;
-    const rbb = varLen ? L : mb; // render/断片の長さ（既定=mb でbit一致）
+    const rbb = L; // render/断片の長さ＝ブロック実長。既定(非phrases)も残小節クランプ済 L を尊重（mb 倍数なら L=mb で bit一致・奇数小節 overrun 根治）
     const Mi = motifFor(L);
     let variant: Motif16, anchor: number, label: string;
     if (sentence) {

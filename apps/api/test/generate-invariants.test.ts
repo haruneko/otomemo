@@ -8,6 +8,7 @@ import {
   genFromEssence,
   type Frame,
 } from "../src/music/generate";
+import { meterInfo } from "../src/music/meter";
 
 // #2 安全網：生成エンジンが実際に保証する musical 不変条件を property test で固定（design 決定1）。
 // seed 依存乱数なので byte 等価は約束しない。代わりに「壊れていない」ことを多数の frame×seed で担保。
@@ -66,6 +67,26 @@ describe("genMelody 不変条件", () => {
     for (const meter of ["5/4", "1/8", "7/8", "2/4", "7/4"]) {
       expect(() => genMelody({ meter, bars: 4 }, chords, 1, { useV2: true }), `${meter} useV2`).toThrow(/未対応/);
       expect(() => genMelody({ meter, bars: 4 }, chords, 1), `${meter} 直呼び`).toThrow(/未対応/);
+    }
+  });
+
+  // 2026-07-12：奇数小節 overrun 根治（機能e2e S1）。既定ブロック割り（非phrases）が最終ブロックも常に mb 小節を
+  // 敷き、render 長 rbb も mb 決め打ちだったため、bars が motifBars(既定2) の倍数でない時に旋律が区間外へ 1 小節はみ出す。
+  // J2a で 3/4・6/4・6/8 も V2 本線に入ったため各拍子で到達。span 不変条件＝全オンセットが bars×beatsPerBar 未満。
+  it("要求小節数を超えない＝全オンセット < bars×beatsPerBar（奇数小節 overrun 根治）", () => {
+    for (const meter of ["4/4", "3/4", "6/4", "6/8"]) {
+      const bpb = meterInfo(meter).beatsPerBar; // 四分基準（4/4→4・3/4→3・6/4→6・6/8→3）
+      for (const bars of [1, 2, 3, 4, 5, 7]) {
+        const span = bars * bpb;
+        const chords: Chord[] = [{ root: 0, quality: "", start: 0, dur: span }];
+        for (const seed of SEEDS) {
+          const notes = notesOf(genMelody({ meter, bars }, chords, seed, { useV2: true }));
+          const where = `${meter} bars=${bars} #${seed} (span=${span})`;
+          expect(notes.length, `非空: ${where}`).toBeGreaterThan(0);
+          const maxStart = Math.max(...notes.map((n) => n.start));
+          expect(maxStart, `区間内オンセット: ${where} maxStart=${maxStart}`).toBeLessThan(span);
+        }
+      }
     }
   });
 
