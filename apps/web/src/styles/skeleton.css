@@ -91,3 +91,20 @@
 .desk-brace { position: absolute; top: 0; width: 14px; height: 22px; margin-left: -7px; cursor: ew-resize; touch-action: none; z-index: 3; }
 .desk-brace::before { content: ""; position: absolute; left: 6px; top: 2px; width: 2px; height: 18px; background: var(--k-skeleton); border-radius: 1px; }
 .desk-brace::after { content: ""; position: absolute; left: 3px; top: 8px; width: 8px; height: 8px; background: var(--k-skeleton); border-radius: 2px; }
+
+/* 接点ストリップ（D2）＝ロール直下のタップできる対位法要約行。ルーラーと同 PPB(44)/gutter(40)・同 scroll 同期。 */
+.desk-contact { display: flex; border: 1px solid var(--line); border-top: none; background: #15171b; overflow: hidden; }
+.desk-contact-gutter { flex: 0 0 40px; display: flex; align-items: center; justify-content: center; height: 24px; font-size: 0.6rem; color: var(--muted); background: #191c21; z-index: 2; }
+.desk-contact-viewport { flex: 1 1 auto; overflow: hidden; }
+.desk-contact-zone { position: relative; height: 24px; will-change: transform; }
+.desk-contact-badge { position: absolute; top: 3px; transform: translateX(-50%); font-size: 9px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #1b1e23; border: 1px solid var(--line); color: var(--muted); cursor: pointer; white-space: nowrap; touch-action: manipulation; }
+.desk-contact-badge.diss { color: #fff; background: var(--k-section); border-color: var(--k-section); }
+.desk-contact-badge.parallel { color: #ffd24a; border-color: #ffd24a; }
+.desk-contact-badge.cross { color: var(--k-rhythm); border-color: var(--k-rhythm); }
+.desk-contact-badge.rest { color: var(--muted); border-style: dashed; }
+
+/* 説明ポップ（指摘のみ）＝fixed・画面外clamp 済。外タップ backdrop で閉じる。 */
+.desk-contact-backdrop { position: fixed; inset: 0; z-index: 40; }
+.desk-contact-pop { position: fixed; z-index: 41; background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); }
+.desk-contact-pop .dc-text { margin: 0 0 8px; font-size: 0.78rem; line-height: 1.45; color: var(--fg); }
+.desk-contact-pop .dc-listen { width: 100%; background: var(--k-skeleton); color: #10141a; border: none; border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }

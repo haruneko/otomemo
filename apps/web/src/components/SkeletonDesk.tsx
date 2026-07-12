@@ -8,13 +8,15 @@
 //   鳴らす（deskLensNotes）は state が既に実調なので skeletonEarNotes を shift:0 で呼ぶ。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { previewNote } from "../audio";
 import { Icon } from "./Icon";
 import { SkeletonEditor } from "./SkeletonEditor";
 import { useTransport } from "../useTransport";
 import { useEditHistory } from "../history";
 import * as sctx from "../sectionContext";
 import { lanesForKind, type Child } from "./sectionLanes";
-import { deskLoadContent, deskSaveContent, deskLensNotes } from "../deskContent";
+import { deskLoadContent, deskSaveContent, deskLensNotes, contactText, contactDyadNotes } from "../deskContent";
+import { analyzeCounterpoint, effectiveBassAt, type MelCp } from "../skeletonEdit";
 import { LENS_FOLD, LENS_REAL } from "../deskLens";
 import {
   beatsPerBar,
@@ -164,6 +166,11 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   // 骨格を beat 0 起点で描く幅と一致＝プレイヘッド（--phb）がロールと揃う。ベッドは deskLensNotes 内で窓切り出し。
   const blockSpan = bars * BPB;
 
+  // --- 接点ストリップ（D2）：各メロ点の対位法要約。SkeletonEditor のロール（cp バッジ）と同じ計算＝
+  //   analyzeCounterpoint(tones, 実効ベース)。ブロックローカル座標（earChordsRel も相対）＝ロールと一致。
+  //   ※ intervalBadge のテーブルを崇拝＝バッジ label は m.interval.label をそのまま出す（再実装しない）。
+  const cp: MelCp[] = analyzeCounterpoint(tones, (b) => effectiveBassAt(b, bass, earChordsRel, phrases, blockSpan));
+
   // 範囲ブレース（D1.5）。既定＝ブロック全体 [0, blockSpan]。bars 伸縮でクランプ（窓が blockSpan を超えない）。
   const [range, setRange] = useState<{ startBeat: number; endBeat: number } | null>(null);
   const clampStart = Math.max(0, Math.min(range?.startBeat ?? 0, blockSpan - BPB));
@@ -192,12 +199,15 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   // 骨格ゾーン（ticks/braces）だけを translate＝ロール content と同じ量だけ左へ流れる（beat 位置が一致）。
   // 「窓」ラベルの gutter は translate 外＝ロールの sticky keycol と同じく左端に据え置き。
   const rulerZoneRef = useRef<HTMLDivElement>(null); // transform も beatFromClientX も同一要素（beat0=rect.left）
+  const contactZoneRef = useRef<HTMLDivElement>(null); // 接点ストリップ（ルーラーと同じ scroll 同期＝ロール一致）
   useEffect(() => {
     const sc = (tp.scrollerRef as React.RefObject<HTMLDivElement>).current;
     const zone = rulerZoneRef.current;
     if (!sc || !zone) return;
     const sync = () => {
-      zone.style.transform = `translateX(${-sc.scrollLeft}px)`;
+      const tx = `translateX(${-sc.scrollLeft}px)`;
+      zone.style.transform = tx;
+      if (contactZoneRef.current) contactZoneRef.current.style.transform = tx; // 接点行もロールと同じだけ流す
     };
     sync();
     sc.addEventListener("scroll", sync, { passive: true });
@@ -249,6 +259,27 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     tp.setLensGain(activeLens, false);
     tp.setLensGain(next, true);
     setActiveLens(next);
+  };
+
+  // --- 接点タップ→説明ポップ（指摘のみ）＋「この瞬間だけ聴く」ダイアッド。 ---
+  // ポップは fixed 配置＝タップした badge の画面座標を起点に、モバイル幅で画面外に出ないよう clamp。
+  const [contactPop, setContactPop] = useState<{ cp: MelCp; x: number; y: number } | null>(null);
+  const POP_W = 232; // ポップ幅（clamp 用・CSS と同値）
+  const onContactTap = (e: React.MouseEvent, m: MelCp) => {
+    e.stopPropagation();
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = Math.max(8, Math.min(r.left, window.innerWidth - POP_W - 8)); // 画面外clamp（右端はみ出し防止）
+    const y = Math.min(r.bottom + 4, window.innerHeight - 110); // 下端はみ出し防止
+    setContactPop({ cp: m, x, y });
+  };
+  // バッジ/ポップの属性色クラス（parallel/cross/rest/diss を dissonant より前＝説明文と同じ優先順位）。
+  const contactClass = (m: MelCp): string =>
+    m.parallel ? "parallel" : m.cross ? "cross" : m.interval === null ? "rest" : m.dissonant ? "diss" : "";
+  // 「この瞬間だけ聴く」＝当該接点の2音だけを 0.8拍相当で鳴らす（暫定既定・耳較正で見直し可＝handoff §5）。
+  // 短すぎると不協和が聴き取れない（handoff の典型失敗）ので previewNote の holdSec で持続を伸ばす。
+  const playContactDyad = (m: MelCp) => {
+    const holdSec = 0.8 * (60 / tempo); // 拍→秒（tempo=♩/分）
+    for (const n of contactDyadNotes(m)) void previewNote(n, { holdSec });
   };
 
   const modeBtn = (m: "draw" | "select" | "erase", label: string, icon: "edit" | "eraser", svg?: React.ReactNode) => (
@@ -339,6 +370,42 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         playheadRef={tp.lineRef}
         scrollerRef={tp.scrollerRef}
       />
+
+      {/* 接点ストリップ（D2）：ロール直下・タップできる対位法要約行。バッジ label＝intervalBadge の label
+          （m.interval.label＝再実装しない）。色＝属性（並行/交差/休符/不協和/協和）。scroll はロールと同期。 */}
+      <div className="desk-contact" aria-label="desk-contact">
+        <div className="desk-contact-gutter" style={{ width: GUTTER }}>接点</div>
+        <div className="desk-contact-viewport">
+          <div className="desk-contact-zone" ref={contactZoneRef} style={{ width: blockSpan * PPB }}>
+            {cp.map((m, i) => (
+              <button
+                key={i}
+                type="button"
+                className={"desk-contact-badge " + contactClass(m)}
+                aria-label={`contact-${i}`}
+                title="タップ＝説明＋この瞬間だけ聴く"
+                style={{ left: m.start * PPB }}
+                onClick={(e) => onContactTap(e, m)}
+              >
+                {m.interval ? m.interval.label : "—"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 説明ポップ（指摘のみ・禁止しない）＋「この瞬間だけ聴く」＝当該接点の2音だけダイアッド。外タップで閉じる。 */}
+      {contactPop && (
+        <>
+          <div className="desk-contact-backdrop" aria-hidden="true" onClick={() => setContactPop(null)} />
+          <div className="desk-contact-pop" role="dialog" aria-label="contact-pop" style={{ left: contactPop.x, top: contactPop.y, width: POP_W }}>
+            <p className="dc-text">{contactText(contactPop.cp)}</p>
+            <button type="button" className="dc-listen" aria-label="contact-listen" onClick={() => playContactDyad(contactPop.cp)}>
+              ♪ この瞬間だけ聴く
+            </button>
+          </div>
+        </>
+      )}
 
       {/* 固定下端トランスポート：▶ループ／レンズ2択［畳み｜実音］／位置。 */}
       <div className="desk-transport" aria-label="desk-transport">

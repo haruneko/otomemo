@@ -15,6 +15,7 @@ const { getComposition, updateNeta, music } = vi.hoisted(() => ({
 vi.mock("../src/api", () => ({ api: { getComposition, updateNeta, music } }));
 
 import { SkeletonDesk } from "../src/components/SkeletonDesk";
+import { previewNote } from "../src/audio";
 import { melodyPlacementShift } from "../src/music";
 
 const mkNeta = (id: string, kind: string, over: Record<string, unknown> = {}) => ({
@@ -106,5 +107,31 @@ describe("SkeletonDesk（design #20 S6 D1c）", () => {
     // ブロック小節数ぶんの目盛り（bars+1=3 本）。
     expect(screen.getByText("1")).toBeTruthy();
     expect(screen.getByText("3")).toBeTruthy();
+  });
+
+  it("D2 接点ストリップ：メロ点ぶんのバッジが出て、タップ→説明ポップ＋『この瞬間だけ聴く』でダイアッドが鳴る", async () => {
+    getComposition.mockResolvedValue(tree);
+    render(
+      <SkeletonDesk
+        sectionId="s1" sectionKey={0} sectionMode="major" meter="4/4" tempo={120}
+        skelNetaId="sk1" skelPosition={0} skelOrd={0} onClose={() => {}}
+      />,
+    );
+    await screen.findByText(/Aメロ/);
+    // メロ点2つ（start 0/4）＝接点バッジ2つ。
+    expect(screen.getByLabelText("desk-contact")).toBeTruthy();
+    const b0 = await screen.findByLabelText("contact-0");
+    expect(screen.getByLabelText("contact-1")).toBeTruthy();
+    // タップ→説明ポップ（指摘のみ）。
+    fireEvent.click(b0);
+    const pop = await screen.findByLabelText("contact-pop");
+    expect(pop.textContent).toBeTruthy();
+    // 「この瞬間だけ聴く」＝previewNote が接点の2音（メロ／ベース）だけで呼ばれる＝ベッド音が混ざらない。
+    fireEvent.click(screen.getByLabelText("contact-listen"));
+    expect((previewNote as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(0);
+    for (const [note] of (previewNote as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(["melody", "bass"]).toContain((note as { part?: string }).part); // 骨格2声のみ
+      expect((note as { drum?: boolean }).drum).toBeFalsy(); // ドラム（ベッド）非混入
+    }
   });
 });

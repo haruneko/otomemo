@@ -756,10 +756,11 @@ export async function probeSoundFont(): Promise<{
 }
 
 // 単発プレビュー用フォールバック（SF2 未ロード時）。生成→発音→少し後に dispose（ノード蓄積を防ぐ）。
-function previewFallbackMelodic(Tone: any, pitch: number, vel: number, now: number): void {
+function previewFallbackMelodic(Tone: any, pitch: number, vel: number, now: number, holdSec?: number): void {
+  const dur = holdSec ?? 0.4; // 未指定＝従来 0.4s（bit 一致）。ダイアッド試聴は holdSec で伸ばす。
   const s = new Tone.Synth().connect(ensureMaster(Tone, "melody"));
-  s.triggerAttackRelease(Tone.Frequency(pitch, "midi").toNote(), 0.4, now, vel);
-  setTimeout(() => { try { s.dispose(); } catch { /* already disposed */ } }, 700);
+  s.triggerAttackRelease(Tone.Frequency(pitch, "midi").toNote(), dur, now, vel);
+  setTimeout(() => { try { s.dispose(); } catch { /* already disposed */ } }, Math.round(dur * 1000) + 300);
 }
 function previewFallbackDrum(Tone: any, pitch: number, vel: number, now: number): void {
   if (pitch <= 41) {
@@ -776,12 +777,15 @@ function previewFallbackDrum(Tone: any, pitch: number, vel: number, now: number)
 // 音符を置いた時にその音を即鳴らす（エディタの入力フィードバック）。Transport を使わず Tone.now() で
 // 発音＝再生中でも止めない・低遅延。SF2 があればそれ（drum はキット・melodic は program）、無ければ簡易シンセ。
 // 失敗は無音で握り潰す（音が出なくても入力は止めない）。
-export async function previewNote(note: Note): Promise<void> {
+// opts.holdSec（#20 S6 D2）：melodic の持続を上書き（未指定＝従来 0.45s＝既存呼び出し bit 一致）。ダイアッド
+//   試聴（接点の2音）は 0.45s では短すぎて不協和が聴き取れない＝呼び出し側で 0.8拍相当の秒を渡す。drum は据え置き。
+export async function previewNote(note: Note, opts?: { holdSec?: number }): Promise<void> {
   try {
     const Tone = await import("tone");
     await Tone.start();
     const now = Tone.now();
     const vel127 = Math.round(note.vel ?? 100);
+    const holdSec = opts?.holdSec;
     // 入力FBは常に素のバスで鳴らす＝レンズ印は無視（閉じたレンズゲイン経由で無音化しない）。
     note = note.lens != null ? { ...note, lens: undefined } : note;
     const sf = await ensureSoundFont(Tone, note.program ?? 0, false);
@@ -800,10 +804,10 @@ export async function previewNote(note: Note): Promise<void> {
     if (sf) {
       const byPart = await prepareMelodicSamplers([note], Tone, note.program ?? 0, sf);
       const inst = byPart.get(note.part ?? "melody") ?? sf;
-      inst.start({ note: note.pitch, time: now, duration: 0.45, velocity: vel127 });
+      inst.start({ note: note.pitch, time: now, duration: holdSec ?? 0.45, velocity: vel127 });
       return;
     }
-    previewFallbackMelodic(Tone, note.pitch, vel127 / 127, now);
+    previewFallbackMelodic(Tone, note.pitch, vel127 / 127, now, holdSec);
   } catch {
     /* preview 失敗は無音（入力は止めない） */
   }

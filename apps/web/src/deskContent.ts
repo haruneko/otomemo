@@ -14,7 +14,7 @@
 //   ・ベッド（セクション全体 composite）は骨格ブロックの窓 [skelPosition, skelPosition+blockSpan) を
 //     切り出し **-skelPosition** でブロックローカルへ寄せる（sliceBedToWindow）。
 import type { Note, ChordEntry, SkeletonContent, SkeletonBreakpoint } from "./music";
-import { skeletonEarNotes } from "./skeletonEdit";
+import { skeletonEarNotes, SKEL_MEL_PROGRAM, SKEL_BASS_PROGRAM, type MelCp } from "./skeletonEdit";
 import { foldLensNotes, realLensNotes, type LensNote } from "./deskLens";
 
 // pitch を d だけ動かす（休符 pitch==null は不変）。tones/bass 双方に同じだけ効く（melodyPlacementShift 流儀）。
@@ -78,4 +78,45 @@ export function deskLensNotes(args: {
   });
   const bed = sliceBedToWindow(args.composite, args.skelPosition, args.bars * args.bpb);
   return [...foldLensNotes(skelEar, args.bars, args.bpb), ...realLensNotes(bed, skelEar)];
+}
+
+// --- 接点（対位法）の説明文と「この瞬間だけ聴く」ダイアッド（design #20 S6・D2） ---------------------
+// 思想（#20）：機械は候補・完成は人間＝**指摘のみ・禁止しない**。「ダメ/間違い」でなく「避ける/意図なら可/味」の
+// 語彙で、なぜ引っかかるか（＝声部の独立・強拍の緊張）を短く言うだけ。判断はオーナーに返す。
+
+// 接点1つの説明文（MelCp を消費・analyzeCounterpoint 出力そのまま）。分岐の優先順位＝
+//   parallel → cross → dissonant → 協和/弱拍 → ベース無し。
+// 根拠：parallel/cross は「動きの質（並行・交差）」で、その拍が協和でも指摘したい構造上の癖＝dissonant（点の
+//   縦の響き）より優先して前に出す（両立時は動きの癖を先に伝える方が編集の手がかりになる）。
+// ※文言は暫定既定＝耳/手較正（handoff §5）で語感を見直し可。オーナー語彙（味/意図/可）で禁止語を避ける。
+export function contactText(m: MelCp): string {
+  if (m.parallel === "P5" || m.parallel === "P8") {
+    const deg = m.parallel === "P5" ? "並行5度" : "並行8度";
+    return `${deg}。声部の独立が薄れる。避けるか、経過として通すなら可。`;
+  }
+  if (m.cross) {
+    return "声部交差（メロがベースより下）。意図があれば可・ふつうは避ける。";
+  }
+  if (m.interval === null) {
+    return "ベース無し（骨格休符の区間）。この拍は縦の相手がいない。";
+  }
+  if (m.dissonant) {
+    // 強拍かつ不協和。
+    return `強拍の${m.interval.label}。掛留・倚音として次で解決するなら味。`;
+  }
+  // 協和、または弱拍（弱拍なら経過の不協和もここ＝縦の緊張は弱い）。
+  const weakPassing = !m.interval.consonant ? "（弱拍の経過）" : "";
+  return `${m.interval.label}${weakPassing}。素直な響き。`;
+}
+
+// 「この瞬間だけ聴く」＝当該接点の **2音だけ**（メロ点＋実効ベース+1oct）を返す。ベッドは一切混ざらない
+//   ＝引数が MelCp 単体なので構造的に混入しようがない（handoff §3 D2 の要件）。program は骨格2声の音色
+//   （メロ=SKEL_MEL_PROGRAM / ベース=SKEL_BASS_PROGRAM）に揃える。持続（dur）は呼び出し側が previewNote の
+//   holdSec で上書きするためここは placeholder（0.8拍相当・暫定既定）。bassPitch=null（骨格休符区間）は1音のみ。
+export function contactDyadNotes(m: MelCp, bassOct = 12): Note[] {
+  const notes: Note[] = [{ pitch: m.melPitch, start: 0, dur: 0.8, program: SKEL_MEL_PROGRAM, part: "melody" }];
+  if (m.bassPitch != null) {
+    notes.push({ pitch: m.bassPitch + bassOct, start: 0, dur: 0.8, program: SKEL_BASS_PROGRAM, part: "bass" });
+  }
+  return notes;
 }
