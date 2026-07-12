@@ -56,6 +56,20 @@ export function sliceBedToWindow(notes: Note[], windowStart: number, span: numbe
   return out;
 }
 
+// ②「コードだけ」レンズ用（#5 是正 2026-07-13）：ブロック相対 effChords（start は既に −skelPosition 済＝負もあり）を
+// 再生窓 `[0, span)` に切り出す。**窓頭に食い込むコード（start<0 かつ end>0）は start=0 へクランプし dur を詰める**
+// ＝ブロック開始時点で支配中のコードを鳴らす（skelPosition>0 で先頭コードが負時刻＝Tone で無発火になる欠落を是正）。
+// 窓外（end<=0 or start>=span）は捨てる（負時刻の無駄スケジュール排除）。
+export function clipChordsToWindow(chords: ChordEntry[], span: number): ChordEntry[] {
+  const out: ChordEntry[] = [];
+  for (const c of chords) {
+    const s = Math.max(0, c.start);
+    const e = Math.min(span, c.start + c.dur);
+    if (e > s + 1e-6) out.push({ ...c, start: s, dur: e - s });
+  }
+  return out;
+}
+
 // deskLensNotes / deskFoldReal の引数（D5 で deskStages.ts も同じ形を消費＝named 型に切り出し）。
 export interface DeskLensArgs {
   stateReal: SkeletonContent;

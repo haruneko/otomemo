@@ -31,6 +31,11 @@ S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。~~残＝S3群
   - **机の後続小物**：3/4・6/4 の snap 表（付点系）・句単位再抽選（「句2だけ引き直す」）・②聴き方「コードだけ」（旧「和声だけ」・用語対応表＝design #20 S6）の voicing 込み化。
   - **①ドラム/分岐スタックの潜り導線（机に onOpenNeta）**：D4/D5 の裁定で一覧・表示のみに留めた分（design #20「D7パーキング」参照）。机に onOpenNeta 導線を1本足せば①ドラム行タップ→ドラム編集・分岐スタックタップ→旧メロへ潜れる。
   - **D3b＝②コードの「他N箇所で使用」バッジ＋複製して切り離す（copy_neta）**（2026-07-12・D3コアから切り出し）：コード進行ネタの**他セクション配置数**を出す＝`compose_edge` の逆引き（親/placements）を返す **read api が現状無い**（`/neta/:id/relations` は realized_from のみ）。S6「api無改変（生成契約を足さない）」に対し read クエリ追加の是非を要判断。api足すなら `getBacklinks(id,"compose_edge")` 相当の薄い read route＋web で N表示＋copy_neta→この配置だけ removeChild/placeChild 差し替え。D3コア（チップ/導出ベース/substitute試着採用）は着地済。
+- **机レビュー(2026-07-13・Fable/Sonnet 3観点)由来の送り分**（P0=#1再スケジュール鮮度/#2 chordTrial deps/#3トレイ埋没/#4音名ガター/#5②レンズ窓切り/#8 undoChord stale＝**修正済コミット**。以下は判断/低優先で送り）：
+  - **#8b SF2フォールバック時レンズゲート素通し**：SF2未ロード/冷スタート/ロード失敗の1回目に机で再生すると、fallback kit(membrane/noise/poly)が `ensureMaster` 直結＝ゲート外で fold+real が**同時発音**（レンズ2択が効かない）。SF2常用なら実害小。fix＝fallback kit を (lens) 別に partLensGain へ繋ぐ or 発火時にゲイン参照で捨てる。
+  - **sectionChords/Bass の位置=小節扱い(×BPB)**：`sectionContext.ts` が `c.position*BPB`（他経路は拍）＝非0位置にコード/ベースを配置すると gen/fit へ4倍ずれた和声文脈。**既存の潜在バグ**（D0以前35fbacc由来）。是正は生成出力が変わる＝**design signoff要**（オーナー相談中＝#6）。
+  - **ループ再生中の骨格編集(打点/ドラッグ)が音に入らない**：reloop 発火が編集に無い＝「回しながら書き聴く」と乖離。無停止優先の意図なら明記、そうでなければ編集debounceでreloop（**オーナー相談中＝#7**）。
+  - **P3小物**：接点先頭バッジがガター「対位」と重なり判読難／候補トレイ足「閉じる」の右端見切れ／候補にAm重複(substitute_chordのばらつき)／SkeletonDesk毎レンダ再計算のmemo化(ドラッグjank候補・現状データ量では実害薄)／chordChipsのlaneChildren再実装をsctx受けへ／保存失敗の無音catch(ネット断で編集消失の無通知)。
 - **運用**：本番webはdist配信＝**コミットしてもUIは変わらない**。機能追加後は必ず `pnpm --filter web build`（2026-07-11に「ボタンがない」事故）。apiはtsx watchで自動反映。
 - **耳確認未消化**：フィール層（swing/humanize非破壊化・7/10-11分）と骨格S2の較正（強拍不協和の注意色の鳴り具合・導出→明示境界の手触り）。
 

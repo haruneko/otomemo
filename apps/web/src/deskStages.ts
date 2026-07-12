@@ -13,7 +13,7 @@
 //   ＝deskFoldReal を割った物をそのまま a=fold（LENS_FOLD）・b=real（LENS_REAL）に載せる＝D1〜D4 の音は不変。
 import type { LensNote } from "./deskLens";
 import { LENS_FOLD } from "./deskLens";
-import { deskFoldReal, sliceBedToWindow, type DeskLensArgs } from "./deskContent";
+import { deskFoldReal, sliceBedToWindow, clipChordsToWindow, type DeskLensArgs } from "./deskContent";
 import { chordsToNotes, type ChordEntry } from "./music";
 
 export type StageFocus = "beat" | "chord" | "skeleton" | "surface";
@@ -57,7 +57,10 @@ export function stageLensSets(focus: StageFocus, args: StageLensArgs): StageLens
     case "chord": {
       // ②和声だけ＝effChords を素の三和音で鳴らす簡易合成（chordsToNotes＝既存 SSOT・分数は bass も足す）。
       // part:"chord"・LENS_FOLD 印。音色は暫定既定（CHORD_LENS_PROGRAM）。編成＝フル(real)。
-      const triads: LensNote[] = chordsToNotes(args.effChords).map((n) => ({
+      // #5 是正：effChords はブロック相対で start が負もある（skelPosition>0）＝再生窓 [0, span) へ切り出し
+      //   （窓頭に食い込むコードは start=0 クランプ）＝ブロック先頭で支配中のコードが無発火にならない。
+      const windowChords = clipChordsToWindow(args.effChords, args.bars * args.bpb);
+      const triads: LensNote[] = chordsToNotes(windowChords).map((n) => ({
         ...n,
         part: "chord",
         program: CHORD_LENS_PROGRAM,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deskLoadContent, deskSaveContent, deskLensNotes, sliceBedToWindow, contactText, contactDyadNotes, staleContacts } from "../src/deskContent";
+import { deskLoadContent, deskSaveContent, deskLensNotes, sliceBedToWindow, clipChordsToWindow, contactText, contactDyadNotes, staleContacts } from "../src/deskContent";
 import { LENS_FOLD, LENS_REAL } from "../src/deskLens";
 import { analyzeCounterpoint, intervalBadge, SKEL_MEL_PROGRAM, SKEL_BASS_PROGRAM, type MelCp } from "../src/skeletonEdit";
 import type { ChordEntry, Note, SkeletonContent, SkeletonBreakpoint } from "../src/music";
@@ -285,5 +285,21 @@ describe("contactDyadNotes（この瞬間だけ聴く＝2音のみ）", () => {
   it("bassOct 引数で畳みオクターブを変えられる（既定 12）", () => {
     const notes = contactDyadNotes(mkCp({ melPitch: 64, bassPitch: 40 }), 24);
     expect(notes.find((n) => n.part === "bass")!.pitch).toBe(40 + 24);
+  });
+});
+
+// --- #5 是正: clipChordsToWindow（②「コードだけ」レンズをブロック窓 [0,span) へ切り出し） -------------
+describe("clipChordsToWindow（#5・skelPosition>0 で先頭コードが無発火にならない）", () => {
+  const ch = (root: number, start: number, dur: number): ChordEntry => ({ root, quality: "", start, dur });
+  it("窓頭に食い込むコード(start<0,end>0)は start=0 へクランプし dur を詰める", () => {
+    // 骨格を bar2(skelPosition=4)に配置＝コード@0(dur8) は effChords で start=-4/dur8。span=8(2小節×4拍)。
+    const out = clipChordsToWindow([ch(0, -4, 8), ch(5, 4, 4)], 8);
+    expect(out).toEqual([ch(0, 0, 4), ch(5, 4, 4)]); // 先頭コードは 0..4 に、次コードはそのまま
+  });
+  it("窓外(end<=0 / start>=span)のコードは捨てる", () => {
+    expect(clipChordsToWindow([ch(0, -8, 4), ch(7, 8, 4)], 8)).toEqual([]);
+  });
+  it("窓内のコードは不変・末尾はみ出しは span で詰める", () => {
+    expect(clipChordsToWindow([ch(0, 0, 4), ch(7, 6, 8)], 8)).toEqual([ch(0, 0, 4), ch(7, 6, 2)]);
   });
 });
