@@ -60,7 +60,7 @@ function legacy(children: Child[], LANES: readonly Lane[], keyPc: number, mode: 
     const out: { root?: number; quality?: string; start?: number; dur?: number }[] = [];
     for (const c of laneChildrenL(chordLane)) {
       const content = c.node.neta.content as { chords?: typeof out } | null;
-      const offset = (c.position ?? 0) * BPB;
+      const offset = c.position ?? 0; // #6 是正：拍（×BPB を外した・sectionContext と一致）
       for (const ch of content?.chords ?? []) out.push({ ...ch, start: (ch.start ?? 0) + offset });
     }
     return out.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
@@ -70,7 +70,7 @@ function legacy(children: Child[], LANES: readonly Lane[], keyPc: number, mode: 
     const chords = sectionChordsL().map((c) => ({ root: c.root ?? 0, quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? BPB }));
     const out: Note[] = [];
     for (const c of laneChildrenL(bassLane)) {
-      const offset = (c.position ?? 0) * BPB;
+      const offset = c.position ?? 0; // #6 是正：拍（×BPB を外した・sectionContext と一致）
       for (const n of notesForContent("bass", c.node.neta.content, { key: keyPc, chords })) out.push({ ...n, start: n.start + offset });
     }
     return out.sort((a, b) => a.start - b.start);
@@ -171,16 +171,22 @@ describe("childDur / contentDur", () => {
   });
 });
 
-describe("sectionChords（連結オフセット・position*BPB）", () => {
-  it("各コード子を position*BPB ぶんオフセットし start 昇順で連結", () => {
+describe("sectionChords（連結オフセット・position は拍＝+position・#6是正）", () => {
+  it("各コード子を position(拍)ぶんオフセットし start 昇順で連結（×BPB でない＝earChords と一致）", () => {
     const BPB = 4;
     const c0 = child("chord_progression", 0, { chords: [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }] });
-    const c1 = child("chord_progression", 2, { chords: [{ root: 5, quality: "", start: 0, dur: 4 }] });
+    const c1 = child("chord_progression", 8, { chords: [{ root: 5, quality: "", start: 0, dur: 4 }] }); // bar3=位置8拍
     const ctx: SectionCtx = { children: [c0, c1], LANES: SECTION_LANES, keyPc: 0, mode: "major", BPB };
     const out = sectionChords(ctx);
-    // c1 offset = 2*4 = 8。start 昇順：0, 4, 8。
+    // #6：c1 offset = 8拍（旧バグは 8×4=32）。start 昇順：0, 4, 8。
     expect(out.map((c) => c.start)).toEqual([0, 4, 8]);
     expect(out.map((c) => c.root)).toEqual([0, 7, 5]);
+  });
+  it("小節途中(位置2拍)のコードも +2（×BPB=8 でない）＝#6", () => {
+    const c0 = child("chord_progression", 0, { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] });
+    const c1 = child("chord_progression", 2, { chords: [{ root: 5, quality: "", start: 0, dur: 2 }] });
+    const out = sectionChords({ children: [c0, c1], LANES: SECTION_LANES, keyPc: 0, mode: "major", BPB: 4 });
+    expect(out.map((c) => c.start)).toEqual([0, 2]); // 旧バグなら [0, 8]
   });
 });
 

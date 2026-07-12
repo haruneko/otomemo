@@ -50,13 +50,15 @@ export function contentDur(ctx: SectionCtx, kind: string, content: unknown): num
   return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : ctx.BPB;
 }
 
-// ②文脈系：この進行にメロ。section のコード進行を1本に連結（各コード子を小節位置ぶんオフセット）。
+// ②文脈系：この進行にメロ。section のコード進行を1本に連結（各コード子を**配置位置(拍)ぶん**オフセット）。
+// #6 是正(2026-07-13)：position は拍（LaneCell=bar*BPB／compositeNotes・earChords も +position）＝**×BPB は誤り**
+//   （非0位置にコードを置くと gen/fit へ4倍ずれた和声文脈が渡っていた）。earChords と同じ +position に統一。
 export function sectionChords(ctx: SectionCtx): { root?: number; quality?: string; start?: number; dur?: number }[] {
   const chordLane = ctx.LANES.find((l) => l.key === "chord")!;
   const out: { root?: number; quality?: string; start?: number; dur?: number }[] = [];
   for (const c of laneChildren(ctx, chordLane)) {
     const content = c.node.neta.content as { chords?: typeof out } | null;
-    const offset = (c.position ?? 0) * ctx.BPB;
+    const offset = c.position ?? 0; // 拍（#6・×BPB を外した）
     for (const ch of content?.chords ?? []) out.push({ ...ch, start: (ch.start ?? 0) + offset });
   }
   return out.sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
@@ -69,7 +71,7 @@ export function sectionBass(ctx: SectionCtx): Note[] {
   const chords = sectionChords(ctx).map((c) => ({ root: c.root ?? 0, quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? ctx.BPB }));
   const out: Note[] = [];
   for (const c of laneChildren(ctx, bassLane)) {
-    const offset = (c.position ?? 0) * ctx.BPB;
+    const offset = c.position ?? 0; // 拍（#6・sectionChords と同じく ×BPB を外した）
     for (const n of notesForContent("bass", c.node.neta.content, { key: ctx.keyPc, chords })) out.push({ ...n, start: n.start + offset });
   }
   return out.sort((a, b) => a.start - b.start);

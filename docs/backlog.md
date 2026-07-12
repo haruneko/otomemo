@@ -33,7 +33,7 @@ S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。~~残＝S3群
   - **D3b＝②コードの「他N箇所で使用」バッジ＋複製して切り離す（copy_neta）**（2026-07-12・D3コアから切り出し）：コード進行ネタの**他セクション配置数**を出す＝`compose_edge` の逆引き（親/placements）を返す **read api が現状無い**（`/neta/:id/relations` は realized_from のみ）。S6「api無改変（生成契約を足さない）」に対し read クエリ追加の是非を要判断。api足すなら `getBacklinks(id,"compose_edge")` 相当の薄い read route＋web で N表示＋copy_neta→この配置だけ removeChild/placeChild 差し替え。D3コア（チップ/導出ベース/substitute試着採用）は着地済。
 - **机レビュー(2026-07-13・Fable/Sonnet 3観点)由来の送り分**（P0=#1再スケジュール鮮度/#2 chordTrial deps/#3トレイ埋没/#4音名ガター/#5②レンズ窓切り/#8 undoChord stale＝**修正済コミット**。以下は判断/低優先で送り）：
   - **#8b SF2フォールバック時レンズゲート素通し**：SF2未ロード/冷スタート/ロード失敗の1回目に机で再生すると、fallback kit(membrane/noise/poly)が `ensureMaster` 直結＝ゲート外で fold+real が**同時発音**（レンズ2択が効かない）。SF2常用なら実害小。fix＝fallback kit を (lens) 別に partLensGain へ繋ぐ or 発火時にゲイン参照で捨てる。
-  - **sectionChords/Bass の位置=小節扱い(×BPB)**：`sectionContext.ts` が `c.position*BPB`（他経路は拍）＝非0位置にコード/ベースを配置すると gen/fit へ4倍ずれた和声文脈。**既存の潜在バグ**（D0以前35fbacc由来）。是正は生成出力が変わる＝**design signoff要**（オーナー相談中＝#6）。
+  - ~~**sectionChords/Bass の位置=小節扱い(×BPB)＝#6**~~ **→ ✅済(2026-07-13・c.position を拍で統一・×BPB撤去・earChords と一致)**：非0位置にコード/ベースを置くと gen/fit へ4倍ずれた和声文脈が渡っていた既存潜在バグ（D0以前35fbacc由来）。オーナー承認（踏んでるデータがあっても直す）で是正。生成出力は非0位置配置のケースで変わる（正しい方へ）。
   - **ループ再生中の骨格編集(打点/ドラッグ)が音に入らない**：reloop 発火が編集に無い＝「回しながら書き聴く」と乖離。無停止優先の意図なら明記、そうでなければ編集debounceでreloop（**オーナー相談中＝#7**）。
   - **P3小物**：接点先頭バッジがガター「対位」と重なり判読難／候補トレイ足「閉じる」の右端見切れ／候補にAm重複(substitute_chordのばらつき)／SkeletonDesk毎レンダ再計算のmemo化(ドラッグjank候補・現状データ量では実害薄)／chordChipsのlaneChildren再実装をsctx受けへ／保存失敗の無音catch(ネット断で編集消失の無通知)。
 - **運用**：本番webはdist配信＝**コミットしてもUIは変わらない**。機能追加後は必ず `pnpm --filter web build`（2026-07-11に「ボタンがない」事故）。apiはtsx watchで自動反映。
