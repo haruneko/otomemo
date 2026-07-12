@@ -26,6 +26,9 @@ export interface PlaybackHandle {
   pause(): void;
   resume(): void;
   stop(): void;
+  // #20 S6骨格の机: 再生を止めずにレンズ別ゲインバスを開閉（無停止A/B）。lens 印つき notes を渡した時のみ意味あり。
+  // レンズ層を持たない再生（従来）では no-op。stop 後も no-op。
+  setLensGain(lens: string, on: boolean): void;
 }
 
 interface PlayOpts {
@@ -34,6 +37,7 @@ interface PlayOpts {
   program?: number; // #55c SF2旋律の音色（GM program）。未指定は0（ピアノ）。
   feel?: Feel | null; // フィール層：再生境界で applyFeel（スイング/微小タイミング）。未指定＝ストレート＝従来一致。
   compound?: boolean; // 6/8等＝スイング対象外（feel.swing skip）。
+  activeLens?: string; // #20 S6: notes にレンズ印がある時、初期に開くレンズ。未指定＝全レンズ開（従来は無関係）。
 }
 
 // 単一再生：グローバル Transport を奪い合うので、現在の音源を1組だけ保持し再利用/破棄。
@@ -76,6 +80,41 @@ let mix: MixState = loadMix();
 let masterCtx: AudioContext | null = null;
 let masterGain: GainNode | null = null;
 let partGains: Record<MixPart, GainNode> | null = null;
+// #20 S6骨格の机: レンズ別ゲインバス。partLensGain[part][lens] → partGains[part]（直列の別ゲート）。
+// setMixVolume は partGains を触り、レンズゲートは partLensGain を触る＝互いに上書きしない（実効音量は積）。
+// partGains 再構築（AudioContext 変化）時に null リセット＝古い partGains を指す孤児ノードを残さない。
+let partLensGain: Record<MixPart, Record<string, GainNode>> | null = null;
+
+// notes 内に現れる distinct な lens 値（定義順・undefined 除外）。純関数＝[機械]テスト対象。
+export function lensesOf(notes: Note[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const n of notes) {
+    if (n.lens != null && !seen.has(n.lens)) {
+      seen.add(n.lens);
+      out.push(n.lens);
+    }
+  }
+  return out;
+}
+
+// レンズゲートの目標ゲイン。activeLens 指定→それだけ1・他0／未指定→全1。純関数＝[機械]テスト対象。
+export function lensGateTargets(lensesPresent: string[], activeLens?: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const l of lensesPresent) {
+    out[l] = activeLens == null ? 1 : l === activeLens ? 1 : 0;
+  }
+  return out;
+}
+
+// レンズ別 sampler/kit のキャッシュ・ルックアップキー。lens 未指定は従来キー（part 文字列 / drumKey 数値）
+// をそのまま返す＝レガシー経路の Map 構造・型・既存 playEvent テスト（数値キー）を割らない（bit一致）。
+const melodicMapKey = (lens: string | undefined, part: MixPart): string =>
+  lens == null ? part : `${lens}:${part}`;
+const drumMapKey = (lens: string | undefined, kit: number | undefined, pitch: number): number | string => {
+  const dk = drumKey(kit ?? 0, pitch);
+  return lens == null ? dk : `${lens}:${dk}`;
+};
 
 // 共有 AudioContext 上にマスターチェーンを一度だけ構築し、指定パートの入口ノードを返す。
 export function ensureMaster(Tone: any, part: MixPart = "melody"): AudioNode {
@@ -101,8 +140,52 @@ export function ensureMaster(Tone: any, part: MixPart = "melody"): AudioNode {
       pg[p] = g;
     }
     partGains = pg;
+    partLensGain = null; // partGains 再構築＝古いレンズゲインは孤児（別ctx）＝破棄して作り直す
   }
   return partGains![part];
+}
+
+// #20 S6: (part, lens) のレンズゲインバスを1つ返す（lazy・partGains[part] へ接続・既定 gain=1）。
+// setMixVolume と直列＝レンズゲートで鳴らす側だけ開く。partGains 未構築なら ensureMaster が先に建てる。
+export function ensureLensGain(Tone: any, part: MixPart, lens: string): AudioNode {
+  ensureMaster(Tone, part); // partGains + masterCtx を保証（同 ctx なら再構築しない）
+  const ctx = masterCtx!;
+  if (!partLensGain) {
+    partLensGain = { melody: {}, chord: {}, bass: {}, drums: {} };
+  }
+  const byLens = partLensGain[part];
+  let g = byLens[lens];
+  if (!g) {
+    g = ctx.createGain();
+    g.gain.value = 1;
+    g.connect(partGains![part]);
+    byLens[lens] = g;
+  }
+  return g;
+}
+
+// 指定レンズの全 part のゲートを on?1:0 へ。クリック回避に短いランプ（setTargetAtTime）。
+// 存在するレンズゲインだけ触る（sampler 未生成の part はノードが無い＝スキップ）。
+function applyLensGate(lens: string, on: boolean): void {
+  if (!partLensGain || !masterCtx) return;
+  const target = on ? 1 : 0;
+  const now = masterCtx.currentTime;
+  for (const part of MIX_PARTS) {
+    const g = partLensGain[part]?.[lens];
+    if (g) g.gain.setTargetAtTime(target, now, 0.005);
+  }
+}
+
+// レンズゲートの初期状態を即時反映（ランプ無し＝再生開始前）。lensGateTargets の目標を各レンズへ。
+function initLensGates(lenses: string[], activeLens?: string): void {
+  if (!partLensGain) return;
+  const targets = lensGateTargets(lenses, activeLens);
+  for (const [lens, t] of Object.entries(targets)) {
+    for (const part of MIX_PARTS) {
+      const g = partLensGain[part]?.[lens];
+      if (g) g.gain.value = t;
+    }
+  }
 }
 
 export function getMix(): MixState {
@@ -155,12 +238,13 @@ export function playEvent(
   sf: any,
   kit: Kit,
   Tone: any,
-  drumKits?: Map<number, DrumVoice>,
-  melodicByPart?: Map<MixPart, any>, // #section音色/ミキサー: パート毎の旋律 sampler（無ければ sf）
+  drumKits?: Map<number | string, DrumVoice>,
+  melodicByPart?: Map<string, any>, // #section音色/ミキサー: (lens,)パート毎の旋律 sampler（無ければ sf）
   defaultProg = 0,
 ): void {
   if (ev.voice === "membrane" || ev.voice === "noise") {
-    const ds = drumKits?.get(drumKey(ev.kit ?? 0, ev.pitch));
+    // #20 S6: レンズ印つきは (lens,kit,pitch) キー、無しは従来 drumKey（数値）で選ぶ。
+    const ds = drumKits?.get(drumMapKey(ev.lens, ev.kit, ev.pitch));
     if (ds) {
       dbg("note pitch", ev.pitch, "via sf2-drum @", ds.note, "detune", ds.detune);
       // 打楽器はワンショット＝loop を明示OFF。SF2のキック等は loop点を持ち、loop有のまま
@@ -182,9 +266,9 @@ export function playEvent(
       kit.noise.triggerAttackRelease(ev.durSec, time, ev.vel);
     }
   } else if (sf) {
-    // #section音色/ミキサー: この音のパートに対応する旋律 sampler（無ければ既定 sf=melody）
-    const inst = melodicByPart?.get(ev.part ?? "melody") ?? sf;
-    dbg("note pitch", ev.pitch, "via sf2-melodic part", ev.part ?? "melody");
+    // #section音色/ミキサー: この音の (lens,)パートに対応する旋律 sampler（無ければ既定 sf=melody）
+    const inst = melodicByPart?.get(melodicMapKey(ev.lens, ev.part ?? "melody")) ?? sf;
+    dbg("note pitch", ev.pitch, "via sf2-melodic part", ev.part ?? "melody", "lens", ev.lens);
     inst.start({ note: ev.pitch, time, duration: ev.durSec, velocity: velToMidi(ev.vel) });
   } else {
     // SF2 未ロード時の純シンセ・フォールバック（後退ゼロ＝必ず鳴る）。診断ログを出して
@@ -300,36 +384,42 @@ async function prepareMelodicSamplers(
   Tone: any,
   defaultProg: number,
   sf: any,
-): Promise<Map<MixPart, any>> {
-  const map = new Map<MixPart, any>();
+): Promise<Map<string, any>> {
+  // キー＝melodicMapKey(lens,part)。lens 無しは part 文字列（従来）＝レガシー Map と同構造・同ルーティング。
+  const map = new Map<string, any>();
   if (!sf || !activeSfUrl) return map;
-  // パート→そのパートの program（最初に見た音の program で確定）。part 無し(単体再生)は "melody" 扱い。
-  const partProg = new Map<MixPart, number>();
+  // (part,lens)→program（最初に見た音の program で確定）。part 無し(単体再生)は "melody" 扱い。
+  type Combo = { part: MixPart; lens: string | undefined; prog: number };
+  const combos = new Map<string, Combo>();
   for (const n of notes) {
     if (n.drum) continue;
     const part = n.part ?? "melody";
-    if (!partProg.has(part)) partProg.set(part, n.program ?? defaultProg);
+    const key = melodicMapKey(n.lens, part);
+    if (!combos.has(key)) combos.set(key, { part, lens: n.lens, prog: n.program ?? defaultProg });
   }
-  for (const [part, prog] of partProg) {
-    if (part === "melody" && prog === defaultProg) {
-      map.set(part, sf); // 既定 melody は sfSampler（既に melody gain 接続済）
+  for (const [key, { part, lens, prog }] of combos) {
+    // 従来経路：lens 無し・既定 melody は sfSampler（既に melody gain 接続済）を再利用。
+    // lens 付きは sf を使い回さず、必ず partLensGain 経由の専用インスタンスにする（でないとゲートが効かない）。
+    if (lens == null && part === "melody" && prog === defaultProg) {
+      map.set(key, sf);
       continue;
     }
-    const cacheKey = `${part}:${prog}`;
+    // キャッシュキーに lens を含める＝同 part/prog でもレンズ違いは別インスタンス（別ゲイン）。
+    const cacheKey = `${lens ?? ""}:${part}:${prog}`;
     let s = sfMelodicCache.get(cacheKey);
     if (!s) {
       try {
-        s = await makeSampler(activeSfUrl, Tone, part); // このパートのゲインへ接続
+        s = await makeSampler(activeSfUrl, Tone, part, lens); // このパート(・レンズ)のゲインへ接続
         await s.ready;
         const want = melodicInstrumentName(prog);
         if (want) await s.loadInstrument(want);
         sfMelodicCache.set(cacheKey, s);
       } catch (e) {
-        dbg("melodic sampler load failed part/prog", part, prog, e);
+        dbg("melodic sampler load failed part/lens/prog", part, lens, prog, e);
         continue; // 失敗パートは既定sf(melody)にフォールバック
       }
     }
-    map.set(part, s);
+    map.set(key, s);
   }
   return map;
 }
@@ -376,7 +466,8 @@ function primeSf2(url: string): Promise<ArrayBuffer> {
 }
 
 // SF2 を1個生成。本体DLは primeSf2 で url 単位1回、parse は createSoundfont で url 単位1回。
-async function makeSampler(url: string, Tone: any, part: MixPart = "melody"): Promise<any> {
+// lens 指定時は partLensGain[part][lens] を destination にする（レンズゲート経由）。未指定＝従来（partGains 直結）。
+async function makeSampler(url: string, Tone: any, part: MixPart = "melody", lens?: string): Promise<any> {
   primeSf2(url); // ★ SF2 URL を横取り登録＝smplr 内の fetch(url) は共有バッファを受け取り再DLしない
   const [smplr, sf2mod] = await Promise.all([import("smplr"), import("soundfont2")]);
   const Soundfont2 = (smplr as any).Soundfont2;
@@ -384,7 +475,7 @@ async function makeSampler(url: string, Tone: any, part: MixPart = "melody"): Pr
   sfCtx = Tone.getContext().rawContext;
   return Soundfont2(sfCtx, {
     url,
-    destination: ensureMaster(Tone, part), // 出口直結でなくマスターバス経由（音割れ対策・パート別ゲイン）
+    destination: lens != null ? ensureLensGain(Tone, part, lens) : ensureMaster(Tone, part), // 出口直結でなくマスターバス経由（音割れ対策・パート別ゲイン）
     createSoundfont: (data: Uint8Array) => {
       if (sfParsedUrl === url && sfParsed) return sfParsed;
       sfParsed = new SoundFont2(data);
@@ -576,14 +667,16 @@ function drumVoiceFor(
 }
 
 // ドラム1種をロード（楽器名キャッシュ）。失敗時 null＝その音は簡易キットにフォールバック。
-async function loadDrumSampler(name: string, Tone: any): Promise<any | null> {
+// lens 指定時は drums のレンズゲイン経由・キャッシュキーに lens を含める（レンズ違い＝別インスタンス）。
+async function loadDrumSampler(name: string, Tone: any, lens?: string): Promise<any | null> {
   if (!activeSfUrl) return null;
-  if (sfDrumCache.has(name)) return sfDrumCache.get(name);
+  const cacheKey = `${lens ?? ""}:${name}`;
+  if (sfDrumCache.has(cacheKey)) return sfDrumCache.get(cacheKey);
   try {
-    const s = await makeSampler(activeSfUrl, Tone, "drums"); // ドラムは drums パートゲインへ
+    const s = await makeSampler(activeSfUrl, Tone, "drums", lens); // ドラムは drums パート(・レンズ)ゲインへ
     await s.ready;
     await s.loadInstrument(name);
-    sfDrumCache.set(name, s);
+    sfDrumCache.set(cacheKey, s);
     return s;
   } catch (e) {
     console.error("[SoundFont] drum load failed:", name, e);
@@ -595,22 +688,26 @@ export type DrumVoice = { sampler: any; note: number; detune: number; stopId?: s
 
 // 再生に出てくるドラム音(pitch)→ {sampler, 鳴らすnote}。ドラムは原音高で鳴らすと自然。
 // トムだけ音程差が要るので root を中心に GM番号で上下させる。
-async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number, DrumVoice>> {
-  const map = new Map<number, DrumVoice>();
+async function prepareDrumKits(notes: Note[], Tone: any): Promise<Map<number | string, DrumVoice>> {
+  // キー＝drumMapKey(lens,kit,pitch)。lens 無しは drumKey 数値（従来）＝レガシー Map と同型・同ルーティング。
+  const map = new Map<number | string, DrumVoice>();
   if (!sfInstrumentNames.length) return map;
-  // (キット, GM番号) の組ごとにサンプラを用意（アコ/エレキ混在もOK＝section内で別kit可）。
-  const combos = [...new Set(notes.filter((n) => n.drum).map((n) => drumKey(n.kit ?? 0, n.pitch)))];
+  // (キット, GM番号[, レンズ]) の組ごとにサンプラを用意（アコ/エレキ混在もOK＝section内で別kit可）。
+  const seen = new Map<string, { lens: string | undefined; kit: number; pitch: number }>();
+  for (const n of notes) {
+    if (!n.drum) continue;
+    const sig = `${n.lens ?? ""}|${drumKey(n.kit ?? 0, n.pitch)}`;
+    if (!seen.has(sig)) seen.set(sig, { lens: n.lens, kit: n.kit ?? 0, pitch: n.pitch });
+  }
   // #84 S0: ドラムサンプラのロードを並列化（直列awaitで初回再生が1〜2.5s重い問題を緩和）。
   const loaded = await Promise.all(
-    combos.map(async (key) => {
-      const kit = key >> 8;
-      const p = key & 0xff;
-      const name = drumNameFor(p, sfInstrumentNames, kit);
+    [...seen.values()].map(async ({ lens, kit, pitch }) => {
+      const name = drumNameFor(pitch, sfInstrumentNames, kit);
       if (!name) return null;
-      const s = await loadDrumSampler(name, Tone);
+      const s = await loadDrumSampler(name, Tone, lens);
       if (!s) return null;
-      const v = drumVoiceFor(name, p); // #84 S2/S3: note＋ピッチ補正detune＋choke stopId
-      return { key, name, sampler: s, note: v.note, detune: v.detune, stopId: v.stopId };
+      const v = drumVoiceFor(name, pitch); // #84 S2/S3: note＋ピッチ補正detune＋choke stopId
+      return { key: drumMapKey(lens, kit, pitch), name, sampler: s, note: v.note, detune: v.detune, stopId: v.stopId };
     }),
   );
   for (const r of loaded) {
@@ -685,6 +782,8 @@ export async function previewNote(note: Note): Promise<void> {
     await Tone.start();
     const now = Tone.now();
     const vel127 = Math.round(note.vel ?? 100);
+    // 入力FBは常に素のバスで鳴らす＝レンズ印は無視（閉じたレンズゲイン経由で無音化しない）。
+    note = note.lens != null ? { ...note, lens: undefined } : note;
     const sf = await ensureSoundFont(Tone, note.program ?? 0, false);
     if (note.drum) {
       if (sf) {
@@ -735,9 +834,13 @@ export async function playNotes(
   const defaultProg = opts.program ?? 0;
   // 冷スタートはブロックせずフォールバック（次回warm）。ただし先読み等のロードが進行中なら待って SF2 で鳴らす。
   const sf = await ensureSoundFont(Tone, defaultProg, false);
-  const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number, DrumVoice>();
+  const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number | string, DrumVoice>();
   // #section音色: パート毎(program毎)の旋律 sampler を用意（合成再生で音色を保つ）
-  const melodicByPart = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<MixPart, any>();
+  const melodicByPart = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<string, any>();
+  // #20 S6骨格の机: notes にレンズ印があれば両レンズを同時スケジュール済み。上の sampler 生成で
+  // partLensGain が構築されているので、初期ゲート（activeLens だけ開く・未指定は全開）を反映する。
+  const lenses = lensesOf(notes);
+  if (lenses.length) initLensGates(lenses, opts.activeLens);
   dbg(
     "playNotes engine=",
     sf ? "sf2" : "fallback-synth",
@@ -773,6 +876,10 @@ export async function playNotes(
     },
     resume: () => {
       if (!stopped) transport.start();
+    },
+    // #20 S6: 再生を止めずにレンズゲートを開閉（短ランプでクリック回避）。stop 後・レンズ層無しは no-op。
+    setLensGain: (lens: string, on: boolean) => {
+      if (!stopped) applyLensGate(lens, on);
     },
     stop: () => {
       if (stopped) return; // 冪等

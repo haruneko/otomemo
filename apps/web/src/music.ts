@@ -35,6 +35,8 @@ export interface Note extends CoreNote {
   program?: number; // #section音色: 合成再生で子(パート)ごとの GM音色を保つ（compositeNotesが付与）
   kit?: number; // ドラムキット(GM bank128 preset番号 0=Standard)。アコ/エレキ選択＝drumノートに付与。
   part?: MixPart; // ミキサーのパート（合成再生で compositeNotes が付与）。パート別ゲインへ振り分ける。
+  lens?: string; // #20 S6骨格の机: レンズ印（例 "fold"/"real"）。両レンズを同時スケジュールし
+  // レンズ別ゲインバスで鳴らす側だけ開く（無停止A/B）。未指定＝従来経路（partGains 直結）＝bit一致。
 }
 
 // ミキサーのパート＝メロ/コード/ベース/ドラム（音量バランスと音割れ対策のパート別ゲイン・耳FB 2026-07-09）。
@@ -842,6 +844,7 @@ export interface ScheduledNote {
   program?: number; // #section音色: per-note の GM音色（合成再生でパート毎に切替）
   kit?: number; // ドラムキット(GM bank128 preset)。drum 音の解決でこのキットのサンプルを使う。
   part?: MixPart; // ミキサーのパート（合成再生で付与）。パート別ゲインへ振り分ける。
+  lens?: string; // #20 S6骨格の机: レンズ印。playEvent が (lens,part) でレンズ別 sampler/kit を選ぶ。未指定＝従来。
 }
 
 const MEMBRANE_DUR = 0.15;
@@ -855,9 +858,9 @@ export function scheduleTimes(notes: Note[], bpm = 120): ScheduledNote[] {
     const vel = (n.vel ?? 100) / 127;
     if (n.drum) {
       const voice: Voice = n.pitch <= 41 ? "membrane" : "noise";
-      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel, kit: n.kit, part: n.part ?? "drums" };
+      return { time, durSec: voice === "membrane" ? MEMBRANE_DUR : NOISE_DUR, voice, pitch: n.pitch, vel, kit: n.kit, part: n.part ?? "drums", lens: n.lens };
     }
-    return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel, program: n.program, part: n.part };
+    return { time, durSec: n.dur * spb, voice: "poly", pitch: n.pitch, vel, program: n.program, part: n.part, lens: n.lens };
   });
 }
 

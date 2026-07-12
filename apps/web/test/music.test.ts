@@ -530,6 +530,15 @@ describe("music", () => {
       expect(scheduleTimes([{ pitch: 60, start: 0, dur: 1 }], 120)[0]!.vel).toBeCloseTo(100 / 127);
     });
 
+    it("#20 S6: carries the lens mark from Note to ScheduledNote (melodic and drum)", () => {
+      const mel = scheduleTimes([{ pitch: 60, start: 0, dur: 1, lens: "fold" }], 120);
+      expect(mel[0]!.lens).toBe("fold");
+      const drum = scheduleTimes([{ pitch: 36, start: 0, dur: 1, drum: true, lens: "real" }], 120);
+      expect(drum[0]!.lens).toBe("real");
+      // lens 未指定は undefined（従来経路＝レンズ層を作らない）
+      expect(scheduleTimes([{ pitch: 60, start: 0, dur: 1 }], 120)[0]!.lens).toBeUndefined();
+    });
+
     it("totalSec ends past the last note; drums add their sound tail (ショット最後の打を切らない)", () => {
       expect(totalSec([{ pitch: 60, start: 0, dur: 2 }], 120)).toBeCloseTo(1.0); // 2拍*0.5
       // ドラムは start だけだと最後の打が発火前に止まる→発音長(膜0.15)を尾に足す
