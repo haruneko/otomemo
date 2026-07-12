@@ -239,7 +239,7 @@ button:disabled {
    選択中はその種別色でリング＋淡い地。タップで選択/再タップで解除。 */
 .filter-kinds {
   display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr)); /* 作成9種と同数。minmax(0,…)＝列を縮められる＝横はみ出し防止 */
+  grid-template-columns: repeat(10, minmax(0, 1fr)); /* 絞り込み10種(骨格を追加)。minmax(0,…)＝列を縮められる＝横はみ出し防止 */
   gap: 4px;
   margin: 0 0 8px;
 }

@@ -100,6 +100,8 @@ body:has(.dialog-backdrop) {
     max-width: none;
     height: 100dvh;
     max-height: 100dvh;
+    /* 全画面化(height:100dvh)＋display:grid で余白が行間にストレッチ配分され設定/Trayが縦に間延びする既存の粗を是正＝上詰め。 */
+    align-content: start;
     border: 0;
     border-radius: 0;
     padding: 12px;

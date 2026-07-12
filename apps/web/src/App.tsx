@@ -609,8 +609,10 @@ export function App() {
           <div className="filter-kinds" role="group" aria-label="kind-filter">
             {(
               [
-                // 作成タイルと同じ順：パーツ(メロ/コード/ベース/リズム/コード楽器)→組み立て(セクション/曲)→文字(歌詞/テーマ)。
+                // 作成タイルと同じ順：パーツ(メロ/骨格/コード/ベース/リズム/コード楽器)→組み立て(セクション/曲)→文字(歌詞/テーマ)。
+                // 骨格は #20 で一級ネタ＝作成/カードにあるので絞り込みにも出す（旧: 骨格だけ欠落＝ede57f4の下流取りこぼし）。
                 ["melody", "var(--k-melody)"],
+                ["skeleton", "var(--k-skeleton)"],
                 ["chord_progression", "var(--k-chord)"],
                 ["bass", "var(--k-bass)"],
                 ["rhythm", "var(--k-rhythm)"],
