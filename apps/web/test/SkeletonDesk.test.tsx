@@ -87,4 +87,24 @@ describe("SkeletonDesk（design #20 S6 D1c）", () => {
     fireEvent.click(screen.getByLabelText("lens-real"));
     expect(screen.getByLabelText("lens-real").getAttribute("aria-pressed")).toBe("true");
   });
+
+  it("D1.5 範囲ブレース：ルーラー＋両端つまみが出て、既定はブロック全体 [0, bars*BPB]", async () => {
+    getComposition.mockResolvedValue(tree);
+    render(
+      <SkeletonDesk
+        sectionId="s1" sectionKey={0} sectionMode="major" meter="4/4" tempo={120}
+        skelNetaId="sk1" skelPosition={0} skelOrd={0} onClose={() => {}}
+      />,
+    );
+    await screen.findByText(/Aメロ/);
+    expect(screen.getByLabelText("desk-ruler")).toBeTruthy();
+    const start = screen.getByLabelText("desk-brace-start");
+    const end = screen.getByLabelText("desk-brace-end");
+    // 既定＝ブロック全体（bars=2・4/4 → blockSpan=8 拍）。
+    expect(start.getAttribute("aria-valuenow")).toBe("0");
+    expect(end.getAttribute("aria-valuenow")).toBe("8");
+    // ブロック小節数ぶんの目盛り（bars+1=3 本）。
+    expect(screen.getByText("1")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+  });
 });

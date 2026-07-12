@@ -44,6 +44,13 @@ export type SkeletonDeskProps = SkeletonDeskTarget & { onClose: () => void };
 
 const SAVE_DEBOUNCE_MS = 500; // NetaeEditor/SectionEditor 流儀（暫定既定）
 
+// ルーラー/ブレースの座標定数。SkeletonEditor と同値（PPB=44・gutter=40）＝ロールと1px もずれないため。
+// 将来は SkeletonEditor 側と共通化（handoff §1「ロール抽出」時に SSOT へ）。
+const PPB = 44; // 1拍の px 幅
+const GUTTER = 40; // 鍵盤/ラベル列の幅（ロールの beat 0 が始まる x）
+// ブレースのつまみは pointer capture のドラッグ専用（SkeletonEditor の句境界ハンドルと同方式）＝
+// setPointerCapture 中はスクローラへ流れず、地のゾーンは非インタラクティブ＝スクロール誤爆なし。
+
 // pc（0–11）→ 音名（オクターブ無し）。ヘッダ表示用。
 const keyLabel = (pc: number): string => pitchName(60 + ((pc % 12) + 12) % 12).replace(/-?\d+$/, "");
 
@@ -152,9 +159,16 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   // --- ベッド文脈（実調・セクション位置）。earChords を骨格ブロック相対へ（SectionEditor.skelEar と同座標系）。 ---
   const secCtx: sctx.SectionCtx = { children, LANES, keyPc: sectionKey, mode: sectionMode, BPB };
   const earChordsRel: ChordEntry[] = sctx.earChords(secCtx).map((ch) => ({ ...ch, start: ch.start - skelPosition }));
-  const sectionEndBeats = children.length ? Math.max(0, ...children.map((c) => c.position + sctx.childDur(secCtx, c))) : bars * BPB;
-  const sectionBars = Math.max(1, Math.ceil(sectionEndBeats / BPB - 1e-6));
-  const TOTAL = sectionBars * BPB; // ループ尺＝セクション全体（範囲ブレースは D1.5）
+
+  // D1.5: 再生座標は **骨格ブロックローカル**。scaleBeats＝blockSpan＝ロール幅（=bars*BPB）＝ SkeletonEditor が
+  // 骨格を beat 0 起点で描く幅と一致＝プレイヘッド（--phb）がロールと揃う。ベッドは deskLensNotes 内で窓切り出し。
+  const blockSpan = bars * BPB;
+
+  // 範囲ブレース（D1.5）。既定＝ブロック全体 [0, blockSpan]。bars 伸縮でクランプ（窓が blockSpan を超えない）。
+  const [range, setRange] = useState<{ startBeat: number; endBeat: number } | null>(null);
+  const clampStart = Math.max(0, Math.min(range?.startBeat ?? 0, blockSpan - BPB));
+  const clampEnd = Math.max(clampStart + BPB, Math.min(range?.endBeat ?? blockSpan, blockSpan));
+  const effRange = { startBeat: clampStart, endBeat: clampEnd };
 
   // --- ベッド＋レンズの再生 Note 列（純合成は deskContent へ委譲）。 ---
   const getNotes = useCallback((): Note[] => {
@@ -164,15 +178,61 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
       stateReal,
       earChordsRel,
       composite: compositeNotes(children, sectionKey, sectionMode), // 骨格は無音（従来どおり）
-      skelPosition,
-      bars: sectionBars,
+      skelPosition, // ベッド窓の起点（skelEar 自体は beat 0 起点のまま＝ロール一致）
+      bars, // 骨格ブロックの小節数（クリック尺／ベッド窓幅）
       bpb: BPB,
     });
     // earChordsRel/children 等は毎レンダ再計算＝useTransport が cfg ref で最新を読む（stale なし）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, bars, tones, bass, phrases, children, sectionBars, BPB, sectionKey, sectionMode, skelPosition]);
+  }, [loaded, bars, tones, bass, phrases, children, BPB, sectionKey, sectionMode, skelPosition]);
 
-  const tp = useTransport(getNotes, tempo, { scaleBeats: TOTAL, bpb: BPB, activeLens });
+  const tp = useTransport(getNotes, tempo, { scaleBeats: blockSpan, bpb: BPB, activeLens, range: effRange });
+
+  // --- 範囲ブレースのルーラー：ロール（tp.scrollerRef）と横スクロールを同期＝ずれない。 ---
+  // 骨格ゾーン（ticks/braces）だけを translate＝ロール content と同じ量だけ左へ流れる（beat 位置が一致）。
+  // 「窓」ラベルの gutter は translate 外＝ロールの sticky keycol と同じく左端に据え置き。
+  const rulerZoneRef = useRef<HTMLDivElement>(null); // transform も beatFromClientX も同一要素（beat0=rect.left）
+  useEffect(() => {
+    const sc = (tp.scrollerRef as React.RefObject<HTMLDivElement>).current;
+    const zone = rulerZoneRef.current;
+    if (!sc || !zone) return;
+    const sync = () => {
+      zone.style.transform = `translateX(${-sc.scrollLeft}px)`;
+    };
+    sync();
+    sc.addEventListener("scroll", sync, { passive: true });
+    return () => sc.removeEventListener("scroll", sync);
+    // loaded で SkeletonEditor がマウントされ scrollerRef が付く。blockSpan 変化で幅が変わっても再同期。
+  }, [loaded, blockSpan, tp.scrollerRef]);
+
+  // ブレース掴み＝pointer capture＋小節境界スナップ。setPointerCapture 中はスクローラへイベントが流れない
+  // ＝スクロール誤爆なし（つまみは小さく、ゾーン地は非インタラクティブ）。確定（up）で tp.reloop＝新窓を反映。
+  const beatFromClientX = (clientX: number): number => {
+    const r = rulerZoneRef.current?.getBoundingClientRect();
+    return r ? (clientX - r.left) / PPB : 0;
+  };
+  const snapBar = (beat: number): number => Math.round(beat / BPB) * BPB;
+  const onBraceDown = (e: React.PointerEvent, edge: "start" | "end") => {
+    e.preventDefault();
+    e.stopPropagation();
+    const h = e.currentTarget as HTMLElement;
+    h.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const snapped = snapBar(beatFromClientX(ev.clientX));
+      setRange((prev) => {
+        const cur = prev ?? { startBeat: 0, endBeat: blockSpan };
+        if (edge === "start") return { startBeat: Math.max(0, Math.min(snapped, cur.endBeat - BPB)), endBeat: cur.endBeat };
+        return { startBeat: cur.startBeat, endBeat: Math.min(blockSpan, Math.max(snapped, cur.startBeat + BPB)) };
+      });
+    };
+    const up = () => {
+      h.removeEventListener("pointermove", move);
+      h.removeEventListener("pointerup", up);
+      tp.reloop(); // 再生中なら新窓でループし直す（無停止でない＝D1.5 スコープ内）
+    };
+    h.addEventListener("pointermove", move);
+    h.addEventListener("pointerup", up);
+  };
 
   // 机は常にループ再生（トップライン書き）。初回マウントで loopOn を立てる（stopped＝再生し直さない）。
   useEffect(() => {
@@ -236,6 +296,25 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
             </svg>,
           )}
           {modeBtn("erase", "消す（点タップで削除）", "eraser")}
+        </div>
+      </div>
+
+      {/* 範囲ブレースのルーラー（D1.5）：ロールと同 PPB・同スクロール。両端つまみで再生ループ窓を絞る。 */}
+      <div className="desk-ruler" aria-label="desk-ruler">
+        <div className="desk-ruler-gutter" style={{ width: GUTTER }}>窓</div>
+        <div className="desk-ruler-viewport">
+          <div className="desk-ruler-zone" ref={rulerZoneRef} style={{ width: blockSpan * PPB }}>
+            {/* 小節目盛り（0..bars）。 */}
+            {Array.from({ length: bars + 1 }, (_, i) => (
+              <span key={i} className="desk-ruler-tick" style={{ left: i * BPB * PPB }}>
+                {i + 1}
+              </span>
+            ))}
+            {/* ループ窓ハイライト＋両端ブレース。 */}
+            <div className="desk-brace-region" aria-label="desk-brace-region" style={{ left: effRange.startBeat * PPB, width: (effRange.endBeat - effRange.startBeat) * PPB }} />
+            <span className="desk-brace start" role="slider" aria-label="desk-brace-start" aria-valuenow={effRange.startBeat} title="ループ開始（小節境界スナップ）" style={{ left: effRange.startBeat * PPB }} onPointerDown={(e) => onBraceDown(e, "start")} />
+            <span className="desk-brace end" role="slider" aria-label="desk-brace-end" aria-valuenow={effRange.endBeat} title="ループ終了（小節境界スナップ）" style={{ left: effRange.endBeat * PPB }} onPointerDown={(e) => onBraceDown(e, "end")} />
+          </div>
         </div>
       </div>
 

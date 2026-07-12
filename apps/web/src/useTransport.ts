@@ -10,9 +10,10 @@ export type TransportState = "stopped" | "playing" | "paused";
 export function useTransport(
   getNotes: () => Note[],
   bpm: number,
-  // #20 S6骨格の机: activeLens は加算 optional。未指定＝従来完全一致（NetaDialog/SectionEditor 不変）。
-  // 指定時＝begin の playNotes へ渡し初期ゲート（そのレンズだけ開く）を効かせる＝レンズ印つき notes 用。
-  opts: { scaleBeats: number; bpb?: number; program?: number; feel?: Feel | null; compound?: boolean; activeLens?: string },
+  // #20 S6骨格の机: activeLens/range は加算 optional。未指定＝従来完全一致（NetaDialog/SectionEditor 不変）。
+  // activeLens 指定時＝begin の playNotes へ渡し初期ゲート（そのレンズだけ開く）＝レンズ印つき notes 用。
+  // range 指定時（D1.5）＝ループ区間を [startBeat,endBeat) に絞る。未指定＝全体（0..total）＝従来 bit 一致。
+  opts: { scaleBeats: number; bpb?: number; program?: number; feel?: Feel | null; compound?: boolean; activeLens?: string; range?: { startBeat: number; endBeat: number } },
 ) {
   const { lineRef, timeRef, scrollerRef, beatRef, start: startPh, stop: stopPh } = usePlayhead();
   const handle = useRef<PlaybackHandle | null>(null);
@@ -21,8 +22,8 @@ export function useTransport(
 
   // 最新値を ref に退避＝コールバックを安定化（stale closure 回避）。activeLens も載せる＝再ループ時の
   // 初期ゲート（そのレンズだけ開く）が最新のレンズ選択で正しく効く（無停止切替は begin を回さないので別経路）。
-  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens });
-  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens };
+  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens, range: opts.range });
+  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens, range: opts.range };
 
   const begin = useCallback(
     async (loop: boolean) => {
@@ -31,7 +32,8 @@ export function useTransport(
       if (!notes.length) return;
       const total = notes.reduce((m, n) => Math.max(m, n.start + n.dur), 0);
       handle.current = await playNotes(notes, c.bpm, {
-        loop: loop ? { startBeat: 0, endBeat: total } : undefined,
+        // range 指定時はその区間だけループ（D1.5 範囲ブレース）。未指定＝全体（0..total）＝従来 bit 一致。
+        loop: loop ? (c.range ?? { startBeat: 0, endBeat: total }) : undefined,
         program: c.program,
         feel: c.feel,
         compound: c.compound,
@@ -75,6 +77,16 @@ export function useTransport(
     }
   }, [loopOn, state, begin]);
 
+  // #20 S6骨格の机 D1.5: 範囲ブレースを掴み直した時に、いま鳴っているループへ新 range を効かせる。
+  // stop→begin（再スケジュール・ループ頭から）＝無停止ではない（無停止 range 変更は D1.5 スコープ外）。
+  // 停止中は no-op（次の play/loop が cfg.range を読む）。ドラッグ確定（pointerup）で1回だけ呼ぶ想定。
+  const reloop = useCallback(() => {
+    if (state !== "stopped") {
+      handle.current?.stop();
+      void begin(loopOn);
+    }
+  }, [state, loopOn, begin]);
+
   // #20 S6骨格の机: レンズ別ゲートを**再生を止めずに**開閉（handle パススルー）。begin を回さない＝
   // 再スケジュールしない＝再生位置が飛ばない（無停止A/B の核）。停止中/レンズ層なしは handle 側で no-op。
   const setLensGain = useCallback((lens: string, on: boolean) => {
@@ -95,6 +107,7 @@ export function useTransport(
     playPause,
     rewind,
     toggleLoop,
+    reloop,
     setLensGain,
   };
 }

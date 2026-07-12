@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deskLoadContent, deskSaveContent, deskLensNotes } from "../src/deskContent";
+import { deskLoadContent, deskSaveContent, deskLensNotes, sliceBedToWindow } from "../src/deskContent";
 import { LENS_FOLD, LENS_REAL } from "../src/deskLens";
 import type { ChordEntry, Note, SkeletonContent } from "../src/music";
 
@@ -81,10 +81,41 @@ describe("deskLensNotes（畳み群＝fold のみ／実音群＝real）", () => 
     expect(real.some((n) => n.program === 48 || n.program === 42)).toBe(true);
   });
 
-  it("skelPosition オフセットが効く（骨格ブロック相対→セクション座標）", () => {
-    const shifted = deskLensNotes({ stateReal, earChordsRel, composite, skelPosition: 8, bars, bpb });
-    const foldVoices = shifted.filter((n) => n.lens === LENS_FOLD && !n.drum);
-    // 全ての骨格線 start が +8 されている（最小 start が 8 以上）。
-    expect(Math.min(...foldVoices.map((n) => n.start))).toBeGreaterThanOrEqual(8);
+  it("D1.5 ブロックローカル：skelEar は skelPosition に **依存しない**（beat 0 起点＝ロール一致）", () => {
+    const at0 = deskLensNotes({ stateReal, earChordsRel, composite, skelPosition: 0, bars, bpb });
+    const at8 = deskLensNotes({ stateReal, earChordsRel, composite, skelPosition: 8, bars, bpb });
+    const voices = (out: typeof at0) => out.filter((n) => n.lens === LENS_FOLD && !n.drum).map((n) => n.start).sort((a, b) => a - b);
+    // 骨格2声の start は skelPosition が 0 でも 8 でも同じ＝ +skelPosition していない（プレイヘッド一致の根拠）。
+    expect(voices(at8)).toEqual(voices(at0));
+    // 具体的に骨格 content どおり（tones の start 0/4 が beat 0 起点で残る）。
+    expect(Math.min(...voices(at8))).toBe(0);
+  });
+});
+
+// --- D1.5 ベッドの窓切り出し（ブロックローカル化）＝プレイヘッドとロールを一致させる機構 --------------
+describe("sliceBedToWindow（窓 [start, start+span) を切り出し -start シフト）", () => {
+  const notes: Note[] = [
+    { pitch: 60, start: 0, dur: 1, part: "melody" },
+    { pitch: 62, start: 7.5, dur: 1, part: "melody" }, // 窓内（境界近く）
+    { pitch: 64, start: 8, dur: 1, part: "melody" }, // 次ブロック頭＝窓外（start==end は除外）
+    { pitch: 65, start: 12, dur: 1, part: "melody" }, // 窓外
+  ];
+  it("windowStart=8, span=8：窓 [8,16) の音だけ・start が -8 される", () => {
+    const out = sliceBedToWindow(notes, 8, 8);
+    expect(out.map((n) => [n.pitch, n.start])).toEqual([[64, 0], [65, 4]]);
+  });
+  it("窓外（start<windowStart / start>=end）は除外", () => {
+    const out = sliceBedToWindow(notes, 0, 8);
+    // start 0/7.5 が対象（8 は end==8 で除外・12 は窓外）。
+    expect(out.map((n) => n.pitch)).toEqual([60, 62]);
+  });
+  it("windowStart=0 は恒等シフト（bit 一致・従来ケース）", () => {
+    const out = sliceBedToWindow(notes, 0, 24); // span 大＝全部窓内
+    expect(out.map((n) => n.start)).toEqual(notes.map((n) => n.start));
+  });
+  it("元配列を破壊しない", () => {
+    const snap = notes.map((n) => n.start);
+    sliceBedToWindow(notes, 8, 8);
+    expect(notes.map((n) => n.start)).toEqual(snap);
   });
 });

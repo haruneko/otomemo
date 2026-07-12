@@ -82,6 +82,43 @@ describe("useTransport (#59)", () => {
     expect(playNotes.mock.calls[1]![2].loop).toEqual({ startBeat: 0, endBeat: 2 });
   });
 
+  // #20 S6骨格の机 D1.5：range 指定時は playNotes の loop がその区間・未指定は従来（0..total）。
+  it("range option is forwarded as the loop window; omitted range keeps 0..total (bit一致)", async () => {
+    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop: vi.fn() });
+    const { result } = renderHook(() =>
+      useTransport(() => NOTES, 120, { scaleBeats: 8, range: { startBeat: 4, endBeat: 6 } }),
+    );
+    // ループ ON（停止中は begin を回さない）→ 再生（begin(true)）。
+    act(() => result.current.toggleLoop());
+    await act(async () => {
+      result.current.playPause();
+    });
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(1));
+    // range がそのまま loop 窓になる（total=2 ではなく指定の 4..6）。
+    expect(playNotes.mock.calls[0]![2].loop).toEqual({ startBeat: 4, endBeat: 6 });
+  });
+
+  it("reloop restarts the loop while playing (applies new range); no-op while stopped", async () => {
+    const stop = vi.fn();
+    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop, setLensGain: vi.fn() });
+    const { result } = renderHook(() =>
+      useTransport(() => NOTES, 120, { scaleBeats: 8, range: { startBeat: 0, endBeat: 8 } }),
+    );
+    // 停止中の reloop は no-op（begin を回さない）。
+    act(() => result.current.reloop());
+    expect(playNotes).not.toHaveBeenCalled();
+    // 再生開始 → reloop で鳴らし直し（stop→begin）。
+    await act(async () => {
+      result.current.playPause();
+    });
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      result.current.reloop();
+    });
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(2));
+    expect(stop).toHaveBeenCalled();
+  });
+
   // #20 S6骨格の机：レンズ無停止切替。setLensGain は handle パススルーのみ＝begin（再スケジュール）を回さない。
   it("lens gate: setLensGain passes through to handle without rescheduling; activeLens is forwarded to playNotes", async () => {
     const setLensGain = vi.fn();
