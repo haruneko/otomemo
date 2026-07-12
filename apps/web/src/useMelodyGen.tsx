@@ -72,6 +72,14 @@ export function voiceLeadingBadge(meta?: CandMeta): { text: string; warn: boolea
   return bits.length ? { text: `⚠${bits.join(" ")}`, warn: true } : { text: "対位OK", warn: false };
 }
 
+// 骨格チップの分岐スタック「→吹いたメロ N」（design #20 S6・D4）：getRelations(骨格id) の出力から
+// realized_from（表面→骨格）で相手が melody のものを数える＝この骨格から吹いた表面メロの在庫数。
+// 吹き直すたびに新メロ neta＋realized_from が増える＝N が増える（骨格 content 不変・旧メロ不滅）ことの根拠。
+// ベース（gen_bass の realized_from）は「メロ」でないので数えない（バッジ文言が「→吹いたメロ」のため）。
+export function realizedMelodyCount(relations: { type: string; neta: { kind: string } | null }[]): number {
+  return relations.filter((r) => r.type === "realized_from" && r.neta?.kind === "melody").length;
+}
+
 // section から渡される文脈（当フックは section 形状を知らずに済むよう関数で受ける）。
 export type MelodyGenCtx = {
   neta: Neta;
@@ -325,7 +333,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     const ns = notesForContent(c.kind, c.content);
     if (ns.length) candPlay.current = await playNotes(ns, tempo, { program: ctx.progForKind(c.kind) });
   }
-  async function placeCandidate(c: Cand) {
+  // position＝置くセクション内位置（拍）。既定 0＝従来（SectionEditor の呼び出しは引数無し＝bit一致）。
+  // 骨格の机（D4）は焦点骨格の skelPosition を渡し、骨格が居る位置へ表面メロを置く（＝正しい配置）。
+  async function placeCandidate(c: Cand, position = 0) {
     candPlay.current?.stop();
     const lane = ctx.laneOf(c.kind);
     const created = await api.createNeta({
@@ -339,14 +349,14 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       meter: liveMeter,
       tags: neta.tags,
     });
-    // 再生成メロ＝置換：同レーンで新メロ(位置0)と尺が重なる既存子を先に外す＝二重化を防ぐ。
+    // 再生成メロ＝置換：同レーンで新メロ(位置 position)と尺が重なる既存子を先に外す＝二重化を防ぐ。
     if (lane) {
       const dur = ctx.contentDur(c.kind, c.content);
       for (const ch of ctx.laneChildren(lane)) {
-        if (spanOverlaps(0, dur, ch.position, ctx.childDur(ch))) await api.removeChild(neta.id, ch.node.neta.id, ch.position);
+        if (spanOverlaps(position, dur, ch.position, ctx.childDur(ch))) await api.removeChild(neta.id, ch.node.neta.id, ch.position);
       }
     }
-    await api.placeChild(neta.id, created.id, 0, lane?.row ?? 0);
+    await api.placeChild(neta.id, created.id, position, lane?.row ?? 0);
     // 骨格から吹いたメロ/ベース＝realized_from(表面→骨格) を張る（design #20 S2/S3c）。候補が自分の骨格idを持つ。
     if (c.skeletonNetaId && (c.kind === "melody" || c.kind === "bass")) await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
     removeCand(c.cid); // 置いた候補はトレイから外す（他候補・keepは残す）

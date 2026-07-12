@@ -7,13 +7,15 @@
 //   state は **セクション実調（配置移調 shift 済＝ビュー）**。読込＝+shift（deskLoadContent）／保存＝−shift（deskSaveContent）。
 //   鳴らす（deskLensNotes）は state が既に実調なので skeletonEarNotes を shift:0 で呼ぶ。
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../api";
+import { api, type Neta } from "../api";
 import { previewNote } from "../audio";
 import { Icon } from "./Icon";
 import { SkeletonEditor } from "./SkeletonEditor";
 import { useTransport } from "../useTransport";
 import { useEditHistory } from "../history";
-import { lanesForKind, type Child } from "./sectionLanes";
+import { useMelodyGen, voiceLeadingBadge, realizedMelodyCount, type Cand, type MelodyGenCtx } from "../useMelodyGen";
+import * as sctx from "../sectionContext";
+import { lanesForKind, MIN_BARS, maxBarsForKind, type Child, type Lane } from "./sectionLanes";
 import { deskLoadContent, deskSaveContent, deskLensNotes, contactText, contactDyadNotes } from "../deskContent";
 import { analyzeCounterpoint, effectiveBassAt, effectiveBassSegments, type MelCp } from "../skeletonEdit";
 import { chordChips, applyChordTrial, adoptedChordContent, chordName, type ChordSub, type ChordTrial } from "../deskChords";
@@ -23,6 +25,7 @@ import {
   compositeNotes,
   melodyPlacementShift,
   isSkeleton,
+  notesForContent,
   pitchName,
   type ChordEntry,
   type Note,
@@ -63,6 +66,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
 
   // --- state（すべて実調ビュー） ---
   const [children, setChildren] = useState<Child[]>([]);
+  const [sectionNeta, setSectionNeta] = useState<Neta | null>(null); // ④出口（D4）：MelodyGenCtx.neta＝section neta を保持
   const [sectionTitle, setSectionTitle] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [loadErr, setLoadErr] = useState(false);
@@ -81,6 +85,11 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   const [chordBusy, setChordBusy] = useState(false); // 候補取得中
   const [chordUndo, setChordUndo] = useState<{ netaId: string; prevContent: unknown } | null>(null); // 直前採用の1手戻し（skeleton の↶↷とは別ドメイン）
 
+  // --- ④出口トレイ（D4）：吹く→試着→置く＋分岐スタック。 ---
+  const [realizedRels, setRealizedRels] = useState<{ type: string; neta: Neta | null }[]>([]); // 焦点骨格の realized_from backlink（分岐スタック）
+  const [candPreview, setCandPreview] = useState<Cand | null>(null); // ベッド上で試着中の候補（getNotes に差し込む・在庫は不変）
+  const [stackOpen, setStackOpen] = useState(false); // 「→吹いたメロ N」一覧の開閉
+
   const shiftRef = useRef(0); // 配置移調（読込時に確定・保存で外す）
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingRef = useRef(false); // 未 flush の編集があるか（閉じる時に確定保存）
@@ -95,6 +104,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         const tree = await api.getComposition(sectionId);
         if (!alive) return;
         setChildren(tree.children);
+        setSectionNeta(tree.neta);
         setSectionTitle(tree.neta.title ?? "");
         // 焦点＝タップした骨格子（id＋position＋ord で一意・無ければ id 一致にフォールバック）。
         const child =
@@ -120,6 +130,31 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
       alive = false;
     };
   }, [sectionId, skelNetaId, skelPosition, skelOrd, sectionKey, sectionMode]);
+
+  // --- ④出口（D4）：置いた後の鮮度更新。children/sectionNeta だけ取り直し、**骨格編集 state(tones/bass/phrases)
+  //   は触らない**（編集中を潰さない）。焦点骨格の content は children に居るが机は state から描く＝影響なし。 ---
+  const reloadChildren = useCallback(async () => {
+    try {
+      const tree = await api.getComposition(sectionId);
+      setChildren(tree.children);
+      setSectionNeta(tree.neta);
+      setSectionTitle(tree.neta.title ?? "");
+    } catch {
+      /* 取り直し失敗は黙って無視（次の操作で再取得） */
+    }
+  }, [sectionId]);
+
+  // 分岐スタック「→吹いたメロ N」＝焦点骨格の realized_from backlink（getRelations）。吹いて置くたびに増える。
+  const refreshRelations = useCallback(async () => {
+    try {
+      setRealizedRels(await api.getRelations(skelNetaId));
+    } catch {
+      /* 取得失敗は空のまま（バッジは 0 = 非表示） */
+    }
+  }, [skelNetaId]);
+  useEffect(() => {
+    void refreshRelations();
+  }, [refreshRelations]);
 
   // --- 保存：実調 state → −shift → 素材調 content を updateNeta（debounce flush） ---
   const stateRef = useRef<SkeletonContent | null>(null);
@@ -173,6 +208,44 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   //   採用まで earChordsRel（在庫由来）は不変・override はローカル state のみ（updateNeta は飛ばさない）。
   const effChords: ChordEntry[] = applyChordTrial(earChordsRel, chordTrial);
 
+  // --- ④出口（D4）：机で MelodyGenCtx を組み useMelodyGen を1つ起動。SectionEditor と同じ文脈計算(sctx)で
+  //   ベッド/コード/ベース/ドラムを渡す＝「吹く」が SectionEditor の骨格ブロック[吹く▶]と bit 一致で動く。 ---
+  const secCtx: sctx.SectionCtx = { children, LANES, keyPc: sectionKey, mode: sectionMode, BPB };
+  // セクション尺（小節数）＝SectionEditor と同式（neta.bars と配置済み content の長い方、上限 MAX）。
+  const contentEnd = children.reduce((m, c) => Math.max(m, c.position + sctx.childDur(secCtx, c)), 0);
+  const sectionBars = Math.min(maxBarsForKind("section"), Math.max(MIN_BARS, sectionNeta?.bars ?? MIN_BARS, Math.ceil(contentEnd / BPB - 1e-6)));
+  // 焦点＝タップした骨格子（id＋position＋ord で一意・無ければ id 一致にフォールバック＝D1c と同じ探し方）。
+  const focusChild =
+    children.find((c) => c.node.neta.id === skelNetaId && Math.abs(c.position - skelPosition) < 1e-6 && c.ord === skelOrd) ??
+    children.find((c) => c.node.neta.id === skelNetaId);
+  // MelodyGenCtx.neta＝section neta（読込前は最小 neta でフォールバック＝吹くは loaded ゲート後なので実害なし）。
+  const genNeta: Neta =
+    sectionNeta ?? { id: sectionId, kind: "section", title: sectionTitle || null, text: null, content: null, key: sectionKey, mode: sectionMode, tempo, meter: meter ?? null, bars: null, mood: null, tags: [], created: "", updated: "" };
+  const laneChildren = (l: Lane): Child[] => sctx.laneChildren(secCtx, l);
+  const laneOf = (kind: string): Lane | undefined => LANES.find((l) => sctx.inLane(l, kind));
+  const genCtx: MelodyGenCtx = {
+    neta: genNeta,
+    keyPc: sectionKey,
+    tempo,
+    liveMeter: meter,
+    liveTitle: sectionTitle,
+    BARS: sectionBars,
+    BPB,
+    lanes: LANES,
+    laneChildren,
+    laneOf,
+    sectionChords: () => sctx.sectionChords(secCtx),
+    sectionBass: () => sctx.sectionBass(secCtx),
+    sectionDrums: () => sctx.sectionDrums(secCtx),
+    contentDur: (kind, content) => sctx.contentDur(secCtx, kind, content),
+    childDur: (c) => sctx.childDur(secCtx, c),
+    progForKind: (k) => (k === "bass" ? 33 : k === "rhythm" ? undefined : 0),
+    reload: reloadChildren,
+    onChanged: () => void refreshRelations(),
+  };
+  const gen = useMelodyGen(genCtx);
+  const realizedN = realizedMelodyCount(realizedRels);
+
   // D1.5: 再生座標は **骨格ブロックローカル**。scaleBeats＝blockSpan＝ロール幅（=bars*BPB）＝ SkeletonEditor が
   // 骨格を beat 0 起点で描く幅と一致＝プレイヘッド（--phb）がロールと揃う。ベッドは deskLensNotes 内で窓切り出し。
   const blockSpan = bars * BPB;
@@ -192,6 +265,8 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   const getNotes = useCallback((): Note[] => {
     if (!loaded) return [];
     const stateReal: SkeletonContent = { bars, tones, ...(bass.length ? { bass } : {}), ...(phrases.length ? { phrases } : {}) };
+    // ④試着（D4）：候補メロが選ばれていれば実音レンズのメロ枠へ差し込む（ブロックローカル＝gen_melody(skeletonNetaId) 由来）。
+    const previewMelody = candPreview ? notesForContent(candPreview.kind, candPreview.content) : null;
     return deskLensNotes({
       stateReal,
       earChordsRel: effChords, // 試着中は override 済＝reloop（採用時）で次ループから音も追従。停止中に再生すれば即最新。
@@ -199,10 +274,11 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
       skelPosition, // ベッド窓の起点（skelEar 自体は beat 0 起点のまま＝ロール一致）
       bars, // 骨格ブロックの小節数（クリック尺／ベッド窓幅）
       bpb: BPB,
+      previewMelody, // null＝従来（bit一致）。候補ありは現骨格線/現メロをゴーストして候補を鳴らす。
     });
     // earChordsRel/children 等は毎レンダ再計算＝useTransport が cfg ref で最新を読む（stale なし）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, bars, tones, bass, phrases, children, BPB, sectionKey, sectionMode, skelPosition]);
+  }, [loaded, bars, tones, bass, phrases, children, BPB, sectionKey, sectionMode, skelPosition, candPreview]);
 
   const tp = useTransport(getNotes, tempo, { scaleBeats: blockSpan, bpb: BPB, activeLens, range: effRange });
 
@@ -273,6 +349,28 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     tp.setLensGain(next, true);
     setActiveLens(next);
   };
+
+  // --- ④出口（D4）の操作：吹く→試着（ベッド上・無停止）→置く（skelPosition）。 ---
+  // 吹く▶＝焦点骨格から表面メロを吹く（gen_melody(skeletonNetaId)→候補トレイ）。焦点が無ければ何もしない。
+  const blowFocus = () => { if (focusChild) gen.blowSkeleton(focusChild); };
+  // 試着▶＝候補をベッドの上で鳴らす。auditionCandidate（候補ソロ）とは別＝現メロと一緒に比較するため。
+  //   実音レンズへ寄せ candPreview を立て、この瞬間だけ tp.reloop＝**次ループから**反映（無停止＝D1.5 流儀・素直）。
+  //   巡回のたびは reloop しない（ループ頭に飛ぶ煩さを避ける＝コード採用と同じ設計判断）。同候補の再タップで解除。
+  const auditionOnBed = (c: Cand) => {
+    const next = candPreview?.cid === c.cid ? null : c;
+    setCandPreview(next);
+    if (next && activeLens !== LENS_REAL) toggleLens(LENS_REAL);
+    tp.reloop();
+  };
+  // 置く＝焦点骨格の位置(skelPosition)へ。gen.placeCandidate が新メロ neta＋realized_from を張り骨格 content 不変。
+  //   内部で ctx.reload(=children 取り直し)＋onChanged(=分岐スタック再取得)＝置いた直後に N が増える。
+  const placeAtSkeleton = async (c: Cand) => {
+    await gen.placeCandidate(c, skelPosition);
+    if (candPreview?.cid === c.cid) setCandPreview(null); // 置いた候補の試着を解除
+    tp.reloop(); // ベッドに新メロが載る＝次ループから反映
+  };
+  // 試着解除（捨てる/閉じる時）＝candPreview を落とし次ループでベッドを元へ。
+  const stopAudition = () => { if (candPreview) { setCandPreview(null); tp.reloop(); } };
 
   // --- 接点タップ→説明ポップ（指摘のみ）＋「この瞬間だけ聴く」ダイアッド。 ---
   // ポップは fixed 配置＝タップした badge の画面座標を起点に、モバイル幅で画面外に出ないよう clamp。
@@ -571,6 +669,75 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           </div>
         </>
       )}
+
+      {/* ④出口トレイ（D4）：レール＝書く[①②③] ＋ 出口[④]。焦点骨格を吹く→ベッド上で試着→骨格位置へ置く。
+          吹くたび新メロ neta＋realized_from＝在庫は分岐（骨格 content 不変・旧メロ不滅）＝「→吹いたメロ N」。 */}
+      <div className="desk-outlet" aria-label="desk-outlet">
+        <div className="desk-outlet-head">
+          <span className="desk-rail" aria-hidden="true">書く<b>①②③</b>＋出口<b>④</b></span>
+          <button type="button" className="desk-blow primary" aria-label="desk-blow" title="この骨格からメロを吹く" disabled={gen.genBusy || !focusChild} onClick={blowFocus}>
+            {gen.genBusy ? "吹いています…" : "吹く▶"}
+          </button>
+          {realizedN > 0 && (
+            <button type="button" className="desk-stack-badge" aria-label="realized-stack" aria-expanded={stackOpen} title="この骨格から吹いたメロ（戻って吹き直しても消えない）" onClick={() => setStackOpen((v) => !v)}>
+              →吹いたメロ {realizedN}
+            </button>
+          )}
+        </div>
+        {/* 分岐スタック一覧（開閉）。机には他ネタを開く導線が無いため一覧表示のみ（タップ遷移は D4 では出さない）。 */}
+        {stackOpen && realizedN > 0 && (
+          <div className="desk-stack-list" aria-label="realized-list">
+            {realizedRels
+              .filter((r) => r.type === "realized_from" && r.neta?.kind === "melody")
+              .map((r, i) => (
+                <span key={i} className="desk-stack-item">
+                  {(r.neta?.title ?? r.neta?.text ?? "(無題)").slice(0, 16)}
+                </span>
+              ))}
+          </div>
+        )}
+        {/* 候補トレイ：対位バッジ〔指摘のみ〕・試着▶（ベッド上・無停止）・＋置く（skelPosition）。 */}
+        {gen.cands.length > 0 && (
+          <div className="desk-cand-tray" aria-label="desk-candidate-tray">
+            {gen.cands.map((c) => {
+              const cn = notesForContent(c.kind, c.content);
+              const vl = voiceLeadingBadge(c.meta);
+              const previewing = candPreview?.cid === c.cid;
+              return (
+                <div key={c.cid} className={"desk-cand-card" + (previewing ? " previewing" : "")} aria-label="desk-candidate-card">
+                  <span className="desk-cand-meta">
+                    {cn.length}音
+                    {vl && (
+                      <span className={"cand-vl" + (vl.warn ? " warn" : " ok")} aria-label="voiceleading-badge" title={c.meta?.voiceLeadingSummary}>
+                        {vl.text}
+                      </span>
+                    )}
+                  </span>
+                  <div className="desk-cand-actions">
+                    <button type="button" className={"tb-tool" + (previewing ? " on" : "")} aria-label="audition-on-bed" aria-pressed={previewing} title="ベッドの上で試着（現メロと比較）" onClick={() => auditionOnBed(c)}>
+                      {previewing ? "試着中■" : "試着▶"}
+                    </button>
+                    <button type="button" className="tb-tool primary" aria-label="place-at-skeleton" title="この骨格の位置に置く" onClick={() => void placeAtSkeleton(c)}>
+                      ＋置く
+                    </button>
+                    <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => { if (previewing) stopAudition(); gen.removeCand(c.cid); }}>
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="desk-cand-foot">
+              <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
+                {gen.genBusy ? "…" : "🎲 もっと"}
+              </button>
+              <button type="button" className="tb-tool" aria-label="close-candidate" onClick={() => { stopAudition(); gen.closeCandidate(); }}>
+                閉じる
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* 固定下端トランスポート：▶ループ／レンズ2択［畳み｜実音］／位置。 */}
       <div className="desk-transport" aria-label="desk-transport">

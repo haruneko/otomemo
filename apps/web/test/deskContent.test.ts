@@ -96,6 +96,41 @@ describe("deskLensNotes（畳み群＝fold のみ／実音群＝real）", () => 
     // 具体的に骨格 content どおり（tones の start 0/4 が beat 0 起点で残る）。
     expect(Math.min(...voices(at8))).toBe(0);
   });
+
+  // --- D4 試着（candPreview）：実音レンズのメロ枠を候補で差し替え・現骨格線/現メロはゴースト。 ---
+  describe("previewMelody（④試着＝ベッド上で候補を差し込む）", () => {
+    const previewMelody: Note[] = [
+      { pitch: 76, start: 0, dur: 1, part: "melody" },
+      { pitch: 74, start: 2, dur: 1, part: "melody" },
+    ];
+    // 既存メロ入りベッド（part:"melody" が居る＝二重化しうる状況）。
+    const bedComposite: Note[] = [
+      { pitch: 72, start: 0, dur: 1, program: 0, part: "melody" }, // 現メロ（ゴースト対象）
+      { pitch: 67, start: 0, dur: 2, program: 4, part: "chord" }, // 伴奏（残す）
+      { pitch: 36, start: 0, dur: 0.25, drum: true, part: "drums" }, // 伴奏（残す）
+    ];
+    const withPrev = deskLensNotes({ stateReal, earChordsRel, composite: bedComposite, skelPosition: 0, bars, bpb, previewMelody });
+    const realPrev = withPrev.filter((n) => n.lens === LENS_REAL);
+
+    it("実音群のメロ＝候補に差し替わる（現メロ pitch72 は消え・候補 pitch76/74 が居る）", () => {
+      const mel = realPrev.filter((n) => n.part === "melody");
+      expect(mel.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([74, 76]);
+      expect(mel.some((n) => n.pitch === 72)).toBe(false); // 現メロはゴースト（除外）
+    });
+    it("伴奏（コード/ドラム）はベッドとして残る", () => {
+      expect(realPrev.some((n) => n.part === "chord")).toBe(true);
+      expect(realPrev.some((n) => n.drum === true)).toBe(true);
+    });
+    it("現骨格線（skelEar・String/Cello）は実音群からゴースト＝鳴らさない", () => {
+      expect(realPrev.some((n) => n.program === 48 || n.program === 42)).toBe(false);
+    });
+    it("previewMelody 未指定＝従来（bit一致・骨格線が残る）", () => {
+      const plain = deskLensNotes({ stateReal, earChordsRel, composite: bedComposite, skelPosition: 0, bars, bpb });
+      const realPlain = plain.filter((n) => n.lens === LENS_REAL);
+      expect(realPlain.some((n) => n.program === 48 || n.program === 42)).toBe(true); // 骨格線が居る
+      expect(realPlain.some((n) => n.pitch === 72)).toBe(true); // 現メロも居る
+    });
+  });
 });
 
 // --- D1.5 ベッドの窓切り出し（ブロックローカル化）＝プレイヘッドとロールを一致させる機構 --------------

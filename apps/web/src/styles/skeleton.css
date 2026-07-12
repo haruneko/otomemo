@@ -136,3 +136,24 @@
 .desk-chord-pop .dcp-actions button:disabled { opacity: 0.4; cursor: default; }
 .desk-chord-pop .dcp-adopt.primary { background: var(--k-chord); color: #10141a; border-color: var(--k-chord); font-weight: 600; }
 .desk-chord-pop .dcp-hint { margin: 8px 0 0; font-size: 0.66rem; line-height: 1.4; }
+
+/* ④出口トレイ（D4）＝レール[書く①②③＋出口④]・吹く▶・分岐スタック「→吹いたメロ N」・候補トレイ。
+   暫定既定の見た目（handoff §5＝耳/手較正で見直し可）。 */
+.desk-outlet { border-top: 1px solid var(--line); background: #15171b; padding: 6px 8px; }
+.desk-outlet-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.desk-outlet-head .desk-rail { font-size: 0.62rem; color: var(--muted); white-space: nowrap; }
+.desk-outlet-head .desk-rail b { color: var(--k-skeleton); font-weight: 700; margin: 0 1px; }
+.desk-blow { background: var(--k-melody); color: #10141a; border: none; border-radius: 6px; padding: 5px 12px; font-size: 0.82rem; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.desk-blow:disabled { opacity: 0.45; cursor: default; }
+.desk-stack-badge { background: color-mix(in srgb, var(--k-melody) 18%, transparent); border: 1px solid var(--k-melody); color: var(--k-melody); border-radius: 12px; padding: 2px 9px; font-size: 0.68rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.desk-stack-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.desk-stack-item { font-size: 0.66rem; color: var(--muted); background: #1b1e23; border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; }
+/* 候補トレイ＝横スクロール（各カード＝音数＋対位バッジ＋試着/置く/捨てる）。 */
+.desk-cand-tray { display: flex; gap: 8px; overflow-x: auto; margin-top: 8px; padding-bottom: 4px; }
+.desk-cand-card { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.desk-cand-card.previewing { border-color: var(--k-melody); box-shadow: 0 0 0 1px var(--k-melody) inset; }
+.desk-cand-meta { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.desk-cand-actions { display: flex; gap: 4px; }
+.desk-cand-actions .tb-tool { min-width: 34px; font-size: 0.74rem; }
+.desk-cand-actions .tb-tool.on { background: var(--k-melody); color: #10141a; border-color: var(--k-melody); }
+.desk-cand-foot { display: flex; gap: 6px; align-items: center; margin-top: 6px; }

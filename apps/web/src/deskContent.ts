@@ -70,6 +70,7 @@ export function deskLensNotes(args: {
   skelPosition: number; // 骨格ブロックのセクション内位置（拍）＝ベッド窓の起点
   bars: number; // 骨格ブロックの小節数（=ロール幅／クリック尺／ベッド窓幅）
   bpb: number;
+  previewMelody?: Note[] | null; // ④出口の試着（D4）：実音レンズのメロ枠を候補メロで差替（ブロックローカル・beat0起点）。
 }): LensNote[] {
   const skelEar: Note[] = skeletonEarNotes(args.stateReal, {
     chords: args.earChordsRel,
@@ -77,6 +78,17 @@ export function deskLensNotes(args: {
     beatsPerBar: args.bpb,
   });
   const bed = sliceBedToWindow(args.composite, args.skelPosition, args.bars * args.bpb);
+  // ④試着（D4）：実音レンズのメロ枠を候補で差し替える。候補メロは gen_melody(skeletonNetaId) 由来＝骨格と同じ
+  //   ブロックローカル座標（beat0 起点）なので **オフセット無し**（skelEar と同座標）。skelPosition オフセットは
+  //   しない＝ベッド/skelEar も既にブロックローカル（D1.5）だから（座標を揃える素直な判断）。
+  //   ・現骨格線(skelEar)はゴースト＝実音群から外す（鳴らさない）。
+  //   ・ベッドの既存メロ(part:"melody")もゴースト＝候補と二重化しないよう外す。伴奏(コード/ベース/ドラム)は残す。
+  //   ・fold 群は現骨格のまま（試着中はレンズ=実音でミュートされる＝素直）。
+  if (args.previewMelody) {
+    const bedNoMel = bed.filter((n) => n.part !== "melody");
+    const cand: Note[] = args.previewMelody.map((n) => ({ ...n, part: "melody" }));
+    return [...foldLensNotes(skelEar, args.bars, args.bpb), ...realLensNotes([...bedNoMel, ...cand], [])];
+  }
   return [...foldLensNotes(skelEar, args.bars, args.bpb), ...realLensNotes(bed, skelEar)];
 }
 

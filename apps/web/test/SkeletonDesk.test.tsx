@@ -7,12 +7,17 @@ vi.mock("../src/audio", () => ({
   previewNote: vi.fn(),
   playNotes: vi.fn(async () => playHandle),
 }));
-const { getComposition, updateNeta, music } = vi.hoisted(() => ({
+const { getComposition, updateNeta, music, createNeta, placeChild, removeChild, link, getRelations } = vi.hoisted(() => ({
   getComposition: vi.fn(),
   updateNeta: vi.fn(),
   music: vi.fn(),
+  createNeta: vi.fn(),
+  placeChild: vi.fn(),
+  removeChild: vi.fn(),
+  link: vi.fn(),
+  getRelations: vi.fn(),
 }));
-vi.mock("../src/api", () => ({ api: { getComposition, updateNeta, music } }));
+vi.mock("../src/api", () => ({ api: { getComposition, updateNeta, music, createNeta, placeChild, removeChild, link, getRelations } }));
 
 import { SkeletonDesk } from "../src/components/SkeletonDesk";
 import { previewNote } from "../src/audio";
@@ -25,6 +30,10 @@ const mkNeta = (id: string, kind: string, over: Record<string, unknown> = {}) =>
 beforeEach(() => {
   vi.clearAllMocks();
   updateNeta.mockResolvedValue({});
+  placeChild.mockResolvedValue({});
+  removeChild.mockResolvedValue({});
+  link.mockResolvedValue({ ok: true });
+  getRelations.mockResolvedValue([]);
 });
 
 describe("SkeletonDesk（design #20 S6 D1c）", () => {
@@ -188,5 +197,85 @@ describe("SkeletonDesk（design #20 S6 D1c）", () => {
       { root: 0, quality: "", start: 0, dur: 4 },
       { root: 5, quality: "", start: 4, dur: 4 },
     ]);
+  });
+});
+
+// --- D4 ④出口トレイ（吹く→試着→置く＋分岐スタック） ---
+describe("SkeletonDesk D4（④出口＝吹く→試着→置く・分岐スタック）", () => {
+  // 焦点骨格を position=4 に置く＝置く時に skelPosition(=4) へ配置されることを実証。
+  const material4 = { bars: 2, tones: [{ start: 0, pitch: 60 }, { start: 4, pitch: 64 }] };
+  const tree4 = {
+    neta: mkNeta("s1", "section", { title: "Aメロ" }),
+    children: [{ position: 4, ord: 0, node: { neta: mkNeta("sk1", "skeleton", { content: material4, key: 2, mode: "major" }), children: [] } }],
+  };
+  const render4 = () =>
+    render(
+      <SkeletonDesk sectionId="s1" sectionKey={0} sectionMode="major" meter="4/4" tempo={120} skelNetaId="sk1" skelPosition={4} skelOrd={0} onClose={() => {}} />,
+    );
+
+  it("吹く→トレイ→置く：gen_melody(skeletonNetaId)→新メロ neta＋placeChild(skelPosition=4)＋realized_from・骨格 content 不変", async () => {
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 62, start: 0, dur: 1 }] } }] });
+    createNeta.mockResolvedValue(mkNeta("newmel", "melody"));
+    getComposition.mockResolvedValue(tree4);
+    render4();
+    await screen.findByText(/Aメロ/);
+    // 吹く▶＝gen_melody に skeletonNetaId=sk1 が乗る（骨格が構造を担うのでコード無しでも生成）。
+    fireEvent.click(screen.getByLabelText("desk-blow"));
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ skeletonNetaId: "sk1" })));
+    // 候補カードが出る→＋置く。
+    fireEvent.click(await screen.findByLabelText("place-at-skeleton"));
+    // 新メロ neta を作成（骨格でなくメロ＝骨格 content は不変。updateNeta(sk1) は飛ばない）。
+    await waitFor(() => expect(createNeta).toHaveBeenCalledTimes(1));
+    expect(createNeta.mock.calls[0]![0]).toEqual(expect.objectContaining({ kind: "melody", content: { notes: [{ pitch: 62, start: 0, dur: 1 }] } }));
+    // ★置くは skelPosition(=4) へ（位置0固定でない）。
+    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("s1", "newmel", 4, 0));
+    // realized_from(メロ→骨格) を張る＝骨格に戻れる＝在庫は分岐。
+    await waitFor(() => expect(link).toHaveBeenCalledWith("newmel", "sk1", "realized_from"));
+    // 骨格ネタへの updateNeta は起きない（骨格 content 不変・旧メロ不滅の根拠）。
+    expect(updateNeta.mock.calls.some(([id]) => id === "sk1")).toBe(false);
+  });
+
+  it("試着中は在庫不変：試着▶で candPreview のみ・createNeta/placeChild は飛ばない", async () => {
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 62, start: 0, dur: 1 }] } }] });
+    getComposition.mockResolvedValue(tree4);
+    render4();
+    await screen.findByText(/Aメロ/);
+    fireEvent.click(screen.getByLabelText("desk-blow"));
+    const audition = await screen.findByLabelText("audition-on-bed");
+    fireEvent.click(audition);
+    // 試着＝ローカル state のみ（在庫は書かない）。
+    expect(audition.getAttribute("aria-pressed")).toBe("true");
+    expect(createNeta).not.toHaveBeenCalled();
+    expect(placeChild).not.toHaveBeenCalled();
+  });
+
+  it("分岐スタック：getRelations の realized_from×melody 件数が「→吹いたメロ N」に出る（bass は数えない）", async () => {
+    getComposition.mockResolvedValue(tree4);
+    getRelations.mockResolvedValue([
+      { type: "realized_from", neta: mkNeta("m1", "melody", { title: "吹メロ1" }) },
+      { type: "realized_from", neta: mkNeta("m2", "melody", { title: "吹メロ2" }) },
+      { type: "realized_from", neta: mkNeta("b1", "bass") },
+    ]);
+    render4();
+    await screen.findByText(/Aメロ/);
+    const badge = await screen.findByLabelText("realized-stack");
+    expect(badge.textContent).toContain("2"); // melody×2 のみ（bass 除外）
+    // タップで一覧が開く。
+    fireEvent.click(badge);
+    const list = await screen.findByLabelText("realized-list");
+    expect(list.textContent).toContain("吹メロ1");
+    expect(list.textContent).toContain("吹メロ2");
+  });
+
+  it("voiceLeading バッジ：候補 meta の対位法要約がトレイに出る（S3d を再実装しない）", async () => {
+    music.mockResolvedValue({
+      items: [{ kind: "melody", content: { notes: [{ pitch: 62, start: 0, dur: 1 }] }, meta: { voiceLeading: { score: 0.5, parallelFifths: 1, parallelOctaves: 0, directFifths: 0, directOctaves: 0, voiceCrossings: 0 } } }],
+    });
+    getComposition.mockResolvedValue(tree4);
+    render4();
+    await screen.findByText(/Aメロ/);
+    fireEvent.click(screen.getByLabelText("desk-blow"));
+    const badge = await screen.findByLabelText("voiceleading-badge");
+    expect(badge.textContent).toContain("並5×1"); // voiceLeadingBadge の text と一致
   });
 });
