@@ -107,10 +107,16 @@
   color: var(--muted);
 }
 .rel-item {
+  /* span→button 化（ede57f4・タップで相手を開く）でグローバル button の青ベタ塗り/白字/太字を継承してしまう回帰を是正
+     ＝地味な枠線ピルへ戻す（背景透明・文字色継承・通常太さ）。.realized の淡青文字は透明地で可読に戻る。 */
+  background: transparent;
+  color: inherit;
+  font-weight: 400;
   font-size: 0.72rem;
   padding: 2px 6px;
   border: 1px solid var(--line);
   border-radius: 6px;
+  cursor: pointer;
 }
 .mainpane-editor {
   width: 100%;

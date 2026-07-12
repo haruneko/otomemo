@@ -209,6 +209,15 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - ✅**search/section-dnd セレクタ腐敗 2件**＝toggle-filters廃止(常時表示)へ追従・kind-filter群→個別ボタンのdisabled判定／`@12` を `block-` に限定（remove-…@12 との二重マッチ是正）。
 - ✅**chat-stream 3件**＝**環境要因ではなく既定configの設定漏れ**。この spec は専用config(playwright.chat.config.ts・フェイクclaude・`pnpm test:e2e:chat`)専用なのに、既定configに testIgnore が無く実claude/実MCP背後で走って必ず赤→既定configに `testIgnore:/chat-stream\.spec\.ts$/` を追加して除外。
 
+## デザイン回帰監査（2026-07-12・大手術後・二重法でやり直し）
+初回監査が「フルページ流し見＋絶対破綻(overflow/overlap)のみ」で甘く、実デグレ（作成タイル孤立）を見落としてオーナー激怒。**二重法で再監査**＝①ベースライン(85765ee=#20 UI着手前)を worktree で実ビルドし現行と同一データ・同一ビューで**視覚diff**（客観）②現行UIを**要素単位で拡大**して敵対的検分。教訓＝**デザイン監査はベースライン差分＋コンポ拡大が必須**、絶対破綻チェックだけでは相対劣化を拾えない。
+- 根本パターン：**ede57f4(骨格層S2)が「骨格」を作成種に足したが下流の追従を全部忘れた**（グリッド列数・フィルタ配列・rel-itemスタイル）＝#1〜#3は同根の芋づる。
+- ✅**#1 作成タイル孤立を修正**（`.ct-parts` 5列→6列・モバイルは詳細度付き@mediaで3×2＝assets-bass.css）。実測: モバイル3×2/デスクトップ6列1行・孤立ゼロ。**CSS罠**＝@mediaは詳細度を上げず後方の基底ルールに負ける(base.css:109と同型)→`.create-tiles .ct-parts`で勝たせた。
+- ✅**#2 rel-itemの青CTA化を修正**（span→button化でグローバルbutton継承→`.rel-item`にbg透明/color:inherit/fw400を追加＝chat.css）。realizedの青地青文字の低コントラストも解消。computed実測で裏取り。骨格→表面化(realized_from)＝#20本流で出るので実害あった。
+- ⏳**#3 骨格が種別フィルタに無い**（作成6 vs フィルタ5の非対称・kinds.tsはskeleton filterable:true）＝**製品判断**（骨格を絞り込み可能にするか。追加すると`.filter-kinds`が10個・モバイルチップ約33px＝タップ標的割れ）。オーナー確認待ち。
+- ⏳**#4 SectionEditorモバイルの空レーン常設＋ブロックラベル「6/…」潰れ**（#20の骨格レーン追加・常時2声は意図・モバイル過密は副作用）＝設計判断。
+- ▲**ウィンドウ外＝大手術のデグレでない既存粗**（別件）：Chatがアシスタント文を生Markdown壁表示（Chat.tsxは無変更・ReactMarkdown配線済＝データ/改行潰れ疑い）／設定ダイアログのモバイル縦間延び（dialog-forms.css無変更＝既存の100dvh grid伸張）。要否は別途。
+
 ## データ収集（要ユーザー関与）
 - メロコーパスのデータ収集（Hooktheory 型・Task #59）。
 - 確認リストの維持（自走中の不明点・Task #10）。

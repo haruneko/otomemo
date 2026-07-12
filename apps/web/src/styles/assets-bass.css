@@ -654,6 +654,11 @@ article[aria-label="neta-card"].dragging {
 .sheet-close { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; width: 30px; height: 30px; }
 /* モバイル＝ドロップダウンでなく「下から迫り上がる生成シート」。z-index戦争/幅216/右見切れを撤去。 */
 @media (max-width: 640px) {
+  /* 作成パーツタイル＝モバイルは6列だと1タイル約55pxで窮屈＋「コード楽器」が2行化＝3列×2段で均す（孤立回帰の是正・両監査の推奨）。
+     基底 .ct-parts{repeat(6)} が後方にあり @media は詳細度を上げない罠（base.css:109 と同型）＝.create-tiles を足して詳細度で勝たせる。 */
+  .create-tiles .ct-parts {
+    grid-template-columns: repeat(3, 1fr);
+  }
   .tools-menu {
     position: fixed;
     left: 0;
@@ -1054,7 +1059,8 @@ article header {
   gap: 6px;
 }
 .ct-parts {
-  grid-template-columns: repeat(5, 1fr);
+  /* パーツ6種（メロ/骨格/コード/ベース/リズム/コード楽器）＝要素数に合わせ6列（旧5列固定でコード楽器が孤立していた回帰を是正・ede57f4）。モバイルは@media で3×2に。 */
+  grid-template-columns: repeat(6, 1fr);
 }
 .ct-buildtext {
   grid-template-columns: repeat(4, 1fr);
