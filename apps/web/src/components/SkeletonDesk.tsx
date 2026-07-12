@@ -511,7 +511,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         <button type="button" className="hd-back" aria-label="close-desk" title="閉じる（セクションへ戻る）" onClick={p.onClose}>
           ‹ 戻る
         </button>
-        <span className="desk-title">骨格の机{sectionTitle ? `：${sectionTitle}` : ""}</span>
+        <span className="desk-title">骨格エディタ{sectionTitle ? `：${sectionTitle}` : ""}</span>
         <span className="desk-meta muted" aria-label="desk-meta">
           {keyLabel(sectionKey)} {sectionMode === "minor" ? "minor" : "major"} · {meter ?? "4/4"} · ♩{tempo}
         </span>
@@ -562,7 +562,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
             className={"desk-stage" + (focusStage === f ? " on" : "")}
             aria-label={`stage-${f}`}
             aria-pressed={focusStage === f}
-            title={`聴きレンズの焦点＝${label}`}
+            title={`聴き方の焦点＝${label}`}
             onClick={() => changeStage(f)}
           >
             {label}
@@ -652,7 +652,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
                 type="button"
                 className={"desk-chord-chip" + (chordTrial?.chordIndex === i ? " trial" : "") + (chordPop?.chipIndex === i ? " open" : "")}
                 aria-label={`chord-chip-${i}`}
-                title="タップ＝代替候補（試着→採用）"
+                title="タップ＝代替候補（試聴→採用）"
                 style={{ left: effChords[i]!.start * PPB }}
                 onClick={(e) => void onChordTap(e, i)}
               >
@@ -670,7 +670,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           <div className="desk-chord-pop" role="dialog" aria-label="chord-pop" style={{ left: chordPop.x, top: chordPop.y, width: CHORD_POP_W }}>
             <div className="dcp-head">
               <span className="dcp-cur">{chordName(effChords[chordPop.chipIndex]!)}</span>
-              <span className="muted">代替候補（試着→採用）</span>
+              <span className="muted">代替候補（試聴→採用）</span>
             </div>
             {chordBusy && (
               <p className="dcp-msg muted" aria-label="chord-loading">
@@ -702,7 +702,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
                 この代替で書く
               </button>
             </div>
-            <p className="dcp-hint muted">試着中は在庫を書き換えません。採用で初めてコードネタに反映（元に戻せます）。</p>
+            <p className="dcp-hint muted">試聴中は元のコードは変わりません。採用で初めてコードネタに反映（元に戻せます）。</p>
           </div>
         </>
       )}
@@ -734,11 +734,11 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           （m.interval.label＝再実装しない）。色＝属性（並行/交差/休符/不協和/協和）。scroll はロールと同期。 */}
       <div className="desk-contact" aria-label="desk-contact">
         <div className="desk-contact-gutter" style={{ width: GUTTER }}>
-          <span>接点</span>
+          <span>対位</span>
           {/* D6：②のコード差替で対位が変わった（＝腐りうる）接点数。0 なら出さない。試聴で確認すると減る（騒がない）。 */}
           {staleCount > 0 && (
             <span className="desk-stale-mark" aria-label="stale-count" title="②のコード変更で対位が変わった接点。タップして確認できます。">
-              要確認×{staleCount}
+              要チェック×{staleCount}
             </span>
           )}
         </div>
@@ -792,13 +792,13 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           吹くたび新メロ neta＋realized_from＝在庫は分岐（骨格 content 不変・旧メロ不滅）＝「→吹いたメロ N」。 */}
       <div className="desk-outlet" aria-label="desk-outlet">
         <div className="desk-outlet-head">
-          <span className="desk-rail" aria-hidden="true">書く<b>①②③</b>＋出口<b>④</b></span>
-          <button type="button" className="desk-blow primary" aria-label="desk-blow" title="この骨格からメロを吹く" disabled={gen.genBusy || !focusChild} onClick={blowFocus}>
-            {gen.genBusy ? "吹いています…" : (<>吹く<Icon name="wand" size={16} /></>)}
+          <span className="desk-rail" aria-hidden="true"><b>①②③</b>で書く → <b>④</b>でメロ生成</span>
+          <button type="button" className="desk-blow primary" aria-label="desk-blow" title="この骨格からメロを作る" disabled={gen.genBusy || !focusChild} onClick={blowFocus}>
+            {gen.genBusy ? "生成中…" : (<>メロを作る<Icon name="wand" size={16} /></>)}
           </button>
           {realizedN > 0 && (
-            <button type="button" className="desk-stack-badge" aria-label="realized-stack" aria-expanded={stackOpen} title="この骨格から吹いたメロ（戻って吹き直しても消えない）" onClick={() => setStackOpen((v) => !v)}>
-              →吹いたメロ {realizedN}
+            <button type="button" className="desk-stack-badge" aria-label="realized-stack" aria-expanded={stackOpen} title="この骨格から作ったメロ（作り直しても消えません）" onClick={() => setStackOpen((v) => !v)}>
+              作ったメロ {realizedN}
             </button>
           )}
         </div>
@@ -832,11 +832,11 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
                     )}
                   </span>
                   <div className="desk-cand-actions">
-                    <button type="button" className={"tb-tool" + (previewing ? " on" : "")} aria-label="audition-on-bed" aria-pressed={previewing} title="ベッドの上で試着（現メロと比較）" onClick={() => auditionOnBed(c)}>
-                      {previewing ? (<>試着中<Icon name="pause" size={15} /></>) : (<>試着<Icon name="play" size={15} /></>)}
+                    <button type="button" className={"tb-tool" + (previewing ? " on" : "")} aria-label="audition-on-bed" aria-pressed={previewing} title="伴奏の上で試聴（現メロと比較）" onClick={() => auditionOnBed(c)}>
+                      {previewing ? (<>試聴中（停止）<Icon name="pause" size={15} /></>) : (<>試聴<Icon name="play" size={15} /></>)}
                     </button>
                     <button type="button" className="tb-tool primary" aria-label="place-at-skeleton" title="この骨格の位置に置く" onClick={() => void placeAtSkeleton(c)}>
-                      ＋置く
+                      置く
                     </button>
                     <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => { if (previewing) stopAudition(); gen.removeCand(c.cid); }}>
                       <Icon name="trash" size={15} />
@@ -869,10 +869,10 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         {/* レンズ2択（A群=LENS_FOLD / B群=LENS_REAL）。aria-label は A/B ゲートで固定・表示ラベルは focusStage で
             読み替わる（③④畳み|実音・①パターン単体|ベッド・②和声だけ|編成）＝seams A の「同じ1つの操作」。 */}
         <span className="desk-lens seg" role="group" aria-label="desk-lens">
-          <button type="button" className={activeLens === LENS_FOLD ? "on" : ""} aria-pressed={activeLens === LENS_FOLD} aria-label="lens-fold" title={`${lensLabels[0]}（焦点を畳む/絞る側）`} onClick={() => toggleLens(LENS_FOLD)}>
+          <button type="button" className={activeLens === LENS_FOLD ? "on" : ""} aria-pressed={activeLens === LENS_FOLD} aria-label="lens-fold" title={`${lensLabels[0]}（絞って聴く側）`} onClick={() => toggleLens(LENS_FOLD)}>
             {lensLabels[0]}
           </button>
-          <button type="button" className={activeLens === LENS_REAL ? "on" : ""} aria-pressed={activeLens === LENS_REAL} aria-label="lens-real" title={`${lensLabels[1]}（フル/実音側）`} onClick={() => toggleLens(LENS_REAL)}>
+          <button type="button" className={activeLens === LENS_REAL ? "on" : ""} aria-pressed={activeLens === LENS_REAL} aria-label="lens-real" title={`${lensLabels[1]}（フルで聴く側）`} onClick={() => toggleLens(LENS_REAL)}>
             {lensLabels[1]}
           </button>
         </span>

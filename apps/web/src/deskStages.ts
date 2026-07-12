@@ -35,11 +35,11 @@ export interface StageLensSet {
 export function stageLabels(focus: StageFocus): [string, string] {
   switch (focus) {
     case "beat":
-      return ["パターン単体", "ベッド"];
+      return ["ドラムだけ", "伴奏"];
     case "chord":
-      return ["和声だけ", "編成"];
+      return ["コードだけ", "フル"];
     default: // skeleton / surface
-      return ["畳み", "実音"];
+      return ["骨格だけ", "フル"];
   }
 }
 

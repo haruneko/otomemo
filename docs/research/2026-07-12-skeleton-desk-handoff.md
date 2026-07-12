@@ -1,5 +1,7 @@
 # 骨格の机（design #20 S6）実装ハンドオフ — Opus向け（2026-07-12・統合Fable）
 
+> 用語注記：UI表示語は確定版へ改称（対応表＝docs/design.md #20 S6）。本doc本文は当時の設計語のまま。
+
 **あなた（実装役）への一枚**。設計思考2本（[`2026-07-12-skeleton-if-redesign-memo`](2026-07-12-skeleton-if-redesign-memo.md)＋[`2026-07-12-desk-feel-seams-memo`](2026-07-12-desk-feel-seams-memo.md)・動くモック付き）を統合Fableが検証し、正典 `docs/design.md` **#20【S6 骨格の机】** に確定事項を書き込んだ。本docは**実装スライス D0〜D6**＝「生きている SectionEditor を壊さない縦スライス」（S1..S5 と同じ流儀）。判断済みの裁定と地雷も全部ここにある。**設計判断で迷ったら design.md S6 が勝ち・実装手順で迷ったら本doc**。
 
 ## 0. 一言でいうと

@@ -493,7 +493,7 @@ export function SectionEditor({
                   <div className="cand-actions">
                     <button type="button" className="tb-tool" aria-label="audition-candidate" title="試聴" onClick={() => void gen.auditionCandidate(c)}>▶</button>
                     <button type="button" className="tb-tool" aria-label="keep-candidate" aria-pressed={kept} title="気に入ったら残す" onClick={() => gen.toggleKeep(c.cid)}>{kept ? "♥" : "♡"}</button>
-                    <button type="button" className="tb-tool primary" aria-label="place-candidate" title="レーンに置く" onClick={() => void gen.placeCandidate(c)}>＋置く</button>
+                    <button type="button" className="tb-tool primary" aria-label="place-candidate" title="レーンに置く" onClick={() => void gen.placeCandidate(c)}>置く</button>
                     <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => gen.removeCand(c.cid)}>🗑</button>
                   </div>
                 </div>
@@ -565,9 +565,9 @@ export function SectionEditor({
                   {/* 骨格ブロック（design #20 S2）：吹く▶＝gen_melody(skeletonNetaId)／コード無し時はコードを推定(harmonize)。 */}
                   {!eraseMode && c.node.neta.kind === "skeleton" && (
                     <span className="skel-block-actions">
-                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-${c.node.neta.id}`} title="この骨格からメロを吹く" onClick={(e) => { e.stopPropagation(); gen.blowSkeleton(c); }}>吹く▶</span>
+                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-${c.node.neta.id}`} title="この骨格からメロを作る" onClick={(e) => { e.stopPropagation(); gen.blowSkeleton(c); }}>メロを作る▶</span>
                       {/* ベース表面化（design #20 S3c）：明示ベース点/休符がある骨格から実体ベースを吹く（無ければroot導出=従来ベース生成と同じ）。 */}
-                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-bass-${c.node.neta.id}`} title="この骨格からベースを吹く（明示ベース区間を反映）" onClick={(e) => { e.stopPropagation(); gen.blowSkeletonBass(c); }}>ベ▶</span>
+                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-bass-${c.node.neta.id}`} title="この骨格からベースを作る（明示ベース区間を反映）" onClick={(e) => { e.stopPropagation(); gen.blowSkeletonBass(c); }}>ベ▶</span>
                       {sectionChords().length === 0 && (
                         <span role="button" tabIndex={0} className="skel-estimate" aria-label={`estimate-${c.node.neta.id}`} title="骨格からコードを推定（harmonize）" onClick={(e) => { e.stopPropagation(); void gen.estimateChords(c); }}>コードを推定</span>
                       )}
