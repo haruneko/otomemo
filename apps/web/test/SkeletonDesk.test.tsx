@@ -134,4 +134,59 @@ describe("SkeletonDesk（design #20 S6 D1c）", () => {
       expect((note as { drum?: boolean }).drum).toBeFalsy(); // ドラム（ベッド）非混入
     }
   });
+
+  // --- D3 ②コード前景（試着→採用・在庫不変） ---
+  const chordContent = { chords: [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }] };
+  const treeC = {
+    neta: mkNeta("s1", "section", { title: "Aメロ" }),
+    children: [
+      { position: 0, ord: 0, node: { neta: mkNeta("cp1", "chord_progression", { content: chordContent, key: 0, mode: "major" }), children: [] } },
+      { position: 0, ord: 0, node: { neta: mkNeta("sk1", "skeleton", { content: material, key: 2, mode: "major" }), children: [] } },
+    ],
+  };
+  const renderC = () =>
+    render(
+      <SkeletonDesk sectionId="s1" sectionKey={0} sectionMode="major" meter="4/4" tempo={120} skelNetaId="sk1" skelPosition={0} skelOrd={0} onClose={() => {}} />,
+    );
+
+  it("D3 ②コードチップが進行ぶん出る（C/G）", async () => {
+    getComposition.mockResolvedValue(treeC);
+    renderC();
+    await screen.findByText(/Aメロ/);
+    expect(screen.getByLabelText("desk-chords")).toBeTruthy();
+    expect((await screen.findByLabelText("chord-chip-0")).textContent).toBe("C");
+    expect(screen.getByLabelText("chord-chip-1").textContent).toBe("G");
+  });
+
+  it("D3 試着→採用：試着中は updateNeta 0回・採用で1回・payload は該当 chord を差替（在庫不変）", async () => {
+    getComposition.mockResolvedValue(treeC);
+    // substitute_chord 候補（F=root5, Am=root9m）。web は root/quality を消費。
+    music.mockResolvedValue([
+      { root: 5, quality: "", degree: 5, kind: "functional", why: "" },
+      { root: 9, quality: "m", degree: 9, kind: "relative", why: "" },
+    ]);
+    renderC();
+    await screen.findByText(/Aメロ/);
+    // G（2つ目）チップをタップ→ substitute_chord が飛ぶ。
+    fireEvent.click(await screen.findByLabelText("chord-chip-1"));
+    await screen.findByLabelText("chord-pop");
+    expect(music).toHaveBeenCalledWith("substitute_chord", expect.objectContaining({ chord: { root: 7, quality: "" }, key: 0, mode: "major" }));
+    // 候補が出る（F/Am）。ここまで updateNeta は 0回（取得は在庫を触らない）。
+    const cand0 = await screen.findByLabelText("chord-cand-0");
+    expect(cand0.textContent).toBe("F");
+    expect(updateNeta).not.toHaveBeenCalled();
+    // 試着＝候補タップ。②チップ名が差替後（F）に追従＝③が試着に追従。ここでも updateNeta 0回（在庫不変）。
+    fireEvent.click(cand0);
+    expect(screen.getByLabelText("chord-chip-1").textContent).toBe("F");
+    expect(updateNeta).not.toHaveBeenCalled();
+    // 採用＝書込。updateNeta が cp1 へ1回・payload は chords[1] が F(root5) に差替（他は温存）。
+    fireEvent.click(screen.getByLabelText("chord-adopt"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledTimes(1));
+    const [id, patch] = updateNeta.mock.calls[0]!;
+    expect(id).toBe("cp1");
+    expect((patch as { content: { chords: { root: number }[] } }).content.chords).toEqual([
+      { root: 0, quality: "", start: 0, dur: 4 },
+      { root: 5, quality: "", start: 4, dur: 4 },
+    ]);
+  });
 });

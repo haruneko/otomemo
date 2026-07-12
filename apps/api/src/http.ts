@@ -30,6 +30,8 @@ import {
   explainProgression,
   harmonize,
   parseChordSymbol,
+  substitutesOf,
+  toDegrees,
 } from "./music";
 import { analyzeVoiceLeading } from "./music/voiceLeading";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20 S2）
@@ -270,6 +272,16 @@ export function buildHttp(core: Core): FastifyInstance {
         case "analyze_progression": return analyzeProgression(asChords(b.chords), { key: b.key, mode: b.mode });
         case "explain_progression": return explainProgression(asChords(b.chords), { key: b.key, mode: b.mode });
         case "harmonize": return harmonize(asNotes(b.melody), b.key ?? 0, { mode: b.mode, barBeats: b.barBeats });
+        case "substitute_chord": { // #20 S6 D3：既存 substitutesOf を HTTP へ露出（MCP mcp.ts と同計算＝理論SSOTを web②が消費）。純関数委譲・加算のみ。
+          const chord = asChords([b.chord])[0];
+          if (!chord) return reply.code(400).send({ error: "chord required" });
+          const key = typeof b.key === "number" ? b.key : 0;
+          const deg = toDegrees([chord], key)[0]!;
+          const nextArr = b.next != null ? asChords([b.next]) : [];
+          const nextDeg = nextArr.length ? toDegrees(nextArr, key)[0] : undefined;
+          const subs = substitutesOf(deg, { mode: b.mode, next: nextDeg });
+          return subs.map((s) => ({ ...s, root: (s.degree + key) % 12 })); // 度数→実音ルート0-11を添える（mcp と同じ）
+        }
         case "find_progressions": return findProgressions(core, { tags: b.tags, like: b.like, limit: b.limit });
         default: return reply.code(404).send({ error: `unknown music op: ${op}` });
       }

@@ -85,6 +85,26 @@ describe("http data API", () => {
     const top = cands.slice(0, 3).map((c) => `${c.key}:${c.mode}`);
     expect(top.some((t) => t === "0:major" || t === "9:minor")).toBe(true);
   });
+
+  it("#20 S6 D3 /music/substitute_chord：1コードの代替候補（度数＋実音root）を返す", async () => {
+    // C major の V(=G)。機能代理・相対・（next 指定で）セカンダリードミナント等の代替を返す。
+    const r = await app.inject({
+      method: "POST",
+      url: "/music/substitute_chord",
+      payload: { chord: { root: 7, quality: "" }, key: 0, mode: "major" },
+    });
+    expect(r.statusCode).toBe(200);
+    const subs = r.json() as { degree: number; quality: string; kind: string; root: number }[];
+    expect(subs.length).toBeGreaterThan(0);
+    // 各候補は 実音root(0-11) を持ち、= (degree + key) % 12（mcp と同じ度数→実音写像）。
+    for (const s of subs) {
+      expect(s.root).toBe(((s.degree + 0) % 12 + 12) % 12);
+      expect(s).toHaveProperty("kind");
+    }
+    // chord 欠落は 400。
+    const bad = await app.inject({ method: "POST", url: "/music/substitute_chord", payload: { key: 0 } });
+    expect(bad.statusCode).toBe(400);
+  });
 });
 
 describe("http auth gate (#36)", () => {

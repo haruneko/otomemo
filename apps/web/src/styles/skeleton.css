@@ -108,3 +108,31 @@
 .desk-contact-pop { position: fixed; z-index: 41; background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); }
 .desk-contact-pop .dc-text { margin: 0 0 8px; font-size: 0.78rem; line-height: 1.45; color: var(--fg); }
 .desk-contact-pop .dc-listen { width: 100%; background: var(--k-skeleton); color: #10141a; border: none; border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+
+/* ②コード前景（D3）＝コードチップ列＋導出ベース線。ルーラー/接点と同じ scroll 同期・同 PPB＝ロール一致。 */
+.desk-chords { display: flex; border: 1px solid var(--line); border-bottom: none; background: #15171b; overflow: hidden; }
+.desk-chords-gutter { flex: 0 0 40px; display: flex; align-items: center; justify-content: center; gap: 3px; height: 40px; font-size: 0.6rem; color: var(--muted); background: #191c21; z-index: 2; }
+.desk-chords-gutter .desk-chord-undo { background: none; border: none; color: var(--k-chord); cursor: pointer; font-size: 0.9rem; padding: 0; line-height: 1; }
+.desk-chords-viewport { flex: 1 1 auto; overflow: hidden; }
+.desk-chords-zone { position: relative; height: 40px; will-change: transform; }
+/* チップ＝上段（コード名）。試着中は枠を強調・開いてるチップは塗り。 */
+.desk-chord-chip { position: absolute; top: 3px; transform: translateX(0); font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 5px; background: #1b1e23; border: 1px solid var(--k-chord); color: var(--fg); cursor: pointer; white-space: nowrap; font-weight: 600; touch-action: manipulation; }
+.desk-chord-chip.trial { background: color-mix(in srgb, var(--k-chord) 26%, transparent); border-style: dashed; }
+.desk-chord-chip.open { background: var(--k-chord); color: #10141a; }
+/* 導出ベース線＝下段（薄く・実線=明示/点線=導出）。コード変化で即動く。 */
+.desk-bassline { position: absolute; top: 24px; height: 13px; display: flex; align-items: center; justify-content: center; font-size: 8px; line-height: 1; color: var(--muted); background: color-mix(in srgb, var(--k-bass) 16%, transparent); border-bottom: 2px solid var(--k-bass); border-radius: 2px; pointer-events: none; overflow: hidden; }
+.desk-bassline.derived { background: transparent; border-bottom-style: dashed; }
+
+/* ②コードの代替候補ポップ（試着→採用）＝fixed・接点ポップと同じ backdrop で閉じる。 */
+.desk-chord-pop { position: fixed; z-index: 41; background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); }
+.desk-chord-pop .dcp-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; font-size: 0.72rem; }
+.desk-chord-pop .dcp-cur { font-size: 0.95rem; font-weight: 700; color: var(--k-chord); }
+.desk-chord-pop .dcp-msg { margin: 4px 0 8px; font-size: 0.74rem; }
+.desk-chord-pop .dcp-cands { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.desk-chord-pop .dcp-cand { background: #23262c; border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px; font-size: 0.8rem; color: var(--fg); cursor: pointer; }
+.desk-chord-pop .dcp-cand.on { background: var(--k-chord); color: #10141a; border-color: var(--k-chord); font-weight: 600; }
+.desk-chord-pop .dcp-actions { display: flex; gap: 6px; }
+.desk-chord-pop .dcp-actions button { flex: 1; border-radius: 6px; padding: 6px 8px; font-size: 0.78rem; cursor: pointer; border: 1px solid var(--line); background: #23262c; color: var(--fg); }
+.desk-chord-pop .dcp-actions button:disabled { opacity: 0.4; cursor: default; }
+.desk-chord-pop .dcp-adopt.primary { background: var(--k-chord); color: #10141a; border-color: var(--k-chord); font-weight: 600; }
+.desk-chord-pop .dcp-hint { margin: 8px 0 0; font-size: 0.66rem; line-height: 1.4; }
