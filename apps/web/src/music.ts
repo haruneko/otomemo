@@ -564,7 +564,9 @@ export function skeletonPreviewNotes(content: SkeletonContent, beatsPerBarN = 4)
 
 export function notesForContent(kind: string, content: unknown, ctx?: BassContext): Note[] {
   // 骨格＝単体プレビューは支配区間の白玉（design #20）。合成では compositeNotes 側で無音扱い。
-  if (kind === "skeleton" && isSkeleton(content)) return skeletonPreviewNotes(content);
+  // 音色は骨格の慣習＝Strings（48・SKEL_MEL_PROGRAM と一致）＝骨格エディタ/机と同じ音で鳴らす（プレビューが
+  // ピアノで不統一だった耳FB 2026-07-12 の是正）。program は再生のみ効き描画(MiniRoll)は不変。
+  if (kind === "skeleton" && isSkeleton(content)) return skeletonPreviewNotes(content).map((n) => ({ ...n, program: 48, part: "melody" as const }));
   if (kind === "bass" && isRelativeBass(content)) {
     // 相対モード：コードに当てて実音高へ解決。chords が無ければ preview_chords→key の tonic。
     const chords = ctx?.chords ?? content.preview_chords ?? [];

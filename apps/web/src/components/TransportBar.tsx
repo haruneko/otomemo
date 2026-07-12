@@ -1,4 +1,4 @@
-import { type Ref } from "react";
+import { type Ref, type ReactNode } from "react";
 import { type TransportState } from "../useTransport";
 import { Icon } from "./Icon";
 import { MixerControl } from "./MixerControl";
@@ -15,6 +15,7 @@ export function TransportBar({
   onRedo,
   canUndo = false,
   canRedo = false,
+  extra,
 }: {
   state: TransportState;
   loopOn: boolean;
@@ -26,6 +27,7 @@ export function TransportBar({
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  extra?: ReactNode; // 再生系の追加トグル（例: Section の「骨格を鳴らす」＝再生機能なのでトランスポートに置く）
 }) {
   const playing = state === "playing";
   return (
@@ -67,6 +69,7 @@ export function TransportBar({
       <span className="transport-time" aria-label="position" ref={timeRef}>
         1:1
       </span>
+      {extra}
       <MixerControl />
     </div>
   );

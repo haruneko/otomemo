@@ -36,8 +36,11 @@ describe("skeleton preview (単体・白玉)", () => {
       { pitch: 64, start: 5, dur: 3 },
     ]);
   });
-  it("notesForContent(kind=skeleton) はプレビューへ委譲", () => {
-    expect(notesForContent("skeleton", content)).toEqual(skeletonPreviewNotes(content));
+  it("notesForContent(kind=skeleton) はプレビューへ委譲＋Strings音色(48)を付与", () => {
+    // 骨格プレビューは Strings(program48・part:melody)で鳴らす＝骨格エディタ/机と同じ音（ピアノ不統一の是正 2026-07-12）。
+    // pitch/start/dur はプレビュー委譲どおり（program/part の加算のみ）。
+    const expected = skeletonPreviewNotes(content).map((n) => ({ ...n, program: 48, part: "melody" as const }));
+    expect(notesForContent("skeleton", content)).toEqual(expected);
   });
 });
 

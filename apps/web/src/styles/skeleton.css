@@ -23,7 +23,7 @@
 .skel-scroll { border: 1px solid var(--line); border-radius: 8px; background: #15171b; overflow: auto; max-height: 64vh; position: relative; }
 .skel-phrases { display: flex; position: sticky; top: 0; z-index: 6; background: #191c21; border-bottom: 1px solid #2a2d33; }
 .skel-gutter { flex: 0 0 40px; width: 40px; position: sticky; left: 0; z-index: 2; background: #191c21; font-size: 0.6rem; color: var(--muted); display: flex; align-items: center; justify-content: center; }
-.skel-phrase-zone { position: relative; height: 24px; }
+.skel-phrase-zone { position: relative; height: 24px; flex: 0 0 auto; } /* 幅W(インライン)を尊重＝flex行で縮ませない＝右スクロールでグリッド/句が途切れない */
 .skel-phrase-chip { position: absolute; top: 2px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.62rem; color: var(--fg); background: color-mix(in srgb, var(--k-skeleton) 20%, #1b1e23); border: 1px solid color-mix(in srgb, var(--k-skeleton) 55%, var(--line)); border-radius: 5px; cursor: pointer; overflow: hidden; }
 .skel-phrase-handle { position: absolute; top: 0; height: 24px; width: 12px; margin-left: -6px; cursor: ew-resize; z-index: 3; touch-action: none; }
 .skel-phrase-handle::after { content: ""; position: absolute; left: 5px; top: 2px; bottom: 2px; width: 2px; background: color-mix(in srgb, var(--k-skeleton) 70%, #fff); }
@@ -36,7 +36,7 @@
 .skel-key.tonic { background: var(--accent); color: #fff; font-weight: 700; }
 /* ゾーンはパン可（touch-action 既定）＝ロールをスクロールできる。打点は click（タッチスクロールでは
    発火しない＝PianoRollの<button onClick>と同性質）＋pointerdownからの移動閾値(isTap)の二重ガード。 */
-.skel-zone { position: relative; }
+.skel-zone { position: relative; flex: 0 0 auto; } /* 幅W(インライン)を尊重＝flex行で縮ませない＝右スクロールでもグリッド背景/小節線が最後まで描かれる(PianoRoll同様) */
 
 .skel-hl { position: absolute; left: 0; right: 0; background: rgba(58, 109, 240, 0.06); pointer-events: none; }
 .skel-hl.tonic { background: rgba(58, 109, 240, 0.13); }
@@ -57,12 +57,15 @@
 .skel-warn.cross { color: var(--k-rhythm); }
 
 .skel-rest-strip { display: flex; position: sticky; bottom: 0; z-index: 6; background: #191c21; border-top: 1px solid #2a2d33; cursor: pointer; } /* パン可＝スクロールで休符を作らない（click+isTap） */
-.skel-rest-zone { position: relative; height: 22px; flex: 1; }
+.skel-rest-zone { position: relative; height: 22px; flex: 0 0 auto; } /* 幅Wを尊重(旧flex:1は可視幅に伸び休符列が右で切れた) */
 .skel-rest-mark { position: absolute; top: 2px; height: 18px; background: color-mix(in srgb, var(--muted) 30%, #1b1e23); border: 1px solid var(--muted); border-radius: 4px; font-size: 0.6rem; color: var(--fg); display: flex; align-items: center; justify-content: center; }
 
 /* セクションの骨格ブロック内アクション（吹く▶ / コードを推定） */
 .skel-block-actions { position: absolute; top: 2px; right: 3px; z-index: 3; display: flex; gap: 3px; }
 .skel-blow, .skel-estimate { background: rgba(0, 0, 0, 0.42); border: 1px solid rgba(255, 255, 255, 0.4); color: #fff; border-radius: 5px; font-size: 0.6rem; padding: 1px 5px; cursor: pointer; white-space: nowrap; }
+
+/* 「骨格を鳴らす」＝トランスポート内の文字トグル（アイコンでなくラベル・再生機能・オーナーFB 2026-07-12） */
+.transport .tp-skel { width: auto; min-width: 0; padding: 0 10px; font-size: 0.72rem; white-space: nowrap; }
 
 /* realized_from の関連チップ（RelationsPanel・タップで開く） */
 .relations .rel-item.realized { border-color: var(--k-skeleton); color: var(--k-skeleton); cursor: pointer; }
