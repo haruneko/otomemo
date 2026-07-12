@@ -67,19 +67,35 @@
 /* realized_from の関連チップ（RelationsPanel・タップで開く） */
 .relations .rel-item.realized { border-color: var(--k-skeleton); color: var(--k-skeleton); cursor: pointer; }
 
-/* 骨格の机（design #20 S6 D1c）＝全画面。ヘッダ＋③前景（SkeletonEditor）＋固定下端トランスポート。 */
-.skeleton-desk { flex: 1; min-height: 0; }
-.skeleton-desk .skeleton-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.desk-header { display: flex; align-items: center; gap: 10px; padding: 4px 2px 8px; border-bottom: 1px solid var(--line); }
-.desk-header .hd-back { background: none; border: none; color: var(--fg); cursor: pointer; font-size: 0.9rem; padding: 2px 6px; }
-.desk-title { font-weight: 600; }
-.desk-meta { margin-left: auto; font-size: 0.72rem; white-space: nowrap; }
-.desk-transport { display: flex; align-items: center; gap: 6px; padding: 6px 4px; border-top: 1px solid var(--line); }
-.desk-transport .tb-tool { min-width: 34px; }
-.desk-lens.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.desk-lens.seg button { background: none; border: none; color: var(--muted); padding: 3px 12px; cursor: pointer; font-size: 0.8rem; }
+/* 骨格の机（design #20 S6 D1c）＝全画面。ヘッダ＋③前景（SkeletonEditor）＋固定下端トランスポート。
+   モバイル幅（360×780）対策：机ボディは縦スクロール可（overflow:auto で mainpane-editor の overflow:hidden を上書き）＝
+   縦積み行が 780 を食い尽くしてもロールが 0 に潰れない。ヘッダは sticky top・トランスポートは sticky bottom で常時可視。
+   ※skeleton.css は index.css で最後に @import＝同 specificity の .mainpane-editor(overflow:hidden) をここで上書きできる。 */
+.skeleton-desk { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; gap: 6px; }
+.skeleton-desk > * { flex: 0 0 auto; } /* 縦は自然高で積む＝flex-shrink で潰さない。溢れは机ごと縦スクロール。 */
+.skeleton-desk .skeleton-editor { display: flex; flex-direction: column; min-height: 0; }
+/* ロール（編集本体）は実用高さを必ず取る＝潰れて消えない（P0）。中身が短ければ 200px、長ければ内側で縦スクロール。 */
+.skeleton-desk .skel-scroll { flex: 1 1 auto; min-height: 200px; max-height: 52vh; }
+.desk-header { position: sticky; top: 0; z-index: 9; background: #15171b; display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; border-bottom: 1px solid var(--line); }
+.desk-header .hd-back { background: none; border: none; color: var(--fg); cursor: pointer; font-size: 0.9rem; padding: 2px 6px; white-space: nowrap; }
+.desk-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.desk-meta { margin-left: auto; font-size: 0.72rem; white-space: nowrap; flex: 0 0 auto; }
+/* トランスポートは机の下端に貼り付く（sticky bottom）＝縦スクロールしても隠れない。地の背景を塗り content を透かさない。
+   360幅で全ボタン（▶⏮｜レンズ2択｜位置｜↶↷）が1行に収まるよう詰める＝レンズ第2ボタン（ベッド/編成）が欠けない。 */
+.desk-transport { position: sticky; bottom: 0; z-index: 9; margin-top: auto; background: #15171b; display: flex; align-items: center; gap: 3px; padding: 6px 4px; border-top: 1px solid var(--line); }
+.desk-transport .tb-tool { min-width: 30px; padding: 4px 6px; display: inline-flex; align-items: center; justify-content: center; }
+.desk-transport .tb-divider { margin: 0 1px; }
+/* レンズ2択は横幅を確保（flex:0 0 auto＝縮まない）＝overflow で第2ボタンが刈られない。ラベルは1行固定。 */
+.desk-lens.seg { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.desk-lens.seg button { background: none; border: none; color: var(--muted); padding: 3px 6px; cursor: pointer; font-size: 0.68rem; white-space: nowrap; }
 .desk-lens.seg button.on { background: var(--k-skeleton); color: #10141a; font-weight: 600; }
-.desk-time { font-variant-numeric: tabular-nums; min-width: 32px; text-align: center; }
+.desk-time { font-variant-numeric: tabular-nums; min-width: 26px; text-align: center; font-size: 0.72rem; }
+
+/* 机埋め込み（embedded）の SkeletonEditor ツールバーは行高を圧縮＝縦を稼ぐ（凡例/ヒント/再生トグルは JS 側で非表示）。 */
+.skeleton-desk .skel-toolbar { padding: 5px 6px; gap: 4px 8px; }
+.skeleton-desk .skel-grp { font-size: 0.68rem; gap: 4px; }
+/* アイコン＋文字を含むボタンの整列（絵文字→Icon 差し替えで縦ずれしないよう inline-flex）。 */
+.skel-stub-btn, .desk-blow, .desk-transport .tb-tool, .desk-cand-actions .tb-tool, .desk-cand-foot .tb-tool { display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
 
 /* 範囲ブレースのルーラー（D1.5）。ロールと同 PPB(44)/gutter(40)・横スクロールは JS で zone を translate。 */
 .desk-ruler { display: flex; border: 1px solid var(--line); border-bottom: none; border-radius: 8px 8px 0 0; background: #15171b; overflow: hidden; }

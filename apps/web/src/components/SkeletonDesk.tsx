@@ -709,6 +709,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
 
       {/* ③前景：骨格ロール＋ツールバー＋叩き台トレイ（既存 SkeletonEditor をそのまま）。 */}
       <SkeletonEditor
+        embedded
         tones={tones}
         setTones={setTones}
         bass={bass}
@@ -793,7 +794,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         <div className="desk-outlet-head">
           <span className="desk-rail" aria-hidden="true">書く<b>①②③</b>＋出口<b>④</b></span>
           <button type="button" className="desk-blow primary" aria-label="desk-blow" title="この骨格からメロを吹く" disabled={gen.genBusy || !focusChild} onClick={blowFocus}>
-            {gen.genBusy ? "吹いています…" : "吹く▶"}
+            {gen.genBusy ? "吹いています…" : (<>吹く<Icon name="wand" size={16} /></>)}
           </button>
           {realizedN > 0 && (
             <button type="button" className="desk-stack-badge" aria-label="realized-stack" aria-expanded={stackOpen} title="この骨格から吹いたメロ（戻って吹き直しても消えない）" onClick={() => setStackOpen((v) => !v)}>
@@ -832,13 +833,13 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
                   </span>
                   <div className="desk-cand-actions">
                     <button type="button" className={"tb-tool" + (previewing ? " on" : "")} aria-label="audition-on-bed" aria-pressed={previewing} title="ベッドの上で試着（現メロと比較）" onClick={() => auditionOnBed(c)}>
-                      {previewing ? "試着中■" : "試着▶"}
+                      {previewing ? (<>試着中<Icon name="pause" size={15} /></>) : (<>試着<Icon name="play" size={15} /></>)}
                     </button>
                     <button type="button" className="tb-tool primary" aria-label="place-at-skeleton" title="この骨格の位置に置く" onClick={() => void placeAtSkeleton(c)}>
                       ＋置く
                     </button>
                     <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => { if (previewing) stopAudition(); gen.removeCand(c.cid); }}>
-                      🗑
+                      <Icon name="trash" size={15} />
                     </button>
                   </div>
                 </div>
@@ -846,7 +847,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
             })}
             <div className="desk-cand-foot">
               <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
-                {gen.genBusy ? "…" : "🎲 もっと"}
+                {gen.genBusy ? "…" : (<><Icon name="wand" size={15} /> もっと</>)}
               </button>
               <button type="button" className="tb-tool" aria-label="close-candidate" onClick={() => { stopAudition(); gen.closeCandidate(); }}>
                 閉じる
@@ -859,10 +860,10 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
       {/* 固定下端トランスポート：▶ループ／レンズ2択［畳み｜実音］／位置。 */}
       <div className="desk-transport" aria-label="desk-transport">
         <button type="button" className="tb-tool" aria-label="desk-play" title="ループ再生/一時停止" onClick={tp.playPause}>
-          {tp.playing ? "⏸" : "▶"}
+          <Icon name={tp.playing ? "pause" : "play"} size={18} />
         </button>
         <button type="button" className="tb-tool" aria-label="desk-rewind" title="頭出し" onClick={tp.rewind}>
-          ⏮
+          <Icon name="rewind" size={18} />
         </button>
         <span className="tb-divider" aria-hidden="true" />
         {/* レンズ2択（A群=LENS_FOLD / B群=LENS_REAL）。aria-label は A/B ゲートで固定・表示ラベルは focusStage で
@@ -881,10 +882,10 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         </span>
         <span className="tb-spacer" style={{ flex: 1 }} />
         <button type="button" className="tb-tool" aria-label="desk-undo" title="元に戻す" disabled={!hist.canUndo} onClick={hist.undo}>
-          ↶
+          <Icon name="undo" size={18} />
         </button>
         <button type="button" className="tb-tool" aria-label="desk-redo" title="やり直す" disabled={!hist.canRedo} onClick={hist.redo}>
-          ↷
+          <Icon name="redo" size={18} />
         </button>
       </div>
     </div>

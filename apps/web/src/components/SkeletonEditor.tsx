@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { pitchName, pc, isBlack, scalePcSet, beatsPerBar, skeletonPreviewNotes, playNotes, type ChordEntry, type SkeletonBreakpoint, type SkeletonContent, type PlaybackHandle } from "../music";
 import { previewNote } from "../audio";
 import { api, type Neta } from "../api";
+import { Icon } from "./Icon";
 import { MiniRoll } from "./MiniRoll";
 import {
   snapBeat,
@@ -56,6 +57,10 @@ export interface SkeletonEditorProps {
   tempo?: number; // 候補試聴のテンポ（未指定=120）
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
+  // 机（SkeletonDesk）埋め込み用の簡素モード。既定=false=単品UI（NetaDialog 経路）完全不変。
+  //   true＝純ヘルプ（凡例/ヒント）と再生[対位法|実音]トグルを隠す（机では下端レンズ[畳み|実音]が担う）。
+  //   残すノブ＝スナップ/入力先/ベース表示/小節±/機械に叩き台（レイアウトのみ簡素化）。
+  embedded?: boolean;
 }
 
 export function SkeletonEditor(p: SkeletonEditorProps) {
@@ -283,7 +288,10 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
         <span className="skel-grp"><span className="muted">スナップ</span>{seg([["2拍", 2], ["1拍", 1], ["自由", 0]], snap, setSnap, "snap")}</span>
         <span className="skel-grp"><span className="muted">入力先</span>{seg([["メロ", 0], ["ベース", 1]], inputVoice === "bass" ? 1 : 0, (v) => setInputVoice(v ? "bass" : "melody"), "input-voice")}</span>
         <span className="skel-grp"><span className="muted">ベース表示</span>{seg([["+2oct", 24], ["+3oct", 36]], foldOct, setFoldOct, "fold-oct")}</span>
-        <span className="skel-grp"><span className="muted">再生</span>{seg([["対位法", 1], ["実音", 0]], p.counterpoint ? 1 : 0, (v) => p.setCounterpoint(!!v), "play-mode")}</span>
+        {/* 再生[対位法|実音]は机では下端レンズ[畳み|実音]が担う＝embedded では重複を避けて隠す。単品は不変。 */}
+        {!p.embedded && (
+          <span className="skel-grp"><span className="muted">再生</span>{seg([["対位法", 1], ["実音", 0]], p.counterpoint ? 1 : 0, (v) => p.setCounterpoint(!!v), "play-mode")}</span>
+        )}
         {p.setBars && (
           <span className="skel-grp"><span className="muted">小節</span>
             <button type="button" aria-label="skel-bars-dec" disabled={p.bars <= 1} onClick={() => p.setBars!(Math.max(1, p.bars - 1))}>−</button>
@@ -291,7 +299,7 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
             <button type="button" aria-label="skel-bars-inc" onClick={() => p.setBars!(p.bars + 1)}>＋</button>
           </span>
         )}
-        <button type="button" className="tb-tool" aria-label="gen-skeleton-stub" disabled={busy} onClick={() => void genStub()}>🤖 機械に叩き台</button>
+        <button type="button" className="tb-tool skel-stub-btn" aria-label="gen-skeleton-stub" disabled={busy} onClick={() => void genStub()}><Icon name="wand" size={16} /> 機械に叩き台</button>
         {p.rollMode === "select" && (
           <span className="skel-selbar" aria-label="skeleton-selbar">
             <span className="muted">{selected.size}個</span>
@@ -337,13 +345,16 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
         </div>
       )}
 
-      <div className="skel-legend muted" aria-label="skeleton-legend">
-        <span><i className="sw" style={{ background: "var(--k-melody)" }} />メロ骨格</span>
-        <span><i className="sw" style={{ background: "var(--k-bass)" }} />ベース明示</span>
-        <span><i className="sw sw-dash" />導出ベース(コードroot)</span>
-        <span>度数=実音差mod12／強拍不協和=注意色／⚠並行5・8度／✕声部交差(実音)</span>
-        <span>表示=ベース+{foldOct / 12}oct畳み・計算は実音／再生={p.counterpoint ? "対位法(ベース+1oct)" : "実音"}</span>
-      </div>
+      {/* 凡例＝純ヘルプ。机では邪魔（縦を食う）＝embedded では隠す。単品は不変。 */}
+      {!p.embedded && (
+        <div className="skel-legend muted" aria-label="skeleton-legend">
+          <span><i className="sw" style={{ background: "var(--k-melody)" }} />メロ骨格</span>
+          <span><i className="sw" style={{ background: "var(--k-bass)" }} />ベース明示</span>
+          <span><i className="sw sw-dash" />導出ベース(コードroot)</span>
+          <span>度数=実音差mod12／強拍不協和=注意色／⚠並行5・8度／✕声部交差(実音)</span>
+          <span>表示=ベース+{foldOct / 12}oct畳み・計算は実音／再生={p.counterpoint ? "対位法(ベース+1oct)" : "実音"}</span>
+        </div>
+      )}
 
       <div className="skel-scroll proll" ref={p.scrollerRef} role="grid" aria-label="skeleton-roll">
         <div className="proll-playhead" aria-hidden="true" ref={p.playheadRef} style={{ left: `calc(40px + var(--phb,0) * ${PPB}px)` }} />
@@ -439,7 +450,10 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
           </div>
         </div>
       </div>
-      <p className="muted lanes-hint">空きタップ=打点（入力先の声部・次点まで自動延伸）／点ドラッグ=移動／⌫消す=点タップで削除／句チップ=全↔半終止／休ストリップ=骨格休符。度数/並行/交差は実音判定・指摘のみ。</p>
+      {/* ヒント文＝純ヘルプ。机では邪魔＝embedded では隠す。単品は不変。 */}
+      {!p.embedded && (
+        <p className="muted lanes-hint">空きタップ=打点（入力先の声部・次点まで自動延伸）／点ドラッグ=移動／⌫消す=点タップで削除／句チップ=全↔半終止／休ストリップ=骨格休符。度数/並行/交差は実音判定・指摘のみ。</p>
+      )}
     </div>
   );
 }
