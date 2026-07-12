@@ -5,7 +5,7 @@ import { KIND_LABEL } from "../kinds";
 
 // realized_from のラベル＝相手が骨格なら「← 元の骨格」、メロなら「→ 吹いたメロ」（向きを相手の種類で判定）。
 function relLabel(r: { type: string; neta: Neta }): string {
-  if (r.type === "realized_from") return r.neta.kind === "skeleton" ? "← 元の骨格" : "→ 吹いたメロ";
+  if (r.type === "realized_from") return r.neta.kind === "skeleton" ? "← 元の骨格" : "→ 作ったメロ";
   return KIND_LABEL[r.neta.kind] ?? r.neta.kind;
 }
 

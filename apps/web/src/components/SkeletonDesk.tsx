@@ -87,7 +87,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   const [chordCands, setChordCands] = useState<ChordSub[] | null>(null); // substitute_chord 候補（巡回対象）
   const [chordTrial, setChordTrial] = useState<ChordTrial | null>(null); // 試着中の差替（earChords への override・在庫は不変）
   const [chordBusy, setChordBusy] = useState(false); // 候補取得中
-  const [chordUndo, setChordUndo] = useState<{ netaId: string; prevContent: unknown } | null>(null); // 直前採用の1手戻し（skeleton の↶↷とは別ドメイン）
+  const [chordUndo, setChordUndo] = useState<{ netaId: string; prevContent: unknown; range: { start: number; end: number } } | null>(null); // 直前採用の1手戻し（skeleton の↶↷とは別ドメイン）＋D6 stale 区間（戻す時に消す）
 
   // --- D6 B-lite「変化→耳」：②で採用されたコード区間（ブロックローカル）をセッション内で記録＝③接点の stale 判定源。
   //   非永続（updateNeta しない・DB に持たない・閉じたら消える＝React state のみ）。編集来歴の永続追跡/クロスセクション
@@ -296,9 +296,9 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
       bpb: BPB,
       previewMelody, // null＝従来（bit一致）。候補ありは現骨格線/現メロをゴーストして候補を鳴らす。
     });
-    // earChordsRel/children 等は毎レンダ再計算＝useTransport が cfg ref で最新を読む（stale なし）。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, bars, tones, bass, phrases, children, BPB, sectionKey, sectionMode, skelPosition, candPreview, focusStage]);
+    // useTransport は cfg ref 経由でこの getNotes を読む＝deps に載せた state が変わった時だけ最新化される。
+    // **chordTrial を deps に含める**（effChords が依存）＝試着を停止→再生で反映（欠落バグ #2 の是正 2026-07-13）。
+  }, [loaded, bars, tones, bass, phrases, children, BPB, sectionKey, sectionMode, skelPosition, candPreview, focusStage, chordTrial]);
 
   const tp = useTransport(getNotes, tempo, { scaleBeats: blockSpan, bpb: BPB, activeLens, range: effRange });
 
@@ -363,6 +363,19 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // #1 再スケジュール鮮度（2026-07-13 是正）：以前は各ハンドラで setState(...) の直後に tp.reloop() を命令的に
+  //   呼んでいたが、reloop→begin は cfg ref 経由で **その時点の（フラッシュ前＝旧）** getNotes/activeLens を読むため、
+  //   ステージ切替/候補試着/採用が「一手遅れ」or「表示と逆」で鳴っていた。→ **鳴らす内容を決める state が変わったら
+  //   フラッシュ後に reloop する effect** へ集約（cfg は commit 済＝最新を読む）。停止中は reloop が no-op。
+  //   骨格編集(tones/bass/phrases)は含めない＝ループ中の打点を音に入れない現行仕様（#7 で別途判断）。
+  //   ※範囲ブレース確定は pointerup で setState を伴わない＝命令的 reloop のままで最新 cfg を読める（据え置き）。
+  const didFirstSchedule = useRef(false);
+  useEffect(() => {
+    if (!didFirstSchedule.current) { didFirstSchedule.current = true; return; } // 初回=読込直後（未再生）はスキップ
+    tp.reloop(); // focusStage/candPreview/children が変わった＝新 state で鳴らし直す（再生中のみ・停止中no-op）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusStage, candPreview, children]);
+
   // レンズ無停止切替：begin（再スケジュール）を回さず、ゲートだけ開閉＝再生位置が飛ばない（この器の核）。
   // activeLens state も更新＝再ループ時の初期ゲート（initLensGates）が正しいレンズを開く。
   const toggleLens = (next: string) => {
@@ -376,8 +389,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   //   レンズ内の A⇄B（toggleLens）とは別＝そちらは無停止ゲート。activeLens は据え置き（A/B の選択はステージ跨ぎで保つ）。
   const changeStage = (next: StageFocus) => {
     if (next === focusStage) return;
-    setFocusStage(next);
-    tp.reloop(); // 停止中は no-op・再生中は新ステージの reduce でループし直す
+    setFocusStage(next); // reloop は focusStage 変化を見る effect が担う（#1・フラッシュ後＝最新 reduce で鳴らし直す）
   };
   // 焦点ステージのレンズ2択ラベル（トランスポートのボタン表示が focusStage で読み替わる＝seams A の配線）。
   const lensLabels = stageLabels(focusStage);
@@ -396,19 +408,17 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   //   巡回のたびは reloop しない（ループ頭に飛ぶ煩さを避ける＝コード採用と同じ設計判断）。同候補の再タップで解除。
   const auditionOnBed = (c: Cand) => {
     const next = candPreview?.cid === c.cid ? null : c;
-    setCandPreview(next);
+    setCandPreview(next); // reloop は candPreview 変化を見る effect が担う（#1・begin が最新 activeLens/候補を読む）
     if (next && activeLens !== LENS_REAL) toggleLens(LENS_REAL);
-    tp.reloop();
   };
   // 置く＝焦点骨格の位置(skelPosition)へ。gen.placeCandidate が新メロ neta＋realized_from を張り骨格 content 不変。
   //   内部で ctx.reload(=children 取り直し)＋onChanged(=分岐スタック再取得)＝置いた直後に N が増える。
   const placeAtSkeleton = async (c: Cand) => {
-    await gen.placeCandidate(c, skelPosition);
+    await gen.placeCandidate(c, skelPosition); // 内部 reload で children 更新→reloop effect が新ベースで鳴らし直す（#1）
     if (candPreview?.cid === c.cid) setCandPreview(null); // 置いた候補の試着を解除
-    tp.reloop(); // ベッドに新メロが載る＝次ループから反映
   };
-  // 試着解除（捨てる/閉じる時）＝candPreview を落とし次ループでベッドを元へ。
-  const stopAudition = () => { if (candPreview) { setCandPreview(null); tp.reloop(); } };
+  // 試着解除（捨てる/閉じる時）＝candPreview を落とす（reloop は effect が担う・次ループでベッドを元へ）。
+  const stopAudition = () => { if (candPreview) setCandPreview(null); };
 
   // --- 接点タップ→説明ポップ（指摘のみ）＋「この瞬間だけ聴く」ダイアッド。 ---
   // ポップは fixed 配置＝タップした badge の画面座標を起点に、モバイル幅で画面外に出ないよう clamp。
@@ -473,10 +483,10 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     const target = children.find((c) => c.node.neta.id === chip.netaId);
     const prevContent = target?.node.neta.content ?? null;
     const content = adoptedChordContent(prevContent, chip.netaChordIndex, chordTrial.sub, chip.shift);
-    setChordUndo({ netaId: chip.netaId, prevContent });
     // D6：採用（＝在庫を書き換えた瞬間）にだけ、差し替えたコードのブロックローカル区間を記録＝接点 cp の start と
     //   同座標系（chip.entry.start は earChordsRel と同じブロック相対）。試着では記録しない（在庫不変の間は腐らない）。
     const range = { start: chip.entry.start, end: chip.entry.start + chip.entry.dur };
+    setChordUndo({ netaId: chip.netaId, prevContent, range }); // range も保持＝1手戻しで stale を消す（#8）
     setEditedChordRanges((prev) => [...prev, range]); // 重複は素直に許容（staleContacts は membership＝or で無害）
     // 同区間に載る acknowledged は解除＝再採用でその接点が再び変わった＝もう一度「要確認」に戻す（見落とし防止）。
     setAcknowledgedStale((prev) => new Set([...prev].filter((s) => !(s >= range.start - 1e-6 && s < range.end - 1e-6))));
@@ -486,16 +496,18 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     setChordTrial(null);
     setChordPop(null);
     setChordCands(null);
-    tp.reloop(); // 再生中なら次ループから音も追従（巡回では飛ばさず採用時のみ＝ループ頭に飛ぶ煩さを避ける）
+    // reloop は children 変化を見る effect が担う（#1・採用後の新コードで鳴らし直す）。
   };
   // コード編集専用の1手戻し（skeleton の↶↷とは別ドメイン＝混乱を避ける）。直前採用を updateNeta で復元。
   const undoChord = () => {
     if (!chordUndo) return;
-    const { netaId, prevContent } = chordUndo;
+    const { netaId, prevContent, range } = chordUndo;
     void api.updateNeta(netaId, { content: prevContent }).catch(() => {});
     setChildren((prev) => prev.map((c) => (c.node.neta.id === netaId ? { ...c, node: { ...c.node, neta: { ...c.node.neta, content: prevContent } } } : c)));
+    // #8：戻したら D6 の「要チェック」痕も消す（対位は元に戻っているのにパルスが残る＝オオカミ少年化を防ぐ）。
+    setEditedChordRanges((prev) => prev.filter((r) => !(Math.abs(r.start - range.start) < 1e-6 && Math.abs(r.end - range.end) < 1e-6)));
     setChordUndo(null);
-    tp.reloop();
+    // reloop は children 変化を見る effect が担う（#1）。
   };
 
   const modeBtn = (m: "draw" | "select" | "erase", label: string, icon: "edit" | "eraser", svg?: React.ReactNode) => (
@@ -545,6 +557,9 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           {modeBtn("erase", "消す（点タップで削除）", "eraser")}
         </div>
       </div>
+
+      {/* #3 是正：ヘッダ/トランスポートを外に出し、本体だけを縦スクロール（トランスポートが本体末尾を覆わない）。 */}
+      <div className="desk-scroll">
 
       {/* D5 ステージレール：聴きレンズの焦点（①ビート/②コード/③骨格/④表面）。選択でトランスポートのレンズ2択の
           ラベルと reduce が読み替わる（seams A）。切替＝reloop（再生継続・loop維持・位置はループ頭へ）。②③④の
@@ -737,7 +752,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           <span>対位</span>
           {/* D6：②のコード差替で対位が変わった（＝腐りうる）接点数。0 なら出さない。試聴で確認すると減る（騒がない）。 */}
           {staleCount > 0 && (
-            <span className="desk-stale-mark" aria-label="stale-count" title="②のコード変更で対位が変わった接点。タップして確認できます。">
+            <span className="desk-stale-mark" aria-label="stale-count" title="②のコード変更で対位が変わった箇所。タップして確認できます。">
               要チェック×{staleCount}
             </span>
           )}
@@ -857,7 +872,9 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         )}
       </div>
 
-      {/* 固定下端トランスポート：▶ループ／レンズ2択［畳み｜実音］／位置。 */}
+      </div>{/* /desk-scroll（本体の縦スクロール終わり） */}
+
+      {/* 固定下端トランスポート（スクロール外の footer・#3）：▶ループ／レンズ2択／位置／Undo。 */}
       <div className="desk-transport" aria-label="desk-transport">
         <button type="button" className="tb-tool" aria-label="desk-play" title="ループ再生/一時停止" onClick={tp.playPause}>
           <Icon name={tp.playing ? "pause" : "play"} size={18} />

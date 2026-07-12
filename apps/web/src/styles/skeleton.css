@@ -21,14 +21,14 @@
 
 /* スクロール枠は .proll の流儀（横スクロール・playhead は左40px+ppb） */
 .skel-scroll { border: 1px solid var(--line); border-radius: 8px; background: #15171b; overflow: auto; max-height: 64vh; position: relative; }
-.skel-phrases { display: flex; position: sticky; top: 0; z-index: 6; background: #191c21; border-bottom: 1px solid #2a2d33; }
+.skel-phrases { display: flex; min-width: max-content; position: sticky; top: 0; z-index: 6; background: #191c21; border-bottom: 1px solid #2a2d33; } /* min-width＝句ガター(sticky left)を横スクロール全域でピン */
 .skel-gutter { flex: 0 0 40px; width: 40px; position: sticky; left: 0; z-index: 2; background: #191c21; font-size: 0.6rem; color: var(--muted); display: flex; align-items: center; justify-content: center; }
 .skel-phrase-zone { position: relative; height: 24px; flex: 0 0 auto; } /* 幅W(インライン)を尊重＝flex行で縮ませない＝右スクロールでグリッド/句が途切れない */
 .skel-phrase-chip { position: absolute; top: 2px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.62rem; color: var(--fg); background: color-mix(in srgb, var(--k-skeleton) 20%, #1b1e23); border: 1px solid color-mix(in srgb, var(--k-skeleton) 55%, var(--line)); border-radius: 5px; cursor: pointer; overflow: hidden; }
 .skel-phrase-handle { position: absolute; top: 0; height: 24px; width: 12px; margin-left: -6px; cursor: ew-resize; z-index: 3; touch-action: none; }
 .skel-phrase-handle::after { content: ""; position: absolute; left: 5px; top: 2px; bottom: 2px; width: 2px; background: color-mix(in srgb, var(--k-skeleton) 70%, #fff); }
 
-.skel-body { display: flex; }
+.skel-body { display: flex; min-width: max-content; } /* 行幅を内容幅に＝鍵盤(.skel-keycol sticky)が横スクロール全域でピン(PianoRoll .proll-row 同様・無いと1画面分で流れた) */
 .skel-keycol { flex: 0 0 40px; width: 40px; position: sticky; left: 0; z-index: 5; background: #15171b; }
 .skel-key { font-size: 8px; line-height: 13px; text-align: right; padding-right: 3px; border: 1px solid #24272e; user-select: none; cursor: pointer; }
 .skel-key.white { background: #d7dae0; color: #2a2d33; }
@@ -56,7 +56,7 @@
 .skel-warn { position: absolute; z-index: 7; font-size: 11px; pointer-events: none; filter: drop-shadow(0 1px 1px #000); }
 .skel-warn.cross { color: var(--k-rhythm); }
 
-.skel-rest-strip { display: flex; position: sticky; bottom: 0; z-index: 6; background: #191c21; border-top: 1px solid #2a2d33; cursor: pointer; } /* パン可＝スクロールで休符を作らない（click+isTap） */
+.skel-rest-strip { display: flex; min-width: max-content; position: sticky; bottom: 0; z-index: 6; background: #191c21; border-top: 1px solid #2a2d33; cursor: pointer; } /* パン可＝スクロールで休符を作らない（click+isTap）。min-width＝休ガター(sticky left)を横スクロール全域でピン */
 .skel-rest-zone { position: relative; height: 22px; flex: 0 0 auto; } /* 幅Wを尊重(旧flex:1は可視幅に伸び休符列が右で切れた) */
 .skel-rest-mark { position: absolute; top: 2px; height: 18px; background: color-mix(in srgb, var(--muted) 30%, #1b1e23); border: 1px solid var(--muted); border-radius: 4px; font-size: 0.6rem; color: var(--fg); display: flex; align-items: center; justify-content: center; }
 
@@ -74,18 +74,21 @@
    モバイル幅（360×780）対策：机ボディは縦スクロール可（overflow:auto で mainpane-editor の overflow:hidden を上書き）＝
    縦積み行が 780 を食い尽くしてもロールが 0 に潰れない。ヘッダは sticky top・トランスポートは sticky bottom で常時可視。
    ※skeleton.css は index.css で最後に @import＝同 specificity の .mainpane-editor(overflow:hidden) をここで上書きできる。 */
-.skeleton-desk { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; gap: 6px; }
-.skeleton-desk > * { flex: 0 0 auto; } /* 縦は自然高で積む＝flex-shrink で潰さない。溢れは机ごと縦スクロール。 */
+/* #3 是正：机＝ヘッダ(上・固定) / 本体(.desk-scroll・縦スクロール) / トランスポート(下・固定) の3段 flex 列。
+   トランスポートをスクロール流の外に出す＝候補トレイ等の本体末尾を覆わない（旧: sticky bottom が最下部を隠していた）。 */
+.skeleton-desk { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.skeleton-desk > * { flex: 0 0 auto; } /* ヘッダ/トランスポートは自然高で固定。 */
+.skeleton-desk > .desk-scroll { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; } /* 本体だけが縦スクロール。 */
 .skeleton-desk .skeleton-editor { display: flex; flex-direction: column; min-height: 0; }
 /* ロール（編集本体）は実用高さを必ず取る＝潰れて消えない（P0）。中身が短ければ 200px、長ければ内側で縦スクロール。 */
 .skeleton-desk .skel-scroll { flex: 1 1 auto; min-height: 200px; max-height: 52vh; }
-.desk-header { position: sticky; top: 0; z-index: 9; background: #15171b; display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; border-bottom: 1px solid var(--line); }
+.desk-header { background: #15171b; display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; border-bottom: 1px solid var(--line); } /* スクロール外の固定上段（#3 で sticky 撤去） */
 .desk-header .hd-back { background: none; border: none; color: var(--fg); cursor: pointer; font-size: 0.9rem; padding: 2px 6px; white-space: nowrap; }
 .desk-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .desk-meta { margin-left: auto; font-size: 0.72rem; white-space: nowrap; flex: 0 0 auto; }
 /* トランスポートは机の下端に貼り付く（sticky bottom）＝縦スクロールしても隠れない。地の背景を塗り content を透かさない。
    360幅で全ボタン（▶⏮｜レンズ2択｜位置｜↶↷）が1行に収まるよう詰める＝レンズ第2ボタン（ベッド/編成）が欠けない。 */
-.desk-transport { position: sticky; bottom: 0; z-index: 9; margin-top: auto; background: #15171b; display: flex; align-items: center; gap: 3px; padding: 6px 4px; border-top: 1px solid var(--line); }
+.desk-transport { background: #15171b; display: flex; align-items: center; gap: 3px; padding: 6px 4px; border-top: 1px solid var(--line); } /* スクロール外の固定下段（#3 で sticky 撤去＝本体末尾を覆わない） */
 .desk-transport .tb-tool { min-width: 30px; padding: 4px 6px; display: inline-flex; align-items: center; justify-content: center; }
 .desk-transport .tb-divider { margin: 0 1px; }
 /* レンズ2択は横幅を確保（flex:0 0 auto＝縮まない）＝overflow で第2ボタンが刈られない。ラベルは1行固定。 */

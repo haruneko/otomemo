@@ -21,11 +21,11 @@ describe("RelationsPanel realized_from（骨格⇄表面メロの双方向導線
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "sk1" }));
   });
 
-  it("骨格を開くと「→ 吹いたメロ」へ辿れる（相手=melody・逆引き由来）", async () => {
+  it("骨格を開くと「→ 作ったメロ」へ辿れる（相手=melody・逆引き由来／語彙刷新 2026-07-13）", async () => {
     const onOpen = vi.fn();
-    render(<RelationsPanel rels={[{ type: "realized_from", neta: mk("mel1", "melody", "吹いたメロ") }]} onOpenNeta={onOpen} />);
+    render(<RelationsPanel rels={[{ type: "realized_from", neta: mk("mel1", "melody", "作ったメロ") }]} onOpenNeta={onOpen} />);
     const btn = screen.getByLabelText("relation-realized_from-mel1");
-    expect(btn).toHaveTextContent("→ 吹いたメロ");
+    expect(btn).toHaveTextContent("→ 作ったメロ");
     await userEvent.click(btn);
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "mel1" }));
   });
