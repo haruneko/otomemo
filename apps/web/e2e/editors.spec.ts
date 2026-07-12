@@ -16,7 +16,8 @@ test.describe("editors persist (U6/U7)", () => {
       await page.getByLabel("edit-neta").getByRole("button", { name: "＋コード" }).click();
       await page.getByLabel("root-0").selectOption("9"); // A
       await page.getByLabel("triad-0").selectOption("m"); // minor（quality選択→decomposed 三和音に変更済）
-      await page.getByRole("button", { name: "保存" }).click();
+      // 自動保存化(26f465f)で明示「保存」撤去＝closeで未保存ぶんをフラッシュしてから閉じる。
+      await page.getByLabel("edit-neta").getByLabel("close", { exact: true }).click();
       await expect(page.getByLabel("edit-neta")).toHaveCount(0, { timeout: 8000 });
       const after = await (await request.get(`/api/neta/${ch.id}`)).json();
       expect(after.content.chords.length).toBe(1);
@@ -40,7 +41,8 @@ test.describe("editors persist (U6/U7)", () => {
       await roll.click({ position: { x: 40, y: 80 } });
       await roll.click({ position: { x: 100, y: 120 } });
       await expect(page.locator('[aria-label^="note-"]').first()).toBeVisible();
-      await page.getByRole("button", { name: "保存" }).click();
+      // 自動保存化＝closeでフラッシュしてから閉じる（ノートが永続）。
+      await page.getByLabel("edit-neta").getByLabel("close", { exact: true }).click();
       await expect(page.getByLabel("edit-neta")).toHaveCount(0, { timeout: 8000 });
       const after = await (await request.get(`/api/neta/${mel.id}`)).json();
       expect(after.content.notes.length).toBeGreaterThan(0);
@@ -60,7 +62,8 @@ test.describe("editors persist (U6/U7)", () => {
       await openNeta(page, `${s}-rh`);
       await page.getByLabel("hit-Kick-0").click();
       await page.getByLabel("hit-Kick-4").click();
-      await page.getByRole("button", { name: "保存" }).click();
+      // 自動保存化＝closeでフラッシュしてから閉じる（ヒットが永続）。
+      await page.getByLabel("edit-neta").getByLabel("close", { exact: true }).click();
       await expect(page.getByLabel("edit-neta")).toHaveCount(0, { timeout: 8000 });
       const after = await (await request.get(`/api/neta/${rh.id}`)).json();
       expect(after.content.rhythm.lanes[0].hits).toEqual([0, 4]);

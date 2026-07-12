@@ -39,8 +39,10 @@ test.describe("neta CRUD (desktop)", () => {
     await expect(page.getByLabel("edit-neta")).toBeVisible();
     await page.getByLabel("title").fill(created);
     await page.getByLabel("text").fill("歌詞本文");
-    await page.getByLabel("edit-neta").locator('button.primary:has-text("保存")').click();
-    await page.waitForTimeout(600);
+    // 自動保存化(26f465f)で明示「保存」ボタン撤去＝値確定→closeで自動保存フラッシュ＆一覧へ。
+    await expect(page.getByLabel("title")).toHaveValue(created); // 入力確定を担保（フレーク耐性）
+    await page.getByLabel("edit-neta").getByLabel("close", { exact: true }).click();
+    await page.waitForTimeout(700); // デバウンス(600ms)＋PATCH反映待ち
 
     // --- Read: 一覧に出る（card body に created テキスト） ---
     const card = page
@@ -72,7 +74,9 @@ test.describe("neta CRUD (desktop)", () => {
     // lyric は本文(text)編集。タイトルも付ける。
     await page.getByLabel("title").fill(updated);
     await page.getByLabel("text").fill(`${created}\n本文を更新した`);
-    await editor.locator('button.primary:has-text("保存")').click();
+    // 自動保存化＝値確定→closeでフラッシュ（更新が永続し一覧へ反映）。
+    await expect(page.getByLabel("title")).toHaveValue(updated);
+    await editor.getByLabel("close", { exact: true }).click();
     await page.waitForTimeout(800);
 
     // タイトルを付けたのでカードラベルは title 優先 = updated
@@ -96,7 +100,8 @@ test.describe("neta CRUD (desktop)", () => {
         { timeout: 8000 },
       )
       .catch(() => null);
-    await page.getByLabel("edit-neta").locator('button.danger:has-text("削除")').click();
+    // 削除は明示テキストボタン→ゴミ箱アイコン化(EditorHeader・自動保存化リファクタ)＝aria-labelで指す。
+    await page.getByLabel("edit-neta").getByLabel("削除", { exact: true }).click();
     const resp = await delResp;
 
     await page.screenshot({ path: `${SHOT}-delete-desktop.png`, fullPage: true });
@@ -144,8 +149,10 @@ test.describe("neta CRUD (desktop)", () => {
     await page.getByRole("button", { name: "＋メロ", exact: true }).click();
     await expect(page.getByLabel("edit-neta")).toBeVisible();
     await page.getByLabel("title").fill(title);
-    await page.getByLabel("edit-neta").locator('button.primary:has-text("保存")').click();
-    await page.waitForTimeout(400);
+    // 自動保存化＝値確定→closeでフラッシュ＆一覧へ。
+    await expect(page.getByLabel("title")).toHaveValue(title);
+    await page.getByLabel("edit-neta").getByLabel("close", { exact: true }).click();
+    await page.waitForTimeout(500);
 
     const card = page
       .locator('article[aria-label="neta-card"]')
@@ -167,8 +174,9 @@ test.describe("neta CRUD (desktop)", () => {
     await expect(page.locator('[aria-label^="note-"]').first()).toBeVisible();
     await page.screenshot({ path: `${SHOT}-pianoroll-desktop.png`, fullPage: true });
 
-    await page.getByLabel("edit-neta").locator('button.primary:has-text("保存")').click();
-    await page.waitForTimeout(600);
+    // 自動保存化＝ノート追加で dirty→closeでフラッシュ（永続）。
+    await page.getByLabel("edit-neta").getByLabel("close", { exact: true }).click();
+    await page.waitForTimeout(700);
 
     // 後片付け：API で掃除（content-type なし＝200）。
     const list = await (await request.get(`/api/neta?q=${encodeURIComponent(title)}`)).json();
@@ -192,8 +200,10 @@ test.describe("neta CRUD (mobile)", () => {
     await page.getByRole("button", { name: "＋歌詞", exact: true }).click();
     await expect(page.getByLabel("edit-neta")).toBeVisible();
     await page.getByLabel("title").fill(created);
-    await page.getByLabel("edit-neta").locator('button.primary:has-text("保存")').click();
-    await page.waitForTimeout(400);
+    // 自動保存化＝値確定→closeで全画面エディタが閉じフラッシュ＆一覧へ。
+    await expect(page.getByLabel("title")).toHaveValue(created);
+    await page.getByLabel("edit-neta").getByLabel("close", { exact: true }).click();
+    await page.waitForTimeout(500);
 
     const card = page
       .locator('article[aria-label="neta-card"]')
@@ -221,7 +231,8 @@ test.describe("neta CRUD (mobile)", () => {
         { timeout: 8000 },
       )
       .catch(() => null);
-    await page.getByLabel("edit-neta").locator('button.danger:has-text("削除")').click();
+    // 削除は明示テキストボタン→ゴミ箱アイコン化(EditorHeader・自動保存化リファクタ)＝aria-labelで指す。
+    await page.getByLabel("edit-neta").getByLabel("削除", { exact: true }).click();
     const resp = await delResp;
     expect(resp?.status(), "モバイルでも UI 削除は 200").toBe(200);
     await expect(page.getByLabel("edit-neta")).toHaveCount(0);

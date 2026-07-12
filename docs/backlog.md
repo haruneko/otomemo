@@ -202,6 +202,13 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - ✅**済 P2（2026-07-09・前向き防止）**：今後の study/audio_analyze は**音源を asset(重複排除)へ保存＋処理後に params の audio_b64 を strip**＝done後に base64 が残らない（再蓄積の恒久防止）。共有ヘルパ `audio-asset.ts`（`saveAudioAsset`＝content-hash dedup／`assetsDir` SSOT化）・`core.stripJobAudio`。reaper が結果の `audio_asset_id`／`audioAssets[]` を生成ネタへ `role=source` リンク。design #16 に契約明記。ユニット6本＋実機e2e（fail時も strip＋asset保存を確認・後始末済）。
 - 潜在（現規模で低優先）＝listNeta/getComposition の tags N+1（1425行で5.6ms＝無害・万件規模で `IN(...)`一括へ）。
 
+## e2e spec の陳腐化（2026-07-12・大手術後の一括e2e検証）＝✅**全解消済**
+大手術（メロ生成V2一本化＋SectionEditor分割）後の全e2e通しで13赤。**全て大手術と無関係**（UI崩れ・機能退行はゼロと確認）＝過去の意図的UX変更/環境にspecが未追従だっただけ。**全13を現行UXへfaithfulに追従して解消**（プロダクトコード無改変・specとconfigのみ／最終通し 28 passed・2 flaky[並列DB競合でリトライ自己修復]・0 failed）：
+- ✅**保存ボタン系 7件**（crud×3・editors×3・section-save×1）＝自動保存化(26f465f)で明示「保存」撤去済→「編集で値確定→`getByLabel("close")`（EditorHeaderの戻る＝`useNetaEditor.close()`が未保存をflush）で閉じ一覧へ」に書換。crud の削除ボタンも同リファクタでアイコン化(`aria-label="削除"`)＝追随。
+- ✅**midi.spec 1件**＝MIDI書き出しが単体編集→Section「いじる▾」へ移設(2026-07-04)→section作成＋メロ配置→`getByLabel("tools")`→`export-midi`/`export-midi-split` でDL検証。
+- ✅**search/section-dnd セレクタ腐敗 2件**＝toggle-filters廃止(常時表示)へ追従・kind-filter群→個別ボタンのdisabled判定／`@12` を `block-` に限定（remove-…@12 との二重マッチ是正）。
+- ✅**chat-stream 3件**＝**環境要因ではなく既定configの設定漏れ**。この spec は専用config(playwright.chat.config.ts・フェイクclaude・`pnpm test:e2e:chat`)専用なのに、既定configに testIgnore が無く実claude/実MCP背後で走って必ず赤→既定configに `testIgnore:/chat-stream\.spec\.ts$/` を追加して除外。
+
 ## データ収集（要ユーザー関与）
 - メロコーパスのデータ収集（Hooktheory 型・Task #59）。
 - 確認リストの維持（自走中の不明点・Task #10）。

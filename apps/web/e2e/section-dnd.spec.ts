@@ -51,7 +51,8 @@ test("drag a melody card onto a melody lane places it (desktop)", async ({ page,
     await page.mouse.up();
 
     // pointerWithin でカーソル直下のセル＝bar3(position 12)に正確に配置される
-    await expect(page.locator('[aria-label$="@12"]')).toHaveCount(1, { timeout: 4000 });
+    // block- に限定（同 position の remove-…@12 ボタンにもマッチしていた＝count 2 で誤検知していたのを是正）
+    await expect(page.locator('[aria-label^="block-"][aria-label$="@12"]')).toHaveCount(1, { timeout: 4000 });
   } finally {
     await request.delete(`/api/neta/${sec.id}`);
     await request.delete(`/api/neta/${mel.id}`);

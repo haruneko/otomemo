@@ -40,12 +40,13 @@ test.describe("search & filters (U4/U20)", () => {
     });
     try {
       await page.goto("/");
-      await page.getByLabel("toggle-filters").click(); // 種別/mood は既定折りたたみ→展開
-      // 検索文字入力で kind-filter は無効化（検索中は種類フィルタ無効の連動）
+      // フィルタ（種別/mood）は常時表示化済＝toggle-filters は廃止（旧: 折りたたみ展開）。
+      // 検索文字入力で種別フィルタボタンは無効化（検索中は種類フィルタ無効の連動・App.tsx kind-filter-${k} の disabled）。
+      // 旧: group全体 getByLabel("kind-filter") を disabled 判定していたが group(div) に disabled 状態は無い＝個別ボタンで判定。
       await page.getByLabel("search").fill("夜");
-      await expect(page.getByLabel("kind-filter")).toBeDisabled();
+      await expect(page.getByLabel("kind-filter-melody")).toBeDisabled();
       await page.getByLabel("search").fill("");
-      await expect(page.getByLabel("kind-filter")).toBeEnabled();
+      await expect(page.getByLabel("kind-filter-melody")).toBeEnabled();
       // mood-filter で自分のネタが残る
       await page.getByLabel("mood-filter").fill(moodVal);
       await expect(page.getByText(`${s}-m`, { exact: false }).first()).toBeVisible({

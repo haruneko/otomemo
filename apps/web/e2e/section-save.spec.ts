@@ -19,8 +19,9 @@ test("section save: key/tempo/meter roundtrip persists (U9)", async ({ page, req
     await tempo.fill("96");
     await page.getByLabel("meter").selectOption("6/8");
     await page.getByLabel("key").selectOption("5");
-    await page.getByRole("button", { name: "保存" }).click();
-    await expect(page.getByLabel("edit-neta")).toHaveCount(0, { timeout: 8000 }); // 保存で閉じる
+    // 自動保存化(26f465f)で明示「保存」撤去＝closeで未保存メタをフラッシュしてから閉じる。
+    await page.getByLabel("edit-neta").getByLabel("close", { exact: true }).click();
+    await expect(page.getByLabel("edit-neta")).toHaveCount(0, { timeout: 8000 }); // closeで一覧へ
     const after = await (await request.get(`/api/neta/${sec.id}`)).json();
     expect(after.tempo).toBe(96);
     expect(after.meter).toBe("6/8");
