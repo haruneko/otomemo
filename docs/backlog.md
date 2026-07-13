@@ -3,7 +3,7 @@
 スペック層（requirements/architecture/design）にも Task 機能にも載せきれない「いつかやる／保留」をここに貯める。
 着手したら Task 化して、ここからは消すか「→ #NN」と印を付ける。最終更新を都度書く。
 
-最終更新: 2026-07-13（鮮度棚卸し＝S3a/#1/#2の消し込み・S6 D0〜D6実装済へ更新・onOpenNeta潜り導線を送りに追記）
+最終更新: 2026-07-13（鮮度棚卸し2＝P3小物#1-4＋潜り導線を13765b0で消し込み・6/4負dur bugはTask#17済へ是正・残P3=memo化/chordChips→sctxのみ）
 
 ## 骨格層（design #20）実装後の負債・残り（2026-07-11・S1/S2完了時点の棚卸し→同日Fable調査でTask #1-#11に組み直し）
 S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。~~残＝S3群(→#3-#6)/S4リズムパーツ(→#7-#8)/S5歌詞(→#9)~~ → **S3群✅・S4✅(#7=88d3973/#8=a3559e0「S4完了」)済＝残は実質S5歌詞(#9)のみ**（2026-07-13棚卸し）。以下は実装中に確定した負債：
@@ -19,7 +19,7 @@ S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。~~残＝S3群
 - ✅**メロ生成エンジンの大物負債（骨格層の動機そのもの）＝#11 経路撤去＋ノブ再編＝完了(2026-07-12)** → **~~#10（死にプロト＋Note型）~~✅・~~#11（J1〜J4）~~✅**：genMelody(generate.ts)の4経路early-return並存（補完/V2/motifModel/旧経路）を **①partial補完→②useV2 V2→④フォールバック=V2 の3経路**へ整理（③motifModel撤去）。倚音/掛留の**三重実装（applyExpression④／V2 melodyCells／genMotifMelody③）は ④撤去＋③撤去で V2 の表情パス一本に一元化＝完了**。
   - ✅**J1 呼出グラフ全数調査**(research doc 2026-07-11)・✅**J2a 3/4・6/4**(#13)・✅**J2b chordless**(#14)・✅**J2c fit useV2化**(#12)・✅**J3 旧経路④撤去＝V2一本化**(#15・2026-07-11・api874緑)：④ヘルパ~250行＋stepWeights系(learnStepWeights/learnStepWeightsFromLibrary/cScaleArr/MOVES/DEFAULT_STEP_WEIGHTS)を撤去、V2非対応拍子(2/4・5/4・7/8等)は明示エラー。design【J3】参照。
   - ✅**J4 ③motifModel(genMotifMelody)撤去＋appoggiatura ノブ削除**(#16・2026-07-12・api874緑)：generate.ts ③ブロック＋melodyCells.ts genMotifMelody関数(~95行)＋snapToChordTones の appo分岐＋appoggiatura ノブを撤去。③の受け皿＝V2フォールバック(motifModel消費・corpusModel活きる)＝useV2:true と bit 等価(invariants J4テストで実証)。共有ヘルパ(snapToChordTones本体/genSkeleton v1/genContour/sampleBarRhythm)は汎用＋単体テスト持ちで残置。design【J4】参照。
-- **6/4(bpb=6)メロ V2 の負dur bug**（2026-07-11 J3で発見）：genMotifMelodyV2 が 6/4 で末尾群に負dur音を出す（例 start=10/dur=-2・bars/pickup 非依存＝J2a #13 の3+3群マッピング由来）。3/4・4/4・6/8は健全。V2内部のbitを変えるので6/4 golden更新を伴う別TDDで是正（generate-invariants の対応拍子スイープは現状6/4除外）。
+- ~~**6/4(bpb=6)メロ V2 の負dur bug**（2026-07-11 J3で発見）~~ **→ ✅済(2026-07-12・Task#17)**：render/renderPreserve のブロック末フォールバックが `*4` ハードコード（barLen非依存）ゆえ 6/4(barLen=6) で末端が実ブロック末より手前になり負gap→負dur（例 start=10/dur=-2）になっていた。`*4`→`*barLen` で根治（melodyCells.ts L639/L724・barLen=4 は同値=bit一致）。generate-invariants は 6/4 を OK_METERS＋span スイープに復帰済＝`dur>0` を全 mood×bars×seed で担保（2026-07-13 確認）。
   - ✅**#10 死にプロト撤去**：melodyCells.ts 冒頭の joint cell 遺構（parseCell/cellToNotes/MelodyCellModel/learnMelodyCells/sampleCell/genCells/realizeMelody＝テストからのみ参照）を撤去。makeRng/weightedPick は sampleBarRhythm が使うので残置。テスト14件（melody-cells.test.ts の対応describe）も削除。
   - ✅**#10 Note型一元化**：基本形 `Note={pitch,start,dur,vel?,syllable?}` を @cm/music-core に新設し SSOT 化。api の voiceLeading/phrase/voiceLeadingReport/evalMelody/melodyCells が import、chordDetect は `Note&{channel?}` 交差、web music.ts の Note は `extends CoreNote` へ。**派生は無理に統一せず残置**＝corpusBias/fit（start?/dur? 任意・fit は harmonize が import）。匿名インライン（generate.ts 等）は挙動不変優先で未着手＝#11 のノブ再編時に。
 - **音価(agogic)**：上の「音価バリエーション不足」項の(a)骨格に長音アンカー案は、骨格層ではdurを持たない設計（分割方式）にしたため**リズムパーツ層（S4）の長音パーツ**で実現する方針に変わった（design #20）。
@@ -35,7 +35,7 @@ S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。~~残＝S3群
   - ~~**#8b SF2フォールバック時レンズゲート素通し**~~ **→ 対応せず（オーナー裁定2026-07-13）**：SF2未ロード時の簡易シンセ再生で聴き方2択が両方鳴る件。**基本 SF2 が正の機能＝フォールバックは鳴らなくてよい**。修正しない。
   - ~~**sectionChords/Bass の位置=小節扱い(×BPB)＝#6**~~ **→ ✅済(2026-07-13・c.position を拍で統一・×BPB撤去・earChords と一致)**：非0位置にコード/ベースを置くと gen/fit へ4倍ずれた和声文脈が渡っていた既存潜在バグ（D0以前35fbacc由来）。オーナー承認（踏んでるデータがあっても直す）で是正。生成出力は非0位置配置のケースで変わる（正しい方へ）。
   - ~~**ループ再生中の骨格編集(打点/ドラッグ)が音に入らない＝#7**~~ **→ ✅済(2026-07-13・#7-C reschedule-in-place)**：`reloop` を「その場組み直し(transport.cancel(0)→再スケジュール・stop/startしない＝頭に戻らず途切れず)」化＋骨格編集を400ms debounce で反映。ステージ切替/コード採用/候補試聴も seamless に。begin/一括スケジュール経路・他画面は不変。**滑らかさ/間合いは実機耳確認待ち**。
-  - **P3小物**：接点先頭バッジがガター「対位」と重なり判読難／候補トレイ足「閉じる」の右端見切れ／候補にAm重複(substitute_chordのばらつき)／SkeletonDesk毎レンダ再計算のmemo化(ドラッグjank候補・現状データ量では実害薄)／chordChipsのlaneChildren再実装をsctx受けへ／保存失敗の無音catch(ネット断で編集消失の無通知)。
+  - ~~**P3小物**：接点先頭バッジのガター重なり／候補トレイ足「閉じる」右端見切れ／候補Am重複／保存失敗の無音catch~~ **→ ✅済(2026-07-13・13765b0)**：P3-1 バッジ左寄せ・P3-2 desk-cand-foot flex-wrap・P3-3 `dedupeChordSubs`(api無改変)・P3-4 saveErr表示＋タップ再試行。**残**：~~chordChips の laneChildren 再実装を sctx 受けへ~~ **→ ✅済(2026-07-13)**：deskChords.chordChips のインライン `rowOf`＋`kinds.includes` フィルタを sctx 正準の `inLane`/`rowOf` へ委譲（同一述語＝earChordsRel とバイト等価・deskChords.test 10件緑）。**SkeletonDesk 毎レンダ再計算の memo化＝据え置き**：backlog 自身が「実害薄・未確認 jank 候補」。値（chips/effChords/secCtx）は useMelodyGen へ供給されるため投機的 useMemo は stale-closure リスクの方が大きい。**実測で jank が出てから**着手（「なぜ今」を問う規律）。
 - **運用**：本番webはdist配信＝**コミットしてもUIは変わらない**。機能追加後は必ず `pnpm --filter web build`（2026-07-11に「ボタンがない」事故）。apiはtsx watchで自動反映。
 - **耳確認未消化**：フィール層（swing/humanize非破壊化・7/10-11分）と骨格S2の較正（強拍不協和の注意色の鳴り具合・導出→明示境界の手触り）。
 

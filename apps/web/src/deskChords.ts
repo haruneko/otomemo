@@ -7,6 +7,7 @@
 //   ③ adoptedChordContent ＝ 採用時に出所ネタへ書く updateNeta payload（実調 sub → 素材調へ un-shift・破壊上書きしない）。
 //   ④ chordName ＝ チップ表示名（root+quality、分数は "/bass"）。
 import { chordsOf, harmonyPlacementShift, pitchName, type ChordEntry } from "./music";
+import { inLane, rowOf } from "./sectionContext";
 import type { Child, Lane } from "./components/sectionLanes";
 
 const norm = (x: number): number => ((Math.round(x) % 12) + 12) % 12;
@@ -36,10 +37,10 @@ export function chordChips(
 ): ChordChip[] {
   const chordLane = LANES.find((l) => l.key === "chord");
   if (!chordLane) return [];
-  const kinds = chordLane.kinds as readonly string[];
-  const rowOf = (c: Child): number => (c.ord === 1 ? 1 : 0);
+  // レーン所属判定は sctx の正準 inLane/rowOf に委譲（旧: 同ロジックを逐語再実装）。
+  // sctx.laneChildren(ctx, chordLane) と同一述語＝earChordsRel とのバイト等価は保存。
   const laneChildren = children.filter(
-    (c) => kinds.includes(c.node.neta.kind) && (chordLane.row === undefined || rowOf(c) === chordLane.row),
+    (c) => inLane(chordLane, c.node.neta.kind) && (chordLane.row === undefined || rowOf(c) === chordLane.row),
   );
   const out: ChordChip[] = [];
   for (const c of laneChildren) {
