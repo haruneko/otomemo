@@ -114,10 +114,11 @@ export function lensGateTargets(lensesPresent: string[], activeLens?: string): R
   return out;
 }
 
-// レンズ別 sampler/kit のキャッシュ・ルックアップキー。lens 未指定は従来キー（part 文字列 / drumKey 数値）
-// をそのまま返す＝レガシー経路の Map 構造・型・既存 playEvent テスト（数値キー）を割らない（bit一致）。
-const melodicMapKey = (lens: string | undefined, part: MixPart): string =>
-  lens == null ? part : `${lens}:${part}`;
+// レンズ別 sampler/kit のルックアップキー。**program も含める**＝同じ part に音色違いの楽器が複数あっても
+// （例：コード楽器×2 が別 GM program）各音を自分の program の sampler へルーティングする（2026-07-13 修正：
+// 従来は (lens,part) だけ＝1パート1音色前提で、2つ目のコード楽器が1つ目の音色で鳴っていた）。
+export const melodicMapKey = (lens: string | undefined, part: MixPart, program: number): string =>
+  `${lens ?? ""}:${part}:${program}`;
 const drumMapKey = (lens: string | undefined, kit: number | undefined, pitch: number): number | string => {
   const dk = drumKey(kit ?? 0, pitch);
   return lens == null ? dk : `${lens}:${dk}`;
@@ -274,7 +275,7 @@ export function playEvent(
     }
   } else if (sf) {
     // #section音色/ミキサー: この音の (lens,)パートに対応する旋律 sampler（無ければ既定 sf=melody）
-    const inst = melodicByPart?.get(melodicMapKey(ev.lens, ev.part ?? "melody")) ?? sf;
+    const inst = melodicByPart?.get(melodicMapKey(ev.lens, ev.part ?? "melody", ev.program ?? defaultProg)) ?? sf;
     dbg("note pitch", ev.pitch, "via sf2-melodic part", ev.part ?? "melody", "lens", ev.lens);
     inst.start({ note: ev.pitch, time, duration: ev.durSec, velocity: velToMidi(ev.vel) });
   } else {
@@ -401,8 +402,9 @@ async function prepareMelodicSamplers(
   for (const n of notes) {
     if (n.drum) continue;
     const part = n.part ?? "melody";
-    const key = melodicMapKey(n.lens, part);
-    if (!combos.has(key)) combos.set(key, { part, lens: n.lens, prog: n.program ?? defaultProg });
+    const prog = n.program ?? defaultProg;
+    const key = melodicMapKey(n.lens, part, prog); // program 込み＝同 part の音色違い（コード楽器×2 等）を別 sampler に分ける
+    if (!combos.has(key)) combos.set(key, { part, lens: n.lens, prog });
   }
   for (const [key, { part, lens, prog }] of combos) {
     // 従来経路：lens 無し・既定 melody は sfSampler（既に melody gain 接続済）を再利用。

@@ -13,6 +13,7 @@ import {
   presetName,
   lensesOf,
   lensGateTargets,
+  melodicMapKey,
 } from "../src/audio";
 
 describe("drumKey — (キット, GM番号) の合成キー（ビットシフト）", () => {
@@ -30,6 +31,18 @@ describe("drumKey — (キット, GM番号) の合成キー（ビットシフト
     const k = drumKey(3, 46);
     expect(k >> 8).toBe(3);
     expect(k & 0xff).toBe(46);
+  });
+});
+
+describe("melodicMapKey — 音色(program)込みルーティングキー（コード楽器×2 のバグ修正・2026-07-13）", () => {
+  it("同じ part(chord) でも program 違いは別キー＝別 sampler へ（2つ目の音色が1つ目に潰れない）", () => {
+    expect(melodicMapKey(undefined, "chord", 0)).not.toBe(melodicMapKey(undefined, "chord", 46));
+  });
+  it("同 part・同 program は同キー（安定ルーティング・毎音同じ sampler）", () => {
+    expect(melodicMapKey(undefined, "chord", 46)).toBe(melodicMapKey(undefined, "chord", 46));
+  });
+  it("lens 違いは別キー（レンズ別ゲート）", () => {
+    expect(melodicMapKey("A", "chord", 0)).not.toBe(melodicMapKey(undefined, "chord", 0));
   });
 });
 
