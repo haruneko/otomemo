@@ -107,55 +107,67 @@ export function ChordPatternEditor({
           </div>
         </div>
         <div className="cp-vrow">
-          <span className="cp-vlbl">トップ</span>
-          <div className="cp-top" aria-label="top">
-            <button type="button" aria-label="top-dec" onClick={() => setV({ top: Math.max(48, top - 1) })}>−</button>
-            <span aria-label="top-note">{pitchName(top)}</span>
-            <button type="button" aria-label="top-inc" onClick={() => setV({ top: Math.min(88, top + 1) })}>＋</button>
-          </div>
-          <span className="cp-vlbl">広がり</span>
-          <div className="seg seg-chord" role="group" aria-label="spread">
-            <button type="button" className={v.openClose === "close" ? "on" : ""} onClick={() => setV({ openClose: "close" })}>close</button>
-            <button type="button" className={v.openClose === "open" ? "on" : ""} onClick={() => setV({ openClose: "open" })}>open</button>
-          </div>
+          <span className="cp-unit">
+            <span className="cp-vlbl">トップ</span>
+            <div className="cp-top" aria-label="top">
+              <button type="button" aria-label="top-dec" onClick={() => setV({ top: Math.max(48, top - 1) })}>−</button>
+              <span aria-label="top-note">{pitchName(top)}</span>
+              <button type="button" aria-label="top-inc" onClick={() => setV({ top: Math.min(88, top + 1) })}>＋</button>
+            </div>
+          </span>
+          <span className="cp-unit">
+            <span className="cp-vlbl">広がり</span>
+            <div className="seg seg-chord" role="group" aria-label="spread">
+              <button type="button" className={v.openClose === "close" ? "on" : ""} onClick={() => setV({ openClose: "close" })}>close</button>
+              <button type="button" className={v.openClose === "open" ? "on" : ""} onClick={() => setV({ openClose: "open" })}>open</button>
+            </div>
+          </span>
         </div>
         <div className="cp-vrow">
           {isArp ? (
             <>
-              <span className="cp-vlbl">向き</span>
-              <div className="seg seg-chord" role="group" aria-label="arp-dir">
-                <button type="button" aria-label="arp-up" className={(v.arpDir ?? "up") === "up" ? "on" : ""} onClick={() => setV({ arpDir: "up" })}>↑</button>
-                <button type="button" aria-label="arp-down" className={v.arpDir === "down" ? "on" : ""} onClick={() => setV({ arpDir: "down" })}>↓</button>
-                <button type="button" aria-label="arp-updown" className={v.arpDir === "updown" ? "on" : ""} onClick={() => setV({ arpDir: "updown" })}>↑↓</button>
-              </div>
-              <span className="cp-vlbl">駆け上がり幅</span>
-              <div className="cp-top" aria-label="arp-octaves-ctrl">
-                <button type="button" aria-label="arp-oct-dec" onClick={() => setV({ arpOctaves: Math.max(1, (v.arpOctaves ?? 1) - 1) })}>−</button>
-                <span aria-label="arp-octaves">{v.arpOctaves ?? 1}oct</span>
-                <button type="button" aria-label="arp-oct-inc" onClick={() => setV({ arpOctaves: Math.min(4, (v.arpOctaves ?? 1) + 1) })}>＋</button>
-              </div>
-              <span className="cp-vlbl">区切り</span>
-              <select aria-label="arp-reset" value={v.arpReset ?? 0} onChange={(e) => setV({ arpReset: Number(e.target.value) || undefined })}>
-                <option value={0}>なし（連続）</option>
-                <option value={0.5}>0.5拍ごと</option>
-                <option value={1}>1拍ごと</option>
-                <option value={1.5}>1.5拍ごと</option>
-                <option value={2}>2拍ごと</option>
-                <option value={3}>3拍ごと</option>
-                <option value={4}>1小節ごと</option>
-              </select>
+              <span className="cp-unit">
+                <span className="cp-vlbl">向き</span>
+                <div className="seg seg-chord" role="group" aria-label="arp-dir">
+                  <button type="button" aria-label="arp-up" className={(v.arpDir ?? "up") === "up" ? "on" : ""} onClick={() => setV({ arpDir: "up" })}>↑</button>
+                  <button type="button" aria-label="arp-down" className={v.arpDir === "down" ? "on" : ""} onClick={() => setV({ arpDir: "down" })}>↓</button>
+                  <button type="button" aria-label="arp-updown" className={v.arpDir === "updown" ? "on" : ""} onClick={() => setV({ arpDir: "updown" })}>↑↓</button>
+                </div>
+              </span>
+              <span className="cp-unit">
+                <span className="cp-vlbl">駆け上がり幅</span>
+                <div className="cp-top" aria-label="arp-octaves-ctrl">
+                  <button type="button" aria-label="arp-oct-dec" onClick={() => setV({ arpOctaves: Math.max(1, (v.arpOctaves ?? 1) - 1) })}>−</button>
+                  <span aria-label="arp-octaves">{v.arpOctaves ?? 1}oct</span>
+                  <button type="button" aria-label="arp-oct-inc" onClick={() => setV({ arpOctaves: Math.min(4, (v.arpOctaves ?? 1) + 1) })}>＋</button>
+                </div>
+              </span>
+              <span className="cp-unit">
+                <span className="cp-vlbl">区切り</span>
+                <select className="cp-select" aria-label="arp-reset" value={v.arpReset ?? 0} onChange={(e) => setV({ arpReset: Number(e.target.value) || undefined })}>
+                  <option value={0}>なし（連続）</option>
+                  <option value={0.5}>0.5拍ごと</option>
+                  <option value={1}>1拍ごと</option>
+                  <option value={1.5}>1.5拍ごと</option>
+                  <option value={2}>2拍ごと</option>
+                  <option value={3}>3拍ごと</option>
+                  <option value={4}>1小節ごと</option>
+                </select>
+              </span>
             </>
           ) : (
             <button type="button" className={"cp-chk" + (v.powerChord ? " on" : "")} aria-label="power-chord" aria-pressed={!!v.powerChord} onClick={() => setV({ powerChord: !v.powerChord })}>
               パワーコード（3rd抜き）
             </button>
           )}
-          <span className="cp-vlbl">高さ</span>
-          <div className="cp-top" aria-label="octave-ctrl">
-            <button type="button" aria-label="oct-dec" onClick={() => setV({ octave: Math.max(-1, v.octave - 1) })}>−</button>
-            <span aria-label="octave">{v.octave}</span>
-            <button type="button" aria-label="oct-inc" onClick={() => setV({ octave: Math.min(2, v.octave + 1) })}>＋</button>
-          </div>
+          <span className="cp-unit">
+            <span className="cp-vlbl">高さ</span>
+            <div className="cp-top" aria-label="octave-ctrl">
+              <button type="button" aria-label="oct-dec" onClick={() => setV({ octave: Math.max(-1, v.octave - 1) })}>−</button>
+              <span aria-label="octave">{v.octave}</span>
+              <button type="button" aria-label="oct-inc" onClick={() => setV({ octave: Math.min(2, v.octave + 1) })}>＋</button>
+            </div>
+          </span>
         </div>
         {pattern.hits.length > 0 && (
           <div className="chord-roll" aria-label="voicing-roll">

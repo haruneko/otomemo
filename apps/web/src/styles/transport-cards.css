@@ -187,7 +187,8 @@
 .lane-label {
   flex: 0 0 44px;
   width: 44px;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
+  line-height: 1.05; /* 2行折返し時も詰めてレーンの縦リズムを乱さない（幅はタイムラインを食わないよう据え置き） */
   color: var(--muted);
   display: flex;
   align-items: center;
@@ -1084,9 +1085,13 @@
 .cp-when-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 /* ②「響き」＝音の作り込みを1枠に集約・静かに（青の壁を解体）。 */
 .cp-voicing { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #191c21; }
-.cp-vrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }
+.cp-vrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 9px; }
 .cp-vrow:last-child { margin-bottom: 0; }
+/* ラベル＋操作子を1ユニットに束ね、折り返しはユニット間だけ＝モバイルで「駆け上がり幅」ラベルと ±oct が分離しない。 */
+.cp-unit { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .cp-vlbl { font-size: 0.75rem; color: var(--muted); }
+/* 響きゾーンの select（区切り等）＝周囲のピル/ステッパーに見た目を揃える（素の select 見た目の浮きを解消）。 */
+.cp-select { border: 1px solid var(--line); border-radius: 8px; background: #22252b; color: var(--fg); font-size: 0.82rem; padding: 5px 6px; height: 32px; cursor: pointer; }
 /* セグメント（二択/多択）：選択だけ色・他はグレー＝全部青を避ける。既定=accent／chord系=種別色。 */
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { background: transparent; border: 0; color: var(--muted); padding: 6px 12px; font-size: 0.85rem; cursor: pointer; }

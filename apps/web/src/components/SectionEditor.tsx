@@ -95,8 +95,10 @@ export function SectionEditor({
   const skelEar = (): Note[] => sctx.skelEar(secCtx);
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
-  const contentEnd = children.length ? Math.max(0, ...children.map((c) => c.position + childDur(c))) : 0;
-  const BARS = Math.min(MAX_BARS, Math.max(secBars, Math.ceil(contentEnd / BPB - 1e-6)));
+  // 子の実尺の最大。childDur が壊れた content で NaN を返しても画面に「NaN」を出さない＝有限値のみで算出（防御）。
+  const ends = children.map((c) => c.position + childDur(c)).filter((x) => Number.isFinite(x));
+  const contentEnd = ends.length ? Math.max(0, ...ends) : 0;
+  const BARS = Math.min(MAX_BARS, Math.max(secBars, Math.ceil(contentEnd / BPB - 1e-6))) || Math.max(MIN_BARS, secBars);
   const TOTAL = BARS * BPB;
   // 小節が多い時だけトラックに最小幅を与えて横スクロール（セルが潰れないように・8小節までは従来どおり伸縮）。
   const trackStyle = BARS > 10 ? { minWidth: `${BARS * 34}px` } : undefined;
@@ -365,7 +367,7 @@ export function SectionEditor({
                             <button key={p.name} type="button" className={"chip" + (gen.preset === p.name ? " on" : "")} aria-label={`preset-${p.name}`} aria-pressed={gen.preset === p.name} onClick={() => gen.applyPreset(p.name, p.v)}>{p.label}</button>
                           ))}
                         </div>
-                        <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（🔒は固定）" onClick={gen.rollDice}>🎲</button>
+                        <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（ロックは固定）" onClick={gen.rollDice}><Icon name="dice" size={18} /></button>
                       </div>
                       <button
                         type="button"
@@ -518,7 +520,7 @@ export function SectionEditor({
           </div>
           <div className="cand-tray-foot">
             <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
-              {gen.genBusy ? "…" : "🎲 もっと"}
+              {gen.genBusy ? "…" : <><Icon name="dice" size={14} /> もっと</>}
             </button>
             <button type="button" className="tb-tool" aria-label="close-candidate" onClick={gen.closeCandidate}>閉じる</button>
           </div>

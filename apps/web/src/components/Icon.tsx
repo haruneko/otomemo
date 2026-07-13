@@ -158,6 +158,31 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" />
         </svg>
       );
+    case "dice": // 🎲 ノブをランダムに振る（tofu回避・SVG化）
+      return (
+        <svg {...s}>
+          <rect {...st} x="4" y="4" width="16" height="16" rx="3" />
+          <circle cx="9" cy="9" r="1.4" fill="currentColor" />
+          <circle cx="15" cy="9" r="1.4" fill="currentColor" />
+          <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+          <circle cx="9" cy="15" r="1.4" fill="currentColor" />
+          <circle cx="15" cy="15" r="1.4" fill="currentColor" />
+        </svg>
+      );
+    case "lock": // 🔒 値を固定（サイコロから守る）
+      return (
+        <svg {...s}>
+          <rect {...st} x="5" y="11" width="14" height="9" rx="2" />
+          <path {...st} d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+      );
+    case "unlock": // 🔓 固定なし（サイコロ対象）
+      return (
+        <svg {...s}>
+          <rect {...st} x="5" y="11" width="14" height="9" rx="2" />
+          <path {...st} d="M8 11V7a4 4 0 0 1 7-2" />
+        </svg>
+      );
     default:
       return null;
   }

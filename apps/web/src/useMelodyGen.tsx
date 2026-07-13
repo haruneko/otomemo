@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { api, type Neta } from "./api";
+import { Icon } from "./components/Icon";
 import { fitReportText } from "./fitReport";
 import { harmonyVoice } from "./harmony";
 import {
@@ -157,7 +158,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         {SEG4.map(([lab, v], i) => (
           <button key={lab} type="button" className={"seg-b" + (bucket(val) === i ? " on" : "")} aria-label={`${aria}-${SEG_LV[i]}`} aria-pressed={bucket(val) === i} onClick={() => { set(v); setPreset(""); }}>{lab}</button>
         ))}
-        {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={() => toggleLock(lock)}>{lockedKnobs.has(lock) ? "🔒" : "🔓"}</button>}
+        {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={() => toggleLock(lock)}>{<Icon name={lockedKnobs.has(lock) ? "lock" : "unlock"} size={14} />}</button>}
       </span>
     </div>
   );
@@ -168,7 +169,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       <span className="knob-end">{lo}</span>
       <input aria-label={aria} type="range" min={0} max={1} step={0.1} value={val} onChange={(e) => { set(Number(e.target.value)); setPreset(""); }} />
       <span className="knob-end">{hi}</span>
-      {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={(e) => { e.preventDefault(); toggleLock(lock); }}>{lockedKnobs.has(lock) ? "🔒" : "🔓"}</button>}
+      {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={(e) => { e.preventDefault(); toggleLock(lock); }}>{<Icon name={lockedKnobs.has(lock) ? "lock" : "unlock"} size={14} />}</button>}
     </label>
   );
   // 🎲：ロックしていないノブを現在値±0.3でランダムに振る（当たりの周辺探索）。0.1刻み・[0,1]。
