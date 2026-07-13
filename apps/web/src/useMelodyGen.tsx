@@ -119,6 +119,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [breathe, setBreathe] = useState(0); // 句頭の遅延入場(息継ぎ) 0=なし〜1=各句頭を空けて入る（#9 2026-07-09）
   const [humanize, setHumanize] = useState(0); // 人間味(グルーヴ) 0=機械的〜1=強弱＋微小タイミング揺れ（監査E 2026-07-09）
   const [form, setForm] = useState<"" | "sentence">(""); // 形式 空=従来AABA/文=sentence(提示→反復→継続断片化→カデンツ=起承転結)（D本丸 2026-07-09）
+  const [skelForm, setSkelForm] = useState<"" | "period" | "aaba">(""); // 骨格のフォーム型リテラル回帰（gen_skeleton専用）空=従来(輪郭反復)/period=[4+4]/aaba=Aの回帰（design #12-M 2026-07-13）
   // 対位（メロがベースを見て並行5度8度/b9を避ける）＝固定0.3自動送信を廃し UI で選択（2026-07-10・menu整理）。
   const [counter, setCounter] = useState<"" | "weak" | "mid" | "strong">("");
   // 反復音モチーフ（Phase2案B・2026-07-10）：hook>0 で motifMode:preserve＋hook を送る（hookはpreserve下でのみ本領）。
@@ -245,6 +246,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secModeOf() },
         chords: ctx.sectionChords(),
         seed: Math.floor(Math.random() * 1e6),
+        ...(skelForm ? { form: skelForm } : {}), // 構造の使い回し（period/aaba）＝空=従来
       });
       const item = r.items?.[0];
       if (item) pushCand({ kind: item.kind, content: item.content });
@@ -376,7 +378,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     density, setDensity, swing, setSwing, expression, setExpression, runs, setRuns, push, setPush,
     foreground, setForeground, breathe, setBreathe, humanize, setHumanize, hook, setHook,
     articulation, setArticulation, flow, setFlow, pickup, setPickup,
-    phrasing, setPhrasing, form, setForm, counter, setCounter, finest, setFinest,
+    phrasing, setPhrasing, form, setForm, skelForm, setSkelForm, counter, setCounter, finest, setFinest,
     rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ

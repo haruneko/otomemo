@@ -567,7 +567,7 @@ export function genSkeletonCandidates(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence" },
+  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; form?: "period" | "aaba" },
 ): GenResult {
   const f = normalizeFrame(frame);
   const minor = isMinorFrame(f);
@@ -593,7 +593,7 @@ export function genSkeletonCandidates(
   const phrasesOut = phrases.map((p) => ({ endBeat: p.startBeat + p.beats, cadence: p.isLast ? "full" : p.cadenceDegree === 5 ? "half" : "full" }));
   const model = loadSkeletonModel(minor);
   const build = (s: number): SkeletonContent => {
-    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters, start: 62, phraseEnds });
+    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters, start: 62, phraseEnds, skelForm: opts?.form });
     return { bars, tones: skelArrayToBreakpoints(skel), phrases: phrasesOut };
   };
   const label = "骨格";

@@ -247,9 +247,10 @@ export function buildHttp(core: Core): FastifyInstance {
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string; // capture 後 link(ベース→骨格,"realized_from") 用にエコー
           return res;
         }
-        case "gen_skeleton": // 骨格候補（design #20 S2・構造線→ブレークポイント列）。phrasing=句割り。
+        case "gen_skeleton": // 骨格候補（design #20 S2・構造線→ブレークポイント列）。phrasing=句割り・form=構造の使い回し。
           return genSkeletonCandidates(b.frame, asChords(b.chords), b.seed, {
             phrasing: (["symmetric", "asymmetric", "period", "sentence"] as const).includes(b.phrasing as never) ? (b.phrasing as "symmetric" | "asymmetric" | "period" | "sentence") : undefined,
+            form: (["period", "aaba"] as const).includes(b.form as never) ? (b.form as "period" | "aaba") : undefined,
           });
         case "gen_drums": return genDrums(b.frame, b.seed);
         case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);

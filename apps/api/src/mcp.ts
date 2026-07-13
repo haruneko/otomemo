@@ -565,8 +565,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "gen_skeleton",
-    { title: "骨格を生成", description: "メロの構造線（骨格＝Urlinie近似のブレークポイント列）を機械が候補出しする(design #20)。frame(key/mode/meter/bars)＋コード進行を受け、コード追従の骨格音を句割り付きで複数案返す。返りは kind=\"skeleton\" の content={bars,tones:[{start,pitch}],phrases:[{endBeat,cadence}]}＝dur を持たない支配区間方式（各音は次の点/句末まで支配）。この骨格を capture して gen_melody(skeletonNetaId) で表面化する。「機械は候補まで・仕上げは人間」。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional().describe("指定=1案を決定的に。未指定=複数案"), phrasing: z.enum(["symmetric", "asymmetric", "period", "sentence"]).optional().describe("句割り。symmetric=2小節句/asymmetric=3+3+2/period=[4,4]/sentence=[2,2,4]。未指定=対称") } },
-    async ({ frame, chords, seed, phrasing }) => ok(genSkeletonCandidates(frame, chords, seed, { phrasing })),
+    { title: "骨格を生成", description: "メロの構造線（骨格＝Urlinie近似のブレークポイント列）を機械が候補出しする(design #20)。frame(key/mode/meter/bars)＋コード進行を受け、コード追従の骨格音を句割り付きで複数案返す。返りは kind=\"skeleton\" の content={bars,tones:[{start,pitch}],phrases:[{endBeat,cadence}]}＝dur を持たない支配区間方式（各音は次の点/句末まで支配）。この骨格を capture して gen_melody(skeletonNetaId) で表面化する。「機械は候補まで・仕上げは人間」。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional().describe("指定=1案を決定的に。未指定=複数案"), phrasing: z.enum(["symmetric", "asymmetric", "period", "sentence"]).optional().describe("句割り。symmetric=2小節句/asymmetric=3+3+2/period=[4,4]/sentence=[2,2,4]。未指定=対称"), form: z.enum(["period", "aaba"]).optional().describe("フォーム型リテラル回帰＝構造を2/4/8で使い回す。period=後半4小節が前半の反復([4+4]楽節・カデンツだけ差替)/aaba=Aを1・2・4句目へ回帰(Bだけ対比)。度数をそのまま複写＝耳に「同じフレーズが返る」。未指定=従来(輪郭反復のみ・さまよい気味)") } },
+    async ({ frame, chords, seed, phrasing, form }) => ok(genSkeletonCandidates(frame, chords, seed, { phrasing, form })),
   );
   server.registerTool(
     "complete_melody",

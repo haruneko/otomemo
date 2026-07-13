@@ -378,4 +378,17 @@ describe("gen_skeleton candidates (機械は候補まで)", () => {
     const mel = genMelody(frame, chords4, 5, { useV2: true, skeleton: skel });
     expect(notesOf(mel).length).toBeGreaterThan(0);
   });
+  it("form=period＝後半toneが前半を反復＝構造の使い回しが gen_skeleton に通っている（S2配線）", () => {
+    const frame8 = { key: 0, mode: "major" as const, meter: "4/4", bars: 8 };
+    const chords8 = [0, 5, 7, 0, 9, 2, 5, 7].map((root, i) => ({ root, quality: "", start: i * 4, dur: 4 })); // 後半は別進行
+    const def = genSkeletonCandidates(frame8, chords8, 3).items[0]!.content as SkeletonContent;
+    const per = genSkeletonCandidates(frame8, chords8, 3, { form: "period" }).items[0]!.content as SkeletonContent;
+    expect(validateSkeletonContent(per)).toEqual([]);
+    expect(per.tones).not.toEqual(def.tones); // form が効いている
+    // period＝後半4小節(start≥16拍)の構造音が前半(start−16)と一致（カデンツ除き多数）。
+    const pitchAt = (c: SkeletonContent, beat: number) => c.tones.filter((t) => t.start <= beat + 1e-6).slice(-1)[0]?.pitch;
+    let match = 0, n = 0;
+    for (let b = 0; b < 16; b += 2) { n++; if (pitchAt(per, b) === pitchAt(per, b + 16)) match++; }
+    expect(match).toBeGreaterThanOrEqual(n - 2); // 8構造点中6以上が回帰（カデンツ2点を除く）
+  });
 });

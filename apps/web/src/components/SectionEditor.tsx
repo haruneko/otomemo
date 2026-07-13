@@ -336,7 +336,16 @@ export function SectionEditor({
                       {gen.genBusy ? "生成中…" : part.label}
                     </button>
                   ))}
-                  {/* 骨格を生成（design #20 S2）：構造線(2声骨格)を機械に叩き台で出す→骨格レーンへ。 */}
+                  {/* 骨格を生成（design #20 S2）：構造線(2声骨格)を機械に叩き台で出す→骨格レーンへ。
+                      構造(skelForm・design #12-M 2026-07-13)＝2/4/8で使い回すフォーム型リテラル回帰を選んでから生成。 */}
+                  <label className="tool-item" aria-label="skel-form" onClick={(e) => e.stopPropagation()}>
+                    構造
+                    <select value={gen.skelForm} onChange={(e) => gen.setSkelForm(e.target.value as "" | "period" | "aaba")}>
+                      <option value="">おまかせ</option>
+                      <option value="period">前半くり返し</option>
+                      <option value="aaba">AABA</option>
+                    </select>
+                  </label>
                   <button type="button" className="tool-item" aria-label="gen-skeleton" disabled={gen.genBusy} onClick={() => { setToolsOpen(false); void gen.genSkeleton(); }}>
                     {gen.genBusy ? "生成中…" : "骨格"}
                   </button>
