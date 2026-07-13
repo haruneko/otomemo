@@ -157,7 +157,18 @@ function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, 
   return h && h.size ? weightedPickNum(h, r) : 0;
 }
 // コード根(調相対pc)列＋学習モデル → 骨格ピッチ列(bars*beatsPerBar)。各強拍で度数をサンプルし声部進行で配置、次強拍まで保持。
-export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch" } = {}): number[] {
+// フォーム型リテラル回帰の計画（design #12-M・2026-07-13）：各ユニット u に「複写元ユニット src（null=fresh）」を与える。
+// period＝後半[nu/2..]が前半をリテラル複写（[4+4]の楽節反復）。aaba＝4ユニット周期で u1/u3 が u0 を複写（Aの回帰）。
+// 未対応/短い(nu<2)は null（＝現状の輪郭反復にフォールバック）。src は必ず u より前＝逐次で既に埋まっている。
+export function skelFormPlan(form: "period" | "aaba" | undefined, nu: number): (number | null)[] | null {
+  if ((form !== "period" && form !== "aaba") || nu < 2) return null;
+  const src: (number | null)[] = new Array(nu).fill(null);
+  if (form === "period") { const h = Math.floor(nu / 2); for (let u = h; u < 2 * h; u++) src[u] = u - h; }
+  else for (let u = 0; u < nu; u++) { const m = u % 4; if (m === 1 || m === 3) src[u] = Math.floor(u / 4) * 4; } // aaba
+  return src;
+}
+
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: "period" | "aaba" } = {}): number[] {
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
   const bpb = opts.beatsPerBar ?? 4;
   const strongQ = opts.strongQuarters ?? [0, 2];
@@ -199,14 +210,18 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   // D-P1(2026-07-09 監査D)：句割りを骨格に伝える。phraseEnds 指定時は unit尾のバーが句末なら句のカデンツ度数へ着地
   // （対称=各unit尾に整合／非対称=unit尾に落ちる句末のみ・可変長ブロックP2は別）。未指定=従来 u%2 の 5̂/1̂（bit一致）。
   const pe = opts.phraseEnds;
+  const formSrc = skelFormPlan(opts.skelForm, nu); // null＝現状（輪郭反復）＝bit一致
   for (let u = 0; u < nu; u++) {
     const base = u * spu, reuse = !useMotif ? null : (u % 4 === 1 ? hA : u % 4 === 3 ? hB : null), phraseEnd = u % 2 === 1, lastU = u === nu - 1, ctr = ctrOf(u);
+    const src = formSrc ? formSrc[u] : null; // フォーム複写元ユニット（null=fresh）
     const tailBar = Math.floor((slots[Math.min(base + spu - 1, slots.length - 1)]!.beat) / bpb);
     const peHit = pe?.find((x) => x.bar === tailBar); // この unit尾のバーが句末か
     for (let s = 0; s < spu && base + s < slots.length; s++) {
       const cr = slots[base + s]!.cr;
       let idx: number;
-      if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi, ctr);
+      if (src != null && s < spu - 1) idx = I[src * spu + s]!; // フォーム：ユニットを頭からリテラル複写（カデンツ除く）
+      else if (src != null) idx = pe ? (lastU ? idxOf(0, pi, tonicIdx) : peHit ? idxOf(peHit.deg, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)) : (lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)); // フォームのカデンツ＝句末ルール（終止の役割は形式で保つ）
+      else if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi, ctr);
       else if (s < spu - 1) { // 頭＝動機の反復。repetition＝「頭の正確なステップ移動を反復」する確率。残りはfresh＝varied反復。
         idx = r() < rep ? cl(pi + (reuse[s] ?? 0)) : idxOf(smp(cr, pv), pi, ctr);
       } else if (pe) idx = lastU ? idxOf(0, pi, tonicIdx) : peHit ? idxOf(peHit.deg, pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 句割り駆動：句末は cadence度数着地・非句末は自由

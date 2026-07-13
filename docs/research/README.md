@@ -12,6 +12,7 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - ★**設計思想確定**＝機械は候補/選択肢まで・仕上げは人間。Suno等は画像生成的で別パラダイム・競合しない。
 
 ## メロディ生成（本丸：理論→設計→実装→検証）
+- [2026-07-13-skeleton-form-reuse](2026-07-13-skeleton-form-reuse.md) — **骨格メロの構造使い回し＝フォーム型リテラル回帰（研究＋設計）**。オーナーFB「8小節ランダムウォーク・2/4/8で構造使い回せ」。現状 `genSkeletonFromModel` は2小節ユニットの**輪郭反復(A A′ B B′・rep0.85)を既に持つ**が、①反復が輪郭でdriftする前音アンカー＝絶対音が戻らない②再利用は頭スロットのみ③**8小節でのAの回帰が無い**(後半BB′は新規)＝さまよう。設計＝`skelForm`("period"[4+4後半=前半リテラル複写]/"aaba"[u0をu1/u3へ回帰])opt-inノブ＝**度数インデックスをリテラル複写・カデンツのみ句末ルールで差替**。骨格→表面の一方向依存ゆえ骨格1か所で階層反復が効く。既定undefined=現状bit一致。実装S1(genSkeletonFromModel)→S2(gen_skeleton/web露出)→S3耳較正。
 - [melody-model-summary](melody-model-summary.md) — メロ生成モデルのサマリ＆メロ専用インデックス（まずここ）
 - [melody-generation](melody-generation.md) — 研究仕様（フレーズ感/息継ぎ）＝design #12-M の full spec
 - [melody-design-journey](melody-design-journey.md) — 設計ジャーニー（仮説一覧と対処）
