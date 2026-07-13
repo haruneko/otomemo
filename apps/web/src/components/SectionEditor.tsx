@@ -7,6 +7,7 @@ import { TransportBar } from "./TransportBar";
 import {
   notesForContent,
   compositeNotes,
+  trackProgramOf,
   downloadMidi,
   downloadMultitrackMidi,
   beatsPerBar,
@@ -276,12 +277,18 @@ export function SectionEditor({
     return undefined;
   }
   // #55 多トラック書出：レーン(メロ/コード/ベース/リズム)別に1トラックずつ。空レーンは省く。
+  // バグ#1(2026-07-13)：各トラックの GM音色を composite notes の program から採る（trackProgramOf）＝
+  // コード楽器2(ハープ46)等が MIDI で program 0(ピアノ)に潰れないように。drum は kit で扱うので program 不要。
   function laneTracks() {
-    return LANES.map((lane) => ({
-      name: LANE_MIDI_NAME[lane.key] ?? lane.key, // ASCII＝DAWで文字化けしない（日本語ラベルは使わない）
-      notes: compositeNotes(laneChildren(lane), keyPc, neta.mode),
-      drum: lane.key === "rhythm",
-    })).filter((t) => t.notes.length);
+    return LANES.map((lane) => {
+      const notes = compositeNotes(laneChildren(lane), keyPc, neta.mode);
+      return {
+        name: LANE_MIDI_NAME[lane.key] ?? lane.key, // ASCII＝DAWで文字化けしない（日本語ラベルは使わない）
+        notes,
+        drum: lane.key === "rhythm",
+        program: lane.key === "rhythm" ? undefined : trackProgramOf(notes),
+      };
+    }).filter((t) => t.notes.length);
   }
 
   return (

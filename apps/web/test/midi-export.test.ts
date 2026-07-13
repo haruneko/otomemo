@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Midi } from "@tonejs/midi";
-import { notesToMidi, tracksToMidi } from "../src/music";
+import { notesToMidi, tracksToMidi, trackProgramOf } from "../src/music";
 
 describe("MIDI出力の正しさ検証", () => {
   it("単一トラック：テンポ・拍子ヘッダ・音符の秒時刻・velocity（4/4）", () => {
@@ -74,6 +74,28 @@ describe("MIDI出力の正しさ検証", () => {
     expect(m.tracks[1]!.instrument.number).toBe(33);
     expect(m.tracks[0]!.channel).not.toBe(9); // メロは非ドラム
     expect(m.tracks[2]!.channel).toBe(9); // リズムだけch10
+  });
+
+  // バグ#1修正（機能E2E監査 2026-07-13）：セクション分割書き出しが per-note program（compositeNotes 付与の
+  // GM音色）をトラックに載せず全 program 0 になっていた＝コード楽器2(ハープ46)がピアノで出る。laneTracks が
+  // 各レーンの composite notes から program を採る（trackProgramOf）ように是正。ここは採取ロジック＋保持を固定。
+  describe("バグ#1：セクション分割書き出しが per-note program を保持（ハープ46 が失われない）", () => {
+    it("trackProgramOf＝レーンの composite notes から最初の program を採る（drum は除外＝呼び出し側）", () => {
+      expect(trackProgramOf([{ pitch: 60, start: 0, dur: 1, program: 46 }])).toBe(46);
+      expect(trackProgramOf([{ pitch: 60, start: 0, dur: 1, program: 0 }, { pitch: 64, start: 1, dur: 1, program: 0 }])).toBe(0);
+      expect(trackProgramOf([{ pitch: 60, start: 0, dur: 1 }])).toBeUndefined(); // program 無し＝undefined（track.program 未設定＝従来）
+    });
+    it("laneTracks 相当：piano(0)/harp(46) の2コード楽器レーン→MIDI が別 program で出る", () => {
+      // laneTracks が composite notes（各ノートに program 付与）から trackProgramOf で採る流儀を再現。
+      const keys1 = [{ pitch: 60, start: 0, dur: 1, program: 0 }]; // コード楽器1＝ピアノ
+      const keys2 = [{ pitch: 67, start: 0, dur: 1, program: 46 }]; // コード楽器2＝ハープ
+      const tracks = [
+        { name: "Keys 1", notes: keys1, program: trackProgramOf(keys1) },
+        { name: "Keys 2", notes: keys2, program: trackProgramOf(keys2) },
+      ];
+      const m = new Midi(tracksToMidi(tracks, 120, "6/8").buffer as ArrayBuffer);
+      expect(m.tracks.map((t) => t.instrument.number)).toEqual([0, 46]); // 0=ピアノ / 46=ハープ（潰れない）
+    });
   });
 });
 

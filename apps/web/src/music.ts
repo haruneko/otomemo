@@ -797,6 +797,9 @@ export interface MidiTrackSpec {
   name?: string;
   kit?: number; // ドラムトラックのキット（ch10 program）。
 }
+// レーン(トラック)の GM program を composite notes から採る＝各ノートに付与済みの program（compositeNotes 由来）の
+// 最初の非nullを使う。1レーン=1楽器（コード楽器×2は別レーン）なので均一。program 無し＝undefined（track.program 未設定＝従来）。
+export const trackProgramOf = (notes: Note[]): number | undefined => notes.find((n) => n.program != null)?.program;
 export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null, feel?: Feel | null): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);
