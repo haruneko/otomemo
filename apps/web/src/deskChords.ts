@@ -62,6 +62,21 @@ export interface ChordTrial {
   sub: ChordSub;
 }
 
+// substitute_chord は文脈違い（機能代理/裏コード/セカンダリー…）で同じ (root,quality) を複数返すことがある
+// （例：Am が2枠）。表示は畳んで1枠にする＝先勝ち・順序維持（P3-3）。bass は同一 (root,quality) 内では区別しない
+// （分数指定は稀・先勝ちで十分）。
+export function dedupeChordSubs(subs: ChordSub[]): ChordSub[] {
+  const seen = new Set<string>();
+  const out: ChordSub[] = [];
+  for (const s of subs) {
+    const key = `${((s.root % 12) + 12) % 12}:${s.quality}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
 // 試着＝earChords（実調・ブロック相対）の chordIndex 番目を sub で差し替えた **新配列**（元配列非破壊・在庫不変）。
 // start/dur は温存＝時間割りは変えず「縦の相手」だけ差し替える。sub.bass 無し＝分数解除（bass を落とす）。
 export function applyChordTrial(chords: ChordEntry[], trial: ChordTrial | null): ChordEntry[] {

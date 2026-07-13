@@ -676,7 +676,14 @@ export function App() {
           <Suspense fallback={<div className="mainpane-empty"><p className="muted">読み込み中…</p></div>}>
           {deskTarget ? (
             // #20 S6骨格の机（全画面）。開いている間は下の SectionEditor はアンマウント相当（handoff §2.2）。
-            <SkeletonDesk key={`${deskTarget.skelNetaId}@${deskTarget.skelPosition}`} {...deskTarget} onClose={closeDesk} />
+            <SkeletonDesk
+              key={`${deskTarget.skelNetaId}@${deskTarget.skelPosition}`}
+              {...deskTarget}
+              onClose={closeDesk}
+              /* C：①ドラムブロック/分岐一覧のメロをタップ→机を閉じて（unmount flush で保存）そのネタを開く。
+                 drillNeta は active(=section) を navStack に積むので、開いたネタを閉じれば section に戻る。 */
+              onOpenNeta={(n) => { closeDesk(); drillNeta(n); }}
+            />
           ) : projectView && activeProject ? (
             <ProjectScreen
               project={activeProject}

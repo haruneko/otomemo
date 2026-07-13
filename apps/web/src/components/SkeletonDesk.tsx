@@ -19,7 +19,7 @@ import { lanesForKind, MIN_BARS, maxBarsForKind, type Child, type Lane } from ".
 import { deskLoadContent, deskSaveContent, contactText, contactDyadNotes, staleContacts } from "../deskContent";
 import { stageAllNotes, stageLabels, type StageFocus } from "../deskStages";
 import { analyzeCounterpoint, effectiveBassAt, effectiveBassSegments, type MelCp } from "../skeletonEdit";
-import { chordChips, applyChordTrial, adoptedChordContent, chordName, type ChordSub, type ChordTrial } from "../deskChords";
+import { chordChips, applyChordTrial, adoptedChordContent, chordName, dedupeChordSubs, type ChordSub, type ChordTrial } from "../deskChords";
 import { LENS_FOLD, LENS_REAL } from "../deskLens";
 import {
   beatsPerBar,
@@ -46,7 +46,9 @@ export interface SkeletonDeskTarget {
   skelOrd: number;
 }
 
-export type SkeletonDeskProps = SkeletonDeskTarget & { onClose: () => void };
+// onOpenNeta（optional・C）＝①ドラムブロック／分岐一覧のメロをタップで開く導線。App が「机を閉じて＋そのネタを開く」
+// を渡す。未指定なら従来どおり表示のみ（optional で従来一致）。
+export type SkeletonDeskProps = SkeletonDeskTarget & { onClose: () => void; onOpenNeta?: (n: Neta) => void };
 
 const SAVE_DEBOUNCE_MS = 500; // NetaeEditor/SectionEditor 流儀（暫定既定）
 // #7-C 骨格編集をループへ反映する debounce（打鍵/ドラッグのたびでなく打ち終えて反映）。保存(content 永続化)とは独立＝音の反映のみ。
@@ -73,6 +75,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   const [sectionTitle, setSectionTitle] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [loadErr, setLoadErr] = useState(false);
+  const [saveErr, setSaveErr] = useState(false); // P3-4：骨格 content 保存失敗の可視化（無音の catch をやめる＝編集消失に気づける）
   const [tones, setTones] = useState<SkeletonBreakpoint[]>([]);
   const [bass, setBass] = useState<SkeletonBreakpoint[]>([]);
   const [phrases, setPhrases] = useState<{ endBeat: number; cadence?: string }[]>([]);
@@ -176,7 +179,8 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     const st = stateRef.current;
     if (!st) return;
     const content = deskSaveContent(st, shiftRef.current); // 素材調へ戻す（配置移調を外す）
-    void api.updateNeta(skelNetaId, { content }).catch(() => {});
+    // P3-4：成功で saveErr を消し、失敗で立てる（無音の catch をやめる＝ネット断等で編集消失に気づける）。
+    void api.updateNeta(skelNetaId, { content }).then(() => setSaveErr(false)).catch(() => setSaveErr(true));
     pendingRef.current = false;
   }, [skelNetaId]);
 
@@ -475,7 +479,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         mode: sectionMode === "minor" ? "minor" : "major",
         ...(next ? { next: { root: next.root, quality: next.quality } } : {}),
       });
-      setChordCands((subs ?? []).map((s) => ({ root: s.root, quality: s.quality })));
+      setChordCands(dedupeChordSubs((subs ?? []).map((s) => ({ root: s.root, quality: s.quality })))); // (root,quality) で重複除去（先勝ち・順序維持＝P3-3）
     } catch {
       setChordCands([]); // 取得失敗＝空（黙って消えない＝ポップに「候補なし」を出す）
     } finally {
@@ -547,6 +551,13 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         <p className="fit-report" aria-label="desk-load-error">
           読み込みに失敗しました
         </p>
+      )}
+
+      {/* P3-4：保存失敗の控えめな可視化。タップで doSave 再試行（成功で消える）。ネット断等で編集が消えるのを黙らせない。 */}
+      {saveErr && (
+        <button type="button" className="desk-save-err" aria-label="desk-save-error" title="保存に失敗しました。タップで再試行します。" onClick={() => doSave()}>
+          ⚠ 保存に失敗（タップで再試行）
+        </button>
       )}
 
       {/* rollMode（描く/選ぶ/消す）＝KindEditorBody の骨格結線と同じ3ボタン。 */}
@@ -629,15 +640,18 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
             {beatChildren.map((c, i) => {
               const left = (c.position - skelPosition) * PPB;
               const w = Math.max(8, sctx.childDur(secCtx, c) * PPB - 2);
+              const label = c.node.neta.title ?? c.node.neta.text ?? "ドラム";
+              const tappable = !!p.onOpenNeta; // C：導線ありのときだけ interactive（optional で従来＝表示のみ）
               return (
                 <span
                   key={i}
-                  className="desk-beat-block"
+                  className={"desk-beat-block" + (tappable ? " tappable" : "")}
                   aria-label={`beat-block-${i}`}
                   style={{ left, width: w }}
-                  title={c.node.neta.title ?? c.node.neta.text ?? "ドラム"}
+                  title={tappable ? `${label}（タップでドラムを開く）` : label}
+                  {...(tappable ? { role: "button", tabIndex: 0, onClick: () => p.onOpenNeta!(c.node.neta) } : {})}
                 >
-                  {(c.node.neta.title ?? c.node.neta.text ?? "ドラム").slice(0, 10)}
+                  {label.slice(0, 10)}
                 </span>
               );
             })}
@@ -836,11 +850,19 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           <div className="desk-stack-list" aria-label="realized-list">
             {realizedRels
               .filter((r) => r.type === "realized_from" && r.neta?.kind === "melody")
-              .map((r, i) => (
-                <span key={i} className="desk-stack-item">
-                  {(r.neta?.title ?? r.neta?.text ?? "(無題)").slice(0, 16)}
-                </span>
-              ))}
+              .map((r, i) => {
+                const tappable = !!p.onOpenNeta && !!r.neta; // C：導線ありのときだけタップで当該メロを開く
+                return (
+                  <span
+                    key={i}
+                    className={"desk-stack-item" + (tappable ? " tappable" : "")}
+                    title={tappable ? "タップでこのメロを開く" : undefined}
+                    {...(tappable ? { role: "button", tabIndex: 0, onClick: () => p.onOpenNeta!(r.neta!) } : {})}
+                  >
+                    {(r.neta?.title ?? r.neta?.text ?? "(無題)").slice(0, 16)}
+                  </span>
+                );
+              })}
           </div>
         )}
         {/* 候補トレイ：対位バッジ〔指摘のみ〕・試着▶（ベッド上・無停止）・＋置く（skelPosition）。 */}

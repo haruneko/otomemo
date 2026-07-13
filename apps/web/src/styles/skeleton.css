@@ -97,6 +97,9 @@
 .desk-lens.seg button.on { background: var(--k-skeleton); color: #10141a; font-weight: 600; }
 .desk-time { font-variant-numeric: tabular-nums; min-width: 26px; text-align: center; font-size: 0.72rem; }
 
+/* P3-4：保存失敗の控えめな帯（タップで再試行）。過剰にしない＝小さく・警告色のみ。 */
+.desk-save-err { display: block; width: 100%; margin: 2px 0 0; padding: 4px 8px; font-size: 0.68rem; text-align: left; color: #ffd24a; background: color-mix(in srgb, #ffd24a 12%, transparent); border: 1px solid #ffd24a; border-radius: 6px; cursor: pointer; touch-action: manipulation; }
+
 /* 机埋め込み（embedded）の SkeletonEditor ツールバーは行高を圧縮＝縦を稼ぐ（凡例/ヒント/再生トグルは JS 側で非表示）。 */
 .skeleton-desk .skel-toolbar { padding: 5px 6px; gap: 4px 8px; }
 .skeleton-desk .skel-grp { font-size: 0.68rem; gap: 4px; }
@@ -119,7 +122,7 @@
 .desk-contact-gutter { flex: 0 0 40px; display: flex; align-items: center; justify-content: center; height: 24px; font-size: 0.6rem; color: var(--muted); background: #191c21; z-index: 2; }
 .desk-contact-viewport { flex: 1 1 auto; overflow: hidden; }
 .desk-contact-zone { position: relative; height: 24px; will-change: transform; }
-.desk-contact-badge { position: absolute; top: 3px; transform: translateX(-50%); font-size: 9px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #1b1e23; border: 1px solid var(--line); color: var(--muted); cursor: pointer; white-space: nowrap; touch-action: manipulation; }
+.desk-contact-badge { position: absolute; top: 3px; font-size: 9px; line-height: 1; padding: 2px 4px; border-radius: 4px; background: #1b1e23; border: 1px solid var(--line); color: var(--muted); cursor: pointer; white-space: nowrap; touch-action: manipulation; }
 .desk-contact-badge.diss { color: #fff; background: var(--k-section); border-color: var(--k-section); }
 .desk-contact-badge.parallel { color: #ffd24a; border-color: #ffd24a; }
 .desk-contact-badge.cross { color: var(--k-rhythm); border-color: var(--k-rhythm); }
@@ -151,6 +154,9 @@
 .desk-beat-viewport { flex: 1 1 auto; overflow: hidden; }
 .desk-beat-zone { position: relative; height: 22px; will-change: transform; }
 .desk-beat-block { position: absolute; top: 3px; height: 16px; display: flex; align-items: center; padding: 0 5px; font-size: 9px; line-height: 1; color: var(--fg); background: color-mix(in srgb, var(--k-rhythm) 20%, transparent); border: 1px solid var(--k-rhythm); border-radius: 3px; overflow: hidden; white-space: nowrap; pointer-events: none; }
+/* C：導線ありのときだけタップ可（カーソル/hover を出す）。既定は上の pointer-events:none で従来＝表示のみ。 */
+.desk-beat-block.tappable { pointer-events: auto; cursor: pointer; }
+.desk-beat-block.tappable:hover { background: color-mix(in srgb, var(--k-rhythm) 32%, transparent); }
 .desk-beat-empty { position: absolute; top: 5px; left: 6px; font-size: 0.62rem; }
 
 /* ②コード前景（D3）＝コードチップ列＋導出ベース線。ルーラー/接点と同じ scroll 同期・同 PPB＝ロール一致。 */
@@ -192,6 +198,9 @@
 .desk-stack-badge { background: color-mix(in srgb, var(--k-melody) 18%, transparent); border: 1px solid var(--k-melody); color: var(--k-melody); border-radius: 12px; padding: 2px 9px; font-size: 0.68rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .desk-stack-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .desk-stack-item { font-size: 0.66rem; color: var(--muted); background: #1b1e23; border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; }
+/* C：導線ありのときだけタップ可＝そのメロを開く。 */
+.desk-stack-item.tappable { cursor: pointer; }
+.desk-stack-item.tappable:hover { color: var(--fg); border-color: var(--k-melody); }
 /* 候補トレイ＝横スクロール（各カード＝音数＋対位バッジ＋試着/置く/捨てる）。 */
 .desk-cand-tray { display: flex; gap: 8px; overflow-x: auto; margin-top: 8px; padding-bottom: 4px; }
 .desk-cand-card { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
@@ -200,4 +209,4 @@
 .desk-cand-actions { display: flex; gap: 4px; }
 .desk-cand-actions .tb-tool { min-width: 34px; font-size: 0.74rem; }
 .desk-cand-actions .tb-tool.on { background: var(--k-melody); color: #10141a; border-color: var(--k-melody); }
-.desk-cand-foot { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.desk-cand-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
