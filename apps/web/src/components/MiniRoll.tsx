@@ -52,7 +52,7 @@ export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import(".
   const ps = notes.map((n) => n.pitch);
   const lo = Math.min(...ps);
   const hi = Math.max(...ps);
-  const span = Math.max(hi - lo, 1);
+  const range = hi - lo; // 単音/同高(range=0)は下端貼付き＝空箱に見えるので中央寄せにする（frac=0.5）
   return (
     <svg
       className="mini-roll"
@@ -63,7 +63,8 @@ export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import(".
       {notes.map((n, i) => {
         const x = pad + (n.start / maxT) * (W - pad * 2);
         const w = Math.max((n.dur / maxT) * (W - pad * 2), 1.5);
-        const y = pad + (1 - (n.pitch - lo) / span) * (H - pad * 2 - 3);
+        const frac = range > 0 ? (n.pitch - lo) / range : 0.5; // フラットは中央
+        const y = pad + (1 - frac) * (H - pad * 2 - 3);
         return <rect key={i} x={x} y={y} width={w} height={3} rx={1} />;
       })}
     </svg>

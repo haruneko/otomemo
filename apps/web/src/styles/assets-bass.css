@@ -1074,10 +1074,17 @@ article header {
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 8px 4px;
-  font-size: 0.72rem;
+  padding: 8px 3px;
+  font-size: 0.7rem;
   font-weight: 600;
   cursor: pointer;
+}
+/* ラベルは1行固定＝「＋コード楽器」が「＋コード楽/器」と途中改行しない（6列で幅が狭いデスクトップの是正）。 */
+.create-tile span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .create-tile svg {
   color: var(--k, var(--accent)); /* アイコン＝kind 色（可愛さと識別を担う） */
