@@ -49,6 +49,8 @@ export interface SkeletonDeskTarget {
 export type SkeletonDeskProps = SkeletonDeskTarget & { onClose: () => void };
 
 const SAVE_DEBOUNCE_MS = 500; // NetaeEditor/SectionEditor 流儀（暫定既定）
+// #7-C 骨格編集をループへ反映する debounce（打鍵/ドラッグのたびでなく打ち終えて反映）。保存(content 永続化)とは独立＝音の反映のみ。
+const EDIT_RELOOP_MS = 400; // 暫定既定・耳較正で見直し可
 
 // ルーラー/ブレースの座標定数。SkeletonEditor と同値（PPB=44・gutter=40）＝ロールと1px もずれないため。
 // 将来は SkeletonEditor 側と共通化（handoff §1「ロール抽出」時に SSOT へ）。
@@ -102,6 +104,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
 
   const shiftRef = useRef(0); // 配置移調（読込時に確定・保存で外す）
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const editReloopTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); // #7-C 骨格編集→ループ反映の debounce（保存とは別 timer）
   const pendingRef = useRef(false); // 未 flush の編集があるか（閉じる時に確定保存）
   const skipSaveRef = useRef(false); // 読込直後の state セットで保存を走らせない
   const didInitLoop = useRef(false);
@@ -375,6 +378,17 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     tp.reloop(); // focusStage/candPreview/children が変わった＝新 state で鳴らし直す（再生中のみ・停止中no-op）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusStage, candPreview, children]);
+
+  // #7-C 骨格編集（打点/ドラッグ）の反映：打ち終えて EDIT_RELOOP_MS 後に tp.reloop＝ループ中の打点が**次から途切れず・
+  //   頭に戻らず**鳴る（reschedule-in-place）。連続編集は clearTimeout で1回に集約。停止中は reloop が no-op（打点で鳴らし直さない）。
+  //   保存 debounce（doSave・content 永続化）とは独立 timer＝音の反映と永続化を混ぜない。tones/bass/phrases/bars を監視。
+  useEffect(() => {
+    if (!loaded) return;
+    if (editReloopTimer.current) clearTimeout(editReloopTimer.current);
+    editReloopTimer.current = setTimeout(() => tp.reloop(), EDIT_RELOOP_MS);
+    return () => { if (editReloopTimer.current) clearTimeout(editReloopTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tones, bass, phrases, bars, loaded]);
 
   // レンズ無停止切替：begin（再スケジュール）を回さず、ゲートだけ開閉＝再生位置が飛ばない（この器の核）。
   // activeLens state も更新＝再ループ時の初期ゲート（initLensGates）が正しいレンズを開く。

@@ -29,6 +29,13 @@ export interface PlaybackHandle {
   // #20 S6骨格の机: 再生を止めずにレンズ別ゲインバスを開閉（無停止A/B）。lens 印つき notes を渡した時のみ意味あり。
   // レンズ層を持たない再生（従来）では no-op。stop 後も no-op。
   setLensGain(lens: string, on: boolean): void;
+  // #7-C ループを止めず頭に戻さず、最新ノートを**その場で組み直す**（reschedule-in-place）。
+  // transport.stop()/start() を呼ばず transport.cancel(0)→再スケジュール＝走行中クロックを保つ＝位置が流れ続ける。
+  // 現在位置より先のイベントはこの周から鳴り、過ぎたものは次周から。停止(stop)済みハンドルでは no-op。
+  // 骨格エディタ専用の加算メソッド（NetaDialog/SectionEditor 等 従来 consumer は呼ばない＝不変）。
+  reschedule(notes: Note[]): void;
+  // #7-C ループ区間だけを走行中に更新（transport.loopStart/loopEnd＝stop/start 不要）。範囲ブレース確定用。
+  setLoopRange(startBeat: number, endBeat: number): void;
 }
 
 interface PlayOpts {
@@ -838,9 +845,15 @@ export async function playNotes(
   const defaultProg = opts.program ?? 0;
   // 冷スタートはブロックせずフォールバック（次回warm）。ただし先読み等のロードが進行中なら待って SF2 で鳴らす。
   const sf = await ensureSoundFont(Tone, defaultProg, false);
-  const drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number | string, DrumVoice>();
+  // #7-C reschedule で差し替えるため let（新パート/プログラム/lens/drum が出たら prepare を追加で呼んで更新）。
+  let drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number | string, DrumVoice>();
   // #section音色: パート毎(program毎)の旋律 sampler を用意（合成再生で音色を保つ）
-  const melodicByPart = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<string, any>();
+  let melodicByPart = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<string, any>();
+  // #7-C 開くべきレンズ＝最後に指定された activeLens（setLensGain/reschedule で表示とずれないよう保持）。
+  let currentActiveLens = opts.activeLens;
+  // フィール層の設定を保持（reschedule でも最新ノートへ同じ跳ねを適用＝初回一括経路と一致）。
+  const feel = opts.feel ?? null;
+  const compound = opts.compound;
   // #20 S6骨格の机: notes にレンズ印があれば両レンズを同時スケジュール済み。上の sampler 生成で
   // partLensGain が構築されているので、初期ゲート（activeLens だけ開く・未指定は全開）を反映する。
   const lenses = lensesOf(notes);
@@ -866,14 +879,35 @@ export async function playNotes(
   currentKit = kit;
 
   transport.bpm.value = bpm;
-  for (const ev of scheduleTimes(notes, bpm)) {
-    transport.schedule(
-      (time: number) => playEvent(ev, time, sf, kit, Tone, drumKits, melodicByPart, defaultProg),
-      ev.time,
-    );
-  }
+  // #7-C 発音イベントの一括スケジュール（初回 begin・reschedule 双方で再利用）。sf/kit は const、
+  // drumKits/melodicByPart は let＝reschedule で差し替えた最新 Map を各 playEvent が参照する。
+  const scheduleFrom = (finalNotes: Note[]): void => {
+    for (const ev of scheduleTimes(finalNotes, bpm)) {
+      transport.schedule(
+        (time: number) => playEvent(ev, time, sf, kit, Tone, drumKits, melodicByPart, defaultProg),
+        ev.time,
+      );
+    }
+  };
+  scheduleFrom(notes); // 初回＝従来と bit 一致（notes は上で feel 適用済み）。
 
   let stopped = false;
+  // #7-C その場組み直し本体（async＝新サンプラの追加ロードがあるが cache 済は即時＝走行中クロックはほぼ進まない）。
+  // stop/start を呼ばない＝頭に戻らない・音が途切れない。transport.loop/loopStart/loopEnd は保持（別途 setLoopRange で更新）。
+  const doReschedule = async (rawNotes: Note[]): Promise<void> => {
+    if (stopped) return; // 破棄済みハンドル（kit dispose 済）では鳴らさない
+    const finalNotes = feel ? applyFeel(rawNotes, feel, { compound }) : rawNotes;
+    transport.cancel(0); // 予約済みを全消し（部分 cancel はループ再火と二重化するので不可）
+    if (sf) {
+      // 新パート/プログラム/lens/drum が出ても map を最新へ（cache 済は即時＝再DL/再parseゼロ＝SF2 dedup 維持）。
+      drumKits = await prepareDrumKits(finalNotes, Tone);
+      melodicByPart = await prepareMelodicSamplers(finalNotes, Tone, defaultProg, sf);
+    }
+    if (stopped) return; // await 中に stop された場合は鳴らさない
+    const lenses = lensesOf(finalNotes);
+    if (lenses.length) initLensGates(lenses, currentActiveLens); // レンズ層があればゲート再初期化（開くレンズは保持中の activeLens）
+    scheduleFrom(finalNotes); // 現在位置より先はこの周から・過ぎたものは次周から鳴る
+  };
   const handle: PlaybackHandle = {
     pause: () => {
       if (!stopped) transport.pause();
@@ -882,8 +916,22 @@ export async function playNotes(
       if (!stopped) transport.start();
     },
     // #20 S6: 再生を止めずにレンズゲートを開閉（短ランプでクリック回避）。stop 後・レンズ層無しは no-op。
+    // #7-C: 開いたレンズ（on=true）を activeLens として保持＝以後の reschedule が正しいレンズで初期ゲートを張る。
     setLensGain: (lens: string, on: boolean) => {
-      if (!stopped) applyLensGate(lens, on);
+      if (stopped) return;
+      applyLensGate(lens, on);
+      if (on) currentActiveLens = lens;
+    },
+    // #7-C ループを止めず頭に戻さず、最新ノートをその場で組み直す（cancel(0)→再スケジュール・fire-and-forget）。
+    reschedule: (rawNotes: Note[]) => {
+      void doReschedule(rawNotes);
+    },
+    // #7-C ループ窓だけを走行中に更新（stop/start 不要）。beat→秒（loopRange と同じ spb 換算）。
+    setLoopRange: (startBeat: number, endBeat: number) => {
+      if (stopped) return;
+      const spb = 60 / bpm;
+      transport.loopStart = startBeat * spb;
+      transport.loopEnd = endBeat * spb;
     },
     stop: () => {
       if (stopped) return; // 冪等

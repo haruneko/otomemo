@@ -98,16 +98,21 @@ describe("useTransport (#59)", () => {
     expect(playNotes.mock.calls[0]![2].loop).toEqual({ startBeat: 4, endBeat: 6 });
   });
 
-  it("reloop restarts the loop while playing (applies new range); no-op while stopped", async () => {
+  // #7-C reloop は「その場組み直し（reschedule-in-place）」＝再生を止めず・頭に戻さず最新ノート/レンジを反映。
+  //   stop→begin をやめ handle.reschedule（＋range 指定時 setLoopRange）を呼ぶ＝playNotes 再呼び出し無し・stop 無し。
+  it("reloop reschedules in place while playing (no stop/begin＝頭に戻らない); no-op while stopped", async () => {
     const stop = vi.fn();
-    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop, setLensGain: vi.fn() });
+    const reschedule = vi.fn();
+    const setLoopRange = vi.fn();
+    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop, setLensGain: vi.fn(), reschedule, setLoopRange });
     const { result } = renderHook(() =>
       useTransport(() => NOTES, 120, { scaleBeats: 8, range: { startBeat: 0, endBeat: 8 } }),
     );
-    // 停止中の reloop は no-op（begin を回さない）。
+    // 停止中の reloop は no-op（reschedule も playNotes も回さない）。
     act(() => result.current.reloop());
     expect(playNotes).not.toHaveBeenCalled();
-    // 再生開始 → reloop で鳴らし直し（stop→begin）。
+    expect(reschedule).not.toHaveBeenCalled();
+    // 再生開始 → reloop はその場組み直し。
     await act(async () => {
       result.current.playPause();
     });
@@ -115,8 +120,10 @@ describe("useTransport (#59)", () => {
     await act(async () => {
       result.current.reloop();
     });
-    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(2));
-    expect(stop).toHaveBeenCalled();
+    await waitFor(() => expect(reschedule).toHaveBeenCalledTimes(1));
+    expect(setLoopRange).toHaveBeenCalledWith(0, 8); // range 指定＝ループ窓を走行中更新
+    expect(stop).not.toHaveBeenCalled(); // ★stop を呼ばない＝音が途切れない
+    expect(playNotes).toHaveBeenCalledTimes(1); // ★begin を回さない＝頭に戻らない
   });
 
   // #20 S6骨格の机：レンズ無停止切替。setLensGain は handle パススルーのみ＝begin（再スケジュール）を回さない。

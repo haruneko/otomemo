@@ -77,15 +77,16 @@ export function useTransport(
     }
   }, [loopOn, state, begin]);
 
-  // #20 S6骨格の机 D1.5: 範囲ブレースを掴み直した時に、いま鳴っているループへ新 range を効かせる。
-  // stop→begin（再スケジュール・ループ頭から）＝無停止ではない（無停止 range 変更は D1.5 スコープ外）。
-  // 停止中は no-op（次の play/loop が cfg.range を読む）。ドラッグ確定（pointerup）で1回だけ呼ぶ想定。
+  // #7-C 「その場で組み直す（reschedule-in-place）」：再生を**止めず・頭に戻さず**、最新ノート/レンジを次の
+  //   タイミングから途切れず反映（ルーパー的）。stop→begin をやめ handle.reschedule（＝transport.cancel(0)→再スケジュール、
+  //   走行中クロック保持）で差し替える＝reloop の全呼び出し元（ブレース確定・#1 effect・骨格編集 debounce）が頭に戻らない。
+  //   range 指定時は先に setLoopRange でループ窓を走行中更新（stop/start 不要）。停止中は no-op（次の play が cfg を読む）。
   const reloop = useCallback(() => {
-    if (state !== "stopped") {
-      handle.current?.stop();
-      void begin(loopOn);
-    }
-  }, [state, loopOn, begin]);
+    if (state === "stopped") return;
+    const c = cfg.current;
+    if (c.range) handle.current?.setLoopRange?.(c.range.startBeat, c.range.endBeat);
+    handle.current?.reschedule?.(c.getNotes());
+  }, [state]);
 
   // #20 S6骨格の机: レンズ別ゲートを**再生を止めずに**開閉（handle パススルー）。begin を回さない＝
   // 再スケジュールしない＝再生位置が飛ばない（無停止A/B の核）。停止中/レンズ層なしは handle 側で no-op。
