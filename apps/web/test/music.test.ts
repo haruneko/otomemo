@@ -372,6 +372,24 @@ describe("music", () => {
       expect(notes.length).toBe(3); // 3 hit = 3音
       expect(notes.map((n) => n.pitch)).toEqual([48, 52, 55]); // R,3,5 を巡回
     });
+    it("arp駆け上がり幅：arpOctaves=3 で voiced を下方へ3oct積み増し＝複数オクターブを駆け上がる（ハープ・2026-07-13）", () => {
+      const hits = Array.from({ length: 9 }, (_, i) => ({ step: i * 2, dur: 2 }));
+      const notes = resolveChordPattern(cp({ mode: "arp", steps: 32, voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, arpDir: "up", arpOctaves: 3 }, hits }), [{ root: 0, quality: "", start: 0, dur: 8 }], 0);
+      // voiced=[48,52,55] を下方へ [36,40,43]・[24,28,31] と積み増し→昇順プールを up で辿る。
+      expect(notes.map((n) => n.pitch)).toEqual([24, 28, 31, 36, 40, 43, 48, 52, 55]);
+      expect(Math.max(...notes.map((n) => n.pitch)) - Math.min(...notes.map((n) => n.pitch))).toBeGreaterThanOrEqual(24); // ≥2oct span
+    });
+    it("arp駆け上がり幅：既定(undefined)=1oct＝従来の voiced 巡回のまま＝bit一致（天井=topも不変）", () => {
+      const hits = Array.from({ length: 3 }, (_, i) => ({ step: i * 2, dur: 2 }));
+      const base = cp({ mode: "arp", steps: 32, voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, arpDir: "up" }, hits });
+      const def = resolveChordPattern(base, [{ root: 0, quality: "", start: 0, dur: 8 }], 0);
+      const one = resolveChordPattern(cp({ ...base, voicing: { ...base.voicing, arpOctaves: 1 } }), [{ root: 0, quality: "", start: 0, dur: 8 }], 0);
+      expect(def.map((n) => n.pitch)).toEqual([48, 52, 55]); // 従来と同一
+      expect(one.map((n) => n.pitch)).toEqual(def.map((n) => n.pitch)); // arpOctaves=1 も同一
+      // 天井（最高音）は幅を広げても top 側で不変＝「トップは絶対の磁石」を保つ（下へ伸ばす設計）。
+      const wide = resolveChordPattern(cp({ ...base, voicing: { ...base.voicing, arpOctaves: 4 }, hits: Array.from({ length: 12 }, (_, i) => ({ step: i * 2, dur: 2 })) }), [{ root: 0, quality: "", start: 0, dur: 8 }], 0);
+      expect(Math.max(...wide.map((n) => n.pitch))).toBe(Math.max(...def.map((n) => n.pitch)));
+    });
     it("コードチェンジに解決（後半は次コード G の voicing）", () => {
       const chords = [{ root: 0, quality: "", start: 0, dur: 2 }, { root: 7, quality: "", start: 2, dur: 2 }];
       const notes = resolveChordPattern(cp({ hits: [{ step: 0, dur: 8 }, { step: 8, dur: 8 }] }), chords, 0); // step8=2拍=G

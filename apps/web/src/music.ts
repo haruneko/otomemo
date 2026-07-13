@@ -393,6 +393,7 @@ export interface ChordVoicing {
   top?: number;
   powerChord?: boolean;
   arpDir?: "up" | "down" | "updown";
+  arpOctaves?: number; // arp の駆け上がり幅（1〜4oct）。voiced を下方へ積み増した拡張プールを巡回＝ハープのグリッサンド。既定1＝従来の voiced 巡回（bit一致）。
 }
 export interface ChordHit { step: number; dur: number } // dur=step数（1step=16分）＝各音の長さを指定
 export interface ChordPatternContent {
@@ -457,6 +458,17 @@ function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
   return v.openClose === "open" ? tones.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : tones;
 }
 
+// arp の駆け上がりプール＝voiced（1oct分の voicing）を **下方へ** arpOctaves ぶん積み増し昇順化。
+// 下へ伸ばす＝天井（トップ声部＝絶対の磁石）を動かさず低音側から駆け上がる（design 2026-07-13）。
+// 既定/1oct＝voiced そのもの（arpStep のインデックスも音数も不変＝bit一致）。上限4oct。
+function arpPool(voiced: number[], octaves?: number): number[] {
+  const n = Math.max(1, Math.min(4, Math.round(octaves ?? 1)));
+  if (n <= 1) return voiced;
+  const pool: number[] = [];
+  for (let o = 0; o < n; o++) for (const p of voiced) pool.push(p - 12 * o);
+  return pool.sort((a, b) => a - b);
+}
+
 // アルペジオ i 番目が voiced（昇順・n音）のどのインデックスか。up=昇順／down=降順／updown=ピンポン。
 function arpStep(i: number, n: number, dir?: "up" | "down" | "updown"): number {
   if (n <= 1) return 0;
@@ -492,8 +504,10 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
     const quality = ch ? ch.quality : "";
     const voiced = voiceChord(root, quality, v);
     if (mode === "arp") {
-      // 向き（up=昇順／down=降順／updown=ピンポン）で voiced（昇順）を辿る。音域は voicing 継承＝別指定なし。
-      out.push({ pitch: voiced[arpStep(arpIdx, voiced.length, v.arpDir)]!, start, dur });
+      // 向き（up=昇順／down=降順／updown=ピンポン）で拡張プール（voiced を下方へ arpOctaves 積み増し）を辿る。
+      // 既定1oct＝プール＝voiced＝従来どおり（bit一致）。arpOctaves≥2 で複数オクターブを駆け上がる＝ハープ。
+      const pool = arpPool(voiced, v.arpOctaves);
+      out.push({ pitch: pool[arpStep(arpIdx, pool.length, v.arpDir)]!, start, dur });
       arpIdx++;
     } else {
       for (const p of voiced) out.push({ pitch: p, start, dur });

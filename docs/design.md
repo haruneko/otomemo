@@ -292,7 +292,7 @@
 **問題**：`chord_progression`（和声＝抽象）が `program`（音色）を持つのは概念の混線。**和声=何か** と **楽器がどう鳴らすか** を分ける。
 - **`chord_progression` は抽象**：音色を持たない／選べない。プレビューは**固定の中立音色（GM 49 String Ensemble）**で鳴らせるが選択不可。合成では「コード楽器パターン」が実際の伴奏を担う。
 - **新 kind「コード楽器パターン（chord_pattern）」**＝**進行に解決する相対型**（相対ベースの和音版＝姉妹）。section のコード進行に合成時解決・自前の音色・複数重ねOK（ピアノ/ギター等）。content：
-  - `{ mode:"strum"|"arp", voicing:{ tones:("R"|"3"|"5"|"7")[], openClose:"open"|"close", octave:number }, steps:N, hits:{step,dur}[] }`（dur=step数＝各音の長さを指定。旧 number[] も後方互換で受ける）
+  - `{ mode:"strum"|"arp", voicing:{ tones:("R"|"3"|"5"|"7")[], openClose:"open"|"close", octave:number, top?, powerChord?, arpDir?, arpOctaves? }, steps:N, hits:{step,dur}[] }`（dur=step数＝各音の長さを指定。旧 number[] も後方互換で受ける。`arpOctaves`＝arp駆け上がり幅 1〜4oct・既定1＝下方の後述決定を参照）
   - **mode**：strum＝各 hit で和音ブロック／arp＝各 hit で選択構成音を1つずつ巡回。
   - **voicing**：構成音(R/3/5/7 から選ぶ)・open/close・高さ(octave)。＝**スケッチ範囲（やりすぎてシーケンサーにしない）**。
   - resolve：各 hit の時刻のコードを取り、voicing で実音へ（strum=同時／arp=巡回）。
@@ -304,6 +304,7 @@
 - **B. 拍子(6/8)対応**：`beatsPerBar` を music.ts に集約(SSOT)。`PianoRoll` に meter を渡し**小節線(拍子基準)＋複製単位**を拍子に。`useNetaEditor`(len初期化/bars保存/＋1小節)・`MetaPanel`(小節数表示)・`ChordEditor`(「1小節」ボタン/合計)の**4拍固定を全撤去**。6/8メロが「6小節」→正しく「8小節」に。
 - **C. 配置の長さ整合＋ピッカーのコーパス氾濫**：ループ系(リズム/コード楽器)は配置時に**セクション末尾まで自動で敷き詰め**(`loopPositions`)＝melodyは8小節なのにrhythmだけ1小節、のムラを解消。ピッカーは**コーパス(library)を既定で隠す**(トグルで表示)＝自作ネタが埋もれない。web257緑・実機で6/8・16小節セクション成立を確認。
 - **決定：ボイシング入力を「トップ狙い音」ベースへ（2026-07-04・オーナー発案／方向確定・エンジン先行）**：現状の R/3/5/7＋open/close＋octave は抽象パラメータで、一番audibleな**トップ声部（コンピングの旋律）を握れない**。→ **トップ声部の"狙い音"を人が決め、各コードでそれに最寄りのコードトーンを最高声部に採り、内声を下へ自動配置**（`voiceToTop` in music.ts・`ChordVoicing.top?`）。旨み＝レジスタが一定に保たれ**進行間の声部進行が自動で滑らか**（backlog「compingの声部進行最適化」を回収）。**トップは絶対採用**（調/コードが変わってもコンピングの音域は動かさない＝物理レジスタ。相対は将来トグル）。**"できるか"問題＝進行非依存で成立**：トップ＝絶対の狙い音（メロ実体でなく音域の磁石）だから、どの進行に乗せても各コードで最寄りトーンをトップに採るだけ。同距離時の優先やベース分離は「そこまでやるなら DAW」で割り切り（再生は多少雑でOK＝オーナー了承）。ベースはベースパートに任せる方針。**✅実装完了(2026-07-04・web249緑)**：①エンジン(構成音の手選択を撤去＝鳴る音はコード質から自動導出・`voiceToTop`／`powerChord`でR+5間引き／`arpDir`で向き＝音域はvoicing継承・別指定なし) ②エディタ再構成(ChordPatternEditorを2ゾーン＝「いつ弾く」grid主役＋長さ＋小節／「響き」＝打ち方・トップ狙い・広がり・高さ・パワーコード・arp時は向き を1枠に集約) ③トップ狙い(top)をステッパーで配線・プレビューは常にtop込み。青の壁は解体(二択セグメント/トグルはコード色/±無彩色)。音の長さは既存どおり各hitのdur(長さツール+付点)で保持。候補プレビュー化は後段。
+- **決定：arp の「駆け上がり幅」＝複数オクターブ span（2026-07-13・オーナーFB「ハープの駆け上がりみたいなのを作りたい／今のarpは幅が小さい」）**：現状 arp は `voiced`（voicing の3〜4音＝約1オクターブ内、open でも約1.5oct）だけを `arpStep` で巡回するため、**ハープのグリッサンド（複数オクターブを一気に駆け上がる）が原理的に出せない**。→ **`ChordVoicing.arpOctaves?:number`（駆け上がり幅・1〜4oct）を追加**。arp 時のみ、voiced を**下方向へ** arpOctaves ぶん積み増した拡張プール（`voiced ∪ voiced−12 ∪ … ∪ voiced−12*(n−1)` を昇順ソート）を `arpStep` が巡回する。**下方向に伸ばす**理由＝「トップ声部は絶対の磁石」（上の 2026-07-04 決定）を保ち、天井(top)を動かさず下から駆け上がる／up=低→top・down=top→低・updown=ピンポン。**既定 undefined=1oct＝拡張プール＝voiced そのもの＝bit一致**（既存 arp 出力不変）。strum は無関係（arpOctaves 無視）。速さ/音数は既存の hits グリッド（16分）が担う＝span×密度でハープ run になる。スコープ＝**1本のノブ**（「やりすぎてシーケンサーにしない」原則内＝グリッサンドは正当な音楽プリミティブ）。**✅実装(2026-07-13・web `music.ts` resolveChordPattern＋`ChordVoicing.arpOctaves`＋ChordPatternEditor「駆け上がり幅」＝arp時のみ表示・TDD)**。解決は web `music.ts` 一本（api は生成 genChordPattern のみ・実音化しない）ゆえ変更は web に閉じる。
 - **コード入力/section UX（CV・✅実装済）**：ChordEditor＝start自動フロー(順番)・長さボタン・ピアノロール表示・合計尺。SectionEditor＝レーン層モデル順(進行→メロ→コード楽器→ベース→リズム→section)・**占有セルのみ配置不可**(別小節は自由)。トグル/構成音の選択色＝OFF地色付与で是正(E2E)。
 
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）

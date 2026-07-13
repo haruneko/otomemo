@@ -128,6 +128,12 @@ export function ChordPatternEditor({
                 <button type="button" aria-label="arp-down" className={v.arpDir === "down" ? "on" : ""} onClick={() => setV({ arpDir: "down" })}>↓</button>
                 <button type="button" aria-label="arp-updown" className={v.arpDir === "updown" ? "on" : ""} onClick={() => setV({ arpDir: "updown" })}>↑↓</button>
               </div>
+              <span className="cp-vlbl">駆け上がり幅</span>
+              <div className="cp-top" aria-label="arp-octaves-ctrl">
+                <button type="button" aria-label="arp-oct-dec" onClick={() => setV({ arpOctaves: Math.max(1, (v.arpOctaves ?? 1) - 1) })}>−</button>
+                <span aria-label="arp-octaves">{v.arpOctaves ?? 1}oct</span>
+                <button type="button" aria-label="arp-oct-inc" onClick={() => setV({ arpOctaves: Math.min(4, (v.arpOctaves ?? 1) + 1) })}>＋</button>
+              </div>
             </>
           ) : (
             <button type="button" className={"cp-chk" + (v.powerChord ? " on" : "")} aria-label="power-chord" aria-pressed={!!v.powerChord} onClick={() => setV({ powerChord: !v.powerChord })}>
