@@ -379,6 +379,15 @@ describe("music", () => {
       expect(notes.map((n) => n.pitch)).toEqual([24, 28, 31, 36, 40, 43, 48, 52, 55]);
       expect(Math.max(...notes.map((n) => n.pitch)) - Math.min(...notes.map((n) => n.pitch))).toBeGreaterThanOrEqual(24); // ≥2oct span
     });
+    it("arp区切り：arpReset=1.5拍ごとに低音(pool頭)から駆け上がり直す（前半/後半で同じ上昇を反復・2026-07-13）", () => {
+      // pool=voiced(C close=[48,52,55])を2oct下方拡張=[36,40,43,48,52,55]。1step=0.25拍ゆえ step6=1.5拍で区切り。
+      const hits = [0, 2, 4, 6, 8, 10].map((step) => ({ step, dur: 2 })); // 0/0.5/1.0拍 ｜ 1.5/2.0/2.5拍
+      const v = { tones: ["R", "3", "5"] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0, arpDir: "up" as const, arpOctaves: 2 };
+      const withReset = resolveChordPattern(cp({ mode: "arp", steps: 16, voicing: { ...v, arpReset: 1.5 }, hits }), [{ root: 0, quality: "", start: 0, dur: 8 }], 0);
+      expect(withReset.map((n) => n.pitch)).toEqual([36, 40, 43, 36, 40, 43]); // 各1.5拍窓が pool 頭から
+      const noReset = resolveChordPattern(cp({ mode: "arp", steps: 16, voicing: v, hits }), [{ root: 0, quality: "", start: 0, dur: 8 }], 0);
+      expect(noReset.map((n) => n.pitch)).toEqual([36, 40, 43, 48, 52, 55]); // 既定=区切りなし=連続で登り続ける(bit一致)
+    });
     it("arp駆け上がり幅：既定(undefined)=1oct＝従来の voiced 巡回のまま＝bit一致（天井=topも不変）", () => {
       const hits = Array.from({ length: 3 }, (_, i) => ({ step: i * 2, dur: 2 }));
       const base = cp({ mode: "arp", steps: 32, voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, arpDir: "up" }, hits });

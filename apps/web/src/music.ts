@@ -394,6 +394,7 @@ export interface ChordVoicing {
   powerChord?: boolean;
   arpDir?: "up" | "down" | "updown";
   arpOctaves?: number; // arp の駆け上がり幅（1〜4oct）。voiced を下方へ積み増した拡張プールを巡回＝ハープのグリッサンド。既定1＝従来の voiced 巡回（bit一致）。
+  arpReset?: number; // arp の駆け上がり区切り（拍）。この拍数ごとに pool 頭（低音）から登り直す＝「1.5拍ごとに下から駆け上がる」。既定/0＝区切りなし（連続巡回・bit一致）。
 }
 export interface ChordHit { step: number; dur: number } // dur=step数（1step=16分）＝各音の長さを指定
 export interface ChordPatternContent {
@@ -487,7 +488,7 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
   const v = content?.voicing ?? { tones: ["R", "3", "5"], openClose: "close", octave: 0 };
   const hits = normHits(content?.hits).sort((a, b) => a.step - b.step);
   const out: Note[] = [];
-  let arpIdx = 0;
+  let arpIdx = 0, arpGrp = -1; // arpGrp＝arpReset の区切り番号（変わったら arpIdx を頭へ戻す）
   for (let h = 0; h < hits.length; h++) {
     const step = hits[h]!.step;
     const start = Math.round(step * BASS_STEP_TO_BEAT * 1000) / 1000;
@@ -507,6 +508,8 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
       // 向き（up=昇順／down=降順／updown=ピンポン）で拡張プール（voiced を下方へ arpOctaves 積み増し）を辿る。
       // 既定1oct＝プール＝voiced＝従来どおり（bit一致）。arpOctaves≥2 で複数オクターブを駆け上がる＝ハープ。
       const pool = arpPool(voiced, v.arpOctaves);
+      // arpReset＝この拍数ごとに pool 頭から登り直す（区切り番号が変わったら arpIdx を 0 へ）。既定/0＝連続巡回（bit一致）。
+      if (v.arpReset && v.arpReset > 0) { const grp = Math.floor((start + 1e-9) / v.arpReset); if (grp !== arpGrp) { arpIdx = 0; arpGrp = grp; } }
       out.push({ pitch: pool[arpStep(arpIdx, pool.length, v.arpDir)]!, start, dur });
       arpIdx++;
     } else {
@@ -712,6 +715,32 @@ export const GM_INSTRUMENTS: { value: number; label: string }[] = [
   { value: 80, label: "シンセリード" },
   { value: 88, label: "シンセパッド" },
 ];
+
+// GM 128 音色の全リスト（家族＝GM標準の16グループ×8）。簡易リスト(GM_INSTRUMENTS)の「他に全部選べる」用（GSバンクは非対象）。
+// value=GM プログラム番号(0-127)。再生の音色は SF2 が持つ範囲＝General MIDI サウンドフォント前提（未収録音は簡易シンセ代替になりうる）。
+export const GM_ALL_FAMILIES: { family: string; names: string[] }[] = [
+  { family: "ピアノ", names: ["アコースティックピアノ", "ブライトピアノ", "エレクトリックグランド", "ホンキートンク", "エレピ1", "エレピ2", "ハープシコード", "クラビ"] },
+  { family: "クロマチック打", names: ["チェレスタ", "グロッケン", "オルゴール", "ビブラフォン", "マリンバ", "シロフォン", "チューブラーベル", "ダルシマー"] },
+  { family: "オルガン", names: ["ドローバーオルガン", "パーカッシブオルガン", "ロックオルガン", "チャーチオルガン", "リードオルガン", "アコーディオン", "ハーモニカ", "タンゴアコーディオン"] },
+  { family: "ギター", names: ["ナイロンギター", "スチールギター", "ジャズギター", "クリーンギター", "ミュートギター", "オーバードライブギター", "ディストーションギター", "ギターハーモニクス"] },
+  { family: "ベース", names: ["アコースティックベース", "フィンガーベース", "ピックベース", "フレットレスベース", "スラップベース1", "スラップベース2", "シンセベース1", "シンセベース2"] },
+  { family: "ストリングス", names: ["バイオリン", "ビオラ", "チェロ", "コントラバス", "トレモロ弦", "ピチカート弦", "ハープ", "ティンパニ"] },
+  { family: "アンサンブル", names: ["ストリングス1", "ストリングス2", "シンセストリングス1", "シンセストリングス2", "合唱アー", "声オー", "シンセボイス", "オーケストラヒット"] },
+  { family: "ブラス", names: ["トランペット", "トロンボーン", "チューバ", "ミュートトランペット", "フレンチホルン", "ブラスセクション", "シンセブラス1", "シンセブラス2"] },
+  { family: "リード(木管)", names: ["ソプラノサックス", "アルトサックス", "テナーサックス", "バリトンサックス", "オーボエ", "イングリッシュホルン", "ファゴット", "クラリネット"] },
+  { family: "パイプ", names: ["ピッコロ", "フルート", "リコーダー", "パンフルート", "ボトルブロウ", "尺八", "ホイッスル", "オカリナ"] },
+  { family: "シンセリード", names: ["矩形波リード", "鋸波リード", "カリオペ", "チフ", "チャラング", "ボイスリード", "5度リード", "ベース+リード"] },
+  { family: "シンセパッド", names: ["ニューエイジパッド", "ウォームパッド", "ポリシンセパッド", "クワイアパッド", "ボウドパッド", "メタリックパッド", "ヘイローパッド", "スイープパッド"] },
+  { family: "シンセ効果", names: ["レイン", "サウンドトラック", "クリスタル", "アトモスフィア", "ブライトネス", "ゴブリン", "エコー", "SF"] },
+  { family: "エスニック", names: ["シタール", "バンジョー", "三味線", "琴", "カリンバ", "バグパイプ", "フィドル", "シャナイ"] },
+  { family: "パーカッシブ", names: ["ティンクルベル", "アゴゴ", "スチールドラム", "ウッドブロック", "太鼓", "メロディックタム", "シンセドラム", "リバースシンバル"] },
+  { family: "効果音", names: ["ギターフレットノイズ", "ブレスノイズ", "海岸", "小鳥", "電話", "ヘリコプター", "拍手", "銃声"] },
+];
+// value→ラベル逆引き（簡易/全GM 双方をカバー）。要約表示や候補で使う。
+export const GM_ALL: { value: number; label: string }[] = GM_ALL_FAMILIES.flatMap((f, fi) => f.names.map((label, i) => ({ value: fi * 8 + i, label })));
+export function gmLabel(program: number): string {
+  return GM_INSTRUMENTS.find((g) => g.value === program)?.label ?? GM_ALL.find((g) => g.value === program)?.label ?? `GM ${program}`;
+}
 
 export function programOf(content: unknown): number | undefined {
   if (content && typeof content === "object" && "program" in content) {

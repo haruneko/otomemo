@@ -3,7 +3,7 @@
 // ※MIDI書き出しは単体編集画面から撤去済（2026-07-04）＝Section の いじる▾ のみ。
 // どの枠を出すかは flags で決める（kind 分岐を集約）。折りたたみ状態(localStorage)と要約はここに閉じる。
 import { useState } from "react";
-import { GM_INSTRUMENTS, beatsPerBar, PITCH_NAMES as KEY_NAMES } from "../music";
+import { GM_INSTRUMENTS, GM_ALL_FAMILIES, gmLabel, beatsPerBar, PITCH_NAMES as KEY_NAMES } from "../music";
 import { NumberField } from "./NumberField";
 import { BarsControl } from "./BarsControl";
 
@@ -68,7 +68,7 @@ export function MetaPanel(p: {
     f.showKey ? `${KEY_NAMES[p.keyPc]} ${p.mode === "major" ? "長調" : "短調"}` : null,
     f.isContainer ? p.meter : null,
     f.showMeta ? `♩${p.tempo}` : null,
-    f.isMelody || f.isBass || f.isChordPat ? GM_INSTRUMENTS.find((g) => g.value === p.program)?.label : null,
+    f.isMelody || f.isBass || f.isChordPat ? gmLabel(p.program) : null,
     p.rollBars ? `${Math.max(1, Math.round(p.rollBars.len / beatsPerBar(p.rollBars.meter)))}小節` : null,
     p.rollBars && p.rollBars.pickup > 0 ? `弱起${p.rollBars.pickup}` : null,
   ]
@@ -132,10 +132,21 @@ export function MetaPanel(p: {
               <label className="meta">
                 音色
                 <select aria-label="program" value={p.program} onChange={(e) => p.setProgram(Number(e.target.value))}>
-                  {GM_INSTRUMENTS.map((g) => (
-                    <option key={g.value} value={g.value}>
-                      {g.label}
-                    </option>
+                  <optgroup label="よく使う">
+                    {GM_INSTRUMENTS.map((g) => (
+                      <option key={`q${g.value}`} value={g.value}>
+                        {g.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {GM_ALL_FAMILIES.map((fam, fi) => (
+                    <optgroup key={fam.family} label={fam.family}>
+                      {fam.names.map((name, i) => (
+                        <option key={fi * 8 + i} value={fi * 8 + i}>
+                          {name}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </label>

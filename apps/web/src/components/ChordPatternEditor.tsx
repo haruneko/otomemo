@@ -134,6 +134,16 @@ export function ChordPatternEditor({
                 <span aria-label="arp-octaves">{v.arpOctaves ?? 1}oct</span>
                 <button type="button" aria-label="arp-oct-inc" onClick={() => setV({ arpOctaves: Math.min(4, (v.arpOctaves ?? 1) + 1) })}>＋</button>
               </div>
+              <span className="cp-vlbl">区切り</span>
+              <select aria-label="arp-reset" value={v.arpReset ?? 0} onChange={(e) => setV({ arpReset: Number(e.target.value) || undefined })}>
+                <option value={0}>なし（連続）</option>
+                <option value={0.5}>0.5拍ごと</option>
+                <option value={1}>1拍ごと</option>
+                <option value={1.5}>1.5拍ごと</option>
+                <option value={2}>2拍ごと</option>
+                <option value={3}>3拍ごと</option>
+                <option value={4}>1小節ごと</option>
+              </select>
             </>
           ) : (
             <button type="button" className={"cp-chk" + (v.powerChord ? " on" : "")} aria-label="power-chord" aria-pressed={!!v.powerChord} onClick={() => setV({ powerChord: !v.powerChord })}>
