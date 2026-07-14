@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Job, type Neta } from "../api";
 import { KIND_LABEL } from "../kinds";
+import { Icon } from "./Icon";
 
 // 何のジョブか分かる日本語ラベル（生 intent を出さない・fb-1）。
 const INTENT_LABEL: Record<string, string> = {
@@ -128,7 +129,7 @@ export function Tray({
                 <span className="tray-intent">{intentLabel(j.intent)}</span>
                 {fromChat(j) && (
                   <button className="tray-chip" aria-label="open-chat" title="このチャットを開く" onClick={() => onOpenChat?.(j.target_neta_id ?? undefined)}>
-                    💬 チャット
+                    <Icon name="chat" size={13} /> チャット
                   </button>
                 )}
                 <span className={"tray-status " + j.status}>{j.status}</span>
@@ -139,7 +140,7 @@ export function Tray({
                   title={j.status === "running" ? "止めて消す（実行中の処理も停止）" : "このジョブを消す"}
                   onClick={() => void removeJob(j.id)}
                 >
-                  {j.status === "running" ? "■" : "🗑"}
+                  {j.status === "running" ? "■" : <Icon name="trash" size={16} />}
                 </button>
               </div>
               {asked(j) && <div className="tray-asked">「{asked(j)}」</div>}

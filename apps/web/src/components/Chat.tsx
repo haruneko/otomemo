@@ -561,16 +561,16 @@ export function Chat({
         )}
         {!target && activeProject && projectInstructions && (
           <div className="chat-instr" aria-label="project-instructions-active" title={projectInstructions}>
-            📌 「{activeProject}」の指示が効いています：{projectInstructions.slice(0, 60)}
+            <span className="ic-inline"><Icon name="pin" size={14} /></span> 「{activeProject}」の指示が効いています：{projectInstructions.slice(0, 60)}
             {projectInstructions.length > 60 ? "…" : ""}
           </div>
         )}
-        {gear && <div className="chat-target">🎛 機材の相談（全曲共通・器に紐づかない）</div>}
+        {gear && <div className="chat-target"><span className="ic-inline"><Icon name="sliders" size={14} /></span> 機材の相談（全曲共通・器に紐づかない）</div>}
         {targetLabel && <div className="chat-target">「{targetLabel.slice(0, 30)}」についての相談</div>}
         {/* リロード等で待ち状態が消えても、裏で動いてるジョブを可視化（待ちか不明をなくす）。 */}
         {inflight > 0 && !busy && (
           <div className="chat-inflight" aria-label="inflight">
-            🔄 {inflight}件 実行中…（できたら受け取りトレイ 📥 とネタ帳に届きます）
+            <span className="ic-inline"><Icon name="loop" size={14} /></span> {inflight}件 実行中…（できたら受け取りトレイ <span className="ic-inline"><Icon name="inbox" size={13} /></span> とネタ帳に届きます）
           </div>
         )}
         <div className="chat-log">

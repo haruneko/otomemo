@@ -1,4 +1,9 @@
 /* 基底・ルート変数・2ペーンワークスペース */
+/* 文中インラインのアイコン（豆腐絵文字のSVG置換・バナー/ヒント用）＝ベースライン合わせ。 */
+.ic-inline {
+  display: inline-flex;
+  vertical-align: -0.18em;
+}
 :root {
   color-scheme: dark;
   --bg: #16181c;

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { GM_INSTRUMENTS, GM_ALL_FAMILIES, gmLabel, beatsPerBar, PITCH_NAMES as KEY_NAMES } from "../music";
 import { NumberField } from "./NumberField";
 import { BarsControl } from "./BarsControl";
+import { Icon } from "./Icon";
 
 const METERS = ["4/4", "3/4", "6/8", "2/4", "5/4", "12/8"];
 
@@ -160,7 +161,7 @@ export function MetaPanel(p: {
                 本体（合成/分割）から。将来は「エクスポート機能でネタを選ぶ」導線も可。 */}
             {f.isThemeable && (
               <button type="button" className={p.schedId ? "primary" : ""} aria-label="continuous-research" title="このテーマを見てない間も継続して調べ、参考をトレイに溜める" onClick={p.onToggleSchedule}>
-                {p.schedId ? "🔁 継続調査中" : "🔁 継続して調べる"}
+                <span className="ic-inline"><Icon name="loop" size={14} /></span> {p.schedId ? "継続調査中" : "継続して調べる"}
               </button>
             )}
           </div>

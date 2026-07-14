@@ -356,7 +356,7 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
             })}
           </div>
           <div className="cand-tray-foot">
-            <button type="button" className="tb-tool" aria-label="stub-again" disabled={busy} onClick={() => void genStub()}>{busy ? "…" : "🎲 別案"}</button>
+            <button type="button" className="tb-tool" aria-label="stub-again" disabled={busy} onClick={() => void genStub()}>{busy ? "…" : <><Icon name="dice" size={16} /> 別案</>}</button>
             <button type="button" className="tb-tool" aria-label="stub-close" onClick={closeStub}>閉じる</button>
           </div>
         </div>

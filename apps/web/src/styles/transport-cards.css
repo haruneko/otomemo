@@ -164,12 +164,14 @@
   color: var(--muted);
 }
 .section-bars button {
-  width: 30px;
+  min-width: 30px;
   height: 30px;
+  padding: 0 4px;
   border: 1px solid var(--line);
   background: #22252b;
   color: var(--fg);
   border-radius: 6px;
+  white-space: nowrap; /* ＋8/−8 が「＋」「8」に折れる（迷子の8）事故を防ぐ＝SP尺ステッパーの二段崩れ修正 */
 }
 .section-bars button:disabled {
   opacity: 0.4;
@@ -208,7 +210,7 @@
   pointer-events: none;
   z-index: 5;
   display: none; /* start() で block にする */
-  left: calc(44px + var(--ph, 0) * (100% - 44px));
+  left: calc(56px + var(--ph, 0) * (100% - 56px));
 }
 .lane-ruler,
 .lane {
@@ -216,10 +218,14 @@
   align-items: stretch;
 }
 .lane-label {
-  flex: 0 0 44px;
-  width: 44px;
-  font-size: 0.68rem;
-  line-height: 1.05; /* 2行折返し時も詰めてレーンの縦リズムを乱さない（幅はタイムラインを食わないよう据え置き） */
+  flex: 0 0 56px;
+  width: 56px;
+  padding-right: 4px;
+  box-sizing: border-box;
+  font-size: 0.6rem;
+  line-height: 1.15; /* レーン名は1行に収める前提（コード進行/コード楽器1 等）。溢れた時も詰めて縦リズムを乱さない */
+  word-break: keep-all; /* 「コード進/行」の様な単語途中の折返しを禁止（CJKは語のまとまりで扱う） */
+  overflow-wrap: anywhere; /* それでも幅を超える極端なラベルだけは折返しを許可（はみ出し防止） */
   color: var(--muted);
   display: flex;
   align-items: center;

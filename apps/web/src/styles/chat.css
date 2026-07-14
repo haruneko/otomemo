@@ -368,11 +368,11 @@
 @media (max-width: 480px) {
   .rhythm-editor {
     --rcell: 14px;
-    --rname: 42px;
+    --rname: 50px;
   }
   .rhythm-name {
-    font-size: 0.62rem;
-    line-height: 1.05;
+    font-size: 0.56rem;
+    line-height: 1.1;
   }
   /* コード行：セレクタを少し詰めて root/三和音/拡張/オルタード/オンベースの5つが1行に収まる
      ＝ドミナント7(オルタード有)の行も /オンベース が次行に落ちず、行ごとに揃う。 */
@@ -412,7 +412,10 @@
 .rhythm-name {
   width: var(--rname);
   flex: 0 0 auto;
-  font-size: 0.72rem;
+  font-size: 0.64rem;
+  line-height: 1.1;
+  word-break: keep-all; /* ハイハット/オープンHH 等が単語途中で折れないように（①レーン名折返し修正） */
+  overflow-wrap: anywhere;
   color: var(--muted);
   /* 複数小節で横スクロールしてもレーン名を左に固定＝何の行か見失わない（DAW定石）。
      背景で後ろのセルを隠す＋右に影＝「ここから先がスクロールする」フローズン列に見える（かぶり解消）。 */

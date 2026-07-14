@@ -400,7 +400,7 @@ export function SectionEditor({
                           <button type="button" className="tb-tool" aria-label="audition-candidate" title="試聴" onClick={() => void gen.auditionCandidate(c)}>▶</button>
                           <button type="button" className="tb-tool" aria-label="keep-candidate" aria-pressed={kept} title="気に入ったら残す" onClick={() => gen.toggleKeep(c.cid)}>{kept ? "♥" : "♡"}</button>
                           <button type="button" className="tb-tool primary" aria-label="place-candidate" title="レーンに置く" onClick={() => void gen.placeCandidate(c)}>置く</button>
-                          <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => gen.removeCand(c.cid)}>🗑</button>
+                          <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => gen.removeCand(c.cid)}><Icon name="trash" size={16} /></button>
                         </div>
                       </div>
                     );
@@ -526,7 +526,7 @@ export function SectionEditor({
         </div>
       </div>
       <p className="muted lanes-hint">
-        空きをタップ→置く/新規作成／ブロックをタップで編集（⌫消しゴムでタップ＝外す）／右端ドラッグで繰り返し
+        空きをタップ→置く/新規作成／ブロックをタップで編集（消しゴムモードでタップ＝外す）／右端ドラッグで繰り返し
       </p>
 
       {others.length > 0 && (

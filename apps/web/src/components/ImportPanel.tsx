@@ -2,6 +2,7 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import { api } from "../api";
 import { parseMusicXml } from "../musicxml";
 import { HummingRecorder } from "./HummingRecorder";
+import { Icon } from "./Icon";
 
 // 過去資産の取込パネル（MIDI/楽譜/音源アナリーゼ/URL/歌詞/ハミング）。App.tsx から機械分割
 // （負債D6）＝挙動不変。importing/URL入力の状態とハンドラを自己完結で持ち、開閉(importOpen)と
@@ -169,7 +170,7 @@ export function ImportPanel({
       </label>
       <HummingRecorder onCreated={() => void reload()} projectTags={projectTags} />
       <label className="import-btn" title="音源を分離→BPM/調/コード/音域を解析しアナリーゼ文を受信トレイへ（音源は解析後に削除）">
-        {importing ? "解析中…" : "🎵 音源アナリーゼ"}
+        {importing ? "解析中…" : <><Icon name="waveform" size={15} /> 音源アナリーゼ</>}
         <input
           type="file"
           accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"

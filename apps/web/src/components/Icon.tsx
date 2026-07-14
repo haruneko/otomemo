@@ -144,6 +144,12 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <circle {...st} cx="12" cy="12" r="9" />
         </svg>
       );
+    case "waveform": // 🎵 音源アナリーゼ（波形＝音源を解析）
+      return (
+        <svg {...s}>
+          <path {...st} d="M4 10v4M8 6v12M12 9v6M16 4v16M20 8v8" />
+        </svg>
+      );
     case "pin": // 指示ピン
       return (
         <svg {...s}>
