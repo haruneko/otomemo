@@ -25,6 +25,8 @@ import {
   detectKeyFromNotes,
   melodySimilarity,
   findSimilar,
+  similarityWarning,
+  originalityReport,
   genNamedProgression,
   suggestClicheLines,
   suggestKeyPlan,
@@ -983,6 +985,24 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       },
     },
     async ({ roles, template }) => ok(suggestEnergyPlan(roles ?? [], template !== undefined ? { template } : {})),
+  );
+  // WP-E1：感情語 or V-A座標 → 実在ノブの推奨値プリセット（提案のみ・過信警告付き）。emotion_shift（単体コードの品質シフト）とは別物＝生成ノブ翻訳。
+  server.registerTool(
+    "suggest_emotion_params",
+    {
+      title: "感情語→生成パラメータを提案",
+      description:
+        "「切ない感じで/疾走感/エモい」等の感情語（or V-A座標）を、生成エンジンの**実在ノブの推奨値**へ翻訳して提案する。返り＝V-A座標＋mix(正負混合)フラグ＋一行根拠＋variations（各案＝mode/palette/tempoBpm＋knobs{registerShift/density/swing/expression/articulation/flow/runs/borrow/secondaryDom}＝frame や gen_melody/gen_chords へ渡せる実在ノブのみ）＋**過信警告**（文化/個人差依存）。切ない/エモい/懐かしい/情熱は正負混合＝**陽寄り/陰寄り2案**を返す。17語プリセット（明るい/悲しい/切ない/エモい/疾走感/浮遊感/儚い/懐かしい/怒り/恐れ/荘厳/穏やか/高揚/クール/情熱/決意/幻想的・別表記/英語も吸収）。**提案のみ＝自動適用しない**（1ノブで決めず候補として耳に委ねる・doc §6）。1コードの品質を切なく/明るくは emotion_shift。",
+      inputSchema: {
+        word: z.string().optional().describe("感情語（例 切ない/疾走感/エモい/happy/dreamy）。別表記・英語も吸収。引けなければ V-A 近傍へフォールバック"),
+        V: z.number().min(-1).max(1).optional().describe("valence −1..+1（快‐不快）。word 未指定/不一致時に最近傍プリセットを引く"),
+        A: z.number().min(0).max(1).optional().describe("arousal 0..1（覚醒‐鎮静）。V と併せて最近傍を引く"),
+      },
+    },
+    async ({ word, V, A }) => {
+      const r = suggestEmotionParams({ word, V, A });
+      return r ? ok(r) : err("感情語が辞書に無く V-A 座標も未指定＝提案不可（word か V+A を渡す）");
+    },
   );
   server.registerTool(
     "generate",
