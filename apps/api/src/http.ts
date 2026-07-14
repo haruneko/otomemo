@@ -50,6 +50,7 @@ import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonN
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
 import { attachSyncScore } from "./music/syncopationReport"; // シンコペ「ノリメーター」の生成側露出（WP-D2）
+import { attachStructureWarnings } from "./music/structureValidator"; // 生成後の構造バリデータ＝dur<=0/重複onset/範囲外を警告のみ添付（2026-07-15）
 import { attachHarmonicTension } from "./music/harmonicTensionReport"; // 和声張力カーブレンズの生成側露出（WP-C4）
 import { meterInfo } from "./music/meter";
 import { resolveVoiceProfile } from "@cm/music-core"; // 声種プロファイル解決（WP-M4・レンズへ渡す）
@@ -77,6 +78,18 @@ function stripHeavyListContent<T extends { content: unknown }>(items: T[]): T[] 
 
 
 // neta/job 入力スキーマは SSOT(schemas.ts)から import（http/mcp/型で共有・三重定義を排す）。
+
+// 音源アナリーゼの params.url は http/https の妥当なURLのみ許す（不正URLで yt-dlp を無駄に起動して
+// 失敗させない＝入口で 400）。空/非文字列/他プロトコル(file: 等)は不正扱い。
+export function isValidHttpUrl(u: unknown): boolean {
+  if (typeof u !== "string" || !u.trim()) return false;
+  try {
+    const parsed = new URL(u.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 // 意味検索のPython窓口（docs/design.md #16）。localhost のみ、外に露出しない。
 import { SEARCH_URL, searchNetaMerged } from "./semantic-search"; // 共通化(2026-07-14)
@@ -514,6 +527,14 @@ export function buildHttp(core: Core): FastifyInstance {
   app.post("/job", async (req, reply) => {
     const p = jobInputSchema.safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    // 音源アナリーゼで url を渡すなら http(s) の妥当なURLに限る（不正URLでyt-dlpを無駄起動しない）。
+    // url 未指定（audio_b64 でのアップロード解析）は従来どおり通す。
+    if (p.data.intent === "audio_analyze") {
+      const url = (p.data.params as { url?: unknown } | null | undefined)?.url;
+      if (url != null && !isValidHttpUrl(url)) {
+        return reply.code(400).send({ error: "音源URLは http(s):// で始まる正しいURLを指定してください" });
+      }
+    }
     return core.enqueueJob(p.data);
   });
 

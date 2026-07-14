@@ -15,6 +15,7 @@ import {
   rhythmToNotes,
   programOf,
   scheduleTimes,
+  clampNegativeStarts,
   applyFeel,
   type Feel,
   totalSec,
@@ -922,7 +923,11 @@ export async function playNotes(
   // #7-C 発音イベントの一括スケジュール（初回 begin・reschedule 双方で再利用）。sf/kit は const、
   // drumKits/melodicByPart は let＝reschedule で差し替えた最新 Map を各 playEvent が参照する。
   const scheduleFrom = (finalNotes: Note[]): void => {
-    for (const ev of scheduleTimes(finalNotes, bpm)) {
+    // 弱起（負start）を再生でも鳴らす：Tone.Transport は負時刻イベントを発火しない（開始 tick=0 より前は
+    // 素通り＝弱起が無音）。入口で t=0 へ丸めて鳴らす（dur は end 保持で縮め・完全に0以前で終わる音は落とす
+    // ＝書き出しの clampNegativeStarts と同規則）。※将来のプリロール再生（カウントイン＝頭に空小節を足して
+    //   本来の弱起位置で鳴らす）は今回やらない＝ここは「頭に寄せて鳴らす」までに留める。
+    for (const ev of scheduleTimes(clampNegativeStarts(finalNotes), bpm)) {
       transport.schedule(
         (time: number) => playEvent(ev, time, sf, kit, Tone, drumKits, melodicByPart, defaultProg),
         ev.time,

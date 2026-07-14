@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { openDb } from "../src/db";
 import { Core } from "../src/core";
-import { runAudioAnalyzeJob, synthesisPrompt } from "../src/audio-analyze";
+import { runAudioAnalyzeJob, synthesisPrompt, userFacingFailure } from "../src/audio-analyze";
 
 describe("① アナリーゼ（audio_analyze）", () => {
   it("synthesisPrompt は『調はコードから』の指示と facts/曲名を含む", () => {
@@ -204,5 +204,28 @@ describe("① アナリーゼ（audio_analyze）", () => {
     });
     expect(core.getJob(claimed.id)!.status).toBe("failed");
     expect(core.getJob(claimed.id)!.error).toContain("boom");
+  });
+
+  // 失敗文言の生パス丸め（2026-07-15）：yt-dlp/analyze.py の生失敗は絶対パスを含む＝ユーザーに晒さない。
+  it("失敗 message に絶対パスが混じらない（詳細はサーバログのみ）", async () => {
+    const core = new Core(openDb(":memory:"));
+    core.enqueueJob({ intent: "audio_analyze", params: { filename: "x.mp3", audio_b64: "" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    // 実際の run() reject 形状＝`<絶対パス>/python failed (1): <stderr にパス>`。
+    await runAudioAnalyzeJob(core, claimed, async () => "", async () => {
+      throw new Error("/home/shuraba_p/projects/creative_manager/_audio_poc/.venv/bin/python failed (1): No such file: /tmp/cm-audio-xxx/dl.mp3");
+    });
+    const err = core.getJob(claimed.id)!.error!;
+    expect(err).not.toContain("/home/shuraba_p"); // 内部絶対パスが出ない
+    expect(err).not.toContain("/tmp/cm-audio"); // stderr のパスも出ない
+    expect(err).toContain("解析に失敗しました"); // ユーザー向け1行
+  });
+
+  it("userFacingFailure：停止/短文は保持・パス/ダンプ/timeout は1行へ丸める", () => {
+    expect(userFacingFailure("停止しました")).toBe("停止しました"); // ユーザー操作は区別を保つ
+    expect(userFacingFailure("analyze boom")).toBe("analyze boom"); // パスもダンプも無い短文は保持
+    expect(userFacingFailure("/usr/bin/yt-dlp failed (1): ERROR")).toContain("解析に失敗しました");
+    expect(userFacingFailure("/usr/bin/yt-dlp failed (1): ERROR")).not.toMatch(/\//);
+    expect(userFacingFailure("python timeout")).toContain("解析に失敗しました");
   });
 });

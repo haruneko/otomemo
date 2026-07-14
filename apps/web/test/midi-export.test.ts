@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Midi } from "@tonejs/midi";
-import { notesToMidi, tracksToMidi, trackProgramOf } from "../src/music";
+import { notesToMidi, tracksToMidi, trackProgramOf, prerollOffsetBeats, clampNegativeStarts } from "../src/music";
 
 describe("MIDI出力の正しさ検証", () => {
   it("単一トラック：テンポ・拍子ヘッダ・音符の秒時刻・velocity（4/4）", () => {
@@ -99,10 +99,21 @@ describe("MIDI出力の正しさ検証", () => {
   });
 });
 
-// 弱起（負start）ノートの書き出し安全化（実機監査 2026-07-15）：弱起メロを section の bar0
-// (position 0)に置くと負start が残り、@tonejs/midi が負tick で throw → DL 無言失敗。書き出し
-// 境界で start<0 を t=0 へクランプ（end=start+dur を保つ・min0.05・end<=0 は捨てる）。合成側は不変。
-describe("弱起（負start）の書き出しクランプ：負tick throw の根治", () => {
+// 弱起（負start）ノートの書き出しプリロール（実機監査 2026-07-15・オーナー方針）：弱起メロを section の
+// bar0(position 0)に置くと負start が残り、@tonejs/midi が負tick で throw → DL 無言失敗。書き出し境界で
+// 全ノートを**小節単位に切り上げたオフセット**だけ後ろへシフト（-0.5拍→+1小節/-5拍→+2小節）＝DAW 小節整合。
+// シフトでほぼ全 start>=0 になるが、想定外の残り負は clampNegativeStarts で t=0 保険。合成側は不変。
+describe("弱起（負start）の書き出しプリロール：小節単位シフト", () => {
+  it("prerollOffsetBeats：小節単位の切り上げ（4/4=bpb4／6/8=bpb3・境界ちょうどは足さない）", () => {
+    expect(prerollOffsetBeats(-0.5, 4)).toBe(4); // -0.5拍 → +1小節
+    expect(prerollOffsetBeats(-5, 4)).toBe(8); // -5拍 → +2小節
+    expect(prerollOffsetBeats(-4, 4)).toBe(4); // ちょうど1小節ぶん→+1小節（余分な2小節にしない）
+    expect(prerollOffsetBeats(-0.5, 3)).toBe(3); // 6/8：-0.5拍 → +1小節(3拍)
+    expect(prerollOffsetBeats(-5, 3)).toBe(6); // 6/8：-5拍 → +2小節(6拍)
+    expect(prerollOffsetBeats(0, 4)).toBe(0); // 負start無し＝シフト無し
+    expect(prerollOffsetBeats(2, 4)).toBe(0);
+  });
+
   it("notesToMidi：負start があっても throw せず、全イベント time>=0", () => {
     const notes = [
       { pitch: 60, start: -0.5, dur: 1 }, // 弱起（0 をまたぐ）
@@ -114,44 +125,59 @@ describe("弱起（負start）の書き出しクランプ：負tick throw の根
     for (const t of m.tracks) for (const n of t.notes) expect(n.time).toBeGreaterThanOrEqual(0);
   });
 
-  it("notesToMidi：0 をまたぐ弱起は t=0 へ寄せ、聞こえる終端(end=start+dur)を保つ", () => {
-    const spb = 60 / 120;
-    const notes = [{ pitch: 60, start: -0.5, dur: 1 }]; // end=0.5拍
-    const m = new Midi(notesToMidi(notes, 120, "4/4", 0).buffer as ArrayBuffer);
-    const n = m.tracks[0]!.notes[0]!;
-    expect(n.time).toBeCloseTo(0, 5); // t=0 にクランプ
-    expect(n.duration).toBeCloseTo(0.5 * spb, 4); // end(0.5拍)を保って縮む＝終端不変
-  });
-
-  it("notesToMidi：end<=0（完全に0より前）の音は捨てる／min dur 0.05", () => {
+  it("notesToMidi：弱起は +1小節ぶん後ろへシフト＝元の拍位置+オフセットで小節整合（dur 不変）", () => {
     const spb = 60 / 120;
     const notes = [
-      { pitch: 48, start: -2, dur: 1 }, // end=-1拍 → 発音されない＝落ちる
-      { pitch: 60, start: -0.02, dur: 0.02 }, // end=0 → 落ちる（end<=0）
-      { pitch: 62, start: -0.01, dur: 0.03 }, // end=0.02拍>0 → 残る・dur は min0.05 拍
+      { pitch: 60, start: -0.5, dur: 1 }, // 弱起
+      { pitch: 64, start: 1, dur: 1 },
     ];
     const m = new Midi(notesToMidi(notes, 120, "4/4", 0).buffer as ArrayBuffer);
-    const midis = m.tracks[0]!.notes.map((n) => n.midi);
-    expect(midis).toEqual([62]); // 48/60 は落ち、62 だけ残る
-    expect(m.tracks[0]!.notes[0]!.duration).toBeCloseTo(0.05 * spb, 4); // min dur 0.05 拍
+    const ns = m.tracks[0]!.notes;
+    // 4/4・minStart=-0.5 → offset=+4拍。全ノートが元の拍位置 +4 へ。
+    expect(ns[0]!.time).toBeCloseTo((-0.5 + 4) * spb, 4); // 弱起は前小節の裏（3.5拍）に居る＝小節線保持
+    expect(ns[0]!.duration).toBeCloseTo(1 * spb, 4); // dur は縮まない（シフトのみ）
+    expect(ns[1]!.time).toBeCloseTo((1 + 4) * spb, 4); // 相対関係も保持（5拍）
   });
 
-  it("tracksToMidi（分割書出）：負start でも throw せず全 time>=0・end<=0 は捨てる", () => {
+  it("notesToMidi：-5拍の深い弱起は +2小節（4/4）／6/8 は +1小節=3拍でシフト", () => {
+    const spb = 60 / 120;
+    const deep = [{ pitch: 48, start: -5, dur: 1 }];
+    const m = new Midi(notesToMidi(deep, 120, "4/4", 0).buffer as ArrayBuffer);
+    expect(m.tracks[0]!.notes[0]!.time).toBeCloseTo((-5 + 8) * spb, 4); // +2小節=8拍 → 3拍
+    // 6/8（bpb=3）：-0.5拍 → +1小節=3拍
+    const m68 = new Midi(notesToMidi([{ pitch: 60, start: -0.5, dur: 1 }], 120, "6/8").buffer as ArrayBuffer);
+    expect(m68.tracks[0]!.notes[0]!.time).toBeCloseTo((-0.5 + 3) * spb, 4);
+  });
+
+  it("notesToMidi：シフトぶんループマーカーも後ろへ（startBar/endBar に +offsetBars）", () => {
+    // 4/4・弱起 -0.5拍 → offset=+4拍=+1小節。loop {startBar:0,endBar:8} → {1,9}。
+    const notes = [{ pitch: 60, start: -0.5, dur: 1 }];
+    const m = new Midi(notesToMidi(notes, 120, "4/4", 0, null, { startBar: 0, endBar: 8 }).buffer as ArrayBuffer);
+    const markers = m.header.meta.filter((e) => e.type === "marker");
+    expect(markers.find((e) => e.text === "LOOPSTART")!.ticks).toBe(1 * 4 * m.header.ppq); // startBar0→1
+    expect(markers.find((e) => e.text === "LOOPEND")!.ticks).toBe(9 * 4 * m.header.ppq); // endBar8→9
+  });
+
+  it("tracksToMidi（分割書出）：全トラック共通オフセットで揃ってシフト＝縦がズレない", () => {
+    const spb = 60 / 120;
     const tracks = [
       { name: "Melody", program: 0, notes: [{ pitch: 72, start: -0.25, dur: 0.5 }, { pitch: 74, start: 1, dur: 1 }] },
-      { name: "Bass", program: 33, notes: [{ pitch: 40, start: -3, dur: 1 }] }, // 全部 end<=0 → 空トラック化
+      { name: "Bass", program: 33, notes: [{ pitch: 40, start: 0, dur: 1 }] }, // 負なし。共通 offset で一緒に動く
     ];
     let bytes!: Uint8Array;
     expect(() => { bytes = tracksToMidi(tracks, 120, "4/4"); }).not.toThrow();
     const m = new Midi(bytes.buffer as ArrayBuffer);
     for (const t of m.tracks) for (const n of t.notes) expect(n.time).toBeGreaterThanOrEqual(0);
+    // 全トラック横断の minStart=-0.25 → offset=+4拍（1小節）。両トラックとも +4 へ。
     const mel = m.tracks.find((t) => t.name === "Melody")!;
-    expect(mel.notes[0]!.time).toBeCloseTo(0, 5); // 弱起は t=0
+    const bass = m.tracks.find((t) => t.name === "Bass")!;
+    expect(mel.notes[0]!.time).toBeCloseTo((-0.25 + 4) * spb, 4); // 弱起は前小節の裏
+    expect(bass.notes[0]!.time).toBeCloseTo((0 + 4) * spb, 4); // ベースも同じ +4＝縦の相対関係を保持
   });
 
-  it("正常notes（全 start>=0）はクランプ非介入＝従来出力と bit 一致", () => {
+  it("正常notes（全 start>=0）はシフト非介入＝従来出力と bit 一致", () => {
     const notes = [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 2, dur: 0.5, vel: 80 }];
-    // クランプ導入後も、負start が無ければ同一バイト列（回帰なし）。基準は同一入力の再エンコード。
+    // シフト導入後も、負start が無ければ offset=0＝同一バイト列（回帰なし）。基準は同一入力の再エンコード。
     const a = notesToMidi(notes, 120, "4/4", 4);
     const b = notesToMidi([...notes], 120, "4/4", 4);
     expect(Array.from(a)).toEqual(Array.from(b));
@@ -159,6 +185,33 @@ describe("弱起（負start）の書き出しクランプ：負tick throw の根
     const ta = tracksToMidi(tr, 120, "4/4");
     const tb = tracksToMidi([{ name: "M", program: 0, notes: [...notes] }], 120, "4/4");
     expect(Array.from(ta)).toEqual(Array.from(tb));
+  });
+});
+
+// 再生の弱起丸め（Task1b）：Tone.Transport は負時刻イベントを発火しないので、playNotes 入口で負start を
+// t=0 へ丸めて鳴らす（＝書き出し保険と同じ clampNegativeStarts）。この純関数規則を単体で固定する。
+describe("clampNegativeStarts：再生入口/書き出し保険の丸め規則", () => {
+  it("0 をまたぐ弱起は t=0・end(start+dur)を保って dur を縮める", () => {
+    const out = clampNegativeStarts([{ pitch: 60, start: -0.5, dur: 1 }]); // end=0.5拍
+    expect(out).toEqual([{ pitch: 60, start: 0, dur: 0.5 }]);
+  });
+  it("end<=0（完全に0より前）は落とす／端は min dur 0.05・正常 start>=0 は同一参照で素通し", () => {
+    const keep = { pitch: 62, start: 2, dur: 1 };
+    const out = clampNegativeStarts([
+      { pitch: 48, start: -2, dur: 1 }, // end=-1 → 落ちる
+      { pitch: 61, start: -0.02, dur: 0.02 }, // end=0 → 落ちる（end<=0）
+      { pitch: 63, start: -0.01, dur: 0.03 }, // end=0.02>0 → 残る・dur min0.05
+      keep, // start>=0 は素通し（同一参照）
+    ]);
+    expect(out.map((n) => n.pitch)).toEqual([63, 62]);
+    expect(out[0]!.dur).toBeCloseTo(0.05, 6); // min dur
+    expect(out[1]).toBe(keep); // 参照そのまま（bit一致の担保）
+  });
+  it("負start が無ければ全て同一参照で素通し", () => {
+    const notes = [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 1, dur: 1 }];
+    const out = clampNegativeStarts(notes);
+    expect(out[0]).toBe(notes[0]);
+    expect(out[1]).toBe(notes[1]);
   });
 });
 

@@ -90,6 +90,19 @@ function summarizeFacts(facts: unknown): unknown {
   };
 }
 
+// 失敗メッセージのユーザー向け丸め：yt-dlp/analyze.py の生失敗は `<絶対パス>/python failed (1): ...`
+// のようにサーバ内部の絶対パスやスタックダンプを含む＝ユーザーに内部構造を晒す。詳細はサーバログ
+// (console.error)にだけ残し、ユーザーには意味の分かる1行を返す。パスも内部ダンプも無い短文（"停止
+// しました"・空 base64 の zod 由来など）はそのまま活かす＝停止/中断の区別を潰さない。
+export function userFacingFailure(raw: string): string {
+  if (/停止しました/.test(raw)) return "停止しました"; // ユーザー操作（削除/停止）＝そのまま
+  // 絶対パス(/... や C:\...)・サブプロセスダンプ(failed (n)/Traceback)・timeout を含む＝内部詳細。1行に丸める。
+  if (/(?:[A-Za-z]:)?[\\/][^\s]+|failed \(\d+\)|Traceback|timeout/i.test(raw)) {
+    return "解析に失敗しました（音源を読み込めませんでした）";
+  }
+  return raw; // パスもダンプも無い短文はそのまま（診断性を保つ）
+}
+
 // 1件の audio_analyze ジョブを実行。file(b64) or url → analyze.py → facts → Claude統合 → done。
 export async function runAudioAnalyzeJob(
   core: Core,
@@ -126,7 +139,9 @@ export async function runAudioAnalyzeJob(
     }
     core.completeJob(job.id, { facts, prose, title: label, audio_asset_id: audioAssetId });
   } catch (e) {
-    core.failJob(job.id, e instanceof Error ? e.message : String(e));
+    const raw = e instanceof Error ? e.message : String(e);
+    console.error("[audio_analyze] job failed:", job.id, raw); // 詳細（絶対パス含む）はサーバログにだけ残す
+    core.failJob(job.id, userFacingFailure(raw)); // ユーザーには内部パスを晒さない1行
   } finally {
     rmSync(dir, { recursive: true, force: true }); // 音源・stem を削除（30-4：派生事実のみ残す）
     core.stripJobAudio(job.id); // P2：params の base64 を除去（asset へ保存済み・done後に残さない）

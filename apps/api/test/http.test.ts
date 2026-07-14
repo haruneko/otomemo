@@ -274,4 +274,24 @@ describe("skeleton music routes (#20 S2)", () => {
     const r = await app.inject({ method: "POST", url: "/music/gen_melody", payload: { frame: { key: 0, meter: "4/4", bars: 2 }, skeletonNetaId: mel.id } });
     expect(r.statusCode).toBe(400);
   });
+
+  // 音源アナリーゼの URL 堅牢化（2026-07-15）：不正 URL は yt-dlp を起動する前に 400 で弾く。
+  it("POST /job audio_analyze：不正 url は 400（日本語1行）", async () => {
+    const r = await app.inject({ method: "POST", url: "/job", payload: { intent: "audio_analyze", params: { url: "not a url" } } });
+    expect(r.statusCode).toBe(400);
+    expect(r.json().error).toContain("URL");
+    // file: 等の非 http(s) も不正
+    const f = await app.inject({ method: "POST", url: "/job", payload: { intent: "audio_analyze", params: { url: "file:///etc/passwd" } } });
+    expect(f.statusCode).toBe(400);
+  });
+
+  it("POST /job audio_analyze：正当な http(s) url は従来どおり queued／url 無し(b64)も通す", async () => {
+    const ok = await app.inject({ method: "POST", url: "/job", payload: { intent: "audio_analyze", params: { url: "https://example.com/song.mp3" } } });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().status).toBe("queued");
+    // url を渡さないアップロード解析（audio_b64）は URL 検証の対象外＝従来どおり通る
+    const up = await app.inject({ method: "POST", url: "/job", payload: { intent: "audio_analyze", params: { filename: "x.mp3", audio_b64: "eA==" } } });
+    expect(up.statusCode).toBe(200);
+    expect(up.json().status).toBe("queued");
+  });
 });

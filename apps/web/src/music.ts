@@ -773,13 +773,44 @@ function addLoopMarkers(midi: Midi, loop: LoopSpec | null | undefined, meter?: s
   }
 }
 
-// 書き出し境界の安全化：負start（弱起ノートを bar0/position0 に置いた時などに残る）を t=0 へ
-// クランプする。@tonejs/midi は負の可変長整数（負tick）を書けず「Cannot write negative
-// variable-length integer」を throw し、DL が無言で失敗していた（実機監査で再現）。
-// end=start+dur を保って dur を縮める（＝聞こえる終端は不変・min 0.05）／end<=0（完全に0より前で
-// 鳴らない音）は捨てる。start>=0 のノートは同一参照でそのまま通す＝正常出力は従来と bit 一致。
-// 合成(compositeNotes)側は触らない＝再生の弱起表現は不変・書き出しだけ安全化。
-function clampNegativeStarts(notes: Note[]): Note[] {
+// 弱起シフト（offsetBeats）ぶんループマーカーを後ろへ。offset は小節単位なので startBar/endBar に
+// offsetBars(=offset/bpb) を足すだけ＝小節整合を保つ。tailBars は「長さ」なので不変。offset0/loop無しは素通し。
+function shiftLoop(loop: LoopSpec | null | undefined, offsetBeats: number, beatsPerBarN: number): LoopSpec | null | undefined {
+  if (!loop || !offsetBeats) return loop;
+  const bars = offsetBeats / (beatsPerBarN > 0 ? beatsPerBarN : 4);
+  return { ...loop, startBar: loop.startBar + bars, endBar: loop.endBar + bars };
+}
+
+// 弱起（負start）プリロール：書き出しは負start を潰さず、**小節単位に切り上げたオフセット**だけ
+// 全ノートを後ろへシフトする（オーナー方針 2026-07-15）。弱起の拍数（例 -1.5拍）をそのまま +1.5拍
+// シフトすると DAW の小節線がズレるので、**必要拍数を覆う最小の小節数**ぶん（4/4で -0.5拍→+1小節=+4拍・
+// -5拍→+2小節=+8拍）後ろへ寄せる＝小節頭が保たれ、弱起は前小節の途中に正しく居る。付随時刻（ループ
+// マーカー）も同オフセットで動かす。負start が無ければオフセット0＝従来出力と bit 一致。
+// notes 内の最小 start（負なら弱起）。無ければ 0。
+function minStartOf(notes: Note[]): number {
+  let m = 0;
+  for (const n of notes) if (n.start < m) m = n.start;
+  return m;
+}
+// 弱起シフト量（拍）＝ minStart を覆う小節数×1小節の拍数。minStart>=0 なら 0（シフト無し）。
+// bpb（1小節の拍数・四分=1.0基準）で小節単位に切り上げる＝DAW 小節整合。純関数＝テスト対象。
+export function prerollOffsetBeats(minStart: number, beatsPerBar: number): number {
+  if (minStart >= 0) return 0;
+  const bpb = beatsPerBar > 0 ? beatsPerBar : 4;
+  return Math.ceil(-minStart / bpb - 1e-9) * bpb; // -1e-9＝ちょうど小節境界(-4拍等)を余分な1小節にしない
+}
+// 全ノートを offsetBeats だけ後ろへシフト（弱起プリロール）。0 なら同一参照で素通し＝bit一致。
+function shiftNotes(notes: Note[], offsetBeats: number): Note[] {
+  return offsetBeats ? notes.map((n) => ({ ...n, start: n.start + offsetBeats })) : notes;
+}
+
+// 負start を t=0 へクランプする（**再生の入口**と、書き出しの「シフト後もなお負」保険で使う）。
+// @tonejs/midi は負の可変長整数（負tick）を書けず「Cannot write negative variable-length integer」を
+// throw し DL が無言失敗する／Tone.Transport は負時刻イベントを発火しない（開始 tick=0 より前は素通り）。
+// どちらも「負start＝頭で潰れる/鳴らない」ので、end=start+dur を保って dur を縮め（聞こえる終端は不変・
+// min 0.05）、end<=0（完全に0より前で鳴らない音）は捨てる。start>=0 のノートは同一参照でそのまま通す。
+// 書き出しでは prerollOffsetBeats のシフトで通常 offset により全 start>=0 になる＝この保険は非介入。
+export function clampNegativeStarts(notes: Note[]): Note[] {
   const out: Note[] = [];
   for (const n of notes) {
     if (n.start >= 0) { out.push(n); continue; }
@@ -809,8 +840,13 @@ export function notesToMidi(
     }
   };
   // 書き出し境界＝feel を適用（跳ねて聞こえる performance MIDI／feel 無しはストレートのまま＝従来一致）。
-  // さらに負start を t=0 へクランプ＝負tick throw（無言DL失敗）の根治。feel 後にかける＝最終 time>=0 を保証。
-  const feltAll = clampNegativeStarts(feelNotes(notes, feel, meter));
+  // 弱起（負start）は小節単位のオフセットで後ろへシフト（DAW小節整合・オーナー方針）。feel 後に測って
+  // シフト＝humanize 等で頭が僅かに負へ振れても拾う。シフトでほぼ全 start>=0 になるが、想定外に残る負は
+  // clampNegativeStarts で t=0 保険＝負tick throw（無言DL失敗）を根治。
+  const felt = feelNotes(notes, feel, meter);
+  const bpb = beatsPerBar(meter);
+  const offset = prerollOffsetBeats(minStartOf(felt), bpb);
+  const feltAll = clampNegativeStarts(shiftNotes(felt, offset));
   // ドラムとピッチ楽器は GM 上ch分けが必須（ch10=ドラム）。混在時は別トラックに分離＝1トラックに
   // 全部押し込んで ch9 固定にすると、ピッチ楽器が DAW でドラム音源で鳴る破綻を防ぐ（監査 SG-04）。
   const drums = feltAll.filter((n) => n.drum);
@@ -827,7 +863,7 @@ export function notesToMidi(
     if (kit) dtrack.instrument.number = kit;
     addNotes(dtrack, drums);
   }
-  addLoopMarkers(midi, loop, meter);
+  addLoopMarkers(midi, shiftLoop(loop, offset, bpb), meter); // 弱起シフトぶんループ点も後ろへ
   return midi.toArray();
 }
 
@@ -849,8 +885,15 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
   const ts = meterPair(meter);
   if (ts) midi.header.timeSignatures.push({ ticks: 0, timeSignature: ts });
   const spb = 60 / bpm;
-  for (const t of tracks) {
-    if (!t.notes.length) continue;
+  // 弱起シフトは**全トラック共通のオフセット**で揃える（トラックごとに別量シフトすると縦がズレる）。
+  // 各トラックへ同一 feel を適用してから全トラック横断の最小 start を測り、小節単位に切り上げてシフト。
+  const bpb = beatsPerBar(meter);
+  const felted = tracks.map((t) => feelNotes(t.notes, feel, meter));
+  let globalMin = 0;
+  for (const ns of felted) { const m = minStartOf(ns); if (m < globalMin) globalMin = m; }
+  const offset = prerollOffsetBeats(globalMin, bpb);
+  tracks.forEach((t, ti) => {
+    if (!t.notes.length) return;
     const track = midi.addTrack();
     if (t.name) track.name = t.name;
     if (t.drum) {
@@ -858,11 +901,12 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
       const kit = t.kit ?? t.notes.find((n) => n.drum)?.kit;
       if (kit) track.instrument.number = kit;
     } else if (t.program !== undefined) track.instrument.number = t.program;
-    for (const n of clampNegativeStarts(feelNotes(t.notes, feel, meter))) { // 各トラックに同一 feel＝アンサンブルで揃って跳ねる（負start は t=0 クランプ＝負tick throw 回避）
+    // 共通 offset で後ろへシフト（弱起プリロール）→ 想定外の残り負は clampNegativeStarts で t=0 保険。
+    for (const n of clampNegativeStarts(shiftNotes(felted[ti]!, offset))) {
       track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
     }
-  }
-  addLoopMarkers(midi, loop, meter);
+  });
+  addLoopMarkers(midi, shiftLoop(loop, offset, bpb), meter);
   return midi.toArray();
 }
 
