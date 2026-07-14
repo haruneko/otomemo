@@ -51,7 +51,17 @@
 | **WP-X3 新生成器群（対旋律/管弦/リフ）** | **設計確定済（2026-07-14裁定＝[wpx3メモ§8](2026-07-14-wpx3-newlane-design-options.md)）**：X3a counter（一級kind・机④出口・MixPart追加）→X3b riff→X3c section_inst（**1ネタ多声1レーン**・chord_pattern親戚・pad/stab先行）。1エージェント直列（3スライスがweb同一ファイル群を触るため） | X5・X6・X7・wpx3メモ | 特大・直列3スライス |
 | **WP-E1 感情プリセット＋警告系** | ①感情語17→パラメータ写像（emotion_shift根拠強化＋チャット翻訳）②類似度警告（除外ゲート→緑黄赤・cryptomnesia別チャンネル）③build/dropテンプレ | E1・M8・X4 | 中・3分割可 |
 
-## 推奨実行順（オーナー判断待ち）
+## 実施状況（2026-07-14）
+
+- ✅ **第1弾**：WP-0(cf06399 遷移統計3表DB化)・WP-1(e033231 較正値=意図的bit破壊)・WP-M3(b0551c1 レンズ3種)・WP-M5(ea12347 prosody第1スライス=verbs2本+allowlist)
+- ✅ **第2弾**：WP-M1(b3a8b4e skelColor=強拍倚音コーパス注入・**発見=骨格層は既に64.8%で脱平面済/犯人は表面スナップ・asymmetric実効問題も解消済と再計測**)・WP-X3全3スライス(dcdd7bf counter/1443f9a riff/f3fa99d section_inst)
+- ✅ **第3弾**：WP-M2(49d2d74 skelForm=cadence-swap/sentence・距離条件変奏・リズム固定再フィット)・WP-M4(54e7ecc voice_profile+ボカロ緩和)・WP-C1(8da923a 旋法パレット4種+aeolian終止)
+- ✅ **第4弾**：WP-C3(b77d0ba variety=6進行収束解消9→42/47958ab クリシェ10型suggest_cliche/b1eda86 citypop)・WP-D1(4ea3018+1d2138f+bffeb99 ビート18型+フィルF01-12+style/fillノブ)
+- ✅ **第5弾**：WP-C2(719bc81 suggest_key_plan=12型調プラン・転調しない案先頭・transition準備和音)・WP-B1(9914206 bassLibrary 33型+style/fill・kickLock排他)
+- **派生WP追加**：WP-M1b「輪郭prior＝DP-λソフト制約」（M1から切り出し）／web生成UIボタンへのriff/section_inst露出（小）／velCurveのweb再生反映（music.ts resolveRhythm・現状lane単一vel近似）／調プラン適用のセクション列UI／メロ骨格の転調度数読み替え
+- ［耳/手］蓄積中＝全WP完了時に一括リスト（api再起動込み）
+
+## 推奨実行順（オーナー判断待ち→第1弾・第2弾は承認済で消化）
 
 ```
 第1弾: WP-0 → WP-1（基盤・小）＋ WP-M3（レンズ=独立・非破壊で効果が見やすい）
