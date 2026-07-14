@@ -72,6 +72,7 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
   const [cands, setCands] = useState<SkelCand[] | null>(null);
   const [stubMsg, setStubMsg] = useState<string | null>(null); // 生成失敗/0件の可視化（黙って消えない）
   const [busy, setBusy] = useState(false);
+  const [skelColor, setSkelColor] = useState(0); // 骨格の色付け（脱平面化・WP-M1）＝強拍倚音のコーパス駆動注入。0=素直
   const audRef = useRef<PlaybackHandle | null>(null); // 候補試聴（前の再生を止めてから）
   useEffect(() => () => audRef.current?.stop(), []); // アンマウントで鳴りっぱなし防止
   const zoneRef = useRef<HTMLDivElement>(null);
@@ -236,6 +237,7 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
       const r = await api.music<{ items: { content: unknown; label?: string }[] }>("gen_skeleton", {
         frame: { key: p.keyPc, mode: p.keyMode, meter: p.meter, bars: p.bars },
         ...(p.chords.length ? { chords: p.chords } : {}),
+        ...(skelColor > 0 ? { skelColor } : {}),
       });
       const list: SkelCand[] = (r.items ?? []).flatMap((it): SkelCand[] => {
         const c = it.content as { bars?: number; tones?: SkeletonBreakpoint[]; bass?: SkeletonBreakpoint[]; phrases?: { endBeat: number; cadence?: string }[] } | undefined;
@@ -299,6 +301,10 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
             <button type="button" aria-label="skel-bars-inc" onClick={() => p.setBars!(p.bars + 1)}>＋</button>
           </span>
         )}
+        {/* 色付け＝脱平面化（WP-M1）。強拍に倚音（コーパス駆動の非和声音・必ず段進行で解決）を確率で入れ、主音平面を割る。 */}
+        <span className="skel-grp" title="色付け＝強拍に倚音（非和声音）を混ぜて主音平面を割る。実曲の骨格は強拍の1/3が非和声音。">
+          <span className="muted">色付け</span>{seg([["素直", 0], ["少し", 0.4], ["濃い", 0.8]], skelColor, setSkelColor, "skel-color")}
+        </span>
         <button type="button" className="tb-tool skel-stub-btn" aria-label="gen-skeleton-stub" disabled={busy} onClick={() => void genStub()}><Icon name="wand" size={16} /> 機械に叩き台</button>
         {p.rollMode === "select" && (
           <span className="skel-selbar" aria-label="skeleton-selbar">

@@ -40,6 +40,20 @@ describe("mcp gen_skeleton / gen_melody skeleton injection (design #20)", () => 
     expect(out.items[0].content.tones.length).toBeGreaterThan(0);
   });
 
+  it("gen_skeleton(skelColor) は脱平面化＝skelColor=0 と別の骨格を返す（強拍倚音を注入）", async () => {
+    const { client } = await connect();
+    const eight = { key: 0, mode: "major", meter: "4/4", bars: 8 };
+    const eightChords = [0, 9, 5, 7, 0, 9, 5, 7].map((r, i) => ({ root: r, quality: i % 4 === 1 ? "m" : "", start: i * 4, dur: 4 }));
+    const sig = (o: any) => o.items[0].content.tones.map((t: any) => `${t.start}:${t.pitch}`).join(",");
+    let differ = 0;
+    for (const seed of [1, 3, 5, 7, 9, 11, 13, 15]) { // 倚音注入は確率的＝seed によっては不発。複数seedで発火を確認
+      const plain = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed } })));
+      const colored = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed, skelColor: 0.8 } })));
+      if (sig(colored) !== sig(plain)) differ++;
+    }
+    expect(differ).toBeGreaterThan(0); // MCP スキーマが skelColor を通し、色付けで骨格が変わる seed がある
+  });
+
   it("gen_melody(skeletonNetaId) injects a captured skeleton and echoes the id for linking", async () => {
     const { client, core } = await connect();
     // 骨格を生成→capture

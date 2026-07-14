@@ -168,7 +168,7 @@ export function skelFormPlan(form: "period" | "aaba" | undefined, nu: number): (
   return src;
 }
 
-export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: "period" | "aaba" } = {}): number[] {
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: "period" | "aaba"; skelColor?: number; chordPcsPerBar?: number[][] } = {}): number[] {
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
   const bpb = opts.beatsPerBar ?? 4;
   const strongQ = opts.strongQuarters ?? [0, 2];
@@ -191,6 +191,10 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   // ctr(u)=曲頭 tonic+kopf(≈3度上)から曲末 tonic へ線形下降。声部進行の引きをこの ctr へ（旧: 主音レジスタへ 0.7 の
   // 強い引き→全部主音へ潰れていた＝実測 主音pc43%/同音44%）。引きを 0.3 へ弱め、度数サンプルが素直に立つように。
   const kopf = Math.min(hi - tonicIdx, Math.max(2, Math.round(span * 0.4))); // Kopfton の高さ(音階ステップ・≈5̂)
+  // 脱平面化(WP-M1・2026-07-14)：skelColor 0..1＝コーパスprior駆動の**強拍倚音**の色付け。強拍スロットの下段
+  // 後処理で accented NCT を確率的に注入する（既定0/未指定＝bit一致）。輪郭 prior はカデンツ/句末アンカーが
+  // 包絡を上書きするため soft 包絡では robust に寄らず、DP ソフト制約(contour-template doc §6.2 λ)が要る＝別WP。
+  const color = Math.max(0, Math.min(1, opts.skelColor ?? 0));
   // arc："arch"＝下降線でなく **山なり**（sin：句頭tonic→中間で頂点kopf→句末tonic）。実メロのサビは登って落ちる弧が多い
   // （research 2026-07-10 頂点位置 0.09→実0.32 の是正）。既定(未指定)＝従来の Kopfton→主音 下降＝bit一致。
   const ctrOf = (u: number) => {
@@ -230,6 +234,33 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
     }
     if (useMotif && u % 4 === 0) { hA = [0]; for (let s = 1; s < spu; s++) hA.push((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx)); } // 連続ステップ移動(符号付き大きさ)を記録＝正確な輪郭の反復用
     if (useMotif && u % 4 === 2) { hB = [0]; for (let s = 1; s < spu; s++) hB.push((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx)); }
+  }
+  // 脱平面化・強拍倚音(WP-M1・2026-07-14)：skelColor>0 かつ chordPcsPerBar 指定時、強拍スロットの一部を
+  // **コーパス駆動の accented NCT（倚音）** へ置換する。実曲の骨格は強拍の 1/3 が非和声音（強拍CT 65.8%＝
+  // docs/research/2026-07-14-skeleton-corpus-stats.md §5）。置換は「次スロット度数の1音階段隣＝必ず段進行で解決」
+  // ＝裸で放置しない（Fux/古典の倚音規則）。倚音は上から入り下へ解く型（upper）を優先。カデンツスロット(u尾)・
+  // 開始・末尾は保護。前スロットからの跳躍が完全5度超になる置換は却下（E-rule 禁則跳躍を作らない）。
+  if (color > 0 && opts.chordPcsPerBar && opts.chordPcsPerBar.length) {
+    const cp = opts.chordPcsPerBar;
+    const clI = (i: number) => Math.max(0, Math.min(scalePitches.length - 1, i));
+    const pcsAtSlot = (i: number): number[] => cp[Math.max(0, Math.min(cp.length - 1, Math.floor(slots[i]!.beat / bpb)))] ?? [];
+    const isCT = (idx: number, pcs: number[]) => pcs.length === 0 || pcs.includes(((scalePitches[clI(idx)]! % 12) + 12) % 12);
+    const rA = makeRng((opts.seed ?? 1) * 131 + 7);
+    const pApp = color * 0.2; // 置換確率上限＝color=1 で強拍CTスロットの ~20% を倚音化 → 強拍CT率を実曲帯(60-70%)へ
+    for (let i = 1; i < I.length - 1; i++) {
+      if (i % spu === spu - 1) continue;         // ユニット末＝カデンツスロット（終止の役割）は保護
+      const pcs = pcsAtSlot(i);
+      if (!isCT(I[i]!, pcs)) continue;           // 既に非和声なら触らない（骨格モデルの素の NCT を尊重）
+      if (rA() >= pApp) continue;
+      const target = I[i + 1]!;                  // 解決先＝次スロット度数
+      let cand: number | null = null;
+      for (const c of [cl(target + 1), cl(target - 1)]) { // upper(上から下へ解く)優先→lower
+        if (c === target || isCT(c, pcs)) continue;       // 非和声かつ解決先と別音
+        if (Math.abs(scalePitches[clI(c)]! - scalePitches[clI(I[i - 1]!)]!) > 7) continue; // 前音からの跳躍≤完全5度
+        cand = c; break;
+      }
+      if (cand != null) { I[i] = cand; i++; }    // 置換したら解決スロットは飛ばす（連続倚音を避け解決を固定）
+    }
   }
   const points = slots.map((sl, i) => ({ beat: sl.beat, pitch: scalePitches[Math.max(0, Math.min(scalePitches.length - 1, I[i]!))]! }));
   const out: number[] = [];
@@ -358,7 +389,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -747,7 +778,7 @@ export function genMotifMelodyV2(
   const phraseEnds = opts.phrases?.map((p) => ({ bar: Math.max(0, Math.floor((p.startBeat + p.beats - 0.001) / barLen)), deg: p.cadenceDegree === 5 ? 4 : p.cadenceDegree === 2 ? 1 : 0 }));
   // 骨格注入（design #20）：opts.skel（人間製/機械候補の SkeletonContent 由来・1拍粒度 number[]）が来たら
   // genSkeletonFromModel をバイパスしてそれを構造線に使う。未指定＝従来どおりモデル生成＝bit一致。
-  const skel = opts.skel ?? genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: strongPos, start: opts.skelStart ?? 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds, arc: opts.arc }); // C4/F4: 骨格ノブをV2でも透過。skelStart=前セクション最終音の近傍（section.prevEndPitch・未指定=62=bit一致）
+  const skel = opts.skel ?? genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: strongPos, start: opts.skelStart ?? 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds, arc: opts.arc, skelColor: opts.skelColor, chordPcsPerBar }); // C4/F4: 骨格ノブをV2でも透過。skelColor=強拍倚音の脱平面化(WP-M1・未指定=bit一致)。skelStart=前セクション最終音の近傍（section.prevEndPitch・未指定=62=bit一致）
   const r = makeRng(seed + 5);
   // seedMotif 指定時は genBest をスキップしてそれを M に（補完=与モチーフを発展）。既定(未指定)は現挙動と完全一致。
   const M = opts.seedMotif ?? genBest(r);

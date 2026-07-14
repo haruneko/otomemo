@@ -125,6 +125,16 @@
 - **止めた悪い修正**（ループの価値）：R2の同音是正独立パス（不要）・R3の Option A/B/C（回帰誘発）・leapLicense器のみ実装（後処理⑤で no-op＋gap-fill逆効果の罠）。
 - **残る最大乖離＝強拍CT89%(実曲57)**＝expression既定引き上げ・leapLicense。両者**値が可聴＝耳セッション必須**でループ対象外。骨格の句割り追従・展開技法(sequence/拡大縮小)・和声語彙接続・旋法一級化 は次の投資先（§3）。
 
+## 5.6 WP-M1 追試＝骨格脱平面化をコーパス駆動へ（2026-07-14）
+
+§5.5 の残り（「無菌さ」の本体は割れたが**倚音が偶発**＝コーパス駆動でない）を埋める `skelColor` ノブを実装（`genSkeletonFromModel`・design #12-M「WP-M1」）。追試で以下を確認：
+
+- **骨格層の脱平面化は到達済み**：素の `genSkeletonFromModel`（R1-R3後）の**強拍CT 64.8%**＝コーパス実曲 65.8%（`2026-07-14-skeleton-corpus-stats.md` §5）に一致。輪郭も arch/valley/desc に分散。R0 の「強拍CT100%・主音平面」は**表面(surface)の後処理①強拍CTスナップの像**であって骨格の像ではない、と切り分け確定。
+- **`skelColor`（0..1・既定0=bit一致）の効き（80seed・C major I vi IV V×2）**：強拍CT 64.9%→(0.5)61.3%→(1.0)59.1%（実曲帯を維持）／強拍NCTの**段進行解決率 38.7%→47.5%**（偶発NCT→principled 倚音）／禁則跳躍率 不変（ガード成立）。
+- **「主音平面がノブを飲む」の再計測**：`phrasing=asymmetric` は **40/40 seed で baseline と変化**（skelColor 有無に依らず）＝§1 表の「14/30」は D-P1（phraseEnds 骨格結線）で既に解消。**平面はもうノブを飲まない**。
+- **surface へは出さない（罠回避）**：`gen_melody` 一発経路は骨格をブロックアンカーにしか使わず強拍を再スナップ＝skelColor は surface 強拍CT を動かさない（実測 0.878 不変）。骨格の色は **gen_skeleton→capture→realize** の骨格経路で活き、surface 脱平面化は既存 `expression`（0.7→66.9%＝実曲帯・耳ゲート）が担う。
+- **輪郭 prior 注入は見送り**：カデンツ/句末アンカーが soft 包絡を上書きし robust に寄らない（forced-asc prior でも出力 arch へ潰れる）＝骨格DPソフト制約 λ（`2026-07-14-contour-template-dictionary.md` §6.2）の別WP。
+
 ## 6. 未確認・留保
 - 実測は全て**耳確認未実施**（環境上）＝数値は傾向の裏取り。既定値の最終決定は設計ルール通り耳セッションを要する（半音衝突17.9%/同音42.3%はdur/resolutionで層別しておらず「濁り/静止の上限」）。
 - ベースは `genBass` root/5度モデル相手＝実伴奏だと並行5/8はさらに増える可能性。
