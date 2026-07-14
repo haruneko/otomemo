@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>「いじる」再設計 — パーツの棚＋引き出し（Before/Afterモック）</title>
+<style>
+/* ============ 基本（2026-07-12 skeleton-if-redesign-mock の流儀） ============ */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0d1016; --panel:#1a1e2a; --panel2:#202634; --panel3:#262d3e; --line:#2b3245;
+  --ink:#e9edf5; --dim:#96a0b5; --faint:#5d6577; --acc:#8fb7ff; --pri:#3b6bd6;
+  --ok:#8fe0a8; --warn:#ffd479;
+  --k-chord:#a887e0; --k-skel:#4a6ee0; --k-mel:#6fc3ef; --k-counter:#5a78e8;
+  --k-bass:#35b8a8; --k-rhythm:#e8604a; --k-riff:#e0a83c; --k-orch:#a878d8;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.5}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+select{font:inherit;background:var(--panel3);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;max-width:100%}
+input[type=range]{width:100%;accent-color:var(--acc)}
+[hidden]{display:none!important}
+#page{max-width:430px;margin:0 auto;padding:10px 8px 40px}
+h1{font-size:15px}
+.sub{color:var(--dim);font-size:11px;line-height:1.6}
+
+/* ============ 上部：モード切替＋お題＋タップ計 ============ */
+#ctrl{position:sticky;top:0;z-index:90;background:var(--bg);padding:6px 0 8px;border-bottom:1px solid var(--line);margin-bottom:10px}
+#modeTabs{display:flex;gap:6px;margin:8px 0 6px}
+#modeTabs button{flex:1;padding:9px 4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-weight:700;font-size:13px;color:var(--dim)}
+#modeTabs button.on{background:#233052;border-color:var(--acc);color:var(--ink)}
+#modeTabs button small{display:block;font-weight:400;font-size:10px;color:var(--dim)}
+#missionRow{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+#missionRow .m{border:1px solid var(--line);border-radius:999px;padding:4px 9px;font-size:11px;color:var(--dim);background:var(--panel)}
+#missionRow .m.on{border-color:var(--warn);color:var(--warn)}
+#tapchip{margin-left:auto;border:1px solid var(--acc);color:var(--acc);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:rgba(143,183,255,.08)}
+#missionNote{font-size:11px;color:var(--warn);margin-top:5px;min-height:1em}
+
+/* ============ 端末フレーム（390px想定） ============ */
+#frame{position:relative;max-width:390px;margin:0 auto;background:#11141b;border:1px solid var(--line);border-radius:18px;overflow:hidden;height:min(744px,calc(100vh - 40px));display:flex;flex-direction:column}
+#screen{flex:1;overflow-y:auto;padding:10px 10px 0}
+.ed-title{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.ed-title .tt{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-weight:700;font-size:13px}
+.ed-title .ic{width:34px;height:34px;border:1px solid var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--dim)}
+.ed-set{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:12px;color:var(--dim);margin-bottom:8px}
+.toolbar{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.toolbar .tb{border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:13px;background:var(--panel)}
+.toolbar .tb.on{background:var(--pri);border-color:var(--pri)}
+.toolbar .sepv{width:1px;height:20px;background:var(--line)}
+#btnTinker{border-color:#3c5f9a;color:#cfe0ff}
+.barsrow{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--dim);margin-bottom:6px}
+.barsrow b{color:var(--ink);font-size:14px}
+.barsrow .bb{width:30px;height:26px;border:1px solid var(--line);border-radius:8px;color:var(--dim)}
+
+/* レーン */
+#lanes{border:1px solid var(--line);border-radius:10px;background:#141826;padding:4px 4px 2px;margin-bottom:6px}
+.lane{display:flex;align-items:center;gap:4px;margin-bottom:3px}
+.lane .ll{flex:0 0 52px;font-size:10px;color:var(--dim);line-height:1.2}
+.lane .lt{flex:1;height:26px;border-radius:5px;background:#181d2b;position:relative;overflow:hidden}
+.lane .lt.filled{background:transparent}
+.lane .blk{position:absolute;inset:0;border-radius:5px;border:1px solid rgba(255,255,255,.25);opacity:.92}
+.lane .blk i{position:absolute;width:5px;height:2px;border-radius:2px;background:rgba(255,255,255,.65)}
+.lanehint{font-size:10px;color:var(--faint);margin:0 2px 8px}
+
+/* 候補トレイ */
+#tray{border:1.5px solid var(--acc);border-radius:12px;background:rgba(143,183,255,.05);padding:8px;margin-bottom:8px}
+#tray .thead{font-size:12px;color:var(--acc);font-weight:700;margin-bottom:6px}
+.cgroup{margin-bottom:8px}
+.cgroup .gl{font-size:11px;color:var(--dim);margin-bottom:3px}
+.ccard{display:flex;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px}
+.ccard .roll{flex:0 0 96px;height:38px;border-radius:6px;background:#151a28;position:relative;overflow:hidden}
+.ccard .roll i{position:absolute;width:6px;height:3px;border-radius:2px}
+.ccard .cmeta{flex:1;font-size:10px;color:var(--dim)}
+.ccard .cbtns{display:flex;gap:4px}
+.ccard .cbtns button{width:34px;height:32px;border:1px solid var(--line);border-radius:8px;font-size:12px;background:var(--panel3)}
+.ccard .cbtns button.pri{background:var(--pri);border-color:var(--pri);font-weight:700;width:auto;padding:0 10px}
+#tray .tfoot{display:flex;gap:6px;justify-content:flex-end;margin-top:2px}
+#tray .tfoot button{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;background:var(--panel2)}
+
+/* トランスポート（フレーム内下端固定） */
+#transport{flex:0 0 auto;border-top:1px solid var(--line);background:#161a26;padding:8px 10px;display:flex;gap:8px;align-items:center}
+#transport .tp{width:44px;height:38px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:15px}
+#transport .tp.play{background:var(--pri);border-color:var(--pri);width:56px}
+#transport .pos{margin-left:auto;color:var(--dim);font-size:13px}
+
+/* ============ シート共通 ============ */
+#backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:20}
+#sheet{position:absolute;left:0;right:0;bottom:0;z-index:21;background:var(--panel);border-radius:16px 16px 0 0;box-shadow:0 -18px 40px -18px rgba(0,0,0,.8);display:flex;flex-direction:column;max-height:84%}
+#sheet .shead{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 12px 8px;border-bottom:1px solid var(--line);position:relative}
+#sheet .shead .grab{position:absolute;top:5px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:99px;background:var(--line)}
+#sheet .shead b{font-size:14px;margin-top:2px}
+#sheet .shead .xbtn{margin-left:auto;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;color:var(--dim)}
+#sheet .shead .backb{border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:12px;color:var(--dim)}
+#sheet .shead .resetb{margin-left:auto;border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:11px;color:var(--dim)}
+#sheet .shead .xbtn2{width:30px;height:30px;border:1px solid var(--line);border-radius:8px;color:var(--dim)}
+#sbody{flex:1;overflow-y:auto;padding:10px 12px 14px;position:relative}
+#sfoot{flex:0 0 auto;border-top:1px solid var(--line);padding:8px 12px;background:var(--panel)}
+#sfoot .genb{width:100%;padding:12px;border-radius:12px;background:var(--pri);font-weight:700;font-size:14px}
+.ssep{font-size:11px;color:var(--faint);margin:12px 0 6px;letter-spacing:.05em}
+.titem{display:block;width:100%;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:14px;margin-bottom:6px}
+.titem.lab{display:flex;align-items:center;gap:8px}
+.chiprow{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:12px;background:var(--panel2);color:var(--dim)}
+.chip.on{border-color:var(--acc);color:var(--ink);background:#233052;font-weight:600}
+.chip.add{border-style:dashed;color:var(--faint)}
+.dice{width:46px;height:34px;border:1px solid var(--acc);border-radius:9px;color:var(--acc);font-size:12px;background:rgba(143,183,255,.06)}
+
+/* ノブ */
+.gh{font-size:11px;color:var(--acc);margin:12px 0 6px}
+.gh::before{content:"● ";font-size:8px;vertical-align:2px}
+.gacc{width:100%;text-align:left;border:1px solid var(--line);border-radius:10px;background:var(--panel2);padding:10px 12px;font-size:13px;color:var(--dim);margin:6px 0}
+.gacc.on{border-color:var(--acc);color:var(--ink)}
+.gacc small{float:right;color:var(--faint);font-size:10px;margin-top:2px}
+.knob{display:flex;align-items:center;gap:8px;margin:10px 0}
+.knob .kn{flex:0 0 74px;font-size:12px;line-height:1.25}
+.knob .kn small{display:block;font-size:9px;color:var(--faint)}
+.knob .ke{font-size:9px;color:var(--faint);flex:0 0 auto}
+.knob .lock{flex:0 0 30px;height:28px;border:1px solid var(--line);border-radius:7px;color:var(--faint);font-size:11px}
+.knob .lock.on{border-color:var(--warn);color:var(--warn)}
+.seg{flex:1;display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{flex:1;padding:8px 2px;font-size:11px;color:var(--dim);background:var(--panel2)}
+.seg button.on{background:#2e3a5c;color:var(--ink);font-weight:700}
+.minichips{display:flex;flex-wrap:wrap;gap:4px;flex:1}
+.minichips .chip{padding:5px 9px;font-size:11px}
+
+/* ============ Before固有 ============ */
+#scrollMeter{position:sticky;top:0;z-index:5;float:right;background:#3a2f18;border:1px solid var(--warn);color:var(--warn);font-size:10px;border-radius:8px;padding:3px 8px;margin:-2px -2px 0 8px}
+
+/* ============ After：ハブ ============ */
+.hublab{font-size:10px;color:var(--faint);margin:8px 0 4px}
+#heroSet{width:100%;text-align:left;border:1.5px solid var(--acc);border-radius:12px;background:rgba(143,183,255,.07);padding:9px 12px;margin-bottom:2px}
+#heroSet b{font-size:14px;color:var(--ink)}
+#heroSet small{display:block;font-size:10px;color:var(--dim);margin-top:2px}
+#tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:6px}
+.tile{border:1px solid var(--line);border-radius:12px;background:var(--panel2);overflow:hidden;display:flex;flex-direction:column}
+.tile .tbody{flex:1;padding:7px 6px 6px;text-align:center}
+.tile .tbody .cbar{display:block;width:26px;height:5px;border-radius:3px;margin:0 auto 4px}
+.tile .tbody b{font-size:13px}
+.tile .tbody small{display:block;font-size:9px;color:var(--faint);margin-top:2px}
+.tile .tchip{border-top:1px solid var(--line);padding:6px 4px;font-size:10px;color:var(--dim);background:var(--panel3);width:100%}
+.tile .tchip.set{color:var(--warn)}
+.tile.ghost{border-style:dashed;opacity:.55}
+.tile.ghost .tbody b{color:var(--faint);font-weight:400;font-size:11px}
+.tile:active .tbody{background:#233052}
+#exportRow{display:flex;gap:7px;margin-top:6px}
+#exportRow button{flex:1;border:1px solid var(--line);border-radius:10px;background:var(--panel2);padding:9px;font-size:13px}
+.drawnote{font-size:9.5px;color:var(--faint);margin-top:6px;line-height:1.55}
+
+/* トースト */
+#toast{position:absolute;left:50%;transform:translateX(-50%);bottom:70px;background:#2e3a5c;border:1px solid var(--acc);border-radius:10px;padding:8px 14px;font-size:12px;z-index:40;max-width:86%}
+
+/* 下部サマリ */
+#summary{margin-top:14px}
+#summary table{width:100%;border-collapse:collapse;font-size:11px}
+#summary th,#summary td{border:1px solid var(--line);padding:5px 7px;text-align:left;color:var(--dim)}
+#summary th{color:var(--ink);background:var(--panel)}
+#summary td b{color:var(--ok)}
+</style>
+</head>
+<body>
+<div id="page">
+  <h1>「いじる」再設計モック — パーツの棚＋引き出し</h1>
+  <div class="sub">390px想定・指で試す用。設計doc＝<code>2026-07-14-tinker-menu-redesign-fable.md</code>。Before＝現行38コントロール（縦1756px）の忠実再現／After＝ハブ（スクロール0）＋パーツ別引き出し。</div>
+
+  <div id="ctrl">
+    <div id="modeTabs">
+      <button data-act="mode" data-v="before">Before 現状<small>1シート38個・壁1756px</small></button>
+      <button data-act="mode" data-v="after">After 提案<small>棚12個・スクロール0</small></button>
+    </div>
+    <div id="missionRow">
+      <button class="m" data-act="mission" data-v="a">お題A: 4トラック</button>
+      <button class="m" data-act="mission" data-v="b">お題B: メロこだわり</button>
+      <button class="m" data-act="mission" data-v="c">お題C: ドラム型変え</button>
+      <span id="tapchip">タップ 0</span>
+    </div>
+    <div id="missionNote"></div>
+  </div>
+
+  <div id="frame">
+    <div id="screen">
+      <div class="ed-title">
+        <div class="tt">検収-Aメロ-20260714</div><div class="ic">✓</div><div class="ic">⌫</div>
+      </div>
+      <div class="ed-set">▶ 設定　A 短調 · 4/4 · ♩120</div>
+      <div class="toolbar">
+        <button class="tb on">✎</button><button class="tb">⌫</button>
+        <span class="sepv"></span>
+        <button class="tb" id="btnTinker" data-act="open">☆ いじる ▾</button>
+      </div>
+      <div id="trayBox"></div>
+      <div class="barsrow"><span>小節</span><button class="bb">−</button><b>32</b><button class="bb">＋</button></div>
+      <div id="lanes"></div>
+      <p class="lanehint">空きをタップ→置く/新規作成／ブロックをタップで編集／右端ドラッグで繰り返し</p>
+    </div>
+    <div id="transport">
+      <button class="tp">|◀</button><button class="tp play">▶</button><button class="tp">↻</button>
+      <span class="pos">1:1</span><button class="tp" style="width:auto;padding:0 10px;font-size:12px">骨格</button>
+    </div>
+    <div id="backdrop" hidden data-act="close"></div>
+    <div id="sheet" hidden></div>
+    <div id="toast" hidden></div>
+  </div>
+
+  <div id="summary">
+    <div class="sub" style="margin:6px 0"><b style="color:var(--ink)">数字の対比</b>（inventory 2026-07-14 実測 × 本提案）</div>
+    <table>
+      <tr><th></th><th>Before（実測）</th><th>After（提案）</th></tr>
+      <tr><td>最初の1画面のコントロール</td><td>38個が1シート縦列</td><td><b>ハブ12個・スクロール0</b>（残りは引き出し）</td></tr>
+      <tr><td>縦スクロール</td><td>畳み935px／展開1756px（画面2.5枚）</td><td><b>ハブ0px</b>・引き出し≦1画面＋群アコーディオン</td></tr>
+      <tr><td>おまかせ4トラック</td><td>12タップ（シート4往復）</td><td><b>6〜8タップ</b>（一式＋置く×N）</td></tr>
+      <tr><td>メロこだわり</td><td>6タップ＋壁往復~1600px</td><td><b>6タップ・スクロール0</b>（前面4ノブ＋下端固定の生成）</td></tr>
+      <tr><td>パーツが増えたら</td><td>縦列に割込み（今日4セレクタで破綻）</td><td><b>タイル+1のみ</b>（棚は12枚まで無スクロール）</td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+ * 「いじる」再設計モック
+ *  Before＝現行 SectionEditor.tsx:323-569 の .tools-menu を忠実再現（38コントロール）
+ *  After ＝ハブ（パーツの棚・スクロール0）＋パーツ別引き出し＋おまかせで一式
+ *  生成は擬似（400msビジー→候補トレイ）。音は鳴らさない＝IA/動線の検証用。
+ * ===================================================================== */
+
+/* ---------- 状態 ---------- */
+const LANES = [
+  {k:"chord",  l:"コード進行", c:"var(--k-chord)"},
+  {k:"skel",   l:"骨格",     c:"var(--k-skel)"},
+  {k:"mel",    l:"メロ",     c:"var(--k-mel)"},
+  {k:"counter",l:"対旋律",   c:"var(--k-counter)"},
+  {k:"riff",   l:"リフ",     c:"var(--k-riff)"},
+  {k:"orch",   l:"管弦",     c:"var(--k-orch)"},
+  {k:"bass",   l:"ベース",   c:"var(--k-bass)"},
+  {k:"rhythm", l:"リズム",   c:"var(--k-rhythm)"},
+];
+const PART = { // 生成パーツ（タイル＝棚。tap=生成／chip=引き出し）
+  mel:   {label:"メロ",   lane:"mel",   c:"var(--k-mel)",   drawer:true},
+  bass:  {label:"ベース", lane:"bass",  c:"var(--k-bass)",  drawer:true},
+  rhythm:{label:"ドラム", lane:"rhythm",c:"var(--k-rhythm)",drawer:true},
+  chord: {label:"コード", lane:"chord", c:"var(--k-chord)", drawer:false},
+  skel:  {label:"骨格",   lane:"skel",  c:"var(--k-skel)",  drawer:true},
+  riff:  {label:"リフ",   lane:"riff",  c:"var(--k-riff)",  drawer:false},
+  orch:  {label:"管弦",   lane:"orch",  c:"var(--k-orch)",  drawer:false},
+};
+const S = {
+  mode:"after",            // before | after
+  sheet:null,              // null | "before" | "hub" | "mel" | "bass" | "rhythm" | "skel"
+  taps:0, mission:null,
+  placed:{chord:true},     // レーン充填（コードだけ在＝4トラックお題の初期状態）
+  cands:[],                // {id, part}
+  busyMsg:null,
+  // 設定（既定＝全部おまかせ＝bit一致文化）
+  palette:"", drumGenre:"", drumFill:"なし", drumType:"", drumBuild:"",
+  bassGenre:"", bassFill:"なし", bassType:"", skelForm:"",
+  melPreset:"", knobs:{density:.5, swing:0, runs:"OFF", tame:"OFF"},
+  myPresets:[], groupOpen:{}, beforeDetails:false,
+};
+let cid=1, rndSeed=7;
+const rnd=()=> (rndSeed=(rndSeed*1103515245+12345)&0x7fffffff)/0x7fffffff;
+const $=(q)=>document.querySelector(q);
+const esc=(s)=>String(s);
+
+/* ---------- レーン描画 ---------- */
+function dots(n,color){
+  let h="";
+  for(let i=0;i<n;i++) h+=`<i style="left:${(rnd()*94).toFixed(1)}%;top:${(4+rnd()*18)|0}px;${color?`background:${color}`:""}"></i>`;
+  return h;
+}
+function renderLanes(){
+  $("#lanes").innerHTML = LANES.map(L=>{
+    const f = S.placed[L.k];
+    return `<div class="lane"><span class="ll">${L.l}</span><span class="lt ${f?"filled":""}">${
+      f?`<span class="blk" style="background:${L.c}">${dots(14)}</span>`:""}</span></div>`;
+  }).join("");
+}
+
+/* ---------- 候補トレイ ---------- */
+function renderTray(){
+  const box=$("#trayBox");
+  if(!S.cands.length && !S.busyMsg){ box.innerHTML=""; return; }
+  const groups={};
+  S.cands.forEach(c=>{(groups[c.part]??=[]).push(c);});
+  box.innerHTML = `<div id="tray">
+    <div class="thead">候補 ${S.cands.length}件（この進行に生成・見て選ぶ）${S.busyMsg?` <span style="color:var(--warn)">${S.busyMsg}</span>`:""}</div>
+    ${Object.entries(groups).map(([p,cs])=>`<div class="cgroup">
+      <div class="gl">${PART[p].label}候補</div>
+      ${cs.map(c=>`<div class="ccard">
+        <span class="roll">${dots(16,PART[p].c)}</span>
+        <span class="cmeta">16小節・${40+((c.id*7)%40)}音<br>対位OK</span>
+        <span class="cbtns">
+          <button data-act="audition">▶</button>
+          <button data-act="keep">♡</button>
+          <button class="pri" data-act="place" data-v="${c.id}">置く</button>
+          <button data-act="drop" data-v="${c.id}">捨</button>
+        </span>
+      </div>`).join("")}
+    </div>`).join("")}
+    <div class="tfoot"><button data-act="more">もっと出す</button><button data-act="closetray">閉じる</button></div>
+  </div>`;
+}
+
+/* ---------- 擬似生成 ---------- */
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.hidden=false;
+  clearTimeout(t._tm); t._tm=setTimeout(()=>{t.hidden=true;},1600);
+}
+function generate(part, keepSheet){
+  if(!keepSheet){ S.sheet=null; }
+  S.busyMsg=`${PART[part].label}を生成中…`;
+  render();
+  setTimeout(()=>{ S.busyMsg=null; S.cands.push({id:cid++, part}); render(); }, 400);
+}
+function generateSet(){ // おまかせで一式：ドラム→ベース→メロ（＋リフ）の候補を順に積む
+  S.sheet=null;
+  const seq=["rhythm","bass","mel","riff"];
+  let i=0;
+  const step=()=>{
+    if(i>=seq.length){ S.busyMsg=null; render(); return; }
+    S.busyMsg=`一式生成中… ${PART[seq[i]].label}`; render();
+    setTimeout(()=>{ S.cands.push({id:cid++, part:seq[i]}); i++; step(); }, 380);
+  };
+  step();
+}
+
+/* =====================================================================
+ * Before シート＝現行の忠実再現（棚卸し doc §1 の38コントロール）
+ * ===================================================================== */
+const seg=(labels,cur,act,extra)=>`<span class="seg">${labels.map(l=>
+  `<button data-act="${act}" data-v="${l}" class="${cur===l?"on":""}">${l}</button>`).join("")}</span>${extra??""}`;
+const lock=`<button class="lock" data-act="locktoggle">鍵</button>`;
+const knobSlider=(name,sub,lo,hi,val)=>`<div class="knob"><span class="kn">${name}<small>${sub||""}</small></span>
+  <span class="ke">${lo}</span><input type="range" min="0" max="1" step="0.1" value="${val}"><span class="ke">${hi}</span>${lock}</div>`;
+const knobSeg=(name,sub,cur)=>`<div class="knob"><span class="kn">${name}<small>${sub||""}</small></span>${seg(["OFF","弱","中","強"],cur,"noop")}${lock}</div>`;
+
+function beforeSheet(){
+  const det=S.beforeDetails;
+  return `
+  <div class="shead"><span class="grab"></span><b>いじる</b><button class="xbtn" data-act="close">✕</button></div>
+  <div id="sbody" data-scrollmeter="1">
+    <div id="scrollMeter">壁 0 / 0px</div>
+    <div class="ssep">この進行に生成</div>
+    <button class="titem" data-act="gen" data-v="mel">メロ</button>
+    <button class="titem" data-act="gen" data-v="bass">ベース</button>
+    <button class="titem" data-act="gen" data-v="rhythm">ドラム</button>
+    <button class="titem" data-act="gen" data-v="riff">リフ</button>
+    <button class="titem" data-act="gen" data-v="orch">管弦</button>
+    <button class="titem" data-act="gen" data-v="chord">コード</button>
+    <label class="titem lab">旋法 <select><option>おまかせ</option><option>明るめ(王道)</option><option>土っぽい(♭VII)</option><option>哀愁(短調)</option><option>浮遊(♮6)</option></select></label>
+    <label class="titem lab">ビート型 <select><option>おまかせ</option><optgroup label="ジャンル"><option>J-pop</option><option>ロック</option><option>ダンス/EDM</option><option>バラード</option><option>ファンク/R&amp;B</option></optgroup><optgroup label="型（直指定）"><option>8ビート基本</option><option>8ビート食い込み</option><option>16ビート</option><option>16ゴースト</option><option>4つ打ちロック</option><option>4つ打ちハウス</option><option>ハーフタイム</option><option>シャッフル</option><option>6/8バラード</option></optgroup></select></label>
+    <label class="titem lab">フィル <select><option>なし</option><option>弱（軽い節目）</option><option>中（遷移フィル）</option><option>強（大遷移）</option><optgroup label="ビルドアップ（溜め）"><option>溜め4小節</option><option>溜め8小節</option><option>溜め16小節</option></optgroup></select></label>
+    <label class="titem lab">ベース型 <select><option>おまかせ</option><optgroup label="ジャンル"><option>ロック</option><option>バラード</option><option>シティポップ</option><option>ファンク</option><option>EDM</option><option>ボカロック</option></optgroup><optgroup label="型（直指定）"><option>8分ルート弾き</option><option>ギャロップ</option><option>全音符バラード</option><option>アプローチ橋渡し</option><option>オクターブ奏法</option><option>歩くシティポップ</option><option>ファンク the one</option><option>オフビート</option><option>ロー持続</option><option>高速8分ドライブ</option></optgroup></select></label>
+    <label class="titem lab">ベースフィル <select><option>なし</option><option>下降（落ち着かせ）</option><option>上昇（駆け上がり）</option></select></label>
+    <label class="titem lab">構造 <select><option>おまかせ</option><option>前半くり返し</option><option>AABA</option><option>終止だけ変えて反復</option><option>提示→畳み掛け(sentence)</option></select></label>
+    <button class="titem" data-act="gen" data-v="skel">骨格</button>
+    <div class="chiprow" style="margin-top:10px">
+      ${["おまかせ","しっとり","跳ねる","走る","きらきら","歌もの","口ずさめる","伸びやか"].map(p=>
+        `<button class="chip ${S.melPreset===p?"on":""}" data-act="preset" data-v="${p}">${p}</button>`).join("")}
+      <button class="dice" data-act="noop">振る</button>
+    </div>
+    <button class="gacc ${det?"on":""}" data-act="beforedetails">${det?"▾":"▸"} 細かく設定する</button>
+    ${det?`
+      <div class="gh">リズムのノリ</div>
+      ${knobSlider("細かさ","","スカスカ","ぎっしり",S.knobs.density)}
+      ${knobSlider("跳ね","","まっすぐ","はねる",S.knobs.swing)}
+      ${knobSeg("駆け上がり","16分の走り",S.knobs.runs)}
+      ${knobSeg("前ノリ","拍を食う","OFF")}
+      <label class="titem lab">最小音符 <select><option>おまかせ(速さ連動)</option><option>4分まで</option><option>8分まで</option></select></label>
+      <div class="knob"><span class="kn">リズムパーツ<small>小節に順に敷く</small></span><span class="minichips">${
+        ["白玉","二分×2","付点タメ","四分刻み","8分刻み","刻み→タメ","駆け16分","シンコペ","頭抜き","アフター"].map(x=>`<button class="chip" data-act="noop">${x}</button>`).join("")}</span></div>
+      <label class="titem lab">声種 <select><option>おまかせ(女性平均)</option><option>女性ポップ</option><option>男性ポップ</option><option>ミックス</option><option>ボカロ(C6開放)</option></select></label>
+      <div class="gh">歌い回し</div>
+      ${knobSeg("タメ","強拍のもたれ",S.knobs.tame)}
+      ${knobSeg("口ずさみ","反復音フック","OFF")}
+      ${knobSlider("冒険度","","おなじみ","冒険",0)}
+      ${knobSlider("歯切れ","","なめらか","くっきり",0)}
+      <div class="gh">フレーズの組み立て</div>
+      <label class="titem lab">句割り <select><option>おまかせ</option><option>対称(問→答)</option><option>非対称(3+3+2)</option><option>4小節句[4,4]</option><option>短短長[2,2,4]</option></select></label>
+      <label class="titem lab">展開 <select><option>おまかせ</option><option>起承転結(文)</option></select></label>
+      ${knobSeg("息継ぎ","句アタマの間","OFF")}
+      ${knobSlider("つなぎ","","ぶつ切れ","長く連結",0)}
+      ${knobSlider("歌い出し","","拍アタマ","弱起(食い込み)",0)}
+      <div class="gh">他パートとの絡み</div>
+      ${knobSeg("ベースをよける","並行5度8度を避ける","OFF")}
+      <div class="gh">人間味・仕上げ</div>
+      ${knobSeg("人間味","自然な揺れ(1/f)","OFF")}
+    `:""}
+    <div class="ssep">メロ加工</div>
+    <button class="titem" data-act="toastonly" data-v="上ハモ（第2声部の候補）">上ハモ</button>
+    <button class="titem" data-act="toastonly" data-v="下ハモ（第2声部の候補）">下ハモ</button>
+    <button class="titem" data-act="toastonly" data-v="コードに合わせる">コードに合わせる</button>
+    <button class="titem" data-act="toastonly" data-v="噛み合い診断">噛み合い診断</button>
+    <div class="ssep">書き出し</div>
+    <button class="titem" data-act="toastonly" data-v="MIDIを書き出した">MIDI</button>
+    <button class="titem" data-act="toastonly" data-v="MIDI（分割）を書き出した">MIDI（分割）</button>
+  </div>`;
+}
+
+/* =====================================================================
+ * After：ハブ（棚）＝スクロール0契約
+ * ===================================================================== */
+function chipOf(part){ // タイル下端の状態チップ＝設定サマリ＝引き出しの扉
+  if(part==="rhythm") return (S.drumGenre||S.drumType)? `${S.drumGenre||S.drumType}${S.drumFill!=="なし"?"・フィル"+S.drumFill:""}` : (S.drumFill!=="なし"?`フィル${S.drumFill}`:"おまかせ");
+  if(part==="bass")   return (S.bassGenre||S.bassType)? `${S.bassGenre||S.bassType}${S.bassFill!=="なし"?"・"+S.bassFill:""}` : (S.bassFill!=="なし"?S.bassFill:"おまかせ");
+  if(part==="mel")    return S.melPreset || "おまかせ";
+  if(part==="skel")   return S.skelForm || "おまかせ";
+  return "";
+}
+function hubSheet(){
+  return `
+  <div class="shead"><span class="grab"></span><b>いじる</b><button class="xbtn" data-act="close">✕</button></div>
+  <div id="sbody">
+    <div class="hublab">進行の色（全パーツの生成に効く）</div>
+    <div class="chiprow">${["おまかせ","明るめ","土っぽい","哀愁","浮遊"].map(p=>
+      `<button class="chip ${ (S.palette||"おまかせ")===p?"on":""}" data-act="palette" data-v="${p}">${p}</button>`).join("")}</div>
+    <button id="heroSet" data-act="genset"><b>☆ おまかせで一式</b><small>ドラム→ベース→メロ（＋リフ）の候補を順に出す・置くのは1件ずつ人間</small></button>
+    <div class="hublab">パーツ＝タップで生成／下のチップで設定（引き出し）</div>
+    <div id="tiles">
+      ${Object.entries(PART).map(([k,p])=>`<div class="tile">
+        <button class="tbody" data-act="gen" data-v="${k}"><span class="cbar" style="background:${p.c}"></span><b>${p.label}</b><small>tapで生成</small></button>
+        ${p.drawer?`<button class="tchip ${chipOf(k)!=="おまかせ"?"set":""}" data-act="drawer" data-v="${k}">${chipOf(k)} ▾</button>`:""}
+      </div>`).join("")}
+      <div class="tile ghost"><div class="tbody" style="padding-top:18px"><b>＋ 増えたら<br>ここに1枚</b></div></div>
+    </div>
+    <div class="hublab">書き出し</div>
+    <div id="exportRow">
+      <button data-act="toastonly" data-v="MIDIを書き出した">MIDI</button>
+      <button data-act="toastonly" data-v="MIDI（分割）を書き出した">MIDI（分割）</button>
+    </div>
+    <div class="drawnote">ハブ契約＝この画面はスクロール0のまま。新パーツ→タイル+1／新ノブ→そのパーツの引き出し／横断設定→旋法＋一式の2枠で打ち止め。</div>
+  </div>`;
+}
+
+/* ---------- After：引き出し（パーツ別サブシート） ---------- */
+function drawerHead(name){
+  return `<div class="shead"><span class="grab"></span>
+    <button class="backb" data-act="drawerback">← 棚へ</button><b>${name}</b>
+    <button class="resetb" data-act="drawerreset">おまかせに戻す</button>
+    <button class="xbtn2" data-act="close">✕</button></div>`;
+}
+const gacc=(id,label,count)=>`<button class="gacc ${S.groupOpen[id]?"on":""}" data-act="gacc" data-v="${id}">${S.groupOpen[id]?"▾":"▸"} ${label}<small>${count}</small></button>`;
+
+function melDrawer(){
+  const g=S.groupOpen;
+  return `${drawerHead("メロ")}
+  <div id="sbody">
+    <div class="hublab">プリセット（当たりの組を1タップ）</div>
+    <div class="chiprow">
+      ${["おまかせ","しっとり","跳ねる","走る","きらきら","歌もの","口ずさめる","伸びやか"].map(p=>
+        `<button class="chip ${S.melPreset===p?"on":""}" data-act="preset" data-v="${p}">${p}</button>`).join("")}
+      ${S.myPresets.map(p=>`<button class="chip ${S.melPreset===p?"on":""}" data-act="preset" data-v="${p}">★${p}</button>`).join("")}
+      <button class="dice" data-act="dice">振る</button>
+      <button class="chip add" data-act="savepreset">＋保存</button>
+    </div>
+    <div class="hublab">よく回す4本（それ以外は下の群に沈む）</div>
+    ${knobSlider("細かさ","","スカスカ","ぎっしり",S.knobs.density)}
+    ${knobSlider("跳ね","","まっすぐ","はねる",S.knobs.swing)}
+    <div class="knob"><span class="kn">駆け上がり<small>16分の走り</small></span>${seg(["OFF","弱","中","強"],S.knobs.runs,"kruns")}${lock}</div>
+    <div class="knob"><span class="kn">タメ<small>強拍のもたれ</small></span>${seg(["OFF","弱","中","強"],S.knobs.tame,"ktame")}${lock}</div>
+    ${gacc("nori","リズムのノリ（残り）","前ノリ・最小音符・リズムパーツ・声種")}
+    ${g.nori?`${knobSeg("前ノリ","拍を食う","OFF")}
+      <label class="titem lab">最小音符 <select><option>おまかせ(速さ連動)</option><option>4分まで</option><option>8分まで</option></select></label>
+      <div class="knob"><span class="kn">リズムパーツ<small>小節に順に敷く</small></span><span class="minichips">${["白玉","二分×2","付点タメ","四分刻み","8分刻み","刻み→タメ","駆け16分","シンコペ","頭抜き","アフター"].map(x=>`<button class="chip" data-act="noop">${x}</button>`).join("")}</span></div>
+      <label class="titem lab">声種 <select><option>おまかせ(女性平均)</option><option>女性ポップ</option><option>男性ポップ</option><option>ミックス</option><option>ボカロ(C6開放)</option></select></label>`:""}
+    ${gacc("utai","歌い回し","口ずさみ・冒険度・歯切れ")}
+    ${g.utai?`${knobSeg("口ずさみ","反復音フック","OFF")}${knobSlider("冒険度","","おなじみ","冒険",0)}${knobSlider("歯切れ","","なめらか","くっきり",0)}`:""}
+    ${gacc("phrase","フレーズの組み立て","句割り・展開・息継ぎ・つなぎ・歌い出し")}
+    ${g.phrase?`<label class="titem lab">句割り <select><option>おまかせ</option><option>対称(問→答)</option><option>非対称(3+3+2)</option><option>4小節句[4,4]</option><option>短短長[2,2,4]</option></select></label>
+      <label class="titem lab">展開 <select><option>おまかせ</option><option>起承転結(文)</option></select></label>
+      ${knobSeg("息継ぎ","句アタマの間","OFF")}${knobSlider("つなぎ","","ぶつ切れ","長く連結",0)}${knobSlider("歌い出し","","拍アタマ","弱起(食い込み)",0)}`:""}
+    ${S.placed.bass?gacc("karami","他パートとの絡み","ベースをよける（ベース在時のみ表示）"):""}
+    ${S.placed.bass&&g.karami?knobSeg("ベースをよける","並行5度8度を避ける","OFF"):""}
+    ${gacc("shiage","人間味・仕上げ","人間味")}
+    ${g.shiage?knobSeg("人間味","自然な揺れ(1/f)","OFF"):""}
+    ${S.placed.mel?`<div class="ssep">メロを直す（置いたメロが相手）</div>
+      <button class="titem" data-act="toastonly" data-v="上ハモ候補を出した">上ハモ</button>
+      <button class="titem" data-act="toastonly" data-v="下ハモ候補を出した">下ハモ</button>
+      <button class="titem" data-act="toastonly" data-v="コードに合わせた候補を出した">コードに合わせる</button>
+      <button class="titem" data-act="toastonly" data-v="噛み合い：87点・コード内率82%">噛み合い診断</button>`:""}
+  </div>
+  <div id="sfoot"><button class="genb" data-act="gen" data-v="mel">メロを生成（設定：${S.melPreset||"おまかせ"}）</button></div>`;
+}
+function drumDrawer(){
+  return `${drawerHead("ドラム")}
+  <div id="sbody">
+    <div class="hublab">ビートのジャンル</div>
+    <div class="chiprow">${["おまかせ","J-pop","ロック","EDM","バラード","ファンク"].map(x=>
+      `<button class="chip ${ (S.drumGenre||"おまかせ")===x?"on":""}" data-act="drumgenre" data-v="${x}">${x}</button>`).join("")}</div>
+    <div class="hublab">フィル（セクション末の節目）</div>
+    <div class="knob"><span class="kn">強さ</span>${seg(["なし","弱","中","強"],S.drumFill,"drumfill")}</div>
+    ${gacc("drumfine","細かく（型直指定・ビルドアップ）","9型＋溜め3種")}
+    ${S.groupOpen.drumfine?`
+      <label class="titem lab">型直指定 <select data-act-change="drumtype"><option>—</option><option>8ビート基本</option><option>8ビート食い込み</option><option>16ビート</option><option>16ゴースト</option><option>4つ打ちロック</option><option>4つ打ちハウス</option><option>ハーフタイム</option><option>シャッフル</option><option>6/8バラード</option></select></label>
+      <label class="titem lab">ビルドアップ <select><option>なし</option><option>溜め4小節</option><option>溜め8小節</option><option>溜め16小節</option></select></label>`:""}
+    <div class="drawnote">ここに増える（ゴースト量・キット差替え…）＝この引き出しの中だけが伸びる。棚は不変。</div>
+  </div>
+  <div id="sfoot"><button class="genb" data-act="gen" data-v="rhythm">ドラムを生成（${chipOf("rhythm")}）</button></div>`;
+}
+function bassDrawer(){
+  return `${drawerHead("ベース")}
+  <div id="sbody">
+    <div class="hublab">ベースのジャンル</div>
+    <div class="chiprow">${["おまかせ","ロック","バラード","シティポップ","ファンク","EDM","ボカロック"].map(x=>
+      `<button class="chip ${ (S.bassGenre||"おまかせ")===x?"on":""}" data-act="bassgenre" data-v="${x}">${x}</button>`).join("")}</div>
+    <div class="hublab">フィル（セクション末）</div>
+    <div class="knob"><span class="kn">向き</span>${seg(["なし","下降","上昇"],S.bassFill,"bassfill")}</div>
+    ${gacc("bassfine","細かく（型直指定）","10型")}
+    ${S.groupOpen.bassfine?`<label class="titem lab">型直指定 <select><option>—</option><option>8分ルート弾き</option><option>ギャロップ</option><option>全音符バラード</option><option>アプローチ橋渡し</option><option>オクターブ奏法</option><option>歩くシティポップ</option><option>ファンク the one</option><option>オフビート</option><option>ロー持続</option><option>高速8分ドライブ</option></select></label>`:""}
+  </div>
+  <div id="sfoot"><button class="genb" data-act="gen" data-v="bass">ベースを生成（${chipOf("bass")}）</button></div>`;
+}
+function skelDrawer(){
+  return `${drawerHead("骨格")}
+  <div id="sbody">
+    <div class="hublab">構造（フォームの使い回し）</div>
+    <div class="chiprow">${["おまかせ","前半くり返し","AABA","終止だけ変えて","提示→畳み掛け"].map(x=>
+      `<button class="chip ${ (S.skelForm||"おまかせ")===x?"on":""}" data-act="skelform" data-v="${x}">${x}</button>`).join("")}</div>
+    <div class="drawnote">置いた骨格のブロックをタップ＝骨格の机（動線は現行のまま）。ここは生成の設定だけ。</div>
+  </div>
+  <div id="sfoot"><button class="genb" data-act="gen" data-v="skel">骨格を生成（${S.skelForm||"おまかせ"}）</button></div>`;
+}
+
+/* ---------- 描画ルート ---------- */
+function render(){
+  document.querySelectorAll("#modeTabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===S.mode));
+  document.querySelectorAll("#missionRow .m").forEach(b=>b.classList.toggle("on",b.dataset.v===S.mission));
+  $("#tapchip").textContent=`タップ ${S.taps}`;
+  renderLanes(); renderTray();
+  const sh=$("#sheet"), bd=$("#backdrop");
+  if(!S.sheet){ sh.hidden=true; bd.hidden=true; }
+  else{
+    sh.hidden=false; bd.hidden=false;
+    sh.innerHTML = S.sheet==="before"? beforeSheet()
+      : S.sheet==="hub"? hubSheet()
+      : S.sheet==="mel"? melDrawer()
+      : S.sheet==="rhythm"? drumDrawer()
+      : S.sheet==="bass"? bassDrawer()
+      : skelDrawer();
+    const sb=sh.querySelector("#sbody");
+    if(sb && sb.dataset.scrollmeter){ // Before：壁メーター（スクロールしないと全部見えない量を可視化）
+      const m=sh.querySelector("#scrollMeter");
+      const upd=()=>{ m.textContent=`壁 ${sb.scrollTop|0} / ${Math.max(0,sb.scrollHeight-sb.clientHeight)|0}px`; };
+      sb.addEventListener("scroll",upd); requestAnimationFrame(upd);
+    }
+  }
+}
+
+/* ---------- イベント（委譲） ---------- */
+const MISSION={
+  a:"お題A：4トラック（ドラム/ベース/メロ/リフ）を置くまで。Before=いじる→パーツ→置く×4往復／After=一式1タップ→置く×4。",
+  b:"お題B：メロをプリセット＋ノブ2本いじって生成。Beforeは細かく設定→壁スクロール往復／Afterは前面4本＋下端固定の生成。",
+  c:"お題C：ドラムをロックの型に変えて生成。Before=42択セレクタ／After=ドラムの引き出し→ジャンルchip→生成。",
+};
+document.addEventListener("click",(e)=>{
+  const t=e.target.closest("[data-act]");
+  // フレーム内の操作タップを数える（お題の実測用）
+  if(e.target.closest("#frame") && e.target.closest("button,select,input")) { S.taps++; $("#tapchip").textContent=`タップ ${S.taps}`; }
+  if(!t) return;
+  const act=t.dataset.act, v=t.dataset.v;
+  if(act==="mode"){ S.mode=v; S.sheet=null; render(); return; }
+  if(act==="mission"){
+    S.mission=v; S.taps=0; S.cands=[]; S.placed={chord:true};
+    if(v==="b") S.placed.mel=true; // メロこだわり＝メロ在の状態から
+    $("#missionNote").textContent=MISSION[v]; render(); return;
+  }
+  if(act==="open"){ S.sheet = S.mode==="before"?"before":"hub"; render(); return; }
+  if(act==="close"){ S.sheet=null; render(); return; }
+  if(act==="drawer"){ S.sheet=v; render(); return; }
+  if(act==="drawerback"){ S.sheet="hub"; render(); return; }
+  if(act==="drawerreset"){
+    if(S.sheet==="rhythm"){ S.drumGenre=""; S.drumType=""; S.drumFill="なし"; }
+    if(S.sheet==="bass"){ S.bassGenre=""; S.bassType=""; S.bassFill="なし"; }
+    if(S.sheet==="mel"){ S.melPreset=""; S.knobs={density:.5,swing:0,runs:"OFF",tame:"OFF"}; }
+    if(S.sheet==="skel"){ S.skelForm=""; }
+    render(); return;
+  }
+  if(act==="gen"){ generate(v); return; }
+  if(act==="genset"){ generateSet(); return; }
+  if(act==="place"){
+    const c=S.cands.find(x=>x.id===+v); if(!c) return;
+    S.placed[PART[c.part].lane]=true; S.cands=S.cands.filter(x=>x.id!==+v);
+    toast(`${PART[c.part].label}をレーンに置いた`); render(); return;
+  }
+  if(act==="drop"){ S.cands=S.cands.filter(x=>x.id!==+v); render(); return; }
+  if(act==="more"){ if(S.cands.length){ S.busyMsg="もう1案…"; render(); const p=S.cands[S.cands.length-1].part; setTimeout(()=>{S.busyMsg=null;S.cands.push({id:cid++,part:p});render();},380);} return; }
+  if(act==="closetray"){ S.cands=[]; render(); return; }
+  if(act==="audition"){ toast("♪ 試聴（モックでは鳴りません）"); return; }
+  if(act==="keep"){ t.textContent = t.textContent==="♡"?"♥":"♡"; return; }
+  if(act==="beforedetails"){ S.beforeDetails=!S.beforeDetails; render(); return; }
+  if(act==="gacc"){ S.groupOpen[v]=!S.groupOpen[v]; render(); return; }
+  if(act==="preset"){ S.melPreset = S.melPreset===v?"":v;
+    if(S.melPreset==="走る"){S.knobs={density:.8,swing:.1,runs:"強",tame:"OFF"};}
+    else if(S.melPreset==="しっとり"){S.knobs={density:.3,swing:0,runs:"OFF",tame:"中"};}
+    else {S.knobs={density:.5,swing:0,runs:"OFF",tame:"OFF"};}
+    render(); return; }
+  if(act==="dice"){ S.knobs.density=Math.round(rnd()*10)/10; S.knobs.swing=Math.round(rnd()*10)/10;
+    S.knobs.runs=["OFF","弱","中","強"][rnd()*4|0]; S.knobs.tame=["OFF","弱","中","強"][rnd()*4|0];
+    S.melPreset=""; render(); return; }
+  if(act==="savepreset"){ const n="マイ"+(S.myPresets.length+1); S.myPresets.push(n); S.melPreset=n; toast(`「${n}」として保存（localStorage想定）`); render(); return; }
+  if(act==="kruns"){ S.knobs.runs=v; S.melPreset=""; render(); return; }
+  if(act==="ktame"){ S.knobs.tame=v; S.melPreset=""; render(); return; }
+  if(act==="drumgenre"){ S.drumGenre = v==="おまかせ"?"":v; render(); return; }
+  if(act==="drumfill"){ S.drumFill=v; render(); return; }
+  if(act==="bassgenre"){ S.bassGenre = v==="おまかせ"?"":v; render(); return; }
+  if(act==="bassfill"){ S.bassFill=v; render(); return; }
+  if(act==="skelform"){ S.skelForm = v==="おまかせ"?"":v; render(); return; }
+  if(act==="palette"){ S.palette = v==="おまかせ"?"":v; render(); return; }
+  if(act==="locktoggle"){ t.classList.toggle("on"); t.textContent="鍵"; return; }
+  if(act==="toastonly"){ toast(v); return; }
+});
+document.addEventListener("change",(e)=>{ // 型直指定select（ドラム）＝状態チップへ反映のデモ
+  const s=e.target.closest("select[data-act-change='drumtype']");
+  if(s){ S.drumType = s.value==="—"?"":s.value; S.drumGenre=""; }
+});
+
+render();
+</script>
+</body>
+</html>
