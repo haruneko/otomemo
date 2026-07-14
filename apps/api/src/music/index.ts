@@ -25,6 +25,8 @@ export * from "./harmonize";
 // 継続（次のコード候補）。
 export * from "./continuation";
 export * from "./generate";
+// 調プラン（セクション間の転調設計・WP-C2）。
+export * from "./keyPlan";
 export * from "./similarity";
 export * from "./chordname";
 export * from "./melodyEssence";

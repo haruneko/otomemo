@@ -35,6 +35,7 @@ import {
   parseChordSymbol,
   substitutesOf,
   suggestClicheLines,
+  suggestKeyPlan,
   toDegrees,
 } from "./music";
 import { analyzeVoiceLeading } from "./music/voiceLeading";
@@ -194,7 +195,8 @@ export function buildHttp(core: Core): FastifyInstance {
     };
     try {
       switch (op) {
-        case "gen_chords": { const num = (x: unknown) => (typeof x === "number" ? x : undefined); const cad = ["half", "deceptive", "plagal", "aeolian"].includes(b.cadence) ? b.cadence : undefined; const pal = ["ionian", "mixolydian", "aeolian", "dorian"].includes(b.palette) ? b.palette : undefined; const gen = b.genre === "citypop" ? "citypop" as const : undefined; return genChords(b.frame, b.seed, cad, { borrow: num(b.borrow), secondaryDom: num(b.secondaryDom), loop: b.loop === true, palette: pal, variety: num(b.variety), genre: gen }); }
+        case "gen_chords": { const num = (x: unknown) => (typeof x === "number" ? x : undefined); const cad = ["half", "deceptive", "plagal", "aeolian"].includes(b.cadence) ? b.cadence : undefined; const pal = ["ionian", "mixolydian", "aeolian", "dorian"].includes(b.palette) ? b.palette : undefined; const gen = b.genre === "citypop" ? "citypop" as const : undefined; const tr = b.transition && (b.transition.prep === "pivot" || b.transition.prep === "secondary_dominant") && typeof b.transition.toKey === "number" ? { prep: b.transition.prep as "pivot" | "secondary_dominant", toKey: b.transition.toKey as number, toMode: b.transition.toMode === "minor" ? "minor" as const : "major" as const } : undefined; return genChords(b.frame, b.seed, cad, { borrow: num(b.borrow), secondaryDom: num(b.secondaryDom), loop: b.loop === true, palette: pal, variety: num(b.variety), genre: gen, transition: tr }); }
+        case "suggest_key_plan": { const md = b.mode === "minor" ? "minor" as const : "major" as const; const cnt = typeof b.count === "number" ? { count: b.count } : {}; return { plans: suggestKeyPlan(Array.isArray(b.roles) ? b.roles : [], typeof b.key === "number" ? b.key : 0, md, cnt) }; }
         case "gen_melody": {
           // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
@@ -249,7 +251,10 @@ export function buildHttp(core: Core): FastifyInstance {
             if (errs.length) return reply.code(400).send({ error: `invalid skeleton content: ${errs.join("; ")}` });
             skeleton = sn.content as SkeletonContent;
           }
-          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton });
+          // WP-B1：style(型ID/ジャンル名)／fill(0..1 or 型ID) 透過。未指定=従来 bit 一致。
+          const style = typeof b.style === "string" ? b.style : undefined;
+          const fill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
+          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill });
           // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
           attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string; // capture 後 link(ベース→骨格,"realized_from") 用にエコー
@@ -321,7 +326,7 @@ export function buildHttp(core: Core): FastifyInstance {
   // gen→compose ワンショット（dogfood P4）：コードを土台に各パートを生成→ネタ化→section に合成、を1コール。
   // 「叩き台を一発で組む」。決定的(seed)。返り＝section ネタ＋合成木。全部 project・tags:["生成"]。
   app.post("/gen/section", async (req) => {
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string } };
     const frame = b.frame ?? {};
     const key = typeof frame.key === "number" ? frame.key : 0;
     // part 名は素直な別名も受ける（chords→chord_progression, drums→rhythm 等）。指定の揺れで落とさない。

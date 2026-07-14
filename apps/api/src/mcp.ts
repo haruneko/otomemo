@@ -27,6 +27,7 @@ import {
   findSimilar,
   genNamedProgression,
   suggestClicheLines,
+  suggestKeyPlan,
 } from "./music";
 import { learnMotifModelFromLibrary } from "./music/corpusBias";
 import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
@@ -527,8 +528,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   // 生成（ルールベース・決定的記号エンジン・TS一本化＝cm-music の gen_* を置換）。frame=key/meter/bars/mood。
   server.registerTool(
     "gen_chords",
-    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・frame.key の実音で返る）。cadence=終止型(full=完全/half=半終止=V止め/deceptive=偽終止=V→vi/plagal=変終止=IV→I/aeolian=エオリアン終止=♭VI→♭VII→i)。borrow=サブドミナントマイナー(切なさ)、secondaryDom=二次ドミナント(おしゃれ/接着)、palette=旋法パレット(mixolydian等)。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), cadence: z.enum(["full", "half", "deceptive", "plagal", "aeolian"]).optional().describe("終止型。half=Aメロ末の開き/deceptive=続く感(偽終止)/plagal=アーメン終止/aeolian=エオリアン終止(♭VI→♭VII→i・短調の実測第1位／長調は♭VI→♭VII→I)。未指定=完全終止(従来)"), borrow: z.number().min(0).max(1).optional().describe("借用和音の確率。長調のIVを iv(サブドミナントマイナー=切なさ)へ。未指定=なし"), secondaryDom: z.number().min(0).max(1).optional().describe("二次ドミナントの確率。非トニック和音の直前を V/x(dom7)へ＝おしゃれ/接着(丸サのIII7等)。未指定=なし"), loop: z.boolean().optional().describe("循環進行(閉じずに回す)。短調=エオリアン i-♭VI-♭VII／長調=アクシス I-V-vi-IV。未指定=なし"), palette: z.enum(["ionian", "mixolydian", "aeolian", "dorian"]).optional().describe("旋法パレット(WP-C1)。mixolydian=♭VII(ロック・土臭)/dorian=IV長(浮遊・おしゃれ)/aeolian=切ない民族(短調既定)/ionian=明るい王道(長調既定)。frame.palette でも可。未指定=mode から既定＝bit一致"), variety: z.number().min(0).max(1).optional().describe("多様性(WP-C3)。中間和音を確率で代替候補(機能代理/相対/裏コード/同主調借用/二次ドミナント)へ差替＝進行の収束を緩める(ベタ回避)。未指定=なし(従来のダイアトニック進行)"), genre: z.enum(["citypop"]).optional().describe("ジャンルプリセット(WP-C3)。citypop=機能別テンション付与(Maj9/m9/13/maj7#11)＋IV/V等の分数化。meta.warnings にやり過ぎ警告を併記(ブロックしない)。未指定=素の三和音/7th") } },
-    async ({ frame, seed, cadence, borrow, secondaryDom, loop, palette, variety, genre }) => ok(genChords(frame, seed, cadence, { borrow, secondaryDom, loop, palette, variety, genre })),
+    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・frame.key の実音で返る）。cadence=終止型(full=完全/half=半終止=V止め/deceptive=偽終止=V→vi/plagal=変終止=IV→I/aeolian=エオリアン終止=♭VI→♭VII→i)。borrow=サブドミナントマイナー(切なさ)、secondaryDom=二次ドミナント(おしゃれ/接着)、palette=旋法パレット(mixolydian等)。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), cadence: z.enum(["full", "half", "deceptive", "plagal", "aeolian"]).optional().describe("終止型。half=Aメロ末の開き/deceptive=続く感(偽終止)/plagal=アーメン終止/aeolian=エオリアン終止(♭VI→♭VII→i・短調の実測第1位／長調は♭VI→♭VII→I)。未指定=完全終止(従来)"), borrow: z.number().min(0).max(1).optional().describe("借用和音の確率。長調のIVを iv(サブドミナントマイナー=切なさ)へ。未指定=なし"), secondaryDom: z.number().min(0).max(1).optional().describe("二次ドミナントの確率。非トニック和音の直前を V/x(dom7)へ＝おしゃれ/接着(丸サのIII7等)。未指定=なし"), loop: z.boolean().optional().describe("循環進行(閉じずに回す)。短調=エオリアン i-♭VI-♭VII／長調=アクシス I-V-vi-IV。未指定=なし"), palette: z.enum(["ionian", "mixolydian", "aeolian", "dorian"]).optional().describe("旋法パレット(WP-C1)。mixolydian=♭VII(ロック・土臭)/dorian=IV長(浮遊・おしゃれ)/aeolian=切ない民族(短調既定)/ionian=明るい王道(長調既定)。frame.palette でも可。未指定=mode から既定＝bit一致"), variety: z.number().min(0).max(1).optional().describe("多様性(WP-C3)。中間和音を確率で代替候補(機能代理/相対/裏コード/同主調借用/二次ドミナント)へ差替＝進行の収束を緩める(ベタ回避)。未指定=なし(従来のダイアトニック進行)"), genre: z.enum(["citypop"]).optional().describe("ジャンルプリセット(WP-C3)。citypop=機能別テンション付与(Maj9/m9/13/maj7#11)＋IV/V等の分数化。meta.warnings にやり過ぎ警告を併記(ブロックしない)。未指定=素の三和音/7th"), transition: z.object({ prep: z.enum(["pivot", "secondary_dominant"]), toKey: z.number().int().min(0).max(11), toMode: z.enum(["major", "minor"]).optional() }).optional().describe("転調準備(WP-C2)。境界セクション末尾を次調への準備和音へ差替＝pivot(共通和音で滑らか)/secondary_dominant(次調のV7で牽引)。toKey=転調先の主音pc。調プラン(suggest_key_plan)適用時に境界へ差す。未指定=なし(従来の終止・bit一致)。無準備(direct)は渡さない") } },
+    async ({ frame, seed, cadence, borrow, secondaryDom, loop, palette, variety, genre, transition }) => ok(genChords(frame, seed, cadence, { borrow, secondaryDom, loop, palette, variety, genre, transition })),
   );
   // gen_bass / gen_melody のドラム入力（gen_drums の content と同形）＝design「gen_bass×ドラム結線」「gen_melody×ドラム結線」2026-07-10。
   const drumsSchema = z
@@ -607,8 +608,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "gen_bass",
-    { title: "ベースを生成", description: "強拍ルート/弱拍5度のベースライン（C2基準低域・コードに合う）。drums(gen_drums の content)を渡すとドラムに噛む：kickLock=キック骨格の採用率(負=逆相・キック裏8分)、snareGap=スネア(2,4拍)頭で音価を切りbackbeatを抜く、approach=コードチェンジ直前を半音/全音接近→次ルート着地。全て既定0=従来。6/8はkickLock/approach対象外。skeletonNetaId=骨格ネタのベース明示区間で表面化＝書いた区間(クリシェ/ペダル)だけベース音を上書き・省略区間はコード導出のまま(design #20)。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), drums: drumsSchema, kickLock: z.number().min(-1).max(1).optional().describe("キック骨格 -1..1。正=キックstepにオンセットを乗せる率(小節頭は常に弾く)、負=逆相(キックに無い8分裏へ)。0=従来fig経路"), snareGap: z.number().min(0).max(1).optional().describe("スネア頭で音価を切る強さ 0..1（onset不変・最小dur16分）＝2・4に穴を空けてスネアを抜く"), approach: z.number().min(0).max(1).optional().describe("コードチェンジ直前の接近音化率 0..1（弱拍・短音のみ＝半音上下/全音下→次ルート着地）"), skeletonNetaId: z.string().optional().describe("骨格ネタ(kind=skeleton)のid。骨格の明示ベース区間(bass)だけをベース音として上書き＝表面化(design #20)。骨格休符(pitch:null)区間はベースも鳴らさない。明示ゼロ/未指定=従来コード導出とbit一致。返りに skeletonNetaId が入る＝capture 後 link(ベース→骨格,\"realized_from\")") } },
-    async ({ frame, chords, seed, drums, kickLock, snareGap, approach, skeletonNetaId }) => {
+    { title: "ベースを生成", description: "強拍ルート/弱拍5度のベースライン（C2基準低域・コードに合う）。drums(gen_drums の content)を渡すとドラムに噛む：kickLock=キック骨格の採用率(負=逆相・キック裏8分)、snareGap=スネア(2,4拍)頭で音価を切りbackbeatを抜く、approach=コードチェンジ直前を半音/全音接近→次ルート着地。全て既定0=従来。6/8はkickLock/approach対象外。**style**=ベース定型型ID(RK-8ROOT/BL-WHOLE/CP-OCT8/FK-ONE/ED-OFFBEAT/VR-8DRIVE 等)またはジャンル名(rock/ballad/citypop/funk/edm/vocarock＝frame.section.role＋tempo域で候補型を絞り選択)＝度数×16分グリッドの型を実音化。型格子を正準に鳴らしkickLockとは二重適用しない(排他)。**fill**=0..1(小さい=下降で落ち着かせる/大きい=上昇で盛り上げる)またはフィル型ID(FL-WALKUP等)＝末尾1つ手前の小節に駆け上がり/下がりを挿入。style/fill未指定=従来bit一致。6/8はstyle/fill対象外。skeletonNetaId=骨格ネタのベース明示区間で表面化＝書いた区間(クリシェ/ペダル)だけベース音を上書き・省略区間はコード導出のまま(design #20)。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), drums: drumsSchema, kickLock: z.number().min(-1).max(1).optional().describe("キック骨格 -1..1。正=キックstepにオンセットを乗せる率(小節頭は常に弾く)、負=逆相(キックに無い8分裏へ)。0=従来fig経路"), snareGap: z.number().min(0).max(1).optional().describe("スネア頭で音価を切る強さ 0..1（onset不変・最小dur16分）＝2・4に穴を空けてスネアを抜く"), approach: z.number().min(0).max(1).optional().describe("コードチェンジ直前の接近音化率 0..1（弱拍・短音のみ＝半音上下/全音下→次ルート着地）"), style: z.string().optional().describe("ベース定型型ID or ジャンル名(rock/ballad/citypop/funk/edm/vocarock)。度数×16分グリッドの型を実音化＝型格子が正準(kickLockと排他)。未指定=従来"), fill: z.union([z.number().min(0).max(1), z.string()]).optional().describe("フィル 0..1(小=下降/大=上昇) or 型ID(FL-WALKUP等)。末尾1つ手前の小節に駆け上がり/下がりを挿入。未指定=なし(従来)"), skeletonNetaId: z.string().optional().describe("骨格ネタ(kind=skeleton)のid。骨格の明示ベース区間(bass)だけをベース音として上書き＝表面化(design #20)。骨格休符(pitch:null)区間はベースも鳴らさない。明示ゼロ/未指定=従来コード導出とbit一致。返りに skeletonNetaId が入る＝capture 後 link(ベース→骨格,\"realized_from\")") } },
+    async ({ frame, chords, seed, drums, kickLock, snareGap, approach, style, fill, skeletonNetaId }) => {
       // 骨格注入（design #20 S3c）：skeletonNetaId 指定時はその neta の content を SkeletonContent として読み検証し注入（gen_melody と同契約）。
       let skeleton: SkeletonContent | undefined;
       if (skeletonNetaId) {
@@ -619,7 +620,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         if (errs.length) return err(`invalid skeleton content: ${errs.join("; ")}`);
         skeleton = sn.content as SkeletonContent;
       }
-      const res = genBass(frame, chords, seed, drums, { kickLock, snareGap, approach, skeleton });
+      const res = genBass(frame, chords, seed, drums, { kickLock, snareGap, approach, skeleton, style, fill });
       // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
       attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
       // capture 後に link(ベース, 骨格, "realized_from") を張れるよう id をエコー（design #20・gen_melody と同じ）。
@@ -881,6 +882,22 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       const cs = (chords ?? []).map((c) => ({ root: normRoot(c.root), quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? 1 }));
       return ok(suggestClicheLines(cs, { key, mode, role, melody, max }));
     },
+  );
+  // WP-C2：調プラン（セクション間の転調設計）を候補として提示（自動適用しない＝機械は候補まで）。
+  server.registerTool(
+    "suggest_key_plan",
+    {
+      title: "調プランを提案（転調）",
+      description:
+        "セクション役割の並び（intro/verse/prechorus/chorus/bridge/interlude/outro＝Aメロ/Bメロ/サビ等）と基準 key/mode から、曲全体の『調プラン』候補を複数出す。各案＝各セクションの key+mode＋境界の転調メタ(型ID・準備和音・戻り方)。二大頻出＝サビ短3度上げ/最終サビ半音上げ(トラックドライバー)を重み上位に。**必ず『転調しない案』を先頭に含む**。提案のみ＝自動適用しない（各セクションへ key を落とし込み、境界の gen_chords に transition を渡すのは人/上位の判断）。一時転調(借用和音)は対象外＝frameは動かさない。",
+      inputSchema: {
+        roles: z.array(z.string()).describe("セクション役割の並び（例 [\"intro\",\"verse\",\"prechorus\",\"chorus\",\"verse\",\"prechorus\",\"chorus\",\"bridge\",\"chorus\"]）。Aメロ→verse/Bメロ→prechorus/サビ→chorus 等の別表記も吸収"),
+        key: z.number().int().min(0).max(11).optional().describe("基準調の主音pc（0=C..11=B）。未指定=0(C)"),
+        mode: z.enum(["major", "minor"]).optional().describe("基準調の長短。未指定=major"),
+        count: z.number().int().min(1).max(8).optional().describe("返す候補数（既定4・先頭は必ず転調しない案）"),
+      },
+    },
+    async ({ roles, key, mode, count }) => ok({ plans: suggestKeyPlan(roles ?? [], key ?? 0, mode ?? "major", count !== undefined ? { count } : {}) }),
   );
   server.registerTool(
     "generate",
