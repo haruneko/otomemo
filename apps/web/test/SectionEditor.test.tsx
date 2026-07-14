@@ -801,6 +801,68 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(body.backbeat).toBeUndefined();
   });
 
+  it("T4 ドラム型chip化＝ジャンルchip/フィルsegが既存 style/fill を送る（値はbit一致・selectのUI化のみ）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-drums")); // ドラム引き出し
+    await userEvent.click(screen.getByLabelText("drum-genre-rock")); // ジャンル＝ロック（chip前面）
+    await userEvent.click(screen.getByLabelText("drum-fill-0.6")); // フィル＝中（seg前面）
+    await userEvent.click(screen.getByLabelText("gen-gen_drums")); // 下端の生成
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_drums");
+    expect(body.style).toBe("rock"); // ジャンルコードがそのまま
+    expect(body.fill).toBeCloseTo(0.6);
+  });
+  it("T4 ドラム：おまかせ既定は style/fill を送らない（未送信＝bit一致の鉄則）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_drums")); // ハブのドラムタイル＝おまかせ即生成
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const body = music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.style).toBeUndefined();
+    expect(body.fill).toBeUndefined();
+  });
+  it("T4 ベース型chip化＝ジャンルchip/フィルsegが既存 style/fill を送る（bit一致）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass")); // ベース引き出し
+    await userEvent.click(screen.getByLabelText("bass-genre-citypop")); // ジャンル＝シティポップ
+    await userEvent.click(screen.getByLabelText("bass-fill-0.2")); // フィル＝下降
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_bass");
+    expect(body.style).toBe("citypop");
+    expect(body.fill).toBeCloseTo(0.2);
+  });
   it("sizes bars by meter — 6/8 bar1 = position 3 (#51)", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section", { meter: "6/8" }), children: [] });
     listNeta.mockResolvedValue([mk("c2", "melody", { title: "M" })]);

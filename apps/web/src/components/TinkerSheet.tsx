@@ -45,6 +45,9 @@ const PALETTE_CHIPS: { v: "" | "ionian" | "mixolydian" | "aeolian" | "dorian"; l
   { v: "dorian", label: "浮遊" },
 ];
 const PRESET_LABEL = Object.fromEntries(MELODY_PRESETS.map((p) => [p.name, p.label]));
+// タイル状態チップ用のジャンル語（型直指定コードは「型指定」でまとめる＝チップは軽く保つ）。
+const DRUM_GENRE_LABEL: Record<string, string> = { jpop: "J-pop", rock: "ロック", dance: "EDM", ballad: "バラード", funk: "ファンク" };
+const BASS_GENRE_LABEL: Record<string, string> = { rock: "ロック", ballad: "バラード", citypop: "シティポップ", funk: "ファンク", edm: "EDM", vocarock: "ボカロック" };
 
 // マイ設定（P4 の回収・design #19 ⑥）＝いま回してるノブ群を localStorage に {name,label,v} で保存＝MELODY_PRESETS と同型。
 // これは UI ローカルの当たり保存＝生成 payload には影響しない（applyPreset で通常ノブへ流すだけ＝bit一致）。
@@ -93,8 +96,17 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
   // タイル下端の状態チップ＝設定サマリ＝引き出しの扉（設定の可視化と扉を1つのUIで兼ねる）。
   const chipInfo = (id: string): { text: string; set: boolean } => {
     if (id === "melody") return { text: gen.preset ? PRESET_LABEL[gen.preset] ?? "設定" : "おまかせ", set: !!gen.preset };
-    if (id === "drums") { const set = !!gen.drumStyle || (typeof gen.drumFill === "number" ? gen.drumFill > 0 : !!gen.drumFill); return { text: set ? "設定あり" : "おまかせ", set }; }
-    if (id === "bass") { const set = !!gen.bassStyle || gen.bassFill > 0; return { text: set ? "設定あり" : "おまかせ", set }; }
+    if (id === "drums") {
+      const fillSet = typeof gen.drumFill === "number" ? gen.drumFill > 0 : !!gen.drumFill;
+      const set = !!gen.drumStyle || fillSet;
+      const g = DRUM_GENRE_LABEL[gen.drumStyle] ?? (gen.drumStyle ? "型指定" : "");
+      return { text: set ? [g, fillSet ? "フィル" : ""].filter(Boolean).join("・") || "設定あり" : "おまかせ", set };
+    }
+    if (id === "bass") {
+      const set = !!gen.bassStyle || gen.bassFill > 0;
+      const g = BASS_GENRE_LABEL[gen.bassStyle] ?? (gen.bassStyle ? "型指定" : "");
+      return { text: set ? [g, gen.bassFill > 0 ? "フィル" : ""].filter(Boolean).join("・") || "設定あり" : "おまかせ", set };
+    }
     if (id === "skeleton") return { text: gen.skelForm || "おまかせ", set: !!gen.skelForm };
     return { text: "おまかせ", set: false };
   };
@@ -285,23 +297,33 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
     </>
   );
 
-  // ---- ドラム引き出し（T4 で型chip化。T2 は現行 select を移設）----
+  // ---- ドラム引き出し（型chip化・design §2.4）＝ジャンルchip前面／フィルseg／型直指定は「細かく」に沈める。
+  // 42択セレクタ地獄→耳で選ぶジャンル語を前面・型IDは沈める。値は既存 state（drumStyle/drumFill）＝送信不変。
   const drumsDrawer = (
     <>
       {drawerHead("ドラム", () => { gen.setDrumStyle(""); gen.setDrumFill(0); })}
       <div className="tk-drawer-body">
-        <label className="tool-item" aria-label="drum-style">
-          ビート型
-          <select value={gen.drumStyle} onChange={(e) => gen.setDrumStyle(e.target.value)}>
-            <option value="">おまかせ</option>
-            <optgroup label="ジャンル">
-              <option value="jpop">J-pop</option>
-              <option value="rock">ロック</option>
-              <option value="dance">ダンス/EDM</option>
-              <option value="ballad">バラード</option>
-              <option value="funk">ファンク/R&B</option>
-            </optgroup>
-            <optgroup label="型（直指定）">
+        <div className="tk-hublab">ビートのジャンル</div>
+        <div className="tk-palette" aria-label="drum-genre">
+          {([["", "おまかせ"], ["jpop", "J-pop"], ["rock", "ロック"], ["dance", "EDM"], ["ballad", "バラード"], ["funk", "ファンク"]] as [string, string][]).map(([v, lab]) => (
+            <button key={v || "omakase"} type="button" className={"chip" + (gen.drumStyle === v ? " on" : "")} aria-label={`drum-genre-${v || "omakase"}`} aria-pressed={gen.drumStyle === v} onClick={() => gen.setDrumStyle(v)}>{lab}</button>
+          ))}
+        </div>
+        <div className="tk-hublab">フィル（セクション末の節目）</div>
+        <div className="knob-seg" aria-label="drum-fill">
+          <span className="knob-name">強さ</span>
+          <span className="seg-ctl">
+            {([["なし", 0], ["弱", 0.3], ["中", 0.6], ["強", 0.9]] as [string, number][]).map(([lab, v]) => (
+              <button key={v} type="button" className={"seg-b" + (gen.drumFill === v ? " on" : "")} aria-label={`drum-fill-${v}`} aria-pressed={gen.drumFill === v} onClick={() => gen.setDrumFill(v)}>{lab}</button>
+            ))}
+          </span>
+        </div>
+        {gacc("drumfine", "細かく（型直指定・ビルドアップ）", "9型＋溜め3種")}
+        {openGroups.drumfine && <>
+          <label className="knob-row" aria-label="drum-style">
+            <span className="knob-name">型直指定</span>
+            <select value={gen.drumStyle.startsWith("beat") || gen.drumStyle.startsWith("four") || gen.drumStyle.startsWith("half") || gen.drumStyle.startsWith("shuffle") || gen.drumStyle.startsWith("six") ? gen.drumStyle : ""} onChange={(e) => gen.setDrumStyle(e.target.value)}>
+              <option value="">—（ジャンルにまかせる）</option>
               <option value="beat8.basic">8ビート基本</option>
               <option value="beat8.syncopated">8ビート食い込み</option>
               <option value="beat16.basic">16ビート</option>
@@ -311,23 +333,18 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
               <option value="halftime.basic">ハーフタイム</option>
               <option value="shuffle.basic">シャッフル</option>
               <option value="six8.ballad">6/8バラード</option>
-            </optgroup>
-          </select>
-        </label>
-        <label className="tool-item" aria-label="drum-fill">
-          フィル
-          <select value={String(gen.drumFill)} onChange={(e) => { const v = e.target.value; gen.setDrumFill(v.startsWith("build.") ? v : Number(v)); }}>
-            <option value="0">なし</option>
-            <option value="0.3">弱（軽い節目）</option>
-            <option value="0.6">中（遷移フィル）</option>
-            <option value="0.9">強（大遷移）</option>
-            <optgroup label="ビルドアップ（溜め）">
+            </select>
+          </label>
+          <label className="knob-row" aria-label="drum-buildup">
+            <span className="knob-name">ビルドアップ<small>サビ/ドロップ前の溜め</small></span>
+            <select value={typeof gen.drumFill === "string" ? gen.drumFill : ""} onChange={(e) => gen.setDrumFill(e.target.value || 0)}>
+              <option value="">なし</option>
               <option value="build.tight.4bar">溜め4小節（プリコーラス）</option>
               <option value="build.standard.8bar">溜め8小節（汎用）</option>
               <option value="build.big.16bar">溜め16小節（大サビ前）</option>
-            </optgroup>
-          </select>
-        </label>
+            </select>
+          </label>
+        </>}
       </div>
       <div className="tk-drawer-foot">
         <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_drums" disabled={gen.genBusy} onClick={() => drawerGen("gen_drums")}>ドラムを生成</button>
@@ -335,24 +352,33 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
     </>
   );
 
-  // ---- ベース引き出し（T4 で型chip化）----
+  // ---- ベース引き出し（型chip化・design §2.4）----
+  const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE"];
   const bassDrawer = (
     <>
       {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); })}
       <div className="tk-drawer-body">
-        <label className="tool-item" aria-label="bass-style">
-          ベース型
-          <select value={gen.bassStyle} onChange={(e) => gen.setBassStyle(e.target.value)}>
-            <option value="">おまかせ</option>
-            <optgroup label="ジャンル">
-              <option value="rock">ロック</option>
-              <option value="ballad">バラード</option>
-              <option value="citypop">シティポップ</option>
-              <option value="funk">ファンク</option>
-              <option value="edm">EDM</option>
-              <option value="vocarock">ボカロック</option>
-            </optgroup>
-            <optgroup label="型（直指定）">
+        <div className="tk-hublab">ベースのジャンル</div>
+        <div className="tk-palette" aria-label="bass-genre">
+          {([["", "おまかせ"], ["rock", "ロック"], ["ballad", "バラード"], ["citypop", "シティポップ"], ["funk", "ファンク"], ["edm", "EDM"], ["vocarock", "ボカロック"]] as [string, string][]).map(([v, lab]) => (
+            <button key={v || "omakase"} type="button" className={"chip" + (gen.bassStyle === v ? " on" : "")} aria-label={`bass-genre-${v || "omakase"}`} aria-pressed={gen.bassStyle === v} onClick={() => gen.setBassStyle(v)}>{lab}</button>
+          ))}
+        </div>
+        <div className="tk-hublab">フィル（セクション末）</div>
+        <div className="knob-seg" aria-label="bass-fill">
+          <span className="knob-name">向き</span>
+          <span className="seg-ctl">
+            {([["なし", 0], ["下降", 0.2], ["上昇", 0.9]] as [string, number][]).map(([lab, v]) => (
+              <button key={v} type="button" className={"seg-b" + (gen.bassFill === v ? " on" : "")} aria-label={`bass-fill-${v}`} aria-pressed={gen.bassFill === v} onClick={() => gen.setBassFill(v)}>{lab}</button>
+            ))}
+          </span>
+        </div>
+        {gacc("bassfine", "細かく（型直指定）", "10型")}
+        {openGroups.bassfine && (
+          <label className="knob-row" aria-label="bass-style">
+            <span className="knob-name">型直指定</span>
+            <select value={BASS_TYPES.includes(gen.bassStyle) ? gen.bassStyle : ""} onChange={(e) => gen.setBassStyle(e.target.value)}>
+              <option value="">—（ジャンルにまかせる）</option>
               <option value="RK-8ROOT">8分ルート弾き</option>
               <option value="RK-GALLOP">ギャロップ</option>
               <option value="BL-WHOLE">全音符バラード</option>
@@ -363,17 +389,9 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
               <option value="ED-OFFBEAT">オフビート</option>
               <option value="ED-SUSTAIN">ロー持続</option>
               <option value="VR-8DRIVE">高速8分ドライブ</option>
-            </optgroup>
-          </select>
-        </label>
-        <label className="tool-item" aria-label="bass-fill">
-          ベースフィル
-          <select value={String(gen.bassFill)} onChange={(e) => gen.setBassFill(Number(e.target.value))}>
-            <option value="0">なし</option>
-            <option value="0.2">下降（落ち着かせ）</option>
-            <option value="0.9">上昇（駆け上がり）</option>
-          </select>
-        </label>
+            </select>
+          </label>
+        )}
       </div>
       <div className="tk-drawer-foot">
         <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_bass" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る" : "ベースを生成"} onClick={() => drawerGen("gen_bass")}>ベースを生成</button>
