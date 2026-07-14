@@ -251,3 +251,9 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - **R0§6の遷移統計テーブル化**（phrase_pattern / note_transition / chord_transition）＝素材は正常化済、辞書→遷移統計の器が未着手。M2（骨格再抽出＝M1計測仕様12点）と合わせて設計するのが得
 - game句のキー推定漏れ（数%）への信頼度フラグ
 - 再構築後コーパスの**耳での質確認**（生成経由で崩れ有無・要api再起動後）
+
+## cm-search の運用強化（2026-07-14・機材チャット不達の事後）
+事象＝8日連続稼働でハング（ソケット生存・無応答）→api searchが2sタイムアウト→keyword劣化0件→チャットが機材インベントリ(knowledge×3)に到達不能。再起動＋インデックス再構築(~11分)で復旧確認済。
+- ヘルスチェック→自動再起動（systemd Watchdog or 定期 curl+restart。cm-backup.timer と同じ流儀で cm-search-health.timer が安い）
+- ウォームアップ中のクエリが無言ブロック＝「準備中」503を返す（api側は semanticOk:false の理由をUI/チャットに伝える）
+- api→cm-search の2sタイムアウトはコールド時に過敏＝リトライ1回 or 状況通知
