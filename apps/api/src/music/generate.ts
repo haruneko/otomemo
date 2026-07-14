@@ -25,6 +25,7 @@ import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpe
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
+import { beatPatternById, pickBeatPattern, resolveFillType, DRUM, type OutLane, type FillType } from "./drumLibrary"; // ドラム定型ビート＋フィル語彙（WP-D1）
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -1161,7 +1162,22 @@ const GM = { Kick: 36, Snare: 38, HiHat: 42, OpenHat: 46 };
 
 /** GMドラム（16ステップ1小節）を **mood/tempo/seed で可変**生成。切ない=ハーフタイム/疎、
  * 明るい/速い=16分ハット・キック増、既定=8ビート。返り #85 items 形（rhythm）。 */
-export function genDrums(frame?: Frame | null, seed?: number | null): GenResult {
+// ドラム content 形（rhythm.lanes は OutLane＝{name,midi,hits,vel,velCurve?}）。
+type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[] } };
+export interface DrumsGenOpts { style?: string; fill?: number | string }
+
+/** GMバックビートを生成（WP-D1 で style/fill ノブ追加・**opts 無し/両ノブ未指定は従来と bit 一致**）。
+ * style=型ID or ジャンル名→定型ビートライブラリで realize。fill=0..1 or 型ID→末尾遷移小節へフィル挿入＋着地。 */
+export function genDrums(frame?: Frame | null, seed?: number | null, opts?: DrumsGenOpts): GenResult {
+  const f = normalizeFrame(frame);
+  // ベース1小節（or 定型型）content を決める。style 未指定＝従来経路（bit 一致）。
+  let base: DrumContent = opts?.style != null ? (resolveStyleContent(f, opts.style, seed ?? 0) ?? defaultDrumBar(f, seed)) : defaultDrumBar(f, seed);
+  if (opts?.fill != null) { const filled = applyDrumFill(base, f, opts.fill, seed ?? 0); if (filled) base = filled; }
+  return { items: [{ kind: "rhythm", content: base, label: "ドラム" }], edges: [] };
+}
+
+// 従来の densityBias 経路（sparse/busy 分岐）＝**opts 無しの既定**（bit 一致の本体）。返りは content（inner）。
+function defaultDrumBar(frame: Frame, seed?: number | null): DrumContent {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 0);
   const bias = densityBias(f.mood ?? "", f.tempo);
@@ -1182,7 +1198,7 @@ export function genDrums(frame?: Frame | null, seed?: number | null): GenResult 
       { name: "HiHat", midi: GM.HiHat, hits: hat, vel: hv },
     ];
     // C④ step↔拍を自己記述（hits は0..steps-1の16分グリッド index、beatsPerStep で拍へ変換可）。
-    return { items: [{ kind: "rhythm", content: { rhythm: { steps: 12, bars: 1, beatsPerStep: round3(beatsPerBar(f.meter) / 12), lanes: cl } }, label: "ドラム" }], edges: [] };
+    return { rhythm: { steps: 12, bars: 1, beatsPerStep: round3(beatsPerBar(f.meter) / 12), lanes: cl } };
   }
   const kick = new Set<number>([0]);
   const snare = new Set<number>();
@@ -1221,5 +1237,64 @@ export function genDrums(frame?: Frame | null, seed?: number | null): GenResult 
     ...(open.length ? [{ name: "OpenHat", midi: GM.OpenHat, hits: open, vel: 70 }] : []),
   ];
   // C④ step↔拍を自己記述（hits は0..steps-1の16分グリッド index、beatsPerStep で拍へ変換可）。
-  return { items: [{ kind: "rhythm", content: { rhythm: { steps: 16, bars: 1, beatsPerStep: round3(beatsPerBar(f.meter) / 16), lanes } }, label: "ドラム" }], edges: [] };
+  return { rhythm: { steps: 16, bars: 1, beatsPerStep: round3(beatsPerBar(f.meter) / 16), lanes } };
+}
+
+// style（型ID or ジャンル名）→定型ビート content。無ければ null（＝呼び出し側で従来経路へフォールバック）。
+function resolveStyleContent(frame: Frame, style: string, seed: number): DrumContent | null {
+  const f = normalizeFrame(frame);
+  const compound = meterInfo(f.meter).grouping === "compound";
+  let pat = beatPatternById(style) ?? pickBeatPattern(style, f.section?.role, f.tempo, compound, seed) ?? null;
+  if (!pat) return null;
+  // 拍子ゲート：6/8(compound)は 6/8 型のみ（4/4 型を指定されても six8.ballad へ差替）／4/4 で 6/8 型は使わない。
+  if (compound && pat.meter !== "6/8") pat = beatPatternById("six8.ballad")!;
+  if (!compound && pat.meter === "6/8") return null;
+  const beatsPerStep = round3(beatsPerBar(f.meter) / pat.grid);
+  const lanes: OutLane[] = pat.lanes.map((l) => ({ name: l.name, midi: l.midi, hits: [...l.hits], vel: l.vel }));
+  return { rhythm: { steps: pat.grid * pat.bars, bars: pat.bars, beatsPerStep, lanes } };
+}
+
+// フィル挿入：base(1小節 or 型)を frame.bars 本へタイル＋末尾の遷移小節へフィル型＋着地(次小節頭 crash+kick)。
+// フィルグリッドと base グリッドが不一致（例 shuffle三連 base×16格子フィル）や小節数不足なら null（＝フィル無し）。
+function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, seed: number): DrumContent | null {
+  const f = normalizeFrame(frame);
+  const compound = meterInfo(f.meter).grouping === "compound";
+  const grid = base.rhythm.steps / base.rhythm.bars; // base の1小節step数
+  if (!Number.isInteger(grid) || grid <= 0) return null;
+  const ft: FillType | null = resolveFillType(fill, compound, seed);
+  if (!ft || ft.grid !== grid) return null; // グリッド不一致＝二重格子は不可
+  const N = Math.max(1, Math.min(16, f.bars ?? 4)); // 生成小節数（既定4）
+  if (N < ft.bars + 1) return null; // 着地(次小節)の余地が要る＝最低 fillbars+1 小節
+  const fillStart = N - 1 - ft.bars; // フィル本体の先頭小節
+  const landingBar = N - 1;
+  // base の1小節ぶん（bar0）のレーンを取り出す（2小節型は bar0 のみ反復単位に）。
+  type Pair = { midi: number; pairs: { step: number; vel: number }[] };
+  const map = new Map<string, Pair>();
+  const add = (name: string, midi: number, step: number, vel: number) => {
+    const e = map.get(name) ?? map.set(name, { midi, pairs: [] }).get(name)!;
+    e.pairs.push({ step, vel });
+  };
+  const baseBar0 = base.rhythm.lanes.map((l) => ({ name: l.name, midi: l.midi, hits: l.hits.filter((s) => s < grid), vel: l.vel, velCurve: l.velCurve }));
+  for (let b = 0; b < N; b++) {
+    if (b >= fillStart && b < fillStart + ft.bars) continue; // フィル本体の小節は base を敷かない
+    for (const l of baseBar0) l.hits.forEach((s, i) => add(l.name, l.midi, b * grid + s, l.velCurve?.[i] ?? l.vel));
+  }
+  // フィル本体（fillStart から ft.bars 小節・hits は 0..grid*bars-1）。
+  const off = fillStart * grid;
+  for (const l of ft.lanes) l.hits.forEach((s, i) => add(l.name, l.midi, off + s, l.velCurve[i] ?? l.velCurve[l.velCurve.length - 1] ?? 100));
+  // 着地（次小節頭＝landingBar step0）。crashKick=crash+kick／crashOnly=crash／rideKick=ride+kick／silent=無し。
+  const lstep = landingBar * grid;
+  if (ft.landing !== "silent") {
+    if (ft.landing === "rideKick") add("Ride", DRUM.Ride, lstep, 90); else add("Crash", DRUM.Crash, lstep, 120);
+    if (ft.landing !== "crashOnly") add("Kick", DRUM.Kick, lstep, 118);
+  }
+  // Map→OutLane（step 昇順・全 vel 同一なら velCurve 省略＝単一 vel）。
+  const lanes: OutLane[] = [...map.entries()].map(([name, e]) => {
+    const uniq = [...new Map(e.pairs.map((p) => [p.step, p.vel])).entries()].sort((a, b) => a[0] - b[0]);
+    const hits = uniq.map((u) => u[0]);
+    const vels = uniq.map((u) => u[1]);
+    const allSame = vels.every((v) => v === vels[0]);
+    return allSame ? { name, midi: e.midi, hits, vel: vels[0] ?? 100 } : { name, midi: e.midi, hits, vel: Math.max(...vels), velCurve: vels };
+  });
+  return { rhythm: { steps: N * grid, bars: N, beatsPerStep: base.rhythm.beatsPerStep, lanes } };
 }
