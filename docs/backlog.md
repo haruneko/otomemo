@@ -257,3 +257,13 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - ヘルスチェック→自動再起動（systemd Watchdog or 定期 curl+restart。cm-backup.timer と同じ流儀で cm-search-health.timer が安い）
 - ウォームアップ中のクエリが無言ブロック＝「準備中」503を返す（api側は semanticOk:false の理由をUI/チャットに伝える）
 - api→cm-search の2sタイムアウトはコールド時に過敏＝リトライ1回 or 状況通知
+
+## UI総点検の起票（2026-07-15 夜間監査・設計判断が要るもの）
+棚卸し正典＝`docs/research/2026-07-15-ui-feature-inventory.md`（§7怪しい箇所）。低リスク分は当夜修正済み/中（🎲結線=design#23・戻るガード=23c4089等）。以下は**判断が要るので実装せず起票**：
+- **Capture.tsx が完全dead＋outbox退避の呼び元消滅**：「摩擦ゼロの捕獲」動線が画面に無く、オフライン退避(queueNeta)も実質死。復活（どこに置く？）or 撤去（コンセプトから外す？）の判断。
+- **importMidi の完了待ち12s打ち切り**：遅いジョブが「取り込めなかったように見える」。トレイへ誘導する見せ方に変えるか。
+- **「すべて」表示での手動並べ替え**：reorderNeta("") の順序永続の意味が曖昧（全器横断の集合に順序？）。仕様を決める。
+- **Chatの常時ポーリング（2req/4s）と target付きオープンの自動送信**：開いただけで実claude 1ターン課金。意図的か再考。
+- **AnalysisWorkbench**：anchors を単一要素で常に上書き（複数アンカー化に非対応）／beat_times 空音源でロール幅破綻の恐れ。
+- **placeCandidate の重複除去**：position=0固定呼びだと別小節の既存メロを尺次第で巻き込み削除し得る（useMelodyGen.tsx:443）。配置仕様の明確化。
+- **再生タイミングの構造是正（実測後に確定）**：押下→発音までの可変await列（SF2/サンプラ準備）を「開始時刻を先に確定→準備完了後に開始」へ／reloop を NetaDialog にも配線（再生中のtempo/notes反映）／latencyHint・lookAhead の明示設定。実測結果は監査レポート参照。
