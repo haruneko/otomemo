@@ -32,7 +32,6 @@ const ProjectScreen = lazy(() => import("./components/ProjectScreen").then((m) =
 // #20 S6骨格の机：骨格ブロック→全画面の机（ベッド上で編集・レンズA/B）。二次画面＝遅延ロード。
 const SkeletonDesk = lazy(() => import("./components/SkeletonDesk").then((m) => ({ default: m.SkeletonDesk })));
 import type { SkeletonDeskTarget } from "./components/SkeletonDesk";
-import { flushOutbox } from "./outbox";
 import { projectTag } from "./project";
 
 const ACTIVE_PROJECT_KEY = "cm-active-project";
@@ -186,6 +185,16 @@ export function App() {
     };
   }, [activeProject]);
 
+  // 種別の「実在集合」＝facets(GET /facets)の kind（DB上に実在する kind の権威・件数窓に依存しない）。
+  // トップの一覧(listNeta)は updated DESC の最新100件で頭打ち＝古い kind(analysis/study 等)がその窓から
+  // 漏れるとクライアント集計では0件になり、絞る▾で非タップの「0件ゴースト」に化けてタップ不能だった
+  // （＝古データの kind に絞り込めない）。実データ規模で破綻したため実在判定を facets へ移す（2026-07-15監査）。
+  // 正典 docs/research/2026-07-14-topview-redesign-fable.md は「クライアント集計」契約だが、その前提が
+  // 実データ規模で崩れたのでここだけ facets に依る。限界：facets は(a)件数を返さない＝バッジ数値は最新100件窓の
+  // best-effort、(b)全プロジェクト横断・library除外＝activeProject を絞らない（他器だけに在る kind も実在扱い）。
+  // 厳密な per-project kind 件数が要るなら API 追加（docs/backlog）。
+  const [facetKinds, setFacetKinds] = useState<string[]>([]);
+
   // プロジェクト一覧（prj:タグ ∪ project行＝説明だけ作った空の器も拾う）。reload時に追従。
   const loadProjects = useCallback(() => {
     api
@@ -195,6 +204,10 @@ export function App() {
     api
       .getProjectCounts()
       .then(setCounts)
+      .catch(() => {});
+    api
+      .facets()
+      .then((f) => setFacetKinds(f.kind))
       .catch(() => {});
   }, []);
 
@@ -264,6 +277,9 @@ export function App() {
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 6);
+  // 種別の「実在集合」＝facets（DB全体の権威）∪ 現在ロード中の items にある kind。これで絞る▾の
+  // 0件ゴースト判定を件数(最新100件窓)でなく実在に依らせる＝窓から漏れた古い kind もタップ可能に。
+  const existsKinds = new Set<string>([...facetKinds, ...Object.keys(kindCounts).filter((k) => kindCounts[k]! > 0)]);
   // S5 検索合流（B-lite）＝検索語が種別名に前方一致したら一覧先頭に「＋『◯◯』を作る」行（createBlank/newSong を呼ぶだけ）。
   const createHintKind = q.trim()
     ? SHELF_KINDS.find((k) => (KIND_LABEL[k] ?? "").startsWith(q.trim()))
@@ -408,18 +424,6 @@ export function App() {
     reload().catch(() => {});
     loadProjects(); // 新規プロジェクトのネタができたら一覧(facets)に追従
   }, [reload, loadProjects]);
-
-  // オフライン退避分をオンライン復帰時に同期
-  useEffect(() => {
-    const doFlush = () => {
-      void flushOutbox().then((n) => {
-        if (n) void reload();
-      });
-    };
-    doFlush();
-    window.addEventListener("online", doFlush);
-    return () => window.removeEventListener("online", doFlush);
-  }, [reload]);
 
   // 受け取りトレイの通知バッジ＋一覧の自動更新（reap されたネタを出す）
   const lastDone = useRef(-1);
@@ -701,6 +705,7 @@ export function App() {
               moodFilter={moodFilter}
               setMoodFilter={setMoodFilter}
               kindCounts={kindCounts}
+              existsKinds={existsKinds}
               onClose={() => setFilterDrawerOpen(false)}
             />
           )}

@@ -44,7 +44,8 @@ export function KindTiles({ entries, kindFilter, setKindFilter, variant, onPick,
           title={`${KIND_LABEL[k] ?? k}で絞る（${n}件）`}
           onClick={() => pick(k)}
         >
-          <span className="kt-badge" aria-hidden="true">{n}</span>
+          {/* 件数バッジは >0 のときだけ＝facets 実在だが最新100件窓の外(=集計0)の kind に誤った「0」を出さない。 */}
+          {n > 0 && <span className="kt-badge" aria-hidden="true">{n}</span>}
           <KindIcon kind={k} />
           <span className="kt-label">{KIND_LABEL[k] ?? k}</span>
         </button>

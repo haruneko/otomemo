@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const { createJob } = vi.hoisted(() => ({ createJob: vi.fn() }));
-vi.mock("../src/api", () => ({ api: { createJob } }));
+const { createJob, getJob } = vi.hoisted(() => ({ createJob: vi.fn(), getJob: vi.fn() }));
+vi.mock("../src/api", () => ({ api: { createJob, getJob } }));
 
 import { ImportPanel } from "../src/components/ImportPanel";
 
@@ -18,6 +18,7 @@ function renderPanel() {
 
 beforeEach(() => {
   createJob.mockReset();
+  getJob.mockReset();
 });
 
 describe("ImportPanel URL analyze feedback（監査#7）", () => {
@@ -77,5 +78,34 @@ describe("ImportPanel URL client-side validation（実機監査A4）", () => {
     });
     expect(screen.queryByRole("alert")).toBeNull();
     expect(setImportOpen).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("ImportPanel MIDI 12s 打ち切り表示（2026-07-15）", () => {
+  // 12秒待って done にならない＝無言で importing 解除だと「押しても何も起きなかった」に見える。
+  // 実際は裏で reaper が処理を続ける＝「時間がかかっています。完了すると受け取りトレイに届きます」を出す。
+  it("shows a 'still processing' message when MIDI import does not finish within ~12s", async () => {
+    vi.useFakeTimers();
+    try {
+      createJob.mockResolvedValue({ id: "j1" });
+      getJob.mockResolvedValue({ status: "running" }); // 完了しない＝ループが 12 回とも done にならない
+      const setImportOpen = vi.fn();
+      const reload = vi.fn().mockResolvedValue(undefined);
+      const { container } = render(
+        <ImportPanel importOpen={true} setImportOpen={setImportOpen} reload={reload} projectTags={[]} />,
+      );
+      const input = container.querySelector('input[accept=".mid,.midi"]') as HTMLInputElement;
+      // jsdom の File は arrayBuffer() 未実装＝importMidi が読む最小限を持つ擬似ファイルを差し込む。
+      const file = new File([new Uint8Array([0x4d, 0x54, 0x68, 0x64])], "a.mid");
+      Object.defineProperty(file, "arrayBuffer", { value: async () => new Uint8Array([0x4d, 0x54, 0x68, 0x64]).buffer });
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      await act(async () => {
+        fireEvent.change(input);
+        await vi.advanceTimersByTimeAsync(13000); // ~12s のポーリング窓を越える
+      });
+      expect(screen.getByRole("status")).toHaveTextContent("時間がかかっています。完了すると受け取りトレイに届きます");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

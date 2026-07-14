@@ -34,6 +34,10 @@ beforeEach(() => {
   // 既定＝空一覧。件数を見るテストは自前で mockResolvedValue する（前テストの残留を防ぐ）。
   (api.listNeta as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue([]);
   (api.createNeta as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue(undefined);
+  // 種別の実在集合は facets 由来（0件ゴースト判定の権威）。既定＝空、実在を見るテストで上書き。
+  (api.facets as ReturnType<typeof vi.fn>)
+    .mockReset()
+    .mockResolvedValue({ kind: [], mood: [], meter: [], key: [], tags: [], projects: [] });
 });
 
 describe("App", () => {
@@ -104,15 +108,23 @@ describe("App", () => {
     expect(screen.queryByLabelText("analyze-url")).toBeNull();
   });
 
-  // 絞る▾で引き出しが開き、mood が扉の奥に居る（S2）。実在kindはタイル・0件kindはゴースト（S3）。
-  it("opens the filter drawer with mood and kind tiles — S2/S3", async () => {
+  // 絞る▾で引き出しが開き、mood が扉の奥に居る（S2）。実在kindはタイル・非実在kindはゴースト（S3）。
+  // 実在判定は facets（DB全体の権威）＝最新100件窓に載らない古い kind(analysis 等)もタップ可能なタイルに
+  // なる（0件ゴースト＝非タップに化けない・2026-07-15監査）。riff は items にも facets にも無い＝ゴースト。
+  it("opens the filter drawer; facets-existing kinds are tappable tiles, absent kinds are ghosts — S2/S3", async () => {
     (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2 }));
+    // analysis は items（最新100件）に無いが facets で実在＝タップ可能タイルになるべき（ゴースト化しない）。
+    (api.facets as ReturnType<typeof vi.fn>).mockResolvedValue({
+      kind: ["melody", "analysis"], mood: [], meter: [], key: [], tags: [], projects: [],
+    });
     render(<App />);
     await waitFor(() => expect(screen.getByLabelText("kind-filter-melody")).toBeInTheDocument()); // トップ種別行に出た
     await userEvent.click(screen.getByLabelText("open-filter-drawer"));
     const drawer = screen.getByRole("dialog", { name: "filter-drawer" });
-    expect(within(drawer).getByLabelText("kind-filter-melody")).toBeInTheDocument(); // 実在=タイル
-    expect(within(drawer).getByLabelText("kind-zero-riff")).toBeInTheDocument(); // 0件=ゴースト
+    expect(within(drawer).getByLabelText("kind-filter-melody")).toBeInTheDocument(); // items 実在=タイル
+    expect(within(drawer).getByLabelText("kind-filter-analysis")).toBeInTheDocument(); // facets 実在=タップ可
+    expect(within(drawer).queryByLabelText("kind-zero-analysis")).toBeNull(); // 非タップのゴーストではない
+    expect(within(drawer).getByLabelText("kind-zero-riff")).toBeInTheDocument(); // items/facets どちらにも無い=ゴースト
     expect(within(drawer).getByLabelText("mood-filter")).toBeInTheDocument();
   });
 

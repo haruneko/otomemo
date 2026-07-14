@@ -46,6 +46,9 @@ const toolUse = (name: string) => ({ type: "assistant", message: { content: [{ t
 const result = (text: string, is_error = false) => ({ type: "result", subtype: "success", result: text, is_error });
 // 永続履歴に proposals メッセージを置く（#100 で proposals は判別ユニオンでなく履歴経由で描く）。
 import { Chat } from "../src/components/Chat";
+import type { Neta } from "../src/api";
+
+const targetNeta = { id: "t1", kind: "melody", title: "夜のメロ", content: null } as unknown as Neta;
 
 describe("Chat", () => {
   beforeEach(() => {
@@ -185,6 +188,29 @@ describe("Chat", () => {
     await userEvent.click(screen.getByLabelText("open-neta"));
     await waitFor(() => expect(getNeta).toHaveBeenCalledWith("neta-xyz")); // スナップショット→本体取り直し
     await waitFor(() => expect(onOpenNeta).toHaveBeenCalledWith(expect.objectContaining({ id: "neta-xyz" })));
+  });
+
+  it("target付きで開いても自動送信しない＝1ターンを勝手に消費しない（課金安全化・2026-07-15）", async () => {
+    listChatMessages.mockResolvedValue([]);
+    render(<Chat target={targetNeta} onClose={vi.fn()} onChanged={vi.fn()} />);
+    // 対象バナー（＝履歴ロード後も居る）が出るまで待つ＝自動送信していたら chatTurnStream が呼ばれているはず。
+    expect(await screen.findByText(/についての相談/)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 0)); // 保険：マイクロタスクを流す
+    expect(chatTurnStream).not.toHaveBeenCalled(); // 開いただけでは送らない
+  });
+
+  it("target バナーの「発展の提案をもらう」ボタンで初めて送信する（押した時だけ）", async () => {
+    listChatMessages.mockResolvedValue([]);
+    streamEvents(asst("案を出します"), result("案を出します"));
+    render(<Chat target={targetNeta} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(await screen.findByLabelText("ask-develop"));
+    await waitFor(() =>
+      expect(chatTurnStream).toHaveBeenCalledWith(
+        "t1", // thread=対象ネタ id
+        "この内容を発展させる方向性の案を出して",
+        expect.any(Function),
+      ),
+    );
   });
 
   it("research(streaming): 調べる モードも常駐 claude へ（リサーチ依頼に包んで /turn）(#100④)", async () => {

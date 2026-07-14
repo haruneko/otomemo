@@ -11,15 +11,19 @@ export type FilterDrawerProps = {
   moodFilter: string;
   setMoodFilter: (m: string) => void;
   kindCounts: Record<string, number>;
+  existsKinds: Set<string>; // DB上に実在する kind（facets ∪ ロード中 items）。0件ゴースト判定の権威。
   onClose: () => void;
 };
 
-export function FilterDrawer({ kindFilter, setKindFilter, moodFilter, setMoodFilter, kindCounts, onClose }: FilterDrawerProps) {
-  // 全 filterable 種別を件数で二分＝有り（件数降順タイル）／0件（ゴースト）。
-  const nonzero = FILTER_KINDS.map((k) => [k, kindCounts[k] ?? 0] as [string, number])
-    .filter(([, n]) => n > 0)
+export function FilterDrawer({ kindFilter, setKindFilter, moodFilter, setMoodFilter, kindCounts, existsKinds, onClose }: FilterDrawerProps) {
+  // 全 filterable 種別を「実在するか」で二分＝有り（タイル・タップ可）／0件（非タップのゴースト）。
+  // 実在判定は件数(最新100件窓)でなく existsKinds＝facets に依る（窓落ちの古い kind も絞り込める）。
+  // 件数バッジ(kindCounts)は最新100件窓の best-effort＝窓外の実在 kind は 0 になり得るが KindTiles が
+  // 0 のときバッジを出さない（誤った「0件」表示を避けつつタップは可能）。件数降順で並べる。
+  const nonzero = FILTER_KINDS.filter((k) => existsKinds.has(k))
+    .map((k) => [k, kindCounts[k] ?? 0] as [string, number])
     .sort((a, b) => b[1] - a[1]);
-  const zeroKinds = FILTER_KINDS.filter((k) => (kindCounts[k] ?? 0) === 0);
+  const zeroKinds = FILTER_KINDS.filter((k) => !existsKinds.has(k));
   return (
     <>
       <div className="cm-sheet-backdrop" aria-hidden="true" onClick={onClose} />

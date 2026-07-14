@@ -21,12 +21,14 @@ export function ImportPanel({
   const [importing, setImporting] = useState(false);
   const [analyzeUrlText, setAnalyzeUrlText] = useState(""); // ① 音源アナリーゼの URL 入力
   const [urlError, setUrlError] = useState(""); // URLアナリーゼ起動失敗の可視フィードバック（監査#7・alert不可）
+  const [midiSlow, setMidiSlow] = useState(false); // MIDI取込が12秒で完了しない＝無言で解除せず「裏で続く」と知らせる（2026-07-15）
 
   // #10/#81 MIDIはworker(mido)でトラック×チャンネル分割→melody/rhythmネタ化。base64でジョブに載せ、
   // 分割→reaperがネタ化。jobのdoneを待って一覧へ反映。
   async function importMidi(files: FileList | null) {
     if (!files) return;
     setImporting(true);
+    setMidiSlow(false);
     try {
       const ids: string[] = [];
       for (const file of Array.from(files)) {
@@ -40,6 +42,7 @@ export function ImportPanel({
         ids.push(job.id);
       }
       // 分割→reaper反映を待つ（mido は速い・reaperは5s間隔）。最大~12s、毎秒reload。
+      let finished = false;
       for (let i = 0; i < 12; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         await reload();
@@ -49,9 +52,13 @@ export function ImportPanel({
         if (st.every((s) => s === "done" || s === "failed")) {
           await new Promise((r) => setTimeout(r, 600));
           await reload();
+          finished = true;
           break;
         }
       }
+      // 12秒待っても完了しない＝無言で importing 解除だと「押しても何も起きなかった」に見える。
+      // 実際は裏で reaper が処理を続ける（jobは生きている）＝そう明示する（2026-07-15 オーナー承認）。
+      if (!finished) setMidiSlow(true);
     } finally {
       setImporting(false);
     }
@@ -154,6 +161,11 @@ export function ImportPanel({
           }}
         />
       </label>
+      {midiSlow && (
+        <span className="import-url-error" role="status">
+          時間がかかっています。完了すると受け取りトレイに届きます
+        </span>
+      )}
       <label className="import-btn">
         楽譜取込
         <input

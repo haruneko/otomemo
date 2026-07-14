@@ -193,7 +193,9 @@ export function Chat({
       }
     };
     void check();
-    const t = setInterval(check, 4000);
+    // ポーリング間隔＝15s（旧4s）。inflight ジョブの可視化は「まだ動いてるか」を知らせる用途で
+    // 秒単位の即応は要らず、常駐 claude/ジョブ API への叩き過ぎ（課金/負荷）を抑える（2026-07-15 オーナー承認）。
+    const t = setInterval(check, 15000);
     return () => {
       on = false;
       clearInterval(t);
@@ -421,14 +423,6 @@ export function Chat({
     }
   }
 
-  // 対象付きで開いたら最初の提案を自動で出す
-  useEffect(() => {
-    if (loaded && target && !started.current) {
-      started.current = true;
-      void run("この内容を発展させる方向性の案を出して");
-    }
-  }, [target, loaded]);
-
   // #68 ネタを開く＝Chatを閉じて編集画面へ
   function openNeta(neta: Neta) {
     onOpenNeta?.(neta);
@@ -566,7 +560,22 @@ export function Chat({
           </div>
         )}
         {gear && <div className="chat-target"><span className="ic-inline"><Icon name="sliders" size={14} /></span> 機材の相談（全曲共通・器に紐づかない）</div>}
-        {targetLabel && <div className="chat-target">「{targetLabel.slice(0, 30)}」についての相談</div>}
+        {targetLabel && (
+          // target 付きで開いても自動送信しない（課金安全化・2026-07-15 オーナー承認）。
+          // 旧実装は開いた瞬間に run(...) して1ターン消費していた＝押した時だけ送るボタンへ。
+          <div className="chat-target">
+            「{targetLabel.slice(0, 30)}」についての相談
+            <button
+              type="button"
+              className="bs-btn"
+              aria-label="ask-develop"
+              disabled={busy}
+              onClick={() => void run("この内容を発展させる方向性の案を出して")}
+            >
+              発展の提案をもらう
+            </button>
+          </div>
+        )}
         {/* リロード等で待ち状態が消えても、裏で動いてるジョブを可視化（待ちか不明をなくす）。 */}
         {inflight > 0 && !busy && (
           <div className="chat-inflight" aria-label="inflight">
