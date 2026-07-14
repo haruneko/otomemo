@@ -122,16 +122,16 @@ describe("mcp tool layer", () => {
 // #101 目的ツール面（10 thin verbs）。機械動作名(39)を目的語へ畳む。既存39は残置(additive)、チャットは --tools で10だけ見る。
 // 研究反映：transform は fat tool 回避で reshape(feel/range)＋convert(移調/拍子・確定) に2分割。generate↔fit は入力で排他。
 describe("purpose tool surface (#101)", () => {
-  // ③ song_state/plan_next・② read_neta/set_lyric・① analyze_audio・#S11 start_study を追加（10→17）。旧39は隠したまま。
-  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords", "start_study"];
+  // ③ song_state/plan_next・② read_neta/set_lyric・① analyze_audio・#S11 start_study・WP-M5 ②プロソディ2本 を追加（10→19）。旧39は隠したまま。
+  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords", "start_study", "suggest_lyric_rhythm", "analyze_lyric_fit"];
 
-  it("目的ツール(17)を公開する", async () => {
+  it("目的ツール(19)を公開する", async () => {
     const { client } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name);
     for (const n of VERBS) expect(names, n).toContain(n);
   });
 
-  it("surface:chat は 17 verbs だけ（旧39を隠す＝モデルが旧ツールを掴まない・#100 D）", async () => {
+  it("surface:chat は 19 verbs だけ（旧39を隠す＝モデルが旧ツールを掴まない・#100 D）", async () => {
     const core = new Core(openDb(":memory:"));
     const server = buildMcpServer(core, { surface: "chat" });
     const [clientT, serverT] = InMemoryTransport.createLinkedPair();
@@ -239,6 +239,29 @@ describe("purpose tool surface (#101)", () => {
     expect((r.content.notes as { syllable?: string }[]).map((n) => n.syllable)).toEqual(["や", "ま", "と"]); // 1:1 割当
     const back = JSON.parse(textOf(await client.callTool({ name: "read_neta", arguments: { id: mel.id } })));
     expect((back.content.notes as unknown[]).length).toBe(3); // read_neta で読み戻せる
+  });
+
+  it("② suggest_lyric_rhythm が歌詞→リズム型候補を返す（特殊拍を正しく扱う・WP-M5）", async () => {
+    const { client } = await connect();
+    const r = JSON.parse(textOf(await client.callTool({ name: "suggest_lyric_rhythm", arguments: { lyrics: "せーの" } })));
+    expect(r.moraCount).toBe(3); // 長音ーも1モーラ
+    const basic = (r.candidates as { id: string; slots: { role: string }[] }[]).find((c) => c.id === "basic")!;
+    expect(basic.slots.map((s) => s.role)).toEqual(["onset", "tie", "onset"]); // ー=tie（直前へ延長）
+    expect((r.candidates as { id: string }[]).map((c) => c.id)).toEqual(["basic", "subdivide", "tail"]);
+  });
+
+  it("② analyze_lyric_fit が set_lyric 済メロのアクセント衝突を検出（A-01赤・WP-M5）", async () => {
+    const { client } = await connect();
+    // 「はし」を 60→64（上昇）で歌う＝箸(頭高)なら A-01（語義誤解＝赤）
+    const mel = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "melody", title: "m", content: { notes: [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 1, dur: 1 }] } } })));
+    await client.callTool({ name: "set_lyric", arguments: { id: mel.id, lyrics: "はし" } });
+    const rep = JSON.parse(textOf(await client.callTool({ name: "analyze_lyric_fit", arguments: { id: mel.id, accents: [{ kana: "はし", kernel: 1 }] } })));
+    expect(rep.contour).toEqual(["DOWN"]);
+    expect((rep.hits as { ruleId: string; severity: string }[]).some((h) => h.ruleId === "A-01" && h.severity === "red")).toBe(true);
+    // syllable 未設定なら誠実にエラー（捏造しない）
+    const bare = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "melody", title: "b", content: { notes: [{ pitch: 60 }, { pitch: 62 }] } } })));
+    const e = await client.callTool({ name: "analyze_lyric_fit", arguments: { id: bare.id } });
+    expect((e as { isError?: boolean }).isError).toBe(true);
   });
 
   it("未実装のギャップは明示エラーを返す（黙って捏造しない）", async () => {

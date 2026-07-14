@@ -14,6 +14,9 @@ export interface Note {
   syllable?: string;  // 歌詞の音節割当（design #16）
 }
 
+// 歌詞↔メロ プロソディ（WP-M5・design #13b）＝モーラ分割/リズム型候補/アクセント整合の純関数。
+export * from "./prosody";
+
 /** ピッチクラス(0-11)の音名。旧 web `PITCH_NAMES` / api `KEY_NAMES` の同一配列を1本化。
  *  型は既存に合わせ `string[]`（web の `PITCH_NAMES.indexOf(root: string)` 等の互換のため as const にしない）。 */
 export const PITCH_NAMES: string[] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];

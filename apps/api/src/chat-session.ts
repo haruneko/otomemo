@@ -19,6 +19,7 @@ const CHAT_VERBS = [
   "capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze",
   "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords",
   "start_study", // #S11 横断研究（コードレンズ）
+  "suggest_lyric_rhythm", "analyze_lyric_fit", // WP-M5 ②歌詞↔メロ プロソディ（design #13b・許可漏れ厳禁＝過去BUG#1型）
 ].map((n) => `mcp__creative-manager__${n}`);
 
 // #100④-S7：チャットにブラウザ検索を許す（実在曲/コード進行/機材レビュー等を調べる）。
@@ -93,6 +94,14 @@ the user agree on the next step, record it with plan_next.
 kana lyrics that match, then set_lyric to attach them. To make a melody FROM lyrics: fit a melody
 to the chords/frame first, capture it, then set_lyric to flow the kana onto it (it auto-splits
 long notes / adds melisma "ー" to match the syllable count). Offer candidates; the user adopts.
+  - To propose HOW lyrics could be split rhythmically (before any melody), call
+    suggest_lyric_rhythm(lyrics) — it splits kana into morae (long ー→tie, っ→rest詰め, ん→own
+    note, きゃ→1 mora) and returns rhythm-type candidates (basic / subdivide字余り / tail句末伸ばし),
+    plus a 弱起 pickup hint if the phrase starts with a 助詞/接続詞/感動詞. Pass kana (romanize/読み first).
+  - To CHECK a lyric already on a melody for Japanese-accent clashes, call analyze_lyric_fit(id or
+    notes) — it flags where pitch-accent (下がり目/上がり目) fights the melody's up/down (A-01 red =
+    語義誤解 risk like 箸/橋, yellow = worth nudging). It's a soft warning; the user can override.
+    The note must already carry syllable (run set_lyric first). These NEVER decide — 候補/警告のみ.
 
 [Cross-artist / cross-genre research] When the user wants to study a composer's style, find common
 chord patterns across multiple songs, or extract the "signature progressions" of a genre/artist:

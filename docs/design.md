@@ -1109,6 +1109,17 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - 漢字の同形異音は自動読みを正としない＝Chat/編集でユーザー上書き可。連母音(えい→ええ等)は発話モーラ数を正、歌唱実現は表示オプション。
 - ピッチアクセントは extract_fullcontext でほぼ無料で取れるが v1 は不要（韻律フィットを作る時に追加）。
 
+### #13b 歌詞↔メロ プロソディ契約（WP-M5 第1スライス＝分析と提案／2026-07-14）
+- 正典規則表：`docs/research/2026-07-14-jp-prosody-melody-rules.md`（R-01〜14 歌詞→リズム型／A-01〜10 アクセント整合）。思想＝**機械は候補まで・仕上げは人間**＝hard規則も候補提示/soft警告に留め確定しない。
+- **層**：純関数を `@cm/music-core`（prosody.ts）に置く＝api/web 共有・移調テンポ不変・DB/MCP非依存（music-core の趣旨）。MCP は薄い verb で dispatch。
+- **入力源**：本スライスは `syllable`（かな・モーラ片）とピッチ/オンセット列で完結。かな→モーラは自作分割（#13の SMALL 拗音結合＋ー/っ/ん 独立＝既に api `lyric.ts` splitMora と同規約、prosody は各モーラを `{kana,kind,vowel}` に**分類**して返す）。
+- **アクセント辞書**：v1 は**内蔵簡易辞書＋平板ヒューリスティック**（未知語＝平板型 kernel0＝第1モーラ低・以降高）。呼び側は `accents`（語ごと核位置）で上書き可＝確定は人間。pyopenjtalk はモーラ境界＋核＋アクセント句境界を一括で取れ費用対効果最良だが**本スライスでは導入せず**（Python 常駐/子プロセス配線が別作業・#13 の方式決定＝Pythonワーカー内は将来 R-09/A-06 の語境界×リズム軸を本実装する時に接続）。
+- **契約2本**：
+  1. `suggestLyricRhythm(kana, opts)` → `{moras, moraCount, candidates[], pickup?}`。候補は grid1マス=1モーラの**リズム型**（ピッチは持たない＝生成本体はやらない）。各スロット role＝`onset`(実音)/`tie`(長音ー＝直前へ延長・新アタック無=R-02)/`rest`(促音っ＝詰め=R-04)。候補＝basic(R-01/03/05/06)・subdivide(字余り16分=R-07)・tail(字足らず句末伸ばし/メリスマ=R-08/11/12)。先頭が助詞/接続詞/感動詞なら pickup(弱起=R-10)。
+  2. `analyzeLyricFit(notes, opts)` → `{score(0..1), hits[], contour, melodyDir}`。隣接モーラの朗読関係(UP/DOWN/FLAT)×旋律方向(+/0/-)を A-01〜05/07 で採点（DOWN×+=A-01 赤・最重＝語義誤解／DOWN×0=A-02・UP×-=A-03 黄／UP×0=A-04 info／FLAT×大跳躍=A-05 黄／句末上げ=A-07 info）。hit＝`{noteIdx,ruleId,severity(red/yellow/info)}`＝UI が赤/黄ハイライト、握りつぶし可。
+- **本スライスの実装/保留**：R 実装=01,02,03,04,05,06,07,08,10,11,12（11本）／保留=09,13,14（3本・語境界×拍/リフレイン再利用/母音韻＝辞書・句解析・跨フレーズが要る）。A 実装=01,02,03,04,05,07（＋08=原則非警告なので noop 実装／計7本 handled）／保留=06,09,10（語境界×リズム・特殊拍への強アタック・語分断休符＝アクセント句境界/特殊拍位置/休符情報が要る＝pyopenjtalk 接続時）。
+- **MCP verb**：`suggest_lyric_rhythm`(歌詞→リズム型候補)・`analyze_lyric_fit`(メロ+歌詞→整合レポート)。**chat allowlist(chat-session.ts CHAT_VERBS)へ必ず両方追加**（過去BUG#1「登録したが許可漏れで黙って死ぬ」型の再発防止）。
+
 ## #12 ノート生成エンジン（調査完了・段階決定／#86で改訂）
 一発で「自作と差し替え可能」を満たす単一ツールは無い。段階建て。詳細サーベイ＝`docs/research/2026-06-21-generation-methods.md`。
 
@@ -1237,6 +1248,14 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
   - **実装到達点（2026-07-10）**：U1-U7＋二眼レビュー反映まで実装済（api753緑・web321緑）。commit a21bb76→f6a275e＋57c6989(ブラッシュアップ)＋449a00c(completeMelody preserve既定・k質的CT/対ベースw2)＋b720a0a(U5逐語反復・同ラベルk literal再利用)＋78b27c3(web露出 hook/articulation)。二眼レビュー実測：オーナー例(ラーラシドラ)再現・zeroSeeds0・bigLeap~0・強拍非CT3%(b9/avoid0)・禁則0・同音率0.25-0.29・micropause可聴化。**構造制約**（後処理が文脈依存ゆえ）＝A/A''のリテラル全音一致は非対象、保護反復音(フック)の回帰一致が狙い。**残**＝Phase3案D観点別候補(製品判断・hookスライダーで代替可)・役割プリセットhook既定(耳較正後)・耳較正(hook既定値/くどさ/micropause深さ)。
 
 → **メロ×低音の声部進行レンズ（2026-07-09・理論不足総点検 #8・分析のみ）**。backlog和声③「完全に未監視」への回答。`analyzeVoiceLeading(upper, lower)`（voiceLeading.ts）＝並行完全5度/8度・直行(隠伏)5度/8度・声部交差を数え score(1-違反/機会) を返す**分析レンズ（生成非介入）**。`analyze question="voiceleading"`（MCP）＋ http `analyze_voiceleading`。bass 明示 or chords のルートを低域(36+pc)で代用。良し悪しの断は人間（機械は指摘まで＝設計思想）。
+
+→ **候補レンズ＝メロ候補の並べ替え眼鏡3種（WP-M3・2026-07-14）**。正典＝`docs/research/2026-07-14-research-to-implementation-plan.md` Tier1＋各研究doc（`2026-07-14-expectation-theory-melody.md`／`-earworm-hook-features.md`／`-singability-tessitura.md`）。
+**思想（絶対）**：レンズは審判でない＝候補を弾かず・総合点で1本に潰さず、**選んだ軸で候補トレイを並べ替えるだけ**。レンズ未選択＝**生成順（既定 bit 一致）**。全レンズ**純TS・記号（半音move＋拍位置）のみで計算**（音源不要）＝`@cm/music-core/melodyLenses.ts`（`packages/music-core` に純関数、api/web が共有）。全レンズ headline score は**高い＝良い（上位）**に揃える。
+- **① 期待理論レンズ `expectationLens`**（M5）：句内ICカーブ（句頭=高IC／句中=順次で低IC／句末直前=こぶ／句末=低IC＝納得）への適合度 0..1。IC＝Schellenberg近接＋Narmour反転(gap-fill)の簡易サロゲート（句頭は境界=高IC固定）。句割りは休符(≥1拍)＋2小節上限で内部導出。高い＝目標カーブへ適合。
+- **② フック度レンズ `hookLens`**（M6）：F1内部反復/圧縮・F2輪郭コンヴェンショナリティ(弧)・F3局所勾配の希少度(一点際立ち)・F4順次率・F5音符密度・F6リズム規則性・F7フレーズ短さ・F8低サプライザル＋G1位置ゲート(chorus1.0/prechorus0.9/bridge0.8/verse0.7…)。**積型近似** score=position×compression×(0.7+0.3×distinctiveness)＝「大域平凡×局所一点」。反復は過剰で微減（天井）。
+- **③ 歌唱難度レンズ `singabilityLens`**（M7）：跳躍(幅×着地音高×上行×パッサッジョまたぎ・最重w0.30)＋tessitura乖離＋音節密度＋音域端＋パッサッジョまたぎ。既定 voice_profile＝女性ポップ平均(最低G3/快適tess A3–D5/地声上端D5/裏声上端E5/passaggio Bb4–F5)を**ハードコード**＋引数で差替可（voice_profile 本体の frame 宣言は WP-M4）。返り score=**1−difficulty**（高い＝歌いやすい）。歌詞母音×高音項は歌詞前=0。**ソフト減点**基本＝弾かない（思想）。
+- **配線**：api `attachMelodyLenses(res,{frame,chords,sectionRole})`（`melodyLensesReport.ts`・voiceLeading添付と同型）が各候補 `item.meta.lenses={expectation,hook,singability}`（headline 3値・高い=良い）を付す＝gen_melody(MCP/HTTP)両経路。web `useMelodyGen` が候補トレイに**並べ替え軸セレクタ**（生成順/期待理論/フック度/歌いやすさ）＋スコアバッジを足す（既定=生成順=挿入順=**bit 一致**）。UI は器を改造しない（tinker-ux-redesign 不可侵＝セレクタ1個＋バッジのみ）。
+- **初期重み＝全て仮**（各研究doc §重み初期値）。［耳/手］＝レンズ順の妥当性・重み較正は後日一括。**レンズは弱い補助**（記憶性≠好み・説明力低＝研究doc警告）＝決め手にしない。
 
 → **motif-driven前景＝自由材料の同音/跳躍（2026-07-09・理論不足総点検 Step5・本丸2）**。full＝motif-extraction.md §4.5。
 **問題**：前景が「ダルダル」＝実曲は自由材料に跳躍14%/同音23%あるが、gen は**跳躍ほぼ0%・同音を潰す**。犯人＝(1)全ブロックが単一モチーフ M の A/A'/B/A'' 派生で自由材料が無い (2)`mkMotif`/`varyTail` が同音(move=0)を ±1 に潰し・跳躍を2度にクランプ＝contour が均される。

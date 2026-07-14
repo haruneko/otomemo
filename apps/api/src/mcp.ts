@@ -31,6 +31,7 @@ import { normRoot } from "./music/theory";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20）
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { splitMora, flowLyric, type LNote } from "./lyric";
+import { suggestLyricRhythm, analyzeLyricFit } from "@cm/music-core"; // ② 歌詞↔メロ プロソディ（design #13b・WP-M5）
 import { analyzeProgressionFromUfret, extractSongTitle, fetchedToLibraryInput } from "./ingest-ufret";
 import { meterInfo } from "./music/meter";
 import { sanitizeRhythmParts, extractRhythmPart } from "./music/rhythmParts"; // リズムパーツ層 L1/L2＋採取（design #20 S4-1/S4-2）
@@ -705,6 +706,43 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       const flowed = flowLyric(notes, splitMora(lyrics));
       const upd = core.updateNeta(id, { content: { ...content, notes: flowed } });
       return upd ? ok(upd) : err("not found");
+    },
+  );
+  // ② 歌詞↔メロ プロソディ（design #13b・規則表 R-01〜/A-01〜）＝分析と提案（生成本体はしない・候補まで）。
+  server.registerTool(
+    "suggest_lyric_rhythm",
+    {
+      title: "歌詞→リズム型候補",
+      description:
+        "歌詞(かな)をモーラに分けて『リズム型』候補を複数出す（ピッチは付けない＝割付の型のみ）。特殊拍を正しく扱う＝長音ーは直前へ延長(tie)・促音っは詰め(rest)・撥音んは独立音符・拗音きゃは1モーラ。候補=基本(1モーラ1音符)/細分(字余り・早口)/句末伸ばし(字足らず・メリスマ)。句頭が助詞/接続詞/感動詞なら弱起(pickup)を提案。漢字は先に読み(かな)へ。",
+      inputSchema: { lyrics: z.string().describe("歌詞（かな。漢字は読みへ直してから渡す）"), unit: z.number().optional().describe("1モーラの基準拍（既定1）") },
+    },
+    async ({ lyrics, unit }) => ok(suggestLyricRhythm(lyrics, unit !== undefined ? { unit } : {})),
+  );
+  server.registerTool(
+    "analyze_lyric_fit",
+    {
+      title: "メロ×歌詞のアクセント整合レポート",
+      description:
+        "既存メロに歌詞が乗ったとき、日本語アクセント(下がり目/上がり目)と旋律の上下がぶつかる箇所を検出してレポートする（A-01〜。DOWN×上昇=赤で語義誤解リスク／黄=寄せたい）。各音符に syllable が要る＝先に set_lyric したメロの id を渡すか、notes(pitch+syllable)を直接渡す。確定はしない＝候補提示＝ユーザーが握りつぶせる。accents で語ごとのアクセント核を上書き可(0=平板/1=頭高/n=中高)。",
+      inputSchema: {
+        id: z.string().optional().describe("歌詞付きメロ(melody)ネタのid（content.notes に syllable 必須）。notes を直接渡すなら不要"),
+        notes: z.array(z.object({ pitch: z.number(), syllable: z.string().optional(), start: z.number().optional(), dur: z.number().optional() })).optional().describe("直接渡すメロ（pitch=MIDI番号＋syllable=モーラ片）"),
+        accents: z.array(z.object({ kana: z.string(), kernel: z.number().int() })).optional().describe("語ごとのアクセント核（kana=語・kernel 0=平板/1=頭高/n=中高）。未指定は内蔵簡易辞書＋平板ヒューリスティック"),
+        meter: z.string().optional().describe("拍子（例 4/4）。語境界×リズム軸は将来対応"),
+      },
+    },
+    async ({ id, notes, accents, meter }) => {
+      let mnotes = notes as Parameters<typeof analyzeLyricFit>[0] | undefined;
+      if (!mnotes?.length && id) {
+        const n = core.getNeta(id);
+        if (!n) return err("not found");
+        const content = (n.content ?? {}) as { notes?: unknown };
+        mnotes = Array.isArray(content.notes) ? (content.notes as Parameters<typeof analyzeLyricFit>[0]) : [];
+      }
+      if (!mnotes?.length) return err("メロが必要です（歌詞付きmelodyの id か、notes を渡して）");
+      if (!mnotes.some((x) => x.syllable)) return err("各音符に歌詞(syllable)がありません。先に set_lyric で歌詞を載せて。");
+      return ok(analyzeLyricFit(mnotes, { ...(accents ? { accents } : {}), ...(meter ? { meter } : {}) }));
     },
   );
   // ① 音源アナリーゼ：実在曲を**実際に落として本物のMIR解析**を裏で回す（yt-dlp→Demucs→BPM/コードから調/音域）。
