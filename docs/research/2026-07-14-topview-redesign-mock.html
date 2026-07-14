@@ -32,6 +32,9 @@ h1{font-size:15px}
 #missionRow .m.on{border-color:var(--warn);color:var(--warn)}
 #tapchip{margin-left:auto;border:1px solid var(--acc);color:var(--acc);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:rgba(143,183,255,.08)}
 #missionNote{font-size:11px;color:var(--warn);margin-top:5px;min-height:1em}
+#fstyleRow{display:flex;gap:5px;align-items:center;margin-top:6px;font-size:10px;color:var(--faint);flex-wrap:wrap}
+#fstyleRow .fs{border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:10px;color:var(--dim);background:var(--panel)}
+#fstyleRow .fs.on{border-color:var(--acc);color:var(--acc);font-weight:700}
 
 /* ============ 端末フレーム（390px想定） ============ */
 #frame{position:relative;max-width:390px;margin:0 auto;background:#11141b;border:1px solid var(--line);border-radius:18px;overflow:hidden;height:min(744px,calc(100vh - 40px));display:flex;flex-direction:column}
@@ -101,6 +104,21 @@ h1{font-size:15px}
 .kchip .n{color:var(--faint);font-size:10px;margin-left:3px}
 .kchip.on{box-shadow:0 0 0 1.5px var(--k,#fff) inset;font-weight:700}
 .kchip .dot{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--k,#888);margin-right:5px;vertical-align:0}
+/* 種別ミニタイル＝作成タイルと同じ視覚言語（オーナーFB「作る側に寄せたい」対応・件数はバッジ） */
+.ktiles{display:flex;gap:7px;overflow-x:auto;margin-bottom:8px;padding:6px 6px 2px 1px}
+.ktiles::-webkit-scrollbar{display:none}
+.ktile{position:relative;flex:0 0 auto;min-width:62px;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:8px 9px 6px;text-align:center;font-size:10.5px;color:var(--ink);line-height:1.25}
+.ktile .kg{display:block;font-size:14px;line-height:1;margin:0 auto 4px;font-style:normal;color:var(--k,#aaa)}
+.ktile.on{box-shadow:0 0 0 1.5px var(--k,#fff) inset;font-weight:700}
+.bdg{position:absolute;top:-6px;right:-5px;background:var(--k,#888);color:#0d1016;font-size:9px;font-weight:800;border-radius:99px;padding:1.5px 5px;line-height:1.25;box-shadow:0 0 0 2px #11141b}
+.ktile .nn{display:block;font-size:9px;color:var(--faint);margin-top:2px;font-weight:400}
+/* 絞る引き出しのタイル格子（棚と同じ3列・バッジつき） */
+.stile{position:relative}
+.stile .bdg{box-shadow:0 0 0 2px var(--panel)}
+.shelf.fgrid{padding-top:5px;row-gap:11px}
+.stile.fk2.on{box-shadow:0 0 0 1.5px var(--k,#fff) inset;font-weight:700}
+.stile.zero2{border-style:dashed;opacity:.5;color:var(--faint)}
+.stile .nn{display:block;font-size:9px;color:var(--faint);margin-top:2px;font-weight:400}
 .contlab{font-size:10px;color:var(--faint);margin:2px 0 4px}
 .cont{display:flex;align-items:center;gap:8px;border:1.5px solid var(--acc);border-radius:12px;background:rgba(143,183,255,.06);padding:9px 10px;margin-bottom:10px}
 .cont .cbar{width:4px;height:30px;border-radius:3px;background:var(--k,#888)}
@@ -150,7 +168,7 @@ h1{font-size:15px}
 <body>
 <div id="page">
   <h1>トップ画面再設計モック — ネタが主役・作る/絞るは扉の奥</h1>
-  <div class="sub">390px想定・指で試す用。設計doc＝<code>2026-07-14-topview-redesign-fable.md</code>。Before＝現行フォールド（作成14＋フィルタ13＝壁27個・実データ0.3枚）の忠実再現／After＝実データ主役＋作成の棚＋データ導出チップ。姉妹モック（いじる再設計）と並べて触る用。</div>
+  <div class="sub">390px想定・指で試す用。設計doc＝<code>2026-07-14-topview-redesign-fable.md</code>。Before＝現行フォールド（作成14＋フィルタ13＝壁27個・実データ0.3枚）の忠実再現／After＝実データ主役＋作成の棚＋データ導出の種別タイル。オーナーFB反映＝絞る行を作成タイルと同じ絵に統一（件数はバッジ）・旧チップ案と切替可。姉妹モック（いじる再設計）と並べて触る用。</div>
 
   <div id="ctrl">
     <div id="modeTabs">
@@ -162,6 +180,11 @@ h1{font-size:15px}
       <button class="m" data-act="mission" data-v="b">お題B: 新規メロ</button>
       <button class="m" data-act="mission" data-v="c">お題C: メロで絞る</button>
       <span id="tapchip">タップ 0</span>
+    </div>
+    <div id="fstyleRow">絞る行（After）:
+      <button class="fs" data-act="fstyle" data-v="tile">タイル＋バッジ（推し）</button>
+      <button class="fs" data-act="fstyle" data-v="tileunder">タイル＋件数下</button>
+      <button class="fs" data-act="fstyle" data-v="chip">チップ（旧案）</button>
     </div>
     <div id="missionNote"></div>
   </div>
@@ -179,11 +202,11 @@ h1{font-size:15px}
     <div class="sub" style="margin:6px 0"><b style="color:var(--ink)">数字の対比</b>（inventory 2026-07-14 実測 × 本提案）</div>
     <table>
       <tr><th></th><th>Before（実測）</th><th>After（提案）</th></tr>
-      <tr><td>フォールド内タップ標的</td><td>47（うち作成14＋絞り13＝57%）</td><td><b>約22</b>（操作壁は8＝＋作る/絞る/チップ6）</td></tr>
+      <tr><td>フォールド内タップ標的</td><td>47（うち作成14＋絞り13＝57%）</td><td><b>約22</b>（操作壁は8＝＋作る/絞る/種別タイル6）</td></tr>
       <tr><td>フォールド内の実データ</td><td>カード0.3枚（可視9割クローム）</td><td><b>つづき1行＋リスト8行前後</b>（約6割）</td></tr>
       <tr><td>最初のネタまで</td><td>約715px スクロール</td><td><b>0px</b>（スクロール無しで可視）</td></tr>
       <tr><td>kind追加のトップ増分</td><td>+2（タイル+チップ・恒久）</td><td><b>+0</b>（棚+1・チップは実在時のみ）</td></tr>
-      <tr><td>新規作成／種別絞り／続き</td><td>1／1（無ラベル）／2＋長スクロール</td><td>2（棚・トレード）／<b>1（ラベル+件数）</b>／<b>1</b></td></tr>
+      <tr><td>新規作成／種別絞り／続き</td><td>1／1（無ラベル）／2＋長スクロール</td><td>2（棚・トレード）／<b>1（同じ絵のタイル・ラベル+件数バッジ）</b>／<b>1</b></td></tr>
     </table>
   </div>
 </div>
@@ -246,6 +269,7 @@ const S = {
   mode:"after", sheet:null,       // sheet: null | "shelf" | "filter"
   taps:0, scrollMax:0, mission:null, done:false,
   kindFilter:"", density:"list",  // After の既定＝リスト
+  fstyle:"tile",                  // 絞る行: "tile"=タイル+バッジ(推し) | "tileunder"=タイル+件数下 | "chip"=旧チップ案
   bImport:false, bDensity:"card", // Before：取込パネル・既定＝カード
 };
 let rndSeed=7;
@@ -322,6 +346,21 @@ function beforeScreen(){
 function topChips(){ // データ導出チップ＝実在kindのみ・件数降順・上位6（riff/管弦0件は現れない）
   return Object.entries(K).filter(([,v])=>v.n>0).sort((a,b)=>b[1].n-a[1].n).slice(0,6);
 }
+/* 種別行＝タイル様式（既定・オーナーFB「作る側に寄せたい」）／旧チップ案と切替可。
+ * 弁別＝絞りタイルは「＋」無し・件数バッジ・選択リング。作成タイルは「＋」付き・棚の中だけ。 */
+function kindRow(){
+  const tops=topChips();
+  if(S.fstyle==="chip")
+    return `<div class="kchips">${tops.map(([key,k])=>
+      `<button class="kchip ${S.kindFilter===key?"on":""}" style="--k:${k.c}" data-act="afilter" data-v="${key}"><span class="dot"></span>${k.l}<span class="n">${k.n}</span></button>`).join("")}
+    </div>`;
+  const under=S.fstyle==="tileunder";
+  return `<div class="ktiles">${tops.map(([key,k])=>
+    `<button class="ktile ${S.kindFilter===key?"on":""}" style="--k:${k.c}" data-act="afilter" data-v="${key}">${
+      under?"":`<span class="bdg">${k.n}</span>`}<i class="kg">${k.g}</i>${k.l}${
+      under?`<span class="nn">${k.n}件</span>`:""}</button>`).join("")}
+  </div>`;
+}
 function afterScreen(){
   const cont = ITEMS.find(x=>x.cont);
   const ck = K[cont.k];
@@ -332,9 +371,7 @@ function afterScreen(){
     <input placeholder="検索…" aria-label="search">
     <button class="flt ${S.kindFilter&&!topChips().some(([key])=>key===S.kindFilter)?"set":""}" data-act="fdrawer" title="絞り込み（全種別・mood）">絞▾</button>
   </div>
-  <div class="kchips">${topChips().map(([key,k])=>
-    `<button class="kchip ${S.kindFilter===key?"on":""}" style="--k:${k.c}" data-act="afilter" data-v="${key}"><span class="dot"></span>${k.l}<span class="n">${k.n}</span></button>`).join("")}
-  </div>
+  ${kindRow()}
   <div class="contlab">つづきから（最終更新）</div>
   <div class="cont" style="--k:${ck.c}">
     <span class="cbar"></span>
@@ -347,7 +384,7 @@ function afterScreen(){
     <select><option>既定順</option><option>更新</option><option>種別</option><option>タイトル</option></select>
   </div>
   ${itemsFiltered().map(x=> S.density==="card"? cardHTML(x): rowHTML(x)).join("")}
-  <div class="drawnote">トップ契約＝固定6行（ヘッダ/器/アクション/種別チップ/つづき/一覧ヘッダ）＋一覧。新kind→棚に+1のみ・チップはネタが実在した時だけ件数順で現れる。</div>`;
+  <div class="drawnote">トップ契約＝固定6行（ヘッダ/器/アクション/種別行/つづき/一覧ヘッダ）＋一覧。種別行＝作成タイルと同じ絵柄のミニタイル（件数バッジ・横スクロール1行固定）。新kind→棚に+1のみ・タイルはネタが実在した時だけ件数順で現れる。</div>`;
 }
 
 /* ---------- 作成の棚（ボトムシート＝姉妹ハブと同じ言語） ---------- */
@@ -370,16 +407,24 @@ function shelfSheet(){
 function filterSheet(){
   const nonzero = Object.entries(K).filter(([,v])=>v.n>0).sort((a,b)=>b[1].n-a[1].n);
   const zero    = Object.entries(K).filter(([,v])=>v.n===0);
+  const body = S.fstyle!=="chip"
+    ? `<div class="hublab">種別（件数順・上位6はトップにもタイルで出ている）</div>
+    <div class="shelf fgrid">${nonzero.map(([key,k])=>
+      `<button class="stile fk2 ${S.kindFilter===key?"on":""}" style="--k:${k.c}" data-act="afilter" data-v="${key}"><span class="bdg">${k.n}</span><i class="kg" style="color:${k.c}">${k.g}</i>${k.l}</button>`).join("")}</div>
+    <div class="hublab">まだ0件（作ればトップのタイルに現れる）</div>
+    <div class="shelf">${zero.map(([key,k])=>
+      `<div class="stile zero2"><i class="kg" style="color:${k.c}">${k.g}</i>${k.l}<span class="nn">0件</span></div>`).join("")}</div>`
+    : `<div class="hublab">種別（件数順・上位6はトップにチップで出ている）</div>
+    ${nonzero.map(([key,k])=>`<button class="dk ${S.kindFilter===key?"on":""}" style="--k:${k.c}" data-act="afilter" data-v="${key}"><span class="dot"></span>${k.l}<span class="n">${k.n}件</span></button>`).join("")}
+    <div class="hublab">まだ0件（作ればチップに現れる）</div>
+    ${zero.map(([key,k])=>`<div class="dk zero" style="--k:${k.c}"><span class="dot"></span>${k.l}<span class="n">0件</span></div>`).join("")}`;
   return `
   <div class="shead"><span class="grab"></span><b>絞り込み</b><button class="xbtn" data-act="close">✕</button></div>
   <div id="sbody">
-    <div class="hublab">種別（件数順・上位6はトップにチップで出ている）</div>
-    ${nonzero.map(([key,k])=>`<button class="dk ${S.kindFilter===key?"on":""}" style="--k:${k.c}" data-act="afilter" data-v="${key}"><span class="dot"></span>${k.l}<span class="n">${k.n}件</span></button>`).join("")}
-    <div class="hublab">まだ0件（作ればチップに現れる）</div>
-    ${zero.map(([key,k])=>`<div class="dk zero" style="--k:${k.c}"><span class="dot"></span>${k.l}<span class="n">0件</span></div>`).join("")}
+    ${body}
     <div class="hublab">mood で絞る</div>
     <input placeholder="mood（例：哀愁・きらきら）…" style="width:100%">
-    <div class="drawnote">露出∝実利用＝0件kindはトップに出ない。E2Eジャンク掃除後は件数も実数に痩せる。</div>
+    <div class="drawnote">露出∝実利用＝0件kindはトップに出ない。E2Eジャンク掃除後は件数も実数に痩せる。タイル案では引き出しも棚と同じ3列格子＝「作る棚＝＋つき・絞る引き出し＝バッジつき」で見分ける。</div>
   </div>`;
 }
 
@@ -394,6 +439,8 @@ function firstDataInfo(){
 function render(){
   document.querySelectorAll("#modeTabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===S.mode));
   document.querySelectorAll("#missionRow .m").forEach(b=>b.classList.toggle("on",b.dataset.v===S.mission));
+  document.querySelectorAll("#fstyleRow .fs").forEach(b=>b.classList.toggle("on",b.dataset.v===S.fstyle));
+  $("#fstyleRow").hidden = S.mode!=="after";
   $("#tapchip").textContent=`タップ ${S.taps}`;
   const sc=$("#screen");
   const keep=sc.scrollTop;
@@ -416,7 +463,7 @@ $("#screen").addEventListener("scroll",updMeter);
 const MISSION={
   a:{note:"お題A：きのうの続き（検収-Aメロ-20260714 セクション）を開く。Before=壁の下へスクロールして6枚目／After=つづき行。", goal:(act,v)=>act==="openneta"&&v==="a5adec0d"},
   b:{note:"お題B：新しいメロを作る。Before=＋メロ1タップ／After=＋作る→棚→メロ＝2タップ（このトレードは設計docで明示・頻度で回収）。", goal:(act,v)=>act==="create"&&v==="melody"},
-  c:{note:"お題C：メロだけに絞って一覧を見る。Before=無ラベルのアイコンを当て推量（結果はフォールド外）／After=ラベル+件数チップ（結果はすぐ下）。", goal:(act,v)=>(act==="afilter"||act==="bfilter")&&v==="melody"},
+  c:{note:"お題C：メロだけに絞って一覧を見る。Before=無ラベルのアイコンを当て推量（結果はフォールド外）／After=作成と同じ絵のタイル（ラベル+件数バッジ・結果はすぐ下）。", goal:(act,v)=>(act==="afilter"||act==="bfilter")&&v==="melody"},
 };
 function checkGoal(act,v){
   if(!S.mission||S.done) return;
@@ -439,6 +486,7 @@ document.addEventListener("click",(e)=>{
     S.mission=v; S.taps=0; S.scrollMax=0; S.done=false; S.sheet=null; S.kindFilter="";
     $("#missionNote").textContent=MISSION[v].note; $("#screen").scrollTop=0; render(); return;
   }
+  if(act==="fstyle"){ S.fstyle=v; render(); return; }
   if(act==="close"){ S.sheet=null; render(); return; }
   if(act==="shelf"){ S.sheet="shelf"; render(); return; }
   if(act==="fdrawer"){ S.sheet="filter"; render(); return; }
