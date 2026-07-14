@@ -39,6 +39,9 @@ export const GEN_PARTS = [
   // counter(対旋律)は主メロ必須のため別UI（骨格ブロックの「対旋律を作る▶」）で露出済み＝ここには出さない。
   { label: "リフ", op: "gen_riff", needsChords: true },
   { label: "管弦", op: "gen_section_inst", needsChords: true },
+  // コード進行そのものを生成（WP-C1・2026-07-14）＝旋法パレット(下の select)を試す入口。needsChords:false＝進行が無くても押せる。
+  // ※ GEN_PARTS[0]=メロ/[1]=ベースは blowSkeleton から index 参照＝並びを崩さないため末尾に足す。
+  { label: "コード", op: "gen_chords", needsChords: false },
 ] as const;
 
 // リズムパーツ層 L1（design #20 S4-1）：プリセット id/label を web に複写（パターン本体は api 唯一持ち＝ids のみ参照）。
@@ -158,6 +161,10 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [finest, setFinest] = useState<"" | "quarter" | "eighth">("");
   // 声種プロファイル（WP-M4・design #16）：""=おまかせ(女性平均相当・従来bit一致)。vocaloid=ボカロモード(C6開放・難度ペナ無効)。
   const [voice, setVoice] = useState<"" | "female_pop" | "male_pop" | "mix" | "vocaloid">("");
+  // 旋法パレット（WP-C1・2026-07-14）：mode の下の「色」。""=おまかせ(未送信＝従来 bit 一致)。frame.palette として
+  // gen_chords(特徴和音♭VII/IV長)＋gen_melody/gen_bass/gen_skeleton(scalePcs 差替)へ流す＝旋法がトラック横断で追従。
+  // ionian/aeolian は各 mode の既定スケール＝明示しても素の長/短（cadence:aeolian とは独立＝mode-usage-stats §4-1）。
+  const [palette, setPalette] = useState<"" | "ionian" | "mixolydian" | "aeolian" | "dorian">("");
   // リズムパーツ層 L1（design #20 S4-1）：選択した partId 群（押した順＝rotate）。空＝未送信＝従来抽選(bit一致)。
   const [rhythmParts, setRhythmParts] = useState<string[]>([]);
   const toggleRhythmPart = (id: string) => { setRhythmParts((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])); setPreset(""); };
@@ -235,6 +242,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       const frame: Record<string, unknown> = { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode };
       if (roleTag) frame.section = { role: roleTag };
       if (voice) frame.voice_profile = voice; // 声種プロファイル（WP-M4）：""=未送信＝従来 bit 一致。指定時のみ音域窓＋歌唱難度レンズが追従。
+      if (palette) frame.palette = palette; // 旋法パレット（WP-C1）：""=未送信＝従来 bit 一致。gen_chords/melody/bass が frame.palette で追従。
       const body: Record<string, unknown> = {
         frame,
         chords,
@@ -290,7 +298,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     setGenBusy(true);
     try {
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>("gen_skeleton", {
-        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secModeOf(), ...(voice ? { voice_profile: voice } : {}) }, // 声種（WP-M4）＝骨格の音域窓も追従
+        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secModeOf(), ...(voice ? { voice_profile: voice } : {}), ...(palette ? { palette } : {}) }, // 声種（WP-M4）＝骨格の音域窓も追従／旋法（WP-C1）＝骨格の scalePcs も追従
         chords: ctx.sectionChords(),
         seed: Math.floor(Math.random() * 1e6),
         ...(skelForm ? { form: skelForm } : {}), // 構造の使い回し（period/aaba）＝空=従来
@@ -460,7 +468,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     density, setDensity, swing, setSwing, expression, setExpression, runs, setRuns, push, setPush,
     foreground, setForeground, breathe, setBreathe, humanize, setHumanize, hook, setHook,
     articulation, setArticulation, flow, setFlow, pickup, setPickup,
-    phrasing, setPhrasing, form, setForm, skelForm, setSkelForm, counter, setCounter, finest, setFinest, voice, setVoice,
+    phrasing, setPhrasing, form, setForm, skelForm, setSkelForm, counter, setCounter, finest, setFinest, voice, setVoice, palette, setPalette,
     rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
     drumStyle, setDrumStyle, drumFill, setDrumFill, // ドラム定型ビート＋フィル（WP-D1）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）

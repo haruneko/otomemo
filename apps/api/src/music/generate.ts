@@ -95,13 +95,26 @@ export interface GenResult {
   meta?: { warnings?: string[] }; // WP-C3スライス3：citypop 等の「やり過ぎ警告」を非ブロックで併記（未指定＝キー無し＝従来 bit 一致）。
 }
 
+// 長尺の安全弁（2026-07-14・実機検収 §3-H1 の是正）。旧 Math.min(16,…)（2026-06-23 の最初期スライス既定＝
+// V2の設計制約ではなく歴史的な暫定値。git blame 810f4d39）が 32小節セクションを**黙って16に切って**いた。
+// 原則＝bars は MAX_BARS まで素直に通す。超過だけ安全弁でクランプし、黙って切らず meta.warnings で明示する。
+export const MAX_BARS = 64;
+function withBarsWarning<T extends GenResult>(res: T, frame?: Frame | null): T {
+  const req = frame?.bars;
+  if (typeof req === "number" && Math.trunc(req) > MAX_BARS) {
+    const w = `bars=${Math.trunc(req)} は上限 ${MAX_BARS} 小節へ制限しました（安全弁）。長尺は分割して生成/配置してください。`;
+    res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), w] };
+  }
+  return res;
+}
+
 export function normalizeFrame(frame?: Frame | null): Frame {
   const f = frame ?? {};
   const out: Frame = {};
   if (typeof f.key === "number" && f.key >= 0 && f.key <= 11) out.key = Math.trunc(f.key);
   if (f.meter) out.meter = String(f.meter);
   if (typeof f.tempo === "number" && f.tempo > 0) out.tempo = f.tempo;
-  if (typeof f.bars === "number") out.bars = Math.max(1, Math.min(16, Math.trunc(f.bars)));
+  if (typeof f.bars === "number") out.bars = Math.max(1, Math.min(MAX_BARS, Math.trunc(f.bars)));
   if (f.mood) out.mood = String(f.mood);
   if (f.mode === "major" || f.mode === "minor") out.mode = f.mode; // 一級の長短（moodより優先）
   if (typeof f.pickup === "number" && f.pickup > 0) out.pickup = Math.min(2, f.pickup);
@@ -208,7 +221,7 @@ function beatsPerBar(meter?: string): number {
 }
 
 const barsOf = (frame: Frame): number =>
-  typeof frame.bars === "number" && frame.bars ? Math.max(1, Math.min(16, Math.trunc(frame.bars))) : 4;
+  typeof frame.bars === "number" && frame.bars ? Math.max(1, Math.min(MAX_BARS, Math.trunc(frame.bars))) : 4;
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 /** 機能和声ルールでコード進行を生成（T始まり・T終わり）。返り #85 items 形。 */
@@ -333,7 +346,7 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
     const tail = chords[chords.length - 1]!;
     chords[chords.length - 1] = { root: p.root, quality: p.quality, start: tail.start, dur: tail.dur };
   }
-  return { items: [{ kind: "chord_progression", content: { chords }, label }], edges: [], ...(meta ? { meta } : {}) };
+  return withBarsWarning({ items: [{ kind: "chord_progression", content: { chords }, label }], edges: [], ...(meta ? { meta } : {}) }, frame);
 }
 
 function chordAt(t: number, chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[]) {
@@ -450,7 +463,7 @@ export function genMelody(
     const mNotes = completeMelody(partialNotes, chordPcsPerBar, rootsPerBar, qualsPerBar, sp, loadMotifModel16(), { seed: seed ?? 1, tonicPc, minor, skelModel: opts.skelModel ?? loadSkeletonModel(minor), compound, chordPcsAt });
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ補完" : "メロ補完").slice(0, 24);
-    return { items: [{ kind: "melody", content: { notes: mNotes }, label: lbl }], edges: [] };
+    return withBarsWarning({ items: [{ kind: "melody", content: { notes: mNotes }, label: lbl }], edges: [] }, frame);
   }
 
   // A2レシピ経路（docs/research/melody-recipe-validated.md）：4/4＋chords＋bars≥1＋useV2 時。
@@ -579,7 +592,7 @@ export function genMelody(
     // フィール層（2026-07-11）：swing/humanize は notes に焼かず content.feel に載せる（notes はストレート）。
     // 再生/書き出し境界の applyFeel が拍内単調ワープ＋微小揺れを掛ける。未指定(=0)＝feel 無し＝従来 bit一致。
     const feel = buildFeel(so.swing, so.humanize, seed ?? 1);
-    return { items: [{ kind: "melody", content: feel ? { notes: mNotes, feel } : { notes: mNotes }, label: lbl }], edges: [] };
+    return withBarsWarning({ items: [{ kind: "melody", content: feel ? { notes: mNotes, feel } : { notes: mNotes }, label: lbl }], edges: [] }, frame);
   };
   if (opts?.useV2 && (bpb === 3 || bpb === 4 || bpb === 6 || compound) && bars >= 1) return runV2();
 
@@ -687,7 +700,7 @@ export function genSkeletonCandidates(
   };
   const label = "骨格";
   if (seed != null) {
-    return { items: [{ kind: "skeleton", content: build(seed), label }], edges: [] };
+    return withBarsWarning({ items: [{ kind: "skeleton", content: build(seed), label }], edges: [] }, frame);
   }
   const k = Math.max(1, opts?.k ?? 3);
   const n = Math.max(k, opts?.n ?? 8);
@@ -701,7 +714,7 @@ export function genSkeletonCandidates(
     items.push({ kind: "skeleton", content, label: `${label}案${items.length + 1}` });
   }
   if (items.length === 0) items.push({ kind: "skeleton", content: build(1), label });
-  return { items, edges: [] };
+  return withBarsWarning({ items, edges: [] }, frame);
 }
 
 // 弱起を前置（破壊的）：最初のダウンビート音の1スケール度下から歩進で滑り込む upbeat を負startで足す。
@@ -1032,7 +1045,7 @@ export function genBass(
   }
 
   if (notes.length === 0) notes.push({ pitch: 36, start: 0, dur: 1 });
-  return { items: [{ kind: "bass", content: { notes }, label: "ベース" }], edges: [] };
+  return withBarsWarning({ items: [{ kind: "bass", content: { notes }, label: "ベース" }], edges: [] }, frame);
 }
 
 // ベース定型型/フィルの16分格子→実音（WP-B1）。度数×リズム（BassCell[]）を1小節分（barStart 起点・perBar 拍）へ realize。
@@ -1261,7 +1274,7 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
   // ベース1小節（or 定型型）content を決める。style 未指定＝従来経路（bit 一致）。
   let base: DrumContent = opts?.style != null ? (resolveStyleContent(f, opts.style, seed ?? 0) ?? defaultDrumBar(f, seed)) : defaultDrumBar(f, seed);
   if (opts?.fill != null) { const filled = applyDrumFill(base, f, opts.fill, seed ?? 0); if (filled) base = filled; }
-  return { items: [{ kind: "rhythm", content: base, label: "ドラム" }], edges: [] };
+  return withBarsWarning({ items: [{ kind: "rhythm", content: base, label: "ドラム" }], edges: [] }, frame);
 }
 
 // 従来の densityBias 経路（sparse/busy 分岐）＝**opts 無しの既定**（bit 一致の本体）。返りは content（inner）。
@@ -1351,7 +1364,7 @@ function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, s
   if (!Number.isInteger(grid) || grid <= 0) return null;
   const ft: FillType | null = resolveFillType(fill, compound, seed);
   if (!ft || ft.grid !== grid) return null; // グリッド不一致＝二重格子は不可
-  const N = Math.max(1, Math.min(32, f.bars ?? 4)); // 生成小節数（既定4・16小節ビルド build.big.16bar は着地込み17小節要＝上限32へ）
+  const N = Math.max(1, Math.min(MAX_BARS, f.bars ?? 4)); // 生成小節数（既定4・16小節ビルド build.big.16bar は着地込み17小節要）。f.bars は normalizeFrame で既に MAX_BARS 制限済
   if (N < ft.bars + 1) return null; // 着地(次小節)の余地が要る＝最低 fillbars+1 小節
   const fillStart = N - 1 - ft.bars; // フィル本体の先頭小節
   const landingBar = N - 1;

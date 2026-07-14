@@ -17,9 +17,11 @@ describe("genChords（機能和声ルール）", () => {
     const chords = (items[0]!.content as { chords: { root: number; quality: string }[] }).chords;
     expect(chords[0]).toEqual(expect.objectContaining({ root: 0, quality: "m" }));
   });
-  it("bars は 1..16 に丸め", () => {
+  it("bars は 1..MAX_BARS(64) に丸め（旧16上限は撤廃・2026-07-14 H1）", () => {
     const { items } = genChords({ bars: 99 }, 1);
-    expect((items[0]!.content as { chords: unknown[] }).chords.length).toBe(16);
+    expect((items[0]!.content as { chords: unknown[] }).chords.length).toBe(64);
+    const g32 = genChords({ bars: 32 }, 1); // 32小節は素直に通す（16で切らない）
+    expect((g32.items[0]!.content as { chords: unknown[] }).chords.length).toBe(32);
   });
 
   it("I3a: 隣接同和音(C→C等)を出さない・終止前はドミナント準備（bars>=3）", () => {
@@ -307,6 +309,7 @@ describe("normalizeFrame", () => {
   it("不正key/bars を落とす・clampする", () => {
     expect(normalizeFrame({ key: 99 }).key).toBeUndefined();
     expect(normalizeFrame({ bars: 0 }).bars).toBe(1);
-    expect(normalizeFrame({ bars: 50 }).bars).toBe(16);
+    expect(normalizeFrame({ bars: 50 }).bars).toBe(50); // MAX_BARS(64)以下は素直に通す（旧16上限は撤廃・H1）
+    expect(normalizeFrame({ bars: 99 }).bars).toBe(64); // 超過は安全弁64へクランプ
   });
 });

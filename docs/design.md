@@ -31,8 +31,9 @@
   - **決定性**：同一 `(frame, chords, seed)` は同一出力（gen_chords/melody/bass/drums/chord_pattern/from_essence 全て）。
   - **音域**：メロは本体音 `start>=0` を `[60,84]` に収める（オクターブ折り返しは**ピッチクラス保存**＝ハモりを壊さない意図的処理。輪郭保存は**約束しない**）。弱起(pickup)のみ拍0前に負start で1度下にはみ出してよい。ベースは低域。全 pitch は有限整数。
   - **非空**：どの frame でも各パートは最低1音を返す（全休を出さない）。
-  - **コード**：`genChords` は長さ=bars(1..16)、bars>=2 で I/i 始まり・I/i 終わり、各和音はダイアトニック表内・dur>0。
-  - 入力の頑健化：不正 meter は 4/4、`bars` は 1..16 クランプ（既存 normalizeFrame/meterInfo）。`Rng.choices` は weights が空/非有限でも NaN を出さず末尾要素にフォールバック（決定的）。
+  - **コード**：`genChords` は長さ=bars(1..64)、bars>=2 で I/i 始まり・I/i 終わり、各和音はダイアトニック表内・dur>0。
+  - 入力の頑健化：不正 meter は 4/4、`bars` は 1..`MAX_BARS`(=64) クランプ（既存 normalizeFrame/meterInfo）。`Rng.choices` は weights が空/非有限でも NaN を出さず末尾要素にフォールバック（決定的）。
+    - **長尺の安全弁（2026-07-14・実機検収 H1 是正）**：旧 `Math.min(16,…)`（2026-06-23 最初期スライスの暫定既定・V2設計制約ではない）が 32小節セクションを**黙って16小節に切って**いた。原則＝**bars は `MAX_BARS`(64) まで素直に通す**。超過だけ安全弁でクランプし、**黙って切らず** `GenResult.meta.warnings` に明示する（`withBarsWarning`＝genChords/genMelody/genBass/genDrums/genSkeleton に適用）。V2/骨格/フォーム(AABA等)は全て bars 由来の配列長で駆動＝32/64 でも構造が崩れない（実測：gen_melody V2 は 16↔32 で生成時間ほぼ不変 ~34ms）。
 
 ### 決定2：契約の単一情報源（SSOT）化
 - neta/job/scope 等の契約は **zod スキーマを `apps/api/src/schemas.ts` に1本化**し `z.infer` で型導出、http と mcp が import（現状 core型/http zod/mcp zod の三重定義・http listのscope無検証キャストを解消）。
@@ -1298,6 +1299,7 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **スケールの集合共有（矛盾回避）**：`scalePcs(key, mode, palette?)` に palette 集合を追加。genMelody/genBass/genFromEssence の経過音スケールが `f.palette` を参照＝**旋法音が「調外」でペナルティ/avoid される矛盾を防ぐ**（生成だけ差替で評価が古い集合だと旋法音が消える）。`Frame.palette?` を追加＝frame 経由でメロ/ベースが旋法を継承（§4-3 point6「realize 時の scale 差替」）。E-rule の禁則は音程（三全音/7度/8度超）判定で scale 非依存＝旋法で禁則0は不変。
 - **メロ句辞書は変更不要**（研究§2＝辞書に旋法色が薄い実測）＝旋法色はコード側＋scalePcs 追従で出す。Dorian は minor 辞書＋♭6→♮6 差替、Mixolydian は major 辞書＋7→♭7 差替で運用。
 - **配線**：`gen_chords`(MCP/HTTP) に `palette` enum＋`cadence` に "aeolian" 追加。frameSchema に `palette` optional（メロ/ベース継承用）。既定＝未指定＝従来 bit 一致。**耳確認**＝mixolydian で♭VII の土臭さ・dorian の浮遊・aeolian 終止の疾走感（実機フローでしか出ない＝mode 結線は要試聴）。
+- **web露出（2026-07-14・実機検収 H2 是正）**：`SectionEditor`「いじる▾ → この進行に生成」に**旋法セレクタ1個**（おまかせ=未送信=bit一致／明るめ ionian／土っぽい mixolydian／哀愁 aeolian／浮遊 dorian＝耳語ラベル流儀）を追加。選択は `useMelodyGen` の `frame.palette` として **gen_chords/gen_melody/gen_bass/gen_skeleton 全生成へ流す**（コードは特徴和音、メロ/ベース/骨格は scalePcs 差替で追従）。併せて `GEN_PARTS` に「コード」(gen_chords)を追加＝旧「web からコード進行を palette 付きで生成できない」を解消。`palette=aeolian`(=短調既定スケール)と `cadence:"aeolian"`(終止型)は**独立**（mode-usage-stats §4-1＝palette はスケール色・cadence は終止規則）＝旋法選択で cadence を自動付与しない。
 
 → **和声語彙拡張 3本立て（WP-C3・2026-07-14）**。正典＝`docs/research/2026-07-14-cliche-pedal-lines.md`（クリシェ/ペダル10型）・`2026-07-14-citypop-extended-voicings.md`（citypop）・`2026-07-09-brushup-audit-5areas.md`C（既存語彙の未接続）。前提＝2026-07-08 短調V7維持/終止追従・WP-C1 と共存。
 - **スライス1＝既存語彙接続（variety）**。audit C「genChords が全mode で数種の進行に収束・`substitutesOf`(機能代理/相対/裏/同主調借用/二次ドミナント)が生成経路から分断」の是正。genChords opts `variety:0..1`（既定 undefined/0＝**従来 bit 一致**）＝base(C基準)確定後・palette 注入前に、中間和音(index 1..last-1・先頭/末尾のT は保護)を確率 variety で `substitutesOf` の代替候補へ差替（rng 決定的）。base は key=0 ゆえ root=調主音からの半音=`Degree.degree`。**効果の数値検証**＝bars=3 で基底ユニーク進行 ≤4→variety で増、bars=4 で 9→42（generate.test.ts C⑤⑥⑦）。borrow/secondaryDom と同じ「非ダイアトニックを確率注入」の枠＝ダイアトニック契約(§冒頭 line34)の既定は不変。配線＝`gen_chords`(MCP/HTTP) に `variety`。

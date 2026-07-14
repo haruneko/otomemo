@@ -531,6 +531,34 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(body.bass).toEqual([{ pitch: 36, start: 0, dur: 1 }, { pitch: 43, start: 2, dur: 1 }]);
     expect(body.counter).toBeCloseTo(0.4); // 中=0.4（弱0.2/中0.4/強0.7）
   });
+  it("旋法パレット（WP-C1）：おまかせ既定は未送信・選ぶと frame.palette を全生成へ流す", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    // 既定（おまかせ）＝未送信＝bit一致
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body0] = music.mock.calls[0] as [string, { frame: Record<string, unknown> }];
+    expect(body0.frame.palette).toBeUndefined();
+    // 旋法＝浮遊(dorian)を選ぶ→コード生成にも frame.palette が乗る（生成でメニューが閉じるので開き直す）
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.selectOptions(screen.getByLabelText("palette"), "dorian");
+    await userEvent.click(screen.getByLabelText("gen-gen_chords"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [opC, bodyC] = music.mock.calls[0] as [string, { frame: Record<string, unknown> }];
+    expect(opC).toBe("gen_chords");
+    expect(bodyC.frame.palette).toBe("dorian");
+  });
   it("メロノブ＝プリセットは常時・ノブは詳細に畳む／対位群はベース在時のみ（P4）", async () => {
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),

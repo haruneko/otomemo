@@ -345,6 +345,19 @@ export function SectionEditor({
                       {gen.genBusy ? "生成中…" : part.label}
                     </button>
                   ))}
+                  {/* 旋法パレット（WP-C1・2026-07-14）：mode の下の「色」を1セレクタで。おまかせ=未送信=従来 bit 一致。
+                      コード生成では特徴和音（♭VII/IV長）、メロ/ベース/骨格生成では scalePcs 差替でトラック横断に追従。
+                      耳語ラベル（2026-07-10-melody-param-clarity 流儀）＝明るめ/土っぽい/哀愁/浮遊。 */}
+                  <label className="tool-item" onClick={(e) => e.stopPropagation()}>
+                    旋法
+                    <select aria-label="palette" value={gen.palette} onChange={(e) => gen.setPalette(e.target.value as "" | "ionian" | "mixolydian" | "aeolian" | "dorian")}>
+                      <option value="">おまかせ</option>
+                      <option value="ionian">明るめ(王道)</option>
+                      <option value="mixolydian">土っぽい(♭VII)</option>
+                      <option value="aeolian">哀愁(短調)</option>
+                      <option value="dorian">浮遊(♮6)</option>
+                    </select>
+                  </label>
                   {/* ドラム定型ビート＋フィル（WP-D1・2026-07-14）：おまかせ=未送信=従来。style=ジャンル/型、fill=セクション末に挿入。 */}
                   <label className="tool-item" aria-label="drum-style" onClick={(e) => e.stopPropagation()}>
                     ビート型
@@ -625,13 +638,20 @@ export function SectionEditor({
       )}
 
       {/* セクション尺（小節数）＝可変（評価修正A）。placed content より短くはできない（自動で伸びる）。 */}
+      {/* ±8 は「8小節フレーズ」単位のジャンプ（8→32 が3タップ・M3 是正）。±1 は微調整で併存。 */}
       <div className="section-bars" aria-label="section-bars">
         <span className="muted">小節</span>
+        <button type="button" aria-label="bars-dec8" disabled={BARS <= MIN_BARS} title="8小節減らす" onClick={() => void setSectionBars(BARS - 8)}>−8</button>
         <button type="button" aria-label="bars-dec" disabled={BARS <= MIN_BARS} onClick={() => void setSectionBars(BARS - 1)}>−</button>
         <span aria-label="bars-count">{BARS}</span>
         <button type="button" aria-label="bars-inc" disabled={BARS >= MAX_BARS} onClick={() => void setSectionBars(BARS + 1)}>＋</button>
+        <button type="button" aria-label="bars-inc8" disabled={BARS >= MAX_BARS} title="8小節増やす" onClick={() => void setSectionBars(BARS + 8)}>＋8</button>
       </div>
       <div className="lanes" aria-label="timeline" ref={tp.scrollerRef}>
+        {/* content 幅の内枠：BARS>10 で lane-track に min-width が付き横スクロールになる。playhead を
+            この内枠の中に置く＝playhead の `left: calc(44px + --ph*(100%-44px))` の 100% が「可視幅」でなく
+            「content 幅」を指す＝blocks/ruler（同じ content 幅基準）と必ず一致（32小節でプレイヘッドがズレる回帰の根治）。 */}
+        <div className="lanes-inner" style={trackStyle ? { minWidth: `${44 + BARS * 34}px` } : undefined}>
         <div className="playhead" aria-hidden="true" ref={tp.lineRef} />
         <div className="lane-ruler">
           <div className="lane-label" />
@@ -722,6 +742,7 @@ export function SectionEditor({
             </div>
           </div>
         ))}
+        </div>
       </div>
       <p className="muted lanes-hint">
         空きをタップ→置く/新規作成／ブロックをタップで編集（⌫消しゴムでタップ＝外す）／右端ドラッグで繰り返し

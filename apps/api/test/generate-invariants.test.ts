@@ -148,11 +148,11 @@ describe("genMelody 不変条件", () => {
 });
 
 describe("genChords 不変条件", () => {
-  it("長さ=bars(1..16)・bars>=2でI/i始終・dur>0・root∈0..11", () => {
+  it("長さ=bars(1..64)・bars>=2でI/i始終・dur>0・root∈0..11", () => {
     for (const f of frames())
       for (const seed of SEEDS) {
         const chords = chordsOf(genChords(f, seed));
-        const expectBars = Math.max(1, Math.min(16, f.bars!));
+        const expectBars = Math.max(1, Math.min(64, f.bars!)); // MAX_BARS=64（旧16上限は撤廃・H1）
         const where = `${f.meter}/${f.mood}/${f.bars}#${seed}`;
         expect(chords.length, `len=bars: ${where}`).toBe(expectBars);
         expect(chords[0]!.root, `I始まり: ${where}`).toBe(0);
