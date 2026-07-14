@@ -201,9 +201,10 @@ describe("SectionEditor (3-lane timeline)", () => {
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("knob-details-toggle")); // 詳細段を開く
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ引き出しへ
+    await userEvent.click(screen.getByLabelText("group-phrase")); // フレーズの組み立て群を開く（つなぎはここに沈む）
     fireEvent.change(screen.getByLabelText("flow"), { target: { value: "0.7" } }); // つなぎ=0.7
-    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody")); // 引き出し下端の生成
     await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ flow: 0.7 })));
   });
   it("WP-X3 派生パーツ露出：リフ/管弦を『この進行に生成』から生成＝正しい op＋進行を渡す", async () => {
@@ -280,10 +281,11 @@ describe("SectionEditor (3-lane timeline)", () => {
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("gen-gen_melody"));
     await screen.findByLabelText("candidate-tray"); // 候補が出た
-    await userEvent.click(screen.getByLabelText("tools")); // シートを開き直す
-    // 旧: 候補ありで生成UI丸ごと非表示だった。今: プリセット/生成ボタンが残り、別プリセットで作り直せる。
+    await userEvent.click(screen.getByLabelText("tools")); // シートを開き直す＝ハブ
+    // 旧: 候補ありで生成UI丸ごと非表示だった。今: ハブのメロタイル(生成)＋引き出しのプリセットが残り、別プリセットで作り直せる。
+    expect(screen.getByLabelText("gen-gen_melody")).toBeInTheDocument(); // ハブのメロタイル
+    await userEvent.click(screen.getByLabelText("drawer-melody"));
     expect(screen.getByLabelText("melody-presets")).toBeInTheDocument();
-    expect(screen.getByLabelText("gen-gen_melody")).toBeInTheDocument();
   });
   it("P3 いじるシート：ヘッダの閉じるボタンで閉じる（ボトムシート化）", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
@@ -310,11 +312,12 @@ describe("SectionEditor (3-lane timeline)", () => {
     // 閉じてる間は生成/書き出しボタンは出さない（バラ撒かない＝薄い）
     expect(screen.queryByLabelText("gen-gen_drums")).toBeNull();
     expect(screen.queryByLabelText("export-midi")).toBeNull();
-    // いじる▾ を開くと現れる
+    // いじる▾ を開くと現れる＝ハブにドラムタイル・書き出し、メロ引き出しにハモリ
     await userEvent.click(screen.getByLabelText("tools"));
-    expect(screen.getByLabelText("gen-gen_drums")).toBeInTheDocument();
-    expect(screen.getByLabelText("harmony-up")).toBeInTheDocument(); // メロがある→ハモリ
-    expect(screen.getByLabelText("export-midi")).toBeInTheDocument();
+    expect(screen.getByLabelText("gen-gen_drums")).toBeInTheDocument(); // ハブのドラムタイル
+    expect(screen.getByLabelText("export-midi")).toBeInTheDocument(); // ハブ書き出し
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ引き出しへ（メロ在→タイルが出る）
+    expect(screen.getByLabelText("harmony-up")).toBeInTheDocument(); // メロがある→メロを直す
   });
 
   it("#20 ピッカーおすすめ＝コーパスを数件出し、tapでコピーして配置（生libraryは直接選ばせない）", async () => {
@@ -523,7 +526,8 @@ describe("SectionEditor (3-lane timeline)", () => {
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-b1@0");
     await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("knob-details-toggle")); // 詳細段を開く
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ引き出しへ
+    await userEvent.click(screen.getByLabelText("group-karami")); // 他パートとの絡み群を開く（ベース在時のみ）
     await userEvent.click(screen.getByLabelText("counter-mid")); // 対位=中（セグメント）
     await userEvent.click(screen.getByLabelText("gen-gen_melody"));
     await waitFor(() => expect(music).toHaveBeenCalled());
@@ -552,7 +556,7 @@ describe("SectionEditor (3-lane timeline)", () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });
     await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.selectOptions(screen.getByLabelText("palette"), "dorian");
+    await userEvent.click(screen.getByLabelText("palette-dorian")); // 進行の色＝浮遊(dorian)・ハブのchip
     await userEvent.click(screen.getByLabelText("gen-gen_chords"));
     await waitFor(() => expect(music).toHaveBeenCalled());
     const [opC, bodyC] = music.mock.calls[0] as [string, { frame: Record<string, unknown> }];
@@ -569,13 +573,14 @@ describe("SectionEditor (3-lane timeline)", () => {
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ引き出しへ
     expect(screen.getByLabelText("melody-presets")).toBeInTheDocument(); // プリセットは常時（主動線）
-    expect(screen.queryByLabelText("density")).toBeNull(); // ノブは詳細に畳まれている
-    expect(screen.queryByLabelText("runs-off")).toBeNull();
-    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
-    expect(screen.getByLabelText("density")).toBeInTheDocument(); // 展開で現れる
-    expect(screen.getByLabelText("runs-off")).toBeInTheDocument(); // 駆け上がり(セグメント)
-    expect(screen.queryByLabelText("counter-off")).toBeNull(); // ベース無し＝対位群は出さない(文脈依存・グレーアウトすらしない)
+    expect(screen.getByLabelText("density")).toBeInTheDocument(); // 前面4ノブは常時露出（param-clarity §4.1 の回収）
+    expect(screen.getByLabelText("runs-off")).toBeInTheDocument(); // 駆け上がり(セグメント)も前面
+    expect(screen.queryByLabelText("phrasing")).toBeNull(); // 沈んだノブ(句割り)は群を開くまで出ない
+    await userEvent.click(screen.getByLabelText("group-phrase"));
+    expect(screen.getByLabelText("phrasing")).toBeInTheDocument(); // 群を開くと現れる
+    expect(screen.queryByLabelText("group-karami")).toBeNull(); // ベース無し＝絡み群は出さない(文脈依存・グレーアウトすらしない)
   });
   it("gen_melody＝反復音(hook)ONで motifMode:preserve＋hook を送る／articulation も（詳細段・Phase2案B）", async () => {
     music.mockReset();
@@ -595,10 +600,11 @@ describe("SectionEditor (3-lane timeline)", () => {
     let body = music.mock.calls[0]![1] as Record<string, unknown>;
     expect(body.hook).toBeUndefined();
     expect(body.motifMode).toBeUndefined();
-    // 反復音スライダーを上げると motifMode:preserve＋hook を送る
+    // 反復音セグメントを上げると motifMode:preserve＋hook を送る
     music.mockClear();
-    await userEvent.click(screen.getByLabelText("tools")); // 生成で閉じたツール列を開き直す
-    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    await userEvent.click(screen.getByLabelText("tools")); // 生成で閉じたシートを開き直す＝ハブ
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ引き出しへ
+    await userEvent.click(screen.getByLabelText("group-utai")); // 歌い回し群を開く（口ずさみ/歯切れはここ）
     await userEvent.click(screen.getByLabelText("hook-strong")); // 口ずさみ=強（セグメント→0.9）
     fireEvent.change(screen.getByLabelText("articulation"), { target: { value: "0.5" } }); // 歯切れ=スライダー
     await userEvent.click(screen.getByLabelText("gen-gen_melody"));
@@ -620,15 +626,16 @@ describe("SectionEditor (3-lane timeline)", () => {
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ引き出しへ
     await userEvent.click(screen.getByLabelText("preset-run")); // 「走る」＝runs0.7/density0.8…
     await userEvent.click(screen.getByLabelText("gen-gen_melody"));
     await waitFor(() => expect(music).toHaveBeenCalled());
     const body = music.mock.calls[0]![1] as Record<string, unknown>;
     expect(body.runs).toBeCloseTo(0.7); // プリセット値がそのまま送られる
     expect(body.density).toBeCloseTo(0.8);
-    // 詳細を開くと駆け上がり(runs=0.7)セグメントは「中」バケット(0.45〜0.75)に光る
+    // 駆け上がり(runs=0.7)は前面segなので、引き出しを開いた時点で「中」バケット(0.45〜0.75)に光る
     await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    await userEvent.click(screen.getByLabelText("drawer-melody"));
     expect(screen.getByLabelText("runs-mid")).toHaveAttribute("aria-pressed", "true");
     // 「おまかせ」＝density 0.5(未タッチ既定)へ戻る＝従来生成（監査F1）
     music.mockClear();
@@ -654,7 +661,8 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect((music.mock.calls[0]![1] as Record<string, unknown>).finest).toBeUndefined();
     music.mockClear();
     await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ引き出しへ
+    await userEvent.click(screen.getByLabelText("group-nori")); // リズムのノリ群を開く（最小音符はここに沈む）
     await userEvent.selectOptions(screen.getByLabelText("finest"), "eighth");
     await userEvent.click(screen.getByLabelText("gen-gen_melody"));
     await waitFor(() => expect(music).toHaveBeenCalled());
@@ -670,7 +678,8 @@ describe("SectionEditor (3-lane timeline)", () => {
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("knob-details-toggle"));
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ引き出しへ
+    expect(screen.queryByLabelText("group-karami")).toBeNull(); // ベース無し＝絡み群を出さない
     expect(screen.queryByLabelText("counter-off")).toBeNull();
   });
   it("gen_melody＝ベースレーンが空なら bass/counter を渡さない（従来どおり＝bit一致の鉄則）", async () => {

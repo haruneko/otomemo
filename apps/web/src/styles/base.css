@@ -13,6 +13,11 @@
   --k-bass: #2fa6b0;
   --k-chord: #7c6ce0;
   --k-chord_progression: #b7a0f0;
+  /* いじる ハブのパーツタイル色（reshape-bar/タイル bar が var(--k-<kind>) で参照・design #19 ⑥）。 */
+  --k-skeleton: #4a6ee0;
+  --k-counter: #5a78e8;
+  --k-riff: #e0a83c;
+  --k-section_inst: #a878d8;
   --k-lyric: #f0c544;
   --k-theme: #2bb789;
   --k-section: #e08a3c;

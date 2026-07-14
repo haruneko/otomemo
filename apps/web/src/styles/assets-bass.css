@@ -941,6 +941,186 @@ article[aria-label="neta-card"].dragging {
   text-align: center;
   padding: 6px 4px;
 }
+
+/* ============================================================
+   いじる＝ハブ（パーツの棚）＋パーツ別引き出し（design #19 ⑥・2026-07-14）
+   ＝1シート同居(縦1756px)を二軸(パーツ×深さ)へ。ハブはスクロール0契約。
+   ============================================================ */
+.tk-hublab {
+  font-size: 0.62rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  margin: 9px 2px 3px;
+}
+/* chip をシート全体で共通化（旧 .gen-knobs .chip はメロ引き出しへ移った＝ここで一元化）。 */
+.tools-menu .chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  background: #191d23;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.tools-menu .chip.on {
+  background: var(--k-melody);
+  border-color: var(--k-melody);
+  color: #1a1206;
+  font-weight: 700;
+}
+/* 進行の色（旋法）＝横断設定なのでアクセント色（メロ色と混同させない）。 */
+.tk-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.tk-palette .chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+/* パーツタイル棚（3列・ホーム作成タイルと同じ言語）。 */
+.tk-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-top: 2px;
+}
+.tk-tile {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1b1e23;
+}
+.tk-tile-gen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 4px 7px;
+  background: transparent;
+  color: var(--fg);
+  border: 0;
+}
+.tk-tile-gen:disabled {
+  opacity: 0.4;
+}
+.tk-tile-gen b {
+  font-size: 0.82rem;
+}
+.tk-tile-gen small {
+  font-size: 0.56rem;
+  color: var(--muted);
+}
+.tk-tile-bar {
+  width: 26px;
+  height: 5px;
+  border-radius: 3px;
+}
+.tk-tile-gen:active {
+  background: #233052;
+}
+.tk-tile-chip {
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: #22262e;
+  color: var(--muted);
+  font-size: 0.62rem;
+  padding: 5px 4px;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tk-tile-chip.set {
+  color: var(--k-melody);
+}
+/* 書き出し＝ハブ下端の固定行。 */
+.tk-export {
+  display: flex;
+  gap: 7px;
+}
+.tk-export .tool-item {
+  flex: 1;
+  text-align: center;
+}
+/* 引き出しヘッダ（←棚へ／名前／おまかせに戻す／✕）＝PC/モバイル 常時表示（sheet-head と違い隠さない）。 */
+.tk-drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+  padding: 6px 0 7px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.tk-drawer-head .sheet-title {
+  flex: 1;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.tk-back,
+.tk-reset {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.tk-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* 引き出し下端に生成ボタンを固定＝往復スクロール根絶（親指圏に生成が常在）。 */
+.tk-drawer-foot {
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
+  padding: 8px 0 2px;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.tk-gen {
+  width: 100%;
+  text-align: center;
+  padding: 11px;
+  font-size: 0.86rem;
+}
+/* 群アコーディオン＝一度に15本を縦に並べない（メロ引き出し）。 */
+.tk-gacc {
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #1b1e23;
+  color: var(--muted);
+  padding: 9px 11px;
+  font-size: 0.78rem;
+  margin: 5px 0 2px;
+}
+.tk-gacc.on {
+  color: var(--k-melody);
+  border-color: var(--k-melody);
+}
+.tk-gacc small {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.tk-drawnote {
+  font-size: 0.62rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 6px 2px;
+}
 .list-density button {
   font-size: 0.76rem;
   padding: 4px 10px;

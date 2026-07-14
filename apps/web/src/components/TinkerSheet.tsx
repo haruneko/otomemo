@@ -1,11 +1,17 @@
+import { useState } from "react";
 import { Icon } from "./Icon";
 import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI } from "../useMelodyGen";
 import type { ChordArg } from "../useMelodyGen";
 import type { Note } from "../music";
 
 // 「いじる」ボトムシートの中身（design #19 ⑥・正準＝docs/research/2026-07-14-tinker-menu-redesign-fable.md）。
-// Task「いじる再設計」T1＝SectionEditor の inline `.tools-menu` を機械抽出（挙動/DOM/aria 完全不変）。
-// 状態と送信ロジックは useMelodyGen(gen) が唯一持つ＝当コンポは器（JSX/CSS）のみ＝生成 payload は bit 一致。
+// ＝ハブ（パーツの棚・スクロール0）＋パーツ別引き出し。状態と送信ロジックは useMelodyGen(gen) が唯一持つ
+// ＝当コンポは器（JSX/CSS）のみ＝生成 payload は bit 一致（0/""非送信は genPart に閉じたまま）。
+//
+// ★ハブ契約（不変条件・再発防止の本体）：ハブに足してよいのは【新パーツのタイル+1】のみ。
+//   新ノブ/型は【そのパーツの引き出しの中】へ（前面はchip6±1・seg1行まで、超過は群アコーディオンへ沈める）。
+//   横断設定は【旋法＋一式の2枠で打ち止め】（3つ目が要る日は「共通」引き出しを新設して沈める）。
+//   ＝パーツが7→12に増えてもハブは無スクロールのまま壊れない。
 export type TinkerSheetProps = {
   gen: ReturnType<typeof useMelodyGen>;
   isSong: boolean;
@@ -16,252 +22,373 @@ export type TinkerSheetProps = {
   onExportMidiSplit: () => void;
 };
 
+type View = "hub" | "melody" | "bass" | "drums" | "skeleton";
+
+// GEN_PARTS を op で引ける形に（タイルtap＝おまかせ生成の実体呼び）。
+const PART_BY_OP = Object.fromEntries(GEN_PARTS.map((p) => [p.op, p])) as Record<string, (typeof GEN_PARTS)[number]>;
+// ハブのパーツタイル棚（横軸＝パーツ＝増える唯一の軸）。色はレーン色 --k-<kind> を流用＝ホーム作成タイルと同じ言語。
+const TILES: { id: string; label: string; kind: string; op?: string; needsChords: boolean; drawer?: View }[] = [
+  { id: "melody", label: "メロ", kind: "melody", op: "gen_melody", needsChords: true, drawer: "melody" },
+  { id: "bass", label: "ベース", kind: "bass", op: "gen_bass", needsChords: true, drawer: "bass" },
+  { id: "drums", label: "ドラム", kind: "rhythm", op: "gen_drums", needsChords: false, drawer: "drums" },
+  { id: "chord", label: "コード", kind: "chord", op: "gen_chords", needsChords: false },
+  { id: "skeleton", label: "骨格", kind: "skeleton", op: undefined, needsChords: false, drawer: "skeleton" },
+  { id: "riff", label: "リフ", kind: "riff", op: "gen_riff", needsChords: true },
+  { id: "orch", label: "管弦", kind: "section_inst", op: "gen_section_inst", needsChords: true },
+];
+// 横断設定「進行の色」＝旋法（frame.palette）。おまかせ=未送信=bit一致。耳語ラベル（param-clarity 流儀）。
+const PALETTE_CHIPS: { v: "" | "ionian" | "mixolydian" | "aeolian" | "dorian"; label: string }[] = [
+  { v: "", label: "おまかせ" },
+  { v: "ionian", label: "明るめ" },
+  { v: "mixolydian", label: "土っぽい" },
+  { v: "aeolian", label: "哀愁" },
+  { v: "dorian", label: "浮遊" },
+];
+const PRESET_LABEL = Object.fromEntries(MELODY_PRESETS.map((p) => [p.name, p.label]));
+
 export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, onExportMidi, onExportMidiSplit }: TinkerSheetProps) {
-  return (
-    <div className="assign-menu to-right tools-menu" aria-label="tools-menu">
-      {/* P3（2026-07-10・UX再設計）：モバイルは下から迫り上がるシート。掴み＋見出し＋閉じる（CSSで sheet 化）。 */}
+  const [view, setView] = useState<View>("hub");
+  // 引き出し内の群アコーディオン開閉（メロ引き出し＝一度に15本を縦に並べない）。
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const toggleGroup = (id: string) => setOpenGroups((g) => ({ ...g, [id]: !g[id] }));
+
+  const hasChords = sectionChords().length > 0;
+  const hasBass = sectionBass().length > 0;
+  const hasMelody = gen.melodyLaneNotes().length > 0;
+
+  // タイルtap＝そのパーツをおまかせ生成（現行2タップ主動線を死守）→シートを閉じ候補トレイへ。
+  const tapGen = (tile: (typeof TILES)[number]) => {
+    onClose();
+    if (tile.op) { const part = PART_BY_OP[tile.op]; if (part) void gen.genPart(part); }
+    else void gen.genSkeleton(); // 骨格は genSkeleton（op を持たない）
+  };
+  // 引き出し下端の「このパーツを生成」＝設定を適用して生成→閉じる（往復スクロール根絶）。
+  const drawerGen = (op?: string) => {
+    onClose();
+    if (op) { const part = PART_BY_OP[op]; if (part) void gen.genPart(part); }
+    else void gen.genSkeleton();
+  };
+
+  // タイル下端の状態チップ＝設定サマリ＝引き出しの扉（設定の可視化と扉を1つのUIで兼ねる）。
+  const chipInfo = (id: string): { text: string; set: boolean } => {
+    if (id === "melody") return { text: gen.preset ? PRESET_LABEL[gen.preset] ?? "設定" : "おまかせ", set: !!gen.preset };
+    if (id === "drums") { const set = !!gen.drumStyle || (typeof gen.drumFill === "number" ? gen.drumFill > 0 : !!gen.drumFill); return { text: set ? "設定あり" : "おまかせ", set }; }
+    if (id === "bass") { const set = !!gen.bassStyle || gen.bassFill > 0; return { text: set ? "設定あり" : "おまかせ", set }; }
+    if (id === "skeleton") return { text: gen.skelForm || "おまかせ", set: !!gen.skelForm };
+    return { text: "おまかせ", set: false };
+  };
+
+  // 群アコーディオンの見出し（▸/▾＋サブ）。前面はchip6±1・seg1行まで、それを超えるノブはここに沈める。
+  const gacc = (id: string, label: string, hint: string) => (
+    <button type="button" className={"tk-gacc" + (openGroups[id] ? " on" : "")} aria-label={`group-${id}`} aria-expanded={!!openGroups[id]} onClick={() => toggleGroup(id)}>
+      {openGroups[id] ? "▾" : "▸"} {label}<small>{hint}</small>
+    </button>
+  );
+
+  // 引き出しヘッダ（←棚へ／パーツ名／おまかせに戻す／✕）。
+  const drawerHead = (name: string, reset: () => void) => (
+    <div className="tk-drawer-head">
+      <button type="button" className="tk-back" aria-label="drawer-back" onClick={() => setView("hub")}>← 棚へ</button>
+      <span className="sheet-title">{name}</span>
+      <button type="button" className="tk-reset" aria-label="drawer-reset" onClick={reset}>おまかせに戻す</button>
+      <button type="button" className="sheet-close" aria-label="close-tools" onClick={onClose}>✕</button>
+    </div>
+  );
+
+  // ---- ハブ（棚）＝スクロール0契約 ----
+  const hub = (
+    <>
       <div className="sheet-head">
         <span className="sheet-grab" aria-hidden="true" />
         <span className="sheet-title">いじる</span>
         <button type="button" className="sheet-close" aria-label="close-tools" onClick={onClose}>✕</button>
       </div>
-      {/* 生成/ハモリはパートを作る道具＝section 専用。song(編成)は書き出しのみ（#5）。 */}
-      {/* E2E[高]：候補生成中もプリセット/生成ボタンを出す＝別プリセットで作り直しがワンタップ（旧: 候補ありで生成UI丸ごと非表示＝多段操作）。候補は別パネル(トレイ)で並行表示。 */}
       {!isSong && (
         <>
-          <div className="tools-sep">この進行に生成</div>
-          {GEN_PARTS.filter((part) => !part.needsChords || sectionChords().length > 0).map((part) => (
-            <button
-              key={part.op}
-              type="button"
-              className="tool-item"
-              aria-label={`gen-${part.op}`}
-              disabled={gen.genBusy}
-              onClick={() => { onClose(); void gen.genPart(part); }}
-            >
-              {gen.genBusy ? "生成中…" : part.label}
-            </button>
-          ))}
-          {/* 旋法パレット（WP-C1・2026-07-14）：mode の下の「色」を1セレクタで。おまかせ=未送信=従来 bit 一致。
-              コード生成では特徴和音（♭VII/IV長）、メロ/ベース/骨格生成では scalePcs 差替でトラック横断に追従。
-              耳語ラベル（2026-07-10-melody-param-clarity 流儀）＝明るめ/土っぽい/哀愁/浮遊。 */}
-          <label className="tool-item" onClick={(e) => e.stopPropagation()}>
-            旋法
-            <select aria-label="palette" value={gen.palette} onChange={(e) => gen.setPalette(e.target.value as "" | "ionian" | "mixolydian" | "aeolian" | "dorian")}>
-              <option value="">おまかせ</option>
-              <option value="ionian">明るめ(王道)</option>
-              <option value="mixolydian">土っぽい(♭VII)</option>
-              <option value="aeolian">哀愁(短調)</option>
-              <option value="dorian">浮遊(♮6)</option>
-            </select>
-          </label>
-          {/* ドラム定型ビート＋フィル（WP-D1・2026-07-14）：おまかせ=未送信=従来。style=ジャンル/型、fill=セクション末に挿入。 */}
-          <label className="tool-item" aria-label="drum-style" onClick={(e) => e.stopPropagation()}>
-            ビート型
-            <select value={gen.drumStyle} onChange={(e) => gen.setDrumStyle(e.target.value)}>
-              <option value="">おまかせ</option>
-              <optgroup label="ジャンル">
-                <option value="jpop">J-pop</option>
-                <option value="rock">ロック</option>
-                <option value="dance">ダンス/EDM</option>
-                <option value="ballad">バラード</option>
-                <option value="funk">ファンク/R&B</option>
-              </optgroup>
-              <optgroup label="型（直指定）">
-                <option value="beat8.basic">8ビート基本</option>
-                <option value="beat8.syncopated">8ビート食い込み</option>
-                <option value="beat16.basic">16ビート</option>
-                <option value="beat16.ghost">16ゴースト</option>
-                <option value="four.rock">4つ打ちロック</option>
-                <option value="four.house">4つ打ちハウス</option>
-                <option value="halftime.basic">ハーフタイム</option>
-                <option value="shuffle.basic">シャッフル</option>
-                <option value="six8.ballad">6/8バラード</option>
-              </optgroup>
-            </select>
-          </label>
-          <label className="tool-item" aria-label="drum-fill" onClick={(e) => e.stopPropagation()}>
-            フィル
-            <select value={String(gen.drumFill)} onChange={(e) => { const v = e.target.value; gen.setDrumFill(v.startsWith("build.") ? v : Number(v)); }}>
-              <option value="0">なし</option>
-              <option value="0.3">弱（軽い節目）</option>
-              <option value="0.6">中（遷移フィル）</option>
-              <option value="0.9">強（大遷移）</option>
-              {/* ビルドアップ・テンプレ（WP-X4）：密度倍加＋vel漸増＋末尾ギャップ＝サビ/ドロップ直前の溜め。要 bars≥テンプレ小節+1。 */}
-              <optgroup label="ビルドアップ（溜め）">
-                <option value="build.tight.4bar">溜め4小節（プリコーラス）</option>
-                <option value="build.standard.8bar">溜め8小節（汎用）</option>
-                <option value="build.big.16bar">溜め16小節（大サビ前）</option>
-              </optgroup>
-            </select>
-          </label>
-          {/* ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：おまかせ=未送信=従来。style=ジャンル/型、bassFill=セクション末に挿入。 */}
-          <label className="tool-item" aria-label="bass-style" onClick={(e) => e.stopPropagation()}>
-            ベース型
-            <select value={gen.bassStyle} onChange={(e) => gen.setBassStyle(e.target.value)}>
-              <option value="">おまかせ</option>
-              <optgroup label="ジャンル">
-                <option value="rock">ロック</option>
-                <option value="ballad">バラード</option>
-                <option value="citypop">シティポップ</option>
-                <option value="funk">ファンク</option>
-                <option value="edm">EDM</option>
-                <option value="vocarock">ボカロック</option>
-              </optgroup>
-              <optgroup label="型（直指定）">
-                <option value="RK-8ROOT">8分ルート弾き</option>
-                <option value="RK-GALLOP">ギャロップ</option>
-                <option value="BL-WHOLE">全音符バラード</option>
-                <option value="BL-APPROACH">アプローチ橋渡し</option>
-                <option value="CP-OCT8">オクターブ奏法</option>
-                <option value="CP-WALK">歩くシティポップ</option>
-                <option value="FK-ONE">ファンク the one</option>
-                <option value="ED-OFFBEAT">オフビート</option>
-                <option value="ED-SUSTAIN">ロー持続</option>
-                <option value="VR-8DRIVE">高速8分ドライブ</option>
-              </optgroup>
-            </select>
-          </label>
-          <label className="tool-item" aria-label="bass-fill" onClick={(e) => e.stopPropagation()}>
-            ベースフィル
-            <select value={String(gen.bassFill)} onChange={(e) => gen.setBassFill(Number(e.target.value))}>
-              <option value="0">なし</option>
-              <option value="0.2">下降（落ち着かせ）</option>
-              <option value="0.9">上昇（駆け上がり）</option>
-            </select>
-          </label>
-          {/* 骨格を生成（design #20 S2）：構造線(2声骨格)を機械に叩き台で出す→骨格レーンへ。
-              構造(skelForm・design #12-M 2026-07-13)＝2/4/8で使い回すフォーム型リテラル回帰を選んでから生成。 */}
-          <label className="tool-item" aria-label="skel-form" onClick={(e) => e.stopPropagation()}>
-            構造
-            <select value={gen.skelForm} onChange={(e) => gen.setSkelForm(e.target.value as "" | "period" | "aaba" | "cadence-swap" | "sentence")}>
-              <option value="">おまかせ</option>
-              <option value="period">前半くり返し</option>
-              <option value="aaba">AABA</option>
-              <option value="cadence-swap">終止だけ変えて反復</option>
-              <option value="sentence">提示→畳み掛け(sentence)</option>
-            </select>
-          </label>
-          <button type="button" className="tool-item" aria-label="gen-skeleton" disabled={gen.genBusy} onClick={() => { onClose(); void gen.genSkeleton(); }}>
-            {gen.genBusy ? "生成中…" : "骨格"}
-          </button>
-          {/* P4/P5（2026-07-10・UX再設計）：プリセット主役＋🎲サイコロ＋耳語ラベルの詳細（群でまとめる）。押す前に設定→生成。 */}
-          {sectionChords().length > 0 && (
-            <div className="gen-knobs" onClick={(e) => e.stopPropagation()}>
-              <div className="preset-head">
-                <div className="preset-row" aria-label="melody-presets">
-                  {MELODY_PRESETS.map((p) => (
-                    <button key={p.name} type="button" className={"chip" + (gen.preset === p.name ? " on" : "")} aria-label={`preset-${p.name}`} aria-pressed={gen.preset === p.name} onClick={() => gen.applyPreset(p.name, p.v)}>{p.label}</button>
-                  ))}
+          {/* 横断設定＝進行の色（旋法）。ハブ専属＝frame.palette として全生成へ流れる（コード以外も追従）。 */}
+          <div className="tk-hublab">進行の色（全パーツの生成に効く）</div>
+          <div className="tk-palette" aria-label="palette">
+            {PALETTE_CHIPS.map((p) => (
+              <button key={p.v || "omakase"} type="button" className={"chip" + (gen.palette === p.v ? " on" : "")} aria-label={`palette-${p.v || "omakase"}`} aria-pressed={gen.palette === p.v} onClick={() => gen.setPalette(p.v)}>{p.label}</button>
+            ))}
+          </div>
+          {/* ☆おまかせで一式（ヒーロー・§4）は T5 で追加（genPart 直列＋候補トレイのkind別グループ）。 */}
+          {/* パーツタイル棚（3列）＝tap上=生成／下チップ=引き出し。増えても【タイル+1】で終わる（ハブ契約）。 */}
+          <div className="tk-hublab">パーツ＝タップで生成／下のチップで設定（引き出し）</div>
+          <div className="tk-tiles" aria-label="part-tiles">
+            {TILES.filter((t) => !t.needsChords || hasChords || (t.id === "melody" && hasMelody)).map((t) => {
+              const ci = t.drawer ? chipInfo(t.id) : null;
+              const genDisabled = gen.genBusy || (t.needsChords && !hasChords);
+              return (
+                <div className="tk-tile" key={t.id} data-kind={t.kind}>
+                  <button type="button" className="tk-tile-gen" aria-label={t.op ? `gen-${t.op}` : "gen-skeleton"} disabled={genDisabled} title={t.needsChords && !hasChords ? "コードが要る（先に進行を置く）" : `${t.label}をおまかせ生成`} onClick={() => tapGen(t)}>
+                    <span className="tk-tile-bar" style={{ background: `var(--k-${t.kind}, var(--accent))` }} aria-hidden="true" />
+                    <b>{t.label}</b>
+                    <small>{gen.genBusy ? "生成中…" : "タップで生成"}</small>
+                  </button>
+                  {ci && (
+                    <button type="button" className={"tk-tile-chip" + (ci.set ? " set" : "")} aria-label={`drawer-${t.id}`} onClick={() => setView(t.drawer!)}>{ci.text} ▾</button>
+                  )}
                 </div>
-                <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（ロックは固定）" onClick={gen.rollDice}><Icon name="dice" size={18} /></button>
-              </div>
-              <button
-                type="button"
-                className={"knob-details-toggle" + (gen.detailsOpen ? " on" : "")}
-                aria-label="knob-details-toggle"
-                aria-expanded={gen.detailsOpen}
-                onClick={() => gen.setDetailsOpen((v) => !v)}
-              >
-                {gen.detailsOpen ? "▾ 細かく設定する" : "▸ 細かく設定する"}
-              </button>
-              {gen.detailsOpen && <>
-                <div className="knob-group-h">リズムのノリ</div>
-                {gen.sliderRow("density", "細かさ", gen.density, gen.setDensity, "スカスカ", "ぎっしり", "density")}
-                {gen.sliderRow("swing", "跳ね", gen.swing, gen.setSwing, "まっすぐ", "はねる", "swing")}
-                {gen.segRow("runs", "駆け上がり", "16分の走り", gen.runs, gen.setRuns, "runs")}
-                {gen.segRow("push", "前ノリ", "拍を食う", gen.push, gen.setPush, "push")}
-                <label className="knob-row">
-                  <span className="knob-name">最小音符<small>速い曲は粗く</small></span>
-                  <select aria-label="finest" value={gen.finest} onChange={(e) => { gen.setFinest(e.target.value as "" | "quarter" | "eighth"); gen.setPreset(""); }}>
-                    <option value="">おまかせ(速さ連動)</option>
-                    <option value="quarter">4分まで</option>
-                    <option value="eighth">8分まで</option>
-                  </select>
-                </label>
-                {/* リズムパーツ層 L1（design #20 S4-1）：プリセットを押した順に小節へローテで敷く。未選択=従来抽選 */}
-                <div className="knob-seg" aria-label="rhythmParts">
-                  <span className="knob-name">リズムパーツ<small>小節に順に敷く(白玉=長音)</small></span>
-                  <span className="seg-ctl seg-wrap">
-                    {RHYTHM_PART_UI.map((rp) => {
-                      const idx = gen.rhythmParts.indexOf(rp.id);
-                      return (
-                        <button key={rp.id} type="button" className={"seg-b" + (idx >= 0 ? " on" : "")} aria-label={`rpart-${rp.id}`} aria-pressed={idx >= 0} title={idx >= 0 ? `${idx + 1}番目に敷く` : "小節に敷く"} onClick={() => gen.toggleRhythmPart(rp.id)}>{rp.label}{idx >= 0 ? <sup>{idx + 1}</sup> : null}</button>
-                      );
-                    })}
-                  </span>
-                </div>
-                <label className="knob-row" aria-label="voice">
-                  <span className="knob-name">声種<small>音域と歌いやすさの基準</small></span>
-                  <select value={gen.voice} onChange={(e) => { gen.setVoice(e.target.value as "" | "female_pop" | "male_pop" | "mix" | "vocaloid"); gen.setPreset(""); }}>
-                    <option value="">おまかせ(女性平均)</option>
-                    <option value="female_pop">女性ポップ</option>
-                    <option value="male_pop">男性ポップ</option>
-                    <option value="mix">ミックス</option>
-                    <option value="vocaloid">ボカロ(C6開放)</option>
-                  </select>
-                </label>
-                <div className="knob-group-h">歌い回し</div>
-                {gen.segRow("expression", "タメ", "強拍のもたれ", gen.expression, gen.setExpression, "expression")}
-                {gen.segRow("hook", "口ずさみ", "反復音フック", gen.hook, gen.setHook, "hook")}
-                {gen.sliderRow("foreground", "冒険度", gen.foreground, gen.setForeground, "おなじみ", "冒険", "foreground")}
-                {gen.sliderRow("articulation", "歯切れ", gen.articulation, gen.setArticulation, "なめらか", "くっきり", "articulation")}
-                <div className="knob-group-h">フレーズの組み立て</div>
-                <label className="knob-row" aria-label="phrasing">
-                  <span className="knob-name">句割り</span>
-                  <select value={gen.phrasing} onChange={(e) => { gen.setPhrasing(e.target.value as "" | "symmetric" | "asymmetric" | "period" | "sentence"); gen.setPreset(""); }}>
-                    <option value="">おまかせ</option>
-                    <option value="symmetric">対称(問→答)</option>
-                    <option value="asymmetric">非対称(3+3+2)</option>
-                    <option value="period">4小節句[4,4]</option>
-                    <option value="sentence">短短長[2,2,4]</option>
-                  </select>
-                </label>
-                <label className="knob-row" aria-label="form">
-                  <span className="knob-name">展開</span>
-                  <select value={gen.form} onChange={(e) => { gen.setForm(e.target.value as "" | "sentence"); gen.setPreset(""); }}>
-                    <option value="">おまかせ</option>
-                    <option value="sentence">起承転結(文)</option>
-                  </select>
-                </label>
-                {gen.segRow("breathe", "息継ぎ", "句アタマの間", gen.breathe, gen.setBreathe, "breathe")}
-                {gen.sliderRow("flow", "つなぎ", gen.flow, gen.setFlow, "ぶつ切れ", "長く連結", "flow")}
-                {gen.sliderRow("pickup", "歌い出し", gen.pickup, gen.setPickup, "拍アタマ", "弱起(食い込み)", "pickup")}
-                {sectionBass().length > 0 && <>
-                  <div className="knob-group-h">他パートとの絡み</div>
-                  <div className="knob-seg" aria-label="counter">
-                    <span className="knob-name">ベースをよける<small>並行5度8度を避ける</small></span>
-                    <span className="seg-ctl">
-                      {([["OFF", ""], ["弱", "weak"], ["中", "mid"], ["強", "strong"]] as [string, "" | "weak" | "mid" | "strong"][]).map(([lab, v]) => (
-                        <button key={v || "off"} type="button" className={"seg-b" + (gen.counter === v ? " on" : "")} aria-label={`counter-${v || "off"}`} aria-pressed={gen.counter === v} onClick={() => { gen.setCounter(v); gen.setPreset(""); }}>{lab}</button>
-                      ))}
-                    </span>
-                  </div>
-                </>}
-                <div className="knob-group-h">人間味・仕上げ</div>
-                {/* WP-D2 humanize 較正：揺れは 1/f（人間寄り）・部位別に上限（K/S/HH タイト〜メロ自由）。OFF=機械通り／弱=既定の自然な揺れ／強=生っぽく(盛りすぎは自動で頭打ち) */}
-                {gen.segRow("humanize", "人間味", "自然な揺れ(1/f)・盛り上限あり", gen.humanize, gen.setHumanize, "humanize")}
-              </>}
-            </div>
-          )}
-          {gen.melodyLaneNotes().length > 0 && (
-            <>
-              <div className="tools-sep">メロ加工</div>
-              <button type="button" className="tool-item" aria-label="harmony-up" title="調内で平行3度上の第2声部" onClick={() => { onClose(); gen.makeHarmony(2); }}>上ハモ</button>
-              <button type="button" className="tool-item" aria-label="harmony-down" title="調内で平行3度下の第2声部" onClick={() => { onClose(); gen.makeHarmony(-2); }}>下ハモ</button>
-              {sectionChords().length > 0 && (
-                <>
-                  <button type="button" className="tool-item" aria-label="fit-to-chords" title="メロの各音を近いコードトーンへ寄せる" disabled={gen.genBusy} onClick={() => { onClose(); void gen.fitToChords(); }}>コードに合わせる</button>
-                  <button type="button" className="tool-item" aria-label="analyze-fit" title="メロとコードの噛み合いを診断（読むだけ）" onClick={() => { onClose(); void gen.analyzeFit(); }}>噛み合い診断</button>
-                </>
-              )}
-            </>
-          )}
+              );
+            })}
+          </div>
         </>
       )}
-      <div className="tools-sep">書き出し</div>
-      <button type="button" className="tool-item" aria-label="export-midi" onClick={onExportMidi}>MIDI</button>
-      <button type="button" className="tool-item" aria-label="export-midi-split" title="メロ/コード/ベース/リズムを別トラックに" onClick={onExportMidiSplit}>MIDI（分割）</button>
+      {/* 書き出し＝ハブ下端の固定行（スクロール0で到達）。song(編成)はここだけ残る。 */}
+      <div className="tk-hublab">書き出し</div>
+      <div className="tk-export">
+        <button type="button" className="tool-item" aria-label="export-midi" onClick={onExportMidi}>MIDI</button>
+        <button type="button" className="tool-item" aria-label="export-midi-split" title="メロ/コード/ベース/リズムを別トラックに" onClick={onExportMidiSplit}>MIDI（分割）</button>
+      </div>
+    </>
+  );
+
+  // ---- メロ引き出し（前面4ノブ＋群アコーディオン5つ＋メロを直す）----
+  const melodyDrawer = (
+    <>
+      {drawerHead("メロ", () => gen.applyPreset("plain", { density: 0.5 }))}
+      <div className="tk-drawer-body">
+        <div className="tk-hublab">プリセット（当たりの組を1タップ）</div>
+        <div className="preset-head">
+          <div className="preset-row" aria-label="melody-presets">
+            {MELODY_PRESETS.map((p) => (
+              <button key={p.name} type="button" className={"chip" + (gen.preset === p.name ? " on" : "")} aria-label={`preset-${p.name}`} aria-pressed={gen.preset === p.name} onClick={() => gen.applyPreset(p.name, p.v)}>{p.label}</button>
+            ))}
+          </div>
+          <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（ロックは固定）" onClick={gen.rollDice}><Icon name="dice" size={18} /></button>
+        </div>
+        {/* 前面4ノブ（param-clarity §4.1 の回収）＝よく回す4本を常時露出。残りは下の群に沈む。 */}
+        <div className="tk-hublab">よく回す4本（それ以外は下の群に沈む）</div>
+        {gen.sliderRow("density", "細かさ", gen.density, gen.setDensity, "スカスカ", "ぎっしり", "density")}
+        {gen.sliderRow("swing", "跳ね", gen.swing, gen.setSwing, "まっすぐ", "はねる", "swing")}
+        {gen.segRow("runs", "駆け上がり", "16分の走り", gen.runs, gen.setRuns, "runs")}
+        {gen.segRow("expression", "タメ", "強拍のもたれ", gen.expression, gen.setExpression, "expression")}
+        {gacc("nori", "リズムのノリ（残り）", "前ノリ・最小音符・リズムパーツ・声種")}
+        {openGroups.nori && <>
+          {gen.segRow("push", "前ノリ", "拍を食う", gen.push, gen.setPush, "push")}
+          <label className="knob-row">
+            <span className="knob-name">最小音符<small>速い曲は粗く</small></span>
+            <select aria-label="finest" value={gen.finest} onChange={(e) => { gen.setFinest(e.target.value as "" | "quarter" | "eighth"); gen.setPreset(""); }}>
+              <option value="">おまかせ(速さ連動)</option>
+              <option value="quarter">4分まで</option>
+              <option value="eighth">8分まで</option>
+            </select>
+          </label>
+          <div className="knob-seg" aria-label="rhythmParts">
+            <span className="knob-name">リズムパーツ<small>小節に順に敷く(白玉=長音)</small></span>
+            <span className="seg-ctl seg-wrap">
+              {RHYTHM_PART_UI.map((rp) => {
+                const idx = gen.rhythmParts.indexOf(rp.id);
+                return (
+                  <button key={rp.id} type="button" className={"seg-b" + (idx >= 0 ? " on" : "")} aria-label={`rpart-${rp.id}`} aria-pressed={idx >= 0} title={idx >= 0 ? `${idx + 1}番目に敷く` : "小節に敷く"} onClick={() => gen.toggleRhythmPart(rp.id)}>{rp.label}{idx >= 0 ? <sup>{idx + 1}</sup> : null}</button>
+                );
+              })}
+            </span>
+          </div>
+          <label className="knob-row" aria-label="voice">
+            <span className="knob-name">声種<small>音域と歌いやすさの基準</small></span>
+            <select value={gen.voice} onChange={(e) => { gen.setVoice(e.target.value as "" | "female_pop" | "male_pop" | "mix" | "vocaloid"); gen.setPreset(""); }}>
+              <option value="">おまかせ(女性平均)</option>
+              <option value="female_pop">女性ポップ</option>
+              <option value="male_pop">男性ポップ</option>
+              <option value="mix">ミックス</option>
+              <option value="vocaloid">ボカロ(C6開放)</option>
+            </select>
+          </label>
+        </>}
+        {gacc("utai", "歌い回し", "口ずさみ・冒険度・歯切れ")}
+        {openGroups.utai && <>
+          {gen.segRow("hook", "口ずさみ", "反復音フック", gen.hook, gen.setHook, "hook")}
+          {gen.sliderRow("foreground", "冒険度", gen.foreground, gen.setForeground, "おなじみ", "冒険", "foreground")}
+          {gen.sliderRow("articulation", "歯切れ", gen.articulation, gen.setArticulation, "なめらか", "くっきり", "articulation")}
+        </>}
+        {gacc("phrase", "フレーズの組み立て", "句割り・展開・息継ぎ・つなぎ・歌い出し")}
+        {openGroups.phrase && <>
+          <label className="knob-row" aria-label="phrasing">
+            <span className="knob-name">句割り</span>
+            <select value={gen.phrasing} onChange={(e) => { gen.setPhrasing(e.target.value as "" | "symmetric" | "asymmetric" | "period" | "sentence"); gen.setPreset(""); }}>
+              <option value="">おまかせ</option>
+              <option value="symmetric">対称(問→答)</option>
+              <option value="asymmetric">非対称(3+3+2)</option>
+              <option value="period">4小節句[4,4]</option>
+              <option value="sentence">短短長[2,2,4]</option>
+            </select>
+          </label>
+          <label className="knob-row" aria-label="form">
+            <span className="knob-name">展開</span>
+            <select value={gen.form} onChange={(e) => { gen.setForm(e.target.value as "" | "sentence"); gen.setPreset(""); }}>
+              <option value="">おまかせ</option>
+              <option value="sentence">起承転結(文)</option>
+            </select>
+          </label>
+          {gen.segRow("breathe", "息継ぎ", "句アタマの間", gen.breathe, gen.setBreathe, "breathe")}
+          {gen.sliderRow("flow", "つなぎ", gen.flow, gen.setFlow, "ぶつ切れ", "長く連結", "flow")}
+          {gen.sliderRow("pickup", "歌い出し", gen.pickup, gen.setPickup, "拍アタマ", "弱起(食い込み)", "pickup")}
+        </>}
+        {hasBass && <>
+          {gacc("karami", "他パートとの絡み", "ベースをよける（ベース在時のみ）")}
+          {openGroups.karami && (
+            <div className="knob-seg" aria-label="counter">
+              <span className="knob-name">ベースをよける<small>並行5度8度を避ける</small></span>
+              <span className="seg-ctl">
+                {([["OFF", ""], ["弱", "weak"], ["中", "mid"], ["強", "strong"]] as [string, "" | "weak" | "mid" | "strong"][]).map(([lab, v]) => (
+                  <button key={v || "off"} type="button" className={"seg-b" + (gen.counter === v ? " on" : "")} aria-label={`counter-${v || "off"}`} aria-pressed={gen.counter === v} onClick={() => { gen.setCounter(v); gen.setPreset(""); }}>{lab}</button>
+                ))}
+              </span>
+            </div>
+          )}
+        </>}
+        {gacc("shiage", "人間味・仕上げ", "人間味")}
+        {openGroups.shiage && gen.segRow("humanize", "人間味", "自然な揺れ(1/f)・盛り上限あり", gen.humanize, gen.setHumanize, "humanize")}
+        {/* メロを直す（置いたメロが相手）＝メロ在時のみ末尾に。 */}
+        {hasMelody && (
+          <>
+            <div className="tools-sep">メロを直す（置いたメロが相手）</div>
+            <button type="button" className="tool-item" aria-label="harmony-up" title="調内で平行3度上の第2声部" onClick={() => { onClose(); gen.makeHarmony(2); }}>上ハモ</button>
+            <button type="button" className="tool-item" aria-label="harmony-down" title="調内で平行3度下の第2声部" onClick={() => { onClose(); gen.makeHarmony(-2); }}>下ハモ</button>
+            {hasChords && <>
+              <button type="button" className="tool-item" aria-label="fit-to-chords" title="メロの各音を近いコードトーンへ寄せる" disabled={gen.genBusy} onClick={() => { onClose(); void gen.fitToChords(); }}>コードに合わせる</button>
+              <button type="button" className="tool-item" aria-label="analyze-fit" title="メロとコードの噛み合いを診断（読むだけ）" onClick={() => { onClose(); void gen.analyzeFit(); }}>噛み合い診断</button>
+            </>}
+          </>
+        )}
+      </div>
+      <div className="tk-drawer-foot">
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_melody" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る" : "メロを生成"} onClick={() => drawerGen("gen_melody")}>メロを生成（{gen.preset ? PRESET_LABEL[gen.preset] : "おまかせ"}）</button>
+      </div>
+    </>
+  );
+
+  // ---- ドラム引き出し（T4 で型chip化。T2 は現行 select を移設）----
+  const drumsDrawer = (
+    <>
+      {drawerHead("ドラム", () => { gen.setDrumStyle(""); gen.setDrumFill(0); })}
+      <div className="tk-drawer-body">
+        <label className="tool-item" aria-label="drum-style">
+          ビート型
+          <select value={gen.drumStyle} onChange={(e) => gen.setDrumStyle(e.target.value)}>
+            <option value="">おまかせ</option>
+            <optgroup label="ジャンル">
+              <option value="jpop">J-pop</option>
+              <option value="rock">ロック</option>
+              <option value="dance">ダンス/EDM</option>
+              <option value="ballad">バラード</option>
+              <option value="funk">ファンク/R&B</option>
+            </optgroup>
+            <optgroup label="型（直指定）">
+              <option value="beat8.basic">8ビート基本</option>
+              <option value="beat8.syncopated">8ビート食い込み</option>
+              <option value="beat16.basic">16ビート</option>
+              <option value="beat16.ghost">16ゴースト</option>
+              <option value="four.rock">4つ打ちロック</option>
+              <option value="four.house">4つ打ちハウス</option>
+              <option value="halftime.basic">ハーフタイム</option>
+              <option value="shuffle.basic">シャッフル</option>
+              <option value="six8.ballad">6/8バラード</option>
+            </optgroup>
+          </select>
+        </label>
+        <label className="tool-item" aria-label="drum-fill">
+          フィル
+          <select value={String(gen.drumFill)} onChange={(e) => { const v = e.target.value; gen.setDrumFill(v.startsWith("build.") ? v : Number(v)); }}>
+            <option value="0">なし</option>
+            <option value="0.3">弱（軽い節目）</option>
+            <option value="0.6">中（遷移フィル）</option>
+            <option value="0.9">強（大遷移）</option>
+            <optgroup label="ビルドアップ（溜め）">
+              <option value="build.tight.4bar">溜め4小節（プリコーラス）</option>
+              <option value="build.standard.8bar">溜め8小節（汎用）</option>
+              <option value="build.big.16bar">溜め16小節（大サビ前）</option>
+            </optgroup>
+          </select>
+        </label>
+      </div>
+      <div className="tk-drawer-foot">
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_drums" disabled={gen.genBusy} onClick={() => drawerGen("gen_drums")}>ドラムを生成</button>
+      </div>
+    </>
+  );
+
+  // ---- ベース引き出し（T4 で型chip化）----
+  const bassDrawer = (
+    <>
+      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); })}
+      <div className="tk-drawer-body">
+        <label className="tool-item" aria-label="bass-style">
+          ベース型
+          <select value={gen.bassStyle} onChange={(e) => gen.setBassStyle(e.target.value)}>
+            <option value="">おまかせ</option>
+            <optgroup label="ジャンル">
+              <option value="rock">ロック</option>
+              <option value="ballad">バラード</option>
+              <option value="citypop">シティポップ</option>
+              <option value="funk">ファンク</option>
+              <option value="edm">EDM</option>
+              <option value="vocarock">ボカロック</option>
+            </optgroup>
+            <optgroup label="型（直指定）">
+              <option value="RK-8ROOT">8分ルート弾き</option>
+              <option value="RK-GALLOP">ギャロップ</option>
+              <option value="BL-WHOLE">全音符バラード</option>
+              <option value="BL-APPROACH">アプローチ橋渡し</option>
+              <option value="CP-OCT8">オクターブ奏法</option>
+              <option value="CP-WALK">歩くシティポップ</option>
+              <option value="FK-ONE">ファンク the one</option>
+              <option value="ED-OFFBEAT">オフビート</option>
+              <option value="ED-SUSTAIN">ロー持続</option>
+              <option value="VR-8DRIVE">高速8分ドライブ</option>
+            </optgroup>
+          </select>
+        </label>
+        <label className="tool-item" aria-label="bass-fill">
+          ベースフィル
+          <select value={String(gen.bassFill)} onChange={(e) => gen.setBassFill(Number(e.target.value))}>
+            <option value="0">なし</option>
+            <option value="0.2">下降（落ち着かせ）</option>
+            <option value="0.9">上昇（駆け上がり）</option>
+          </select>
+        </label>
+      </div>
+      <div className="tk-drawer-foot">
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_bass" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る" : "ベースを生成"} onClick={() => drawerGen("gen_bass")}>ベースを生成</button>
+      </div>
+    </>
+  );
+
+  // ---- 骨格引き出し（構造＝フォームの使い回し）----
+  const skeletonDrawer = (
+    <>
+      {drawerHead("骨格", () => gen.setSkelForm(""))}
+      <div className="tk-drawer-body">
+        <label className="tool-item" aria-label="skel-form">
+          構造
+          <select value={gen.skelForm} onChange={(e) => gen.setSkelForm(e.target.value as "" | "period" | "aaba" | "cadence-swap" | "sentence")}>
+            <option value="">おまかせ</option>
+            <option value="period">前半くり返し</option>
+            <option value="aaba">AABA</option>
+            <option value="cadence-swap">終止だけ変えて反復</option>
+            <option value="sentence">提示→畳み掛け(sentence)</option>
+          </select>
+        </label>
+        <p className="tk-drawnote">置いた骨格のブロックをタップ＝骨格の机（動線は現行のまま）。ここは生成の設定だけ。</p>
+      </div>
+      <div className="tk-drawer-foot">
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-skeleton" disabled={gen.genBusy} onClick={() => drawerGen(undefined)}>骨格を生成</button>
+      </div>
+    </>
+  );
+
+  const body =
+    view === "melody" ? melodyDrawer
+    : view === "drums" ? drumsDrawer
+    : view === "bass" ? bassDrawer
+    : view === "skeleton" ? skeletonDrawer
+    : hub;
+
+  return (
+    <div className={"assign-menu to-right tools-menu tk-sheet" + (view === "hub" ? " tk-hub" : " tk-drawer")} aria-label="tools-menu">
+      {body}
     </div>
   );
 }
