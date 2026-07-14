@@ -105,6 +105,31 @@
   line-height: 1.3;
   margin: 2px 0 0;
 }
+/* SP（狭幅・実測360×800でボタンが画面外に溢れていた）＝下端バーの全コントロール
+   （undo/redo/rewind/play/loop/位置/音量）を1行360px内に収める。密度を下げ骨格を守る思想：
+   ボタン幅/gap/paddingを詰めるだけ＝機能は削らない・折り返さない（下端2段化は圧迫感が出る）。
+   タップ標的の高さ44pxは据え置き（横だけ圧縮）。PC(>480px)には一切効かない＝レグレッション無し。 */
+@media (max-width: 480px) {
+  .transport {
+    gap: 5px;
+    padding: 6px 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+  .transport .tp-btn {
+    min-width: 38px;
+    font-size: 1rem;
+  }
+  .transport .tp-divider {
+    margin: 0 2px;
+  }
+  .transport-time {
+    min-width: 2.6em;
+    font-size: 0.82rem;
+  }
+  .mixer-wrap {
+    margin-left: 2px;
+  }
+}
 .section-actions button {
   background: #2b2f36;
   color: var(--fg);
