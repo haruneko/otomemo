@@ -126,4 +126,54 @@ describe("フィール層＝書き出し境界で applyFeel（スイング・非
     expect(isCompoundMeter("6/8")).toBe(true);
     expect(isCompoundMeter("4/4")).toBe(false);
   });
+
+  // WP-X2 ゲームBGMループマーカー（marker メタ 0xFF 0x06＝LOOPSTART/LOOPEND）。
+  const hasBytes = (buf: Uint8Array, seq: number[]): boolean => {
+    for (let i = 0; i + seq.length <= buf.length; i++) {
+      let ok = true;
+      for (let k = 0; k < seq.length; k++) if (buf[i + k] !== seq[k]) { ok = false; break; }
+      if (ok) return true;
+    }
+    return false;
+  };
+  // "LOOPSTART" の ASCII 前置＝marker イベント本体（0xFF 0x06 <len> "LOOPSTART"）を素バイトで探す。
+  const LOOPSTART_BYTES = [0xff, 0x06, 9, ...[..."LOOPSTART"].map((c) => c.charCodeAt(0))];
+
+  it("loop 未指定＝マーカー無し・bit一致（明示 undefined と同一バイト）", () => {
+    const notes = [{ pitch: 60, start: 0, dur: 1 }];
+    const a = notesToMidi(notes, 120, "4/4", 0);
+    const b = notesToMidi(notes, 120, "4/4", 0, null, undefined); // loop 明示 undefined
+    expect(Array.from(a)).toEqual(Array.from(b)); // 既存出力と bit 一致
+    expect(hasBytes(a, [0xff, 0x06])).toBe(false); // marker メタが1つも無い
+    const m = new Midi(a.buffer as ArrayBuffer);
+    expect(m.header.meta.filter((e) => e.type === "marker").length).toBe(0);
+  });
+
+  it("loop 指定＝LOOPSTART/LOOPEND marker が正しい tick に載る（4/4・ppq480）", () => {
+    const notes = [{ pitch: 60, start: 0, dur: 1 }];
+    const bytes = notesToMidi(notes, 120, "4/4", 0, null, { startBar: 0, endBar: 8 });
+    expect(hasBytes(bytes, LOOPSTART_BYTES)).toBe(true); // 生バイトに marker(0xFF06)+"LOOPSTART"
+    const m = new Midi(bytes.buffer as ArrayBuffer);
+    const markers = m.header.meta.filter((e) => e.type === "marker");
+    const start = markers.find((e) => e.text === "LOOPSTART")!;
+    const end = markers.find((e) => e.text === "LOOPEND")!;
+    expect(start.ticks).toBe(0); // startBar0 → 0 tick
+    expect(end.ticks).toBe(8 * 4 * m.header.ppq); // endBar8 × 4拍 × 480
+  });
+
+  it("6/8：LOOPEND tick は beatsPerBar=3 で換算＋tailBars で LOOPTAILEND", () => {
+    const bytes = tracksToMidi([{ notes: [{ pitch: 60, start: 0, dur: 1 }] }], 120, "6/8", null, { startBar: 0, endBar: 4, tailBars: 1 });
+    const m = new Midi(bytes.buffer as ArrayBuffer);
+    const markers = m.header.meta.filter((e) => e.type === "marker");
+    expect(markers.find((e) => e.text === "LOOPEND")!.ticks).toBe(4 * 3 * m.header.ppq); // 6/8=1小節3拍(四分換算)
+    expect(markers.find((e) => e.text === "LOOPTAILEND")!.ticks).toBe(5 * 3 * m.header.ppq); // endBar+tailBars=5小節
+  });
+
+  it("多トラック（分割書出）＝loop 未指定はマーカー無しで bit一致", () => {
+    const tracks = [{ notes: [{ pitch: 60, start: 0, dur: 1 }], name: "melody" }];
+    const a = tracksToMidi(tracks, 120, "4/4");
+    const b = tracksToMidi(tracks, 120, "4/4", null, undefined);
+    expect(Array.from(a)).toEqual(Array.from(b));
+    expect(hasBytes(a, [0xff, 0x06])).toBe(false);
+  });
 });

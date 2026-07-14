@@ -123,7 +123,7 @@ describe("mcp tool layer", () => {
 // 研究反映：transform は fat tool 回避で reshape(feel/range)＋convert(移調/拍子・確定) に2分割。generate↔fit は入力で排他。
 describe("purpose tool surface (#101)", () => {
   // ③ song_state/plan_next・② read_neta/set_lyric・① analyze_audio・#S11 start_study・WP-M5 ②プロソディ2本・WP-C3 suggest_cliche・WP-C2 suggest_key_plan を追加（10→21）。旧39は隠したまま。
-  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords", "start_study", "suggest_lyric_rhythm", "analyze_lyric_fit", "suggest_cliche", "suggest_key_plan"];
+  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords", "start_study", "suggest_lyric_rhythm", "analyze_lyric_fit", "suggest_cliche", "suggest_key_plan", "suggest_form", "suggest_energy_plan", "check_loop"];
 
   it("目的ツール(20)を公開する", async () => {
     const { client } = await connect();
@@ -230,6 +230,28 @@ describe("purpose tool surface (#101)", () => {
     expect(pn.next_action).toBe("サビのメロを詰める");
     const st2 = JSON.parse(textOf(await client.callTool({ name: "song_state", arguments: { id: song.id } })));
     expect(st2.song.next_action).toBe("サビのメロを詰める"); // 記録が反映される
+  });
+
+  it("WP-X2 check_loop は chat面に登録され所見を返す（許可漏れ/未登録の回帰ガード）", async () => {
+    const core = new Core(openDb(":memory:"));
+    const server = buildMcpServer(core, { surface: "chat" });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "t", version: "0" });
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).toContain("check_loop"); // chat面 verb と allowlist の不一致を防ぐ
+    const r = JSON.parse(
+      textOf(await client.callTool({ name: "check_loop", arguments: { loop: { startBar: 0, endBar: 8 }, meter: "4/4", key: 0, mode: "major", chords: [{ root: 5 }, { root: 7 }, { root: 0 }] } })),
+    );
+    expect(r.findings.find((f: { code: string }) => f.code === "boundary-cadence").severity).toBe("warn"); // …V→I＝閉じている
+  });
+
+  it("WP-X2 update_song が loop を受けて song_state に載る", async () => {
+    const { client } = await connect();
+    const song = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "song", title: "BGM" } })));
+    await client.callTool({ name: "update_song", arguments: { id: song.id, loop: { startBar: 0, endBar: 16, tailBars: 1 } } });
+    const st = JSON.parse(textOf(await client.callTool({ name: "song_state", arguments: { id: song.id } })));
+    expect(st.song.loop).toEqual({ startBar: 0, endBar: 16, tailBars: 1 });
   });
 
   it("② read_neta でメロを読み、set_lyric で歌詞を音符へ流し込む", async () => {

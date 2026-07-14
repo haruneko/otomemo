@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS song (
   neta_id     TEXT PRIMARY KEY REFERENCES neta(id) ON DELETE CASCADE,
   stage       TEXT,
   next_action TEXT,
+  loop        TEXT,
   updated     TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS neta_asset (
@@ -205,6 +206,11 @@ function migrate(db: Database.Database): void {
   const cols = db.prepare(`PRAGMA table_info(neta)`).all() as { name: string }[];
   if (!cols.some((c) => c.name === "scope")) {
     db.exec(`ALTER TABLE neta ADD COLUMN scope TEXT NOT NULL DEFAULT 'project'`);
+  }
+  // WP-X2: song overlay に loop 列（JSON {startBar,endBar,tailBars?}）を増設。既存曲は NULL＝無影響。
+  const songCols = db.prepare(`PRAGMA table_info(song)`).all() as { name: string }[];
+  if (!songCols.some((c) => c.name === "loop")) {
+    db.exec(`ALTER TABLE song ADD COLUMN loop TEXT`);
   }
   // #54: compose_edge の旧PK (parent_id, child_id) → (parent_id, child_id, position) へ再構築。
   // SQLiteはPK変更不可なので新テーブルを作って移し替える（既存辺は無損失）。

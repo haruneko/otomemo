@@ -259,6 +259,28 @@
 - **マイクロタイミング（tick前後の補正）は今は持たない**：将来のヒューマナイズ機能用で、後から nullable な offset を足すだけ（データ移行不要＝後付けが安い）。
 - 判断則：**スキーマ変更は高い／機能追加は安い**。小さくMIDI標準で確実に要るものだけ今持つ（velocity）、純粋な将来機能＆後付け可能なものは後回し（micro-timing）。
 
+### WP-X2 ゲームBGMループ対応（決定 2026-07-14・正典＝`docs/research/2026-07-14-intro-outro-game-loop.md`）
+ゲームBGMは「イントロ→ループ本体」が最頻で、本ツールに欠けていた「どのセクション範囲がループ本体か」「継ぎ目が聞こえないか」「書き出しにループ点を残す」を最小拡張で載せる。**思想＝機械は指摘まで・継ぎ目調整は人間の耳**（骨格の机の接点と同じ＝自動修正しない）。
+
+**(1) データ表現＝song overlay の任意フィールド `loop`**
+- `song` overlay（kind=song の 1:1 箱・`stage`/`next_action` と同じ層）に **`loop?: {startBar, endBar, tailBars?}`** を足す（`song` テーブルに JSON 列 `loop` を増設＝migration。既存曲は `loop=null`＝**無影響/bit一致**）。
+  - `startBar`/`endBar`＝ループ境界（小節・0起点）。ループは `endBar → startBar` へ戻る。`tailBars?`＝頭へ重ねる余韻尺（テール処理ヒント・任意）。
+  - `mode`/`boundaryCadence` 等（research §7.3）は今持たない＝**最小**（後付けが安い）。セクション役割 `sectionRole` も今は導入しない（compose_edge に role 列が無く、導入はスキーマ変更＝高い。研究docに将来案として残す）。
+- 契約経路：`update_song` が `loop` を受ける（`core.updateSong`→`AssetRepo.updateSong` で JSON 永続）。`song_state`/`get_song` は `loop` を含めて返す。**loop 未指定＝既存挙動不変**。
+
+**(2) ループ境界チェック＝`check_loop` 純関数＋verb（指摘のみ・自動修正しない）**
+- 入力＝ループ本体の素材（進行 chords＋任意 melody）＋`loop{startBar,endBar,tailBars?}`＋meter/key/mode。出力＝`{findings:[{code,layer,severity,message}]}`（research §7.2 チェックリストの機械判定分）。
+- 判定（`cadenceOf`/`analyzeProgression` 語彙を流用）：
+  - **harmony**：`loop-length-integer`（`endBar-startBar` が正の整数か＝半端拍で終わってないか）。`boundary-cadence`（本体末尾が **authentic(PAC)＝閉じている→warn**「回り続けたいなら開く」／half・modal・deceptive・none＝**開いた境界→ok**）。`boundary-wrap`（末尾→頭が V→I / D→T 循環なら info で肯定）。
+  - **melody**：`boundary-melody-interval`（末尾音→頭音の音程。>完全5度(7半音)＝跳躍大 warn／以内 ok）。`crossing-note`（`loopEnd` 境界を跨ぐ持続ノート検出＝頭で鳴らし直す/末尾でリリースを促す warn）。
+  - **tail**：`tail-unset`（`tailBars` 未設定＝余韻の重ね未指定 info）。
+- 純関数＝`apps/api/src/music/loopCheck.ts`（`analyze_progression` と同じく core を通さず music から直呼び）。MCP verb は chat surface（`CHAT_VERBS` にも追加＝許可漏れ厳禁）。HTTP は `/music/check_loop`。
+
+**(3) MIDI 書き出し＝ループマーカー（RPGツクール/ゲームエンジン慣習）**
+- web 書き出し経路（`music.ts` `notesToMidi`/`tracksToMidi`/`downloadMultitrackMidi`）に任意 `loop{startBar,endBar,tailBars?}` を通し、`@tonejs/midi` の `header.meta` へ **marker メタイベント**（`0xFF 0x06`）を書く＝`LOOPSTART`(startTick)・`LOOPEND`(endTick)。tick＝`bar×beatsPerBar×ppq`。**loop 未指定＝マーカー無し＝既存出力 bit 一致**。
+  - 注：RPGツクール本来の `LOOPSTART`/`LOOPLENGTH` は **OGG Vorbis コメントのサンプル値**（音声レンダ経路の概念）。本ツールは MIDI 書き出しなので **tick 位置の marker** で表現する（サンプル値化は将来の音声レンダ経路の仕事）。
+- web UI 露出＝**見送り**：section エディタに loop を編む器（フィールド/レーン）が無く、追加はスキーマ跨ぎの UI 作業で最小を超える。export 関数は loop 引数を持つが SectionEditor は `undefined` を渡す（＝bit一致）。将来 song overlay の loop を読んで export に渡す（backlog）。
+
 ### ベース（kind=`bass`・2モード）（決定 2026-06-21）
 低音域前提のパート。**1 kind で「絶対=個別フレーズ」「相対=半リズムパート」の双方**を持つ。content に `mode` 判別子。
 - **絶対** `{mode:"absolute", notes:[{pitch,start,dur,vel?}]}`：melody と同一スキーマ（C基準・自己完結）。**低域ピアノロール**で編集（既定ビュー低域・床=E1）。「相対で出せない個別フレーズ」用。

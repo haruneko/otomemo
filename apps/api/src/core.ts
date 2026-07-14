@@ -17,7 +17,7 @@ import type {
 import { reapResults } from "./reaper";
 import { tickSchedules } from "./scheduler";
 import { now } from "./repo/util";
-import { AssetRepo, type Asset, type SongOverlay } from "./repo/asset-repo";
+import { AssetRepo, type Asset, type SongOverlay, type SongLoop } from "./repo/asset-repo";
 import { ScheduleRepo, type Schedule } from "./repo/schedule-repo";
 import { ChatRepo, type ChatMessage } from "./repo/chat-repo";
 import { ProjectRepo, type Project } from "./repo/project-repo";
@@ -35,7 +35,7 @@ export interface ProjectFile extends Asset {
 }
 
 // repo に移した型を従来の import 元(core)からも引けるよう再公開（呼び出し側 無改修）。
-export type { Asset, SongOverlay } from "./repo/asset-repo";
+export type { Asset, SongOverlay, SongLoop } from "./repo/asset-repo";
 export type { Schedule } from "./repo/schedule-repo";
 export type { ChatMessage } from "./repo/chat-repo";
 export type { Project } from "./repo/project-repo";
@@ -314,7 +314,10 @@ export class Core {
   deleteAsset(id: string): boolean {
     return this.asset.deleteAsset(id);
   }
-  updateSong(netaId: string, patch: { stage?: string | null; next_action?: string | null }): SongOverlay | null {
+  updateSong(
+    netaId: string,
+    patch: { stage?: string | null; next_action?: string | null; loop?: SongLoop | null },
+  ): SongOverlay | null {
     return this.asset.updateSong(netaId, patch);
   }
   getSong(netaId: string): SongOverlay | null {

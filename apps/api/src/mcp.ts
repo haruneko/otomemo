@@ -28,9 +28,12 @@ import {
   genNamedProgression,
   suggestClicheLines,
   suggestKeyPlan,
+  suggestForm,
+  suggestEnergyPlan,
   isMinorFrame,
   normalizeFrame,
 } from "./music";
+import { checkLoop } from "./music/loopCheck"; // WP-X2 ゲームBGMループ境界チェック
 import { learnMotifModelFromLibrary } from "./music/corpusBias";
 import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
 import { analyzeVoiceLeading } from "./music/voiceLeading"; // #8：メロ×低音の声部進行レンズ（並行/隠伏5度8度・声部交差）
@@ -60,6 +63,13 @@ const chordsSchema = z
     }),
   )
   .describe("コード進行（content.chords 形・各 root はその曲の実音ピッチクラス）");
+
+// WP-X2 ループ本体の範囲（小節・0起点）。update_song / check_loop で共用。
+const loopShape = z.object({
+  startBar: z.number().describe("ループ本体の先頭小節（0起点）"),
+  endBar: z.number().describe("ループ本体の末尾小節（この小節末で startBar へ戻る）"),
+  tailBars: z.number().optional().describe("頭へ重ねる余韻の尺（小節・テール処理ヒント）"),
+});
 
 const ok = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -462,11 +472,12 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     "update_song",
     {
       title: "曲の段階を更新",
-      description: "曲(kind=song)の stage（段階）／next_action（次の一手）を更新する。",
+      description: "曲(kind=song)の stage（段階）／next_action（次の一手）／loop（ゲームBGMのループ本体範囲）を更新する。",
       inputSchema: {
         id: z.string(),
         stage: z.string().nullable().optional(),
         next_action: z.string().nullable().optional(),
+        loop: loopShape.nullable().optional().describe("WP-X2 ループ本体範囲{startBar,endBar,tailBars?}。null で解除・未指定で据え置き"),
       },
     },
     async ({ id, ...patch }) => {
@@ -748,6 +759,25 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       return s ? ok(s) : err("not found");
     },
   );
+  // WP-X2 ゲームBGMループ境界チェック：ループ本体の進行＋メロ＋loop範囲→継ぎ目の所見(指摘のみ・自動修正しない)。
+  server.registerTool(
+    "check_loop",
+    {
+      title: "ループ境界を点検",
+      description:
+        "ゲームBGMのループ本体が“回り続ける”か点検＝末尾終止の開き具合・末尾→頭の音程・境界を跨ぐ持続ノート・テール未設定を所見で返す（指摘のみ。修正はしない）。",
+      inputSchema: {
+        loop: loopShape,
+        meter: z.string().optional().describe("拍子＝\"分子/分母\"（例 \"4/4\",\"6/8\"）。既定 4/4"),
+        key: z.number().int().min(0).max(11).optional().describe("主音のピッチクラス0-11。未指定は進行から推定"),
+        mode: z.enum(["major", "minor"]).optional(),
+        chords: chordsSchema.optional().describe("ループ本体の進行（時間順・末尾＝ループ末尾の和音）"),
+        melody: notesSchema.optional().describe("ループ本体のメロ（拍・曲頭からの絶対位置）"),
+      },
+    },
+    async ({ loop, meter, key, mode, chords, melody }) =>
+      ok(checkLoop({ loop, meter, key, mode, chords, melody })),
+  );
   // ② 歌詞↔メロ：read_neta でメロの音符/歌詞を読む・set_lyric で歌詞(かな)を音符へ流し込む。
   server.registerTool(
     "read_neta",
@@ -916,6 +946,42 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       },
     },
     async ({ roles, key, mode, count }) => ok({ plans: suggestKeyPlan(roles ?? [], key ?? 0, mode ?? "major", count !== undefined ? { count } : {}) }),
+  );
+  // WP-X1：構成テンプレ（構成型辞書 F01..F14）から構成候補を提案（自動適用しない＝機械は候補まで）。
+  server.registerTool(
+    "suggest_form",
+    {
+      title: "構成を提案（構成型テンプレ）",
+      description:
+        "ジャンル/目標尺/Bメロ有無/ポストコーラス/サビ頭/bridge の条件から、曲の『構成候補』を複数出す。各案＝役割列（intro/verse/verse_var(A')/prechorus(Bメロ)/chorus(サビ)/postchorus/bridge(Cメロ)/interlude(間奏)/drop_chorus(落ちサビ)/last_chorus(大サビ)/outro）＋各セクション小節数＋概算尺。構成型辞書 F01..F14（J-pop黄金/標準/短尺/サビ頭/ボカロ超短尺/アニソンTVサイズ89秒/洋楽VC/VPC/ポストコーラス/AABA/落ちサビ強調/ダブルサビ）。**尺目標があれば削除優先順位 Inst>O>I>A'>B で切り詰め、収まる案だけ返す**。Bメロは二値トグル（on/off/auto）。**提案のみ＝自動適用しない**（役割列を song の place_child や gen_* の frame.section へ落とすのは人/上位の判断）。",
+      inputSchema: {
+        genre: z.enum(["jpop", "vocaloid", "anime_tv", "western_pop", "ballad", "game_loop", "oldies"]).optional().describe("ジャンル/年代文脈。候補型を辞書引き。未指定=全型から"),
+        lengthTarget: z.enum(["full", "standard", "short", "tv_size", "custom"]).optional().describe("尺プリセット。full≈4:30/standard≈3:30/short≈2:45/tv_size=89秒(アニソン)/custom=targetSeconds指定。未指定=尺制約なし"),
+        targetSeconds: z.number().min(10).max(600).optional().describe("custom 時の目標秒数"),
+        hasPrechorus: z.enum(["on", "off", "auto"]).optional().describe("Bメロ(prechorus)トグル。off=全候補からBメロを省略/on/auto=辞書型のまま。未指定=auto"),
+        chorusFirst: z.boolean().optional().describe("サビ頭(冒頭でサビ先出し)の型を優先"),
+        postChorus: z.boolean().optional().describe("ポストコーラス(サビ後の追い)を持つ型を優先"),
+        bridge: z.boolean().optional().describe("後半ドラマ(Cメロ/bridge)の有無。false で bridge を省略"),
+        bpm: z.number().min(40).max(300).optional().describe("概算尺の算出テンポ。未指定=120"),
+        meter: z.string().optional().describe("拍子(例 4/4・6/8)。概算尺の1小節拍数。未指定=4/4"),
+        count: z.number().int().min(1).max(8).optional().describe("返す候補数(既定4・doc §5-B＝3〜5案)"),
+      },
+    },
+    async (a) => ok({ candidates: suggestForm({ genre: a.genre, lengthTarget: a.lengthTarget, targetSeconds: a.targetSeconds, hasPrechorus: a.hasPrechorus, chorusFirst: a.chorusFirst, postChorus: a.postChorus, bridge: a.bridge, bpm: a.bpm, meter: a.meter, count: a.count }) }),
+  );
+  // WP-X1：役割列 → エネルギープラン（多次元アークΔ＋レイヤ写像＋既存ノブ推奨値）を提案（自動適用しない）。
+  server.registerTool(
+    "suggest_energy_plan",
+    {
+      title: "エネルギープランを提案（多次元アーク）",
+      description:
+        "役割列（落ちサビ/大サビ含む）から、各セクションの『エネルギープラン』を出す。5次元(密度/音域/レイヤ/ラウドネス/細分化)の**前セクション比Δ**（−2..+2）＋絶対レベル(low/mid/high/peak)＋レイヤ追加/削除の具体操作＋**既存生成ノブへの推奨値**(density/registerShift/energy/runs＝frame.section や gen_melody へ渡せる実在ノブ)。谷→山(落ちサビ→ラスサビ)でΔ最大化。テンプレ3種＝jpop_standard/ballad/four_on_floor。**提案のみ＝自動適用しない**（曲の情動設計＝機械が決め切らず人が崩す・doc §6）。知覚エネルギーは絶対値でなくΔで決まる＝ピークの正体は音量でなくlayers/density/subdiv。",
+      inputSchema: {
+        roles: z.array(z.string()).describe("役割列（例 [\"intro\",\"verse\",\"prechorus\",\"chorus\",\"verse\",\"prechorus\",\"chorus\",\"bridge\",\"drop_chorus\",\"last_chorus\",\"outro\"]）。落ちサビ→drop_chorus/大サビ→last_chorus/サビ→chorus/Aメロ→verse/Bメロ→prechorus 等の別表記も吸収"),
+        template: z.enum(["jpop_standard", "ballad", "four_on_floor"]).optional().describe("エネルギーテンプレ。jpop_standard=標準J-pop(落ちサビ谷→ラスサビ山)/ballad=register/layersで山/four_on_floor=build→drop。未指定=jpop_standard"),
+      },
+    },
+    async ({ roles, template }) => ok(suggestEnergyPlan(roles ?? [], template !== undefined ? { template } : {})),
   );
   server.registerTool(
     "generate",

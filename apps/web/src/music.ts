@@ -750,12 +750,36 @@ export function programOf(content: unknown): number | undefined {
   return undefined;
 }
 
+// WP-X2 ゲームBGMループ本体の範囲（小節・0起点）。endBar→startBar へ戻る。tailBars=頭へ重ねる余韻尺。
+export interface LoopSpec {
+  startBar: number;
+  endBar: number;
+  tailBars?: number;
+}
+
+// WP-X2: ループ本体の範囲を marker メタイベント(0xFF 0x06)で書く＝LOOPSTART(startTick)/LOOPEND(endTick)。
+// tick = bar × beatsPerBar × ppq。RPGツクール等のゲームエンジンが読むループ点の慣習。
+// loop 未指定＝何も足さない＝既存出力 bit 一致。tailBars は LOOPEND の後に marker で残す（テール処理ヒント）。
+function addLoopMarkers(midi: Midi, loop: LoopSpec | null | undefined, meter?: string | null): void {
+  if (!loop) return;
+  const ppq = midi.header.ppq;
+  const bpb = beatsPerBar(meter);
+  const startTick = Math.round(loop.startBar * bpb * ppq);
+  const endTick = Math.round(loop.endBar * bpb * ppq);
+  midi.header.meta.push({ ticks: startTick, type: "marker", text: "LOOPSTART" });
+  midi.header.meta.push({ ticks: endTick, type: "marker", text: "LOOPEND" });
+  if (loop.tailBars != null && loop.tailBars > 0) {
+    midi.header.meta.push({ ticks: Math.round((loop.endBar + loop.tailBars) * bpb * ppq), type: "marker", text: "LOOPTAILEND" });
+  }
+}
+
 export function notesToMidi(
   notes: Note[],
   bpm = 120,
   meter?: string | null,
   program?: number,
   feel?: Feel | null,
+  loop?: LoopSpec | null,
 ): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);
@@ -785,6 +809,7 @@ export function notesToMidi(
     if (kit) dtrack.instrument.number = kit;
     addNotes(dtrack, drums);
   }
+  addLoopMarkers(midi, loop, meter);
   return midi.toArray();
 }
 
@@ -800,7 +825,7 @@ export interface MidiTrackSpec {
 // レーン(トラック)の GM program を composite notes から採る＝各ノートに付与済みの program（compositeNotes 由来）の
 // 最初の非nullを使う。1レーン=1楽器（コード楽器×2は別レーン）なので均一。program 無し＝undefined（track.program 未設定＝従来）。
 export const trackProgramOf = (notes: Note[]): number | undefined => notes.find((n) => n.program != null)?.program;
-export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null, feel?: Feel | null): Uint8Array {
+export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null, feel?: Feel | null, loop?: LoopSpec | null): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);
   const ts = meterPair(meter);
@@ -819,6 +844,7 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
       track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
     }
   }
+  addLoopMarkers(midi, loop, meter);
   return midi.toArray();
 }
 
@@ -843,8 +869,9 @@ export function downloadMultitrackMidi(
   bpm = 120,
   meter?: string | null,
   feel?: Feel | null,
+  loop?: LoopSpec | null,
 ): void {
-  const blob = new Blob([tracksToMidi(tracks, bpm, meter, feel) as BlobPart], { type: "audio/midi" });
+  const blob = new Blob([tracksToMidi(tracks, bpm, meter, feel, loop) as BlobPart], { type: "audio/midi" });
   triggerDownload(blob, filename);
 }
 
@@ -872,8 +899,9 @@ export function downloadMidi(
   meter?: string | null,
   program?: number,
   feel?: Feel | null,
+  loop?: LoopSpec | null,
 ): void {
-  const blob = new Blob([notesToMidi(notes, bpm, meter, program, feel) as BlobPart], {
+  const blob = new Blob([notesToMidi(notes, bpm, meter, program, feel, loop) as BlobPart], {
     type: "audio/midi",
   });
   triggerDownload(blob, filename);

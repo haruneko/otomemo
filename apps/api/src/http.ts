@@ -36,10 +36,13 @@ import {
   substitutesOf,
   suggestClicheLines,
   suggestKeyPlan,
+  suggestForm,
+  suggestEnergyPlan,
   toDegrees,
   isMinorFrame,
   normalizeFrame,
 } from "./music";
+import { checkLoop } from "./music/loopCheck"; // WP-X2 ゲームBGMループ境界チェック
 import { analyzeVoiceLeading } from "./music/voiceLeading";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20 S2）
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
@@ -201,6 +204,9 @@ export function buildHttp(core: Core): FastifyInstance {
       switch (op) {
         case "gen_chords": { const num = (x: unknown) => (typeof x === "number" ? x : undefined); const cad = ["half", "deceptive", "plagal", "aeolian"].includes(b.cadence) ? b.cadence : undefined; const pal = ["ionian", "mixolydian", "aeolian", "dorian"].includes(b.palette) ? b.palette : undefined; const gen = b.genre === "citypop" ? "citypop" as const : undefined; const tr = b.transition && (b.transition.prep === "pivot" || b.transition.prep === "secondary_dominant") && typeof b.transition.toKey === "number" ? { prep: b.transition.prep as "pivot" | "secondary_dominant", toKey: b.transition.toKey as number, toMode: b.transition.toMode === "minor" ? "minor" as const : "major" as const } : undefined; const res = genChords(b.frame, b.seed, cad, { borrow: num(b.borrow), secondaryDom: num(b.secondaryDom), loop: b.loop === true, palette: pal, variety: num(b.variety), genre: gen, transition: tr }); attachHarmonicTension(res, { key: typeof b.frame?.key === "number" ? b.frame.key : undefined, mode: isMinorFrame(normalizeFrame(b.frame)) ? "minor" : "major", sectionRole: (b.frame as { section?: { role?: string } } | undefined)?.section?.role }); return res; }
         case "suggest_key_plan": { const md = b.mode === "minor" ? "minor" as const : "major" as const; const cnt = typeof b.count === "number" ? { count: b.count } : {}; return { plans: suggestKeyPlan(Array.isArray(b.roles) ? b.roles : [], typeof b.key === "number" ? b.key : 0, md, cnt) }; }
+        case "check_loop": { const lp = b.loop ?? {}; return checkLoop({ loop: { startBar: Number(lp.startBar) || 0, endBar: Number(lp.endBar) || 0, tailBars: typeof lp.tailBars === "number" ? lp.tailBars : undefined }, meter: typeof b.meter === "string" ? b.meter : undefined, key: typeof b.key === "number" ? b.key : undefined, mode: b.mode === "minor" ? "minor" as const : b.mode === "major" ? "major" as const : undefined, chords: asChords(b.chords), melody: asNotes(b.melody) }); }
+        case "suggest_form": { const genres = ["jpop", "vocaloid", "anime_tv", "western_pop", "ballad", "game_loop", "oldies"]; const lts = ["full", "standard", "short", "tv_size", "custom"]; const hps = ["on", "off", "auto"]; return { candidates: suggestForm({ genre: genres.includes(b.genre) ? b.genre : undefined, lengthTarget: lts.includes(b.lengthTarget) ? b.lengthTarget : undefined, targetSeconds: typeof b.targetSeconds === "number" ? b.targetSeconds : undefined, hasPrechorus: hps.includes(b.hasPrechorus) ? b.hasPrechorus : undefined, chorusFirst: b.chorusFirst === true ? true : undefined, postChorus: b.postChorus === true ? true : undefined, bridge: b.bridge === false ? false : undefined, bpm: typeof b.bpm === "number" ? b.bpm : undefined, meter: typeof b.meter === "string" ? b.meter : undefined, count: typeof b.count === "number" ? b.count : undefined }) }; }
+        case "suggest_energy_plan": { const tmpls = ["jpop_standard", "ballad", "four_on_floor"]; const t = tmpls.includes(b.template) ? { template: b.template } : {}; return suggestEnergyPlan(Array.isArray(b.roles) ? b.roles : [], t); }
         case "gen_melody": {
           // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
@@ -649,7 +655,13 @@ export function buildHttp(core: Core): FastifyInstance {
   });
   app.patch("/neta/:id/song", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const p = z.object({ stage: z.string().nullish(), next_action: z.string().nullish() }).parse(req.body);
+    const p = z
+      .object({
+        stage: z.string().nullish(),
+        next_action: z.string().nullish(),
+        loop: z.object({ startBar: z.number(), endBar: z.number(), tailBars: z.number().optional() }).nullish(), // WP-X2
+      })
+      .parse(req.body);
     const s = core.updateSong(id, p);
     return s ?? reply.code(404).send({ error: "neta not found" });
   });

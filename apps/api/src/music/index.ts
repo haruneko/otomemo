@@ -27,9 +27,13 @@ export * from "./continuation";
 export * from "./generate";
 // 調プラン（セクション間の転調設計・WP-C2）。
 export * from "./keyPlan";
+// 構成テンプレ＋エネルギープラン（WP-X1）。
+export * from "./formLibrary";
+export * from "./energyPlan";
 export * from "./similarity";
 export * from "./chordname";
 export * from "./melodyEssence";
+export * from "./loopCheck"; // WP-X2 ゲームBGMループ境界チェック
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {

@@ -289,6 +289,28 @@ describe("song overlay + neta_asset (#83)", () => {
     expect(core.updateSong("nope", { stage: "x" })).toBeNull();
   });
 
+  it("WP-X2 updateSong は loop を JSON 永続＝新規曲は null・部分更新で loop 保持・null で解除", () => {
+    const s = core.createNeta({ kind: "song", title: "ゲームBGM" });
+    expect(core.getSong(s.id)).toBeNull(); // 未指定＝overlay 無し
+    const up = core.updateSong(s.id, { stage: "ループ設計", loop: { startBar: 0, endBar: 16, tailBars: 1 } });
+    expect(up?.loop).toEqual({ startBar: 0, endBar: 16, tailBars: 1 });
+    // 読み直しで JSON が往復する（列に文字列で載っている）
+    expect(core.getSong(s.id)?.loop).toEqual({ startBar: 0, endBar: 16, tailBars: 1 });
+    // loop を渡さない部分更新では据え置き
+    const up2 = core.updateSong(s.id, { next_action: "境界チェック" });
+    expect(up2?.loop).toEqual({ startBar: 0, endBar: 16, tailBars: 1 });
+    expect(up2?.stage).toBe("ループ設計");
+    // 明示 null で解除
+    const up3 = core.updateSong(s.id, { loop: null });
+    expect(up3?.loop).toBeNull();
+  });
+
+  it("WP-X2 loop 未指定の既存曲は overlay に loop=null（後方互換）", () => {
+    const s = core.createNeta({ kind: "song" });
+    const up = core.updateSong(s.id, { stage: "x" }); // loop に触れない
+    expect(up?.loop).toBeNull();
+  });
+
   it("linkAsset/getNetaAssets/unlinkAsset carry role", () => {
     const n = core.createNeta({ kind: "melody" });
     const a = core.addAsset({ kind: "midi", path: "/x.mid", name: "x" });

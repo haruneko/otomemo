@@ -14,10 +14,18 @@ export interface Asset {
   created: string;
 }
 
+// WP-X2 ゲームBGMループ本体の範囲（小節・0起点）。endBar→startBar へ戻る。tailBars=頭へ重ねる余韻尺。
+export interface SongLoop {
+  startBar: number;
+  endBar: number;
+  tailBars?: number;
+}
+
 export interface SongOverlay {
   neta_id: string;
   stage: string | null;
   next_action: string | null;
+  loop: SongLoop | null; // WP-X2 未指定=null（既存曲は無影響）
   updated: string;
 }
 
@@ -90,17 +98,21 @@ export class AssetRepo {
   }
 
   // --- song（#83 曲の箱 overlay：neta[kind=song] と 1:1。段階／次の一手）---
-  updateSong(netaId: string, patch: { stage?: string | null; next_action?: string | null }): SongOverlay | null {
+  updateSong(
+    netaId: string,
+    patch: { stage?: string | null; next_action?: string | null; loop?: SongLoop | null },
+  ): SongOverlay | null {
     if (!this.netaExists(netaId)) return null;
     const cur = this.getSong(netaId);
     const stage = patch.stage !== undefined ? patch.stage : (cur?.stage ?? null);
     const next_action = patch.next_action !== undefined ? patch.next_action : (cur?.next_action ?? null);
+    const loop = patch.loop !== undefined ? patch.loop : (cur?.loop ?? null); // WP-X2 未指定=据え置き
     this.db
       .prepare(
-        `INSERT INTO song (neta_id, stage, next_action, updated) VALUES (@n,@s,@a,@u)
-         ON CONFLICT(neta_id) DO UPDATE SET stage=@s, next_action=@a, updated=@u`,
+        `INSERT INTO song (neta_id, stage, next_action, loop, updated) VALUES (@n,@s,@a,@l,@u)
+         ON CONFLICT(neta_id) DO UPDATE SET stage=@s, next_action=@a, loop=@l, updated=@u`,
       )
-      .run({ n: netaId, s: stage, a: next_action, u: now() });
+      .run({ n: netaId, s: stage, a: next_action, l: loop == null ? null : JSON.stringify(loop), u: now() });
     return this.getSong(netaId);
   }
 
@@ -113,6 +125,7 @@ export class AssetRepo {
           neta_id: row.neta_id as string,
           stage: (row.stage as string) ?? null,
           next_action: (row.next_action as string) ?? null,
+          loop: (parseJsonColumn(row.loop, "song.loop") as SongLoop | null) ?? null,
           updated: row.updated as string,
         }
       : null;
