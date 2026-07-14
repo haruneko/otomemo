@@ -1556,6 +1556,21 @@ article header {
 }
 .resume-row .resume-sub { font-size: 0.66rem; color: var(--muted); }
 .resume-row .resume-go { flex: 0 0 auto; color: var(--muted); font-size: 0.9rem; }
+
+/* 検索合流（S5・B-lite）＝一覧先頭の「＋『◯◯』を作る」行。破線＝作成の合図。 */
+.create-suggest {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: color-mix(in srgb, var(--k, var(--accent)) 10%, #1b1e23);
+  color: var(--fg);
+  border: 1px dashed var(--k, var(--accent));
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  margin-bottom: 8px;
+}
 .import-btn.accent {
   background: var(--accent);
   color: #fff;

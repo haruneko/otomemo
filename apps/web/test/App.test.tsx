@@ -143,6 +143,16 @@ describe("App", () => {
     expect(resume).not.toHaveTextContent("古いメロ");
   });
 
+  // S5：検索語が種別名に前方一致→「＋『◯◯』を作る」行が出て createBlank を呼ぶ（検索から作成へ地続き）。
+  it("suggests creating a kind from the search box (B-lite) — S5", async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("search"), "メロ");
+    const sug = await screen.findByLabelText("create-suggest");
+    expect(sug).toHaveTextContent("「メロディ」を作る");
+    await userEvent.click(sug);
+    expect(api.createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "melody" }));
+  });
+
   // S3：トップ種別タイルをtap→kindFilter が効いて listNeta が kind 付きで呼ばれる（絞り込み動線1タップ）。
   it("filters by tapping a top kind tile — S3", async () => {
     (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2, bass: 1 }));
