@@ -48,6 +48,13 @@ export function KindIcon({ kind }: { kind: string }) {
           <circle cx="20" cy="6" r="2" fill="currentColor" />
         </svg>
       );
+    case "counter": // 対旋律＝主線に絡む従属の第2声（2本の波が交差）
+      return (
+        <svg {...s}>
+          <path d="M3 8 C7 5 10 11 14 8 C17 5.5 19 7 21 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity="0.55" />
+          <path d="M3 16 C7 13 10 19 14 16 C17 13.5 19 15 21 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
     case "rhythm": // ステップグリッド（4マス）
       return (
         <svg {...s}>

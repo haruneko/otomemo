@@ -62,7 +62,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
   const bpb = beatsPerBar(meter); // 1小節の拍数（6/8=3・4/4=4）＝小節数/尺の換算に（評価修正B）
   const [program, setProgram] = useState<number>(
-    programOf(neta.content) ?? (neta.kind === "bass" ? 33 : neta.kind === "skeleton" ? 48 : 0), // #47 GM音色（bass=フィンガーベース・骨格=Strings＝オーナーFB 2026-07-11）
+    programOf(neta.content) ?? (neta.kind === "bass" ? 33 : neta.kind === "skeleton" || neta.kind === "counter" ? 48 : 0), // #47 GM音色（bass=フィンガーベース・骨格/対旋律=Strings）
   );
   const [rollMode, setRollMode] = useState<"draw" | "select" | "erase">("draw"); // ロールの描く/選ぶ/消す（同じ行に出す・Section と同流儀）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
@@ -96,12 +96,13 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [schedId, setSchedId] = useState<string | null>(null); // #80 継続調査スケジュール
   const isMelody = neta.kind === "melody";
   const isBass = neta.kind === "bass"; // #bass S1 絶対モード＝melodyと同型・低域ピアノロール
+  const isCounter = neta.kind === "counter"; // WP-X3a 対旋律＝melody相乗り（単音ライン・ピアノロール）
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
   const isChordPat = neta.kind === "chord_pattern"; // CP3 コード楽器パターン（進行に解決する相対型）
   const isRhythm = neta.kind === "rhythm";
   const isSkel = neta.kind === "skeleton"; // 骨格層の一級化（design #20）
   const isContainer = neta.kind === "section" || neta.kind === "song";
-  const isMusic = isMelody || isBass || isChord || isChordPat || isRhythm || isSkel;
+  const isMusic = isMelody || isBass || isCounter || isChord || isChordPat || isRhythm || isSkel;
   const isRelBass = isBass && bassMode === "relative"; // #bass S2 相対モード
   // 弱起ぶんの lead-in（指定 pickup と既存の負 start を包む）。ソロ再生はこの分だけ前へずらして鳴らす
   // ＝弱起→ダウンビートの順で聞こえる（PianoRoll も同じ pre で描画）。
@@ -116,8 +117,8 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
       ? resolveChordPattern(chordPat, [], key) // 単体プレビュー＝key の tonic コードに解決
       : isSkel
         ? skeletonPlaybackNotes({ bars: skelBars, tones, bass: skelBass, phrases }, { counterpoint: skelCounter, chords: skelChords, beatsPerBar: bpb, melProgram: program }) // 骨格＝2声(対位法/実音)
-        : isMelody || isBass
-          ? activeNotes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る
+        : isMelody || isBass || isCounter
+          ? activeNotes.map((n) => ({ ...n, start: n.start + pre })) // 弱起ぶん前へ＝負拍も0以降で鳴る（counter も単音ライン）
           : isChord
             ? chordsToNotes(chords)
             : rhythmToNotes(rhythm);
@@ -211,7 +212,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     if (isRelBass)
       return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
     // meter は単体パートでも保存＝roll のグリッドと MIDI 拍子ヘッダに効く（container 限定を解消・監査 MB-05）。
-    if (isMelody || isBass) return { content: { notes, program }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
+    if (isMelody || isBass || isCounter) return { content: { notes, program }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
     if (isSkel) {
       // 骨格＝ブレークポイント列（dur無し）。bass/phrases は空なら省く。preview_chords は導出ベースの源として保持。
       const content: SkeletonContent & { preview_chords?: ChordEntry[] } = { bars: skelBars, tones };
@@ -391,13 +392,13 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const showMeta = isMusic || isContainer; // テンポ
   const collapsibleMeta = isMusic || isContainer; // メタ折りたたみ対象（MetaPanel）
   // 小節/弱起は roll（メロ・ベース絶対）のみ＝折りたたみ設定(MetaPanel)へ移す対象（縦詰め）。
-  const showRollBars = isMelody || (isBass && bassMode === "absolute"); // メロ/絶対ベースの roll（パッド撤去でロール一本）
+  const showRollBars = isMelody || isCounter || (isBass && bassMode === "absolute"); // メロ/対旋律/絶対ベースの roll（パッド撤去でロール一本）
   // #10④ エディタ本体の active 色を kind 色に（chord_pattern は chord 色を流用）。
   const colorKind = neta.kind === "chord_pattern" ? "chord" : neta.kind;
 
   return {
     // フラグ
-    flags: { isMelody, isBass, isChord, isChordPat, isRhythm, isSkel, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, hasChords: chords.length > 0 },
+    flags: { isMelody, isBass, isCounter, isChord, isChordPat, isRhythm, isSkel, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, hasChords: chords.length > 0 },
     // 骨格（design #20 S2）
     tones, setTones, skelBass, setSkelBass, phrases, setPhrases, skelBars, setSkelBars, skelChords, skelCounter, setSkelCounter,
     // 値＋setter

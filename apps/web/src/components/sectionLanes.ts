@@ -14,6 +14,7 @@ const SECTION_LANES: readonly LaneDef[] = [
   { key: "chord", label: "コード進行", kinds: ["chord", "chord_progression"] },
   { key: "skeleton", label: "骨格", kinds: ["skeleton"] }, // design #20：コードとメロの間（合成無音・MiniRoll白玉）
   { key: "melody", label: "メロ", kinds: ["melody"] },
+  { key: "counter", label: "対旋律", kinds: ["counter"] }, // WP-X3a：主メロの間まに入る第2声（melody相乗り・独立フェーダー）
   { key: "chord_pattern", label: "コード楽器1", kinds: ["chord_pattern"], row: 0 },
   { key: "chord_pattern2", label: "コード楽器2", kinds: ["chord_pattern"], row: 1 },
   { key: "bass", label: "ベース", kinds: ["bass"] },
@@ -33,6 +34,7 @@ export const LANE_COLOR: Record<string, string> = {
   chord: "var(--k-chord)",
   skeleton: "var(--k-skeleton)",
   melody: "var(--k-melody)",
+  counter: "var(--k-counter)",
   chord_pattern: "var(--k-chord)",
   chord_pattern2: "var(--k-chord)",
   bass: "var(--k-bass)",
@@ -44,6 +46,7 @@ export const LANE_MIDI_NAME: Record<string, string> = {
   chord: "Chord",
   skeleton: "Skeleton", // 合成無音＝書き出しトラックには乗らない（notes空で filter される）
   melody: "Melody",
+  counter: "Counter",
   chord_pattern: "Keys 1",
   chord_pattern2: "Keys 2",
   bass: "Bass",

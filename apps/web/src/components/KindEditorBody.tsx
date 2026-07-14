@@ -17,7 +17,7 @@ import type { Note, ChordEntry, RhythmContent, BassStep, ChordPatternContent, Sk
 
 export interface KindEditorBodyProps {
   neta: Neta;
-  flags: { isMelody: boolean; isBass: boolean; isChord: boolean; isChordPat: boolean; isRhythm: boolean; isSkel: boolean; isContainer: boolean; isRelBass: boolean };
+  flags: { isMelody: boolean; isBass: boolean; isCounter: boolean; isChord: boolean; isChordPat: boolean; isRhythm: boolean; isSkel: boolean; isContainer: boolean; isRelBass: boolean };
   // 状態と setter（親所有）
   notes: Note[];
   setNotes: (n: Note[]) => void;
@@ -77,7 +77,7 @@ export interface KindEditorBodyProps {
 }
 
 export function KindEditorBody(p: KindEditorBodyProps) {
-  const { isMelody, isBass, isChord, isRhythm, isContainer, isRelBass } = p.flags;
+  const { isMelody, isBass, isCounter, isChord, isRhythm, isContainer, isRelBass } = p.flags;
   const tp = p.tp;
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement>(null);
@@ -105,7 +105,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
   }
   return (
     <div className="editor-body">
-      {isMelody || isBass ? (
+      {isMelody || isBass || isCounter ? (
         <div className="melody-input">
           {/* #bass S2: bass は 絶対(ピアノロール)/相対(度数グリッド) をモード切替 */}
           {isBass && (

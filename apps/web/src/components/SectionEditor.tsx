@@ -159,7 +159,7 @@ export function SectionEditor({
     laneChildren(lane).some((c) => c.node.neta.id !== childId && spanOverlaps(pos, dur, c.position, childDur(c)));
   // この曲(section)が属する器＝母集団の既定ソース（A）。無ければ「自作すべて」。
   const sectionProjects = (neta.tags ?? []).filter(isProjectTag).map(projectName);
-  const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : 0);
+  const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : kind === "counter" ? 48 : 0);
 
   async function remove(childId: string, position?: number) {
     await api.removeChild(neta.id, childId, position);
@@ -595,6 +595,8 @@ export function SectionEditor({
                       <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-${c.node.neta.id}`} title="この骨格からメロを作る" onClick={(e) => { e.stopPropagation(); gen.blowSkeleton(c); }}>メロを作る▶</span>
                       {/* ベース表面化（design #20 S3c）：明示ベース点/休符がある骨格から実体ベースを吹く（無ければroot導出=従来ベース生成と同じ）。 */}
                       <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-bass-${c.node.neta.id}`} title="この骨格からベースを作る（明示ベース区間を反映）" onClick={(e) => { e.stopPropagation(); gen.blowSkeletonBass(c); }}>ベ▶</span>
+                      {/* 対旋律（WP-X3a）：メロレーンの主メロを相手に対旋律を作る（主メロの間まに絡む第2声・realized_from流儀）。 */}
+                      <span role="button" tabIndex={0} className="skel-blow" aria-label={`blow-counter-${c.node.neta.id}`} title="主メロを相手に対旋律を作る（間まに絡む第2声）" onClick={(e) => { e.stopPropagation(); void gen.blowSkeletonCounter(c); }}>対旋律を作る▶</span>
                       {sectionChords().length === 0 && (
                         <span role="button" tabIndex={0} className="skel-estimate" aria-label={`estimate-${c.node.neta.id}`} title="骨格からコードを推定（harmonize）" onClick={(e) => { e.stopPropagation(); void gen.estimateChords(c); }}>コードを推定</span>
                       )}

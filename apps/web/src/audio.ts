@@ -57,10 +57,11 @@ let currentKit: Kit | null = null;
 // 集約する。リミッターが天井を作り**何音重なっても割れない**。生Web Audioで組む＝Tone/smplr 双方が
 // ネイティブノードとして繋げる（Toneは.connect(node)、smplrは destination オプション）。
 export type { MixPart }; // music.ts の型を UI へ再輸出（MixerControl 等）
-const MIX_PARTS: MixPart[] = ["melody", "chord", "bass", "drums"];
-const VOL_KEY = "cm.mix"; // localStorage: { master:number, melody, chord, bass, drums }
+const MIX_PARTS: MixPart[] = ["melody", "counter", "chord", "bass", "drums"];
+const VOL_KEY = "cm.mix"; // localStorage: { master:number, melody, counter, chord, bass, drums }
 type MixState = { master: number } & Record<MixPart, number>;
-const DEFAULT_MIX: MixState = { master: 0.8, melody: 1, chord: 0.8, bass: 0.9, drums: 0.8 };
+// counter(対旋律)＝主メロを食わない＝既定はやや控えめ 0.75（WP-X3a・独立フェーダー）。
+const DEFAULT_MIX: MixState = { master: 0.8, melody: 1, counter: 0.75, chord: 0.8, bass: 0.9, drums: 0.8 };
 
 function loadMix(): MixState {
   try {
@@ -71,6 +72,7 @@ function loadMix(): MixState {
       return {
         master: clamp(p.master, DEFAULT_MIX.master),
         melody: clamp(p.melody, DEFAULT_MIX.melody),
+        counter: clamp(p.counter, DEFAULT_MIX.counter),
         chord: clamp(p.chord, DEFAULT_MIX.chord),
         bass: clamp(p.bass, DEFAULT_MIX.bass),
         drums: clamp(p.drums, DEFAULT_MIX.drums),
@@ -159,7 +161,7 @@ export function ensureLensGain(Tone: any, part: MixPart, lens: string): AudioNod
   ensureMaster(Tone, part); // partGains + masterCtx を保証（同 ctx なら再構築しない）
   const ctx = masterCtx!;
   if (!partLensGain) {
-    partLensGain = { melody: {}, chord: {}, bass: {}, drums: {} };
+    partLensGain = { melody: {}, counter: {}, chord: {}, bass: {}, drums: {} };
   }
   const byLens = partLensGain[part];
   let g = byLens[lens];

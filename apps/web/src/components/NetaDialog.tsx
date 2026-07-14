@@ -70,7 +70,7 @@ export function NetaDialog({
       />
       <KindEditorBody
         neta={neta}
-        flags={{ isMelody: f.isMelody, isBass: f.isBass, isChord: f.isChord, isChordPat: f.isChordPat, isRhythm: f.isRhythm, isSkel: f.isSkel, isContainer: f.isContainer, isRelBass: f.isRelBass }}
+        flags={{ isMelody: f.isMelody, isBass: f.isBass, isCounter: f.isCounter, isChord: f.isChord, isChordPat: f.isChordPat, isRhythm: f.isRhythm, isSkel: f.isSkel, isContainer: f.isContainer, isRelBass: f.isRelBass }}
         tones={ed.tones} setTones={ed.setTones}
         skelBass={ed.skelBass} setSkelBass={ed.setSkelBass}
         phrases={ed.phrases} setPhrases={ed.setPhrases}

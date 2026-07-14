@@ -301,6 +301,14 @@
   - resolve：各 hit の時刻のコードを取り、voicing で実音へ（strum=同時／arp=巡回）。
 - **段階(CP)＝✅実装済(2026-06-23)**：CP1 進行を抽象化(音色固定GM49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(music.ts) → CP3 エディタ(ChordPatternEditor＝hitsグリッド＋長さツール＋voicing＋voicing MiniRoll) → CP4 `genChordPattern`＋/gen/section 配線 → CP5 compositeNotes で section 進行に解決(パート毎 program・複数可)。api/web 緑。
 
+### WP-X3 新レーン3種（対旋律 counter／リフ riff／セクション楽器 section_inst）
+正準相談メモ＝`docs/research/2026-07-14-wpx3-newlane-design-options.md`（§2「新kind追加の芋づる12-13箇所」チェックリスト・§8オーナー裁定＝1ネタ多声1レーン/伴奏先行/counter一級/案A反復）。生成の中身＝counter=`2026-07-14-countermelody-obbligato.md`／riff=`2026-07-14-riff-ostinato-design.md`／section_inst=`2026-07-14-horn-string-arranging.md`。
+**レーン導出の注記（#14 補強）**：レーンは lane 列を持たず**子の kind から導出**（#14）。counter/riff/section_inst も一級 kind として `SECTION_LANES` に各1レーンを追加（chord_pattern の ord 2レーンハックは使わない＝1kind1レーン）。芋づるは §2 の12〜13箇所（kinds/theme/KindIcon/sectionLanes+LANE_COLOR+LANE_MIDI_NAME/MiniRoll/notesForContent/part分岐/useNetaEditor/KindEditorBody＋作成タイル/絞込）を全て手当てする（1つでも抜くと下流が黙って欠ける＝ede57f4の轍）。
+
+- **`counter`（対旋律・WP-X3a・実装済）**＝主メロの「間ま」に入る従属の第2声（オブリガート）。**単音ライン＝melody 相乗り**（PianoRoll・notes 同型・`melodyPlacementShift` で旋法保持移調）。**MixPart `counter` を新設＝独立フェーダー**（既定0.75＝主メロを食わない）。既定音色 GM48(Strings)。
+  - 生成 `genCounter(frame, melody, chords, seed, {density?})`＝**主メロ必須**（主メロのイベント列 rest/sustain/busy に依存＝外声ベース生成と決定的に違う）。ガードレール（機械は候補まで）：P0 主メロと同時発音の2度(半音/全音)禁止／P1 音域分離＝主メロの下3〜10度／P1 相補リズム＝主メロ busy 拍(1拍2onset以上)では鳴らさず rest/sustain 拍で動く／拍頭はコードトーン軸／反行優先／density で出し入れ(role 既定 or 明示)。決定的(seed)。
+  - 配線：`/music/gen_counter`(http)＋`gen_counter`(mcp full)＋チャットは `fit target:"counter"`(既存 allowlist)。骨格の机④出口に「対旋律を作る▶」＝メロレーンの主メロを相手に生成→counterレーンへ置き `realized_from`(骨格) を張る（既存「メロを作る▶/ベ▶」の隣・同流儀）。
+
 #### 決定：ドッグフード評価(16小節6/8を組む)の指摘を修正（2026-07-04・サブエージェント辛口評価→A/B/C）
 サブエージェントがPlaywrightで16小節6/8を実際に組み「部品は良いが組み上げ(尺・拍子)が未通」＝★3/5。以下を修正。
 - **A. セクション尺を可変に(8→最大32)＋ネスト合成**：`SectionEditor` の `BARS=8` 固定が最大の壁（16小節が組めない）。小節ステッパー(`neta.bars`永続)＋配置済みcontentで自動伸長(切れない)。`childDur` が子section/songでBPB固定→**再帰で実長**に（ネスト配置が重ならない＝compositeNotesの位置オフセットは元々正しく、childDurの誤りが原因だった）。尺>10で横スクロール。

@@ -14,6 +14,7 @@ import {
   genFromEssence,
   genChordPattern,
   genBass,
+  genCounter,
   genDrums,
   genNamedProgression,
   analyzeFit,
@@ -255,6 +256,12 @@ export function buildHttp(core: Core): FastifyInstance {
             phrasing: (["symmetric", "asymmetric", "period", "sentence"] as const).includes(b.phrasing as never) ? (b.phrasing as "symmetric" | "asymmetric" | "period" | "sentence") : undefined,
             form: (["period", "aaba"] as const).includes(b.form as never) ? (b.form as "period" | "aaba") : undefined,
           });
+        case "gen_counter": { // WP-X3a 対旋律＝主メロ(melody)必須・音域分離/相補リズム/コードトーン軸/反行（研究doc 2026-07-14-countermelody）
+          const mel = asNotes(b.melody ?? b.notes);
+          if (!mel.length) return reply.code(400).send({ error: "gen_counter は主メロ(melody)が必須です" });
+          const num = (x: unknown) => (typeof x === "number" ? x : undefined);
+          return genCounter(b.frame, mel, asChords(b.chords), b.seed, { density: num(b.density) });
+        }
         case "gen_drums": return genDrums(b.frame, b.seed);
         case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);

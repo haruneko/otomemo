@@ -6,8 +6,8 @@ import { Icon } from "./Icon";
 // 再生バーの音量コントロール（音割れ対策・耳FB 2026-07-09）。🔉ボタンで小さなミキサーを開閉。
 // 全体音量＋パート別フェーダー(メロ/コード/ベース/ドラム)。値は audio.ts が localStorage に保存し
 // マスターバス(ゲイン→リミッター→出口)へ即時反映。0〜1.4(=+約+3dB)まで＝天井はリミッターが持つ。
-const PART_LABEL: Record<MixPart, string> = { melody: "メロ", chord: "コード", bass: "ベース", drums: "ドラム" };
-const PARTS: MixPart[] = ["melody", "chord", "bass", "drums"];
+const PART_LABEL: Record<MixPart, string> = { melody: "メロ", counter: "対旋律", chord: "コード", bass: "ベース", drums: "ドラム" };
+const PARTS: MixPart[] = ["melody", "counter", "chord", "bass", "drums"];
 
 export function MixerControl() {
   const [open, setOpen] = useState(false);

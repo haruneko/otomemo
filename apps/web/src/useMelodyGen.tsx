@@ -284,6 +284,27 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   function blowSkeletonBass(child: Child) {
     void genPart(GEN_PARTS[1], { skeletonNetaId: child.node.neta.id });
   }
+  // 骨格ブロック[対旋律を作る▶]（WP-X3a）：メロレーンの主メロを相手に gen_counter→counter候補トレイ→
+  // ＋置くで counterレーンへ新 counter＋realized_from(骨格)。**主メロ必須**（間まに絡む第2声＝相手が要る）。
+  async function blowSkeletonCounter(child: Child) {
+    if (genBusy) return;
+    const mel = melodyLaneNotes();
+    if (!mel.length) { setFitReport("対旋律には主メロが要る（先にメロを作る/置く）"); return; }
+    lastPartRef.current = null;
+    setGenBusy(true);
+    try {
+      const r = await api.music<{ items: { kind: string; content: unknown; meta?: CandMeta }[] }>("gen_counter", {
+        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secModeOf() },
+        melody: mel,
+        chords: ctx.sectionChords(),
+        seed: Math.floor(Math.random() * 1e6), // 押すたび別案
+      });
+      const item = r.items?.[0];
+      if (item) pushCand({ kind: item.kind, content: item.content, skeletonNetaId: child.node.neta.id, meta: item.meta });
+    } finally {
+      setGenBusy(false);
+    }
+  }
   // 骨格からコードを推定（design #20 S2・harmonize）：骨格の白玉→harmonize→chord_progression 候補→＋置くでコードレーンへ。
   async function estimateChords(child: Child) {
     if (genBusy) return;
@@ -382,7 +403,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     }
     await api.placeChild(neta.id, created.id, position, lane?.row ?? 0);
     // 骨格から吹いたメロ/ベース＝realized_from(表面→骨格) を張る（design #20 S2/S3c）。候補が自分の骨格idを持つ。
-    if (c.skeletonNetaId && (c.kind === "melody" || c.kind === "bass")) await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
+    if (c.skeletonNetaId && (c.kind === "melody" || c.kind === "bass" || c.kind === "counter")) await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
     removeCand(c.cid); // 置いた候補はトレイから外す（他候補・keepは残す）
     await ctx.reload();
     ctx.onChanged?.();
@@ -420,7 +441,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,
     // ハンドラ
-    genPart, genSkeleton, blowSkeleton, blowSkeletonBass, estimateChords,
+    genPart, genSkeleton, blowSkeleton, blowSkeletonBass, blowSkeletonCounter, estimateChords,
     melodyLaneNotes, makeHarmony, fitToChords, analyzeFit, fitReport, setFitReport,
     auditionCandidate, placeCandidate, closeCandidate, toggleKeep, removeCand,
     lastPartRef,

@@ -506,6 +506,7 @@ export function App() {
               const PARTS = [
                 ["melody", "メロ", "新しいメロ", "var(--k-melody)"],
                 ["skeleton", "骨格", "新しい骨格", "var(--k-skeleton, #7fb8d4)"],
+                ["counter", "対旋律", "新しい対旋律", "var(--k-counter)"],
                 ["chord_progression", "コード", "新しいコード進行", "var(--k-chord)"],
                 ["bass", "ベース", "新しいベース", "var(--k-bass)"],
                 ["rhythm", "リズム", "新しいリズム", "var(--k-rhythm)"],
@@ -625,6 +626,7 @@ export function App() {
                 // 骨格は #20 で一級ネタ＝作成/カードにあるので絞り込みにも出す（旧: 骨格だけ欠落＝ede57f4の下流取りこぼし）。
                 ["melody", "var(--k-melody)"],
                 ["skeleton", "var(--k-skeleton)"],
+                ["counter", "var(--k-counter)"],
                 ["chord_progression", "var(--k-chord)"],
                 ["bass", "var(--k-bass)"],
                 ["rhythm", "var(--k-rhythm)"],

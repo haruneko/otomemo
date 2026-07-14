@@ -328,7 +328,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skeleton?: SkeletonContent; rhythmParts?: RhythmPartsOpt }, // motifModel/skelModel=コーパス学習（V2経路が消費＝③genMotifMelodyはJ4/#16で撤去済み）。rhythmParts=リズムパーツ層L1/L2（design #20 S4-1/S4-2・rotate=小節ローテ／placement=小節明示（placement>rotate>L0）／custom=インラインパーツ・未指定=bit一致）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
+  opts?: { motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; skeleton?: SkeletonContent; rhythmParts?: RhythmPartsOpt }, // motifModel/skelModel=コーパス学習（V2経路が消費＝③genMotifMelodyはJ4/#16で撤去済み）。rhythmParts=リズムパーツ層L1/L2（design #20 S4-1/S4-2・rotate=小節ローテ／placement=小節明示（placement>rotate>L0）／custom=インラインパーツ・未指定=bit一致）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -490,7 +490,7 @@ export function genMelody(
     // 骨格休符の表面抑制（design #20 S3b）：pitch:null 区間の restマスクを渡し、V2 が最終出力で当該区間の表面音を落とす。
     // 休符なし骨格 or 骨格未指定＝空/undefined＝V2側で丸ごとスキップ＝bit一致。
     const restMaskV2 = opts?.skeleton ? skeletonRestMask(opts.skeleton, { beatsPerBar: barLen }) : undefined;
-    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, beatsPerBar: barLen, skelModel: so.skelModel ?? loadSkeletonModel(minor), skel: injectedSkel, restMask: restMaskV2 && restMaskV2.length ? restMaskV2 : undefined, motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse, hook: so.hook, articulation: so.articulation, inflect: so.inflect, motifMode: so.motifMode, finest: so.finest ?? ((f.tempo ?? 0) >= 150 ? "eighth" : undefined), flow: so.flow, pickup: so.pickup, arc: so.arc, rhythmParts: so.rhythmParts }); // finest＝最小音符。未指定はテンポ連動(≥150で8分上限＝高BPMの16分潰れを自動回避・オーナーFB)。明示が勝つ
+    const mNotes = genMotifMelodyV2(chordPcsPerBar, rootsPerBar, qualsPerBar, sp, m16, { seed: seed ?? 1, tonicPc, minor, beatsPerBar: barLen, skelModel: so.skelModel ?? loadSkeletonModel(minor), skel: injectedSkel, restMask: restMaskV2 && restMaskV2.length ? restMaskV2 : undefined, motifBars: so.motifBars, compound, repetition: so.repetition, rangeSteps: so.rangeSteps, chordPcsAt, density: so.density, swing: so.swing, expression: exprDefault, phrases, runs: so.runs, push: so.push, foreground: so.foreground, breathe: so.breathe, humanize: so.humanize, form: so.form, seedMotif, skelStart, bassPitchAt, counter: so.counter, drums: drumsV2, drumLock: so.drumLock, backbeat: so.backbeat, converse: so.converse, hook: so.hook, articulation: so.articulation, inflect: so.inflect, motifMode: so.motifMode, finest: so.finest ?? ((f.tempo ?? 0) >= 150 ? "eighth" : undefined), flow: so.flow, pickup: so.pickup, arc: so.arc, skelColor: so.skelColor, rhythmParts: so.rhythmParts }); // finest＝最小音符。未指定はテンポ連動(≥150で8分上限＝高BPMの16分潰れを自動回避・オーナーFB)。明示が勝つ
     if ((f.pickup ?? 0) > 0 && mNotes.length > 0) prependPickup(mNotes, f.pickup!, scaleArr);
     if (mNotes.length === 0) mNotes.push({ pitch: 72, start: 0, dur: 1 });
     const lbl = (mood ? mood + "メロ" : "メロディ").slice(0, 24);
@@ -570,7 +570,7 @@ export function genSkeletonCandidates(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; form?: "period" | "aaba" },
+  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; form?: "period" | "aaba"; skelColor?: number },
 ): GenResult {
   const f = normalizeFrame(frame);
   const minor = isMinorFrame(f);
@@ -584,11 +584,13 @@ export function genSkeletonCandidates(
   const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
   const tpBase = Math.max(60, Math.min(65, 60 + tonicPc)); // V2 と同じ tonic中心の音域窓＝注入時にレジスタが揃う
   const sp = scalePitchList(scale, tpBase - 5, tpBase + 12);
-  // 小節ごとのコード根（調相対でなく実 pc）。genSkeletonFromModel が調相対へ内部変換する。
+  // 小節ごとのコード根（調相対でなく実 pc）＋構成pc（skelColor 倚音判定＝強拍が和声内かを見る）。
   const rootsPerBar: number[] = [];
+  const chordPcsPerBar: number[][] = [];
   for (let bar = 0; bar < bars; bar++) {
     const ch = chordAt(bar * barLen, chords);
     rootsPerBar.push(ch ? normRoot(ch.root ?? 0) : tonicPc);
+    chordPcsPerBar.push(ch ? chordPcs(normRoot(ch.root ?? 0), ch.quality ?? "") : [...scale]);
   }
   // 句割り＝planSkeleton（未指定=対称）。骨格の phraseEnds（unit尾バー→カデンツ度数）と phrases（endBeat/cadence）両方に使う。
   const phrases = planSkeleton(bars, f.meter, { phrasing: opts?.phrasing });
@@ -596,7 +598,7 @@ export function genSkeletonCandidates(
   const phrasesOut = phrases.map((p) => ({ endBeat: p.startBeat + p.beats, cadence: p.isLast ? "full" : p.cadenceDegree === 5 ? "half" : "full" }));
   const model = loadSkeletonModel(minor);
   const build = (s: number): SkeletonContent => {
-    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters, start: 62, phraseEnds, skelForm: opts?.form });
+    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters, start: 62, phraseEnds, skelForm: opts?.form, skelColor: opts?.skelColor, chordPcsPerBar });
     return { bars, tones: skelArrayToBreakpoints(skel), phrases: phrasesOut };
   };
   const label = "骨格";
@@ -909,6 +911,92 @@ export function genBass(
 
   if (notes.length === 0) notes.push({ pitch: 36, start: 0, dur: 1 });
   return { items: [{ kind: "bass", content: { notes }, label: "ベース" }], edges: [] };
+}
+
+// WP-X3a 対旋律(counter/オブリガート)：主メロの「間ま」に入る従属の第2声を**候補**生成する
+// （docs/research/2026-07-14-countermelody-obbligato.md）。主メロのイベント列に依存＝外声(ベース)生成と決定的に違う所。
+// ガードレール（機械は候補まで・仕上げは人間）：
+//   P0 主メロと**同時発音の2度(半音/全音)を作らない**（音域が近く濁る）／
+//   P1 **音域分離**＝主メロの下3〜10度に置く／P1 **相補リズム**＝主メロ busy 拍(1拍に2onset以上)では鳴らさず、
+//   rest/sustain 拍で動く／拍頭はコードトーン軸／**反行優先**（主が上れば対旋律は下る）。
+//   density（role 既定 or 明示）で出し入れ（常時鳴らさない＝散らからせない）。決定的(seed)。
+export function genCounter(
+  frame?: Frame | null,
+  melody?: { pitch: number; start?: number; dur?: number }[],
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  seed?: number | null,
+  opts?: { density?: number },
+): GenResult {
+  const f = normalizeFrame(frame);
+  const rng = new Rng(seed ?? 7);
+  const minor = isMinorFrame(f);
+  const key = (((f.key ?? 0) % 12) + 12) % 12;
+  const scalePcsArr = [...scalePcs(key, minor ? "minor" : "major")];
+  const bpb = beatsPerBar(f.meter);
+  const bars = barsOf(f);
+  const total = Math.max(1, Math.round(bars * bpb));
+  const label = "対旋律";
+  const mel = (melody ?? [])
+    .filter((n) => Number.isFinite(n.pitch) && Number.isFinite(n.start ?? 0))
+    .map((n) => ({ pitch: n.pitch, start: n.start ?? 0, dur: Math.max(0.01, n.dur ?? 0.5) }))
+    .sort((a, b) => a.start - b.start);
+  if (!mel.length) return { items: [{ kind: "counter", content: { notes: [], program: 48 }, label }], edges: [] };
+
+  const melPitchAt = (t: number): number | null => pitchAt(mel, t); // その瞬間に鳴っている主メロ音高（voiceLeading と共用）
+  const onsetsInBeat = (b: number): number => mel.filter((n) => n.start >= b - 1e-9 && n.start < b + 1 - 1e-9).length;
+  const chordTonesAt = (t: number): number[] => { const c = chordAt(t, chords); return c ? chordPcs(normRoot(c.root ?? 0), c.quality ?? "") : scalePcsArr; };
+  const isSecond = (a: number, b: number): boolean => { const d = (((a - b) % 12) + 12) % 12; const m = Math.min(d, 12 - d); return m === 1 || m === 2; }; // 同時発音の2度
+
+  // density の出し入れ（§4）：明示 density ＞ role 既定（frame.section.role・#12-M）＞ 0.5。
+  const ROLE_DENSITY: Record<string, number> = { intro: 0.3, verse: 0.35, prechorus: 0.6, chorus: 0.75, bridge: 0.5, interlude: 0.4, outro: 0.4 };
+  const role = f.section?.role;
+  const density = Math.max(0, Math.min(1, opts?.density ?? (role ? ROLE_DENSITY[role] ?? 0.5 : 0.5)));
+
+  const raw: { pitch: number; start: number; dur: number }[] = [];
+  let prevCounter: number | null = null;
+  let prevMel: number | null = null;
+  for (let b = 0; b < total; b++) {
+    const melAtOnset = melPitchAt(b); // counter オンセット(拍頭)で鳴っている主メロ音高（2度/音域制約の相手）
+    const melMid = melPitchAt(b + 0.5);
+    const ref: number | null = melAtOnset ?? melMid ?? prevMel; // 音域窓の基準（拍頭に主メロがあればそれ）
+    const busy = onsetsInBeat(b) >= 2; // 主メロが細かい＝相補で counter は引っ込む（交通整理）
+    if (busy || ref == null) { prevMel = ref ?? prevMel; continue; }
+    if (rng.next() > density + 1e-9) { prevMel = ref; continue; } // density マスク（出し入れ・決定的）
+    const tones = chordTonesAt(b + 0.5);
+    // 主メロの下 3..10 半音の窓に置ける実音コードトーン候補（同時発音の2度は除外＝P0）。
+    const cands: number[] = [];
+    for (const pc of tones) {
+      for (let p = ref - 10; p <= ref - 3; p++) {
+        if ((((p % 12) + 12) % 12) !== pc) continue;
+        if (p < 0) continue;
+        if (melAtOnset != null && isSecond(p, melAtOnset)) continue;
+        cands.push(p);
+      }
+    }
+    if (!cands.length) { prevMel = ref; continue; }
+    // 反行優先（主が上れば対旋律は下る）＋滑らかさ（前音に近い）でスコア最小を選ぶ＝決定的。
+    const melTrend = prevMel != null ? Math.sign(ref - prevMel) : 0;
+    let best = cands[0]!, bestScore = Infinity;
+    for (const c of cands) {
+      const move = prevCounter != null ? Math.sign(c - prevCounter) : 0;
+      const contrary = melTrend !== 0 && move === -melTrend ? 0 : 1; // 反行=0(優先)
+      const smooth = prevCounter != null ? Math.abs(c - prevCounter) : Math.abs(c - (ref - 6));
+      const score = contrary * 100 + smooth;
+      if (score < bestScore) { bestScore = score; best = c; }
+    }
+    raw.push({ pitch: best, start: b, dur: 1 });
+    prevCounter = best;
+    prevMel = ref;
+  }
+  // 相補リズム：連続する同ピッチの counter 拍は1本の長音へ結合（伸ばしで支える＝主メロが動く区間の面）。
+  const notes: { pitch: number; start: number; dur: number }[] = [];
+  for (const n of raw) {
+    const last = notes[notes.length - 1];
+    if (last && last.pitch === n.pitch && Math.abs(last.start + last.dur - n.start) < 1e-6) last.dur += n.dur;
+    else notes.push({ ...n });
+  }
+  if (!notes.length) notes.push({ pitch: Math.max(0, (melPitchAt(0.5) ?? 60) - 5), start: 0, dur: 1 });
+  return { items: [{ kind: "counter", content: { notes, program: 48 }, label }], edges: [] };
 }
 
 const GM = { Kick: 36, Snare: 38, HiHat: 42, OpenHat: 46 };
