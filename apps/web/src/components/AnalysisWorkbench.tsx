@@ -55,7 +55,29 @@ function secToBeat(bt: number[], t: number): number {
   return lo + (t - bt[lo]!) / ((bt[hi]! - bt[lo]!) || 0.5);
 }
 
-const PXB = 48; // 1拍のpx（PianoRoll の 1拍=48px に合わせる＝密度整合）
+// スケール（px/拍）の下限ガード＝これ以上詰めると音符/チップが潰れて読めない（長い曲の全体フィット時に効く）。
+export const MIN_PXB = 6;
+const FALLBACK_PXB = 48; // 幅未測定(SSR/初回/テスト)のフォールバック＝旧固定値と一致（1拍=48px・PianoRoll 整合）。
+
+// 全体フィットの px/拍＝コンテナ可視幅を総拍数で割る。幅0/拍0はフォールバック、下限は MIN_PXB でガード。
+// 長い曲でストリップが3万px超になり初期に1コードしか見えない問題の是正（可変スケールの土台・純関数＝テスト対象）。
+export function fitScale(totalBeat: number, containerWidth: number, minPxb = MIN_PXB): number {
+  if (totalBeat <= 0 || containerWidth <= 0) return FALLBACK_PXB;
+  return Math.max(minPxb, containerWidth / totalBeat);
+}
+
+// クリックX(コンテナ相対)→再生開始拍。可変スケール pxb で割り [0,totalBeat] にクランプ（シーク座標＝pxb 追従）。
+export function seekBeatAt(clientX: number, rectLeft: number, pxb: number, totalBeat: number): number {
+  if (pxb <= 0) return 0;
+  return Math.max(0, Math.min(totalBeat, (clientX - rectLeft) / pxb));
+}
+
+// ズーム段（オーナー承認）：全体フィット基準の倍率。全体=1（画面幅に収める）、×2/×4 で拡大＝横スクロールで読む。
+export const AWB_ZOOMS: { id: string; label: string; mult: number }[] = [
+  { id: "fit", label: "全体", mult: 1 },
+  { id: "x2", label: "×2", mult: 2 },
+  { id: "x4", label: "×4", mult: 4 },
+];
 
 // BTC の細切れ（Am→Am7→Am の揺れ）を **連続同一ルートでマージ**し変な分割を解消。
 // 代表 quality＝マージ区間で累積が最長のラベル。N/X は落とす。
@@ -95,11 +117,26 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   const startRef = useRef(0);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  const rollRef = useRef<HTMLDivElement>(null); // 横スクロールの可視コンテナ＝全体フィットの基準幅
   const [seekBeat, setSeekBeat] = useState(0); // 再生開始位置（ロールをタップで指定）
   const [quantize, setQuantize] = useState(true); // コードを拍にそろえる（既定ON）
+  const [zoomId, setZoomId] = useState("fit"); // ズーム段（全体/×2/×4）＝初期は全体フィット
+  const [containerW, setContainerW] = useState(0); // 可視コンテナ幅（ResizeObserver で追従・未測定=0=フォールバック）
 
   // ★画面を閉じたら（unmount）再生を必ず止める（編集画面と同じ＝閉じたら鳴り止む）。
   useEffect(() => () => { handleRef.current?.stop(); if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
+  // 可視コンテナ幅を測る＝全体フィットの分母。ResizeObserver で回転/リサイズに追従（無い環境はガード）。
+  useEffect(() => {
+    const el = rollRef.current;
+    if (!el) return;
+    const update = () => setContainerW(el.clientWidth);
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const anchorBeat = useMemo(() => secToBeat(bt, anchorT), [bt, anchorT]);
   // アンカー基準のビート位置（小節頭=0,meter,2*meter…）
@@ -110,6 +147,14 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   const dur = c.meta?.duration_sec ?? (bt[bt.length - 1] ?? 30);
   const totalBeat = Math.max(4, Math.ceil(b(dur)));
   const totalBars = Math.ceil(totalBeat / meter);
+
+  // 可変スケール（px/拍）＝全体フィット×ズーム倍率。初期(fit,×1)は曲全体が可視幅に収まる（下限 MIN_PXB ガード）。
+  // 全ての座標計算（ストリップ幅/グリッド/コード/メロ/シーク/プレイヘッド）はこの pxb を参照＝スケールが一元追従。
+  const zoomMult = AWB_ZOOMS.find((z) => z.id === zoomId)?.mult ?? 1;
+  const pxb = fitScale(totalBeat, containerW) * zoomMult;
+  // プレイヘッドは rAF ループ（tick）が閉包で pxb を読む＝ズーム中も追従するよう ref に最新値を載せる。
+  const pxbRef = useRef(pxb);
+  pxbRef.current = pxb;
 
   // ★コードを拍グリッドにクオンタイズ（最小=四分音符=1拍）。実測の揺れ/BTC細切れを拍にそろえて綺麗に見せる。
   // 逐次で単調・非重なりに整える（前のコード終端より前には始まらない）。既定ON。生位置は quantize=off で。
@@ -172,7 +217,7 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   function stopPh() { if (rafRef.current) cancelAnimationFrame(rafRef.current); if (phRef.current) phRef.current.style.display = "none"; }
   function tick(from: number) {
     const beat = from + ((performance.now() - startRef.current) / 1000) * (bpm / 60);
-    if (phRef.current) { phRef.current.style.left = `${beat * PXB}px`; phRef.current.style.display = beat <= totalBeat ? "block" : "none"; }
+    if (phRef.current) { phRef.current.style.left = `${beat * pxbRef.current}px`; phRef.current.style.display = beat <= totalBeat ? "block" : "none"; }
     if (beat < totalBeat + 0.5) rafRef.current = requestAnimationFrame(() => tick(from));
   }
   async function togglePlay() {
@@ -185,7 +230,7 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   // ロールをタップ＝そこを再生開始位置(seek)に。再生中なら止めて位置だけ更新。
   function onSeek(e: ReactMouseEvent) {
     const rect = stripRef.current?.getBoundingClientRect(); if (!rect) return;
-    const beat = Math.max(0, Math.min(totalBeat, (e.clientX - rect.left) / PXB));
+    const beat = seekBeatAt(e.clientX, rect.left, pxb, totalBeat);
     setSeekBeat(beat);
     if (playing) { handleRef.current?.stop(); stopPh(); setPlaying(false); }
   }
@@ -246,23 +291,28 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
           <button className="tp-btn awb-nudge" aria-label="anchor-next" onClick={() => nudgeAnchor(1)}>拍▶</button>
         </span>
         <button className={"bs-btn" + (quantize ? " on" : "")} aria-label="toggle-quantize" title="コードを拍にそろえる（最小=四分音符）" onClick={() => setQuantize((v) => !v)}>拍そろえ</button>
+        <span className="awb-zoom" role="group" aria-label="zoom">
+          {AWB_ZOOMS.map((z) => (
+            <button key={z.id} type="button" className={"bs-btn" + (zoomId === z.id ? " on" : "")} aria-label={`zoom-${z.id}`} aria-pressed={zoomId === z.id} onClick={() => setZoomId(z.id)}>{z.label}</button>
+          ))}
+        </span>
         <button className="bs-btn" aria-label="toggle-prose" onClick={() => setShowProse((v) => !v)}>所見{showProse ? "▲" : "▼"}</button>
       </div>
       {showProse && <div className="awb-prose chat-md">{c.prose || "（所見なし）"}</div>}
 
       {/* ロール：横スクロール。上=コード、下=メロピアノロール、縦線=小節/拍 */}
-      <div className="awb-roll">
-        <div ref={stripRef} className="awb-strip" onClick={onSeek} style={{ width: `${totalBeat * PXB}px`, height: `${44 + rows * ROWH + 10}px` }}>
+      <div ref={rollRef} className="awb-roll">
+        <div ref={stripRef} className="awb-strip" onClick={onSeek} style={{ width: `${totalBeat * pxb}px`, height: `${44 + rows * ROWH + 10}px` }}>
           {/* 小節線・拍線 */}
           {Array.from({ length: totalBeat + 1 }, (_v, i) => (
-            <div key={"g" + i} className={"awb-grid" + (i % meter === 0 ? " bar" : "")} style={{ left: `${i * PXB}px` }}>
+            <div key={"g" + i} className={"awb-grid" + (i % meter === 0 ? " bar" : "")} style={{ left: `${i * pxb}px` }}>
               {i % meter === 0 && <span className="awb-barno">{i / meter + 1}</span>}
             </div>
           ))}
           {/* #S12改3 区間境界（crash由来）：破線の縦線＋ラベル。名付け(Aメロ/サビ)は人間・機械は境界だけ。 */}
           {(c.overlay?.sections ?? []).map((s, i) => {
-            if (b(s.to_t) * PXB <= 0) return null; // 完全にアンカー手前＝描かない
-            const left = Math.max(0, b(s.from_t) * PXB);
+            if (b(s.to_t) * pxb <= 0) return null; // 完全にアンカー手前＝描かない
+            const left = Math.max(0, b(s.from_t) * pxb);
             return (
               <div key={"sec" + i} className="awb-section" style={{ left: `${left}px` }}>
                 <span className="awb-section-label" title={s.label}>{s.label}</span>
@@ -272,7 +322,7 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
           {/* コードレーン（拍そろえ済み chordBeats・左端 straddle は可視幅だけ＝重なり回避） */}
           <div className="awb-chords">
             {chordBeats.map((cb, i) => {
-              const xs = cb.sb * PXB, xe = cb.eb * PXB;
+              const xs = cb.sb * pxb, xe = cb.eb * pxb;
               if (xe <= 0) return null; // 完全にアンカー手前＝描かない
               const left = Math.max(0, xs); const w = Math.max(14, xe - left);
               return <div key={"c" + i} className="awb-chip" style={{ left: `${left}px`, width: `${w}px` }}>{ROOTS[cb.root]}{cb.disp}</div>;
@@ -281,13 +331,13 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
           {/* メロ・ピアノロール（外れ値はクランプ／straddle は可視幅） */}
           <div className="awb-mel" style={{ height: `${rows * ROWH}px` }}>
             {mel.map(([s, e, midi], i) => {
-              const xs = b(s) * PXB, xe = b(e) * PXB;
+              const xs = b(s) * pxb, xe = b(e) * pxb;
               if (xe <= 0) return null;
               const left = Math.max(0, xs); const w = Math.max(3, xe - left);
               return <div key={"m" + i} className="awb-note" style={{ left: `${left}px`, width: `${w}px`, top: `${(hiMidi - clampMidi(midi)) * ROWH}px`, height: `${ROWH - 1}px` }} />;
             })}
           </div>
-          <div className="awb-seek" style={{ left: `${seekBeat * PXB}px` }} title="再生開始位置" />
+          <div className="awb-seek" style={{ left: `${seekBeat * pxb}px` }} title="再生開始位置" />
           <div ref={phRef} className="awb-playhead" style={{ display: "none" }} />
         </div>
       </div>

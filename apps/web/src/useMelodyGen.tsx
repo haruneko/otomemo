@@ -453,6 +453,18 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   async function placeCandidate(c: Cand, position = 0) {
     candPlay.current?.stop();
     const lane = ctx.laneOf(c.kind);
+    // 巻き込み削除の確認（オーナー仕様 2026-07-15）：同レーンで尺が重なる既存配置を **無確認で消さない**。
+    // 重なりがあれば confirm で「上書き（既存を外す）/ 置かない」を選ばせる。判定は createNeta より前＝
+    // 「置かない」を選んだら何も作らない・何も外さない（副作用ゼロ）。position=0 固定呼びで別小節を巻き添えにする事故を防ぐ。
+    const dur = ctx.contentDur(c.kind, c.content);
+    const overlapping = lane
+      ? ctx.laneChildren(lane).filter((ch) => spanOverlaps(position, dur, ch.position, ctx.childDur(ch)))
+      : [];
+    if (overlapping.length) {
+      const names = overlapping.map((ch) => ch.node.neta.title || lane?.label || c.kind);
+      const ok = window.confirm(`重なる既存配置 ${overlapping.length}件（${names.join("、")}）を外して置きますか？`);
+      if (!ok) return; // 「置かない」＝何も変えない（createNeta もしない）
+    }
     const created = await api.createNeta({
       kind: c.kind,
       title: `${liveTitle || "曲"} ${lane?.label ?? c.kind}`,
@@ -464,13 +476,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       meter: liveMeter,
       tags: neta.tags,
     });
-    // 再生成メロ＝置換：同レーンで新メロ(位置 position)と尺が重なる既存子を先に外す＝二重化を防ぐ。
-    if (lane) {
-      const dur = ctx.contentDur(c.kind, c.content);
-      for (const ch of ctx.laneChildren(lane)) {
-        if (spanOverlaps(position, dur, ch.position, ctx.childDur(ch))) await api.removeChild(neta.id, ch.node.neta.id, ch.position);
-      }
-    }
+    // 再生成メロ＝置換：尺が重なる既存子（confirm 済み）を外す＝二重化を防ぐ。重なり無し＝空ループ＝従来通り即配置。
+    for (const ch of overlapping) await api.removeChild(neta.id, ch.node.neta.id, ch.position);
     await api.placeChild(neta.id, created.id, position, lane?.row ?? 0);
     // 骨格から吹いたメロ/ベース＝realized_from(表面→骨格) を張る（design #20 S2/S3c）。候補が自分の骨格idを持つ。
     if (c.skeletonNetaId && (c.kind === "melody" || c.kind === "bass" || c.kind === "counter")) await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
