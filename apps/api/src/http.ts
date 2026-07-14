@@ -41,6 +41,7 @@ import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonN
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
 import { meterInfo } from "./music/meter";
+import { resolveVoiceProfile } from "@cm/music-core"; // 声種プロファイル解決（WP-M4・レンズへ渡す）
 import { sanitizeRhythmParts, extractRhythmPart } from "./music/rhythmParts"; // リズムパーツ層 L1/L2＋採取（design #20 S4-1/S4-2）
 import { normRoot } from "./music/theory";
 import { assetsDir } from "./audio-asset";
@@ -192,7 +193,7 @@ export function buildHttp(core: Core): FastifyInstance {
     };
     try {
       switch (op) {
-        case "gen_chords": { const num = (x: unknown) => (typeof x === "number" ? x : undefined); return genChords(b.frame, b.seed, b.cadence === "half" || b.cadence === "deceptive" || b.cadence === "plagal" ? b.cadence : undefined, { borrow: num(b.borrow), secondaryDom: num(b.secondaryDom), loop: b.loop === true }); }
+        case "gen_chords": { const num = (x: unknown) => (typeof x === "number" ? x : undefined); const cad = ["half", "deceptive", "plagal", "aeolian"].includes(b.cadence) ? b.cadence : undefined; const pal = ["ionian", "mixolydian", "aeolian", "dorian"].includes(b.palette) ? b.palette : undefined; return genChords(b.frame, b.seed, cad, { borrow: num(b.borrow), secondaryDom: num(b.secondaryDom), loop: b.loop === true, palette: pal }); }
         case "gen_melody": {
           // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
@@ -222,7 +223,7 @@ export function buildHttp(core: Core): FastifyInstance {
           // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
           attachMelodyVoiceLeading(res, { bass: bassN.length ? bassN : undefined, skeleton, chords: asChords(b.chords), beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           // 候補レンズの添付（design #12-M・WP-M3・読み取り専用＝候補ノートは不変）。web 候補トレイの並べ替え軸。
-          attachMelodyLenses(res, { key: typeof b.frame?.key === "number" ? b.frame.key : undefined, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, sectionRole: (b.frame as { section?: { role?: string } } | undefined)?.section?.role });
+          attachMelodyLenses(res, { key: typeof b.frame?.key === "number" ? b.frame.key : undefined, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, sectionRole: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, profile: resolveVoiceProfile((b.frame as { voice_profile?: unknown } | undefined)?.voice_profile as string | undefined) });
           // capture 後に link(メロ, 骨格, "realized_from") を張れるよう id をエコー（design #20・MCP 経路と同じ）。
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string;
           return res;
@@ -256,7 +257,7 @@ export function buildHttp(core: Core): FastifyInstance {
         case "gen_skeleton": // 骨格候補（design #20 S2・構造線→ブレークポイント列）。phrasing=句割り・form=構造の使い回し。
           return genSkeletonCandidates(b.frame, asChords(b.chords), b.seed, {
             phrasing: (["symmetric", "asymmetric", "period", "sentence"] as const).includes(b.phrasing as never) ? (b.phrasing as "symmetric" | "asymmetric" | "period" | "sentence") : undefined,
-            form: (["period", "aaba"] as const).includes(b.form as never) ? (b.form as "period" | "aaba") : undefined,
+            form: (["period", "aaba", "cadence-swap", "sentence"] as const).includes(b.form as never) ? (b.form as "period" | "aaba" | "cadence-swap" | "sentence") : undefined,
           });
         case "gen_counter": { // WP-X3a 対旋律＝主メロ(melody)必須・音域分離/相補リズム/コードトーン軸/反行（研究doc 2026-07-14-countermelody）
           const mel = asNotes(b.melody ?? b.notes);

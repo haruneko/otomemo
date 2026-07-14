@@ -1,7 +1,7 @@
 // ルールベース生成（#86・design「アーキ是正 決定1」＝生成をTSに一本化）。
 // worker(Python)の music/generate.py を忠実移植。Claudeは関与しない（決定的記号エンジン）。
 // 乱数は seed 付き（Pythonのbyte等価は不可＝MT vs ここ。musicalルールが等価＝property testで担保）。
-import { chordPcs, normRoot, scalePcs } from "./theory";
+import { chordPcs, normRoot, scalePcs, type Palette } from "./theory";
 import { planSkeleton } from "./skeleton";
 import { meterInfo } from "./meter";
 import { classifyNCT, isChordTone } from "./degree";
@@ -20,7 +20,7 @@ import {
 import { genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
 import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, explicitBassSegments, foldBassPitch, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
-import { type Feel } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる（notes はストレート）
+import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
@@ -61,6 +61,16 @@ export interface SectionContext {
   energy?: number; // 0..1。未指定＝role の既定値をそのまま。明示時のみ density/registerShift を線形スケール（0.5=表の値）。
 }
 
+// voice_profile 指定時の音域窓中心（tpBase）。窓 [tpBase-5, tpBase+12] が [low, falsettoTop] に収まるよう、
+// tessitura 中央へ寄せてクランプ（未指定時＝従来 [58,70] クランプは呼び出し側で分岐）。registerShift は相対で加算。
+export function profileTpBase(vp: VoiceProfile, registerShift = 0): number {
+  const tessCenter = Math.round((vp.tessLow + vp.tessHigh) / 2);
+  const lo = vp.low + 5; // tpBase-5 >= low
+  const hi = vp.falsettoTop - 12; // tpBase+12 <= falsettoTop
+  const target = tessCenter + registerShift;
+  return Math.max(lo, Math.min(hi < lo ? lo : hi, target));
+}
+
 export interface Frame {
   key?: number;
   mode?: "major" | "minor"; // 一級の長短宣言（2026-07-08・design#12-M）。mood からの推定はフォールバック。
@@ -71,6 +81,8 @@ export interface Frame {
   pickup?: number; // 弱起（アウフタクト）：拍0の前に置く拍数（0=無し）。
   expression?: number; // 素直⇔表情ノブ（0..1）：強拍に倚音等の滑り込みを置く頻度。既定は mood で控えめ。
   section?: SectionContext; // セクション役割文脈（2026-07-10）。未指定＝従来 bit 一致。design #12-M「セクション役割の一級化」。
+  voice_profile?: VoiceProfileSpec; // 声種プロファイル（WP-M4・design #16）。プリセット名 or カスタム。未指定＝bit一致（生成音域窓・レンズ既定=女性平均）。
+  palette?: Palette; // 旋法パレット（WP-C1・2026-07-14）。ionian/mixolydian/aeolian/dorian。未指定＝mode から ionian(major)/aeolian(minor)＝bit一致。メロ/ベースが scalePcs 差替で追従。
 }
 export interface GenResult {
   items: { kind: string; content: unknown; label: string }[];
@@ -90,6 +102,10 @@ export function normalizeFrame(frame?: Frame | null): Frame {
   if (typeof f.expression === "number") out.expression = Math.max(0, Math.min(1, f.expression));
   const sec = normalizeSection(f.section);
   if (sec) out.section = sec;
+  // voice_profile（WP-M4）：解決できる spec のみ保持（不正/未知は落とす＝未指定＝bit一致）。生成側は resolveVoiceProfile で使う。
+  if (f.voice_profile != null && resolveVoiceProfile(f.voice_profile as VoiceProfileSpec)) out.voice_profile = f.voice_profile;
+  // palette（WP-C1）：既知の旋法のみ保持（未知は落とす＝未指定＝bit一致）。genChords/genMelody/genBass が scalePcs 経由で追従。
+  if (f.palette === "ionian" || f.palette === "mixolydian" || f.palette === "aeolian" || f.palette === "dorian") out.palette = f.palette;
   return out;
 }
 
@@ -190,11 +206,12 @@ const barsOf = (frame: Frame): number =>
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 /** 機能和声ルールでコード進行を生成（T始まり・T終わり）。返り #85 items 形。 */
-export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal", opts?: { borrow?: number; secondaryDom?: number; loop?: boolean }): GenResult {
+export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal" | "aeolian", opts?: { borrow?: number; secondaryDom?: number; loop?: boolean; palette?: Palette }): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
   const minor = isMinorFrame(f); // mode一級・moodフォールバック（2026-07-08）
+  const palette: Palette | undefined = opts?.palette ?? f.palette; // 旋法パレット（WP-C1）。opts 優先・未指定は frame から。
   const table = minor ? DIATONIC_MINOR : DIATONIC_MAJOR;
   const key = f.key ?? 0; // 実音で返す：度数表は C基準、最後に key で移調。
   const bars = barsOf(f);
@@ -237,6 +254,9 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
     if (cadence === "half") { degrees[last] = 5; if (pen >= 1) degrees[pen] = 4; }              // 半終止＝IV→V(開いて止める)
     else if (cadence === "deceptive") { degrees[last] = 6; if (pen >= 1) degrees[pen] = 5; }    // 偽終止＝V→vi(長調)/V→♭VI(短調)
     else if (cadence === "plagal") { degrees[last] = 1; if (pen >= 1) degrees[pen] = 4; }        // 変終止＝IV→I(アーメン)
+    // aeolian(WP-C1・2026-07-14)：エオリアン終止＝♭VI→♭VII→i（短調・実測第1位 ♭VI→♭VII 18本>V→i 5本）。
+    // 短調は既存表の度数 6(♭VI=[8,""])/7(♭VII=[10,""])/1(i) で表現。長調(♭VI→♭VII→I)は base 段で借用フラット上書き。
+    else if (cadence === "aeolian" && minor) { degrees[last] = 1; if (pen >= 1) degrees[pen] = 7; if (last - 2 >= 1) degrees[last - 2] = 6; }
   }
 
   // I3b: mood がコードの「色」に効く＝おしゃれ/ジャズ/夜系は7thパレット（旧: moodは長短切替のみで進行が不変）。
@@ -251,6 +271,27 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
   // secondaryDom(2026-07-09 監査C)：非トニック和音の直前を V/x（完全5度上の dom7）へ差替＝二次ドミナント(接着・丸サIII7=V/vi)。
   const secondaryDom = Math.max(0, Math.min(1, opts?.secondaryDom ?? 0));
   if (secondaryDom > 0) for (let i = 1; i < base.length - 1; i++) { const nx = base[i + 1]!; if (((nx.root % 12) + 12) % 12 !== 0 && rng.next() < secondaryDom) base[i] = { root: ((nx.root + 7) % 12 + 12) % 12, quality: "7" }; }
+  // palette(WP-C1・2026-07-14)：旋法の特徴和音を base(C基準)へ注入。ionian(major)/aeolian(minor)/undefined=無変化(bit一致)。
+  const last = base.length - 1;
+  if (!loop && bars >= 2 && palette === "mixolydian") {
+    // Mixolydian＝♭VII を「次=I」規則で挿入（自前 ♭VII→I 20/24・DT post-tonic .159）。I 直前スロットを ♭VII 化（無ければ penult→♭VII/last→I）。
+    const bVII = { root: 10, quality: colorful ? "7" : "" };
+    let placed = false;
+    for (let i = 1; i < last; i++) if (degrees[i + 1] === 1) { base[i] = bVII; placed = true; break; }
+    if (!placed && last - 1 >= 1) { base[last - 1] = bVII; base[last] = { root: 0, quality: colorful ? "maj7" : "" }; }
+  } else if (!loop && bars >= 2 && palette === "dorian" && minor) {
+    // Dorian＝IV(長) は mid のみ（終止に置かない・自前 IV長 last 2/26）。中間の IV(度数4)を長3度化（無ければ中央スロットへ）。
+    const IVmaj = { root: 5, quality: colorful ? "7" : "" };
+    let placed = false;
+    for (let i = 1; i < last; i++) if (degrees[i] === 4) { base[i] = IVmaj; placed = true; }
+    if (!placed && base.length >= 3) base[Math.floor(base.length / 2)] = IVmaj;
+  }
+  // 長調エオリアン終止＝末尾3和音を ♭VI(8)→♭VII(10)→I(0) へ（借用フラット・degrees では表せず base 直書き）。
+  if (!loop && cadence === "aeolian" && !minor && bars >= 2) {
+    base[last] = { root: 0, quality: colorful ? "maj7" : "" };
+    if (last - 1 >= 1) base[last - 1] = { root: 10, quality: colorful ? "7" : "" };
+    if (last - 2 >= 1) base[last - 2] = { root: 8, quality: colorful ? "maj7" : "" };
+  }
   const chords = base.map((c, i) => ({ root: (c.root + key) % 12, quality: c.quality, start: round3(i * bpb), dur: round3(bpb) }));
   const label = (mood ? mood + "コード進行" : minor ? "マイナーの進行" : "コード進行").slice(0, 24);
   return { items: [{ kind: "chord_progression", content: { chords }, label }], edges: [] };
@@ -334,7 +375,7 @@ export function genMelody(
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
   const minor = isMinorFrame(f); // mode一級・moodフォールバック（2026-07-08）
-  const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major"); // 経過音も曲の調に乗せる（実音）。
+  const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major", f.palette); // 経過音も曲の調に乗せる（実音）。
   const scaleArr = scaleArray(scale);
   const bars = barsOf(f);
   const info = meterInfo(f.meter); // 拍子→拍構造（6/8 一級）
@@ -399,7 +440,9 @@ export function genMelody(
     // registerShift(2026-07-10)：セクション役割（chorus=+4 等）で音域中心を半音シフト。**飽和必須**（Round3 の
     // B5金切り域の轍＝tpBase' を [58,70] にクランプ＝ceiling は tpBase'+12 ≤ 82）。shift=0＝tpBase 不変＝bit一致。
     const tpBase0 = Math.max(60, Math.min(65, 60 + ((((f.key ?? 0) % 12) + 12) % 12)));
-    const tpBase = Math.max(58, Math.min(70, tpBase0 + (so.registerShift ?? 0)));
+    // voice_profile 指定時のみ音域窓の中心を声種 tessitura へ追従（未指定＝従来 bit 一致）。registerShift はプロファイル上でも相対で効く。
+    const vp = resolveVoiceProfile(f.voice_profile);
+    const tpBase = vp ? profileTpBase(vp, so.registerShift ?? 0) : Math.max(58, Math.min(70, tpBase0 + (so.registerShift ?? 0)));
     const sp = scalePitchList(scale, tpBase - 5, tpBase + 12);
     const chordPcsPerBar: number[][] = [];
     const rootsPerBar: number[] = [];
@@ -570,11 +613,11 @@ export function genSkeletonCandidates(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; form?: "period" | "aaba"; skelColor?: number },
+  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; form?: "period" | "aaba" | "cadence-swap" | "sentence"; skelColor?: number },
 ): GenResult {
   const f = normalizeFrame(frame);
   const minor = isMinorFrame(f);
-  const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major");
+  const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major", f.palette);
   const bars = barsOf(f);
   const info = meterInfo(f.meter);
   const compound = info.grouping === "compound";
@@ -582,7 +625,9 @@ export function genSkeletonCandidates(
   const barLen = compound ? 3 : info.beatsPerBar;
   const strongQuarters = compound ? [0, 1.5] : barLen === 3 ? [0] : barLen === 6 ? [0, 3] : [0, 2];
   const tonicPc = (((f.key ?? 0) % 12) + 12) % 12;
-  const tpBase = Math.max(60, Math.min(65, 60 + tonicPc)); // V2 と同じ tonic中心の音域窓＝注入時にレジスタが揃う
+  // voice_profile 指定時のみ声種 tessitura へ追従（未指定＝従来 tonic中心 bit 一致）。
+  const vpSkel = resolveVoiceProfile(f.voice_profile);
+  const tpBase = vpSkel ? profileTpBase(vpSkel, 0) : Math.max(60, Math.min(65, 60 + tonicPc)); // V2 と同じ tonic中心の音域窓＝注入時にレジスタが揃う
   const sp = scalePitchList(scale, tpBase - 5, tpBase + 12);
   // 小節ごとのコード根（調相対でなく実 pc）＋構成pc（skelColor 倚音判定＝強拍が和声内かを見る）。
   const rootsPerBar: number[] = [];
@@ -653,7 +698,7 @@ export function genFromEssence(
   const strength = Math.max(0, Math.min(1, opts?.strength ?? 0));
   const rng = new Rng(seed ?? 1);
   const minor = isMinorFrame(f); // mode一級・moodフォールバック（2026-07-08）
-  const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major"); // E1: frame.key を尊重（旧: 常にC＝調外まみれ）
+  const scale = scalePcs(f.key ?? 0, minor ? "minor" : "major", f.palette); // E1: frame.key を尊重（旧: 常にC＝調外まみれ）
   const scaleArr = scaleArray(scale);
   const lo = 60;
   const hi = 84;
@@ -931,7 +976,7 @@ export function genCounter(
   const rng = new Rng(seed ?? 7);
   const minor = isMinorFrame(f);
   const key = (((f.key ?? 0) % 12) + 12) % 12;
-  const scalePcsArr = [...scalePcs(key, minor ? "minor" : "major")];
+  const scalePcsArr = [...scalePcs(key, minor ? "minor" : "major", f.palette)];
   const bpb = beatsPerBar(f.meter);
   const bars = barsOf(f);
   const total = Math.max(1, Math.round(bars * bpb));

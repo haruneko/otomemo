@@ -141,7 +141,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [breathe, setBreathe] = useState(0); // 句頭の遅延入場(息継ぎ) 0=なし〜1=各句頭を空けて入る（#9 2026-07-09）
   const [humanize, setHumanize] = useState(0); // 人間味(グルーヴ) 0=機械的〜1=強弱＋微小タイミング揺れ（監査E 2026-07-09）
   const [form, setForm] = useState<"" | "sentence">(""); // 形式 空=従来AABA/文=sentence(提示→反復→継続断片化→カデンツ=起承転結)（D本丸 2026-07-09）
-  const [skelForm, setSkelForm] = useState<"" | "period" | "aaba">(""); // 骨格のフォーム型リテラル回帰（gen_skeleton専用）空=従来(輪郭反復)/period=[4+4]/aaba=Aの回帰（design #12-M 2026-07-13）
+  const [skelForm, setSkelForm] = useState<"" | "period" | "aaba" | "cadence-swap" | "sentence">(""); // 骨格のフォーム型回帰（gen_skeleton専用）空=従来/period=[4+4]/aaba=Aの回帰/cadence-swap・sentence=M9実測文法（design #12-M・WP-M2）
   // 対位（メロがベースを見て並行5度8度/b9を避ける）＝固定0.3自動送信を廃し UI で選択（2026-07-10・menu整理）。
   const [counter, setCounter] = useState<"" | "weak" | "mid" | "strong">("");
   // 反復音モチーフ（Phase2案B・2026-07-10）：hook>0 で motifMode:preserve＋hook を送る（hookはpreserve下でのみ本領）。
@@ -152,6 +152,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [pickup, setPickup] = useState(0);
   // 最小音符（2026-07-10）：これより細かい音を出さない上限。""=おまかせ(テンポ連動)。
   const [finest, setFinest] = useState<"" | "quarter" | "eighth">("");
+  // 声種プロファイル（WP-M4・design #16）：""=おまかせ(女性平均相当・従来bit一致)。vocaloid=ボカロモード(C6開放・難度ペナ無効)。
+  const [voice, setVoice] = useState<"" | "female_pop" | "male_pop" | "mix" | "vocaloid">("");
   // リズムパーツ層 L1（design #20 S4-1）：選択した partId 群（押した順＝rotate）。空＝未送信＝従来抽選(bit一致)。
   const [rhythmParts, setRhythmParts] = useState<string[]>([]);
   const toggleRhythmPart = (id: string) => { setRhythmParts((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])); setPreset(""); };
@@ -221,6 +223,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       const roleTag = (neta.tags ?? []).find((t) => t.startsWith("role:"))?.slice(5);
       const frame: Record<string, unknown> = { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode };
       if (roleTag) frame.section = { role: roleTag };
+      if (voice) frame.voice_profile = voice; // 声種プロファイル（WP-M4）：""=未送信＝従来 bit 一致。指定時のみ音域窓＋歌唱難度レンズが追従。
       const body: Record<string, unknown> = {
         frame,
         chords,
@@ -265,7 +268,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     setGenBusy(true);
     try {
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>("gen_skeleton", {
-        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secModeOf() },
+        frame: { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secModeOf(), ...(voice ? { voice_profile: voice } : {}) }, // 声種（WP-M4）＝骨格の音域窓も追従
         chords: ctx.sectionChords(),
         seed: Math.floor(Math.random() * 1e6),
         ...(skelForm ? { form: skelForm } : {}), // 構造の使い回し（period/aaba）＝空=従来
@@ -435,7 +438,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     density, setDensity, swing, setSwing, expression, setExpression, runs, setRuns, push, setPush,
     foreground, setForeground, breathe, setBreathe, humanize, setHumanize, hook, setHook,
     articulation, setArticulation, flow, setFlow, pickup, setPickup,
-    phrasing, setPhrasing, form, setForm, skelForm, setSkelForm, counter, setCounter, finest, setFinest,
+    phrasing, setPhrasing, form, setForm, skelForm, setSkelForm, counter, setCounter, finest, setFinest, voice, setVoice,
     rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ

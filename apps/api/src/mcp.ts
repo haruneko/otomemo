@@ -36,6 +36,7 @@ import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceL
 import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
 import { splitMora, flowLyric, type LNote } from "./lyric";
 import { suggestLyricRhythm, analyzeLyricFit } from "@cm/music-core"; // ② 歌詞↔メロ プロソディ（design #13b・WP-M5）
+import { resolveVoiceProfile } from "@cm/music-core"; // 声種プロファイル解決（WP-M4・レンズへ渡す）
 import { analyzeProgressionFromUfret, extractSongTitle, fetchedToLibraryInput } from "./ingest-ufret";
 import { meterInfo } from "./music/meter";
 import { sanitizeRhythmParts, extractRhythmPart } from "./music/rhythmParts"; // リズムパーツ層 L1/L2＋採取（design #20 S4-1/S4-2）
@@ -90,6 +91,21 @@ const frameSchema = z
       })
       .optional()
       .describe("セクション役割文脈（2026-07-10）。role を書くだけで役割別プリセットが効く。未指定＝従来動作"),
+    voice_profile: z
+      .union([
+        z.string().describe("プリセット名：female_pop/male_pop/mix/vocaloid（女性/男性/ミックス/ボカロ・別表記可）"),
+        z.object({
+          base: z.string().optional().describe("土台プリセット名（省略時=女性平均に部分上書き）"),
+          low: z.number().optional(), tessLow: z.number().optional(), tessHigh: z.number().optional(),
+          chestTop: z.number().optional(), falsettoTop: z.number().optional(),
+          passaggioLow: z.number().optional(), passaggioHigh: z.number().optional(),
+          vocaloid: z.boolean().optional().describe("ボカロ緩和（跳躍/密度/母音/パッサッジョの難度ペナ無効＋C6開放）"),
+          name: z.string().optional(),
+        }).describe("カスタム声種＝base プリセット＋部分上書き（MIDI番号・60=C4）"),
+      ])
+      .optional()
+      .describe("声種プロファイル（WP-M4）。歌唱難度レンズの評価基準＋生成の音域窓を声種の tessitura へ追従させる。vocaloid=ボカロモード（C6まで開放・人声制約の難度ペナ無効）。未指定＝女性平均相当・従来動作(bit一致)"),
+    palette: z.enum(["ionian", "mixolydian", "aeolian", "dorian"]).optional().describe("旋法パレット（WP-C1）。mode の下の色＝ionian(明るい王道)/mixolydian(♭VII・ロック土臭)/aeolian(切ない民族)/dorian(♮6・IV長・浮遊おしゃれ)。mode(長短)とは直交＝scalePcs 差替でメロ/ベースが旋法に追従。未指定＝mode から ionian(major)/aeolian(minor)＝従来 bit 一致"),
   })
   .optional();
 const notesSchema = z
@@ -510,8 +526,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   // 生成（ルールベース・決定的記号エンジン・TS一本化＝cm-music の gen_* を置換）。frame=key/meter/bars/mood。
   server.registerTool(
     "gen_chords",
-    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・frame.key の実音で返る）。cadence=終止型(full=完全/half=半終止=V止め/deceptive=偽終止=V→vi/plagal=変終止=IV→I)。borrow=サブドミナントマイナー(切なさ)、secondaryDom=二次ドミナント(おしゃれ/接着)。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), cadence: z.enum(["full", "half", "deceptive", "plagal"]).optional().describe("終止型。half=Aメロ末の開き/deceptive=続く感(偽終止)/plagal=アーメン終止。未指定=完全終止(従来)"), borrow: z.number().min(0).max(1).optional().describe("借用和音の確率。長調のIVを iv(サブドミナントマイナー=切なさ)へ。未指定=なし"), secondaryDom: z.number().min(0).max(1).optional().describe("二次ドミナントの確率。非トニック和音の直前を V/x(dom7)へ＝おしゃれ/接着(丸サのIII7等)。未指定=なし"), loop: z.boolean().optional().describe("循環進行(閉じずに回す)。短調=エオリアン i-♭VI-♭VII／長調=アクシス I-V-vi-IV。未指定=なし") } },
-    async ({ frame, seed, cadence, borrow, secondaryDom, loop }) => ok(genChords(frame, seed, cadence, { borrow, secondaryDom, loop })),
+    { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・frame.key の実音で返る）。cadence=終止型(full=完全/half=半終止=V止め/deceptive=偽終止=V→vi/plagal=変終止=IV→I/aeolian=エオリアン終止=♭VI→♭VII→i)。borrow=サブドミナントマイナー(切なさ)、secondaryDom=二次ドミナント(おしゃれ/接着)、palette=旋法パレット(mixolydian等)。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), cadence: z.enum(["full", "half", "deceptive", "plagal", "aeolian"]).optional().describe("終止型。half=Aメロ末の開き/deceptive=続く感(偽終止)/plagal=アーメン終止/aeolian=エオリアン終止(♭VI→♭VII→i・短調の実測第1位／長調は♭VI→♭VII→I)。未指定=完全終止(従来)"), borrow: z.number().min(0).max(1).optional().describe("借用和音の確率。長調のIVを iv(サブドミナントマイナー=切なさ)へ。未指定=なし"), secondaryDom: z.number().min(0).max(1).optional().describe("二次ドミナントの確率。非トニック和音の直前を V/x(dom7)へ＝おしゃれ/接着(丸サのIII7等)。未指定=なし"), loop: z.boolean().optional().describe("循環進行(閉じずに回す)。短調=エオリアン i-♭VI-♭VII／長調=アクシス I-V-vi-IV。未指定=なし"), palette: z.enum(["ionian", "mixolydian", "aeolian", "dorian"]).optional().describe("旋法パレット(WP-C1)。mixolydian=♭VII(ロック・土臭)/dorian=IV長(浮遊・おしゃれ)/aeolian=切ない民族(短調既定)/ionian=明るい王道(長調既定)。frame.palette でも可。未指定=mode から既定＝bit一致") } },
+    async ({ frame, seed, cadence, borrow, secondaryDom, loop, palette }) => ok(genChords(frame, seed, cadence, { borrow, secondaryDom, loop, palette })),
   );
   // gen_bass / gen_melody のドラム入力（gen_drums の content と同形）＝design「gen_bass×ドラム結線」「gen_melody×ドラム結線」2026-07-10。
   const drumsSchema = z
@@ -556,7 +572,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
       attachMelodyVoiceLeading(res, { bass, skeleton, chords, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
       // 候補レンズの添付（design #12-M・WP-M3・読み取り専用＝候補ノートは不変）。並べ替え軸＝expectation/hook/singability。
-      attachMelodyLenses(res, { key: typeof frame?.key === "number" ? frame.key : undefined, beatsPerBar: meterInfo(frame?.meter).beatsPerBar, sectionRole: (frame as { section?: { role?: string } } | undefined)?.section?.role });
+      attachMelodyLenses(res, { key: typeof frame?.key === "number" ? frame.key : undefined, beatsPerBar: meterInfo(frame?.meter).beatsPerBar, sectionRole: (frame as { section?: { role?: string } } | undefined)?.section?.role, profile: resolveVoiceProfile((frame as { voice_profile?: unknown } | undefined)?.voice_profile as string | undefined) });
       // F1(2026-07-08)：style指定なのにコーパス未投入＝黙って既定劣化していたのを可視化（Claudeがユーザーに伝えられる）。
       if (style && !corpusModel) (res as typeof res & { note?: string }).note = `style「${style}」のコーパスが library に無いため既定モデルで生成（らしさ順ランクも既定＝生成順）`;
       // 骨格→メロの紐付けは capture 後（gen_melody は候補返しでまだ neta 化しない＝この時点で id が無い）。
@@ -572,7 +588,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "gen_skeleton",
-    { title: "骨格を生成", description: "メロの構造線（骨格＝Urlinie近似のブレークポイント列）を機械が候補出しする(design #20)。frame(key/mode/meter/bars)＋コード進行を受け、コード追従の骨格音を句割り付きで複数案返す。返りは kind=\"skeleton\" の content={bars,tones:[{start,pitch}],phrases:[{endBeat,cadence}]}＝dur を持たない支配区間方式（各音は次の点/句末まで支配）。この骨格を capture して gen_melody(skeletonNetaId) で表面化する。「機械は候補まで・仕上げは人間」。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional().describe("指定=1案を決定的に。未指定=複数案"), phrasing: z.enum(["symmetric", "asymmetric", "period", "sentence"]).optional().describe("句割り。symmetric=2小節句/asymmetric=3+3+2/period=[4,4]/sentence=[2,2,4]。未指定=対称"), form: z.enum(["period", "aaba"]).optional().describe("フォーム型リテラル回帰＝構造を2/4/8で使い回す。period=後半4小節が前半の反復([4+4]楽節・カデンツだけ差替)/aaba=Aを1・2・4句目へ回帰(Bだけ対比)。度数をそのまま複写＝耳に「同じフレーズが返る」。未指定=従来(輪郭反復のみ・さまよい気味)"), skelColor: z.number().min(0).max(1).optional().describe("骨格の色付け(脱平面化) 0=素直(強拍ほぼ和声内)〜1=強拍に倚音(コーパス駆動の非和声音・必ず次で段進行解決)。実曲の骨格は強拍の1/3が非和声音＝主音平面を割る。0.3-0.5目安で強拍コードトーン率が実曲帯(60-70%)へ。未指定=0=従来") } },
+    { title: "骨格を生成", description: "メロの構造線（骨格＝Urlinie近似のブレークポイント列）を機械が候補出しする(design #20)。frame(key/mode/meter/bars)＋コード進行を受け、コード追従の骨格音を句割り付きで複数案返す。返りは kind=\"skeleton\" の content={bars,tones:[{start,pitch}],phrases:[{endBeat,cadence}]}＝dur を持たない支配区間方式（各音は次の点/句末まで支配）。この骨格を capture して gen_melody(skeletonNetaId) で表面化する。「機械は候補まで・仕上げは人間」。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional().describe("指定=1案を決定的に。未指定=複数案"), phrasing: z.enum(["symmetric", "asymmetric", "period", "sentence"]).optional().describe("句割り。symmetric=2小節句/asymmetric=3+3+2/period=[4,4]/sentence=[2,2,4]。未指定=対称"), form: z.enum(["period", "aaba", "cadence-swap", "sentence"]).optional().describe("フォーム型回帰＝構造を2/4/8で使い回す。period=後半4小節が前半の反復([4+4]楽節・カデンツだけ差替)/aaba=Aを1・2・4句目へ回帰(Bだけ対比)＝度数リテラル複写(耳に「同じフレーズが返る」)。cadence-swap=2小節言って2小節後に終止だけ変えて言い直す(前句のリズム保存/音高は現コードへ再フィット・M9実測 2-4小節帯)/sentence=提示→反復→頭断片の畳み掛け(fragmentation+加速・Caplin)。cadence-swap/sentence は M9実測文法＝近距離ほど変え遠距離ほど戻す・リズムが同一性を担う。未指定=従来(輪郭反復のみ・さまよい気味)"), skelColor: z.number().min(0).max(1).optional().describe("骨格の色付け(脱平面化) 0=素直(強拍ほぼ和声内)〜1=強拍に倚音(コーパス駆動の非和声音・必ず次で段進行解決)。実曲の骨格は強拍の1/3が非和声音＝主音平面を割る。0.3-0.5目安で強拍コードトーン率が実曲帯(60-70%)へ。未指定=0=従来") } },
     async ({ frame, chords, seed, phrasing, form, skelColor }) => ok(genSkeletonCandidates(frame, chords, seed, { phrasing, form, skelColor })),
   );
   server.registerTool(

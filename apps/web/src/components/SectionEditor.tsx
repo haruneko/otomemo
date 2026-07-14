@@ -349,10 +349,12 @@ export function SectionEditor({
                       構造(skelForm・design #12-M 2026-07-13)＝2/4/8で使い回すフォーム型リテラル回帰を選んでから生成。 */}
                   <label className="tool-item" aria-label="skel-form" onClick={(e) => e.stopPropagation()}>
                     構造
-                    <select value={gen.skelForm} onChange={(e) => gen.setSkelForm(e.target.value as "" | "period" | "aaba")}>
+                    <select value={gen.skelForm} onChange={(e) => gen.setSkelForm(e.target.value as "" | "period" | "aaba" | "cadence-swap" | "sentence")}>
                       <option value="">おまかせ</option>
                       <option value="period">前半くり返し</option>
                       <option value="aaba">AABA</option>
+                      <option value="cadence-swap">終止だけ変えて反復</option>
+                      <option value="sentence">提示→畳み掛け(sentence)</option>
                     </select>
                   </label>
                   <button type="button" className="tool-item" aria-label="gen-skeleton" disabled={gen.genBusy} onClick={() => { setToolsOpen(false); void gen.genSkeleton(); }}>
@@ -404,6 +406,16 @@ export function SectionEditor({
                             })}
                           </span>
                         </div>
+                        <label className="knob-row" aria-label="voice">
+                          <span className="knob-name">声種<small>音域と歌いやすさの基準</small></span>
+                          <select value={gen.voice} onChange={(e) => { gen.setVoice(e.target.value as "" | "female_pop" | "male_pop" | "mix" | "vocaloid"); gen.setPreset(""); }}>
+                            <option value="">おまかせ(女性平均)</option>
+                            <option value="female_pop">女性ポップ</option>
+                            <option value="male_pop">男性ポップ</option>
+                            <option value="mix">ミックス</option>
+                            <option value="vocaloid">ボカロ(C6開放)</option>
+                          </select>
+                        </label>
                         <div className="knob-group-h">歌い回し</div>
                         {gen.segRow("expression", "タメ", "強拍のもたれ", gen.expression, gen.setExpression, "expression")}
                         {gen.segRow("hook", "口ずさみ", "反復音フック", gen.hook, gen.setHook, "hook")}

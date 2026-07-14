@@ -160,7 +160,8 @@ function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, 
 // フォーム型リテラル回帰の計画（design #12-M・2026-07-13）：各ユニット u に「複写元ユニット src（null=fresh）」を与える。
 // period＝後半[nu/2..]が前半をリテラル複写（[4+4]の楽節反復）。aaba＝4ユニット周期で u1/u3 が u0 を複写（Aの回帰）。
 // 未対応/短い(nu<2)は null（＝現状の輪郭反復にフォールバック）。src は必ず u より前＝逐次で既に埋まっている。
-export function skelFormPlan(form: "period" | "aaba" | undefined, nu: number): (number | null)[] | null {
+export type SkelForm = "period" | "aaba" | "cadence-swap" | "sentence";
+export function skelFormPlan(form: SkelForm | undefined, nu: number): (number | null)[] | null {
   if ((form !== "period" && form !== "aaba") || nu < 2) return null;
   const src: (number | null)[] = new Array(nu).fill(null);
   if (form === "period") { const h = Math.floor(nu / 2); for (let u = h; u < 2 * h; u++) src[u] = u - h; }
@@ -168,7 +169,45 @@ export function skelFormPlan(form: "period" | "aaba" | undefined, nu: number): (
   return src;
 }
 
-export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: "period" | "aaba"; skelColor?: number; chordPcsPerBar?: number[][] } = {}): number[] {
+// WP-M2：M9実測文法（docs/research/2026-07-14-motif-transform-stats.md）の骨格フォーム拡張。
+// M9 §4「近くでは変える・遠くでは戻す」＝完全反復(literal)シェアは距離バケツで割れる（隣接≈1.4%→5-8小節で≈16%）。
+// 定数表＝1小節窓の literal シェア（DB非依存＝genSkeletonFromModel を純関数に保つ。corpus_motif_transform の catByDist と等価）。
+const MOTIF_LITERAL_BY_DIST: [number, number][] = [[2, 0.014], [4, 0.102], [8, 0.161], [16, 0.074], [32, 0.134], [Infinity, 0.124]];
+export function literalProbByDist(distBars: number): number {
+  for (const [ub, p] of MOTIF_LITERAL_BY_DIST) if (distBars <= ub) return p;
+  return 0.12;
+}
+// 距離条件付きコピー変奏の選択：近距離ほど「変える」(vary)・遠距離(セクション回帰)ほど「戻す」(literal)。
+// rand∈[0,1) を注入＝決定性（テスト可）。M9 §2/§7：ポップ変奏の主通貨は音数±1-2のゆるい変奏＝ここでは vary。
+export function pickSkelCopyMode(distBars: number, rand: number): "literal" | "vary" {
+  return rand < literalProbByDist(distBars) ? "literal" : "vary";
+}
+// リズム保存・音高コード再フィット（M9 §7-4＝モチーフ同一性の本命＝リズム型を保存し音高だけ現コードへ再フィット。
+// リズム保存差替は音高保存リズム変形の約10倍＝ポップではリズムが同一性を担う）。骨格スロット構造(=リズム)は不変のまま、
+// 複写した度数インデックスを現コードの最寄り和声音インデックスへ寄せる。pcs 空＝そのまま。表面 motifMode:preserve とは
+// 層が別（骨格→表面の一方向依存）＝二重機構でない。
+export function refitIdxToChord(scalePitches: number[], idx: number, pcs: number[]): number {
+  if (!pcs.length || !scalePitches.length) return idx;
+  const ci = Math.max(0, Math.min(scalePitches.length - 1, idx));
+  const pc = ((scalePitches[ci]! % 12) + 12) % 12;
+  if (pcs.includes(pc)) return ci; // 既に和声音＝不変
+  const rp = nearestChordTonePitch(scalePitches[ci]!, pcs, scalePitches[0]!, scalePitches[scalePitches.length - 1]!);
+  return nearestIdx(scalePitches, rp);
+}
+export interface SkelFormUnit { src: number | null; frag: boolean }
+// 新形(cadence-swap/sentence)の複写計画＝各ユニットの複写元(archetype)＋断片化フラグ。
+// cadence-swap：奇数ユニットが直前の偶数(先行句=archetype)を複写＝「2小節言って2小節後に終止だけ変えて言い直す」(M9 §4 2-4小節帯)。
+// sentence：presentation(u0原型→u1複写)＋continuation(u≥2は u0 の頭断片を畳み掛け＝fragmentation+加速・Caplin)。
+// A A' A 原型回帰(M9 §6)＝複写元は常に fresh の原型を指し、変形済みコピーは参照しない＝累積ドリフト禁止。
+export function skelFormPlanNew(form: SkelForm | undefined, nu: number): SkelFormUnit[] | null {
+  if (nu < 2 || (form !== "cadence-swap" && form !== "sentence")) return null;
+  const out: SkelFormUnit[] = Array.from({ length: nu }, () => ({ src: null as number | null, frag: false }));
+  if (form === "cadence-swap") { for (let u = 1; u < nu; u += 2) out[u] = { src: u - 1, frag: false }; }
+  else { for (let u = 1; u < nu; u++) out[u] = { src: 0, frag: u >= 2 }; } // sentence
+  return out;
+}
+
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: SkelForm; skelColor?: number; chordPcsPerBar?: number[][] } = {}): number[] {
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
   const bpb = opts.beatsPerBar ?? 4;
   const strongQ = opts.strongQuarters ?? [0, 2];
@@ -214,7 +253,11 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   // D-P1(2026-07-09 監査D)：句割りを骨格に伝える。phraseEnds 指定時は unit尾のバーが句末なら句のカデンツ度数へ着地
   // （対称=各unit尾に整合／非対称=unit尾に落ちる句末のみ・可変長ブロックP2は別）。未指定=従来 u%2 の 5̂/1̂（bit一致）。
   const pe = opts.phraseEnds;
-  const formSrc = skelFormPlan(opts.skelForm, nu); // null＝現状（輪郭反復）＝bit一致
+  const formSrc = skelFormPlan(opts.skelForm, nu); // null＝現状（輪郭反復）＝bit一致（period/aaba のみ）
+  // WP-M2：新形(cadence-swap/sentence)は M9文法の距離条件付き変奏＋リズム保存音高再フィットで複写する。
+  // formNew!=null のときだけ下段の新枝が走る＝period/aaba/undefined は完全 bit一致（rF は消費されず r 列も不変）。
+  const formNew = skelFormPlanNew(opts.skelForm, nu);
+  const rF = makeRng((opts.seed ?? 1) * 2654435761 + 101); // 変奏判定用の独立RNG（既定路の r 消費を変えない）
   for (let u = 0; u < nu; u++) {
     const base = u * spu, reuse = !useMotif ? null : (u % 4 === 1 ? hA : u % 4 === 3 ? hB : null), phraseEnd = u % 2 === 1, lastU = u === nu - 1, ctr = ctrOf(u);
     const src = formSrc ? formSrc[u] : null; // フォーム複写元ユニット（null=fresh）
@@ -223,7 +266,25 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
     for (let s = 0; s < spu && base + s < slots.length; s++) {
       const cr = slots[base + s]!.cr;
       let idx: number;
-      if (src != null && s < spu - 1) idx = I[src * spu + s]!; // フォーム：ユニットを頭からリテラル複写（カデンツ除く）
+      if (formNew) { // WP-M2 新形：距離条件付き変奏＋リズム保存音高再フィット（M9文法）
+        const fu = formNew[u]!;
+        if (s === spu - 1) idx = lastU ? idxOf(0, pi, tonicIdx) : pe ? (peHit ? idxOf(peHit.deg, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)) : (phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)); // 終止＝句末ルールで保つ（形式が終止の役割を担保）
+        else if (fu.src == null) idx = idxOf(smp(cr, pv), pi, ctr); // fresh＝提示 basic idea／対の先行句（度数サンプル）
+        else {
+          const headHalf = Math.max(1, Math.floor(spu / 2));
+          let copied = I[fu.src * spu + (fu.frag ? s % headHalf : s)]!; // 原型から複写（frag=頭断片を畳み掛け＝fragmentation/加速・累積ドリフトなし）
+          const mode = pickSkelCopyMode(Math.abs(u - fu.src) * 2, rF()); // 距離条件：near→vary/far→literal（M9 §4）
+          if (mode === "vary" || fu.frag) {
+            const bar = Math.floor(slots[base + s]!.beat / bpb);
+            copied = refitIdxToChord(scalePitches, copied, opts.chordPcsPerBar?.[Math.min(opts.chordPcsPerBar.length - 1, bar)] ?? []); // リズム保存・音高だけ現コード再フィット（§7-4）
+            if (mode === "vary" && rF() < 0.5) copied += rF() < 0.5 ? 1 : -1; // 音数/度数±1のゆるい変奏（M9 §3・変奏の主通貨）
+          }
+          idx = cl(copied);
+          // E-ruleガード：前音(pi)からの跳躍が三全音/オクターブ超なら pi 側へ1段寄せて禁則を作らない（Fux・skelColor と同思想）。
+          for (let g = 0; g < 6; g++) { const iv = Math.abs(scalePitches[Math.max(0, Math.min(scalePitches.length - 1, idx))]! - scalePitches[Math.max(0, Math.min(scalePitches.length - 1, pi))]!); if (iv !== 6 && iv <= 12) break; idx = cl(idx + Math.sign(pi - idx || 1)); }
+        }
+      }
+      else if (src != null && s < spu - 1) idx = I[src * spu + s]!; // フォーム：ユニットを頭からリテラル複写（カデンツ除く）
       else if (src != null) idx = pe ? (lastU ? idxOf(0, pi, tonicIdx) : peHit ? idxOf(peHit.deg, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)) : (lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)); // フォームのカデンツ＝句末ルール（終止の役割は形式で保つ）
       else if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi, ctr);
       else if (s < spu - 1) { // 頭＝動機の反復。repetition＝「頭の正確なステップ移動を反復」する確率。残りはfresh＝varied反復。
