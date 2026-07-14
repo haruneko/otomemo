@@ -52,6 +52,13 @@
   min-width: 3.2em;
   text-align: right;
 }
+/* #24 backlog: SF2 読込中だけ出る小さな muted テキスト（位置表示の隣）。完了で消える。 */
+.sf-loading {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  opacity: 0.85;
+}
 /* 音量ミキサー（音割れ対策・耳FB 2026-07-09）＝🔉で上向きに開く小パネル。 */
 .mixer-wrap {
   position: relative;

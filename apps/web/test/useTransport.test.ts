@@ -82,6 +82,51 @@ describe("useTransport (#59)", () => {
     expect(playNotes.mock.calls[1]![2].loop).toEqual({ startBeat: 0, endBeat: 2 });
   });
 
+  // #24 backlog toggleLoop の in-place 化：弱起なし（leadBeats=0）でハンドルが setLooping を持てば、
+  //   再生を止めずその場でループ切替（stop→begin しない＝頭出し・全サンプラ再準備なし）。range 指定は先に窓更新。
+  it("toggleLoop while playing switches in place via setLooping (弱起なし; no stop/begin)", async () => {
+    const stop = vi.fn();
+    const setLooping = vi.fn();
+    const setLoopRange = vi.fn();
+    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop, setLooping, setLoopRange, leadBeats: 0 });
+    const { result } = renderHook(() =>
+      useTransport(() => NOTES, 120, { scaleBeats: 4, range: { startBeat: 0, endBeat: 2 } }),
+    );
+    await act(async () => {
+      result.current.playPause();
+    });
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      result.current.toggleLoop();
+    });
+    await waitFor(() => expect(result.current.loopOn).toBe(true));
+    expect(setLooping).toHaveBeenCalledWith(true);
+    expect(setLoopRange).toHaveBeenCalledWith(0, 2); // range 指定＝ループ窓を先に走行中更新
+    expect(stop).not.toHaveBeenCalled(); // ★止めない
+    expect(playNotes).toHaveBeenCalledTimes(1); // ★begin を回さない＝頭出しなし
+  });
+
+  // #25 弱起（handle.leadBeats>0）は非ループ⇄ループでスケジュールが根本的に異なるため in-place 不可＝
+  //   従来の stop→begin にフォールバック（setLooping は呼ばない）。
+  it("toggleLoop while playing falls back to stop→begin when 弱起 (leadBeats>0)", async () => {
+    const stop = vi.fn();
+    const setLooping = vi.fn();
+    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop, setLooping, leadBeats: 0.5 });
+    const { result } = renderHook(() => useTransport(() => NOTES, 120, { scaleBeats: 4 }));
+    await act(async () => {
+      result.current.playPause();
+    });
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      result.current.toggleLoop();
+    });
+    await waitFor(() => expect(playNotes).toHaveBeenCalledTimes(2)); // begin 再実行＝従来経路
+    expect(stop).toHaveBeenCalled();
+    expect(setLooping).not.toHaveBeenCalled();
+  });
+
   // #20 S6骨格の机 D1.5：range 指定時は playNotes の loop がその区間・未指定は従来（0..total）。
   it("range option is forwarded as the loop window; omitted range keeps 0..total (bit一致)", async () => {
     playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop: vi.fn() });

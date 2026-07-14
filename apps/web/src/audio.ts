@@ -36,6 +36,12 @@ export interface PlaybackHandle {
   reschedule(notes: Note[]): void;
   // #7-C ループ区間だけを走行中に更新（transport.loopStart/loopEnd＝stop/start 不要）。範囲ブレース確定用。
   setLoopRange(startBeat: number, endBeat: number): void;
+  // ループ ON/OFF を**再生を止めずその場で**切替（頭出し・全サンプラ再準備を避ける）。
+  // ON＝transport.loop=true＋loop点設定＋終端 scheduleOnce（自動停止）の解除。
+  // OFF＝transport.loop=false＋現在位置から終端 stop を再スケジュール。
+  // #25 弱起（leadBeats>0）がある場合は非ループ⇄ループでスケジュール自体が異なる（+Lシフト vs 終端巻き込み）
+  // ため in-place 不可＝呼び出し側（useTransport）が従来の stop→begin にフォールバックする責務。防御的に no-op。
+  setLooping(on: boolean): void;
   // #25 弱起（負start）の再生契約：非ループ時の lead L（拍・全イベントを +L シフトし transport 0 開始）。
   // usePlayhead へ渡し、リード区間（raw beat < L）は線を 0 位置で待機・position を弱起表示にする。ループ時は 0。
   leadBeats: number;
@@ -469,11 +475,86 @@ function ensureFetchDedup(): void {
     return origFetch!(input, init);
   }) as typeof fetch;
 }
-function primeSf2(url: string): Promise<ArrayBuffer> {
+// ── SF2 の IndexedDB 永続化（セッション跨ぎの cold 解消・design#24 backlog）────────────────
+// SF2(32MB)は大きすぎてブラウザHTTPキャッシュに乗らず**毎セッション再DL**（遅回線で ~13s）。#24 の有界
+// 待ちで再生ハングは避けたが初回ロード自体は毎回発生する。→ decode 前の生 ArrayBuffer を IndexedDB に
+// キャッシュ（key=SF2 URL, value=ArrayBuffer）。ヒット→ネットワーク省略、ミス→fetch 後に保存。
+// **保存失敗は握りつぶして fetch 結果を使う**（機能劣化させない）。掃除は「現在 URL 以外を削除」の簡易。
+// IndexedDB が無い環境（jsdom 等）は get→null/put→no-op で**素通し**＝従来どおり fetch する。
+const IDB_DB = "cm-sf2";
+const IDB_STORE = "buffers";
+function openSf2Db(): Promise<IDBDatabase | null> {
+  const idb = (globalThis as any).indexedDB as IDBFactory | undefined;
+  if (!idb) return Promise.resolve(null); // jsdom 等＝無ければ素通し
+  return new Promise((resolve) => {
+    let req: IDBOpenDBRequest;
+    try {
+      req = idb.open(IDB_DB, 1);
+    } catch {
+      resolve(null);
+      return;
+    }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+}
+async function idbGetSf2(url: string): Promise<ArrayBuffer | null> {
+  try {
+    const db = await openSf2Db();
+    if (!db) return null;
+    return await new Promise<ArrayBuffer | null>((resolve) => {
+      const req = db.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).get(url);
+      req.onsuccess = () => resolve((req.result as ArrayBuffer) ?? null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null; // 読取失敗は「ミス」扱い＝fetch へフォールバック
+  }
+}
+async function idbPutSf2(url: string, buf: ArrayBuffer): Promise<void> {
+  try {
+    const db = await openSf2Db();
+    if (!db) return;
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      const store = tx.objectStore(IDB_STORE);
+      store.put(buf, url);
+      // 掃除：今 DL した url 以外は削除（古い SF2 の 32MB を溜めない）。
+      const keysReq = store.getAllKeys();
+      keysReq.onsuccess = () => {
+        for (const k of keysReq.result as IDBValidKey[]) if (k !== url) store.delete(k);
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve(); // 保存失敗は握りつぶす（fetch 結果はそのまま使う）
+      tx.onabort = () => resolve();
+    });
+  } catch {
+    /* 保存不可は無視（音は fetch 結果で鳴る） */
+  }
+}
+// テスト差し替え可能なシーム（IDB 不在環境や fake store を注入）。実行時は本体のまま。
+let idbGetImpl: (url: string) => Promise<ArrayBuffer | null> = idbGetSf2;
+let idbPutImpl: (url: string, buf: ArrayBuffer) => Promise<void> = idbPutSf2;
+
+// SF2 バイト列を取得：まず IndexedDB（ヒット→ネット省略）、ミス→origFetch で1回だけ DL し保存。
+async function loadSf2Bytes(url: string): Promise<ArrayBuffer> {
+  const cached = await idbGetImpl(url);
+  if (cached) return cached; // ヒット＝ネットワーク省略（cold 解消）
+  const buf = await origFetch!(url).then((r) => r.arrayBuffer()); // 実DLは origFetch で1回だけ
+  void idbPutImpl(url, buf); // 保存は待たない・失敗は握りつぶす（機能劣化させない）
+  return buf;
+}
+
+// SF2 本体の in-flight 共有 + IndexedDB 経由の取得。テスト専用に export（primeSf2 は元々 internal）。
+export function primeSf2(url: string): Promise<ArrayBuffer> {
   ensureFetchDedup();
   let p = sfBufCache.get(url);
   if (!p) {
-    p = origFetch!(url).then((r) => r.arrayBuffer()); // 実DLは origFetch で1回だけ
+    p = loadSf2Bytes(url);
     sfBufCache.set(url, p);
   }
   return p;
@@ -509,6 +590,34 @@ const COLD_START_WAIT_MS = 400;
 // 直呼びはここを経由しない＝#24 の有界待ちロジックだけをユニットで検証するための最小シーム。
 let makeSamplerImpl: (url: string, Tone: any, part?: MixPart, lens?: string) => Promise<any> = makeSampler;
 
+// ── SF2 ロード中フラグの購読口（design#24 backlog「読込中表示」）─────────────────────────
+// SF2 ロード進行中に▶を押すと #24 の有界待ちで簡易シンセにフォールバックするが、ユーザーには読込中で
+// あることが分からない。TransportBar が購読して「音源読込中…」を出す（鳴らせなくはしない＝#24 どおり）。
+// ロードは ensureSoundFont の in-flight（先読み prewarm 含む）で true、完了/失敗で false。
+let sfLoading = false;
+const sfLoadingListeners = new Set<(loading: boolean) => void>();
+function setSfLoading(v: boolean): void {
+  if (sfLoading === v) return;
+  sfLoading = v;
+  for (const cb of sfLoadingListeners) {
+    try {
+      cb(v);
+    } catch {
+      /* 購読側の例外で音を止めない */
+    }
+  }
+}
+export function isSfLoading(): boolean {
+  return sfLoading;
+}
+// 変更通知を購読（現在値は isSfLoading で取る）。返り値は解除関数。useSyncExternalStore と相性が良い。
+export function subscribeSfLoading(cb: (loading: boolean) => void): () => void {
+  sfLoadingListeners.add(cb);
+  return () => {
+    sfLoadingListeners.delete(cb);
+  };
+}
+
 // waitIfCold=false: 誰もロードしてない冷スタートでは今回フォールバック（裏でロードは進む＝次回から鳴る）。
 // 進行中ロード(alreadyLoading)があっても**#24 で有界待ち**＝≤COLD_START_WAIT_MS だけ待ち、間に合えば
 // 先読みと同じ SF2 を共有して鳴らし(#84)、間に合わなければ null=簡易シンセへ即フォールバック（裏ロード継続）。
@@ -520,6 +629,7 @@ export async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true)
     const alreadyLoading = !!sfLoadPromise;
     if (!sfLoadPromise) {
       // 進行中ロードを1本に集約＝先読みと再生が同時に来ても makeSampler は1回だけ。
+      setSfLoading(true); // 読込中表示 ON（TransportBar が購読）
       sfLoadPromise = (async () => {
         try {
           const sampler = await makeSamplerImpl(url, Tone);
@@ -539,6 +649,7 @@ export async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true)
           return null;
         } finally {
           sfLoadPromise = null;
+          setSfLoading(false); // 読込完了/失敗＝表示 OFF
         }
       })();
     }
@@ -574,10 +685,19 @@ export async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true)
 // （本番コードは呼ばない）。有界待ち契約を実 SF2 抜きでユニット検証するための最小注入口。
 export function __setSfTestHooks(hooks: {
   makeSampler?: ((url: string, Tone: any, part?: MixPart, lens?: string) => Promise<any>) | null;
+  // IndexedDB 永続化（#24 backlog）の get/put を fake store へ差し替える注入口（null=本体へ戻す）。
+  idb?: {
+    get: (url: string) => Promise<ArrayBuffer | null>;
+    put: (url: string, buf: ArrayBuffer) => Promise<void>;
+  } | null;
   reset?: boolean;
 }): void {
   if (hooks.reset) resetSfCaches();
   if ("makeSampler" in hooks) makeSamplerImpl = hooks.makeSampler ?? makeSampler;
+  if ("idb" in hooks) {
+    idbGetImpl = hooks.idb?.get ?? idbGetSf2;
+    idbPutImpl = hooks.idb?.put ?? idbPutSf2;
+  }
 }
 
 // #55e 権威 GM ドラムマップ：SF2 の bank128/preset0("Standard"キット)のゾーンから
@@ -956,6 +1076,10 @@ export async function playNotes(
   // loopEndBeat は setLoopRange（走行中窓変更）で更新＝次の reschedule が新窓終端へ弱起を再配置する（let）。
   const isLoop = !!opts.loop;
   let loopEndBeat: number | null = opts.loop ? opts.loop.endBeat : null;
+  // setLooping（in-place ループ切替）用の窓（拍）。setLoopRange で走行中更新。既定＝[0, 全尺拍]。
+  const spb = 60 / bpm;
+  const totalBeats = notes.reduce((m, n) => Math.max(m, n.start + n.dur), 0);
+  let loopStartBeat = opts.loop ? opts.loop.startBeat : 0;
   // 非ループ時の lead L（拍）＝先頭の弱起ぶん。全イベントを +L シフトして 0 開始する分の視覚/終端補正に使う。
   // 初回 notes から算出（ループ時は常に 0）。reschedule でノートが変わっても onEnd/視覚は初回で固定＝#7-C は
   // 主にループ経路（骨格エディタ）で lead=0。
@@ -992,6 +1116,22 @@ export async function playNotes(
     if (lenses.length) initLensGates(lenses, currentActiveLens); // レンズ層があればゲート再初期化（開くレンズは保持中の activeLens）
     scheduleFrom(finalNotes); // 現在位置より先はこの周から・過ぎたものは次周から鳴る
   };
+  // 非ループ時の終端 自動停止イベント。setLooping で ON にする時は解除、OFF に戻す時は再スケジュール。
+  // id を保持し transport.clear(id) で個別解除（cancel(0) は全消し＝発音イベントも消すので使えない）。
+  let endEventId: number | null = null;
+  const endStopSec = () => totalSec(notes, bpm) + leadBeats * spb; // +L 追従（lead 無し＝従来一致）
+  const scheduleEndStop = (): void => {
+    endEventId = transport.scheduleOnce(() => {
+      opts.onEnd?.();
+      handle.stop();
+    }, endStopSec());
+  };
+  const clearEndStop = (): void => {
+    if (endEventId != null) {
+      transport.clear(endEventId);
+      endEventId = null;
+    }
+  };
   const handle: PlaybackHandle = {
     pause: () => {
       if (!stopped) transport.pause();
@@ -1014,10 +1154,26 @@ export async function playNotes(
     // #25 loopEndBeat も更新＝次の reschedule で弱起を新窓終端（e+start）へ再配置（reschedule 経由で自然に効く）。
     setLoopRange: (startBeat: number, endBeat: number) => {
       if (stopped) return;
-      const spb = 60 / bpm;
       transport.loopStart = startBeat * spb;
       transport.loopEnd = endBeat * spb;
+      loopStartBeat = startBeat;
       loopEndBeat = endBeat;
+    },
+    // ループ ON/OFF を再生を止めずその場で切替（頭出し・全サンプラ再準備を避ける＝toggleLoop の in-place 化）。
+    setLooping: (on: boolean) => {
+      if (stopped) return;
+      // #25 弱起（leadBeats>0）は非ループ⇄ループでスケジュールが根本的に異なる（+Lシフト vs 終端巻き込み）。
+      // in-place では割れる＝useTransport が leadBeats>0 で従来の stop→begin に回す。ここは防御的に no-op。
+      if (leadBeats > 0) return;
+      if (on) {
+        clearEndStop(); // 終端 自動停止を解除（ループは止めない）
+        transport.loop = true;
+        transport.loopStart = loopStartBeat * spb;
+        transport.loopEnd = (loopEndBeat ?? totalBeats) * spb;
+      } else {
+        transport.loop = false;
+        scheduleEndStop(); // 現在位置から終端 stop を再スケジュール（+L 追従）
+      }
     },
     // #25 非ループ時の lead L（拍）。useTransport が usePlayhead へ渡す（リード区間の 0 待機・弱起表示）。
     leadBeats,
@@ -1046,10 +1202,7 @@ export async function playNotes(
   } else {
     transport.loop = false;
     // 非ループ時のみ終端で自動停止。#25 弱起ぶん全イベントを +L シフトしたので終端も +L 追従（lead 無し＝従来一致）。
-    transport.scheduleOnce(() => {
-      opts.onEnd?.();
-      handle.stop();
-    }, totalSec(notes, bpm) + (leadBeats * 60) / bpm);
+    scheduleEndStop();
   }
 
   transport.start();

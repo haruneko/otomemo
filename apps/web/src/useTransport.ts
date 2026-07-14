@@ -73,9 +73,18 @@ export function useTransport(
   const toggleLoop = useCallback(() => {
     const next = !loopOn;
     setLoopOn(next);
-    if (state !== "stopped") {
-      handle.current?.stop();
-      void begin(next); // 再生中なら新ループ設定で鳴らし直す
+    if (state === "stopped") return;
+    const h = handle.current;
+    // 弱起なし＝再生を止めずその場でループ切替（頭出し・全サンプラ再準備を避ける）。ON にする時に range 指定が
+    //   あればループ窓を先に走行中更新。#25 弱起（handle.leadBeats>0）はスケジュールが根本的に異なる（+Lシフト vs
+    //   終端巻き込み）ため in-place 不可＝従来の stop→begin にフォールバック。旧モック（setLooping 無し）も従来経路。
+    if (h?.setLooping && (h.leadBeats ?? 0) === 0) {
+      const c = cfg.current;
+      if (next && c.range) h.setLoopRange?.(c.range.startBeat, c.range.endBeat);
+      h.setLooping(next);
+    } else {
+      h?.stop();
+      void begin(next); // 弱起あり/未対応ハンドル＝新ループ設定で鳴らし直す
     }
   }, [loopOn, state, begin]);
 

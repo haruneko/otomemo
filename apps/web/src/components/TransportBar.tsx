@@ -1,5 +1,6 @@
-import { type Ref, type ReactNode } from "react";
+import { type Ref, type ReactNode, useSyncExternalStore } from "react";
 import { type TransportState } from "../useTransport";
+import { subscribeSfLoading, isSfLoading } from "../audio";
 import { Icon } from "./Icon";
 import { MixerControl } from "./MixerControl";
 
@@ -30,6 +31,8 @@ export function TransportBar({
   extra?: ReactNode; // 再生系の追加トグル（例: Section の「骨格を鳴らす」＝再生機能なのでトランスポートに置く）
 }) {
   const playing = state === "playing";
+  // #24 backlog: SF2 ロード進行中だけ「音源読込中…」を出す（鳴らせなくはしない＝#24 の有界待ちで再生は即可能）。
+  const sfLoading = useSyncExternalStore(subscribeSfLoading, isSfLoading, () => false);
   return (
     <div className="transport" role="group" aria-label="transport">
       {onUndo && (
@@ -69,6 +72,11 @@ export function TransportBar({
       <span className="transport-time" aria-label="position" ref={timeRef}>
         1:1
       </span>
+      {sfLoading && (
+        <span className="sf-loading" aria-label="sf-loading" title="音源(SF2)を読込中">
+          音源読込中…
+        </span>
+      )}
       {extra}
       <MixerControl />
     </div>
