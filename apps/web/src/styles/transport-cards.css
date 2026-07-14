@@ -155,8 +155,6 @@
   color: var(--fg);
 }
 .lanes {
-  display: grid;
-  gap: 3px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 6px;
@@ -166,12 +164,20 @@
   overflow-y: hidden;
   position: relative;
 }
+/* content 幅の内枠＝ruler/lanes/playhead を束ねる。BARS>10 で min-width（inline）が付き .lanes を横スクロール
+   させる。playhead はこの内枠が containing block ＝ --ph の 100% が content 幅を指す（可視幅でなく）。 */
+.lanes-inner {
+  display: grid;
+  gap: 3px;
+  position: relative;
+}
 .playhead {
   position: absolute;
-  top: 6px;
-  bottom: 6px;
+  top: 0;
+  bottom: 0;
   width: 2px;
-  /* #58 再生位置ガイドは赤。--ph(0..1) を ref で毎フレーム直書き（再レンダ無し）。 */
+  /* #58 再生位置ガイドは赤。--ph(0..1) を ref で毎フレーム直書き（再レンダ無し）。100% は .lanes-inner
+     ＝blocks/ruler と同じ content 幅基準＝32小節（横スクロール）でも一致（実機ズレの根治 2026-07-14）。 */
   background: #ff5a5a;
   opacity: 0.9;
   pointer-events: none;
