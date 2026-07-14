@@ -1543,6 +1543,29 @@ export function genMotifMelodyV2(
     }
     notes.length = 0; notes.push(...kept);
   }
+
+  // ── 出力境界の生成契約ガード（2026-07-15・統計監査240生成で確定）──
+  // 症状＝4/4×density×runs で走句が増幅され、頭ナッジ(L599: ons[0] を 0.25 へ)が既に置かれた第2十六分と同一
+  // onset に畳まれ、後段 render の「gap=dur」が 0 に潰れる（同一 start に実音＋dur:0 の幽霊音が併存）。
+  // 上流の走句ロジックは触らず、返す直前に契約を保証＝(a) 同一start重複を1音へ畳む（単声＝同時刻は1音）
+  // (b) dur に正の下限（既存の 0.1 に合わせる）。重複も dur<=0 も無い既定パスは完全 no-op＝bit一致。
+  if (notes.length > 1) {
+    // 同一startは「長いdur優先・同dur時は高い方（旋律の前景）」を残す＝幽霊(dur0)や潰れ音を捨てる音楽的に自然な畳み。
+    notes.sort((a, b) => a.start - b.start || b.dur - a.dur || b.pitch - a.pitch);
+    const dedup: Note[] = [];
+    for (const n of notes) {
+      const last = dedup[dedup.length - 1];
+      if (last && Math.abs(last.start - n.start) < 1e-6) continue; // 同一onset＝先頭(勝者)を残し以降を捨てる
+      dedup.push(n);
+    }
+    if (dedup.length !== notes.length) { notes.length = 0; notes.push(...dedup); }
+  }
+  // dur 正の下限：次onsetを越えない範囲で floor（既存 anticipate/render と同じ 0.1 目安・極小gapは 0.05 まで）。
+  for (let i = 0; i < notes.length; i++) {
+    if (notes[i]!.dur > 1e-6) continue;
+    const next = i + 1 < notes.length ? notes[i + 1]!.start : notes[i]!.start + 0.1;
+    notes[i]!.dur = Math.round(Math.max(0.05, Math.min(0.1, next - notes[i]!.start)) * 1000) / 1000;
+  }
   return notes;
 }
 

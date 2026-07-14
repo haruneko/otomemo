@@ -816,3 +816,27 @@ describe("swing は生成側で焼かない＝feel層へ移行（2026-07-11・de
     }
   });
 });
+
+// ── 出力境界の生成契約ガード（2026-07-15・統計監査240生成で確定したバグ）──
+// 症状：4/4 × density0.85 × runs0.7 で走句が増幅され、ons[0]の頭ナッジ(L599)が既に置かれた第2十六分(0.25等)と
+// 同一onsetに畳まれ、gapベースの dur が 0 に潰れる（例: start=0.25 に pitch60 dur0 と pitch59 dur0.25 が併存）。
+// 契約＝「返る全ノートは dur>0・同一startの重複オンセットは無い」。上流の走句ロジックは触らず出力境界で保証する。
+describe("生成契約：dur>0・同一onset重複なし（監査バグ 2026-07-15）", () => {
+  const genV2 = (seed: number, o: Record<string, unknown>) =>
+    genMotifMelodyV2(pcsPerBar, ROOTS, QUALS, sp, motif16, { seed, tonicPc: 0, minor: false, ...o }).sort((a, b) => a.start - b.start);
+  it("4/4 × density0.85 × runs0.7 の8小節：全seed で dur>0（dur:0 のノートを出さない）", () => {
+    for (let s = 0; s < 60; s++) {
+      const notes = genV2(s, { density: 0.85, runs: 0.7 });
+      const zero = notes.filter((n) => n.dur <= 0);
+      expect(zero, `seed=${s}: dur<=0 のノート ${JSON.stringify(zero)}`).toEqual([]);
+    }
+  });
+  it("4/4 × density0.85 × runs0.7 の8小節：同一start の重複オンセットが無い", () => {
+    for (let s = 0; s < 60; s++) {
+      const notes = genV2(s, { density: 0.85, runs: 0.7 });
+      for (let i = 1; i < notes.length; i++) {
+        expect(Math.abs(notes[i]!.start - notes[i - 1]!.start), `seed=${s}: 重複onset @${notes[i]!.start}`).toBeGreaterThan(1e-6);
+      }
+    }
+  });
+});
