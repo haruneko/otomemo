@@ -58,8 +58,12 @@
 - ✅ **第3弾**：WP-M2(49d2d74 skelForm=cadence-swap/sentence・距離条件変奏・リズム固定再フィット)・WP-M4(54e7ecc voice_profile+ボカロ緩和)・WP-C1(8da923a 旋法パレット4種+aeolian終止)
 - ✅ **第4弾**：WP-C3(b77d0ba variety=6進行収束解消9→42/47958ab クリシェ10型suggest_cliche/b1eda86 citypop)・WP-D1(4ea3018+1d2138f+bffeb99 ビート18型+フィルF01-12+style/fillノブ)
 - ✅ **第5弾**：WP-C2(719bc81 suggest_key_plan=12型調プラン・転調しない案先頭・transition準備和音)・WP-B1(9914206 bassLibrary 33型+style/fill・kickLock排他)
-- **派生WP追加**：WP-M1b「輪郭prior＝DP-λソフト制約」（M1から切り出し）／web生成UIボタンへのriff/section_inst露出（小）／velCurveのweb再生反映（music.ts resolveRhythm・現状lane単一vel近似）／調プラン適用のセクション列UI／メロ骨格の転調度数読み替え
-- ［耳/手］蓄積中＝全WP完了時に一括リスト（api再起動込み）
+- ✅ **第6弾**：WP-C4(a9d3371 TIS張力レンズ・モーダルループ自動降格)・WP-D2(d26865d ノリメーター+1/f humanize・部位別msリミット)
+- ✅ **第7弾**：WP-X1(7108685 suggest_form 14型+suggest_energy_plan Δ設計)・WP-X2(6e8c574 loop表現+check_loop+MIDIループマーカー)
+- ✅ **第8弾（最終）**：WP-E1(baf67c8+e76e735 感情17語→実在ノブ翻訳)・WP-M8(8ff2c04 独自性警告=除外ゲート+緑黄赤+check_originality)・WP-X4+web露出(5821d21+418b641+cd3ad44 ビルド3種+riff/管弦GEN_PARTS)・WP-M1b(a7951a5+9810801 輪郭DP-λ「かたち」・asc 0.00→0.82)
+- **＝WP17個＋派生4個 全消化（2026-07-14）**。最終検証=music-core 100/api 1081/web 548 全緑・tsc 0。api再起動済（旧tsx watch孤児2本も根絶）。
+- **残る派生（backlog級）**：velCurveのweb再生反映／調プラン適用のセクション列UI／メロ骨格の転調度数読み替え／ボカロ用プリセットボタン／prosodyのpyopenjtalk接続(R-09/A-06)／sectionNoriLensのanalyze結線
+- **［耳/手］＝[2026-07-14-ear-hand-checklist-wp-batch](2026-07-14-ear-hand-checklist-wp-batch.md) に一括**（セッションA〜F＋総合G1「一曲書く」）＝実装フェーズの出口はオーナーの耳
 
 ## 推奨実行順（オーナー判断待ち→第1弾・第2弾は承認済で消化）
 
