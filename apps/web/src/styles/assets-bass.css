@@ -285,7 +285,7 @@ button:disabled {
 .project-picker {
   display: flex;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: 0; /* .notebook(grid gap:12px)の直下子＝行間は grid gap が担う（旧 margin-bottom は二重の隙間） */
 }
 .project-picker select {
   flex: 1;
@@ -1334,11 +1334,12 @@ article header {
 
 /* ============ トップ再設計（2026-07-14）＝アクション行＋作る/絞るボトムシート ============ */
 /* アクション行＝[＋作る▾][検索…][絞る▾] を1行に（トップ契約§2.2＝この3枠で打ち止め）。 */
+/* これらは .notebook（grid gap:12px）の直下子＝行間は grid gap が担う＝margin-bottom は付けない
+   （二重の隙間でファーストビューが間延びし最初のネタが下がる事故を防ぐ）。 */
 .action-row {
   display: flex;
   gap: 6px;
   align-items: center;
-  margin-bottom: 8px;
 }
 .action-row .act-create {
   flex: 0 0 auto;
@@ -1453,8 +1454,7 @@ article header {
   gap: 7px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 7px 2px 3px 1px; /* 上=バッジのはみ出しを吸収 */
-  margin-bottom: 8px;
+  padding: 6px 2px 1px 1px; /* 上=バッジのはみ出しを吸収／行間は notebook grid gap が担う */
 }
 .kind-tiles.kt-row::-webkit-scrollbar { display: none; }
 .kind-tiles.kt-grid {
@@ -1474,7 +1474,7 @@ article header {
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 9px 6px 7px;
+  padding: 7px 6px 6px;
   font-size: 0.7rem;
   font-weight: 600;
   cursor: pointer;
@@ -1537,7 +1537,6 @@ article header {
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
   border-radius: 12px;
   padding: 9px 10px;
-  margin-bottom: 10px;
 }
 .resume-row .resume-bar {
   flex: 0 0 auto;
@@ -1569,7 +1568,6 @@ article header {
   padding: 9px 11px;
   font-weight: 700;
   font-size: 0.82rem;
-  margin-bottom: 8px;
 }
 .import-btn.accent {
   background: var(--accent);
