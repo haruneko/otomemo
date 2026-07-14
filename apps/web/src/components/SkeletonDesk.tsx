@@ -897,7 +897,7 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
               );
             })}
             <div className="desk-cand-foot">
-              <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
+              <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy || !gen.hasLastPart} title={!gen.hasLastPart ? "直前の生成がまだない" : undefined} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
                 {gen.genBusy ? "…" : (<><Icon name="wand" size={15} /> もっと</>)}
               </button>
               <button type="button" className="tb-tool" aria-label="close-candidate" onClick={() => { stopAudition(); gen.closeCandidate(); }}>

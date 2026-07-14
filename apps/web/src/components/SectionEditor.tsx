@@ -410,7 +410,7 @@ export function SectionEditor({
             })()}
           </div>
           <div className="cand-tray-foot">
-            <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
+            <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy || !gen.hasLastPart} title={!gen.hasLastPart ? "直前の生成がまだない" : undefined} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
               {gen.genBusy ? "…" : <><Icon name="dice" size={14} /> もっと</>}
             </button>
             <button type="button" className="tb-tool" aria-label="close-candidate" onClick={gen.closeCandidate}>閉じる</button>

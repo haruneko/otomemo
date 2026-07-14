@@ -129,6 +129,9 @@ export type MelodyGenCtx = {
   onChanged?: () => void;
 };
 
+// 🎲 が振る11ノブ（design #23）。rollDice が同期計算した「振った後の値」を genPart へ override 渡しし、setState の stale を排す。
+export type MelodyKnobs = { density: number; swing: number; expression: number; runs: number; push: number; foreground: number; breathe: number; hook: number; articulation: number; flow: number; pickup: number };
+
 export function useMelodyGen(ctx: MelodyGenCtx) {
   const { neta, keyPc, tempo, liveMeter, liveTitle, BARS, BPB, lanes } = ctx;
   // P2（2026-07-10・UX再設計）：候補を単数→配列(トレイ)＝複数を並べて比較・keep。cid=React key＋keep追跡。
@@ -213,23 +216,41 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       {lock && <button type="button" className={"seg-lock" + (lockedKnobs.has(lock) ? " on" : "")} aria-label={`lock-${lock}`} aria-pressed={lockedKnobs.has(lock)} title="この値を固定してサイコロ" onClick={(e) => { e.preventDefault(); toggleLock(lock); }}>{<Icon name={lockedKnobs.has(lock) ? "lock" : "unlock"} size={14} />}</button>}
     </label>
   );
-  // 🎲：ロックしていないノブを現在値±0.3でランダムに振る（当たりの周辺探索）。0.1刻み・[0,1]。
+  // 🎲（design #23）：ロックしていないノブを現在値±0.3で振り（当たりの周辺探索・0.1刻み・[0,1]）、
+  // 振ってから即・再生成する＝押すたび「別の性格のメロ候補」がトレイに出る。ロックは乱択から守る（制御は生きる）。
   const rollDice = () => {
-    const j = (cur: number, key: string) => (lockedKnobs.has(key) ? cur : Math.max(0, Math.min(1, Math.round((cur + (Math.random() * 0.6 - 0.3)) * 10) / 10)));
-    setDensity((d) => j(d, "density")); setSwing((s) => j(s, "swing")); setRuns((r) => j(r, "runs")); setExpression((e) => j(e, "expression"));
-    setPush((p) => j(p, "push")); setHook((h) => j(h, "hook")); setArticulation((a) => j(a, "articulation")); setForeground((f) => j(f, "foreground")); setBreathe((b) => j(b, "breathe"));
-    setFlow((f) => j(f, "flow")); setPickup((p) => j(p, "pickup"));
+    // 乱択1回分。ロックは不変。乱択結果が現在値と同一なら最小刻み0.1を強制的に動かす（clamp端は内側へ）＝「必ず動く」。
+    const j = (cur: number, key: string) => {
+      if (lockedKnobs.has(key)) return cur;
+      let n = Math.max(0, Math.min(1, Math.round((cur + (Math.random() * 0.6 - 0.3)) * 10) / 10));
+      if (n === cur) n = cur >= 1 ? 0.9 : cur <= 0 ? 0.1 : Math.round((cur + (Math.random() < 0.5 ? -0.1 : 0.1)) * 10) / 10;
+      return n;
+    };
+    // 現在値から新値を同期計算＝state と body の両方に同じ「振った後の値」を使う（setState 直後の stale を回避）。
+    const rolled = {
+      density: j(density, "density"), swing: j(swing, "swing"), runs: j(runs, "runs"), expression: j(expression, "expression"),
+      push: j(push, "push"), hook: j(hook, "hook"), articulation: j(articulation, "articulation"), foreground: j(foreground, "foreground"),
+      breathe: j(breathe, "breathe"), flow: j(flow, "flow"), pickup: j(pickup, "pickup"),
+    };
+    setDensity(rolled.density); setSwing(rolled.swing); setRuns(rolled.runs); setExpression(rolled.expression);
+    setPush(rolled.push); setHook(rolled.hook); setArticulation(rolled.articulation); setForeground(rolled.foreground); setBreathe(rolled.breathe);
+    setFlow(rolled.flow); setPickup(rolled.pickup);
     setPreset("");
+    // 振った直後の値で gen_melody を走らせる（knobs override で stale を確実に排す）。
+    void genPart(GEN_PARTS[0], { knobs: rolled });
   };
   const candPlay = useRef<PlaybackHandle | null>(null);
   // 直近の生成呼び出し（「🎲 もっと」で同条件再生成）。骨格から吹いた時は skeletonNetaId も保持し再現する。
   const lastPartRef = useRef<{ op: string; needsChords: boolean; label: string; skeletonNetaId?: string } | null>(null);
+  // lastPartRef の有無を派生 state で公開（ref は再レンダしない）＝「もっと」ボタンの disabled 判定に使う（design #23）。
+  const [hasLastPart, setHasLastPart] = useState(false);
+  const setLastPart = (p: { op: string; needsChords: boolean; label: string; skeletonNetaId?: string } | null) => { lastPartRef.current = p; setHasLastPart(!!p); };
 
   const secModeOf = (): "major" | "minor" => ((neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major");
 
-  async function genPart(part: { op: string; needsChords: boolean; label: string }, opts?: { skeletonNetaId?: string; append?: boolean }) {
+  async function genPart(part: { op: string; needsChords: boolean; label: string }, opts?: { skeletonNetaId?: string; append?: boolean; knobs?: MelodyKnobs }) {
     if (genBusy) return;
-    lastPartRef.current = { ...part, skeletonNetaId: opts?.skeletonNetaId };
+    setLastPart({ ...part, skeletonNetaId: opts?.skeletonNetaId });
     const chords = ctx.sectionChords();
     // 骨格から吹く時は骨格が構造を担うのでコード無しでも可（skeletonNetaId 注入）。
     if (part.needsChords && !chords.length && !opts?.skeletonNetaId) return;
@@ -249,7 +270,11 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         seed: Math.floor(Math.random() * 1e6), // 押すたび別案
       };
       if (part.op === "gen_melody") {
-        body.density = density; body.swing = swing; body.expression = expression; body.runs = runs; body.push = push; body.foreground = foreground; body.breathe = breathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form;
+        // 🎲 からの生成は振った後の値（opts.knobs）を使う＝setState 直後の stale を排す（design #23）。無指定＝現在 state（bit一致）。
+        const k = opts?.knobs;
+        const kDensity = k?.density ?? density, kSwing = k?.swing ?? swing, kExpression = k?.expression ?? expression, kRuns = k?.runs ?? runs, kPush = k?.push ?? push;
+        const kForeground = k?.foreground ?? foreground, kBreathe = k?.breathe ?? breathe, kHook = k?.hook ?? hook, kArticulation = k?.articulation ?? articulation, kFlow = k?.flow ?? flow, kPickup = k?.pickup ?? pickup;
+        body.density = kDensity; body.swing = kSwing; body.expression = kExpression; body.runs = kRuns; body.push = kPush; body.foreground = kForeground; body.breathe = kBreathe; body.humanize = humanize; if (phrasing) body.phrasing = phrasing; if (form) body.form = form;
         // 骨格から吹く（design #20 S2）：骨格neta を注入＝構造線を共有し表面(リズム/装飾)だけ変える。
         if (opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;
         // 対位バイアス（design「gen_melody×ベース結線」）：UI の「対位」を ON にした時だけ bass を渡し counter を送る。
@@ -257,12 +282,12 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         const counterVal = counter === "weak" ? 0.2 : counter === "mid" ? 0.4 : counter === "strong" ? 0.7 : 0;
         if (counterVal > 0 && bass.length) { body.bass = bass; body.counter = counterVal; }
         // 反復音モチーフ（design「動機保存レンダ」）：hook>0 で motifMode:preserve＋hook を送る。
-        if (hook > 0) { body.hook = hook; body.motifMode = "preserve"; }
-        if (articulation > 0) body.articulation = articulation;
+        if (kHook > 0) { body.hook = kHook; body.motifMode = "preserve"; }
+        if (kArticulation > 0) body.articulation = kArticulation;
         if (finest) body.finest = finest; // 最小音符（""=おまかせ＝未送信＝テンポ連動）
         // 句フレージング（2026-07-11）：flow=連結/長音・pickup=弱起。0＝未送信＝従来 bit一致。
-        if (flow > 0) body.flow = flow;
-        if (pickup > 0) body.pickup = pickup;
+        if (kFlow > 0) body.flow = kFlow;
+        if (kPickup > 0) body.pickup = kPickup;
         // リズムパーツ層 L1（design #20 S4-1）：選択があれば rotate として送る＝小節にパーツを敷く。空＝未送信＝bit一致。
         if (rhythmParts.length) body.rhythmParts = { rotate: rhythmParts };
         // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3。
@@ -305,7 +330,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // 骨格を生成（design #20 S2・いじる▾）：gen_skeleton→候補トレイ→＋置くで骨格レーンへ。破壊上書きしない。
   async function genSkeleton() {
     if (genBusy) return;
-    lastPartRef.current = null;
+    setLastPart(null);
     setGenBusy(true);
     try {
       const r = await api.music<{ items: { kind: string; content: unknown }[] }>("gen_skeleton", {
@@ -334,7 +359,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     if (genBusy) return;
     const mel = melodyLaneNotes();
     if (!mel.length) { setFitReport("対旋律には主メロが要る（先にメロを作る/置く）"); return; }
-    lastPartRef.current = null;
+    setLastPart(null);
     setGenBusy(true);
     try {
       const r = await api.music<{ items: { kind: string; content: unknown; meta?: CandMeta }[] }>("gen_counter", {
@@ -356,7 +381,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     if (!isSkeleton(content)) return;
     const notes = skeletonPreviewNotes(content, BPB);
     if (!notes.length) return;
-    lastPartRef.current = null;
+    setLastPart(null);
     setGenBusy(true);
     try {
       const bars = await api.music<{ bar: number; start: number; candidates: { root: number; quality: string; score: number }[] }[]>(
@@ -382,7 +407,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   function makeHarmony(degSteps: number) {
     const mel = melodyLaneNotes();
     if (!mel.length) return;
-    lastPartRef.current = null; // 決定的＝別案なし
+    setLastPart(null); // 決定的＝別案なし
     setSingleCand({ kind: "melody", content: { notes: harmonyVoice(mel, keyPc, isMinor, degSteps) } });
   }
   // コードに合わせる（fit_to_chords）：メロの各音を近いコードトーンへ寄せた候補。
@@ -393,7 +418,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     setGenBusy(true);
     try {
       const r = await api.music<{ notes: Note[] }>("fit_to_chords", { melody: mel, chords, key: keyPc });
-      lastPartRef.current = null;
+      setLastPart(null);
       if (r.notes?.length) setSingleCand({ kind: "melody", content: { notes: r.notes } });
     } finally {
       setGenBusy(false);
@@ -491,6 +516,6 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     genPart, genSet, genSkeleton, blowSkeleton, blowSkeletonBass, blowSkeletonCounter, estimateChords,
     melodyLaneNotes, makeHarmony, fitToChords, analyzeFit, fitReport, setFitReport,
     auditionCandidate, placeCandidate, closeCandidate, toggleKeep, removeCand,
-    lastPartRef,
+    lastPartRef, hasLastPart, // hasLastPart＝「もっと」disabled 判定用の派生 state（design #23）
   };
 }

@@ -207,6 +207,104 @@ describe("SectionEditor (3-lane timeline)", () => {
     await userEvent.click(screen.getByLabelText("gen-gen_melody")); // 引き出し下端の生成
     await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ flow: 0.7 })));
   });
+  // ---- #23 いじる🎲の体感結線（UI監査 2026-07-15）＝振ってから即・再生成／必ず動く／もっとの沈黙修正 ----
+  const withChords = () => ({
+    neta: mk("s1", "section"),
+    children: [{ position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } }],
+  });
+  const inp = (aria: string) => (screen.getByLabelText(aria) as HTMLInputElement).value;
+  it("#23 🎲＝振ってから即・再生成：ロック外ノブが変わり、その振った後の値で gen_melody が1回走る（staleなし）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    getComposition.mockResolvedValue(withChords());
+    const rnd = vi.spyOn(Math, "random").mockReturnValue(0.9); // delta=+0.24 → 0.1刻みで確定的に上振れ（density 0.5→0.7）
+    try {
+      render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+      await screen.findByLabelText("block-ch1@0");
+      await userEvent.click(screen.getByLabelText("tools"));
+      await userEvent.click(screen.getByLabelText("drawer-melody"));
+      expect(inp("density")).toBe("0.5"); // 既定
+      await userEvent.click(screen.getByLabelText("dice-roll"));
+      // (a) ロック外ノブが押下前と変わる
+      expect(inp("density")).toBe("0.7");
+      // (c) gen_melody が1回・「振った後の値(0.7)」で走る＝state(0.5)ではなく rolled が body に乗る＝stale無し
+      await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ density: 0.7 })));
+      expect(music.mock.calls.filter((c) => c[0] === "gen_melody")).toHaveLength(1);
+    } finally { rnd.mockRestore(); }
+  });
+  it("#23 🔒ロックしたノブは乱択から守られる（値不変・body も現在値／他ノブは振れる）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    getComposition.mockResolvedValue(withChords());
+    const rnd = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    try {
+      render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+      await screen.findByLabelText("block-ch1@0");
+      await userEvent.click(screen.getByLabelText("tools"));
+      await userEvent.click(screen.getByLabelText("drawer-melody"));
+      await userEvent.click(screen.getByLabelText("lock-density")); // density を固定
+      await userEvent.click(screen.getByLabelText("dice-roll"));
+      // (b) ロック中 density は不変(0.5)、ロック外 swing は振れる(0→0.2)
+      expect(inp("density")).toBe("0.5");
+      expect(inp("swing")).toBe("0.2");
+      await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ density: 0.5, swing: 0.2 })));
+    } finally { rnd.mockRestore(); }
+  });
+  it("#23 乱択が現在値と同一なら最小刻み0.1だけ必ず動く（中間は±0.1・clamp端は内側へ）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    getComposition.mockResolvedValue(withChords());
+    const rnd = vi.spyOn(Math, "random").mockReturnValue(0.5); // delta=0 → 全ノブ「同値」→強制移動が発火
+    try {
+      render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+      await screen.findByLabelText("block-ch1@0");
+      await userEvent.click(screen.getByLabelText("tools"));
+      await userEvent.click(screen.getByLabelText("drawer-melody"));
+      await userEvent.click(screen.getByLabelText("dice-roll"));
+      // density 0.5(中間)→+0.1→0.6、swing 0(端≤0)→内側へ0.1＝「押したのに何も変わらない」の根絶
+      expect(inp("density")).toBe("0.6");
+      expect(inp("swing")).toBe("0.1");
+    } finally { rnd.mockRestore(); }
+  });
+  it("#23 コード無しセクションでは 🎲 と メロ生成が disabled（理由を title に・gen-gen_melody と同条件）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("c1", "melody", { content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }), children: [] } }],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-c1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-melody")); // メロ在→タイル→引き出し（コードは無い）
+    const dice = screen.getByLabelText("dice-roll");
+    expect(dice).toBeDisabled();
+    expect(dice).toHaveAttribute("title", "コードが要る（先に進行を置く）");
+    expect(screen.getByLabelText("gen-gen_melody")).toBeDisabled(); // 引き出し下端の生成も同条件で disabled
+  });
+  it("#23「もっと」は直前の生成が無い間 disabled（ハモリ＝lastPart null の候補トレイ）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("c1", "melody", { content: { notes: [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 1, dur: 1 }] } }), children: [] } }],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-c1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-melody"));
+    await userEvent.click(screen.getByLabelText("harmony-up")); // 決定的ハモリ＝lastPart null で候補トレイが出る
+    const more = await screen.findByLabelText("more-candidates");
+    expect(more).toBeDisabled();
+    expect(more).toHaveAttribute("title", "直前の生成がまだない");
+  });
+  it("#23「もっと」は生成後 enabled（lastPart 有り＝同条件でもう一発）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    getComposition.mockResolvedValue(withChords());
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_melody")); // ハブのメロタイル＝生成→lastPart 有り
+    await screen.findByLabelText("candidate-tray");
+    expect(screen.getByLabelText("more-candidates")).toBeEnabled();
+  });
   it("WP-X3 派生パーツ露出：リフ/管弦を『この進行に生成』から生成＝正しい op＋進行を渡す", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [{ kind: "riff", content: { notes: [{ pitch: 60, start: 0, dur: 1 }], program: 30 } }] });

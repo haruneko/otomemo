@@ -198,7 +198,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
             ))}
             <button type="button" className="chip tk-chip-add" aria-label="preset-save" title="いまのノブ設定をマイ設定として保存（localStorage）" onClick={saveMyPreset}>＋保存</button>
           </div>
-          <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（ロックは固定）" onClick={gen.rollDice}><Icon name="dice" size={18} /></button>
+          <button type="button" className="dice-btn" aria-label="dice-roll" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る（先に進行を置く）" : "振って別案を生成（ロックは固定）"} onClick={gen.rollDice}><Icon name="dice" size={18} /></button>
         </div>
         {/* 前面4ノブ（param-clarity §4.1 の回収）＝よく回す4本を常時露出。残りは下の群に沈む。 */}
         <div className="tk-hublab">よく回す4本（それ以外は下の群に沈む）</div>
