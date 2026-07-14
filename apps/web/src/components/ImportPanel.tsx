@@ -76,6 +76,18 @@ export function ImportPanel({
     const u = analyzeUrlText.trim();
     if (!u) return;
     setUrlError("");
+    // 実機監査A4＝不正URL（htp://x等）が無検証でジョブ化され無言でfailedに落ちていた。
+    // 送信前にクライアント側で軽く弾く（http/https以外・URLとしてパース不能）。入力は保持しパネルは閉じない。
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(u);
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
+      setUrlError("URLの形式が正しくありません");
+      return;
+    }
     try {
       await api.createJob({ intent: "audio_analyze", params: { url: u } });
     } catch {

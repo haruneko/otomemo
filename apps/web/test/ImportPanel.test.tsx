@@ -50,3 +50,32 @@ describe("ImportPanel URL analyze feedback（監査#7）", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("ImportPanel URL client-side validation（実機監査A4）", () => {
+  // 不正URL（htp://x のようなスキーム誤字等）は送信前にクライアントで弾く＝無言でジョブ化させない。
+  it.each(["htp://x", "ただの文字列", "example.com/no-scheme"])(
+    "rejects invalid URL %s without calling createJob",
+    async (bad) => {
+      const { setImportOpen } = renderPanel();
+      const input = screen.getByLabelText("analyze-url");
+      await userEvent.type(input, `${bad}{enter}`);
+      expect(await screen.findByRole("alert")).toHaveTextContent("URLの形式が正しくありません");
+      expect(createJob).not.toHaveBeenCalled();
+      expect(setImportOpen).not.toHaveBeenCalled(); // パネルは閉じない
+      expect(input).toHaveValue(bad); // 入力は保持される
+    },
+  );
+
+  // 正しい https:// URL は従来通り送信される（クライアント検証で誤ってブロックしない）。
+  it("still submits a well-formed https URL", async () => {
+    createJob.mockResolvedValue({ id: "j1" });
+    const { setImportOpen } = renderPanel();
+    await userEvent.type(screen.getByLabelText("analyze-url"), "https://example.com/x{enter}");
+    expect(createJob).toHaveBeenCalledWith({
+      intent: "audio_analyze",
+      params: { url: "https://example.com/x" },
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(setImportOpen).toHaveBeenCalledWith(false);
+  });
+});
