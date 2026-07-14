@@ -277,6 +277,8 @@ export function buildHttp(core: Core): FastifyInstance {
           return genSkeletonCandidates(b.frame, asChords(b.chords), b.seed, {
             phrasing: (["symmetric", "asymmetric", "period", "sentence"] as const).includes(b.phrasing as never) ? (b.phrasing as "symmetric" | "asymmetric" | "period" | "sentence") : undefined,
             form: (["period", "aaba", "cadence-swap", "sentence"] as const).includes(b.form as never) ? (b.form as "period" | "aaba" | "cadence-swap" | "sentence") : undefined,
+            skelColor: typeof b.skelColor === "number" ? b.skelColor : undefined, // 骨格の色付け（WP-M1・脱平面化）
+            contour: (["arch", "asc", "desc", "valley"] as const).includes(b.contour as never) ? (b.contour as "arch" | "asc" | "desc" | "valley") : undefined, // 輪郭の型（WP-M1b）
           });
         case "gen_counter": { // WP-X3a 対旋律＝主メロ(melody)必須・音域分離/相補リズム/コードトーン軸/反行（研究doc 2026-07-14-countermelody）
           const mel = asNotes(b.melody ?? b.notes);

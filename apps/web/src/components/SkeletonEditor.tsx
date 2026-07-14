@@ -73,6 +73,7 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
   const [stubMsg, setStubMsg] = useState<string | null>(null); // 生成失敗/0件の可視化（黙って消えない）
   const [busy, setBusy] = useState(false);
   const [skelColor, setSkelColor] = useState(0); // 骨格の色付け（脱平面化・WP-M1）＝強拍倚音のコーパス駆動注入。0=素直
+  const [contour, setContour] = useState<string>(""); // 輪郭の型（かたち・WP-M1b）＝構造線を型の包絡へソフト制約で寄せる。""=おまかせ
   const audRef = useRef<PlaybackHandle | null>(null); // 候補試聴（前の再生を止めてから）
   useEffect(() => () => audRef.current?.stop(), []); // アンマウントで鳴りっぱなし防止
   const zoneRef = useRef<HTMLDivElement>(null);
@@ -238,6 +239,7 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
         frame: { key: p.keyPc, mode: p.keyMode, meter: p.meter, bars: p.bars },
         ...(p.chords.length ? { chords: p.chords } : {}),
         ...(skelColor > 0 ? { skelColor } : {}),
+        ...(contour ? { contour } : {}),
       });
       const list: SkelCand[] = (r.items ?? []).flatMap((it): SkelCand[] => {
         const c = it.content as { bars?: number; tones?: SkeletonBreakpoint[]; bass?: SkeletonBreakpoint[]; phrases?: { endBeat: number; cadence?: string }[] } | undefined;
@@ -304,6 +306,15 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
         {/* 色付け＝脱平面化（WP-M1）。強拍に倚音（コーパス駆動の非和声音・必ず段進行で解決）を確率で入れ、主音平面を割る。 */}
         <span className="skel-grp" title="色付け＝強拍に倚音（非和声音）を混ぜて主音平面を割る。実曲の骨格は強拍の1/3が非和声音。">
           <span className="muted">色付け</span>{seg([["素直", 0], ["少し", 0.4], ["濃い", 0.8]], skelColor, setSkelColor, "skel-color")}
+        </span>
+        {/* かたち＝輪郭prior（WP-M1b）。構造線を型の包絡へソフト制約で寄せる（中間で効き終止/句末は終止規則が優先）。 */}
+        <span className="skel-grp" title="かたち＝構造線の輪郭型。山=登って落ちる(サビ)/のぼり=右肩上がり(溜め)/くだり=下降終止/たに=下って戻る(ブリッジ)。中間で効き、終止は保つ。">
+          <span className="muted">かたち</span>
+          <span className="skel-seg" role="group" aria-label="skel-contour">
+            {([["おまかせ", ""], ["山", "arch"], ["のぼり", "asc"], ["くだり", "desc"], ["たに", "valley"]] as [string, string][]).map(([lab, v]) => (
+              <button key={lab} type="button" className={contour === v ? "on" : ""} aria-pressed={contour === v} onClick={() => setContour(v)}>{lab}</button>
+            ))}
+          </span>
         </span>
         <button type="button" className="tb-tool skel-stub-btn" aria-label="gen-skeleton-stub" disabled={busy} onClick={() => void genStub()}><Icon name="wand" size={16} /> 機械に叩き台</button>
         {p.rollMode === "select" && (

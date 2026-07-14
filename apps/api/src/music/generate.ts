@@ -20,7 +20,7 @@ import {
   BASS_FIGS,
   COMPOUND_BASS_FIGS,
 } from "./rhythm";
-import { genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel } from "./melodyCells";
+import { genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel, type SkelContour } from "./melodyCells";
 import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, explicitBassSegments, foldBassPitch, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）
@@ -652,7 +652,7 @@ export function genSkeletonCandidates(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; form?: "period" | "aaba" | "cadence-swap" | "sentence"; skelColor?: number },
+  opts?: { k?: number; n?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; form?: "period" | "aaba" | "cadence-swap" | "sentence"; skelColor?: number; contour?: SkelContour },
 ): GenResult {
   const f = normalizeFrame(frame);
   const minor = isMinorFrame(f);
@@ -682,7 +682,7 @@ export function genSkeletonCandidates(
   const phrasesOut = phrases.map((p) => ({ endBeat: p.startBeat + p.beats, cadence: p.isLast ? "full" : p.cadenceDegree === 5 ? "half" : "full" }));
   const model = loadSkeletonModel(minor);
   const build = (s: number): SkeletonContent => {
-    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters, start: 62, phraseEnds, skelForm: opts?.form, skelColor: opts?.skelColor, chordPcsPerBar });
+    const skel = genSkeletonFromModel(rootsPerBar, model, sp, { tonicPc, seed: s, beatsPerBar: barLen, strongQuarters, start: 62, phraseEnds, skelForm: opts?.form, skelColor: opts?.skelColor, contour: opts?.contour, chordPcsPerBar });
     return { bars, tones: skelArrayToBreakpoints(skel), phrases: phrasesOut };
   };
   const label = "骨格";
