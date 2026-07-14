@@ -248,7 +248,7 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 
 ## コーパス根治の残（2026-07-14・R0ファンアウト実装後）
 根治本体は完了（92a4181/c57c37e・pop位相100%・進行断片/重複0・検証=research/2026-07-14-corpus-rebuild-verification.md）。残り：
-- **R0§6の遷移統計テーブル化**（phrase_pattern / note_transition / chord_transition）＝素材は正常化済、辞書→遷移統計の器が未着手。M2（骨格再抽出＝M1計測仕様12点）と合わせて設計するのが得
+- **R0§6の遷移統計テーブル化**：~~（phrase_pattern / note_transition / chord_transition）辞書→遷移統計の器が未着手~~ → **(B) note_transition＝骨格n-gram＋M9変換文法は ✅WP-0(#21・cf06399)で器実装済**（`corpus_note_transition`/`corpus_skeleton_prior`/`corpus_motif_transform`＋読み出し純関数 `corpusStats.ts`・生成側結線は WP-M1/M2）。**残＝(A) phrase_pattern の literal 句・(C/D) chord_transition**（design #21 で WP-0 対象外＝raw 句/進行の再構築が前提で素材が別・§6.3）。M2（骨格再抽出＝M1計測仕様12点）と合わせて設計するのが得
 - game句のキー推定漏れ（数%）への信頼度フラグ
 - 再構築後コーパスの**耳での質確認**（生成経由で崩れ有無・要api再起動後）
 
