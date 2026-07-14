@@ -19,7 +19,7 @@ import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
 import { useIsMobile } from "./useIsMobile";
 import { CreateShelf } from "./components/CreateShelf";
-import { FilterBar } from "./components/FilterBar";
+import { FilterDrawer } from "./components/FilterDrawer";
 // 重い二次画面は遅延ロード＝初回バンドルを軽くする（perf 耳FB 2026-07-09。Chatはreact-markdown 170KB）。
 // NetaDialog(セクション/メロ編集の本体)は最頻操作なので**同梱のまま**＝開く時に取得待ちを出さない。
 const AnalysisWorkbench = lazy(() => import("./components/AnalysisWorkbench").then((m) => ({ default: m.AnalysisWorkbench })));
@@ -241,6 +241,9 @@ export function App() {
   // 過去資産の取込パネル（MIDI/楽譜/音源/URL/歌詞/ハミング）は <ImportPanel> に分離（負債D6）。
   // App が持つのは開閉状態だけ（トグルタイルは create タイル群に残す）。
   const [importOpen, setImportOpen] = useState(false); // 取込ボタン群を畳む（既定=閉）
+  // トップ再設計 S2：作る/絞るは扉の奥（ボトムシート）。既定=閉＝ファーストビューは実データが主役。
+  const [shelfOpen, setShelfOpen] = useState(false); // ＋作る▾ → 作成の棚（CreateShelf）
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false); // 絞る▾ → 絞り込み引き出し（FilterDrawer）
 
   const openChat = (target?: Neta, seed = "") => {
     setGearMode(false);
@@ -486,16 +489,12 @@ export function App() {
           }
         >
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
-          {/* 作成の棚（S1 機械抽出＝CreateShelf）＝作成タイル(PARTS/BUILD_TEXT)＋取込トグル＋ImportPanel。
-              state/API は App が持ち、CreateShelf は器(JSX)のみ＝createBlank/newSong を呼ぶ（bit一致）。 */}
-          <CreateShelf
-            createBlank={createBlank}
-            newSong={newSong}
-            importOpen={importOpen}
-            setImportOpen={setImportOpen}
-            reload={reload}
-            projectTags={projectTags}
-          />
+          {/* ★トップ契約（再発防止の本体・正典＝docs/research/2026-07-14-topview-redesign-fable.md §2.2）：
+              ファーストビューの固定行は6つだけ＝ヘッダ／器チップ／アクション行(＋作る/検索/絞る)／種別行(≤1)／
+              つづき(≤1)／一覧ヘッダ。残り全部が一覧＝実データが主役。
+              ・新 kind が増えた → 作成の棚(CreateShelf)にタイル+1のみ。トップの種別行にはそのkindのネタを
+                実際に作った時だけ件数順で現れる＝トップの DOM 増分＋0。
+              ・アクション行に足してよいものは無し（＋作る/検索/絞る▾の3枠で打ち止め）。 */}
           {/* 案1：スコープ＋器を1行に統合。すべて/未仕分け/器＝作業ネタの絞り込み、区切りの先の
               「ライブラリ」＝連想元の参考素材（別の場所・全プロジェクト共有）。 */}
           <div className="project-picker proj-chips" role="tablist" aria-label="scope" ref={chipsRef}>
@@ -559,9 +558,18 @@ export function App() {
                 <Icon name="library" size={15} /> ライブラリ
               </button>
           </div>
-          {/* 検索を主役に。種別の絞り込みは「作成タイルと同じ絵・同じ順」を常時1行（種別色・ラベル無し）。
-              開閉トグルは廃止＝常に見えて分かりやすい。順は作成と一致：パーツ→組み立て→文字。 */}
-          <div className="filters">
+          {/* アクション行＝「作る」「探す」「絞る」の3つの扉を1行に統合（トップ契約§2.2＝この3枠で打ち止め）。
+              検索は常時入力欄（1タップ死守）。＋作る/絞る▾ はボトムシートの扉。 */}
+          <div className="action-row">
+            <button
+              type="button"
+              className="act-create"
+              aria-label="open-create-shelf"
+              title="新しいネタを作る"
+              onClick={() => setShelfOpen(true)}
+            >
+              ＋作る ▾
+            </button>
             <input
               className="search-main"
               aria-label="search"
@@ -569,6 +577,16 @@ export function App() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
+            <button
+              type="button"
+              className={"act-filter" + (kindFilter || moodFilter.trim() ? " set" : "")}
+              aria-label="open-filter-drawer"
+              aria-pressed={!!(kindFilter || moodFilter.trim())}
+              title="種別・mood で絞り込む"
+              onClick={() => setFilterDrawerOpen(true)}
+            >
+              絞る ▾
+            </button>
           </div>
           {searchDegraded && q.trim() && (
             // フェイルサイレント解消：意味検索(cm-search)不通時は黙って劣化せず、キーワードのみと明示。
@@ -576,15 +594,6 @@ export function App() {
               ⚠ 意味検索が使えません。キーワード一致のみで検索中（「近い」候補は出ません）
             </div>
           )}
-          {/* 種別フィルタ＋mood（S1 機械抽出＝FilterBar）＝作成と同じ絵・同じ順のアイコン1行＋mood 入力。
-              kindFilter/moodFilter の state は App が持つ。S3 でデータ導出のミニタイル＋件数バッジへ差し替える。 */}
-          <FilterBar
-            kindFilter={kindFilter}
-            setKindFilter={setKindFilter}
-            moodFilter={moodFilter}
-            setMoodFilter={setMoodFilter}
-            qActive={!!q.trim()}
-          />
           <NetaList
             items={shownItems}
             scope={scope}
@@ -599,6 +608,29 @@ export function App() {
                 : undefined
             }
           />
+          {/* 作成の棚（S2＝ボトムシート）。＋作る▾ で開き、タイルtap＝createBlank/newSong→閉じる。 */}
+          {shelfOpen && (
+            <CreateShelf
+              createBlank={createBlank}
+              newSong={newSong}
+              importOpen={importOpen}
+              setImportOpen={setImportOpen}
+              reload={reload}
+              projectTags={projectTags}
+              onClose={() => setShelfOpen(false)}
+            />
+          )}
+          {/* 絞り込み引き出し（S2＝ボトムシート）。絞る▾ で開く。S3 でデータ導出のタイル格子＋0件ゾーンへ。 */}
+          {filterDrawerOpen && (
+            <FilterDrawer
+              kindFilter={kindFilter}
+              setKindFilter={setKindFilter}
+              moodFilter={moodFilter}
+              setMoodFilter={setMoodFilter}
+              qActive={!!q.trim()}
+              onClose={() => setFilterDrawerOpen(false)}
+            />
+          )}
         </aside>
         <section className="mainpane" aria-label="mainpane">
           <Suspense fallback={<div className="mainpane-empty"><p className="muted">読み込み中…</p></div>}>
