@@ -742,6 +742,27 @@
 .cand-vl.ok {
   color: color-mix(in srgb, var(--muted) 80%, transparent);
 }
+/* 候補レンズ（design #12-M・WP-M3）：並べ替え軸セレクタ＋スコアバッジ（審判でなく目安）。器は改造しない＝最小。 */
+.lens-select {
+  margin-left: 8px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
+  border-radius: 4px;
+  padding: 0 2px;
+  vertical-align: baseline;
+}
+.cand-lens {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  color: color-mix(in srgb, var(--accent) 85%, white 10%);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  vertical-align: baseline;
+}
 /* P2（2026-07-10）：候補トレイ＝横スクロールで複数候補を並べて比較 */
 .cand-tray {
   width: 100%;

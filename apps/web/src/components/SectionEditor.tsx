@@ -27,7 +27,7 @@ import { useDismiss } from "../useDismiss";
 import { LaneCell } from "./LaneCell";
 import { SongStatus } from "./SongStatus";
 import { PlacePicker } from "./PlacePicker";
-import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI, voiceLeadingBadge } from "../useMelodyGen";
+import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI, voiceLeadingBadge, LENS_AXES, lensBadge } from "../useMelodyGen";
 import { usePlacePicker } from "../usePlacePicker";
 // D0（design #20 S6）：セクション文脈の計算は純関数へ抽出（机 SkeletonDesk と共有）。ここは薄い委譲。
 import * as sctx from "../sectionContext";
@@ -488,15 +488,23 @@ export function SectionEditor({
         >
           <span className="reshape-label">
             {laneOf(gen.cands[0]!.kind)?.label ?? gen.cands[0]!.kind}候補 {gen.cands.length}件（この進行に生成・見て選ぶ）
+            {/* 候補レンズ（design #12-M・WP-M3）：選んだ軸で並べ替えるだけ＝候補は弾かない。既定=生成順=bit一致。メロ候補のみ。 */}
+            {gen.cands[0]!.kind === "melody" && (
+              <select className="lens-select" aria-label="lens-axis" value={gen.lensAxis} onChange={(e) => gen.setLensAxis(e.target.value as typeof gen.lensAxis)} title="並べ替え軸（レンズ＝候補を弾かず並べ替えるだけ）">
+                {LENS_AXES.map((a) => <option key={a.id} value={a.id}>並べ替え：{a.label}</option>)}
+              </select>
+            )}
           </span>
           {/* P2（2026-07-10・UX再設計）：候補を横スクロールのトレイで並べて比較。各カード＝MiniRoll＋メタ＋試聴/keep/置く/捨てる。 */}
           <div className="cand-tray" aria-label="candidate-tray">
-            {gen.cands.map((c) => {
+            {gen.displayCands.map((c) => {
               const cn = notesForContent(c.kind, c.content);
               const bars = cn.length ? Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6)) : 0;
               const kept = gen.keptCids.has(c.cid);
               // 対位法バッジ（design #20 S3d・指摘のみ・禁止しない）：違反ありは ⚠＋種別、無ければ小さく「対位OK」。
               const vl = voiceLeadingBadge(c.meta);
+              // レンズスコアバッジ（design #12-M・WP-M3）：並べ替え軸を選んだ時だけ、その軸のスコアを表示（審判でなく目安）。
+              const lb = lensBadge(c.meta, gen.lensAxis);
               return (
                 <div key={c.cid} className={"cand-card" + (kept ? " kept" : "")} aria-label="candidate-card">
                   {cn.length > 0 && (
@@ -505,6 +513,7 @@ export function SectionEditor({
                       <span className="cand-meta">
                         {bars}小節・{cn.length}音{kept ? " ♡" : ""}
                         {vl && <span className={"cand-vl" + (vl.warn ? " warn" : " ok")} aria-label="voiceleading-badge" title={c.meta?.voiceLeadingSummary}>{vl.text}</span>}
+                        {lb && <span className="cand-lens" aria-label="lens-badge" title={`${lb.label}スコア（並べ替えの目安・審判ではない）`}>{lb.label} {lb.text}</span>}
                       </span>
                     </span>
                   )}

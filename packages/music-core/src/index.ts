@@ -17,6 +17,10 @@ export interface Note {
 // 歌詞↔メロ プロソディ（WP-M5・design #13b）＝モーラ分割/リズム型候補/アクセント整合の純関数。
 export * from "./prosody";
 
+// メロ候補の並べ替えレンズ3種（WP-M3・design #12-M「候補レンズ」）＝純TS・記号のみ・音源不要。
+// api/web が @cm/music-core から引く（voiceLeading 分析レンズと同格の共有純関数）。
+export * from "./melodyLenses";
+
 /** ピッチクラス(0-11)の音名。旧 web `PITCH_NAMES` / api `KEY_NAMES` の同一配列を1本化。
  *  型は既存に合わせ `string[]`（web の `PITCH_NAMES.indexOf(root: string)` 等の互換のため as const にしない）。 */
 export const PITCH_NAMES: string[] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api, type Neta } from "./api";
 import { Icon } from "./components/Icon";
 import { fitReportText } from "./fitReport";
@@ -56,8 +56,27 @@ export type ChordArg = { root?: number; quality?: string; start?: number; dur?: 
 export type DrumsPayload = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: { name?: string; midi?: number; hits: number[]; vel?: number }[] } };
 // 対位法レポート（design #20 S3d）：API が gen_melody/gen_bass 候補の meta に添付（読み取り専用・指摘のみ）。
 export type VoiceLeadingReport = { score: number; parallelFifths: number; parallelOctaves: number; directFifths: number; directOctaves: number; voiceCrossings: number };
-export type CandMeta = { voiceLeading?: VoiceLeadingReport; voiceLeadingSummary?: string };
+// 候補レンズ（design #12-M・WP-M3）：API が gen_melody 候補の meta に添付する3軸 headline スコア（全て高い=良い）。
+export type MelodyLenses = { expectation: number; hook: number; singability: number };
+export type CandMeta = { voiceLeading?: VoiceLeadingReport; voiceLeadingSummary?: string; lenses?: MelodyLenses };
 export type Cand = { kind: string; content: unknown; cid: number; skeletonNetaId?: string; meta?: CandMeta };
+
+// 候補トレイの並べ替え軸（design #12-M「候補レンズ」）。既定 ""＝生成順＝挿入順＝bit一致（審判にしない＝弾かず並べ替えるだけ）。
+export type LensAxis = "" | "expectation" | "hook" | "singability";
+export const LENS_AXES: { id: LensAxis; label: string }[] = [
+  { id: "", label: "生成順" },
+  { id: "expectation", label: "期待理論" },
+  { id: "hook", label: "フック度" },
+  { id: "singability", label: "歌いやすさ" },
+];
+// カード用スコアバッジ（レンズ未選択なら null＝非表示）。値は 0..1 を % 表示。
+export function lensBadge(meta: CandMeta | undefined, axis: LensAxis): { text: string; label: string } | null {
+  if (!axis) return null;
+  const v = meta?.lenses?.[axis];
+  if (typeof v !== "number") return null;
+  const label = LENS_AXES.find((a) => a.id === axis)?.label ?? axis;
+  return { text: `${Math.round(v * 100)}`, label };
+}
 
 // 候補カードの対位法バッジ（design #20 S3d）：違反があれば ⚠＋種別×件数を簡潔に、無ければ「対位OK」。
 // 「機械は指摘まで・禁止しない」＝score が低くても置ける（バッジは注意喚起のみ）。meta 無し＝null＝非表示。
@@ -107,6 +126,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const { neta, keyPc, tempo, liveMeter, liveTitle, BARS, BPB, lanes } = ctx;
   // P2（2026-07-10・UX再設計）：候補を単数→配列(トレイ)＝複数を並べて比較・keep。cid=React key＋keep追跡。
   const [cands, setCands] = useState<Cand[]>([]);
+  // 候補レンズの並べ替え軸（design #12-M・WP-M3）。既定 ""＝生成順（挿入順＝bit一致）。
+  const [lensAxis, setLensAxis] = useState<LensAxis>("");
   const [keptCids, setKeptCids] = useState<Set<number>>(new Set());
   const candId = useRef(0);
   const [genBusy, setGenBusy] = useState(false);
@@ -371,10 +392,24 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     setCands([]);
     setKeptCids(new Set());
   }
+  // 候補トレイの表示順（design #12-M・WP-M3）：レンズ未選択＝生成順（挿入順＝bit一致）。選択時は
+  // その軸の headline スコア降順（安定・レンズ値なし=末尾で挿入順維持）。**候補は弾かない**＝並べ替えのみ。
+  const displayCands = useMemo(() => {
+    if (!lensAxis) return cands;
+    return cands
+      .map((c, i) => ({ c, i, s: c.meta?.lenses?.[lensAxis] }))
+      .sort((a, b) => {
+        if (a.s == null && b.s == null) return a.i - b.i;
+        if (a.s == null) return 1;
+        if (b.s == null) return -1;
+        return b.s - a.s || a.i - b.i;
+      })
+      .map((x) => x.c);
+  }, [cands, lensAxis]);
 
   return {
     // 候補トレイ状態
-    cands, keptCids, genBusy,
+    cands, displayCands, lensAxis, setLensAxis, keptCids, genBusy,
     // ノブ状態＋setter（JSX が select/segRow/sliderRow で直に使う）
     density, setDensity, swing, setSwing, expression, setExpression, runs, setRuns, push, setPush,
     foreground, setForeground, breathe, setBreathe, humanize, setHumanize, hook, setHook,

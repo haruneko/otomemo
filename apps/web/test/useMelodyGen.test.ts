@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { realizedMelodyCount, voiceLeadingBadge } from "../src/useMelodyGen";
+import { realizedMelodyCount, voiceLeadingBadge, lensBadge, LENS_AXES } from "../src/useMelodyGen";
 
 // 分岐スタック「→吹いたメロ N」（design #20 S6・D4）＝getRelations(骨格id) 出力から realized_from×melody を数える。
 describe("realizedMelodyCount（分岐スタック N）", () => {
@@ -30,5 +30,26 @@ describe("voiceLeadingBadge（④トレイの対位バッジ）", () => {
     const warn = voiceLeadingBadge({ voiceLeading: { score: 0.5, parallelFifths: 2, parallelOctaves: 0, directFifths: 0, directOctaves: 0, voiceCrossings: 0 } });
     expect(warn?.warn).toBe(true);
     expect(warn?.text).toContain("並5×2");
+  });
+});
+
+// 候補レンズのバッジ（design #12-M・WP-M3）＝並べ替え軸を選んだ時だけ、その軸の headline スコアを目安表示。
+describe("lensBadge（候補レンズのスコアバッジ）", () => {
+  const meta = { lenses: { expectation: 0.82, hook: 0.45, singability: 0.9 } };
+  it("軸未選択（生成順）は null＝バッジ非表示（既定=bit一致）", () => {
+    expect(lensBadge(meta, "")).toBeNull();
+  });
+  it("選んだ軸のスコアを % で・ラベル付きで返す", () => {
+    expect(lensBadge(meta, "expectation")).toEqual({ text: "82", label: "期待理論" });
+    expect(lensBadge(meta, "hook")).toEqual({ text: "45", label: "フック度" });
+    expect(lensBadge(meta, "singability")).toEqual({ text: "90", label: "歌いやすさ" });
+  });
+  it("lenses メタ無し（骨格/ハモリ等）は null", () => {
+    expect(lensBadge(undefined, "hook")).toBeNull();
+    expect(lensBadge({ voiceLeadingSummary: "x" }, "hook")).toBeNull();
+  });
+  it("LENS_AXES 先頭は生成順（既定＝挿入順＝bit一致）", () => {
+    expect(LENS_AXES[0]).toEqual({ id: "", label: "生成順" });
+    expect(LENS_AXES.map((a) => a.id)).toEqual(["", "expectation", "hook", "singability"]);
   });
 });

@@ -36,6 +36,7 @@ import {
 import { analyzeVoiceLeading } from "./music/voiceLeading";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20 S2）
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
+import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
 import { meterInfo } from "./music/meter";
 import { sanitizeRhythmParts, extractRhythmPart } from "./music/rhythmParts"; // リズムパーツ層 L1/L2＋採取（design #20 S4-1/S4-2）
 import { normRoot } from "./music/theory";
@@ -217,6 +218,8 @@ export function buildHttp(core: Core): FastifyInstance {
           });
           // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
           attachMelodyVoiceLeading(res, { bass: bassN.length ? bassN : undefined, skeleton, chords: asChords(b.chords), beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
+          // 候補レンズの添付（design #12-M・WP-M3・読み取り専用＝候補ノートは不変）。web 候補トレイの並べ替え軸。
+          attachMelodyLenses(res, { key: typeof b.frame?.key === "number" ? b.frame.key : undefined, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, sectionRole: (b.frame as { section?: { role?: string } } | undefined)?.section?.role });
           // capture 後に link(メロ, 骨格, "realized_from") を張れるよう id をエコー（design #20・MCP 経路と同じ）。
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string;
           return res;
