@@ -46,11 +46,32 @@ const PALETTE_CHIPS: { v: "" | "ionian" | "mixolydian" | "aeolian" | "dorian"; l
 ];
 const PRESET_LABEL = Object.fromEntries(MELODY_PRESETS.map((p) => [p.name, p.label]));
 
+// マイ設定（P4 の回収・design #19 ⑥）＝いま回してるノブ群を localStorage に {name,label,v} で保存＝MELODY_PRESETS と同型。
+// これは UI ローカルの当たり保存＝生成 payload には影響しない（applyPreset で通常ノブへ流すだけ＝bit一致）。
+type MyPreset = { name: string; label: string; v: Parameters<ReturnType<typeof useMelodyGen>["applyPreset"]>[1] };
+const MY_PRESETS_KEY = "cm_melody_my_presets";
+const loadMyPresets = (): MyPreset[] => { try { return JSON.parse(localStorage.getItem(MY_PRESETS_KEY) || "[]"); } catch { return []; } };
+
 export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, onExportMidi, onExportMidiSplit }: TinkerSheetProps) {
   const [view, setView] = useState<View>("hub");
   // 引き出し内の群アコーディオン開閉（メロ引き出し＝一度に15本を縦に並べない）。
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const toggleGroup = (id: string) => setOpenGroups((g) => ({ ...g, [id]: !g[id] }));
+  const [myPresets, setMyPresets] = useState<MyPreset[]>(loadMyPresets);
+  // いま画面に出ているノブ値を PresetV へ畳む（保存・再適用の種）。
+  const currentPresetV = (): MyPreset["v"] => ({
+    density: gen.density, swing: gen.swing, runs: gen.runs, expression: gen.expression, push: gen.push,
+    hook: gen.hook, articulation: gen.articulation, foreground: gen.foreground, breathe: gen.breathe,
+    flow: gen.flow, pickup: gen.pickup, phrasing: gen.phrasing, form: gen.form,
+  });
+  const saveMyPreset = () => {
+    const v = currentPresetV();
+    const name = `my_${Date.now()}`;
+    const next = [...myPresets, { name, label: `マイ${myPresets.length + 1}`, v }];
+    setMyPresets(next);
+    try { localStorage.setItem(MY_PRESETS_KEY, JSON.stringify(next)); } catch { /* localStorage 不可でも保存無しで続行 */ }
+    gen.applyPreset(name, v); // 保存＝選択中に（ハイライト）
+  };
 
   const hasChords = sectionChords().length > 0;
   const hasBass = sectionBass().length > 0;
@@ -155,6 +176,10 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
             {MELODY_PRESETS.map((p) => (
               <button key={p.name} type="button" className={"chip" + (gen.preset === p.name ? " on" : "")} aria-label={`preset-${p.name}`} aria-pressed={gen.preset === p.name} onClick={() => gen.applyPreset(p.name, p.v)}>{p.label}</button>
             ))}
+            {myPresets.map((p) => (
+              <button key={p.name} type="button" className={"chip" + (gen.preset === p.name ? " on" : "")} aria-label={`preset-${p.name}`} aria-pressed={gen.preset === p.name} onClick={() => gen.applyPreset(p.name, p.v)}>★{p.label}</button>
+            ))}
+            <button type="button" className="chip tk-chip-add" aria-label="preset-save" title="いまのノブ設定をマイ設定として保存（localStorage）" onClick={saveMyPreset}>＋保存</button>
           </div>
           <button type="button" className="dice-btn" aria-label="dice-roll" title="ノブをランダムに振る（ロックは固定）" onClick={gen.rollDice}><Icon name="dice" size={18} /></button>
         </div>

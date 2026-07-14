@@ -644,6 +644,37 @@ describe("SectionEditor (3-lane timeline)", () => {
     await waitFor(() => expect(music).toHaveBeenCalled());
     expect((music.mock.calls[0]![1] as Record<string, unknown>).density).toBeCloseTo(0.5);
   });
+  it("T3 マイ設定＝［＋保存］でノブ群をlocalStorageに畳み、chip再選択で同値を再適用＝生成bodyが一致", async () => {
+    localStorage.clear(); // 他テストのマイ設定を持ち込まない
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    // メロ引き出しで前面の細かさ/跳ねを動かして＋保存
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-melody"));
+    fireEvent.change(screen.getByLabelText("density"), { target: { value: "0.7" } });
+    fireEvent.change(screen.getByLabelText("swing"), { target: { value: "0.4" } });
+    await userEvent.click(screen.getByLabelText("preset-save")); // マイ1 として保存＝選択中に
+    // localStorage に畳まれる
+    expect(JSON.parse(localStorage.getItem("cm_melody_my_presets") || "[]")).toHaveLength(1);
+    // 別プリセットへ逃がしてからマイ1を再選択＝同値へ戻す
+    await userEvent.click(screen.getByLabelText("preset-plain")); // density0.5 へ
+    const myChip = screen.getByText("★マイ1");
+    await userEvent.click(myChip);
+    await userEvent.click(screen.getByLabelText("gen-gen_melody"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const body = music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.density).toBeCloseTo(0.7); // 保存した値がそのまま再適用され送られる
+    expect(body.swing).toBeCloseTo(0.4);
+    localStorage.clear();
+  });
   it("gen_melody＝最小音符を選ぶと finest を送る／おまかせ(既定)は未送信（高BPM対策・オーナーFB）", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });

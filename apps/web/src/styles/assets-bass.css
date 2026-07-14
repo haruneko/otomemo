@@ -1037,6 +1037,12 @@ article[aria-label="neta-card"].dragging {
 .tk-tile-chip.set {
   color: var(--k-melody);
 }
+/* ＋保存＝マイ設定（P4 の回収）＝破線で「足す」を示す。 */
+.tk-chip-add {
+  border-style: dashed !important;
+  color: var(--muted) !important;
+  background: transparent !important;
+}
 /* 書き出し＝ハブ下端の固定行。 */
 .tk-export {
   display: flex;
