@@ -20,6 +20,7 @@ import { prewarmSoundFont } from "./music";
 import { useIsMobile } from "./useIsMobile";
 import { CreateShelf } from "./components/CreateShelf";
 import { FilterDrawer } from "./components/FilterDrawer";
+import { KindTiles } from "./components/KindTiles";
 // 重い二次画面は遅延ロード＝初回バンドルを軽くする（perf 耳FB 2026-07-09。Chatはreact-markdown 170KB）。
 // NetaDialog(セクション/メロ編集の本体)は最頻操作なので**同梱のまま**＝開く時に取得待ちを出さない。
 const AnalysisWorkbench = lazy(() => import("./components/AnalysisWorkbench").then((m) => ({ default: m.AnalysisWorkbench })));
@@ -232,6 +233,22 @@ export function App() {
   const shownItems = moodFilter.trim()
     ? items.filter((n) => (n.mood ?? "").toLowerCase().includes(moodFilter.trim().toLowerCase()))
     : items;
+
+  // トップ再設計 S3：種別タイルの件数はクライアント集計（追加APIなし・正典 §3.2/§7）。
+  // 「未絞り込みブラウズ時の items」からのみ集計し、kindFilter/q/mood 適用中は直前スナップショットを維持
+  //   ＝絞り込むとチップが消える/並び替わるチラつきを防ぐ（露出∝実利用）。
+  const [kindCounts, setKindCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (q.trim() || kindFilter || moodFilter.trim()) return; // 絞り込み中＝スナップショット固定
+    const c: Record<string, number> = {};
+    for (const n of items) c[n.kind] = (c[n.kind] ?? 0) + 1;
+    setKindCounts(c);
+  }, [items, q, kindFilter, moodFilter]);
+  // トップの種別行＝件数降順・上位6・実在(>0)のみ（0件kindはトップ非表示＝絞る▾引き出しの「まだ0件」に居る）。
+  const topKinds: [string, number][] = Object.entries(kindCounts)
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
 
   // 手動並べ替えが効くのは「素のプロジェクト一覧」だけ＝検索/種別/mood 絞り込み中は無効
   // （部分集合を並べ替えると position が疎になり混乱する）。この時 items===表示順で楽観更新が安全。
@@ -594,6 +611,11 @@ export function App() {
               ⚠ 意味検索が使えません。キーワード一致のみで検索中（「近い」候補は出ません）
             </div>
           )}
+          {/* 種別行（S3）＝実在kindだけを件数降順・上位6のミニタイル（作成タイルと同じ絵＋件数バッジ）。
+              露出∝実利用＝0件kindは出ない。検索中は種別絞りが無効（検索が絞りの主体）なので隠す。 */}
+          {!q.trim() && topKinds.length > 0 && (
+            <KindTiles entries={topKinds} kindFilter={kindFilter} setKindFilter={setKindFilter} variant="row" />
+          )}
           <NetaList
             items={shownItems}
             scope={scope}
@@ -627,7 +649,7 @@ export function App() {
               setKindFilter={setKindFilter}
               moodFilter={moodFilter}
               setMoodFilter={setMoodFilter}
-              qActive={!!q.trim()}
+              kindCounts={kindCounts}
               onClose={() => setFilterDrawerOpen(false)}
             />
           )}

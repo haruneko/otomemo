@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("../src/api", () => ({
@@ -15,8 +15,26 @@ vi.mock("../src/api", () => ({
 }));
 
 import { api } from "../src/api";
+import type { Neta } from "../src/api";
 
 import { App } from "../src/App";
+
+// 種別件数(kindCounts)の集計テスト用の最小ネタ。NetaList が読む形だけ満たす。
+let seq = 0;
+const mk = (kind: string): Neta => ({
+  id: `n${seq++}`, kind, title: `${kind}-${seq}`, text: null, content: null,
+  key: null, mode: null, tempo: null, meter: null, bars: null, mood: null,
+  tags: [], created: "2026-07-14", updated: "2026-07-14",
+});
+// kind→件数 で items をまとめて作る。
+const itemsOf = (spec: Record<string, number>): Neta[] =>
+  Object.entries(spec).flatMap(([k, n]) => Array.from({ length: n }, () => mk(k)));
+
+beforeEach(() => {
+  // 既定＝空一覧。件数を見るテストは自前で mockResolvedValue する（前テストの残留を防ぐ）。
+  (api.listNeta as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue([]);
+  (api.createNeta as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue(undefined);
+});
 
 describe("App", () => {
   it("renders title and empty state", async () => {
@@ -86,13 +104,43 @@ describe("App", () => {
     expect(screen.queryByLabelText("analyze-url")).toBeNull();
   });
 
-  // 絞る▾で引き出しが開き、種別フィルタ(kind-filter-*)と mood が扉の奥に居る（S2）。
-  it("opens the filter drawer with kind filters and mood — S2", async () => {
+  // 絞る▾で引き出しが開き、mood が扉の奥に居る（S2）。実在kindはタイル・0件kindはゴースト（S3）。
+  it("opens the filter drawer with mood and kind tiles — S2/S3", async () => {
+    (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2 }));
     render(<App />);
-    expect(screen.queryByRole("dialog", { name: "filter-drawer" })).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText("kind-filter-melody")).toBeInTheDocument()); // トップ種別行に出た
     await userEvent.click(screen.getByLabelText("open-filter-drawer"));
-    expect(screen.getByRole("dialog", { name: "filter-drawer" })).toBeInTheDocument();
-    expect(screen.getByLabelText("kind-filter-melody")).toBeInTheDocument();
-    expect(screen.getByLabelText("mood-filter")).toBeInTheDocument();
+    const drawer = screen.getByRole("dialog", { name: "filter-drawer" });
+    expect(within(drawer).getByLabelText("kind-filter-melody")).toBeInTheDocument(); // 実在=タイル
+    expect(within(drawer).getByLabelText("kind-zero-riff")).toBeInTheDocument(); // 0件=ゴースト
+    expect(within(drawer).getByLabelText("mood-filter")).toBeInTheDocument();
+  });
+
+  // S3：トップ種別行＝件数降順・上位6・実在(>0)のみ（0件kindはトップに出ない＝露出∝実利用）。
+  it("shows top-6 kind mini-tiles by count and hides 0-count kinds — S3", async () => {
+    (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(
+      itemsOf({ chord_progression: 5, melody: 3, counter: 2, bass: 2, rhythm: 1, chord_pattern: 1, lyric: 1 }),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.getByLabelText("kind-filter-chord_progression")).toBeInTheDocument());
+    const row = screen.getByRole("group", { name: "kind-filter" }); // トップ種別行（引き出しは閉じている）
+    const tiles = within(row).getAllByRole("button");
+    expect(tiles).toHaveLength(6); // 上位6のみ（7種入れたが lyric は溢れる）
+    expect(within(row).queryByLabelText("kind-filter-lyric")).toBeNull(); // 7位はトップ非表示
+    expect(within(row).queryByLabelText("kind-filter-riff")).toBeNull(); // 0件はトップ非表示
+    // 件数バッジ（先頭=最多 chord_progression=5）。
+    expect(within(within(row).getByLabelText("kind-filter-chord_progression")).getByText("5")).toBeInTheDocument();
+  });
+
+  // S3：トップ種別タイルをtap→kindFilter が効いて listNeta が kind 付きで呼ばれる（絞り込み動線1タップ）。
+  it("filters by tapping a top kind tile — S3", async () => {
+    (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2, bass: 1 }));
+    render(<App />);
+    await waitFor(() => expect(screen.getByLabelText("kind-filter-melody")).toBeInTheDocument());
+    const row = screen.getByRole("group", { name: "kind-filter" });
+    await userEvent.click(within(row).getByLabelText("kind-filter-melody"));
+    await waitFor(() =>
+      expect(api.listNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "melody" })),
+    );
   });
 });
