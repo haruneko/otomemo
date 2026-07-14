@@ -326,9 +326,9 @@ describe("genBass skeleton injection (ベース表面化・design #20 S3c)", () 
   });
   it("高い明示ピッチは低域窓へ畳んで差し替わる", () => {
     const seed = 42;
-    const skel: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 62 }] }; // D4=62→窓内の最寄り D3=50
+    const skel: SkeletonContent = { bars: 2, tones: [{ start: 0, pitch: 60 }], bass: [{ start: 0, pitch: 62 }] }; // D4=62→低域窓[33,48]内の D2=38（2026-07-14 較正で窓上端55→48）
     const got = bassNotes(genBass(frame, chords, seed, null, { skeleton: skel }));
-    for (const n of got.filter((n) => n.start < 2 - 1e-9)) expect(n.pitch).toBe(50);
+    for (const n of got.filter((n) => n.start < 2 - 1e-9)) expect(n.pitch).toBe(38);
   });
   it("骨格ベース休符 pitch:null 区間はベースも鳴らさない（onset 抑制）", () => {
     const seed = 42;

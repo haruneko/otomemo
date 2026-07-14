@@ -471,6 +471,9 @@ export function genMelody(
           for (const s of dr.kick) { const t = inWin(s); if (t != null) { kick.push(t); k++; } }
           for (const s of dr.snare) { const t = inWin(s); if (t != null) { snare.push(t); s2++; } }
           for (const s of dr.hihat) if (inWin(s) != null) h++;
+          // hihat 重み 0.3＝**上限として維持**（D2 実測＝小節別 hihat 数と kick+snare 数の相関 0.20/−0.02≒無情報。
+          // busy-ness 信号としては kick+snare 主体で大勢は変わらず・0.3 で密度指標の約2割を占めるのが上限。0.2 へ下げる
+          // 選択肢もデータ寄りだが差は小＝現行 0.3 のままで実測と矛盾しない。docs/research/2026-07-14-stem-groove-measurements.md §4）。
           densityByBar.push(k + s2 + 0.3 * h);
         }
         drumsV2 = { kick, snare, densityByBar };
@@ -741,7 +744,19 @@ function parseDrums(drums?: DrumsInput | null): { steps: number; bps: number; ki
   return { steps: Math.trunc(steps), bps, kick: laneOf(36, "Kick"), snare: laneOf(38, "Snare"), hihat: laneAll([42, 44, 46], ["HiHat", "OpenHat", "ClosedHat"]) };
 }
 
-/** ベースライン（強拍=ルート・弱拍=5度/オクターブ）＋**リズム図形**。C2基準低域。
+// ベース低域窓＋kickLock 動作点の実測較正（B1+D2＝docs/research/2026-07-14-stem-groove-measurements.md）。
+// 音域窓：自作曲 stem 実測 p5–p95=G1..A2（絶対上限F3）。旧 36..47(legacy)/33..55(kick経路) は上端が実曲より高い。
+//   → **33..48（A1..C3）へ是正**。★意図的 bit 破壊：ルート/5度/oct の絶対配置が下方シフト＝旧出力と不一致
+//   （A/A#/B ルートは1oct 下がり・高ルートの 5度上/oct は窓上端48で刈られ root 集中）。耳確認は[耳/手]。
+export const BASS_LO = 33, BASS_HI = 48;
+// pc(0..11) を窓 [BASS_LO,BASS_HI] の最下オクターブへ写す（旧 36+pc の 36..47 張り付きに代わる低域化）。
+// 例：C(pc0)→36(C2 据え置き)・G(pc7)→43(G2)・A(pc9)→33(A1 で1oct 降下)・B(pc11)→35(B1)。
+function bassPcToWindow(pc: number): number { return BASS_LO + ((((pc % 12) - BASS_LO) % 12) + 12) % 12; }
+// kickLock 動作点（実測＝bass onset の kick 共有率）。既定0=bit一致は不変。弱/強プリセット＋上限クランプ。
+// 上限0.85＝share→1.0（全 onset を kick へスナップ＝完全ユニゾン）は自作曲に存在しない実測ゆえ安全弁。
+export const KICK_LOCK_PRESETS = { weak: 0.6, strong: 0.8, max: 0.85 } as const;
+
+/** ベースライン（強拍=ルート・弱拍=5度/オクターブ）＋**リズム図形**。低域窓 [BASS_LO,BASS_HI]。
  * drums＋opts（kickLock/snareGap/approach・各既定0）＝ドラムに噛む強化（design「gen_bass×ドラム結線」・
  * research/2026-07-10-bass-generation-upgrade.md）。**drums 無し or 全係数0 は従来と bit 一致**（fig 経路温存＝
  * 第二経路の追加。melodyCells push/swing/humanize と同じ流儀＝係数0は段ごとスキップ・段は独立 seed 派生 Rng）。 */
@@ -764,7 +779,8 @@ export function genBass(
   const notes: { pitch: number; start: number; dur: number }[] = [];
   // ドラム結線のゲート：drums content が無ければ全ノブ無効＝従来経路（鉄則）。
   const dr = parseDrums(drums);
-  const kickLock = dr ? Math.max(-1, Math.min(1, opts?.kickLock ?? 0)) : 0;
+  // 上限クランプ 0.85（B1 実測＝share→1.0 は非実在）。負(逆相)は 8分裏配置ゆえユニゾン化せず -1 まで許容。
+  const kickLock = dr ? Math.max(-1, Math.min(KICK_LOCK_PRESETS.max, opts?.kickLock ?? 0)) : 0;
   const snareGap = dr ? Math.max(0, Math.min(1, opts?.snareGap ?? 0)) : 0;
   const approach = dr ? Math.max(0, Math.min(1, opts?.approach ?? 0)) : 0;
   // A/A' キック骨格＝4/4系のみ・ドラムの1小節長が拍子と一致する時のみ（6/8 は push/swing と同じ除外方針）。
@@ -797,17 +813,18 @@ export function genBass(
         if (dur <= 0) return;
         const ch = chordAt(Math.floor(t), chords);
         const root = ch ? normRoot(ch.root ?? 0) : (f.key ?? 0);
-        const rootP = 36 + root; // ルートは従来と同じ帯（C2..B2）
+        const rootP = bassPcToWindow(root); // ルートを低域窓の最下 oct へ（実測較正・A/A#/B は1oct 降下）
         let pitch: number;
         if (i === 0 || root !== prevRoot) pitch = rootP; // アンカー＝小節内最初 or チェンジ頭＝ルート
         else {
-          // B: 間＝R/5度/オクターブ。5度は原則「上」＝root+7 実音（(root+7)%12 の窓張り付けで下に出る転回を是正）。
-          const cand = [rootP, rootP + 7, rootP + 12].filter((p) => p <= 55); // 窓 33..55（A1..G3）
+          // B: 間＝R/5度/オクターブ。5度は原則「上」＝root+7 実音。窓上端 BASS_HI を超える候補（高ルートの5度上/oct）は
+          //    刈る＝実測窓（p95=A2）逸脱を防ぐ＝高ルートは root 集中（(root+7)%12 の下転回はしない設計を維持）。
+          const cand = [rootP, rootP + 7, rootP + 12].filter((p) => p <= BASS_HI);
           const w = [2, 1.5, bias.busy >= 1.5 ? 1.2 : 0.6].slice(0, cand.length);
           pitch = rng.choices(cand, w);
         }
         prevRoot = root;
-        notes.push({ pitch: Math.max(33, Math.min(55, pitch)), start: round3(t), dur: round3(dur) });
+        notes.push({ pitch: Math.max(BASS_LO, Math.min(BASS_HI, pitch)), start: round3(t), dur: round3(dur) });
       });
     }
   } else {
@@ -825,7 +842,7 @@ export function genBass(
         // 拍頭(小節/拍の頭)=ルート、間=5度。たまにオクターブ上で動きを。
         const fifth = (root + 7) % 12;
         const pc = off === 0 && (onBar || i === 0) ? root : rng.next() < 0.5 ? fifth : root;
-        notes.push({ pitch: 36 + pc, start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
+        notes.push({ pitch: bassPcToWindow(pc), start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
       });
       beat += fig.span;
     }
@@ -846,8 +863,8 @@ export function genBass(
       const strong = Number.isInteger(pos) && pos % 2 === 0; // 4/4 の 1・3拍頭＝強拍
       if (strong || n.dur > 1 + 1e-6 || cs - n.start > 1.5 + 1e-6) continue;
       if (aRng.next() >= approach) continue;
-      const target = 36 + normRoot(c.root ?? 0); // beat1=ターゲット（次ルート）
-      n.pitch = Math.max(33, Math.min(55, aRng.choice([target - 1, target + 1, target - 2]))); // 半音下/上・全音下
+      const target = bassPcToWindow(normRoot(c.root ?? 0)); // beat1=ターゲット（次ルート・低域窓）
+      n.pitch = Math.max(BASS_LO, Math.min(BASS_HI, aRng.choice([target - 1, target + 1, target - 2]))); // 半音下/上・全音下
     }
   }
 
@@ -879,7 +896,7 @@ export function genBass(
         const seg = segs.find((s) => n.start >= s.start - 1e-9 && n.start < s.start + s.dur - 1e-9);
         if (seg) {
           if (seg.pitch == null) continue; // 骨格ベース休符＝当該オンセットを鳴らさない
-          n.pitch = Math.max(33, Math.min(55, foldBassPitch(seg.pitch))); // 明示ピッチを低域窓へ畳む
+          n.pitch = Math.max(BASS_LO, Math.min(BASS_HI, foldBassPitch(seg.pitch, BASS_LO, BASS_HI))); // 明示ピッチを低域窓へ畳む
         }
         // 休符区間へ食い込む dur は区間頭で切る（S3b と同思想・直前の音は休符頭で着地）。
         for (const r of rests) if (r.start > n.start + 1e-9 && r.start < n.start + n.dur - 1e-9) n.dur = round3(r.start - n.start);
