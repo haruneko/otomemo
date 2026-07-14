@@ -1290,6 +1290,14 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **配線**：api `attachMelodyLenses(res,{frame,chords,sectionRole})`（`melodyLensesReport.ts`・voiceLeading添付と同型）が各候補 `item.meta.lenses={expectation,hook,singability}`（headline 3値・高い=良い）を付す＝gen_melody(MCP/HTTP)両経路。web `useMelodyGen` が候補トレイに**並べ替え軸セレクタ**（生成順/期待理論/フック度/歌いやすさ）＋スコアバッジを足す（既定=生成順=挿入順=**bit 一致**）。UI は器を改造しない（tinker-ux-redesign 不可侵＝セレクタ1個＋バッジのみ）。
 - **初期重み＝全て仮**（各研究doc §重み初期値）。［耳/手］＝レンズ順の妥当性・重み較正は後日一括。**レンズは弱い補助**（記憶性≠好み・説明力低＝研究doc警告）＝決め手にしない。
 
+→ **voice_profile＝声種プロファイルの frame 宣言＋ボカロモード（WP-M4・2026-07-14）**。正典＝`docs/research/2026-07-14-singability-tessitura.md`（§6-2 声種別レンジ表・§6-3 ボカロ緩和表）＋`2026-07-14-vocaloid-grammar.md`。
+- **契約**：`frame.voice_profile`（任意・**未指定=bit一致**）＝プリセット名（`female_pop`/`male_pop`/`mix`/`vocaloid`・日本語別表記可）**or** カスタム（`{base?, low, tessLow, tessHigh, chestTop, falsettoTop, passaggioLow, passaggioHigh, vocaloid?}`＝base プリセット＋部分上書き）。型＝`VoiceProfileSpec`（`@cm/music-core`）。`resolveVoiceProfile(spec)` が `VoiceProfile` へ解決（不正/未知=undefined＝落として bit 一致）。プリセット＝`VOICE_PROFILES`（`FEMALE_POP_AVG`/`MALE_POP_AVG`/`MIX_POP`/`VOCALOID`）。
+- **配線(a) レンズ**：`attachMelodyLenses(res,{...,profile})` が frame.voice_profile を解決して `singabilityLens` へ渡す＝**難度評価が声種依存**（例：D5メロは女性平均で易・男性平均で難）。
+- **配線(b) 生成音域窓**：`genMelody`/`genSkeletonCandidates` は **voice_profile 指定時のみ** `profileTpBase(vp,registerShift)` で音域窓中心(tpBase)を声種 tessitura へ寄せる（窓 `[tpBase-5,tpBase+12]` を `[low,falsettoTop]` に収める）。未指定＝従来 tonic中心クランプ＝bit 一致。registerShift(セクション役割)はプロファイル上でも相対で効く。
+- **ボカロモード**：`voice_profile:"vocaloid"`＝`VOCALOID`（上端 falsettoTop=C6=84 開放）＋`vocaloid:true` フラグ。`singabilityLens` は voca 時 **跳躍/音節密度/パッサッジョ/母音×高音の難度ペナを 0**（声帯・母音修正・声区の生理制約なし）。音域端は falsettoTop=C6 基準で「C6まで無罰・超で軽微」に自然化。tessitura は残す（広域許容だが山場設計の観点）。**BPM/密度/跳躍/転調の"尖り値"はプリセットの提案どまり＝ノブで振れる（vocaloid-grammar §0-3「既定固定＝逸脱の自由が死ぬ」）＝ノブ強制はしない**。
+- **web**：`useMelodyGen` に声種セレクタ（おまかせ/女性/男性/ミックス/ボカロ）＝空=未送信=bit一致。gen_melody/gen_skeleton の frame へ `voice_profile` を載せる。SectionEditor 詳細段「フレーズの組み立て」に select 1個追加（器改造なし）。
+- **［耳/手］**：音域窓の追従量・ボカロ緩和の効き・端滞在秒数/重みは研究doc初期値＝要・耳較正。
+
 → **motif-driven前景＝自由材料の同音/跳躍（2026-07-09・理論不足総点検 Step5・本丸2）**。full＝motif-extraction.md §4.5。
 **問題**：前景が「ダルダル」＝実曲は自由材料に跳躍14%/同音23%あるが、gen は**跳躍ほぼ0%・同音を潰す**。犯人＝(1)全ブロックが単一モチーフ M の A/A'/B/A'' 派生で自由材料が無い (2)`mkMotif`/`varyTail` が同音(move=0)を ±1 に潰し・跳躍を2度にクランプ＝contour が均される。
 **正準**：

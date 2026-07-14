@@ -19,21 +19,80 @@ export interface LensContext {
   sectionRole?: string; // "verse"|"chorus"|... 位置ゲート G1
 }
 
-/** 声種プロファイル（歌唱難度レンズ用・MIDI番号）。既定＝女性ポップ平均（研究 §6-2）。voice_profile 本体宣言は WP-M4。 */
+/** 声種プロファイル（歌唱難度レンズ用・MIDI番号）。既定＝女性ポップ平均（研究 §6-2）。voice_profile 本体宣言＝WP-M4。 */
 export interface VoiceProfile {
   low: number; // 実用最低音
   tessLow: number; // 快適 tessitura 下端
   tessHigh: number; // 快適 tessitura 上端
   chestTop: number; // 地声上端（実用上限）
-  falsettoTop: number; // 裏声/ミックス上端（単発可）
+  falsettoTop: number; // 裏声/ミックス上端（単発可）。ボカロは C6=84（上端開放）。
   passaggioLow: number; // パッサッジョ帯 下端
   passaggioHigh: number; // パッサッジョ帯 上端
+  vocaloid?: boolean; // ボカロモード：声帯/母音修正/声区の生理制約なし＝難度ペナ（跳躍/密度/母音/パッサッジョ）を無効化（研究 §6-3・C6開放）。
+  name?: string; // 表示名（情報のみ・計算に不使用）。
 }
 
 // 女性ポップ平均（研究 §6-2）：最低G3=55 / tess A3=57..D5=74 / 地声上端D5=74 / 裏声上端E5=76 / passaggio Bb4=70..F5=77。
-export const FEMALE_POP_AVG: VoiceProfile = { low: 55, tessLow: 57, tessHigh: 74, chestTop: 74, falsettoTop: 76, passaggioLow: 70, passaggioHigh: 77 };
+export const FEMALE_POP_AVG: VoiceProfile = { low: 55, tessLow: 57, tessHigh: 74, chestTop: 74, falsettoTop: 76, passaggioLow: 70, passaggioHigh: 77, name: "女性ポップ平均" };
 // 男性ポップ平均（研究 §6-2）：最低D3=50 / tess D3=50..A4=69 / 地声上端A4=69 / 裏声上端D5=74 / passaggio E4=64..B4=71。
-export const MALE_POP_AVG: VoiceProfile = { low: 50, tessLow: 50, tessHigh: 69, chestTop: 69, falsettoTop: 74, passaggioLow: 64, passaggioHigh: 71 };
+export const MALE_POP_AVG: VoiceProfile = { low: 50, tessLow: 50, tessHigh: 69, chestTop: 69, falsettoTop: 74, passaggioLow: 64, passaggioHigh: 71, name: "男性ポップ平均" };
+// ミックス（男女中間・ミックスボイス想定）：最低E3=52 / tess G3=55..C5=72 / 地声上端C5=72 / 裏声上端E5=76 / passaggio G4=67..D5=74。
+export const MIX_POP: VoiceProfile = { low: 52, tessLow: 55, tessHigh: 72, chestTop: 72, falsettoTop: 76, passaggioLow: 67, passaggioHigh: 74, name: "ミックス" };
+// ボカロ（研究 §6-3・vocaloid-grammar）：上端 C6=84 まで開放（tess C4=60..A5=81・上端 B5=83）。難度ペナは vocaloid フラグで無効化。
+// passaggio 値は保持するが vocaloid 経路では未使用（無効化）。生成側の音域窓は tess を C4-A5 帯へ引き上げる。
+export const VOCALOID: VoiceProfile = { low: 48, tessLow: 60, tessHigh: 81, chestTop: 83, falsettoTop: 84, passaggioLow: 64, passaggioHigh: 77, vocaloid: true, name: "ボカロ" };
+
+/** 声種プリセット登録（正準キー）。カスタムは resolveVoiceProfile で base+上書き。 */
+export const VOICE_PROFILES: Record<string, VoiceProfile> = {
+  female_pop: FEMALE_POP_AVG,
+  male_pop: MALE_POP_AVG,
+  mix: MIX_POP,
+  vocaloid: VOCALOID,
+};
+
+/** frame.voice_profile の型：プリセット名（文字列）／カスタム（base プリセット＋部分上書き or 全フィールド指定）。 */
+export type VoiceProfileSpec = string | (Partial<VoiceProfile> & { base?: string });
+
+const normKey = (s: string) => s.toLowerCase().replace(/[\s_-]+/g, "");
+// 別表記→正準キー（日本語/英語ゆらぎ）。未知は VOICE_PROFILES 直引き（正準キー）にフォールバック。
+const PROFILE_ALIASES: Record<string, string> = {
+  female: "female_pop", femalepop: "female_pop", 女性: "female_pop", 女声: "female_pop", 女: "female_pop",
+  male: "male_pop", malepop: "male_pop", 男性: "male_pop", 男声: "male_pop", 男: "male_pop",
+  mix: "mix", mixed: "mix", ミックス: "mix",
+  vocaloid: "vocaloid", vocalo: "vocaloid", vocaro: "vocaloid", ボカロ: "vocaloid", ボーカロイド: "vocaloid",
+};
+function lookupPreset(name: string): VoiceProfile | undefined {
+  const k = normKey(name);
+  const canon = PROFILE_ALIASES[k];
+  return canon ? VOICE_PROFILES[canon] : VOICE_PROFILES[k];
+}
+const numOr = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+
+/** frame.voice_profile → VoiceProfile を解決。未指定/不正=undefined（＝レンズ既定＆生成 bit 一致）。
+ *  文字列＝プリセット名（別表記可）。オブジェクト＝base プリセット（無ければ女性平均）に部分上書き。 */
+export function resolveVoiceProfile(spec?: VoiceProfileSpec | null): VoiceProfile | undefined {
+  if (spec == null) return undefined;
+  if (typeof spec === "string") return lookupPreset(spec);
+  if (typeof spec === "object") {
+    const base = spec.base ? lookupPreset(spec.base) : undefined;
+    const seed = base ?? FEMALE_POP_AVG;
+    const out: VoiceProfile = {
+      low: numOr(spec.low, seed.low),
+      tessLow: numOr(spec.tessLow, seed.tessLow),
+      tessHigh: numOr(spec.tessHigh, seed.tessHigh),
+      chestTop: numOr(spec.chestTop, seed.chestTop),
+      falsettoTop: numOr(spec.falsettoTop, seed.falsettoTop),
+      passaggioLow: numOr(spec.passaggioLow, seed.passaggioLow),
+      passaggioHigh: numOr(spec.passaggioHigh, seed.passaggioHigh),
+    };
+    const voca = spec.vocaloid ?? base?.vocaloid;
+    if (voca !== undefined) out.vocaloid = !!voca;
+    if (typeof spec.name === "string") out.name = spec.name;
+    else if (base?.name) out.name = base.name;
+    return out;
+  }
+  return undefined;
+}
 
 /** 各候補の headline レンズスコア（api が item.meta.lenses に載せる・全て高い=良い）。 */
 export interface MelodyLenses {
@@ -286,19 +345,28 @@ export function singabilityLens(
   const withLyric = ns.some((n) => !!n.syllable);
   const vowelHigh = withLyric && ns.length ? clamp01(highNarrow / ns.length * 3) : 0;
 
+  // ボカロ緩和（研究 §6-3）：声帯/母音修正/声区の生理制約なし＝跳躍・音節密度・母音×高音・パッサッジョを無効化。
+  // 音域端(rangeFit)は profile.falsettoTop（ボカロ=C6=84）基準で自然に「C6まで無罰・超で軽微」になる。
+  // tessitura は残す（広域許容だが「山場設計」の観点＝重心の極端な偏りは弱く見る）。
+  const voca = !!profile.vocaloid;
+  const leapV = voca ? 0 : leap;
+  const densV = voca ? 0 : syllableDensity;
+  const passV = voca ? 0 : passaggio;
+  const vowelV = voca ? 0 : vowelHigh;
+
   // 合成（研究 §6-1 初期重み）。歌詞無し時は vowel_high を外して再正規化＝bit影響なく歌詞前でも安定。
   const parts: [number, number][] = [
-    [leap, 0.30], [tessitura, 0.20], [syllableDensity, 0.20], [rangeFit, 0.15], [passaggio, 0.15],
+    [leapV, 0.30], [tessitura, 0.20], [densV, 0.20], [rangeFit, 0.15], [passV, 0.15],
   ];
-  if (withLyric) parts.push([vowelHigh, 0.15]);
+  if (withLyric) parts.push([vowelV, 0.15]);
   let dw = 0, dv = 0;
   for (const [v, w] of parts) { dw += w; dv += v * w; }
   const difficulty = clamp01(dw ? dv / dw : 0);
   return {
     score: round3(1 - difficulty),
     difficulty: round3(difficulty),
-    leap: round3(leap), tessitura: round3(tessitura), rangeFit: round3(rangeFit),
-    syllableDensity: round3(syllableDensity), passaggio: round3(passaggio),
+    leap: round3(leapV), tessitura: round3(tessitura), rangeFit: round3(rangeFit),
+    syllableDensity: round3(densV), passaggio: round3(passV),
   };
 }
 

@@ -8,6 +8,10 @@ import {
   melodyLenses,
   FEMALE_POP_AVG,
   MALE_POP_AVG,
+  MIX_POP,
+  VOCALOID,
+  VOICE_PROFILES,
+  resolveVoiceProfile,
   type LensNote,
 } from "../src/index";
 
@@ -125,6 +129,57 @@ describe("singabilityLens（難度→score=1-difficulty・既定=女性ポップ
       { pitch: 81, start: 1, dur: 0.5, syllable: "う" },
     ]);
     expect(withLyric.difficulty).toBeGreaterThanOrEqual(noLyric.difficulty); // 歌詞で母音項が加わり難化方向
+  });
+});
+
+describe("voice_profile 解決（WP-M4・プリセット＋カスタム上書き）", () => {
+  it("プリセット名（別表記含む）→ VoiceProfile", () => {
+    expect(resolveVoiceProfile("female_pop")).toEqual(FEMALE_POP_AVG);
+    expect(resolveVoiceProfile("女性")).toEqual(FEMALE_POP_AVG);
+    expect(resolveVoiceProfile("male")).toEqual(MALE_POP_AVG);
+    expect(resolveVoiceProfile("ミックス")).toEqual(MIX_POP);
+    expect(resolveVoiceProfile("ボカロ")).toEqual(VOCALOID);
+    expect(resolveVoiceProfile("vocaloid")!.vocaloid).toBe(true);
+  });
+  it("未指定/不正=undefined（＝レンズ既定＆生成 bit 一致）", () => {
+    expect(resolveVoiceProfile(undefined)).toBeUndefined();
+    expect(resolveVoiceProfile(null)).toBeUndefined();
+    expect(resolveVoiceProfile("存在しない声種")).toBeUndefined();
+  });
+  it("カスタム＝base プリセット＋部分上書き", () => {
+    const p = resolveVoiceProfile({ base: "male_pop", tessHigh: 72 })!;
+    expect(p.low).toBe(MALE_POP_AVG.low); // base 継承
+    expect(p.tessHigh).toBe(72); // 上書き
+  });
+  it("VOICE_PROFILES に4プリセット", () => {
+    expect(Object.keys(VOICE_PROFILES).sort()).toEqual(["female_pop", "male_pop", "mix", "vocaloid"]);
+  });
+});
+
+describe("singabilityLens × voice_profile（プロファイル依存・ボカロ緩和）", () => {
+  // C6=84 を含む高音・大跳躍・16分早口のメロ（人間には難／ボカロには易）。
+  const highLeapy = seq([60, 84, 62, 83, 60, 81], 0.25, 0.25); // 大跳躍＋C6＋速い
+  it("プロファイル指定でレンズスコアが変わる（固定＝女性≠ボカロ・ボカロの方が易）", () => {
+    const female = singabilityLens(highLeapy, {}, FEMALE_POP_AVG);
+    const voca = singabilityLens(highLeapy, {}, VOCALOID);
+    expect(voca.score).not.toBe(female.score);
+    expect(voca.score).toBeGreaterThan(female.score); // ボカロは難度ペナ無効＝歌いやすい側
+  });
+  it("ボカロ＝跳躍/音節密度/パッサッジョ項が 0（難度ペナ無効化）", () => {
+    const voca = singabilityLens(highLeapy, {}, VOCALOID);
+    expect(voca.leap).toBe(0);
+    expect(voca.syllableDensity).toBe(0);
+    expect(voca.passaggio).toBe(0);
+  });
+  it("ボカロ＝C6(84) までは音域端ペナ 0・C6超(85+)で軽微に発生", () => {
+    const atC6 = singabilityLens(seq([72, 84, 72, 84]), {}, VOCALOID); // 上端=C6
+    expect(atC6.rangeFit).toBe(0);
+    const aboveC6 = singabilityLens(seq([72, 88, 72, 88]), {}, VOCALOID); // 上端=E6（C6超）
+    expect(aboveC6.rangeFit).toBeGreaterThan(0);
+  });
+  it("同じ C6 メロは女性人間モードでは音域端ペナが大きく出る（対比）", () => {
+    const human = singabilityLens(seq([72, 84, 72, 84]), {}, FEMALE_POP_AVG);
+    expect(human.rangeFit).toBeGreaterThan(0); // 女性 falsettoTop=76 を大きく超過
   });
 });
 
