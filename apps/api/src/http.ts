@@ -26,6 +26,8 @@ import {
   detectKeyFromChords,
   melodySimilarity,
   findSimilar,
+  similarityWarning,
+  originalityReport,
   melodyEssence,
   normalizeToC,
   identifyProgression,
@@ -312,6 +314,19 @@ export function buildHttp(core: Core): FastifyInstance {
         case "detect_key_chords": return { candidates: detectKeyFromChords(asChords(b.chords), b.top ?? 3) };
         case "melody_similarity": return { similarity: melodySimilarity(asNotes(b.a), asNotes(b.b)) };
         case "find_similar": return findSimilar(asNotes(b.target), b.candidates, b.top);
+        // WP-M8：2旋律の三色トリアージ（除外ゲート＋AND 条件・法的助言ではない）。
+        case "similarity_warning": return similarityWarning(asNotes(b.a), asNotes(b.b), b.layer ? { layer: b.layer } : {});
+        // WP-M8：独自性チェック（cryptomnesia）＝新作 × 自作既出コーパス走査 or 明示 candidates。警告のみ。
+        case "check_originality": {
+          const opts = b.layer ? { layer: b.layer } : {};
+          if (b.against) return { ...similarityWarning(asNotes(b.notes), asNotes(b.against), opts), against: true };
+          const corpus = Array.isArray(b.candidates)
+            ? b.candidates
+            : core.listNeta({ kind: "melody", scope: b.scope ?? "project", limit: 500 })
+                .filter((n) => n.id !== b.excludeId)
+                .map((n) => ({ id: n.id, label: n.title ?? undefined, notes: (n.content as { notes?: { pitch: number; start?: number; dur?: number }[] } | null)?.notes ?? [] }));
+          return originalityReport(asNotes(b.notes), corpus, opts);
+        }
         // 連想エンジン（MCP と同じ機能を HTTP からも・web UI/programmatic 用）。
         case "identify_progression": return identifyProgression(asChords(b.chords), b.key !== undefined ? { key: b.key } : {});
         case "analyze_progression": return analyzeProgression(asChords(b.chords), { key: b.key, mode: b.mode });

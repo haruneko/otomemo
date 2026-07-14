@@ -24,6 +24,7 @@ const CHAT_VERBS = [
   "suggest_key_plan", // WP-C2 調プラン（セクション間の転調設計候補・許可漏れ厳禁）
   "suggest_form", "suggest_energy_plan", // WP-X1 構成テンプレ＋エネルギープラン（提案系2・許可漏れ厳禁＝過去BUG#1型）
   "check_loop", // WP-X2 ゲームBGMループ境界チェック（指摘系・許可漏れ厳禁＝過去BUG#1型）
+  "check_originality", // WP-M8 独自性/焼き直し警告（cryptomnesia・警告のみ・許可漏れ厳禁＝過去BUG#1型）
 ].map((n) => `mcp__creative-manager__${n}`);
 
 // #100④-S7：チャットにブラウザ検索を許す（実在曲/コード進行/機材レビュー等を調べる）。

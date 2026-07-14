@@ -34,6 +34,7 @@ export * from "./similarity";
 export * from "./chordname";
 export * from "./melodyEssence";
 export * from "./loopCheck"; // WP-X2 ゲームBGMループ境界チェック
+export * from "./similarityWarning"; // WP-M8 旋律類似の独自性警告（除外ゲート＋緑/黄/赤トリアージ）
 
 /** コード列 → C基準（調相対）の度数列。(root - key) mod 12。quality は保持。 */
 export function toDegrees(chords: Chord[], key: number): Degree[] {

@@ -123,7 +123,7 @@ describe("mcp tool layer", () => {
 // 研究反映：transform は fat tool 回避で reshape(feel/range)＋convert(移調/拍子・確定) に2分割。generate↔fit は入力で排他。
 describe("purpose tool surface (#101)", () => {
   // ③ song_state/plan_next・② read_neta/set_lyric・① analyze_audio・#S11 start_study・WP-M5 ②プロソディ2本・WP-C3 suggest_cliche・WP-C2 suggest_key_plan を追加（10→21）。旧39は隠したまま。
-  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords", "start_study", "suggest_lyric_rhythm", "analyze_lyric_fit", "suggest_cliche", "suggest_key_plan", "suggest_form", "suggest_energy_plan", "suggest_emotion_params", "check_loop"];
+  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords", "start_study", "suggest_lyric_rhythm", "analyze_lyric_fit", "suggest_cliche", "suggest_key_plan", "suggest_form", "suggest_energy_plan", "suggest_emotion_params", "check_loop", "check_originality"];
 
   it("目的ツール(20)を公開する", async () => {
     const { client } = await connect();
