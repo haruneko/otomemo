@@ -63,6 +63,10 @@ export function App() {
   const [gearMode, setGearMode] = useState(false); // ④ 機材相談（全曲共通のグローバルチャット）
   const [chatTarget, setChatTarget] = useState<Neta | undefined>(undefined);
   const [trayOpen, setTrayOpen] = useState(false);
+  // トップ再設計 S2：作る/絞るは扉の奥（ボトムシート）。既定=閉＝ファーストビューは実データが主役。
+  // ※宣言は closeTop/anyOpen より前に置く必要がある（戻るガードの対象＝監査2026-07-15のバグ修正）。
+  const [shelfOpen, setShelfOpen] = useState(false); // ＋作る▾ → 作成の棚（CreateShelf）
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false); // 絞る▾ → 絞り込み引き出し
   const [projectView, setProjectView] = useState(false); // メインペーンにプロジェクト画面を出す
   const [fromProject, setFromProject] = useState(false); // プロジェクト画面からネタを開いた＝閉じたら画面へ戻す
   const [chatSeed, setChatSeed] = useState(""); // Chatを開くときの最初の一言（プロジェクト画面の起点入力から）
@@ -97,6 +101,9 @@ export function App() {
   const closeTop = (): boolean => {
     if (trayOpen) { setTrayOpen(false); return true; }
     if (chatOpen) { setChatOpen(false); setChatTarget(undefined); setGearMode(false); return true; }
+    // 作る棚/絞る引き出し＝ボトムシートも1レイヤ（従来対象外で、SPの戻るがアプリを抜けるバグだった）。
+    if (shelfOpen) { setShelfOpen(false); return true; }
+    if (filterDrawerOpen) { setFilterDrawerOpen(false); return true; }
     if (deskTarget) { closeDesk(); return true; } // #20 S6：机を1レイヤとして戻るで閉じる（下の SectionEditor へ）
     if (navStack.length) {
       const parent = navStack[navStack.length - 1]!;
@@ -116,7 +123,9 @@ export function App() {
   //   戻る(popstate)で1レイヤ閉じ、まだ開いていれば reconcile が再 arm する。数を数える旧方式は
   //   非同期オープン(newSong の await reload 中に depth が一瞬0になる)で guard がズレてアプリを早期に抜ける
   //   バグがあった（監査 BUG-1）。bool の armed にしたので瞬間的な 0→再オープンでも壊れない。
-  const anyOpen = trayOpen || chatOpen || !!deskTarget || navStack.length > 0 || !!active || projectView;
+  const anyOpen =
+    trayOpen || chatOpen || shelfOpen || filterDrawerOpen ||
+    !!deskTarget || navStack.length > 0 || !!active || projectView;
   const anyOpenRef = useRef(false); anyOpenRef.current = anyOpen;
   const closeTopRef = useRef(closeTop); closeTopRef.current = closeTop;
   const armedRef = useRef(false); // guard を1件積んでいるか
@@ -268,9 +277,7 @@ export function App() {
   // 過去資産の取込パネル（MIDI/楽譜/音源/URL/歌詞/ハミング）は <ImportPanel> に分離（負債D6）。
   // App が持つのは開閉状態だけ（トグルタイルは create タイル群に残す）。
   const [importOpen, setImportOpen] = useState(false); // 取込ボタン群を畳む（既定=閉）
-  // トップ再設計 S2：作る/絞るは扉の奥（ボトムシート）。既定=閉＝ファーストビューは実データが主役。
-  const [shelfOpen, setShelfOpen] = useState(false); // ＋作る▾ → 作成の棚（CreateShelf）
-  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false); // 絞る▾ → 絞り込み引き出し（FilterDrawer）
+  // shelfOpen/filterDrawerOpen は戻るガードの都合で上部（trayOpen 付近）に宣言済み。
 
   const openChat = (target?: Neta, seed = "") => {
     setGearMode(false);

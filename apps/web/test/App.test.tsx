@@ -153,6 +153,28 @@ describe("App", () => {
     expect(api.createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "melody" }));
   });
 
+  // 監査2026-07-15：作る棚/絞る引き出しも「戻る」ガードの対象（開いたら guard を積み、popstate で1レイヤ閉じる）。
+  // 従来 anyOpen に入っておらず、SPで棚を開いて戻るとアプリごと抜けるバグがあった。
+  it("arms the back guard for the create shelf and closes it on popstate", async () => {
+    const push = vi.spyOn(window.history, "pushState");
+    render(<App />);
+    await userEvent.click(screen.getByLabelText("open-create-shelf"));
+    expect(push).toHaveBeenCalledWith({ cmOverlay: true }, ""); // guard が積まれる
+    window.dispatchEvent(new PopStateEvent("popstate")); // ブラウザ/Androidの戻る
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "create-shelf" })).toBeNull());
+    expect(screen.getByLabelText("open-create-shelf")).toBeInTheDocument(); // アプリは生きている
+  });
+
+  it("arms the back guard for the filter drawer and closes it on popstate", async () => {
+    const push = vi.spyOn(window.history, "pushState");
+    render(<App />);
+    await userEvent.click(screen.getByLabelText("open-filter-drawer"));
+    expect(push).toHaveBeenCalledWith({ cmOverlay: true }, "");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "filter-drawer" })).toBeNull());
+    expect(screen.getByLabelText("open-filter-drawer")).toBeInTheDocument();
+  });
+
   // S3：トップ種別タイルをtap→kindFilter が効いて listNeta が kind 付きで呼ばれる（絞り込み動線1タップ）。
   it("filters by tapping a top kind tile — S3", async () => {
     (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2, bass: 1 }));
