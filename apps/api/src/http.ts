@@ -270,7 +270,11 @@ export function buildHttp(core: Core): FastifyInstance {
           return genRiff(b.frame, asChords(b.chords), b.seed, { harmony: b.harmony === "indep" || b.harmony === "follow" ? b.harmony : undefined });
         case "gen_section_inst": // WP-X3c 管弦(ホーン/ストリングス)＝コード相手・1ネタ多声(進行追従ボイシング)・role=pad|stab（研究doc 2026-07-14-horn-string-arranging）
           return genSectionInst(b.frame, asChords(b.chords), b.seed, { role: b.role === "stab" ? "stab" : b.role === "pad" ? "pad" : undefined });
-        case "gen_drums": return genDrums(b.frame, b.seed);
+        case "gen_drums": { // WP-D1：style(型ID/ジャンル)＋fill(0..1/型ID)＝定型ビート＋フィル。未指定=従来 bit 一致。
+          const dstyle = typeof b.style === "string" ? b.style : undefined;
+          const dfill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
+          return genDrums(b.frame, b.seed, dstyle != null || dfill != null ? { style: dstyle, fill: dfill } : undefined);
+        }
         case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
@@ -317,7 +321,7 @@ export function buildHttp(core: Core): FastifyInstance {
   // gen→compose ワンショット（dogfood P4）：コードを土台に各パートを生成→ネタ化→section に合成、を1コール。
   // 「叩き台を一発で組む」。決定的(seed)。返り＝section ネタ＋合成木。全部 project・tags:["生成"]。
   app.post("/gen/section", async (req) => {
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string } };
     const frame = b.frame ?? {};
     const key = typeof frame.key === "number" ? frame.key : 0;
     // part 名は素直な別名も受ける（chords→chord_progression, drums→rhythm 等）。指定の揺れで落とさない。
@@ -333,7 +337,9 @@ export function buildHttp(core: Core): FastifyInstance {
     };
     // 依存順＝rhythm→bass→melody（design「gen_bass×ドラム結線」＋「gen_melody×ベース結線」＋「gen_melody×ドラム結線」）：
     // ドラムをベースとメロへ・生成済みベースをメロへ渡す。配置(ord)は従来の 進行→楽器→メロ→ベース→リズム のまま。
-    const drums = want.has("rhythm") ? genDrums(frame, b.seed).items[0]!.content : undefined;
+    // ドラム定型ビート＋フィル（WP-D1）：body.drums:{style,fill}＝未指定は従来 bit 一致。bass/melody へ渡す依存順は不変。
+    const dOpts = b.drums && (b.drums.style != null || b.drums.fill != null) ? { style: b.drums.style, fill: b.drums.fill } : undefined;
+    const drums = want.has("rhythm") ? genDrums(frame, b.seed, dOpts).items[0]!.content : undefined;
     const bassContent = want.has("bass") ? (genBass(frame, chords, b.seed, drums as Parameters<typeof genBass>[3], b.bass).items[0]!.content as { notes: { pitch: number; start: number; dur: number }[] }) : undefined;
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
     if (want.has("chord_pattern")) place("chord_pattern", genChordPattern(frame, b.seed).items[0]!.content, "コード楽器");

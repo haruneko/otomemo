@@ -647,8 +647,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "gen_drums",
-    { title: "ドラムを生成", description: "GMバックビート（1小節・16分グリッド hits=step index・4/4で16step/6-8で12step・seedで小変化）。content.rhythm.beatsPerStep で拍換算。", inputSchema: { frame: frameSchema, seed: z.number().int().optional() } },
-    async ({ frame, seed }) => ok(genDrums(frame, seed)),
+    { title: "ドラムを生成", description: "GMバックビート（16分グリッド hits=step index・4/4で16step/6-8で12step・seedで小変化）。content.rhythm.beatsPerStep で拍換算。**style**=定型ビート型ID(beat8.syncopated/four.rock/beat16.ghost/six8.ballad 等)またはジャンル名(jpop/rock/dance/ballad/funk＝frame.section.role＋tempo域で候補型を絞り選択)。**fill**=0..1(小さい=軽い節目/大きい=大遷移フィル)またはフィル型ID(fill.tom.asc.half 等)＝frame.bars本の末尾遷移小節へフィル挿入＋着地(次小節頭crash+kick)・他小節不変。型はstraight格子でスイング/timingはfeel層へ委譲。style/fill 未指定=従来 bit 一致。6/8は6/8対応型のみ。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), style: z.string().optional().describe("定型ビート型ID or ジャンル名(jpop/rock/dance/ballad/funk)。未指定=従来"), fill: z.union([z.number().min(0).max(1), z.string()]).optional().describe("フィル 0..1(強さ) or 型ID。指定でセクション末小節にフィル＋着地。未指定=なし(従来)") } },
+    async ({ frame, seed, style, fill }) => ok(genDrums(frame, seed, style != null || fill != null ? { style, fill } : undefined)),
   );
   server.registerTool(
     "gen_named_progression",
