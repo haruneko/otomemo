@@ -16,6 +16,20 @@ export const KS_MINOR = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.
 // スケール（worker theory.py と一致）。
 export const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
 export const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10];
+// 旋法パレット（WP-C1・2026-07-14・研究 2026-07-14-mode-usage-stats.md）。mode の下の色＝集合差替で安く一級化。
+export const MIXO_SCALE = [0, 2, 4, 5, 7, 9, 10]; // Mixolydian＝major の 7̂ を ♭7̂ へ（特徴和音 ♭VII）
+export const DORIAN_SCALE = [0, 2, 3, 5, 7, 9, 10]; // Dorian＝minor の ♭6̂ を ♮6̂ へ（特徴和音 IV長）
+export type Palette = "ionian" | "mixolydian" | "aeolian" | "dorian";
+// palette → スケール(半音・C基準)。undefined は mode から ionian/aeolian へ。
+function paletteScale(mode: "major" | "minor", palette?: Palette): number[] {
+  switch (palette) {
+    case "mixolydian": return MIXO_SCALE;
+    case "dorian": return DORIAN_SCALE;
+    case "ionian": return MAJOR_SCALE;
+    case "aeolian": return MINOR_SCALE;
+    default: return mode === "minor" ? MINOR_SCALE : MAJOR_SCALE;
+  }
+}
 
 // 調のダイアトニック和音パレット [度数(半音), 品質]。**単一の正準表**＝harmonize/continuation/substitute で共有
 // （旧: 3モジュールが別コピーで短調Vの品質が不一致＝生成E7 vs 提案Em の往復矛盾。design#12-M 2026-07-08）。
@@ -25,9 +39,9 @@ export const DIATONIC_CHORDS_MINOR: [number, string][] = [[0, "m"], [2, "dim"], 
 // KEY_NAMES は音名配列（PITCH_NAMES）と同一＝@cm/music-core の1本を別名で公開。
 export const KEY_NAMES = PITCH_NAMES;
 
-/** 調のスケール構成ピッチクラス集合。 */
-export function scalePcs(key: number, mode: "major" | "minor"): Set<number> {
-  const base = mode === "minor" ? MINOR_SCALE : MAJOR_SCALE;
+/** 調のスケール構成ピッチクラス集合。palette 指定時は旋法集合（未指定＝mode から＝従来 bit 一致）。 */
+export function scalePcs(key: number, mode: "major" | "minor", palette?: Palette): Set<number> {
+  const base = paletteScale(mode, palette);
   const k = ((Math.trunc(key) % 12) + 12) % 12;
   return new Set(base.map((i) => (k + i) % 12));
 }
