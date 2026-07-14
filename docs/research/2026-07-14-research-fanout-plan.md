@@ -8,7 +8,8 @@
 - **第1波6本 完走**＝R0[corpus-db-diagnosis]・M1[skeleton-dictionary-metrics]・M3[jp-prosody-melody-rules]・M5[expectation-theory-melody]・M7[singability-tessitura]・D1[drum-fill-vocabulary]。R0の結論＝ごみの根因はコード起因2件（POP909注釈拍とMIDI拍の混同／ingest-ufret.tsのループ毎キー判定・dedup無）。
 - **第2波理論6本 完走**＝M6[earworm-hook-features]・M10[galant-schemata-pop]・C2[modulation-catalog]・C3[harmonic-tension-curve]・X1[energy-arc-arrangement]・X3[intro-outro-game-loop]。
 - **コーパス根治 実装完了**（92a4181/c57c37e/5ee96e4・api891緑）＝pop拍0オンセット被覆 52.8%→**100%**・進行 断片91→0/重複0（356→210）。検証=[corpus-rebuild-verification]。→ **実曲解析系（M2/C1残部/B1/D2/X2）の前提が解消**、次はR0§6の遷移統計テーブル化とM2再抽出。
-- 残（未着手）＝第2波実曲解析系・在庫（M4/M8/C5/C7/D3/D4/D5/B2/X4〜X7/E1/E2/G1）。
+- **第3波理論15本＋第4波実曲解析4本 完走（2026-07-14午後）**＝M4輪郭/M8類似度警告/C5クリシェ/C6シティポップ/B2ベース語彙/D3humanize/D4シンコペ/D5定型ビート/X2構成統計/X4build-drop/X5対旋律/X6管弦/X7リフ/E1感情/G1ボカロ＋M2骨格統計/M9モチーフ変換/C7旋法/B1+D2stem実測。E2はM5に吸収スキップ。**＝研究プログラム全項目消化**。統計JSONは `data/corpus-stats/` に恒久化。途中セッション上限で10体中断→6体はdoc書き込み済で無傷・4体は文脈再開で完遂。
+- 次＝実装方針（研究→実装ワークパッケージのマッピング）→ [2026-07-14-research-to-implementation-plan](2026-07-14-research-to-implementation-plan.md)。
 
 ## 実行方式（共通レシピ）
 
