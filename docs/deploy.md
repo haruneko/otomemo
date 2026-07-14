@@ -8,12 +8,12 @@
 
 ```
 スマホ(Tailscale) ──tailnet(暗号化)── Windows11(Tailscale serve) ──localhost── WSL2: api :8787 ─┬ web(静的)も配信
-   家PC(Tailscale) ─┘                                                                          └ worker / cm-search:8788 / cm-music-mcp:8790(内部)
+   家PC(Tailscale) ─┘                                                                          └ cm-search:8788(内部)
 ```
 
 - api は **localhost バインド**（`CM_HOST` 既定 `127.0.0.1`）＝LANにもネットにも出ない。
 - 外へは Windows の `tailscale serve 8787` が tailnet 限定で出す（mirrored で Windows は WSL の localhost を共有）。
-- web は api が単一オリジン配信＝**外に出すのは 8787 の1ポートだけ**。worker系は localhost 内部。
+- web は api が単一オリジン配信＝**外に出すのは 8787 の1ポートだけ**。cm-search は localhost 内部。
 
 ## 1. web をビルド（更新のたび・1コマンド）
 
@@ -25,7 +25,6 @@ pnpm --filter @cm/web build      # apps/web/dist を生成
 
 ```bash
 CM_DB=./data/cm.sqlite \
-CM_MUSIC_MCP_URL=http://127.0.0.1:8790/mcp \
 pnpm --filter @cm/api start      # "serving web from ..." / "host: 127.0.0.1" と出る
 ```
 

@@ -110,7 +110,7 @@ export function buildHttp(core: Core): FastifyInstance {
     return payload;
   });
 
-  // 運用ヘルス（systemd/監視用・トークン不要）。queued滞留・失敗数・依存ポート(search/music-mcp)疎通。
+  // 運用ヘルス（systemd/監視用・トークン不要）。queued滞留・失敗数・依存ポート(cm-search)疎通。
   app.get("/health", async () => {
     const s = core.healthStats();
     const reach = async (url: string): Promise<boolean> => {
@@ -122,14 +122,11 @@ export function buildHttp(core: Core): FastifyInstance {
         return false;
       }
     };
-    const [search, musicMcp] = await Promise.all([
-      reach(`${SEARCH_URL}/`),
-      process.env.CM_MUSIC_MCP_URL ? reach(process.env.CM_MUSIC_MCP_URL) : Promise.resolve(false),
-    ]);
+    const search = await reach(`${SEARCH_URL}/`);
     return {
       ok: true,
       jobs: s,
-      deps: { "cm-search": search, "cm-music-mcp": musicMcp },
+      deps: { "cm-search": search },
     };
   });
 

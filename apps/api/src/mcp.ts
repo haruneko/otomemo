@@ -87,7 +87,7 @@ const err = (msg: string) => ({
  * MCPツール層（docs/design.md #20）。TSの操作コアを AIクライアント（Claude Code/Desktop 等）に公開。
  * HTTP と同じ Core を叩く＝同一操作の別アダプタ。
  */
-// 10 verbs / legacy 両方が使う共有スキーマ（モジュール級＝surface 分岐の外に置く）。
+// 共通 verbs / legacy 両方が使う共有スキーマ（モジュール級＝surface 分岐の外に置く）。
 const oneChord = z.object({
   root: z.union([z.number(), z.string()]).describe("根音＝実音。数値はピッチクラス0-11(0=C…)、文字列は音名"),
   quality: z.string().optional().describe("コード品質（\"\"=メジャー, \"m\", \"7\" 等）"),
@@ -138,7 +138,7 @@ const notesSchema = z
   )
   .describe("ノート列（pitch=MIDI番号・start/dur=拍）");
 
-// #100/#101: surface="chat" は **10 verbs だけ**公開（旧39を隠す＝モデルが旧ツールを掴まない）。"full"(既定)は49（test/worker 互換）。
+// #100/#101: surface="chat" は **共通 verbs だけ**公開（legacy を隠す＝モデルが旧ツールを掴まない）。"full"(既定)＝共通+legacy（test互換）。本数は増える＝2026-07-15現在 chat26/legacy45/full71。
 export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } = {}): McpServer {
   const server = new McpServer({ name: "creative-manager", version: "0.0.0" });
   const legacy = opts.surface !== "chat";
@@ -717,7 +717,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     async ({ target, candidates, top }) => ok(findSimilar(target, candidates, top)),
   );
 
-  } // ← if(legacy) ここまで＝full のみ旧39を登録。surface="chat" は以下の10 verbsだけ。
+  } // ← if(legacy) ここまで＝full のみ legacy を登録。surface="chat" は以下の共通 verbs だけ。
 
   // ── #101 目的ツール面（10 thin verbs）。chat面はこれだけ＝モデルが旧ツールを掴まない。既存エンジンへ dispatch、未実装は明示エラー(捏造禁止)。
   //    A 書込: capture/revise/assemble ｜ B 生成(候補・保存しない): generate/fit/reshape/convert/continue ｜ C 読取: search/analyze

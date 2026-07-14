@@ -12,7 +12,7 @@
 - **メロ崩し**：`genFromEssence(…, {strength, blendWith})`（崩し強度＋複数参照ブレンド）。**MCP `reshape` に `mode:"deform"`** で露出（L416 の reshape 記述は emotion のみで古い）。research 2026-06-29-melody-corpus-and-deform。
 - **音符プレビュー**：エディタで音符配置/鍵盤タップ→`previewNote` 即発音（web/audio.ts・PianoRoll/Rhythm/ChordPattern/BassStep）。
 - **モバイル土台**：編集面を可視 dvh に収め底のトランスポートが潜らない＋横スクロールの左ラベル/鍵盤 sticky（全エディタ）。
-- **MCP/HTTP**：`convert` は公開済（L413(4) の「未公開」は古い）。`#101` の「CUT」宣言した旧ジョブ系ツール（`create_job`/`list_jobs`/`get_job`/`get_job_results`）は、**chat面（surface="chat"＝10 verbs）では非公開＝ユーザー到達不可**。full面（既定・test互換）には当面残す＝**legacy維持を正式決定（2026-07-07）**、コード撤去は backlog（`mcp.ts` の `if(legacy)` を畳む別タスク）。`/projects*`・`/chat/:thread/meta|turn`・`DELETE /chat/:thread` は本書の一覧に未掲載。`/schedule` に PATCH は無い。
+- **MCP/HTTP**：`convert` は公開済（L413(4) の「未公開」は古い）。`#101` の「CUT」宣言した旧ジョブ系ツール（`create_job`/`list_jobs`/`get_job`/`get_job_results`）は、**chat面（surface="chat"＝共通verbsのみ・2026-07-15現在26本）では非公開＝ユーザー到達不可**。full面（既定・test互換）には当面残す＝**legacy維持を正式決定（2026-07-07）**、コード撤去は backlog（`mcp.ts` の `if(legacy)` を畳む別タスク）。`/projects*`・`/chat/:thread/meta|turn`・`DELETE /chat/:thread`・`PATCH /schedule/:id`（enabledトグル）は本書の一覧に未掲載。
 - **コーパス**：library は U-FRET進行315に加え **メロパターン irish186/pop1139/game100 投入済**（L596「データ未収集」前提は古い）。質の検証（耳）が残。
 
 ## アーキテクチャ是正方針（2026-06-23・4監査→ユーザー確定）
