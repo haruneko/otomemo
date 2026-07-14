@@ -117,6 +117,25 @@ export interface FillType {
 const FL = (name: string, midi: number, hits: number[], velCurve: number[]): FillLane => ({ name, midi, hits, velCurve });
 const flat = (n: number, v: number): number[] => Array.from({ length: n }, () => v);
 
+// ── ビルドアップ・ロール生成（buildup テンプレ・正準＝docs/research/2026-07-14-buildup-drop-mechanics.md §5-1）─────
+// divs=各小節の分割（4=4分/8=8分/16=16分・grid16なので step間隔=16/div）。**密度倍加**＝divs を段階的に倍化（§1-1 本命）。
+//   32分は16格子で表せないため 16分連打（div=16）で近似＝加速の到達点は末尾小節（§5-2 の「32分は末尾1〜2拍限定」ガードは grid16 では16分上限で自然充足）。
+// gapBeats=最終小節**末尾の無音拍**（1..4）＝ドロップ直前の「予測の宙吊り」（§1-5・必須の一級要素）。
+// vel は全 hit を通して vStart→vEnd の**単調ランプ**（フィルタ開き/クレッシェンドの MIDI 近似・§1-2）＝溜めは単調増でないと抜ける（§0）。
+// スネア単声＝ビルド区間は自動で**キック抜き**（applyDrumFill が fill 小節に base を敷かない＝低域除去が自動・§1-4）。着地(次小節頭)で crash+kick 復帰＝ドロップ頭の一斉復帰（§2-1）。
+function makeBuildRoll(id: string, divs: number[], gapBeats: number, vStart: number, vEnd: number, intensity: 1 | 2 | 3 | 4 | 5): FillType {
+  const bars = divs.length;
+  const hits: number[] = [];
+  for (let b = 0; b < bars; b++) {
+    const interval = Math.max(1, Math.round(16 / divs[b]!)); // 16/4=4・16/8=2・16/16=1
+    const gapStart = b === bars - 1 ? Math.max(0, 16 - gapBeats * 4) : 16; // 末尾小節のみ gap 手前で打ち止め
+    for (let s = 0; s < gapStart; s += interval) hits.push(b * 16 + s);
+  }
+  const M = hits.length;
+  const velCurve = hits.map((_, k) => Math.round(vStart + (vEnd - vStart) * (M <= 1 ? 1 : k / (M - 1)))); // 単調ランプ（非減少）
+  return { id, meter: "4/4", grid: 16, bars, category: "buildup", intensity, landing: "crashKick", energyDir: "up", lanes: [FL("Snare", DRUM.Snare, hits, velCurve)] };
+}
+
 export const FILL_TYPES: FillType[] = [
   { id: "fill.snare.1beat", meter: "4/4", grid: 16, bars: 1, category: "snareRoll", intensity: 1, landing: "crashKick", energyDir: "flat", lanes: [
     FL("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10], flat(6, V.hh8)), FL("Snare", DRUM.Snare, [12, 13, 14, 15], [70, 78, 87, 95]), FL("Kick", DRUM.Kick, [0, 6, 8], flat(3, V.kick)),
@@ -155,6 +174,11 @@ export const FILL_TYPES: FillType[] = [
   { id: "fill.halfTime.flip", meter: "4/4", grid: 16, bars: 1, category: "rest", intensity: 2, landing: "crashOnly", energyDir: "down", lanes: [
     FL("Snare", DRUM.Snare, [4, 12], [90, 90]), FL("Kick", DRUM.Kick, [0, 8], flat(2, V.kick)),
   ] },
+  // ── ビルドアップ・テンプレ3種（buildup・§5-1 の A/B/C タイムライン）＝密度倍加＋vel単調ランプ＋末尾無音ギャップ ─────
+  // fill=型ID で**明示選択**（数値 fill は bars===1 群からのみ選抜＝ビルドは既定 OFF＝bit 一致）。要 frame.bars≥bars+1（着地小節ぶん）。
+  makeBuildRoll("build.tight.4bar", [4, 8, 8, 16], 1, 70, 110, 3), // C: J-pop プリコーラス（軽量遷移・末尾1拍タメ）
+  makeBuildRoll("build.standard.8bar", [4, 4, 8, 8, 16, 16, 16, 16], 1, 50, 127, 5), // A: 汎用8小節（安全牌・末尾1拍ギャップ）
+  makeBuildRoll("build.big.16bar", [4, 4, 4, 4, 8, 8, 8, 8, 16, 16, 16, 16, 16, 16, 16, 16], 4, 40, 127, 5), // B: 大サビ前・最大溜め（末尾1小節まるごと無音）
 ];
 
 // 6/8 用の簡易フィル（12格子・後半3拍=step6..11 のタム下降＝D1 §8-5 の張替の最小対応）。

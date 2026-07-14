@@ -1351,7 +1351,7 @@ function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, s
   if (!Number.isInteger(grid) || grid <= 0) return null;
   const ft: FillType | null = resolveFillType(fill, compound, seed);
   if (!ft || ft.grid !== grid) return null; // グリッド不一致＝二重格子は不可
-  const N = Math.max(1, Math.min(16, f.bars ?? 4)); // 生成小節数（既定4）
+  const N = Math.max(1, Math.min(32, f.bars ?? 4)); // 生成小節数（既定4・16小節ビルド build.big.16bar は着地込み17小節要＝上限32へ）
   if (N < ft.bars + 1) return null; // 着地(次小節)の余地が要る＝最低 fillbars+1 小節
   const fillStart = N - 1 - ft.bars; // フィル本体の先頭小節
   const landingBar = N - 1;

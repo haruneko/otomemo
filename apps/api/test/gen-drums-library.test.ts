@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { genDrums } from "../src/music/generate";
+import { FILL_TYPES } from "../src/music/drumLibrary";
 
 type Lane = { name: string; midi: number; hits: number[]; vel: number; velCurve?: number[] };
 type Rhythm = { steps: number; bars: number; beatsPerStep: number; lanes: Lane[] };
@@ -95,5 +96,87 @@ describe("genDrums 定型ビート＋フィル（WP-D1）", () => {
     expect("feel" in content).toBe(false); // swing/微小 timing は applyFeel に委譲＝生成物に焼かない
     const r = (content as { rhythm: Rhythm }).rhythm;
     for (const l of r.lanes) for (const s of l.hits) expect(Number.isInteger(s)).toBe(true);
+  });
+});
+
+// WP-X4 ビルドアップ／ドロップのテンプレ（正準＝docs/research/2026-07-14-buildup-drop-mechanics.md §5-1）。
+describe("ビルドアップ・テンプレ（WP-X4）", () => {
+  const bt = (id: string) => FILL_TYPES.find((f) => f.id === id)!;
+  const snare = (id: string) => bt(id).lanes.find((l) => l.name === "Snare")!;
+  const barHitCount = (hits: number[], bar: number) => hits.filter((s) => s >= bar * 16 && s < (bar + 1) * 16).length;
+
+  it("3テンプレが buildup カテゴリで存在（4/4・grid16・snare単声）", () => {
+    for (const id of ["build.tight.4bar", "build.standard.8bar", "build.big.16bar"]) {
+      const t = bt(id);
+      expect(t.category).toBe("buildup");
+      expect(t.meter).toBe("4/4");
+      expect(t.grid).toBe(16);
+      expect(t.landing).toBe("crashKick"); // 着地でドロップ復帰（crash+kick）
+      expect(t.lanes.map((l) => l.name)).toEqual(["Snare"]); // ビルド区間はキック抜き＝スネアロールのみ
+    }
+  });
+
+  it("密度倍加スケジュール：8小節=4分×2→8分×2→16分×4（bar0=4/bar2=8/bar4=16）", () => {
+    const sn = snare("build.standard.8bar");
+    expect(bt("build.standard.8bar").bars).toBe(8);
+    expect(barHitCount(sn.hits, 0)).toBe(4); // 4分
+    expect(barHitCount(sn.hits, 1)).toBe(4);
+    expect(barHitCount(sn.hits, 2)).toBe(8); // 8分（倍加）
+    expect(barHitCount(sn.hits, 3)).toBe(8);
+    expect(barHitCount(sn.hits, 4)).toBe(16); // 16分（倍加）
+    expect(barHitCount(sn.hits, 6)).toBe(16);
+    expect(barHitCount(sn.hits, 7)).toBe(12); // 末尾は 16分×3拍＝末尾1拍が無音ギャップ
+  });
+
+  it("末尾無音ギャップ：最終小節の末尾拍にヒットが無い（宙吊り）", () => {
+    const sn = snare("build.standard.8bar"); // gap=1拍＝bar7 の step12..15(絶対124..127)が空
+    expect(sn.hits.every((s) => s < 124)).toBe(true);
+    const big = snare("build.big.16bar"); // gap=1小節＝bar15(絶対240..255)まるごと空
+    expect(bt("build.big.16bar").bars).toBe(16);
+    expect(barHitCount(big.hits, 15)).toBe(0);
+    expect(barHitCount(big.hits, 14)).toBe(16); // ピークは末尾1つ手前
+  });
+
+  it("ベロシティは単調増加（非減少・溜めは下げない）＝先頭低→末尾127", () => {
+    for (const id of ["build.tight.4bar", "build.standard.8bar", "build.big.16bar"]) {
+      const v = snare(id).velCurve;
+      for (let i = 1; i < v.length; i++) expect(v[i]!).toBeGreaterThanOrEqual(v[i - 1]!); // 単調非減少
+      expect(v[0]!).toBeLessThan(v[v.length - 1]!); // 先頭 < 末尾
+    }
+    expect(snare("build.standard.8bar").velCurve[0]).toBe(50);
+    expect(snare("build.standard.8bar").velCurve.at(-1)).toBe(127);
+  });
+
+  it("軽量テンプレ tight.4bar＝4小節・密度2段（4→8→16分）", () => {
+    const sn = snare("build.tight.4bar");
+    expect(bt("build.tight.4bar").bars).toBe(4);
+    expect(barHitCount(sn.hits, 0)).toBe(4);
+    expect(barHitCount(sn.hits, 1)).toBe(8);
+    expect(barHitCount(sn.hits, 3)).toBe(12); // 末尾1拍タメ
+  });
+
+  it("genDrums 経由：fill=build.standard.8bar が bars=9 で敷かれ着地に crash+kick", () => {
+    type Lane2 = { name: string; midi: number; hits: number[]; vel: number; velCurve?: number[] };
+    type Rhythm2 = { steps: number; bars: number; beatsPerStep: number; lanes: Lane2[] };
+    const r = (genDrums({ meter: "4/4", bars: 9 }, 5, { fill: "build.standard.8bar" }).items[0]!.content as { rhythm: Rhythm2 }).rhythm;
+    expect(r.bars).toBe(9);
+    const sn = r.lanes.find((l) => l.name === "Snare")!;
+    // ビルド区間(bar0..7)にスネアロールの密な連打（>=80発）が乗る。
+    expect(sn.hits.filter((s) => s < 8 * 16).length).toBeGreaterThan(80);
+    // 着地＝bar8 step0(=128) に Crash+Kick（ドロップ頭の一斉復帰）。
+    expect(r.lanes.find((l) => l.name === "Crash")!.hits).toContain(128);
+    expect(r.lanes.find((l) => l.name === "Kick")!.hits).toContain(128);
+  });
+
+  it("genDrums 経由：小節数不足(bars<テンプレ+1)はフィル不成立＝従来 bit 一致", () => {
+    const base = JSON.stringify(genDrums({ meter: "4/4", bars: 4 }, 5));
+    expect(JSON.stringify(genDrums({ meter: "4/4", bars: 4 }, 5, { fill: "build.standard.8bar" }))).toBe(base); // 8+1>4 で不成立
+  });
+
+  it("数値 fill はビルド型を選ばない（bars===1 群のみ＝ビルドは既定OFF）", () => {
+    type Rhythm3 = { bars: number; lanes: { name: string }[] };
+    // fill=1（最大強度）でも多小節ビルドは選ばれず 1小節フィルの範囲＝bar数=指定通り(4)で snare 連打が全域を占めない。
+    const r = (genDrums({ meter: "4/4", bars: 4 }, 0, { fill: 1 }).items[0]!.content as { rhythm: Rhythm3 }).rhythm;
+    expect(r.bars).toBe(4); // 多小節ビルドなら bars は変わらない＝1小節フィル群から選抜された
   });
 });

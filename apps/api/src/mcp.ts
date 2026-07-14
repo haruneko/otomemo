@@ -30,6 +30,7 @@ import {
   suggestKeyPlan,
   suggestForm,
   suggestEnergyPlan,
+  suggestEmotionParams,
   isMinorFrame,
   normalizeFrame,
 } from "./music";
@@ -672,7 +673,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "gen_drums",
-    { title: "ドラムを生成", description: "GMバックビート（16分グリッド hits=step index・4/4で16step/6-8で12step・seedで小変化）。content.rhythm.beatsPerStep で拍換算。**style**=定型ビート型ID(beat8.syncopated/four.rock/beat16.ghost/six8.ballad 等)またはジャンル名(jpop/rock/dance/ballad/funk＝frame.section.role＋tempo域で候補型を絞り選択)。**fill**=0..1(小さい=軽い節目/大きい=大遷移フィル)またはフィル型ID(fill.tom.asc.half 等)＝frame.bars本の末尾遷移小節へフィル挿入＋着地(次小節頭crash+kick)・他小節不変。型はstraight格子でスイング/timingはfeel層へ委譲。style/fill 未指定=従来 bit 一致。6/8は6/8対応型のみ。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), style: z.string().optional().describe("定型ビート型ID or ジャンル名(jpop/rock/dance/ballad/funk)。未指定=従来"), fill: z.union([z.number().min(0).max(1), z.string()]).optional().describe("フィル 0..1(強さ) or 型ID。指定でセクション末小節にフィル＋着地。未指定=なし(従来)") } },
+    { title: "ドラムを生成", description: "GMバックビート（16分グリッド hits=step index・4/4で16step/6-8で12step・seedで小変化）。content.rhythm.beatsPerStep で拍換算。**style**=定型ビート型ID(beat8.syncopated/four.rock/beat16.ghost/six8.ballad 等)またはジャンル名(jpop/rock/dance/ballad/funk＝frame.section.role＋tempo域で候補型を絞り選択)。**fill**=0..1(小さい=軽い節目/大きい=大遷移フィル)またはフィル型ID(fill.tom.asc.half 等)＝frame.bars本の末尾遷移小節へフィル挿入＋着地(次小節頭crash+kick)・他小節不変。**ビルドアップ型**(build.tight.4bar=J-popプリコーラス/build.standard.8bar=汎用/build.big.16bar=大サビ前)＝密度倍加(4→8→16分)＋vel単調漸増＋末尾無音ギャップ＋ビルド区間キック抜き→着地でドロップ復帰（要 frame.bars≥テンプレ小節+1）。型はstraight格子でスイング/timingはfeel層へ委譲。style/fill 未指定=従来 bit 一致。6/8は6/8対応型のみ(ビルド型は4/4)。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), style: z.string().optional().describe("定型ビート型ID or ジャンル名(jpop/rock/dance/ballad/funk)。未指定=従来"), fill: z.union([z.number().min(0).max(1), z.string()]).optional().describe("フィル 0..1(強さ) or 型ID(fill.*/build.* ビルドアップ)。指定でセクション末小節にフィル＋着地。未指定=なし(従来)") } },
     async ({ frame, seed, style, fill }) => {
       const res = genDrums(frame, seed, style != null || fill != null ? { style, fill } : undefined);
       // シンコペ「ノリメーター」（WP-D2）：ドラム層のシンコペ密度＝ハット≈0/バックビート据えの床の上でどれだけ食うか。
@@ -1127,6 +1128,34 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       if (question === "identify") return ok(identifyProgression(chords, key !== undefined ? { key } : {}));
       if (question === "explain") return ok(explainProgression(chords, { key, mode }));
       return ok(analyzeProgression(chords, { key, mode }));
+    },
+  );
+  // WP-M8 独自性チェック（cryptomnesia）＝新作メロ × 自作既出コーパス（project の melody 全走査）→ 焼き直し注記。
+  // 警告のみ・ブロックしない（研究doc §4）。除外ゲート（ありふれ音型/コーパス頻度）＋AND 条件で乱発を防ぐ。
+  // 2旋律直接の三色トリアージも同verbで（candidates 明示 or against 指定時）。既存 melody_similarity は不変（別verb）。
+  server.registerTool(
+    "check_originality",
+    {
+      title: "独自性チェック（焼き直し警告・法的助言ではない）",
+      description:
+        "新作メロを自作既出コーパス（project の melody 全走査）と照合し、無意識の焼き直し(cryptomnesia)を緑/黄/赤で注記。警告のみでブロックしない。ありふれた音型(スケール/分散和音/定番)は除外。**これは法的助言ではありません**。against(2旋律直接) or candidates 明示も可。骨格の手癖は layer:'skeleton'。",
+      inputSchema: {
+        notes: notesSchema,
+        against: notesSchema.optional().describe("2旋律を直接トリアージ（指定時はコーパス走査せず notes×against）"),
+        candidates: z.array(z.object({ id: z.string().optional(), label: z.string().optional(), notes: notesSchema })).optional().describe("照合先を明示（未指定は project の melody を自動走査）"),
+        scope: scopeEnum.optional().describe("自動走査の範囲（既定 project）"),
+        excludeId: z.string().optional().describe("自分自身のネタIDを除外"),
+        layer: z.enum(["skeleton", "surface"]).optional().describe("層ラベル（自己模倣は骨格に出やすい）"),
+      },
+    },
+    async ({ notes, against, candidates, scope, excludeId, layer }) => {
+      const opts = layer ? { layer } : {};
+      if (against) return ok({ ...similarityWarning(notes, against, opts), against: true });
+      const corpus = candidates ?? core
+        .listNeta({ kind: "melody", scope: scope ?? "project", limit: 500 })
+        .filter((n) => n.id !== excludeId)
+        .map((n) => ({ id: n.id, label: n.title ?? undefined, notes: (n.content as { notes?: { pitch: number; start?: number; dur?: number }[] } | null)?.notes ?? [] }));
+      return ok(originalityReport(notes, corpus, opts));
     },
   );
 
