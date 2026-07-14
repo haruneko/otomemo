@@ -379,6 +379,41 @@ export function SectionEditor({
                       <option value="0.9">強（大遷移）</option>
                     </select>
                   </label>
+                  {/* ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：おまかせ=未送信=従来。style=ジャンル/型、bassFill=セクション末に挿入。 */}
+                  <label className="tool-item" aria-label="bass-style" onClick={(e) => e.stopPropagation()}>
+                    ベース型
+                    <select value={gen.bassStyle} onChange={(e) => gen.setBassStyle(e.target.value)}>
+                      <option value="">おまかせ</option>
+                      <optgroup label="ジャンル">
+                        <option value="rock">ロック</option>
+                        <option value="ballad">バラード</option>
+                        <option value="citypop">シティポップ</option>
+                        <option value="funk">ファンク</option>
+                        <option value="edm">EDM</option>
+                        <option value="vocarock">ボカロック</option>
+                      </optgroup>
+                      <optgroup label="型（直指定）">
+                        <option value="RK-8ROOT">8分ルート弾き</option>
+                        <option value="RK-GALLOP">ギャロップ</option>
+                        <option value="BL-WHOLE">全音符バラード</option>
+                        <option value="BL-APPROACH">アプローチ橋渡し</option>
+                        <option value="CP-OCT8">オクターブ奏法</option>
+                        <option value="CP-WALK">歩くシティポップ</option>
+                        <option value="FK-ONE">ファンク the one</option>
+                        <option value="ED-OFFBEAT">オフビート</option>
+                        <option value="ED-SUSTAIN">ロー持続</option>
+                        <option value="VR-8DRIVE">高速8分ドライブ</option>
+                      </optgroup>
+                    </select>
+                  </label>
+                  <label className="tool-item" aria-label="bass-fill" onClick={(e) => e.stopPropagation()}>
+                    ベースフィル
+                    <select value={String(gen.bassFill)} onChange={(e) => gen.setBassFill(Number(e.target.value))}>
+                      <option value="0">なし</option>
+                      <option value="0.2">下降（落ち着かせ）</option>
+                      <option value="0.9">上昇（駆け上がり）</option>
+                    </select>
+                  </label>
                   {/* 骨格を生成（design #20 S2）：構造線(2声骨格)を機械に叩き台で出す→骨格レーンへ。
                       構造(skelForm・design #12-M 2026-07-13)＝2/4/8で使い回すフォーム型リテラル回帰を選んでから生成。 */}
                   <label className="tool-item" aria-label="skel-form" onClick={(e) => e.stopPropagation()}>

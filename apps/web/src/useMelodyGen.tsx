@@ -160,6 +160,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // ドラム定型ビート＋フィル（WP-D1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、drumFill=0..1(0=OFF=未送信)。
   const [drumStyle, setDrumStyle] = useState<string>("");
   const [drumFill, setDrumFill] = useState<number>(0);
+  // ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、bassFill=0..1(0=OFF=未送信)。
+  const [bassStyle, setBassStyle] = useState<string>("");
+  const [bassFill, setBassFill] = useState<number>(0);
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
   // P4：プリセット主役。選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）。
   const [preset, setPreset] = useState<string>("");
@@ -260,6 +263,11 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       }
       // ベース表面化（design #20 S3c）：骨格の明示ベース区間を gen_bass が差し替える（明示無し=root導出=従来）。
       if (part.op === "gen_bass" && opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;
+      // ベース定型型＋フィル（WP-B1）：style/fill を送る。""/0＝未送信＝従来 bit 一致。骨格表面化時は型を送らない（骨格が構造を担う）。
+      if (part.op === "gen_bass" && !opts?.skeletonNetaId) {
+        if (bassStyle) body.style = bassStyle;
+        if (bassFill > 0) body.fill = bassFill;
+      }
       const r = await api.music<{ items: { kind: string; content: unknown; meta?: CandMeta }[] }>(part.op, body);
       const item = r.items?.[0];
       // 候補に骨格コンテキストを持たせる＝置く時に realized_from を張る相手が候補ごとに確定（ref の撒き漏れを排す）。
@@ -449,6 +457,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     phrasing, setPhrasing, form, setForm, skelForm, setSkelForm, counter, setCounter, finest, setFinest, voice, setVoice,
     rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
     drumStyle, setDrumStyle, drumFill, setDrumFill, // ドラム定型ビート＋フィル（WP-D1）
+    bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,
