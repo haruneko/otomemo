@@ -92,7 +92,7 @@ export interface Frame {
 export interface GenResult {
   items: { kind: string; content: unknown; label: string }[];
   edges: never[];
-  meta?: { warnings?: string[] }; // WP-C3スライス3：citypop 等の「やり過ぎ警告」を非ブロックで併記（未指定＝キー無し＝従来 bit 一致）。
+  meta?: { warnings?: string[]; structureWarnings?: string[] }; // warnings=citypop 等の「やり過ぎ警告」（WP-C3）。structureWarnings=生成後の構造欠陥(dur<=0/重複onset/範囲外)の警告（2026-07-15・structureValidator）。いずれも非ブロック併記＝未指定＝キー無し＝従来 bit 一致。
 }
 
 // 長尺の安全弁（2026-07-14・実機検収 §3-H1 の是正）。旧 Math.min(16,…)（2026-06-23 の最初期スライス既定＝
@@ -220,7 +220,7 @@ function beatsPerBar(meter?: string): number {
   return n > 0 && d > 0 ? n * (4 / d) : 4;
 }
 
-const barsOf = (frame: Frame): number =>
+export const barsOf = (frame: Frame): number =>
   typeof frame.bars === "number" && frame.bars ? Math.max(1, Math.min(MAX_BARS, Math.trunc(frame.bars))) : 4;
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 

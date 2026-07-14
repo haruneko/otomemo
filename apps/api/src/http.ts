@@ -43,6 +43,7 @@ import {
   toDegrees,
   isMinorFrame,
   normalizeFrame,
+  barsOf,
 } from "./music";
 import { checkLoop } from "./music/loopCheck"; // WP-X2 ゲームBGMループ境界チェック
 import { analyzeVoiceLeading } from "./music/voiceLeading";
@@ -250,6 +251,8 @@ export function buildHttp(core: Core): FastifyInstance {
           attachMelodyLenses(res, { key: typeof b.frame?.key === "number" ? b.frame.key : undefined, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, sectionRole: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, profile: resolveVoiceProfile((b.frame as { voice_profile?: unknown } | undefined)?.voice_profile as string | undefined) });
           // シンコペ「ノリメーター」の添付（WP-D2・読み取り専用）。並べ替え軸＝役割別ターゲット帯への適合。
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined });
+          // 生成後の構造バリデータ（2026-07-15）＝dur<=0/重複onset/範囲外を検出し警告のみ meta.structureWarnings へ（弾かず・直さず）。
+          attachStructureWarnings(res, { bars: barsOf(normalizeFrame(b.frame)), bpb: meterInfo(b.frame?.meter).beatsPerBar, pitchRange: [0, 127] });
           // capture 後に link(メロ, 骨格, "realized_from") を張れるよう id をエコー（design #20・MCP 経路と同じ）。
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string;
           return res;
@@ -281,6 +284,7 @@ export function buildHttp(core: Core): FastifyInstance {
           // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
           attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
+          attachStructureWarnings(res, { bars: barsOf(normalizeFrame(b.frame)), bpb: meterInfo(b.frame?.meter).beatsPerBar, pitchRange: [0, 127] }); // 生成後の構造バリデータ（2026-07-15・警告のみ）
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string; // capture 後 link(ベース→骨格,"realized_from") 用にエコー
           return res;
         }
@@ -295,7 +299,9 @@ export function buildHttp(core: Core): FastifyInstance {
           const mel = asNotes(b.melody ?? b.notes);
           if (!mel.length) return reply.code(400).send({ error: "gen_counter は主メロ(melody)が必須です" });
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
-          return genCounter(b.frame, mel, asChords(b.chords), b.seed, { density: num(b.density) });
+          const res = genCounter(b.frame, mel, asChords(b.chords), b.seed, { density: num(b.density) });
+          attachStructureWarnings(res, { bars: barsOf(normalizeFrame(b.frame)), bpb: meterInfo(b.frame?.meter).beatsPerBar, pitchRange: [0, 127] }); // 生成後の構造バリデータ（2026-07-15・警告のみ）
+          return res;
         }
         case "gen_riff": // WP-X3b リフ＝コード相手・2部構造(核motif+終止改変)・和声3類型(indep/follow・自動判定)・ループ適性（研究doc 2026-07-14-riff-ostinato）
           return genRiff(b.frame, asChords(b.chords), b.seed, { harmony: b.harmony === "indep" || b.harmony === "follow" ? b.harmony : undefined });

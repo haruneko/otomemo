@@ -596,7 +596,16 @@ export function genMotifMelodyV2(
       const hiN0 = dens === undefined ? 4 * mb * bScale : Math.max(loN + 1, Math.round((2.5 + 4 * dens) * mb * bScale));
       const hiN = rns === undefined ? hiN0 : hiN0 + Math.round(rns * 3 * mb * bScale); // runs＝走句ぶん受入音数を拡張
       if (ons.length < loN || ons.length > hiN) return null;
-      if (ons[0]! < 0.5 && r() < 0.5) ons[0] = Math.max(opts.finest === "eighth" || opts.finest === "quarter" ? 0.5 : 0.25, ons[0]!); // finest時は16分(0.25)へ動かさない
+      // 頭ナッジ＝先頭onsetを 0.25(通常)/0.5(finest) へ寄せて downbeat 直打ちを崩す（弱起/シンコペ味）。
+      // r() は従来どおり無条件ドロー＝bit一致を保つ（衝突seedのみ出力が変わる）。占有チェックは寄せ「後」に行う。
+      // 衝突是正(2026-07-15上流化)：寄せ先が既に別onset(ons[1]等)で占有なら**ナッジをスキップし ons[0] を維持**する。
+      // 理由＝ons[0](≈0)と ons[1](=寄せ先) の間に空き16分枠は存在しない（グリッド上「次の空きスロット」は取れない・
+      // ons を昇順に保てない）。ゆえに占有時の音楽的に自然な選択は downbeat(0) 維持＝音数を保存し、後段dedupeの
+      // 1音損失を上流で断つ（従来は 0.25 へ畳んで重複→dur0幽霊→1音喪失。出力境界ガードは実害を消すが密度が僅減）。
+      if (ons[0]! < 0.5 && r() < 0.5) {
+        const tgt = Math.max(opts.finest === "eighth" || opts.finest === "quarter" ? 0.5 : 0.25, ons[0]!);
+        if (!ons.some((t, i) => i > 0 && Math.abs(t - tgt) < 1e-6)) ons[0] = tgt; // 寄せ先が空いている時のみ寄せる
+      }
       const _gap = ons.slice(1).map((t, i) => t - ons[i]!);
       const gapCap = dens === undefined ? Math.max(2.0, mb) : Math.max(2.0, mb, 2 + (1 - dens) * 2);
       if (_gap.length && Math.max(..._gap) > gapCap) return null; // 孤立音(大間隔)モチーフは棄却＝繋がった塊のみ（長尺ほど内部restは許容）

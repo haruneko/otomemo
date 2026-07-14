@@ -839,4 +839,24 @@ describe("生成契約：dur>0・同一onset重複なし（監査バグ 2026-07-
       }
     }
   });
+
+  // 頭ナッジの上流是正（2026-07-15）：mkMotif L599 の頭ナッジは寄せ先(0.25/0.5)が既に占有なら**スキップ**し
+  // downbeat(0)を維持する＝重複オンセットを鋳造しない。従来は 0.25 へ畳んで dedupe が1音捨て密度が僅減していた。
+  // この profile（監査バグの再現条件）で頭ナッジが衝突していた12 seed は、各ブロックで捨てていた1音を取り戻し
+  // 2小節モチーフ×4ブロック＝+4音 回復する。回帰＝これらの音数が「従来(衝突あり)」を下回らないこと。
+  it("頭ナッジ上流是正：衝突していた seed で音数が従来より減らない（density0.85×runs0.7・+4回復）", () => {
+    // [seed, 是正前(衝突で1音/ブロック喪失)の音数]。是正後は各 seed で +4（全ブロックの喪失を回復）。
+    const preFix: [number, number][] = [
+      [9, 36], [17, 52], [40, 52], [44, 52], [46, 40], [57, 56],
+      [61, 24], [70, 36], [74, 52], [85, 40], [88, 52], [95, 44],
+    ];
+    for (const [s, oldN] of preFix) {
+      const notes = genV2(s, { density: 0.85, runs: 0.7 });
+      expect(notes.length, `seed=${s}: 是正後の音数(${notes.length})が従来(${oldN})を下回らない`).toBeGreaterThanOrEqual(oldN);
+      // 重複を鋳造しない＝境界dedupeに頼らず上流で一意（dur>0・同一onsetなし）。
+      const starts = new Set(notes.map((n) => Math.round(n.start * 1000)));
+      expect(starts.size, `seed=${s}: onsetが一意（重複鋳造なし）`).toBe(notes.length);
+      expect(notes.every((n) => n.dur > 0), `seed=${s}: 全ノート dur>0`).toBe(true);
+    }
+  });
 });

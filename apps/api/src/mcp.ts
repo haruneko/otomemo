@@ -35,6 +35,7 @@ import {
   suggestEmotionParams,
   isMinorFrame,
   normalizeFrame,
+  barsOf,
 } from "./music";
 import { checkLoop } from "./music/loopCheck"; // WP-X2 ゲームBGMループ境界チェック
 import { searchNetaMerged } from "./semantic-search"; // 意味+キーワード合流（HTTP /searchと共通・2026-07-14）
@@ -46,6 +47,7 @@ import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonN
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
 import { attachSyncScore } from "./music/syncopationReport"; // シンコペ「ノリメーター」の生成側露出（WP-D2）
+import { attachStructureWarnings } from "./music/structureValidator"; // 生成後の構造バリデータ＝dur<=0/重複onset/範囲外を警告のみ添付（2026-07-15）
 import { attachHarmonicTension } from "./music/harmonicTensionReport"; // 和声張力カーブレンズの生成側露出（WP-C4）
 import { splitMora, flowLyric, type LNote } from "./lyric";
 import { suggestLyricRhythm, analyzeLyricFit } from "@cm/music-core"; // ② 歌詞↔メロ プロソディ（design #13b・WP-M5）
@@ -601,6 +603,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       attachMelodyLenses(res, { key: typeof frame?.key === "number" ? frame.key : undefined, beatsPerBar: meterInfo(frame?.meter).beatsPerBar, sectionRole: (frame as { section?: { role?: string } } | undefined)?.section?.role, profile: resolveVoiceProfile((frame as { voice_profile?: unknown } | undefined)?.voice_profile as string | undefined) });
       // シンコペ「ノリメーター」の添付（WP-D2・読み取り専用＝候補ノート不変）。並べ替え軸＝セクション役割別ターゲット帯への適合。
       attachSyncScore(res, { beatsPerBar: meterInfo(frame?.meter).beatsPerBar, role: (frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof frame?.tempo === "number" ? frame.tempo : undefined });
+      // 生成後の構造バリデータ（2026-07-15）＝dur<=0/重複onset/範囲外を検出し警告のみ meta.structureWarnings へ（弾かず・直さず）。
+      attachStructureWarnings(res, { bars: barsOf(normalizeFrame(frame)), bpb: meterInfo(frame?.meter).beatsPerBar, pitchRange: [0, 127] });
       // F1(2026-07-08)：style指定なのにコーパス未投入＝黙って既定劣化していたのを可視化（Claudeがユーザーに伝えられる）。
       if (style && !corpusModel) (res as typeof res & { note?: string }).note = `style「${style}」のコーパスが library に無いため既定モデルで生成（らしさ順ランクも既定＝生成順）`;
       // 骨格→メロの紐付けは capture 後（gen_melody は候補返しでまだ neta 化しない＝この時点で id が無い）。
@@ -651,6 +655,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
       // シンコペ「ノリメーター」の添付（WP-D2）：ベース層のシンコペ密度＝目標帯（中が主役）への適合。
       attachSyncScore(res, { beatsPerBar: meterInfo(frame?.meter).beatsPerBar, role: (frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof frame?.tempo === "number" ? frame.tempo : undefined });
+      attachStructureWarnings(res, { bars: barsOf(normalizeFrame(frame)), bpb: meterInfo(frame?.meter).beatsPerBar, pitchRange: [0, 127] }); // 生成後の構造バリデータ（2026-07-15・警告のみ）
       // capture 後に link(ベース, 骨格, "realized_from") を張れるよう id をエコー（design #20・gen_melody と同じ）。
       if (skeletonNetaId) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = skeletonNetaId;
       return ok(res);
@@ -661,7 +666,9 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     { title: "対旋律を生成", description: "主メロ(melody)の「間ま」に入る従属の第2声＝対旋律/オブリガートを候補生成する（WP-X3a）。**主メロ必須**＝主メロのイベント列(休符/伸ばし/busy)に依存。ガードレール：主メロと同時発音の2度(半音/全音)を作らない・音域は主メロの下3〜10度に分離・主メロが細かい拍(1拍2onset以上)では引っ込み rest/sustain 拍で動く相補リズム・拍頭はコードトーン軸・反行優先。density=出し入れ(0=疎〜1=密・未指定は frame.section.role 既定 or 0.5)。返り kind=\"counter\" の content={notes,program:48(Strings)}。「機械は候補まで・仕上げは人間」。", inputSchema: { frame: frameSchema, melody: notesSchema.describe("主メロ＝対旋律を絡める相手（必須）"), chords: chordsSchema.optional(), seed: z.number().int().optional(), density: z.number().min(0).max(1).optional().describe("出し入れ 0=疎(たまに)〜1=密(毎拍候補)。未指定は role 既定(サビ0.75/Aメロ0.35 等)or 0.5") } },
     async ({ frame, melody, chords, seed, density }) => {
       if (!melody?.length) return err("gen_counter は主メロ(melody)が必須です");
-      return ok(genCounter(frame, melody, chords, seed, { density }));
+      const res = genCounter(frame, melody, chords, seed, { density });
+      attachStructureWarnings(res, { bars: barsOf(normalizeFrame(frame)), bpb: meterInfo(frame?.meter).beatsPerBar, pitchRange: [0, 127] }); // 生成後の構造バリデータ（2026-07-15・警告のみ）
+      return ok(res);
     },
   );
   server.registerTool(
