@@ -14,6 +14,7 @@ import {
   lensesOf,
   lensGateTargets,
   melodicMapKey,
+  pickupSchedule,
 } from "../src/audio";
 
 describe("drumKey — (キット, GM番号) の合成キー（ビットシフト）", () => {
@@ -200,6 +201,72 @@ describe("lensesOf — notes 内の distinct な lens 印（定義順・undefine
       { pitch: 62, start: 1, dur: 1, lens: "real" },
     ];
     expect(lensesOf(notes)).toEqual(["real"]);
+  });
+});
+
+// #25 弱起（負start）の再生契約：時刻変換の純関数。却下案（t=0 丸め）を撤去し、非ループ=+L シフト、
+// ループ=弱起を loopEnd+start へ巻き込む。lead L = max(0, −min(start))・弱起なし＝bit 一致。
+describe("pickupSchedule — 弱起（負start）の再生時刻変換（design#25）", () => {
+  // (a) 非ループ：start=−0.5 のノートは 0 へ、下拍(0)は +0.5 へ。lead=0.5。
+  it("(a) 非ループ：全ノートを +L シフト（弱起は 0、下拍は +L）・lead=L", () => {
+    const notes = [
+      { pitch: 60, start: -0.5, dur: 0.5 }, // 弱起
+      { pitch: 62, start: 0, dur: 1 }, // 1拍目（下拍）
+    ];
+    const r = pickupSchedule(notes, { loop: false });
+    expect(r.leadBeats).toBe(0.5);
+    expect(r.notes.map((n) => n.start)).toEqual([0, 0.5]); // 弱起=0, 下拍=+0.5
+    expect(r.notes.map((n) => n.pitch)).toEqual([60, 62]); // 順序・他フィールド保持
+    expect(notes[0]!.start).toBe(-0.5); // 入力は非破壊
+  });
+
+  // (b) ループ：0拍開始・弱起は loopEnd+start（total=8 → 7.5）・他ノートは無シフト（同一参照）。lead=0。
+  it("(b) ループ：弱起は loopEnd+start へ・他は無シフト（同一参照）・lead=0", () => {
+    const notes = [
+      { pitch: 60, start: -0.5, dur: 0.5 }, // 弱起
+      { pitch: 62, start: 0, dur: 1 },
+      { pitch: 64, start: 4, dur: 1 },
+    ];
+    const r = pickupSchedule(notes, { loop: true, loopEndBeat: 8 });
+    expect(r.leadBeats).toBe(0);
+    expect(r.notes.map((n) => n.start)).toEqual([7.5, 0, 4]); // 弱起=8−0.5、他は不変
+    expect(r.notes[1]).toBe(notes[1]); // 無シフトのノートは同一参照＝bit 一致
+    expect(r.notes[2]).toBe(notes[2]);
+  });
+
+  // (c) 窓ループ [4,8)：弱起は e+start（=7.5）＝窓終端で巻き込む（loopEndBeat=窓の e）。
+  it("(c) 窓ループ [4,8)：弱起は e+start（窓終端で巻き込む）", () => {
+    const notes = [{ pitch: 60, start: -0.5, dur: 0.5 }, { pitch: 62, start: 4, dur: 1 }];
+    const r = pickupSchedule(notes, { loop: true, loopEndBeat: 8 });
+    expect(r.notes.map((n) => n.start)).toEqual([7.5, 4]);
+    expect(r.leadBeats).toBe(0);
+  });
+
+  // (d) 弱起なし（全 start>=0）＝入力を同一参照でそのまま返す・lead=0（全経路 bit 一致）。
+  it("(d) 弱起なし＝入力そのまま（同一参照）・lead=0（非ループ/ループ両方）", () => {
+    const notes = [{ pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 2, dur: 1 }];
+    const nl = pickupSchedule(notes, { loop: false });
+    expect(nl.notes).toBe(notes); // 同一配列参照
+    expect(nl.leadBeats).toBe(0);
+    const lp = pickupSchedule(notes, { loop: true, loopEndBeat: 4 });
+    expect(lp.notes).toBe(notes);
+    expect(lp.leadBeats).toBe(0);
+  });
+
+  it("空 notes は lead=0・空配列そのまま", () => {
+    const notes: { pitch: number; start: number; dur: number }[] = [];
+    expect(pickupSchedule(notes, { loop: false })).toEqual({ notes, leadBeats: 0 });
+  });
+
+  it("複数弱起は最も深い（最小 start）で L を決める", () => {
+    const notes = [
+      { pitch: 60, start: -1, dur: 1 },
+      { pitch: 62, start: -0.5, dur: 0.5 },
+      { pitch: 64, start: 0, dur: 1 },
+    ];
+    const r = pickupSchedule(notes, { loop: false });
+    expect(r.leadBeats).toBe(1); // max(0, −min(−1,−0.5,0)) = 1
+    expect(r.notes.map((n) => n.start)).toEqual([0, 0.5, 1]);
   });
 });
 

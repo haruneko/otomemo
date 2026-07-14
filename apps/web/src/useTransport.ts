@@ -44,7 +44,9 @@ export function useTransport(
         },
       });
       setState("playing");
-      void startPh(c.scaleBeats, c.bpm, c.bpb);
+      // #25 弱起（負start）の再生契約：非ループ時は playNotes が算出した lead L を渡す（リード区間の 0 待機・
+      // 弱起表示）。ループ時は handle.leadBeats が 0＝従来一致。handle 未確定/旧モックは 0 フォールバック。
+      void startPh(c.scaleBeats, c.bpm, c.bpb, handle.current?.leadBeats ?? 0);
     },
     [startPh, stopPh],
   );

@@ -15,7 +15,6 @@ import {
   rhythmToNotes,
   programOf,
   scheduleTimes,
-  clampNegativeStarts,
   applyFeel,
   type Feel,
   totalSec,
@@ -37,6 +36,9 @@ export interface PlaybackHandle {
   reschedule(notes: Note[]): void;
   // #7-C ループ区間だけを走行中に更新（transport.loopStart/loopEnd＝stop/start 不要）。範囲ブレース確定用。
   setLoopRange(startBeat: number, endBeat: number): void;
+  // #25 弱起（負start）の再生契約：非ループ時の lead L（拍・全イベントを +L シフトし transport 0 開始）。
+  // usePlayhead へ渡し、リード区間（raw beat < L）は線を 0 位置で待機・position を弱起表示にする。ループ時は 0。
+  leadBeats: number;
 }
 
 interface PlayOpts {
@@ -860,6 +862,36 @@ export async function previewNote(note: Note, opts?: { holdSec?: number }): Prom
   }
 }
 
+// #25 弱起（負start）の再生契約：スケジュールの時刻変換を純関数へ切り出す（Tone非依存＝テスト可能）。
+// lead L = max(0, −min(start))。弱起が無ければ L=0 で入力 notes を**同一参照でそのまま**返す（全経路 bit 一致）。
+//  - 非ループ（loop=false）：全ノートを +L 拍シフト（transport 0 開始＝音響上「−L から始まる」と等価）。
+//    先頭が弱起ぶんマイナスから鳴り、下拍以降は +L 拍後ろへ。返す leadBeats は視覚(usePlayhead)・終端(onEnd)へ。
+//  - ループ（loop=true）：0拍開始・start<0 のノートだけ loopEnd(=loopEndBeat) + start へ置く（＝ループ終端で
+//    「次周の頭への弱起」として鳴る）。他ノートは無シフト＝同一参照。leadBeats は常に 0（頭からループ）。
+// 却下案（ウェーブC）：再生入口で負start を t=0 へ丸める（頭拍に潰れる）＝本契約で置き換え。書き出し側の
+//   小節プリロール＋clampNegativeStarts 保険は別契約でそのまま（#25-4）。
+export function pickupSchedule(
+  notes: Note[],
+  opts: { loop: boolean; loopEndBeat?: number | null },
+): { notes: Note[]; leadBeats: number } {
+  let minStart = Infinity;
+  for (const n of notes) if (n.start < minStart) minStart = n.start;
+  const hasPickup = minStart < 0; // notes 空 or 全 start>=0 なら false
+  const leadBeats = hasPickup ? -minStart : 0;
+  if (opts.loop) {
+    // ループ：弱起は loopEnd + start（範囲窓 [s,e) でも e+start）。他は無シフト＝同一参照。
+    if (!hasPickup) return { notes, leadBeats: 0 };
+    const e = opts.loopEndBeat ?? 0;
+    return {
+      notes: notes.map((n) => (n.start < 0 ? { ...n, start: e + n.start } : n)),
+      leadBeats: 0,
+    };
+  }
+  // 非ループ：弱起が無ければ入力そのまま（bit 一致）、有れば全ノートを +L シフト。
+  if (leadBeats === 0) return { notes, leadBeats: 0 };
+  return { notes: notes.map((n) => ({ ...n, start: n.start + leadBeats })), leadBeats };
+}
+
 // Tone.js は再生時のみ動的import（jsdom/テストで読み込まない）。
 // #57①: Tone.Transport ベース。戻り値 Handle で pause/resume/stop（②でUI配線）。
 // 既存呼び出し元は `void playNotes(notes, tempo)` のままでも従来通り鳴る（後方互換）。
@@ -920,14 +952,21 @@ export async function playNotes(
   currentKit = kit;
 
   transport.bpm.value = bpm;
+  // #25 弱起（負start）の再生契約：loop の有無で時刻変換が変わる（pickupSchedule）。isLoop は const、
+  // loopEndBeat は setLoopRange（走行中窓変更）で更新＝次の reschedule が新窓終端へ弱起を再配置する（let）。
+  const isLoop = !!opts.loop;
+  let loopEndBeat: number | null = opts.loop ? opts.loop.endBeat : null;
+  // 非ループ時の lead L（拍）＝先頭の弱起ぶん。全イベントを +L シフトして 0 開始する分の視覚/終端補正に使う。
+  // 初回 notes から算出（ループ時は常に 0）。reschedule でノートが変わっても onEnd/視覚は初回で固定＝#7-C は
+  // 主にループ経路（骨格エディタ）で lead=0。
+  const leadBeats = pickupSchedule(notes, { loop: isLoop, loopEndBeat }).leadBeats;
   // #7-C 発音イベントの一括スケジュール（初回 begin・reschedule 双方で再利用）。sf/kit は const、
   // drumKits/melodicByPart は let＝reschedule で差し替えた最新 Map を各 playEvent が参照する。
   const scheduleFrom = (finalNotes: Note[]): void => {
-    // 弱起（負start）を再生でも鳴らす：Tone.Transport は負時刻イベントを発火しない（開始 tick=0 より前は
-    // 素通り＝弱起が無音）。入口で t=0 へ丸めて鳴らす（dur は end 保持で縮め・完全に0以前で終わる音は落とす
-    // ＝書き出しの clampNegativeStarts と同規則）。※将来のプリロール再生（カウントイン＝頭に空小節を足して
-    //   本来の弱起位置で鳴らす）は今回やらない＝ここは「頭に寄せて鳴らす」までに留める。
-    for (const ev of scheduleTimes(clampNegativeStarts(finalNotes), bpm)) {
+    // #25 弱起（負start）を再生でも鳴らす。却下案（t=0 丸め）を撤去し pickupSchedule で置き換え：
+    //   非ループ＝全ノート +L シフト（transport 0 開始）／ループ＝弱起を loopEnd+start へ巻き込む。
+    const { notes: scheduled } = pickupSchedule(finalNotes, { loop: isLoop, loopEndBeat });
+    for (const ev of scheduleTimes(scheduled, bpm)) {
       transport.schedule(
         (time: number) => playEvent(ev, time, sf, kit, Tone, drumKits, melodicByPart, defaultProg),
         ev.time,
@@ -972,12 +1011,16 @@ export async function playNotes(
       void doReschedule(rawNotes);
     },
     // #7-C ループ窓だけを走行中に更新（stop/start 不要）。beat→秒（loopRange と同じ spb 換算）。
+    // #25 loopEndBeat も更新＝次の reschedule で弱起を新窓終端（e+start）へ再配置（reschedule 経由で自然に効く）。
     setLoopRange: (startBeat: number, endBeat: number) => {
       if (stopped) return;
       const spb = 60 / bpm;
       transport.loopStart = startBeat * spb;
       transport.loopEnd = endBeat * spb;
+      loopEndBeat = endBeat;
     },
+    // #25 非ループ時の lead L（拍）。useTransport が usePlayhead へ渡す（リード区間の 0 待機・弱起表示）。
+    leadBeats,
     stop: () => {
       if (stopped) return; // 冪等
       stopped = true;
@@ -1002,11 +1045,11 @@ export async function playNotes(
     transport.loopEnd = range.end;
   } else {
     transport.loop = false;
-    // 非ループ時のみ終端で自動停止。
+    // 非ループ時のみ終端で自動停止。#25 弱起ぶん全イベントを +L シフトしたので終端も +L 追従（lead 無し＝従来一致）。
     transport.scheduleOnce(() => {
       opts.onEnd?.();
       handle.stop();
-    }, totalSec(notes, bpm));
+    }, totalSec(notes, bpm) + (leadBeats * 60) / bpm);
   }
 
   transport.start();

@@ -18,6 +18,7 @@ export function usePlayhead() {
     bpm: number;
     bpb: number;
     lookAhead: number;
+    lead: number; // #25 弱起 lead L（拍・非ループのみ>0）。raw beat < lead の間は線を 0 待機・弱起表示。
     seconds: () => number;
   } | null>(null);
   const userScrolledAt = useRef(0); // 手動スクロール最終時刻
@@ -60,14 +61,27 @@ export function usePlayhead() {
     const c = ctx.current;
     if (!c) return;
     // 負clamp必須：開始直後 seconds<lookAhead で線が左端外へ出るのを防ぐ。
-    const beat = (Math.max(0, c.seconds() - c.lookAhead) * c.bpm) / 60;
-    beatRef.current = Math.min(beat, c.scale);
+    const raw = (Math.max(0, c.seconds() - c.lookAhead) * c.bpm) / 60;
+    // #25 弱起（負start）の再生契約：全イベントを +L シフトして 0 開始しているので、視覚は raw−L が真の拍。
+    // raw < L（リード区間）は線を 0 位置で待機し position を「弱起…」表示。L 到達後は beat=raw−L で従来通り。
+    // lead=0（弱起なし）は beat=raw＝従来と bit 一致。
+    const beat = raw - c.lead;
     const el = lineRef.current;
-    if (el) {
-      el.style.setProperty("--ph", String(c.scale > 0 ? Math.min(beat / c.scale, 1) : 0));
-      el.style.setProperty("--phb", String(Math.min(beat, c.scale))); // 生beat（末尾でclamp）
+    if (beat < 0) {
+      beatRef.current = 0;
+      if (el) {
+        el.style.setProperty("--ph", "0");
+        el.style.setProperty("--phb", "0"); // リード区間は線を頭で待機
+      }
+      if (timeRef.current) timeRef.current.textContent = "弱起…";
+    } else {
+      beatRef.current = Math.min(beat, c.scale);
+      if (el) {
+        el.style.setProperty("--ph", String(c.scale > 0 ? Math.min(beat / c.scale, 1) : 0));
+        el.style.setProperty("--phb", String(Math.min(beat, c.scale))); // 生beat（末尾でclamp）
+      }
+      if (timeRef.current) timeRef.current.textContent = barBeat(beat, c.bpb);
     }
-    if (timeRef.current) timeRef.current.textContent = barBeat(beat, c.bpb);
 
     // #74 追従スクロール（page-turn）。手動スクロール後 2.5s は止める。
     const sc = scrollerRef.current;
@@ -83,8 +97,9 @@ export function usePlayhead() {
   }, []);
 
   // scaleBeats = グリッド全体の拍数。bpb = 1小節の拍数。自己停止しない（終了は onEnd→stop()）。
+  // #25 leadBeats = 弱起 lead L（拍・非ループのみ>0）。既定 0＝弱起なし＝従来と bit 一致。
   const start = useCallback(
-    async (scaleBeats: number, bpm: number, bpb = 4) => {
+    async (scaleBeats: number, bpm: number, bpb = 4, leadBeats = 0) => {
       const Tone = await import("tone");
       const transport = Tone.getTransport();
       ctx.current = {
@@ -92,6 +107,7 @@ export function usePlayhead() {
         bpm,
         bpb,
         lookAhead: Tone.getContext().lookAhead,
+        lead: leadBeats,
         seconds: () => transport.seconds,
       };
       const el = lineRef.current;

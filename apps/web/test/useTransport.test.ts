@@ -150,6 +150,29 @@ describe("useTransport (#59)", () => {
     expect(playNotes).toHaveBeenCalledTimes(1); // ★begin を回避＝再生位置が保持される
   });
 
+  // #25 弱起（負start）の再生契約：playNotes が算出した handle.leadBeats を startPh の第4引数へ渡す
+  //   （非ループ時のみ>0）。弱起なし＝leadBeats 0（未定義でも 0 フォールバック）＝従来と bit 一致。
+  it("forwards handle.leadBeats to startPh (弱起 lead); omitted → 0", async () => {
+    // 弱起あり：handle.leadBeats=0.5 → startPh(scale,bpm,bpb,0.5)。
+    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), leadBeats: 0.5 });
+    const { result } = renderHook(() => useTransport(() => NOTES, 120, { scaleBeats: 4, bpb: 4 }));
+    await act(async () => {
+      result.current.playPause();
+    });
+    await waitFor(() => expect(phStart).toHaveBeenCalled());
+    expect(phStart).toHaveBeenLastCalledWith(4, 120, 4, 0.5);
+
+    // 弱起なし：handle に leadBeats 無し → 0 フォールバック（従来 bit 一致）。
+    phStart.mockClear();
+    playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop: vi.fn() });
+    const { result: r2 } = renderHook(() => useTransport(() => NOTES, 120, { scaleBeats: 4, bpb: 4 }));
+    await act(async () => {
+      r2.current.playPause();
+    });
+    await waitFor(() => expect(phStart).toHaveBeenCalled());
+    expect(phStart).toHaveBeenLastCalledWith(4, 120, 4, 0);
+  });
+
   it("unmount stops playback (no rogue audio)", async () => {
     const stop = vi.fn();
     playNotes.mockResolvedValue({ pause: vi.fn(), resume: vi.fn(), stop });
