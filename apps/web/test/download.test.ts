@@ -58,4 +58,27 @@ describe("#4 MIDI ダウンロードのアンカー/URL ライフサイクル", 
     vi.runAllTimers();
     expect(revoked).toEqual(created);
   });
+
+  it("成功時は true を返す（両関数）", () => {
+    expect(downloadMidi([{ pitch: 60, start: 0, dur: 1 }], "x.mid", 120)).toBe(true);
+    expect(downloadMultitrackMidi([{ name: "m", notes: [{ pitch: 60, start: 0, dur: 1 }] }], "s.mid", 120)).toBe(true);
+  });
+
+  it("弱起（負start）を含んでも throw せず true（クランプで負tick失敗を根治・無言失敗の根絶）", () => {
+    // 実機監査：弱起メロを bar0 に置くと負start が残り @tonejs/midi が throw → 無言DL失敗だった。
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(downloadMidi([{ pitch: 60, start: -0.5, dur: 1 }], "x.mid", 120)).toBe(true);
+    expect(downloadMultitrackMidi([{ name: "m", notes: [{ pitch: 60, start: -0.5, dur: 1 }] }], "s.mid", 120)).toBe(true);
+    expect(err).not.toHaveBeenCalled(); // クランプ済み＝例外経路に入らない
+  });
+
+  it("書き出しが例外を投げても無言で死なず false＋console.error（保険の try/catch）", () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    // createObjectURL を throw させて書き出し境界の失敗を再現。
+    (URL.createObjectURL as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+    expect(downloadMidi([{ pitch: 60, start: 0, dur: 1 }], "x.mid", 120)).toBe(false);
+    expect(err).toHaveBeenCalled();
+  });
 });

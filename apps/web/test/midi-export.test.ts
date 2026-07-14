@@ -99,6 +99,69 @@ describe("MIDI出力の正しさ検証", () => {
   });
 });
 
+// 弱起（負start）ノートの書き出し安全化（実機監査 2026-07-15）：弱起メロを section の bar0
+// (position 0)に置くと負start が残り、@tonejs/midi が負tick で throw → DL 無言失敗。書き出し
+// 境界で start<0 を t=0 へクランプ（end=start+dur を保つ・min0.05・end<=0 は捨てる）。合成側は不変。
+describe("弱起（負start）の書き出しクランプ：負tick throw の根治", () => {
+  it("notesToMidi：負start があっても throw せず、全イベント time>=0", () => {
+    const notes = [
+      { pitch: 60, start: -0.5, dur: 1 }, // 弱起（0 をまたぐ）
+      { pitch: 64, start: 1, dur: 1 },
+    ];
+    let bytes!: Uint8Array;
+    expect(() => { bytes = notesToMidi(notes, 120, "4/4", 0); }).not.toThrow();
+    const m = new Midi(bytes.buffer as ArrayBuffer);
+    for (const t of m.tracks) for (const n of t.notes) expect(n.time).toBeGreaterThanOrEqual(0);
+  });
+
+  it("notesToMidi：0 をまたぐ弱起は t=0 へ寄せ、聞こえる終端(end=start+dur)を保つ", () => {
+    const spb = 60 / 120;
+    const notes = [{ pitch: 60, start: -0.5, dur: 1 }]; // end=0.5拍
+    const m = new Midi(notesToMidi(notes, 120, "4/4", 0).buffer as ArrayBuffer);
+    const n = m.tracks[0]!.notes[0]!;
+    expect(n.time).toBeCloseTo(0, 5); // t=0 にクランプ
+    expect(n.duration).toBeCloseTo(0.5 * spb, 4); // end(0.5拍)を保って縮む＝終端不変
+  });
+
+  it("notesToMidi：end<=0（完全に0より前）の音は捨てる／min dur 0.05", () => {
+    const spb = 60 / 120;
+    const notes = [
+      { pitch: 48, start: -2, dur: 1 }, // end=-1拍 → 発音されない＝落ちる
+      { pitch: 60, start: -0.02, dur: 0.02 }, // end=0 → 落ちる（end<=0）
+      { pitch: 62, start: -0.01, dur: 0.03 }, // end=0.02拍>0 → 残る・dur は min0.05 拍
+    ];
+    const m = new Midi(notesToMidi(notes, 120, "4/4", 0).buffer as ArrayBuffer);
+    const midis = m.tracks[0]!.notes.map((n) => n.midi);
+    expect(midis).toEqual([62]); // 48/60 は落ち、62 だけ残る
+    expect(m.tracks[0]!.notes[0]!.duration).toBeCloseTo(0.05 * spb, 4); // min dur 0.05 拍
+  });
+
+  it("tracksToMidi（分割書出）：負start でも throw せず全 time>=0・end<=0 は捨てる", () => {
+    const tracks = [
+      { name: "Melody", program: 0, notes: [{ pitch: 72, start: -0.25, dur: 0.5 }, { pitch: 74, start: 1, dur: 1 }] },
+      { name: "Bass", program: 33, notes: [{ pitch: 40, start: -3, dur: 1 }] }, // 全部 end<=0 → 空トラック化
+    ];
+    let bytes!: Uint8Array;
+    expect(() => { bytes = tracksToMidi(tracks, 120, "4/4"); }).not.toThrow();
+    const m = new Midi(bytes.buffer as ArrayBuffer);
+    for (const t of m.tracks) for (const n of t.notes) expect(n.time).toBeGreaterThanOrEqual(0);
+    const mel = m.tracks.find((t) => t.name === "Melody")!;
+    expect(mel.notes[0]!.time).toBeCloseTo(0, 5); // 弱起は t=0
+  });
+
+  it("正常notes（全 start>=0）はクランプ非介入＝従来出力と bit 一致", () => {
+    const notes = [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 2, dur: 0.5, vel: 80 }];
+    // クランプ導入後も、負start が無ければ同一バイト列（回帰なし）。基準は同一入力の再エンコード。
+    const a = notesToMidi(notes, 120, "4/4", 4);
+    const b = notesToMidi([...notes], 120, "4/4", 4);
+    expect(Array.from(a)).toEqual(Array.from(b));
+    const tr = [{ name: "M", program: 0, notes }];
+    const ta = tracksToMidi(tr, 120, "4/4");
+    const tb = tracksToMidi([{ name: "M", program: 0, notes: [...notes] }], 120, "4/4");
+    expect(Array.from(ta)).toEqual(Array.from(tb));
+  });
+});
+
 import { feelOf, isCompoundMeter } from "../src/music";
 describe("フィール層＝書き出し境界で applyFeel（スイング・非破壊）", () => {
   const spb = 60 / 120;

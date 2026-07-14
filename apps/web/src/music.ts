@@ -773,6 +773,23 @@ function addLoopMarkers(midi: Midi, loop: LoopSpec | null | undefined, meter?: s
   }
 }
 
+// 書き出し境界の安全化：負start（弱起ノートを bar0/position0 に置いた時などに残る）を t=0 へ
+// クランプする。@tonejs/midi は負の可変長整数（負tick）を書けず「Cannot write negative
+// variable-length integer」を throw し、DL が無言で失敗していた（実機監査で再現）。
+// end=start+dur を保って dur を縮める（＝聞こえる終端は不変・min 0.05）／end<=0（完全に0より前で
+// 鳴らない音）は捨てる。start>=0 のノートは同一参照でそのまま通す＝正常出力は従来と bit 一致。
+// 合成(compositeNotes)側は触らない＝再生の弱起表現は不変・書き出しだけ安全化。
+function clampNegativeStarts(notes: Note[]): Note[] {
+  const out: Note[] = [];
+  for (const n of notes) {
+    if (n.start >= 0) { out.push(n); continue; }
+    const end = n.start + n.dur;
+    if (end <= 0) continue; // 0 より前で完全に終わる＝発音されない＝落とす
+    out.push({ ...n, start: 0, dur: Math.max(end, 0.05) });
+  }
+  return out;
+}
+
 export function notesToMidi(
   notes: Note[],
   bpm = 120,
@@ -792,7 +809,8 @@ export function notesToMidi(
     }
   };
   // 書き出し境界＝feel を適用（跳ねて聞こえる performance MIDI／feel 無しはストレートのまま＝従来一致）。
-  const feltAll = feelNotes(notes, feel, meter);
+  // さらに負start を t=0 へクランプ＝負tick throw（無言DL失敗）の根治。feel 後にかける＝最終 time>=0 を保証。
+  const feltAll = clampNegativeStarts(feelNotes(notes, feel, meter));
   // ドラムとピッチ楽器は GM 上ch分けが必須（ch10=ドラム）。混在時は別トラックに分離＝1トラックに
   // 全部押し込んで ch9 固定にすると、ピッチ楽器が DAW でドラム音源で鳴る破綻を防ぐ（監査 SG-04）。
   const drums = feltAll.filter((n) => n.drum);
@@ -840,7 +858,7 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
       const kit = t.kit ?? t.notes.find((n) => n.drum)?.kit;
       if (kit) track.instrument.number = kit;
     } else if (t.program !== undefined) track.instrument.number = t.program;
-    for (const n of feelNotes(t.notes, feel, meter)) { // 各トラックに同一 feel＝アンサンブルで揃って跳ねる
+    for (const n of clampNegativeStarts(feelNotes(t.notes, feel, meter))) { // 各トラックに同一 feel＝アンサンブルで揃って跳ねる（負start は t=0 クランプ＝負tick throw 回避）
       track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
     }
   }
@@ -863,6 +881,9 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000); // DL 開始を待ってから解放（リーク防止）
 }
 
+// 書き出しは try/catch で包み、失敗しても console.error に出して false を返す（無言失敗の根絶）。
+// 負start は clampNegativeStarts で潰す想定なので通常 throw しないが、想定外の例外でも DL が
+// 静かに死なないよう保険を張る。成功=true。呼び出し元の通知UIは別起票（負start設計判断とセット）。
 export function downloadMultitrackMidi(
   tracks: MidiTrackSpec[],
   filename = "section.mid",
@@ -870,9 +891,15 @@ export function downloadMultitrackMidi(
   meter?: string | null,
   feel?: Feel | null,
   loop?: LoopSpec | null,
-): void {
-  const blob = new Blob([tracksToMidi(tracks, bpm, meter, feel, loop) as BlobPart], { type: "audio/midi" });
-  triggerDownload(blob, filename);
+): boolean {
+  try {
+    const blob = new Blob([tracksToMidi(tracks, bpm, meter, feel, loop) as BlobPart], { type: "audio/midi" });
+    triggerDownload(blob, filename);
+    return true;
+  } catch (e) {
+    console.error("MIDI 書き出しに失敗しました（多トラック）:", e);
+    return false;
+  }
 }
 
 export function midiToNotes(buf: ArrayBuffer | Uint8Array): { notes: Note[]; bpm: number } {
@@ -900,11 +927,17 @@ export function downloadMidi(
   program?: number,
   feel?: Feel | null,
   loop?: LoopSpec | null,
-): void {
-  const blob = new Blob([notesToMidi(notes, bpm, meter, program, feel, loop) as BlobPart], {
-    type: "audio/midi",
-  });
-  triggerDownload(blob, filename);
+): boolean {
+  try {
+    const blob = new Blob([notesToMidi(notes, bpm, meter, program, feel, loop) as BlobPart], {
+      type: "audio/midi",
+    });
+    triggerDownload(blob, filename);
+    return true;
+  } catch (e) {
+    console.error("MIDI 書き出しに失敗しました:", e);
+    return false;
+  }
 }
 
 // --- 再生スケジュールの純関数（Tone非依存・テスト可能, #57/#58 ①）---
