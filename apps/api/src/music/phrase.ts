@@ -115,6 +115,47 @@ export function firstDownbeatFromBeats(text: string): number | null {
   return null;
 }
 
+// POP909 beat 注釈の「各拍の時刻(秒・1列目)」列。行index=拍番号（注釈拍座標）で downbeat は整数拍に乗る。
+// この秒列に MIDI ノートの実時刻を内挿写像すると「拍が食わない」正しい拍位置が得られる（R0・2026-07-14）。
+export function beatTimesFromBeats(text: string): number[] {
+  return text.trim().split(/\r?\n/).map((l) => Number(l.trim().split(/\s+/)[0]));
+}
+
+// 秒 → 注釈拍位置（beatTimes への区分線形内挿）。範囲外は端の間隔で外挿。
+export function makeSecondsToBeat(beatTimes: number[]): (sec: number) => number {
+  const b = beatTimes;
+  return (s: number): number => {
+    if (b.length < 2) return 0;
+    if (s <= b[0]!) return (s - b[0]!) / (b[1]! - b[0]! || 1);
+    for (let i = 1; i < b.length; i++) if (s < b[i]!) return i - 1 + (s - b[i - 1]!) / (b[i]! - b[i - 1]! || 1);
+    const n = b.length;
+    return n - 1 + (s - b[n - 1]!) / (b[n - 1]! - b[n - 2]! || 1);
+  };
+}
+
+// MIDIノート（start/dur は tick/division＝MIDI拍）を「注釈拍座標」へ写像。
+// tick→秒（テンポマップ）→注釈拍（beatTimes 内挿）。表情テンポ/曲頭オフセットで MIDI拍と注釈拍が
+// 整数対応しないので、この二段変換で downbeat が整数拍に乗る座標へ揃える（位相ズレ根治）。
+export function remapToBeatGrid<T extends Note>(notes: T[], tickToSec: (tick: number) => number, division: number, beatTimes: number[]): T[] {
+  const s2b = makeSecondsToBeat(beatTimes);
+  return notes.map((n) => {
+    const startBeat = s2b(tickToSec(n.start * division));
+    const endBeat = s2b(tickToSec((n.start + n.dur) * division));
+    return { ...n, start: startBeat, dur: Math.max(1e-3, endBeat - startBeat) };
+  });
+}
+
+// メトリック健全ゲート：句内に「拍0近傍(小節頭)にオンセットを持つ音」があるか（phase_ok）。
+// R0 の 52.8% はこのゲートで弾ける＝辞書に「拍が食う句」を入れない。tol は拍単位の許容。
+export function phraseHasDownbeatOnset(notes: Note[], beatsPerBar: number, tol = 0.13): boolean {
+  for (const n of notes) {
+    if (n.start < 0) continue;
+    const ph = ((n.start % beatsPerBar) + beatsPerBar) % beatsPerBar;
+    if (ph < tol || ph > beatsPerBar - tol) return true;
+  }
+  return false;
+}
+
 // notes を「実小節 × barsPerPhrase」ごとのフレーズに分割。各フレーズは start を 0 起点へ rebase。
 // **小節グリッドは「最初の音の小節頭」にアンカー**（tick0固定だとイントロ/弱起で1小節ズレる）。
 // anchorBeat を渡せばそれを bar1 起点に使う（POP909 の実 downbeat 等）。疎なフレーズは捨てる。

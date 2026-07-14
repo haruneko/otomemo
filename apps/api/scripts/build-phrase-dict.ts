@@ -7,10 +7,11 @@ import { join } from "node:path";
 import { openDb } from "../src/db";
 import { Core } from "../src/core";
 import { parseAbcTune, tonicPcOf, modeOf } from "../src/music/abc";
-import { parseMidi, meterOf, leadChannelMelody, skylineMelody, notesOfTrackNamed } from "../src/music/midi";
-import { isStandardMeter, segmentByBars, clusterPhrases, beatsPerBarFromBeats, firstDownbeatFromBeats, scoreDurations } from "../src/music/phrase";
+import { parseMidi, meterOf, leadChannelMelody, skylineMelody, notesOfTrackNamed, makeTickToSeconds } from "../src/music/midi";
+import { isStandardMeter, segmentByBars, clusterPhrases, beatsPerBarFromBeats, firstDownbeatFromBeats, beatTimesFromBeats, remapToBeatGrid, phraseHasDownbeatOnset, scoreDurations } from "../src/music/phrase";
 import { detectKeyFromNotes } from "../src/music";
 import { normalizeToC } from "../src/music/melodyEssence";
+import { meterInfo } from "../src/music/meter";
 
 type Mode = "major" | "minor";
 type Note = { pitch: number; start: number; dur: number };
@@ -44,24 +45,39 @@ function irishPhrases(jsonPath: string): Phrase[] {
 }
 
 // POP909（曲別フォルダ NNN/NNN.mid + beat_midi.txt）→ pop フレーズ。拍子は beat ファイルから復元。
+// **位相の核（R0・2026-07-14）**：beat_midi.txt は 1列目=秒。MIDI拍(tick/division)は表情テンポ/曲頭
+// オフセットで注釈拍に整数対応しない → テンポマップで note を秒化 → beat秒列へ内挿して「注釈拍座標」へ
+// 写像（この座標で downbeat が整数拍=行index に乗る）→ anchor=firstDownbeat行index で 4小節分割。
+// 旧実装は行index を MIDI拍と混同（anchor直流用）で位相が 0.25/0.75 に散っていた（拍0被覆54%→93%）。
 function popPhrases(dir: string): Phrase[] {
   const out: Phrase[] = [];
   for (const id of readdirSync(dir).filter((d) => /^\d{3}$/.test(d))) {
     const base = join(dir, id);
     let bpb: number | null = null;
     let anchor: number | null = null;
-    // beat ファイル＝拍/小節 と 実 downbeat 位相の両方の源（半端小節始まりの曲は anchor で位相を合わせる）。
-    try { const bt = readFileSync(join(base, "beat_midi.txt"), "utf8"); bpb = beatsPerBarFromBeats(bt); anchor = firstDownbeatFromBeats(bt); } catch { continue; }
-    if (!bpb) continue;
+    let beatTimes: number[] = [];
+    try {
+      const bt = readFileSync(join(base, "beat_midi.txt"), "utf8");
+      bpb = beatsPerBarFromBeats(bt);
+      anchor = firstDownbeatFromBeats(bt); // 注釈拍座標では行index（整数）が正しいアンカー
+      beatTimes = beatTimesFromBeats(bt);
+    } catch { continue; }
+    if (!bpb || beatTimes.length < 4 || anchor === null) continue;
     const meter = `${bpb}/4`;
     const parsed = parseMidi(new Uint8Array(readFileSync(join(base, `${id}.mid`))));
-    const mel = skylineMelody(notesOfTrackNamed(parsed, "MELODY"));
-    if (mel.length < 8) continue;
+    const melMidi = skylineMelody(notesOfTrackNamed(parsed, "MELODY"));
+    if (melMidi.length < 8) continue;
+    // MIDI拍 → 注釈拍座標へ写像（テンポマップ＋beat秒列内挿）。ここで拍位相が正しく揃う。
+    const mel = remapToBeatGrid(melMidi, makeTickToSeconds(parsed), parsed.division, beatTimes);
     let kp = { keyPc: 0, mode: "major" as Mode };
     try { kp = keyFromPop909(readFileSync(join(base, "key_audio.txt"), "utf8")); } catch { /* 無ければ既定 */ }
     const notesC = normalizeToC(mel, kp.keyPc);
-    // 音長復元はフレーズ単位（フレーズ内の音長相対で上限）。
-    for (const ph of segmentByBars(notesC, meter, 4, 4, anchor ?? undefined).filter(MELODIC)) out.push({ notes: scoreDurations(ph), style: "pop", meter, mode: kp.mode });
+    // 音長復元はフレーズ単位（フレーズ内の音長相対で上限）。phase_ok（拍0近傍オンセット）ゲートで拍が食う句を捨てる。
+    for (const ph of segmentByBars(notesC, meter, 4, 4, anchor).filter(MELODIC)) {
+      const sc = scoreDurations(ph);
+      if (!phraseHasDownbeatOnset(sc, bpb)) continue; // メトリック健全ゲート（R0§6.2(A)）
+      out.push({ notes: sc, style: "pop", meter, mode: kp.mode });
+    }
   }
   return out;
 }
@@ -118,7 +134,11 @@ function main(): void {
   const old = core.listNeta({ kind: "melody", scope: "library", limit: 99999 }).filter((n) => (n.tags ?? []).some((t) => STYLES.includes(t)));
   for (const n of old) core.deleteNeta(n.id);
   for (const p of patterns) {
-    core.createNeta({ kind: "melody", title: `${p.style} pattern ×${p.count}`, content: { notes: p.notes, count: p.count }, meter: p.meter ?? "4/4", mode: p.mode ?? null, scope: "library", tags: ["pattern", p.style] });
+    const bpb = meterInfo(p.meter ?? "4/4").beatsPerBar;
+    const phaseOk = phraseHasDownbeatOnset(p.notes, bpb);
+    const pickup = Math.max(0, -Math.min(0, ...p.notes.map((n) => n.start))); // 弱起量（downbeat相対の負start絶対値）
+    // key=0＝C正規化済みの明示（旧NULL廃止・R0§7）／bars=4＝句の小節数（明示）／phase_ok・pickup を content に。
+    core.createNeta({ kind: "melody", title: `${p.style} pattern ×${p.count}`, content: { notes: p.notes, count: p.count, phase_ok: phaseOk, pickup }, key: 0, bars: 4, meter: p.meter ?? "4/4", mode: p.mode ?? null, scope: "library", tags: ["pattern", p.style] });
   }
   console.log(`置換: 旧メロ ${old.length}件 削除 → パターン ${patterns.length}件 投入 → ${dbPath}`);
 }

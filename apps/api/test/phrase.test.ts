@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { isStandardMeter, segmentByBars, clusterPhrases, beatsPerBarFromBeats, firstDownbeatFromBeats, scoreDurations } from "../src/music/phrase";
-import { parseMidi, meterOf } from "../src/music/midi";
+import { isStandardMeter, segmentByBars, clusterPhrases, beatsPerBarFromBeats, firstDownbeatFromBeats, beatTimesFromBeats, makeSecondsToBeat, remapToBeatGrid, phraseHasDownbeatOnset, scoreDurations } from "../src/music/phrase";
+import { parseMidi, meterOf, makeTickToSeconds } from "../src/music/midi";
 
 type N = { pitch: number; start: number; dur: number };
 const seq = (starts: number[], step = 1): N[] => starts.map((s) => ({ pitch: 60, start: s, dur: step }));
@@ -100,6 +100,54 @@ describe("firstDownbeatFromBeats（最初の小節頭の絶対拍）", () => {
   });
   it("downbeat が一つも無ければ null", () => {
     expect(firstDownbeatFromBeats("0 0 0\n1 0 0\n2 0 0")).toBeNull();
+  });
+});
+
+describe("位相アンカー（R0・2026-07-14）＝注釈拍座標へ写像", () => {
+  it("beatTimesFromBeats：1列目(秒)を拍時刻列に", () => {
+    const txt = "0.05 1.0 1.0\n0.72 0.0 0.0\n1.39 1.0 0.0";
+    expect(beatTimesFromBeats(txt)).toEqual([0.05, 0.72, 1.39]);
+  });
+
+  it("makeSecondsToBeat：beat秒列へ区分線形内挿（downbeatは整数拍に乗る）", () => {
+    const times = [0.0, 1.0, 2.0, 3.0, 4.0]; // 1拍=1秒
+    const s2b = makeSecondsToBeat(times);
+    expect(s2b(0.0)).toBeCloseTo(0);
+    expect(s2b(2.0)).toBeCloseTo(2);
+    expect(s2b(2.5)).toBeCloseTo(2.5); // 拍間は内挿
+    // 非等間隔（テンポ変化）：拍2→3 が 2秒に伸びる
+    const s2 = makeSecondsToBeat([0, 1, 2, 4, 6]);
+    expect(s2(3.0)).toBeCloseTo(2.5); // 拍2(2s)と拍3(4s)の中間
+  });
+
+  it("remapToBeatGrid：MIDI拍がテンポ/オフセットでズレても注釈拍で整数化（020型の根治）", () => {
+    // MIDIは 120BPM(0.5s/拍)一定・division=1。だが注釈拍は 0.5秒始まりで 0.5s間隔。
+    // → MIDI拍 b の秒 = b*0.5。注釈拍 = (b*0.5 - 0.5)/0.5 = b-1。1拍ズレを注釈拍で吸収。
+    const tickToSec = (tick: number) => tick * 0.5; // division=1 なので tick=拍
+    const beatTimes = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]; // 注釈の拍時刻（0.5s始まり）
+    const notes = [{ pitch: 60, start: 1, dur: 1 }, { pitch: 62, start: 2, dur: 1 }];
+    const out = remapToBeatGrid(notes, tickToSec, 1, beatTimes);
+    expect(out[0]!.start).toBeCloseTo(0); // MIDI拍1(0.5s) → 注釈拍0（小節頭に乗る）
+    expect(out[1]!.start).toBeCloseTo(1); // MIDI拍2(1.0s) → 注釈拍1
+  });
+
+  it("phraseHasDownbeatOnset：拍0近傍のオンセット有無（メトリック健全ゲート）", () => {
+    expect(phraseHasDownbeatOnset([{ pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 1.5, dur: 1 }], 4)).toBe(true);
+    expect(phraseHasDownbeatOnset([{ pitch: 60, start: 0.5, dur: 1 }, { pitch: 62, start: 1.5, dur: 1 }], 4)).toBe(false); // 拍頭に乗らない
+    expect(phraseHasDownbeatOnset([{ pitch: 60, start: 3.98, dur: 1 }], 4)).toBe(true); // 小節末≒次小節頭
+  });
+
+  it("makeTickToSeconds：テンポマップを積分（変化前後で正しい秒）", () => {
+    // division=480。tick0で120BPM(500000μs)、tick960(=2拍)で60BPM(1000000μs)。
+    const t2s = makeTickToSeconds({ division: 480, tempos: [{ tick: 0, usPerQ: 500000 }, { tick: 960, usPerQ: 1000000 }] });
+    expect(t2s(0)).toBeCloseTo(0);
+    expect(t2s(480)).toBeCloseTo(0.5); // 1拍@120BPM=0.5s
+    expect(t2s(960)).toBeCloseTo(1.0); // 2拍@120BPM=1.0s
+    expect(t2s(1440)).toBeCloseTo(2.0); // +1拍@60BPM=+1.0s → 2.0s
+  });
+  it("makeTickToSeconds：テンポ無し=120BPM既定", () => {
+    const t2s = makeTickToSeconds({ division: 480, tempos: [] });
+    expect(t2s(480)).toBeCloseTo(0.5);
   });
 });
 

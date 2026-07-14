@@ -3,7 +3,7 @@
 // メロ抽出＝skyline（各オンセットで最高音）＝多声アレンジから単旋律の輪郭を取る実用ヒューリスティック。
 
 export interface MidiNote { pitch: number; start: number; dur: number; channel: number; track: number }
-export interface ParsedMidi { division: number; notes: MidiNote[]; trackNames: string[]; timeSigs: { tick: number; meter: string }[]; programs: Record<number, number> }
+export interface ParsedMidi { division: number; notes: MidiNote[]; trackNames: string[]; timeSigs: { tick: number; meter: string }[]; programs: Record<number, number>; tempos: { tick: number; usPerQ: number }[] }
 
 function readVarLen(b: Uint8Array, p: number): [number, number] {
   let value = 0;
@@ -29,6 +29,7 @@ export function parseMidi(buf: Uint8Array): ParsedMidi {
   const notes: MidiNote[] = [];
   const trackNames: string[] = [];
   const timeSigs: { tick: number; meter: string }[] = [];
+  const tempos: { tick: number; usPerQ: number }[] = []; // set-tempo(0xFF 0x51) 列＝tick→秒 変換の素
   const programs: Record<number, number> = {}; // channel → GM program（最初の音色）
   let p = 14;
   for (let tr = 0; tr < ntrks && p < buf.length; tr++) {
@@ -56,6 +57,8 @@ export function parseMidi(buf: Uint8Array): ParsedMidi {
           trackNames[tr] = s.trim();
         } else if (metaType === 0x58 && mlen >= 2) { // time signature: num, den=2^pow
           timeSigs.push({ tick, meter: `${buf[mp]!}/${2 ** buf[mp + 1]!}` });
+        } else if (metaType === 0x51 && mlen === 3) { // set tempo: μs/四分音符
+          tempos.push({ tick, usPerQ: (buf[mp]! << 16) | (buf[mp + 1]! << 8) | buf[mp + 2]! });
         }
         pos = mp + mlen;
       } else if (status === 0xf0 || status === 0xf7) { // sysex
@@ -88,7 +91,29 @@ export function parseMidi(buf: Uint8Array): ParsedMidi {
     p = end;
   }
   notes.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
-  return { division, notes, trackNames, timeSigs, programs };
+  tempos.sort((a, b) => a.tick - b.tick);
+  return { division, notes, trackNames, timeSigs, programs, tempos };
+}
+
+// tick → 秒 の変換器（テンポマップを区分線形に積分）。テンポ変化前提の POP909 で
+// 「注釈 beat（秒）」と「MIDI拍（tick/division）」を突き合わせるのに使う（コーパス位相アンカーの核）。
+// テンポ無し＝120BPM(500000μs/四分)既定。tick0 より前にイベントが無ければ先頭テンポを 0 まで外挿。
+export function makeTickToSeconds(parsed: { division: number; tempos: { tick: number; usPerQ: number }[] }): (tick: number) => number {
+  const div = parsed.division || 480;
+  const evs = parsed.tempos.length ? [...parsed.tempos].sort((a, b) => a.tick - b.tick) : [{ tick: 0, usPerQ: 500000 }];
+  if (evs[0]!.tick !== 0) evs.unshift({ tick: 0, usPerQ: evs[0]!.usPerQ });
+  // 各テンポ区間の開始 tick における累積秒。
+  const cum: { tick: number; sec: number; usPerQ: number }[] = [];
+  let sec = 0;
+  for (let i = 0; i < evs.length; i++) {
+    if (i > 0) sec += ((evs[i]!.tick - evs[i - 1]!.tick) / div) * (evs[i - 1]!.usPerQ / 1e6);
+    cum.push({ tick: evs[i]!.tick, sec, usPerQ: evs[i]!.usPerQ });
+  }
+  return (tick: number): number => {
+    let k = 0;
+    for (let i = 0; i < cum.length; i++) { if (cum[i]!.tick <= tick) k = i; else break; }
+    return cum[k]!.sec + ((tick - cum[k]!.tick) / div) * (cum[k]!.usPerQ / 1e6);
+  };
 }
 
 // チャンネルの最大同時発音数（和音/パッド検出用）。
