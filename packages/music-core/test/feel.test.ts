@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyFeel, warpTime, unwarpTime, type Feel } from "../src/index";
+import { applyFeel, warpTime, unwarpTime, pink1f, humanizeProfile, HUMANIZE_YORE_MS, type Feel, type HumanizeWarn } from "../src/index";
 
 type Note = { pitch: number; start: number; dur: number; vel?: number };
 // ストレート格子のサンプル（8分＋16分混在＝衝突が起きうる素材）。
@@ -95,5 +95,67 @@ describe("feel層 applyFeel＝非破壊タイムワープ（swing/humanize）", 
   it("swing→humanize の順（両掛けでも単調＝順序保存）", () => {
     const w = applyFeel(straight(), { swing: 0.9, humanize: 0.5, seed: 3 }).map((n) => n.start);
     for (let i = 1; i < w.length; i++) expect(w[i]!).toBeGreaterThanOrEqual(w[i - 1]!);
+  });
+});
+
+// ── humanize 知覚較正（WP-D2・2026-07-14）＝1/f 化・部位別リミット・ヨレ警告 ──
+// 8音のストレート格子（中間音が humanize 対象＝端音不動）。
+const line8 = (): { pitch: number; start: number; dur: number }[] =>
+  Array.from({ length: 8 }, (_, i) => ({ pitch: 60 + i, start: i * 0.5, dur: 0.5 }));
+
+describe("humanize 知覚較正（1/f・部位別リミット・ヨレ警告）", () => {
+  it("pink1f：出力[-1,1]・同 seed 同系列（決定的）・別 seed で変わる", () => {
+    const a = pink1f(7, 64);
+    const b = pink1f(7, 64);
+    expect(a).toEqual(b);                                  // 決定的（bit 再現性）
+    expect(a.every((x) => x >= -1 && x <= 1)).toBe(true);  // [-1,1]
+    expect(pink1f(8, 64)).not.toEqual(a);                  // seed 依存
+  });
+
+  it("humanize 0＝bit一致（tempo/part 有無に不依存）", () => {
+    const src = line8();
+    for (const ctx of [{}, { tempo: 120 }, { tempo: 120, part: "kick" as const }]) {
+      expect(applyFeel(src, { humanize: 0 }, ctx)).toEqual(src);
+    }
+  });
+
+  it("tempo 無指定＝拍比経路（上限0.03拍）・1/f 化で決定的", () => {
+    const src = line8();
+    const a = applyFeel(src, { humanize: 1, seed: 5 });
+    const b = applyFeel(src, { humanize: 1, seed: 5 });
+    expect(a).toEqual(b);
+    for (let i = 1; i < a.length - 1; i++) expect(Math.abs(a[i]!.start - src[i]!.start)).toBeLessThanOrEqual(0.031);
+  });
+
+  it("部位別クランプ：tempo 指定時、各部位のずれが ms リミット内（Kick<Hihat 相対タイト）", () => {
+    const src = line8();
+    const tempo = 120;
+    const msPerBeat = 60000 / tempo;
+    const maxMs = (part: "kick" | "hihat" | "bass" | "melody") => {
+      const w = applyFeel(src, { humanize: 1, seed: 9 }, { tempo, part });
+      let m = 0;
+      for (let i = 1; i < w.length - 1; i++) m = Math.max(m, Math.abs(w[i]!.start - src[i]!.start) * msPerBeat);
+      return m;
+    };
+    // 各部位の最大ずれは自分のリミット（+丸め余裕）を超えない。
+    expect(maxMs("kick")).toBeLessThanOrEqual(humanizeProfile("kick").limit + 1);
+    expect(maxMs("hihat")).toBeLessThanOrEqual(humanizeProfile("hihat").limit + 1);
+    expect(maxMs("bass")).toBeLessThanOrEqual(humanizeProfile("bass").limit + 1);
+    expect(maxMs("melody")).toBeLessThanOrEqual(humanizeProfile("melody").limit + 1);
+  });
+
+  it("ヨレ警告：盛りすぎ設定（melody×高humanize×遅テンポ）で発火・既定帯では未発火", () => {
+    const src = line8();
+    // melody hum=1・♩80(遅=×1.3)：peak=4·1·10·1.3=52ms>40 → 発火。
+    const warns: HumanizeWarn[] = [];
+    applyFeel(src, { humanize: 1, seed: 3 }, { tempo: 80, part: "melody", onWarn: (w) => warns.push(w) });
+    expect(warns.length).toBeGreaterThanOrEqual(1);
+    expect(warns[0]!.kind).toBe("humanize-yore");
+    expect(warns[0]!.peakMs).toBeGreaterThan(HUMANIZE_YORE_MS);
+
+    // 既定帯（kick hum=0.25・♩120）は未発火（4·0.25·3=3ms）。
+    const safe: HumanizeWarn[] = [];
+    applyFeel(src, { humanize: 0.25, seed: 3 }, { tempo: 120, part: "kick", onWarn: (w) => safe.push(w) });
+    expect(safe.length).toBe(0);
   });
 });

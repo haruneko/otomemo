@@ -523,7 +523,8 @@ export function SectionEditor({
                           </div>
                         </>}
                         <div className="knob-group-h">人間味・仕上げ</div>
-                        {gen.sliderRow("humanize", "人間味", gen.humanize, gen.setHumanize, "きっちり", "揺らぐ")}
+                        {/* WP-D2 humanize 較正：揺れは 1/f（人間寄り）・部位別に上限（K/S/HH タイト〜メロ自由）。OFF=機械通り／弱=既定の自然な揺れ／強=生っぽく(盛りすぎは自動で頭打ち) */}
+                        {gen.segRow("humanize", "人間味", "自然な揺れ(1/f)・盛り上限あり", gen.humanize, gen.setHumanize, "humanize")}
                       </>}
                     </div>
                   )}

@@ -834,7 +834,8 @@ export async function playNotes(
 ): Promise<PlaybackHandle> {
   // フィール層：再生境界で feel を適用（スイング/微小タイミング）。SSOTのnotesはストレート・ここで跳ねさせる。
   // 未指定＝恒等＝従来一致。start/dur のみ変わるので samplers（pitch/program/part 依存）には無影響。
-  if (opts.feel) notes = applyFeel(notes, opts.feel, { compound: opts.compound });
+  // tempo を渡す＝humanize が ms 絶対時間＋部位別リミット＋ヨレ警告で効く（WP-D2・研究 humanize-perception-defaults）。
+  if (opts.feel) notes = applyFeel(notes, opts.feel, { compound: opts.compound, tempo: bpm });
   const Tone = await import("tone");
   await Tone.start();
   const transport = Tone.getTransport();
@@ -900,7 +901,7 @@ export async function playNotes(
   // stop/start を呼ばない＝頭に戻らない・音が途切れない。transport.loop/loopStart/loopEnd は保持（別途 setLoopRange で更新）。
   const doReschedule = async (rawNotes: Note[]): Promise<void> => {
     if (stopped) return; // 破棄済みハンドル（kit dispose 済）では鳴らさない
-    const finalNotes = feel ? applyFeel(rawNotes, feel, { compound }) : rawNotes;
+    const finalNotes = feel ? applyFeel(rawNotes, feel, { compound, tempo: bpm }) : rawNotes;
     transport.cancel(0); // 予約済みを全消し（部分 cancel はループ再火と二重化するので不可）
     if (sf) {
       // 新パート/プログラム/lens/drum が出ても map を最新へ（cache 済は即時＝再DL/再parseゼロ＝SF2 dedup 維持）。

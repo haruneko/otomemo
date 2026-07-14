@@ -38,6 +38,7 @@ import { normRoot } from "./music/theory";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20）
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
+import { attachSyncScore } from "./music/syncopationReport"; // シンコペ「ノリメーター」の生成側露出（WP-D2）
 import { attachHarmonicTension } from "./music/harmonicTensionReport"; // 和声張力カーブレンズの生成側露出（WP-C4）
 import { splitMora, flowLyric, type LNote } from "./lyric";
 import { suggestLyricRhythm, analyzeLyricFit } from "@cm/music-core"; // ② 歌詞↔メロ プロソディ（design #13b・WP-M5）
@@ -583,6 +584,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       attachMelodyVoiceLeading(res, { bass, skeleton, chords, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
       // 候補レンズの添付（design #12-M・WP-M3・読み取り専用＝候補ノートは不変）。並べ替え軸＝expectation/hook/singability。
       attachMelodyLenses(res, { key: typeof frame?.key === "number" ? frame.key : undefined, beatsPerBar: meterInfo(frame?.meter).beatsPerBar, sectionRole: (frame as { section?: { role?: string } } | undefined)?.section?.role, profile: resolveVoiceProfile((frame as { voice_profile?: unknown } | undefined)?.voice_profile as string | undefined) });
+      // シンコペ「ノリメーター」の添付（WP-D2・読み取り専用＝候補ノート不変）。並べ替え軸＝セクション役割別ターゲット帯への適合。
+      attachSyncScore(res, { beatsPerBar: meterInfo(frame?.meter).beatsPerBar, role: (frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof frame?.tempo === "number" ? frame.tempo : undefined });
       // F1(2026-07-08)：style指定なのにコーパス未投入＝黙って既定劣化していたのを可視化（Claudeがユーザーに伝えられる）。
       if (style && !corpusModel) (res as typeof res & { note?: string }).note = `style「${style}」のコーパスが library に無いため既定モデルで生成（らしさ順ランクも既定＝生成順）`;
       // 骨格→メロの紐付けは capture 後（gen_melody は候補返しでまだ neta 化しない＝この時点で id が無い）。
@@ -631,6 +634,8 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       const res = genBass(frame, chords, seed, drums, { kickLock, snareGap, approach, skeleton, style, fill });
       // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
       attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(frame?.meter).beatsPerBar });
+      // シンコペ「ノリメーター」の添付（WP-D2）：ベース層のシンコペ密度＝目標帯（中が主役）への適合。
+      attachSyncScore(res, { beatsPerBar: meterInfo(frame?.meter).beatsPerBar, role: (frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof frame?.tempo === "number" ? frame.tempo : undefined });
       // capture 後に link(ベース, 骨格, "realized_from") を張れるよう id をエコー（design #20・gen_melody と同じ）。
       if (skeletonNetaId) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = skeletonNetaId;
       return ok(res);
@@ -657,7 +662,12 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   server.registerTool(
     "gen_drums",
     { title: "ドラムを生成", description: "GMバックビート（16分グリッド hits=step index・4/4で16step/6-8で12step・seedで小変化）。content.rhythm.beatsPerStep で拍換算。**style**=定型ビート型ID(beat8.syncopated/four.rock/beat16.ghost/six8.ballad 等)またはジャンル名(jpop/rock/dance/ballad/funk＝frame.section.role＋tempo域で候補型を絞り選択)。**fill**=0..1(小さい=軽い節目/大きい=大遷移フィル)またはフィル型ID(fill.tom.asc.half 等)＝frame.bars本の末尾遷移小節へフィル挿入＋着地(次小節頭crash+kick)・他小節不変。型はstraight格子でスイング/timingはfeel層へ委譲。style/fill 未指定=従来 bit 一致。6/8は6/8対応型のみ。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), style: z.string().optional().describe("定型ビート型ID or ジャンル名(jpop/rock/dance/ballad/funk)。未指定=従来"), fill: z.union([z.number().min(0).max(1), z.string()]).optional().describe("フィル 0..1(強さ) or 型ID。指定でセクション末小節にフィル＋着地。未指定=なし(従来)") } },
-    async ({ frame, seed, style, fill }) => ok(genDrums(frame, seed, style != null || fill != null ? { style, fill } : undefined)),
+    async ({ frame, seed, style, fill }) => {
+      const res = genDrums(frame, seed, style != null || fill != null ? { style, fill } : undefined);
+      // シンコペ「ノリメーター」（WP-D2）：ドラム層のシンコペ密度＝ハット≈0/バックビート据えの床の上でどれだけ食うか。
+      attachSyncScore(res, { beatsPerBar: meterInfo(frame?.meter).beatsPerBar, role: (frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof frame?.tempo === "number" ? frame.tempo : undefined });
+      return ok(res);
+    },
   );
   server.registerTool(
     "gen_named_progression",

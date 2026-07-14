@@ -44,6 +44,7 @@ import { analyzeVoiceLeading } from "./music/voiceLeading";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20 S2）
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
+import { attachSyncScore } from "./music/syncopationReport"; // シンコペ「ノリメーター」の生成側露出（WP-D2）
 import { attachHarmonicTension } from "./music/harmonicTensionReport"; // 和声張力カーブレンズの生成側露出（WP-C4）
 import { meterInfo } from "./music/meter";
 import { resolveVoiceProfile } from "@cm/music-core"; // 声種プロファイル解決（WP-M4・レンズへ渡す）
@@ -230,6 +231,8 @@ export function buildHttp(core: Core): FastifyInstance {
           attachMelodyVoiceLeading(res, { bass: bassN.length ? bassN : undefined, skeleton, chords: asChords(b.chords), beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           // 候補レンズの添付（design #12-M・WP-M3・読み取り専用＝候補ノートは不変）。web 候補トレイの並べ替え軸。
           attachMelodyLenses(res, { key: typeof b.frame?.key === "number" ? b.frame.key : undefined, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, sectionRole: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, profile: resolveVoiceProfile((b.frame as { voice_profile?: unknown } | undefined)?.voice_profile as string | undefined) });
+          // シンコペ「ノリメーター」の添付（WP-D2・読み取り専用）。並べ替え軸＝役割別ターゲット帯への適合。
+          attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined });
           // capture 後に link(メロ, 骨格, "realized_from") を張れるよう id をエコー（design #20・MCP 経路と同じ）。
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string;
           return res;
@@ -260,6 +263,7 @@ export function buildHttp(core: Core): FastifyInstance {
           const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill });
           // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
           attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
+          attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
           if (skeleton) (res as typeof res & { skeletonNetaId?: string }).skeletonNetaId = b.skeletonNetaId as string; // capture 後 link(ベース→骨格,"realized_from") 用にエコー
           return res;
         }
@@ -281,7 +285,9 @@ export function buildHttp(core: Core): FastifyInstance {
         case "gen_drums": { // WP-D1：style(型ID/ジャンル)＋fill(0..1/型ID)＝定型ビート＋フィル。未指定=従来 bit 一致。
           const dstyle = typeof b.style === "string" ? b.style : undefined;
           const dfill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
-          return genDrums(b.frame, b.seed, dstyle != null || dfill != null ? { style: dstyle, fill: dfill } : undefined);
+          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null ? { style: dstyle, fill: dfill } : undefined);
+          attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
+          return res;
         }
         case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);

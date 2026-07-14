@@ -137,8 +137,8 @@ describe("mcp gen_skeleton / gen_melody skeleton injection (design #20)", () => 
     const bassChords = [{ root: 0, quality: "", start: 0, dur: 8 }];
     const withSkel = JSON.parse(textOf(await client.callTool({ name: "gen_bass", arguments: { frame: bassFrame, chords: bassChords, seed: 42, skeletonNetaId: captured.id } })));
     expect(withSkel.items[0].meta?.voiceLeading).toBeTruthy();
-    // 骨格無しの gen_bass はメタ無し（対位相手が無い）
+    // 骨格無しの gen_bass は voiceLeading メタ無し（対位相手が無い）。WP-D2 の sync ノリメーターは下声非依存ゆえ付きうる。
     const noSkel = JSON.parse(textOf(await client.callTool({ name: "gen_bass", arguments: { frame: bassFrame, chords: bassChords, seed: 42 } })));
-    expect(noSkel.items[0].meta).toBeUndefined();
+    expect(noSkel.items[0].meta?.voiceLeading).toBeUndefined();
   });
 });

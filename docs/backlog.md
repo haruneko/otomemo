@@ -3,7 +3,17 @@
 スペック層（requirements/architecture/design）にも Task 機能にも載せきれない「いつかやる／保留」をここに貯める。
 着手したら Task 化して、ここからは消すか「→ #NN」と印を付ける。最終更新を都度書く。
 
-最終更新: 2026-07-14（コード楽器arp 幅/区切り・全GM・コード楽器2音色/MIDI音色バグ修正・骨格フォーム回帰skelForm S1/S2・一曲書くE2E受け入れ〈機能/デザイン監査を分離実施〉を反映。耳確認未消化＋デザイン据え置き1件〈極小ブロック〉を追記）
+最終更新: 2026-07-14（コード楽器arp 幅/区切り・全GM・コード楽器2音色/MIDI音色バグ修正・骨格フォーム回帰skelForm S1/S2・一曲書くE2E受け入れ〈機能/デザイン監査を分離実施〉を反映。耳確認未消化＋デザイン据え置き1件〈極小ブロック〉を追記。**WP-D2（シンコペレンズ＋humanize較正）実装済＝残タスクを下に追記**）
+
+## WP-D2（シンコペ密度レンズ＋humanize知覚較正・2026-07-14実装）の残り
+正典＝design.md「humanize 知覚較正」「シンコペ密度スコア＋ノリレンズ」節＋research `2026-07-14-humanize-perception-defaults.md`／`-syncopation-sweet-spot.md`。実装済＝music-core `syncopation.ts`（lhlSyncScore/metricWeights/noriMeter/sectionNoriLens）＋applyFeel の 1/f 化＋部位別 ms リミット＋ヨレ警告、api `syncopationReport.ts`（gen_melody/bass/drums 候補へ meta.sync 添付・MCP/HTTP 両経路）、web「人間味」ノブの段/説明更新＋playback applyFeel に tempo 結線。以下は明示的に送った残：
+- **humanize の part 別付与（混在ストリーム分離）**：web playback の applyFeel は notes 全体に一括適用＝現状 default プロファイル（SD8/limit40）。ノート毎の part（kick/snare/hihat/bass/melody/chords）を渡して部位別リミット（K/S/HH20・Bass30）を実効化する（applyFeel は ctx.part 対応済＝呼び出し側でレーン/program→part マップして分割適用 or per-note 解決を足す）。
+- **MIDI 書き出し(feelNotes)の ms 経路整合**：現状 `music.ts feelNotes` は tempo 未結線＝拍比経路（1/f 質感は共通だが ms クランプ/系統オフセットは playback のみ）。feelNotes に tempo を通して playback と一致させる（bit 一致鉄則＝humanize0 は不変）。
+- **ヨレ警告の web 露出**：applyFeel の `onWarn`（設定が単発40ms超え得る）を UI に出す（「盛りすぎ」バッジ/トースト）。現状はコールバック未購読＝内部のみ。
+- **SYNC_REF/ターゲット帯の自前コーパス較正**：syncopation.ts の `SYNC_REF=10`・役割別帯・テンポ/ジャンル補正は研究 §6 の暫定初期値。手持ち素材のジャンル別 syncPerBar を実測→相場表で確定（research §7 の backlog 項）。
+- **sectionNoriLens（層合成の飽和/アンカーガード）の露出**：純関数＋テスト済だが、api の analyze/section 合成経路への結線は未（現状は候補単位 noriMeter のみ meta 添付）。セクションで drums/bass/melody を束ねて「全層同時高＝飽和」「床が無い」警告を出す配線。
+- **耳較正**（［耳/手］）：1/f humanize の質感・部位別リミット値・シンコペ帯の妥当性は実機試聴で確定（未消化）。
+
 
 ## 骨格層（design #20）実装後の負債・残り（2026-07-11・S1/S2完了時点の棚卸し→同日Fable調査でTask #1-#11に組み直し）
 S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。~~残＝S3群(→#3-#6)/S4リズムパーツ(→#7-#8)/S5歌詞(→#9)~~ → **S3群✅・S4✅(#7=88d3973/#8=a3559e0「S4完了」)済＝残は実質S5歌詞(#9)のみ**（2026-07-13棚卸し）。以下は実装中に確定した負債：
