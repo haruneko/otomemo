@@ -110,7 +110,9 @@ describe("mcp gen_skeleton / gen_melody skeleton injection (design #20)", () => 
     const { client } = await connect();
     const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, seed: 5 } })));
     expect(out.items[0].content.notes.length).toBeGreaterThan(0);
-    expect(out.items[0].meta).toBeUndefined();
+    // 対位(voiceLeading)meta は lower 不在で添付しない。WP-M3 のメロ単体レンズ(lenses)は下声非依存ゆえ付きうる。
+    expect(out.items[0].meta?.voiceLeading).toBeUndefined();
+    expect(out.items[0].meta?.voiceLeadingSummary).toBeUndefined();
   });
 
   it("gen_bass は骨格ありでベース候補に voiceLeading メタを添付（骨格 tones=上声）", async () => {

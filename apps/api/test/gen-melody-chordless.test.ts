@@ -95,7 +95,9 @@ describe("J2b MCP e2e：chordless gen_melody（骨格注入・restMask 込み）
     const frame = { key: 0, mode: "major", meter: "4/4", bars: 8 };
     const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, seed: 5 } })));
     expect(out.items[0].content.notes.length).toBeGreaterThan(0);
-    expect(out.items[0].meta).toBeUndefined(); // chords/bass/骨格明示ベース 全て無し＝対位相手なし
+    // 対位(voiceLeading)meta は lower 不在で添付しない（S3d スキップ）。WP-M3 のメロ単体レンズ(lenses)は下声非依存ゆえ付く。
+    expect(out.items[0].meta?.voiceLeading).toBeUndefined();
+    expect(out.items[0].meta?.voiceLeadingSummary).toBeUndefined();
   });
 
   it("chords 無し＋骨格注入（skeletonNetaId）＝骨格の休符区間(restMask)で表面音が落ちる", async () => {
