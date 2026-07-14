@@ -491,6 +491,45 @@ export function Chat({
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div className="dialog chat" role="dialog" aria-label="chat" onClick={(e) => e.stopPropagation()}>
+        {showSessions && !target ? (
+          // #9 会話一覧＝ダイアログ全面の切替ビュー。メッセージ領域+入力欄を隠し一覧が全高を使う
+          //     ＝下端で行が中途に切れ裏のチャット入力欄が覗く「二層モーダル」を解消（一層に）。
+          //     ヘッダ＝「← 戻る」+「会話」+「＋新しい会話」。既存 aria-label は維持（テスト互換）。
+          <>
+            <header className="chat-sessions-header">
+              <button aria-label="close-sessions" className="chat-back" title="チャットに戻る" onClick={() => setShowSessions(false)}>
+                ← 戻る
+              </button>
+              <strong className="chat-sessions-title">{activeProject ? `会話 · ${activeProject}` : "会話"}</strong>
+              <button aria-label="new-session" className="chat-newsession" onClick={newSession}>
+                ＋ 新しい会話
+              </button>
+            </header>
+            <div className="chat-sessions-view" aria-label="chat-sessions">
+              {sessions.length === 0 && (
+                <p className="muted">
+                  {activeProject ? `「${activeProject}」の会話はまだありません` : "まだ会話がありません"}
+                </p>
+              )}
+              {sessions.map((s) => (
+                <div key={s.thread} className={"chat-session-item" + (s.thread === thread ? " on" : "")}>
+                  <button type="button" className="chat-session-pick" onClick={() => pickSession(s.thread)}>
+                    <span className="chat-session-title">
+                      {s.title ?? s.preview ?? (s.thread === "global" ? "(最初の会話)" : "(無題の会話)")}
+                    </span>
+                    <span className="muted">
+                      {s.last ? new Date(s.last).toLocaleString() : "新規"} · {s.count}
+                    </span>
+                  </button>
+                  <button type="button" className="chat-session-del" aria-label="delete-session" title="この会話を削除" onClick={() => deleteSession(s.thread)}>
+                    <Icon name="trash" size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
         <header>
           <div className="chat-mode">
             <button className={mode === "consult" ? "on" : ""} onClick={() => setMode("consult")}>
@@ -501,8 +540,7 @@ export function Chat({
             </button>
           </div>
           <div className="chat-actions">
-            {/* 会話一覧を開いている間はパネル側に＋/✕があるので外側の ☰＋🗑 は隠す（二重操作を解消・監査 LOW）。 */}
-            {!target && !showSessions && (
+            {!target && (
               <>
                 <button aria-label="sessions" title="会話一覧" onClick={openSessions}>
                   ☰
@@ -512,47 +550,14 @@ export function Chat({
                 </button>
               </>
             )}
-            {!showSessions && (
-              <button aria-label="clear-history" title="履歴を消す" onClick={clearHistory}>
-                <Icon name="trash" size={18} />
-              </button>
-            )}
+            <button aria-label="clear-history" title="履歴を消す" onClick={clearHistory}>
+              <Icon name="trash" size={18} />
+            </button>
             <button aria-label="close" onClick={onClose}>
               ✕
             </button>
           </div>
         </header>
-        {showSessions && !target && (
-          <div className="chat-sessions" role="dialog" aria-label="chat-sessions">
-            <div className="chat-sessions-head">
-              <strong>{activeProject ? `会話 · ${activeProject}` : "会話"}</strong>
-              <button onClick={newSession}>＋ 新しい会話</button>
-              <button aria-label="close-sessions" onClick={() => setShowSessions(false)}>
-                ✕
-              </button>
-            </div>
-            {sessions.length === 0 && (
-              <p className="muted">
-                {activeProject ? `「${activeProject}」の会話はまだありません` : "まだ会話がありません"}
-              </p>
-            )}
-            {sessions.map((s) => (
-              <div key={s.thread} className={"chat-session-item" + (s.thread === thread ? " on" : "")}>
-                <button type="button" className="chat-session-pick" onClick={() => pickSession(s.thread)}>
-                  <span className="chat-session-title">
-                    {s.title ?? s.preview ?? (s.thread === "global" ? "(最初の会話)" : "(無題の会話)")}
-                  </span>
-                  <span className="muted">
-                    {s.last ? new Date(s.last).toLocaleString() : "新規"} · {s.count}
-                  </span>
-                </button>
-                <button type="button" className="chat-session-del" aria-label="delete-session" title="この会話を削除" onClick={() => deleteSession(s.thread)}>
-                  <Icon name="trash" size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
         {!target && activeProject && projectInstructions && (
           <div className="chat-instr" aria-label="project-instructions-active" title={projectInstructions}>
             <span className="ic-inline"><Icon name="pin" size={14} /></span> 「{activeProject}」の指示が効いています：{projectInstructions.slice(0, 60)}
@@ -685,6 +690,8 @@ export function Chat({
             <button onClick={() => void send()}>送信</button>
           )}
         </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -29,6 +29,46 @@ describe("Tray", () => {
     expect(screen.getByText(/要点A/)).toBeInTheDocument();
   });
 
+  it("#8 相対時刻を出す＝created から「3分前」", async () => {
+    const created = new Date(Date.now() - 3 * 60000).toISOString();
+    listJobs.mockResolvedValue([
+      { id: "j1", intent: "research", status: "done", result: {}, error: null, created },
+    ]);
+    jobOutcome.mockResolvedValue({ settled: true, failed: 0, jobs: [], neta: [] });
+    render(<Tray onClose={vi.fn()} />);
+    expect(await screen.findByText("3分前")).toBeInTheDocument();
+  });
+
+  it("#8 結果ネタ4件超は「N件できた ▸」で畳み、タップで展開", async () => {
+    listJobs.mockResolvedValue([
+      { id: "j1", intent: "gen_melody", status: "done", result: {}, error: null, created: "2026-07-15T00:00:00Z" },
+    ]);
+    const neta = Array.from({ length: 5 }, (_, i) => ({
+      id: `n${i}`, kind: "melody", title: `m${i}`, text: null,
+    }));
+    jobOutcome.mockResolvedValue({ settled: true, failed: 0, jobs: [], neta });
+    render(<Tray onClose={vi.fn()} onOpenNeta={vi.fn()} />);
+    // 畳まれている＝結果ボタンは出さず「5件できた」チップだけ。
+    const chip = await screen.findByLabelText("expand-results");
+    expect(chip).toHaveTextContent("5件できた");
+    expect(screen.queryAllByLabelText("open-result")).toHaveLength(0);
+    await userEvent.click(chip);
+    expect(screen.getAllByLabelText("open-result")).toHaveLength(5);
+  });
+
+  it("#8 waiting（回答待ち）ジョブは最前へ並ぶ", async () => {
+    listJobs.mockResolvedValue([
+      { id: "d1", intent: "research", status: "done", result: {}, error: null, created: "2026-07-15T00:00:00Z" },
+      { id: "w1", intent: "gen_melody", status: "waiting", question: "何小節？", result: null, error: null, created: "2026-07-15T00:00:00Z" },
+    ]);
+    jobOutcome.mockResolvedValue({ settled: true, failed: 0, jobs: [], neta: [] });
+    render(<Tray onClose={vi.fn()} />);
+    const waiting = await screen.findByText("メロ生成");
+    const done = screen.getByText("調べる");
+    // waiting(メロ生成) が done(調べる) より前＝done は waiting の後に位置する。
+    expect(waiting.compareDocumentPosition(done) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("死にジョブを🗑で消せる＝deleteJob を呼び一覧から消える（#100④-S6）", async () => {
     // 初回ロードは滞留ジョブ有り、削除後の reload はサーバから消えている（[]）。
     listJobs

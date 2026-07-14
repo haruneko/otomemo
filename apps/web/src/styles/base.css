@@ -106,6 +106,142 @@ main {
   border-radius: 8px;
   padding: 8px 16px;
 }
+/* #5 「次の一手」ハブ＝未選択時の右ペーンを実データ（つづき/最近の更新）で埋める。飾りでなくデータ。
+   縦フローで上寄せ・幅は主戦場に合わせて広がるが読みやすさのため上限を持たせる。 */
+.home-hub {
+  align-self: stretch;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: grid;
+  gap: 20px;
+  align-content: start;
+}
+.hh-project {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.hh-project-label {
+  font-size: 12px;
+}
+.hh-project-name {
+  font-size: 15px;
+}
+/* つづきカード＝左に種別色の帯、本文（つづきから/タイトル/種別）、右にミニプレビュー。 */
+.hh-resume {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  text-align: left;
+  background: var(--card-2, var(--card));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  color: inherit;
+}
+.hh-resume:hover {
+  border-color: var(--k, var(--accent));
+}
+.hh-resume-bar {
+  flex: 0 0 4px;
+  border-radius: 3px;
+  background: var(--k, var(--accent));
+}
+.hh-resume-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  align-content: center;
+}
+.hh-resume-eyebrow {
+  font-size: 11px;
+}
+.hh-resume-title {
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hh-resume-kind {
+  font-size: 12px;
+  color: var(--k, var(--accent));
+}
+.hh-resume-preview {
+  flex: 0 0 160px;
+  display: flex;
+  align-items: center;
+}
+.hh-resume-preview .lazy-preview,
+.hh-resume-preview .mini-roll {
+  width: 160px;
+}
+.hh-section-head {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.hh-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.hh-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: inherit;
+}
+.hh-recent-item:hover {
+  background: var(--card-2, rgba(127, 127, 127, 0.12));
+}
+.hh-recent-dot {
+  flex: 0 0 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--k, var(--accent));
+}
+.hh-recent-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hh-recent-kind {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+.hh-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+.hh-shortcut {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.hh-shortcut.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+}
 /* モバイルのワークスペース土台（2026-06-29 刷新）：状態ごとの :has() ハックをやめ、
    「一度に1つの全画面ビュー」モデルへ。App が .workspace に .mv-home / .mv-pane を付ける。
    mv-home＝ネタ帳(捕獲＋一覧)が主役／mv-pane＝mainpane(プロジェクト or 編集)が主役。

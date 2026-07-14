@@ -2,10 +2,11 @@
 // 薄いラッパー（既存メロ編集を一切壊さない）。純ロジックは skeletonEdit.ts へ委譲＝ここは描画/入力のみ。
 // 打点は **click ベース**＝タッチのスクロールでは click が発火しない（PianoRoll の <button onClick> と同方式）。
 // さらに pointerdown からの移動閾値(isTap)＋pointercancel の保険＝スクロールでは絶対に点が置かれない（オーナーFB 2026-07-11）。
-import { useEffect, useMemo, useRef, useState, type Ref } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { pitchName, pc, isBlack, scalePcSet, beatsPerBar, skeletonPreviewNotes, playNotes, type ChordEntry, type SkeletonBreakpoint, type SkeletonContent, type PlaybackHandle } from "../music";
 import { previewNote } from "../audio";
 import { api, type Neta } from "../api";
+import { useDismiss } from "../useDismiss";
 import { Icon } from "./Icon";
 import { MiniRoll } from "./MiniRoll";
 import {
@@ -77,6 +78,25 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
   const audRef = useRef<PlaybackHandle | null>(null); // 候補試聴（前の再生を止めてから）
   useEffect(() => () => audRef.current?.stop(), []); // アンマウントで鳴りっぱなし防止
   const zoneRef = useRef<HTMLDivElement>(null);
+
+  // #10 凡例＝(?)ポップ（useDismiss 流儀）。常設は色チップ3つのみ・詳細テキストはポップへ畳む。
+  const [legendOpen, setLegendOpen] = useState(false);
+  const legendRef = useRef<HTMLDivElement>(null);
+  useDismiss(legendRef, legendOpen, useCallback(() => setLegendOpen(false), []));
+
+  // #14-1 机（embedded）の設定パネル7行を折り畳み。既定=畳み（1行サマリー）・状態は localStorage 永続。
+  //   叩き台ボタンは常設（下の JSX で collapsed 対象外）。単体（!embedded）は常に全開＝従来不変。
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(() => {
+    if (typeof localStorage === "undefined") return false;
+    return localStorage.getItem("cm.skelDeskSettingsOpen") === "1";
+  });
+  const toggleSettings = useCallback(() => {
+    setSettingsOpen((v) => {
+      const next = !v;
+      try { localStorage.setItem("cm.skelDeskSettingsOpen", next ? "1" : "0"); } catch { /* private mode 等は無視 */ }
+      return next;
+    });
+  }, []);
 
   const bpb = beatsPerBar(p.meter);
   const total = p.bars * bpb;
@@ -272,6 +292,16 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
     setCands(null);
   }
 
+  // #14-1 折り畳み時の1行サマリー（現在値の要約）。例「2拍・メロ・+2oct・8小節・素直・おまかせ」。
+  const settingsSummary = [
+    snap === 2 ? "2拍" : snap === 1 ? "1拍" : "自由",
+    inputVoice === "bass" ? "ベース" : "メロ",
+    `+${foldOct / 12}oct`,
+    `${p.bars}小節`,
+    skelColor === 0 ? "素直" : skelColor <= 0.4 ? "少し" : "濃い",
+    ({ "": "おまかせ", arch: "山", asc: "のぼり", desc: "くだり", valley: "たに" } as Record<string, string>)[contour] ?? "おまかせ",
+  ].join("・");
+
   const seg = (opts: [string, number][], val: number, set: (v: number) => void, aria: string) => (
     <span className="skel-seg" role="group" aria-label={aria}>
       {opts.map(([lab, v]) => (
@@ -288,7 +318,17 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
 
   return (
     <div className="skeleton-editor">
-      <div className="skel-toolbar" aria-label="skeleton-toolbar">
+      <div className={"skel-toolbar" + (p.embedded ? " embedded" : "") + (p.embedded && !settingsOpen ? " collapsed" : "")} aria-label="skeleton-toolbar">
+        {/* #14-1 机（embedded）は設定7行を折り畳み＝既定は1行サマリー。単体は toggle を出さず常に全開（従来不変）。 */}
+        {p.embedded && (
+          <button type="button" className="skel-settings-toggle" aria-label="skel-settings-toggle" aria-expanded={settingsOpen} onClick={toggleSettings}>
+            <span className="ss-caret">{settingsOpen ? "▲ 設定" : "▼ 設定"}</span>
+            {!settingsOpen && <span className="ss-summary muted">{settingsSummary}</span>}
+          </button>
+        )}
+        {/* display:contents ラッパ＝単体では素通し（従来レイアウト不変）・collapsed で display:none。DOM には残す
+            （テスト互換＝skel-bars-inc 等の aria-label が畳んでも見つかる）。 */}
+        <div className="skel-settings">
         <span className="skel-grp"><span className="muted">スナップ</span>{seg([["2拍", 2], ["1拍", 1], ["自由", 0]], snap, setSnap, "snap")}</span>
         <span className="skel-grp"><span className="muted">入力先</span>{seg([["メロ", 0], ["ベース", 1]], inputVoice === "bass" ? 1 : 0, (v) => setInputVoice(v ? "bass" : "melody"), "input-voice")}</span>
         <span className="skel-grp"><span className="muted">ベース表示</span>{seg([["+2oct", 24], ["+3oct", 36]], foldOct, setFoldOct, "fold-oct")}</span>
@@ -316,6 +356,8 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
             ))}
           </span>
         </span>
+        </div>{/* /.skel-settings */}
+        {/* 叩き台ボタンは常設（主動線）＝折り畳んでも残す（#14-1）。 */}
         <button type="button" className="tb-tool skel-stub-btn" aria-label="gen-skeleton-stub" disabled={busy} onClick={() => void genStub()}><Icon name="wand" size={16} /> 機械に叩き台</button>
         {p.rollMode === "select" && (
           <span className="skel-selbar" aria-label="skeleton-selbar">
@@ -362,16 +404,20 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
         </div>
       )}
 
-      {/* 凡例＝純ヘルプ。机では邪魔（縦を食う）＝embedded では隠す。単品は不変。 */}
-      {!p.embedded && (
-        <div className="skel-legend muted" aria-label="skeleton-legend">
-          <span><i className="sw" style={{ background: "var(--k-melody)" }} />メロ骨格</span>
-          <span><i className="sw" style={{ background: "var(--k-bass)" }} />ベース明示</span>
-          <span><i className="sw sw-dash" />導出ベース(コードroot)</span>
-          <span>度数=実音差mod12／強拍不協和=注意色／⚠並行5・8度／✕声部交差(実音)</span>
-          <span>表示=ベース+{foldOct / 12}oct畳み・計算は実音／再生={p.counterpoint ? "対位法(ベース+1oct)" : "実音"}</span>
-        </div>
-      )}
+      {/* #10 凡例＝常設は色チップ3つのみ。専門用語（度数=実音差mod12／並行5・8度…）は (?)ポップへ畳む
+          （縦密度の緩和＋威圧感減）。embedded/単体とも同じ＝机でも色の意味が読める（従来は机で非表示だった）。 */}
+      <div className="skel-legend muted" aria-label="skeleton-legend" ref={legendRef}>
+        <span><i className="sw" style={{ background: "var(--k-melody)" }} />メロ骨格</span>
+        <span><i className="sw" style={{ background: "var(--k-bass)" }} />ベース明示</span>
+        <span><i className="sw sw-dash" />導出ベース</span>
+        <button type="button" className="skel-legend-help" aria-label="skeleton-legend-help" aria-expanded={legendOpen} title="記号の意味" onClick={() => setLegendOpen((v) => !v)}>?</button>
+        {legendOpen && (
+          <div className="skel-legend-pop" role="tooltip" aria-label="skeleton-legend-pop">
+            <p>度数=実音差mod12／強拍不協和=注意色／⚠並行5・8度／✕声部交差(実音)</p>
+            <p>表示=ベース+{foldOct / 12}oct畳み・計算は実音{!p.embedded && <>／再生={p.counterpoint ? "対位法(ベース+1oct)" : "実音"}</>}</p>
+          </div>
+        )}
+      </div>
 
       <div className="skel-scroll proll" ref={p.scrollerRef} role="grid" aria-label="skeleton-roll">
         <div className="proll-playhead" aria-hidden="true" ref={p.playheadRef} style={{ left: `calc(40px + var(--phb,0) * ${PPB}px)` }} />

@@ -277,6 +277,65 @@
   min-width: 0; /* flex子が内容幅で膨らまず、内側スクロールに収まる */
   overflow: auto;
 }
+/* #7（SP編集画面の縦の死にスペース＝ロールに還元・2026-07-15）：モバイルでは editor-body を縦 flex 列にし、
+   ロール／グリッドを flex-grow で下端バー直上まで伸ばす＝メロは可視オクターブ増・リズム/ベースは行が太る
+   （タップ標的拡大）。PC は現状維持（この @media 外＝.proll max-height:56vh 等が効いたまま）。
+   editor-body の子は各 kind で1つ（KindEditorBody が単一分岐を返す）＝単一子が残り高さを取る。 */
+@media (max-width: 820px) {
+  .editor-body {
+    display: flex;
+    flex-direction: column;
+  }
+  /* メロ/ベース(絶対)/骨格＝.melody-input 経由。ロールを縦いっぱいに。 */
+  .editor-body .melody-input {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .editor-body .melody-input .proll {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none; /* 56vh 上限を解除＝下端バー直上まで（内側は従来どおり縦横スクロール可） */
+  }
+  /* 骨格（単体・NetaDialog 経路）＝.skeleton-editor > … > .skel-scroll。机(.skeleton-desk)は別セレクタで不変。 */
+  .editor-body .melody-input .skeleton-editor {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .editor-body .melody-input .skel-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
+  /* リズム＝grid。ツールバー=auto 行に固定し、レーン(implicit 行)を 1fr で均等ストレッチ＝行が太る。
+     セルは行高いっぱい（height:100%）＝タップ標的拡大。playhead は position:absolute でトラックを占めない。 */
+  .editor-body .rhythm-editor {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: auto;
+    grid-auto-rows: minmax(18px, 1fr);
+  }
+  .editor-body .rhythm-editor .rhythm-cell {
+    height: 100%;
+  }
+  /* ベース(相対)＝.bass-step を縦 flex 列にし、.bass-grid のレーンを 1fr で均等ストレッチ＝行が太る。 */
+  .editor-body .bass-step {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px; /* grid→flex 切替で失う grid gap を補う */
+  }
+  .editor-body .bass-step .bass-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-auto-rows: minmax(26px, 1fr);
+  }
+  .editor-body .bass-step .step-cell.deg {
+    height: 100%;
+  }
+}
 .chord-editor {
   display: grid;
   gap: 6px;
@@ -508,3 +567,34 @@
 .chat-md th { background: rgba(127,127,127,0.16); font-weight: 600; }
 .chat-md tr:nth-child(even) td { background: rgba(127,127,127,0.06); }
 .chat-md a { color: #4ea1ff; text-decoration: underline; }
+
+/* #9 会話一覧＝ダイアログ全面の切替ビュー（旧 .chat-sessions の position:absolute 浮きパネルを廃し一層に）。
+   一覧表示中はメッセージ領域+入力欄を出さず、この2要素(ヘッダ+リスト)だけがダイアログ全高を占める。
+   flex:1+min-height:0 でリストが残り高さを埋め内部スクロール＝下端は必ず行境界で終わる（中途切れ解消）。 */
+.chat-sessions-header {
+  gap: 0.5rem;
+}
+.chat-sessions-header .chat-sessions-title {
+  flex: 1;
+  text-align: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-sessions-header .chat-back,
+.chat-sessions-header .chat-newsession {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.chat-sessions-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  /* 単一列を親幅に固定＝会話タイトル(nowrap)の min-content が暗黙列を広げてはみ出すのを防ぐ。 */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  align-content: start;
+}

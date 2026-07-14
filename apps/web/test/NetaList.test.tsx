@@ -180,6 +180,42 @@ describe("NetaList", () => {
     expect(onChat).toHaveBeenCalledWith(expect.objectContaining({ id: "x" }));
   });
 
+  it("#11 library: 連続する同名を×Nに束ね、タップで展開する", async () => {
+    localStorage.clear();
+    render(
+      <NetaList
+        scope="library"
+        items={[
+          mk({ id: "a", kind: "melody", title: "pop pattern" }),
+          mk({ id: "b", kind: "melody", title: "pop pattern" }),
+          mk({ id: "c", kind: "melody", title: "pop pattern" }),
+          mk({ id: "d", kind: "melody", title: "other" }),
+        ]}
+      />,
+    );
+    // 束ね：先頭(a)＋other(d)＝2枚だけ見える。b,c は畳まれている。
+    expect(screen.getAllByLabelText("neta-card")).toHaveLength(2);
+    expect(screen.getByLabelText("bundle-a")).toHaveTextContent("×3");
+    await userEvent.click(screen.getByLabelText("bundle-a"));
+    expect(screen.getAllByLabelText("neta-card")).toHaveLength(4);
+  });
+
+  it("#11 project: 同名でも束ねない（表示は不変）", () => {
+    localStorage.clear();
+    render(
+      <NetaList
+        scope="project"
+        items={[
+          mk({ id: "a", kind: "melody", title: "pop pattern" }),
+          mk({ id: "b", kind: "melody", title: "pop pattern" }),
+          mk({ id: "c", kind: "melody", title: "pop pattern" }),
+        ]}
+      />,
+    );
+    expect(screen.getAllByLabelText("neta-card")).toHaveLength(3);
+    expect(screen.queryByLabelText("bundle-a")).not.toBeInTheDocument();
+  });
+
   it("section card has a composite play button (#73)", () => {
     render(<NetaCard neta={mk({ id: "s1", kind: "section", title: "曲A" })} />);
     expect(screen.getByLabelText("play-s1")).toBeInTheDocument();

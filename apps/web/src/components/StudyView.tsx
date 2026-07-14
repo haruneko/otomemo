@@ -5,6 +5,8 @@ import { useRef, useState } from "react";
 import { type Neta } from "../api";
 import { playNotes, type PlaybackHandle } from "../audio";
 import { notesForContent } from "../music";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Slot = { root: number; quality: string; start: number; dur: number };
 interface CoreLoop { degrees: string[]; example: Slot[]; length: number; count: number }
@@ -62,7 +64,11 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
           所見（手癖の考察）{showProse ? "▲" : "▼"}
         </button>
       )}
-      {c.prose && showProse && <div className="study-prose chat-md">{c.prose}</div>}
+      {c.prose && showProse && (
+        <div className="study-prose chat-md">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.prose}</ReactMarkdown>
+        </div>
+      )}
 
       {/* ★主役：曲ごとのコア・ループ（曲内で繰り返す＝曲の顔） */}
       {songs.length > 0 && (

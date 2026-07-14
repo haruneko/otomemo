@@ -1,4 +1,24 @@
 /* #65 検索バッジ・#9 参考曲・kind色・#83 段階・会話セッション */
+/* #11 ライブラリの同名束ね：先頭要素＋×N バッジ（タップで展開）。母集団は不変・表示だけ。 */
+.neta-bundle { display: contents; }
+.bundle-lead { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+.bundle-lead > :first-child { flex: 1; min-width: 0; }
+.bundle-toggle {
+  flex: 0 0 auto;
+  align-self: center;
+  background: #1b1e23;
+  border: 1px solid #2a2e36;
+  color: var(--muted, #9aa0ab);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bundle-toggle:hover { color: #fff; border-color: var(--accent); }
+.neta-bundle[data-open="true"] .bundle-toggle { color: #fff; border-color: var(--accent); }
+
 /* #65 検索の一致種別バッジ（一致=実線/近い=点線・淡色） */
 .match-badge {
   font-size: 0.62rem;

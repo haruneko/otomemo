@@ -82,6 +82,24 @@ describe("SkeletonDesk（design #20 S6 D1c）", () => {
     expect(updateNeta).not.toHaveBeenCalled();
   });
 
+  it("#14-4 『メロを作る』CTA は下端トランスポート内へ移設（どのスクロール位置からでも押せる）＋機能する", async () => {
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 62, start: 0, dur: 1 }] } }] });
+    getComposition.mockResolvedValue(tree);
+    render(
+      <SkeletonDesk
+        sectionId="s1" sectionKey={0} sectionMode="major" meter="4/4" tempo={120}
+        skelNetaId="sk1" skelPosition={0} skelOrd={0} onClose={() => {}}
+      />,
+    );
+    await screen.findByText(/Aメロ/);
+    const blow = screen.getByLabelText("desk-blow");
+    // 移設先＝下端トランスポート（.desk-transport の子）＝旧位置（④出口ヘッダ）でない。
+    expect(blow.closest(".desk-transport")).toBeTruthy();
+    // 押すと従来どおり gen_melody(skeletonNetaId) が飛ぶ。
+    fireEvent.click(blow);
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ skeletonNetaId: "sk1" })));
+  });
+
   it("トランスポート：レンズ2択［骨格だけ｜フル］が出て、既定は骨格だけ", async () => {
     getComposition.mockResolvedValue(tree);
     render(

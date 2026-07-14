@@ -204,6 +204,9 @@
   display: grid;
   gap: 3px;
   position: relative;
+  /* 終端ガター（design提案#13）：ルーラ/レーンの右に数pxの余白を確保＝末尾ブロックの角丸が見え
+     「ここで終わり」が分かる（右端で半端に見切れない）。ruler-bars/lane-track/playhead が共有。 */
+  --lane-gutter: 6px;
 }
 .playhead {
   position: absolute;
@@ -217,7 +220,8 @@
   pointer-events: none;
   z-index: 5;
   display: none; /* start() で block にする */
-  left: calc(56px + var(--ph, 0) * (100% - 56px));
+  /* 終端ガター分だけトラック実効幅が縮む（ruler-bars/lane-track の margin-right）＝ph の 100% から差引く。 */
+  left: calc(56px + var(--ph, 0) * (100% - 56px - var(--lane-gutter, 0px)));
 }
 .lane-ruler,
 .lane {
@@ -246,6 +250,7 @@
 .ruler-bars {
   flex: 1;
   display: flex;
+  margin-right: var(--lane-gutter, 0px); /* 終端ガター（#13）＝lane-track と同量でルーラも合わせる */
 }
 .bar-num {
   flex: 1;
@@ -260,6 +265,7 @@
   min-width: 0;
   display: flex;
   height: 38px; /* #55 lane-block(34px)＋概形が収まる高さ */
+  margin-right: var(--lane-gutter, 0px); /* 終端ガター（#13）＝末尾ブロックの角丸を見切れさせない右余白 */
 }
 .lane-cell {
   flex: 1;

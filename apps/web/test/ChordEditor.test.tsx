@@ -93,6 +93,30 @@ describe("ChordEditor", () => {
     expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 1 }]);
   });
 
+  it("空状態＝初手ガイド：『最初のコードを置く』で1コード追加（#6）", async () => {
+    const onChange = vi.fn();
+    render(<ChordEditor chords={[]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("place-first-chord"));
+    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 4 }]);
+  });
+
+  it("空状態＝『よく使う進行から選ぶ』で定番進行チップを表示→選ぶと流し込む（#6）", async () => {
+    const onChange = vi.fn();
+    render(<ChordEditor chords={[]} onChange={onChange} />);
+    // 初期はチップ非表示
+    expect(screen.queryByLabelText("popular-progressions")).toBeNull();
+    await userEvent.click(screen.getByLabelText("pick-progression"));
+    expect(screen.getByLabelText("popular-progressions")).toBeTruthy();
+    // 王道 I–V–vi–IV を選ぶ＝C→G→Am→F、start は順番から自動フロー
+    await userEvent.click(screen.getByLabelText("prog-王道 I–V–vi–IV"));
+    expect(onChange).toHaveBeenCalledWith([
+      { root: 0, quality: "", start: 0, dur: 4 },
+      { root: 7, quality: "", start: 4, dur: 4 },
+      { root: 9, quality: "m", start: 8, dur: 4 },
+      { root: 5, quality: "", start: 12, dur: 4 },
+    ]);
+  });
+
   it("highlights the chord under the playhead beat while playing (#76)", () => {
     vi.useFakeTimers();
     const chords = [

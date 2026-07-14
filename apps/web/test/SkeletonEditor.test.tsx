@@ -172,3 +172,50 @@ describe("機械に叩き台（複数候補トレイ・オーナーFB 2026-07-11
     expect(await screen.findByLabelText("stub-message")).toBeTruthy();
   });
 });
+
+describe("#10 凡例＝(?)ポップ（常設は色チップ3つ・専門用語は畳む）", () => {
+  it("常設は色チップ＋(?)＝専門用語テキストは初期は畳まれている", () => {
+    setup();
+    expect(screen.getByLabelText("skeleton-legend")).toBeTruthy();
+    expect(screen.getByLabelText("skeleton-legend-help")).toBeTruthy();
+    expect(screen.queryByLabelText("skeleton-legend-pop")).toBeNull(); // 初期は閉じ
+    expect(screen.queryByText(/度数=実音差mod12/)).toBeNull(); // 専門用語はポップの中＝未描画
+  });
+  it("(?)タップでポップ開＝専門用語が出る／再タップで閉じる", async () => {
+    setup();
+    await userEvent.click(screen.getByLabelText("skeleton-legend-help"));
+    expect(await screen.findByLabelText("skeleton-legend-pop")).toBeTruthy();
+    expect(screen.getByText(/度数=実音差mod12/)).toBeTruthy();
+    await userEvent.click(screen.getByLabelText("skeleton-legend-help"));
+    expect(screen.queryByLabelText("skeleton-legend-pop")).toBeNull();
+  });
+  it("embedded でも色チップ＋(?)を出す（従来は机で非表示だった）", () => {
+    setup({ embedded: true });
+    expect(screen.getByLabelText("skeleton-legend")).toBeTruthy();
+    expect(screen.getByLabelText("skeleton-legend-help")).toBeTruthy();
+  });
+});
+
+describe("#14-1 机(embedded)の設定パネル折り畳み（既定=畳み・localStorage 永続）", () => {
+  it("embedded 既定は畳み＝toggle が出て aria-expanded=false・叩き台は常設・toolbar collapsed", () => {
+    localStorage.clear();
+    setup({ embedded: true });
+    const toggle = screen.getByLabelText("skel-settings-toggle");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByLabelText("gen-skeleton-stub")).toBeTruthy(); // 叩き台は畳んでも常設
+    expect(screen.getByLabelText("skeleton-toolbar").className).toContain("collapsed");
+  });
+  it("タップで展開＝aria-expanded=true・collapsed 解除・localStorage に永続", async () => {
+    localStorage.clear();
+    setup({ embedded: true });
+    await userEvent.click(screen.getByLabelText("skel-settings-toggle"));
+    expect(screen.getByLabelText("skel-settings-toggle").getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByLabelText("skeleton-toolbar").className).not.toContain("collapsed");
+    expect(localStorage.getItem("cm.skelDeskSettingsOpen")).toBe("1");
+  });
+  it("単体(!embedded)は toggle を出さず常に全開（従来不変）", () => {
+    setup();
+    expect(screen.queryByLabelText("skel-settings-toggle")).toBeNull();
+    expect(screen.getByLabelText("skeleton-toolbar").className).not.toContain("collapsed");
+  });
+});

@@ -836,10 +836,9 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           吹くたび新メロ neta＋realized_from＝在庫は分岐（骨格 content 不変・旧メロ不滅）＝「→吹いたメロ N」。 */}
       <div className="desk-outlet" aria-label="desk-outlet">
         <div className="desk-outlet-head">
+          {/* #14-4「メロを作る」CTA は下端バー（▶の隣）へ移設＝どのスクロール位置からでも押せる。ここはレール文言＋
+              分岐スタックのみ残す。 */}
           <span className="desk-rail" aria-hidden="true"><b>①②③</b>で書く → <b>④</b>でメロ生成</span>
-          <button type="button" className="desk-blow primary" aria-label="desk-blow" title="この骨格からメロを作る" disabled={gen.genBusy || !focusChild} onClick={blowFocus}>
-            {gen.genBusy ? "生成中…" : (<>メロを作る<Icon name="wand" size={16} /></>)}
-          </button>
           {realizedN > 0 && (
             <button type="button" className="desk-stack-badge" aria-label="realized-stack" aria-expanded={stackOpen} title="この骨格から作ったメロ（作り直しても消えません）" onClick={() => setStackOpen((v) => !v)}>
               作ったメロ {realizedN}
@@ -918,6 +917,11 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         </button>
         <button type="button" className="tb-tool" aria-label="desk-rewind" title="頭出し" onClick={tp.rewind}>
           <Icon name="rewind" size={18} />
+        </button>
+        <span className="tb-divider" aria-hidden="true" />
+        {/* #14-4「メロを作る」CTA を下端バーへ統合（▶の隣）＝どのスクロール位置からでも押せる（旧位置＝④出口ヘッダ）。 */}
+        <button type="button" className="desk-blow primary" aria-label="desk-blow" title="この骨格からメロを作る" disabled={gen.genBusy || !focusChild} onClick={blowFocus}>
+          {gen.genBusy ? "生成中…" : (<><Icon name="wand" size={15} />メロを作る</>)}
         </button>
         <span className="tb-divider" aria-hidden="true" />
         {/* レンズ2択（A群=LENS_FOLD / B群=LENS_REAL）。aria-label は A/B ゲートで固定・表示ラベルは focusStage で

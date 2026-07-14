@@ -22,6 +22,7 @@ import { useIsMobile } from "./useIsMobile";
 import { CreateShelf, SHELF_KINDS } from "./components/CreateShelf";
 import { FilterDrawer } from "./components/FilterDrawer";
 import { KindTiles } from "./components/KindTiles";
+import { HomeHub } from "./components/HomeHub";
 // 重い二次画面は遅延ロード＝初回バンドルを軽くする（perf 耳FB 2026-07-09。Chatはreact-markdown 170KB）。
 // NetaDialog(セクション/メロ編集の本体)は最頻操作なので**同梱のまま**＝開く時に取得待ちを出さない。
 const AnalysisWorkbench = lazy(() => import("./components/AnalysisWorkbench").then((m) => ({ default: m.AnalysisWorkbench })));
@@ -783,12 +784,15 @@ export function App() {
               onChanged={() => void reload()}
             />
           ) : (
-            <div className="mainpane-empty">
-              <p className="muted">ネタを選ぶとここで編集できます。または曲を組む。</p>
-              <button className="primary" onClick={() => void newSong()}>
-                ＋曲を組む
-              </button>
-            </div>
+            // #5 空状態を「次の一手」ハブに＝最終更新/最近の更新の実データで再開動線を出す（HomeHub）。
+            //   items が空なら HomeHub 内で従来の空文言＋曲を組むに退避＝挙動不変。SP は mv-home で mainpane 非表示。
+            <HomeHub
+              items={items}
+              activeProject={activeProject || undefined}
+              onOpen={openTop}
+              onCreateSong={() => void newSong()}
+              onCreateMelody={() => void createBlank("melody", "新しいメロディ")}
+            />
           )}
           </Suspense>
         </section>

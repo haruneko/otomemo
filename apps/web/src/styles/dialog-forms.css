@@ -123,13 +123,31 @@ body:has(.dialog-backdrop) {
   gap: 8px;
   align-items: baseline;
   font-size: 0.82rem;
-  border-bottom: 1px solid var(--line);
-  padding: 4px 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line); /* #8 状態の色帯（左） */
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #16181d;
 }
-.tray-job.waiting {
-  border-left: 3px solid var(--accent);
-  padding-left: 6px;
+/* #8 状態の色帯：queued=黄 / running=青 / done=緑 / failed=赤 / waiting=強調 */
+.tray-job[data-status="queued"] { border-left-color: #e0a33c; }
+.tray-job[data-status="running"] { border-left-color: #4a90d9; }
+.tray-job[data-status="done"] { border-left-color: #2bb789; }
+.tray-job[data-status="failed"] { border-left-color: #e0533f; }
+.tray-job.waiting,
+.tray-job[data-status="waiting"] {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, #16181d);
 }
+/* intent アイコン（クローム色に馴染ませる）と相対時刻（小さく控えめ） */
+.tray-ic { display: inline-flex; align-items: center; color: var(--muted, #9aa0ab); align-self: center; }
+.tray-time { font-size: 0.72rem; color: var(--muted, #9aa0ab); }
+/* 「N件できた ▸」畳みチップ */
+.tray-more {
+  background: #1b1e23; border: 1px solid #2a2e36; color: var(--muted, #9aa0ab);
+  border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 0.82rem;
+}
+.tray-more:hover { color: #fff; border-color: var(--accent); }
 .tray-notify {
   font-size: 0.7rem;
   color: var(--accent);

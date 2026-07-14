@@ -15,6 +15,12 @@ import { SkeletonEditor } from "./SkeletonEditor";
 import type { Neta } from "../api";
 import type { Note, ChordEntry, RhythmContent, BassStep, ChordPatternContent, SkeletonBreakpoint } from "../music";
 
+// 空 textarea の初手ガイド（design提案#6）：白紙の心細さを1行の例文プレースホルダで解消。
+const TEXT_PLACEHOLDER: Record<string, string> = {
+  lyric: "例：夜の窓に映る　言えなかった言葉たち…",
+  theme: "例：離れていても変わらない想いを、静かな夜の情景で",
+};
+
 export interface KindEditorBodyProps {
   neta: Neta;
   flags: { isMelody: boolean; isBass: boolean; isCounter: boolean; isRiff: boolean; isChord: boolean; isChordPat: boolean; isSectionInst: boolean; isRhythm: boolean; isSkel: boolean; isContainer: boolean; isRelBass: boolean };
@@ -288,7 +294,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
         />
       ) : (
         <div className="text-editor">
-          <textarea aria-label="text" value={p.text} onChange={(e) => p.setText(e.target.value)} />
+          <textarea aria-label="text" placeholder={TEXT_PLACEHOLDER[p.neta.kind]} value={p.text} onChange={(e) => p.setText(e.target.value)} />
           {p.neta.kind === "lyric" && p.text.trim() && (
             <div className="mora-panel" aria-label="mora">
               {moraLines(p.text).map((m, i) => (

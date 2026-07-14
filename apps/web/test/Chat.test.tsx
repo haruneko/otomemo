@@ -6,6 +6,7 @@ const {
   createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
   link, unlink, listChatMessages, addChatMessage, clearChatThread, chatTurnStream,
   chatTurnLiveStream, chatTurnStop, chatTurnStatus,
+  listChatThreads, deleteChatThread, setChatThread,
 } = vi.hoisted(() => ({
   createJob: vi.fn(),
   getJob: vi.fn(),
@@ -24,12 +25,16 @@ const {
   chatTurnLiveStream: vi.fn(),
   chatTurnStop: vi.fn(),
   chatTurnStatus: vi.fn(),
+  listChatThreads: vi.fn(),
+  deleteChatThread: vi.fn(),
+  setChatThread: vi.fn(),
 }));
 vi.mock("../src/api", () => ({
   api: {
     createJob, getJob, jobOutcome, createNeta, getNeta, updateNeta, placeChild, deleteNeta,
     link, unlink, listChatMessages, addChatMessage, clearChatThread, chatTurnStream,
     chatTurnLiveStream, chatTurnStop, chatTurnStatus,
+    listChatThreads, deleteChatThread, setChatThread,
   },
 }));
 
@@ -60,6 +65,9 @@ describe("Chat", () => {
     chatTurnLiveStream.mockResolvedValue(undefined); // 再アタッチ：既定は走行中ターン無し（no-op）。
     chatTurnStop.mockResolvedValue({ stopped: true });
     chatTurnStatus.mockResolvedValue({ live: false }); // 既定：走行中ターン無し＝再アタッチしない。
+    listChatThreads.mockResolvedValue([]); // #9 会話一覧：既定は空。
+    deleteChatThread.mockResolvedValue({ deleted: true });
+    setChatThread.mockResolvedValue({ ok: true });
     streamEvents(result("")); // 既定：何も言わず終わる（各テストで上書き）。
   });
 
@@ -294,5 +302,53 @@ describe("Chat", () => {
     await waitFor(() => expect(screen.getByText("はい")).toBeInTheDocument());
     // …クライアントからは保存しない（/turn 完了時にサーバが chat_message へ書く＝閉じても消えない・重複しない）。
     expect(addChatMessage).not.toHaveBeenCalledWith("global", expect.objectContaining({ role: "ai" }));
+  });
+
+  // ── #9 会話一覧＝ダイアログ全面の切替ビュー（二層モーダル解消） ──
+  it("#9 会話一覧は全面切替＝開くと入力欄が消え、← 戻る で戻る", async () => {
+    listChatThreads.mockResolvedValue([]);
+    render(<Chat onClose={vi.fn()} />);
+    // 初期＝チャットビュー：入力欄がある。
+    expect(screen.getByLabelText("chat-input")).toBeInTheDocument();
+    // ☰ で会話一覧を開く＝全面ビューへ切替。
+    await userEvent.click(screen.getByLabelText("sessions"));
+    expect(await screen.findByLabelText("chat-sessions")).toBeInTheDocument();
+    expect(listChatThreads).toHaveBeenCalled();
+    // 一覧表示中はメッセージ入力欄を隠す（裏のチャットが覗かない＝一層）。
+    expect(screen.queryByLabelText("chat-input")).toBeNull();
+    // 「← 戻る」(close-sessions) でチャットへ戻る＝入力欄が復活・一覧は消える。
+    await userEvent.click(screen.getByLabelText("close-sessions"));
+    expect(await screen.findByLabelText("chat-input")).toBeInTheDocument();
+    expect(screen.queryByLabelText("chat-sessions")).toBeNull();
+  });
+
+  it("#9 会話一覧：選択で切替・削除で消える（既存挙動の回帰）", async () => {
+    listChatThreads.mockResolvedValue([
+      { thread: "chat:aaa", title: "夜の曲", preview: "…", last: "2026-07-15T00:00:00Z", count: 3 },
+      { thread: "chat:bbb", title: "朝の曲", preview: "…", last: "2026-07-15T01:00:00Z", count: 5 },
+    ]);
+    vi.spyOn(window, "confirm").mockReturnValue(true); // 削除確認を素通し
+    render(<Chat onClose={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("sessions"));
+    expect(await screen.findByText("夜の曲")).toBeInTheDocument();
+    // 削除＝deleteChatThread＋一覧から消える。
+    await userEvent.click(screen.getAllByLabelText("delete-session")[0]!);
+    await waitFor(() => expect(deleteChatThread).toHaveBeenCalledWith("chat:aaa"));
+    await waitFor(() => expect(screen.queryByText("夜の曲")).toBeNull());
+    // 選択＝そのスレッドへ切替（履歴を読み直す）＋チャットビューへ戻る。
+    await userEvent.click(screen.getByText("朝の曲"));
+    await waitFor(() => expect(listChatMessages).toHaveBeenCalledWith("chat:bbb"));
+    expect(await screen.findByLabelText("chat-input")).toBeInTheDocument();
+  });
+
+  it("#9 ＋新しい会話でチャットビューへ戻る（新規セッション）", async () => {
+    listChatThreads.mockResolvedValue([]);
+    render(<Chat onClose={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("sessions"));
+    await screen.findByLabelText("chat-sessions");
+    // 一覧ヘッダの「＋ 新しい会話」＝新規セッションを起こしチャットへ戻る。
+    await userEvent.click(screen.getByLabelText("new-session"));
+    expect(await screen.findByLabelText("chat-input")).toBeInTheDocument();
+    expect(screen.queryByLabelText("chat-sessions")).toBeNull();
   });
 });

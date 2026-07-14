@@ -14,10 +14,24 @@
 .skel-selbar button { background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
 .skel-selbar button:disabled { opacity: 0.5; cursor: default; }
 
-.skel-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.68rem; align-items: center; }
+/* #14-1 設定7行の折り畳み。.skel-settings は display:contents＝単体では素通し（従来レイアウト不変）。
+   collapsed（embedded かつ畳み）で display:none＝設定群を隠す（DOM には残る＝テスト互換）。叩き台/toggle は残る。 */
+.skel-settings { display: contents; }
+.skel-toolbar.collapsed .skel-settings { display: none; }
+.skel-settings-toggle { display: inline-flex; align-items: center; gap: 8px; min-width: 0; background: #22252b; color: var(--fg); border: 1px solid var(--line); border-radius: 7px; padding: 4px 9px; font-size: 0.72rem; cursor: pointer; }
+.skel-settings-toggle .ss-caret { flex: 0 0 auto; white-space: nowrap; font-weight: 600; }
+.skel-settings-toggle .ss-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.68rem; }
+
+.skel-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.68rem; align-items: center; position: relative; }
 .skel-legend span { display: inline-flex; align-items: center; gap: 4px; }
 .skel-legend .sw { width: 16px; height: 8px; border-radius: 2px; display: inline-block; }
 .skel-legend .sw-dash { background: transparent; border: 1px dashed color-mix(in srgb, var(--k-bass) 75%, #fff); }
+/* #10 凡例の (?)＝専門用語をポップへ畳む。常設は色チップ3つ＋この小さな (?) のみ。 */
+.skel-legend-help { flex: 0 0 auto; width: 18px; height: 18px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid var(--line); background: #22252b; color: var(--muted); font-size: 0.72rem; line-height: 1; cursor: pointer; }
+.skel-legend-help:hover, .skel-legend-help[aria-expanded="true"] { color: var(--fg); border-color: var(--k-skeleton); }
+.skel-legend-pop { position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 20; max-width: min(92vw, 360px); background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5); }
+.skel-legend-pop p { margin: 0; font-size: 0.72rem; line-height: 1.5; color: var(--fg); }
+.skel-legend-pop p + p { margin-top: 5px; }
 
 /* スクロール枠は .proll の流儀（横スクロール・playhead は左40px+ppb） */
 .skel-scroll { border: 1px solid var(--line); border-radius: 8px; background: #15171b; overflow: auto; max-height: 64vh; position: relative; }
@@ -88,8 +102,11 @@
 .desk-meta { margin-left: auto; font-size: 0.72rem; white-space: nowrap; flex: 0 0 auto; }
 /* トランスポートは机の下端に貼り付く（sticky bottom）＝縦スクロールしても隠れない。地の背景を塗り content を透かさない。
    360幅で全ボタン（▶⏮｜レンズ2択｜位置｜↶↷）が1行に収まるよう詰める＝レンズ第2ボタン（ベッド/編成）が欠けない。 */
-.desk-transport { background: #15171b; display: flex; align-items: center; gap: 3px; padding: 6px 4px; border-top: 1px solid var(--line); } /* スクロール外の固定下段（#3 で sticky 撤去＝本体末尾を覆わない） */
+/* #14-4「メロを作る」を取り込むため flex-wrap 許容＝360幅で溢れても刈らずに2段目へ折り返す（下端で常時可視は維持）。 */
+.desk-transport { background: #15171b; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 3px; padding: 6px 4px; border-top: 1px solid var(--line); } /* スクロール外の固定下段（#3 で sticky 撤去＝本体末尾を覆わない） */
 .desk-transport .tb-tool { min-width: 30px; padding: 4px 6px; display: inline-flex; align-items: center; justify-content: center; }
+/* #14-4 下端バーの「メロを作る」＝主動線。コンパクト（アイコン＋短ラベル）で他ボタンを刈らない。 */
+.desk-transport .desk-blow { flex: 0 0 auto; padding: 4px 10px; font-size: 0.76rem; white-space: nowrap; }
 .desk-transport .tb-divider { margin: 0 1px; }
 /* レンズ2択は横幅を確保（flex:0 0 auto＝縮まない）＝overflow で第2ボタンが刈られない。ラベルは1行固定。 */
 .desk-lens.seg { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
@@ -100,9 +117,11 @@
 /* P3-4：保存失敗の控えめな帯（タップで再試行）。過剰にしない＝小さく・警告色のみ。 */
 .desk-save-err { display: block; width: 100%; margin: 2px 0 0; padding: 4px 8px; font-size: 0.68rem; text-align: left; color: #ffd24a; background: color-mix(in srgb, #ffd24a 12%, transparent); border: 1px solid #ffd24a; border-radius: 6px; cursor: pointer; touch-action: manipulation; }
 
-/* 机埋め込み（embedded）の SkeletonEditor ツールバーは行高を圧縮＝縦を稼ぐ（凡例/ヒント/再生トグルは JS 側で非表示）。 */
+/* 机埋め込み（embedded）の SkeletonEditor ツールバーは行高を圧縮＝縦を稼ぐ。ヒント/再生トグルは JS 側で非表示。
+   設定7行は #14-1 で折り畳み（既定サマリー）・凡例は #10 で色チップ3つ＋(?)ポップに畳む（縦密度緩和）。 */
 .skeleton-desk .skel-toolbar { padding: 5px 6px; gap: 4px 8px; }
 .skeleton-desk .skel-grp { font-size: 0.68rem; gap: 4px; }
+.skeleton-desk .skel-legend { font-size: 0.64rem; gap: 6px 8px; }
 /* アイコン＋文字を含むボタンの整列（絵文字→Icon 差し替えで縦ずれしないよう inline-flex）。 */
 .skel-stub-btn, .desk-blow, .desk-transport .tb-tool, .desk-cand-actions .tb-tool, .desk-cand-foot .tb-tool { display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
 

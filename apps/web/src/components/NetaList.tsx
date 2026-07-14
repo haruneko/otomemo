@@ -389,6 +389,14 @@ export function NetaList({
     setSortKey(k);
     localStorage.setItem("cm-list-sort", k);
   };
+  // #11 ライブラリの同名束ね：連続する同名(title/text 完全一致)を1行に畳む展開状態（先頭 id で持つ）。
+  const [expandedBundles, setExpandedBundles] = useState<Set<string>>(new Set());
+  const toggleBundle = (k: string) =>
+    setExpandedBundles((s) => {
+      const n = new Set(s);
+      n.has(k) ? n.delete(k) : n.add(k);
+      return n;
+    });
   const labelOf = (n: Neta) => n.title ?? n.text ?? "";
   const ordered =
     sortKey === "default"
@@ -444,24 +452,60 @@ export function NetaList({
     );
   // 並べ替えが効くのは「並べ替え可(App)」かつ「既定順表示」の時だけ＝基準ソート中の誤並べ替えを防ぐ。
   const canReorder = reorderable && sortKey === "default";
+  const card = (n: Neta & { matchType?: string }) => (
+    <NetaCard
+      key={n.id}
+      neta={n}
+      scope={scope}
+      dense={dense}
+      sortDisabled={!canReorder}
+      projects={projects}
+      onChanged={onChanged}
+      onChat={onChat}
+      onOpen={onOpen}
+    />
+  );
+  // #11 ライブラリのみ、連続する同名を1グループに束ねる（表示だけ＝連想の母集団は不変）。
+  // 空ラベルは束ねない（無題同士の誤集約を避ける）。project スコープは束ねずそのまま。
+  const groups: (Neta & { matchType?: string })[][] = [];
+  if (scope === "library") {
+    for (const n of ordered) {
+      const last = groups[groups.length - 1];
+      const l = labelOf(n);
+      if (last && l !== "" && labelOf(last[0]!) === l) last.push(n);
+      else groups.push([n]);
+    }
+  }
   return (
     <>
       {controls}
       <SortableContext items={ordered.map((n) => n.id)} strategy={verticalListSortingStrategy}>
         <section aria-label="neta-list" className={dense ? "dense" : ""}>
-          {ordered.map((n) => (
-            <NetaCard
-              key={n.id}
-              neta={n}
-              scope={scope}
-              dense={dense}
-              sortDisabled={!canReorder}
-              projects={projects}
-              onChanged={onChanged}
-              onChat={onChat}
-              onOpen={onOpen}
-            />
-          ))}
+          {scope === "library"
+            ? groups.map((g) => {
+                if (g.length === 1) return card(g[0]!);
+                const lead = g[0]!;
+                const open = expandedBundles.has(lead.id);
+                return (
+                  <div key={lead.id} className="neta-bundle" data-open={open}>
+                    <div className="bundle-lead">
+                      {/* 束ねた行の再生/開くは先頭要素（正典 #11）。 */}
+                      {card(lead)}
+                      <button
+                        className="bundle-toggle"
+                        aria-label={`bundle-${lead.id}`}
+                        aria-expanded={open}
+                        title={`同名 ${g.length} 件（タップで展開）`}
+                        onClick={() => toggleBundle(lead.id)}
+                      >
+                        ×{g.length} {open ? "▾" : "▸"}
+                      </button>
+                    </div>
+                    {open && g.slice(1).map((n) => card(n))}
+                  </div>
+                );
+              })
+            : ordered.map((n) => card(n))}
         </section>
       </SortableContext>
     </>
