@@ -35,6 +35,10 @@ export const GEN_PARTS = [
   { label: "メロ", op: "gen_melody", needsChords: true },
   { label: "ベース", op: "gen_bass", needsChords: true },
   { label: "ドラム", op: "gen_drums", needsChords: false },
+  // WP-X3b/c：リフ(反復核)・管弦(ホーン/ストリングス)＝いずれもコード相手＝進行があるセクションでこの進行に生成。
+  // counter(対旋律)は主メロ必須のため別UI（骨格ブロックの「対旋律を作る▶」）で露出済み＝ここには出さない。
+  { label: "リフ", op: "gen_riff", needsChords: true },
+  { label: "管弦", op: "gen_section_inst", needsChords: true },
 ] as const;
 
 // リズムパーツ層 L1（design #20 S4-1）：プリセット id/label を web に複写（パターン本体は api 唯一持ち＝ids のみ参照）。

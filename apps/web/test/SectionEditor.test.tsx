@@ -206,6 +206,40 @@ describe("SectionEditor (3-lane timeline)", () => {
     await userEvent.click(screen.getByLabelText("gen-gen_melody"));
     await waitFor(() => expect(music).toHaveBeenCalledWith("gen_melody", expect.objectContaining({ flow: 0.7 })));
   });
+  it("WP-X3 派生パーツ露出：リフ/管弦を『この進行に生成』から生成＝正しい op＋進行を渡す", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [{ kind: "riff", content: { notes: [{ pitch: 60, start: 0, dur: 1 }], program: 30 } }] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    // 進行があるので派生パーツのタイルが出る（needsChords）。
+    expect(screen.getByLabelText("gen-gen_riff")).toBeInTheDocument();
+    expect(screen.getByLabelText("gen-gen_section_inst")).toBeInTheDocument();
+    // counter(対旋律)は主メロ必須のため『この進行に生成』には出さない。
+    expect(screen.queryByLabelText("gen-gen_counter")).toBeNull();
+    // リフ生成＝op=gen_riff＋chords(進行)を渡す。
+    await userEvent.click(screen.getByLabelText("gen-gen_riff"));
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_riff", expect.objectContaining({ chords: [expect.objectContaining({ root: 0 })] })));
+    // 管弦生成＝op=gen_section_inst。
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-gen_section_inst"));
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_section_inst", expect.objectContaining({ chords: expect.any(Array) })));
+  });
+  it("WP-X3 派生パーツ：進行が無いセクションではリフ/管弦タイルを出さない（needsChords）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    await userEvent.click(screen.getByLabelText("tools"));
+    expect(screen.queryByLabelText("gen-gen_riff")).toBeNull();
+    expect(screen.queryByLabelText("gen-gen_section_inst")).toBeNull();
+    expect(screen.getByLabelText("gen-gen_drums")).toBeInTheDocument(); // ドラムは進行不要＝出る
+  });
   it("P2 候補トレイ：もっとで候補が積み上がり比較できる／keepでマーク／捨てるで減る", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }, { pitch: 64, start: 1, dur: 1 }] } }] });
