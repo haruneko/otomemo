@@ -999,6 +999,62 @@ export function genCounter(
   return { items: [{ kind: "counter", content: { notes, program: 48 }, label }], edges: [] };
 }
 
+// WP-X3b リフ/オスティナート（歌でない反復核）＝候補生成（docs/research/2026-07-14-riff-ostinato-design.md）。
+// 2部構造が基底＝「核 motif（1小節・3〜6音・コードトーン軸）＋反復/終止改変」。和声関係は自動判定：
+//   コード列のルート集合がペダル候補(I or V)と半音以内で共有/近接なら **indep(維持)**＝tonic ペダルのコードトーンで
+//   全小節同一音列、そうでなければ **follow(追従)**＝リズム/輪郭を固定し各コードのコードトーンへ度数写像（§3/§5.2）。
+// 2部構造＝既定「提示＋終止改変」＝奇数小節の末尾音を root へ着地。ループ適性＝最終小節の末尾16分を空ける（継ぎ目）。決定的(seed)。
+export function genRiff(
+  frame?: Frame | null,
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  seed?: number | null,
+  opts?: { harmony?: "indep" | "follow" },
+): GenResult {
+  const f = normalizeFrame(frame);
+  const rng = new Rng(seed ?? 11);
+  const minor = isMinorFrame(f);
+  const key = (((f.key ?? 0) % 12) + 12) % 12;
+  const bpb = beatsPerBar(f.meter);
+  const bars = barsOf(f);
+  const stepsPerBar = Math.round(bpb * 4); // 16分グリッド
+  const label = "リフ";
+  // 核 motif（1小節）：拍頭を必ず含む 3〜6 の16分オンセット＋度数(R/3/5(,7))。輪郭/リズムは全小節で固定。
+  const nOnsets = 3 + Math.floor(rng.next() * 4); // 3..6（catchiness＝音数少なめ）
+  const posSet = new Set<number>([0]);
+  let guard = 0;
+  while (posSet.size < nOnsets && guard++ < 100) posSet.add(Math.floor(rng.next() * stepsPerBar));
+  const coreSteps = [...posSet].sort((a, b) => a - b);
+  const degPool = [0, 1, 2, ...(rng.next() < 0.4 ? [3] : [])]; // R,3,5(,7)＝コードトーンのインデックス
+  const coreDeg = coreSteps.map(() => degPool[Math.floor(rng.next() * degPool.length)]!);
+  // 和声依存度の自動判定（§5.2-3）：ルートがペダル候補(I/V)と半音以内で近接なら維持(indep)。明示 opts.harmony が勝つ。
+  const roots = (chords ?? []).map((c) => (((normRoot(c.root ?? 0)) % 12) + 12) % 12);
+  const pedal = [key, (key + 7) % 12];
+  const near = (r: number, p: number) => { const d = (((r - p) % 12) + 12) % 12; return Math.min(d, 12 - d) <= 1; };
+  const autoFollow = roots.length > 0 && !roots.every((r) => pedal.some((p) => near(r, p)));
+  const follow = opts?.harmony ? opts.harmony === "follow" : autoFollow;
+  const BASE = 60; // C4 付近の帯（リフは中域）
+  const realize = (degIdx: number, tones: number[]): number => { const pc = tones[degIdx % tones.length]!; return BASE + ((((pc - BASE) % 12) + 12) % 12); };
+  const notes: { pitch: number; start: number; dur: number }[] = [];
+  for (let bar = 0; bar < bars; bar++) {
+    const ch = chordAt(bar * bpb, chords);
+    const root = ch ? normRoot(ch.root ?? 0) : key;
+    const qual = ch ? (ch.quality ?? "") : minor ? "m" : "";
+    // follow=各コードのコードトーンへ写像／indep=tonic ペダルの三和音で全小節同一音列（維持）。
+    const tones = follow ? chordPcs(root, qual) : chordPcs(key, minor ? "m" : "");
+    coreSteps.forEach((s, i) => {
+      if (bar === bars - 1 && s === stepsPerBar - 1) return; // ループ適性＝最終小節の末尾16分を空ける（継ぎ目クリック回避）
+      let deg = coreDeg[i]!;
+      if (bar % 2 === 1 && i === coreSteps.length - 1) deg = 0; // 2部構造＝終止改変（奇数小節の末尾を root へ着地）
+      const start = bar * bpb + s * 0.25;
+      const nextStep = coreSteps[i + 1] ?? stepsPerBar;
+      const dur = Math.max(0.25, (nextStep - s) * 0.25);
+      notes.push({ pitch: realize(deg, tones), start: round3(start), dur: round3(dur) });
+    });
+  }
+  if (!notes.length) notes.push({ pitch: BASE, start: 0, dur: 1 });
+  return { items: [{ kind: "riff", content: { notes, program: 0 }, label }], edges: [] };
+}
+
 const GM = { Kick: 36, Snare: 38, HiHat: 42, OpenHat: 46 };
 
 /** GMドラム（16ステップ1小節）を **mood/tempo/seed で可変**生成。切ない=ハーフタイム/疎、

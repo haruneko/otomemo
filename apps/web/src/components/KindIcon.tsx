@@ -55,6 +55,16 @@ export function KindIcon({ kind }: { kind: string }) {
           <path d="M3 16 C7 13 10 19 14 16 C17 13.5 19 15 21 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
       );
+    case "riff": // リフ＝反復核（同じ図形が繰り返す・ループ矢印）
+      return (
+        <svg {...s}>
+          <rect x="4" y="10" width="3" height="4" rx="1" fill="currentColor" />
+          <rect x="8.5" y="7" width="3" height="7" rx="1" fill="currentColor" />
+          <rect x="13" y="10" width="3" height="4" rx="1" fill="currentColor" opacity="0.6" />
+          <rect x="17.5" y="7" width="3" height="7" rx="1" fill="currentColor" opacity="0.6" />
+          <path d="M4 18 h13 M14 16 l3 2 l-3 2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+        </svg>
+      );
     case "rhythm": // ステップグリッド（4マス）
       return (
         <svg {...s}>

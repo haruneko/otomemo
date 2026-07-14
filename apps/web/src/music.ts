@@ -594,8 +594,8 @@ export function notesForContent(kind: string, content: unknown, ctx?: BassContex
     const chords = ctx?.chords ?? (content as ChordPatternContent & { preview_chords?: ChordEntry[] }).preview_chords ?? [];
     return resolveChordPattern(content, chords, ctx?.key ?? 0);
   }
-  // bass 絶対モードは melody と同型(notes)。counter(対旋律・WP-X3a) も単音ライン＝notes 同型。
-  if (kind === "melody" || kind === "bass" || kind === "counter") return notesOf(content);
+  // bass 絶対モードは melody と同型(notes)。counter(対旋律・WP-X3a)・riff(反復核・WP-X3b) も単音ライン＝notes 同型。
+  if (kind === "melody" || kind === "bass" || kind === "counter" || kind === "riff") return notesOf(content);
   if (kind === "chord" || kind === "chord_progression") return chordsToNotes(chordsOf(content));
   if (kind === "rhythm") return rhythmToNotes(rhythmOf(content));
   return [];
@@ -643,9 +643,9 @@ export function compositeNotes(
     // 骨格ネタ(skeleton・design #20)も同様に合成では無音（構造線＝表面化して初めて鳴る・単体編集時のみ白玉プレビュー）。
     if (kind === "chord" || kind === "chord_progression" || kind === "skeleton") return [];
     const isRhythm = kind === "rhythm";
-    // ミキサーのパート＝kind から決定（コード楽器→chord・rhythm→drums・bass→bass・counter→counter・他→melody）。
-    const part: MixPart = kind === "bass" ? "bass" : kind === "rhythm" ? "drums" : kind === "chord_pattern" ? "chord" : kind === "counter" ? "counter" : "melody";
-    // パートの音色（GM program）。bass は既定フィンガーベース・counter は既定ストリングス（オブリガート）。他は content.program か既定0。
+    // ミキサーのパート＝kind から決定（コード楽器/riff→chord・rhythm→drums・bass→bass・counter→counter・他→melody）。
+    const part: MixPart = kind === "bass" ? "bass" : kind === "rhythm" ? "drums" : kind === "chord_pattern" || kind === "riff" ? "chord" : kind === "counter" ? "counter" : "melody";
+    // パートの音色（GM program）。bass=フィンガーベース・counter=ストリングス。他は content.program か既定0（riff は content.program）。
     const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : kind === "counter" ? 48 : 0));
     if (kind === "bass" && isRelativeBass(c.node.neta.content)) {
       // 相対bass：section の調・コードで解決済み実音高なので、ここでは移調しない（position だけ）。
@@ -671,7 +671,7 @@ export function compositeNotes(
     // **自分の調から section 調へ key-aware 半音移調**（F#m進行を二重移調しない）。rhythm は移調しない。
     // いずれも C基準content(key=0/mode未指定)では従来挙動に一致＝後退ゼロ。
     const shift =
-      kind === "melody" || kind === "counter" // counter(対旋律)もメロと同型の単音ライン＝旋法保持の相対移調
+      kind === "melody" || kind === "counter" || kind === "riff" // counter/riff もメロと同型の単音ライン＝旋法保持の相対移調
         ? melodyPlacementShift(keyPc, sectionMode, c.node.neta.mode, c.node.neta.key ?? 0)
         : harmonyPlacementShift(keyPc, sectionMode, c.node.neta.mode, c.node.neta.key ?? 0);
     return notesForContent(kind, c.node.neta.content).map((n) => ({

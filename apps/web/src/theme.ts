@@ -4,6 +4,7 @@ export const KINDS_COLORED = [
   "melody",
   "skeleton",
   "counter",
+  "riff",
   "bass",
   "chord",
   "chord_progression",
@@ -21,6 +22,7 @@ export const DEFAULT_COLORS: Record<ColorKind, string> = {
   melody: "#4fa8e0",
   skeleton: "#7fb8d4", // 骨格＝メロ系の淡い青緑（構造線・design #20）
   counter: "#7ec4a8", // 対旋律＝メロ寄りの海緑（主/副が色で立つ・WP-X3a）
+  riff: "#e0a94f", // リフ＝反復核の金橙（WP-X3b・section色と近いが別レーン/別意味）
   bass: "#2fa6b0",
   chord: "#7c6ce0",
   chord_progression: "#b7a0f0",
