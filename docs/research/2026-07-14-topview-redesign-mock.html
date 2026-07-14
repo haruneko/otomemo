@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>トップ画面再設計 — ネタが主役（Before/Afterモック）</title>
+<style>
+/* ============ 基本（2026-07-14 tinker-menu-redesign-mock と同じ流儀） ============ */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0d1016; --panel:#1a1e2a; --panel2:#202634; --panel3:#262d3e; --line:#2b3245;
+  --ink:#e9edf5; --dim:#96a0b5; --faint:#5d6577; --acc:#8fb7ff; --pri:#3b6bd6;
+  --ok:#8fe0a8; --warn:#ffd479;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.5}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select{font:inherit;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:8px 10px;max-width:100%}
+input::placeholder{color:var(--faint)}
+[hidden]{display:none!important}
+#page{max-width:430px;margin:0 auto;padding:10px 8px 40px}
+h1{font-size:15px}
+.sub{color:var(--dim);font-size:11px;line-height:1.6}
+
+/* ============ 上部：モード切替＋お題＋タップ計 ============ */
+#ctrl{position:sticky;top:0;z-index:90;background:var(--bg);padding:6px 0 8px;border-bottom:1px solid var(--line);margin-bottom:10px}
+#modeTabs{display:flex;gap:6px;margin:8px 0 6px}
+#modeTabs button{flex:1;padding:9px 4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-weight:700;font-size:13px;color:var(--dim)}
+#modeTabs button.on{background:#233052;border-color:var(--acc);color:var(--ink)}
+#modeTabs button small{display:block;font-weight:400;font-size:10px;color:var(--dim)}
+#missionRow{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+#missionRow .m{border:1px solid var(--line);border-radius:999px;padding:4px 9px;font-size:11px;color:var(--dim);background:var(--panel)}
+#missionRow .m.on{border-color:var(--warn);color:var(--warn)}
+#tapchip{margin-left:auto;border:1px solid var(--acc);color:var(--acc);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;background:rgba(143,183,255,.08)}
+#missionNote{font-size:11px;color:var(--warn);margin-top:5px;min-height:1em}
+
+/* ============ 端末フレーム（390px想定） ============ */
+#frame{position:relative;max-width:390px;margin:0 auto;background:#11141b;border:1px solid var(--line);border-radius:18px;overflow:hidden;height:min(744px,calc(100vh - 40px));display:flex;flex-direction:column}
+#screen{flex:1;overflow-y:auto;padding:0 10px 20px;position:relative}
+#scrollMeter{position:absolute;left:10px;bottom:14px;z-index:15;background:#3a2f18;border:1px solid var(--warn);color:var(--warn);font-size:10px;border-radius:8px;padding:3px 8px;pointer-events:none}
+
+/* ヘッダ */
+.apphead{display:flex;align-items:center;gap:8px;padding:12px 2px 10px}
+.apphead .brand{display:flex;align-items:center;gap:6px;font-weight:800;font-size:16px}
+.apphead .brand i{width:22px;height:22px;border-radius:7px;background:var(--pri);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px}
+.apphead .hr{margin-left:auto;display:flex;gap:6px}
+.apphead .hb{width:36px;height:34px;border-radius:9px;color:var(--dim);font-size:15px;position:relative;display:flex;align-items:center;justify-content:center}
+.apphead .hb .badge{position:absolute;top:-3px;right:-4px;background:#d64a3b;color:#fff;font-size:9px;border-radius:99px;padding:1px 5px;font-weight:700}
+
+/* Before：作成タイル */
+.ctiles{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:7px}
+.ctiles.b4{grid-template-columns:repeat(4,1fr)}
+.ctile{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 4px 10px;text-align:center;font-size:12px}
+.ctile .kg{display:block;font-size:16px;line-height:1;margin-bottom:7px;font-style:normal}
+.imp{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:11px;text-align:center;font-size:13px;color:var(--dim);margin-bottom:10px}
+.imppanel{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px}
+.imppanel button{border:1px solid var(--line);border-radius:8px;background:var(--panel2);padding:7px 9px;font-size:11px;color:var(--dim)}
+
+/* 器チップ */
+.pchips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;align-items:center}
+.pchips::-webkit-scrollbar{display:none}
+.pchip{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:12px;background:var(--panel);color:var(--dim);white-space:nowrap}
+.pchip.on{background:var(--pri);border-color:var(--pri);color:#fff;font-weight:700}
+.pchip .n{opacity:.7;font-size:10px;margin-left:3px}
+.pchip.lib{border-color:#7a5fd0;color:#c9b8ff}
+.pdiv{flex:0 0 1px;height:20px;background:var(--line)}
+
+/* 検索・フィルタ（Before） */
+.searchrow{margin-bottom:8px}
+.searchrow input{width:100%}
+.fkinds{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.fk{width:34px;height:34px;border:1px solid var(--line);border-radius:9px;background:var(--panel);display:flex;align-items:center;justify-content:center;font-size:14px}
+.fk.on{box-shadow:0 0 0 1.5px var(--k,#fff) inset}
+.moodrow input{width:100%;margin-bottom:8px}
+
+/* 一覧ヘッダ */
+.listhead{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.listhead .dt{border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:12px;color:var(--dim);background:var(--panel)}
+.listhead .dt.on{background:var(--pri);border-color:var(--pri);color:#fff}
+.listhead select{margin-left:auto;font-size:12px;padding:6px 8px}
+
+/* カード（Before忠実＋Afterのカード密度） */
+.card{border:1px solid var(--line);border-left:4px solid var(--k,#888);border-radius:12px;background:var(--panel);padding:10px 12px;margin-bottom:10px}
+.card .ch{display:flex;font-size:11px;margin-bottom:2px}
+.card .ch .kl{color:var(--k,#aaa)}
+.card .ch .id{margin-left:auto;color:var(--faint);font-size:10px}
+.card .tt{font-weight:700;font-size:15px;margin-bottom:6px}
+.card .roll{height:44px;border-radius:7px;background:#0e1220;position:relative;overflow:hidden;margin-bottom:8px}
+.card .roll i{position:absolute;width:7px;height:3px;border-radius:2px;background:var(--k,#888)}
+.card .cb{display:flex;gap:6px}
+.card .cb button{border:1px solid var(--line);border-radius:8px;background:var(--panel2);padding:6px 12px;font-size:12px}
+
+/* ============ After固有 ============ */
+.actrow{display:flex;gap:6px;margin-bottom:8px}
+.actrow .mk{flex:0 0 auto;border:1px solid #3c5f9a;color:#cfe0ff;border-radius:10px;padding:8px 11px;font-size:13px;font-weight:700;background:rgba(59,107,214,.12)}
+.actrow input{flex:1;min-width:0}
+.actrow .flt{flex:0 0 auto;width:42px;border:1px solid var(--line);border-radius:10px;color:var(--dim);font-size:13px;background:var(--panel)}
+.actrow .flt.set{border-color:var(--warn);color:var(--warn)}
+.kchips{display:flex;gap:6px;overflow-x:auto;margin-bottom:8px;padding-bottom:2px}
+.kchips::-webkit-scrollbar{display:none}
+.kchip{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:6px 11px;font-size:12px;background:var(--panel);color:var(--ink);white-space:nowrap}
+.kchip .n{color:var(--faint);font-size:10px;margin-left:3px}
+.kchip.on{box-shadow:0 0 0 1.5px var(--k,#fff) inset;font-weight:700}
+.kchip .dot{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--k,#888);margin-right:5px;vertical-align:0}
+.contlab{font-size:10px;color:var(--faint);margin:2px 0 4px}
+.cont{display:flex;align-items:center;gap:8px;border:1.5px solid var(--acc);border-radius:12px;background:rgba(143,183,255,.06);padding:9px 10px;margin-bottom:10px}
+.cont .cbar{width:4px;height:30px;border-radius:3px;background:var(--k,#888)}
+.cont .cm{flex:1;min-width:0}
+.cont .cm b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cont .cm small{font-size:10px;color:var(--dim)}
+.cont .pb{width:38px;height:34px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);flex:0 0 auto}
+/* リスト行 */
+.lrow{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-left:4px solid var(--k,#888);border-radius:10px;background:var(--panel);padding:8px 8px 8px 10px;margin-bottom:6px}
+.lrow .kg{font-size:13px;color:var(--k,#aaa);flex:0 0 auto;font-style:normal}
+.lrow .tt{flex:1;min-width:0;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.lrow .kl{font-size:10px;color:var(--k,#aaa);flex:0 0 auto}
+.lrow .pb{width:34px;height:30px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);font-size:11px;flex:0 0 auto}
+
+/* ============ シート（棚・引き出し）＝姉妹モックと同型 ============ */
+#backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:20}
+#sheet{position:absolute;left:0;right:0;bottom:0;z-index:21;background:var(--panel);border-radius:16px 16px 0 0;box-shadow:0 -18px 40px -18px rgba(0,0,0,.8);display:flex;flex-direction:column;max-height:86%}
+#sheet .shead{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 12px 8px;border-bottom:1px solid var(--line);position:relative}
+#sheet .shead .grab{position:absolute;top:5px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:99px;background:var(--line)}
+#sheet .shead b{font-size:14px;margin-top:2px}
+#sheet .shead .xbtn{margin-left:auto;width:30px;height:30px;border:1px solid var(--line);border-radius:8px;color:var(--dim)}
+#sbody{flex:1;overflow-y:auto;padding:10px 12px 14px}
+.hublab{font-size:10px;color:var(--faint);margin:8px 0 5px}
+.shelf{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.stile{border:1px solid var(--line);border-radius:12px;background:var(--panel2);padding:12px 4px 10px;text-align:center;font-size:12px}
+.stile .kg{display:block;font-size:16px;line-height:1;margin-bottom:7px;font-style:normal}
+.stile.ghost{border-style:dashed;opacity:.55;font-size:11px;color:var(--faint)}
+.drawnote{font-size:9.5px;color:var(--faint);margin-top:8px;line-height:1.55}
+.dk{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel2);padding:9px 11px;font-size:13px;margin-bottom:6px;text-align:left}
+.dk .dot{width:9px;height:9px;border-radius:99px;background:var(--k,#888);flex:0 0 auto}
+.dk .n{margin-left:auto;color:var(--faint);font-size:11px}
+.dk.on{box-shadow:0 0 0 1.5px var(--k,#fff) inset;font-weight:700}
+.dk.zero{opacity:.45;border-style:dashed;cursor:default}
+
+/* FAB・トースト */
+#fab{position:absolute;right:12px;bottom:14px;height:48px;padding:0 18px;border-radius:99px;background:var(--pri);z-index:10;font-size:14px;font-weight:700;box-shadow:0 6px 18px -6px rgba(0,0,0,.7)}
+#toast{position:absolute;left:50%;transform:translateX(-50%);bottom:76px;background:#2e3a5c;border:1px solid var(--acc);border-radius:10px;padding:8px 14px;font-size:12px;z-index:40;max-width:86%}
+
+/* 下部サマリ */
+#summary{margin-top:14px}
+#summary table{width:100%;border-collapse:collapse;font-size:11px}
+#summary th,#summary td{border:1px solid var(--line);padding:5px 7px;text-align:left;color:var(--dim)}
+#summary th{color:var(--ink);background:var(--panel)}
+#summary td b{color:var(--ok)}
+</style>
+</head>
+<body>
+<div id="page">
+  <h1>トップ画面再設計モック — ネタが主役・作る/絞るは扉の奥</h1>
+  <div class="sub">390px想定・指で試す用。設計doc＝<code>2026-07-14-topview-redesign-fable.md</code>。Before＝現行フォールド（作成14＋フィルタ13＝壁27個・実データ0.3枚）の忠実再現／After＝実データ主役＋作成の棚＋データ導出チップ。姉妹モック（いじる再設計）と並べて触る用。</div>
+
+  <div id="ctrl">
+    <div id="modeTabs">
+      <button data-act="mode" data-v="before">Before 現状<small>標的47・壁27・ネタまで715px</small></button>
+      <button data-act="mode" data-v="after">After 提案<small>標的22・壁8・ネタまで0スクロール</small></button>
+    </div>
+    <div id="missionRow">
+      <button class="m" data-act="mission" data-v="a">お題A: 続きを開く</button>
+      <button class="m" data-act="mission" data-v="b">お題B: 新規メロ</button>
+      <button class="m" data-act="mission" data-v="c">お題C: メロで絞る</button>
+      <span id="tapchip">タップ 0</span>
+    </div>
+    <div id="missionNote"></div>
+  </div>
+
+  <div id="frame">
+    <div id="screen"></div>
+    <div id="scrollMeter"></div>
+    <button id="fab" data-act="toastonly" data-v="相談（Chat）を開く想定">相談</button>
+    <div id="backdrop" hidden data-act="close"></div>
+    <div id="sheet" hidden></div>
+    <div id="toast" hidden></div>
+  </div>
+
+  <div id="summary">
+    <div class="sub" style="margin:6px 0"><b style="color:var(--ink)">数字の対比</b>（inventory 2026-07-14 実測 × 本提案）</div>
+    <table>
+      <tr><th></th><th>Before（実測）</th><th>After（提案）</th></tr>
+      <tr><td>フォールド内タップ標的</td><td>47（うち作成14＋絞り13＝57%）</td><td><b>約22</b>（操作壁は8＝＋作る/絞る/チップ6）</td></tr>
+      <tr><td>フォールド内の実データ</td><td>カード0.3枚（可視9割クローム）</td><td><b>つづき1行＋リスト8行前後</b>（約6割）</td></tr>
+      <tr><td>最初のネタまで</td><td>約715px スクロール</td><td><b>0px</b>（スクロール無しで可視）</td></tr>
+      <tr><td>kind追加のトップ増分</td><td>+2（タイル+チップ・恒久）</td><td><b>+0</b>（棚+1・チップは実在時のみ）</td></tr>
+      <tr><td>新規作成／種別絞り／続き</td><td>1／1（無ラベル）／2＋長スクロール</td><td>2（棚・トレード）／<b>1（ラベル+件数）</b>／<b>1</b></td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+ * トップ画面再設計モック
+ *  Before＝現行 App.tsx notebook列（作成14タイル＋器チップ＋検索＋13フィルタ＋mood＋カード）忠実再現
+ *  After ＝トップ契約（固定6行）＋作成の棚＋データ導出チップ＋つづき行＋リスト密度既定
+ *  件数は実DB（data/cm.sqlite・inventory §5）の project スコープ実測値。
+ * ===================================================================== */
+
+/* ---------- kind レジストリ（kinds.ts 相当） ---------- */
+const K = {
+  chord_progression:{l:"コード進行",c:"#a887e0",g:"≡",n:47},
+  melody:{l:"メロディ",c:"#6fc3ef",g:"♪",n:42},
+  section:{l:"セクション",c:"#e8a04a",g:"▤",n:24},
+  bass:{l:"ベース",c:"#35b8a8",g:"♩",n:19},
+  rhythm:{l:"リズム",c:"#e8604a",g:"▪▪",n:18},
+  chord_pattern:{l:"コード楽器",c:"#b39ae0",g:"≣",n:16},
+  lyric:{l:"歌詞",c:"#e8c84a",g:"✎",n:10},
+  skeleton:{l:"骨格",c:"#4a6ee0",g:"∿",n:5},
+  study:{l:"研究",c:"#8fe0a8",g:"学",n:3},
+  analysis:{l:"アナリーゼ",c:"#9ab0c8",g:"波",n:2},
+  knowledge:{l:"知識",c:"#c8b89a",g:"知",n:2},
+  counter:{l:"対旋律",c:"#5a78e8",g:"≈",n:1},
+  reference:{l:"参考",c:"#8a93a8",g:"参",n:1},
+  song:{l:"曲",c:"#c778c8",g:"♫",n:1},
+  theme:{l:"テーマ",c:"#4ad88a",g:"★",n:1},
+  riff:{l:"リフ",c:"#e0a83c",g:"♬",n:0},
+  section_inst:{l:"管弦",c:"#a878d8",g:"≋",n:0},
+};
+/* 作成タイルの並び（App.tsx PARTS/BUILD_TEXT と同順＝棚も同順で位置学習を保つ） */
+const CREATE_PARTS = ["melody","skeleton","counter","chord_progression","bass","rhythm","chord_pattern","riff","section_inst"];
+const CREATE_BUILD = ["section","song","lyric","theme"];
+const FILTER_ORDER = [...CREATE_PARTS,"section","song","lyric","theme"]; // 現行13チップの順
+const IMPORTS = ["MIDI取込","楽譜取込","ハミング録音","音源アナリーゼ","URLでアナリーゼ","歌詞取込"];
+
+/* ---------- 一覧データ（既定順＝shot01-04の実物に寄せる。cont=最終更新） ---------- */
+const ITEMS = [
+  {k:"counter",           t:"検収-Aメロ-20260714 対旋律", id:"9ce4bd7c"},
+  {k:"rhythm",            t:"検収-Aメロ-20260714 リズム", id:"fd2ddbe0"},
+  {k:"bass",              t:"検収-Aメロ-20260714 ベース", id:"533d935f"},
+  {k:"melody",            t:"検収-Aメロ-20260714 メロ",   id:"f01d9ba2"},
+  {k:"skeleton",          t:"検収-Aメロ-20260714 骨格",   id:"a883cef9"},
+  {k:"section",           t:"検収-Aメロ-20260714",        id:"a5adec0d", cont:true, sub:"セクション・32小節・きのう 23:41"},
+  {k:"chord_progression", t:"検収-Aメロ コード(dorian)",  id:"e1a4e19c"},
+  {k:"melody",            t:"JRock サンプル メロ",        id:"5aaf0807"},
+  {k:"melody",            t:"テスト8小節 メロ",           id:"60dfb879"},
+  {k:"chord_progression", t:"哀愁ボカロ進行 Am",          id:"7c21e0aa"},
+  {k:"section",           t:"6/8 Am Verse A",             id:"b91d44c2"},
+  {k:"chord_pattern",     t:"ハープ Verse A",             id:"58f86f02"},
+  {k:"lyric",             t:"夜の帰り道（サビ案）",        id:"cc90f3d1"},
+  {k:"song",              t:"新しい曲",                   id:"41ab7788"},
+];
+
+/* ---------- 状態 ---------- */
+const S = {
+  mode:"after", sheet:null,       // sheet: null | "shelf" | "filter"
+  taps:0, scrollMax:0, mission:null, done:false,
+  kindFilter:"", density:"list",  // After の既定＝リスト
+  bImport:false, bDensity:"card", // Before：取込パネル・既定＝カード
+};
+let rndSeed=7;
+const rnd=()=> (rndSeed=(rndSeed*1103515245+12345)&0x7fffffff)/0x7fffffff;
+const $=(q)=>document.querySelector(q);
+
+/* ---------- 部品 ---------- */
+function dots(n,color){
+  let h="";
+  for(let i=0;i<n;i++) h+=`<i style="left:${(rnd()*93).toFixed(1)}%;top:${(5+rnd()*32)|0}px;background:${color}"></i>`;
+  return h;
+}
+const header = `
+  <div class="apphead">
+    <span class="brand"><i>♪</i>Otomemo</span>
+    <span class="hr">
+      <button class="hb" data-act="toastonly" data-v="機材相談（グローバルChat）を開く想定">☷</button>
+      <button class="hb" data-act="toastonly" data-v="受け取りトレイを開く想定">↧<span class="badge">19</span></button>
+      <button class="hb" data-act="toastonly" data-v="設定を開く想定">⚙</button>
+    </span>
+  </div>`;
+const pchips = `
+  <div class="pchips">
+    <button class="pchip on">すべて<span class="n">192</span></button>
+    <button class="pchip">未仕分け<span class="n">179</span></button>
+    <button class="pchip">研究<span class="n">13</span></button>
+    <button class="pchip">＋</button>
+    <span class="pdiv"></span>
+    <button class="pchip lib">ライブラリ</button>
+  </div>`;
+
+function itemsFiltered(){ return S.kindFilter? ITEMS.filter(x=>x.k===S.kindFilter): ITEMS; }
+function cardHTML(x){
+  const k=K[x.k];
+  return `<div class="card datarow" style="--k:${k.c}">
+    <div class="ch"><span class="kl">${k.l}</span><span class="id">${x.id}</span></div>
+    <button class="tt" data-act="openneta" data-v="${x.id}" style="display:block;width:100%;text-align:left">${x.t}</button>
+    <div class="roll">${dots(16,k.c)}</div>
+    <div class="cb"><button data-act="toastonly" data-v="♪ 再生（モックでは鳴りません）">▶</button><button data-act="toastonly" data-v="このネタで相談を開く想定">相談</button><button data-act="toastonly" data-v="複製/器へ/削除…の副アクション">…</button></div>
+  </div>`;
+}
+function rowHTML(x){
+  const k=K[x.k];
+  return `<div class="lrow datarow" style="--k:${k.c}">
+    <i class="kg">${k.g}</i>
+    <button class="tt" data-act="openneta" data-v="${x.id}">${x.t}</button>
+    <span class="kl">${k.l}</span>
+    <button class="pb" data-act="toastonly" data-v="♪ 再生（モックでは鳴りません）">▶</button>
+  </div>`;
+}
+
+/* ---------- Before 画面（現行忠実） ---------- */
+function beforeScreen(){
+  const tile=(key)=>{const k=K[key];return `<button class="ctile" data-act="create" data-v="${key}"><i class="kg" style="color:${k.c}">${k.g}</i>＋${k.l==="メロディ"?"メロ":k.l}</button>`;};
+  return `${header}
+  <div class="ctiles">${CREATE_PARTS.map(tile).join("")}</div>
+  <div class="ctiles b4">${CREATE_BUILD.map(tile).join("")}</div>
+  <button class="imp" data-act="bimport">↧ 取込 ${S.bImport?"▲":"▾"}</button>
+  ${S.bImport?`<div class="imppanel">${IMPORTS.map(x=>`<button data-act="toastonly" data-v="${x}（現行と同じ・棚卸し §1 C3）">${x}</button>`).join("")}</div>`:""}
+  ${pchips}
+  <div class="searchrow"><input placeholder="検索…" aria-label="search"></div>
+  <div class="fkinds">${FILTER_ORDER.map(key=>{const k=K[key];
+    return `<button class="fk ${S.kindFilter===key?"on":""}" style="--k:${k.c};color:${k.c}" data-act="bfilter" data-v="${key}" title="${k.l}">${k.g}</button>`;}).join("")}</div>
+  <div class="moodrow"><input placeholder="mood で絞る…"></div>
+  <div class="listhead">
+    <button class="dt ${S.bDensity==="card"?"on":""}" data-act="bdensity" data-v="card">▦ カード</button>
+    <button class="dt ${S.bDensity==="list"?"on":""}" data-act="bdensity" data-v="list">☰ リスト</button>
+    <select><option>既定順</option><option>更新</option><option>種別</option><option>タイトル</option></select>
+  </div>
+  ${itemsFiltered().map(x=> S.bDensity==="card"? cardHTML(x): rowHTML(x)).join("")}`;
+}
+
+/* ---------- After 画面（トップ契約＝固定6行＋一覧） ---------- */
+function topChips(){ // データ導出チップ＝実在kindのみ・件数降順・上位6（riff/管弦0件は現れない）
+  return Object.entries(K).filter(([,v])=>v.n>0).sort((a,b)=>b[1].n-a[1].n).slice(0,6);
+}
+function afterScreen(){
+  const cont = ITEMS.find(x=>x.cont);
+  const ck = K[cont.k];
+  return `${header}
+  ${pchips}
+  <div class="actrow">
+    <button class="mk" data-act="shelf">＋作る ▾</button>
+    <input placeholder="検索…" aria-label="search">
+    <button class="flt ${S.kindFilter&&!topChips().some(([key])=>key===S.kindFilter)?"set":""}" data-act="fdrawer" title="絞り込み（全種別・mood）">絞▾</button>
+  </div>
+  <div class="kchips">${topChips().map(([key,k])=>
+    `<button class="kchip ${S.kindFilter===key?"on":""}" style="--k:${k.c}" data-act="afilter" data-v="${key}"><span class="dot"></span>${k.l}<span class="n">${k.n}</span></button>`).join("")}
+  </div>
+  <div class="contlab">つづきから（最終更新）</div>
+  <div class="cont" style="--k:${ck.c}">
+    <span class="cbar"></span>
+    <button class="cm" data-act="openneta" data-v="${cont.id}" style="text-align:left"><b>${cont.t}</b><small>${cont.sub}</small></button>
+    <button class="pb" data-act="toastonly" data-v="♪ 合成プレビュー（モックでは鳴りません）">▶</button>
+  </div>
+  <div class="listhead">
+    <button class="dt ${S.density==="card"?"on":""}" data-act="adensity" data-v="card">▦ カード</button>
+    <button class="dt ${S.density==="list"?"on":""}" data-act="adensity" data-v="list">☰ リスト</button>
+    <select><option>既定順</option><option>更新</option><option>種別</option><option>タイトル</option></select>
+  </div>
+  ${itemsFiltered().map(x=> S.density==="card"? cardHTML(x): rowHTML(x)).join("")}
+  <div class="drawnote">トップ契約＝固定6行（ヘッダ/器/アクション/種別チップ/つづき/一覧ヘッダ）＋一覧。新kind→棚に+1のみ・チップはネタが実在した時だけ件数順で現れる。</div>`;
+}
+
+/* ---------- 作成の棚（ボトムシート＝姉妹ハブと同じ言語） ---------- */
+function shelfSheet(){
+  const tile=(key)=>{const k=K[key];return `<button class="stile" data-act="create" data-v="${key}"><i class="kg" style="color:${k.c}">${k.g}</i>＋${k.l==="メロディ"?"メロ":k.l}</button>`;};
+  return `
+  <div class="shead"><span class="grab"></span><b>作る</b><button class="xbtn" data-act="close">✕</button></div>
+  <div id="sbody">
+    <div class="hublab">パーツ（tapで空のネタを作ってエディタへ＝現行と同じ）</div>
+    <div class="shelf">${CREATE_PARTS.map(tile).join("")}</div>
+    <div class="hublab">組み立て・文字</div>
+    <div class="shelf">${CREATE_BUILD.map(tile).join("")}<div class="stile ghost">＋ kindが増えたら<br>ここに1枚</div></div>
+    <div class="hublab">取込（過去資産）</div>
+    <div class="imppanel" style="margin:0">${IMPORTS.map(x=>`<button data-act="toastonly" data-v="${x}を開く想定">${x}</button>`).join("")}</div>
+    <div class="drawnote">棚＝「増やす」の全カタログ。並びは現行タイルと同一（位置学習を保つ）。新kind＝ここに+1のみでトップは不変（トップ契約）。</div>
+  </div>`;
+}
+
+/* ---------- 絞る引き出し ---------- */
+function filterSheet(){
+  const nonzero = Object.entries(K).filter(([,v])=>v.n>0).sort((a,b)=>b[1].n-a[1].n);
+  const zero    = Object.entries(K).filter(([,v])=>v.n===0);
+  return `
+  <div class="shead"><span class="grab"></span><b>絞り込み</b><button class="xbtn" data-act="close">✕</button></div>
+  <div id="sbody">
+    <div class="hublab">種別（件数順・上位6はトップにチップで出ている）</div>
+    ${nonzero.map(([key,k])=>`<button class="dk ${S.kindFilter===key?"on":""}" style="--k:${k.c}" data-act="afilter" data-v="${key}"><span class="dot"></span>${k.l}<span class="n">${k.n}件</span></button>`).join("")}
+    <div class="hublab">まだ0件（作ればチップに現れる）</div>
+    ${zero.map(([key,k])=>`<div class="dk zero" style="--k:${k.c}"><span class="dot"></span>${k.l}<span class="n">0件</span></div>`).join("")}
+    <div class="hublab">mood で絞る</div>
+    <input placeholder="mood（例：哀愁・きらきら）…" style="width:100%">
+    <div class="drawnote">露出∝実利用＝0件kindはトップに出ない。E2Eジャンク掃除後は件数も実数に痩せる。</div>
+  </div>`;
+}
+
+/* ---------- 描画ルート ---------- */
+function firstDataInfo(){
+  const el=$("#screen .datarow, #screen .cont");
+  if(!el) return "";
+  const y=el.offsetTop|0, ch=$("#screen").clientHeight;
+  const tag = y < ch-200 ? "（スクロール0で丸ごと可視）" : y < ch-30 ? "（頭だけ見える＝shot01と同じ）" : "（フォールド外）";
+  return `実データ y=${y}px${tag}`;
+}
+function render(){
+  document.querySelectorAll("#modeTabs button").forEach(b=>b.classList.toggle("on",b.dataset.v===S.mode));
+  document.querySelectorAll("#missionRow .m").forEach(b=>b.classList.toggle("on",b.dataset.v===S.mission));
+  $("#tapchip").textContent=`タップ ${S.taps}`;
+  const sc=$("#screen");
+  const keep=sc.scrollTop;
+  sc.innerHTML = S.mode==="before"? beforeScreen(): afterScreen();
+  sc.scrollTop=keep;
+  const sh=$("#sheet"), bd=$("#backdrop");
+  if(!S.sheet){ sh.hidden=true; bd.hidden=true; }
+  else{ sh.hidden=false; bd.hidden=false; sh.innerHTML = S.sheet==="shelf"? shelfSheet(): filterSheet(); }
+  updMeter();
+}
+function updMeter(){
+  const sc=$("#screen"), m=$("#scrollMeter");
+  if(!m) return;
+  S.scrollMax=Math.max(S.scrollMax, sc.scrollTop|0);
+  m.textContent=`スクロール ${sc.scrollTop|0}px｜${firstDataInfo()}`;
+}
+$("#screen").addEventListener("scroll",updMeter);
+
+/* ---------- お題 ---------- */
+const MISSION={
+  a:{note:"お題A：きのうの続き（検収-Aメロ-20260714 セクション）を開く。Before=壁の下へスクロールして6枚目／After=つづき行。", goal:(act,v)=>act==="openneta"&&v==="a5adec0d"},
+  b:{note:"お題B：新しいメロを作る。Before=＋メロ1タップ／After=＋作る→棚→メロ＝2タップ（このトレードは設計docで明示・頻度で回収）。", goal:(act,v)=>act==="create"&&v==="melody"},
+  c:{note:"お題C：メロだけに絞って一覧を見る。Before=無ラベルのアイコンを当て推量（結果はフォールド外）／After=ラベル+件数チップ（結果はすぐ下）。", goal:(act,v)=>(act==="afilter"||act==="bfilter")&&v==="melody"},
+};
+function checkGoal(act,v){
+  if(!S.mission||S.done) return;
+  const m=MISSION[S.mission];
+  if(m.goal(act,v)){ S.done=true; $("#missionNote").textContent=`✔ 達成：${S.taps}タップ・スクロール${S.scrollMax}px（${S.mode}）`; }
+}
+
+/* ---------- イベント（委譲） ---------- */
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.hidden=false;
+  clearTimeout(t._tm); t._tm=setTimeout(()=>{t.hidden=true;},1700);
+}
+document.addEventListener("click",(e)=>{
+  const t=e.target.closest("[data-act]");
+  if(e.target.closest("#frame") && e.target.closest("button,select,input")){ S.taps++; $("#tapchip").textContent=`タップ ${S.taps}`; }
+  if(!t) return;
+  const act=t.dataset.act, v=t.dataset.v;
+  if(act==="mode"){ S.mode=v; S.sheet=null; S.kindFilter=""; render(); return; }
+  if(act==="mission"){
+    S.mission=v; S.taps=0; S.scrollMax=0; S.done=false; S.sheet=null; S.kindFilter="";
+    $("#missionNote").textContent=MISSION[v].note; $("#screen").scrollTop=0; render(); return;
+  }
+  if(act==="close"){ S.sheet=null; render(); return; }
+  if(act==="shelf"){ S.sheet="shelf"; render(); return; }
+  if(act==="fdrawer"){ S.sheet="filter"; render(); return; }
+  if(act==="bimport"){ S.bImport=!S.bImport; render(); return; }
+  if(act==="bdensity"){ S.bDensity=v; render(); return; }
+  if(act==="adensity"){ S.density=v; render(); return; }
+  if(act==="bfilter"){ S.kindFilter=S.kindFilter===v?"":v; checkGoal(act,v); render(); return; }
+  if(act==="afilter"){ S.kindFilter=S.kindFilter===v?"":v; checkGoal(act,v); S.sheet=null; render(); return; }
+  if(act==="create"){
+    checkGoal(act,v); S.sheet=null; render();
+    toast(`新しい${K[v].l}を作った → エディタが開く想定（createBlank と同じ）`); return;
+  }
+  if(act==="openneta"){
+    checkGoal(act,v);
+    const it=ITEMS.find(x=>x.id===v);
+    toast(`「${it?it.t:v}」を開く想定（openTop と同じ）`); return;
+  }
+  if(act==="toastonly"){ toast(v); return; }
+});
+
+render();
+</script>
+</body>
+</html>
