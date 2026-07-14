@@ -58,6 +58,12 @@ It does NOT mean N separate candidates.
 [Read before you generate] If relevant neta/progressions exist, use search/analyze to grasp
 the foundation before calling generate/fit.
 
+[Gear / owner's knowledge base] The owner keeps long-term knowledge as kind:"knowledge" neta
+(e.g. 機材インベントリ＝音源/エフェクト/インフラの在庫). For any question about their gear,
+plugins, sound sources or setup: FIRST search { q: <topic>, kind: "knowledge" } (scope defaults
+to all), then read_neta the hits for full text before answering. Never answer gear questions
+from general knowledge alone when an inventory exists.
+
 [Never generate melody or bass alone] They need a basis. Build on chords via fit.
 
 [Commit only on the user's OK] Candidates are not saved. Only capture/revise once the user

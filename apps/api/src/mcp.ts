@@ -96,7 +96,7 @@ const frameSchema = z
     key: z.number().int().min(0).max(11).optional().describe("主音のピッチクラス0-11（0=C,7=G…）。生成はこの調の実音で返る"),
     meter: z.string().optional().describe("拍子＝\"分子/分母\"文字列（例 \"4/4\",\"3/4\",\"6/8\"）"),
     tempo: z.number().optional().describe("テンポ＝BPM（密度の判断にも使う）"),
-    bars: z.number().int().optional().describe("小節数（1コール=この小節数の“1つ”の構造。1-16にクランプ）"),
+    bars: z.number().int().optional().describe("小節数（1コール=この小節数の“1つ”の構造。1-64にクランプ＝安全弁。超過は meta.warnings で明示）"),
     mood: z.string().optional().describe("雰囲気＝自由文字列。「切ない/悲し/dark/sad」等は短調・疎、「明るい/速い/ダンス」等は密に効く"),
     mode: z.enum(["major", "minor"]).optional().describe("長短の明示（moodの推定より優先。セクション文脈の生成はこれを渡す）"),
     section: z
@@ -1109,7 +1109,10 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       if (mode === "contrast") return err("対照(contrast)検索は未対応（③-5）");
       if (similarTo) return ok(findSimilar(similarTo, candidates ?? [], top));
       if (like) return ok(findProgressions(core, { tags, like: { chords: like, key: likeKey }, limit }));
-      return ok(core.listNeta({ q, kind, mood, key, meter, tags, scope, limit, offset }));
+      // qあり＝検索はscope既定"all"（ツール説明「project＋libraryから引く」との乖離是正＝library保存の
+      // 機材インベントリ等knowledgeへチャットが到達できなかったバグの根治・2026-07-14）。
+      // qなし＝素の一覧は従来project既定＝ネタ帳一覧にlibraryコーパス(メロ句1000超)が混ざる事故を防ぐ。
+      return ok(core.listNeta({ q, kind, mood, key, meter, tags, scope: scope ?? (q ? "all" : undefined), limit, offset }));
     },
   );
   server.registerTool(

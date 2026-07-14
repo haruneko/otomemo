@@ -145,6 +145,19 @@ describe("purpose tool surface (#101)", () => {
     expect(names).not.toContain("gen_chords");
   });
 
+  it("search: qあり検索はscope未指定でlibraryの知識ネタにも届く（機材チャット不達バグの回帰・2026-07-14）", async () => {
+    const { client, core } = await connect();
+    // 機材インベントリはlibrary scopeで保存されている実態を再現
+    const made = core.createNeta({ kind: "knowledge", title: "機材インベントリ: 音源テスト", text: "ギター音源とドラム音源のリスト" });
+    core.setScope(made.id, "library");
+    // qあり＝検索：scope未指定でもlibraryが見える（ツール説明「project＋libraryから引く」に一致）
+    const found = JSON.parse(textOf(await client.callTool({ name: "search", arguments: { q: "機材" } })));
+    expect(found.map((n: { id: string }) => n.id)).toContain(made.id);
+    // qなし＝素の一覧：従来どおりproject既定（コーパスがネタ帳一覧へ混ざらない）
+    const listed = JSON.parse(textOf(await client.callTool({ name: "search", arguments: { kind: "knowledge" } })));
+    expect(listed.map((n: { id: string }) => n.id)).not.toContain(made.id);
+  });
+
   it("capture→search→analyze→generate が既存エンジンへ dispatch する", async () => {
     const { client } = await connect();
     // capture = createNeta
