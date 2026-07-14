@@ -157,9 +157,10 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // リズムパーツ層 L1（design #20 S4-1）：選択した partId 群（押した順＝rotate）。空＝未送信＝従来抽選(bit一致)。
   const [rhythmParts, setRhythmParts] = useState<string[]>([]);
   const toggleRhythmPart = (id: string) => { setRhythmParts((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])); setPreset(""); };
-  // ドラム定型ビート＋フィル（WP-D1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、drumFill=0..1(0=OFF=未送信)。
+  // ドラム定型ビート＋フィル（WP-D1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル。
+  // drumFill=0..1(0=OFF=未送信) or ビルドアップ型ID(build.*・WP-X4)＝密度倍加/vel漸増/末尾ギャップの遷移テンプレ。
   const [drumStyle, setDrumStyle] = useState<string>("");
-  const [drumFill, setDrumFill] = useState<number>(0);
+  const [drumFill, setDrumFill] = useState<number | string>(0);
   // ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、bassFill=0..1(0=OFF=未送信)。
   const [bassStyle, setBassStyle] = useState<string>("");
   const [bassFill, setBassFill] = useState<number>(0);
@@ -259,7 +260,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // ドラム定型ビート＋フィル（WP-D1）：style/fill を送る。""/0＝未送信＝従来 bit 一致。
       if (part.op === "gen_drums") {
         if (drumStyle) body.style = drumStyle;
-        if (drumFill > 0) body.fill = drumFill;
+        // 数値=強度(0=OFF)／文字列=ビルドアップ型ID(build.*)。0/""=未送信＝従来 bit 一致。
+        if (typeof drumFill === "number" ? drumFill > 0 : !!drumFill) body.fill = drumFill;
       }
       // ベース表面化（design #20 S3c）：骨格の明示ベース区間を gen_bass が差し替える（明示無し=root導出=従来）。
       if (part.op === "gen_bass" && opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;

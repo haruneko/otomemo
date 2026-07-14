@@ -372,11 +372,17 @@ export function SectionEditor({
                   </label>
                   <label className="tool-item" aria-label="drum-fill" onClick={(e) => e.stopPropagation()}>
                     フィル
-                    <select value={String(gen.drumFill)} onChange={(e) => gen.setDrumFill(Number(e.target.value))}>
+                    <select value={String(gen.drumFill)} onChange={(e) => { const v = e.target.value; gen.setDrumFill(v.startsWith("build.") ? v : Number(v)); }}>
                       <option value="0">なし</option>
                       <option value="0.3">弱（軽い節目）</option>
                       <option value="0.6">中（遷移フィル）</option>
                       <option value="0.9">強（大遷移）</option>
+                      {/* ビルドアップ・テンプレ（WP-X4）：密度倍加＋vel漸増＋末尾ギャップ＝サビ/ドロップ直前の溜め。要 bars≥テンプレ小節+1。 */}
+                      <optgroup label="ビルドアップ（溜め）">
+                        <option value="build.tight.4bar">溜め4小節（プリコーラス）</option>
+                        <option value="build.standard.8bar">溜め8小節（汎用）</option>
+                        <option value="build.big.16bar">溜め16小節（大サビ前）</option>
+                      </optgroup>
                     </select>
                   </label>
                   {/* ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：おまかせ=未送信=従来。style=ジャンル/型、bassFill=セクション末に挿入。 */}
