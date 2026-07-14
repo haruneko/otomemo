@@ -496,9 +496,21 @@ async function makeSampler(url: string, Tone: any, part: MixPart = "melody", len
   });
 }
 
+// #24 冷スタート有界待ちの上限(ms)。SF2(32MB)先読みと▶のレース対策＝進行中ロードを最大この時間だけ
+// 待ち、間に合わなければ簡易シンセへ即フォールバック（裏ロードは継続＝次回SF2）。押下→発音の上限を固定し
+// 「一定しない」を根絶する。根拠＝design#24／実測 温済み再開30ms↔冷13,000ms（遅回線で無限待ちが破綻）。
+const COLD_START_WAIT_MS = 400;
+
+// #24 テスト専用シーム：ensureSoundFont が使う makeSampler を遅延フェイクへ差し替える注入口。
+// 本番実行時は makeSampler 本体のまま（この変数は触れられない）。ドラム/音色別 sampler の makeSampler
+// 直呼びはここを経由しない＝#24 の有界待ちロジックだけをユニットで検証するための最小シーム。
+let makeSamplerImpl: (url: string, Tone: any, part?: MixPart, lens?: string) => Promise<any> = makeSampler;
+
 // waitIfCold=false: 誰もロードしてない冷スタートでは今回フォールバック（裏でロードは進む＝次回から鳴る）。
-// ただし**進行中のロードがあれば必ず待つ**＝先読み中の再生も同じロードを共有して SF2 で鳴る（#84 是正）。
-async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true): Promise<any | null> {
+// 進行中ロード(alreadyLoading)があっても**#24 で有界待ち**＝≤COLD_START_WAIT_MS だけ待ち、間に合えば
+// 先読みと同じ SF2 を共有して鳴らし(#84)、間に合わなければ null=簡易シンセへ即フォールバック（裏ロード継続）。
+// waitIfCold=true（先読み prewarmSoundFont 等の明示）は従来通り無限待ち＝挙動不変。
+export async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true): Promise<any | null> {
   const url = activeSfUrl;
   if (!url) return null;
   if (!(sfLoadedUrl === url && sfSampler)) {
@@ -507,7 +519,7 @@ async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true): Promi
       // 進行中ロードを1本に集約＝先読みと再生が同時に来ても makeSampler は1回だけ。
       sfLoadPromise = (async () => {
         try {
-          const sampler = await makeSampler(url, Tone);
+          const sampler = await makeSamplerImpl(url, Tone);
           await sampler.ready;
           sfInstrumentNames = sampler.instrumentNames ?? [];
           sfInstrumentCount = sfInstrumentNames.length;
@@ -527,9 +539,22 @@ async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true): Promi
         }
       })();
     }
-    // 冷スタートで待たない指定なら即フォールバック（裏ロードは継続）。進行中ロード有りなら待って共有。
-    if (!alreadyLoading && !waitIfCold) return null;
-    if (!(await sfLoadPromise)) return null;
+    if (!waitIfCold) {
+      // 冷スタート＝進行中ロードも無い＝今回は待たず即フォールバック（裏で新規ロードが進む）。
+      if (!alreadyLoading) return null;
+      // #24 進行中ロード有り＝有界待ち：≤COLD_START_WAIT_MS だけ待つ（Promise.race）。負けても
+      // ロード自体は中断しない（sfLoadPromise はそのまま完走＝次回 SF2）。timeout 印は専用 Symbol。
+      const TIMED_OUT = Symbol("sf-cold-wait-timeout");
+      const raced = await Promise.race([
+        sfLoadPromise,
+        new Promise<typeof TIMED_OUT>((res) => setTimeout(() => res(TIMED_OUT), COLD_START_WAIT_MS)),
+      ]);
+      // 間に合わない or ロード失敗(null)＝今回は簡易シンセへフォールバック。間に合えば下の従来経路へ。
+      if (raced === TIMED_OUT || !raced) return null;
+    } else {
+      // waitIfCold=true（先読み等）は従来通り完了まで無限待ち＝挙動不変。
+      if (!(await sfLoadPromise)) return null;
+    }
   }
   // ネタの音色(program)に合わせて旋律楽器を切替（毎回・差分のみ実ロード）。
   if (sfSampler) {
@@ -540,6 +565,16 @@ async function ensureSoundFont(Tone: any, program = 0, waitIfCold = true): Promi
     }
   }
   return sfSampler;
+}
+
+// #24 テスト専用フック：SF ロードを遅延フェイクへ差し替え＋モジュール状態リセット。実行時は未使用
+// （本番コードは呼ばない）。有界待ち契約を実 SF2 抜きでユニット検証するための最小注入口。
+export function __setSfTestHooks(hooks: {
+  makeSampler?: ((url: string, Tone: any, part?: MixPart, lens?: string) => Promise<any>) | null;
+  reset?: boolean;
+}): void {
+  if (hooks.reset) resetSfCaches();
+  if ("makeSampler" in hooks) makeSamplerImpl = hooks.makeSampler ?? makeSampler;
 }
 
 // #55e 権威 GM ドラムマップ：SF2 の bank128/preset0("Standard"キット)のゾーンから

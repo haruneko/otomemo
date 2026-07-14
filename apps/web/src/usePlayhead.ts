@@ -46,7 +46,13 @@ export function usePlayhead() {
     beatRef.current = 0;
     detach();
     const el = lineRef.current;
-    if (el) el.style.display = "none";
+    if (el) {
+      el.style.display = "none";
+      // #24 停止後にプレイヘッド変数の前回値が残る実バグの是正。display:none だけでは
+      // --ph/--phb が残留し、次の start までCSS(left計算)に古い比率/生beatが効く。0へ明示リセット。
+      el.style.setProperty("--ph", "0");
+      el.style.setProperty("--phb", "0");
+    }
     if (timeRef.current) timeRef.current.textContent = "1:1";
   }, [detach]);
 
