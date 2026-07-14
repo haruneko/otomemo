@@ -32,3 +32,4 @@ _audio_poc/*.wav
 _audio_poc/*.pt
 _audio_poc/*.mp3
 _audio_poc/*.mid
+logs/ui-audit-*/
