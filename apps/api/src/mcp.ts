@@ -37,6 +37,7 @@ import {
   normalizeFrame,
 } from "./music";
 import { checkLoop } from "./music/loopCheck"; // WP-X2 ゲームBGMループ境界チェック
+import { searchNetaMerged } from "./semantic-search"; // 意味+キーワード合流（HTTP /searchと共通・2026-07-14）
 import { learnMotifModelFromLibrary } from "./music/corpusBias";
 import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
 import { analyzeVoiceLeading } from "./music/voiceLeading"; // #8：メロ×低音の声部進行レンズ（並行/隠伏5度8度・声部交差）
@@ -1109,10 +1110,18 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       if (mode === "contrast") return err("対照(contrast)検索は未対応（③-5）");
       if (similarTo) return ok(findSimilar(similarTo, candidates ?? [], top));
       if (like) return ok(findProgressions(core, { tags, like: { chords: like, key: likeKey }, limit }));
-      // qあり＝検索はscope既定"all"（ツール説明「project＋libraryから引く」との乖離是正＝library保存の
-      // 機材インベントリ等knowledgeへチャットが到達できなかったバグの根治・2026-07-14）。
+      // qあり＝検索は意味(cm-search)＋キーワードの合流・scope既定"all"（ツール説明「意味/様式/名前で
+      // project＋libraryから引く」との乖離是正＝機材インベントリ(kind:knowledge,library)へ「ドラム音源」等の
+      // 自然な言い方で届かなかったバグの根治・2026-07-14）。VITEST時は意味検索スキップ＝テスト密閉。
       // qなし＝素の一覧は従来project既定＝ネタ帳一覧にlibraryコーパス(メロ句1000超)が混ざる事故を防ぐ。
-      return ok(core.listNeta({ q, kind, mood, key, meter, tags, scope: scope ?? (q ? "all" : undefined), limit, offset }));
+      if (q) {
+        const merged = await searchNetaMerged(core, {
+          q, kind, mood, key, meter, tags, scope, limit, offset,
+          semanticUrl: process.env.VITEST ? null : undefined,
+        });
+        return ok(merged.items);
+      }
+      return ok(core.listNeta({ kind, mood, key, meter, tags, scope, limit, offset }));
     },
   );
   server.registerTool(

@@ -79,10 +79,9 @@ function stripHeavyListContent<T extends { content: unknown }>(items: T[]): T[] 
 // neta/job 入力スキーマは SSOT(schemas.ts)から import（http/mcp/型で共有・三重定義を排す）。
 
 // 意味検索のPython窓口（docs/design.md #16）。localhost のみ、外に露出しない。
-const SEARCH_URL = process.env.CM_SEARCH_URL ?? "http://127.0.0.1:8788";
+import { SEARCH_URL, searchNetaMerged } from "./semantic-search"; // 共通化(2026-07-14)
 // #65 意味hitの spread較正ゲート閾値。実機コーパス実測で 0.07（無意味top rel≈0.061 を弾き
 // 実クエリtop≈0.112 を残す）。コーパス成長で最適点が動く前提で env 外出し＋回帰スイープ。
-const SEM_MIN_REL = Number(process.env.CM_SEM_MIN_REL ?? 0.07);
 
 /** 低次元データAPI（docs/design.md #15/#16）。PWAの主窓口。 */
 export function buildHttp(core: Core): FastifyInstance {
@@ -578,48 +577,9 @@ export function buildHttp(core: Core): FastifyInstance {
     const { q, k } = req.query as { q?: string; k?: string };
     if (!q) return [];
     const limit = k ? Number(k) : 20;
-
-    // キーワード一致＝確実な真。日本語1〜2文字も拾える。
-    const keyword = core.listNeta({ q, scope: "all", limit }); // 検索は project＋library 横断（取込コーパスも名前で引ける）
-    const kwIds = new Set(keyword.map((n) => n.id));
-
-    // 意味：rel(=score-floor)が閾値未満の弱いhitは落とす（無意味クエリ＝全員横並びを排除）。
-    const semIds = new Set<string>();
-    const semantic: NonNullable<ReturnType<typeof core.getNeta>>[] = [];
-    let semanticOk = false; // cm-search が応答したか＝false は意味検索が使えず keyword-only に劣化（UIで告知）。
-    try {
-      // cm-search 不通時にハングしない（閉ポートが RST を返さない環境=WSL2 等では OS connect が
-      // ~11s ブロック＝AbortSignal では connect 中断が効かない）。2s で応答を切り上げてキーワード
-      // だけで返す＝検索は常に即応。背後の接続は放置で無害（undici が後で片付ける）。
-      const res = (await Promise.race([
-        fetch(`${SEARCH_URL}/search?q=${encodeURIComponent(q)}&k=${limit}`, {
-          signal: AbortSignal.timeout(2000),
-        }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("cm-search timeout")), 2000)),
-      ])) as Response;
-      if (res.ok) {
-        semanticOk = true; // 応答あり＝意味検索は生きている（hit 0 でも「使えている」）。
-        const hits = (await res.json()) as { neta_id: string; score: number; rel?: number }[];
-        for (const h of hits) {
-          if ((h.rel ?? 0) < SEM_MIN_REL) continue;
-          const n = core.getNeta(h.neta_id);
-          if (n) {
-            semantic.push(n);
-            semIds.add(n.id);
-          }
-        }
-      }
-    } catch {
-      // 意味検索が落ちていてもキーワードだけで返す（semanticOk=false のまま＝UIで劣化を告知）
-    }
-
-    return {
-      items: [
-        ...keyword.map((n) => ({ ...n, matchType: semIds.has(n.id) ? "both" : "exact" })),
-        ...semantic.filter((n) => !kwIds.has(n.id)).map((n) => ({ ...n, matchType: "semantic" })),
-      ],
-      semanticOk,
-    };
+    // 意味(cm-search)＋キーワードの合流＝semantic-search.ts へ委譲（MCP search と共通化・2026-07-14）。
+    // 挙動不変：scope"all"横断・2s切り上げ・rel閾値・matchType/semanticOk。
+    return await searchNetaMerged(core, { q, limit });
   });
 
   // --- asset（#77 ファイル資産。SoundFont を全体で1個読む等）---
