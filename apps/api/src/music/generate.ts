@@ -3,6 +3,7 @@
 // 乱数は seed 付き（Pythonのbyte等価は不可＝MT vs ここ。musicalルールが等価＝property testで担保）。
 import { chordPcs, normRoot, scalePcs, type Palette } from "./theory";
 import { substitutesOf } from "./substitute"; // WP-C3スライス1：既存の和声語彙(機能代理/相対/裏/借用/二次ドミナント)を genChords 候補生成へ結線
+import { applyCitypop } from "./citypop"; // WP-C3スライス3：citypop プリセット（テンション付与＋分数化＋やり過ぎ警告）
 import { planSkeleton } from "./skeleton";
 import { meterInfo } from "./meter";
 import { classifyNCT, isChordTone } from "./degree";
@@ -89,6 +90,7 @@ export interface Frame {
 export interface GenResult {
   items: { kind: string; content: unknown; label: string }[];
   edges: never[];
+  meta?: { warnings?: string[] }; // WP-C3スライス3：citypop 等の「やり過ぎ警告」を非ブロックで併記（未指定＝キー無し＝従来 bit 一致）。
 }
 
 export function normalizeFrame(frame?: Frame | null): Frame {
@@ -310,9 +312,16 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
     if (last - 1 >= 1) base[last - 1] = { root: 10, quality: colorful ? "7" : "" };
     if (last - 2 >= 1) base[last - 2] = { root: 8, quality: colorful ? "maj7" : "" };
   }
-  const chords = base.map((c, i) => ({ root: (c.root + key) % 12, quality: c.quality, start: round3(i * bpb), dur: round3(bpb) }));
+  let chords: { root: number; quality: string; start: number; dur: number; bass?: number }[] = base.map((c, i) => ({ root: (c.root + key) % 12, quality: c.quality, start: round3(i * bpb), dur: round3(bpb) }));
   const label = (mood ? mood + "コード進行" : minor ? "マイナーの進行" : "コード進行").slice(0, 24);
-  return { items: [{ kind: "chord_progression", content: { chords }, label }], edges: [] };
+  // genre(WP-C3スライス3)：citypop＝テンション付与＋末尾Vの分数化(IV/V)＋やり過ぎ警告(meta.warnings・ブロックしない)。未指定＝無変換＝bit一致。
+  let meta: GenResult["meta"];
+  if (opts?.genre === "citypop") {
+    const r = applyCitypop(chords, { key, mode: minor ? "minor" : "major" });
+    chords = r.chords.map((c) => ({ root: c.root, quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? round3(bpb), ...(c.bass !== undefined ? { bass: c.bass } : {}) }));
+    if (r.warnings.length) meta = { warnings: r.warnings };
+  }
+  return { items: [{ kind: "chord_progression", content: { chords }, label }], edges: [], ...(meta ? { meta } : {}) };
 }
 
 function chordAt(t: number, chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[]) {

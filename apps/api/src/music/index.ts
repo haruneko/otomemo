@@ -12,6 +12,8 @@ export * from "./identify";
 export * from "./substitute";
 // ラインクリシェ／ペダル（WP-C3スライス2＝内声/ベースの半音線語彙）。
 export * from "./lineCliche";
+// シティポップ拡張和声プリセット（WP-C3スライス3＝テンション付与＋分数化＋やり過ぎ警告）。
+export * from "./citypop";
 // 感情シフト（単体コード）。
 export * from "./emotion";
 // 説明・命名（機能解析＋名前あての束ね）。
