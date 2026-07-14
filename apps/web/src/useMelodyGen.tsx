@@ -157,6 +157,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // リズムパーツ層 L1（design #20 S4-1）：選択した partId 群（押した順＝rotate）。空＝未送信＝従来抽選(bit一致)。
   const [rhythmParts, setRhythmParts] = useState<string[]>([]);
   const toggleRhythmPart = (id: string) => { setRhythmParts((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])); setPreset(""); };
+  // ドラム定型ビート＋フィル（WP-D1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、drumFill=0..1(0=OFF=未送信)。
+  const [drumStyle, setDrumStyle] = useState<string>("");
+  const [drumFill, setDrumFill] = useState<number>(0);
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
   // P4：プリセット主役。選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）。
   const [preset, setPreset] = useState<string>("");
@@ -249,6 +252,11 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         // ドラム結線（design「gen_melody×ドラム結線」）：リズムレーンがあれば step 列を渡し backbeat=0.3。
         const drums = ctx.sectionDrums();
         if (drums) { body.drums = drums; body.backbeat = 0.3; }
+      }
+      // ドラム定型ビート＋フィル（WP-D1）：style/fill を送る。""/0＝未送信＝従来 bit 一致。
+      if (part.op === "gen_drums") {
+        if (drumStyle) body.style = drumStyle;
+        if (drumFill > 0) body.fill = drumFill;
       }
       // ベース表面化（design #20 S3c）：骨格の明示ベース区間を gen_bass が差し替える（明示無し=root導出=従来）。
       if (part.op === "gen_bass" && opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;
@@ -440,6 +448,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     articulation, setArticulation, flow, setFlow, pickup, setPickup,
     phrasing, setPhrasing, form, setForm, skelForm, setSkelForm, counter, setCounter, finest, setFinest, voice, setVoice,
     rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
+    drumStyle, setDrumStyle, drumFill, setDrumFill, // ドラム定型ビート＋フィル（WP-D1）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,

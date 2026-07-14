@@ -345,6 +345,40 @@ export function SectionEditor({
                       {gen.genBusy ? "生成中…" : part.label}
                     </button>
                   ))}
+                  {/* ドラム定型ビート＋フィル（WP-D1・2026-07-14）：おまかせ=未送信=従来。style=ジャンル/型、fill=セクション末に挿入。 */}
+                  <label className="tool-item" aria-label="drum-style" onClick={(e) => e.stopPropagation()}>
+                    ビート型
+                    <select value={gen.drumStyle} onChange={(e) => gen.setDrumStyle(e.target.value)}>
+                      <option value="">おまかせ</option>
+                      <optgroup label="ジャンル">
+                        <option value="jpop">J-pop</option>
+                        <option value="rock">ロック</option>
+                        <option value="dance">ダンス/EDM</option>
+                        <option value="ballad">バラード</option>
+                        <option value="funk">ファンク/R&B</option>
+                      </optgroup>
+                      <optgroup label="型（直指定）">
+                        <option value="beat8.basic">8ビート基本</option>
+                        <option value="beat8.syncopated">8ビート食い込み</option>
+                        <option value="beat16.basic">16ビート</option>
+                        <option value="beat16.ghost">16ゴースト</option>
+                        <option value="four.rock">4つ打ちロック</option>
+                        <option value="four.house">4つ打ちハウス</option>
+                        <option value="halftime.basic">ハーフタイム</option>
+                        <option value="shuffle.basic">シャッフル</option>
+                        <option value="six8.ballad">6/8バラード</option>
+                      </optgroup>
+                    </select>
+                  </label>
+                  <label className="tool-item" aria-label="drum-fill" onClick={(e) => e.stopPropagation()}>
+                    フィル
+                    <select value={String(gen.drumFill)} onChange={(e) => gen.setDrumFill(Number(e.target.value))}>
+                      <option value="0">なし</option>
+                      <option value="0.3">弱（軽い節目）</option>
+                      <option value="0.6">中（遷移フィル）</option>
+                      <option value="0.9">強（大遷移）</option>
+                    </select>
+                  </label>
                   {/* 骨格を生成（design #20 S2）：構造線(2声骨格)を機械に叩き台で出す→骨格レーンへ。
                       構造(skelForm・design #12-M 2026-07-13)＝2/4/8で使い回すフォーム型リテラル回帰を選んでから生成。 */}
                   <label className="tool-item" aria-label="skel-form" onClick={(e) => e.stopPropagation()}>
