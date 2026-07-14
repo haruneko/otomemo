@@ -5,7 +5,7 @@ import { detectPitchHz, hzToMidi, pitchTrackToNotes } from "../pitch";
 // #56 ハミング録音→音高→melodyネタ。検出/分割ロジックは pitch.ts（テスト済）。ここはマイク捕獲のみ。
 const FRAME_MS = 50;
 
-export function HummingRecorder({ onCreated }: { onCreated?: () => void }) {
+export function HummingRecorder({ onCreated, projectTags = [] }: { onCreated?: () => void; projectTags?: string[] }) {
   const [recording, setRecording] = useState(false);
   const stopRef = useRef<null | (() => Promise<void>)>(null);
 
@@ -37,7 +37,7 @@ export function HummingRecorder({ onCreated }: { onCreated?: () => void }) {
       stopRef.current = null;
       const notes = pitchTrackToNotes(frames, FRAME_MS / 1000, 120, 0.125);
       if (notes.length) {
-        await api.createNeta({ kind: "melody", title: "ハミング", content: { notes } });
+        await api.createNeta({ kind: "melody", title: "ハミング", content: { notes }, tags: projectTags });
         onCreated?.();
       } else {
         alert("音程を取れませんでした（もう少しはっきり歌ってみてください）");

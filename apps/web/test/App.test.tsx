@@ -153,6 +153,18 @@ describe("App", () => {
     expect(api.createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "melody" }));
   });
 
+  // 監査#4：検索合流は「棚のタイルが作る kind」に一致させる。旧実装は KINDS 順で bare chord(ラベル"コード")に
+  // 当たり createBlank("chord") したが、棚の「コード」タイルは chord_progression を作る＝別物。SHELF_KINDS 参照で是正。
+  it("search-merge suggests the same kind the create-shelf tile makes (chord→chord_progression) — 監査#4", async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("search"), "コード");
+    const sug = await screen.findByLabelText("create-suggest");
+    expect(sug).toHaveTextContent("「コード進行」を作る");
+    await userEvent.click(sug);
+    expect(api.createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "chord_progression" }));
+    expect(api.createNeta).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "chord" }));
+  });
+
   // 監査2026-07-15：作る棚/絞る引き出しも「戻る」ガードの対象（開いたら guard を積み、popstate で1レイヤ閉じる）。
   // 従来 anyOpen に入っておらず、SPで棚を開いて戻るとアプリごと抜けるバグがあった。
   it("arms the back guard for the create shelf and closes it on popstate", async () => {

@@ -331,7 +331,11 @@ export function NetaCard({
             </button>
           </>
           ))}
+        {/* 作例を生成＝プロジェクトの音楽系ネタ(音楽kind∪コンテナ)だけに露出（監査#3）。
+            ライブラリのカードや歌詞/テーマ/知識/参考など非音楽kindでは一式生成が無意味＝出さない。 */}
         {moreOpen &&
+          scope === "project" &&
+          (MUSIC_KINDS.includes(neta.kind) || CONTAINER_KINDS.includes(neta.kind)) &&
           (gen ? (
             <span className="bs-btn">生成中…</span>
           ) : (

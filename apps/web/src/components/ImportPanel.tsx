@@ -19,6 +19,7 @@ export function ImportPanel({
 }) {
   const [importing, setImporting] = useState(false);
   const [analyzeUrlText, setAnalyzeUrlText] = useState(""); // ① 音源アナリーゼの URL 入力
+  const [urlError, setUrlError] = useState(""); // URLアナリーゼ起動失敗の可視フィードバック（監査#7・alert不可）
 
   // #10/#81 MIDIはworker(mido)でトラック×チャンネル分割→melody/rhythmネタ化。base64でジョブに載せ、
   // 分割→reaperがネタ化。jobのdoneを待って一覧へ反映。
@@ -74,7 +75,14 @@ export function ImportPanel({
   async function analyzeAudioUrl() {
     const u = analyzeUrlText.trim();
     if (!u) return;
-    await api.createJob({ intent: "audio_analyze", params: { url: u } }).catch(() => {});
+    setUrlError("");
+    try {
+      await api.createJob({ intent: "audio_analyze", params: { url: u } });
+    } catch {
+      // ジョブ投入に失敗＝無通知だと「押しても何も起きない」に見える。パネル内に文言で知らせる（alert不可）。
+      setUrlError("解析を開始できませんでした");
+      return;
+    }
     setAnalyzeUrlText("");
     setImportOpen(false);
   }
@@ -147,7 +155,7 @@ export function ImportPanel({
           }}
         />
       </label>
-      <HummingRecorder onCreated={() => void reload()} />
+      <HummingRecorder onCreated={() => void reload()} projectTags={projectTags} />
       <label className="import-btn" title="音源を分離→BPM/調/コード/音域を解析しアナリーゼ文を受信トレイへ（音源は解析後に削除）">
         {importing ? "解析中…" : "🎵 音源アナリーゼ"}
         <input
@@ -166,11 +174,19 @@ export function ImportPanel({
         aria-label="analyze-url"
         placeholder="URLでアナリーゼ(YouTube等・best-effort)"
         value={analyzeUrlText}
-        onChange={(e) => setAnalyzeUrlText(e.target.value)}
+        onChange={(e) => {
+          setAnalyzeUrlText(e.target.value);
+          if (urlError) setUrlError("");
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter") void analyzeAudioUrl();
         }}
       />
+      {urlError && (
+        <span className="import-url-error" role="alert">
+          {urlError}
+        </span>
+      )}
       <label className="import-btn">
         歌詞取込
         <input

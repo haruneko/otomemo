@@ -10,7 +10,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api, type Neta } from "./api";
-import { KIND_LABEL, kindColor, KINDS } from "./kinds";
+import { KIND_LABEL, kindColor } from "./kinds";
 import { applyColors, loadColors } from "./theme";
 import { Icon } from "./components/Icon";
 import { NetaList } from "./components/NetaList";
@@ -19,7 +19,7 @@ import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
 import { useIsMobile } from "./useIsMobile";
-import { CreateShelf } from "./components/CreateShelf";
+import { CreateShelf, SHELF_KINDS } from "./components/CreateShelf";
 import { FilterDrawer } from "./components/FilterDrawer";
 import { KindTiles } from "./components/KindTiles";
 // 重い二次画面は遅延ロード＝初回バンドルを軽くする（perf 耳FB 2026-07-09。Chatはreact-markdown 170KB）。
@@ -266,7 +266,7 @@ export function App() {
     .slice(0, 6);
   // S5 検索合流（B-lite）＝検索語が種別名に前方一致したら一覧先頭に「＋『◯◯』を作る」行（createBlank/newSong を呼ぶだけ）。
   const createHintKind = q.trim()
-    ? KINDS.find((k) => (KIND_LABEL[k] ?? "").startsWith(q.trim()))
+    ? SHELF_KINDS.find((k) => (KIND_LABEL[k] ?? "").startsWith(q.trim()))
     : undefined;
 
   // 手動並べ替えが効くのは「素のプロジェクト一覧」だけ＝検索/種別/mood 絞り込み中は無効

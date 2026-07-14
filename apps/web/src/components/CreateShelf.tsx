@@ -39,6 +39,11 @@ const BUILD_TEXT = [
   ["theme", "テーマ", "新しいテーマ", "var(--k-theme)"],
 ] as const;
 
+// 棚のタイルが実際に作る kind の SSOT（並び順もタイルと同一）。検索合流の「＋『◯◯』を作る」
+// はこの集合から前方一致で選ぶ＝棚に無い kind（bare chord / knowledge / other）を作らない（監査#4）。
+// ★ chord_progression が chord より前＝「コード」検索は棚の「コード」タイルと同じ chord_progression に当たる。
+export const SHELF_KINDS: readonly string[] = [...PARTS, ...BUILD_TEXT].map((t) => t[0]);
+
 export function CreateShelf({ createBlank, newSong, importOpen, setImportOpen, reload, projectTags, onClose }: CreateShelfProps) {
   // タイルtap＝既存 createBlank/newSong を呼び棚を閉じる（現行2タップ主動線＝＋作る→タイル）。
   const create = (k: string, title: string) => {

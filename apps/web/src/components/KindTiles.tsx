@@ -1,5 +1,14 @@
 import { KindIcon } from "./KindIcon";
-import { KIND_LABEL, kindColor } from "../kinds";
+import { KIND_LABEL, kindColor, KINDS } from "../kinds";
+
+// capturable=false の kind（reference/analysis/study）は作成タイルが無い＝「作れば現れる」は嘘。
+// 取込・解析で件数が増えたら初めて出る、と実態に合う文言へ分岐する（監査#9）。
+function zeroHint(k: string): string {
+  const label = KIND_LABEL[k] ?? k;
+  return KINDS.includes(k)
+    ? `${label}：まだ0件（作ればトップのタイルに現れる）`
+    : `${label}：まだ0件（取込・解析で増えると現れる）`;
+}
 
 // 種別ミニタイル（トップ再設計 S3・正準＝docs/research/2026-07-14-topview-redesign-fable.md §10）。
 // オーナーFB「作る側(タイル)に絵を寄せたい」を受け、種別フィルタを作成タイルと同じ視覚言語のミニタイル
@@ -47,7 +56,7 @@ export function KindTiles({ entries, kindFilter, setKindFilter, variant, onPick,
             className="kind-tile kt-zero"
             style={{ ["--k" as string]: kindColor(k) }}
             aria-label={`kind-zero-${k}`}
-            title={`${KIND_LABEL[k] ?? k}：まだ0件（作ればトップのタイルに現れる）`}
+            title={zeroHint(k)}
           >
             <KindIcon kind={k} />
             <span className="kt-label">{KIND_LABEL[k] ?? k}</span>

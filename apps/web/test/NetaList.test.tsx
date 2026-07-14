@@ -82,6 +82,23 @@ describe("NetaList", () => {
     expect(screen.getByRole("button", { name: "作例を生成" })).toBeInTheDocument();
   });
 
+  // 監査#3：作例を生成は「プロジェクトの音楽系kind(音楽∪コンテナ)」だけに露出。
+  // 非音楽kind（歌詞/テーマ/知識/参考）では一式生成が無意味＝…を開いても出さない。
+  it("hides 「作例を生成」on non-music kinds — 監査#3", async () => {
+    render(<NetaCard neta={mk({ id: "x", kind: "lyric", text: "夜" })} />);
+    await userEvent.click(screen.getByLabelText("more-x"));
+    expect(screen.getByRole("button", { name: "複製" })).toBeInTheDocument(); // …は開いている
+    expect(screen.queryByRole("button", { name: "作例を生成" })).not.toBeInTheDocument();
+  });
+
+  // 監査#3：ライブラリscopeのカードでも作例を生成は出さない（音楽kindでもプロジェクト外は対象外）。
+  it("hides 「作例を生成」on library-scope cards — 監査#3", async () => {
+    render(<NetaCard neta={mk({ id: "x", kind: "melody", title: "m" })} scope="library" />);
+    await userEvent.click(screen.getByLabelText("more-x"));
+    expect(screen.getByRole("button", { name: "＋プロジェクトへ" })).toBeInTheDocument(); // library の…は開いている
+    expect(screen.queryByRole("button", { name: "作例を生成" })).not.toBeInTheDocument();
+  });
+
   it("P3: 「…」→「器へ」ピッカーで既存器に入れる(member=true)", async () => {
     assignProject.mockResolvedValue({});
     render(<NetaCard neta={mk({ id: "x", kind: "melody", title: "m" })} projects={["みなそこ"]} />);
