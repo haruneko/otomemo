@@ -16,6 +16,8 @@ export * from "./lineCliche";
 export * from "./citypop";
 // 感情シフト（単体コード）。
 export * from "./emotion";
+// 感情語→パラメータプリセット（WP-E1・実在ノブ推奨値の提案）。
+export * from "./emotionMap";
 // 説明・命名（機能解析＋名前あての束ね）。
 export * from "./explain";
 // メロ×コードの当てはまり判定＋外し音補正（土台v・メロが変→直す/ハモ付けの足場）。
