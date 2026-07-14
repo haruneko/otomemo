@@ -157,6 +157,36 @@ CREATE TABLE IF NOT EXISTS neta_order (
   PRIMARY KEY (project, neta_id)
 );
 CREATE INDEX IF NOT EXISTS idx_neta_order_project ON neta_order(project, position);
+
+-- #21 コーパス遷移統計テーブル（WP-0・2026-07-14・design #21）。生成の弱マルコフ材料＝POP909統計を一級市民化。
+-- 追加のみ・非破壊。投入＝scripts/ingest-corpus-stats.ts（data/corpus-stats/*.json）。既存 neta 不可侵。
+-- リテラル旋律は非保存（統計・度数・相対のみ＝著作権セーフ）。
+CREATE TABLE IF NOT EXISTS corpus_note_transition (
+  style    TEXT NOT NULL,     -- pop|irish|game（骨格は POP909=pop）
+  mode     TEXT NOT NULL,     -- major|minor
+  ngram    INTEGER NOT NULL,  -- 2=bigram / 3=trigram
+  from_ctx TEXT NOT NULL,     -- 前文脈の度数列（"4" or "4>2"）
+  to_deg   INTEGER NOT NULL,  -- 次度数（key相対pc 0..11）
+  count    INTEGER NOT NULL,
+  PRIMARY KEY (style, mode, ngram, from_ctx, to_deg)
+);
+CREATE TABLE IF NOT EXISTS corpus_skeleton_prior (
+  style   TEXT NOT NULL,
+  mode    TEXT NOT NULL,
+  feature TEXT NOT NULL,      -- startDeg|cadDeg|degHist|chordRel|chordRelStrong|chordRelWeak|contour|rangeHist|ornType
+  bin     TEXT NOT NULL,      -- pc/ラベル
+  pct     REAL NOT NULL,
+  n       INTEGER NOT NULL,
+  PRIMARY KEY (style, mode, feature, bin)
+);
+CREATE TABLE IF NOT EXISTS corpus_motif_transform (
+  scope_bars INTEGER NOT NULL, -- 1|2（モチーフ窓小節数）
+  feature    TEXT NOT NULL,    -- transform|transposeShift|lengthDelta|catByDist
+  bin        TEXT NOT NULL,    -- 変換名 / 半音数 / 長さ増減 / "<変換>:<距離バケット>"
+  count      INTEGER NOT NULL,
+  pct        REAL,
+  PRIMARY KEY (scope_bars, feature, bin)
+);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {
