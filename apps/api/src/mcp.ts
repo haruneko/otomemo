@@ -28,6 +28,8 @@ import {
   genNamedProgression,
   suggestClicheLines,
   suggestKeyPlan,
+  isMinorFrame,
+  normalizeFrame,
 } from "./music";
 import { learnMotifModelFromLibrary } from "./music/corpusBias";
 import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
@@ -36,6 +38,7 @@ import { normRoot } from "./music/theory";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20）
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
+import { attachHarmonicTension } from "./music/harmonicTensionReport"; // 和声張力カーブレンズの生成側露出（WP-C4）
 import { splitMora, flowLyric, type LNote } from "./lyric";
 import { suggestLyricRhythm, analyzeLyricFit } from "@cm/music-core"; // ② 歌詞↔メロ プロソディ（design #13b・WP-M5）
 import { resolveVoiceProfile } from "@cm/music-core"; // 声種プロファイル解決（WP-M4・レンズへ渡す）
@@ -529,7 +532,12 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   server.registerTool(
     "gen_chords",
     { title: "コード進行を生成", description: "機能和声ルールで進行を生成（T始終・ダイアトニック・frame.key の実音で返る）。cadence=終止型(full=完全/half=半終止=V止め/deceptive=偽終止=V→vi/plagal=変終止=IV→I/aeolian=エオリアン終止=♭VI→♭VII→i)。borrow=サブドミナントマイナー(切なさ)、secondaryDom=二次ドミナント(おしゃれ/接着)、palette=旋法パレット(mixolydian等)。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), cadence: z.enum(["full", "half", "deceptive", "plagal", "aeolian"]).optional().describe("終止型。half=Aメロ末の開き/deceptive=続く感(偽終止)/plagal=アーメン終止/aeolian=エオリアン終止(♭VI→♭VII→i・短調の実測第1位／長調は♭VI→♭VII→I)。未指定=完全終止(従来)"), borrow: z.number().min(0).max(1).optional().describe("借用和音の確率。長調のIVを iv(サブドミナントマイナー=切なさ)へ。未指定=なし"), secondaryDom: z.number().min(0).max(1).optional().describe("二次ドミナントの確率。非トニック和音の直前を V/x(dom7)へ＝おしゃれ/接着(丸サのIII7等)。未指定=なし"), loop: z.boolean().optional().describe("循環進行(閉じずに回す)。短調=エオリアン i-♭VI-♭VII／長調=アクシス I-V-vi-IV。未指定=なし"), palette: z.enum(["ionian", "mixolydian", "aeolian", "dorian"]).optional().describe("旋法パレット(WP-C1)。mixolydian=♭VII(ロック・土臭)/dorian=IV長(浮遊・おしゃれ)/aeolian=切ない民族(短調既定)/ionian=明るい王道(長調既定)。frame.palette でも可。未指定=mode から既定＝bit一致"), variety: z.number().min(0).max(1).optional().describe("多様性(WP-C3)。中間和音を確率で代替候補(機能代理/相対/裏コード/同主調借用/二次ドミナント)へ差替＝進行の収束を緩める(ベタ回避)。未指定=なし(従来のダイアトニック進行)"), genre: z.enum(["citypop"]).optional().describe("ジャンルプリセット(WP-C3)。citypop=機能別テンション付与(Maj9/m9/13/maj7#11)＋IV/V等の分数化。meta.warnings にやり過ぎ警告を併記(ブロックしない)。未指定=素の三和音/7th"), transition: z.object({ prep: z.enum(["pivot", "secondary_dominant"]), toKey: z.number().int().min(0).max(11), toMode: z.enum(["major", "minor"]).optional() }).optional().describe("転調準備(WP-C2)。境界セクション末尾を次調への準備和音へ差替＝pivot(共通和音で滑らか)/secondary_dominant(次調のV7で牽引)。toKey=転調先の主音pc。調プラン(suggest_key_plan)適用時に境界へ差す。未指定=なし(従来の終止・bit一致)。無準備(direct)は渡さない") } },
-    async ({ frame, seed, cadence, borrow, secondaryDom, loop, palette, variety, genre, transition }) => ok(genChords(frame, seed, cadence, { borrow, secondaryDom, loop, palette, variety, genre, transition })),
+    async ({ frame, seed, cadence, borrow, secondaryDom, loop, palette, variety, genre, transition }) => {
+      const res = genChords(frame, seed, cadence, { borrow, secondaryDom, loop, palette, variety, genre, transition });
+      // WP-C4：張力カーブレンズを meta.tension へ添付（content 不変＝bit一致・審判でなく設計レンズ）。
+      attachHarmonicTension(res, { key: typeof frame?.key === "number" ? frame.key : undefined, mode: isMinorFrame(normalizeFrame(frame)) ? "minor" : "major", sectionRole: (frame as { section?: { role?: string } } | undefined)?.section?.role });
+      return ok(res);
+    },
   );
   // gen_bass / gen_melody のドラム入力（gen_drums の content と同形）＝design「gen_bass×ドラム結線」「gen_melody×ドラム結線」2026-07-10。
   const drumsSchema = z

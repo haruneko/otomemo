@@ -21,6 +21,10 @@ export * from "./prosody";
 // api/web が @cm/music-core から引く（voiceLeading 分析レンズと同格の共有純関数）。
 export * from "./melodyLenses";
 
+// 和声張力カーブレンズ（WP-C4・2026-07-14）＝TIS（DFT→6D TIV→μ/θ）で進行の張力プロファイルを計算し
+// 役割別の目標帯へ適合score・モーダルループで自動降格。純TS・度数+品質+key のみ・音源不要（メロレンズと同格）。
+export * from "./harmonicTension";
+
 /** ピッチクラス(0-11)の音名。旧 web `PITCH_NAMES` / api `KEY_NAMES` の同一配列を1本化。
  *  型は既存に合わせ `string[]`（web の `PITCH_NAMES.indexOf(root: string)` 等の互換のため as const にしない）。 */
 export const PITCH_NAMES: string[] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];

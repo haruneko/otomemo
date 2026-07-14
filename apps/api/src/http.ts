@@ -37,11 +37,14 @@ import {
   suggestClicheLines,
   suggestKeyPlan,
   toDegrees,
+  isMinorFrame,
+  normalizeFrame,
 } from "./music";
 import { analyzeVoiceLeading } from "./music/voiceLeading";
 import { validateSkeletonContent, type SkeletonContent } from "./music/skeletonNeta"; // 骨格層の一級化（design #20 S2）
 import { attachMelodyVoiceLeading, attachBassVoiceLeading } from "./music/voiceLeadingReport"; // 対位法レポートの生成側露出（design #20 S3d）
 import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レンズの生成側露出（design #12-M・WP-M3）
+import { attachHarmonicTension } from "./music/harmonicTensionReport"; // 和声張力カーブレンズの生成側露出（WP-C4）
 import { meterInfo } from "./music/meter";
 import { resolveVoiceProfile } from "@cm/music-core"; // 声種プロファイル解決（WP-M4・レンズへ渡す）
 import { sanitizeRhythmParts, extractRhythmPart } from "./music/rhythmParts"; // リズムパーツ層 L1/L2＋採取（design #20 S4-1/S4-2）
@@ -195,7 +198,7 @@ export function buildHttp(core: Core): FastifyInstance {
     };
     try {
       switch (op) {
-        case "gen_chords": { const num = (x: unknown) => (typeof x === "number" ? x : undefined); const cad = ["half", "deceptive", "plagal", "aeolian"].includes(b.cadence) ? b.cadence : undefined; const pal = ["ionian", "mixolydian", "aeolian", "dorian"].includes(b.palette) ? b.palette : undefined; const gen = b.genre === "citypop" ? "citypop" as const : undefined; const tr = b.transition && (b.transition.prep === "pivot" || b.transition.prep === "secondary_dominant") && typeof b.transition.toKey === "number" ? { prep: b.transition.prep as "pivot" | "secondary_dominant", toKey: b.transition.toKey as number, toMode: b.transition.toMode === "minor" ? "minor" as const : "major" as const } : undefined; return genChords(b.frame, b.seed, cad, { borrow: num(b.borrow), secondaryDom: num(b.secondaryDom), loop: b.loop === true, palette: pal, variety: num(b.variety), genre: gen, transition: tr }); }
+        case "gen_chords": { const num = (x: unknown) => (typeof x === "number" ? x : undefined); const cad = ["half", "deceptive", "plagal", "aeolian"].includes(b.cadence) ? b.cadence : undefined; const pal = ["ionian", "mixolydian", "aeolian", "dorian"].includes(b.palette) ? b.palette : undefined; const gen = b.genre === "citypop" ? "citypop" as const : undefined; const tr = b.transition && (b.transition.prep === "pivot" || b.transition.prep === "secondary_dominant") && typeof b.transition.toKey === "number" ? { prep: b.transition.prep as "pivot" | "secondary_dominant", toKey: b.transition.toKey as number, toMode: b.transition.toMode === "minor" ? "minor" as const : "major" as const } : undefined; const res = genChords(b.frame, b.seed, cad, { borrow: num(b.borrow), secondaryDom: num(b.secondaryDom), loop: b.loop === true, palette: pal, variety: num(b.variety), genre: gen, transition: tr }); attachHarmonicTension(res, { key: typeof b.frame?.key === "number" ? b.frame.key : undefined, mode: isMinorFrame(normalizeFrame(b.frame)) ? "minor" : "major", sectionRole: (b.frame as { section?: { role?: string } } | undefined)?.section?.role }); return res; }
         case "suggest_key_plan": { const md = b.mode === "minor" ? "minor" as const : "major" as const; const cnt = typeof b.count === "number" ? { count: b.count } : {}; return { plans: suggestKeyPlan(Array.isArray(b.roles) ? b.roles : [], typeof b.key === "number" ? b.key : 0, md, cnt) }; }
         case "gen_melody": {
           // 2026-07-08：HTTP経路もV2（旧: 旧経路＝V2未経由で品質floor不在）。density/swing/style ノブを透過。

@@ -1288,6 +1288,14 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **配線**＝`suggest_key_plan`(MCP chat面・**allowlist追加**＝許可漏れ厳禁BUG#1型)＋HTTP。`gen_chords`(MCP/HTTP) に `transition`。**web は見送り**（調プランを提示/適用する器＝セクション列UIが現状無く、最小露出を超えるため。器ができ次第の後続WP）。
 - **スコープ外＝後続WP**：メロ骨格の**度数読み替え自動化**（転調境界の向こう側を新keyの度数系で解釈＝実音は semitones ぶんズレる・catalog §5.3）と**共通音の橋渡し**(pivot時の骨格アンカー)。skeletonレンダラが Transition を読む結線は本スライス未着手（骨格側の対応は別WP）。ゲーム用途のループ整合制約(末尾key=先頭key・上げっぱなし禁止・catalog §6)も後続。
 
+→ **和声張力カーブレンズ（WP-C4・2026-07-14）**。正典＝`docs/research/2026-07-14-harmonic-tension-curve.md`（TIS採用）。思想＝**審判でなく設計レンズ**＝候補を弾かず・単一正解を出さず・「山場をどこに置くか」を見る（既知の結論＝理論スコアは質を測れない＝ガードレール止まり・R²≈0.56 天井を踏襲）。WP-M3（メロ候補レンズ）と同格の**候補レンズ**＝content 不変・meta 添付のみ・純TS・度数+品質+key のみ・音源不要。
+- **TIS 計算器（`@cm/music-core/harmonicTension.ts`・純関数）**＝コード/キーの pc集合 → 12次元クロマ → 離散フーリエ変換の低次6係数 → 知覚重み[3,8,11.5,15,14.5,7.5]（Bernardes TIS）付き **TIV（6次元複素）**。距離＝ユークリッド μ（`tivDistance`＝進行跳躍 d1・声部進行代理）／角度 θ（`tivAngle`＝キー整列 d2）。不協和 **c＝1−‖T_norm‖/M**（単一pc=0=最協和 → 全12pc=1=最不協和／テンションノート9・11・13th は pc を足す＝c が単調増＝**別ロジック不要**・research §2.2/§4 の両立定義）。キー基準は**トニック三和音**＝I が d2≈0 の安息点（音階集合基準は V が I より近く出て機能張力を測れず不採用）。木構造(prolongational h)は**既定 off**（重い＝プロノブ・research §5.3）。
+- **張力プロファイル（`tensionProfile`）**＝各コードの c/d2/d1/表面張力 ss（転回=bass≠root で加算・research §1.3）を固定スケールで 0..1 化 → 合成重み**不協和0.45／調距離0.30／進行跳躍+表面0.25**（research §5.3・木なし再正規化・**暫定＝耳較正で更新**）→ 隣接移動平均で平滑。出力 tension は 0..1（役割帯と同スケール）。**単調性＝ドミナント(V7)>トニック**（c＋d2 で駆動・TDD `harmonic-tension.test.ts`）。
+- **役割別・目標カーブ帯（`TENSION_BANDS`・research §5.4 正準テーブル）**＝verse 低・prechorus 右肩上がり・chorus 頭で解決→中盤一山・bridge 貯めて放出。適合＝`fitToBand`（帯逸脱・小さいほど良）＋`peakPlacementReward`（山が狙い位置）＋`cadenceRelief`（**偽終止V–vi/IV–I は「未解決の快」＝減点しない**・prechorus/bridge の高張力終端を良とする・research §3.2）−`monotonyPenalty`（平坦減点）＝`scoreCandidate`（高い=良い）。
+- **モーダルループ自動降格（`detectModalLoop`・research §6-3）**＝機能希薄な循環＝カーブが意味を失う条件で `score=null`（並べ替え対象外・警告文言）。判定＝(a) 三全音不在（ドミナント V7/vii° 無し）かつ〔反復ループ（I–V–vi–IV/アクシス等）または トニック始・非トニック終の宙吊り循環（i–♭VII–♭VI–♭VII）〕、または (b) 合成張力の分散が閾値未満（ペダル/ドローン＝平坦）。機能進行（I–IV–V7–I）は三全音ありで除外。**未実装だと「機能希薄な良進行」を不当に低評価する事故**＝要ガード。
+- **並べ替え（`rankByTension`）**＝候補を score 降順で安定ソート（同点=生成順＝WP-M3 流儀）・null（降格）は原順で末尾＝機械は候補まで・単一正解を出さない。
+- **配線＝生成側露出（`music/harmonicTensionReport.ts`）**＝`gen_chords`(MCP/HTTP) 応答の chord_progression 候補へ `meta.tension`（curve/band/role/score/modalLoop/warning）を添付。**content 不変＝bit一致**（メタ添付のみ・並び不変）。gen_chords は単候補返し＝N候補は variety+seed違いで複数回呼び `rankByTension` で並べる（呼び側）。**web は見送り**（進行候補トレイ UI が現状無く最小露出を超える＝器ができ次第の後続）。**耳確認**＝役割帯の妥当性・モーダルループ降格の当たり判定（要試聴）。
+
 → **16分細分＝走句(runs)と前借り(push)（2026-07-09・理論不足総点検 Step4・本丸1）**。full＝sixteenth-rhythm.md。
 **現状認識**：語彙 RHYTHM16_DATA は16分裏slot・走句パターンを**既に含む**。gen出力の16分ほぼ0%（実曲44-56%）の原因は**語彙でなく選別抑圧**＝score の `n16Pen`/`runPen`（16分裏・走句を減点）＋受入音数上限。density は総量ノブで「走句らしさ(連続16分)」「前借り(食い)」を狙って出せない。
 **正準（Phase1-2＝データ不要・Phase3データは後）**：
