@@ -10,6 +10,8 @@ export * from "./progressions";
 export * from "./identify";
 // 代替コード。
 export * from "./substitute";
+// ラインクリシェ／ペダル（WP-C3スライス2＝内声/ベースの半音線語彙）。
+export * from "./lineCliche";
 // 感情シフト（単体コード）。
 export * from "./emotion";
 // 説明・命名（機能解析＋名前あての束ね）。

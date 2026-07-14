@@ -34,6 +34,7 @@ import {
   harmonize,
   parseChordSymbol,
   substitutesOf,
+  suggestClicheLines,
   toDegrees,
 } from "./music";
 import { analyzeVoiceLeading } from "./music/voiceLeading";
@@ -299,6 +300,11 @@ export function buildHttp(core: Core): FastifyInstance {
           const nextDeg = nextArr.length ? toDegrees(nextArr, key)[0] : undefined;
           const subs = substitutesOf(deg, { mode: b.mode, next: nextDeg });
           return subs.map((s) => ({ ...s, root: (s.degree + key) % 12 })); // 度数→実音ルート0-11を添える（mcp と同じ）
+        }
+        case "suggest_cliche": { // WP-C3スライス2：ラインクリシェ/ペダル候補を HTTP へ露出（MCP と同計算）。
+          const cs = asChords(Array.isArray(b.chords) ? b.chords : []).map((c: { root?: number | string; quality?: string; start?: number; dur?: number }) => ({ root: normRoot(c.root ?? 0), quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? 1 }));
+          const md = b.mode === "minor" ? "minor" as const : b.mode === "major" ? "major" as const : undefined;
+          return suggestClicheLines(cs, { key: typeof b.key === "number" ? b.key : undefined, mode: md, role: typeof b.role === "string" ? b.role : undefined, melody: Array.isArray(b.melody) ? b.melody : undefined, max: typeof b.max === "number" ? b.max : undefined });
         }
         case "find_progressions": return findProgressions(core, { tags: b.tags, like: b.like, limit: b.limit });
         default: return reply.code(404).send({ error: `unknown music op: ${op}` });

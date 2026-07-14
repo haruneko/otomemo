@@ -20,6 +20,7 @@ const CHAT_VERBS = [
   "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords",
   "start_study", // #S11 横断研究（コードレンズ）
   "suggest_lyric_rhythm", "analyze_lyric_fit", // WP-M5 ②歌詞↔メロ プロソディ（design #13b・許可漏れ厳禁＝過去BUG#1型）
+  "suggest_cliche", // WP-C3スライス2 ラインクリシェ/ペダル（静的区間に半音線を差す候補・許可漏れ厳禁）
 ].map((n) => `mcp__creative-manager__${n}`);
 
 // #100④-S7：チャットにブラウザ検索を許す（実在曲/コード進行/機材レビュー等を調べる）。

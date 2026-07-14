@@ -26,6 +26,7 @@ import {
   melodySimilarity,
   findSimilar,
   genNamedProgression,
+  suggestClicheLines,
 } from "./music";
 import { learnMotifModelFromLibrary } from "./music/corpusBias";
 import { evalMelody } from "./music/evalMelody"; // P0-c：メロの規則ベース評価（項目別critique＋変なメロ検出）を analyze に露出
@@ -858,6 +859,27 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     async ({ topic, artist, works, lenses }) => {
       const job = core.enqueueJob({ intent: "study", params: { topic, artist, works, lenses } });
       return ok({ jobId: job.id, status: "queued", note: `「${topic}」の研究を裏で開始しました。数分後にトレイ📥と study ネタに届きます（待たずに戻ってOK）。` });
+    },
+  );
+  // WP-C3スライス2：ラインクリシェ／ペダルを差す候補（静的区間を検出→10型辞書→複数候補・3rd不動・メロ衝突は降格）。
+  server.registerTool(
+    "suggest_cliche",
+    {
+      title: "ラインを差す（クリシェ/ペダル）",
+      description:
+        "静的なコード進行(同一和音が続く区間)に、内声/ベースの半音線(ラインクリシェ)や保続音(ペダルポイント)を差す候補を返す。「Aメロが動かなくて退屈→内声を動かして」「サビ前で溜めたい」に。3rd不動・1セクション1本・メロ衝突は要耳確認で降格(ブロックしない)。候補まで＝実ボイシング/採否は人。",
+      inputSchema: {
+        chords: chordsSchema,
+        key: z.number().int().min(0).max(11).optional().describe("主音pc。省略時は先頭コードのルート"),
+        mode: z.enum(["major", "minor"]).optional(),
+        role: z.string().optional().describe("セクション役割(intro/verse/prechorus等)。推奨文脈と外れる型は降格(除外はしない)"),
+        melody: notesSchema.optional().describe("メロ(実音ノート)。動く半音線と半音衝突する候補を降格する衝突検査に使う"),
+        max: z.number().int().min(1).max(8).optional().describe("返す候補数の上限(既定4)"),
+      },
+    },
+    async ({ chords, key, mode, role, melody, max }) => {
+      const cs = (chords ?? []).map((c) => ({ root: normRoot(c.root), quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? 1 }));
+      return ok(suggestClicheLines(cs, { key, mode, role, melody, max }));
     },
   );
   server.registerTool(
