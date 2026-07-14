@@ -863,6 +863,45 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(body.style).toBe("citypop");
     expect(body.fill).toBeCloseTo(0.2);
   });
+  it("T5 おまかせで一式＝コード有ならドラム→ベース→メロを順に生成し候補をkind別グループで積む", async () => {
+    music.mockReset();
+    // 各 op ごとに対応 kind の候補を返す（呼ばれた op から kind を決める）。
+    music.mockImplementation((op: string) => {
+      const kind = op === "gen_drums" ? "rhythm" : op === "gen_bass" ? "bass" : "melody";
+      return Promise.resolve({ items: [{ kind, content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
+    });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-set")); // ☆おまかせで一式
+    // 3 op が呼ばれる（drums→bass→melody の依存順）
+    await waitFor(() => expect(music.mock.calls.map((c) => c[0])).toEqual(["gen_drums", "gen_bass", "gen_melody"]));
+    // 候補トレイに 3 グループ（別kindでも置換せず積む＝一式のkind別保持）
+    await screen.findByLabelText("part-candidate");
+    expect(await screen.findByLabelText("cand-group-rhythm")).toBeInTheDocument();
+    expect(screen.getByLabelText("cand-group-bass")).toBeInTheDocument();
+    expect(screen.getByLabelText("cand-group-melody")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("candidate-card")).toHaveLength(3); // グループ跨ぎで3枚
+  });
+  it("T5 一式＝コード無しなら先頭にコード＋ドラム（コード相手が要る2本は次回に回す）", async () => {
+    music.mockReset();
+    music.mockImplementation((op: string) => {
+      const kind = op === "gen_chords" ? "chord_progression" : "rhythm";
+      return Promise.resolve({ items: [{ kind, content: op === "gen_chords" ? { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } : { notes: [{ pitch: 36, start: 0, dur: 1 }] } }] });
+    });
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("gen-set"));
+    await waitFor(() => expect(music.mock.calls.map((c) => c[0])).toEqual(["gen_chords", "gen_drums"]));
+  });
   it("sizes bars by meter — 6/8 bar1 = position 3 (#51)", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section", { meter: "6/8" }), children: [] });
     listNeta.mockResolvedValue([mk("c2", "melody", { title: "M" })]);

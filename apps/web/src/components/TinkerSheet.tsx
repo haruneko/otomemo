@@ -145,7 +145,12 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
               <button key={p.v || "omakase"} type="button" className={"chip" + (gen.palette === p.v ? " on" : "")} aria-label={`palette-${p.v || "omakase"}`} aria-pressed={gen.palette === p.v} onClick={() => gen.setPalette(p.v)}>{p.label}</button>
             ))}
           </div>
-          {/* ☆おまかせで一式（ヒーロー・§4）は T5 で追加（genPart 直列＋候補トレイのkind別グループ）。 */}
+          {/* ☆おまかせで一式（ヒーロー・§4）＝ドラム→ベース→メロを順に候補へ（コード無ければ先頭にコード）。
+              置くのは1件ずつ人間＝「機械は候補まで」。既存 genPart の直列呼び＝新APIゼロ。 */}
+          <button type="button" className="tk-hero" aria-label="gen-set" disabled={gen.genBusy} onClick={() => { onClose(); void gen.genSet(); }}>
+            <b>☆ おまかせで一式</b>
+            <small>{hasChords ? "ドラム→ベース→メロを順に候補へ" : "コード＋ドラムを候補へ（コードを置いてから残りを一式）"}・置くのは1件ずつ人間</small>
+          </button>
           {/* パーツタイル棚（3列）＝tap上=生成／下チップ=引き出し。増えても【タイル+1】で終わる（ハブ契約）。 */}
           <div className="tk-hublab">パーツ＝タップで生成／下のチップで設定（引き出し）</div>
           <div className="tk-tiles" aria-label="part-tiles">

@@ -979,6 +979,43 @@ article[aria-label="neta-card"].dragging {
   border-color: var(--accent);
   color: #fff;
 }
+/* ☆おまかせで一式（ヒーロー）＝ハブの主役。往復レス感を出す1本。 */
+.tk-hero {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1.5px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--fg);
+  padding: 10px 12px;
+  margin-top: 4px;
+}
+.tk-hero:disabled {
+  opacity: 0.5;
+}
+.tk-hero b {
+  font-size: 0.9rem;
+}
+.tk-hero small {
+  display: block;
+  font-size: 0.6rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+/* 候補トレイの kind 別グループ見出し（一式＝複数グループが積まれる）。 */
+.cand-group + .cand-group {
+  margin-top: 8px;
+}
+.cand-group-h {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin: 2px 2px 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 /* パーツタイル棚（3列・ホーム作成タイルと同じ言語）。 */
 .tk-tiles {
   display: grid;

@@ -227,7 +227,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
 
   const secModeOf = (): "major" | "minor" => ((neta.mode ?? "").toLowerCase().includes("min") ? "minor" : "major");
 
-  async function genPart(part: { op: string; needsChords: boolean; label: string }, opts?: { skeletonNetaId?: string }) {
+  async function genPart(part: { op: string; needsChords: boolean; label: string }, opts?: { skeletonNetaId?: string; append?: boolean }) {
     if (genBusy) return;
     lastPartRef.current = { ...part, skeletonNetaId: opts?.skeletonNetaId };
     const chords = ctx.sectionChords();
@@ -286,10 +286,21 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       const item = r.items?.[0];
       // 候補に骨格コンテキストを持たせる＝置く時に realized_from を張る相手が候補ごとに確定（ref の撒き漏れを排す）。
       // meta＝対位法レポート（design #20 S3d・指摘のみ）を候補へ運ぶ＝カードにバッジ表示。
-      if (item) pushCand({ kind: item.kind, content: item.content, skeletonNetaId: opts?.skeletonNetaId, meta: item.meta });
+      if (item) pushCand({ kind: item.kind, content: item.content, skeletonNetaId: opts?.skeletonNetaId, meta: item.meta }, opts?.append);
     } finally {
       setGenBusy(false);
     }
+  }
+  // おまかせで一式（design #19 ⑥ §4）＝ドラム→ベース→メロ（コード無ければ先頭にコード）を順に候補へ積む。
+  // 各パーツは現在の引き出し設定を使う（一式にも型/プリセット/旋法が効く）。新APIゼロ＝既存 genPart の直列呼びのみ。
+  // append=true で候補を kind 別に保持（別kindでも置換せず積む）＝候補トレイはグループ見出しで並ぶ。置くかは全部人間。
+  async function genSet() {
+    if (genBusy) return;
+    const chords = ctx.sectionChords();
+    const by = (op: string) => GEN_PARTS.find((p) => p.op === op)!;
+    // コードがあればドラム→ベース→メロ（track-wiring の依存順）。無ければ先頭にコード候補＋ドラム（コード相手が要る2本は次回に回す）。
+    const seq = chords.length ? [by("gen_drums"), by("gen_bass"), by("gen_melody")] : [by("gen_chords"), by("gen_drums")];
+    for (const part of seq) await genPart(part, { append: true });
   }
   // 骨格を生成（design #20 S2・いじる▾）：gen_skeleton→候補トレイ→＋置くで骨格レーンへ。破壊上書きしない。
   async function genSkeleton() {
@@ -401,8 +412,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     setFitReport(fitReportText(r));
   }
   // 候補を追加（生成/別案は同種を積む・別種は入れ替え）／単発（ハモリ・崩し）は1件で置換。
-  const pushCand = (c: { kind: string; content: unknown; skeletonNetaId?: string; meta?: CandMeta }) =>
-    setCands((prev) => { if (prev.length && prev[0]!.kind !== c.kind) { setKeptCids(new Set()); return [{ ...c, cid: candId.current++ }]; } return [...prev, { ...c, cid: candId.current++ }]; });
+  // append=true（おまかせで一式・T5）＝別kindでも置換せず積む＝候補トレイを kind 別グループで保持。
+  const pushCand = (c: { kind: string; content: unknown; skeletonNetaId?: string; meta?: CandMeta }, append = false) =>
+    setCands((prev) => { if (!append && prev.length && prev[0]!.kind !== c.kind) { setKeptCids(new Set()); return [{ ...c, cid: candId.current++ }]; } return [...prev, { ...c, cid: candId.current++ }]; });
   const setSingleCand = (c: { kind: string; content: unknown }) => { setKeptCids(new Set()); setCands([{ ...c, cid: candId.current++ }]); }; // 別種入替＝keep掃除（監査F4）
   const toggleKeep = (cid: number) => setKeptCids((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
   const removeCand = (cid: number) => { setCands((prev) => prev.filter((c) => c.cid !== cid)); setKeptCids((prev) => { const n = new Set(prev); n.delete(cid); return n; }); };
@@ -476,7 +488,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,
     // ハンドラ
-    genPart, genSkeleton, blowSkeleton, blowSkeletonBass, blowSkeletonCounter, estimateChords,
+    genPart, genSet, genSkeleton, blowSkeleton, blowSkeletonBass, blowSkeletonCounter, estimateChords,
     melodyLaneNotes, makeHarmony, fitToChords, analyzeFit, fitReport, setFitReport,
     auditionCandidate, placeCandidate, closeCandidate, toggleKeep, removeCand,
     lastPartRef,

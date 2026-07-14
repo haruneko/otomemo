@@ -353,45 +353,61 @@ export function SectionEditor({
           style={{ ["--k" as string]: `var(--k-${gen.cands[0]!.kind === "chord_progression" ? "chord" : gen.cands[0]!.kind})` }}
         >
           <span className="reshape-label">
-            {laneOf(gen.cands[0]!.kind)?.label ?? gen.cands[0]!.kind}候補 {gen.cands.length}件（この進行に生成・見て選ぶ）
-            {/* 候補レンズ（design #12-M・WP-M3）：選んだ軸で並べ替えるだけ＝候補は弾かない。既定=生成順=bit一致。メロ候補のみ。 */}
-            {gen.cands[0]!.kind === "melody" && (
-              <select className="lens-select" aria-label="lens-axis" value={gen.lensAxis} onChange={(e) => gen.setLensAxis(e.target.value as typeof gen.lensAxis)} title="並べ替え軸（レンズ＝候補を弾かず並べ替えるだけ）">
-                {LENS_AXES.map((a) => <option key={a.id} value={a.id}>並べ替え：{a.label}</option>)}
-              </select>
-            )}
+            候補 {gen.cands.length}件（この進行に生成・見て選ぶ）
           </span>
-          {/* P2（2026-07-10・UX再設計）：候補を横スクロールのトレイで並べて比較。各カード＝MiniRoll＋メタ＋試聴/keep/置く/捨てる。 */}
+          {/* P2/T5（UX再設計・おまかせで一式）：候補を kind 別グループで並べる＝一式で複数パーツが積まれても
+              「どのパーツの候補か」が分かる。各カード＝MiniRoll＋メタ＋試聴/keep/置く/捨てる。トレイ自体は1つ。 */}
           <div className="cand-tray" aria-label="candidate-tray">
-            {gen.displayCands.map((c) => {
-              const cn = notesForContent(c.kind, c.content);
-              const bars = cn.length ? Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6)) : 0;
-              const kept = gen.keptCids.has(c.cid);
-              // 対位法バッジ（design #20 S3d・指摘のみ・禁止しない）：違反ありは ⚠＋種別、無ければ小さく「対位OK」。
-              const vl = voiceLeadingBadge(c.meta);
-              // レンズスコアバッジ（design #12-M・WP-M3）：並べ替え軸を選んだ時だけ、その軸のスコアを表示（審判でなく目安）。
-              const lb = lensBadge(c.meta, gen.lensAxis);
-              return (
-                <div key={c.cid} className={"cand-card" + (kept ? " kept" : "")} aria-label="candidate-card">
-                  {cn.length > 0 && (
-                    <span className="cand-preview" aria-label="candidate-preview">
-                      <MiniRoll neta={neta} notes={cn} />
-                      <span className="cand-meta">
-                        {bars}小節・{cn.length}音{kept ? " ♡" : ""}
-                        {vl && <span className={"cand-vl" + (vl.warn ? " warn" : " ok")} aria-label="voiceleading-badge" title={c.meta?.voiceLeadingSummary}>{vl.text}</span>}
-                        {lb && <span className="cand-lens" aria-label="lens-badge" title={`${lb.label}スコア（並べ替えの目安・審判ではない）`}>{lb.label} {lb.text}</span>}
-                      </span>
-                    </span>
-                  )}
-                  <div className="cand-actions">
-                    <button type="button" className="tb-tool" aria-label="audition-candidate" title="試聴" onClick={() => void gen.auditionCandidate(c)}>▶</button>
-                    <button type="button" className="tb-tool" aria-label="keep-candidate" aria-pressed={kept} title="気に入ったら残す" onClick={() => gen.toggleKeep(c.cid)}>{kept ? "♥" : "♡"}</button>
-                    <button type="button" className="tb-tool primary" aria-label="place-candidate" title="レーンに置く" onClick={() => void gen.placeCandidate(c)}>置く</button>
-                    <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => gen.removeCand(c.cid)}>🗑</button>
+            {(() => {
+              // kind 別にグループ化（表示順＝displayCands の順＝生成順/レンズ順）。
+              const groups: { kind: string; cands: typeof gen.displayCands }[] = [];
+              for (const c of gen.displayCands) {
+                const g = groups.find((x) => x.kind === c.kind);
+                if (g) g.cands.push(c); else groups.push({ kind: c.kind, cands: [c] });
+              }
+              return groups.map((grp) => (
+                <div key={grp.kind} className="cand-group" aria-label={`cand-group-${grp.kind}`}>
+                  <div className="cand-group-h">
+                    {laneOf(grp.kind)?.label ?? grp.kind}候補 {grp.cands.length}件
+                    {/* 候補レンズ（design #12-M・WP-M3）：選んだ軸で並べ替えるだけ＝候補は弾かない。既定=生成順=bit一致。メロ候補のみ。 */}
+                    {grp.kind === "melody" && (
+                      <select className="lens-select" aria-label="lens-axis" value={gen.lensAxis} onChange={(e) => gen.setLensAxis(e.target.value as typeof gen.lensAxis)} title="並べ替え軸（レンズ＝候補を弾かず並べ替えるだけ）">
+                        {LENS_AXES.map((a) => <option key={a.id} value={a.id}>並べ替え：{a.label}</option>)}
+                      </select>
+                    )}
                   </div>
+                  {grp.cands.map((c) => {
+                    const cn = notesForContent(c.kind, c.content);
+                    const bars = cn.length ? Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6)) : 0;
+                    const kept = gen.keptCids.has(c.cid);
+                    // 対位法バッジ（design #20 S3d・指摘のみ・禁止しない）：違反ありは ⚠＋種別、無ければ小さく「対位OK」。
+                    const vl = voiceLeadingBadge(c.meta);
+                    // レンズスコアバッジ（design #12-M・WP-M3）：並べ替え軸を選んだ時だけ、その軸のスコアを表示（審判でなく目安）。
+                    const lb = lensBadge(c.meta, gen.lensAxis);
+                    return (
+                      <div key={c.cid} className={"cand-card" + (kept ? " kept" : "")} aria-label="candidate-card">
+                        {cn.length > 0 && (
+                          <span className="cand-preview" aria-label="candidate-preview">
+                            <MiniRoll neta={neta} notes={cn} />
+                            <span className="cand-meta">
+                              {bars}小節・{cn.length}音{kept ? " ♡" : ""}
+                              {vl && <span className={"cand-vl" + (vl.warn ? " warn" : " ok")} aria-label="voiceleading-badge" title={c.meta?.voiceLeadingSummary}>{vl.text}</span>}
+                              {lb && <span className="cand-lens" aria-label="lens-badge" title={`${lb.label}スコア（並べ替えの目安・審判ではない）`}>{lb.label} {lb.text}</span>}
+                            </span>
+                          </span>
+                        )}
+                        <div className="cand-actions">
+                          <button type="button" className="tb-tool" aria-label="audition-candidate" title="試聴" onClick={() => void gen.auditionCandidate(c)}>▶</button>
+                          <button type="button" className="tb-tool" aria-label="keep-candidate" aria-pressed={kept} title="気に入ったら残す" onClick={() => gen.toggleKeep(c.cid)}>{kept ? "♥" : "♡"}</button>
+                          <button type="button" className="tb-tool primary" aria-label="place-candidate" title="レーンに置く" onClick={() => void gen.placeCandidate(c)}>置く</button>
+                          <button type="button" className="tb-tool" aria-label="drop-candidate" title="捨てる" onClick={() => gen.removeCand(c.cid)}>🗑</button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              ));
+            })()}
           </div>
           <div className="cand-tray-foot">
             <button type="button" className="tb-tool" aria-label="more-candidates" disabled={gen.genBusy} onClick={() => gen.lastPartRef.current && void gen.genPart(gen.lastPartRef.current, { skeletonNetaId: gen.lastPartRef.current.skeletonNetaId })}>
