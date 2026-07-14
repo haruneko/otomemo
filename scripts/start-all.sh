@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# ⚠️ 非推奨(2026-07-14)：systemd 世代では scripts/restart.sh を使うこと。本スクリプトの api(watch) 起動は
+# systemd cm-api.service と併走すると EADDRINUSE 孤児（tsx watch が自動再spawn）を作る＝実害済み。
 # 常時起動機向け：API(watch)・Web・ワーカー・検索をまとめて起動（#36 自動起動）。cm-music-mcp はS2で廃止(音楽はTS集約)。
 # **再実行で安全**＝先に既存を落としてから上げる（野良プロセス乱立を防ぐ idempotent 起動）。
 #
