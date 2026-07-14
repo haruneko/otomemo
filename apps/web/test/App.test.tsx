@@ -132,6 +132,17 @@ describe("App", () => {
     expect(within(within(row).getByLabelText("kind-filter-chord_progression")).getByText("5")).toBeInTheDocument();
   });
 
+  // S4：つづき行＝現スコープ最終更新の1件を一覧の上にピン（tap→開く）。
+  it("pins a resume row for the most-recently-updated neta — S4", async () => {
+    const older: Neta = { ...mk("melody"), title: "古いメロ", updated: "2026-07-10" };
+    const newer: Neta = { ...mk("bass"), title: "きのうのベース", updated: "2026-07-13" };
+    (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue([older, newer]);
+    render(<App />);
+    const resume = await screen.findByLabelText("resume");
+    expect(resume).toHaveTextContent("きのうのベース"); // updated 最大の1件
+    expect(resume).not.toHaveTextContent("古いメロ");
+  });
+
   // S3：トップ種別タイルをtap→kindFilter が効いて listNeta が kind 付きで呼ばれる（絞り込み動線1タップ）。
   it("filters by tapping a top kind tile — S3", async () => {
     (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2, bass: 1 }));

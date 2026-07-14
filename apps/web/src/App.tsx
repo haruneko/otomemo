@@ -10,6 +10,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api, type Neta } from "./api";
+import { KIND_LABEL, kindColor } from "./kinds";
 import { applyColors, loadColors } from "./theme";
 import { Icon } from "./components/Icon";
 import { NetaList } from "./components/NetaList";
@@ -238,11 +239,16 @@ export function App() {
   // 「未絞り込みブラウズ時の items」からのみ集計し、kindFilter/q/mood 適用中は直前スナップショットを維持
   //   ＝絞り込むとチップが消える/並び替わるチラつきを防ぐ（露出∝実利用）。
   const [kindCounts, setKindCounts] = useState<Record<string, number>>({});
+  // S4 つづき行＝現スコープ最終更新の1件（一覧の上にピン・tap→openTop）。スナップショットと同じ規約で維持。
+  const [resumeNeta, setResumeNeta] = useState<Neta | null>(null);
   useEffect(() => {
     if (q.trim() || kindFilter || moodFilter.trim()) return; // 絞り込み中＝スナップショット固定
     const c: Record<string, number> = {};
     for (const n of items) c[n.kind] = (c[n.kind] ?? 0) + 1;
     setKindCounts(c);
+    setResumeNeta(
+      items.length ? items.reduce((a, b) => ((b.updated ?? "") > (a.updated ?? "") ? b : a)) : null,
+    );
   }, [items, q, kindFilter, moodFilter]);
   // トップの種別行＝件数降順・上位6・実在(>0)のみ（0件kindはトップ非表示＝絞る▾引き出しの「まだ0件」に居る）。
   const topKinds: [string, number][] = Object.entries(kindCounts)
@@ -615,6 +621,24 @@ export function App() {
               露出∝実利用＝0件kindは出ない。検索中は種別絞りが無効（検索が絞りの主体）なので隠す。 */}
           {!q.trim() && topKinds.length > 0 && (
             <KindTiles entries={topKinds} kindFilter={kindFilter} setKindFilter={setKindFilter} variant="row" />
+          )}
+          {/* つづき行（S4）＝現スコープ最終更新の1件を一覧の上にピン（作業の続きへ1タップ）。
+              絞り込み/検索中は出さない（純ブラウズの続き動線）。 */}
+          {!q.trim() && !kindFilter && !moodFilter.trim() && resumeNeta && (
+            <button
+              type="button"
+              className="resume-row"
+              aria-label="resume"
+              style={{ ["--k" as string]: kindColor(resumeNeta.kind) }}
+              onClick={() => openTop(resumeNeta)}
+            >
+              <span className="resume-bar" aria-hidden="true" />
+              <span className="resume-body">
+                <b className="resume-title">{resumeNeta.title ?? resumeNeta.text ?? "（無題）"}</b>
+                <small className="resume-sub">つづきから · {KIND_LABEL[resumeNeta.kind] ?? resumeNeta.kind}</small>
+              </span>
+              <span className="resume-go" aria-hidden="true">▸</span>
+            </button>
           )}
           <NetaList
             items={shownItems}

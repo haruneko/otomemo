@@ -40,6 +40,8 @@ const mk = (over: Partial<Neta>): Neta => ({
 
 describe("NetaList", () => {
   it("renders a card per neta with tags", () => {
+    // トップ再設計 S4 で既定はリスト密度（タグ非表示）になったので、タグ表示はカード密度で確認する。
+    localStorage.setItem("cm-list-density", "card");
     render(
       <NetaList
         items={[

@@ -367,10 +367,12 @@ export function NetaList({
   onOpen?: (neta: Neta) => void;
   emptyText?: string;
 }) {
-  // 表示密度＝カード（リッチ）/ リスト（圧縮・一覧性）。既定=card で現状維持。localStorage で永続。
-  const [dense, setDense] = useState<boolean>(
-    () => localStorage.getItem("cm-list-density") === "list",
-  );
+  // 表示密度＝カード（リッチ）/ リスト（圧縮・一覧性）。トップ再設計 S4＝**既定をリスト密度へ**
+  // （一覧性の底上げ・正典 §3.3）。ただし保存済みの人は不変＝localStorage 未設定時のみ list を既定に。
+  const [dense, setDense] = useState<boolean>(() => {
+    const stored = localStorage.getItem("cm-list-density");
+    return stored === null ? true : stored === "list";
+  });
   const setDensity = (d: boolean) => {
     setDense(d);
     localStorage.setItem("cm-list-density", d ? "list" : "card");
