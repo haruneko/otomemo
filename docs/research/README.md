@@ -51,6 +51,7 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [2026-06-28-lyric-melody-ai-survey](2026-06-28-lyric-melody-ai-survey.md) — 歌詞ライン拡張AI調査（日本語モーラ/アクセント）
 - [2026-07-01-singing-voice-synthesis](2026-07-01-singing-voice-synthesis.md) — メロ＋歌詞を歌わせる可能性調査。Tier0=SF2合唱パッチ(即・言葉なし)／本命=**VOICEVOX歌唱ローカルHTTP**(無料商用可・日本語・自宅完結)／高音質=NEUTRINO(MusicXML書出が橋・CPU低速)。既存 Note.syllable がスコアの素。母艦GPU無しでニューラルは遅い
 - [2026-07-02-card-and-create-ui-patterns](2026-07-02-card-and-create-ui-patterns.md) — カード式管理＋多様な種別の起票UI定石(Notion/Linear/NN/g)。作成タイル＋チャット委譲は王道で詰めどころ少／**詰めしろはカード一覧側＝表示密度の切替(リスト/コンパクト)＋情報優先度(タイトル主役/id退避/アクション整理)**。面solidアイコンは認識速い
+- [2026-07-14-topview-inventory](2026-07-14-topview-inventory.md) — **トップ画面(ファーストビュー)完全棚卸し＝Fable再設計の一次資料**。オーナー評「情報過多」を実測で裏付け：モバイル390×844フォールドに**タップ標的47個・うち作成タイル14＋種別フィルタ13＝27個(57%)が操作壁**でコンテンツは先頭カードの頭だけ・可視9割がクローム。病理=**いじるメニューと同型**＝kind増加が芋づるでトップに恒久割り込む(design.md L340明文化・作成6→9/フィルタ10→13にWP-X3で膨張)フラット壁2枚(作る/絞るで同アイコン二重露出)。DB分布=頻用上位6種に集中・riff/section_inst実在0件・counter1件が等価露出／"すべて"192はE2Eジャンクで実用不能。ピッカー(器)は非肥大。スクショ14枚(`scratchpad/topview-shots/`)・要素表/定量/到達タップ/突合/診断
 
 ## オーディオ解析（アナリーゼ＝新しい柱）
 - [audio-analysis-feasibility](audio-analysis-feasibility.md) — 流行曲(音源)を解析(BPM/調/構成/音域/楽器/コード/メロ特徴)の**CPU自己ホスト feasibility**。結論＝**Demucs分離1passが軸**・三和音/音域/調/BPM/構成は堅い・**7th拡張と混合音源の楽器同定と多声ボーカル採譜は弱い**(候補止まり)・**クラウド(Spotify API)は2024廃止で据えない**・日本**著30-4「情報解析」が有利**(音源は保存せず派生事実だけ残す)。設計含意＝継続調査と同じ「投げて→裏で→トレイ」骨格＋Claudeが数値を言語化
