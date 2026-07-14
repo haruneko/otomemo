@@ -10,9 +10,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api, type Neta } from "./api";
-import { KIND_LABEL } from "./kinds";
 import { applyColors, loadColors } from "./theme";
-import { KindIcon } from "./components/KindIcon";
 import { Icon } from "./components/Icon";
 import { NetaList } from "./components/NetaList";
 import { NetaDialog } from "./components/NetaDialog";
@@ -20,7 +18,8 @@ import { ThemeSettings } from "./settings/ThemeSettings";
 import { SoundFontSettings, initSoundFont } from "./settings/SoundFontSettings";
 import { prewarmSoundFont } from "./music";
 import { useIsMobile } from "./useIsMobile";
-import { ImportPanel } from "./components/ImportPanel";
+import { CreateShelf } from "./components/CreateShelf";
+import { FilterBar } from "./components/FilterBar";
 // 重い二次画面は遅延ロード＝初回バンドルを軽くする（perf 耳FB 2026-07-09。Chatはreact-markdown 170KB）。
 // NetaDialog(セクション/メロ編集の本体)は最頻操作なので**同梱のまま**＝開く時に取得待ちを出さない。
 const AnalysisWorkbench = lazy(() => import("./components/AnalysisWorkbench").then((m) => ({ default: m.AnalysisWorkbench })));
@@ -487,60 +486,16 @@ export function App() {
           }
         >
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
-          {/* 作成タイル＝グループ分け（案A・2026-07-04）＝パーツ/組み立て・文字/取込。
-              section と song を別タイルに分離＝「パーツを組む1ブロック(section)」と「並べる(song)」の混乱を解消。
-              組み立てと文字は同じ行(4枚)に（オーナー）。放り込むフォームは撤去（雑な捕獲はチャット）。 */}
-          <div className="create-tiles">
-            {(() => {
-              const tile = ([k, label, title, col]: readonly [string, string, string, string]) => (
-                <button
-                  key={k}
-                  className="create-tile"
-                  style={{ ["--k" as string]: col }}
-                  onClick={() => (k === "song" ? void newSong() : void createBlank(k, title))}
-                >
-                  <KindIcon kind={k} />
-                  <span>＋{label}</span>
-                </button>
-              );
-              const PARTS = [
-                ["melody", "メロ", "新しいメロ", "var(--k-melody)"],
-                ["skeleton", "骨格", "新しい骨格", "var(--k-skeleton, #7fb8d4)"],
-                ["counter", "対旋律", "新しい対旋律", "var(--k-counter)"],
-                ["chord_progression", "コード", "新しいコード進行", "var(--k-chord)"],
-                ["bass", "ベース", "新しいベース", "var(--k-bass)"],
-                ["rhythm", "リズム", "新しいリズム", "var(--k-rhythm)"],
-                ["chord_pattern", "コード楽器", "新しいコード楽器", "var(--k-chord)"],
-                ["riff", "リフ", "新しいリフ", "var(--k-riff)"],
-                ["section_inst", "管弦", "新しい管弦", "var(--k-section_inst)"],
-              ] as const;
-              const BUILD_TEXT = [
-                ["section", "セクション", "新しいセクション", "var(--k-section)"],
-                ["song", "曲", "", "var(--k-song)"],
-                ["lyric", "歌詞", "新しい歌詞", "var(--k-lyric)"],
-                ["theme", "テーマ", "新しいテーマ", "var(--k-theme)"],
-              ] as const;
-              // グループ見出し(パーツ/組み立て/文字)は撤去＝ラベルはタイル自身が持つので冗長(オーナー)。
-              // 行のまとまり(パーツ5列 / 組み立て・文字4列)だけで種別のグループは伝わる。
-              return (
-                <>
-                  <div className="ct-row ct-parts">{PARTS.map(tile)}</div>
-                  <div className="ct-row ct-buildtext">{BUILD_TEXT.map(tile)}</div>
-                </>
-              );
-            })()}
-            <button
-              className={"create-tile import-tile" + (importOpen ? " on" : "")}
-              aria-label="toggle-import"
-              aria-expanded={importOpen}
-              style={{ ["--k" as string]: "var(--muted)" }}
-              onClick={() => setImportOpen((v) => !v)}
-            >
-              <Icon name="inbox" size={22} />
-              <span>取込 {importOpen ? "▲" : "▾"}</span>
-            </button>
-          </div>
-          <ImportPanel importOpen={importOpen} setImportOpen={setImportOpen} reload={reload} projectTags={projectTags} />
+          {/* 作成の棚（S1 機械抽出＝CreateShelf）＝作成タイル(PARTS/BUILD_TEXT)＋取込トグル＋ImportPanel。
+              state/API は App が持ち、CreateShelf は器(JSX)のみ＝createBlank/newSong を呼ぶ（bit一致）。 */}
+          <CreateShelf
+            createBlank={createBlank}
+            newSong={newSong}
+            importOpen={importOpen}
+            setImportOpen={setImportOpen}
+            reload={reload}
+            projectTags={projectTags}
+          />
           {/* 案1：スコープ＋器を1行に統合。すべて/未仕分け/器＝作業ネタの絞り込み、区切りの先の
               「ライブラリ」＝連想元の参考素材（別の場所・全プロジェクト共有）。 */}
           <div className="project-picker proj-chips" role="tablist" aria-label="scope" ref={chipsRef}>
@@ -621,47 +576,14 @@ export function App() {
               ⚠ 意味検索が使えません。キーワード一致のみで検索中（「近い」候補は出ません）
             </div>
           )}
-          <div className="filter-kinds" role="group" aria-label="kind-filter">
-            {(
-              [
-                // 作成タイルと同じ順：パーツ(メロ/骨格/コード/ベース/リズム/コード楽器)→組み立て(セクション/曲)→文字(歌詞/テーマ)。
-                // 骨格は #20 で一級ネタ＝作成/カードにあるので絞り込みにも出す（旧: 骨格だけ欠落＝ede57f4の下流取りこぼし）。
-                ["melody", "var(--k-melody)"],
-                ["skeleton", "var(--k-skeleton)"],
-                ["counter", "var(--k-counter)"],
-                ["chord_progression", "var(--k-chord)"],
-                ["bass", "var(--k-bass)"],
-                ["rhythm", "var(--k-rhythm)"],
-                ["chord_pattern", "var(--k-chord)"],
-                ["riff", "var(--k-riff)"],
-                ["section_inst", "var(--k-section_inst)"],
-                ["section", "var(--k-section)"],
-                ["song", "var(--k-song)"],
-                ["lyric", "var(--k-lyric)"],
-                ["theme", "var(--k-theme)"],
-              ] as const
-            ).map(([k, col]) => (
-              <button
-                key={k}
-                type="button"
-                className={"filter-kind" + (kindFilter === k ? " on" : "")}
-                style={{ ["--k" as string]: col }}
-                aria-label={`kind-filter-${k}`}
-                aria-pressed={kindFilter === k}
-                disabled={!!q.trim()}
-                title={q.trim() ? "検索中は種別フィルタは無効" : `${KIND_LABEL[k] ?? k}で絞る`}
-                onClick={() => setKindFilter(kindFilter === k ? "" : k)}
-              >
-                <KindIcon kind={k} />
-              </button>
-            ))}
-          </div>
-          <input
-            className="mood-filter-input"
-            aria-label="mood-filter"
-            placeholder="mood で絞る…"
-            value={moodFilter}
-            onChange={(e) => setMoodFilter(e.target.value)}
+          {/* 種別フィルタ＋mood（S1 機械抽出＝FilterBar）＝作成と同じ絵・同じ順のアイコン1行＋mood 入力。
+              kindFilter/moodFilter の state は App が持つ。S3 でデータ導出のミニタイル＋件数バッジへ差し替える。 */}
+          <FilterBar
+            kindFilter={kindFilter}
+            setKindFilter={setKindFilter}
+            moodFilter={moodFilter}
+            setMoodFilter={setMoodFilter}
+            qActive={!!q.trim()}
           />
           <NetaList
             items={shownItems}
