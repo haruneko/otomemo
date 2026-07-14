@@ -81,6 +81,7 @@ const MINI_LANES: { label: string; kinds: string[]; color: string }[] = [
   { label: "対旋律", kinds: ["counter"], color: "--k-counter" }, // WP-X3a
   { label: "コード", kinds: ["chord", "chord_progression", "chord_pattern"], color: "--k-chord" },
   { label: "リフ", kinds: ["riff"], color: "--k-riff" }, // WP-X3b
+  { label: "管弦", kinds: ["section_inst"], color: "--k-section_inst" }, // WP-X3c
   { label: "ベース", kinds: ["bass"], color: "--k-bass" },
   { label: "リズム", kinds: ["rhythm"], color: "--k-rhythm" },
 ];

@@ -23,6 +23,7 @@ export const KIND_DEFS: readonly KindDef[] = [
   { key: "skeleton", label: "骨格", music: true, capturable: true, filterable: true }, // 骨格層の一級化（design #20）＝メロの構造線(Urlinie近似)。合成では無音・単体で白玉プレビュー
   { key: "counter", label: "対旋律", music: true, capturable: true, filterable: true }, // WP-X3a 対旋律(オブリガート)＝主メロの間まに入る従属第2声（melody相乗りエディタ・独立フェーダー）
   { key: "riff", label: "リフ", music: true, capturable: true, filterable: true }, // WP-X3b リフ/オスティナート＝歌でない反復核（melody相乗り・chordパート相乗り）
+  { key: "section_inst", label: "管弦", music: true, capturable: true, filterable: true }, // WP-X3c セクション楽器(ホーン/ストリングス)＝1ネタ多声1レーン・進行追従ボイシング（chord_pattern親戚）
   { key: "theme", label: "テーマ", text: true, capturable: true, filterable: true },
   { key: "section", label: "セクション", container: true, capturable: true, filterable: true },
   { key: "song", label: "曲", container: true, capturable: true, filterable: true },

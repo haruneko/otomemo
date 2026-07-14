@@ -512,6 +512,7 @@ export function App() {
                 ["rhythm", "リズム", "新しいリズム", "var(--k-rhythm)"],
                 ["chord_pattern", "コード楽器", "新しいコード楽器", "var(--k-chord)"],
                 ["riff", "リフ", "新しいリフ", "var(--k-riff)"],
+                ["section_inst", "管弦", "新しい管弦", "var(--k-section_inst)"],
               ] as const;
               const BUILD_TEXT = [
                 ["section", "セクション", "新しいセクション", "var(--k-section)"],
@@ -633,6 +634,7 @@ export function App() {
                 ["rhythm", "var(--k-rhythm)"],
                 ["chord_pattern", "var(--k-chord)"],
                 ["riff", "var(--k-riff)"],
+                ["section_inst", "var(--k-section_inst)"],
                 ["section", "var(--k-section)"],
                 ["song", "var(--k-song)"],
                 ["lyric", "var(--k-lyric)"],

@@ -17,7 +17,7 @@ import type { Note, ChordEntry, RhythmContent, BassStep, ChordPatternContent, Sk
 
 export interface KindEditorBodyProps {
   neta: Neta;
-  flags: { isMelody: boolean; isBass: boolean; isCounter: boolean; isRiff: boolean; isChord: boolean; isChordPat: boolean; isRhythm: boolean; isSkel: boolean; isContainer: boolean; isRelBass: boolean };
+  flags: { isMelody: boolean; isBass: boolean; isCounter: boolean; isRiff: boolean; isChord: boolean; isChordPat: boolean; isSectionInst: boolean; isRhythm: boolean; isSkel: boolean; isContainer: boolean; isRelBass: boolean };
   // 状態と setter（親所有）
   notes: Note[];
   setNotes: (n: Note[]) => void;
@@ -239,7 +239,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
             </>
           )}
         </div>
-      ) : p.flags.isChordPat ? (
+      ) : p.flags.isChordPat || p.flags.isSectionInst ? ( // 管弦(section_inst・WP-X3c)も進行追従の多声＝ChordPatternEditor を共有
         <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />

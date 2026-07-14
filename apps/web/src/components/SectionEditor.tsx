@@ -159,7 +159,7 @@ export function SectionEditor({
     laneChildren(lane).some((c) => c.node.neta.id !== childId && spanOverlaps(pos, dur, c.position, childDur(c)));
   // この曲(section)が属する器＝母集団の既定ソース（A）。無ければ「自作すべて」。
   const sectionProjects = (neta.tags ?? []).filter(isProjectTag).map(projectName);
-  const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : kind === "counter" ? 48 : 0);
+  const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : kind === "counter" || kind === "section_inst" ? 48 : 0);
 
   async function remove(childId: string, position?: number) {
     await api.removeChild(neta.id, childId, position);

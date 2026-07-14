@@ -309,6 +309,14 @@
   - 生成 `genCounter(frame, melody, chords, seed, {density?})`＝**主メロ必須**（主メロのイベント列 rest/sustain/busy に依存＝外声ベース生成と決定的に違う）。ガードレール（機械は候補まで）：P0 主メロと同時発音の2度(半音/全音)禁止／P1 音域分離＝主メロの下3〜10度／P1 相補リズム＝主メロ busy 拍(1拍2onset以上)では鳴らさず rest/sustain 拍で動く／拍頭はコードトーン軸／反行優先／density で出し入れ(role 既定 or 明示)。決定的(seed)。
   - 配線：`/music/gen_counter`(http)＋`gen_counter`(mcp full)＋チャットは `fit target:"counter"`(既存 allowlist)。骨格の机④出口に「対旋律を作る▶」＝メロレーンの主メロを相手に生成→counterレーンへ置き `realized_from`(骨格) を張る（既存「メロを作る▶/ベ▶」の隣・同流儀）。
 
+- **`riff`（リフ/オスティナート・WP-X3b・実装済）**＝歌でない反復核（ギター/シンセ/ピアノ/ゲームBGMの刻み）。**単音ライン＝melody 相乗り**（PianoRoll・notes 同型・`melodyPlacementShift`）。**part は chord に相乗り**（独立フェーダー不要）＝section の伴奏帯に混ぜる。
+  - 生成 `genRiff(frame, chords, seed, {harmony?})`＝コード相手。**2部構造が基底**＝核 motif(1小節・3〜6音・コードトーン軸)＋反復/終止改変。**和声関係3類型を自動判定**：コード列のルートがペダル候補(I/V)と半音以内で近接なら indep(維持＝tonic ペダルで全小節同一音列)、そうでなければ follow(追従＝各コードのコードトーンへ度数写像)。ループ適性＝最終小節の末尾16分を空ける(継ぎ目)。決定的(seed)。
+  - 配線：`/music/gen_riff`(http)＋`gen_riff`(mcp full)。gen_bass/gen_chord_pattern と同格＝チャット直露出はしない（full surface のみ）。
+
+- **`section_inst`（セクション楽器＝管弦・WP-X3c・実装済）**＝ホーン隊/ストリングスの伴奏帯。**1ネタ多声・1レーン**（オーナー裁定＝声部別レーンにしない＝§3 crux 回避）。**chord_pattern の親戚**＝進行追従の多声ボイシング（content は `ChordPatternContent` 形＝strum/voicing/hits・web `resolveChordPattern` が実音化・エディタは `ChordPatternEditor` を共有）。**part は chord に相乗り**。GM音色は content.program。
+  - 生成 `genSectionInst(frame, chords, seed, {role?})`＝コード相手・**伴奏先行**（pad/stab）。role=pad(持続和音で床＝ハーモニックリズム＝コード変わり目/小節頭にアタックし次の境界まで伸ばす・既定 Strings48)/stab(裏の8分を短く突く16分1個 staccato・Brass61)。ボイシングは close(密集)＝top 狙い音で最上声を決め下へ密に積む。旋律的セクションライン(counter の厚いやつ)はスコープ外(後続)。決定的(seed)。
+  - 配線：`/music/gen_section_inst`(http)＋`gen_section_inst`(mcp full)。GM番号は 0-based 保持(§5-1・48=String Ensemble/61=Brass Section)。
+
 #### 決定：ドッグフード評価(16小節6/8を組む)の指摘を修正（2026-07-04・サブエージェント辛口評価→A/B/C）
 サブエージェントがPlaywrightで16小節6/8を実際に組み「部品は良いが組み上げ(尺・拍子)が未通」＝★3/5。以下を修正。
 - **A. セクション尺を可変に(8→最大32)＋ネスト合成**：`SectionEditor` の `BARS=8` 固定が最大の壁（16小節が組めない）。小節ステッパー(`neta.bars`永続)＋配置済みcontentで自動伸長(切れない)。`childDur` が子section/songでBPB固定→**再帰で実長**に（ネスト配置が重ならない＝compositeNotesの位置オフセットは元々正しく、childDurの誤りが原因だった）。尺>10で横スクロール。

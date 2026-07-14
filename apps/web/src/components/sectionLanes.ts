@@ -18,6 +18,7 @@ const SECTION_LANES: readonly LaneDef[] = [
   { key: "chord_pattern", label: "コード楽器1", kinds: ["chord_pattern"], row: 0 },
   { key: "chord_pattern2", label: "コード楽器2", kinds: ["chord_pattern"], row: 1 },
   { key: "riff", label: "リフ", kinds: ["riff"] }, // WP-X3b：歌でない反復核（melody相乗り・chordパート相乗り）
+  { key: "section_inst", label: "管弦", kinds: ["section_inst"] }, // WP-X3c：ホーン/ストリングス＝1ネタ多声1レーン（進行追従ボイシング）
   { key: "bass", label: "ベース", kinds: ["bass"] },
   { key: "rhythm", label: "リズム", kinds: ["rhythm"] },
 ];
@@ -39,6 +40,7 @@ export const LANE_COLOR: Record<string, string> = {
   chord_pattern: "var(--k-chord)",
   chord_pattern2: "var(--k-chord)",
   riff: "var(--k-riff)",
+  section_inst: "var(--k-section_inst)",
   bass: "var(--k-bass)",
   rhythm: "var(--k-rhythm)",
   section: "var(--k-section)",
@@ -52,6 +54,7 @@ export const LANE_MIDI_NAME: Record<string, string> = {
   chord_pattern: "Keys 1",
   chord_pattern2: "Keys 2",
   riff: "Riff",
+  section_inst: "SectionInst",
   bass: "Bass",
   rhythm: "Drums",
   section: "Section",

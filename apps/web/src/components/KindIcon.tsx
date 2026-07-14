@@ -65,6 +65,14 @@ export function KindIcon({ kind }: { kind: string }) {
           <path d="M4 18 h13 M14 16 l3 2 l-3 2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
         </svg>
       );
+    case "section_inst": // 管弦＝多声のロングトーン束（重なった横帯＝pad/セクション）
+      return (
+        <svg {...s}>
+          <rect x="3" y="6" width="16" height="2.6" rx="1.3" fill="currentColor" />
+          <rect x="5" y="10.7" width="16" height="2.6" rx="1.3" fill="currentColor" opacity="0.8" />
+          <rect x="3" y="15.4" width="16" height="2.6" rx="1.3" fill="currentColor" opacity="0.6" />
+        </svg>
+      );
     case "rhythm": // ステップグリッド（4マス）
       return (
         <svg {...s}>

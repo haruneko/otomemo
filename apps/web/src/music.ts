@@ -589,8 +589,8 @@ export function notesForContent(kind: string, content: unknown, ctx?: BassContex
     const chords = ctx?.chords ?? content.preview_chords ?? [];
     return resolveRelativeBass(content.pattern, chords, ctx?.key ?? 0);
   }
-  // コード楽器パターン：進行(or preview)に当てて voicing で実音化（相対型）。
-  if (kind === "chord_pattern" && isChordPattern(content)) {
+  // コード楽器パターン／管弦(section_inst・WP-X3c)：進行(or preview)に当てて voicing で実音化（相対型・多声）。
+  if ((kind === "chord_pattern" || kind === "section_inst") && isChordPattern(content)) {
     const chords = ctx?.chords ?? (content as ChordPatternContent & { preview_chords?: ChordEntry[] }).preview_chords ?? [];
     return resolveChordPattern(content, chords, ctx?.key ?? 0);
   }
@@ -643,10 +643,10 @@ export function compositeNotes(
     // 骨格ネタ(skeleton・design #20)も同様に合成では無音（構造線＝表面化して初めて鳴る・単体編集時のみ白玉プレビュー）。
     if (kind === "chord" || kind === "chord_progression" || kind === "skeleton") return [];
     const isRhythm = kind === "rhythm";
-    // ミキサーのパート＝kind から決定（コード楽器/riff→chord・rhythm→drums・bass→bass・counter→counter・他→melody）。
-    const part: MixPart = kind === "bass" ? "bass" : kind === "rhythm" ? "drums" : kind === "chord_pattern" || kind === "riff" ? "chord" : kind === "counter" ? "counter" : "melody";
-    // パートの音色（GM program）。bass=フィンガーベース・counter=ストリングス。他は content.program か既定0（riff は content.program）。
-    const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : kind === "counter" ? 48 : 0));
+    // ミキサーのパート＝kind から決定（コード楽器/riff/管弦→chord・rhythm→drums・bass→bass・counter→counter・他→melody）。
+    const part: MixPart = kind === "bass" ? "bass" : kind === "rhythm" ? "drums" : kind === "chord_pattern" || kind === "riff" || kind === "section_inst" ? "chord" : kind === "counter" ? "counter" : "melody";
+    // パートの音色（GM program）。bass=フィンガーベース・counter/管弦=ストリングス。他は content.program か既定0（riff/管弦 は content.program）。
+    const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : kind === "counter" || kind === "section_inst" ? 48 : 0));
     if (kind === "bass" && isRelativeBass(c.node.neta.content)) {
       // 相対bass：section の調・コードで解決済み実音高なので、ここでは移調しない（position だけ）。
       const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
@@ -657,8 +657,8 @@ export function compositeNotes(
         part,
       }));
     }
-    if (kind === "chord_pattern" && isChordPattern(c.node.neta.content)) {
-      // コード楽器パターン：section の調・コードで実音解決済み＝移調しない（position だけ）。自前音色。
+    if ((kind === "chord_pattern" || kind === "section_inst") && isChordPattern(c.node.neta.content)) {
+      // コード楽器パターン／管弦(section_inst)：section の調・コードで実音解決済み＝移調しない（position だけ）。自前音色・多声。
       const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
       return notesForContent(kind, c.node.neta.content, { key: keyPc, chords }).map((n) => ({
         ...n,

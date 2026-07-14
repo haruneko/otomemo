@@ -16,6 +16,7 @@ import {
   genBass,
   genCounter,
   genRiff,
+  genSectionInst,
   genDrums,
   genNamedProgression,
   analyzeFit,
@@ -265,6 +266,8 @@ export function buildHttp(core: Core): FastifyInstance {
         }
         case "gen_riff": // WP-X3b リフ＝コード相手・2部構造(核motif+終止改変)・和声3類型(indep/follow・自動判定)・ループ適性（研究doc 2026-07-14-riff-ostinato）
           return genRiff(b.frame, asChords(b.chords), b.seed, { harmony: b.harmony === "indep" || b.harmony === "follow" ? b.harmony : undefined });
+        case "gen_section_inst": // WP-X3c 管弦(ホーン/ストリングス)＝コード相手・1ネタ多声(進行追従ボイシング)・role=pad|stab（研究doc 2026-07-14-horn-string-arranging）
+          return genSectionInst(b.frame, asChords(b.chords), b.seed, { role: b.role === "stab" ? "stab" : b.role === "pad" ? "pad" : undefined });
         case "gen_drums": return genDrums(b.frame, b.seed);
         case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);

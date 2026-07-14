@@ -1055,6 +1055,46 @@ export function genRiff(
   return { items: [{ kind: "riff", content: { notes, program: 0 }, label }], edges: [] };
 }
 
+// WP-X3c セクション楽器（ホーン/ストリングス＝管弦）＝**1ネタ多声・1レーン**の伴奏帯を候補生成する
+// （docs/research/2026-07-14-horn-string-arranging.md）。**伴奏(pad/stab)先行**（旋律的セクションラインは後続）。
+// chord_pattern の親戚＝進行追従の多声ボイシング（ChordPatternContent 形で返し web resolveChordPattern が実音化）。
+//   role=pad：ハーモニックリズム（コード変わり目/小節頭）にアタック、次の変わり目まで伸ばす（面・接着剤）。既定 Strings(48)。
+//   role=stab：裏(& の8分)を短く突く（16分1個・staccato）＝リズム楽器化した和音ヒット。既定 Brass Section(61)。
+// ボイシングは close（密集・§2）＝top 狙い音で最上声を決め下へ密に積む（resolveChordPattern が担う）。GM音色は content.program。決定的(seed)。
+export function genSectionInst(
+  frame?: Frame | null,
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  seed?: number | null,
+  opts?: { role?: "pad" | "stab" },
+): GenResult {
+  const f = normalizeFrame(frame);
+  const info = meterInfo(f.meter);
+  const bars = barsOf(f);
+  const stepsPerBar = Math.round(info.beatsPerBar * 4); // 16分グリッド（4/4=16・6/8=12）
+  const steps = bars * stepsPerBar;
+  const role = opts?.role === "stab" ? "stab" : "pad";
+  const hits: { step: number; dur: number }[] = [];
+  if (role === "pad") {
+    // アタック＝ハーモニックリズム（コード変わり目・§3-4）。境界は各コードの start(step)＋小節頭。次の境界まで伸ばす。
+    const bounds = new Set<number>();
+    for (let bar = 0; bar < bars; bar++) bounds.add(bar * stepsPerBar);
+    for (const c of chords ?? []) { const s = Math.round(Number(c.start ?? 0) * 4); if (Number.isFinite(s) && s >= 0 && s < steps) bounds.add(s); }
+    const sorted = [...bounds].sort((a, b) => a - b);
+    for (let i = 0; i < sorted.length; i++) { const s = sorted[i]!; const next = sorted[i + 1] ?? steps; if (next > s) hits.push({ step: s, dur: next - s }); }
+  } else {
+    // stab＝裏(& の8分)を短く突く（§3-1 の裏食い・16分1個 staccato）。全小節同型＝一枚岩のキメ。
+    const off = [2, 6, 10, 14].filter((s) => s < stepsPerBar); // 各拍の裏（&）
+    for (let bar = 0; bar < bars; bar++) for (const s of off) hits.push({ step: bar * stepsPerBar + s, dur: 1 });
+  }
+  // close ボイシング（密集）＋top 狙い音。pad は弦の中高域(C5付近)、stab はホーンの張る帯(やや上)。
+  const top = role === "stab" ? 74 : 72;
+  const program = role === "stab" ? 61 : 48; // 0-based GM：61=Brass Section / 48=String Ensemble 1（§5-1・内部0-based）
+  const voicing = { tones: ["R", "3", "5"] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0, top };
+  const content = { mode: "strum" as const, voicing, steps, hits, program, role };
+  const label = role === "stab" ? "ホーン(stab)" : "ストリングス(pad)";
+  return { items: [{ kind: "section_inst", content, label }], edges: [] };
+}
+
 const GM = { Kick: 36, Snare: 38, HiHat: 42, OpenHat: 46 };
 
 /** GMドラム（16ステップ1小節）を **mood/tempo/seed で可変**生成。切ない=ハーフタイム/疎、

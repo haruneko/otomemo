@@ -18,6 +18,7 @@ import {
   genBass,
   genCounter,
   genRiff,
+  genSectionInst,
   genDrums,
   analyzeFit,
   fitToChords,
@@ -621,6 +622,11 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     "gen_riff",
     { title: "リフを生成", description: "歌でない反復核＝リフ/オスティナート（ギター/シンセ/ピアノ/ゲームBGMの刻み）を候補生成する（WP-X3b）。2部構造が基底＝核 motif(1小節・3〜6音・コードトーン軸)＋反復/終止改変。和声関係は3類型を自動判定：コード列のルートがペダル候補(I/V)と半音以内で近接なら indep(維持＝tonic ペダルで全小節同一音列)、そうでなければ follow(追従＝各コードのコードトーンへ度数写像)。ループ適性＝最終小節の末尾16分を空ける(継ぎ目)。返り kind=\"riff\" の content={notes,program}。「機械は候補まで・仕上げは人間」。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), harmony: z.enum(["indep", "follow"]).optional().describe("和声依存度。indep=維持(ペダル・コード変化に不動)/follow=追従(各コードのコードトーンへ写像)。未指定=コード進行から自動判定") } },
     async ({ frame, chords, seed, harmony }) => ok(genRiff(frame, chords, seed, { harmony })),
+  );
+  server.registerTool(
+    "gen_section_inst",
+    { title: "管弦(ホーン/ストリングス)を生成", description: "セクション楽器＝ホーン隊/ストリングスの伴奏帯を候補生成する（WP-X3c・伴奏先行）。**1ネタ多声**（進行追従の多声ボイシング＝chord_pattern の親戚）。role=pad(持続和音で床を張る＝コード変わり目にアタックし伸ばす・既定 Strings48)/stab(裏を短く突く和音ヒット＝リズム楽器化・既定 Brass61)。ボイシングは close(密集)＝top 狙い音で最上声を決め下へ密に積む。GM音色は content.program。返り kind=\"section_inst\" の content(ChordPatternContent 形＝strum/voicing/hits＋program/role)。web 側で resolveChordPattern が実音化。旋律的セクションライン(counter の厚いやつ)はスコープ外(後続)。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), role: z.enum(["pad", "stab"]).optional().describe("役割。pad=持続和音で床(ストリングス本命)/stab=裏の短い和音ヒット(ホーン本命)。未指定=pad") } },
+    async ({ frame, chords, seed, role }) => ok(genSectionInst(frame, chords, seed, { role })),
   );
   server.registerTool(
     "gen_drums",

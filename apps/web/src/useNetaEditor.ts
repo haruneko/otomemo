@@ -62,7 +62,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [meter, setMeter] = useState<string>(neta.meter ?? "4/4");
   const bpb = beatsPerBar(meter); // 1小節の拍数（6/8=3・4/4=4）＝小節数/尺の換算に（評価修正B）
   const [program, setProgram] = useState<number>(
-    programOf(neta.content) ?? (neta.kind === "bass" ? 33 : neta.kind === "skeleton" || neta.kind === "counter" ? 48 : 0), // #47 GM音色（bass=フィンガーベース・骨格/対旋律=Strings）
+    programOf(neta.content) ?? (neta.kind === "bass" ? 33 : neta.kind === "skeleton" || neta.kind === "counter" || neta.kind === "section_inst" ? 48 : 0), // #47 GM音色（bass=フィンガーベース・骨格/対旋律/管弦=Strings）
   );
   const [rollMode, setRollMode] = useState<"draw" | "select" | "erase">("draw"); // ロールの描く/選ぶ/消す（同じ行に出す・Section と同流儀）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
@@ -100,10 +100,12 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const isRiff = neta.kind === "riff"; // WP-X3b リフ＝melody相乗り（反復核の単音ライン・ピアノロール）
   const isChord = neta.kind === "chord" || neta.kind === "chord_progression";
   const isChordPat = neta.kind === "chord_pattern"; // CP3 コード楽器パターン（進行に解決する相対型）
+  const isSectionInst = neta.kind === "section_inst"; // WP-X3c 管弦＝1ネタ多声・chord_pattern親戚（進行追従ボイシング）
+  const isChordPatLike = isChordPat || isSectionInst; // 多声・進行解決型のエディタ/再生/保存を共有
   const isRhythm = neta.kind === "rhythm";
   const isSkel = neta.kind === "skeleton"; // 骨格層の一級化（design #20）
   const isContainer = neta.kind === "section" || neta.kind === "song";
-  const isMusic = isMelody || isBass || isCounter || isRiff || isChord || isChordPat || isRhythm || isSkel;
+  const isMusic = isMelody || isBass || isCounter || isRiff || isChord || isChordPatLike || isRhythm || isSkel;
   const isRelBass = isBass && bassMode === "relative"; // #bass S2 相対モード
   // 弱起ぶんの lead-in（指定 pickup と既存の負 start を包む）。ソロ再生はこの分だけ前へずらして鳴らす
   // ＝弱起→ダウンビートの順で聞こえる（PianoRoll も同じ pre で描画）。
@@ -114,8 +116,8 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   // 相対bass は単体プレビュー＝調(key)を tonic に度数解決して鳴らす（実音高）。
   const playable = isRelBass
     ? resolveRelativeBass(bassPattern, [], key)
-    : isChordPat
-      ? resolveChordPattern(chordPat, [], key) // 単体プレビュー＝key の tonic コードに解決
+    : isChordPatLike
+      ? resolveChordPattern(chordPat, [], key) // 単体プレビュー＝key の tonic コードに解決（chord_pattern/管弦 共通・多声）
       : isSkel
         ? skeletonPlaybackNotes({ bars: skelBars, tones, bass: skelBass, phrases }, { counterpoint: skelCounter, chords: skelChords, beatsPerBar: bpb, melProgram: program }) // 骨格＝2声(対位法/実音)
         : isMelody || isBass || isCounter || isRiff
@@ -222,7 +224,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
       if (skelChords.length) content.preview_chords = skelChords;
       return { content, key, mode, tempo, meter, bars: skelBars };
     }
-    if (isChordPat) return { content: { ...chordPat, program }, key, mode, tempo, meter }; // コード楽器＝自前音色
+    if (isChordPatLike) return { content: { ...chordPat, program }, key, mode, tempo, meter }; // コード楽器/管弦＝自前音色（role 等の付随フィールドは chordPat spread で保持）
     if (isChord) return { content: { chords }, key, mode, tempo, meter }; // 進行は抽象＝program持たない(CP1)
     if (isRhythm) return { content: { rhythm }, tempo, meter };
     if (isContainer) return { key, mode, tempo, meter };
@@ -399,7 +401,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
 
   return {
     // フラグ
-    flags: { isMelody, isBass, isCounter, isRiff, isChord, isChordPat, isRhythm, isSkel, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, hasChords: chords.length > 0 },
+    flags: { isMelody, isBass, isCounter, isRiff, isChord, isChordPat, isSectionInst, isRhythm, isSkel, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, hasChords: chords.length > 0 },
     // 骨格（design #20 S2）
     tones, setTones, skelBass, setSkelBass, phrases, setPhrases, skelBars, setSkelBars, skelChords, skelCounter, setSkelCounter,
     // 値＋setter
