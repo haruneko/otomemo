@@ -77,7 +77,9 @@ describe("NetaDialog", () => {
     expect(updateNeta.mock.calls.at(-1)![1].text).toBe("宵闇");
   });
 
-  it("shows a piano roll for melody and saves notes", async () => {
+  // userEvent 連打が多くフルスイート並列時に既定5sを超えることがある（2026-07-15夜間監査で3連続タイムアウト・
+  // 単体では5.3sで緑）＝ロジックでなく負荷のフレークなので、このテストだけ期限を延ばす。
+  it("shows a piano roll for melody and saves notes", { timeout: 20_000 }, async () => {
     const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.click(screen.getByLabelText("cell-60-0"));
