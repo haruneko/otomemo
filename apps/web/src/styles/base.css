@@ -66,7 +66,7 @@ main {
      列を押し広げて横スクロールする事故を防ぐ（既定の暗黙列=auto は最大 min-content に膨らむ）。 */
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  padding-bottom: 80px; /* #67 最下カードが右下チャットバブルの下に潜らないよう余白 */
+  padding-bottom: 88px; /* #67/⚡1 最下カードが右下チャットFAB(52px+bottom18px)の下に潜らないよう余白 */
 }
 .notebook.closed {
   display: none;
@@ -119,7 +119,7 @@ main {
      基底ルールが後方にあるので .notebook で詳細度を上げて勝たせる（@media は詳細度を上げない） */
   .notebook section[aria-label="neta-list"] {
     grid-template-columns: 1fr;
-    padding-bottom: 84px; /* 右下チャットFAB(z40)に最下カードが隠れないようクリアランス */
+    padding-bottom: 88px; /* ⚡1 右下チャットFAB(z40)に最下カードが隠れないようクリアランス */
   }
   /* 一画面ずつ：表示しない側を畳む（両方マウントのまま＝状態を失わない） */
   .workspace.mv-pane .notebook {
@@ -258,4 +258,23 @@ h1 {
   padding: 4px 8px;
   min-width: 0;
   flex: 1 1 140px;
+}
+/* ⚡2 select 共通テーマ：素の <select> がネイティブの明るい枠で浮くのを解消。
+   appearance を殺してダークトークンで塗り、右端にシェブロン矢印を自前描画（テーマ統一）。
+   個別に background を上書きする既存ルールは background-color へ寄せてあり、この矢印を保つ。
+   .chord-row select だけは幅54–64pxの中央寄せ＝矢印が字に被るので shorthand のまま矢印を出さない。 */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 22px 4px 8px;
+  font: inherit;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa0aa' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 9px 6px;
 }

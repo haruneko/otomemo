@@ -173,7 +173,7 @@ form input,
 form textarea,
 .filters select,
 .filters input {
-  background: #1b1e23;
+  background-color: #1b1e23; /* ⚡2 shorthand を避けグローバル select の矢印(background-image)を保つ */
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -515,10 +515,16 @@ article[aria-label="neta-card"].dragging {
 .bass-lens button {
   font-size: 0.74rem;
   padding: 2px 9px;
+  /* 非選択は暗（他エディタ .proll-tools .len と統一）。グローバル button{background:accent} に負けて
+     全ボタンが青地＝全選択に見える不具合を打ち消す（design提案 ⚡3）。 */
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
 }
 .bass-lens button.on {
-  background: var(--k-melody); /* 他エディタと同じ active 色 */
+  background: var(--k-melody); /* 他エディタと同じ active 色（選択のみアクセント） */
   color: #fff;
+  border-color: var(--k-melody);
 }
 .bass-grid {
   display: grid;

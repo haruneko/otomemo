@@ -794,7 +794,7 @@ export function App() {
         </section>
         </div>
       </DndContext>
-      {!chatOpen && !deskTarget && (
+      {!chatOpen && !deskTarget && !shelfOpen && !filterDrawerOpen && (
         <button
           className="chat-bubble"
           aria-label="chat"

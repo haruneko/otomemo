@@ -153,7 +153,9 @@
 .desk-beat-gutter { flex: 0 0 40px; display: flex; align-items: center; justify-content: center; height: 22px; font-size: 0.6rem; color: var(--muted); background: #191c21; z-index: 2; }
 .desk-beat-viewport { flex: 1 1 auto; overflow: hidden; }
 .desk-beat-zone { position: relative; height: 22px; will-change: transform; }
-.desk-beat-block { position: absolute; top: 3px; height: 16px; display: flex; align-items: center; padding: 0 5px; font-size: 9px; line-height: 1; color: var(--fg); background: color-mix(in srgb, var(--k-rhythm) 20%, transparent); border: 1px solid var(--k-rhythm); border-radius: 3px; overflow: hidden; white-space: nowrap; pointer-events: none; }
+/* ⚡4 ラベルは block+line-height で縦中央にし text-overflow:ellipsis で省略（flex の匿名テキストには ellipsis が効かない）。
+   JS 側の .slice(0,10) 硬切りは撤去し、ブロック幅に応じて「…」で丸める。 */
+.desk-beat-block { position: absolute; top: 3px; height: 16px; display: block; line-height: 16px; padding: 0 5px; font-size: 9px; color: var(--fg); background: color-mix(in srgb, var(--k-rhythm) 20%, transparent); border: 1px solid var(--k-rhythm); border-radius: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; pointer-events: none; }
 /* C：導線ありのときだけタップ可（カーソル/hover を出す）。既定は上の pointer-events:none で従来＝表示のみ。 */
 .desk-beat-block.tappable { pointer-events: auto; cursor: pointer; }
 .desk-beat-block.tappable:hover { background: color-mix(in srgb, var(--k-rhythm) 32%, transparent); }

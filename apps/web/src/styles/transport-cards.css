@@ -646,7 +646,7 @@
 .editor-bar input[type="number"],
 .editor-attrs select,
 .editor-attrs input[type="number"] {
-  background: #1b1e23;
+  background-color: #1b1e23; /* ⚡2 グローバル select の矢印を保つ（shorthand を避ける） */
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -1149,7 +1149,7 @@
 .cp-unit { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .cp-vlbl { font-size: 0.75rem; color: var(--muted); }
 /* 響きゾーンの select（区切り等）＝周囲のピル/ステッパーに見た目を揃える（素の select 見た目の浮きを解消）。 */
-.cp-select { border: 1px solid var(--line); border-radius: 8px; background: #22252b; color: var(--fg); font-size: 0.82rem; padding: 5px 6px; height: 32px; cursor: pointer; }
+.cp-select { border: 1px solid var(--line); border-radius: 8px; background-color: #22252b; color: var(--fg); font-size: 0.82rem; padding: 5px 22px 5px 8px; height: 32px; cursor: pointer; }
 /* セグメント（二択/多択）：選択だけ色・他はグレー＝全部青を避ける。既定=accent／chord系=種別色。 */
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { background: transparent; border: 0; color: var(--muted); padding: 6px 12px; font-size: 0.85rem; cursor: pointer; }

@@ -115,11 +115,11 @@ details.theme summary {
 }
 .theme-preset select {
   flex: 1;
-  background: #1b1e23;
+  background-color: #1b1e23; /* ⚡2 グローバル select の矢印を保つ（shorthand を避ける） */
   color: var(--fg);
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 4px;
+  padding: 4px 22px 4px 8px;
   font: inherit;
 }
 .theme-grid {
@@ -252,7 +252,7 @@ details.theme summary {
 .project-screen {
   max-width: 920px;
   margin: 0 auto;
-  padding: 1rem 1rem 3rem;
+  padding: 1rem 1rem 88px; /* ⚡1 下端が右下FABの下に潜らない */
   overflow-y: auto;
   height: 100%;
 }
@@ -491,7 +491,7 @@ details.theme summary {
   .project-screen {
     height: auto;
     overflow: visible;
-    padding-bottom: 2rem;
+    padding-bottom: 88px; /* ⚡1 右下FABクリアランス */
   }
 }
 
@@ -570,7 +570,7 @@ details.theme summary {
 .study-view .study-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 内側スクロール body：.mainpane-editor は overflow:hidden の固定枠なので、prose/カードを直下に置くと
    flex で prose が潰れ下部が touch スクロールで届かない。block+overflow auto の1本スクロールに集約。 */
-.study-body { flex: 1; min-height: 0; overflow-y: auto; }
+.study-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 88px; } /* ⚡1 研究カード最下段が右下FABの下に潜らない */
 .study-body > * + * { margin-top: 8px; }
 .study-prose-toggle { align-self: flex-start; width: fit-content; }
 .study-prose { background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 0.9rem; }

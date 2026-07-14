@@ -651,7 +651,8 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
                   title={tappable ? `${label}（タップでドラムを開く）` : label}
                   {...(tappable ? { role: "button", tabIndex: 0, onClick: () => p.onOpenNeta!(c.node.neta) } : {})}
                 >
-                  {label.slice(0, 10)}
+                  {/* ⚡4 硬切り(.slice(0,10))を撤去＝CSS text-overflow:ellipsis で「…」丸め */}
+                  {label}
                 </span>
               );
             })}
