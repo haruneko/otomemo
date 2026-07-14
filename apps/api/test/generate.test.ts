@@ -125,6 +125,40 @@ describe("genChords（機能和声ルール）", () => {
     expect(min[min.length - 1]!.root).toBe(10); // ♭VII で開いて終わる
   });
 
+  it("C⑤ variety 未指定・空opts＝従来bit一致（回帰ゼロ・WP-C3スライス1）", () => {
+    for (const mood of ["明るい", "切ない", "おしゃれ"]) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const base = JSON.stringify(genChords({ bars: 8, mood }, seed).items[0]!.content);
+        expect(JSON.stringify(genChords({ bars: 8, mood }, seed, undefined, { variety: 0 }).items[0]!.content), `${mood}#${seed}`).toBe(base);
+      }
+    }
+  });
+
+  it("C⑥ variety>0 で既存語彙(substitutesOf)接続＝ユニーク進行数が増える（6進行収束の緩和・WP-C3スライス1）", () => {
+    // 短い枠(bars=3/4)は基底が数種に収束（audit C「6進行収束」の実体）。variety で substitutesOf 語彙が入り多様化。
+    const uniq = (bars: number, variety: number) => {
+      const set = new Set<string>();
+      for (let seed = 1; seed <= 100; seed++) {
+        const ch = (genChords({ key: 0, bars, mood: "明るい" }, seed, undefined, { variety }).items[0]!.content as { chords: { root: number; quality: string }[] }).chords;
+        set.add(ch.map((c) => `${c.root}:${c.quality}`).join("-"));
+      }
+      return set.size;
+    };
+    expect(uniq(3, 0), "bars=3の基底は数種に収束").toBeLessThanOrEqual(4);
+    expect(uniq(4, 0.6), "variety=0.6で多様化").toBeGreaterThan(uniq(4, 0));
+    expect(uniq(3, 0.6), "bars=3でも収束が緩む").toBeGreaterThan(uniq(3, 0));
+  });
+
+  it("C⑦ variety でも T始まり/T終わり（先頭・末尾の主音）は不変", () => {
+    for (const mood of ["明るい", "切ない"]) {
+      for (let seed = 1; seed <= 30; seed++) {
+        const ch = (genChords({ key: 0, bars: 8, mood }, seed, undefined, { variety: 1 }).items[0]!.content as { chords: { root: number }[] }).chords;
+        expect(ch[0]!.root, `${mood}#${seed} 先頭=I`).toBe(0);
+        expect(ch[ch.length - 1]!.root, `${mood}#${seed} 末尾=I`).toBe(0);
+      }
+    }
+  });
+
   it("Step3③ メロは追従不要でカデンツに自動整合（half=V終わりは主音を強制しない・B1）", async () => {
     const { genMelody } = await import("../src/music/generate");
     const frame = { key: 0, bars: 8, mood: "明るい" };

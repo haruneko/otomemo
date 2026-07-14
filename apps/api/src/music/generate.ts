@@ -2,6 +2,7 @@
 // worker(Python)の music/generate.py を忠実移植。Claudeは関与しない（決定的記号エンジン）。
 // 乱数は seed 付き（Pythonのbyte等価は不可＝MT vs ここ。musicalルールが等価＝property testで担保）。
 import { chordPcs, normRoot, scalePcs, type Palette } from "./theory";
+import { substitutesOf } from "./substitute"; // WP-C3スライス1：既存の和声語彙(機能代理/相対/裏/借用/二次ドミナント)を genChords 候補生成へ結線
 import { planSkeleton } from "./skeleton";
 import { meterInfo } from "./meter";
 import { classifyNCT, isChordTone } from "./degree";
@@ -206,7 +207,7 @@ const barsOf = (frame: Frame): number =>
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 /** 機能和声ルールでコード進行を生成（T始まり・T終わり）。返り #85 items 形。 */
-export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal" | "aeolian", opts?: { borrow?: number; secondaryDom?: number; loop?: boolean; palette?: Palette }): GenResult {
+export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal" | "aeolian", opts?: { borrow?: number; secondaryDom?: number; loop?: boolean; palette?: Palette; variety?: number; genre?: "citypop" }): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
@@ -271,6 +272,22 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
   // secondaryDom(2026-07-09 監査C)：非トニック和音の直前を V/x（完全5度上の dom7）へ差替＝二次ドミナント(接着・丸サIII7=V/vi)。
   const secondaryDom = Math.max(0, Math.min(1, opts?.secondaryDom ?? 0));
   if (secondaryDom > 0) for (let i = 1; i < base.length - 1; i++) { const nx = base[i + 1]!; if (((nx.root % 12) + 12) % 12 !== 0 && rng.next() < secondaryDom) base[i] = { root: ((nx.root + 7) % 12 + 12) % 12, quality: "7" }; }
+  // variety(WP-C3スライス1・2026-07-14)：既存の和声語彙 substitutesOf(機能代理/相対/裏/同主調借用/二次ドミナント)を候補生成へ結線。
+  // 「genChords が6進行に収束・substitute/function が生成経路から分断」(audit C)の是正＝中間和音を確率 variety で代理へ差替。
+  // 既定0=bit一致。先頭/末尾(T)は保護＝index 1..last-1 のみ。base は C基準(key=0)なので root=調主音からの半音=Degree.degree。
+  const variety = Math.max(0, Math.min(1, opts?.variety ?? 0));
+  if (variety > 0) {
+    const mode = minor ? "minor" as const : "major" as const;
+    for (let i = 1; i < base.length - 1; i++) {
+      if (rng.next() >= variety) continue;
+      const cur = { degree: ((base[i]!.root % 12) + 12) % 12, quality: base[i]!.quality };
+      const nx = { degree: ((base[i + 1]!.root % 12) + 12) % 12, quality: base[i + 1]!.quality };
+      const subs = substitutesOf(cur, { mode, next: nx });
+      if (subs.length === 0) continue;
+      const s = rng.choice(subs);
+      base[i] = { root: ((s.degree % 12) + 12) % 12, quality: s.quality };
+    }
+  }
   // palette(WP-C1・2026-07-14)：旋法の特徴和音を base(C基準)へ注入。ionian(major)/aeolian(minor)/undefined=無変化(bit一致)。
   const last = base.length - 1;
   if (!loop && bars >= 2 && palette === "mixolydian") {
