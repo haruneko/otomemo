@@ -147,6 +147,18 @@ describe("faceted list / facets", () => {
     expect(f.mood).toContain("切ない");
     expect(f.tags).toContain("疾走");
   });
+  it("kindCounts：kind別件数（kind と同じ母集団・scope=project）", () => {
+    const f = core.facets(); // 既定 project（beforeEach＝melody×2, chord×1）
+    expect(f.kindCounts).toEqual({ melody: 2, chord: 1 });
+    // 母集団は kind リストと一致＝件数 key の集合と distinct kind が同じ
+    expect(Object.keys(f.kindCounts).sort()).toEqual([...f.kind].sort());
+  });
+  it("kindCounts：library は除外（scope=project 母集団）", () => {
+    core.createNeta({ kind: "chord_progression", title: "取込", scope: "library" });
+    const f = core.facets(); // project のみ＝library 分は数えない
+    expect(f.kindCounts.chord_progression).toBeUndefined();
+    expect(f.kindCounts).toEqual({ melody: 2, chord: 1 });
+  });
 });
 
 describe("scope: project / library 分離", () => {

@@ -186,14 +186,15 @@ export function App() {
     };
   }, [activeProject]);
 
-  // 種別の「実在集合」＝facets(GET /facets)の kind（DB上に実在する kind の権威・件数窓に依存しない）。
+  // 種別の「実在集合」と件数＝facets(GET /facets)の kind / kindCounts（DB上の権威・件数窓に依存しない）。
   // トップの一覧(listNeta)は updated DESC の最新100件で頭打ち＝古い kind(analysis/study 等)がその窓から
   // 漏れるとクライアント集計では0件になり、絞る▾で非タップの「0件ゴースト」に化けてタップ不能だった
-  // （＝古データの kind に絞り込めない）。実データ規模で破綻したため実在判定を facets へ移す（2026-07-15監査）。
+  // （＝古データの kind に絞り込めない）。実データ規模で破綻したため実在判定・件数とも facets へ移す（2026-07-15監査）。
   // 正典 docs/research/2026-07-14-topview-redesign-fable.md は「クライアント集計」契約だが、その前提が
-  // 実データ規模で崩れたのでここだけ facets に依る。限界：facets は(a)件数を返さない＝バッジ数値は最新100件窓の
-  // best-effort、(b)全プロジェクト横断・library除外＝activeProject を絞らない（他器だけに在る kind も実在扱い）。
-  // 厳密な per-project kind 件数が要るなら API 追加（docs/backlog）。
+  // 実データ規模で崩れたのでここは facets に依る。facets は kindCounts で kind別件数を返す（GROUP BY・窓非依存）ので
+  // バッジは正確な実数（旧「最新100件窓の best-effort」を解消）。限界：全プロジェクト横断・library除外＝
+  // activeProject を絞らない（他器だけに在る kind も実在・件数に含む）。per-project の厳密件数が要るなら API に
+  // scope/project 引数追加（docs/backlog）。件数の鮮度は facets 再取得時（マウント/器切替/loadProjects）に追従。
   const [facetKinds, setFacetKinds] = useState<string[]>([]);
 
   // プロジェクト一覧（prj:タグ ∪ project行＝説明だけ作った空の器も拾う）。reload時に追従。
@@ -208,7 +209,10 @@ export function App() {
       .catch(() => {});
     api
       .facets()
-      .then((f) => setFacetKinds(f.kind))
+      .then((f) => {
+        setFacetKinds(f.kind);
+        setKindCounts(f.kindCounts); // kind別件数（DB権威・窓非依存）。バッジ/上位6/実在判定の元。
+      })
       .catch(() => {});
   }, []);
 
@@ -258,17 +262,15 @@ export function App() {
     ? items.filter((n) => (n.mood ?? "").toLowerCase().includes(moodFilter.trim().toLowerCase()))
     : items;
 
-  // トップ再設計 S3：種別タイルの件数はクライアント集計（追加APIなし・正典 §3.2/§7）。
-  // 「未絞り込みブラウズ時の items」からのみ集計し、kindFilter/q/mood 適用中は直前スナップショットを維持
-  //   ＝絞り込むとチップが消える/並び替わるチラつきを防ぐ（露出∝実利用）。
+  // トップ再設計 S3：種別タイルの件数は facets の kindCounts＝DB権威・件数窓非依存（起票漏れ消化・2026-07-15）。
+  // 旧「ロード済み items からのクライアント集計」は最新100件窓の近似で、窓落ちの kind が 0 に化けていた。
+  // facets(GET /facets)は GROUP BY で正確な kind別件数を返す＝バッジがそのまま実数。loadProjects() で setKindCounts。
   const [kindCounts, setKindCounts] = useState<Record<string, number>>({});
-  // S4 つづき行＝現スコープ最終更新の1件（一覧の上にピン・tap→openTop）。スナップショットと同じ規約で維持。
+  // S4 つづき行＝現スコープ最終更新の1件（一覧の上にピン・tap→openTop）。ロード済み items から導出＝
+  //   絞り込み中(q/kindFilter/mood)は直前スナップショットを維持（絞るとピンが入れ替わるチラつきを防ぐ）。
   const [resumeNeta, setResumeNeta] = useState<Neta | null>(null);
   useEffect(() => {
     if (q.trim() || kindFilter || moodFilter.trim()) return; // 絞り込み中＝スナップショット固定
-    const c: Record<string, number> = {};
-    for (const n of items) c[n.kind] = (c[n.kind] ?? 0) + 1;
-    setKindCounts(c);
     setResumeNeta(
       items.length ? items.reduce((a, b) => ((b.updated ?? "") > (a.updated ?? "") ? b : a)) : null,
     );
@@ -278,8 +280,8 @@ export function App() {
     .filter(([, n]) => n > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 6);
-  // 種別の「実在集合」＝facets（DB全体の権威）∪ 現在ロード中の items にある kind。これで絞る▾の
-  // 0件ゴースト判定を件数(最新100件窓)でなく実在に依らせる＝窓から漏れた古い kind もタップ可能に。
+  // 種別の「実在集合」＝facets（DB全体の権威）。kind と kindCounts は同母集団なので両者由来を束ねる
+  // （どちらも facets 由来＝DB実在）。絞る▾の 0件ゴースト判定を実在に依らせる＝窓から漏れた古い kind もタップ可能に。
   const existsKinds = new Set<string>([...facetKinds, ...Object.keys(kindCounts).filter((k) => kindCounts[k]! > 0)]);
   // S5 検索合流（B-lite）＝検索語が種別名に前方一致したら一覧先頭に「＋『◯◯』を作る」行（createBlank/newSong を呼ぶだけ）。
   const createHintKind = q.trim()

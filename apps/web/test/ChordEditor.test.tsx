@@ -6,11 +6,25 @@ import { ChordEditor } from "../src/components/ChordEditor";
 afterEach(() => vi.useRealTimers());
 
 describe("ChordEditor", () => {
-  it("adds a chord with ＋コード", async () => {
+  it("adds a chord with ＋コード（1コード以上のとき＝フット追記）", async () => {
+    const onChange = vi.fn();
+    // ＋コードフットは1コード以上のときだけ（空はガイド表示中で非表示・二重解消）。
+    render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: "＋コード" }));
+    expect(onChange).toHaveBeenCalledWith([
+      { root: 0, quality: "", start: 0, dur: 4 },
+      { root: 0, quality: "", start: 4, dur: 4 },
+    ]);
+  });
+
+  it("空状態＝初手ガイド表示中は旧「＋コード」ボタン＋「左から順に並びます」ヒントを出さない（二重解消）", () => {
     const onChange = vi.fn();
     render(<ChordEditor chords={[]} onChange={onChange} />);
-    await userEvent.click(screen.getByRole("button", { name: "＋コード" }));
-    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 4 }]);
+    // 中央の初手ガイドは出る。
+    expect(screen.getByLabelText("place-first-chord")).toBeInTheDocument();
+    // 旧フットの「＋コード」ボタンとヒント文は空のとき非表示（ガイドと二重にしない）。
+    expect(screen.queryByRole("button", { name: "＋コード" })).toBeNull();
+    expect(screen.queryByText("左から順に並びます")).toBeNull();
   });
 
   it("拡張を足して quality 合成（m に 7 = m7・単発）", async () => {

@@ -7,7 +7,7 @@ vi.mock("../src/api", () => ({
   api: {
     listNeta: vi.fn().mockResolvedValue([]),
     createNeta: vi.fn().mockResolvedValue(undefined), // 返り値は使わない（setActive されるが編集面は本テスト対象外）
-    facets: vi.fn().mockResolvedValue({ kind: [], mood: [], meter: [], key: [], tags: [] }),
+    facets: vi.fn().mockResolvedValue({ kind: [], mood: [], meter: [], key: [], kindCounts: {}, tags: [] }),
     listProjectNames: vi.fn().mockResolvedValue([]),
     getProjectCounts: vi.fn().mockResolvedValue({ all: 0, unassigned: 0, projects: [] }),
     listJobs: vi.fn().mockResolvedValue([]),
@@ -34,10 +34,10 @@ beforeEach(() => {
   // 既定＝空一覧。件数を見るテストは自前で mockResolvedValue する（前テストの残留を防ぐ）。
   (api.listNeta as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue([]);
   (api.createNeta as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue(undefined);
-  // 種別の実在集合は facets 由来（0件ゴースト判定の権威）。既定＝空、実在を見るテストで上書き。
+  // 種別の実在集合・件数は facets 由来（0件ゴースト判定＋バッジの権威）。既定＝空、件数系テストで上書き。
   (api.facets as ReturnType<typeof vi.fn>)
     .mockReset()
-    .mockResolvedValue({ kind: [], mood: [], meter: [], key: [], tags: [], projects: [] });
+    .mockResolvedValue({ kind: [], mood: [], meter: [], key: [], kindCounts: {}, tags: [], projects: [] });
 });
 
 describe("App", () => {
@@ -114,8 +114,10 @@ describe("App", () => {
   it("opens the filter drawer; facets-existing kinds are tappable tiles, absent kinds are ghosts — S2/S3", async () => {
     (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2 }));
     // analysis は items（最新100件）に無いが facets で実在＝タップ可能タイルになるべき（ゴースト化しない）。
+    // 件数(kindCounts)も facets 由来＝DB権威（analysis は窓外でも実数を持つ）。
     (api.facets as ReturnType<typeof vi.fn>).mockResolvedValue({
-      kind: ["melody", "analysis"], mood: [], meter: [], key: [], tags: [], projects: [],
+      kind: ["melody", "analysis"], mood: [], meter: [], key: [],
+      kindCounts: { melody: 2, analysis: 3 }, tags: [], projects: [],
     });
     render(<App />);
     await waitFor(() => expect(screen.getByLabelText("kind-filter-melody")).toBeInTheDocument()); // トップ種別行に出た
@@ -130,9 +132,12 @@ describe("App", () => {
 
   // S3：トップ種別行＝件数降順・上位6・実在(>0)のみ（0件kindはトップに出ない＝露出∝実利用）。
   it("shows top-6 kind mini-tiles by count and hides 0-count kinds — S3", async () => {
-    (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(
-      itemsOf({ chord_progression: 5, melody: 3, counter: 2, bass: 2, rhythm: 1, chord_pattern: 1, lyric: 1 }),
-    );
+    const spec = { chord_progression: 5, melody: 3, counter: 2, bass: 2, rhythm: 1, chord_pattern: 1, lyric: 1 };
+    (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf(spec));
+    // トップ種別行の件数は facets の kindCounts（DB権威）が正典＝実数でモック。
+    (api.facets as ReturnType<typeof vi.fn>).mockResolvedValue({
+      kind: Object.keys(spec), mood: [], meter: [], key: [], kindCounts: spec, tags: [], projects: [],
+    });
     render(<App />);
     await waitFor(() => expect(screen.getByLabelText("kind-filter-chord_progression")).toBeInTheDocument());
     const row = screen.getByRole("group", { name: "kind-filter" }); // トップ種別行（引き出しは閉じている）
@@ -202,6 +207,10 @@ describe("App", () => {
   // S3：トップ種別タイルをtap→kindFilter が効いて listNeta が kind 付きで呼ばれる（絞り込み動線1タップ）。
   it("filters by tapping a top kind tile — S3", async () => {
     (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2, bass: 1 }));
+    // トップ種別タイルの実在・件数は facets 由来（DB権威）。
+    (api.facets as ReturnType<typeof vi.fn>).mockResolvedValue({
+      kind: ["melody", "bass"], mood: [], meter: [], key: [], kindCounts: { melody: 2, bass: 1 }, tags: [], projects: [],
+    });
     render(<App />);
     await waitFor(() => expect(screen.getByLabelText("kind-filter-melody")).toBeInTheDocument());
     const row = screen.getByRole("group", { name: "kind-filter" });

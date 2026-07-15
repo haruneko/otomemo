@@ -144,7 +144,8 @@ describe("NetaDialog", () => {
   it("edits a chord progression and saves content.chords", async () => {
     const cp: Neta = { ...neta, kind: "chord_progression", text: null, content: null };
     render(<NetaDialog neta={cp} onClose={vi.fn()} onChanged={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: "＋コード" }));
+    // 空＝初手ガイド（旧「＋コード」フットは空のとき非表示・二重解消）。「最初のコードを置く」で1コード追加。
+    await userEvent.click(screen.getByLabelText("place-first-chord"));
     await userEvent.click(screen.getByLabelText("save-status")); // 状態ピル＝押すと即フラッシュ
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const patch = updateNeta.mock.calls.at(-1)![1];

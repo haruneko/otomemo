@@ -101,6 +101,7 @@ export interface Facets {
   mood: string[];
   meter: string[];
   key: number[];
+  kindCounts: Record<string, number>; // kind→件数（kind と同じ母集団＝scope=project・library除外。窓に依らない権威）
   tags: string[]; // 意味タグ（prj: 除外済）
   projects: string[]; // prj: を剥がしたプロジェクト名一覧（複数プロジェクト機能）
 }

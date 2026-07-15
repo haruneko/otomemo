@@ -202,11 +202,19 @@ export class NetaRepo {
     const allTags = (this.db.prepare(`SELECT name FROM tag ORDER BY name`).all() as { name: string }[]).map(
       (r) => r.name,
     );
+    // kind別件数（GROUP BY で安価）。kind リストと同じ母集団(scopeSql)＝バッジを窓依存でなく DB 権威に。
+    const countStmt = this.db.prepare(
+      `SELECT kind AS k, COUNT(*) AS c FROM neta WHERE kind IS NOT NULL${scopeSql} GROUP BY kind`,
+    );
+    const countRows = (scope === "all" ? countStmt.all() : countStmt.all({ scope })) as { k: string; c: number }[];
+    const kindCounts: Record<string, number> = {};
+    for (const r of countRows) kindCounts[r.k] = r.c;
     return {
       kind: distinct("kind") as string[],
       mood: distinct("mood") as string[],
       meter: distinct("meter") as string[],
       key: distinct(`"key"`) as number[],
+      kindCounts,
       tags: allTags.filter((n) => !isProjectTag(n)),
       projects: allTags.filter(isProjectTag).map((n) => n.slice(PROJECT_TAG_PREFIX.length)),
     };

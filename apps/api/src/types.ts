@@ -47,6 +47,7 @@ export interface Facets {
   mood: string[];
   meter: string[];
   key: number[];
+  kindCounts: Record<string, number>; // kind→件数（kind と同じ母集団＝scope。窓に依らない権威。バッジ用）
   tags: string[]; // 意味タグ（prj: プロジェクトタグは除外）
   projects: string[]; // プロジェクト名（prj: を剥がしたもの）。複数プロジェクト（design「prj: 名前空間タグ」）
 }

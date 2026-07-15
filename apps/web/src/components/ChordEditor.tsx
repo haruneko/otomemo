@@ -119,7 +119,6 @@ export function ChordEditor({
               <button type="button" className="bs-btn chord-empty-secondary" aria-label="pick-progression" onClick={() => setPickProg(true)}>
                 よく使う進行から選ぶ
               </button>
-              <p className="muted chord-empty-hint">左から順に並びます</p>
             </>
           ) : (
             <div className="chord-empty-progs" aria-label="popular-progressions">
@@ -198,12 +197,14 @@ export function ChordEditor({
         </div>
         );
       })}
-      <div className="chord-foot">
-        <button type="button" className="bs-btn" onClick={add}>＋コード</button>
-        {chords.length > 0 && (
+      {/* 空のとき（初手ガイド表示中）は旧「＋コード」ボタン＋合計を出さない＝ガイドと二重にしない。
+          1コード以上で従来通り（＋コードで追記・合計を表示）。 */}
+      {chords.length > 0 && (
+        <div className="chord-foot">
+          <button type="button" className="bs-btn" onClick={add}>＋コード</button>
           <span className="muted chord-total">計 {chords.reduce((s, c) => s + c.dur, 0)}拍（{Math.round((chords.reduce((s, c) => s + c.dur, 0) / bpb) * 10) / 10}小節）</span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
