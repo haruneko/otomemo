@@ -95,6 +95,22 @@ article .tag {
   color: #fff;
   border-color: var(--accent);
 } /* トグル ON（付点 等） */
+/* カードのゴミ箱（一覧から直接削除）。編集ヘッダの .icon-danger と同じ控えめな赤＝叫ばない。 */
+.bs-btn.card-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  background: #1b1e23;
+  color: #e0705a;
+  border-color: color-mix(in srgb, #e0705a 40%, var(--line));
+}
+.bs-btn.card-del:hover:not(:disabled) {
+  background: color-mix(in srgb, #e0705a 18%, #1b1e23);
+}
+.bs-btn.card-del:disabled {
+  opacity: 0.6;
+}
 .bs-result {
   margin: 8px 0 0;
   font-size: 0.78rem;

@@ -9,6 +9,7 @@ import { isProjectTag } from "../project";
 import { MiniRoll, SectionMini, LazyPreview } from "./MiniRoll";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { KindIcon } from "./KindIcon";
+import { Icon } from "./Icon";
 import {
   playNotes,
   notesForContent,
@@ -45,6 +46,7 @@ export function NetaCard({
 }) {
   const label = neta.title ?? neta.text ?? "(無題)";
   const [gen, setGen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   // LV2: 副アクション（複製/ライブラリへ/生成）は既定で畳む＝主要2つ(▶/相談)＋「…」に整理。
   const [moreOpen, setMoreOpen] = useState(false);
   // P3: 器ピッカーの開閉（入れ先はフィルタと独立＝どの器へでも入れられる）。
@@ -113,6 +115,34 @@ export function NetaCard({
       if (alive.current) setGen(false);
     }
   }
+
+  // ゴミ箱（一覧から直接削除）。破壊的＝確認必須。エディタ header の削除（useNetaEditor.remove）と
+  // 同じ確認文言／同じ api.deleteNeta を流用（二重実装しない）。削除は配置(parent-child)へ CASCADE で
+  // 波及し、配置済みネタも自動で外れる（既存の削除挙動そのまま・新挙動を発明しない）。削除後は onChanged
+  // で一覧が再取得され当カードは消える。
+  async function remove() {
+    if (deleting) return;
+    if (!window.confirm("このネタを削除しますか？")) return;
+    setDeleting(true);
+    try {
+      await api.deleteNeta(neta.id);
+      if (alive.current) onChanged?.();
+    } finally {
+      if (alive.current) setDeleting(false);
+    }
+  }
+  // 薄い赤のゴミ箱アイコン（叫ばない）。カード本体タップ（開く）と別領域の bs-tools に置く＝誤タップしにくい。
+  const delBtn = (
+    <button
+      className="bs-btn card-del"
+      aria-label={`delete-${neta.id}`}
+      title="このネタを削除"
+      disabled={deleting}
+      onClick={() => void remove()}
+    >
+      <Icon name="trash" size={16} />
+    </button>
+  );
 
   // 再生ボタン（カード/リスト両モードで共用）。楽器ネタ=単独再生／器ネタ=合成プレビュー。
   const playBtn = MUSIC_KINDS.includes(neta.kind) ? (
@@ -221,7 +251,10 @@ export function NetaCard({
           )}
           <span className="kind dense-kind">{KIND_LABEL[neta.kind] ?? neta.kind}</span>
         </div>
-        <div className="bs-tools">{playBtn}</div>
+        <div className="bs-tools">
+          {playBtn}
+          {delBtn}
+        </div>
       </article>
     );
   }
@@ -347,6 +380,7 @@ export function NetaCard({
               作例を生成
             </button>
           ))}
+        {delBtn}
       </div>
     </article>
   );

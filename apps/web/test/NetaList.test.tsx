@@ -3,19 +3,29 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { createJob, getJob, createNeta, link, placeChild, assignProject, getComposition, genSection } =
-  vi.hoisted(() => ({
-    createJob: vi.fn(),
-    getJob: vi.fn(),
-    createNeta: vi.fn(),
-    link: vi.fn(),
-    placeChild: vi.fn(),
-    assignProject: vi.fn(),
-    getComposition: vi.fn().mockResolvedValue({ children: [] }), // ④ SectionMini の遅延取得
-    genSection: vi.fn(),
-  }));
+const {
+  createJob,
+  getJob,
+  createNeta,
+  link,
+  placeChild,
+  assignProject,
+  getComposition,
+  genSection,
+  deleteNeta,
+} = vi.hoisted(() => ({
+  createJob: vi.fn(),
+  getJob: vi.fn(),
+  createNeta: vi.fn(),
+  link: vi.fn(),
+  placeChild: vi.fn(),
+  assignProject: vi.fn(),
+  getComposition: vi.fn().mockResolvedValue({ children: [] }), // ④ SectionMini の遅延取得
+  genSection: vi.fn(),
+  deleteNeta: vi.fn(),
+}));
 vi.mock("../src/api", () => ({
-  api: { createJob, getJob, createNeta, link, placeChild, assignProject, getComposition, genSection },
+  api: { createJob, getJob, createNeta, link, placeChild, assignProject, getComposition, genSection, deleteNeta },
 }));
 
 import { NetaList, NetaCard } from "../src/components/NetaList";
@@ -219,5 +229,38 @@ describe("NetaList", () => {
   it("section card has a composite play button (#73)", () => {
     render(<NetaCard neta={mk({ id: "s1", kind: "section", title: "曲A" })} />);
     expect(screen.getByLabelText("play-s1")).toBeInTheDocument();
+  });
+
+  // ゴミ箱（一覧から直接削除）＝カードにゴミ箱ボタンが常時見える。
+  it("shows a trash (delete) button on the card", () => {
+    render(<NetaCard neta={mk({ id: "d1", text: "消す候補" })} />);
+    expect(screen.getByLabelText("delete-d1")).toBeInTheDocument();
+  });
+
+  // 確認 OK → 削除 API を呼び、一覧再取得(onChanged)を促す。文言/APIは編集ヘッダの削除と同一を流用。
+  it("confirms then deletes via api.deleteNeta and refreshes the list", async () => {
+    deleteNeta.mockClear();
+    deleteNeta.mockResolvedValue({ deleted: true });
+    const onChanged = vi.fn();
+    const spy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<NetaCard neta={mk({ id: "d2", text: "消す" })} onChanged={onChanged} />);
+    await userEvent.click(screen.getByLabelText("delete-d2"));
+    expect(spy).toHaveBeenCalled();
+    expect(deleteNeta).toHaveBeenCalledWith("d2");
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    spy.mockRestore();
+  });
+
+  // 確認キャンセル → 削除 API を呼ばない（消えない）。
+  it("does not delete when the confirm is cancelled", async () => {
+    deleteNeta.mockClear();
+    const onChanged = vi.fn();
+    const spy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<NetaCard neta={mk({ id: "d3", text: "消さない" })} onChanged={onChanged} />);
+    await userEvent.click(screen.getByLabelText("delete-d3"));
+    expect(spy).toHaveBeenCalled();
+    expect(deleteNeta).not.toHaveBeenCalled();
+    expect(onChanged).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
