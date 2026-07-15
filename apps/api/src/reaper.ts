@@ -6,6 +6,7 @@ import type { Neta, NetaInput } from "./types";
 import { chordsFromTimeline, refineChordsWithBass, pcFromKeyName } from "./audio-chords";
 import { autoDownbeatOffset } from "./audio-grid";
 import { extractDrumPattern, extractSectionPatterns, meterString, type DrumOnset } from "./audio-drums";
+import { buildDigest } from "./music/audio-digest";
 
 // チャット発のジョブは params.chat_thread を持つ。その場合、生成結果を**サーバ側で**そのスレッドの
 // チャットメッセージとして記録する＝クライアントが待ち中に離脱/リロードしても結果が必ずチャットに残る
@@ -218,6 +219,21 @@ export function reapResults(core: Core): number {
     const secs = drumOnsets.length && beatTimes.length && (userMeter || (ext != null && ext.confidence >= 0.3))
       ? extractSectionPatterns(beatTimes, drumOnsets) : [];
     const mmss = (t: number) => { const s = Math.round(t); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }; // 秒を先に丸め＝「4:60」防止
+    // #S10続 v2.1 「読み筋」層：facts 射影の digest（度数化・見どころ spots・~4K tokens）を content に追加保存。
+    // digest 構築が例外を吐いても解析全体を殺さない（重いMIR結果を守る既存方針＝try/catch で digest 無しで続行）。
+    let digest: ReturnType<typeof buildDigest> | undefined;
+    try {
+      digest = buildDigest(facts, {
+        bpm: typeof facts.bpm === "number" ? facts.bpm : 0,
+        meter, downbeat: anchorSec, sub: ext?.sub, template: ext?.template, meterConf,
+        sections: secs.map((s) => ({ startSec: s.startSec, endSec: s.endSec, bars: s.bars })),
+        key: facts.key ?? null,
+        timeline: Array.isArray(timeline) ? (timeline as [number, number, string][]) : [],
+        beatTimes,
+      });
+    } catch (e) {
+      console.error("[audio_analyze] digest failed:", r.id, e instanceof Error ? e.message : String(e));
+    }
     const analysisNeta = core.createNeta({
       kind: "analysis",
       title: `アナリーゼ: ${parsed.title ?? "音源"}`,
@@ -235,6 +251,7 @@ export function reapResults(core: Core): number {
           // #S12改3 crash由来の区間境界を構造ラベルの種に（Aメロ/サビ名は人間が付け替え＝機械は境界だけ）。
           sections: secs.map((s) => ({ from_t: s.startSec, to_t: s.endSec, label: `区間 ${mmss(s.startSec)}–${mmss(s.endSec)}（${s.bars}小節）` })) },
         prose: parsed.prose ?? "",
+        ...(digest ? { digest } : {}),
       },
       tempo: typeof facts.bpm === "number" ? Math.round(facts.bpm) : null,
       key: pcFromKeyName(facts.key?.key),

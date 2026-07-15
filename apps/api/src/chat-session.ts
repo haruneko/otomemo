@@ -15,7 +15,8 @@ type Ev = Record<string, unknown>;
 // ⚠️ mcp.ts の surface="chat" が公開する verb と**必ず一致**させる（`--tools`/`--allowedTools` に無い verb は
 // モデルから見えても呼ぶと is_error で自動拒否＝機能が黙って死ぬ）。③次の一手(song_state/plan_next)・
 // ②歌詞↔メロ(read_neta/set_lyric) はここに無くて実際は動いていなかった（E2Eで発覚・2026-07-05）。
-const CHAT_VERBS = [
+// 素の verb 名（プレフィクス無し）＝mcp.ts の surface="chat" 登録と機械照合する（chat-session.test.ts の不一致検査）。
+export const CHAT_VERB_NAMES = [
   "capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze",
   "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords",
   "start_study", // #S11 横断研究（コードレンズ）
@@ -23,9 +24,11 @@ const CHAT_VERBS = [
   "suggest_cliche", // WP-C3スライス2 ラインクリシェ/ペダル（静的区間に半音線を差す候補・許可漏れ厳禁）
   "suggest_key_plan", // WP-C2 調プラン（セクション間の転調設計候補・許可漏れ厳禁）
   "suggest_form", "suggest_energy_plan", // WP-X1 構成テンプレ＋エネルギープラン（提案系2・許可漏れ厳禁＝過去BUG#1型）
+  "suggest_emotion_params", // 感情→生成パラメータ提案（mcp.ts:998 で chat面登録済だが許可漏れだった＝A2/F4 で是正・BUG#1型）
   "check_loop", // WP-X2 ゲームBGMループ境界チェック（指摘系・許可漏れ厳禁＝過去BUG#1型）
   "check_originality", // WP-M8 独自性/焼き直し警告（cryptomnesia・警告のみ・許可漏れ厳禁＝過去BUG#1型）
-].map((n) => `mcp__creative-manager__${n}`);
+];
+const CHAT_VERBS = CHAT_VERB_NAMES.map((n) => `mcp__creative-manager__${n}`);
 
 // #100④-S7：チャットにブラウザ検索を許す（実在曲/コード進行/機材レビュー等を調べる）。
 // WebSearch/WebFetch は読み取り専用＝Bash 逃げ道は開かない（当初の制限意図＝MCP限定でBash遮断は維持）。
@@ -113,6 +116,13 @@ long notes / adds melisma "ー" to match the syllable count). Offer candidates; 
     notes) — it flags where pitch-accent (下がり目/上がり目) fights the melody's up/down (A-01 red =
     語義誤解 risk like 箸/橋, yellow = worth nudging). It's a soft warning; the user can override.
     The note must already carry syllable (run set_lyric first). These NEVER decide — 候補/警告のみ.
+
+[Reading an アナリーゼ (analysis neta)] read_neta on an analysis neta returns a COMPACT projection:
+prose / meta / digest / chords_timeline pass through, but the heavy raw time-series (melody_f0,
+melody_notes, beat_times, drum_onsets, bass_notes) come back as small stat summaries (count / ranges)
+— that is by design (the raw f0 is ~55% of the size and useless for reasoning). Reason from prose +
+chords_timeline + digest. Only if you truly need a raw array, call read_neta({ id, fields:["melody_f0"] })
+to opt that one field back to full. search returns summaries too — read_neta the hit for detail.
 
 [Cross-artist / cross-genre research] When the user wants to study a composer's style, find common
 chord patterns across multiple songs, or extract the "signature progressions" of a genre/artist:

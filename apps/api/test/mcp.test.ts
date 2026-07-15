@@ -311,3 +311,142 @@ describe("purpose tool surface (#101)", () => {
     expect(errored).toBe(true); // ③-4 まで確定変換(convert)は未対応＝明示エラー
   });
 });
+
+// A2（design #6）：MCP面の facts 射影＝チャットのコンテキスト爆発の是正。
+import { serializeCompact } from "../src/mcp";
+import { CHAT_VERB_NAMES } from "../src/chat-session";
+
+async function connectChat() {
+  const core = new Core(openDb(":memory:"));
+  const server = buildMcpServer(core, { surface: "chat" });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t", version: "0" });
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  return { client, core };
+}
+
+// 巨大 analysis ネタの雛形（melody_f0=数千点の [t,hz|null]・他の時系列も）。
+function makeAnalysis(core: Core) {
+  const f0: [number, number | null][] = [];
+  for (let i = 0; i < 500; i++) f0.push([i * 0.02, i % 2 === 0 ? 220 + i : null]);
+  return core.createNeta({
+    kind: "analysis",
+    title: "アナリーゼ: テスト曲",
+    text: "所見プロローグ",
+    content: {
+      meta: { bpm: 120, meter: 4 },
+      raw: {
+        beat_times: [0, 0.5, 1, 1.5, 2],
+        melody_notes: [[0, 0.5, 60], [0.5, 1, 62], [1, 2, 64]],
+        melody_f0: f0,
+        chords_timeline: [[0, 2, "C:maj"], [2, 4, "A:min"]],
+        drum_onsets: [[0, "kick", 1], [0.5, "snare", 0.8], [1, "kick", 0.9]],
+      },
+      overlay: { anchors: [{ t_sec: 0, meter: 4, bar_no: 1 }] },
+      prose: "この曲は…",
+      digest: { overview: "A1 が付ける想定の疎結合フィールド" },
+    },
+  });
+}
+
+describe("A2 (a) read_neta の analysis 射影（chat面）", () => {
+  it("chat面＝raw の巨大時系列を統計要約に置換し、meta/prose/digest/chords_timeline は素通し", async () => {
+    const { client, core } = await connectChat();
+    const a = makeAnalysis(core);
+    const back = JSON.parse(textOf(await client.callTool({ name: "read_neta", arguments: { id: a.id } })));
+    const raw = back.content.raw;
+    // melody_f0 はフル配列でなく要約（_summary/count/voiced 等）。
+    expect(Array.isArray(raw.melody_f0)).toBe(false);
+    expect(raw.melody_f0._summary).toBe(true);
+    expect(raw.melody_f0.count).toBe(500);
+    expect(raw.melody_f0.voiced_count).toBe(250);
+    expect(raw.beat_times._summary).toBe(true);
+    expect(raw.melody_notes._summary).toBe(true);
+    expect(raw.drum_onsets.kinds.kick).toBe(2);
+    // 軽量で有用なものは素通し。
+    expect(raw.chords_timeline).toEqual([[0, 2, "C:maj"], [2, 4, "A:min"]]);
+    expect(back.content.prose).toBe("この曲は…");
+    expect(back.content.meta.bpm).toBe(120);
+    expect(back.content.digest.overview).toContain("疎結合"); // A1 の digest はあれば素通し
+  });
+
+  it("fields:['melody_f0'] は指定フィールドだけフル配列を素通し（ワークベンチ用途温存）", async () => {
+    const { client, core } = await connectChat();
+    const a = makeAnalysis(core);
+    const back = JSON.parse(textOf(await client.callTool({ name: "read_neta", arguments: { id: a.id, fields: ["melody_f0"] } })));
+    expect(Array.isArray(back.content.raw.melody_f0)).toBe(true);
+    expect(back.content.raw.melody_f0.length).toBe(500);
+    // 指定していない beat_times は依然として要約。
+    expect(back.content.raw.beat_times._summary).toBe(true);
+  });
+
+  it("full面（既定）＝analysis も丸ごと返す（bit一致・ワークベンチ/既存クライアント保護）", async () => {
+    const { client, core } = await connect();
+    const a = makeAnalysis(core);
+    const back = JSON.parse(textOf(await client.callTool({ name: "read_neta", arguments: { id: a.id } })));
+    expect(Array.isArray(back.content.raw.melody_f0)).toBe(true);
+    expect(back.content.raw.melody_f0.length).toBe(500);
+  });
+
+  it("chat面でも analysis 以外の kind は不変（melody は content 素通し）", async () => {
+    const { client, core } = await connectChat();
+    const mel = core.createNeta({ kind: "melody", title: "m", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } });
+    const back = JSON.parse(textOf(await client.callTool({ name: "read_neta", arguments: { id: mel.id } })));
+    expect(back.content.notes.length).toBe(1);
+  });
+});
+
+describe("A2 (b) search の要約射影", () => {
+  it("chat面＝ヒットは要約（preview/_hint あり・content 丸ごとは返さない）", async () => {
+    const { client, core } = await connectChat();
+    makeAnalysis(core);
+    core.createNeta({ kind: "chord_progression", title: "進行A", content: { chords: [{ root: 0 }, { root: 5 }] } });
+    const items = JSON.parse(textOf(await client.callTool({ name: "search", arguments: { kind: "analysis" } })));
+    expect(items.length).toBe(1);
+    expect(items[0].id).toBeTruthy();
+    expect(items[0].kind).toBe("analysis");
+    expect(items[0]._hint).toBeTruthy();
+    expect("content" in items[0]).toBe(false); // 巨大 content は載せない
+    expect(items[0].preview).toContain("所見"); // text 冒頭
+    const chs = JSON.parse(textOf(await client.callTool({ name: "search", arguments: { kind: "chord_progression" } })));
+    expect(chs[0].preview).toContain("和音"); // 音楽系のサマリ
+  });
+
+  it("full面＝従来どおり content 丸ごと（既存クライアント bit一致）", async () => {
+    const { client, core } = await connect();
+    core.createNeta({ kind: "chord_progression", title: "進行B", content: { chords: [{ root: 7 }] } });
+    const items = JSON.parse(textOf(await client.callTool({ name: "search", arguments: { kind: "chord_progression" } })));
+    expect(items[0].content.chords.length).toBe(1); // content が丸ごと来る
+  });
+});
+
+describe("A2 (c) ok() の数値配列インライン化（serializeCompact）", () => {
+  it("数値/null だけの配列は改行なしインライン、他構造は pretty のまま", () => {
+    const s = serializeCompact({ a: [1, 2, null, 3], b: { c: [[0.5, 220], [1, null]] }, d: "x" });
+    expect(s).toContain("[1, 2, null, 3]"); // インライン
+    expect(s).not.toContain("[\n      1"); // 数値配列は要素ごと改行しない
+    expect(s).toContain("[0.5, 220]"); // 内側ペアもインライン
+    expect(s).toContain('\n  "d": "x"'); // オブジェクトは pretty（改行＋インデント）
+    expect(JSON.parse(s)).toEqual({ a: [1, 2, null, 3], b: { c: [[0.5, 220], [1, null]] }, d: "x" });
+  });
+  it("pretty より短い（膨張抑制の実効）", () => {
+    const data = { melody_f0: Array.from({ length: 1000 }, (_, i) => [i * 0.02, i % 2 ? 220 : null]) };
+    expect(serializeCompact(data).length).toBeLessThan(JSON.stringify(data, null, 2).length);
+  });
+});
+
+describe("A2 (d) chat面 verb と CHAT_VERBS 許可リストの一致（BUG#1型の再発防止）", () => {
+  it("chat面に登録された全 verb が CHAT_VERB_NAMES に含まれ、余剰も無い（機械照合）", async () => {
+    const { client } = await connectChat();
+    const registered = (await client.listTools()).tools.map((t) => t.name).sort();
+    const allowed = [...CHAT_VERB_NAMES].sort();
+    // 双方向一致＝登録漏れ(見えて使えない)も 死んだ許可(実体なし)も出さない。
+    // 意図的な除外があればここに列挙する（現状ゼロ）。
+    const INTENTIONAL_EXCLUSIONS: string[] = [];
+    const registeredEffective = registered.filter((n) => !INTENTIONAL_EXCLUSIONS.includes(n));
+    expect(registeredEffective).toEqual(allowed);
+  });
+  it("suggest_emotion_params が許可リストに載っている（F4 で発見した休眠バグの是正）", () => {
+    expect(CHAT_VERB_NAMES).toContain("suggest_emotion_params");
+  });
+});

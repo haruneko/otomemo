@@ -109,6 +109,8 @@ D1 → D2 (Fable) → W2 W3＋実装ハンドオフ (Opus)
 | **allin1** | **条件付きGO・第2弾** | 10-14分/曲＝既定パイプラインには重い。任意「追い焚き」ジョブとして非同期に |
 | **軽量双子ネタ（F4案B）** | **不採用** | digest保存＋read_neta/search射影で代替＝ネタ一覧を汚さない |
 
+**Wave 4 完了（2026-07-15・3並列・api 1147緑/tscクリーン）**：A1=`music/audio-digest.ts` 新設（spots 7類型＝H1/H2/H5[断片化ゲート付きlocalKey結線]/M2/M4/R3/F1・12KB契約・決定的）＋prose 3層テンプレ化＋reaper が `content.digest` 保存／A2=chat面射影＝read_neta 117K→5.7K・147K→9.0K tokens、search 1ヒット134K→203 tokens（full面はバイト一致保護・fieldsオプトイン・verb⇔許可リスト一致の恒久検査テスト）／A4=analyze.py pyin→PESTO（note-F 0.761再現・f0_engineフィールド＋pyin自動フォールバック・spawn型=api再起動不要）。**残**＝(1) prose用digestは区間前の軽量版＝所見が小節番号で語る精度は限定的（prose生成をreaper後段へ移す改善はbacklog級） (2) PESTO生歌耳検証＋新所見文の「なるほど」品質＝オーナー手番 (3) 第2弾=backlog「読み筋第2弾」。
+
 **Wave 4 実装WP（Opus委譲）**：A1=digest純関数＋spots第1弾＋key_segments結線＋prose再設計（audio-digest.ts新設・summarizeFacts置換・reaper保存）／A2=MCP射影（read_neta要約＋fieldsオプトイン・search要約射影・ok()非pretty・CHAT_VERBS+1）／A4=PESTO差し替え（analyze.py・母艦venv・F2ハーネスで回帰確認）。第2弾（backlog）＝beat_this＋venv戦略・allin1追い焚き・調テンプレemission・PESTO生歌耳検証。
 
 ## 4. 出典・根拠の所在

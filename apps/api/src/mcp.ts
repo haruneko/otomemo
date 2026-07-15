@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Core } from "./core";
+import type { Neta } from "./types";
 import {
   identifyProgression,
   analyzeProgression,
@@ -77,13 +78,134 @@ const loopShape = z.object({
   tailBars: z.number().optional().describe("頭へ重ねる余韻の尺（小節・テール処理ヒント）"),
 });
 
+// (c) ok() の膨張抑制（A2・design #6c）：JSON.stringify(data,null,2) は数千点の数値配列を要素ごとに
+// 改行＋インデントし raw を ×2.6〜3.3 に膨らませる（chat の token 爆発の増幅器・research 2026-07-15-chat-analysis-e2e §1）。
+// → **数値(または null)だけの配列はインライン**（改行なし）で直列化し、それ以外は従来どおり 2space pretty（可読性維持）。
+// 出力は valid JSON のまま＝JSON.parse 互換（既存テストは parse して読むので不変）。
+export function serializeCompact(value: unknown, indent = ""): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    // 数値/null だけの配列＝インライン（melody_f0 の [t,hz|null] ペア等はこれで1行に畳まれる）。
+    if (value.every((v) => v === null || typeof v === "number")) {
+      return `[${value.map((v) => JSON.stringify(v)).join(", ")}]`;
+    }
+    const inner = indent + "  ";
+    return `[\n${value.map((v) => inner + serializeCompact(v, inner)).join(",\n")}\n${indent}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined);
+  if (entries.length === 0) return "{}";
+  const inner = indent + "  ";
+  const body = entries.map(([k, v]) => `${inner}${JSON.stringify(k)}: ${serializeCompact(v, inner)}`).join(",\n");
+  return `{\n${body}\n${indent}}`;
+}
 const ok = (data: unknown) => ({
-  content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  content: [{ type: "text" as const, text: serializeCompact(data) }],
 });
 const err = (msg: string) => ({
   content: [{ type: "text" as const, text: msg }],
   isError: true,
 });
+
+// ── A2: MCP面の facts 射影（design #6a/#6b）。chat面の read_neta/search が analysis ネタの巨大 raw を
+//    丸ごと返し token 上限(~25K)を4〜5倍超過する件の是正。full面（ワークベンチ/既存クライアント）は不変＝
+//    射影は surface="chat" でのみ効かせる（既定 bit一致の原則）。
+
+/** raw の巨大時系列フィールドをチャット推論向けの小さな統計要約に置換（フル配列は read_neta({fields}) で）。 */
+export function summarizeRawField(key: string, val: unknown): unknown {
+  if (!Array.isArray(val)) return val;
+  const n = val.length;
+  const base = { _summary: true as const, count: n };
+  if (n === 0) return base;
+  const nums = (xs: unknown[]) => xs.filter((x): x is number => typeof x === "number");
+  const range = (xs: number[]) => (xs.length ? [Math.min(...xs), Math.max(...xs)] : null);
+  const r2 = (x: number) => Math.round(x * 100) / 100;
+  switch (key) {
+    case "melody_f0": {
+      // [[t_sec, hz|null], …]
+      const rows = val as [number, number | null][];
+      const ts = nums(rows.map((r) => r?.[0]));
+      const hz = nums(rows.map((r) => r?.[1]));
+      return { ...base, time_range: range(ts)?.map(r2), voiced_count: hz.length,
+        voiced_ratio: r2(hz.length / n), hz_range: range(hz)?.map(r2) };
+    }
+    case "melody_notes":
+    case "bass_notes": {
+      // [[start_sec, end_sec, midi], …]
+      const rows = val as [number, number, number][];
+      const starts = nums(rows.map((r) => r?.[0]));
+      const ends = nums(rows.map((r) => r?.[1]));
+      const midis = nums(rows.map((r) => r?.[2]));
+      return { ...base, time_range: starts.length ? [r2(Math.min(...starts)), r2(Math.max(...ends))] : null,
+        pitch_range: range(midis) };
+    }
+    case "beat_times": {
+      const ts = nums(val as number[]);
+      const iv: number[] = [];
+      for (let i = 1; i < ts.length; i++) iv.push(ts[i]! - ts[i - 1]!);
+      const med = iv.length ? [...iv].sort((a, b) => a - b)[Math.floor(iv.length / 2)]! : null;
+      return { ...base, time_range: range(ts)?.map(r2), median_interval_sec: med != null ? r2(med) : null,
+        implied_bpm: med ? Math.round(60 / med) : null };
+    }
+    case "drum_onsets": {
+      // [[t_sec, kind, strength], …]
+      const rows = val as [number, string, number][];
+      const kinds: Record<string, number> = {};
+      for (const r of rows) { const k = String(r?.[1] ?? "?"); kinds[k] = (kinds[k] ?? 0) + 1; }
+      return { ...base, time_range: range(nums(rows.map((r) => r?.[0])))?.map(r2), kinds };
+    }
+    default:
+      return base;
+  }
+}
+
+const RAW_TIMESERIES = ["melody_f0", "melody_notes", "beat_times", "drum_onsets", "bass_notes"];
+
+/** (a) analysis ネタを chat 向けに射影：meta/overlay/prose/digest/chords_timeline は素通し、
+ *  raw の巨大時系列は統計要約（fields[] で指定したフィールドだけフル素通し＝ワークベンチ用途温存）。 */
+export function projectAnalysisForChat(neta: Neta, fields?: string[]): Neta {
+  const c = neta.content as Record<string, unknown> | null;
+  if (!c || typeof c !== "object" || Array.isArray(c)) return neta;
+  const raw = (c.raw ?? null) as Record<string, unknown> | null;
+  if (!raw || typeof raw !== "object") return neta;
+  const keep = new Set(fields ?? []);
+  const projRaw: Record<string, unknown> = {};
+  // chords_timeline は軽量かつチャット推論に有用＝常に素通し。
+  if ("chords_timeline" in raw) projRaw.chords_timeline = raw.chords_timeline;
+  for (const key of RAW_TIMESERIES) {
+    if (!(key in raw)) continue;
+    projRaw[key] = keep.has(key) ? raw[key] : summarizeRawField(key, raw[key]);
+  }
+  // raw のその他フィールド（将来追加）は素通し（未知は落とさない）。
+  for (const [k, v] of Object.entries(raw)) {
+    if (k === "chords_timeline" || RAW_TIMESERIES.includes(k)) continue;
+    projRaw[k] = v;
+  }
+  return { ...neta, content: { ...c, raw: projRaw } };
+}
+
+/** (b) search のヒットを要約射影：id/kind/title/tags/key/meter＋冒頭プレビュー。フルは read_neta へ誘導。 */
+export function summarizeNetaForSearch(neta: Neta): Record<string, unknown> {
+  const c = neta.content as Record<string, unknown> | null;
+  let preview: string | null = null;
+  if (typeof neta.text === "string" && neta.text.trim()) preview = neta.text.slice(0, 200);
+  else if (c && typeof c === "object" && typeof c.prose === "string") preview = (c.prose as string).slice(0, 200);
+  else if (c && typeof c === "object") {
+    const notes = Array.isArray(c.notes) ? c.notes.length : null;
+    const chords = Array.isArray(c.chords) ? c.chords.length : null;
+    if (notes != null) preview = `melody: ${notes} notes`;
+    else if (chords != null) preview = `chords: ${chords} 和音`;
+  }
+  const mt = (neta as { matchType?: string }).matchType;
+  return {
+    id: neta.id, kind: neta.kind, title: neta.title, tags: neta.tags,
+    key: neta.key, mode: neta.mode, meter: neta.meter, mood: neta.mood, tempo: neta.tempo,
+    scope: neta.scope, updated: neta.updated,
+    ...(mt ? { matchType: mt } : {}),
+    preview,
+    _hint: "要約射影。全文/facts は read_neta(id) で（analysis は fields:[...] でフル配列）",
+  };
+}
 
 /**
  * MCPツール層（docs/design.md #20）。TSの操作コアを AIクライアント（Claude Code/Desktop 等）に公開。
@@ -144,6 +266,7 @@ const notesSchema = z
 export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } = {}): McpServer {
   const server = new McpServer({ name: "creative-manager", version: "0.0.0" });
   const legacy = opts.surface !== "chat";
+  const isChat = opts.surface === "chat"; // A2: 射影は chat面のみ（full面＝ワークベンチ/既存クライアントは bit一致で不変）
 
   if (legacy) {
   server.registerTool(
@@ -792,8 +915,14 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   // ② 歌詞↔メロ：read_neta でメロの音符/歌詞を読む・set_lyric で歌詞(かな)を音符へ流し込む。
   server.registerTool(
     "read_neta",
-    { title: "ネタを読む", description: "ネタの中身(content 込み)を取得。メロの音符/歌詞/コードを読むのに使う（メロ→仮歌詞・歌詞の音数合わせに）。", inputSchema: { id: z.string() } },
-    async ({ id }) => { const n = core.getNeta(id); return n ? ok(n) : err("not found"); },
+    { title: "ネタを読む", description: "ネタの中身(content 込み)を取得。メロの音符/歌詞/コードを読むのに使う（メロ→仮歌詞・歌詞の音数合わせに）。analysis ネタは既定で raw の巨大時系列(melody_f0/melody_notes/beat_times/drum_onsets/bass_notes)を統計要約にして返す＝token節約。フル配列は fields:['melody_f0',…] で。", inputSchema: { id: z.string(), fields: z.array(z.string()).optional().describe("analysis ネタで raw をフル素通しにするフィールド名（例 ['melody_f0']）。既定は要約。") } },
+    async ({ id, fields }) => {
+      const n = core.getNeta(id);
+      if (!n) return err("not found");
+      // (a) chat面 × analysis ネタは既定で射影（100K〜126K tokens → ~5K）。full面/他kindは不変。
+      if (isChat && n.kind === "analysis") return ok(projectAnalysisForChat(n, fields));
+      return ok(n);
+    },
   );
   server.registerTool(
     "set_lyric",
@@ -1121,14 +1250,16 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       // project＋libraryから引く」との乖離是正＝機材インベントリ(kind:knowledge,library)へ「ドラム音源」等の
       // 自然な言い方で届かなかったバグの根治・2026-07-14）。VITEST時は意味検索スキップ＝テスト密閉。
       // qなし＝素の一覧は従来project既定＝ネタ帳一覧にlibraryコーパス(メロ句1000超)が混ざる事故を防ぐ。
+      // (b) chat面は content 丸ごとをやめ要約射影＝analysis 1件混入でも token 上限を割らない。full面は不変。
+      const proj = (items: Neta[]) => (isChat ? items.map(summarizeNetaForSearch) : items);
       if (q) {
         const merged = await searchNetaMerged(core, {
           q, kind, mood, key, meter, tags, scope, limit, offset,
           semanticUrl: process.env.VITEST ? null : undefined,
         });
-        return ok(merged.items);
+        return ok(proj(merged.items));
       }
-      return ok(core.listNeta({ kind, mood, key, meter, tags, scope, limit, offset }));
+      return ok(proj(core.listNeta({ kind, mood, key, meter, tags, scope, limit, offset })));
     },
   );
   server.registerTool(

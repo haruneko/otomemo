@@ -40,9 +40,23 @@ def pyin_stem(wav, fmin, fmax):
     hop_sec = 512.0 / sr  # pyin 既定 hop_length=512
     return f0, voiced, times, hop_sec
 
-# ボーカル＝声域(C2≈65〜E6≈1300Hz)。音域とメロで共有。
+# ボーカル＝声域(C2≈65〜E6≈1300Hz)。音域とメロで共有。（PESTO 失敗時のフォールバック f0）
 def pyin_vocal(vocal_wav):
     return pyin_stem(vocal_wav, 65, 1300)
+
+# --- ボーカル f0 = PESTO（MIR-1K 学習の歌声モデル）。pyin よりオクターブ跳ねが実質ゼロで
+#     note-F 0.76(vs pyin 0.57)・音域推定が正解に一致・CPU も速い（研究:
+#     docs/research/2026-07-15-vocal-transcription-benchmark.md）。契約は pyin_stem と同型
+#     (f0[Hz], voiced[bool], times[sec], hop_sec) ＝後段の量子化(vocal_melody)/音域(vocal_range) は無改修流用。
+#     ※ベース低域は PESTO 未検証ゆえ据え置き（pyin_stem のまま）。
+def pesto_vocal(vocal_wav):
+    import torch, pesto
+    y, sr = librosa.load(vocal_wav, sr=44100, mono=True)
+    ts, pit, conf, _ = pesto.predict(torch.tensor(y), sr, step_size=10.0)  # step 10ms
+    f0 = pit.numpy()
+    times = ts.numpy() / 1000.0        # PESTO の timesteps は ms → 秒へ
+    voiced = conf.numpy() >= 0.5       # 有声ゲート（本実測で 0.5 が妥当）
+    return f0, voiced, times, 0.01
 
 # --- 音域：有声gate→5/95%tile clip→音名 ---
 def vocal_range(f0, voiced):
@@ -238,9 +252,17 @@ def main():
     beat_times = [round(float(t),3) for t in librosa.frames_to_time(beats, sr=sr)]
     key = estimate_key(y, sr)
 
-    # 3. ボーカル：pyin を1回→音域＋メロ量子化＋f0輪郭（view-only）
+    # 3. ボーカル：PESTO f0 を1回→音域＋メロ量子化＋f0輪郭（view-only）。
+    #    PESTO の import/実行が失敗したら従来 pyin へ自動フォールバック（f0_engine にどちらか記録）。
+    f0_engine = None
     if os.path.exists(vocals):
-        f0, voiced, ftimes, hop_sec = pyin_vocal(vocals)
+        try:
+            f0, voiced, ftimes, hop_sec = pesto_vocal(vocals)
+            f0_engine = "pesto"
+        except Exception as e:
+            print(f"[warn] PESTO f0 failed ({e!r}); falling back to pyin", file=sys.stderr)
+            f0, voiced, ftimes, hop_sec = pyin_vocal(vocals)
+            f0_engine = "pyin"
         vr = vocal_range(f0, voiced)
         melody_notes = vocal_melody(f0, voiced, ftimes, hop_sec)
         melody_f0 = f0_contour(f0, voiced, ftimes)
@@ -274,6 +296,7 @@ def main():
         "vocal_range": vr,
         "melody_notes": melody_notes,               # [[start,end,midi]]＝量子化メロ（view-only）
         "melody_f0": melody_f0,                      # [[t,hz|null]]＝生輪郭（量子化fallback表示）
+        "f0_engine": f0_engine,                      # "pesto"|"pyin"|null＝ボーカルf0の採譜器（追加のみ・後方互換）
         "chords_timeline": chords,                  # [start,end,label]（全体・切出は overlay 側）
         "drum_onsets": d_onsets,                     # #S12 [[t_sec, kick|snare|hihat, strength]]（生・拍子/量子化は TS）
         "bass_notes": bass_notes,                    # #S12改3 [[start,end,midi]]＝低域pyin量子化ベース（TS側で区間絶対音ネタへ）

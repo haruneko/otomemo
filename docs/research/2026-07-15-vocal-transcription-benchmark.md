@@ -109,3 +109,29 @@
   - torchaudio は pesto/torchcrepe が引く版が CUDA/ABI 不整合を起こしたため、既存 `.venv` 実績の torch 2.12.1+cpu / torchaudio 2.11.0+cpu ペアに固定して解消。
 - Demucs vocal 分離: `htdemucs`・CPU 91s（analyze.py と同設定を別スクリプトで再現、既存 venv は読み取り実行のみ）。
 - 作業ファイル一式（スクラッチ、非コミット）: `…/scratchpad/f2work/`（separate.py, run_pyin.py, run_crepe.py, run_pesto.py, run_bp.py, evallib.py, eval_run.py, synth.py 等）。
+
+---
+
+## 組込実施（2026-07-15）— タスク A4
+
+**結論: 組込完了。母艦 `_audio_poc/.venv` にボーカル f0 = PESTO を本番投入（フォールバック付き）。** 実装は上の「組込案」どおり、f0 フロントエンドのみ差し替え・後段の RLE 量子化/音域は無改修流用。
+
+### venv 変更内容（母艦 `.venv` のみ・venv-f1/f2 は不変）
+- `uv pip install --no-deps "pesto-pitch==2.0.1"`（venv-f2 の実物と同一版・PyPI パッケージ名 `pesto-pitch`、import 名 `pesto`）。
+- **`--no-deps`** で入れた理由＝母艦 `.venv` は pesto の依存を既に全て満たしていた（torch 2.12.1+cpu / torchaudio 2.11.0+cpu / numpy 2.4.6 / omegaconf 2.3.1 / scipy 1.18.0 / tqdm 4.68.3）。既存依存に一切触れず pesto 本体 1 パッケージだけ追加＝torch を巻き添え更新しないための予防。
+- 導入後、`analyze.py` の import 群（numpy/librosa/torch/soundfile/demucs）＋ `import pesto` が全て通ることを確認。既存依存は破壊せず。
+
+### analyze.py の変更（diff 要約・vocal f0 のみ）
+1. 新関数 `pesto_vocal(vocal_wav)` を追加。契約は `pyin_stem` と同型 `(f0[Hz], voiced[bool], times[sec], hop_sec)`。`pesto.predict(torch.tensor(y), sr, step_size=10.0)` → `f0=pit`, `voiced=conf>=0.5`, `times=ts/1000`（**PESTO の timesteps は ms 返し**＝実測で 0,10,20… ms を確認。秒へ変換必須）, `hop_sec=0.01`。
+2. `main()` のボーカル節を `pesto_vocal` 優先＋**graceful fallback**に変更＝`try: pesto_vocal / except Exception: pyin_vocal`。`vocal_range`/`vocal_melody`/`f0_contour` は無改修で新 f0 を食う。
+3. 出力 facts に **`f0_engine: "pesto"|"pyin"|null`** を1フィールド追加（追加のみ・後方互換）。melody_notes/melody_f0/vocal_range のスキーマは不変。
+4. **ベース低域 pyin（`pyin_stem(bass,35,330)`）は据え置き**（PESTO 歌声モデルは超低域未検証）。
+
+### 回帰確認の実測値
+- **(a) 本番コードパス経由の note-F（評価ハーネス再利用）**: `analyze.pesto_vocal → analyze.vocal_melody` の出力を F2 の `evallib`（GT track8・offset 2.45・mir_eval）で採点＝**note-F 0.761 / P 0.812 / R 0.716 / onF 0.773 / n_est 544**。F2 実測 0.761 を**完全再現**（≥0.7 クリア）。
+- **(b) フル analyze.py 実走**（`data/assets/8c70788d….mp3`＝LostMemory・329.4s、Demucs 再分離込み）: JSON 壊れず全キー健在、`f0_engine="pesto"`、`vocal_range = C4–C5`（hz 256.6–513.3・voiced 0.558）＝F2 正解 C4–B4 級に一致（生 f0 の 5/95%tile ゆえ上端が B4→C5 と半音広いだけ）。`melody_notes=554`（pesto の n_est≈544 と整合）、`bass_notes=493`（pyin 据え置きで不変）、drum/chords/key/bpm 健在。timing: separate 133.7s（Demucs・並行負荷下）+ chords 2.1s + total 164.8s。pesto f0 自体は 10–20s。
+- **フォールバック動作確認**: `builtins.__import__` で `import pesto` を強制失敗させると `except` が発火し pyin へ自動フォールバック＝`f0_engine="pyin"`・従来の音域 G#3–G#5 を再現。正常系/異常系の両方 OK。
+
+### 反映タイミング（重要）
+- analyze.py は **spawn 型**（api がジョブごとに `.venv/bin/python analyze.py` を起動）＝**api 再起動不要**、次のアナリーゼジョブから新コードが自動的に使われる。今回このタスクでは api 再起動はしていない。
+- 残（オーナー手番）: 組込案の注意どおり、**生歌を含む別曲での耳＋数値の追検証を1回**（正解 MIDI 不要・pyin 出力との差分＋試聴）。step 10ms 化でノート境界が pyin(23ms) より僅かに細かい点の耳確認も同時に。

@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { claudeShot } from "./research-runner";
 import { beginJobProc, endJobProc } from "./job-procs";
 import { saveAudioAsset } from "./audio-asset";
+import { buildDigest } from "./music/audio-digest";
 import type { Core } from "./core";
 import type { Job } from "./types";
 
@@ -63,31 +64,44 @@ export async function analyzeAudioFile(audioPath: string, workdir: string, meter
   return JSON.parse(out.slice(s, e + 1));
 }
 
-// facts → 日本語アナリーゼ文のプロンプト。調は検出器でなくコードから読む（POC実証）・信頼度を分ける。
+// facts → 日本語アナリーゼ文のプロンプト。#S10続 v2.1「読み筋」層：facts でなく **digest（射影・度数化・spots）**
+// を丸ごと渡し、pedagogy テンプレA の3層（事実→解釈→転用）＋深さ優先（効いてる1〜2点だけ深掘り・網羅禁止）で書かせる。
+// ★digest は ~4K tokens に設計済み（配列は統計/上位N/spots へ要約済）＝旧・巨大配列(beat_times/melody_f0)による
+//   Claude タイムアウト対策のカットは不要になった（digest がそのカット済みの姿＝ここでは digest を丸ごと渡す）。
 export function synthesisPrompt(facts: unknown, label: string): string {
+  const digest = digestFromFacts(facts);
   return (
-    "以下はある曲の音源解析(MIR)の結果＝事実データ。これを日本語のアナリーゼ文にまとめて。\n" +
-    "【重要】\n" +
-    "- 調(key)は自動検出器の値＝相対調/属和音で外しやすい。**コード進行(chords)の並びから本当の調を読み**、必要なら検出器値を訂正して述べる。\n" +
-    "- 事実(BPM・調・音域・機能和声)と、候補どまり(7th/テンション・混合音源の楽器)を分けて、信頼度が低い所は『候補』と明記。\n" +
-    "- コード進行は主ループ＋差し色を要約（全部列挙しない）。メロ/音域の特徴を一言。\n" +
-    "- 最後に『学ぶなら〜』の一言。前置き不要、アナリーゼ文だけ。\n\n" +
-    `# 曲: ${label}\n# 解析結果(JSON)\n${JSON.stringify(summarizeFacts(facts))}`
+    "以下はある曲の音源解析(MIR)を「読み筋」に射影した digest＝事実の要約＋見どころ候補(spots)。\n" +
+    "これを日本語のアナリーゼ文にまとめて。良い分析文は「事実→解釈→転用」の3層で、**網羅せず深さ優先**。\n" +
+    "【書き方】\n" +
+    "- spots（見どころ候補）から**最も効いている1〜2点だけ**を選び深掘りする。全項目を均等に語らない・全部列挙しない。\n" +
+    "- 各点を3層で：①事実（度数・小節・具体）→②解釈（それが何を生んでいるか＝色/推進力/翳り）→③転用（自作でどう使うか・最小の実験手順）。\n" +
+    "- 調(key)は digest の値が相対調/属和音で外れていれば、コード進行(chords)の度数の並びから訂正して述べてよい。\n" +
+    "- 信頼度(conf)が低い spot は『候補』と明記。無理に見どころを作らない（spots が薄ければ素直に）。\n" +
+    "- **メタ情報(BPM/調/構成)は前景化しない＝末尾に1行だけ**。前置き不要、アナリーゼ文だけ。\n\n" +
+    `# 曲: ${label}\n# digest(JSON)\n${JSON.stringify(digest)}`
   );
 }
 
-// ★プロンプトに生の巨大配列(beat_times/melody_f0/melody_notes 数千点)を入れると Claude がタイムアウトする。
-//   文章化に要る要約だけ渡す（BPM/拍子/調/音域/コード頻度top/コード列）。
-function summarizeFacts(facts: unknown): unknown {
+// prose 生成は reaper より前に走る＝reaper が計算する区間/downbeat をまだ持たない。よって facts だけから
+// 軽い interp（meter は facts 指定 or 4・sections 空・downbeat 無し）で digest を作る。区間依存の spot（M2/F1）や
+// 小節番号は出ないが、H1借用/H2セカドミ/H5転調/M4食い/R3ベース×キック・度数化コード・メロ統計は facts だけで出る。
+// reaper 側は区間込みの完全 digest を content.digest に別途保存する（プロンプト用の軽 digest とは役割違い）。
+function digestFromFacts(facts: unknown): unknown {
   const f = (facts ?? {}) as {
-    bpm?: number; meter?: number; key?: unknown; vocal_range?: unknown; duration_sec?: number;
-    chord_freq_top?: unknown; chord_labels_seq?: unknown[];
+    bpm?: number; meter?: number; key?: { key?: string; mode?: string };
+    chords_timeline?: unknown; chords?: unknown; beat_times?: unknown;
   };
-  return {
-    bpm: f.bpm, meter: f.meter, key: f.key, vocal_range: f.vocal_range, duration_sec: f.duration_sec,
-    chord_freq_top: f.chord_freq_top,
-    chords: Array.isArray(f.chord_labels_seq) ? f.chord_labels_seq.slice(0, 80) : undefined,
-  };
+  const timeline = (Array.isArray(f.chords_timeline) ? f.chords_timeline : Array.isArray(f.chords) ? f.chords : []) as [number, number, string][];
+  return buildDigest(facts, {
+    bpm: typeof f.bpm === "number" ? f.bpm : 0,
+    meter: typeof f.meter === "number" && f.meter > 0 ? f.meter : 4,
+    downbeat: null,
+    sections: [],
+    key: f.key ?? null,
+    timeline,
+    beatTimes: Array.isArray(f.beat_times) ? (f.beat_times as number[]) : [],
+  });
 }
 
 // 失敗メッセージのユーザー向け丸め：yt-dlp/analyze.py の生失敗は `<絶対パス>/python failed (1): ...`

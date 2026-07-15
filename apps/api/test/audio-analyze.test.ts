@@ -4,11 +4,16 @@ import { Core } from "../src/core";
 import { runAudioAnalyzeJob, synthesisPrompt, userFacingFailure } from "../src/audio-analyze";
 
 describe("① アナリーゼ（audio_analyze）", () => {
-  it("synthesisPrompt は『調はコードから』の指示と facts/曲名を含む", () => {
-    const p = synthesisPrompt({ bpm: 86, key: { key: "A", mode: "minor" }, chord_freq_top: [["A:min", 49]] }, "LostMemory");
-    expect(p).toContain("コード進行"); // 調はコードから読む指示
+  it("synthesisPrompt は digest＋3層(事実→解釈→転用)の指示と曲名を含む（#S10続 v2.1）", () => {
+    const p = synthesisPrompt(
+      { bpm: 86, key: { key: "A", mode: "minor" }, chords_timeline: [[0, 4, "A:min"], [4, 6, "F:maj"], [6, 8, "G:maj"], [8, 12, "A:min"]] },
+      "LostMemory",
+    );
+    expect(p).toContain("事実→解釈→転用"); // 3層テンプレの指示
+    expect(p).toContain("転用");
     expect(p).toContain("LostMemory");
-    expect(p).toContain("A:min");
+    expect(p).toContain("digest"); // facts でなく digest を渡す
+    expect(p).toContain("コード進行"); // 調はコードの度数から読む指示は残す
   });
 
   it("job → analyze/shot 注入 → done → reap で『アナリーゼ』知見ネタが出る", async () => {
@@ -27,6 +32,24 @@ describe("① アナリーゼ（audio_analyze）", () => {
     expect(kn[0]!.title).toContain("アナリーゼ");
     expect(kn[0]!.tags).toContain("アナリーゼ");
     expect((kn[0]!.content as { prose: string }).prose).toContain("下降ループ"); // prose も analysis に入る
+  });
+
+  it("#S10続 v2.1：reap で analysis ネタの content.digest に digest（overview/spots）が保存される", async () => {
+    const core = new Core(openDb(":memory:"));
+    const job = core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    // C major に ♭VII(Bb) 借用を含む＝H1 spot が立つ facts
+    const fakeAnalyze = async () => ({
+      bpm: 120, meter: 4, key: { key: "C", mode: "major" }, duration_sec: 12,
+      chords_timeline: [[0, 4, "C:maj"], [4, 6, "F:maj"], [6, 8, "Bb:maj"], [8, 12, "C:maj"]],
+    });
+    await runAudioAnalyzeJob(core, claimed, async () => "所見", fakeAnalyze);
+    expect(core.reapResults()).toBeGreaterThanOrEqual(1);
+    const kn = core.listNeta({ kind: "analysis", scope: "all", limit: 10 });
+    const digest = (kn[0]!.content as { digest?: { overview?: string; spots?: { id: string }[] } }).digest;
+    expect(digest).toBeTruthy();
+    expect(digest!.overview).toContain("C major");
+    expect(digest!.spots!.some((s) => s.id === "H1")).toBe(true); // 借用 spot が保存されている
   });
 
   it("学習の出口：facts に chords_timeline があれば『コード（候補）』chord_progression ネタも出る", async () => {
