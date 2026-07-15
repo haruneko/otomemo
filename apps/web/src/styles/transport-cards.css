@@ -1178,3 +1178,12 @@
 @media (max-width: 480px) {
   .cp-vrow { gap: 6px; }
 }
+
+/* デザイン#7補完（2026-07-15）：SPでロールの「行」を太らせて縦の死にスペースを実データに還元。
+   セルは固定12x14pxのため、コンテナのflex伸長(chat.cssの@media)だけでは中身が伸びない＝行高側を拡大する。
+   ノート/鍵盤ラベル/行線はセル高に同期（--prc-h 1変数で連動）。横(セル幅12px)は不変＝小節あたりの情報量は据置。 */
+@media (max-width: 820px) {
+  .proll-cell { height: var(--prc-h, 20px); }
+  .proll-key { height: var(--prc-h, 20px); line-height: var(--prc-h, 20px); font-size: 9px; }
+  .proll-note { height: calc(var(--prc-h, 20px) - 2px); }
+}
