@@ -51,8 +51,10 @@ function run(cmd: string, args: string[], timeoutMs: number, signal?: AbortSigna
 }
 
 // YouTube等のURLから音源を一時DL（yt-dlp・best-effort＝SABR/POトークンで失敗し得る）。
+// --js-runtimes: yt-dlp 2026系はYouTube抽出にJSランタイム必須（既定deno）。systemd環境にdenoは無いが
+// api自身を動かしているnode(process.execPath)は必ず在る＝明示パスで渡す（nvmのPATH非継承にも耐える）。
 export async function fetchAudioFromUrl(url: string, dir: string, signal?: AbortSignal): Promise<string> {
-  await run(YTDLP, ["-x", "--audio-format", "mp3", "--no-playlist", "-o", join(dir, "dl.%(ext)s"), url], 180_000, signal);
+  await run(YTDLP, ["--js-runtimes", `node:${process.execPath}`, "-x", "--audio-format", "mp3", "--no-playlist", "-o", join(dir, "dl.%(ext)s"), url], 180_000, signal);
   return join(dir, "dl.mp3");
 }
 
