@@ -78,6 +78,18 @@ export function SectionEditor({
   const [toolsOpen, setToolsOpen] = useState(false); // いじる▾ メニュー（生成/ハモリ/書き出しを集約・メロ編集画面と整合・⑤）
   const toolsRef = useRef<HTMLDivElement>(null);
   useDismiss(toolsRef, toolsOpen, useCallback(() => setToolsOpen(false), [])); // 外タップ/Escで閉じる
+  // レーンの表示/演奏の有効化（オーナー要望「使わないレーンで画面と耳を汚さない」・Fable裁定）。
+  // 既定＝中身のあるレーン＋定番4（コード/メロ/ベース/ドラム）を表示。手動で出した/畳んだ/ミュートした状態は
+  // section content に保存（lanes_shown/lanes_hidden/lanes_muted＝レーンidの配列）＝新 kind が増えても既定畳み。
+  const secContent = (neta.content && typeof neta.content === "object" ? neta.content : {}) as {
+    lanes_shown?: string[]; lanes_hidden?: string[]; lanes_muted?: string[];
+  };
+  const [lanesShown, setLanesShown] = useState<string[]>(() => secContent.lanes_shown ?? []);
+  const [lanesHidden, setLanesHidden] = useState<string[]>(() => secContent.lanes_hidden ?? []);
+  const [lanesMuted, setLanesMuted] = useState<string[]>(() => secContent.lanes_muted ?? []);
+  const [addLaneOpen, setAddLaneOpen] = useState(false); // ＋レーン メニュー（畳んだレーンから選んで出す）
+  const addLaneRef = useRef<HTMLDivElement>(null);
+  useDismiss(addLaneRef, addLaneOpen, useCallback(() => setAddLaneOpen(false), []));
   // #5 container kind でレーン/尺を差し替え（song=section を並べる編成・section=パート専用）。
   const isSong = neta.kind === "song";
   const LANES = lanesForKind(neta.kind);
@@ -97,6 +109,31 @@ export function SectionEditor({
   const sectionDrums = () => sctx.sectionDrums(secCtx);
   const earChords = (): ChordEntry[] => sctx.earChords(secCtx);
   const skelEar = (): Note[] => sctx.skelEar(secCtx);
+  // 表示するレーン／畳んでいるレーン（＝「＋レーン」候補）。song はアレンジ専用＝従来どおり全レーン（畳み無し）。
+  const visibleLanesList: readonly Lane[] = isSong ? LANES : sctx.visibleLanes(secCtx, lanesShown, lanesHidden);
+  const collapsedLanesList: readonly Lane[] = isSong ? [] : sctx.collapsedLanes(secCtx, lanesShown, lanesHidden);
+  // 手動レーン状態を section content に保存（既存 content を潰さずマージ・fire-and-forget＝setSectionBars 流儀）。
+  // content スキーマは自由形＝api 変更不要（updateNeta の既存経路）。
+  const persistLanes = (next: { lanes_shown: string[]; lanes_hidden: string[]; lanes_muted: string[] }) => {
+    void api.updateNeta(neta.id, { content: { ...secContent, ...next } }).catch(() => {});
+  };
+  const showLane = (key: string) => {
+    const shown = lanesShown.includes(key) ? lanesShown : [...lanesShown, key];
+    const hidden = lanesHidden.filter((k) => k !== key);
+    setLanesShown(shown); setLanesHidden(hidden);
+    persistLanes({ lanes_shown: shown, lanes_hidden: hidden, lanes_muted: lanesMuted });
+  };
+  const hideLane = (key: string) => {
+    const shown = lanesShown.filter((k) => k !== key);
+    const hidden = lanesHidden.includes(key) ? lanesHidden : [...lanesHidden, key];
+    setLanesShown(shown); setLanesHidden(hidden);
+    persistLanes({ lanes_shown: shown, lanes_hidden: hidden, lanes_muted: lanesMuted });
+  };
+  const toggleMute = (key: string) => {
+    const muted = lanesMuted.includes(key) ? lanesMuted.filter((k) => k !== key) : [...lanesMuted, key];
+    setLanesMuted(muted);
+    persistLanes({ lanes_shown: lanesShown, lanes_hidden: lanesHidden, lanes_muted: muted });
+  };
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
   // 子の実尺の最大。childDur が壊れた content で NaN を返しても画面に「NaN」を出さない＝有限値のみで算出（防御）。
@@ -321,9 +358,14 @@ export function SectionEditor({
   // コードは compositeNotes と同じ key-aware 移調でセクション実調へ→骨格位置相対に（earChords/skelEar は sectionContext へ委譲・上部）。
   // 再生専用の合成＝トグルONなら骨格2声を足す。書き出し(downloadMidi/laneTracks)は composite のまま＝混入しない。
   function playComposite(): Note[] {
+    // レーンミュート（再生のみ・書き出しは全部入り）＝muted レーンの子を鳴らす合成から外す。
+    // 骨格/仮歌のノート除去と同じ機構＝どれかがミュートならミュートで自然に合成される。lanesMuted 空なら children そのまま＝従来一致。
+    const audible = compositeNotes(sctx.audibleChildren(secCtx, lanesMuted), keyPc, neta.mode);
     // 骨格を鳴らす＝メロ(part:"melody")をミュートし、骨格2声(Strings/Cello)を伴奏(コード/ベース/ドラム)に重ねて
     // 対位法的に聴く（メロと骨格の二重化＝ピアノが勝つのを避ける・オーナーFB 2026-07-12）。書き出し(composite)は不変。
-    const base = skelAudible ? [...composite().filter((n) => n.part !== "melody"), ...skelEar()] : composite();
+    // 骨格レーン自体をミュートしている時は骨格2声も出さない（ミュート合成の一貫性）。
+    const skel = skelAudible && !lanesMuted.includes("skeleton") ? skelEar() : [];
+    const base = skelAudible ? [...audible.filter((n) => n.part !== "melody"), ...skel] : audible;
     // ♪仮歌ON＝メロ楽器音をミュート（歌が主・二重化を避ける）。歌本体は vocal 経路（AudioBuffer）で乗る。書き出しは不変。
     return singOn && singBuf ? muteMelodyForVocal(base) : base;
   }
@@ -503,9 +545,35 @@ export function SectionEditor({
             ))}
           </div>
         </div>
-        {LANES.map((lane) => (
+        {visibleLanesList.map((lane) => (
           <div className="lane" key={lane.key}>
-            <div className="lane-label">{lane.label}</div>
+            <div className="lane-label">
+              <span className="lane-name">{lane.label}</span>
+              {/* レーンの表示/演奏（section のみ・song はアレンジ専用）。ミュート＝再生のみ／畳む＝表示のみ（配置は無傷）。 */}
+              {!isSong && (
+                <span className="lane-ctl">
+                  <button
+                    type="button"
+                    className={"lane-mute" + (lanesMuted.includes(lane.key) ? " on" : "")}
+                    aria-label={`mute-${lane.key}`}
+                    aria-pressed={lanesMuted.includes(lane.key)}
+                    title={lanesMuted.includes(lane.key) ? "ミュート中（再生のみ・MIDI書き出しは全部入り）＝タップで解除" : "このレーンをミュート（再生のみ・MIDI書き出しは全部入り）"}
+                    onClick={() => toggleMute(lane.key)}
+                  >
+                    <Icon name={lanesMuted.includes(lane.key) ? "mute" : "volume"} size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="lane-collapse"
+                    aria-label={`collapse-${lane.key}`}
+                    title="このレーンを畳む（配置は消えない・＋レーンで戻せる）"
+                    onClick={() => hideLane(lane.key)}
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+            </div>
             <div className="lane-track" style={trackStyle}>
               {Array.from({ length: BARS }, (_, b) => (
                 <LaneCell
@@ -587,6 +655,38 @@ export function SectionEditor({
       <p className="muted lanes-hint">
         空きをタップ→置く/新規作成／ブロックをタップで編集（消しゴムモードでタップ＝外す）／右端ドラッグで繰り返し
       </p>
+
+      {/* ＋レーン＝畳んでいるレーン（骨格/対旋律/リフ/コード楽器…）を選んで出す。使わない曲では画面を増やさない。 */}
+      {!isSong && collapsedLanesList.length > 0 && (
+        <div className="add-lane-wrap" ref={addLaneRef}>
+          <button
+            type="button"
+            className={"tb-tool add-lane-btn" + (addLaneOpen ? " on" : "")}
+            aria-label="add-lane"
+            aria-expanded={addLaneOpen}
+            title="使うレーンを出す（骨格・対旋律・リフ・コード楽器 等）"
+            onClick={() => setAddLaneOpen((v) => !v)}
+          >
+            ＋レーン
+          </button>
+          {addLaneOpen && (
+            <div className="add-lane-menu" role="menu" aria-label="add-lane-menu">
+              {collapsedLanesList.map((l) => (
+                <button
+                  key={l.key}
+                  type="button"
+                  role="menuitem"
+                  className="add-lane-item"
+                  aria-label={`add-lane-${l.key}`}
+                  onClick={() => showLane(l.key)}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {others.length > 0 && (
         <div className="section-others">

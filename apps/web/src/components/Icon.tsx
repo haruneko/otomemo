@@ -164,6 +164,13 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" />
         </svg>
       );
+    case "mute": // 🔇 スピーカー＋×（レーンミュート・再生のみ）
+      return (
+        <svg {...s}>
+          <path {...st} d="M4 9v6h3l5 4V5L7 9z" />
+          <path {...st} d="M16 9.5l5 5M21 9.5l-5 5" />
+        </svg>
+      );
     case "dice": // 🎲 ノブをランダムに振る（tofu回避・SVG化）
       return (
         <svg {...s}>

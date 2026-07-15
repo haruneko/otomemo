@@ -4,6 +4,7 @@ import {
   inLane,
   rowOf,
   laneChildren,
+  laneOfChild,
   childDur,
   contentDur,
   sectionChords,
@@ -11,6 +12,11 @@ import {
   sectionDrums,
   earChords,
   skelEar,
+  laneVisible,
+  visibleLanes,
+  collapsedLanes,
+  audibleChildren,
+  STANDARD_LANE_KEYS,
 } from "../src/sectionContext";
 import { lanesForKind, type Child, type Lane } from "../src/components/sectionLanes";
 import { notesForContent, harmonyPlacementShift, melodyPlacementShift, chordsOf, isSkeleton, type Note, type ChordEntry } from "../src/music";
@@ -270,5 +276,68 @@ describe("バイト等価：抽出前後で出力が deepEqual", () => {
   });
   it("laneChildren 一致（全レーン）", () => {
     for (const lane of SECTION_LANES) expect(laneChildren(ctx, lane)).toEqual(L.laneChildrenL(lane));
+  });
+});
+
+// ── レーン表示/演奏の有効化（オーナー要望・Fable裁定）＝純関数 ──
+describe("laneVisible / visibleLanes / collapsedLanes（既定＝中身あり＋定番4／手動 show/hide）", () => {
+  const BPB = 4;
+  const laneByKey = (k: string) => SECTION_LANES.find((l) => l.key === k)!;
+  const ctxWith = (children: Child[]): SectionCtx => ({ children, LANES: SECTION_LANES, keyPc: 0, mode: "major", BPB });
+
+  it("空セクション＝定番4（コード/メロ/ベース/ドラム）だけ表示・定番外は畳む", () => {
+    const ctx = ctxWith([]);
+    const keys = visibleLanes(ctx, [], []).map((l) => l.key);
+    expect(keys).toEqual(["chord", "melody", "bass", "rhythm"]);
+    // 定番外（骨格/対旋律/コード楽器/リフ/管弦）は既定畳み＝＋レーン候補
+    const collapsed = collapsedLanes(ctx, [], []).map((l) => l.key);
+    expect(collapsed).toEqual(["skeleton", "counter", "chord_pattern", "chord_pattern2", "riff", "section_inst"]);
+  });
+  it("中身のある定番外レーンは既定で表示（骨格に子）", () => {
+    const ctx = ctxWith([child("skeleton", 0, { bars: 2, tones: [{ start: 0, pitch: 0 }] })]);
+    expect(laneVisible(ctx, laneByKey("skeleton"), [], [])).toBe(true); // 中身あり＝出す
+    expect(laneVisible(ctx, laneByKey("counter"), [], [])).toBe(false); // 空の定番外＝畳む
+  });
+  it("手動 show＝空の定番外でも出す（＋レーン）／手動 hide＝定番でも畳む（配置は無傷）", () => {
+    const ctx = ctxWith([]);
+    expect(laneVisible(ctx, laneByKey("counter"), ["counter"], [])).toBe(true); // shown で出す
+    expect(laneVisible(ctx, laneByKey("melody"), [], ["melody"])).toBe(false); // hidden で定番も畳む
+  });
+  it("show が hide より優先（同 key が両方にあれば表示）", () => {
+    const ctx = ctxWith([]);
+    expect(laneVisible(ctx, laneByKey("riff"), ["riff"], ["riff"])).toBe(true);
+  });
+  it("レーン契約：新 kind（定番外・中身なし）は既定畳み＝使わない人の画面は増えない", () => {
+    // section_inst（後発 kind の代表）は定番外・空＝畳まれる。
+    const ctx = ctxWith([]);
+    expect(STANDARD_LANE_KEYS).not.toContain("section_inst");
+    expect(laneVisible(ctx, laneByKey("section_inst"), [], [])).toBe(false);
+  });
+});
+
+describe("audibleChildren / laneOfChild（レーンミュート＝再生のみ・書き出しは全部入り）", () => {
+  const BPB = 4;
+  const children: Child[] = [
+    child("melody", 0, { notes: [{ pitch: 60, start: 0, dur: 1 }] }),
+    child("bass", 0, { notes: [{ pitch: 36, start: 0, dur: 1 }] }),
+    child("chord_pattern", 0, { notes: [{ pitch: 60, start: 0, dur: 1 }] }, {}, 0), // コード楽器1（row0）
+    child("chord_pattern", 0, { notes: [{ pitch: 64, start: 0, dur: 1 }] }, {}, 1), // コード楽器2（row1）
+  ];
+  const ctx: SectionCtx = { children, LANES: SECTION_LANES, keyPc: 0, mode: "major", BPB };
+
+  it("muted 未設定＝children そのまま（bit一致・従来一致）", () => {
+    expect(audibleChildren(ctx, [])).toBe(ctx.children);
+  });
+  it("メロをミュート＝メロ子が鳴らす集合から外れる（他は残る）", () => {
+    const kinds = audibleChildren(ctx, ["melody"]).map((c) => c.node.neta.kind);
+    expect(kinds).toEqual(["bass", "chord_pattern", "chord_pattern"]);
+  });
+  it("laneOfChild は row で一意＝コード楽器1のミュートは楽器2（同 kind 別 ord）を巻き込まない", () => {
+    const cp0 = children[2]!; const cp1 = children[3]!;
+    expect(laneOfChild(ctx, cp0)!.key).toBe("chord_pattern");
+    expect(laneOfChild(ctx, cp1)!.key).toBe("chord_pattern2");
+    const audible = audibleChildren(ctx, ["chord_pattern"]); // 楽器1だけミュート
+    expect(audible).toContain(cp1); // 楽器2は残る
+    expect(audible).not.toContain(cp0); // 楽器1は外れる
   });
 });

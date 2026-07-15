@@ -238,14 +238,87 @@
   word-break: keep-all; /* 「コード進/行」の様な単語途中の折返しを禁止（CJKは語のまとまりで扱う） */
   overflow-wrap: anywhere; /* それでも幅を超える極端なラベルだけは折返しを許可（はみ出し防止） */
   color: var(--muted);
+  /* レーン名（上）＋操作アイコン（下・ミュート/畳む）を縦積み＝56px 幅に収める。 */
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
   /* 横スクロールでレーン名(コード進行/メロ…)を左に固定＝何の行か見失わない（全エディタ統一）。 */
   position: sticky;
   left: 0;
   z-index: 2;
   background: var(--card);
   box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.55); /* 右影＝フローズン列（かぶり解消） */
+}
+.lane-name {
+  overflow: hidden;
+}
+/* レーン操作＝ミュート（再生のみ・書き出しは全部入り）／畳む（表示のみ・配置は無傷）。小さく薄く。 */
+.lane-ctl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.lane-ctl button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.lane-ctl button:hover {
+  background: #2a2e35;
+  color: var(--fg);
+}
+.lane-mute.on {
+  color: #ff8a5a; /* ミュート中＝目立たせる（再生から外れている合図） */
+}
+.lane-collapse {
+  font-size: 0.85rem;
+}
+/* ＋レーン＝畳んだレーンから選んで出す（コンパクト・使わない曲では画面を増やさない）。 */
+.add-lane-wrap {
+  position: relative;
+  margin-top: 4px;
+}
+.add-lane-btn {
+  font-size: 0.72rem;
+}
+.add-lane-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+.add-lane-item {
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.add-lane-item:hover {
+  background: #2a2e35;
 }
 .ruler-bars {
   flex: 1;

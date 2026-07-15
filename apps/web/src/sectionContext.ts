@@ -31,6 +31,44 @@ export const rowOf = (c: Child): number => (c.ord === 1 ? 1 : 0);
 export function laneChildren(ctx: SectionCtx, lane: Lane): Child[] {
   return ctx.children.filter((c) => inLane(lane, c.node.neta.kind) && (lane.row === undefined || rowOf(c) === lane.row));
 }
+// ある子が属するレーン（row 込み・kind と ord で一意）。laneChildren の逆引き＝ミュート判定に使う。
+export function laneOfChild(ctx: SectionCtx, c: Child): Lane | undefined {
+  return ctx.LANES.find((l) => inLane(l, c.node.neta.kind) && (l.row === undefined || rowOf(c) === l.row));
+}
+
+// ── レーンの表示/演奏の有効化（オーナー要望「使わないレーンで画面と耳を汚さない」・Fable裁定）──
+// 定番4＝どの曲でも常に出す骨（コード/メロ/ベース/ドラム）。それ以外は「中身がある時だけ」既定表示。
+// 新しい kind が増えても定番外は既定畳み＝レーン契約（使わない人の画面は増えない）。
+export const STANDARD_LANE_KEYS: readonly string[] = ["chord", "melody", "bass", "rhythm"];
+
+// このレーンを表示するか＝手動 show 最優先→手動 hide→（定番4 or 中身あり）。
+// shown/hidden は section content に保存される手動状態（レーンidの配列）。
+export function laneVisible(ctx: SectionCtx, lane: Lane, shown: readonly string[], hidden: readonly string[]): boolean {
+  if (shown.includes(lane.key)) return true; // 手動で出した＝最優先で見せる
+  if (hidden.includes(lane.key)) return false; // 手動で畳んだ＝隠す（配置データは無傷）
+  if (STANDARD_LANE_KEYS.includes(lane.key)) return true; // 定番4は常に
+  return laneChildren(ctx, lane).length > 0; // それ以外は中身がある時だけ
+}
+// 表示するレーン（描画順は LANES のまま）。
+export function visibleLanes(ctx: SectionCtx, shown: readonly string[], hidden: readonly string[]): Lane[] {
+  return ctx.LANES.filter((l) => laneVisible(ctx, l, shown, hidden));
+}
+// 今は畳まれているレーン（＝「＋レーン」で出せる候補）。
+export function collapsedLanes(ctx: SectionCtx, shown: readonly string[], hidden: readonly string[]): Lane[] {
+  return ctx.LANES.filter((l) => !laneVisible(ctx, l, shown, hidden));
+}
+
+// ── レーンミュート（再生のみ・書き出しは全部入り）──
+// muted に含まれるレーンの子を除いた「鳴らす子」集合。playComposite はこれを合成する（骨格/仮歌の
+// ノート除去と同じ機構＝どちらかがミュートならミュートで自然に合成される）。muted 未設定なら children そのまま＝bit一致。
+export function audibleChildren(ctx: SectionCtx, muted: readonly string[]): Child[] {
+  if (!muted.length) return ctx.children;
+  const set = new Set(muted);
+  return ctx.children.filter((c) => {
+    const l = laneOfChild(ctx, c);
+    return !l || !set.has(l.key);
+  });
+}
 
 // 子の実長（拍）。ネストした section/song＝中身の実長（子を再帰で畳む）＝1小節固定でなく本当の尺（評価修正A）。
 export function childDur(ctx: SectionCtx, c: Child): number {

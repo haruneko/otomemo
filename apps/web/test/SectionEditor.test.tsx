@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, music, link } =
+const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link } =
   vi.hoisted(() => ({
     getComposition: vi.fn(),
     listNeta: vi.fn(),
@@ -14,11 +14,12 @@ const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta,
     recommend: vi.fn(),
     getSong: vi.fn(),
     updateSong: vi.fn(),
+    updateNeta: vi.fn(),
     music: vi.fn(),
     link: vi.fn(),
   }));
 vi.mock("../src/api", () => ({
-  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, music, link },
+  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link },
 }));
 
 import { SectionEditor, loopPositions, spanOverlaps } from "../src/components/SectionEditor";
@@ -87,6 +88,8 @@ describe("SectionEditor (3-lane timeline)", () => {
     recommend.mockResolvedValue([]); // #20 既定＝おすすめ無し（各テストで上書き可）
     getSong.mockResolvedValue(null); // song の SongStatus overlay（未設定）
     updateSong.mockResolvedValue({});
+    updateNeta.mockReset();
+    updateNeta.mockResolvedValue({}); // レーン表示/ミュートの content 保存（fire-and-forget）
     copyNeta.mockReset();
   });
 
@@ -561,6 +564,10 @@ describe("SectionEditor (3-lane timeline)", () => {
     listNeta.mockResolvedValue([mk("cp9", "chord_pattern", { title: "パッド素材" })]);
     placeChild.mockResolvedValue({ ok: true });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    // コード楽器2は定番外＝空だと既定で畳まれる（レーン契約）。＋レーンで出してから空セルに置く。
+    await userEvent.click(screen.getByLabelText("add-lane"));
+    await userEvent.click(screen.getByLabelText("add-lane-chord_pattern2"));
     await userEvent.click(screen.getByLabelText("place-chord_pattern2-0")); // 楽器2レーンの1小節目
     await waitFor(() => expect(screen.getByText("パッド素材")).toBeInTheDocument());
     await userEvent.click(screen.getByText("パッド素材"));
@@ -1096,6 +1103,92 @@ describe("骨格から吹く→realized_from（design #20・候補が骨格idを
     await userEvent.click(await screen.findByLabelText("place-candidate"));
     await waitFor(() => expect(placeChild).toHaveBeenCalled());
     expect(link).not.toHaveBeenCalled(); // 骨格idを持たない候補＝リンクしない
+  });
+});
+
+describe("レーンの表示/演奏の有効化（オーナー要望・Fable裁定）", () => {
+  beforeEach(() => {
+    recommend.mockResolvedValue([]);
+    getSong.mockResolvedValue(null);
+    updateNeta.mockReset();
+    updateNeta.mockResolvedValue({});
+  });
+
+  it("既定＝定番4だけ表示。定番外（骨格/対旋律…）は畳み、＋レーンに候補が出る", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    // 定番4は見出しの畳むボタンが出る＝表示中
+    for (const k of ["chord", "melody", "bass", "rhythm"]) expect(screen.getByLabelText(`collapse-${k}`)).toBeInTheDocument();
+    // 定番外は畳まれている＝空セルも畳むボタンも無い
+    expect(screen.queryByLabelText("place-skeleton-0")).toBeNull();
+    expect(screen.queryByLabelText("collapse-counter")).toBeNull();
+    // ＋レーンで畳んだレーンを選べる
+    await userEvent.click(screen.getByLabelText("add-lane"));
+    expect(screen.getByLabelText("add-lane-skeleton")).toBeInTheDocument();
+    expect(screen.getByLabelText("add-lane-counter")).toBeInTheDocument();
+    expect(screen.queryByLabelText("add-lane-melody")).toBeNull(); // 既に見えてるものは候補に出ない
+  });
+
+  it("中身のある定番外レーンは既定で表示（骨格に子）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("sk1", "skeleton", { content: { bars: 2, tones: [{ start: 0, pitch: 60 }] } }), children: [] } }],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-sk1@0");
+    expect(screen.getByLabelText("collapse-skeleton")).toBeInTheDocument(); // 中身あり＝出す
+  });
+
+  it("＋レーンで出す→content に lanes_shown を保存／畳む→lanes_hidden を保存", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    // 対旋律を出す
+    await userEvent.click(screen.getByLabelText("add-lane"));
+    await userEvent.click(screen.getByLabelText("add-lane-counter"));
+    expect(screen.getByLabelText("place-counter-0")).toBeInTheDocument(); // 出た＝空セルが描かれる
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("s1", expect.objectContaining({ content: expect.objectContaining({ lanes_shown: ["counter"] }) })));
+    // 定番のメロを畳む＝lanes_hidden に入る（配置データは無傷＝再生/書き出しには残る）
+    await userEvent.click(screen.getByLabelText("collapse-melody"));
+    expect(screen.queryByLabelText("place-melody-0")).toBeNull(); // 畳まれた
+    await waitFor(() => expect(updateNeta).toHaveBeenLastCalledWith("s1", expect.objectContaining({ content: expect.objectContaining({ lanes_hidden: ["melody"] }) })));
+  });
+
+  it("content の lanes_hidden/lanes_shown を復元して初期表示に反映（bit-safe＝既存は新既定）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    // メロを畳み、骨格を出した状態を content に持つセクション
+    const neta = mk("s1", "section", { content: { lanes_hidden: ["melody"], lanes_shown: ["skeleton"] } });
+    render(<SectionEditor neta={neta} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    expect(screen.queryByLabelText("place-melody-0")).toBeNull(); // hidden 復元
+    expect(screen.getByLabelText("place-skeleton-0")).toBeInTheDocument(); // shown 復元
+  });
+
+  it("レーンミュート＝見出しのスピーカーで toggle・content に lanes_muted を保存（再生のみ・書き出しは全部入り）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("b1", "bass", { content: { notes: [{ pitch: 36, start: 0, dur: 1 }] } }), children: [] } }],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-b1@0");
+    const mute = screen.getByLabelText("mute-bass");
+    expect(mute).toHaveAttribute("aria-pressed", "false"); // 既定＝鳴る
+    await userEvent.click(mute);
+    expect(mute).toHaveAttribute("aria-pressed", "true"); // ミュート
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("s1", expect.objectContaining({ content: expect.objectContaining({ lanes_muted: ["bass"] }) })));
+    // MIDI書き出しは全部入り＝ミュートしてもエクスポート経路(laneTracks/composite)には効かない（UI title で明示）
+    expect(mute.getAttribute("title") ?? "").toContain("書き出しは全部入り");
+  });
+
+  it("song はアレンジ専用＝レーン畳み/ミュート/＋レーンは出さない（従来どおり）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("g1", "song"), children: [] });
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    expect(screen.getByLabelText("place-section-0")).toBeInTheDocument(); // section レーンは従来どおり出る
+    expect(screen.queryByLabelText("add-lane")).toBeNull();
+    expect(screen.queryByLabelText("collapse-section")).toBeNull();
+    expect(screen.queryByLabelText("mute-section")).toBeNull();
   });
 });
 
