@@ -59,6 +59,11 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [2026-07-15-kariuta-accent-feasibility](2026-07-15-kariuta-accent-feasibility.md) — **アクセント抽出実測（L3）＝pyopenjtalk強く推奨**。モーラ分割20/20完全一致・同綴異義（箸/橋）を文脈で弁別・外れの大半は平板↔尾高（語内コンター同一=旋律照合に無害）。重依存ゼロ（torch不要）・MIT+修正BSD商用可・**都度spawn 0.13-0.23秒**=常駐不要。SSOT裁定=分割の正典はPython・TS splitMoraはかな高速パス。限界=英字間投詞/固有名詞→accents上書きの口（既設）で人間確定
 - [2026-07-15-kariuta-voicevox-feasibility](2026-07-15-kariuta-voicevox-feasibility.md) — **VOICEVOX歌唱のローカル実走（L4）＝回る・速い**。RTF≈0.10（8.3秒歌唱を0.83秒レンダ）・ウォーム後1フレーズ≒1秒・RAM691MB/ディスク2.1GB。歌声=波音リツ+ハミング声色81スタイル（query=sing/synth=frame_decodeで差し替え）。統合推奨=cm-search同型の常駐1本（都度起動でもコールド3秒）。NEUTRINO不要判定。試聴wav3本をオーナーへ送付済み
 
+- [2026-07-15-lyrics-first-melody-verdict](2026-07-15-lyrics-first-melody-verdict.md) — **歌詞先行メロ生成＝Fable審査団3体の統合裁定★まずここ**。難易度の答え=使える版S+〜M(Opus2-3日級)・フルOrpheus型XL=「やらない」。推奨=減量版（歌詞→モーラ数/句割りをV2注入＋best-of-N＋analyzeLyricFit再ランク・アクセントはhardにせず検査とランキング）。決定打=Cの実測「実メロのアクセント厳密一致31.7%・オーナー自作曲にA-01赤2発」＝硬い制約は誤前提
+- [2026-07-15-lyrics-first-melody-A](2026-07-15-lyrics-first-melody-A.md) — 設計A=V2拡張路線（Fable）。注入口3つが既存（rhythmParts.custom=音数厳密一致/opts.phrases/候補ランク）・新規発明2点のみ・最小S+/完成M。モチーフ反復×アクセントは「反復が勝つ」優先順位正準化
+- [2026-07-15-lyrics-first-melody-B](2026-07-15-lyrics-first-melody-B.md) — 設計B=Orpheus型二段DP路線（Fable）。リズム層+音高層Viterbi・骨格ガイドで平板回避・Gumbel摂動で多様性・M+。裁定では「A-01=0構造保証」がCの実測で美点でなく害と判明し不採用（骨格×言葉乗せの分業思想は第2スライス候補として遺産）
+- [2026-07-15-lyrics-first-melody-C-audit](2026-07-15-lyrics-first-melody-C-audit.md) — 監査C=意地悪な実測（Fable）★決定打。実メロ6本63ペア=アクセント厳密一致31.7%/核下がり目36%違反/自作みなそこにA-01赤2発＝「硬い制約」は自作曲を生成禁止にする。完全整合メロ=節付き朗読を構築実証・fit>0.85で弁別力喪失・V2×12seed再ランクだけで実曲スコア超えを実測=減量版の実力証明
+
 ## オーディオ解析（アナリーゼ＝新しい柱）
 - [2026-07-15-analysis-pedagogy](2026-07-15-analysis-pedagogy.md) — **アナリーゼ教育論（Wave1-R1・外部サーベイ）＝「何を読むと学びになるか」**。分析の型=フォーム→和声(機能)→メロ→リズム→アレンジのマクロ→微視（教本/Berklee/Covach一致）。**見どころ18類型×検出に要るfacts×言語化の対応表**（D1レンズ転用マップの直接材料）。良い分析文=「事実→解釈→転用」3層＝**v1が薄かったのは事実層で停止したから**・全観点均等でなく「効いてる逸脱1点」深掘り方式。所見文テンプレ3本＋初学者向け3ブロック構成（構成1枚→効いてる一点→転用1手）
 - [2026-07-15-local-key-detection-survey](2026-07-15-local-key-detection-survey.md) — **局所調・転調検出サーベイ（Wave1-R2）＝①の「借用/転調こそ見どころ」を支える手法**。推奨=コード列ベースDP（Viterbi型）＝既存 `resolveTonic`（継続長ヒートマップ）を窓スコアラに再利用＋切替コスト＋最小滞在長＝**純TS・追加依存ゼロ**。借用/転調の区別=三段の砦（切替罰則/滞在2小節/カデンツ加点）・相場「4小節超＋カデンツ=転調、1-2コード=tonicization」。`key_segments` 契約案＋F3合格基準つき。J-pop平行調往復にresolveTonicが原理的に強い根拠も記載
