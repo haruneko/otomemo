@@ -15,7 +15,9 @@ import {
   lensGateTargets,
   melodicMapKey,
   pickupSchedule,
+  vocalSourceSchedule,
 } from "../src/audio";
+import { SING_LEAD_REST_BEATS } from "../src/music";
 
 describe("drumKey — (キット, GM番号) の合成キー（ビットシフト）", () => {
   it("kit=0 は pitch をそのまま返す", () => {
@@ -267,6 +269,39 @@ describe("pickupSchedule — 弱起（負start）の再生時刻変換（design#
     const r = pickupSchedule(notes, { loop: false });
     expect(r.leadBeats).toBe(1); // max(0, −min(−1,−0.5,0)) = 1
     expect(r.notes.map((n) => n.start)).toEqual([0, 0.5, 1]);
+  });
+});
+
+describe("vocalSourceSchedule — 仮歌の初音を楽器の初音と同時刻へ（弱起ズレ修正・#13c）", () => {
+  // 楽器の初音時刻（拍）＝ firstNoteBeat + leadBeats（pickupSchedule が全ノートを +leadBeats シフトするため）。
+  // 受け入れ＝歌の第1音時刻(whenBeat) == 楽器の第1音時刻・offset は wav 先頭休符ぶんちょうど（非ループ）。
+  const spb = 60 / 92; // みなそこイントロ ♩92
+  const lead = SING_LEAD_REST_BEATS;
+
+  it("弱起1（負start・非ループ）：楽器の初音は transport 0、歌も whenBeat=0・offset=先頭休符", () => {
+    // 例＝みなそこ弱起 -0.5。非ループ leadBeats = -minStart = 0.5。楽器初音拍 = -0.5+0.5 = 0。
+    const r = vocalSourceSchedule({ firstNoteBeat: -0.5, leadRestBeats: lead, leadBeats: 0.5, spb });
+    const instrBeat = -0.5 + 0.5; // 楽器がこの初音を鳴らす transport 拍
+    expect(r.whenBeat).toBe(instrBeat); // 歌の第1音時刻 == 楽器の第1音時刻
+    expect(r.offsetSec).toBeCloseTo(lead * spb); // 先頭休符ぶんちょうど食う（余分な食い込みなし）
+  });
+
+  it("弱起0（初音0拍・非ループ）：when=0・offset=先頭休符", () => {
+    const r = vocalSourceSchedule({ firstNoteBeat: 0, leadRestBeats: lead, leadBeats: 0, spb });
+    expect(r.whenBeat).toBe(0);
+    expect(r.offsetSec).toBeCloseTo(lead * spb);
+  });
+
+  it("先頭休符0.25（初音が0.25拍・非ループ）：when=0.25・offset=先頭休符＝楽器初音(0.25拍)と一致", () => {
+    const r = vocalSourceSchedule({ firstNoteBeat: 0.25, leadRestBeats: lead, leadBeats: 0, spb });
+    expect(r.whenBeat).toBe(0.25);
+    expect(r.offsetSec).toBeCloseTo(lead * spb);
+  });
+
+  it("楽器初音が負に押し出る場合（ループ leadBeats=0・弱起）：when=0 へ丸め、余剰を offset で食う", () => {
+    const r = vocalSourceSchedule({ firstNoteBeat: -0.5, leadRestBeats: lead, leadBeats: 0, spb });
+    expect(r.whenBeat).toBe(0); // 負拍は置けない＝0 へ
+    expect(r.offsetSec).toBeCloseTo((lead + 0.5) * spb); // 先頭休符＋押し出た0.5拍を wav 側で飛ばす
   });
 });
 

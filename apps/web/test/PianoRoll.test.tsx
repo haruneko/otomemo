@@ -95,17 +95,7 @@ describe("PianoRoll", () => {
     expect(onChange).not.toHaveBeenCalled(); // 編集tapと競合しない（stopPropagation）
   });
 
-  // --- ♪歌う ボタン ---
-  it("sing button: hidden without onSing, disabled without syllables, enabled with", () => {
-    const { rerender } = render(<PianoRoll notes={[{ pitch: 60, start: 0, dur: 1 }]} onChange={vi.fn()} enableLyric />);
-    expect(screen.queryByLabelText("sing")).toBeNull(); // onSing 未指定＝非表示
-
-    rerender(<PianoRoll notes={[{ pitch: 60, start: 0, dur: 1 }]} onChange={vi.fn()} enableLyric onSing={vi.fn()} />);
-    expect(screen.getByLabelText("sing")).toBeDisabled(); // 歌詞なし＝disabled
-
-    rerender(<PianoRoll notes={[{ pitch: 60, start: 0, dur: 1, syllable: "ら" }]} onChange={vi.fn()} enableLyric onSing={vi.fn()} />);
-    expect(screen.getByLabelText("sing")).toBeEnabled();
-  });
+  // ※♪歌うボタンは撤去（仮歌の入れ方はメロの楽器＝仮歌に集約）。旧 sing-button テストは削除。
 
   // --- 詞モード（歌詞リタッチ）---
   it("lyric mode: note tap opens retouch input with current syllable, does NOT delete the note", async () => {
@@ -179,18 +169,4 @@ describe("PianoRoll", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("sing button: calls onSing, shows spinner text while singing", async () => {
-    const onSing = vi.fn();
-    const { rerender } = render(
-      <PianoRoll notes={[{ pitch: 60, start: 0, dur: 1, syllable: "ら" }]} onChange={vi.fn()} enableLyric onSing={onSing} />,
-    );
-    await userEvent.click(screen.getByLabelText("sing"));
-    expect(onSing).toHaveBeenCalledTimes(1);
-    rerender(
-      <PianoRoll notes={[{ pitch: 60, start: 0, dur: 1, syllable: "ら" }]} onChange={vi.fn()} enableLyric onSing={onSing} singing />,
-    );
-    const btn = screen.getByLabelText("sing");
-    expect(btn).toHaveTextContent("歌声を作っています");
-    expect(btn).toBeDisabled(); // 生成中は連打ロック
-  });
 });

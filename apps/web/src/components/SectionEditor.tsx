@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type Neta } from "../api";
-import { decodeVocal } from "../audio"; // ♪仮歌：wav→AudioBuffer デコード（再生と同一 AudioContext）
 import { KIND_LABEL } from "../kinds";
 import { isProjectTag, projectName } from "../project";
 import { useTransport } from "../useTransport";
+import { useVocalRender } from "../useVocal"; // ♪仮歌（メロの楽器＝歌声）の共有レンダ＝ネタ単体▶と同じ経路
 import { TransportBar } from "./TransportBar";
 import {
   notesForContent,
   compositeNotes,
   vocalMelodyFromComposite,
-  muteMelodyForVocal,
+  singOf,
   trackProgramOf,
   downloadMidi,
   downloadMultitrackMidi,
@@ -151,58 +151,39 @@ export function SectionEditor({
   }
   // 骨格レーンの「鳴らす」トグル（耳確認・オーナーFB 2026-07-11）。既定OFF＝従来どおり無音。保存しない（セッション内のみ）。
   const [skelAudible, setSkelAudible] = useState(false);
-  // ♪仮歌（Section）：メロレーンを VOICEVOX で歌わせ、伴奏と**同一クロック**で鳴らす（譜割り検証の本番）。
-  // vocalMel＝合成メロ声部（複数配置/隙間/オフセットは compositeNotes が連結済み）→歌唱ノート＋整合情報（純関数）。
-  const vocalMel = useMemo(() => vocalMelodyFromComposite(compositeNotes(children, keyPc, neta.mode)), [children, keyPc, neta.mode]);
-  // singBuf がどの入力(歌唱ノート＋テンポ)のものか＝メロ/テンポ/歌詞が変われば別キー＝作り直し（hash 違い＝新asset）。
-  const singInputKey = useMemo(() => JSON.stringify({ n: vocalMel.notes, t: tempo }), [vocalMel, tempo]);
-  const [singOn, setSingOn] = useState(false); // 仮歌ON＝メロ楽器をミュートして歌を再生に乗せる（既定OFF＝bit一致）
-  const [singBuf, setSingBuf] = useState<AudioBuffer | null>(null); // デコード済み歌唱 wav
-  const [singBusy, setSingBusy] = useState(false); // 合成中スピナー
-  const [singMsg, setSingMsg] = useState<string | null>(null); // 音域移調/クランプ注記・失敗メッセージ
-  const singKeyRef = useRef<string | null>(null); // singBuf の入力キー（キャッシュ判定用）
+  // ♪仮歌（メロの楽器＝歌声）：各メロ子ネタの content.sing に従い、歌う子だけ VOICEVOX で歌わせ伴奏と同一クロックで
+  // 鳴らす（入れ方はメロ側に集約＝Section 側トグルは撤去）。歌う子＝kind=melody かつ sing.enabled かつ歌詞(syllable)あり。
+  // 各子は自分の配置オフセットで placed（compositeNotes([child]) で position 移調済み）＝複数メロ混在が自然に成立。
+  const singingJobs = useMemo(() => {
+    const jobs: { key: string; notes: { pitch: number; start: number; dur: number; syllable?: string }[]; bpm: number; firstNoteBeat: number; speaker?: number; child: Child }[] = [];
+    // レーンミュート（再生のみ）された子は歌わせない＝ミュート＝合成/歌の両方から外す（一貫性）。
+    for (const c of sctx.audibleChildren(secCtx, lanesMuted)) {
+      const sing = c.node.neta.kind === "melody" ? singOf(c.node.neta.content) : undefined;
+      if (!sing) continue;
+      const vm = vocalMelodyFromComposite(compositeNotes([c], keyPc, neta.mode));
+      if (!vm.hasLyric) continue; // 歌詞なし＝フォールバック楽器（歌わせない・ミュートもしない）
+      jobs.push({ key: JSON.stringify({ n: vm.notes, t: tempo }), notes: vm.notes, bpm: tempo, firstNoteBeat: vm.minStartBeat, speaker: sing.speaker, child: c });
+    }
+    return jobs;
+  }, [children, keyPc, neta.mode, tempo, lanesMuted]); // secCtx は children/keyPc/mode 派生＝上の deps で十分
+  const singingChildren = useMemo(() => new Set(singingJobs.map((j) => j.child)), [singingJobs]);
+  const vocal = useVocalRender();
+  const jobsRef = useRef(singingJobs);
+  jobsRef.current = singingJobs;
+
   // #49/#58/#59 トランスポート。合成結果を再生／プレイヘッドは TOTAL(グリッド全体)尺・拍子BPB。
   // 再生ノートは playComposite＝骨格トグルONの間だけ骨格2声が混ざる（書き出しは composite のまま）。
-  // 仮歌ON＝vocal に AudioBuffer を渡す＝playNotes が伴奏と同一 transport クロックで歌を鳴らす（OFF/未生成＝従来一致）。
+  // getVocal＝再生押下（playPause で ensure レンダ後）に peek で最新 buffer 群を掴む（歌う子が無ければ null＝従来一致）。
   const tp = useTransport(() => playComposite(), tempo, {
     scaleBeats: TOTAL, bpb: BPB, feel: sectionFeel(), compound: isCompoundMeter(liveMeter),
-    vocal: singOn && singBuf ? { buffer: singBuf, startBeat: vocalMel.startBeat } : null,
+    getVocal: () => vocal.peek(jobsRef.current),
   });
 
-  // メロ/テンポ/歌詞が仮歌ON中に変わったら＝古い歌が伴奏とズレる＝自動でOFFにし作り直しを促す（正直な v1）。
-  useEffect(() => {
-    if (singOn && singKeyRef.current !== null && singKeyRef.current !== singInputKey) {
-      setSingOn(false);
-      setSingMsg("メロが変わりました。もう一度 ♪仮歌 を押して作り直してください。");
-    }
-  }, [singInputKey, singOn]);
-
-  // ♪仮歌トグル：ON で（必要なら）合成→デコード→再生に乗せる／OFF でメロ楽器へ復帰。
-  const toggleSing = useCallback(async () => {
-    if (singOn) { setSingOn(false); return; } // OFF＝vocal を渡さない＝メロ楽器が復帰（muteMelodyForVocal を外す）
-    if (!vocalMel.hasLyric) return; // 歌詞なしは disabled のはず（防御）
-    if (singBuf && singKeyRef.current === singInputKey) { setSingMsg(null); setSingOn(true); return; } // 同一入力＝再合成せず
-    setSingBusy(true);
-    setSingMsg(null);
-    try {
-      const r = await api.sing(vocalMel.notes, tempo); // 同一入力なら api 側 content-hash で合成スキップ
-      const bytes = await fetch(api.assetUrl(r.assetId)).then((x) => x.arrayBuffer());
-      const buf = await decodeVocal(bytes);
-      setSingBuf(buf);
-      singKeyRef.current = singInputKey;
-      setSingOn(true);
-      const notes: string[] = [];
-      if (r.shift) notes.push(`歌える音域へ ${r.shift > 0 ? "+" : ""}${r.shift} 半音移調`);
-      if (r.clamped) notes.push(`${r.clamped}音を音域内に丸め`);
-      if (vocalMel.clampedPickup) notes.push(`弱起 ${vocalMel.clampedPickup}音を頭出し0へクランプ`);
-      setSingMsg(notes.length ? notes.join("／") : null);
-    } catch (e) {
-      setSingOn(false);
-      setSingMsg(`仮歌の生成に失敗：${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setSingBusy(false);
-    }
-  }, [singOn, singBuf, singInputKey, vocalMel, tempo]);
+  // 再生＝歌う子があれば先に wav をレンダ（未キャッシュは「歌声を作っています…」busy）→ 伴奏と同期再生。停止/一時停止は素通し。
+  const playPause = useCallback(async () => {
+    if (tp.state === "stopped" && jobsRef.current.length) await vocal.ensure(jobsRef.current);
+    tp.playPause();
+  }, [tp.state, tp.playPause, vocal.ensure]);
 
   // Space=合成再生/一時停止（design #59）。入力中は無効。
   useEffect(() => {
@@ -211,11 +192,11 @@ export function SectionEditor({
       const t = e.target as HTMLElement;
       if (t.closest?.('input, textarea, select, button, a, [contenteditable="true"]')) return;
       e.preventDefault();
-      tp.playPause();
+      void playPause();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tp.playPause]);
+  }, [playPause]);
 
   const load = useCallback(async () => {
     try {
@@ -360,14 +341,19 @@ export function SectionEditor({
   function playComposite(): Note[] {
     // レーンミュート（再生のみ・書き出しは全部入り）＝muted レーンの子を鳴らす合成から外す。
     // 骨格/仮歌のノート除去と同じ機構＝どれかがミュートならミュートで自然に合成される。lanesMuted 空なら children そのまま＝従来一致。
-    const audible = compositeNotes(sctx.audibleChildren(secCtx, lanesMuted), keyPc, neta.mode);
+    const audibleKids = sctx.audibleChildren(secCtx, lanesMuted);
+    // ♪仮歌＝歌う子の楽器音は muted フラグで再生スケジュールから外す（歌本体は vocal 経路の wav で鳴る＝二重化回避）。
+    // ただし notes は残す＝弱起(負start)/尺が leadBeats・終端計算に効く（歌が伴奏と同じ弱起シフトに乗る）。書き出しは不変。
+    const singKids = audibleKids.filter((c) => singingChildren.has(c));
+    const restKids = audibleKids.filter((c) => !singingChildren.has(c));
+    const audible = compositeNotes(restKids, keyPc, neta.mode);
+    const mutedSing = compositeNotes(singKids, keyPc, neta.mode).map((n) => (n.part === "melody" ? { ...n, muted: true } : n));
     // 骨格を鳴らす＝メロ(part:"melody")をミュートし、骨格2声(Strings/Cello)を伴奏(コード/ベース/ドラム)に重ねて
     // 対位法的に聴く（メロと骨格の二重化＝ピアノが勝つのを避ける・オーナーFB 2026-07-12）。書き出し(composite)は不変。
     // 骨格レーン自体をミュートしている時は骨格2声も出さない（ミュート合成の一貫性）。
     const skel = skelAudible && !lanesMuted.includes("skeleton") ? skelEar() : [];
-    const base = skelAudible ? [...audible.filter((n) => n.part !== "melody"), ...skel] : audible;
-    // ♪仮歌ON＝メロ楽器音をミュート（歌が主・二重化を避ける）。歌本体は vocal 経路（AudioBuffer）で乗る。書き出しは不変。
-    return singOn && singBuf ? muteMelodyForVocal(base) : base;
+    const withSkel = skelAudible ? audible.filter((n) => n.part !== "melody") : audible;
+    return [...withSkel, ...mutedSing, ...skel];
   }
   // アンサンブル feel（design.md「フィール層分離」Stage4）：セクション内メロトラックの content.feel を
   // **全トラックに同一適用**＝スイングは声部単位でなく時間軸の共有性質（メロだけ跳ねる事故を避ける）。無ければストレート。
@@ -441,9 +427,12 @@ export function SectionEditor({
           {gen.fitReport} <span className="muted">（タップで消す）</span>
         </p>
       )}
-      {singMsg && (
-        <p className="fit-report" aria-label="sing-report" onClick={() => setSingMsg(null)}>
-          {singMsg} <span className="muted">（タップで消す）</span>
+      {vocal.busy && (
+        <p className="fit-report" aria-label="sing-busy">歌声を作っています…</p>
+      )}
+      {vocal.msg && (
+        <p className="fit-report" aria-label="sing-report" onClick={() => vocal.setMsg(null)}>
+          {vocal.msg} <span className="muted">（タップで消す）</span>
         </p>
       )}
 
@@ -730,53 +719,26 @@ export function SectionEditor({
         state={tp.state}
         loopOn={tp.loopOn}
         timeRef={tp.timeRef}
-        onPlayPause={tp.playPause}
+        onPlayPause={() => void playPause()}
         onRewind={tp.rewind}
         onToggleLoop={tp.toggleLoop}
         extra={(() => {
           // 「骨格を鳴らす」＝再生機能なのでトランスポートへ（オーナーFB 2026-07-12）。骨格レーンに子がある時だけ。
           // ON＝メロをミュートし骨格2声(Strings/Cello)を伴奏に重ねて対位法的に聴く（再生のみ・MIDI書き出しには入らない）。
+          // ※♪仮歌トグルは撤去（入れ方はメロ側の楽器＝仮歌に集約・2026-07-15）。歌う子は▶で自動レンダ→同期再生。
           const skelLane = LANES.find((l) => l.key === "skeleton");
-          const skelBtn =
-            skelLane && laneChildren(skelLane).length > 0 ? (
-              <button
-                type="button"
-                className={"tp-btn tp-skel" + (skelAudible ? " on" : "")}
-                aria-label="skeleton-audible"
-                aria-pressed={skelAudible}
-                title="骨格を鳴らす（メロをミュートして骨格2声を伴奏に重ね対位法で確認・再生のみ）"
-                onClick={() => setSkelAudible((v) => !v)}
-              >
-                骨格{skelAudible ? "中" : ""}
-              </button>
-            ) : null;
-          // ♪仮歌＝メロを VOICEVOX で歌わせ伴奏と同期再生（譜割り検証）。歌詞(syllable)付き音が無ければ disabled。
-          const singTitle = singBusy
-            ? "歌声を作っています…"
-            : !vocalMel.hasLyric
-              ? "メロに歌詞(syllable)がありません。メロを開いて歌詞を載せてください。"
-              : singOn
-                ? "仮歌を止めてメロ楽器へ戻す"
-                : "メロを歌わせて伴奏と一緒に鳴らす（仮歌・同期再生）";
-          const singBtn = (
+          return skelLane && laneChildren(skelLane).length > 0 ? (
             <button
               type="button"
-              className={"tp-btn tp-sing" + (singOn ? " on" : "")}
-              aria-label="vocal-guide"
-              aria-pressed={singOn}
-              disabled={singBusy || !vocalMel.hasLyric}
-              title={singTitle}
-              onClick={() => void toggleSing()}
+              className={"tp-btn tp-skel" + (skelAudible ? " on" : "")}
+              aria-label="skeleton-audible"
+              aria-pressed={skelAudible}
+              title="骨格を鳴らす（メロをミュートして骨格2声を伴奏に重ね対位法で確認・再生のみ）"
+              onClick={() => setSkelAudible((v) => !v)}
             >
-              {singBusy ? "♪…" : singOn ? "仮歌中" : "♪仮歌"}
+              骨格{skelAudible ? "中" : ""}
             </button>
-          );
-          return (
-            <>
-              {skelBtn}
-              {singBtn}
-            </>
-          );
+          ) : null;
         })()}
       />
     </div>

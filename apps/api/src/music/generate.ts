@@ -23,7 +23,9 @@ import {
 import { genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel, type SkelContour } from "./melodyCells";
 import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, explicitBassSegments, foldBassPitch, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
-import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）
+import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）
+import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
+import { type LyricMelodyPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）
 import { pitchAt } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
@@ -90,7 +92,7 @@ export interface Frame {
   palette?: Palette; // 旋法パレット（WP-C1・2026-07-14）。ionian/mixolydian/aeolian/dorian。未指定＝mode から ionian(major)/aeolian(minor)＝bit一致。メロ/ベースが scalePcs 差替で追従。
 }
 export interface GenResult {
-  items: { kind: string; content: unknown; label: string }[];
+  items: { kind: string; content: unknown; label: string; meta?: Record<string, unknown> }[]; // meta=読み取り専用レポート添付（lenses/syncScore/lyricFit 等・候補ノート不変＝bit一致）
   edges: never[];
   meta?: { warnings?: string[]; structureWarnings?: string[] }; // warnings=citypop 等の「やり過ぎ警告」（WP-C3）。structureWarnings=生成後の構造欠陥(dur<=0/重複onset/範囲外)の警告（2026-07-15・structureValidator）。いずれも非ブロック併記＝未指定＝キー無し＝従来 bit 一致。
 }
@@ -421,7 +423,7 @@ export function genMelody(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
   seed?: number | null,
-  opts?: { motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; skeleton?: SkeletonContent; rhythmParts?: RhythmPartsOpt }, // motifModel/skelModel=コーパス学習（V2経路が消費＝③genMotifMelodyはJ4/#16で撤去済み）。rhythmParts=リズムパーツ層L1/L2（design #20 S4-1/S4-2・rotate=小節ローテ／placement=小節明示（placement>rotate>L0）／custom=インラインパーツ・未指定=bit一致）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
+  opts?: { motifModel?: { rhythm: BarRhythmModel; move: MoveModel }; skelModel?: SkeletonModel; repetition?: number; rangeSteps?: number; useV2?: boolean; motifBars?: number; phrasing?: "symmetric" | "asymmetric" | "period" | "sentence"; partial?: { pitch: number; start?: number; dur?: number }[]; density?: number; swing?: number; expression?: number; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; registerShift?: number; bass?: { pitch: number; start?: number; dur?: number }[]; counter?: number; drums?: DrumsInput | null; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; skeleton?: SkeletonContent; rhythmParts?: RhythmPartsOpt; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[] }, // phrases=句割り配列の直渡し（#13d 歌詞先行＝lyricsPlan 由来・最優先／未指定=従来 phrasing 派生=bit一致）。motifModel/skelModel=コーパス学習（V2経路が消費＝③genMotifMelodyはJ4/#16で撤去済み）。rhythmParts=リズムパーツ層L1/L2（design #20 S4-1/S4-2・rotate=小節ローテ／placement=小節明示（placement>rotate>L0）／custom=インラインパーツ・未指定=bit一致）。skeleton=人間製/機械候補の骨格（design #20・V2経路で genSkeletonFromModel をバイパスして注入・未指定＝bit一致）。repetition/rangeSteps=骨格の利用時制約。useV2=A2レシピ経路。motifBars=モチーフ/フレーズ長(小節)。phrasing=句割り 対称/非対称(P0-b・骨格経路)。partial=補完(completion)の種=部分メロ。density=細かさ/swing=跳ね/expression=表情/runs=走句/push=前借り 0..1（V2経路）。registerShift=音域中心の半音シフト（V2経路・飽和付き・既定0=bit一致・セクション役割 chorus 等で +）。bass=ベーストラックのnotes＋counter=対位係数0..1（V2経路・既定0=bit一致＝design「gen_melody×ベース結線」）。drums=ドラム入力(genDrums content と同形)＋drumLock/backbeat/converse=3ノブ 0..1（V2経路・既定0=bit一致＝design「gen_melody×ドラム結線」）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
@@ -536,7 +538,8 @@ export function genMelody(
     // S3a(design #20)：骨格に phrases があれば frame phrasing 由来より**骨格の句割りを優先**（骨格が構造の権威）。
     // 骨格 phrases 無し＝従来（frame phrasing 由来 or undefined）＝bit一致。beat 単位は V2 の barLen（compound?3:4）に合わせる。
     const skelPhrases = opts?.skeleton ? skeletonPhrasesToV2(opts.skeleton, { beatsPerBar: barLen }) : undefined;
-    const phrases = skelPhrases ?? (so.phrasing ? planSkeleton(bars, f.meter, { phrasing: so.phrasing }).map((p) => ({ startBeat: p.startBeat, beats: p.beats, cadenceDegree: p.cadenceDegree })) : undefined);
+    // #13d 歌詞先行：opts.phrases（lyricsPlan 由来の配列直渡し）を最優先＝句割りの権威は歌詞。未指定＝従来（骨格 or phrasing 派生 or undefined）＝bit一致。
+    const phrases = (opts?.phrases && opts.phrases.length) ? opts.phrases : (skelPhrases ?? (so.phrasing ? planSkeleton(bars, f.meter, { phrasing: so.phrasing }).map((p) => ({ startBeat: p.startBeat, beats: p.beats, cadenceDegree: p.cadenceDegree })) : undefined));
     // 表情の既定較正(2026-07-09 批判レビューP0a)：V2既定が expression=0＝強拍CT100%(無菌の極・実曲57%)だった。
     // frame.expression 明示＞mood既定(0.15-0.3)＞既定0.25。legacy(applyExpression)と同じロジックをV2へ結線。
     // so.expression＝明示 opts.expression ＞ role プリセット（applySectionPreset で埋め済）。
@@ -656,6 +659,65 @@ export function genMelodyCandidates(
   }
   const base = (f.mood ? f.mood + "メロ" : "メロディ");
   return { items: picked.map((c, i) => ({ kind: "melody", content: c.feel ? { notes: c.notes, feel: c.feel } : { notes: c.notes }, label: `${base}案${i + 1}`.slice(0, 24) })), edges: [] };
+}
+
+// 歌詞先行メロ候補（design #13d・WP-L1）＝lyricsPlan（phrases＋rhythmParts）を V2 へ注入して N 本生成し、
+// 各候補に歌詞を流し込み（音数一致で 1:1）→ analyzeLyricFit で採点 → 「句頭A-01赤 ＞ 総赤 ＞ 整合score」で並べ替え、
+// 多様な top-k を返す（select はしない＝機械は候補まで）。各候補の content.notes は syllable 済み・meta.lyricFit に整合レポート。
+// accents は呼び側（mcp ハンドラ）が pyopenjtalk で1回抽出して渡す＝この関数は同期純関数（決定的）。
+export function genLyricMelodyCandidates(
+  frame?: Frame | null,
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  opts?: Parameters<typeof genMelody>[3] & { plan?: LyricMelodyPlan; accents?: AccentEntry[]; corpusModel?: { rhythm: BarRhythmModel; move: MoveModel } | null; k?: number; n?: number },
+): GenResult {
+  if (!opts?.plan || !opts.plan.phrases.length) return genMelodyCandidates(frame, chords, null, opts); // 計画空＝通常候補（保険）
+  const o = opts;
+  const plan = o.plan!;
+  const k = Math.max(1, o.k ?? 3);
+  const n = Math.max(k, o.n ?? 8);
+  const { plan: _p, accents, corpusModel: _c, k: _k, n: _n, ...rest } = o;
+  const genOpts = { ...rest, useV2: true, phrases: plan.phrases, rhythmParts: plan.rhythmParts };
+  const f = normalizeFrame(frame);
+  const isHead = (noteIdx: number): boolean => plan.lineHeadNoteIdx.some((h) => noteIdx >= h && noteIdx <= h + 1); // 句頭＝各行の先頭2オンセット（最初の遷移）
+  type Cand = { notes: (MelNote & { syllable?: string })[]; feel?: Feel; score: number; a01Head: number; a01Total: number; red: number; yellow: number; onsetMatch: boolean };
+  const cands: Cand[] = [];
+  const seen = new Set<string>();
+  for (let s = 1; s <= n; s++) {
+    const c0 = genMelody(frame, chords, s, genOpts).items[0]?.content as { notes?: MelNote[]; feel?: Feel } | undefined;
+    const raw = c0?.notes;
+    if (!raw || raw.length === 0) continue;
+    const key = raw.map((x) => `${x.pitch}@${round3(x.start)}:${round3(x.dur)}`).join(",");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const onsetMatch = raw.length === plan.syllables.length; // 音数⇔モーラ（オンセット）一致 property
+    const flowed = flowLyric(raw as LNote[], plan.syllables) as (MelNote & { syllable?: string })[];
+    const fit = analyzeLyricFit(flowed, accents && accents.length ? { accents } : {});
+    const a01 = fit.hits.filter((h) => h.ruleId === "A-01");
+    cands.push({
+      notes: flowed, feel: c0?.feel, score: fit.score,
+      a01Head: a01.filter((h) => isHead(h.noteIdx)).length,
+      a01Total: a01.length,
+      red: fit.hits.filter((h) => h.severity === "red").length,
+      yellow: fit.hits.filter((h) => h.severity === "yellow").length,
+      onsetMatch,
+    });
+  }
+  if (cands.length === 0) return genMelodyCandidates(frame, chords, 1, opts);
+  // 句頭A-01赤（語義誤解・最重）を最優先で減らす → 総赤 → 整合score 降順（同点は生成順で安定）。
+  cands.sort((a, b) => a.a01Head - b.a01Head || a.a01Total - b.a01Total || b.score - a.score);
+  const picked: Cand[] = [];
+  for (const c of cands) { if (picked.length >= k) break; if (picked.every((p) => melodySimilarity(p.notes, c.notes) < CAND_SIM_MAX)) picked.push(c); }
+  for (const c of cands) { if (picked.length >= k) break; if (!picked.includes(c)) picked.push(c); }
+  const base = (f.mood ? f.mood + "歌詞メロ" : "歌詞メロ");
+  return {
+    items: picked.map((c, i) => ({
+      kind: "melody",
+      content: c.feel ? { notes: c.notes, feel: c.feel } : { notes: c.notes },
+      label: `${base}案${i + 1}`.slice(0, 24),
+      meta: { lyricFit: { score: round3(c.score), a01Head: c.a01Head, a01Total: c.a01Total, red: c.red, yellow: c.yellow, onsetMatch: c.onsetMatch } },
+    })),
+    edges: [],
+  };
 }
 
 // 骨格の機械候補出し（design #20・「機械は候補まで」）。frame＋コード進行を受け、genSkeletonFromModel で

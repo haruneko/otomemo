@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { playNotes, type Note, type PlaybackHandle, type Feel } from "./music";
+import { playNotes, type Note, type PlaybackHandle, type Feel, type VocalPlay } from "./music";
 import { usePlayhead } from "./usePlayhead";
 
 export type TransportState = "stopped" | "playing" | "paused";
@@ -13,8 +13,9 @@ export function useTransport(
   // #20 S6骨格の机: activeLens/range は加算 optional。未指定＝従来完全一致（NetaDialog/SectionEditor 不変）。
   // activeLens 指定時＝begin の playNotes へ渡し初期ゲート（そのレンズだけ開く）＝レンズ印つき notes 用。
   // range 指定時（D1.5）＝ループ区間を [startBeat,endBeat) に絞る。未指定＝全体（0..total）＝従来 bit 一致。
-  // vocal（♪仮歌）＝Section の VOICEVOX 歌唱 AudioBuffer を伴奏と同一クロックで鳴らす。未指定/null＝従来一致。
-  opts: { scaleBeats: number; bpb?: number; program?: number; feel?: Feel | null; compound?: boolean; activeLens?: string; range?: { startBeat: number; endBeat: number }; vocal?: { buffer: AudioBuffer; startBeat: number } | null },
+  // vocal（♪仮歌）＝メロの楽器=歌声の VOICEVOX wav を伴奏と同一クロックで鳴らす。getVocal は begin 時に読む（再生
+  // 押下→レンダ完了後の最新 buffer を掴む＝React state のフラッシュ待ちに依存しない）。未指定/空＝従来一致（bit-safe）。
+  opts: { scaleBeats: number; bpb?: number; program?: number; feel?: Feel | null; compound?: boolean; activeLens?: string; range?: { startBeat: number; endBeat: number }; getVocal?: () => VocalPlay[] | null },
 ) {
   const { lineRef, timeRef, scrollerRef, beatRef, start: startPh, stop: stopPh } = usePlayhead();
   const handle = useRef<PlaybackHandle | null>(null);
@@ -23,8 +24,8 @@ export function useTransport(
 
   // 最新値を ref に退避＝コールバックを安定化（stale closure 回避）。activeLens も載せる＝再ループ時の
   // 初期ゲート（そのレンズだけ開く）が最新のレンズ選択で正しく効く（無停止切替は begin を回さないので別経路）。
-  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens, range: opts.range, vocal: opts.vocal });
-  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens, range: opts.range, vocal: opts.vocal };
+  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens, range: opts.range, getVocal: opts.getVocal });
+  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens, range: opts.range, getVocal: opts.getVocal };
 
   const begin = useCallback(
     async (loop: boolean) => {
@@ -39,7 +40,7 @@ export function useTransport(
         feel: c.feel,
         compound: c.compound,
         activeLens: c.activeLens, // #20 S6: notes にレンズ印がある時だけ意味を持つ（未指定＝全開＝従来）
-        vocal: c.vocal ?? null, // ♪仮歌：伴奏と同一クロックで歌う AudioBuffer（未指定＝従来一致）
+        vocal: c.getVocal?.() ?? null, // ♪仮歌：伴奏と同一クロックで歌う AudioBuffer 群（未指定/空＝従来一致）
         onEnd: () => {
           setState("stopped");
           stopPh();

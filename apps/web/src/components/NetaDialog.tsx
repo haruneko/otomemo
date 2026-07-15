@@ -53,6 +53,8 @@ export function NetaDialog({
         meter={ed.meter}
         tempo={ed.tempo}
         program={ed.program}
+        sing={ed.sing}
+        setSing={ed.setSing}
         tags={ed.tags}
         mood={ed.mood}
         setKey={ed.setKey}
@@ -101,7 +103,7 @@ export function NetaDialog({
           state={ed.tp.state}
           loopOn={ed.tp.loopOn}
           timeRef={ed.tp.timeRef}
-          onPlayPause={ed.tp.playPause}
+          onPlayPause={() => void ed.playPause()}
           onRewind={ed.tp.rewind}
           onToggleLoop={ed.tp.toggleLoop}
           onUndo={ed.editHist.undo}
@@ -109,6 +111,15 @@ export function NetaDialog({
           canUndo={ed.editHist.canUndo}
           canRedo={ed.editHist.canRedo}
         />
+      )}
+      {ed.singNoLyric && (
+        <p className="fit-report" aria-label="sing-fallback">仮歌ですが歌詞(syllable)がありません。詞モードで歌詞を載せるまで既定楽器で鳴らします。</p>
+      )}
+      {ed.vocal.busy && <p className="fit-report" aria-label="sing-busy">歌声を作っています…</p>}
+      {ed.vocal.msg && (
+        <p className="fit-report" aria-label="sing-report" onClick={() => ed.vocal.setMsg(null)}>
+          {ed.vocal.msg} <span className="muted">（タップで消す）</span>
+        </p>
       )}
       <RelationsPanel rels={ed.rels} onOpenNeta={onOpenNeta} />
     </div>

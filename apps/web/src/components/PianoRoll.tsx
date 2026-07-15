@@ -46,8 +46,6 @@ export function PianoRoll({
   meter,
   keyRoot,
   keyMode,
-  onSing,
-  singing = false,
 }: {
 
   notes: Note[];
@@ -65,8 +63,6 @@ export function PianoRoll({
   readOnly?: boolean; // 候補レビュー中は編集不可（クリックで足さない）
   keyRoot?: number; // P0-a 調の主音(0-11)。指定時、行を調内音でハイライト＝「外し音を避ける」足場。
   keyMode?: string; // "major"/"minor"（既定=major）。短調は自然的短音階で判定。
-  onSing?: () => void; // ♪歌う（W-K3）：歌詞付きメロを VOICEVOX で歌わせる。未指定＝ボタン非表示。
-  singing?: boolean; // 歌声生成中（スピナー文言・連打ガードは親）。
 }) {
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
@@ -288,19 +284,6 @@ export function PianoRoll({
             {hasLyric && (
               <button type="button" aria-label="clear-lyric" onClick={() => onChange(notes.map((n) => ({ ...n, syllable: undefined })))}>
                 クリア
-              </button>
-            )}
-            {onSing && (
-              // ♪歌う：歌詞が1つも無ければ disabled・連打/生成中は親が singing でロック。
-              <button
-                type="button"
-                aria-label="sing"
-                className="proll-sing"
-                disabled={!hasLyric || singing}
-                aria-busy={singing}
-                onClick={onSing}
-              >
-                {singing ? "歌声を作っています…" : "♪歌う"}
               </button>
             )}
           </div>

@@ -686,27 +686,26 @@ describe("♪仮歌（Section）＝vocalMelodyFromComposite / muteMelodyForVocal
     expect(v.notes.map((n) => n.syllable)).toEqual(["そ", "ら", "み"]);
     expect(v.notes.some((n) => n.pitch === 36)).toBe(false); // bass は入らない
     expect(v.hasLyric).toBe(true);
-    expect(v.clampedPickup).toBe(0);
-    expect(v.startBeat).toBe(0); // 初音0拍 − 先頭休符0.25 = -0.25 → 0 にクランプ
+    expect(v.minStartBeat).toBe(0); // 初音0拍
   });
 
-  it("弱起（負start）は頭出しを0にクランプし、その数を clampedPickup に、startBeat は初音−先頭休符", async () => {
-    const { vocalMelodyFromComposite, SING_LEAD_REST_BEATS } = await import("../src/music");
+  it("弱起（負start）はクランプせず保持し、minStartBeat は初音（負）＝再生 offset で楽器と揃える（旧v1クランプ撤去）", async () => {
+    const { vocalMelodyFromComposite } = await import("../src/music");
     const composite = [
-      { part: "melody" as const, pitch: 67, start: -1, dur: 1, syllable: "ア" }, // 弱起＝クランプ対象
-      { part: "melody" as const, pitch: 72, start: 4, dur: 1, syllable: "イ" }, // 初音でない（後）
+      { part: "melody" as const, pitch: 67, start: -0.5, dur: 0.25, syllable: "し" }, // 弱起（負start）＝潰さず保持
+      { part: "melody" as const, pitch: 68, start: -0.25, dur: 0.25, syllable: "ず" }, // 弱起2つ目
+      { part: "melody" as const, pitch: 72, start: 0, dur: 0.5, syllable: "み" }, // ダウンビート
     ];
     const v = vocalMelodyFromComposite(composite);
-    expect(v.clampedPickup).toBe(1);
-    expect(v.notes[0]!.start).toBe(0); // 弱起は0へ
-    expect(v.notes[0]!.dur).toBeCloseTo(0.05); // end(=-1+1=0)保持で min 0.05 に丸め
-    expect(v.startBeat).toBe(Math.max(0, 0 - SING_LEAD_REST_BEATS)); // 初音は0拍
+    expect(v.notes.map((n) => n.start)).toEqual([-0.5, -0.25, 0]); // 負start をそのまま保持（輪郭破壊なし）
+    expect(v.notes.map((n) => n.dur)).toEqual([0.25, 0.25, 0.5]); // dur も保持（0.05へ潰さない）
+    expect(v.minStartBeat).toBe(-0.5); // 初音＝弱起の頭（負）
   });
 
-  it("初音が後方の時 startBeat は初音−先頭休符（wav の先頭休符ぶん手前から鳴らして初音を本来の拍へ）", async () => {
+  it("初音が後方の時 minStartBeat は初音の拍（先頭休符/オフセットは再生側 vocalSourceSchedule が扱う）", async () => {
     const { vocalMelodyFromComposite } = await import("../src/music");
     const composite = [{ part: "melody" as const, pitch: 60, start: 8, dur: 1, syllable: "サ" }];
-    expect(vocalMelodyFromComposite(composite).startBeat).toBeCloseTo(7.75);
+    expect(vocalMelodyFromComposite(composite).minStartBeat).toBe(8);
   });
 
   it("歌詞が1つも無ければ hasLyric=false（ボタン disabled の判定）", async () => {
@@ -716,6 +715,15 @@ describe("♪仮歌（Section）＝vocalMelodyFromComposite / muteMelodyForVocal
       { part: "melody" as const, pitch: 62, start: 1, dur: 1, syllable: "  " }, // 空白のみ＝歌詞なし扱い
     ];
     expect(vocalMelodyFromComposite(composite).hasLyric).toBe(false);
+  });
+
+  it("singOf＝content.sing.enabled が true の時だけ設定を返す（未設定/false＝undefined＝従来楽器）", async () => {
+    const { singOf } = await import("../src/music");
+    expect(singOf({ notes: [], program: 73 })).toBeUndefined(); // sing 無し＝従来楽器
+    expect(singOf({ sing: { enabled: false } })).toBeUndefined(); // false＝歌わない
+    expect(singOf({ sing: { enabled: true } })).toEqual({ enabled: true });
+    expect(singOf({ sing: { enabled: true, speaker: 3009 } })).toEqual({ enabled: true, speaker: 3009 });
+    expect(singOf(null)).toBeUndefined();
   });
 
   it("muteMelodyForVocal はメロ声部だけ落とし、伴奏(counter/chord/bass/drums)は保つ", async () => {

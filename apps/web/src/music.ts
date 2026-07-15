@@ -37,6 +37,8 @@ export interface Note extends CoreNote {
   part?: MixPart; // ミキサーのパート（合成再生で compositeNotes が付与）。パート別ゲインへ振り分ける。
   lens?: string; // #20 S6骨格の机: レンズ印（例 "fold"/"real"）。両レンズを同時スケジュールし
   // レンズ別ゲインバスで鳴らす側だけ開く（無停止A/B）。未指定＝従来経路（partGains 直結）＝bit一致。
+  muted?: boolean; // #13c 仮歌: この音は再生スケジュールから外す（＝楽器音を鳴らさない）が、leadBeats/尺の
+  // 計算には残す（弱起・長さを保つ）。歌う声部を wav（vocal 経路）で鳴らす時に楽器音の二重化を避ける。未指定＝通常発音。
 }
 
 // ミキサーのパート＝メロ/コード/ベース/ドラム（音量バランスと音割れ対策のパート別ゲイン・耳FB 2026-07-09）。
@@ -684,46 +686,48 @@ export function compositeNotes(
   });
 }
 
-// ── 仮歌（Section）：合成メロ声部 → VOICEVOX 歌唱ノート ──────────────────────
+// ── 仮歌（メロの楽器＝歌声）：合成メロ声部 → VOICEVOX 歌唱ノート ─────────────────
 // sing.ts notesToScore が先頭に置く休符（拍）。仮歌 wav は初音の LEAD_REST 拍手前から鳴る＝
-// 再生スケジュールをこのぶん手前へずらして初音を本来の拍に合わせる（api の DEFAULT と同値・整合）。
+// 再生時は AudioBufferSource の offset でこのぶんを食って初音を本来の拍に合わせる（api の DEFAULT と同値・整合）。
 export const SING_LEAD_REST_BEATS = 0.25;
 
+// #13c 仮歌設定＝メロネタ content に載る「歌声で鳴らす」宣言。未設定＝従来楽器（後方互換）。
+export interface SingSetting {
+  enabled: boolean;
+  speaker?: number; // 声色（frame_decode id）。未指定＝api 既定（波音リツ）。
+}
+export function singOf(content: unknown): SingSetting | undefined {
+  if (content && typeof content === "object") {
+    const s = (content as { sing?: unknown }).sing;
+    if (s && typeof s === "object" && (s as SingSetting).enabled === true) return s as SingSetting;
+  }
+  return undefined;
+}
+
 export interface VocalMelody {
-  notes: { pitch: number; start: number; dur: number; syllable?: string }[]; // 絶対拍・音域は api 側で歌唱バンドへ寄せる
-  hasLyric: boolean; // syllable が1つでもあるか（無ければ仮歌ボタンは disabled）
-  clampedPickup: number; // 弱起（負start）をクランプした音数（v1＝頭出しを0に）
-  startBeat: number; // 仮歌 wav を鳴らし始める拍（初音 − 先頭休符・0未満は0）＝伴奏と同一クロックで合わせる
+  notes: { pitch: number; start: number; dur: number; syllable?: string }[]; // 絶対拍・弱起(負start)も保持・音域は api 側で歌唱帯へ
+  hasLyric: boolean; // syllable が1つでもあるか（無ければ歌えない＝フォールバック楽器）
+  minStartBeat: number; // 初音の拍（弱起なら負）。再生スケジュール（vocalSourceSchedule.firstNoteBeat）に使う
 }
 
 // 合成済み notes（compositeNotes 由来＝絶対拍・part 付き・複数配置/隙間/オフセットは compositeNotes が解決済み）
 // から**メロ声部だけ**を仮歌用に抽出する純関数。連結ロジックは compositeNotes を再利用＝二重実装しない。
-// 弱起（負start）は v1 クランプ（鳴らし始めを0へ・end は保つ＝MIDI書き出しと同じ既知課題）。
+// 弱起（負start）は**クランプせず保持**＝notesToScore が相対gapで正しく譜割り、再生は offset で初音を楽器と揃える
+// （旧v1クランプ＝弱起を0.05拍に潰す輪郭破壊を撤去・オーナーFB「弱起がズレて再生」の根治）。
 export function vocalMelodyFromComposite(composite: Note[]): VocalMelody {
-  const mel = composite.filter((n) => n.part === "melody" && !n.drum);
-  let clampedPickup = 0;
-  const notes = mel
-    .map((n) => {
-      let start = n.start;
-      let dur = n.dur;
-      if (start < 0) {
-        const end = start + dur;
-        start = 0;
-        dur = Math.max(0.05, end); // 0より前の頭を落として頭出しを0に（end<=0 は下の filter で除外）
-        clampedPickup++;
-      }
-      return { pitch: Math.round(n.pitch), start, dur, syllable: n.syllable };
-    })
-    .filter((n) => n.dur > 0)
+  const notes = composite
+    .filter((n) => n.part === "melody" && !n.drum && n.dur > 0)
+    .map((n) => ({ pitch: Math.round(n.pitch), start: n.start, dur: n.dur, syllable: n.syllable }))
     .sort((a, b) => a.start - b.start);
   const hasLyric = notes.some((n) => !!n.syllable && n.syllable.trim().length > 0);
-  const firstStart = notes.length ? notes[0]!.start : 0;
-  const startBeat = Math.max(0, firstStart - SING_LEAD_REST_BEATS);
-  return { notes, hasLyric, clampedPickup, startBeat };
+  const minStartBeat = notes.length ? notes[0]!.start : 0;
+  return { notes, hasLyric, minStartBeat };
 }
 
 // 仮歌ON時の再生ノート＝メロ声部の**楽器音をミュート**（歌が主・ピアノ等との二重化を避ける）。
-// 純関数（テスト対象）＝part!=="melody" だけ残す。counter/chord/bass/drums は保つ（伴奏）。
+// 純関数＝part!=="melody" だけ残す。counter/chord/bass/drums は保つ（伴奏）。
+// ※新モデル（メロの楽器＝仮歌）では notes に muted フラグを付ける方式（歌う子だけミュート＝複数メロ混在対応）に
+//   一般化したため通常経路では未使用だが、単純な「全メロを落とす」用途向けに残置（api.sing 等の下回りと同じく流用可）。
 export function muteMelodyForVocal(notes: Note[]): Note[] {
   return notes.filter((n) => n.part !== "melody");
 }

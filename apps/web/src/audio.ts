@@ -54,9 +54,37 @@ interface PlayOpts {
   feel?: Feel | null; // フィール層：再生境界で applyFeel（スイング/微小タイミング）。未指定＝ストレート＝従来一致。
   compound?: boolean; // 6/8等＝スイング対象外（feel.swing skip）。
   activeLens?: string; // #20 S6: notes にレンズ印がある時、初期に開くレンズ。未指定＝全レンズ開（従来は無関係）。
-  // ♪仮歌（Section）：VOICEVOX 歌唱 wav をデコードした AudioBuffer を**伴奏と同一クロックで**鳴らす。
-  // 未指定/null＝従来完全一致（仮歌経路は指定時のみ触る＝bit-safe）。startBeat＝wav の鳴らし始め拍。
-  vocal?: { buffer: AudioBuffer; startBeat: number; gain?: number } | null;
+  // ♪仮歌（メロの楽器＝歌声）：VOICEVOX 歌唱 wav をデコードした AudioBuffer を**伴奏と同一クロックで**鳴らす。
+  // 未指定/null/空配列＝従来完全一致（仮歌経路は指定時のみ触る＝bit-safe）。**配列**＝歌う子ごとに1本
+  // （Section 複数メロ・各自の配置オフセット）。firstNoteBeat＝その wav の初音の（合成前）絶対拍＝楽器と同じ
+  // pickupSchedule(leadBeats) を掛けて発音時刻へ。leadRestBeats＝wav 先頭に付く休符（offset で食う）。
+  vocal?: VocalPlay[] | null;
+}
+
+// #13c 仮歌の再生1本ぶん。firstNoteBeat/leadRestBeats から playNotes が when/offset を算出（vocalSourceSchedule）。
+export interface VocalPlay {
+  buffer: AudioBuffer;
+  firstNoteBeat: number; // 歌の初音の絶対拍（弱起なら負）。楽器の同音と同じ座標。
+  leadRestBeats: number; // wav 先頭休符（SING_LEAD_REST_BEATS）。offset でこのぶんを飛ばして初音を when に落とす。
+  gain?: number;
+}
+
+// #13c 仮歌スケジュール（純関数・Tone非依存・TDD）＝歌の初音を**楽器の初音と同時刻**へ落とす when/offset を算出。
+// - 楽器の初音時刻（拍）＝ firstNoteBeat + leadBeats（pickupSchedule が全ノートを +leadBeats シフトするため）。
+// - transport.schedule は負拍に置けない＝when は 0 下限。負に押し出た分（whenBeat − 楽器初音拍）は offset へ足して
+//   wav をそのぶん進めて食う（＝ループ等で楽器初音が0より前になる時、弱起頭を飛ばして頭を揃える）。
+// - 通常（非ループ・楽器初音拍>=0）＝ when=楽器初音拍・offset=先頭休符ぶん＝歌初音 == 楽器初音（弱起でも一致）。
+export function vocalSourceSchedule(opts: {
+  firstNoteBeat: number;
+  leadRestBeats: number;
+  leadBeats: number;
+  spb: number;
+}): { whenBeat: number; offsetSec: number } {
+  const instrBeat = opts.firstNoteBeat + opts.leadBeats; // 楽器がこの初音を鳴らす transport 拍
+  const whenBeat = Math.max(0, instrBeat);
+  const extraBeats = whenBeat - instrBeat; // >=0（負拍を0へ丸めた食い込み量）
+  const offsetSec = (opts.leadRestBeats + extraBeats) * opts.spb;
+  return { whenBeat, offsetSec };
 }
 
 // ♪仮歌：wav バイト列を共有 AudioContext(Tone.rawContext)で AudioBuffer へデコード（再生と同一 ctx＝同期の前提）。
@@ -1102,7 +1130,8 @@ export async function playNotes(
     // #25 弱起（負start）を再生でも鳴らす。却下案（t=0 丸め）を撤去し pickupSchedule で置き換え：
     //   非ループ＝全ノート +L シフト（transport 0 開始）／ループ＝弱起を loopEnd+start へ巻き込む。
     const { notes: scheduled } = pickupSchedule(finalNotes, { loop: isLoop, loopEndBeat });
-    for (const ev of scheduleTimes(scheduled, bpm)) {
+    // #13c 仮歌：muted 音（歌う声部の楽器音）は audio 予約から外す（leadBeats/尺の計算には残る＝pickupSchedule 済）。
+    for (const ev of scheduleTimes(scheduled.filter((n) => !n.muted), bpm)) {
       transport.schedule(
         (time: number) => playEvent(ev, time, sf, kit, Tone, drumKits, melodicByPart, defaultProg),
         ev.time,
@@ -1111,35 +1140,39 @@ export async function playNotes(
   };
   scheduleFrom(notes); // 初回＝従来と bit 一致（notes は上で feel 適用済み）。
 
-  // ♪仮歌（Section）：VOICEVOX 歌唱 wav を伴奏と同一 transport クロックで鳴らす。opts.vocal 未指定＝この経路は
-  // 一切触らない（bit-safe）。仕組み＝AudioBufferSource を transport.schedule で startBeat 位置に予約＝ノート発音と
-  // 同じ absolute ctx 時刻に乗る。ループ時は transport.schedule が**ループ窓内の予約を毎周再発火**するので（本体の
-  // ノート予約と同じ性質）、ループ境界で歌も自然にリスタートする＝前周ソースを止めて新ソースを張り直す。
-  const vocalCtx: AudioContext | null = opts.vocal ? (Tone.getContext().rawContext as AudioContext) : null;
-  const vocalGain = opts.vocal && vocalCtx ? vocalCtx.createGain() : null;
-  if (opts.vocal && vocalGain) {
-    vocalGain.gain.value = opts.vocal.gain ?? 1;
-    vocalGain.connect(ensureMaster(Tone, "melody")); // メロのパートバス経由（歌はメロ声部＝メロフェーダーに乗る）
-  }
-  let vocalSource: AudioBufferSourceNode | null = null;
+  // ♪仮歌（メロの楽器＝歌声）：VOICEVOX 歌唱 wav を伴奏と同一 transport クロックで鳴らす。opts.vocal 未指定/空＝
+  // この経路は一切触らない（bit-safe）。仕組み＝子ごとに AudioBufferSource を transport.schedule で when 拍に予約し
+  // start(ctx時刻, offset) で先頭休符を食う＝歌の初音がその子の楽器初音と同時刻に落ちる（vocalSourceSchedule）。
+  // ループ時は transport.schedule が**ループ窓内の予約を毎周再発火**するので（本体のノート予約と同じ性質）、ループ
+  // 境界で歌も自然にリスタート＝前周ソースを止めて張り直す。歌はメロのパートバス（melody フェーダー）に乗せる。
+  const vocals: VocalPlay[] = opts.vocal ?? [];
+  const vocalCtx: AudioContext | null = vocals.length ? (Tone.getContext().rawContext as AudioContext) : null;
+  const vocalGain = vocals.length && vocalCtx ? vocalCtx.createGain() : null;
+  if (vocalGain) vocalGain.connect(ensureMaster(Tone, "melody"));
+  const vocalCur = new Map<VocalPlay, AudioBufferSourceNode>(); // 子ごとの現行ソース（ループ再火で張り替え）
   const stopVocal = (): void => {
-    if (vocalSource) {
-      try { vocalSource.stop(); } catch { /* 未開始/停止済み */ }
-      try { vocalSource.disconnect(); } catch { /* */ }
-      vocalSource = null;
+    for (const src of vocalCur.values()) {
+      try { src.stop(); } catch { /* 未開始/停止済み */ }
+      try { src.disconnect(); } catch { /* */ }
     }
+    vocalCur.clear();
   };
   const scheduleVocalEvent = (): void => {
-    if (!opts.vocal || !vocalCtx || !vocalGain) return;
-    const v = opts.vocal;
-    transport.schedule((time: number) => {
-      stopVocal(); // ループ再開時＝前周の歌を止めてから張り直す（AudioBufferSource は使い捨て）
-      const src = vocalCtx.createBufferSource();
-      src.buffer = v.buffer;
-      src.connect(vocalGain);
-      src.start(time); // ノート発音と同じ絶対 ctx 時刻＝同期
-      vocalSource = src;
-    }, Math.max(0, v.startBeat) * spb);
+    if (!vocalCtx || !vocalGain) return;
+    for (const v of vocals) {
+      const { whenBeat, offsetSec } = vocalSourceSchedule({ firstNoteBeat: v.firstNoteBeat, leadRestBeats: v.leadRestBeats, leadBeats, spb });
+      transport.schedule((time: number) => {
+        const prev = vocalCur.get(v); // ループ再開＝この子の前周ソースを止めてから張り直す（子単位＝他メロの歌は止めない）
+        if (prev) { try { prev.stop(); } catch { /* */ } try { prev.disconnect(); } catch { /* */ } }
+        const src = vocalCtx.createBufferSource();
+        src.buffer = v.buffer;
+        const g = vocalCtx.createGain();
+        g.gain.value = v.gain ?? 1;
+        src.connect(g).connect(vocalGain);
+        src.start(time, Math.max(0, offsetSec)); // 楽器初音と同 ctx 時刻・offset で先頭休符を食う＝同期
+        vocalCur.set(v, src);
+      }, whenBeat * spb);
+    }
   };
   scheduleVocalEvent();
 

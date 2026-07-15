@@ -31,6 +31,8 @@ export function MetaPanel(p: {
   meter: string;
   tempo: number;
   program: number;
+  sing?: boolean; // #13c メロのみ：楽器＝「仮歌（歌声）」を選んでいるか。true＝▶で VOICEVOX 歌唱（歌詞あれば）。
+  setSing?: (v: boolean) => void;
   tags: string;
   mood: string;
   setKey: (v: number) => void;
@@ -69,7 +71,7 @@ export function MetaPanel(p: {
     f.showKey ? `${KEY_NAMES[p.keyPc]} ${p.mode === "major" ? "長調" : "短調"}` : null,
     f.isContainer ? p.meter : null,
     f.showMeta ? `♩${p.tempo}` : null,
-    f.isMelody || f.isBass || f.isChordPat ? gmLabel(p.program) : null,
+    f.isMelody && p.sing ? "仮歌（歌声）" : f.isMelody || f.isBass || f.isChordPat ? gmLabel(p.program) : null,
     p.rollBars ? `${Math.max(1, Math.round(p.rollBars.len / beatsPerBar(p.rollBars.meter)))}小節` : null,
     p.rollBars && p.rollBars.pickup > 0 ? `弱起${p.rollBars.pickup}` : null,
   ]
@@ -132,7 +134,19 @@ export function MetaPanel(p: {
             {(f.isMelody || f.isBass || f.isChordPat) && (
               <label className="meta">
                 音色
-                <select aria-label="program" value={p.program} onChange={(e) => p.setProgram(Number(e.target.value))}>
+                <select
+                  aria-label="program"
+                  value={p.sing ? "sing" : String(p.program)}
+                  onChange={(e) => {
+                    if (e.target.value === "sing") p.setSing?.(true); // #13c 仮歌＝歌声で鳴らす（歌詞あれば▶で歌う・無ければフォールバック楽器）
+                    else { p.setSing?.(false); p.setProgram(Number(e.target.value)); }
+                  }}
+                >
+                  {f.isMelody && p.setSing && (
+                    <optgroup label="歌声">
+                      <option value="sing">仮歌（歌声）</option>
+                    </optgroup>
+                  )}
                   <optgroup label="よく使う">
                     {GM_INSTRUMENTS.map((g) => (
                       <option key={`q${g.value}`} value={g.value}>

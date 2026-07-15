@@ -21,6 +21,7 @@ import {
   feelOf,
   isCompoundMeter,
   isSkeleton,
+  singOf,
   PITCH_NAMES as KEY_NAMES,
   type Note,
   type ChordEntry,
@@ -31,6 +32,7 @@ import {
   type SkeletonContent,
 } from "./music";
 import { skeletonPlaybackNotes } from "./skeletonEdit";
+import { useVocalRender } from "./useVocal";
 
 export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged?: () => void }) {
   const { onClose, onChanged } = opts;
@@ -64,6 +66,8 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [program, setProgram] = useState<number>(
     programOf(neta.content) ?? (neta.kind === "bass" ? 33 : neta.kind === "skeleton" || neta.kind === "counter" || neta.kind === "section_inst" ? 48 : 0), // #47 GM音色（bass=フィンガーベース・骨格/対旋律/管弦=Strings）
   );
+  // #13c 仮歌＝メロの楽器を「歌声」に（content.sing.enabled）。program はフォールバック楽器として保持（歌詞なし時）。
+  const [sing, setSing] = useState<boolean>(() => !!singOf(neta.content));
   const [rollMode, setRollMode] = useState<"draw" | "select" | "erase" | "lyric">("draw"); // ロールの描く/選ぶ/消す/詞（詞=メロのみ・歌詞リタッチ）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
   const [bassMode, setBassMode] = useState<"absolute" | "relative">(
@@ -126,18 +130,43 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
             ? chordsToNotes(chords)
             : rhythmToNotes(rhythm);
 
+  // #13c 仮歌（メロの楽器＝歌声）：メロで sing 選択かつ歌詞(syllable)あり＝▶で VOICEVOX 歌唱を伴奏なしで鳴らす。
+  // playable は既に pre で弱起を前へ寄せ済み（全 start>=0）＝これを座標系として wav の初音を楽器の初音（=同 playable の
+  // 初音時刻）へ合わせる。歌う時は playable のメロ楽器音を muted にし（歌本体は vocal 経路で鳴る＝二重化回避）、notes は
+  // 残す＝尺/スペースの計算に効く。歌詞なしで sing のみ＝フォールバック楽器（program）で普通に鳴らす。
+  const singingMelody = isMelody && sing;
+  const vocalHasLyric = singingMelody && playable.some((n) => !!n.syllable && n.syllable.trim().length > 0);
+  const vocalJob = vocalHasLyric
+    ? {
+        key: JSON.stringify({ n: playable.map((n) => ({ pitch: Math.round(n.pitch), start: n.start, dur: n.dur, syllable: n.syllable })), t: tempo }),
+        notes: playable.map((n) => ({ pitch: Math.round(n.pitch), start: n.start, dur: n.dur, syllable: n.syllable })),
+        bpm: tempo,
+        firstNoteBeat: playable.length ? Math.min(...playable.map((n) => n.start)) : 0,
+      }
+    : null;
+  const playableFinal = vocalHasLyric ? playable.map((n) => ({ ...n, muted: true })) : playable;
+  const vocal = useVocalRender();
+  const jobsRef = useRef(vocalJob ? [vocalJob] : []);
+  jobsRef.current = vocalJob ? [vocalJob] : [];
+
   // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。
   const span = Math.max(len, ...playable.map((n) => Math.ceil(n.start + n.dur)));
-  const tp = useTransport(() => playable, tempo, {
+  const tp = useTransport(() => playableFinal, tempo, {
     scaleBeats: span,
     bpb: 4,
     program: isRhythm ? undefined : isChord ? 48 : program, // コード進行は抽象＝固定GM49(strings)・選択不可(CP1)
     feel: feelOf(neta.content), // フィール層：この neta の content.feel でスイング/微小揺れ（無ければストレート）。
     compound: isCompoundMeter(neta.meter),
+    getVocal: () => vocal.peek(jobsRef.current),
   });
+  // 再生＝歌う設定なら先に wav をレンダ（未キャッシュは「歌声を作っています…」busy）→ 同期再生。停止/一時停止は素通し。
+  const playPause = useCallback(async () => {
+    if (tp.state === "stopped" && jobsRef.current.length) await vocal.ensure(jobsRef.current);
+    tp.playPause();
+  }, [tp.state, tp.playPause, vocal.ensure]);
 
   // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。
-  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, len, pickup };
+  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, len, pickup };
   const applySnapshot = useCallback((s: typeof snapshot) => {
     setNotes(s.notes);
     setChords(s.chords);
@@ -153,6 +182,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     setMode(s.mode);
     setTempo(s.tempo);
     setProgram(s.program);
+    setSing(s.sing);
     setLen(s.len);
     setPickup(s.pickup);
   }, []);
@@ -166,11 +196,11 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
       const t = e.target as HTMLElement;
       if (t.closest?.('input, textarea, select, button, a, [contenteditable="true"]')) return;
       e.preventDefault();
-      tp.playPause();
+      void playPause();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isMusic, tp.playPause]);
+  }, [isMusic, playPause]);
 
   // 連関（このネタから生成/関連したネタ）を表示
   useEffect(() => {
@@ -210,12 +240,19 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     }
   }
 
+  // #13c 仮歌の content 断片＝メロで sing 選択時のみ {sing:{enabled,speaker?}}。既存 speaker は温存（UIでは編集しない）。
+  // sing 非選択＝空（content から欠落＝従来楽器＝後方互換）。
+  function singContent(): { sing?: { enabled: true; speaker?: number } } {
+    if (!(isMelody && sing)) return {};
+    const speaker = singOf(neta.content)?.speaker;
+    return { sing: { enabled: true, ...(speaker != null ? { speaker } : {}) } };
+  }
   // kind ごとの保存パッチ（C基準保存・調/拍はヒント）。
   function savePatch(): NetaPatch {
     if (isRelBass)
       return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
     // meter は単体パートでも保存＝roll のグリッドと MIDI 拍子ヘッダに効く（container 限定を解消・監査 MB-05）。
-    if (isMelody || isBass || isCounter || isRiff) return { content: { notes, program }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
+    if (isMelody || isBass || isCounter || isRiff) return { content: { notes, program, ...singContent() }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
     if (isSkel) {
       // 骨格＝ブレークポイント列（dur無し）。bass/phrases は空なら省く。preview_chords は導出ベースの源として保持。
       const content: SkeletonContent & { preview_chords?: ChordEntry[] } = { bars: skelBars, tones };
@@ -255,7 +292,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     const created = await api.createNeta({
       kind: "melody",
       title: `${title.trim() || neta.title || "メロ"} 崩し`,
-      content: { notes: candidate, program },
+      content: { notes: candidate, program, ...singContent() }, // 仮歌設定も崩し候補ネタへ継承
       key,
       mode,
       tempo,
@@ -406,15 +443,16 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     tones, setTones, skelBass, setSkelBass, phrases, setPhrases, skelBars, setSkelBars, skelChords, skelCounter, setSkelCounter,
     // 値＋setter
     title, setTitle, text, setText, tags, setTags, mood, setMood,
-    key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram,
+    key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram, sing, setSing,
     notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat,
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
     rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
     // 崩し候補（①道具）
     candidate, candStrength, reshaping, reshape, saveCandidate, discardCandidate, detectKeyFromMelody,
     keyReport, clearKeyReport: () => setKeyReport(null),
-    // 派生・道具
-    playable, tp, editHist, rels, busy, schedId, colorKind,
+    // 派生・道具（playPause＝▶時に仮歌をレンダしてから再生する wrapper・vocal＝busy/msg 表示用）
+    // singNoLyric＝仮歌を選んだが歌詞(syllable)が無い＝フォールバック楽器で鳴る（注記表示用）。
+    playable, tp, playPause, vocal, singNoLyric: singingMelody && !vocalHasLyric, editHist, rels, busy, schedId, colorKind,
     // 自動保存：状態＋手動フラッシュ（保存ピル）＋閉じる（← 戻る＝フラッシュしてから）
     saveStatus, onFlush: () => void flushSave(), flush: () => flushSave(), close,
     // アクション

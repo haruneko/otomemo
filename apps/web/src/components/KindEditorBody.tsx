@@ -90,27 +90,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
   const toolsRef = useRef<HTMLDivElement>(null);
   useDismiss(toolsRef, toolsOpen, useCallback(() => setToolsOpen(false), [])); // 外タップ/Escで閉じる
   const [simReport, setSimReport] = useState<string | null>(null);
-  // ♪歌う（W-K3）：歌詞付きメロを VOICEVOX で歌わせて試聴。連打ガード=singing・失敗はメッセージ表示。
-  const [singing, setSinging] = useState(false);
-  const [singMsg, setSingMsg] = useState<string | null>(null);
-  const singAudioRef = useRef<HTMLAudioElement | null>(null);
-  const doSing = useCallback(async () => {
-    if (singing) return; // 連打ガード
-    setSinging(true);
-    setSingMsg(null);
-    try {
-      await p.flush?.(); // 未保存の歌詞をDBへ確定してから歌わせる（サーバは保存済contentを歌う）
-      const { assetId } = await api.singNeta(p.neta.id);
-      const url = api.assetUrl(assetId);
-      if (!singAudioRef.current) singAudioRef.current = new Audio();
-      singAudioRef.current.src = url;
-      await singAudioRef.current.play();
-    } catch {
-      setSingMsg("歌声の生成に失敗しました（少し待って再試行を）");
-    } finally {
-      setSinging(false);
-    }
-  }, [singing, p]);
+  // ※♪歌う（W-K3 単体試聴）は撤去。仮歌の入れ方はメロの楽器＝仮歌（MetaPanel の音色ピッカー）に集約し、
+  //   歌う設定のメロは通常の▶で歌う（NetaDialog／SectionEditor が同一 useVocalRender 経路でレンダ→同期再生）。
   // トランスポーズ（①道具・純クライアント＝Undo可）。全ノートのピッチを移動。
   const transpose = (d: number) =>
     p.setNotes(p.notes.map((n) => ({ ...n, pitch: Math.max(0, Math.min(127, n.pitch + d)) })));
@@ -269,12 +250,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     readOnly={!!p.candidate}
                     playheadRef={tp.lineRef}
                     scrollerRef={tp.scrollerRef}
-                    onSing={isMelody && !p.candidate ? doSing : undefined}
-                    singing={singing}
                   />
-                  {singMsg && (
-                    <div className="proll-sing-msg" role="alert">{singMsg}</div>
-                  )}
             </>
           )}
         </div>
