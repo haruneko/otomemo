@@ -187,6 +187,87 @@ describe("extractDrumPattern（グレースフルな諦め）", () => {
   });
 });
 
+describe("extractDrumPattern（高BPM格子適応＝#γ・2026-07-15）", () => {
+  // 決定的PRNG（テストが seed 固定で再現）。実オンセットの時刻ジッタ（STFTフレーム±23ms級）を模す。
+  const mulberry32 = (a: number) => () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  // 8ビート（kick表・snareバックビート・8分ハット）を bpm・±J秒ジッタ・seedで合成。
+  const synthJit = (bpm: number, J: number, seed: number, spec: Record<string, number[]>) => {
+    const bars = 48, meter = 4, bp = 60 / bpm;
+    const rnd = mulberry32(seed);
+    const onsets: DrumOnset[] = [];
+    for (let bar = 0; bar < bars; bar++)
+      for (const [kind, beats] of Object.entries(spec))
+        for (const b of beats) onsets.push([(bar * meter + b) * bp + (rnd() * 2 - 1) * J, kind, 1]);
+    onsets.sort((a, b) => a[0] - b[0]);
+    const beatTimes = Array.from({ length: bars * meter + 4 }, (_, i) => i * bp);
+    return { onsets, beatTimes };
+  };
+  const rock8 = { kick: [0, 2], snare: [1, 3], hihat: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5] };
+
+  it("235BPM 8ビート＋ジッタ±28ms → 8分格子適応で高信頼・正パターン（16分格子では滲んで死ぬ帯）", () => {
+    // 235BPM の16分unit=63.8ms・採用窓 QUANT_TOL±30%=±19ms。±28msジッタは16分格子の位相集中を
+    // 割る（適応前は conf≈0＝実測）が、8分格子(127.5ms・±38ms)は生き残る＝格子適応の効きを固定。
+    const { onsets, beatTimes } = synthJit(235, 0.028, 1, rock8);
+    const r = extractDrumPattern(beatTimes, onsets);
+    expect(r.confidence).toBeGreaterThanOrEqual(0.3);
+    expect(r.meter).toBe(4);
+    expect(r.sub).toBe(4); // 出力の sub は検出値（ストレート）。8分照合は内部格子だけ＝契約は16分のまま
+    expect(r.rhythm.steps).toBe(16);
+    expect(lane(r.rhythm, "Kick")!.hits).toEqual([0, 8]);
+    expect(lane(r.rhythm, "Snare")!.hits).toEqual([4, 12]);
+  });
+
+  it("適応は高BPMのみ発火＝閾値下(180BPM)は従来16分格子のまま不変・閾値上(235BPM)も同じ正パターン", () => {
+    // 型追加(FAST_TEMPLATES)は matchSub===2 限定＝低中BPMの語彙・格子に一切影響しない構造保証。
+    for (const bpm of [180, 235]) {
+      const { onsets, beatTimes } = synthJit(bpm, 0.01, 7, rock8);
+      const r = extractDrumPattern(beatTimes, onsets);
+      expect(r.meter).toBe(4);
+      expect(r.sub).toBe(4);
+      expect(r.confidence).toBeGreaterThanOrEqual(0.3);
+      expect(lane(r.rhythm, "Kick")!.hits).toEqual([0, 8]);
+      expect(lane(r.rhythm, "Snare")!.hits).toEqual([4, 12]);
+    }
+  });
+
+  it("決定的＝同一facts なら meter/conf は走行間で不変（タイブレークの非決定性緩和）", () => {
+    const { onsets, beatTimes } = synthJit(235, 0.02, 3, rock8);
+    const a = extractDrumPattern(beatTimes, onsets);
+    const b = extractDrumPattern(beatTimes, onsets);
+    expect(a.meter).toBe(b.meter);
+    expect(a.confidence).toBe(b.confidence);
+    expect(a.template).toBe(b.template);
+  });
+
+  it("λ弛緩(matchSub=2限定)でも捏造しない＝高BPM 6+5変拍子＋kickブリード → 低信頼", () => {
+    // OVERLAP_LAMBDA_FAST=0.15（Fable裁定 2026-07-15）の弛緩しすぎ回帰防止。
+    // ブリード（kick毎に同時刻の偽snare）があり、かつ型に居ない変拍子＝緩いλでも立ってはいけない。
+    const bpm = 235, bp = 60 / bpm;
+    const rnd = mulberry32(5);
+    const onsets: DrumOnset[] = [];
+    let t = 0;
+    for (let i = 0; i < 80; i++) {
+      const m = i % 2 === 0 ? 6 : 5;
+      for (const b of m === 6 ? [0, 2, 4] : [0, 3]) {
+        const tt = t + b * bp + (rnd() * 2 - 1) * 0.02;
+        onsets.push([tt, "kick", 1], [tt, "snare", 0.6]); // snare側へのブリードを模す
+      }
+      onsets.push([t + (m === 6 ? 3 : 2) * bp + (rnd() * 2 - 1) * 0.02, "snare", 1]);
+      for (let b = 0; b < m; b++) onsets.push([t + b * bp + (rnd() * 2 - 1) * 0.02, "hihat", 1]);
+      t += m * bp;
+    }
+    onsets.sort((a, b) => a[0] - b[0]);
+    const beatTimes = Array.from({ length: Math.ceil(t / bp) }, (_, i) => i * bp);
+    const r = extractDrumPattern(beatTimes, onsets);
+    expect(r.confidence).toBeLessThan(0.3);
+  });
+});
+
 describe("transcribeFullSong（全曲書き起こし＝畳まない・小節ごとの実パターン）", () => {
   it("小節0-3と4-7で叩きが違う曲→各小節の生パターンをそのまま書き起こす（折り畳まない）", () => {
     // 前半4小節=8ビート(kick1,3)／後半4小節=4つ打ち(kick0,1,2,3)。hihatは全小節8分。

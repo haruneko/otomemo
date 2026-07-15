@@ -67,10 +67,18 @@ def pesto_vocal(vocal_wav):
 #       (B) RLE前に f0 メディアンフィルタ＋RLE後に同音マージ／孤立短断片除去。
 # f0値は常に PESTO（歌区間の"どの音程か"はPESTOが担う）。閾値は下の定数で較正可能。
 # =========================================================================
-# --- VADゲート定数（歌区間判定の較正パラメータ・ハードコード避け定数化） ---
-VAD_RMS_PERCENTILE = 42     # vocal stem frame RMS の曲内相対閾値（pXX 以上を歌とみなす。
-                            #   較正: 42 で 蜿蜒 の幽霊が落ち voiced 0.75→0.58・密度二極化、
-                            #   かつ LostMemory 回帰 note-F 0.755（≥0.74 floor）を維持。上げると回帰が割れる）
+# --- VADゲート定数（歌/演奏区間判定の較正パラメータ・ハードコード避け定数化） ---
+# stem_energy_mask は**適応閾値**：曲の性質（連続演奏か・休符がある曲か）を pre-gate の voiced率
+# で判定し、閾値の付け方を二段に切り替える（2026-07-15 監査是正・下の実測参照）。
+#   ・休符のある曲（voiced率 ≤ VAD_CONTINUOUS_VOICED）＝イントロ/間奏に滲みがある → p42 で aggressive に
+#     切って幽霊（bleed）を落とす（蜿蜒 voiced 0.72→0.58・密度二極を維持）。
+#   ・ほぼ常時演奏の曲（voiced率 > VAD_CONTINUOUS_VOICED）＝固定 pXX は演奏レベルに食い込み実音を削る
+#     （監査実測: SURFACE ベースで p42 が 23%削り）→ RMS ヒストグラムの谷（Otsu）だけを閾値にして
+#     ノイズ床のみ除去（SURFACE ベース保持率 0.77→0.99）。谷は分布から自動＝曲ごとの絶対レベル非依存。
+VAD_RMS_PERCENTILE = 42     # 休符あり曲の aggressive 閾値（曲内 RMS pXX 以上を有音）。
+                            #   較正: 42 で 蜿蜒 の幽霊が落ち voiced 0.72→0.58・密度二極、LostMemory 回帰も非退行。
+VAD_CONTINUOUS_VOICED = 0.85  # pre-gate voiced率がこの値超なら「ほぼ常時演奏」＝ゲートを谷閾値へ緩める。
+                            #   較正: SURFACE ベース 0.90（連続）だけが上・他曲は ≤0.79＝明確なギャップ（監査実測）。
 VAD_USE_PYIN = False        # pyin voiced_flag も AND 併用するか（+~30s/曲。実測で幽霊除去は energy 単独で
                             #   十分・pyin併用は LostMemory note-F を下げるだけ＝既定 OFF・下の実測参照）
 VAD_MEDIAN_F0 = True        # 半音RLE前に f0 メディアンフィルタ（ビブラート断片化抑制）
@@ -79,19 +87,42 @@ VAD_MEDIAN_MS = 130         # メディアン窓（ms・較正: 130 でビブラ
 NOTE_MERGE_GAP = 0.10       # 同音でこの gap 以内の隣接ノートを1つに結合（s）
 NOTE_ABSORB_DUR = 0.14      # これ以下の短ノートは優勢な隣接持続音の割れとみなし除去（spike/dip/±半音揺れ）
 NOTE_ABSORB_RATIO = 2.5     # 隣接ノートが blip の何倍以上なら"優勢"（持続音の割れ）とみなすか
-NOTE_ABSORB_NB_MIN = 0.30   # 優勢隣接の最小絶対dur（s）＝持続音のみ吸収先に（速い実フレーズは温存）
+NOTE_ABSORB_NB_MIN = 0.60   # 優勢隣接の最小絶対dur（s）＝**明確な持続音**（≈0.6s以上の held音）だけを吸収先に。
+                            #   較正 2026-07-15: 従来 0.30 は LostMemory の速い実フレーズを「持続音の割れ」と
+                            #   誤認して削除し recall を落としていた（監査で 61ノート消失を実測）。0.60 へ上げ、
+                            #   吸収を held音隣接のみに限定＝LostMemory note-F 0.755→0.792・蜿蜒の密度二極は維持。
 NOTE_MIN_ISOLATED = 0.10    # 孤立短断片の最大 dur（s・これ以下かつ前後gap大なら除去）
 NOTE_ISOLATED_GAP = 0.12    # 孤立判定の前後 gap 下限（s）
 
-def stem_energy_mask(vocal_wav, times, percentile=VAD_RMS_PERCENTILE):
-    """vocal stem の frame RMS を曲内相対閾値でゲートし f0 時刻グリッドへ整合。
-    イントロ/間奏の伴奏滲み（低エネルギー）を歌区間から外す＝幽霊ノートの主犯対策。"""
-    y, sr = librosa.load(vocal_wav, sr=44100, mono=True)
+def _otsu_valley_rms(nz):
+    """非ゼロ RMS の log10 ヒストグラムに Otsu 二値化を掛け、二クラス（無音/滲み床 と 演奏）を
+    分ける谷の RMS を返す。連続演奏曲では谷はノイズ床近傍に落ちる＝実音を削らない緩ゲート用。"""
+    lg = np.log10(nz)
+    hist, edges = np.histogram(lg, bins=256)
+    hist = hist.astype(float)
+    p = hist / (hist.sum() + 1e-12)
+    om = np.cumsum(p)
+    mu = np.cumsum(p * np.arange(256))
+    muT = mu[-1]
+    sb = (muT * om - mu) ** 2 / (om * (1.0 - om) + 1e-12)  # クラス間分散
+    k = int(np.nanargmax(sb))
+    return float(10.0 ** (0.5 * (edges[k] + edges[k + 1])))
+
+def stem_energy_mask(stem_wav, times, voiced_ratio, base_percentile=VAD_RMS_PERCENTILE):
+    """stem（vocal/bass 共用）の frame RMS を**適応閾値**でゲートし f0 時刻グリッドへ整合。
+    休符あり曲＝pXX で aggressive（幽霊/滲み除去）、常時演奏曲＝Otsu 谷で緩ゲート（実音温存）。
+    判定は pre-gate の voiced率（VAD_CONTINUOUS_VOICED）。返り値 (mask[bool], thr)。"""
+    y, sr = librosa.load(stem_wav, sr=44100, mono=True)
     hop = 512
     rms = librosa.feature.rms(y=y, hop_length=hop)[0]
     rtimes = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop)
     nz = rms[rms > 1e-5]
-    thr = float(np.percentile(nz, percentile)) if nz.size else 0.0
+    if nz.size == 0:
+        thr = 0.0
+    elif voiced_ratio > VAD_CONTINUOUS_VOICED:
+        thr = _otsu_valley_rms(nz)                       # 常時演奏＝谷のみ（ノイズ床除去）
+    else:
+        thr = float(np.percentile(nz, base_percentile))  # 休符あり＝aggressive
     rms_at = np.interp(np.asarray(times, dtype=float), rtimes, rms)  # f0 grid へ線形整合
     return rms_at >= thr, thr
 
@@ -485,6 +516,44 @@ def resolve_tempo_octave(tempo, drum_onsets_list):
             "onset_counts": counts, "candidates": scored}
     return chosen["bpm"], info
 
+# =========================================================================
+# ベース採譜の是正（2026-07-15 監査）＝①energyVADゲート ②stemオンセットでのノート分割。
+# 背景: bass pyin のピッチ追従は既にほぼ完璧（raw f0 exact 0.951・オクターブ跳ね≈1%）なのに
+# note-F 0.519＝負けは全部「区間」。(1) 幽霊32%（減衰尾/ブリードを追跡・GT無音frameのvoiced率0.48）
+# → ①energyVADゲート（vocal と同じ適応閾値 stem_energy_mask）で除去（音域 29–61→28–45・ghost 0.48→0.09）。
+# (2) 同音8分連打がRLEで1本に融合（GTオンセット53%消失）＝ピッチしか見ない半音RLEに連打境界が原理的に
+# 見えない → ②bass stem の振幅オンセットでノート内部を分割（f0/コード非使用＝refineChordsWithBass と鶏卵なし）。
+# 実測（LostMemory GT track4・F2ハーネス）: ①+② で note-F 0.519→0.928・onF 0.535→0.942・ghost 0.09。
+# ※ボーカルの断片後処理(postprocess_notes)は移植しない＝連打を「持続音の割れ」と誤認して削り悪化を実測（棄却）。
+# =========================================================================
+BASS_ONSET_HOP = 256        # bass onset の hop（512 より細かい 256 でオンセット時刻精度が上がり F +0.05 実測）
+BASS_ONSET_DELTA = 0.05     # onset_detect のピーク閾値（連打を拾う低め）
+BASS_ONSET_GUARD = 0.06     # ノート端 guard（s）＝端近傍の onset では割らない（境界ジッタで過分割を防ぐ）
+BASS_MIN_NOTE = 0.06        # 分割後ノートの最小長（s・RLE量子化と同値＝粒短めベース連打を温存）
+
+def bass_onset_times(bass_wav):
+    """bass stem の振幅オンセット時刻（秒）。backtrack で各アタックの立ち上がり点へスナップ。"""
+    y, sr = librosa.load(bass_wav, mono=True)
+    if y.size == 0:
+        return np.zeros(0)
+    return librosa.onset.onset_detect(y=y, sr=sr, hop_length=BASS_ONSET_HOP, units="time",
+                                      delta=BASS_ONSET_DELTA, backtrack=True, wait=1)
+
+def split_notes_at_onsets(notes, onsets, guard=BASS_ONSET_GUARD, min_note=BASS_MIN_NOTE):
+    """RLE後ノート [s,e,midi] を、内部（端 guard を除く）に落ちる onset 時刻で分割。
+    ピッチは不変・境界だけ増やす＝同音連打の融合を割ってオンセットリズムを復元。"""
+    if not notes:
+        return notes
+    ons = np.sort(np.asarray(onsets, dtype=float))
+    out = []
+    for s, e, m in notes:
+        inner = ons[(ons > s + guard) & (ons < e - guard)]
+        cuts = [float(s)] + [float(x) for x in inner] + [float(e)]
+        for a, b in zip(cuts, cuts[1:]):
+            if b - a >= min_note:
+                out.append([round(a, 3), round(b, 3), int(m)])
+    return out
+
 def main():
     audio = os.path.abspath(sys.argv[1])
     work = os.path.abspath(sys.argv[2]) if len(sys.argv)>2 else "/tmp/audio_poc_work"
@@ -540,10 +609,13 @@ def main():
             print(f"[warn] PESTO f0 failed ({e!r}); falling back to pyin", file=sys.stderr)
             f0, voiced, ftimes, hop_sec = pyin_vocal(vocals)
             f0_engine = "pyin"
-        # --- 生歌較正: VADゲート（stem RMS 相対閾値 ∧ conf/voiced [∧ pyin]）＋断片化対策。
+        # --- 生歌較正: VADゲート（stem RMS **適応閾値** ∧ conf/voiced [∧ pyin]）＋断片化対策。
         #     エンジン非依存で PESTO/pyin 両経路に適用（f0値は各エンジン、歌区間判定を強化）。
-        emask, _rms_thr = stem_energy_mask(vocals, ftimes)
-        voiced = np.asarray(voiced) & emask
+        #     voiced率（pre-gate）で aggressive/緩ゲートを切替＝常時歌唱曲で実音を削らない。
+        voiced = np.asarray(voiced)
+        vr_pre = float((voiced & np.isfinite(f0) & (f0 > 0)).mean()) if len(voiced) else 0.0
+        emask, _rms_thr = stem_energy_mask(vocals, ftimes, vr_pre)
+        voiced = voiced & emask
         if VAD_USE_PYIN and f0_engine != "pyin":
             voiced = voiced & pyin_voiced_mask(vocals, ftimes)
         if VAD_MEDIAN_F0:
@@ -560,13 +632,19 @@ def main():
 
     # 5. ドラム：オンセットは step 1.5 で算出済み（BPM倍/半判定と共用）＝ d_onsets を再利用。
 
-    # 5.5 ベース：分離済み bass stem に**低域pyin**→ボーカルと同じRLE量子化（#S12改3・機構共有）。
+    # 5.5 ベース：分離済み bass stem に**低域pyin**→RLE量子化＋①energyVADゲート＋②オンセット分割（2026-07-15 監査是正）。
     #     帯域＝5弦B0≈31〜E4≈330Hz（実測でfmax400は倍音/ブリードを拾い G4等の外れ→330に締め）。単音・粒短め min_note_sec=0.06。
+    #     ①滲み/減衰尾の幽霊を適応閾値ゲートで除去 ②同音連打の融合を stem 振幅オンセットで割る（スキーマ不変）。
     bass_notes = []
     bass_wav = stems.get("bass", "")
     if bass_wav and os.path.exists(bass_wav):
         bf0, bvoiced, btimes, bhop = pyin_stem(bass_wav, 35, 330)
-        bass_notes = vocal_melody(bf0, bvoiced, btimes, bhop, min_note_sec=0.06)
+        bvoiced = np.asarray(bvoiced)
+        bvr = float((bvoiced & np.isfinite(bf0) & (bf0 > 0)).mean()) if len(bvoiced) else 0.0
+        bmask, _bthr = stem_energy_mask(bass_wav, btimes, bvr)             # ① energyVAD（適応閾値・vocal と共用）
+        bvoiced = bvoiced & bmask
+        bass_notes = vocal_melody(bf0, bvoiced, btimes, bhop, min_note_sec=BASS_MIN_NOTE)
+        bass_notes = split_notes_at_onsets(bass_notes, bass_onset_times(bass_wav))  # ② 同音連打をオンセットで分割
 
     labs = [c[2] for c in chords]
     from collections import Counter

@@ -256,8 +256,11 @@ export function reapResults(core: Core): number {
       console.error("[audio_analyze] melody decode failed:", r.id, e instanceof Error ? e.message : String(e));
     }
     // #S12改3 区間分解＝crashで区間を切り区間ごとに畳む→区間ごとの綺麗なドラムパターン（全曲1グリッドはドリフトで破綻）。
-    // meter確定（ユーザー指定 or ドラム高信頼）の時だけ。ドラム無/低信頼なら空＝区間ネタ無し（グレースフル）。
-    const secs = drumOnsets.length && beatTimes.length && (userMeter || (ext != null && ext.confidence >= 0.3))
+    // 監査D1（2026-07-15）：区間分解を**全体confゲートから独立**させる。旧実装は全体 ext.confidence<0.3 で
+    // extractSectionPatterns 自体をスキップし、回収可能だった高conf区間（蜿蜒 conf0.456）と bass/melody 区間ネタまで
+    // 道連れにしていた。区間の採否は区間自身の conf で各々ゲートする（下流の per-section ガードが担う）。
+    // ドラム無なら空＝区間ネタ無し（グレースフル）。
+    const secs = drumOnsets.length && beatTimes.length
       ? extractSectionPatterns(beatTimes, drumOnsets) : [];
     const mmss = (t: number) => { const s = Math.round(t); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }; // 秒を先に丸め＝「4:60」防止
     // #S10続 v2.1 「読み筋」層：facts 射影の digest（度数化・見どころ spots・~4K tokens）を content に追加保存。
@@ -359,9 +362,11 @@ export function reapResults(core: Core): number {
     // 学習の出口（usecases-chat ①）：検出コードを**弾き直せる chord_progression 候補ネタ**にも落とす（即使える冒頭抜粋）。
     // #S12改3 ベースがあれば精緻化＝(2)転回(slash)/(1)ルート補正（フィジビリ2曲実証・bassは9割コードトーン）。無ければ従来。
     const bpmForChord = typeof facts.bpm === "number" ? facts.bpm : 120;
+    // 監査C1：実測 beat_times 格子＋小節頭(anchorSec)を渡し、累積ドリフト無し・和声リズム(小節内位置)を保つ。
+    const chordGrid = { beatTimes, anchorSec, meter };
     const chords = bassNotes.length
-      ? refineChordsWithBass(timeline, bassNotes, bpmForChord)
-      : chordsFromTimeline(timeline, bpmForChord);
+      ? refineChordsWithBass(timeline, bassNotes, bpmForChord, chordGrid)
+      : chordsFromTimeline(timeline, bpmForChord, 64, chordGrid);
     if (chords.length >= 2) {
       core.createNeta({
         kind: "chord_progression",

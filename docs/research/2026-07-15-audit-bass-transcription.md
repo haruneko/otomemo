@@ -103,6 +103,38 @@
 
 ---
 
+## 実装（2026-07-15）＝B1 energyVADゲート＋B2 stemオンセットでのノート分割
+
+対象 `_audio_poc/analyze.py` の bass 節のみ（bass_notes スキーマ不変）。venv-f2＋F2ハーネス（GT track4・offset2.45・pyinキャッシュ再利用）。
+
+### 実装した2点
+1. **B1 energyVADゲート**: `bvoiced &= stem_energy_mask(bass_wav, btimes, voiced_ratio)`。ボーカルと**同一の適応閾値関数を共用**。
+   pre-gate の pyin voiced率で二段：休符あり曲（≤0.85）＝p42 aggressive、常時演奏曲（>0.85）＝Otsu 谷で緩ゲート。
+   これで §4 の SURFACE 退行（p42固定で実音23%削り）を根治＝**SURFACE ベース保持率 0.77→0.99**（DeepSea 0.85）。
+   判定閾値 `VAD_CONTINUOUS_VOICED=0.85`＝SURFACEベース(voiced0.90)だけが上・他曲 ≤0.79 の明確なギャップ（実測）。
+2. **B2 オンセット分割**: `split_notes_at_onsets(notes, bass_onset_times(bass_wav))`。bass stem の
+   `onset_detect(hop_length=256, delta=0.05, backtrack=True, wait=1)` 時刻で RLE後ノートの**内部のみ**を分割
+   （端 guard 0.06s・min_note 0.06s）。f0/コード不使用＝`refineChordsWithBass` と鶏卵なし。
+   較正の要点＝**hop256+backtrack が効く**（hop512/backtrackなしだと onF が 0.89 止まり）。onset本数 737≒GT725。
+
+### 実測 before/after（LostMemory GT track4）
+
+| 指標 | BEFORE（現行 pyin→RLE） | AFTER（B1適応ゲート＋B2分割） | 受け入れ基準 |
+|---|---|---|---|
+| note-F | 0.519 | **0.928** | ≥0.85 ✓ |
+| onset-F | 0.535 | **0.942** | ≥0.90 ✓ |
+| P / R | 0.641 / 0.436 | 0.935 / 0.920 | — |
+| ノート数 | 493 | 713 | — |
+| 幽霊: GT無音frameのvoiced率 | 0.480 | **0.092** | ≤0.10 ✓ |
+| 音域 p5–p95 | 29–61 | **28–45** | p95≤50 ✓ |
+| オクターブ誤りノート率 | ≈1% | **0.6%** | ≤2% ✓ |
+| GTなし保持率: SURFACE / DeepSea | 1.00 / 1.00（基準） | **0.99** / 0.85 | SURFACE ±20% ✓ |
+
+- 実証値は監査 TL;DR の見積り（0.921/0.936）を上回った（hop256+backtrack の較正差）。
+- 棄却事項（PESTO低域・corpus-Viterbiのベース適用・ボーカル `postprocess_notes` 盲移植）は本監査どおり**未実装**。
+- 追加コスト: bass の適応ゲート（RMS+Otsu ≈1–2s）＋onset検出（librosa.load 22050＋onset_detect ≈0.5–1s）＝計 **+2–4s/曲**（+10s以内）。
+  蜿蜒フル実走の total は 112.7s（demucs分離85s が支配・bass追加分は誤差内）。
+
 ## 再現メモ
 
 - 実験一式（非コミット・セッションscratchpad）: `…/scratchpad/bassaudit/`（run_pyin_bass.py, ident.py, baseline_eval.py, fusion.py, levers.py, pesto_bass.py, exit_impact.py, realmix.py, residual.py, pyin_bass.npz）。評価は `…/scratchpad/f2work/evallib.py`（mir_eval, onset±50ms/pitch±50cent, offset無視）。

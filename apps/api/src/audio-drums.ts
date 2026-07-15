@@ -78,6 +78,19 @@ const TEMPLATES: Record<number, DrumTemplate[]> = {
   ],
 };
 
+// 高BPM（≳190・16分unitが時刻精度より細かい）で 8分照合(matchSub=2)に落とした時だけ足す
+// 「高速ロック」型（監査 2026-07-15）。速拍を半テンポの4/4で感じる叩き＝キックが8分で疾走し、
+// スネアはバックビート（速拍2/4）に落ちる。zero-mean相関はキックが真に一様だと消えるので、
+// 「8分で駆動しつつ拍頭を張る」非一様の骨格を型にする。matchSub===2 の時のみ土俵に載る＝
+// 低中BPM曲の判定には一切影響しない（構造保証）。
+const FAST_TEMPLATES: Record<number, DrumTemplate[]> = {
+  4: [
+    { name: "drive-half", kick: [0, 1, 2, 3], snare: [2] }, // 8分駆動キック＋半テンポ・バックビート(速拍2)
+    { name: "gallop", kick: [0, 0.5, 1.5, 2, 2.5, 3.5], snare: [1, 3] }, // 8分ギャロップ（拍頭は張り裏を抜く）＋速拍2/4スネア
+    { name: "half-drive", kick: [0, 2], snare: [2] }, // 速拍1&3キック＋半テンポ・バックビート
+  ],
+};
+
 const templateVec = (beats: number[], sub: number, L: number): number[] => {
   const v = new Array<number>(L).fill(0);
   for (const b of beats) v[Math.round(b * sub) % L] = 1;
@@ -109,8 +122,8 @@ interface LocalWindow {
   t0: number;
   t1: number;
   period: number; // 局所拍周期(秒)
-  sharp: Record<3 | 4, number>; // 拍/sub 格子への位相集中度（0..1）
-  phase: Record<3 | 4, number>; // 格子位相（0..period/sub 秒）
+  sharp: Record<2 | 3 | 4, number>; // 拍/sub 格子への位相集中度（0..1）。2=8分(高BPM適応用)
+  phase: Record<2 | 3 | 4, number>; // 格子位相（0..period/sub 秒）
 }
 
 const AC_RES = 0.005; // 自己相関の時間分解能(5ms)
@@ -207,10 +220,11 @@ function localWindows(onsets: DrumOnset[], hint: number, winBeats = WIN_BEATS, h
     if (period == null) continue;
     const p4 = circularPhase(wts, wws, t0, period / 4);
     const p3 = circularPhase(wts, wws, t0, period / 3);
+    const p2 = circularPhase(wts, wws, t0, period / 2); // 8分格子（高BPM格子適応用）
     out.push({
       t0, t1: t0 + wlen, period,
-      sharp: { 4: p4.sharp, 3: p3.sharp },
-      phase: { 4: p4.phase, 3: p3.phase },
+      sharp: { 2: p2.sharp, 4: p4.sharp, 3: p3.sharp },
+      phase: { 2: p2.phase, 4: p4.phase, 3: p3.phase },
     });
   }
   return out;
@@ -228,7 +242,7 @@ interface WindowFold {
 
 const QUANT_TOL = 0.3; // 格子から unit の±30% 以内だけ採用
 
-function foldWindow(onsets: DrumOnset[], win: LocalWindow, sub: 3 | 4, L: number): WindowFold {
+function foldWindow(onsets: DrumOnset[], win: LocalWindow, sub: 2 | 3 | 4, L: number): WindowFold {
   const unitSec = win.period / sub;
   const origin = win.t0 + win.phase[sub];
   const hist: Record<DrumKind, number[]> = {
@@ -281,14 +295,24 @@ interface TemplateMatch {
 }
 
 const OVERLAP_LAMBDA = 0.5; // kick/snareヒストの重なり（回転不変）ペナルティ＝ブリード/塗り潰し対策
+// 高BPM8分照合(matchSub=2)専用の緩い λ（Fable裁定 2026-07-15＝matchSub=2 限定でGO）。
+// 速拍の8分格子ではギャロップキックが裏拍スネアと**同セルに正しく共存**する物理＝重なりは
+// ブリードだけでなく実演奏由来。λ=0.5 のままだと raw相関0.45級が −0.5×ov(≈0.60)=−0.30 され
+// positive閾0.2を割る（蜿蜒の死因②）。λ掃引の実測で 0.15→conf0.314≥0.3。この経路は今回新設
+// ＝bit一致制約なし。低中BPM経路(matchSub=sub)の λ=0.5 は不変＝ブリード耐性は無傷（構造的に安全）。
+const OVERLAP_LAMBDA_FAST = 0.15;
 const MIN_LANE_CORR = 0.1; // kick/snare **両方**が型に合う最低ライン（片レーンだけの偶然一致を弾く）
 
 /** 窓foldに最良の正準型（位相込み）。score = zero-mean相関 − 重なり、× 小節出現率ファクタ。 */
-function matchTemplates(fold: WindowFold, meter: number, sub: 3 | 4, presFloor = PRES_FLOOR): TemplateMatch {
+function matchTemplates(fold: WindowFold, meter: number, sub: 2 | 3 | 4, presFloor = PRES_FLOOR): TemplateMatch {
   const L = meter * sub;
   const ov = dot(unit(fold.hist.kick), unit(fold.hist.snare));
   let best: TemplateMatch = { score: -9, name: null, ph: 0 };
-  for (const T of TEMPLATES[meter] ?? []) {
+  // 8分照合(高BPM適応)時のみ高速ロック型を土俵へ追加＝低中BPMの語彙は不変。
+  const lib = sub === 2 ? [...(TEMPLATES[meter] ?? []), ...(FAST_TEMPLATES[meter] ?? [])] : TEMPLATES[meter] ?? [];
+  // 重なりペナルティも matchSub=2 限定で弛緩（低中BPM経路は λ=0.5 のまま＝bit一致）。
+  const lambda = sub === 2 ? OVERLAP_LAMBDA_FAST : OVERLAP_LAMBDA;
+  for (const T of lib) {
     const tk = zeroMeanUnit(templateVec(T.kick, sub, L));
     const tsn = zeroMeanUnit(templateVec(T.snare, sub, L));
     for (let ph = 0; ph < L; ph++) {
@@ -298,7 +322,7 @@ function matchTemplates(fold: WindowFold, meter: number, sub: 3 | 4, presFloor =
       // 型はキック骨格とスネア骨格の**両方**に合うこと（スネアだけの偶然一致＝変拍子foldの
       // 滲んだ一様キックにスネア1山、を positives に数えない）
       if (ck < MIN_LANE_CORR || cs < MIN_LANE_CORR) continue;
-      const corr = (ck + cs) / 2 - OVERLAP_LAMBDA * ov;
+      const corr = (ck + cs) / 2 - lambda * ov;
       if (corr <= best.score) continue;
       // 小節出現率：型のkick/snare位置が「毎小節鳴っているか」。折り畳みエイリアス
       // （6拍ループを4/4に畳むと rock に見えるが各stepは1/3の小節でしか鳴らない）を弾く。
@@ -329,6 +353,14 @@ const HIT_FRAC = 0.45; // lane最大値に対する hit 採用閾値
 const CONF_SCALE = 2.0; // score→confidence の較正（実3曲＋合成でグリッドサーチ・research doc参照）
 const PRES_FLOOR = 0.15; // 小節出現率ファクタの床
 const REPEAT_FLOOR = 0.5; // 隣接小節反復度ファクタの床（フィル/展開で満点は出ない前提の緩い係数）
+// 高BPM格子適応の発火閾値（拍BPM）。16分unit=15/bpm秒・採用窓は QUANT_TOL(0.3)＝±4.5/bpm秒。
+// これがオンセット時刻精度(STFT hop512/sr22050≈±23ms/1フレーム)に一致するのが bpm≈195。
+// これ超のストレート曲は16分格子がセンサー分解能より細かく位相が滲む→照合を8分格子(matchSub=2)へ。
+// 監査 docs/research/2026-07-15-audit-drum-extraction.md（蜿蜒 235BPM で s4=0.263→s2=0.446）。
+const HIGH_BPM_16TH = 190;
+// meter score 近接タイのタイブレーク幅。走行毎の微差(perception再実行)で勝者が反転するのを抑え、
+// 候補順（4→3→6＝4/4優先）で先勝ちさせる決定的タイブレーク（監査：m4=0.043 vs m6=0.030 は同水準）。
+const METER_TIE_EPS = 0.01;
 
 /** 較正ノブ（研究ハーネス用・省略時は定数）。 */
 export interface DrumTune {
@@ -372,7 +404,12 @@ export function extractDrumPattern(
   // シャッフル判定はマージン必須（拍上のみのオンセットは両格子で同点＝既定は16分）。
   // 実測ではシャッフル曲は劇的に差が付く（SURFACE: s4=0.11 vs s3=0.78）。
   const sub: 3 | 4 = s3 > s4 * 1.15 ? 3 : 4;
-  const good = wins.filter((w) => w.sharp[sub] > 0.3);
+  // 高BPM格子適応：拍BPMが高くストレート(sub=4)なら照合格子を8分(matchSub=2)へ落とす。
+  // 16分unit(235BPMで63.8ms)がオンセット時刻精度(±23ms)より細かく位相集中度が滲む死因①の回避。
+  // 低中BPM・シャッフル(sub=3)は matchSub=sub＝従来の格子・挙動を完全維持（bit一致）。
+  // 出力の sub は検出値(3|4)のまま＝rhythm は常に16分契約。matchSub は照合/畳みの内部格子だけを替える。
+  const matchSub: 2 | 3 | 4 = sub === 4 && 60 / hint > HIGH_BPM_16TH ? 2 : sub;
+  const good = wins.filter((w) => w.sharp[matchSub] > 0.3);
   if (good.length < 3) return empty();
 
   const bpm = (() => {
@@ -387,10 +424,10 @@ export function extractDrumPattern(
   }
   const results = new Map<number, MeterResult>();
   for (const meter of candidates) {
-    const L = meter * sub;
-    const folds = good.map((w) => ({ w, fold: foldWindow(onsets, w, sub, L) }));
+    const L = meter * matchSub;
+    const folds = good.map((w) => ({ w, fold: foldWindow(onsets, w, matchSub, L) }));
     const matched = folds.map((f) => {
-      const m0 = matchTemplates(f.fold, meter, sub, T.presFloor);
+      const m0 = matchTemplates(f.fold, meter, matchSub, T.presFloor);
       // 隣接小節反復度＝「この bar 長で畳むと小節が繰り返って見えるか」。変拍子を誤った
       // bar 長で畳むと隣接小節の中身がズレて全く違う形＝型の偶然一致をここで落とす。
       const repFactor = T.repeatFloor + (1 - T.repeatFloor) * Math.max(0, f.fold.repeat);
@@ -450,7 +487,7 @@ export function extractDrumPattern(
     }
     // fold で roll(hist, ph) が step0=downbeat になる ⇔ 実 step index ≡ -ph (mod L)
     const dbOf = (e: (typeof matched)[number]): number =>
-      e.w.t0 + e.w.phase[sub] + (((L - (ph2.get(e) ?? e.m.ph)) % L) * (e.w.period / sub));
+      e.w.t0 + e.w.phase[matchSub] + (((L - (ph2.get(e) ?? e.m.ph)) % L) * (e.w.period / matchSub));
     const sorted = [...positive].sort((a, b) => a.w.t0 - b.w.t0);
     const downbeat = sorted.length ? dbOf(sorted[0]!) : null;
     // 小節線コヒーレンス：正窓の downbeat が等差格子（小節の繰り返し）に乗るか。
@@ -462,7 +499,7 @@ export function extractDrumPattern(
       let inTol = 0, W = 0;
       for (let i = 1; i < sorted.length; i++) {
         const a = sorted[i - 1]!, b = sorted[i]!;
-        const halfBar = ((a.w.period / sub) * L) / 2;
+        const halfBar = ((a.w.period / matchSub) * L) / 2;
         const res = (dbOf(b) - dbOf(a)) / halfBar;
         const frac = res - Math.floor(res); // 0..1
         const dist = Math.min(frac, 1 - frac); // 円距離
@@ -481,13 +518,16 @@ export function extractDrumPattern(
     });
   }
 
+  // meter 選択＝候補順(4→3→6)を保ったまま「近接タイは先勝ち」の決定的タイブレーク。
+  // 微差(±METER_TIE_EPS)では displace しない＝perception 再実行の揺れで勝者が反転するのを抑える。
   let bestMeter = candidates[0]!;
-  for (const m of candidates) if (results.get(m)!.score > results.get(bestMeter)!.score) bestMeter = m;
+  for (const m of candidates) if (results.get(m)!.score > results.get(bestMeter)!.score + METER_TIE_EPS) bestMeter = m;
   const r = results.get(bestMeter)!;
   const confidence = Math.max(0, Math.min(1, Math.round(T.confScale * r.score * 1000) / 1000));
 
-  // hits 抽出（lane最大の45%以上）→ sub=3 はスイング写像で 1step=16分 契約へ
-  const L = bestMeter * sub;
+  // hits 抽出（lane最大の45%以上）→ 1step=16分 契約へ写像。
+  // matchSub=3(シャッフル)はスイング写像・matchSub∈{2,4}は 4/matchSub 倍（2=8分格子は i*2、4=16分は i*1）。
+  const L = bestMeter * matchSub;
   const swingMap = [0, 1, 3]; // 3連{0,1,2}→16分{0,1,3}（シャッフルの標準近似）
   const lanes: RhythmContentLite["lanes"] = [];
   for (const kind of LANES) {
@@ -497,7 +537,7 @@ export function extractDrumPattern(
     const hits: number[] = [];
     for (let i = 0; i < L; i++) {
       if (v[i]! < HIT_FRAC * max) continue;
-      const out16 = sub === 4 ? i : Math.floor(i / 3) * 4 + swingMap[i % 3]!;
+      const out16 = matchSub === 3 ? Math.floor(i / 3) * 4 + swingMap[i % 3]! : i * (4 / matchSub);
       if (!hits.includes(out16)) hits.push(out16);
     }
     if (hits.length) lanes.push({ ...KIND_MIDI[kind], hits: hits.sort((a, b) => a - b) });

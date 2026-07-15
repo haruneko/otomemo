@@ -87,6 +87,43 @@ onset_only 36（51%・分割/境界ずれの相方）、pitch_other 22、semiton
 
 ---
 
+## 実装（2026-07-15）＝V1 ボーカルVADの適応閾値化＋recall犯人の是正
+
+対象 `_audio_poc/analyze.py` のみ。venv-f2＋F2ハーネス（GT track8・offset2.45・PESTOキャッシュ再利用）で before/after 実測。
+
+### 実装した2点
+1. **VADゲートの適応閾値化**（`stem_energy_mask` を vocal/bass 共用の適応閾値へ）。pre-gate の voiced率で二段：
+   休符あり曲（voiced率 ≤ **0.85**）＝従来どおり p42 で aggressive に滲み/幽霊を除去、常時歌唱/演奏曲
+   （voiced率 > 0.85）＝RMS ヒストグラムの **Otsu 谷**だけを閾値にしてノイズ床のみ除去（固定 pXX が演奏
+   レベルに食い込み実音を削る退行を防ぐ）。定数 `VAD_CONTINUOUS_VOICED=0.85`・谷は `_otsu_valley_rms`。
+2. **postprocess の absorb を緩和**（`NOTE_ABSORB_NB_MIN` 0.30→**0.60**）。下記の犯人特定を受けた是正。
+
+### 犯人の再特定（監査の帰属を実コードで検証・重要）
+本監査§1は取り逃し61個を「energyVADゲート（p42）が実歌唱の弱音を除去」と帰属した。**実装時に計装して検証したところ帰属先が違った**：
+- **p42 ゲートは LostMemory では実質ノーオプ**。PESTO conf≥0.5 が既に低RMSの滲みフレームを除外しており、
+  ゲートで落ちるのは **18335→18305 frame＝1ノート**のみ（ゲート有無で pre-post note-F は 0.801 で不変）。
+- 消えた61ノートの実体は **`postprocess_notes` の absorb 段**（短ノートを優勢な隣接持続音の"割れ"とみなし削除）。
+  計装で GT マッチが **474→415（−59）** を確認＝これが取り逃しの主因。absorb 定数がボーカル向けに攻めすぎ、
+  LostMemory の**速い実フレーズ**を dither と誤認していた（本監査がベース側で「盲移植で悪化」と観測したのと同じ機序）。
+- 是正: `NOTE_ABSORB_NB_MIN` を 0.30→0.60 に上げ、吸収先を **≈0.6s以上の明確な held音**に限定。速い実フレーズは温存。
+  → 適応ゲートは主に**汎化**（蜿蜒 vs SURFACE 型）と将来の常時歌唱曲での退行防止に効き、LostMemory の数値回復は absorb 緩和が担う。
+
+### 実測 before/after
+
+| 対象 | 指標 | BEFORE（現行: 固定p42＋absorb0.30） | AFTER（適応ゲート＋absorb0.60） |
+|---|---|---|---|
+| LostMemory（GT track8） | note-F | 0.755 | **0.792**（≥0.78 ✓） |
+| | P / R / onF | 0.859 / 0.673 / 0.782 | 0.854 / **0.739** / **0.824** |
+| | ノート数 | 483 | 534 |
+| 蜿蜒（PESTO・GT無し・yt-dlp再取得→実験後削除） | ゲート後 voiced率 | 0.575 | **0.575**（不変＝幽霊防止は退化せず） |
+| | 10秒ビン密度の二極（polar） | 4.4 | **4.1**（二極維持・SURFACE型と誤判定せず aggressive を選択） |
+| | melody_notes（フル実走） | 426（DB旧） | 490（recall回復・voiced率0.575・polar4.1） |
+
+- 蜿蜒は本実装で `yt-dlp --js-runtimes node:$(which node)`（android client で n-challenge 回避）→ demucs 分離 → PESTO →
+  `analyze.py` フル実走（bpm_hint=235・exit0・JSON健全・total 112.7s）で検証。**音源/stem/リテラルf0は検証後に削除**（著30-4運用）。
+- adaptive ゲートの mode 判定は LostMemory(voiced0.557)・蜿蜒(0.741) とも **aggressive**（=従来 p42 と同挙動）に落ちるため、
+  計測した精度は「ゲート変更で悪化していない」ことも同時に担保。緩ゲートが発動するのは voiced率>0.85 の連続演奏曲のみ（下ベース監査参照）。
+
 ## 再現メモ
 
 - 分解スクリプト: scratchpad `audit/decomp_lm.py`（venv-f2・mir_eval `match_notes` で採点と同条件のマッチングを取得し、FN/FPを生f0・重なり・pc距離で分類）。

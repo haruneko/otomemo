@@ -49,6 +49,9 @@ export interface Digest {
     freq_top: { deg: string; pct: number }[]; // 度数別頻度（継続長シェア）上位
     main_loop: string[];                       // 最頻の連続4コード（度数）
     sections: { at: string; deg: string[] }[]; // 区間別の主コード度数（各≤8）
+    // 監査C2：<1拍で瞬く同ルート7th断片を畳み、「7th含み（継続長シェア=確信度）」として残す注記。
+    // argmax で消えた 7th の不確実性シグナルを継続長で代替回収（BTC softmax の代わり）。
+    seventh_hints?: { deg: string; conf: number }[];
   };
   melody: {
     range: { low: string; high: string; span_semitones: number } | null;
@@ -131,6 +134,54 @@ function timelineRuns(timeline: ChordsTimeline): Run[] {
   return out;
 }
 
+/** quality が 7th/テンションを含むか（"含み" 判定用）。 */
+const SEVENTHISH = new Set(["7", "maj7", "m7", "mM7", "m7b5", "dim7", "aug7", "6", "m6"]);
+
+/**
+ * 監査C2：<1拍で瞬く断片を継続長重みで畳む（run -11〜23%・偽H1スポットの根治）。
+ * (a) ABAサンドイッチ吸収：短い run が同一(root,quality)の隣接に挟まれたら親へ融合。
+ * (b) 同ルート隣接吸収：短い run のルートが長い方の隣接と一致→その隣接(=長い方の quality)へ融合。
+ *     この時 base三和音↔7th の瞬きは「7th含み」注記（conf=7th側の継続長シェア）として拾う。
+ * 閾値＝1拍(secPerBeat)。secPerBeat≤0（BPM不明）は畳まない（安全側）。timeline 原本は不変（純関数・可逆）。
+ */
+function foldFlickers(runs: Run[], secPerBeat: number): { runs: Run[]; sevenths: { root: number; quality: string; share: number }[] } {
+  const sevenths: { root: number; quality: string; share: number }[] = [];
+  if (runs.length === 0 || !(secPerBeat > 0)) return { runs, sevenths };
+  const cur = runs.map((r) => ({ ...r }));
+  const out: Run[] = [];
+  for (let i = 0; i < cur.length; i++) {
+    const r = cur[i]!;
+    const dur = r.end - r.start;
+    const prev = out[out.length - 1];
+    const next = cur[i + 1];
+    if (dur < secPerBeat && (prev || next)) {
+      // (a) ABA：前後が同一コード＝短い中身を潰して前後を1つに融合
+      if (prev && next && prev.root === next.root && prev.quality === next.quality) {
+        prev.end = next.end; i++; continue; // r と next を prev へ吸収
+      }
+      // (b) 同ルート隣接：長い方の同ルート隣接へ融合（quality は長い方＝継続長多数決）
+      const prevSame = !!prev && prev.root === r.root;
+      const nextSame = !!next && next.root === r.root;
+      if (prevSame || nextSame) {
+        const preferPrev = prevSame && (!nextSame || (prev!.end - prev!.start) >= (next!.end - next!.start));
+        const host = preferPrev ? prev! : next!;
+        // 7th含み注記：base三和音 と 7th の瞬き＝7th 側を継続長シェアで残す
+        const rSev = SEVENTHISH.has(r.quality), hSev = SEVENTHISH.has(host.quality);
+        if (rSev !== hSev) {
+          const sevDur = rSev ? dur : (host.end - host.start);
+          const totDur = dur + (host.end - host.start);
+          const sevQual = rSev ? r.quality : host.quality;
+          sevenths.push({ root: r.root, quality: sevQual, share: totDur > 0 ? sevDur / totDur : 0 });
+        }
+        if (preferPrev) host.end = r.end; else host.start = r.start; // 時間だけ広げ quality は host 維持
+        continue;
+      }
+    }
+    out.push(r);
+  }
+  return { runs: out, sevenths };
+}
+
 // ── メイン ───────────────────────────────────────────────────────────────
 export function buildDigest(factsRaw: unknown, interp: DigestInterp): Digest {
   const facts = (factsRaw ?? {}) as {
@@ -148,11 +199,20 @@ export function buildDigest(factsRaw: unknown, interp: DigestInterp): Digest {
     downbeat != null && barLen > 0 ? Math.max(1, Math.floor((t - downbeat) / barLen) + 1) : null;
   const atOf = (t: number) => ({ sec: round(t, 2), bar: barOf(t) });
 
-  // グローバル調（facts.key 優先・無ければ timeline から resolveTonic）
+  // グローバル調＝**resolveTonic（コード頻度・継続長ヒートマップ）優先**（監査C0の正典是正・2026-07-15）。
+  // usecases-chat L94「①調はコードの度数から導く（POC実証・librosa単独は使わない）」＝コードがある限りコード権威。
+  // 旧実装は facts.key（analyze.py の K-S chroma 相関＝実測83%）優先・resolveTonic（実測96%）フォールバックで**逆転**していた
+  // （蜿蜒＝facts.key=A minor でも iv 首位23.8%の自己矛盾）。コード列が空の時だけ facts.key へフォールバック。
   const seqAll = chordSequenceFromTimeline(timeline);
-  let keyPc = pcOf(facts.key?.key ?? interp.key?.key);
-  let mode: "major" | "minor" = (facts.key?.mode ?? interp.key?.mode) === "minor" ? "minor" : "major";
-  if (keyPc == null) { const rt = resolveTonic(seqAll); keyPc = rt.tonic; mode = rt.mode; }
+  let keyPc: number | null;
+  let mode: "major" | "minor";
+  if (seqAll.length > 0) {
+    const rt = resolveTonic(seqAll); keyPc = rt.tonic; mode = rt.mode; // コード頻度権威
+  } else {
+    keyPc = pcOf(facts.key?.key ?? interp.key?.key); // コード無し＝librosa key へフォールバック
+    mode = (facts.key?.mode ?? interp.key?.mode) === "minor" ? "minor" : "major";
+    if (keyPc == null) { keyPc = 0; mode = "major"; }
+  }
   const keyStr = keyName(keyPc, mode);
 
   const spots: DigestSpot[] = [];
@@ -179,7 +239,18 @@ export function buildDigest(factsRaw: unknown, interp: DigestInterp): Digest {
   }
 
   // ── chords（度数化・頻度・主ループ・区間別）───────────────────────────
-  const runs = timelineRuns(timeline);
+  // 監査C2：<1拍フリッカーを継続長で畳んでから度数化＝ゴミ断片が freq_top/main_loop/spots を汚さない。
+  const secPerBeat = bpm > 0 ? 60 / bpm : 0;
+  const folded = foldFlickers(timelineRuns(timeline), secPerBeat);
+  const runs = folded.runs;
+  // 7th含み注記（同ルート瞬きの 7th を継続長シェアで・deg 単位で最大 conf に集約・上位6）
+  const sevMap = new Map<string, number>();
+  for (const s of folded.sevenths) {
+    const deg = degLabel(((s.root - keyPc + 12) % 12), s.quality);
+    sevMap.set(deg, Math.max(sevMap.get(deg) ?? 0, s.share));
+  }
+  const seventhHints = [...sevMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
+    .map(([deg, share]) => ({ deg, conf: round(share, 2) }));
   // 度数別頻度（継続長シェア）
   const degDur = new Map<string, number>();
   let totalDur = 0;
@@ -228,9 +299,10 @@ export function buildDigest(factsRaw: unknown, interp: DigestInterp): Digest {
     }
     if (!inDia && (fam === "maj" || fam === "min")) {
       const deg = degLabel(semi, r.quality);
-      if (!seenBorrow.has(deg)) {
+      const dur = r.end - r.start;
+      // 監査C2：<1拍の断片は借用と見なさない（fold 後も残る非ABA短片＝BTCノイズ）。secPerBeat 不明時は従来どおり通す。
+      if (!seenBorrow.has(deg) && (secPerBeat <= 0 || dur >= secPerBeat)) {
         seenBorrow.add(deg);
-        const dur = r.end - r.start;
         spots.push({ id: "H1", at: atOf(r.start), fact: `借用和音 ${deg}（非ダイアトニック）`, conf: round(Math.min(0.85, 0.4 + dur / (barLen || 2) * 0.15)) });
       }
     }
@@ -344,7 +416,7 @@ export function buildDigest(factsRaw: unknown, interp: DigestInterp): Digest {
     overview,
     key_segments: keySegments,
     modulation,
-    chords: { key: keyStr, freq_top: freqTop, main_loop: mainLoop, sections: chordSections },
+    chords: { key: keyStr, freq_top: freqTop, main_loop: mainLoop, sections: chordSections, ...(seventhHints.length ? { seventh_hints: seventhHints } : {}) },
     melody,
     rhythm,
     bass,

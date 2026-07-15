@@ -25,6 +25,12 @@ describe("parseChordSymbol（コード名→root/quality）", () => {
     expect(parseChordSymbol("Cdim7")).toEqual({ root: 0, quality: "dim7" });
     expect(parseChordSymbol("C°7")).toEqual({ root: 0, quality: "dim7" });
   });
+  it("C3: hdim7/hdim（平文の half-diminished）→ m7b5＝ø 系（旧: /dim7/ 先勝ちで dim7 へ誤縮約）", () => {
+    expect(parseChordSymbol("Bhdim7")).toEqual({ root: 11, quality: "m7b5" });
+    expect(parseChordSymbol("Chdim")).toEqual({ root: 0, quality: "m7b5" });
+    // 通常の dim7 は退行しない（減7音を保持）
+    expect(parseChordSymbol("Bdim7")).toEqual({ root: 11, quality: "dim7" });
+  });
   it("H3: o/+ の過剰マッチ解消＝C7+5はaug7・素のoだけがdim（監査: 任意のo/+が誤爆）", () => {
     expect(parseChordSymbol("C7+5")).toEqual({ root: 0, quality: "aug7" });
     expect(parseChordSymbol("C7#5")).toEqual({ root: 0, quality: "aug7" });

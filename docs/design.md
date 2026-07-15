@@ -947,6 +947,11 @@ P5 切出→chord_progression ネタ＋Claude 所見。
 - **出力**：`{meter, sub, confidence, bpm, downbeat(秒), template, rhythm{steps, lanes}}`。
   rhythm は既存契約（1step=16分）を維持＝sub=3 はスイング写像（3連 {0,1,2}→16分 {0,1,3}）で16分格子に落とし、
   シャッフルの事実は meta/タグに残す。低信頼時は rhythm を出さない（reaper 側ゲート・従来どおり 0.3）。
+  - **→ 是正（監査D1・2026-07-15）＝区間分解ゲートの独立化**：#S12改3 の `extractSectionPatterns`（crash区間分解）は
+    **全体 `extractDrumPattern` の confidence でゲートしない**。全体confは「曲全体を1グリッドに畳めるか」の指標で、
+    高BPM・セクション差の大きい曲では低くなる（蜿蜒 実測 0.086）が、その中に単体で高conf（実測 0.456）の区間が埋もれる。
+    採否は**区間ごとに区間自身の conf≥0.3** で行い（rhythm/bass/melody 区間ネタの per-section ガードが担う・既存）、
+    全体confでの一括スキップは**回収可能な区間ネタと bass/melody 区間ネタまで道連れ**にするので廃止。ドラム無なら空（不変）。
 - **perception 刷新（analyze.py drum_onsets）**：帯域ごと**独立**オンセット検出（kick=20-120Hz・snare=200-1800Hz・
   hihat=6kHz+、包絡は帯域内95%tileで正規化）＋**クロス帯域優勢ゲート**（同時刻の最強帯域の一定割合未満の
   ピーク＝ブリードとして棄却）。同時発音は残る・facts 契約 `[[t,kind,strength]]` は不変。

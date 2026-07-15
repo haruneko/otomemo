@@ -168,6 +168,41 @@ describe("buildDigest（#S10続 v2.1 読み筋層）", () => {
     expect(bytes).toBeLessThanOrEqual(12000);
   });
 
+  it("C0 グローバル調は resolveTonic（コード頻度）優先＝facts.key(librosa) と食い違えばコードが勝つ", () => {
+    // Dm が最長支配＝コード的には D minor。facts.key は A minor（librosa の逆転例＝蜿蜒型）。
+    const timeline = tl([[8, "D:min"], [2, "G:min"], [2, "A:min"], [4, "D:min"]]);
+    const d = buildDigest({ key: { key: "A", mode: "minor" } }, interp(timeline, { key: { key: "A", mode: "minor" } }));
+    expect(d.chords.key).toBe("D minor");       // facts.key=A minor を退け D minor
+    expect(d.overview).toContain("D minor");
+    expect(d.chords.freq_top[0]!.deg).toBe("i"); // 最頻＝トニック i（Dを中心に読めば自己矛盾解消）
+  });
+
+  it("C0 コード列が空なら facts.key へフォールバック（librosa 退避路）", () => {
+    const d = buildDigest({ key: { key: "E", mode: "major" } }, interp([], { key: { key: "E", mode: "major" } }));
+    expect(d.chords.key).toBe("E major");
+  });
+
+  it("C2 <1拍フリッカーの折り畳み：ABA の短い借用断片は H1 に昇格しない（偽スポット根治）", () => {
+    // C…(4s) → Bb 0.3s(♭VII断片) → C…(4s)。bpm120 で 0.3s<0.5s(1拍)・前後同一＝ABA吸収。
+    const timeline: Seg[] = [[0, 4, "C:maj"], [4, 4.3, "Bb:maj"], [4.3, 8, "C:maj"]];
+    const d = buildDigest({ key: { key: "C", mode: "major" } }, interp(timeline, { key: { key: "C", mode: "major" }, bpm: 120 }));
+    expect(d.spots.filter((s) => s.id === "H1")).toHaveLength(0); // 断片 Bb は畳まれ借用に昇格しない
+    expect(d.chords.freq_top.map((x) => x.deg)).toEqual(["I"]);   // 度数統計も I のみ（断片が消える）
+  });
+
+  it("C2 同ルート 7th 瞬きは seventh_hints に継続長シェア＝確信度で残す", () => {
+    // C…(4s) → C7 0.4s → G(1.6s)。短い C7 は前の C へ畳むが「7th含み」を注記（argmax で消えた不確実性の回収）。
+    const timeline: Seg[] = [[0, 4, "C:maj"], [4, 4.4, "C:7"], [4.4, 6, "G:maj"]];
+    const d = buildDigest({ key: { key: "C", mode: "major" } }, interp(timeline, { key: { key: "C", mode: "major" }, bpm: 120 }));
+    expect(d.chords.seventh_hints).toBeTruthy();
+    const hint = d.chords.seventh_hints!.find((h) => h.deg === "I7");
+    expect(hint).toBeTruthy();
+    expect(hint!.conf).toBeGreaterThan(0);
+    expect(hint!.conf).toBeLessThan(0.2); // 短断片＝低確信（継続長シェア小）
+    // 度数統計側は畳まれて I7 が独立エントリにならない
+    expect(d.chords.freq_top.map((x) => x.deg)).not.toContain("I7");
+  });
+
   it("決定性：同一入力で2回呼ぶと完全一致（JSON）", () => {
     const timeline = tl([[4, "C:maj"], [2, "D:7"], [2, "G:maj"], [2, "Bb:maj"], [4, "C:maj"]]);
     const melody_notes: [number, number, number][] = [[0.5, 1, 60], [2, 2.5, 74], [4, 4.5, 72]];

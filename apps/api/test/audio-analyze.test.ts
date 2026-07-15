@@ -188,6 +188,46 @@ describe("① アナリーゼ（audio_analyze）", () => {
     expect(new Set(bn.map(pitchOf)).size).toBe(2);
   });
 
+  it("D1 区間分解は全体confゲートから独立＝全体 conf<0.3 でも高conf区間の rhythm ネタが立つ（監査D1）", async () => {
+    // 実測で作った地形：4小節のクリーンな4/4ロック＋120小節のノイズ。全体 extractDrumPattern の conf=0.235(<0.3)
+    // だが 0–8s 区間(crash境界)は単体 conf=1。旧実装は全体ゲートで extractSectionPatterns 自体をスキップ→rhythm 0枚。
+    const core = new Core(openDb(":memory:"));
+    core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    const bpm = 120, bp = 60 / bpm;
+    const drum: [number, string, number][] = [];
+    let beat = 0;
+    for (let bar = 0; bar < 4; bar++) { // クリーンな4/4ロック（高conf）
+      for (const b of [0, 2]) drum.push([(beat + b) * bp, "kick", 1]);
+      for (const b of [1, 3]) drum.push([(beat + b) * bp, "snare", 1]);
+      for (const b of [0, 1, 2, 3]) drum.push([(beat + b) * bp, "hihat", 1]);
+      beat += 4;
+    }
+    const crashB = beat;
+    let seed = 12345; const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let bar = 0; bar < 120; bar++) { // 決定的な疑似ノイズ（全体confを 0.3 未満へ沈める）
+      const n = 3 + Math.floor(rnd() * 4);
+      for (let k = 0; k < n; k++) { const off = rnd() * 4; const kinds = ["kick", "snare", "hihat"]; drum.push([(beat + off) * bp, kinds[Math.floor(rnd() * 3)]!, 1]); }
+      beat += 4;
+    }
+    drum.push([0, "crash", 5], [crashB * bp, "crash", 5]);
+    drum.sort((a, b) => a[0] - b[0]);
+    const bt = Array.from({ length: beat + 4 }, (_, i) => i * bp);
+    const fakeAnalyze = async () => ({ bpm, key: { key: "C", mode: "major" }, beat_times: bt, drum_onsets: drum, chords_timeline: [[0, 4, "C"]] });
+    await runAudioAnalyzeJob(core, claimed, async () => "低conf全体でも区間救済", fakeAnalyze);
+    core.reapResults();
+    // 全体 meter 検出は低信頼＝chords フォールバック（source=chords・conf 0）
+    const an = core.listNeta({ kind: "analysis", scope: "all", limit: 5 })[0]!;
+    const md = (an.content as { meta: { meter_detected: { source: string; confidence: number } } }).meta.meter_detected;
+    expect(md.source).toBe("chords");
+    expect(md.confidence).toBeLessThan(0.3);
+    // それでも高conf区間の rhythm ネタが1枚立つ（旧実装なら0枚）
+    const rh = core.listNeta({ kind: "rhythm", scope: "all", limit: 10 });
+    expect(rh.length).toBe(1);
+    const kick = (rh[0]!.content as { rhythm: { lanes: { name: string; hits: number[] }[] } }).rhythm.lanes.find((l) => l.name === "Kick")!.hits;
+    expect(kick).toEqual([0, 8]); // 4/4ロックのキック＝表拍
+  });
+
   it("W1 bass_notes が facts にあれば analysis.raw.bass_notes に生データ保存（read_neta/ワークベンチで読み返せる）", async () => {
     const core = new Core(openDb(":memory:"));
     core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });

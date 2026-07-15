@@ -13,7 +13,8 @@ function normalizeQuality(suffixRaw: string): string {
   const isMinorHead = /^(m(?!aj)|min|-)/.test(s) && !/^M(?![a-z])/.test(s);
   const isMinMaj7 = isMinorHead && /(maj7|M7|[△Δ]7)/i.test(s.slice(1));
   const isMaj7 = !isMinMaj7 && (/maj7/i.test(s) || /(^|[^A-Za-z])M7/.test(s) || /[△Δ]7?/.test(s));
-  const isHalfDim = /(m7-5|m7b5|ø|Φ|φ)/i.test(s);
+  // hdim/hdim7（half-diminished の平文表記）も m7b5＝ø 系（旧: dim7 が /dim7/ 先勝ちで減7へ誤縮約・監査C3）。
+  const isHalfDim = /(m7-5|m7b5|ø|Φ|φ|hdim)/i.test(s);
   // H2/H3(2026-07-08)：dim7/°7/o7＝フルディミッシュを保持（旧: dimへ縮約で減7音消失）。
   // "o" は単独語のみ dim（旧: 任意の o に誤爆）。"+" は aug 文脈（+5/単独/aug）のみ（旧: 7+5 が aug 化け）。
   const isDim7 = /(dim7|°7|o7)/.test(s) && !isHalfDim;
