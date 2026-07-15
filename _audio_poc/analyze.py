@@ -58,6 +58,134 @@ def pesto_vocal(vocal_wav):
     voiced = conf.numpy() >= 0.5       # 有声ゲート（本実測で 0.5 が妥当）
     return f0, voiced, times, 0.01
 
+# =========================================================================
+# ボーカル採譜の生歌較正（2026-07-15）＝VADゲート＋断片化対策。
+# 背景: PESTO の conf≥0.5 は「音程の確からしさ」でありVADではない。Demucs vocal
+# stem の伴奏滲みを PESTO が追跡し、イントロ/間奏でも幽霊ノートが出る（voiced率0.74・
+# 密度がほぼ一様）。加えてビブラート/ポルタメントが半音RLEで細切れ（dur中央0.17s）。
+# 対策: (A) 歌区間判定を「PESTO conf ∧ stem RMS 相対閾値 [∧ pyin voiced]」に強化。
+#       (B) RLE前に f0 メディアンフィルタ＋RLE後に同音マージ／孤立短断片除去。
+# f0値は常に PESTO（歌区間の"どの音程か"はPESTOが担う）。閾値は下の定数で較正可能。
+# =========================================================================
+# --- VADゲート定数（歌区間判定の較正パラメータ・ハードコード避け定数化） ---
+VAD_RMS_PERCENTILE = 42     # vocal stem frame RMS の曲内相対閾値（pXX 以上を歌とみなす。
+                            #   較正: 42 で 蜿蜒 の幽霊が落ち voiced 0.75→0.58・密度二極化、
+                            #   かつ LostMemory 回帰 note-F 0.755（≥0.74 floor）を維持。上げると回帰が割れる）
+VAD_USE_PYIN = False        # pyin voiced_flag も AND 併用するか（+~30s/曲。実測で幽霊除去は energy 単独で
+                            #   十分・pyin併用は LostMemory note-F を下げるだけ＝既定 OFF・下の実測参照）
+VAD_MEDIAN_F0 = True        # 半音RLE前に f0 メディアンフィルタ（ビブラート断片化抑制）
+VAD_MEDIAN_MS = 130         # メディアン窓（ms・較正: 130 でビブラート周期を潰しつつ実音は温存）
+# --- 断片化後処理定数 ---
+NOTE_MERGE_GAP = 0.10       # 同音でこの gap 以内の隣接ノートを1つに結合（s）
+NOTE_ABSORB_DUR = 0.14      # これ以下の短ノートは優勢な隣接持続音の割れとみなし除去（spike/dip/±半音揺れ）
+NOTE_ABSORB_RATIO = 2.5     # 隣接ノートが blip の何倍以上なら"優勢"（持続音の割れ）とみなすか
+NOTE_ABSORB_NB_MIN = 0.30   # 優勢隣接の最小絶対dur（s）＝持続音のみ吸収先に（速い実フレーズは温存）
+NOTE_MIN_ISOLATED = 0.10    # 孤立短断片の最大 dur（s・これ以下かつ前後gap大なら除去）
+NOTE_ISOLATED_GAP = 0.12    # 孤立判定の前後 gap 下限（s）
+
+def stem_energy_mask(vocal_wav, times, percentile=VAD_RMS_PERCENTILE):
+    """vocal stem の frame RMS を曲内相対閾値でゲートし f0 時刻グリッドへ整合。
+    イントロ/間奏の伴奏滲み（低エネルギー）を歌区間から外す＝幽霊ノートの主犯対策。"""
+    y, sr = librosa.load(vocal_wav, sr=44100, mono=True)
+    hop = 512
+    rms = librosa.feature.rms(y=y, hop_length=hop)[0]
+    rtimes = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop)
+    nz = rms[rms > 1e-5]
+    thr = float(np.percentile(nz, percentile)) if nz.size else 0.0
+    rms_at = np.interp(np.asarray(times, dtype=float), rtimes, rms)  # f0 grid へ線形整合
+    return rms_at >= thr, thr
+
+def pyin_voiced_mask(vocal_wav, times):
+    """pyin の保守的な voiced_flag を f0 時刻グリッドへ整合（AND併用オプション用）。"""
+    _, voiced, ptimes, _ = pyin_vocal(vocal_wav)
+    v = np.nan_to_num(np.asarray(voiced, dtype=float), nan=0.0)
+    return np.interp(np.asarray(times, dtype=float), ptimes, v) >= 0.5
+
+def median_f0(f0, times, win_ms=VAD_MEDIAN_MS):
+    """有声 f0 の対数領域メディアンフィルタ。ビブラート/ポルタメントの微振動で
+    半音RLEが割れる断片化を抑える。無声（NaN/0）は素通し。"""
+    from scipy.signal import medfilt
+    f0 = np.asarray(f0, dtype=float)
+    times = np.asarray(times, dtype=float)
+    dt = float(np.median(np.diff(times))) if len(times) > 1 else 0.01
+    k = max(1, int(round((win_ms / 1000.0) / max(dt, 1e-6))))
+    if k % 2 == 0:
+        k += 1
+    if k < 3:
+        return f0
+    valid = np.isfinite(f0) & (f0 > 0)
+    if valid.sum() < k:
+        return f0
+    lg = np.where(valid, np.log2(np.where(valid, f0, 1.0)), np.nan)
+    idx = np.where(valid, np.arange(len(lg)), 0)  # nearest(前方)-fill で穴埋め
+    np.maximum.accumulate(idx, out=idx)
+    filled = lg[idx]
+    filled = np.where(np.isnan(filled), float(np.nanmedian(lg[valid])), filled)
+    sm = medfilt(filled, k)
+    out = f0.copy()
+    out[valid] = np.power(2.0, sm[valid])         # 無声フレームは書き換えない
+    return out
+
+def _same_pitch_merge(seq, merge_gap):
+    out = [list(seq[0])]
+    for s, e, m in seq[1:]:
+        if m == out[-1][2] and s - out[-1][1] <= merge_gap:
+            out[-1][1] = max(out[-1][1], e)       # 同音・近接 → 前ノートを延長
+        else:
+            out.append([s, e, m])
+    return out
+
+def postprocess_notes(notes, merge_gap=NOTE_MERGE_GAP, absorb_dur=NOTE_ABSORB_DUR,
+                      absorb_ratio=NOTE_ABSORB_RATIO, absorb_nb_min=NOTE_ABSORB_NB_MIN,
+                      min_isolated=NOTE_MIN_ISOLATED, isolated_gap=NOTE_ISOLATED_GAP):
+    """RLE後の断片化対策（ビブラート/ポルタメント/オクターブ跳ねの細切れ潰し）:
+    ①同音で gap≤merge_gap を結合 ②完全孤立の短断片を除去 ③持続音を割った短ノート
+    （spike/dip/±半音揺れ）を"優勢な"隣接持続音へ吸収 → ④再度同音結合。
+    吸収は「隣接が blip の absorb_ratio 倍以上 かつ 絶対 absorb_nb_min 秒以上」の時だけ発火
+    ＝速い実フレーズ（短ノートの連なり）は温存し、持続音の中の揺れ断片だけ畳む。"""
+    if not notes:
+        return notes
+    ns = _same_pitch_merge(sorted((list(x) for x in notes), key=lambda x: x[0]), merge_gap)
+    # ② 前後gap大の完全孤立短断片を除去
+    tmp = []
+    for i in range(len(ns)):
+        s, e, m = ns[i]
+        gap_b = s - ns[i - 1][1] if i > 0 else 1e9
+        gap_a = ns[i + 1][0] - e if i < len(ns) - 1 else 1e9
+        if (e - s) <= min_isolated and gap_b >= isolated_gap and gap_a >= isolated_gap:
+            continue
+        tmp.append([s, e, m])
+    ns = tmp
+    # ③ "優勢な"持続音に隣接した短ノート（held音を割った揺れ断片）を**除去**（境界は動かさない
+    #    ＝onset安全）。速い実フレーズ（短ノートの連なり＝隣接も短い）は絶対dur guard で温存。
+    bridge = merge_gap * 2
+
+    def dominated(i):
+        d = ns[i][1] - ns[i][0]
+        ok = False
+        if i > 0 and ns[i][0] - ns[i - 1][1] <= bridge:
+            nd = ns[i - 1][1] - ns[i - 1][0]
+            ok = ok or (nd >= absorb_ratio * d and nd >= absorb_nb_min)
+        if i < len(ns) - 1 and ns[i + 1][0] - ns[i][1] <= bridge:
+            nd = ns[i + 1][1] - ns[i + 1][0]
+            ok = ok or (nd >= absorb_ratio * d and nd >= absorb_nb_min)
+        return ok
+
+    changed = True
+    while changed and len(ns) >= 2:
+        changed = False
+        best_i, best_dur = None, 1e9
+        for i in range(len(ns)):
+            if (ns[i][1] - ns[i][0]) <= absorb_dur and dominated(i) and (ns[i][1] - ns[i][0]) < best_dur:
+                best_dur, best_i = (ns[i][1] - ns[i][0]), i
+        if best_i is None:
+            break
+        ns.pop(best_i)                             # blip 除去（隣接ノートの境界は不変）
+        changed = True
+    # ④ 除去で残った持続音の同音断片を再結合（held音のディップ跡を1本へ・gap は absorb_dur まで許容）
+    ns = _same_pitch_merge(ns, max(merge_gap, absorb_dur))
+    return [[round(s, 3), round(e, 3), int(m)] for s, e, m in ns]
+
 # --- 音域：有声gate→5/95%tile clip→音名 ---
 def vocal_range(f0, voiced):
     m = voiced & ~np.isnan(f0)
@@ -263,8 +391,16 @@ def main():
             print(f"[warn] PESTO f0 failed ({e!r}); falling back to pyin", file=sys.stderr)
             f0, voiced, ftimes, hop_sec = pyin_vocal(vocals)
             f0_engine = "pyin"
+        # --- 生歌較正: VADゲート（stem RMS 相対閾値 ∧ conf/voiced [∧ pyin]）＋断片化対策。
+        #     エンジン非依存で PESTO/pyin 両経路に適用（f0値は各エンジン、歌区間判定を強化）。
+        emask, _rms_thr = stem_energy_mask(vocals, ftimes)
+        voiced = np.asarray(voiced) & emask
+        if VAD_USE_PYIN and f0_engine != "pyin":
+            voiced = voiced & pyin_voiced_mask(vocals, ftimes)
+        if VAD_MEDIAN_F0:
+            f0 = median_f0(f0, ftimes)
         vr = vocal_range(f0, voiced)
-        melody_notes = vocal_melody(f0, voiced, ftimes, hop_sec)
+        melody_notes = postprocess_notes(vocal_melody(f0, voiced, ftimes, hop_sec))
         melody_f0 = f0_contour(f0, voiced, ftimes)
     else:
         vr = {"error":"no vocal stem"}; melody_notes = []; melody_f0 = []
