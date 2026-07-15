@@ -92,6 +92,7 @@ export function NetaDialog({
         pickup={ed.pre} setPickup={ed.setPickup}
         text={ed.text} setText={ed.setText}
         keyPc={ed.key} mode={ed.mode} tempo={ed.tempo} meter={ed.meter} title={ed.title}
+        flush={ed.flush}
         reloadSignal={reloadSignal} onChanged={onChanged} onOpenNeta={onOpenNeta} onOpenSkeletonDesk={onOpenSkeletonDesk}
         tp={{ lineRef: ed.tp.lineRef, scrollerRef: ed.tp.scrollerRef, beatRef: ed.tp.beatRef, playing: ed.tp.playing }}
       />

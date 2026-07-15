@@ -225,6 +225,13 @@ export const api = {
   deleteAsset: (id: string) => http<{ deleted: boolean }>(`/asset/${id}`, { method: "DELETE" }),
   assetUrl: (id: string) => `${BASE}/asset/${id}`,
 
+  // ♪歌う（W-K3）：歌詞(syllable)付きメロを VOICEVOX で歌わせ wav asset(role=render)を作る。返り＝{assetId}。
+  singNeta: (id: string, speaker?: number) =>
+    http<{ assetId: string; name: string | null; bytes: number | null; speaker: number }>(
+      `/neta/${id}/sing`,
+      { method: "POST", body: JSON.stringify(speaker != null ? { speaker } : {}) },
+    ),
+
   // #83 song overlay（段階／次の一手）＋ neta_asset（資産紐付け）
   getSong: (id: string) => http<SongOverlay>(`/neta/${id}/song`).catch(() => null),
   updateSong: (id: string, patch: { stage?: string | null; next_action?: string | null }) =>

@@ -894,17 +894,22 @@
   background: var(--line);
   margin: 0 4px;
 }
-/* 歌詞流し込み入力（メロのみ・LS3）。 */
+/* 歌詞流し込み入力（メロのみ・LS3）。IMEキーボード表示中もロールと喧嘩しないよう縦2段＝
+   1段目=歌詞入力欄（フル幅）／2段目=操作ボタン（小さく）。 */
 .proll-lyric-input {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 4px 0;
+}
+.proll-lyric-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 4px 0;
-  flex-wrap: wrap;
 }
-.proll-lyric-input input {
-  flex: 1;
-  min-width: 130px;
+.proll-lyric-row input {
+  flex: 1 1 auto;
+  min-width: 0; /* flex 子が親幅を超えないよう＝フル幅で伸長 */
   background: #1b1e23;
   color: var(--fg);
   border: 1px solid var(--line);
@@ -912,8 +917,93 @@
   padding: 5px 8px;
   font: inherit;
 }
-.proll-lyric-input button {
-  padding: 5px 10px;
+.proll-lyric-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.proll-lyric-actions button {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-lyric-actions button:disabled {
+  opacity: 0.4;
+}
+/* ♪歌う＝VOICEVOX 試聴の入り口（アクセント色で「音が出る」ことを示す）。 */
+.proll-sing {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+}
+.proll-sing[aria-busy="true"] {
+  opacity: 0.75;
+}
+.proll-sing:disabled {
+  background: #2b2f36 !important;
+  color: var(--muted) !important;
+  border-color: var(--line) !important;
+}
+.proll-sing-msg {
+  margin: 2px 0 4px;
+  font-size: 0.78rem;
+  color: var(--fit-red, #e0705a);
+}
+/* 詞モードのリタッチバー（固定入力1本を使い回し＝IMEキーボードを畳まず連続編集）。 */
+.proll-lyric-retouch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 5px 8px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.proll-lyric-retouch .lyr-hint {
+  font-size: 0.78rem;
+}
+.proll-lyric-retouch .lyr-pos {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.proll-lyric-retouch input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #15171b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+}
+.proll-lyric-retouch button {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-lyric-retouch button[aria-label="syllable-commit"] {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+/* 詞モードで編集中の音符＝白枠（選択の黄枠と区別・1つだけ）。 */
+.proll-note.lyr-edit {
+  outline: 2px solid #f0f2f5;
+  outline-offset: -1px;
+  z-index: 3;
+  filter: brightness(1.12);
 }
 .proll-tools .len {
   background: #2b2f36;
@@ -974,6 +1064,66 @@
   outline-offset: -1px;
   z-index: 3;
   filter: brightness(1.15);
+}
+/* 歌詞を音符の矩形内に載せる（別レーン廃止＝オーナーFB「ノート上に入れたい」）。
+   中央寄せ・小フォント・overflow hidden＝狭い音符は見切れる（ズームで読める）。pointer-events無効で編集tapを塞がない。 */
+.proll-note-syl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 9px;
+  /* オーナーFB（2026-07-15）：白文字＋ダーク縁取りの方が見やすい。淡色ノートでも shadow で読める。 */
+  color: #fff;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9), 0 0 1px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  user-select: none;
+}
+.proll-note-syl.melisma {
+  color: #e6e8ec;
+  opacity: 0.75; /* メリスマ ー は控えめ */
+}
+/* W-K2 韻律hit＝音符の下辺ボーダー（旧・歌詞チップ下線と同思想）。box-shadow inset でレイアウトを崩さず下辺だけ塗る。 */
+.proll-note.fit-red {
+  box-shadow: inset 0 -2px 0 var(--fit-red);
+}
+.proll-note.fit-yellow {
+  box-shadow: inset 0 -2px 0 var(--fit-yellow);
+}
+.proll-note.fit-info {
+  box-shadow: inset 0 -1px 0 var(--fit-info);
+}
+/* 韻律hitの理由アイコン（ⓘ）＝音符の上に小さく浮かす。tapで理由バナー開閉（編集tapと別ヒット面）。 */
+.proll-fit-mark {
+  position: absolute;
+  top: -9px;
+  width: 11px;
+  height: 11px;
+  margin-left: -1px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  font-size: 8px;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 11px;
+  text-align: center;
+  color: #15171b;
+  cursor: help;
+  z-index: 4;
+}
+.proll-fit-mark.fit-red {
+  background: var(--fit-red);
+}
+.proll-fit-mark.fit-yellow {
+  background: var(--fit-yellow);
+}
+.proll-fit-mark.fit-info {
+  background: var(--fit-info);
+  color: #e6e8ec;
 }
 /* 崩し候補モード：元メロを半透明ゴーストで重ねる（比較用・非操作・候補の背面）。 */
 .proll-note.ghost {
@@ -1071,61 +1221,8 @@
   background: #2a2d33;
   color: #9aa0aa;
 }
-/* 歌詞レーン（流し込み結果＝各音符のx位置に歌詞）。「詞」ラベルは鍵盤と同じく左に固定。 */
-.proll-lyric-lane {
-  display: flex;
-  align-items: stretch;
-  min-width: max-content;
-  border-top: 1px solid #2a2d33;
-  background: #15171b;
-  position: sticky; /* 縦スクロールしても下端に固定＝音域が広くても歌詞が常に見える */
-  bottom: 0;
-  z-index: 2;
-}
-.proll-lyric-key {
-  flex: 0 0 auto;
-  width: 40px;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--card);
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 22px;
-  text-align: center;
-  border: 1px solid #24272e;
-}
-.proll-lyric-track {
-  position: relative;
-  height: 22px;
-}
-.proll-syl {
-  position: absolute;
-  top: 3px;
-  font-size: 11px;
-  color: #e6e8ec;
-  white-space: nowrap;
-  transform: translateX(1px);
-}
-.proll-syl.melisma {
-  color: #6b7280; /* メリスマ ー は控えめ */
-}
-/* W-K2 韻律整合：面で塗らず下線＝小さいモバイルチップでも埋もれず、どぎつくしない（機械は候補まで）。 */
-.proll-syl.fit-red {
-  color: var(--fit-red);
-  border-bottom: 2px solid var(--fit-red);
-}
-.proll-syl.fit-yellow {
-  color: var(--fit-yellow);
-  border-bottom: 2px solid var(--fit-yellow);
-}
-.proll-syl.fit-info {
-  border-bottom: 1px dotted var(--fit-info); /* info は薄く＝点線のみ */
-}
-.proll-syl[role="button"] {
-  cursor: help;
-}
-/* トグル＋凡例（歌詞レーンの上・控えめ）。 */
+/* （歌詞は音符矩形内に描画＝別レーン proll-lyric-lane は廃止。CSS も撤去した。） */
+/* トグル＋凡例（ロールの上・控えめ）。 */
 .proll-fit-toggle {
   display: flex;
   align-items: center;
@@ -1149,12 +1246,9 @@
 .proll-fit-legend .fit-yellow {
   color: var(--fit-yellow);
 }
-/* タップで開く理由ポップ（歌詞レーンの上に浮かす）。 */
+/* ⓘタップで開く理由バナー（ロール上・in-flow＝在り処が分かる・モバイルで見切れない）。 */
 .proll-fit-reason {
-  position: absolute;
-  bottom: 24px;
-  max-width: 240px;
-  transform: translateX(-40%);
+  margin: 2px 0 4px;
   padding: 6px 8px;
   background: var(--card);
   border: 1px solid var(--line);
@@ -1163,9 +1257,7 @@
   line-height: 1.4;
   color: var(--fg);
   white-space: normal;
-  z-index: 5;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 .proll-cell {
   width: 12px;

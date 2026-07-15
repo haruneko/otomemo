@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type Ref } from "react";
+import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { beatsPerBar, pitchName, pc, isBlack, scalePcSet, type Note } from "../music";
 import { previewNote } from "../audio";
-import { flowLyric, splitMora } from "../lyrics";
+import { flowLyric, splitMora, setSyllable, nextNoteIndex } from "../lyrics";
 import { computeLyricHits, sylFitClass } from "../lyricFit";
 import { nudgeNotes, duplicateSel, deleteSel, copySel, pasteNotes } from "../noteEdit";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -46,6 +46,8 @@ export function PianoRoll({
   meter,
   keyRoot,
   keyMode,
+  onSing,
+  singing = false,
 }: {
 
   notes: Note[];
@@ -58,11 +60,13 @@ export function PianoRoll({
   low?: number; // 既定で見せる最低音（bass は E1=28 など低域既定）
   high?: number; // 既定で見せる最高音
   enableLyric?: boolean; // メロのみ：歌詞流し込み（LS3・design L2）
-  mode?: "draw" | "select" | "erase"; // 描く/選ぶ/消す（トグルは KindEditorBody 側＝同じ行に・Section と同流儀）
+  mode?: "draw" | "select" | "erase" | "lyric"; // 描く/選ぶ/消す/詞（トグルは KindEditorBody 側。詞=歌詞リタッチ・メロのみ）
   ghostNotes?: Note[]; // 崩し候補モード：元メロを半透明ゴーストで重ねる（比較用・非操作）
   readOnly?: boolean; // 候補レビュー中は編集不可（クリックで足さない）
   keyRoot?: number; // P0-a 調の主音(0-11)。指定時、行を調内音でハイライト＝「外し音を避ける」足場。
   keyMode?: string; // "major"/"minor"（既定=major）。短調は自然的短音階で判定。
+  onSing?: () => void; // ♪歌う（W-K3）：歌詞付きメロを VOICEVOX で歌わせる。未指定＝ボタン非表示。
+  singing?: boolean; // 歌声生成中（スピナー文言・連打ガードは親）。
 }) {
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
@@ -83,6 +87,29 @@ export function PianoRoll({
       setPasteArmed(false);
     }
   }, [mode]);
+  // 詞モード（歌詞リタッチ）：編集対象の音符 index と入力中の値。固定入力バー1本を使い回す
+  // ＝IMEキーボードを畳まず連続リタッチできる（インライン input だと対象切替でキーボードが落ちる）。
+  const [lyrTarget, setLyrTarget] = useState<number | null>(null);
+  const [lyrVal, setLyrVal] = useState("");
+  const lyrInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (mode !== "lyric") setLyrTarget(null); // 詞モードを離れたら編集対象を解除
+  }, [mode]);
+  /** 入力中の値を対象音符へ確定（空=クリア・「ー」=メリスマ可）。advance=true なら時間順で次の音符へフォーカス。 */
+  function lyrCommit(advance: boolean) {
+    if (lyrTarget == null || lyrTarget >= notes.length) return;
+    const updated = setSyllable(notes, lyrTarget, lyrVal);
+    if ((notes[lyrTarget]!.syllable ?? "") !== (updated[lyrTarget]!.syllable ?? "")) onChange(updated);
+    if (!advance) return;
+    const nx = nextNoteIndex(notes, lyrTarget);
+    if (nx == null) {
+      setLyrTarget(null); // 最後の音符＝編集終了
+      return;
+    }
+    setLyrTarget(nx);
+    setLyrVal(updated[nx]?.syllable ?? "");
+    lyrInputRef.current?.focus(); // キーボードを保つ（同一 input なので通常保たれる・保険）
+  }
 
   // 崩し候補モードは候補(notes)＋ゴースト(元)の両方が収まる範囲/尺で描く。
   const rangeNotes = useMemo(() => (ghostNotes ? [...notes, ...ghostNotes] : notes), [notes, ghostNotes]);
@@ -133,6 +160,16 @@ export function PianoRoll({
   function onNoteClick(gi: number, target: Note, e: { stopPropagation: () => void }) {
     e.stopPropagation();
     if (readOnly) return; // 候補レビュー中は編集しない
+    if (mode === "lyric") {
+      // 詞モード＝ノートは消さない（作成/移動/削除を無効化＝タップ競合の構造的解消）。
+      // 別の音符をタップ＝入力中の値を先に確定してから対象を切替（打った値を失わない）。
+      if (lyrTarget != null && lyrTarget !== gi) lyrCommit(false);
+      setLyrTarget(gi);
+      setLyrVal(target.syllable ?? "");
+      // rAF で確実にフォーカス（onChange 由来の再レンダ後でも input は同一要素）。
+      requestAnimationFrame(() => lyrInputRef.current?.focus());
+      return;
+    }
     if (mode !== "select") {
       removeNote(target); // 描く/消す＝ノートtapで削除
       return;
@@ -146,6 +183,7 @@ export function PianoRoll({
   }
   function onCellClick(pitch: number, step: number) {
     if (readOnly) return; // 候補レビュー中は編集しない
+    if (mode === "lyric") return; // 詞＝空セルは無反応（ノート作成を無効化）
     if (mode === "erase") return; // 消す＝空セルは無反応（ノートtapのみ削除）
     if (mode === "draw") {
       addAt(pitch, step);
@@ -187,29 +225,85 @@ export function PianoRoll({
           onToggleDotted={() => setDotted((d) => !d)}
         />
       </div>
-      {enableLyric && (
-        <div className="proll-lyric-input">
-          <span className="muted">歌詞</span>
-          <input
-            type="text"
-            aria-label="lyric-draft"
-            placeholder="かな（読み）を入力→流し込む"
-            value={lyricDraft}
-            onChange={(e) => setLyricDraft(e.target.value)}
-          />
-          <button
-            type="button"
-            aria-label="flow-lyric"
-            disabled={!notes.length || splitMora(lyricDraft).length === 0}
-            onClick={() => onChange(flowLyric(notes, splitMora(lyricDraft)))}
-          >
-            流し込む
-          </button>
-          {notes.some((n) => n.syllable) && (
-            <button type="button" aria-label="clear-lyric" onClick={() => onChange(notes.map((n) => ({ ...n, syllable: undefined })))}>
-              クリア
-            </button>
+      {enableLyric && mode === "lyric" && (
+        // 詞モード＝1音ずつリタッチ：固定入力バー（音符タップ→編集→確定で次へ）。一括は「流し込む」（他モード）と分業。
+        <div className="proll-lyric-retouch" aria-label="lyric-retouch">
+          <span className="muted">詞</span>
+          {lyrTarget == null || lyrTarget >= notes.length ? (
+            <span className="muted lyr-hint">音符をタップして歌詞を編集</span>
+          ) : (
+            <>
+              <span className="lyr-pos">{noteName(notes[lyrTarget]!.pitch)}・{notes[lyrTarget]!.start}拍</span>
+              <input
+                ref={lyrInputRef}
+                type="text"
+                aria-label="syllable-input"
+                placeholder="かな（空=消す・ー=のばす）"
+                value={lyrVal}
+                onChange={(e) => setLyrVal(e.target.value)}
+                onKeyDown={(e) => {
+                  // IME 変換確定の Enter では送らない（isComposing ガード）＝日本語入力で誤送を防ぐ。
+                  if (e.key === "Enter" && !(e.nativeEvent as KeyboardEvent).isComposing) lyrCommit(true);
+                }}
+              />
+              <button type="button" aria-label="syllable-commit" onClick={() => lyrCommit(true)}>
+                確定→次
+              </button>
+              <button
+                type="button"
+                aria-label="syllable-close"
+                onClick={() => {
+                  lyrCommit(false); // 打ちかけを確定してから閉じる（失わない）
+                  setLyrTarget(null);
+                }}
+              >
+                ✕
+              </button>
+            </>
           )}
+        </div>
+      )}
+      {enableLyric && mode !== "lyric" && (
+        // 入力欄は1行フル幅（IMEキーボード表示中もロールと喧嘩しない）＝操作ボタンは下段に小さく。
+        <div className="proll-lyric-input">
+          <div className="proll-lyric-row">
+            <span className="muted">歌詞</span>
+            <input
+              type="text"
+              aria-label="lyric-draft"
+              placeholder="かな（読み）を入力→流し込む"
+              value={lyricDraft}
+              onChange={(e) => setLyricDraft(e.target.value)}
+            />
+          </div>
+          <div className="proll-lyric-actions">
+            <button
+              type="button"
+              aria-label="flow-lyric"
+              disabled={!notes.length || splitMora(lyricDraft).length === 0}
+              onClick={() => onChange(flowLyric(notes, splitMora(lyricDraft)))}
+            >
+              流し込む
+            </button>
+            {hasLyric && (
+              <button type="button" aria-label="clear-lyric" onClick={() => onChange(notes.map((n) => ({ ...n, syllable: undefined })))}>
+                クリア
+              </button>
+            )}
+            {onSing && (
+              // ♪歌う：歌詞が1つも無ければ disabled・連打/生成中は親が singing でロック。
+              <button
+                type="button"
+                aria-label="sing"
+                className="proll-sing"
+                disabled={!hasLyric || singing}
+                aria-busy={singing}
+                onClick={onSing}
+              >
+                {singing ? "歌声を作っています…" : "♪歌う"}
+              </button>
+            )}
+          </div>
         </div>
       )}
       {/* W-K2：歌詞があれば韻律チェックのトグル＋軽い凡例（既定ON・機械は候補まで＝どぎつくしない）。 */}
@@ -230,6 +324,12 @@ export function PianoRoll({
               <span className="fit-yellow">黄=注意</span>
             </span>
           )}
+        </div>
+      )}
+      {/* 理由（ⓘタップで開く一行説明）＝音符側の情報アイコンに移設したので、ポップは在り処が分かる in-flow バナーで。 */}
+      {showFit && openReason != null && hitMap.get(openReason) && (
+        <div className="proll-fit-reason" role="tooltip" onClick={() => setOpenReason(null)}>
+          <b>{notes[openReason]?.syllable}</b>　{hitMap.get(openReason)!.ruleId}：{hitMap.get(openReason)!.note}
         </div>
       )}
       {/* 選択バー（選ぶモード）：複製/コピー/貼付/削除＋nudge移動（design N1）。 */}
@@ -309,64 +409,69 @@ export function PianoRoll({
               {notes
                 .map((n, gi) => ({ n, gi }))
                 .filter((x) => x.n.pitch === p)
-                .map(({ n, gi }) => (
+                .map(({ n, gi }) => {
+                  // W-K2：韻律hitはチップ別レーンでなく音符矩形の下辺ボーダーへ移設（歌詞をノート上に載せた結果）。
+                  const hit = showFit ? hitMap.get(gi) : undefined;
+                  const isMelisma = n.syllable === "ー" || n.syllable === "ｰ";
+                  return (
                   <button
                     key={gi}
                     type="button"
                     aria-label={`note-${p}-${n.start}`}
-                    className={"proll-note" + (selected.has(gi) ? " sel" : "") + (mode === "erase" ? " erasing" : "")}
+                    className={
+                      "proll-note" +
+                      (selected.has(gi) ? " sel" : "") +
+                      (mode === "erase" ? " erasing" : "") +
+                      (mode === "lyric" && lyrTarget === gi ? " lyr-edit" : "") +
+                      (hit ? " " + sylFitClass(hit.severity) : "")
+                    }
                     style={{
                       left: `${((n.start + pre) / total) * 100}%`,
                       width: `${(n.dur / total) * 100}%`,
                     }}
-                    title={`${noteName(p)} ${n.start}拍 +${n.dur}`}
+                    title={
+                      hit
+                        ? `${noteName(p)} ${n.start}拍：${hit.ruleId} ${hit.note}`
+                        : `${noteName(p)} ${n.start}拍 +${n.dur}`
+                    }
                     onClick={(e) => onNoteClick(gi, n, e)}
-                  />
-                ))}
+                  >
+                    {/* 歌詞を音符の中に載せる（中央・小フォント・見切れ可＝ズームで読める）。pointer-events無効で編集tapを塞がない。 */}
+                    {n.syllable && (
+                      <span className={"proll-note-syl" + (isMelisma ? " melisma" : "")} aria-hidden="true">
+                        {n.syllable}
+                      </span>
+                    )}
+                  </button>
+                  );
+                })}
+              {/* 韻律hitの理由アイコン（ⓘ）＝音符の上に小さく。tapで理由バナーを開閉（stopPropagation＝編集tapと競合しない）。 */}
+              {showFit &&
+                notes
+                  .map((n, gi) => ({ n, gi }))
+                  .filter((x) => x.n.pitch === p && hitMap.get(x.gi))
+                  .map(({ n, gi }) => {
+                    const hit = hitMap.get(gi)!;
+                    return (
+                      <button
+                        key={`fit-${gi}`}
+                        type="button"
+                        aria-label={`fit-info-${gi}`}
+                        className={"proll-fit-mark " + sylFitClass(hit.severity)}
+                        style={{ left: `${((n.start + pre) / total) * 100}%` }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenReason((o) => (o === gi ? null : gi));
+                        }}
+                      >
+                        i
+                      </button>
+                    );
+                  })}
             </div>
           </div>
           );
         })}
-        {notes.some((n) => n.syllable) && (
-          <div className="proll-lyric-lane" aria-label="lyrics">
-            <div className="proll-lyric-key" aria-hidden="true">詞</div>
-            <div className="proll-lyric-track" style={{ width: `${steps * CELL_PX}px` }}>
-              {notes
-                .map((n, gi) => ({ n, gi }))
-                .filter((x) => x.n.syllable)
-                .map(({ n, gi }) => {
-                  const hit = showFit ? hitMap.get(gi) : undefined; // トグルOFFなら装飾しない
-                  return (
-                    <span
-                      key={gi}
-                      className={
-                        "proll-syl" +
-                        (n.syllable === "ー" ? " melisma" : "") +
-                        (hit ? " " + sylFitClass(hit.severity) : "")
-                      }
-                      style={{ left: `${((n.start + pre) / total) * 100}%` }}
-                      title={hit ? `${hit.ruleId}：${hit.note}` : undefined}
-                      role={hit ? "button" : undefined}
-                      onClick={hit ? () => setOpenReason((o) => (o === gi ? null : gi)) : undefined}
-                    >
-                      {n.syllable}
-                    </span>
-                  );
-                })}
-              {/* タップで理由の一行説明（ruleId＋note）。もう一度タップ/別チップで閉じる。 */}
-              {showFit && openReason != null && hitMap.get(openReason) && (
-                <div
-                  className="proll-fit-reason"
-                  role="tooltip"
-                  style={{ left: `${((notes[openReason]!.start + pre) / total) * 100}%` }}
-                  onClick={() => setOpenReason(null)}
-                >
-                  <b>{hitMap.get(openReason)!.ruleId}</b>　{hitMap.get(openReason)!.note}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

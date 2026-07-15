@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Core } from "./core";
 import { netaInputSchema, netaPatchSchema, jobInputSchema, scopeEnum, scopeQueryEnum } from "./schemas";
+import { singNeta } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
 import {
   genChords,
   genMelody,
@@ -683,6 +684,30 @@ export function buildHttp(core: Core): FastifyInstance {
     const { id, assetId } = req.params as { id: string; assetId: string };
     const role = (req.query as { role?: string }).role;
     return { unlinked: core.unlinkAsset(id, assetId, role) };
+  });
+
+  // ♪歌う（W-K3）：歌詞(syllable)付きメロネタ → VOICEVOX 歌唱 → wav asset（role=render）。
+  // MCP verb sing_neta と同じ singNeta を共用（重複実装しない）。返り＝{assetId}。engine は sing.ts が自動 spawn。
+  app.post("/neta/:id/sing", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ speaker: z.number().int().optional() }).safeParse(req.body ?? {});
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    const n = core.getNeta(id);
+    if (!n) return reply.code(404).send({ error: "not found" });
+    const content = (n.content ?? {}) as { notes?: unknown; tempo?: unknown; bpm?: unknown };
+    const notes = Array.isArray(content.notes)
+      ? (content.notes as { pitch: number; start: number; dur: number; syllable?: string }[])
+      : [];
+    if (!notes.length) return reply.code(400).send({ error: "このネタに notes がありません（melody を指定して）" });
+    if (!notes.some((x) => x.syllable)) return reply.code(400).send({ error: "各音符に歌詞(syllable)がありません。先に歌詞を載せて。" });
+    const bpm = typeof content.tempo === "number" ? content.tempo : typeof content.bpm === "number" ? content.bpm : 120;
+    try {
+      const asset = await singNeta(core, id, notes, bpm, p.data.speaker);
+      return { assetId: asset.id, name: asset.name, bytes: asset.size, speaker: p.data.speaker ?? 3009 };
+    } catch (e) {
+      // engine 未起動/合成失敗は 502（上流依存の失敗）＝web はトーストで拾う。
+      return reply.code(502).send({ error: `歌唱に失敗：${e instanceof Error ? e.message : String(e)}` });
+    }
   });
 
   // プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイルを器単位で集約（S2）。

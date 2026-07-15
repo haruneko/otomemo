@@ -39,8 +39,8 @@ export interface KindEditorBodyProps {
   setBassSteps: (n: number) => void;
   bassMode: "absolute" | "relative";
   setBassMode: (m: "absolute" | "relative") => void;
-  rollMode: "draw" | "select" | "erase";
-  setRollMode: (v: "draw" | "select" | "erase") => void;
+  rollMode: "draw" | "select" | "erase" | "lyric"; // lyric=詞モード（メロのみ・歌詞リタッチ）
+  setRollMode: (v: "draw" | "select" | "erase" | "lyric") => void;
   // 骨格（design #20 S2）
   tones?: SkeletonBreakpoint[];
   setTones?: (t: SkeletonBreakpoint[]) => void;
@@ -78,6 +78,7 @@ export interface KindEditorBodyProps {
   onChanged?: () => void;
   onOpenNeta?: (n: Neta) => void; // Section のブロックタップ→子ネタを開く（潜る）
   onOpenSkeletonDesk?: (t: import("./SkeletonDesk").SkeletonDeskTarget) => void; // #20 S6：骨格ブロック→机
+  flush?: () => Promise<void>; // 未保存ぶんを確定（♪歌う前に歌詞をDBへ反映＝サーバは保存済contentを歌う）
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
   tp: { lineRef: any; scrollerRef: any; beatRef: any; playing: boolean };
 }
@@ -89,6 +90,27 @@ export function KindEditorBody(p: KindEditorBodyProps) {
   const toolsRef = useRef<HTMLDivElement>(null);
   useDismiss(toolsRef, toolsOpen, useCallback(() => setToolsOpen(false), [])); // 外タップ/Escで閉じる
   const [simReport, setSimReport] = useState<string | null>(null);
+  // ♪歌う（W-K3）：歌詞付きメロを VOICEVOX で歌わせて試聴。連打ガード=singing・失敗はメッセージ表示。
+  const [singing, setSinging] = useState(false);
+  const [singMsg, setSingMsg] = useState<string | null>(null);
+  const singAudioRef = useRef<HTMLAudioElement | null>(null);
+  const doSing = useCallback(async () => {
+    if (singing) return; // 連打ガード
+    setSinging(true);
+    setSingMsg(null);
+    try {
+      await p.flush?.(); // 未保存の歌詞をDBへ確定してから歌わせる（サーバは保存済contentを歌う）
+      const { assetId } = await api.singNeta(p.neta.id);
+      const url = api.assetUrl(assetId);
+      if (!singAudioRef.current) singAudioRef.current = new Audio();
+      singAudioRef.current.src = url;
+      await singAudioRef.current.play();
+    } catch {
+      setSingMsg("歌声の生成に失敗しました（少し待って再試行を）");
+    } finally {
+      setSinging(false);
+    }
+  }, [singing, p]);
   // トランスポーズ（①道具・純クライアント＝Undo可）。全ノートのピッチを移動。
   const transpose = (d: number) =>
     p.setNotes(p.notes.map((n) => ({ ...n, pitch: Math.max(0, Math.min(127, n.pitch + d)) })));
@@ -152,6 +174,12 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                       <button type="button" aria-label="mode-erase" title="消す（タップで削除）" className={p.rollMode === "erase" ? "on" : ""} onClick={() => p.setRollMode("erase")}>
                         <Icon name="eraser" size={18} />
                       </button>
+                      {/* 詞＝歌詞リタッチ（メロのみ）：音符タップで syllable 編集・確定で次へ。ノート編集は無効化＝タップ競合の構造的解消。 */}
+                      {isMelody && (
+                        <button type="button" aria-label="mode-lyric" title="詞（音符タップで歌詞を編集）" className={p.rollMode === "lyric" ? "on" : ""} onClick={() => p.setRollMode("lyric")}>
+                          詞
+                        </button>
+                      )}
                     </div>
                     {isMelody && !p.candidate && (
                       <>
@@ -241,7 +269,12 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     readOnly={!!p.candidate}
                     playheadRef={tp.lineRef}
                     scrollerRef={tp.scrollerRef}
+                    onSing={isMelody && !p.candidate ? doSing : undefined}
+                    singing={singing}
                   />
+                  {singMsg && (
+                    <div className="proll-sing-msg" role="alert">{singMsg}</div>
+                  )}
             </>
           )}
         </div>

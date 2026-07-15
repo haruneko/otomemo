@@ -63,3 +63,23 @@ export function flowLyric(notes: Note[], moras: string[], floor = MORA_FLOOR): N
   }
   return out;
 }
+
+// ── 詞モード（1音ずつリタッチ）＝流し込み(一括)との分業。純関数（PianoRoll の歌詞編集モードが使う）。 ──
+
+/** idx の音符の syllable を差し替える。空/空白のみ＝クリア（undefined）。「ー」＝メリスマもそのまま通す。非破壊。 */
+export function setSyllable(notes: Note[], idx: number, val: string): Note[] {
+  const s = val.trim();
+  return notes.map((n, i) => (i === idx ? { ...n, syllable: s ? s : undefined } : n));
+}
+
+/**
+ * 時間順（start昇順・同時は配列順）で idx の「次の音符」の配列インデックスを返す。無ければ null。
+ * 詞モードの「確定で次の音符へ自動フォーカス」＝連続リタッチの足。
+ */
+export function nextNoteIndex(notes: { start: number }[], idx: number): number | null {
+  if (idx < 0 || idx >= notes.length) return null;
+  const order = notes.map((_, i) => i).sort((a, b) => notes[a]!.start - notes[b]!.start || a - b);
+  const pos = order.indexOf(idx);
+  if (pos < 0 || pos + 1 >= order.length) return null;
+  return order[pos + 1]!;
+}

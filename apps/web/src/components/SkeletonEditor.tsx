@@ -52,7 +52,7 @@ export interface SkeletonEditorProps {
   keyPc: number;
   keyMode: string; // "major"/"minor"
   chords: ChordEntry[]; // preview_chords（単体）or 同section由来（S3）→導出ベース
-  rollMode: "draw" | "select" | "erase";
+  rollMode: "draw" | "select" | "erase" | "lyric"; // lyric はメロ専用（骨格には来ない・来ても no-op）
   counterpoint: boolean; // 再生モード（親所有・playable に効く）
   setCounterpoint: (v: boolean) => void;
   tempo?: number; // 候補試聴のテンポ（未指定=120）

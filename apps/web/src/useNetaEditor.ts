@@ -64,7 +64,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const [program, setProgram] = useState<number>(
     programOf(neta.content) ?? (neta.kind === "bass" ? 33 : neta.kind === "skeleton" || neta.kind === "counter" || neta.kind === "section_inst" ? 48 : 0), // #47 GM音色（bass=フィンガーベース・骨格/対旋律/管弦=Strings）
   );
-  const [rollMode, setRollMode] = useState<"draw" | "select" | "erase">("draw"); // ロールの描く/選ぶ/消す（同じ行に出す・Section と同流儀）
+  const [rollMode, setRollMode] = useState<"draw" | "select" | "erase" | "lyric">("draw"); // ロールの描く/選ぶ/消す/詞（詞=メロのみ・歌詞リタッチ）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
   const [bassMode, setBassMode] = useState<"absolute" | "relative">(
     isRelativeBass(neta.content) ? "relative" : "absolute",
@@ -416,7 +416,7 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     // 派生・道具
     playable, tp, editHist, rels, busy, schedId, colorKind,
     // 自動保存：状態＋手動フラッシュ（保存ピル）＋閉じる（← 戻る＝フラッシュしてから）
-    saveStatus, onFlush: () => void flushSave(), close,
+    saveStatus, onFlush: () => void flushSave(), flush: () => flushSave(), close,
     // アクション
     remove, detectKey, toggleSchedule,
     onExtendLen: () => setLen(len + bpb),
