@@ -186,6 +186,13 @@
 .desk-chords-gutter .desk-chord-undo { background: none; border: none; color: var(--k-chord); cursor: pointer; font-size: 0.9rem; padding: 0; line-height: 1; }
 .desk-chords-viewport { flex: 1 1 auto; overflow: hidden; }
 .desk-chords-zone { position: relative; height: 40px; will-change: transform; }
+
+/* #14-2 ステージ連動レーン畳み＝DOM維持のCSS collapse（scroll同期ref無傷・unmountしない）。
+   焦点が①ビート/②コードのどちらかへ寄ったら、もう一方の帯を畳んで縦を詰める。 */
+.desk-beat.collapsed .desk-beat-viewport,
+.desk-chords.collapsed .desk-chords-viewport { display: none; }
+.desk-beat.collapsed .desk-beat-gutter,
+.desk-chords.collapsed .desk-chords-gutter { height: 16px; cursor: pointer; }
 /* チップ＝上段（コード名）。試着中は枠を強調・開いてるチップは塗り。 */
 .desk-chord-chip { position: absolute; top: 3px; transform: translateX(0); font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 5px; background: #1b1e23; border: 1px solid var(--k-chord); color: var(--fg); cursor: pointer; white-space: nowrap; font-weight: 600; touch-action: manipulation; }
 .desk-chord-chip.trial { background: color-mix(in srgb, var(--k-chord) 26%, transparent); border-style: dashed; }

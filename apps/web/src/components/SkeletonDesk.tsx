@@ -86,6 +86,10 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
   // D5: 聴きレンズの焦点ステージ（①ビート/②コード/③骨格/④表面）。既定＝skeleton＝起動時は現行③体験のまま。
   //   レンズ2択のラベルと reduce（鳴らす音符列）が focusStage で読み替わる（seams A）。切替＝reloop（内容が変わる）。
   const [focusStage, setFocusStage] = useState<StageFocus>("skeleton");
+  // #14-2 ステージ連動レーン畳み（案B・CSS collapse・DOM維持）：焦点が①ビート/②コードのどちらかへ寄ったら、
+  //   もう一方の帯を畳んで縦を詰める。skeleton/surface では両方 false＝既定不変（従来の全帯表示のまま）。
+  const chordCollapsed = focusStage === "beat";
+  const beatCollapsed = focusStage === "chord";
 
   // --- ②コード前景（D3）：試着はローカル state（在庫不変）。採用でのみ updateNeta が飛ぶ。 ---
   const [chordPop, setChordPop] = useState<{ chipIndex: number; x: number; y: number } | null>(null); // 開いているチップのポップ
@@ -632,8 +636,15 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
       {/* ①ビート前景（D5・薄）：リズムレーン子（ドラムブロック）の表示のみ。座標＝ロールと同 PPB・同スクロール
           （ブロック相対 position−skelPosition）。※タップで既存ドラムエディタへ潜る導線は机に onOpenNeta が無い
           （D4 と同じ制約）＝今回は表示のみ。①レンズ「パターン単体」はステージレールで効く。 */}
-      <div className="desk-beat" aria-label="desk-beat">
-        <div className="desk-beat-gutter" style={{ width: GUTTER }}>ビート</div>
+      <div className={"desk-beat" + (beatCollapsed ? " collapsed" : "")} aria-label="desk-beat">
+        <div
+          className="desk-beat-gutter"
+          style={{ width: GUTTER }}
+          title={beatCollapsed ? "タップで①ビートを開く" : undefined}
+          {...(beatCollapsed ? { role: "button", tabIndex: 0, onClick: () => changeStage("beat") } : {})}
+        >
+          ビート
+        </div>
         <div className="desk-beat-viewport">
           <div className="desk-beat-zone" ref={beatZoneRef} style={{ width: blockSpan * PPB }}>
             {beatChildren.length === 0 && <span className="desk-beat-empty muted">（リズム未配置）</span>}
@@ -665,11 +676,22 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
           「②はコードで対位の相手を書く段」を体感。※「他N箇所で使用」バッジ＋「複製して切り離す（copy_neta）」は
           配置(compose_edge)の他セクション使用数を返す read api が無く S6 の api 無改変鉄則に触れるため D3b（配置カウント
           api 検討後）へ後回し＝今回は出さない。 */}
-      <div className="desk-chords" aria-label="desk-chords">
-        <div className="desk-chords-gutter" style={{ width: GUTTER }}>
+      <div className={"desk-chords" + (chordCollapsed ? " collapsed" : "")} aria-label="desk-chords">
+        <div
+          className="desk-chords-gutter"
+          style={{ width: GUTTER }}
+          title={chordCollapsed ? "タップで②コードを開く" : undefined}
+          {...(chordCollapsed ? { role: "button", tabIndex: 0, onClick: () => changeStage("chord") } : {})}
+        >
           <span>コード</span>
           {chordUndo && (
-            <button type="button" className="desk-chord-undo" aria-label="chord-undo" title="直前のコード採用を元に戻す" onClick={undoChord}>
+            <button
+              type="button"
+              className="desk-chord-undo"
+              aria-label="chord-undo"
+              title="直前のコード採用を元に戻す"
+              onClick={(e) => { e.stopPropagation(); undoChord(); }}
+            >
               ↩︎
             </button>
           )}

@@ -520,3 +520,46 @@ describe("SkeletonDesk P3-4（保存失敗の可視化＋タップ再試行）",
     await waitFor(() => expect(screen.queryByLabelText("desk-save-error")).toBeNull());
   });
 });
+
+// --- #14-2 ステージ連動レーン畳み（案B・CSS collapse・DOM維持）---
+describe("SkeletonDesk #14-2（ステージ連動レーン畳み）", () => {
+  const material = { bars: 2, tones: [{ start: 0, pitch: 60 }, { start: 4, pitch: 64 }] };
+  const chordContent = { chords: [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }] };
+  const tree = {
+    neta: mkNeta("s1", "section", { title: "Aメロ" }),
+    children: [
+      { position: 0, ord: 0, node: { neta: mkNeta("cp1", "chord_progression", { content: chordContent, key: 0, mode: "major" }), children: [] } },
+      { position: 0, ord: 0, node: { neta: mkNeta("sk1", "skeleton", { content: material, key: 0, mode: "major" }), children: [] } },
+    ],
+  };
+  const renderDesk = () =>
+    render(<SkeletonDesk sectionId="s1" sectionKey={0} sectionMode="major" meter="4/4" tempo={120} skelNetaId="sk1" skelPosition={0} skelOrd={0} onClose={() => {}} />);
+
+  it("①ビートへ切替→②コード帯が collapsed・①ビート帯は collapsed でない", async () => {
+    getComposition.mockResolvedValue(tree);
+    renderDesk();
+    await screen.findByText(/Aメロ/);
+    fireEvent.click(screen.getByLabelText("stage-beat"));
+    expect(screen.getByLabelText("desk-chords").className).toContain("collapsed");
+    expect(screen.getByLabelText("desk-beat").className).not.toContain("collapsed");
+  });
+
+  it("②コードへ切替→①ビート帯が collapsed・②コード帯は collapsed でない", async () => {
+    getComposition.mockResolvedValue(tree);
+    renderDesk();
+    await screen.findByText(/Aメロ/);
+    fireEvent.click(screen.getByLabelText("stage-chord"));
+    expect(screen.getByLabelText("desk-beat").className).toContain("collapsed");
+    expect(screen.getByLabelText("desk-chords").className).not.toContain("collapsed");
+  });
+
+  it("畳み中も desk-chords と chord-chip-0 は DOM に存在する（unmount 退行なし）", async () => {
+    getComposition.mockResolvedValue(tree);
+    renderDesk();
+    await screen.findByText(/Aメロ/);
+    fireEvent.click(screen.getByLabelText("stage-beat")); // ②コード帯を畳む
+    expect(screen.getByLabelText("desk-chords").className).toContain("collapsed");
+    expect(screen.getByLabelText("desk-chords")).toBeTruthy();
+    expect(screen.getByLabelText("chord-chip-0")).toBeTruthy();
+  });
+});
