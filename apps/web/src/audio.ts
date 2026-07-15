@@ -54,6 +54,18 @@ interface PlayOpts {
   feel?: Feel | null; // フィール層：再生境界で applyFeel（スイング/微小タイミング）。未指定＝ストレート＝従来一致。
   compound?: boolean; // 6/8等＝スイング対象外（feel.swing skip）。
   activeLens?: string; // #20 S6: notes にレンズ印がある時、初期に開くレンズ。未指定＝全レンズ開（従来は無関係）。
+  // ♪仮歌（Section）：VOICEVOX 歌唱 wav をデコードした AudioBuffer を**伴奏と同一クロックで**鳴らす。
+  // 未指定/null＝従来完全一致（仮歌経路は指定時のみ触る＝bit-safe）。startBeat＝wav の鳴らし始め拍。
+  vocal?: { buffer: AudioBuffer; startBeat: number; gain?: number } | null;
+}
+
+// ♪仮歌：wav バイト列を共有 AudioContext(Tone.rawContext)で AudioBuffer へデコード（再生と同一 ctx＝同期の前提）。
+// decodeAudioData は渡した ArrayBuffer を detach する＝slice(0) でコピーを渡し呼び出し側のバッファを壊さない。
+export async function decodeVocal(bytes: ArrayBuffer): Promise<AudioBuffer> {
+  const Tone = await import("tone");
+  await Tone.start();
+  const ctx = Tone.getContext().rawContext as AudioContext;
+  return await ctx.decodeAudioData(bytes.slice(0));
 }
 
 // 単一再生：グローバル Transport を奪い合うので、現在の音源を1組だけ保持し再利用/破棄。
@@ -1099,6 +1111,38 @@ export async function playNotes(
   };
   scheduleFrom(notes); // 初回＝従来と bit 一致（notes は上で feel 適用済み）。
 
+  // ♪仮歌（Section）：VOICEVOX 歌唱 wav を伴奏と同一 transport クロックで鳴らす。opts.vocal 未指定＝この経路は
+  // 一切触らない（bit-safe）。仕組み＝AudioBufferSource を transport.schedule で startBeat 位置に予約＝ノート発音と
+  // 同じ absolute ctx 時刻に乗る。ループ時は transport.schedule が**ループ窓内の予約を毎周再発火**するので（本体の
+  // ノート予約と同じ性質）、ループ境界で歌も自然にリスタートする＝前周ソースを止めて新ソースを張り直す。
+  const vocalCtx: AudioContext | null = opts.vocal ? (Tone.getContext().rawContext as AudioContext) : null;
+  const vocalGain = opts.vocal && vocalCtx ? vocalCtx.createGain() : null;
+  if (opts.vocal && vocalGain) {
+    vocalGain.gain.value = opts.vocal.gain ?? 1;
+    vocalGain.connect(ensureMaster(Tone, "melody")); // メロのパートバス経由（歌はメロ声部＝メロフェーダーに乗る）
+  }
+  let vocalSource: AudioBufferSourceNode | null = null;
+  const stopVocal = (): void => {
+    if (vocalSource) {
+      try { vocalSource.stop(); } catch { /* 未開始/停止済み */ }
+      try { vocalSource.disconnect(); } catch { /* */ }
+      vocalSource = null;
+    }
+  };
+  const scheduleVocalEvent = (): void => {
+    if (!opts.vocal || !vocalCtx || !vocalGain) return;
+    const v = opts.vocal;
+    transport.schedule((time: number) => {
+      stopVocal(); // ループ再開時＝前周の歌を止めてから張り直す（AudioBufferSource は使い捨て）
+      const src = vocalCtx.createBufferSource();
+      src.buffer = v.buffer;
+      src.connect(vocalGain);
+      src.start(time); // ノート発音と同じ絶対 ctx 時刻＝同期
+      vocalSource = src;
+    }, Math.max(0, v.startBeat) * spb);
+  };
+  scheduleVocalEvent();
+
   let stopped = false;
   // #7-C その場組み直し本体（async＝新サンプラの追加ロードがあるが cache 済は即時＝走行中クロックはほぼ進まない）。
   // stop/start を呼ばない＝頭に戻らない・音が途切れない。transport.loop/loopStart/loopEnd は保持（別途 setLoopRange で更新）。
@@ -1115,6 +1159,7 @@ export async function playNotes(
     const lenses = lensesOf(finalNotes);
     if (lenses.length) initLensGates(lenses, currentActiveLens); // レンズ層があればゲート再初期化（開くレンズは保持中の activeLens）
     scheduleFrom(finalNotes); // 現在位置より先はこの周から・過ぎたものは次周から鳴る
+    scheduleVocalEvent(); // cancel(0) で消えた仮歌予約も張り直す（SectionEditor は reschedule 非使用だが防御的に整合）
   };
   // 非ループ時の終端 自動停止イベント。setLooping で ON にする時は解除、OFF に戻す時は再スケジュール。
   // id を保持し transport.clear(id) で個別解除（cancel(0) は全消し＝発音イベントも消すので使えない）。
@@ -1135,6 +1180,9 @@ export async function playNotes(
   const handle: PlaybackHandle = {
     pause: () => {
       if (!stopped) transport.pause();
+      // 仮歌 wav は transport クロックに追随しない実時間ソース＝一時停止で鳴りっぱなしを避け止める。
+      // 再開は次のループ境界（ループ時）で張り直る。非ループ時は再開後は歌わない＝v1 の割り切り。
+      stopVocal();
     },
     resume: () => {
       if (!stopped) transport.start();
@@ -1183,6 +1231,7 @@ export async function playNotes(
       transport.stop();
       transport.cancel(0);
       transport.loop = false;
+      stopVocal(); // 仮歌 wav も止める（尾を残さない）
       disposeKit();
       try {
         sf?.stop(); // SF2 の鳴っている音も止める（尾を切る。サンプラ自体は再利用のため破棄しない）

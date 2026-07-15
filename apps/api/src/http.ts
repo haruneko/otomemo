@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Core } from "./core";
 import { netaInputSchema, netaPatchSchema, jobInputSchema, scopeEnum, scopeQueryEnum } from "./schemas";
-import { singNeta, resolveSingBpm } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
+import { singNeta, singGeneric, resolveSingBpm } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
 import {
   genChords,
   genMelody,
@@ -706,6 +706,33 @@ export function buildHttp(core: Core): FastifyInstance {
       return { assetId: asset.id, name: asset.name, bytes: asset.size, speaker: p.data.speaker ?? 3009 };
     } catch (e) {
       // engine 未起動/合成失敗は 502（上流依存の失敗）＝web はトーストで拾う。
+      return reply.code(502).send({ error: `歌唱に失敗：${e instanceof Error ? e.message : String(e)}` });
+    }
+  });
+
+  // ♪汎用歌唱（Section 仮歌）：ネタ非依存で notes+bpm+歌詞 → VOICEVOX 歌唱 wav asset（kind=audio・リンクしない）。
+  // Section のメロレーンを絶対拍で連結した notes を歌わせて伴奏と同期再生する用途。合成コアは /neta/:id/sing と共用
+  // （sing.ts singGeneric）。content-hash 重複排除＝同一入力は既存 asset を再利用（合成スキップ＝自然キャッシュ）。
+  app.post("/sing", async (req, reply) => {
+    const p = z
+      .object({
+        notes: z
+          .array(z.object({ pitch: z.number(), start: z.number(), dur: z.number(), syllable: z.string().optional() }))
+          .min(1, "notes が空です"),
+        bpm: z.number().positive().optional(),
+        speaker: z.number().int().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    const { notes, bpm, speaker } = p.data;
+    if (!notes.some((n) => n.syllable && n.syllable.trim())) {
+      return reply.code(400).send({ error: "各音符に歌詞(syllable)がありません。先に歌詞を載せて。" });
+    }
+    try {
+      const { asset, shift, clamped } = await singGeneric(core, notes, bpm ?? 120, speaker);
+      return { assetId: asset.id, shift, clamped, speaker: speaker ?? 3009 };
+    } catch (e) {
+      // engine 未起動/合成失敗/60秒超は 502（上流依存の失敗）＝web はトーストで拾う。
       return reply.code(502).send({ error: `歌唱に失敗：${e instanceof Error ? e.message : String(e)}` });
     }
   });

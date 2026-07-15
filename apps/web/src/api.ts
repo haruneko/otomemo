@@ -232,6 +232,14 @@ export const api = {
       { method: "POST", body: JSON.stringify(speaker != null ? { speaker } : {}) },
     ),
 
+  // ♪汎用歌唱（Section 仮歌）：絶対拍のメロ notes＋bpm＋歌詞を VOICEVOX で歌わせ wav asset を作る（リンクしない）。
+  // 返り＝{assetId, shift(音域移調 半音), clamped(丸めた音数)}。同一入力は既存 asset 再利用（自然キャッシュ）。
+  sing: (notes: { pitch: number; start: number; dur: number; syllable?: string }[], bpm: number, speaker?: number) =>
+    http<{ assetId: string; shift: number; clamped: number; speaker: number }>("/sing", {
+      method: "POST",
+      body: JSON.stringify({ notes, bpm, ...(speaker != null ? { speaker } : {}) }),
+    }),
+
   // #83 song overlay（段階／次の一手）＋ neta_asset（資産紐付け）
   getSong: (id: string) => http<SongOverlay>(`/neta/${id}/song`).catch(() => null),
   updateSong: (id: string, patch: { stage?: string | null; next_action?: string | null }) =>

@@ -168,13 +168,54 @@ export async function synthesize(score: Score, frameDecodeId = DEFAULT_FRAME_DEC
 }
 
 // ── wav asset 保存＋ネタ紐付け（role=render） ───────────────────────────────
-function saveWavAsset(core: Core, bytes: Buffer, name: string): Asset {
+// extraMeta＝汎用歌唱（/sing）の入力ハッシュ等を meta に足す口（既定呼び出しは不変＝singNeta 挙動温存）。
+function saveWavAsset(core: Core, bytes: Buffer, name: string, extraMeta?: Record<string, unknown>): Asset {
   const sha = createHash("sha256").update(bytes).digest("hex");
   const dir = assetsDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const path = join(dir, `${randomUUID()}.wav`);
   writeFileSync(path, bytes);
-  return core.addAsset({ kind: "audio", name, path, size: bytes.length, mime: "audio/wav", meta: { sha256: sha, source: "voicevox" } });
+  return core.addAsset({ kind: "audio", name, path, size: bytes.length, mime: "audio/wav", meta: { sha256: sha, source: "voicevox", ...extraMeta } });
+}
+
+/**
+ * ネタ非依存の汎用歌唱（http POST /sing）＝Section の仮歌用。notes(拍・曲頭絶対)＋bpm＋声色 → wav asset。
+ * - ネタに **リンクしない**（section の一時的な仮歌・render 資産の氾濫を避ける）。kind=audio。
+ * - **content-hash 重複排除**＝同じ score(=同じ notes/bpm)＋speaker は既存 audio 資産を再利用し VOICEVOX 合成を
+ *   スキップ（自然キャッシュ＝テンポ/ノート/歌詞が変わらなければ再レンダしない）。実体ファイルが消えてたら作り直す。
+ * - 合成コア（notesToScore/synthesize/60秒ガード）は /neta/:id/sing と完全共用＝二重実装しない。
+ */
+/** 汎用歌唱のキャッシュキー＝スコア(音域シフト適用後の実発音列)＋声色。notes/bpm/歌詞のどれが変わっても別キー＝別 wav（純関数・TDD）。 */
+export function singHashOf(score: Score, speaker: number): string {
+  return createHash("sha256").update(JSON.stringify({ notes: score.notes, speaker })).digest("hex");
+}
+
+/** 既存 audio 資産から同一 singHash かつ実体ファイルが残っているものを探す（無ければ null）＝合成スキップの自然キャッシュ。 */
+export function findCachedSing(core: Core, singHash: string): Asset | null {
+  for (const a of core.listAssets("audio")) {
+    const m = (a.meta ?? {}) as { singHash?: string };
+    if (m.singHash === singHash && existsSync(a.path)) return a;
+  }
+  return null;
+}
+
+export async function singGeneric(
+  core: Core,
+  notes: SingNote[],
+  bpm: number,
+  frameDecodeId?: number,
+): Promise<{ asset: Asset; shift: number; clamped: number; cached: boolean }> {
+  const score = notesToScore(notes, bpm);
+  const speaker = frameDecodeId ?? DEFAULT_FRAME_DECODE;
+  const singHash = singHashOf(score, speaker);
+  const hit = findCachedSing(core, singHash);
+  if (hit) return { asset: hit, shift: score.shift, clamped: score.clamped, cached: true }; // 合成せず再利用
+  if (score.shift !== 0 || score.clamped > 0) {
+    console.log(`[sing/generic] bpm=${bpm} octaveShift=${score.shift}半音 clampedNotes=${score.clamped}`);
+  }
+  const wav = await synthesize(score, speaker); // 60秒ガードは synthesize 内（共用）
+  const asset = saveWavAsset(core, wav, "仮歌（Section・VOICEVOX）", { singHash });
+  return { asset, shift: score.shift, clamped: score.clamped, cached: false };
 }
 
 /** melody ネタを歌わせ、wav を asset(kind=audio) 化してネタに render 紐付け。asset を返す。 */

@@ -670,3 +670,65 @@ describe("music", () => {
     });
   });
 });
+
+describe("♪仮歌（Section）＝vocalMelodyFromComposite / muteMelodyForVocal", () => {
+  it("compositeNotes の**メロ声部だけ**を抽出し、複数配置/隙間/小節オフセットを絶対拍で連結する", async () => {
+    const { compositeNotes, vocalMelodyFromComposite } = await import("../src/music");
+    // メロを2箇所（position 0 と 4）に配置＋ベース＝連結は compositeNotes が担う（二重実装しない）。
+    const children = [
+      { position: 0, node: { neta: { kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1, syllable: "そ" }, { pitch: 62, start: 2, dur: 1, syllable: "ら" }] } } } },
+      { position: 4, node: { neta: { kind: "melody", content: { notes: [{ pitch: 64, start: 0, dur: 1, syllable: "み" }] } } } },
+      { position: 0, node: { neta: { kind: "bass", content: { notes: [{ pitch: 36, start: 0, dur: 4 }] } } } },
+    ];
+    const v = vocalMelodyFromComposite(compositeNotes(children, 0));
+    // ベースは除外＝3音（メロのみ）。start は絶対拍（2つ目の配置は +4）。隙間（1〜2拍）は保たれる。
+    expect(v.notes.map((n) => n.start)).toEqual([0, 2, 4]);
+    expect(v.notes.map((n) => n.syllable)).toEqual(["そ", "ら", "み"]);
+    expect(v.notes.some((n) => n.pitch === 36)).toBe(false); // bass は入らない
+    expect(v.hasLyric).toBe(true);
+    expect(v.clampedPickup).toBe(0);
+    expect(v.startBeat).toBe(0); // 初音0拍 − 先頭休符0.25 = -0.25 → 0 にクランプ
+  });
+
+  it("弱起（負start）は頭出しを0にクランプし、その数を clampedPickup に、startBeat は初音−先頭休符", async () => {
+    const { vocalMelodyFromComposite, SING_LEAD_REST_BEATS } = await import("../src/music");
+    const composite = [
+      { part: "melody" as const, pitch: 67, start: -1, dur: 1, syllable: "ア" }, // 弱起＝クランプ対象
+      { part: "melody" as const, pitch: 72, start: 4, dur: 1, syllable: "イ" }, // 初音でない（後）
+    ];
+    const v = vocalMelodyFromComposite(composite);
+    expect(v.clampedPickup).toBe(1);
+    expect(v.notes[0]!.start).toBe(0); // 弱起は0へ
+    expect(v.notes[0]!.dur).toBeCloseTo(0.05); // end(=-1+1=0)保持で min 0.05 に丸め
+    expect(v.startBeat).toBe(Math.max(0, 0 - SING_LEAD_REST_BEATS)); // 初音は0拍
+  });
+
+  it("初音が後方の時 startBeat は初音−先頭休符（wav の先頭休符ぶん手前から鳴らして初音を本来の拍へ）", async () => {
+    const { vocalMelodyFromComposite } = await import("../src/music");
+    const composite = [{ part: "melody" as const, pitch: 60, start: 8, dur: 1, syllable: "サ" }];
+    expect(vocalMelodyFromComposite(composite).startBeat).toBeCloseTo(7.75);
+  });
+
+  it("歌詞が1つも無ければ hasLyric=false（ボタン disabled の判定）", async () => {
+    const { vocalMelodyFromComposite } = await import("../src/music");
+    const composite = [
+      { part: "melody" as const, pitch: 60, start: 0, dur: 1 },
+      { part: "melody" as const, pitch: 62, start: 1, dur: 1, syllable: "  " }, // 空白のみ＝歌詞なし扱い
+    ];
+    expect(vocalMelodyFromComposite(composite).hasLyric).toBe(false);
+  });
+
+  it("muteMelodyForVocal はメロ声部だけ落とし、伴奏(counter/chord/bass/drums)は保つ", async () => {
+    const { muteMelodyForVocal } = await import("../src/music");
+    const notes = [
+      { part: "melody" as const, pitch: 60, start: 0, dur: 1 },
+      { part: "counter" as const, pitch: 64, start: 0, dur: 1 },
+      { part: "chord" as const, pitch: 48, start: 0, dur: 1 },
+      { part: "bass" as const, pitch: 36, start: 0, dur: 1 },
+      { part: "drums" as const, pitch: 38, start: 0, dur: 1, drum: true },
+    ];
+    const out = muteMelodyForVocal(notes);
+    expect(out.some((n) => n.part === "melody")).toBe(false);
+    expect(out.map((n) => n.part)).toEqual(["counter", "chord", "bass", "drums"]);
+  });
+});

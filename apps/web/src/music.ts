@@ -684,6 +684,50 @@ export function compositeNotes(
   });
 }
 
+// ── 仮歌（Section）：合成メロ声部 → VOICEVOX 歌唱ノート ──────────────────────
+// sing.ts notesToScore が先頭に置く休符（拍）。仮歌 wav は初音の LEAD_REST 拍手前から鳴る＝
+// 再生スケジュールをこのぶん手前へずらして初音を本来の拍に合わせる（api の DEFAULT と同値・整合）。
+export const SING_LEAD_REST_BEATS = 0.25;
+
+export interface VocalMelody {
+  notes: { pitch: number; start: number; dur: number; syllable?: string }[]; // 絶対拍・音域は api 側で歌唱バンドへ寄せる
+  hasLyric: boolean; // syllable が1つでもあるか（無ければ仮歌ボタンは disabled）
+  clampedPickup: number; // 弱起（負start）をクランプした音数（v1＝頭出しを0に）
+  startBeat: number; // 仮歌 wav を鳴らし始める拍（初音 − 先頭休符・0未満は0）＝伴奏と同一クロックで合わせる
+}
+
+// 合成済み notes（compositeNotes 由来＝絶対拍・part 付き・複数配置/隙間/オフセットは compositeNotes が解決済み）
+// から**メロ声部だけ**を仮歌用に抽出する純関数。連結ロジックは compositeNotes を再利用＝二重実装しない。
+// 弱起（負start）は v1 クランプ（鳴らし始めを0へ・end は保つ＝MIDI書き出しと同じ既知課題）。
+export function vocalMelodyFromComposite(composite: Note[]): VocalMelody {
+  const mel = composite.filter((n) => n.part === "melody" && !n.drum);
+  let clampedPickup = 0;
+  const notes = mel
+    .map((n) => {
+      let start = n.start;
+      let dur = n.dur;
+      if (start < 0) {
+        const end = start + dur;
+        start = 0;
+        dur = Math.max(0.05, end); // 0より前の頭を落として頭出しを0に（end<=0 は下の filter で除外）
+        clampedPickup++;
+      }
+      return { pitch: Math.round(n.pitch), start, dur, syllable: n.syllable };
+    })
+    .filter((n) => n.dur > 0)
+    .sort((a, b) => a.start - b.start);
+  const hasLyric = notes.some((n) => !!n.syllable && n.syllable.trim().length > 0);
+  const firstStart = notes.length ? notes[0]!.start : 0;
+  const startBeat = Math.max(0, firstStart - SING_LEAD_REST_BEATS);
+  return { notes, hasLyric, clampedPickup, startBeat };
+}
+
+// 仮歌ON時の再生ノート＝メロ声部の**楽器音をミュート**（歌が主・ピアノ等との二重化を避ける）。
+// 純関数（テスト対象）＝part!=="melody" だけ残す。counter/chord/bass/drums は保つ（伴奏）。
+export function muteMelodyForVocal(notes: Note[]): Note[] {
+  return notes.filter((n) => n.part !== "melody");
+}
+
 function meterPair(meter?: string | null): [number, number] | null {
   const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
   if (!m) return null;
