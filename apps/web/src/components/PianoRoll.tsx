@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type Ref } from "react";
 import { beatsPerBar, pitchName, pc, isBlack, scalePcSet, type Note } from "../music";
 import { previewNote } from "../audio";
 import { flowLyric, splitMora } from "../lyrics";
+import { computeLyricHits, sylFitClass } from "../lyricFit";
 import { nudgeNotes, duplicateSel, deleteSel, copySel, pasteNotes } from "../noteEdit";
 import { NoteValuePicker } from "./NoteValuePicker";
 
@@ -66,6 +67,12 @@ export function PianoRoll({
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
   const [lyricDraft, setLyricDraft] = useState(""); // 流し込む歌詞（かな・読み）。永続せずUIだけ
+  // W-K2：歌詞×メロのアクセント整合ハイライト（既定ON・軽い凡例）。openReason=理由ポップを開くチップの index。
+  const [showFit, setShowFit] = useState(true);
+  const [openReason, setOpenReason] = useState<number | null>(null);
+  // hits はノート列/歌詞が変わった時だけ再計算（純関数 analyzeLyricFit へ委譲）。歌詞なしは空 Map＝ゼロ影響。
+  const hitMap = useMemo(() => computeLyricHits(notes), [notes]);
+  const hasLyric = useMemo(() => notes.some((n) => n.syllable), [notes]);
   // ノート編集（design N1・案A）：選択(index集合)・貼付arm。描く に戻ったら選択解除。
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pasteArmed, setPasteArmed] = useState(false);
@@ -205,6 +212,26 @@ export function PianoRoll({
           )}
         </div>
       )}
+      {/* W-K2：歌詞があれば韻律チェックのトグル＋軽い凡例（既定ON・機械は候補まで＝どぎつくしない）。 */}
+      {hasLyric && (
+        <div className="proll-fit-toggle">
+          <label>
+            <input
+              type="checkbox"
+              aria-label="lyric-fit-toggle"
+              checked={showFit}
+              onChange={(e) => { setShowFit(e.target.checked); setOpenReason(null); }}
+            />
+            韻律チェック
+          </label>
+          {showFit && (
+            <span className="proll-fit-legend muted">
+              <span className="fit-red">赤=アクセント逆行</span>
+              <span className="fit-yellow">黄=注意</span>
+            </span>
+          )}
+        </div>
+      )}
       {/* 選択バー（選ぶモード）：複製/コピー/貼付/削除＋nudge移動（design N1）。 */}
       {mode === "select" && (
         <div className="proll-selbar" aria-label="selection-bar">
@@ -305,16 +332,38 @@ export function PianoRoll({
             <div className="proll-lyric-key" aria-hidden="true">詞</div>
             <div className="proll-lyric-track" style={{ width: `${steps * CELL_PX}px` }}>
               {notes
-                .filter((n) => n.syllable)
-                .map((n, i) => (
-                  <span
-                    key={i}
-                    className={"proll-syl" + (n.syllable === "ー" ? " melisma" : "")}
-                    style={{ left: `${((n.start + pre) / total) * 100}%` }}
-                  >
-                    {n.syllable}
-                  </span>
-                ))}
+                .map((n, gi) => ({ n, gi }))
+                .filter((x) => x.n.syllable)
+                .map(({ n, gi }) => {
+                  const hit = showFit ? hitMap.get(gi) : undefined; // トグルOFFなら装飾しない
+                  return (
+                    <span
+                      key={gi}
+                      className={
+                        "proll-syl" +
+                        (n.syllable === "ー" ? " melisma" : "") +
+                        (hit ? " " + sylFitClass(hit.severity) : "")
+                      }
+                      style={{ left: `${((n.start + pre) / total) * 100}%` }}
+                      title={hit ? `${hit.ruleId}：${hit.note}` : undefined}
+                      role={hit ? "button" : undefined}
+                      onClick={hit ? () => setOpenReason((o) => (o === gi ? null : gi)) : undefined}
+                    >
+                      {n.syllable}
+                    </span>
+                  );
+                })}
+              {/* タップで理由の一行説明（ruleId＋note）。もう一度タップ/別チップで閉じる。 */}
+              {showFit && openReason != null && hitMap.get(openReason) && (
+                <div
+                  className="proll-fit-reason"
+                  role="tooltip"
+                  style={{ left: `${((notes[openReason]!.start + pre) / total) * 100}%` }}
+                  onClick={() => setOpenReason(null)}
+                >
+                  <b>{hitMap.get(openReason)!.ruleId}</b>　{hitMap.get(openReason)!.note}
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -21,6 +21,7 @@ export const CHAT_VERB_NAMES = [
   "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords",
   "start_study", // #S11 横断研究（コードレンズ）
   "suggest_lyric_rhythm", "analyze_lyric_fit", // WP-M5 ②歌詞↔メロ プロソディ（design #13b・許可漏れ厳禁＝過去BUG#1型）
+  "sing_neta", // K-api W-K3 ②歌わせる＝VOICEVOX 歌唱出口（メロ→wav render 資産・許可漏れ厳禁＝過去BUG#1型）
   "suggest_cliche", // WP-C3スライス2 ラインクリシェ/ペダル（静的区間に半音線を差す候補・許可漏れ厳禁）
   "suggest_key_plan", // WP-C2 調プラン（セクション間の転調設計候補・許可漏れ厳禁）
   "suggest_form", "suggest_energy_plan", // WP-X1 構成テンプレ＋エネルギープラン（提案系2・許可漏れ厳禁＝過去BUG#1型）
@@ -116,6 +117,14 @@ long notes / adds melisma "ー" to match the syllable count). Offer candidates; 
     notes) — it flags where pitch-accent (下がり目/上がり目) fights the melody's up/down (A-01 red =
     語義誤解 risk like 箸/橋, yellow = worth nudging). It's a soft warning; the user can override.
     The note must already carry syllable (run set_lyric first). These NEVER decide — 候補/警告のみ.
+  - Writing 仮歌詞 (draft lyrics = a "sound blueprint"). Priority: mora-count > vowel placement >
+    語感 > accent > meaning (meaning is LAST). NEVER count morae yourself — verify with
+    suggest_lyric_rhythm/analyze_lyric_fit. Design VOWELS before words: put open vowels (あ段 first,
+    then え/お; avoid う段) on the apex note and long/held notes; put a strong consonant (か/た行) ×
+    open vowel on a section-head strong beat. Offer 3+ drafts of different character (情景 / 心情 /
+    サウンド最優先). Keep repeated/refrain phrases on the same mora count & vowel skeleton.
+  - To HEAR a 仮歌詞: call sing_neta(netaId) — it sends the syllable-bearing melody to VOICEVOX and
+    attaches a sung wav (render asset). Set the lyric first. Judge the singing by ear (機械は足場).
 
 [Reading an アナリーゼ (analysis neta)] read_neta on an analysis neta returns a COMPACT projection:
 prose / meta / digest / chords_timeline pass through, but the heavy raw time-series (melody_f0,

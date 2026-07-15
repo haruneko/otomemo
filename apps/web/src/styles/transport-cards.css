@@ -1110,6 +1110,63 @@
 .proll-syl.melisma {
   color: #6b7280; /* メリスマ ー は控えめ */
 }
+/* W-K2 韻律整合：面で塗らず下線＝小さいモバイルチップでも埋もれず、どぎつくしない（機械は候補まで）。 */
+.proll-syl.fit-red {
+  color: var(--fit-red);
+  border-bottom: 2px solid var(--fit-red);
+}
+.proll-syl.fit-yellow {
+  color: var(--fit-yellow);
+  border-bottom: 2px solid var(--fit-yellow);
+}
+.proll-syl.fit-info {
+  border-bottom: 1px dotted var(--fit-info); /* info は薄く＝点線のみ */
+}
+.proll-syl[role="button"] {
+  cursor: help;
+}
+/* トグル＋凡例（歌詞レーンの上・控えめ）。 */
+.proll-fit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.proll-fit-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.proll-fit-legend {
+  display: inline-flex;
+  gap: 10px;
+}
+.proll-fit-legend .fit-red {
+  color: var(--fit-red);
+}
+.proll-fit-legend .fit-yellow {
+  color: var(--fit-yellow);
+}
+/* タップで開く理由ポップ（歌詞レーンの上に浮かす）。 */
+.proll-fit-reason {
+  position: absolute;
+  bottom: 24px;
+  max-width: 240px;
+  transform: translateX(-40%);
+  padding: 6px 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg);
+  white-space: normal;
+  z-index: 5;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
 .proll-cell {
   width: 12px;
   height: 14px;

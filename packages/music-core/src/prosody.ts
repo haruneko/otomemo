@@ -196,8 +196,83 @@ const ACCENT_DICT: Record<string, number> = {
 
 export interface AccentEntry { kana: string; kernel: number }
 export interface FitHit { noteIdx: number; ruleId: string; severity: "red" | "yellow" | "info"; note: string }
-export interface FitReport { score: number; hits: FitHit[]; contour: Rel[]; melodyDir: Dir[] }
+// openness＝仮歌詞の母音設計メトリクス（L1 §4・V1/V2）。既存 FitReport への **追加のみ**（互換維持）。
+export interface OpennessReport {
+  v1: number | null; // V1 頂点開口度＝セクション最高音に乗るモーラの母音開口度（a=1.0…u=0.2・っ/ん=0）。null=母音不明
+  v2pitch: number | null; // V2 開口度×音高の順位相関（-1..1・正＝高い音ほど開いた母音）。points<2 は null
+  v2dur: number | null; // V2 開口度×音価の順位相関（正＝長い音ほど開いた母音）
+  apexIdx: number; // 最高音の note index（-1=不明）
+}
+export interface FitReport { score: number; hits: FitHit[]; contour: Rel[]; melodyDir: Dir[]; openness: OpennessReport }
 export interface FitNote { pitch: number; syllable?: string; start?: number; dur?: number }
+
+// ── §4 母音開口度メトリクス（L1 §2.1/§4・V1 頂点開口度／V2 開口度×音高・音価相関） ──────────
+// 開口度ランク（L1 §2.1 設計値）：あ段最大→う段最小。ん/っ=0（口が閉じる）、ー は直前を継ぐ。
+const OPENNESS: Record<string, number> = { a: 1.0, o: 0.8, e: 0.6, i: 0.35, u: 0.2 };
+
+/** 音符列（syllable 付き）→ 各音符の母音開口度（null=母音不明）。ー は直前の開口度を継ぐ・っ/ん=0。 */
+export function opennessSeq(syllables: string[]): (number | null)[] {
+  const out: (number | null)[] = [];
+  let prev: number | null = null;
+  for (const s of syllables) {
+    const m = analyzeMoras(s)[0];
+    let o: number | null;
+    if (!m) o = null;
+    else if (m.kind === "long") o = prev; // ー＝直前を継ぐ
+    else if (m.kind === "sokuon" || m.kind === "hatsuon") o = 0; // っ/ん＝口が閉じる
+    else o = m.vowel ? OPENNESS[m.vowel] ?? null : null;
+    prev = o;
+    out.push(o);
+  }
+  return out;
+}
+
+// スピアマン順位相関（同値は平均順位）。points<2 or 片方が定数なら null。
+function spearman(xs: number[], ys: number[]): number | null {
+  const n = xs.length;
+  if (n < 2 || ys.length !== n) return null;
+  const rank = (a: number[]): number[] => {
+    const idx = a.map((v, i) => [v, i] as [number, number]).sort((p, q) => p[0] - q[0]);
+    const r = new Array<number>(a.length);
+    let i = 0;
+    while (i < idx.length) {
+      let j = i;
+      while (j + 1 < idx.length && idx[j + 1]![0] === idx[i]![0]) j++;
+      const avg = (i + j) / 2 + 1; // 1始まりの平均順位
+      for (let k = i; k <= j; k++) r[idx[k]![1]] = avg;
+      i = j + 1;
+    }
+    return r;
+  };
+  const rx = rank(xs), ry = rank(ys);
+  const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+  const mx = mean(rx), my = mean(ry);
+  let num = 0, dx = 0, dy = 0;
+  for (let i = 0; i < n; i++) {
+    const a = rx[i]! - mx, b = ry[i]! - my;
+    num += a * b; dx += a * a; dy += b * b;
+  }
+  if (dx === 0 || dy === 0) return null; // 定数列＝相関定義不能
+  return num / Math.sqrt(dx * dy);
+}
+
+/** V1/V2＝仮歌詞の母音設計メトリクス（頂点開口度・開口度×音高/音価相関）。純関数・音源不要。 */
+export function opennessReport(notes: FitNote[]): OpennessReport {
+  const open = opennessSeq(notes.map((n) => n.syllable ?? ""));
+  // V1：最高音の note に乗るモーラの開口度（同点は最初）。
+  let apexIdx = -1, apexPitch = -Infinity;
+  for (let i = 0; i < notes.length; i++) if (notes[i]!.pitch > apexPitch) { apexPitch = notes[i]!.pitch; apexIdx = i; }
+  const v1 = apexIdx >= 0 ? open[apexIdx] ?? null : null;
+  // V2：母音が判る音符だけで（開口度, 音高）と（開口度, 音価）の順位相関。
+  const oP: number[] = [], p: number[] = [], oD: number[] = [], d: number[] = [];
+  for (let i = 0; i < notes.length; i++) {
+    if (open[i] === null || open[i] === undefined) continue;
+    oP.push(open[i]!); p.push(notes[i]!.pitch);
+    const du = notes[i]!.dur;
+    if (typeof du === "number") { oD.push(open[i]!); d.push(du); }
+  }
+  return { v1, v2pitch: spearman(oP, p), v2dur: spearman(oD, d), apexIdx };
+}
 
 // A-table の重み（§6.2）。score = 1 - Σweight / (最大重み × 対数)。
 const A_WEIGHT: Record<string, { w: number; sev: FitHit["severity"] }> = {
@@ -288,7 +363,7 @@ export function analyzeLyricFit(
   }
 
   const score = Math.max(0, Math.min(1, 1 - totalW / (3 * pairs)));
-  return { score, hits, contour, melodyDir };
+  return { score, hits, contour, melodyDir, openness: opennessReport(notes) };
 }
 
 function ruleNote(id: string): string {

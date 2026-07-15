@@ -31,6 +31,11 @@
   --k-analysis: #d98cc4;
   --k-study: #c99a3c;
   --k-other: #6b7280;
+
+  /* W-K2 韻律整合ハイライト（歌詞チップ）：赤=語義誤解級/黄=注意/info=薄い。 */
+  --fit-red: #e8533f;
+  --fit-yellow: #e0a83c;
+  --fit-info: #8a93a6;
 }
 * {
   box-sizing: border-box;

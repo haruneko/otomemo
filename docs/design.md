@@ -1207,6 +1207,12 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **本スライスの実装/保留**：R 実装=01,02,03,04,05,06,07,08,10,11,12（11本）／保留=09,13,14（3本・語境界×拍/リフレイン再利用/母音韻＝辞書・句解析・跨フレーズが要る）。A 実装=01,02,03,04,05,07（＋08=原則非警告なので noop 実装／計7本 handled）／保留=06,09,10（語境界×リズム・特殊拍への強アタック・語分断休符＝アクセント句境界/特殊拍位置/休符情報が要る＝pyopenjtalk 接続時）。
 - **MCP verb**：`suggest_lyric_rhythm`(歌詞→リズム型候補)・`analyze_lyric_fit`(メロ+歌詞→整合レポート)。**chat allowlist(chat-session.ts CHAT_VERBS)へ必ず両方追加**（過去BUG#1「登録したが許可漏れで黙って死ぬ」型の再発防止）。
 
+### #13c 仮歌パイプ K-api（アクセント自動注入＋VOICEVOX歌唱＋V1/V2／2026-07-15）
+正典＝`docs/research/2026-07-15-kariuta-{accent,voicevox,lyrics-craft,impl-audit}-*.md`（L1〜L4）。#13b の上に「実アクセント」「実歌唱」「母音メトリクス」を載せる。
+- **W-K1 アクセント自動注入（pyopenjtalk 接続）**：`_audio_poc/accent.py`（pyopenjtalk 0.4.1・同 venv `.venv`・spawn 0.13〜0.23秒）＝テキスト→アクセント句ごとの `{moras数, kernel核位置}`。api `apps/api/src/accent.ts`（audio-analyze.ts の run() と同型 spawn＋純関数 `mapAccents`）が音符の syllable 列を句境界で切り `accents:{kana,kernel}[]` を組む（モーラ総数が音符数と不一致なら null＝内蔵ヒューリスティックへ graceful fallback）。`analyze_lyric_fit` は **accents 未指定時に自動 spawn 注入**（明示指定は常に優先＝家訓・返り値に `accentSource: explicit|pyopenjtalk|heuristic`）。**#13b の保留 A-06/09/10 は引き続き保留**（アクセント句境界は得たが、強拍位置＝meter と休符位置＝rest 情報が別途要り、アクセント実データだけでは解禁不可）。
+- **W-K3 VOICEVOX 歌唱出口**：`apps/api/src/sing.ts`＝(a) engine ヘルスチェック→未起動なら `CM_VOICEVOX_DIR`(既定 `~/voicevox-poc/extracted/linux-cpu-x64`) の run を detached spawn（`CM_VOICEVOX_PORT` 既定 50121）(b) 純関数 `notesToScore(notes,bpm)`＝メロ→VOICEVOX Score（FPS93.75・先頭/末尾休符必須・gap>0 に休符挿入・メリスマ ー→lyric""・syllable 欠落→"ラ"・音域外オクターブ折り返し[48,72]）(c) query=歌声(6000)→synth=frame_decode（既定 3009=波音リツ）→wav。**MCP verb `sing_neta(netaId, speaker?)`**＝wav を asset(kind=audio/mime audio/wav)保存し role=render でネタ紐付け→asset id 返す。1フレーズ≒1秒＝同期実行（jobにしない・60秒超ガード）。**CHAT_VERBS 追加済**。
+- **W-K5 母音開口度メトリクス（V1/V2）**：`prosody.ts` に `opennessSeq`/`opennessReport` を追加し `analyzeLyricFit` の返りに `openness:{v1,v2pitch,v2dur,apexIdx}` を **追加（既存互換）**。開口度ランク a1.0/o0.8/e0.6/i0.35/u0.2・っ/ん=0・ー継ぐ。V1=最高音に乗るモーラの開口度／V2=開口度×音高・音価のスピアマン順位相関（正＝高い/長い音ほど開いた母音）。
+
 ## #12 ノート生成エンジン（調査完了・段階決定／#86で改訂）
 一発で「自作と差し替え可能」を満たす単一ツールは無い。段階建て。詳細サーベイ＝`docs/research/2026-06-21-generation-methods.md`。
 
