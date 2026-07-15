@@ -7,6 +7,8 @@ import { chordsFromTimeline, refineChordsWithBass, pcFromKeyName } from "./audio
 import { autoDownbeatOffset } from "./audio-grid";
 import { extractDrumPattern, extractSectionPatterns, meterString, type DrumOnset } from "./audio-drums";
 import { buildDigest } from "./music/audio-digest";
+import { decodeMelody, LAMBDA_DEFAULT, type MelodySegment } from "./music/melody-decode";
+import { hasCorpusStats, loadNoteTransitions, loadSkeletonPriors } from "./music/corpusStats";
 
 // チャット発のジョブは params.chat_thread を持つ。その場合、生成結果を**サーバ側で**そのスレッドの
 // チャットメッセージとして記録する＝クライアントが待ち中に離脱/リロードしても結果が必ずチャットに残る
@@ -188,7 +190,7 @@ export function reapResults(core: Core): number {
     const facts = (parsed.facts ?? {}) as {
       bpm?: number; meter?: number; key?: { key?: string; mode?: string }; vocal_range?: unknown; duration_sec?: number;
       beat_times?: number[]; melody_notes?: unknown; melody_f0?: unknown; chords_timeline?: unknown; chords?: unknown;
-      drum_onsets?: unknown; bass_notes?: unknown;
+      drum_onsets?: unknown; bass_notes?: unknown; melody_segments?: unknown;
     };
     const timeline = (facts.chords_timeline ?? facts.chords) as [number, number, string][] | undefined;
     const beatTimes = Array.isArray(facts.beat_times) ? facts.beat_times : [];
@@ -213,6 +215,45 @@ export function reapResults(core: Core): number {
       meterSource = "drums";
       meterConf = ext.confidence;
       if (ext.downbeat != null) anchorSec = ext.downbeat;
+    }
+    // §7.5 事前確率つき採譜＝corpus-Viterbi 復号：facts に melody_segments があれば TS 復号で melody_notes を
+    // 精緻化して facts へ差し戻す（以降の digest/raw/materialize が精緻版を使う）。無ければ従来 melody_notes のまま＝後方互換。
+    // 効かせるのは「丸め」だけ（VAD＝区間は不変）。λ=0 で現行 round にビット一致（退避路）。corpus 未整備でも degrade（emission 主体）。
+    try {
+      const rawSegs = Array.isArray(facts.melody_segments) ? facts.melody_segments : [];
+      if (rawSegs.length) {
+        const segs: MelodySegment[] = [];
+        for (const s of rawSegs as Record<string, unknown>[]) {
+          const cand = Array.isArray(s?.cand)
+            ? (s.cand as Record<string, unknown>[]).filter((c) => Number.isFinite(Number(c?.midi)))
+                .map((c) => ({ midi: Math.round(Number(c.midi)), mass: Number(c.mass) || 0, conf: Number(c.conf) || 0 }))
+            : [];
+          if (!cand.length) continue;
+          segs.push({ t0: Number(s.t0), t1: Number(s.t1), centerCents: Number(s.centerCents), cand });
+        }
+        if (segs.length) {
+          const mode = facts.key?.mode === "minor" ? "minor" : "major";
+          const tonicPc = pcFromKeyName(facts.key?.key);
+          const hz2midi = (hz: unknown) => (Number.isFinite(Number(hz)) && Number(hz) > 0 ? Math.round(69 + 12 * Math.log2(Number(hz) / 440)) : NaN);
+          const vr = facts.vocal_range as { hz_low?: number; hz_high?: number } | undefined;
+          const vocalRange = vr && Number.isFinite(hz2midi(vr.hz_low)) && Number.isFinite(hz2midi(vr.hz_high))
+            ? { lowMidi: hz2midi(vr.hz_low), highMidi: hz2midi(vr.hz_high) } : null;
+          let bigram: ReturnType<typeof loadNoteTransitions>["bigram"] | null = null;
+          let priors: Record<string, { bin: string; pct: number; n: number }[]> = {};
+          if (hasCorpusStats(core.db)) {
+            bigram = loadNoteTransitions(core.db, "pop", mode).bigram;
+            priors = loadSkeletonPriors(core.db, "pop", mode);
+          }
+          const lambda = Number.isFinite(Number(process.env.CM_MELODY_LAMBDA)) ? Number(process.env.CM_MELODY_LAMBDA) : LAMBDA_DEFAULT;
+          const refined = decodeMelody(segs, timeline ?? null, tonicPc != null ? { tonicPc, mode } : null, {
+            bigram, chordRelStrong: priors.chordRelStrong ?? null, chordRelWeak: priors.chordRelWeak ?? null,
+            vocalRange, beatTimes, meter, downbeatSec: anchorSec, lambda,
+          });
+          if (refined.length) facts.melody_notes = refined; // digest/raw/materialize が精緻版を参照
+        }
+      }
+    } catch (e) {
+      console.error("[audio_analyze] melody decode failed:", r.id, e instanceof Error ? e.message : String(e));
     }
     // #S12改3 区間分解＝crashで区間を切り区間ごとに畳む→区間ごとの綺麗なドラムパターン（全曲1グリッドはドリフトで破綻）。
     // meter確定（ユーザー指定 or ドラム高信頼）の時だけ。ドラム無/低信頼なら空＝区間ネタ無し（グレースフル）。

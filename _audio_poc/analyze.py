@@ -231,6 +231,37 @@ def f0_contour(f0, voiced, times, per_sec=20):
         out.append([round(float(times[k]),2), (round(hz,1) if hz else None)])
     return out
 
+# --- 事前確率つき採譜の perception 出力（design §7.5 ／ research/2026-07-15-prior-informed-transcription.md）。
+#     postprocess 済みの各ノート [s,e,midi] に対し、そのノートのフレーム f0 から
+#     **cent 中心線（centerCents=MIDI*100 スケール）**と **±1半音の候補（mass/conf）**を付ける。
+#     半音丸めは確定せず、TS(interpretation)の Viterbi 復号が調/コード/度数 bigram で「どの半音か」を読む。
+#     centerCents の偏差は ±49cent にクランプ＝round(centerCents/100)==midi を保証（TS λ=0 で現行 melody_notes に一致＝退避路）。
+#     melody_notes は従来どおり出し続ける（追加のみ・後方互換／TS 復号が無い/失敗時のフォールバック）。
+def build_melody_segments(notes, f0, voiced, times):
+    f0 = np.asarray(f0, dtype=float); times = np.asarray(times, dtype=float)
+    voiced = np.asarray(voiced)
+    segs = []
+    for s, e, m in notes:
+        m = int(m)
+        idx = np.where((times >= s) & (times < e) & voiced & np.isfinite(f0) & (f0 > 0))[0]
+        if idx.size:
+            cents = 1200.0 * np.log2(f0[idx] / 440.0) + 6900.0  # MIDI*100（A4=69→6900）
+            dev = float(np.median(cents)) - m * 100.0
+            dev = max(-49.0, min(49.0, dev))                    # round(centerCents/100)==m を保証（λ=0 bit一致）
+            center = m * 100.0 + dev
+            rounded = np.round(cents / 100.0).astype(int)       # フレーム毎の半音丸め→候補 mass
+            counts = {}
+            for r in rounded.tolist():
+                counts[r] = counts.get(r, 0) + 1
+            total = float(idx.size)
+        else:                                                    # 稀：無声のみ（保険）＝committed に全質量
+            center = m * 100.0; counts = {m: 1}; total = 1.0
+        cand = [{"midi": cm, "mass": round(counts.get(cm, 0) / total, 3),
+                 "conf": round(counts.get(cm, 0) / total, 3)} for cm in (m - 1, m, m + 1)]
+        segs.append({"t0": round(float(s), 3), "t1": round(float(e), 3),
+                     "centerCents": round(center, 1), "cand": cand})
+    return segs
+
 # --- コード：BTC の推論を test.py から流用（フルmixに対して） ---
 def btc_chords(audio):
     sys.path.insert(0, BTC)
@@ -349,6 +380,111 @@ def drum_onsets(drums_wav, delta=0.20, min_strength=0.12):
             out.append([round(float(t), 3), "crash", round(min(9.0, peak / (p90 + 1e-9)), 3)])
     return sorted(out, key=lambda x: x[0])
 
+# =========================================================================
+# BPM 倍/半取りの自動判定（テンポオクターブ解決）＝ドラムのオンセット統計で
+# beat_track の倍/半誤りを補正する（2026-07-15）。
+# 背景: librosa beat_track はテンポの ×2 / ÷2 をよく間違える（実例＝畑亜貴「蜿蜒」
+# を 117.5 と半取り・実体感 235）。分離済み drum stem のオンセット間隔(IOI)分布は
+# この曖昧性を割る証拠になる＝「118 なら 8分連打キック（不自然）／235 なら 4分刻み
+# （自然）」。ここでは候補 {bpm/2, bpm, bpm×2} を、ドラムの**最頻オンセット間隔が拍の
+# どの自然な分割に乗るか**で採点し、証拠が強い時だけ octave を差し替える（保守設計）。
+#
+# 実測較正の要点（research/2026-07-15-tempo-octave-fix.md）：多帯域独立検出は kick/
+# snare/hihat が同じ最密パルスに乗るため per-kind の最頻IOIはほぼ一致する。3曲とも
+# **正しいテンポでは最頻ドラムパルス≒8分音符（ratio≒0.5）**に落ちる＝これを頂点に置く
+# 分割自然度スコアが、蜿蜒の半取り（117.5→ratio≒0.27＝16分に見える）を割って ×2 を選び、
+# LostMemory(86)/DeepSea(123) は据え置く。ユーザー bpm_hint 指定時と、ドラムが薄い曲は
+# 判定しない（原値維持）。
+# =========================================================================
+# 拍に対する最頻IOI比の「自然さ」＝ (分割, 品質重み)。8分(0.5)を頂点・16分/4分/3連を副次許容。
+_OCTAVE_SUBDIV = [(0.5, 1.00), (0.25, 0.55), (1.0, 0.70), (1.0/3.0, 0.50),
+                  (2.0/3.0, 0.45), (2.0, 0.30), (0.125, 0.12)]
+_OCTAVE_SIGMA = 0.18          # ガウス幅（オクターブ単位）＝分割近傍の許容
+_OCTAVE_KIND_W = {"kick": 2.0, "snare": 1.2, "hihat": 1.0}  # 種別重み（kick を最重視）
+_OCTAVE_MARGIN = 0.8          # 差し替えは best が original をこの差以上で上回る時だけ（保守）
+_OCTAVE_LO, _OCTAVE_HI = 45.0, 260.0   # 最終BPMの許容絶対レンジ
+_OCTAVE_MIN_ONSETS = 12       # この本数未満の種別は証拠として使わない（薄いドラム）
+
+def _modal_ioi(times, ioi_min=0.06, ioi_max=2.5, bin_ms=15):
+    """連続オンセットの間隔(秒)の最頻値。ヒストグラム最頻ビン±1本の中央値で安定化。
+    休符/区間切れの長間隔は ioi_max で捨てる。データ不足なら (None, 本数)。"""
+    ts = sorted(float(t) for t in times)
+    iois = np.array([b - a for a, b in zip(ts, ts[1:]) if ioi_min <= (b - a) <= ioi_max])
+    if iois.size < 5:
+        return None, int(iois.size)
+    edges = np.arange(ioi_min, ioi_max + bin_ms / 1000.0, bin_ms / 1000.0)
+    hist, _ = np.histogram(iois, bins=edges)
+    pk = int(np.argmax(hist))
+    win = (iois >= edges[max(0, pk - 1)]) & (iois < edges[min(len(edges) - 1, pk + 2)])
+    return float(np.median(iois[win])), int(iois.size)
+
+def _octave_naturalness(r):
+    """拍に対する最頻IOI比 r の音楽的自然さ（0..1）。自然な分割群への対数距離ガウスの最大。"""
+    if r <= 0:
+        return 0.0
+    best = 0.0
+    for tgt, w in _OCTAVE_SUBDIV:
+        d = np.log2(r / tgt)
+        best = max(best, w * float(np.exp(-0.5 * (d / _OCTAVE_SIGMA) ** 2)))
+    return best
+
+def _score_tempo_octave(bpm, iois):
+    """候補BPMの採点＝Σ 種別重み×分割自然度 ＋ 弱いBPM絶対レンジ prior。"""
+    b = 60.0 / bpm
+    s = 0.0
+    det = {}
+    for kind, w in _OCTAVE_KIND_W.items():
+        mi = iois.get(kind)
+        if mi:
+            r = mi / b
+            n = _octave_naturalness(r)
+            s += w * n
+            det[kind] = [round(r, 3), round(n, 3)]
+    prior = 0.0
+    if bpm > 200:                 # 実用歌ものの上限付近＝弱い減点（強い証拠があれば覆る）
+        prior -= 0.010 * (bpm - 200)
+    if bpm > 250:                 # 250超はさらに強く減点
+        prior -= 0.05 * (bpm - 250)
+    if bpm < 55:
+        prior -= 0.03 * (55 - bpm)
+    if 70 <= bpm <= 180:          # 実用スイートスポットに弱加点
+        prior += 0.15
+    s += prior
+    det["prior"] = round(prior, 3)
+    return s, det
+
+def resolve_tempo_octave(tempo, drum_onsets_list):
+    """drum_onsets からテンポオクターブ（bpm の 半/倍）を解決。
+    返り値 info = {original, chosen, reason, [scores/modal_ioi]}（facts 追加用・後方互換）。
+    証拠（十分なドラム本数）が無ければ原値維持。"""
+    iois, counts = {}, {}
+    for kind in ("kick", "snare", "hihat"):
+        mi, n = _modal_ioi([o[0] for o in drum_onsets_list if len(o) > 1 and o[1] == kind])
+        counts[kind] = n
+        iois[kind] = mi if (mi and n >= _OCTAVE_MIN_ONSETS) else None
+    if not any(iois.values()):
+        return round(tempo, 1), {"original": round(tempo, 1), "chosen": round(tempo, 1),
+                                 "reason": "insufficient drum onsets; kept original",
+                                 "onset_counts": counts}
+    cands = [(f, tempo * f) for f in (0.5, 1.0, 2.0) if _OCTAVE_LO <= tempo * f <= _OCTAVE_HI]
+    scored = []
+    for f, bpm in cands:
+        sc, det = _score_tempo_octave(bpm, iois)
+        scored.append({"factor": f, "bpm": round(bpm, 1), "score": round(sc, 3), "detail": det})
+    orig = next(x for x in scored if x["factor"] == 1.0)
+    best = max(scored, key=lambda x: x["score"])
+    chosen = best if (best["factor"] != 1.0 and best["score"] > orig["score"] + _OCTAVE_MARGIN) else orig
+    if chosen["factor"] != 1.0:
+        reason = (f"drum modal pulse best-fits an eighth-note at {chosen['bpm']} "
+                  f"(score {chosen['score']:.2f}) vs {orig['bpm']} ({orig['score']:.2f}); "
+                  f"x{chosen['factor']:g}")
+    else:
+        reason = f"original tempo best-fits drum subdivision (score {orig['score']:.2f}); kept"
+    info = {"original": orig["bpm"], "chosen": chosen["bpm"], "reason": reason,
+            "modal_ioi_sec": {k: (round(v, 3) if v else None) for k, v in iois.items()},
+            "onset_counts": counts, "candidates": scored}
+    return chosen["bpm"], info
+
 def main():
     audio = os.path.abspath(sys.argv[1])
     work = os.path.abspath(sys.argv[2]) if len(sys.argv)>2 else "/tmp/audio_poc_work"
@@ -362,6 +498,10 @@ def main():
     vocals = stems.get("vocals", "")
     t_sep = time.time()-t0
 
+    # 1.5 ドラム：分離済み drums stem からオンセット検出＋帯域分類（#S12・拍子/量子化は TS 側）。
+    #     BPM 倍/半判定（step 2）でも使うため分離直後に前倒しで算出＝出力にもそのまま再利用。
+    d_onsets = drum_onsets(stems["drums"]) if "drums" in stems else []
+
     # 2. BPM＋**実ビート時刻**（フルmix）。固定BPMのドリフト回避のため beat_track の実ビートを出す。
     #    拍を綺麗に：tightness を上げて拍間隔を安定化（揺れ低減）＋BPMヒント(argv[4])があれば start_bpm で固定。
     y, sr = librosa.load(audio, mono=True)
@@ -373,10 +513,19 @@ def main():
         except ValueError:
             bpm_hint = None
     if bpm_hint:
+        # ユーザー指定は常に優先＝オクターブ判定はスキップ（家訓：ユーザー指定を上書きしない）。
         tempo_raw, beats = librosa.beat.beat_track(y=y, sr=sr, start_bpm=bpm_hint, tightness=160)
+        tempo = float(np.atleast_1d(tempo_raw)[0])
+        octave_info = {"original": round(tempo, 1), "chosen": round(tempo, 1),
+                       "reason": "user bpm_hint given; octave check skipped"}
     else:
         tempo_raw, beats = librosa.beat.beat_track(y=y, sr=sr, tightness=140)
-    tempo = float(np.atleast_1d(tempo_raw)[0])
+        tempo = float(np.atleast_1d(tempo_raw)[0])
+        # ドラムのオンセット統計でテンポオクターブ（倍/半）を解決。差し替え時のみ再 beat_track。
+        chosen_bpm, octave_info = resolve_tempo_octave(tempo, d_onsets)
+        if abs(chosen_bpm - round(tempo, 1)) > 0.05:
+            tempo_raw, beats = librosa.beat.beat_track(y=y, sr=sr, start_bpm=chosen_bpm, tightness=160)
+            tempo = float(np.atleast_1d(tempo_raw)[0])  # 正しいスケールで beat_times を出し直す
     beat_times = [round(float(t),3) for t in librosa.frames_to_time(beats, sr=sr)]
     key = estimate_key(y, sr)
 
@@ -402,14 +551,14 @@ def main():
         vr = vocal_range(f0, voiced)
         melody_notes = postprocess_notes(vocal_melody(f0, voiced, ftimes, hop_sec))
         melody_f0 = f0_contour(f0, voiced, ftimes)
+        melody_segments = build_melody_segments(melody_notes, f0, voiced, ftimes)  # §7.5 復号入力（中心線＋±1半音候補）
     else:
-        vr = {"error":"no vocal stem"}; melody_notes = []; melody_f0 = []
+        vr = {"error":"no vocal stem"}; melody_notes = []; melody_f0 = []; melody_segments = []
 
     # 4. コード（フルmix・BTC）
     t1 = time.time(); chords = btc_chords(audio); t_chord = time.time()-t1
 
-    # 5. ドラム：分離済み drums stem からオンセット検出＋帯域分類（#S12・拍子/量子化は TS 側）
-    d_onsets = drum_onsets(stems["drums"]) if "drums" in stems else []
+    # 5. ドラム：オンセットは step 1.5 で算出済み（BPM倍/半判定と共用）＝ d_onsets を再利用。
 
     # 5.5 ベース：分離済み bass stem に**低域pyin**→ボーカルと同じRLE量子化（#S12改3・機構共有）。
     #     帯域＝5弦B0≈31〜E4≈330Hz（実測でfmax400は倍音/ブリードを拾い G4等の外れ→330に締め）。単音・粒短め min_note_sec=0.06。
@@ -426,12 +575,14 @@ def main():
         "file": os.path.basename(audio),
         "duration_sec": round(len(y)/sr,1),
         "bpm": round(tempo,1),
+        "bpm_octave_check": octave_info,             # BPM倍/半の自動判定（追加のみ・後方互換）＝{original,chosen,reason,…}
         "meter": meter,                             # ユーザー指定拍子（beats/bar）
         "beat_times": beat_times,                   # 実ビート時刻(秒)＝小節線導出の土台
         "key": key,
         "vocal_range": vr,
         "melody_notes": melody_notes,               # [[start,end,midi]]＝量子化メロ（view-only）
         "melody_f0": melody_f0,                      # [[t,hz|null]]＝生輪郭（量子化fallback表示）
+        "melody_segments": melody_segments,          # §7.5 [{t0,t1,centerCents,cand:[{midi,mass,conf}]}]＝TS Viterbi復号の入力（追加のみ・後方互換）
         "f0_engine": f0_engine,                      # "pesto"|"pyin"|null＝ボーカルf0の採譜器（追加のみ・後方互換）
         "chords_timeline": chords,                  # [start,end,label]（全体・切出は overlay 側）
         "drum_onsets": d_onsets,                     # #S12 [[t_sec, kick|snare|hihat, strength]]（生・拍子/量子化は TS）

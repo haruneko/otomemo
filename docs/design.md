@@ -919,7 +919,8 @@ P5 切出→chord_progression ネタ＋Claude 所見。
 4. **prose再設計**：summarizeFacts を digest 全体に置換＋所見プロンプトを「事実→解釈→転用」3層テンプレ（pedagogy §テンプレA）＋**逸脱1〜2点深掘り・メタ情報は末尾1行に降格**へ。
 5. **保存**：reaper が digest を `analysis.content.digest` に保存。**軽量双子ネタは作らない**（F4案Bは digest＋下記射影で代替＝ネタ一覧を汚さない）。
 6. **MCP面の射影**：(a) `read_neta`＝analysis kind は既定で raw を要約（digest＋prose＋meta＋chords_timeline を返し、melody_f0/melody_notes/beat_times は件数・統計のみ）・フル配列は `fields:[...]` オプトイン（ワークベンチ用途温存）。(b) `search`＝ヒットの content 丸ごと返却をやめ**要約射影**（id/kind/title/冒頭）のみ・フルは read_neta へ。(c) `ok()` の pretty-print を raw 数値配列で禁止（×2.6〜3.3の膨張増幅を止める）。(d) `CHAT_VERBS` に `suggest_emotion_params` 追加（BUG#1型休眠の是正・F4発見）。記号系verbの個別露出は不要＝統合 `analyze` で足りる（F4確認済）。
-7. **perception 第1弾**：vocal f0 を pyin→**PESTO** 差し替え（上記 抜け#1 解決参照）。
+7. **perception 第1弾**：vocal f0 を pyin→**PESTO** 差し替え（上記 抜け#1 解決参照）。＋生歌較正（2026-07-15・蜿蜒耳検収）＝energyVADゲート（幽霊ノート除去）＋断片化後処理。
+7.5 **事前確率つき採譜＝corpus-Viterbi復号（2026-07-15 GO・オーナー承認・研究正典=research/2026-07-15-prior-informed-transcription.md）**：f0→ノートの**「丸め」層だけ**に音楽的事前確率を効かせる（VAD＝歌区間判定は不変＝区間を作らない/消さないを構造保証）。層分け＝**Python(perception)はセグメント＋候補音高(±1半音)を吐くだけ**（facts追加 `melody_segments`・追加のみ後方互換）／**TS(interpretation)がViterbi復号**＝エミッション=f0中心線（ガウス45cent）×遷移=自前コーパス度数bigram（`corpusStats.ts` 既存ロード資産再利用）×コードトーン吸着は**強拍のみ**（弱拍=経過音/倚音保護）×音域・持続prior。**暴走ガード**＝復号ラベルは生f0から±1半音を超えないハードクランプ＋λ=0で現行bit一致（退避路）。受け入れ＝LostMemory note-F 床0.74維持＋揺れ歌手（蜿蜒）で耳判定。期待値の正直な線＝断片解消と丸め安定であり全自動耳コピではない。
 8. **第2弾（backlog・オーナー判断込み）**：**beat_this** 導入（拍/ダウンビートSOTA・7-10s/曲・ただし torch2.6系 venv 分離が要る＝venv戦略とセット・research/2026-07-15-allin1-beatthis-feasibility.md）／**allin1**＝条件付きGO（機能ラベル付き構成が取れるが 10-14分/曲＋パッチ3点＝**任意の「追い焚き」ジョブ**として非同期・既定は crash 区間分解のまま）／localKey 調テンプレemission／PESTO生歌追検証（耳）。
 
 #### 決定：ドラム抽出＝窓分割×正準パターン型照合へ全面刷新（#S12改・2026-07-08・実測駆動）
