@@ -10,7 +10,8 @@ import { buildHttp } from "../src/http";
 // VOICEVOX 実合成を回さない＝singNeta をモックし、HTTP 契約（抽出/バリデーション/返り）だけ検証。
 // mock 側は wav asset を実際に addAsset+linkAsset して、返す asset を本物同様に見せる。
 const singNeta = vi.hoisted(() => vi.fn());
-vi.mock("../src/sing", () => ({ singNeta }));
+// singNeta だけ差し替え、resolveSingBpm 等の純ヘルパは本物を残す（B1 の bpm 解決を実地検証するため）。
+vi.mock("../src/sing", async (importActual) => ({ ...(await importActual<typeof import("../src/sing")>()), singNeta }));
 
 let app: FastifyInstance;
 let core: Core;
@@ -85,6 +86,14 @@ describe("POST /neta/:id/sing", () => {
     expect(r.statusCode).toBe(200);
     expect((r.json() as { speaker: number }).speaker).toBe(3010);
     expect(singNeta).toHaveBeenCalledWith(core, n.id, expect.any(Array), 96, 3010);
+  });
+
+  it("B1: neta の tempo 列（DB列）を bpm の第一候補にする（content.tempo より優先）", async () => {
+    // 検体＝「みなそこイントロ」型：tempo は DB列(92)、content には別値を置いて列が勝つことを確認。
+    const n = core.createNeta({ kind: "melody", title: "みなそこ", tempo: 92, content: { notes: [{ pitch: 60, start: 0, dur: 1, syllable: "み" }], tempo: 120 } });
+    const r = await app.inject({ method: "POST", url: `/neta/${n.id}/sing`, payload: {} });
+    expect(r.statusCode).toBe(200);
+    expect(singNeta).toHaveBeenCalledWith(core, n.id, expect.any(Array), 92, undefined);
   });
 
   it("502 when synthesis fails (engine 未起動等)", async () => {

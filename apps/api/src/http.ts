@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Core } from "./core";
 import { netaInputSchema, netaPatchSchema, jobInputSchema, scopeEnum, scopeQueryEnum } from "./schemas";
-import { singNeta } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
+import { singNeta, resolveSingBpm } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
 import {
   genChords,
   genMelody,
@@ -694,13 +694,13 @@ export function buildHttp(core: Core): FastifyInstance {
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
     const n = core.getNeta(id);
     if (!n) return reply.code(404).send({ error: "not found" });
-    const content = (n.content ?? {}) as { notes?: unknown; tempo?: unknown; bpm?: unknown };
+    const content = (n.content ?? {}) as { notes?: unknown };
     const notes = Array.isArray(content.notes)
       ? (content.notes as { pitch: number; start: number; dur: number; syllable?: string }[])
       : [];
     if (!notes.length) return reply.code(400).send({ error: "このネタに notes がありません（melody を指定して）" });
     if (!notes.some((x) => x.syllable)) return reply.code(400).send({ error: "各音符に歌詞(syllable)がありません。先に歌詞を載せて。" });
-    const bpm = typeof content.tempo === "number" ? content.tempo : typeof content.bpm === "number" ? content.bpm : 120;
+    const bpm = resolveSingBpm(n); // B1: tempo は neta のDB列(n.tempo)が正準（content.tempo/bpm はフォールバック）
     try {
       const asset = await singNeta(core, id, notes, bpm, p.data.speaker);
       return { assetId: asset.id, name: asset.name, bytes: asset.size, speaker: p.data.speaker ?? 3009 };
