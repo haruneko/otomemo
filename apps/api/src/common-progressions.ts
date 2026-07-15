@@ -32,9 +32,12 @@ const PC_NAME: Record<number, string> = {
 //   ※相対ペアに縛らないので Dm 中心(D Phrygian 的)も拾える（DeepSea＝Dm が最長→D minor）。
 const _isMinQ = (q: string) => q === "m" || q === "m7" || q === "m6";
 const _isMajQ = (q: string) => q === "" || q === "maj7" || q === "6" || q === "7" || q.startsWith("sus");
-export function resolveTonic(chords: { root: number; quality: string; dur?: number }[]): { tonic: number; mode: "major" | "minor" } {
-  if (chords.length === 0) return { tonic: 0, mode: "major" };
+// ★継続長ヒートマップの 24 枠スコア表（"root:M"/"root:m" → 重み）をそのまま返す。
+//   resolveTonic はこの表を argmax するだけ＝挙動不変で切り出した（局所調検出 F3 の per-window emit に再利用）。
+//   空配列は空 Map。第1/末尾コードの弱ボーナス（+0.6/+0.3）も含む＝窓化時は窓端の局所トニックバイアスとして効く。
+export function tonicScores(chords: { root: number; quality: string; dur?: number }[]): Map<string, number> {
   const score = new Map<string, number>(); // "root:m"/"root:M" → 重み
+  if (chords.length === 0) return score;
   const add = (root: number, min: boolean, x: number) => { const k = `${root}:${min ? "m" : "M"}`; score.set(k, (score.get(k) ?? 0) + x); };
   const put = (c: { root: number; quality: string; dur?: number }, x: number) => {
     if (_isMinQ(c.quality)) add(c.root, true, x); else if (_isMajQ(c.quality)) add(c.root, false, x);
@@ -42,6 +45,12 @@ export function resolveTonic(chords: { root: number; quality: string; dur?: numb
   for (const c of chords) put(c, typeof c.dur === "number" && c.dur > 0 ? c.dur : 1); // 分布（継続長 or 出現数）
   put(chords[0]!, 0.6); // 開始はトニックになりやすい
   put(chords[chords.length - 1]!, 0.3); // 解決先も
+  return score;
+}
+
+export function resolveTonic(chords: { root: number; quality: string; dur?: number }[]): { tonic: number; mode: "major" | "minor" } {
+  if (chords.length === 0) return { tonic: 0, mode: "major" };
+  const score = tonicScores(chords); // 挙動不変：スコア表を作り argmax
   let bestK = "0:M", best = -1;
   for (const [k, v] of score) if (v > best) { best = v; bestK = k; }
   const [r, m] = bestK.split(":");

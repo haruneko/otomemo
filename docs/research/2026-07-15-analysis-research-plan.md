@@ -96,6 +96,20 @@ D1 → D2 (Fable) → W2 W3＋実装ハンドオフ (Opus)
 ## 実行記録
 - **Wave 1 完了（2026-07-15・5並列）**：R1→[2026-07-15-analysis-pedagogy](2026-07-15-analysis-pedagogy.md)（見どころ18類型表・「事実→解釈→転用」3層＝v1の薄さの理論的説明）／R2→[2026-07-15-local-key-detection-survey](2026-07-15-local-key-detection-survey.md)（推奨=resolveTonic窓化＋DP・純TS依存ゼロ・F3合格基準込み）／R3→[2026-07-15-mir-2026-refresh](2026-07-15-mir-2026-refresh.md)（BTC据え置き・**beat_this乗り換え推奨**・F2にROSVOT/PESTO追加）／R4→[2026-07-15-ytdlp-status](2026-07-15-ytdlp-status.md)（現行設計維持でOK）／W1→`reaper.ts` raw に bass_notes 保存（api 1116緑・tsc クリーン）。
 - **R3によるWave 2の増補**：F1に beat_this の拍/ダウンビート実測を追加・F2の比較対象に ROSVOT（歌特化採譜）と PESTO（軽量f0）を追加。
+- **Wave 2 完了（2026-07-15・4並列）**：F1→[allin1-beatthis-feasibility](2026-07-15-allin1-beatthis-feasibility.md)（beat_this=7-10s/曲でダウンビートΔ0.045s・allin1=機能ラベル付き14-16区間だが10-14分/曲＋パッチ3点）／F2→[vocal-transcription-benchmark](2026-07-15-vocal-transcription-benchmark.md)（**PESTO勝者** note-F 0.761 vs pyin 0.568・basic-pitch不採用確定・ROSVOT導入断念）／F3→[local-key-proto-results](2026-07-15-local-key-proto-results.md)（合成6系統全勝・実曲2/3合格・DeepSea13分割=emission限界を特定）／F4→[chat-analysis-e2e](2026-07-15-chat-analysis-e2e.md)（会話の質◎だが **analysisネタ100-126K tokens で read_neta/search が実質死**・melody_f0が55%）。api全スイート1122緑（F3のlocalKey.ts＋tonicScores切出し込み）。
+
+## D2 総合裁定（Fable・2026-07-15）
+| 対象 | 裁定 | 根拠/条件 |
+|---|---|---|
+| **PESTO差し替え** | **GO（Wave4即実装）** | 精度・速度・導入の三拍子。生歌別曲で耳＋数値の追検証1回を条件に |
+| **basic-pitch** | **不採用で決着** | 実声0.555。usecases-chat.md v1.1残の「basic-pitch採譜精度up」は撤回（PESTOが代替） |
+| **localKey結線** | **限定GO（Wave4・digest経由）** | 断片化ゲート必須（>4セグ or 最短<8sでグローバルへフォールバック）。調テンプレemissionは第2弾 |
+| **facts射影（digest＋MCP射影）** | **GO（Wave4本丸）** | 所見とチャットの両詰まりが同根＝射影層一本で両方直る。設計＝design.md「読み筋層 v2.1」確定済 |
+| **beat_this** | **GO・ただし第2弾** | 性能文句なしだが torch2.6系 venv分離＝venv戦略の設計とセットで |
+| **allin1** | **条件付きGO・第2弾** | 10-14分/曲＝既定パイプラインには重い。任意「追い焚き」ジョブとして非同期に |
+| **軽量双子ネタ（F4案B）** | **不採用** | digest保存＋read_neta/search射影で代替＝ネタ一覧を汚さない |
+
+**Wave 4 実装WP（Opus委譲）**：A1=digest純関数＋spots第1弾＋key_segments結線＋prose再設計（audio-digest.ts新設・summarizeFacts置換・reaper保存）／A2=MCP射影（read_neta要約＋fieldsオプトイン・search要約射影・ok()非pretty・CHAT_VERBS+1）／A4=PESTO差し替え（analyze.py・母艦venv・F2ハーネスで回帰確認）。第2弾（backlog）＝beat_this＋venv戦略・allin1追い焚き・調テンプレemission・PESTO生歌耳検証。
 
 ## 4. 出典・根拠の所在
 - 正典：`docs/usecases-chat.md`（①v2要件確定 L25-47・合格基準 L114-116）／`docs/design.md`（アナリーゼ・ワークベンチ L856-・ドラム/ベース抽出 L942-）
