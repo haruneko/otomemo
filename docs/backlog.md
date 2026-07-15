@@ -286,3 +286,4 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - **localKey 調テンプレ相関emission**：現プロトは「窓内最強三和音」emission＝半音階の濃い曲（DeepSea）で13分割。根治は調プロファイル相関への差し替え（resolveTonic再利用では届かない・F3 doc に記録）。
 - **PESTO 生歌追検証（耳）**：F2の正解はボカロ的レンダー1曲＝絶対値は楽観。生歌別曲で耳＋数値の追検証1回（オーナー手番を含む）。
 - **_audio_poc/venv-f1・venv-f2 の掃除**：F1/F2実測の残骸（計~数GB）。第2弾に着手しないと決めたら削除。
+- **get_job も chat面射影の対象に**（2026-07-15・蜿蜒アナリーゼ実走で発見）：A2 は read_neta/search を射影したが `get_job` は素通し＝audio_analyze 完了ジョブを引くと生facts 634K文字が丸ごと返る。チャットが get_job でジョブ結果を確認する動線で同じコンテキスト爆発。read_neta と同じ要約射影（facts→統計＋prose）を get_job の result にも。
