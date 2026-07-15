@@ -93,6 +93,10 @@ D1 → D2 (Fable) → W2 W3＋実装ハンドオフ (Opus)
 
 ---
 
+## 実行記録
+- **Wave 1 完了（2026-07-15・5並列）**：R1→[2026-07-15-analysis-pedagogy](2026-07-15-analysis-pedagogy.md)（見どころ18類型表・「事実→解釈→転用」3層＝v1の薄さの理論的説明）／R2→[2026-07-15-local-key-detection-survey](2026-07-15-local-key-detection-survey.md)（推奨=resolveTonic窓化＋DP・純TS依存ゼロ・F3合格基準込み）／R3→[2026-07-15-mir-2026-refresh](2026-07-15-mir-2026-refresh.md)（BTC据え置き・**beat_this乗り換え推奨**・F2にROSVOT/PESTO追加）／R4→[2026-07-15-ytdlp-status](2026-07-15-ytdlp-status.md)（現行設計維持でOK）／W1→`reaper.ts` raw に bass_notes 保存（api 1116緑・tsc クリーン）。
+- **R3によるWave 2の増補**：F1に beat_this の拍/ダウンビート実測を追加・F2の比較対象に ROSVOT（歌特化採譜）と PESTO（軽量f0）を追加。
+
 ## 4. 出典・根拠の所在
 - 正典：`docs/usecases-chat.md`（①v2要件確定 L25-47・合格基準 L114-116）／`docs/design.md`（アナリーゼ・ワークベンチ L856-・ドラム/ベース抽出 L942-）
 - 既存研究：`audio-analysis-feasibility.md`（POC GO・精度天井）／`2026-07-08-drum-transcription-journey.md`（区間分解）／`2026-07-07-audio-to-neta-extraction-map.md`（構成が穴・LLMは組み立て層）／`2026-07-06-within-song-loop-lens.md`（resolveTonic）

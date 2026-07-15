@@ -165,6 +165,34 @@ describe("① アナリーゼ（audio_analyze）", () => {
     expect(new Set(bn.map(pitchOf)).size).toBe(2);
   });
 
+  it("W1 bass_notes が facts にあれば analysis.raw.bass_notes に生データ保存（read_neta/ワークベンチで読み返せる）", async () => {
+    const core = new Core(openDb(":memory:"));
+    core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    const bpm = 120, bp = 60 / bpm, meter = 4;
+    const bt = Array.from({ length: 8 }, (_, i) => i * bp);
+    // bass = [[start_sec, end_sec, midi], ...]
+    const bass: [number, number, number][] = [[0, 2, 36], [2, 4, 43]];
+    const fakeAnalyze = async () => ({ bpm, key: { key: "C", mode: "major" }, beat_times: bt, meter, bass_notes: bass, chords_timeline: [[0, 4, "C"]] });
+    await runAudioAnalyzeJob(core, claimed, async () => "bassraw", fakeAnalyze);
+    core.reapResults();
+    const an = core.listNeta({ kind: "analysis", scope: "all", limit: 5 })[0]!;
+    const raw = (an.content as { raw: { bass_notes?: [number, number, number][] } }).raw;
+    expect(raw.bass_notes).toEqual(bass); // facts の bass 採譜を無加工で保存
+  });
+
+  it("W1 後方互換：bass_notes が facts に無いときは raw.bass_notes は欠落（undefined）", async () => {
+    const core = new Core(openDb(":memory:"));
+    core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });
+    const claimed = core.claimQueued(["audio_analyze"])!;
+    const fakeAnalyze = async () => ({ bpm: 120, meter: 4, key: { key: "C", mode: "major" }, beat_times: [0, 1, 2, 3], chords_timeline: [[0, 4, "C"]] });
+    await runAudioAnalyzeJob(core, claimed, async () => "nobass", fakeAnalyze);
+    core.reapResults();
+    const an = core.listNeta({ kind: "analysis", scope: "all", limit: 5 })[0]!;
+    const raw = (an.content as { raw: { bass_notes?: unknown } }).raw;
+    expect(raw.bass_notes).toBeUndefined();
+  });
+
   it("#S12改3 melody_notes も同じ機構で区間ごとに melody ネタ（vocal 展開＝bassと共通）", async () => {
     const core = new Core(openDb(":memory:"));
     core.enqueueJob({ intent: "audio_analyze", params: { filename: "song.mp3", audio_b64: "x" } });

@@ -227,7 +227,10 @@ export function reapResults(core: Core): number {
           // #S12改 拍子の出所と信頼度＋シャッフル検出（sub=3）＋照合した正準型
           meter_detected: { meter, confidence: Math.round(meterConf * 100) / 100, source: meterSource,
             ...(ext ? { sub: ext.sub, template: ext.template } : {}) } },
-        raw: { beat_times: beatTimes, melody_notes: facts.melody_notes ?? [], melody_f0: facts.melody_f0 ?? [], chords_timeline: timeline ?? [], drum_onsets: drumOnsets },
+        // design「ドラム/ベース抽出」：bass stem の pyin 採譜(bass_notes)も raw に保存＝read_neta/ワークベンチでベース生データを読み返せる。
+        // 後方互換：facts に無ければキー欠落のまま（?? [] で捏造しない）。
+        raw: { beat_times: beatTimes, melody_notes: facts.melody_notes ?? [], melody_f0: facts.melody_f0 ?? [], chords_timeline: timeline ?? [], drum_onsets: drumOnsets,
+          ...(Array.isArray(facts.bass_notes) ? { bass_notes: facts.bass_notes } : {}) },
         overlay: { anchors: [{ t_sec: anchorSec, meter, bar_no: 1 }], cuts: [], chord_edits: [],
           // #S12改3 crash由来の区間境界を構造ラベルの種に（Aメロ/サビ名は人間が付け替え＝機械は境界だけ）。
           sections: secs.map((s) => ({ from_t: s.startSec, to_t: s.endSec, label: `区間 ${mmss(s.startSec)}–${mmss(s.endSec)}（${s.bars}小節）` })) },
