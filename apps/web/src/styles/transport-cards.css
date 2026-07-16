@@ -678,6 +678,126 @@
   font-weight: 500;
   color: var(--muted);
 }
+/* ── S3-a 提案▾（つなぎ＝計画 verb の入口）。ヘッダの小ボタン＋ドロップダウン＋候補モーダル（.dialog 流儀）。 ── */
+.fs-suggest {
+  position: relative;
+  flex: none;
+  margin-left: auto; /* fs-meta 行の右端＝合計尺/調/テンポの読み物と分離 */
+}
+.fs-suggest-btn {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fs-suggest-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8; /* メニューより下・他UIより上（外タップで閉じる） */
+}
+.fs-suggest-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 9;
+  display: grid;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 180px;
+  max-width: calc(100vw - 24px); /* モバイル幅で溢れない */
+}
+.fs-suggest-menu button {
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  font-size: 0.8rem;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.fs-suggest-menu button:hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+/* 候補モーダルの行（フォーム/転調/エナジー共通）＝タップで適用の1候補。 */
+.sg-item {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  min-width: 0;
+}
+.sg-item:hover {
+  border-color: var(--accent);
+}
+.sg-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.sg-sub {
+  font-size: 0.72rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sg-note {
+  font-size: 0.66rem;
+}
+.sg-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.sg-summary {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 0.82rem;
+  display: grid;
+  gap: 4px;
+}
+.sg-summary .sg-branch {
+  color: color-mix(in srgb, var(--k-riff) 70%, var(--fg)); /* 分家される行＝分家バッジと同系（新配色なし） */
+}
+/* 遷移試聴（縫い目E）＝カード境界の小ボタン。挿入＋と並ぶ・再生中は⏹。 */
+.fs-trans {
+  flex: none;
+  align-self: center;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 999px;
+  width: 22px;
+  height: 22px;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.fs-trans:hover,
+.fs-trans[aria-pressed="true"] {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+/* エナジーΔチップ（S3-a・揮発）＝役割行の矢印。保存されない提案の目安。 */
+.fs-energy {
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--accent) 70%, var(--fg));
+}
+
 /* 分家バッジ（′）と共有バッジ（🔗）＝役割行右端の S2 スロット。fs-keychg と同じ密度・既存変数のみ（新配色なし）。 */
 .fs-variant {
   flex: none;

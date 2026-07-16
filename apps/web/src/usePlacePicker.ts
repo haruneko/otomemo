@@ -21,6 +21,9 @@ export type PlacePickerCtx = {
   reload: () => Promise<void>;
   onChanged?: () => void;
   onOpenNeta?: (n: Neta) => void;
+  // compose 辺操作の CoW ガード実行子（S3-a）。共有 section への配置を「全部/この曲だけ(分家)/やめる」で守る。
+  // 未指定＝従来どおり原本へ直接配置（FormStrip の song 経路・bit-safe）。返り false＝やめる（何も置かない）。
+  runEdgeOp?: (op: (targetId: string) => Promise<void>) => Promise<boolean>;
 };
 
 export function usePlacePicker(ctx: PlacePickerCtx) {
@@ -68,17 +71,27 @@ export function usePlacePicker(ctx: PlacePickerCtx) {
   }, [picker?.lane.key, !!picker, liveMeter, keyPc]);
   async function placeAt(child: Neta) {
     if (!picker) return;
-    try {
+    // 尺のはみ出し重複を防ぐ＝置くネタが同レーンの別ネタと重なるなら配置しない（点判定 occupiedAt の穴埋め・読み取りのみ＝ガード前でよい）。
+    if (ctx.overlapsOtherInLane(picker.lane, child.id, picker.position, ctx.contentDur(child.kind, child.content))) {
+      setPicker(null);
+      return;
+    }
+    const ord = picker.lane.row ?? 0; // ② コード楽器レーンは行を ord に。他は 0。
+    const position = picker.position;
+    // コピー→配置を1操作に＝CoW「やめる」で孤児コピーを作らない。ガード時は分家 targetId へ置く（原本無傷）。
+    const op = async (targetId: string) => {
       // ライブラリ項目は project にコピーしてから配置（元コーパスを汚さない・編集はコピー側）。
       const target = child.scope === "library" ? await api.copyNeta(child.id) : child;
-      const ord = picker.lane.row ?? 0; // ② コード楽器レーンは行を ord に。他は 0。
-      // 尺のはみ出し重複を防ぐ＝置くネタが同レーンの別ネタと重なるなら配置しない（点判定 occupiedAt の穴埋め）。
-      if (ctx.overlapsOtherInLane(picker.lane, target.id, picker.position, ctx.contentDur(target.kind, target.content))) {
-        setPicker(null);
-        return;
-      }
       // 置く＝1小節ぶんだけ（小節別に別パターンを置ける）。繰り返したい時は右端ドラッグ(③)で。
-      await api.placeChild(neta.id, target.id, picker.position, ord);
+      await api.placeChild(targetId, target.id, position, ord);
+    };
+    try {
+      if (ctx.runEdgeOp) {
+        const ok = await ctx.runEdgeOp(op);
+        if (!ok) { setPicker(null); return; } // やめる＝何も置かない
+      } else {
+        await op(neta.id);
+      }
     } catch {
       // section ネストで循環になる配置は core が拒否（400）→ そっと無視（配置しない）
       setPicker(null);
@@ -93,13 +106,25 @@ export function usePlacePicker(ctx: PlacePickerCtx) {
     if (!picker) return;
     const kinds = picker.lane.kinds;
     const kind = kinds.includes("chord_progression") ? "chord_progression" : kinds[0]!;
-    // 作る部品に section のライブ拍子を刻む＝単体編集でも6/8で表示される（評価バグ②）。
-    const created = await api.createNeta({ kind, title: pq.trim() || undefined, meter: liveMeter });
-    await api.placeChild(neta.id, created.id, picker.position, picker.lane.row ?? 0).catch(() => {});
+    const position = picker.position;
+    const row = picker.lane.row ?? 0;
+    // 作成→配置を1操作に＝CoW「やめる」で孤児ネタを作らない。分家選択時は分家へ置く。
+    let created: Neta | null = null;
+    const op = async (targetId: string) => {
+      // 作る部品に section のライブ拍子を刻む＝単体編集でも6/8で表示される（評価バグ②）。
+      created = await api.createNeta({ kind, title: pq.trim() || undefined, meter: liveMeter });
+      await api.placeChild(targetId, created.id, position, row).catch(() => {});
+    };
+    if (ctx.runEdgeOp) {
+      const ok = await ctx.runEdgeOp(op);
+      if (!ok) { setPicker(null); return; } // やめる＝作らない・置かない
+    } else {
+      await op(neta.id);
+    }
     setPicker(null);
     await ctx.reload();
     ctx.onChanged?.();
-    ctx.onOpenNeta?.(created); // 作ったらすぐ中身を描けるよう編集へ
+    if (created) ctx.onOpenNeta?.(created); // 作ったらすぐ中身を描けるよう編集へ
   }
   // ピッカー項目の試聴＝配置前に耳で確認（相対bass/コード楽器は section の調で解決して鳴らす）。
   async function previewNeta(n: Neta) {

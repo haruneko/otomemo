@@ -127,6 +127,8 @@ export type MelodyGenCtx = {
   progForKind: (kind: string) => number | undefined;
   reload: () => Promise<void>;
   onChanged?: () => void;
+  // compose 辺操作の CoW ガード実行子（S3-a）。共有 section への候補「置く」を守る。未指定＝従来どおり原本へ。
+  runEdgeOp?: (op: (targetId: string) => Promise<void>) => Promise<boolean>;
 };
 
 // 🎲 が振る11ノブ（design #23）。rollDice が同期計算した「振った後の値」を genPart へ override 渡しし、setState の stale を排す。
@@ -465,22 +467,31 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       const ok = window.confirm(`重なる既存配置 ${overlapping.length}件（${names.join("、")}）を外して置きますか？`);
       if (!ok) return; // 「置かない」＝何も変えない（createNeta もしない）
     }
-    const created = await api.createNeta({
-      kind: c.kind,
-      title: `${liveTitle || "曲"} ${lane?.label ?? c.kind}`,
-      content: c.content,
-      key: keyPc,
-      // 2026-07-08 耳FB：mode を宣言（placementLanding の前提）。旧: 未宣言でmajor既定→短調メロが配置で+3移調＝濁りの主因。
-      mode: secModeOf(),
-      tempo,
-      meter: liveMeter,
-      tags: neta.tags,
-    });
-    // 再生成メロ＝置換：尺が重なる既存子（confirm 済み）を外す＝二重化を防ぐ。重なり無し＝空ループ＝従来通り即配置。
-    for (const ch of overlapping) await api.removeChild(neta.id, ch.node.neta.id, ch.position);
-    await api.placeChild(neta.id, created.id, position, lane?.row ?? 0);
-    // 骨格から吹いたメロ/ベース＝realized_from(表面→骨格) を張る（design #20 S2/S3c）。候補が自分の骨格idを持つ。
-    if (c.skeletonNetaId && (c.kind === "melody" || c.kind === "bass" || c.kind === "counter")) await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
+    // 作成→置換→配置を1操作に＝CoW「やめる」で孤児ネタ/中途半端な外しを作らない。ガード時は分家 targetId へ（原本無傷）。
+    const op = async (targetId: string) => {
+      const created = await api.createNeta({
+        kind: c.kind,
+        title: `${liveTitle || "曲"} ${lane?.label ?? c.kind}`,
+        content: c.content,
+        key: keyPc,
+        // 2026-07-08 耳FB：mode を宣言（placementLanding の前提）。旧: 未宣言でmajor既定→短調メロが配置で+3移調＝濁りの主因。
+        mode: secModeOf(),
+        tempo,
+        meter: liveMeter,
+        tags: neta.tags,
+      });
+      // 再生成メロ＝置換：尺が重なる既存子（confirm 済み）を外す＝二重化を防ぐ。重なり無し＝空ループ＝従来通り即配置。
+      for (const ch of overlapping) await api.removeChild(targetId, ch.node.neta.id, ch.position);
+      await api.placeChild(targetId, created.id, position, lane?.row ?? 0);
+      // 骨格から吹いたメロ/ベース＝realized_from(表面→骨格) を張る（design #20 S2/S3c）。候補が自分の骨格idを持つ。
+      if (c.skeletonNetaId && (c.kind === "melody" || c.kind === "bass" || c.kind === "counter")) await api.link(created.id, c.skeletonNetaId, "realized_from").catch(() => {});
+    };
+    if (ctx.runEdgeOp) {
+      const ok = await ctx.runEdgeOp(op);
+      if (!ok) return; // やめる＝何も作らない・外さない・置かない
+    } else {
+      await op(neta.id);
+    }
     removeCand(c.cid); // 置いた候補はトレイから外す（他候補・keepは残す）
     await ctx.reload();
     ctx.onChanged?.();

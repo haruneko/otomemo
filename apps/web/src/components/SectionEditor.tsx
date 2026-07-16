@@ -276,8 +276,23 @@ export function SectionEditor({
   const sectionProjects = (neta.tags ?? []).filter(isProjectTag).map(projectName);
   const progForKind = (kind: string) => (kind === "bass" ? 33 : kind === "rhythm" ? undefined : kind === "counter" || kind === "section_inst" ? 48 : 0);
 
+  // compose 辺操作（削除/配置）の CoW ガード実行子（S3-a＝S2の既知の残の解消）。cow 無し＝そのまま原本へ（従来どおり）。
+  // "branched"＝op は分家 id に対して実行済み（vary→親の辺差し替えは guardAction 内）＝原本の辺は無傷。
+  const runEdgeOp = async (op: (targetId: string) => Promise<void>): Promise<boolean> => {
+    if (!cow) {
+      await op(neta.id);
+      return true;
+    }
+    const res = await cow.guardAction(async (targetId) => { await op(targetId); });
+    if (res.action === "cancel") return false;
+    if (res.action === "branched") return true; // onForked が画面を分家へ載せ替える
+    await op(neta.id);
+    return true;
+  };
+
   async function remove(childId: string, position?: number) {
-    await api.removeChild(neta.id, childId, position);
+    const ok = await runEdgeOp(async (targetId) => { await api.removeChild(targetId, childId, position); });
+    if (!ok) return; // やめる＝辺は無傷
     await load();
     onChanged?.();
   }
@@ -365,6 +380,7 @@ export function SectionEditor({
     sectionChords, sectionBass, sectionDrums,
     contentDur, childDur, progForKind,
     reload: load, onChanged,
+    runEdgeOp, // 候補「置く」の辺操作も CoW ガード（S3-a）
   });
   // 配置ピッカー（空セルタップ→ネタを選んで置く）＝Task#2 で usePlacePicker に分離。
   const pk = usePlacePicker({
@@ -372,6 +388,7 @@ export function SectionEditor({
     occupiedAt, overlapsOtherInLane, contentDur,
     sectionProjects, progForKind,
     reload: load, onChanged, onOpenNeta,
+    runEdgeOp, // ピッカー配置/新規作成の辺操作も CoW ガード（S3-a）
   });
 
   // 合成：子を section の調へ移調（rhythm除く）＋位置オフセット（共有: compositeNotes）

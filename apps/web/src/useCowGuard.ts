@@ -62,9 +62,11 @@ export function useCowGuard(
   const shouldBlockSilentSave = (): boolean =>
     !!opts.parentId && decidedRef.current === null && sharedRef.current !== false;
 
-  /** 保存前ゲート：共有なら初回のみ3択を出す。branch 選択＝vary→親の該当辺だけ差し替え→patch を分家へ適用。
-   * branchPatch＝分家に適用する patch の補正（Fix B＝title 未変更なら「元title′」を維持する等）。 */
-  async function guard(patch: NetaPatch, branchPatch?: (branch: Neta) => NetaPatch): Promise<CowGuardResult> {
+  /** 汎用ゲート（S3-a Fix＝compose 辺操作もガード）：共有なら初回のみ3択。
+   * 返り "save"＝呼び出し側が**原本 id に対して**操作を実行してよい／"cancel"＝何もしない（楽観更新は戻す）／
+   * "branched"＝vary→親の該当辺差し替え→**applyTo を分家 id に対して実行済み**（原本は無傷・onForked 発火済み）。
+   * applyTo の返り Neta は onForked へ渡す表示用（省略時は vary の返した分家）。 */
+  async function guardAction(applyTo: (targetId: string, branch: Neta) => Promise<Neta | void>): Promise<CowGuardResult> {
     if (!opts.parentId || decidedRef.current !== null) return { action: "save" };
     // 共有判定＝先読みキャッシュを待つ（未起動なら起動）。失敗（null）＝ガードせず従来どおり保存を通す
     // （対話中はユーザーが見ている＝保存を止めて作業を失う方が害）。
@@ -78,9 +80,9 @@ export function useCowGuard(
       if (mountedRef.current) setCowPrompt({ count: countRef.current });
     });
     if (mountedRef.current) setCowPrompt(null);
-    if (choice === "cancel") return { action: "cancel" }; // 決定は保持しない＝次の保存で再度確認
+    if (choice === "cancel") return { action: "cancel" }; // 決定は保持しない＝次の操作で再度確認
     if (choice === "branch") {
-      // この曲だけ変える＝子を分家 → **現在の親の該当辺だけ**新idへ差し替え（position/ord 維持）→ patch は分家へ。
+      // この曲だけ変える＝子を分家 → **現在の親の該当辺だけ**新idへ差し替え（position/ord 維持）→ 操作は分家へ。
       const branch = await api.vary(neta.id).catch(() => null);
       if (branch) {
         const pcomp = await api.getComposition(opts.parentId).catch(() => null);
@@ -89,17 +91,26 @@ export function useCowGuard(
           await api.removeChild(opts.parentId, neta.id, e.position).catch(() => {});
           await api.placeChild(opts.parentId, branch.id, e.position, e.ord).catch(() => {});
         }
-        const p = branchPatch ? branchPatch(branch) : patch;
-        const updated = await api.updateNeta(branch.id, p).catch(() => branch); // 編集内容を分家へ（原本は無傷）
+        const ret = await applyTo(branch.id, branch); // 操作（patch保存/辺操作）を分家に対して実行（原本は無傷）
         decidedRef.current = "branch";
         opts.onChanged?.();
-        opts.onForked?.(updated); // 呼び出し側がエディタを分家へ載せ替え（以降の編集は分家に効く）
-        return { action: "branched", branch: updated };
+        const forked = ret ?? branch;
+        opts.onForked?.(forked); // 呼び出し側がエディタを分家へ載せ替え（以降の編集は分家に効く）
+        return { action: "branched", branch: forked };
       }
-      // vary 失敗＝フォールスルーで「全部に効かす」（保存自体は失わせない）
+      // vary 失敗＝フォールスルーで「全部に効かす」（操作自体は失わせない）
     }
-    decidedRef.current = "all"; // 全部に効かす＝以降このセッションは通常保存
+    decidedRef.current = "all"; // 全部に効かす＝以降このセッションは通常どおり原本へ
     return { action: "save" };
+  }
+
+  /** 保存前ゲート（patch 特化＝guardAction の薄いラッパ）。branch 選択＝patch を分家へ updateNeta。
+   * branchPatch＝分家に適用する patch の補正（Fix B＝title 未変更なら「元title′」を維持する等）。 */
+  async function guard(patch: NetaPatch, branchPatch?: (branch: Neta) => NetaPatch): Promise<CowGuardResult> {
+    return guardAction(async (targetId, branch) => {
+      const p = branchPatch ? branchPatch(branch) : patch;
+      return await api.updateNeta(targetId, p).catch(() => branch); // 編集内容を分家へ（原本は無傷）
+    });
   }
 
   const resolveCow = (v: CowChoice) => {
@@ -107,5 +118,5 @@ export function useCowGuard(
     resolveRef.current = null;
   };
 
-  return { cowPrompt, resolveCow, guard, shouldBlockSilentSave };
+  return { cowPrompt, resolveCow, guard, guardAction, shouldBlockSilentSave };
 }

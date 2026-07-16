@@ -10,9 +10,11 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { api, type Neta } from "../api";
-import { PITCH_NAMES } from "../music";
+import { api, type Neta, type FormCandidate, type EnergyPlanLite } from "../api";
+import { PITCH_NAMES, compositeNotes, playNotes, type PlaybackHandle } from "../music";
 import { collapseRuns, cardsToEdges, reconcileEdges, resolveDurById, totalSpanBeats, roleOf, roleInfo, keyDiffLabel, type StripCard, type Edge } from "../formStrip";
+import { scaffoldPlan, energyChips, transitionWindowNotes, type KeyApplication } from "../formPlan";
+import { FormSuggest, type SuggestCard } from "./FormSuggest";
 import { lanesForKind, type Child } from "./sectionLanes";
 import { SectionSkyline } from "./MiniRoll";
 import { SongStatus } from "./SongStatus";
@@ -192,6 +194,88 @@ export function FormStrip({
     onChanged?.();
   }
 
+  // ── つなぎ＝計画 verb の適用（S3-a）。候補の fetch/選択/確認は FormSuggest・実行はここ。 ──
+  // suggest_form → 足場化：既存の辺を全除去（ネタ実体は無傷）→空 section を作って前置和射影で並べる。
+  // key は設定しない＝曲の key で再帰合成（compositeNotes の継承）・title＝役割ラベル（formStrip ROLE_INFO が SSOT）。
+  async function applyFormCandidate(cand: FormCandidate) {
+    for (const c of sorted) await api.removeChild(neta.id, c.node.neta.id, c.position).catch(() => {});
+    for (const s of scaffoldPlan(cand.sections, BPB)) {
+      const created = await api
+        .createNeta({ kind: "section", title: roleInfo(s.role)?.label ?? s.role, bars: s.bars, meter: liveMeter, tags: [`role:${s.role}`] })
+        .catch(() => null);
+      if (created) await api.placeChild(neta.id, created.id, s.position, 0).catch(() => {});
+    }
+    await reload();
+    onChanged?.();
+  }
+
+  // suggest_key_plan → key/mode 適用（自動分家）：direct＝実体を直接更新（全配置に効く）／branch＝
+  // vary→該当辺差し替え→分家へ key/mode（同ターゲットの複数配置は1分家を共有）。サマリで明示同意済み＝CoWは出さない。
+  async function applyKeyApplication(app: KeyApplication) {
+    for (const d of app.direct) await api.updateNeta(d.childId, { key: d.target.key, mode: d.target.mode }).catch(() => {});
+    for (const b of app.branch) {
+      const branch = await api.vary(b.childId).catch(() => null);
+      if (!branch) continue;
+      for (const idx of b.indices) {
+        const c = sorted[idx];
+        if (!c) continue;
+        await api.removeChild(neta.id, b.childId, c.position).catch(() => {});
+        await api.placeChild(neta.id, branch.id, c.position, c.ord).catch(() => {});
+      }
+      await api.updateNeta(branch.id, { key: b.target.key, mode: b.target.mode }).catch(() => {});
+    }
+    await reload();
+    onChanged?.();
+  }
+
+  // suggest_energy_plan → Δチップ（揮発＝state のみ・永続しない＝「提案は揮発・確定は実体に落ちる」）。
+  // sorted の index に整列（roles を position 順で渡しているため返りも同 index）。
+  const [chips, setChips] = useState<string[] | null>(null);
+  const applyEnergyPlan = (plan: EnergyPlanLite) => setChips(energyChips(plan.sections));
+  // 並びが変わったら消す（index 整列が崩れた Δ を出し続けない＝揮発の一貫）。適用直後は並び不変＝消えない。
+  const orderKey = sortedIds.join(",");
+  const chipsOrderRef = useRef(orderKey);
+  useEffect(() => {
+    if (chipsOrderRef.current !== orderKey) {
+      chipsOrderRef.current = orderKey;
+      setChips(null);
+    }
+  }, [orderKey]);
+
+  // FormSuggest へ渡す position 順カード（key 適用の振り分け＋サマリ表示用）。
+  const suggestCards: SuggestCard[] = sorted.map((c) => ({
+    childId: c.node.neta.id,
+    key: c.node.neta.key,
+    mode: c.node.neta.mode,
+    title: c.node.neta.title ?? c.node.neta.text ?? "(無題)",
+    role: roleOf(c.node.neta.tags),
+  }));
+
+  // ── 遷移試聴（縫い目E・S3-a）＝カード境界の前後2小節を composite の部分窓で連結再生（トグルで停止）。 ──
+  const transPlay = useRef<PlaybackHandle | null>(null);
+  const transTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [transAt, setTransAt] = useState<number | null>(null); // 再生中の境界（units の表示 index）
+  const stopTransition = () => {
+    transPlay.current?.stop();
+    transPlay.current = null;
+    if (transTimer.current) { clearTimeout(transTimer.current); transTimer.current = null; }
+  };
+  async function toggleTransition(unitIdx: number, boundaryBeat: number) {
+    const wasPlaying = transAt === unitIdx;
+    stopTransition();
+    setTransAt(null);
+    if (wasPlaying) return; // トグル停止
+    // 窓＝[境界-2小節, 境界+2小節)（曲頭尾はクリップ）。ノートは composite（曲全体の再帰合成）から切り出す。
+    const win = transitionWindowNotes(compositeNotes(children, keyPc, mode), boundaryBeat, 2 * BPB);
+    if (!win.length) return;
+    setTransAt(unitIdx);
+    transPlay.current = await playNotes(win, tempo, {});
+    // 窓が鳴り終わったら表示を戻す（連結再生は1回きり＝ループしない）。
+    const endBeat = Math.max(...win.map((n) => n.start + n.dur));
+    transTimer.current = setTimeout(() => { setTransAt(null); transPlay.current = null; }, (endBeat * 60 * 1000) / Math.max(1, tempo) + 200);
+  }
+  useEffect(() => stopTransition, []); // unmount で鳴りっぱなしを防ぐ
+
   // 挿入＝まず末尾に置いて（タイ無し）尺を確定→desired 順（index に差し込み）で射影 normalize。
   async function insertSection(index: number, sectionId: string) {
     const before = await fetchChildren();
@@ -241,12 +325,22 @@ export function FormStrip({
 
   return (
     <div className="form-strip" aria-label="form-strip">
-      {/* 曲ヘッダ＝合計尺・key/mode・tempo・段階/次の一手（SongStatus 統合）。 */}
+      {/* 曲ヘッダ＝合計尺・key/mode・tempo・提案▾（S3-a）・段階/次の一手（SongStatus 統合）。 */}
       <div className="fs-header">
         <div className="fs-meta" aria-label="song-meta">
           <span className="fs-total">{totalBars}小節<small>≈{totalSec}秒</small></span>
           <span className="fs-key">{keyLabel}</span>
           <span className="fs-tempo">♩={tempo}</span>
+          <FormSuggest
+            keyPc={keyPc}
+            mode={mode}
+            tempo={tempo}
+            liveMeter={liveMeter}
+            cards={suggestCards}
+            onApplyForm={applyFormCandidate}
+            onApplyKeyPlan={applyKeyApplication}
+            onApplyEnergy={applyEnergyPlan}
+          />
         </div>
         <SongStatus netaId={neta.id} />
       </div>
@@ -262,6 +356,19 @@ export function FormStrip({
               {units.map((u, i) => (
                 <Fragment key={u.id}>
                   <button type="button" className="fs-insert" aria-label={`fs-insert-${i}`} title="ここにセクションを挿す" onClick={() => openInsert(i)}>＋</button>
+                  {/* 遷移試聴（縫い目E）＝内側の境界のみ（先頭カードの前には出さない）。トグルで停止。 */}
+                  {i > 0 && (
+                    <button
+                      type="button"
+                      className="fs-trans"
+                      aria-label={`fs-trans-${i}`}
+                      aria-pressed={transAt === i}
+                      title="つなぎを試聴（前の末2小節＋次の頭2小節）"
+                      onClick={() => void toggleTransition(i, sorted[u.indices[0]!]?.position ?? 0)}
+                    >
+                      {transAt === i ? "⏹" : "♪"}
+                    </button>
+                  )}
                   <FormCard
                     unit={u}
                     neta={netaOf(u.childId)}
@@ -269,6 +376,7 @@ export function FormStrip({
                     songKey={keyPc}
                     shared={badges[u.childId]?.shared ?? false}
                     variant={badges[u.childId]?.variant ?? false}
+                    energyChip={chips?.[u.indices[0]!]}
                     onOpen={() => { const n = netaOf(u.childId); if (n) onOpenNeta?.(n); }}
                     onDelete={() => void removeUnit(u)}
                     onBranch={() => void branchUnit(u)}
@@ -321,6 +429,7 @@ function FormCard({
   songKey,
   shared,
   variant,
+  energyChip,
   onOpen,
   onDelete,
   onBranch,
@@ -336,6 +445,7 @@ function FormCard({
   songKey: number;
   shared: boolean; // 2箇所以上で使われている（共有バッジ）
   variant: boolean; // variant_of を持つ＝分家（A′ バッジ）
+  energyChip?: string; // エナジーΔチップ（S3-a・揮発＝適用中のセッションのみ）
   onOpen: () => void;
   onDelete: () => void;
   onBranch: () => void; // 分家にする（この配置1つだけ vary で差し替え）
@@ -370,6 +480,8 @@ function FormCard({
           <button type="button" className="fs-xn" aria-label={`expand-${unit.childId}`} aria-expanded={expanded} title={`同じセクション ${unit.count} 連続（タップで展開）`} onClick={onToggleExpand}>×{unit.count}</button>
         )}
         {/* S2 バッジ＝役割行右端。調バッジ(曲と違う調)・分家(′)・共有(🔗×n)。既存 CSS 変数のみ・新配色は作らない。 */}
+        {/* S3-a エナジーΔチップ（揮発）＝前セクション比の矢印（↑↑/↑/→/↓/↓↓）。 */}
+        {energyChip && <span className="fs-energy" aria-label={`energy-${unit.childId}`} title="エナジー（前セクション比・提案の目安＝保存されません）">{energyChip}</span>}
         {keyChg && <span className="fs-keychg" aria-label={`keychg-${unit.childId}`} title={`曲の調と${keyChg}半音`}>{keyChg}</span>}
         {variant && <span className="fs-variant" aria-label={`variant-${unit.childId}`} title="分家（元セクションの変奏＝variant_of）">′</span>}
         {shared && <span className="fs-shared" aria-label={`shared-${unit.childId}`} title="2箇所以上で使われています（共有・直すと全部に効く）">🔗</span>}

@@ -1315,4 +1315,84 @@ describe("SectionEditor × CoW（共有 section の直接保存ガード・Fix C
     await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("s1", expect.objectContaining({ bars: 9 })));
     expect(getPlacements).not.toHaveBeenCalledWith("s1"); // section 自身の共有判定はしない（共有バッジの子引きとは別）
   });
+
+  // ── S3-a：compose 辺操作（ブロック削除/配置）も CoW ガード（S2 の既知の残の解消） ──
+  const withMelodyChild = () => ({
+    neta: sharedSection(),
+    children: [{ position: 0, ord: 0, node: { neta: mk("m1", "melody", { title: "メロ" }), children: [] } }],
+  });
+
+  it("共有 section のブロック削除＝確認・「やめる」＝外さない", async () => {
+    getComposition.mockImplementation(async (id: string) =>
+      id === "song1"
+        ? { neta: mk("song1", "song"), children: [{ position: 0, ord: 0, node: { neta: sharedSection(), children: [] } }, { position: 32, ord: 0, node: { neta: sharedSection(), children: [] } }] }
+        : withMelodyChild(),
+    );
+    render(<CowHarness neta={sharedSection()} parentId="song1" />);
+    await screen.findByLabelText("block-m1@0");
+    await userEvent.click(screen.getByLabelText("mode-erase"));
+    await userEvent.click(screen.getByLabelText("block-m1@0")); // 消しゴム tap＝辺操作
+    await userEvent.click(await screen.findByLabelText("cow-cancel"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(removeChild).not.toHaveBeenCalled(); // 原本の辺は無傷
+  });
+
+  it("共有 section のブロック削除＝「この曲だけ」＝分家の辺から外す（原本無傷）", async () => {
+    getComposition.mockImplementation(async (id: string) =>
+      id === "song1"
+        ? { neta: mk("song1", "song"), children: [{ position: 0, ord: 0, node: { neta: sharedSection(), children: [] } }, { position: 32, ord: 0, node: { neta: sharedSection(), children: [] } }] }
+        : withMelodyChild(),
+    );
+    vary.mockResolvedValueOnce(mk("s1b", "section", { title: "サビ′" }));
+    const onForked = vi.fn();
+    render(<CowHarness neta={sharedSection()} parentId="song1" onForked={onForked} />);
+    await screen.findByLabelText("block-m1@0");
+    await userEvent.click(screen.getByLabelText("mode-erase"));
+    await userEvent.click(screen.getByLabelText("block-m1@0"));
+    await userEvent.click(await screen.findByLabelText("cow-branch"));
+    await waitFor(() => expect(vary).toHaveBeenCalledWith("s1"));
+    // 親の該当辺差し替え（position/ord 維持）
+    expect(removeChild).toHaveBeenCalledWith("song1", "s1", 0);
+    expect(placeChild).toHaveBeenCalledWith("song1", "s1b", 0, 0);
+    // 辺操作は**分家に対して**実行（落ちサビ＝分家からドラム/ベースの辺を外すの土台）
+    await waitFor(() => expect(removeChild).toHaveBeenCalledWith("s1b", "m1", 0));
+    // 原本 s1 の子辺は外していない
+    expect(removeChild).not.toHaveBeenCalledWith("s1", "m1", 0);
+    await waitFor(() => expect(onForked).toHaveBeenCalled());
+  });
+
+  it("共有 section へのピッカー配置＝「この曲だけ」＝分家に置く（原本無傷）", async () => {
+    getComposition.mockImplementation(async (id: string) =>
+      id === "song1"
+        ? { neta: mk("song1", "song"), children: [{ position: 0, ord: 0, node: { neta: sharedSection(), children: [] } }, { position: 32, ord: 0, node: { neta: sharedSection(), children: [] } }] }
+        : { neta: sharedSection(), children: [] },
+    );
+    listNeta.mockResolvedValue([mk("mx", "melody", { title: "既存メロ", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } })]);
+    vary.mockResolvedValueOnce(mk("s1b", "section", { title: "サビ′" }));
+    render(<CowHarness neta={sharedSection()} parentId="song1" />);
+    await screen.findByLabelText("timeline");
+    await userEvent.click(screen.getByLabelText("place-melody-0")); // 空セル→ピッカー
+    await userEvent.click(await screen.findByLabelText("place-mx"));
+    await userEvent.click(await screen.findByLabelText("cow-branch"));
+    await waitFor(() => expect(vary).toHaveBeenCalledWith("s1"));
+    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("s1b", "mx", 0, 0)); // 分家へ配置
+    expect(placeChild).not.toHaveBeenCalledWith("s1", "mx", 0, 0); // 原本には置かない
+  });
+
+  it("共有 section へのピッカー配置＝「やめる」＝何も作らず置かない", async () => {
+    getComposition.mockImplementation(async (id: string) =>
+      id === "song1"
+        ? { neta: mk("song1", "song"), children: [{ position: 0, ord: 0, node: { neta: sharedSection(), children: [] } }, { position: 32, ord: 0, node: { neta: sharedSection(), children: [] } }] }
+        : { neta: sharedSection(), children: [] },
+    );
+    listNeta.mockResolvedValue([mk("mx", "melody", { title: "既存メロ" })]);
+    render(<CowHarness neta={sharedSection()} parentId="song1" />);
+    await screen.findByLabelText("timeline");
+    await userEvent.click(screen.getByLabelText("place-melody-0"));
+    await userEvent.click(await screen.findByLabelText("place-mx"));
+    await userEvent.click(await screen.findByLabelText("cow-cancel"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(placeChild).not.toHaveBeenCalled();
+    expect(vary).not.toHaveBeenCalled();
+  });
 });

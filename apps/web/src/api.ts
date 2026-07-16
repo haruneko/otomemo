@@ -351,6 +351,23 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  // つなぎ＝計画 verb（S3-a・「提案→人がワンタップ適用」）。/music/:op の既存ディスパッチをラップ。
+  // suggest_form＝構成候補（役割列＋小節数＋概算尺）。提案のみ＝適用は web 側（足場化）。
+  suggestForm: (body: { genre?: string; lengthTarget?: string; targetSeconds?: number; bpm?: number; meter?: string; count?: number } = {}) =>
+    http<{ candidates: FormCandidate[] }>("/music/suggest_form", { method: "POST", body: JSON.stringify(body) }),
+  // suggest_key_plan＝転調プラン（役割列＝position順→各セクションの key/mode 案）。
+  suggestKeyPlan: (roles: string[], key: number, mode: "major" | "minor", count?: number) =>
+    http<{ plans: KeyPlan[] }>("/music/suggest_key_plan", {
+      method: "POST",
+      body: JSON.stringify({ roles, key, mode, ...(count != null ? { count } : {}) }),
+    }),
+  // suggest_energy_plan＝エナジーアーク（テンプレ3種・前セクション比Δ）。適用は揮発Δチップ（永続しない）。
+  suggestEnergyPlan: (roles: string[], template?: string) =>
+    http<EnergyPlanLite>("/music/suggest_energy_plan", {
+      method: "POST",
+      body: JSON.stringify({ roles, ...(template ? { template } : {}) }),
+    }),
+
   // 似たメロ（①道具・retrieval）：提示メロに近いメロを scope(既定 library=連想元)から近い順。
   melodyNeighbors: (body: { notes: unknown; scope?: string; top?: number; id?: string }) =>
     http<{ neighbors: { id?: string; label?: string; similarity: number }[] }>("/melody/neighbors", {
@@ -506,6 +523,28 @@ export interface ChatMessage {
 export interface CompositionNode {
   neta: Neta;
   children: { position: number; ord: number; node: CompositionNode }[];
+}
+
+// ── S3-a 計画 verb の返り（api 側 music/formLibrary・keyPlan・energyPlan の UI が使う部分集合）──
+export interface FormCandidate {
+  id: string;
+  name: string;
+  sections: { role: string; bars: number }[];
+  totalBars: number;
+  seconds: number;
+  withinTarget: boolean;
+  notes: string[];
+}
+export interface KeyPlan {
+  id: string;
+  label: string;
+  sections: { role: string; key: number; mode: "major" | "minor" }[]; // roles と同 index 整列（position 順）
+  transitions: { from: number; to: number; name: string; semitones: number }[];
+  score: number;
+}
+export interface EnergyPlanLite {
+  template: string;
+  sections: { role: string; absLevel: string; level: number }[]; // roles と同 index 整列
 }
 
 export interface Job {
