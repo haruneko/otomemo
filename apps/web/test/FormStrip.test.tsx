@@ -193,6 +193,19 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     expect(placeChild).toHaveBeenCalledWith("g1", "S2", 32, 0); // 分家を同 position/ord で置く
   });
 
+  // 監査FAIL#7：song の「いじる▾」＝TinkerSheet を開いても落ちない（melodyLaneNotes が song-safe）。
+  // 旧: lanesForKind("song") に melody レーンが無く `lanes.find(...)!` が undefined → `.kinds` 参照で
+  // React root ごと白画面クラッシュ＝part別MIDI書き出しの唯一の導線が到達不能だった。
+  it("song の いじる▾＝クラッシュせず開き、MIDI/MIDI(分割) ボタンが出る", async () => {
+    getComposition.mockResolvedValue({ neta: mk("g1", "song"), children: [sectionChild("A", 0)] });
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("form-card-A");
+    await userEvent.click(screen.getByLabelText("tools")); // ← 旧実装はここで throw（白画面）
+    expect(await screen.findByLabelText("tools-menu")).toBeInTheDocument();
+    expect(screen.getByLabelText("export-midi")).toBeInTheDocument(); // 書き出し導線が到達可能
+    expect(screen.getByLabelText("export-midi-split")).toBeInTheDocument(); // part別（設計S1の是正の実体）
+  });
+
   // ── S3-a：提案▾（つなぎ＝計画 verb の結線） ──
   it("提案▾＝フォーム/転調/エナジーの3項目メニュー", async () => {
     getComposition.mockResolvedValue({ neta: mk("g1", "song"), children: [] });

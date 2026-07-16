@@ -399,8 +399,11 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     }
   }
   // メロレーンの（最初の）メロ notes＝ハモリ/fit の入力。
+  // song-safe（監査FAIL#7）：lanesForKind("song") に melody レーンは無い＝`!` 断定は undefined.kinds で
+  // React root ごと白画面クラッシュだった。無ければ空＝呼び出し元（ハモリ/fit/TinkerSheet の判定）は自然に畳まれる。
   function melodyLaneNotes(): Note[] {
-    const ml = lanes.find((l) => l.key === "melody")!;
+    const ml = lanes.find((l) => l.key === "melody");
+    if (!ml) return [];
     const c = ctx.laneChildren(ml)[0];
     return c ? notesForContent("melody", c.node.neta.content) : [];
   }

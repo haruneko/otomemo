@@ -78,7 +78,9 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
 
   const hasChords = sectionChords().length > 0;
   const hasBass = sectionBass().length > 0;
-  const hasMelody = gen.melodyLaneNotes().length > 0;
+  // song はパートタイル自体を出さない（!isSong ガード）＝判定も評価しない（二重防御・実体の防御は
+  // melodyLaneNotes 側の song-safe 化＝監査FAIL#7）。
+  const hasMelody = !isSong && gen.melodyLaneNotes().length > 0;
 
   // タイルtap＝そのパーツをおまかせ生成（現行2タップ主動線を死守）→シートを閉じ候補トレイへ。
   const tapGen = (tile: (typeof TILES)[number]) => {

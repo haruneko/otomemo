@@ -92,7 +92,10 @@ export function contentDur(ctx: SectionCtx, kind: string, content: unknown): num
 // #6 是正(2026-07-13)：position は拍（LaneCell=bar*BPB／compositeNotes・earChords も +position）＝**×BPB は誤り**
 //   （非0位置にコードを置くと gen/fit へ4倍ずれた和声文脈が渡っていた）。earChords と同じ +position に統一。
 export function sectionChords(ctx: SectionCtx): { root?: number; quality?: string; start?: number; dur?: number }[] {
-  const chordLane = ctx.LANES.find((l) => l.key === "chord")!;
+  // song-safe（監査FAIL#7と同型）：song の LANES に chord レーンは無い＝`!` 断定は白画面クラッシュ。
+  // 無ければ空＝sectionDrums/earChords と同じ防御パターン。
+  const chordLane = ctx.LANES.find((l) => l.key === "chord");
+  if (!chordLane) return [];
   const out: { root?: number; quality?: string; start?: number; dur?: number }[] = [];
   for (const c of laneChildren(ctx, chordLane)) {
     const content = c.node.neta.content as { chords?: typeof out } | null;
@@ -105,7 +108,9 @@ export function sectionChords(ctx: SectionCtx): { root?: number; quality?: strin
 // ベースレーンの notes を1本に連結（sectionChords と同じ流儀＝子を小節位置ぶんオフセット）。
 // メロ生成の対位入力（design「gen_melody×ベース結線」）。相対 bass はコードレーンに当てて実音化。
 export function sectionBass(ctx: SectionCtx): Note[] {
-  const bassLane = ctx.LANES.find((l) => l.key === "bass")!;
+  // song-safe（同上）：bass レーンが無い kind（song）では空。
+  const bassLane = ctx.LANES.find((l) => l.key === "bass");
+  if (!bassLane) return [];
   const chords = sectionChords(ctx).map((c) => ({ root: c.root ?? 0, quality: c.quality ?? "", start: c.start ?? 0, dur: c.dur ?? ctx.BPB }));
   const out: Note[] = [];
   for (const c of laneChildren(ctx, bassLane)) {
