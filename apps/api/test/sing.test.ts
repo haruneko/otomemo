@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { notesToScore, scoreSeconds, chooseOctaveShift, resolveSingBpm } from "../src/sing";
+import { notesToScore, scoreSeconds, chooseOctaveShift, resolveSingBpm, singHashOf, SING_LEAD_REST_SEC, FPS } from "../src/sing";
 
 // 隣接音程列（輪郭）を取り出すヘルパ：シフトは全音を等しく動かすので輪郭は不変であるべき。
 const intervals = (keys: (number | null)[]) => {
@@ -113,6 +113,51 @@ describe("notesToScore の音域処理（B2・輪郭保存）", () => {
     expect(s.clamped).toBeGreaterThan(0);
     // クランプされた音もバンド内に収まる
     for (const n of s.notes) if (n.key != null) expect(n.key).toBeGreaterThanOrEqual(52), expect(n.key).toBeLessThanOrEqual(79);
+  });
+});
+
+// #13c 句頭子音カウントイン：先頭休符をテンポ非依存の時間床（SING_LEAD_REST_SEC）付きに。
+// 母音頭の手前に置かれる子音（VOICEVOX 実測）が速いテンポで先頭休符から溢れないよう前余白を確保。
+// 正典＝docs/research/2026-07-16-vocal-consonant-countin.md §3.4/§7 F1b。
+describe("notesToScore の先頭休符 時間床（#13c カウントイン）", () => {
+  const framesOf = (beats: number, spb: number) => Math.max(1, Math.round(beats * spb * FPS));
+
+  it("速いテンポ（bpm=180）は床が勝つ＝round(0.18*93.75)=17（0.25拍換算の8より長い）", () => {
+    const spb = 60 / 180; // = 1/3
+    const s = notesToScore([{ pitch: 62, start: 0, dur: 1, syllable: "ら" }], 180);
+    const floorFrames = Math.round(SING_LEAD_REST_SEC * FPS); // 17
+    expect(floorFrames).toBe(17);
+    expect(s.notes[0]!.frame_length).toBe(floorFrames); // 床が勝つ
+    expect(s.notes[0]!.frame_length).toBeGreaterThan(framesOf(0.25, spb)); // 0.25拍(=8)より長い
+  });
+
+  it("遅いテンポ（bpm=60）は 0.25拍が勝つ＝round(0.25*93.75)=23（床17より長い）", () => {
+    const spb = 60 / 60; // = 1
+    const s = notesToScore([{ pitch: 62, start: 0, dur: 1, syllable: "ら" }], 60);
+    expect(s.notes[0]!.frame_length).toBe(framesOf(0.25, spb)); // =23＝0.25拍が勝つ（従来式）
+    expect(s.notes[0]!.frame_length).toBeGreaterThan(Math.round(SING_LEAD_REST_SEC * FPS)); // 床17より長い
+  });
+
+  it("末尾休符は据え置き（床を掛けない）＝先頭とは別長になり得る（bpm=180）", () => {
+    const spb = 60 / 180;
+    const s = notesToScore([{ pitch: 62, start: 0, dur: 1, syllable: "ら" }], 180);
+    const last = s.notes[s.notes.length - 1]!;
+    expect(last.key).toBeNull();
+    expect(last.frame_length).toBe(framesOf(0.25, spb)); // 末尾は 0.25拍のまま（=8）
+    expect(last.frame_length).not.toBe(s.notes[0]!.frame_length); // 先頭(17・床)とは別
+  });
+
+  it("leadRestSec（=先頭休符frame/FPS）＝再生側カウントイン量の SSOT（bpm=180 で ≒0.18s）", () => {
+    const s = notesToScore([{ pitch: 62, start: 0, dur: 1, syllable: "ら" }], 180);
+    const leadRestSec = s.notes[0]!.frame_length / FPS;
+    expect(leadRestSec).toBeCloseTo(17 / FPS, 5); // ≒0.1813s
+  });
+
+  it("床で先頭休符 frame が変われば singHash も別キー＝旧 wav を再利用しない", () => {
+    const s = notesToScore([{ pitch: 62, start: 0, dur: 1, syllable: "ら" }], 180); // 床適用（先頭17）
+    // 旧挙動（床なし・0.25拍=8）を模した score との hash 差＝別キー（=再レンダ）。
+    const old = { ...s, notes: [{ ...s.notes[0]!, frame_length: 8 }, ...s.notes.slice(1)] };
+    expect(singHashOf(s, 3009)).not.toBe(singHashOf(old, 3009));
   });
 });
 

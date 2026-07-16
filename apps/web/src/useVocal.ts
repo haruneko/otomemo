@@ -7,7 +7,7 @@
 import { useCallback, useRef, useState } from "react";
 import { api } from "./api";
 import { decodeVocal } from "./audio";
-import { SING_LEAD_REST_BEATS, type VocalPlay } from "./music";
+import { type VocalPlay } from "./music";
 
 export interface SingNote {
   pitch: number;
@@ -25,17 +25,19 @@ export interface VocalJob {
 }
 
 export function useVocalRender() {
-  const cacheRef = useRef<Map<string, AudioBuffer>>(new Map());
+  // #13c buffer と一緒に leadRestSec（api /sing の実測先頭休符長）をキャッシュ＝カウントイン量の SSOT
+  // （web の SING_LEAD_REST_BEATS 直参照を撤去）。leadRestBeats は再生時に leadRestSec/spb で換算。
+  const cacheRef = useRef<Map<string, { buffer: AudioBuffer; leadRestSec: number }>>(new Map());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [, bump] = useState(0); // レンダ完了で peek 依存の再描画を促す
 
-  // job を VocalPlay へ（buffer がキャッシュにある前提）。
-  const toPlay = (j: VocalJob): VocalPlay => ({
-    buffer: cacheRef.current.get(j.key)!,
-    firstNoteBeat: j.firstNoteBeat,
-    leadRestBeats: SING_LEAD_REST_BEATS,
-  });
+  // job を VocalPlay へ（buffer がキャッシュにある前提）。leadRestBeats＝api 実測 leadRestSec を拍換算（床追従）。
+  const toPlay = (j: VocalJob): VocalPlay => {
+    const c = cacheRef.current.get(j.key)!;
+    const spb = 60 / (j.bpm > 0 ? j.bpm : 120);
+    return { buffer: c.buffer, firstNoteBeat: j.firstNoteBeat, leadRestBeats: c.leadRestSec / spb };
+  };
 
   // 未キャッシュ job をレンダしてから、レンダ済み全 job の VocalPlay[] を返す（再生押下時）。
   const ensure = useCallback(async (jobs: VocalJob[]): Promise<VocalPlay[]> => {
@@ -48,7 +50,7 @@ export function useVocalRender() {
         for (const j of missing) {
           const r = await api.sing(j.notes, j.bpm, j.speaker); // 同一入力は content-hash で合成スキップ
           const buf = await decodeVocal(await (await fetch(api.assetUrl(r.assetId))).arrayBuffer());
-          cacheRef.current.set(j.key, buf);
+          cacheRef.current.set(j.key, { buffer: buf, leadRestSec: r.leadRestSec });
           if (r.shift) notes.push(`音域を${r.shift > 0 ? "+" : ""}${r.shift}半音移調`);
           if (r.clamped) notes.push(`${r.clamped}音を歌唱帯へクランプ`);
         }

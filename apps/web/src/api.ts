@@ -228,9 +228,10 @@ export const api = {
   // ♪汎用歌唱（仮歌＝メロの楽器）：絶対拍のメロ notes＋bpm＋歌詞を VOICEVOX で歌わせ wav asset を作る（リンクしない）。
   // （旧 singNeta＝ネタ単体♪歌うボタン用は撤去。単体/Section とも本 sing を useVocalRender 経由で共用＝入れ方の一本化。
   //   ネタ紐付け歌唱は MCP verb sing_neta が /neta/:id/sing を担うため api 側エンドポイントは残置＝web からは未使用。）
-  // 返り＝{assetId, shift(音域移調 半音), clamped(丸めた音数)}。同一入力は既存 asset 再利用（自然キャッシュ）。
+  // 返り＝{assetId, shift(音域移調 半音), clamped(丸めた音数), leadRestSec(#13c 先頭休符長 秒＝仮歌カウントイン量 SSOT)}。
+  // 同一入力は既存 asset 再利用（自然キャッシュ）。
   sing: (notes: { pitch: number; start: number; dur: number; syllable?: string }[], bpm: number, speaker?: number) =>
-    http<{ assetId: string; shift: number; clamped: number; speaker: number }>("/sing", {
+    http<{ assetId: string; shift: number; clamped: number; speaker: number; leadRestSec: number }>("/sing", {
       method: "POST",
       body: JSON.stringify({ notes, bpm, ...(speaker != null ? { speaker } : {}) }),
     }),

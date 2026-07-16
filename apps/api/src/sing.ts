@@ -17,7 +17,14 @@ const VV_PORT = Number(process.env.CM_VOICEVOX_PORT ?? 50121);
 const VV_URL = process.env.CM_VOICEVOX_URL ?? `http://127.0.0.1:${VV_PORT}`;
 const SING_SPEAKER = 6000; // 歌声モデル（波音リツ・query 用）＝L4 実測で歌声は 6000 の1体のみ
 const DEFAULT_FRAME_DECODE = 3009; // 声色（synth 用）既定＝波音リツ frame_decode
-const FPS = 93.75; // フレームレート = 24000 / 256（L4 実測）
+export const FPS = 93.75; // フレームレート = 24000 / 256（L4 実測）
+// #13c 句頭子音カウントイン（2026-07-16・正典＝docs/research/2026-07-16-vocal-consonant-countin.md §3.4）。
+// 先頭休符のテンポ非依存な時間床（秒）。VOICEVOX は子音を母音頭の手前（先頭休符の後半）に置く（実測 §1）。
+// 0.25拍だけだと速いテンポで子音がはみ出す（bpm140=107ms＜子音上限 sh≈128ms）ので、先頭休符を
+// 「0.25拍 と この床 の大きい方」にする＝速いテンポでも子音ぶんの前余白を確保。**耳で聴いて増減する定数
+// ＝owner が「もっと前余白／一小節前から」を望めばここを上げる（0.18〜0.25s が試聴を損なわない推奨域）**。
+// web 側のカウントイン量は /sing 応答 leadRestSec 経由でこの床に自動追従（SSOT）。
+export const SING_LEAD_REST_SEC = 0.18;
 const DEFAULT_MORA = "ラ"; // syllable 欠落時の既定モーラ（音程確認用）
 // 歌唱バンド＝この歌声モデル(query=6000 波音リツ)が「要求ピッチどおりに歌える」実測レンジ。
 // 2026-07-15 実測（feasibility doc §7）：key 52〜79 は誤差±0.5半音以内で正確。
@@ -80,7 +87,9 @@ export function notesToScore(notes: SingNote[], bpm: number, opts: { defaultMora
   const sorted = [...notes].filter((n) => n.dur > 0).sort((a, b) => a.start - b.start);
   const shift = chooseOctaveShift(sorted.map((n) => Math.round(n.pitch)), lo, hi); // 全体シフト量（輪郭保存）
   let clamped = 0;
-  const out: ScoreNote[] = [{ key: null, frame_length: framesOf(0.25, spb), lyric: "" }]; // 先頭休符
+  // #13c 先頭休符＝「0.25拍」と「時間床 SING_LEAD_REST_SEC」の大きい方（テンポ非依存の子音前余白）。末尾休符は据え置き。
+  const leadRestFrames = Math.max(framesOf(0.25, spb), Math.round(SING_LEAD_REST_SEC * FPS));
+  const out: ScoreNote[] = [{ key: null, frame_length: leadRestFrames, lyric: "" }]; // 先頭休符（床付き）
   let cursor = sorted.length ? sorted[0]!.start : 0; // 直前音符の終端（拍）
   for (let i = 0; i < sorted.length; i++) {
     const n = sorted[i]!;
@@ -204,18 +213,20 @@ export async function singGeneric(
   notes: SingNote[],
   bpm: number,
   frameDecodeId?: number,
-): Promise<{ asset: Asset; shift: number; clamped: number; cached: boolean }> {
+): Promise<{ asset: Asset; shift: number; clamped: number; cached: boolean; leadRestSec: number }> {
   const score = notesToScore(notes, bpm);
+  // #13c SSOT：実測の先頭休符長（秒）＝再生側カウントイン量。web は leadRestSec/spb を VocalPlay.leadRestBeats に使う。
+  const leadRestSec = score.notes[0]!.frame_length / FPS;
   const speaker = frameDecodeId ?? DEFAULT_FRAME_DECODE;
   const singHash = singHashOf(score, speaker);
   const hit = findCachedSing(core, singHash);
-  if (hit) return { asset: hit, shift: score.shift, clamped: score.clamped, cached: true }; // 合成せず再利用
+  if (hit) return { asset: hit, shift: score.shift, clamped: score.clamped, cached: true, leadRestSec }; // 合成せず再利用
   if (score.shift !== 0 || score.clamped > 0) {
     console.log(`[sing/generic] bpm=${bpm} octaveShift=${score.shift}半音 clampedNotes=${score.clamped}`);
   }
   const wav = await synthesize(score, speaker); // 60秒ガードは synthesize 内（共用）
   const asset = saveWavAsset(core, wav, "仮歌（Section・VOICEVOX）", { singHash });
-  return { asset, shift: score.shift, clamped: score.clamped, cached: false };
+  return { asset, shift: score.shift, clamped: score.clamped, cached: false, leadRestSec };
 }
 
 /** melody ネタを歌わせ、wav を asset(kind=audio) 化してネタに render 紐付け。asset を返す。 */

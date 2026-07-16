@@ -28,8 +28,9 @@ const SONG_LANES: readonly LaneDef[] = [
 export const lanesForKind = (kind: string): readonly LaneDef[] => (kind === "song" ? SONG_LANES : SECTION_LANES);
 export const MIN_BARS = 8;
 const SECTION_MAX_BARS = 32; // section 尺の上限（1ブロック＝Aメロ/サビ等）
-const SONG_MAX_BARS = 64; // song 尺の上限（section を複数並べる編成）
-export const maxBarsForKind = (kind: string): number => (kind === "song" ? SONG_MAX_BARS : SECTION_MAX_BARS);
+// song は小節グリッド→フォームストリップ化（design「#曲フォーム」S1）＝描画は尺に依存しない＝上限撤廃
+// （旧 SONG_MAX_BARS=64 は 3:30曲(≈105小節)が入らずバグ級だった）。section の上限は据え置き。
+export const maxBarsForKind = (kind: string): number => (kind === "song" ? Number.POSITIVE_INFINITY : SECTION_MAX_BARS);
 
 // ピッカー種別タブの色＝作成タイルと揃える（種別色）。chord_pattern は chord 色。
 export const LANE_COLOR: Record<string, string> = {

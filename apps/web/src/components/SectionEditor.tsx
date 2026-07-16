@@ -17,6 +17,7 @@ import {
   feelOf,
   isCompoundMeter,
   isSkeleton,
+  partTracks,
   type ChordEntry,
   type Feel,
   type Note,
@@ -28,7 +29,7 @@ import { useDismiss } from "../useDismiss";
 // 巨大コンポの機械分割（負債D6→Task#2）＝挙動不変。レーン定義/尺定数/純関数/LaneCell/SongStatus/PlacePicker、
 // および 生成/ハモリ道具(useMelodyGen)・配置ピッカー(usePlacePicker) を分離。
 import { LaneCell } from "./LaneCell";
-import { SongStatus } from "./SongStatus";
+import { FormStrip } from "./FormStrip"; // song のフォームストリップ（design「#曲フォーム」S1）＝小節グリッドの置換
 import { PlacePicker } from "./PlacePicker";
 import { TinkerSheet } from "./TinkerSheet";
 import { useMelodyGen, voiceLeadingBadge, LENS_AXES, lensBadge } from "../useMelodyGen";
@@ -378,7 +379,7 @@ export function SectionEditor({
 
   return (
     <div className="section-editor">
-      {neta.kind === "song" && <SongStatus netaId={neta.id} />}
+      {/* song の段階/次の一手（SongStatus）はフォームストリップの曲ヘッダへ統合（下の FormStrip 内）。 */}
       {/* 道具は メロ編集画面に整合：[✎通常][⌫消しゴム] modes（左）… [✨いじる▾]（右）。
           生成/ハモリ/書き出しは全部 いじる メニューに集約＝バラ撒きボタンを畳んで薄く（②⑤）。 */}
       <div className="roll-toolbar section-toolbar">
@@ -411,7 +412,7 @@ export function SectionEditor({
               sectionBass={sectionBass}
               onClose={() => setToolsOpen(false)}
               onExportMidi={() => { setToolsOpen(false); downloadMidi(composite(), `${liveTitle || "section"}.mid`, tempo, liveMeter ?? null, undefined, sectionFeel()); }}
-              onExportMidiSplit={() => { setToolsOpen(false); downloadMultitrackMidi(laneTracks(), `${liveTitle || "section"}-tracks.mid`, tempo, liveMeter ?? null, sectionFeel()); }}
+              onExportMidiSplit={() => { setToolsOpen(false); downloadMultitrackMidi(isSong ? partTracks(composite()) : laneTracks(), `${liveTitle || "section"}-tracks.mid`, tempo, liveMeter ?? null, sectionFeel()); }}
             />
           )}
         </div>
@@ -508,6 +509,27 @@ export function SectionEditor({
         </div>
       )}
 
+      {/* song＝フォームストリップ（カード列・design「#曲フォーム」S1）／section＝従来の小節グリッド。 */}
+      {isSong ? (
+        <FormStrip
+          neta={neta}
+          children={children}
+          keyPc={keyPc}
+          tempo={tempo}
+          mode={neta.mode}
+          BPB={BPB}
+          liveMeter={liveMeter}
+          liveTitle={liveTitle}
+          childDur={childDur}
+          beatRef={tp.beatRef}
+          playing={tp.state === "playing"}
+          sectionProjects={sectionProjects}
+          reload={load}
+          onChanged={onChanged}
+          onOpenNeta={onOpenNeta}
+        />
+      ) : (
+      <>
       {/* セクション尺（小節数）＝可変（評価修正A）。placed content より短くはできない（自動で伸びる）。 */}
       {/* ±8 は「8小節フレーズ」単位のジャンプ（8→32 が3タップ・M3 是正）。±1 は微調整で併存。 */}
       <div className="section-bars" aria-label="section-bars">
@@ -644,6 +666,8 @@ export function SectionEditor({
       <p className="muted lanes-hint">
         空きをタップ→置く/新規作成／ブロックをタップで編集（消しゴムモードでタップ＝外す）／右端ドラッグで繰り返し
       </p>
+      </>
+      )}
 
       {/* ＋レーン＝畳んでいるレーン（骨格/対旋律/リフ/コード楽器…）を選んで出す。使わない曲では画面を増やさない。 */}
       {!isSong && collapsedLanesList.length > 0 && (

@@ -272,36 +272,55 @@ describe("pickupSchedule — 弱起（負start）の再生時刻変換（design#
   });
 });
 
-describe("vocalSourceSchedule — 仮歌の初音を楽器の初音と同時刻へ（弱起ズレ修正・#13c）", () => {
-  // 楽器の初音時刻（拍）＝ firstNoteBeat + leadBeats（pickupSchedule が全ノートを +leadBeats シフトするため）。
-  // 受け入れ＝歌の第1音時刻(whenBeat) == 楽器の第1音時刻・offset は wav 先頭休符ぶんちょうど（非ループ）。
+describe("vocalSourceSchedule — 句頭子音カウントイン一般式（#13c・2026-07-16）", () => {
+  // 一般式（doc §3.1）＝母音頭をターゲット拍に載せ、子音の手前余白を offset の残しで確保：
+  //   vowelTarget = firstNoteBeat + leadBeats + countInBeats
+  //   srcStart    = vowelTarget − leadRestBeats
+  //   whenBeat    = max(0, srcStart)
+  //   offsetSec   = (whenBeat − srcStart) * spb   ＝余地がある限り 0（先頭休符ごと鳴らす＝子音が切れない）
   const spb = 60 / 92; // みなそこイントロ ♩92
-  const lead = SING_LEAD_REST_BEATS;
+  const lead = SING_LEAD_REST_BEATS; // 0.25
 
-  it("弱起1（負start・非ループ）：楽器の初音は transport 0、歌も whenBeat=0・offset=先頭休符", () => {
-    // 例＝みなそこ弱起 -0.5。非ループ leadBeats = -minStart = 0.5。楽器初音拍 = -0.5+0.5 = 0。
-    const r = vocalSourceSchedule({ firstNoteBeat: -0.5, leadRestBeats: lead, leadBeats: 0.5, spb });
-    const instrBeat = -0.5 + 0.5; // 楽器がこの初音を鳴らす transport 拍
-    expect(r.whenBeat).toBe(instrBeat); // 歌の第1音時刻 == 楽器の第1音時刻
-    expect(r.offsetSec).toBeCloseTo(lead * spb); // 先頭休符ぶんちょうど食う（余分な食い込みなし）
-  });
-
-  it("弱起0（初音0拍・非ループ）：when=0・offset=先頭休符", () => {
-    const r = vocalSourceSchedule({ firstNoteBeat: 0, leadRestBeats: lead, leadBeats: 0, spb });
+  // 非ループ＝カウントイン countIn=leadRest（0.25）を全パートに上乗せ済み＝offset=0 で先頭休符ごと鳴る。
+  it("弱起(-0.5) 非ループ（countIn=0.25）：when=0・offset=0（子音を含む先頭休符から鳴らす）", () => {
+    const r = vocalSourceSchedule({ firstNoteBeat: -0.5, leadRestBeats: lead, leadBeats: 0.5, countInBeats: 0.25, spb });
     expect(r.whenBeat).toBe(0);
-    expect(r.offsetSec).toBeCloseTo(lead * spb);
+    expect(r.offsetSec).toBeCloseTo(0);
   });
 
-  it("先頭休符0.25（初音が0.25拍・非ループ）：when=0.25・offset=先頭休符＝楽器初音(0.25拍)と一致", () => {
-    const r = vocalSourceSchedule({ firstNoteBeat: 0.25, leadRestBeats: lead, leadBeats: 0, spb });
+  it("初音0 非ループ（countIn=0.25）：when=0・offset=0", () => {
+    const r = vocalSourceSchedule({ firstNoteBeat: 0, leadRestBeats: lead, leadBeats: 0, countInBeats: 0.25, spb });
+    expect(r.whenBeat).toBe(0);
+    expect(r.offsetSec).toBeCloseTo(0);
+  });
+
+  it("初音0.25 非ループ（countIn=0.25）：when=0.25・offset=0", () => {
+    const r = vocalSourceSchedule({ firstNoteBeat: 0.25, leadRestBeats: lead, leadBeats: 0, countInBeats: 0.25, spb });
     expect(r.whenBeat).toBe(0.25);
-    expect(r.offsetSec).toBeCloseTo(lead * spb);
+    expect(r.offsetSec).toBeCloseTo(0);
   });
 
-  it("楽器初音が負に押し出る場合（ループ leadBeats=0・弱起）：when=0 へ丸め、余剰を offset で食う", () => {
-    const r = vocalSourceSchedule({ firstNoteBeat: -0.5, leadRestBeats: lead, leadBeats: 0, spb });
-    expect(r.whenBeat).toBe(0); // 負拍は置けない＝0 へ
-    expect(r.offsetSec).toBeCloseTo((lead + 0.5) * spb); // 先頭休符＋押し出た0.5拍を wav 側で飛ばす
+  // ループ＝countIn=0（一般式に流すだけ＝旧挙動）。弱起は負に押し出る＝先頭休符＋押し出しぶんを offset で食う。
+  it("ループ弱起(countIn=0)：when=0・offset=(0.25+0.5)·spb（旧④と一致）", () => {
+    const r = vocalSourceSchedule({ firstNoteBeat: -0.5, leadRestBeats: lead, leadBeats: 0, countInBeats: 0, spb });
+    expect(r.whenBeat).toBe(0);
+    expect(r.offsetSec).toBeCloseTo((lead + 0.5) * spb);
+  });
+
+  it("ループ 初音1.0 余裕あり(countIn=0)：when=0.75・offset=0（子音も鳴る＝余地時 offset=0）", () => {
+    const r = vocalSourceSchedule({ firstNoteBeat: 1.0, leadRestBeats: lead, leadBeats: 0, countInBeats: 0, spb });
+    expect(r.whenBeat).toBeCloseTo(0.75);
+    expect(r.offsetSec).toBeCloseTo(0);
+  });
+
+  // 不変条件＝同一 S（共有 leadBeats+countIn）を持つ2 vocal の相対時刻は保存（複数メロで破綻しない・doc §4）。
+  it("同一 S で2 vocal の相対時刻を保存（fnb 差=2 → when 差=2・countIn を変えても差不変）", () => {
+    const base = { leadRestBeats: lead, leadBeats: 0.5, spb }; // srcStart>=0 に保つ lead（両者クランプ回避）
+    for (const countInBeats of [0, 0.25, 0.5]) {
+      const a = vocalSourceSchedule({ ...base, firstNoteBeat: 0, countInBeats });
+      const b = vocalSourceSchedule({ ...base, firstNoteBeat: 2, countInBeats });
+      expect(b.whenBeat - a.whenBeat).toBeCloseTo(2); // カウントインは共通スカラ＝相対は不変
+    }
   });
 });
 

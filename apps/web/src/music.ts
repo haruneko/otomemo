@@ -927,6 +927,47 @@ export interface MidiTrackSpec {
 // レーン(トラック)の GM program を composite notes から採る＝各ノートに付与済みの program（compositeNotes 由来）の
 // 最初の非nullを使う。1レーン=1楽器（コード楽器×2は別レーン）なので均一。program 無し＝undefined（track.program 未設定＝従来）。
 export const trackProgramOf = (notes: Note[]): number | undefined => notes.find((n) => n.program != null)?.program;
+
+// part 別 MIDI トラック（song 書き出しの是正・正典 §5.2）。compositeNotes が各ノートへ付与済みの
+// `part`（melody/counter/chord/bass/drums）でトラックを割る＝song のレーンは[section]1本なので laneTracks だと
+// 全パートが1トラックに潰れる穴を塞ぐ。**program はノート単位を尊重**＝同一 part 内でも program が違えば別トラック
+// （コード楽器1(program0)とハープ(46)を1トラックへ潰さない）。drums は kit で鳴らす(ch10・program不要)。
+// section(非song)の書き出しは laneTracks のまま＝この関数は song 経路専用（bit 不変の分離）。
+export const PART_MIDI_NAME: Record<MixPart, string> = {
+  melody: "Melody",
+  counter: "Counter",
+  chord: "Chord",
+  bass: "Bass",
+  drums: "Drums",
+};
+const PART_ORDER: MixPart[] = ["melody", "counter", "chord", "bass", "drums"];
+export function partTracks(notes: Note[]): MidiTrackSpec[] {
+  // part → (program → notes)。program は出現順を保つ。drums は program で割らず1トラック（kit で鳴る）。
+  const byPart = new Map<MixPart, Map<number, Note[]>>();
+  for (const n of notes) {
+    const part: MixPart = n.part ?? "melody"; // compositeNotes 由来は必ず付くが、未指定はメロ扱い（防御）
+    const progKey = part === "drums" ? -1 : n.program ?? -1; // drums は分けない／program 無しは -1 に束ねる
+    const byProg = byPart.get(part) ?? byPart.set(part, new Map()).get(part)!;
+    (byProg.get(progKey) ?? byProg.set(progKey, []).get(progKey)!).push(n);
+  }
+  const out: MidiTrackSpec[] = [];
+  for (const part of PART_ORDER) {
+    const byProg = byPart.get(part);
+    if (!byProg) continue;
+    const isDrum = part === "drums";
+    for (const group of byProg.values()) {
+      if (!group.length) continue;
+      out.push({
+        name: PART_MIDI_NAME[part], // ASCII＝DAW で文字化けしない
+        notes: group,
+        drum: isDrum,
+        program: isDrum ? undefined : trackProgramOf(group),
+        kit: isDrum ? group.find((n) => n.drum)?.kit : undefined,
+      });
+    }
+  }
+  return out;
+}
 export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null, feel?: Feel | null, loop?: LoopSpec | null): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);

@@ -69,21 +69,27 @@ export interface VocalPlay {
   gain?: number;
 }
 
-// #13c 仮歌スケジュール（純関数・Tone非依存・TDD）＝歌の初音を**楽器の初音と同時刻**へ落とす when/offset を算出。
-// - 楽器の初音時刻（拍）＝ firstNoteBeat + leadBeats（pickupSchedule が全ノートを +leadBeats シフトするため）。
-// - transport.schedule は負拍に置けない＝when は 0 下限。負に押し出た分（whenBeat − 楽器初音拍）は offset へ足して
-//   wav をそのぶん進めて食う（＝ループ等で楽器初音が0より前になる時、弱起頭を飛ばして頭を揃える）。
-// - 通常（非ループ・楽器初音拍>=0）＝ when=楽器初音拍・offset=先頭休符ぶん＝歌初音 == 楽器初音（弱起でも一致）。
+// #13c 句頭子音カウントイン一般式（純関数・Tone非依存・TDD／2026-07-16・正典＝docs/research/2026-07-16-vocal-consonant-countin.md §3.1）。
+// VOICEVOX は母音頭をノート境界に、子音をその手前（先頭休符/前ノート）に置く（実測 §1）。旧式は offset で
+// 先頭休符を丸ごと飛ばし母音頭から鳴らす＝**先頭句の子音を切っていた**。新式＝母音頭をターゲット拍に載せつつ、
+// 余地がある限り offset=0＝先頭休符（後半に子音が居る）ごと鳴らす：
+//   vowelTarget = firstNoteBeat + leadBeats + countInBeats  // 母音頭を載せたい transport 拍
+//   srcStart    = vowelTarget − leadRestBeats               // wav 頭（先頭休符の頭）を置く拍
+//   whenBeat    = max(0, srcStart)                          // 負拍は置けない＝0 下限
+//   offsetSec   = (whenBeat − srcStart) * spb               // 負に押し出た分だけ wav を進めて食う（余地時 0）
+// countInBeats＝仮歌がある非ループで leadRest ぶん（playNotes の単一スカラ）を全パートに上乗せした量。
+// ループ（countInBeats=0）は旧挙動＝一般式に 0 を入れるだけ（余地ある時 offset=0・無い時は従来どおり食う）。
 export function vocalSourceSchedule(opts: {
   firstNoteBeat: number;
   leadRestBeats: number;
   leadBeats: number;
+  countInBeats: number;
   spb: number;
 }): { whenBeat: number; offsetSec: number } {
-  const instrBeat = opts.firstNoteBeat + opts.leadBeats; // 楽器がこの初音を鳴らす transport 拍
-  const whenBeat = Math.max(0, instrBeat);
-  const extraBeats = whenBeat - instrBeat; // >=0（負拍を0へ丸めた食い込み量）
-  const offsetSec = (opts.leadRestBeats + extraBeats) * opts.spb;
+  const vowelTarget = opts.firstNoteBeat + opts.leadBeats + opts.countInBeats; // 母音頭を載せる拍
+  const srcStart = vowelTarget - opts.leadRestBeats; // wav 頭を置く拍
+  const whenBeat = Math.max(0, srcStart);
+  const offsetSec = (whenBeat - srcStart) * opts.spb; // >=0（余地がある限り 0）
   return { whenBeat, offsetSec };
 }
 
@@ -1120,16 +1126,29 @@ export async function playNotes(
   const spb = 60 / bpm;
   const totalBeats = notes.reduce((m, n) => Math.max(m, n.start + n.dur), 0);
   let loopStartBeat = opts.loop ? opts.loop.startBeat : 0;
+  // #13c 句頭子音カウントイン（2026-07-16・正典＝docs/research/2026-07-16-vocal-consonant-countin.md）。
+  // 仮歌があるとき（非ループ）だけ、子音の前余白ぶん（＝各 vocal の leadRest の最大）を**全パートに一律**
+  // 上乗せする単一スカラ。job/フックへは漏らさず playNotes 内に閉じ込める＝複数 Section/メロレーン/弱起でも
+  // 全 vocal が同じシフト S を共有し相対時刻不変（doc §4）。ループは 0（毎周の無音挿入でシームレス性を壊さない）。
+  // 仮歌なし（vocals 空）は countInBeats=0＝全経路 bit 不変。**カウントイン量を増減したい owner はここ一箇所**＝
+  // 先頭休符 leadRest（api SING_LEAD_REST_SEC=0.18 の床／web SING_LEAD_REST_BEATS 由来）に追従（一小節まで上げたければ leadRest を上げる）。
+  const vocals: VocalPlay[] = opts.vocal ?? [];
+  const countInBeats = !isLoop && vocals.length ? Math.max(...vocals.map((v) => v.leadRestBeats)) : 0;
   // 非ループ時の lead L（拍）＝先頭の弱起ぶん。全イベントを +L シフトして 0 開始する分の視覚/終端補正に使う。
   // 初回 notes から算出（ループ時は常に 0）。reschedule でノートが変わっても onEnd/視覚は初回で固定＝#7-C は
-  // 主にループ経路（骨格エディタ）で lead=0。
-  const leadBeats = pickupSchedule(notes, { loop: isLoop, loopEndBeat }).leadBeats;
+  // 主にループ経路（骨格エディタ）で lead=0。vocal は pickupLead だけで整合（母音頭アライン＝vocalSourceSchedule
+  // が countInBeats を別引数で受ける）。楽器・視覚・終端は totalLead（pickup＋カウントイン）で後ろへ。
+  const pickupLead = pickupSchedule(notes, { loop: isLoop, loopEndBeat }).leadBeats;
+  const totalLead = pickupLead + countInBeats;
   // #7-C 発音イベントの一括スケジュール（初回 begin・reschedule 双方で再利用）。sf/kit は const、
   // drumKits/melodicByPart は let＝reschedule で差し替えた最新 Map を各 playEvent が参照する。
   const scheduleFrom = (finalNotes: Note[]): void => {
     // #25 弱起（負start）を再生でも鳴らす。却下案（t=0 丸め）を撤去し pickupSchedule で置き換え：
     //   非ループ＝全ノート +L シフト（transport 0 開始）／ループ＝弱起を loopEnd+start へ巻き込む。
-    const { notes: scheduled } = pickupSchedule(finalNotes, { loop: isLoop, loopEndBeat });
+    let { notes: scheduled } = pickupSchedule(finalNotes, { loop: isLoop, loopEndBeat });
+    // #13c 句頭子音カウントイン：仮歌がある非ループのみ全楽器を +countInBeats 後ろへ（母音頭アラインと同じ S）。
+    // countInBeats===0（仮歌なし/ループ）は map せず**同一参照のまま**＝全経路 bit 不変（回帰テストで担保）。
+    if (countInBeats) scheduled = scheduled.map((n) => ({ ...n, start: n.start + countInBeats }));
     // #13c 仮歌：muted 音（歌う声部の楽器音）は audio 予約から外す（leadBeats/尺の計算には残る＝pickupSchedule 済）。
     for (const ev of scheduleTimes(scheduled.filter((n) => !n.muted), bpm)) {
       transport.schedule(
@@ -1145,7 +1164,6 @@ export async function playNotes(
   // start(ctx時刻, offset) で先頭休符を食う＝歌の初音がその子の楽器初音と同時刻に落ちる（vocalSourceSchedule）。
   // ループ時は transport.schedule が**ループ窓内の予約を毎周再発火**するので（本体のノート予約と同じ性質）、ループ
   // 境界で歌も自然にリスタート＝前周ソースを止めて張り直す。歌はメロのパートバス（melody フェーダー）に乗せる。
-  const vocals: VocalPlay[] = opts.vocal ?? [];
   const vocalCtx: AudioContext | null = vocals.length ? (Tone.getContext().rawContext as AudioContext) : null;
   const vocalGain = vocals.length && vocalCtx ? vocalCtx.createGain() : null;
   if (vocalGain) vocalGain.connect(ensureMaster(Tone, "melody"));
@@ -1160,7 +1178,7 @@ export async function playNotes(
   const scheduleVocalEvent = (): void => {
     if (!vocalCtx || !vocalGain) return;
     for (const v of vocals) {
-      const { whenBeat, offsetSec } = vocalSourceSchedule({ firstNoteBeat: v.firstNoteBeat, leadRestBeats: v.leadRestBeats, leadBeats, spb });
+      const { whenBeat, offsetSec } = vocalSourceSchedule({ firstNoteBeat: v.firstNoteBeat, leadRestBeats: v.leadRestBeats, leadBeats: pickupLead, countInBeats, spb });
       transport.schedule((time: number) => {
         const prev = vocalCur.get(v); // ループ再開＝この子の前周ソースを止めてから張り直す（子単位＝他メロの歌は止めない）
         if (prev) { try { prev.stop(); } catch { /* */ } try { prev.disconnect(); } catch { /* */ } }
@@ -1197,7 +1215,7 @@ export async function playNotes(
   // 非ループ時の終端 自動停止イベント。setLooping で ON にする時は解除、OFF に戻す時は再スケジュール。
   // id を保持し transport.clear(id) で個別解除（cancel(0) は全消し＝発音イベントも消すので使えない）。
   let endEventId: number | null = null;
-  const endStopSec = () => totalSec(notes, bpm) + leadBeats * spb; // +L 追従（lead 無し＝従来一致）
+  const endStopSec = () => totalSec(notes, bpm) + totalLead * spb; // +totalLead 追従（pickup＋カウントイン・lead 無し＝従来一致）
   const scheduleEndStop = (): void => {
     endEventId = transport.scheduleOnce(() => {
       opts.onEnd?.();
@@ -1243,9 +1261,10 @@ export async function playNotes(
     // ループ ON/OFF を再生を止めずその場で切替（頭出し・全サンプラ再準備を避ける＝toggleLoop の in-place 化）。
     setLooping: (on: boolean) => {
       if (stopped) return;
-      // #25 弱起（leadBeats>0）は非ループ⇄ループでスケジュールが根本的に異なる（+Lシフト vs 終端巻き込み）。
-      // in-place では割れる＝useTransport が leadBeats>0 で従来の stop→begin に回す。ここは防御的に no-op。
-      if (leadBeats > 0) return;
+      // #25 弱起（pickupLead>0）／#13c カウントイン（countInBeats>0）は非ループ⇄ループでスケジュールが
+      // 根本的に異なる（+Lシフト/カウントイン vs 終端巻き込み・countIn無し）。in-place では割れる＝
+      // useTransport が totalLead>0 で従来の stop→begin に回す。ここは防御的に no-op。
+      if (totalLead > 0) return;
       if (on) {
         clearEndStop(); // 終端 自動停止を解除（ループは止めない）
         transport.loop = true;
@@ -1256,8 +1275,9 @@ export async function playNotes(
         scheduleEndStop(); // 現在位置から終端 stop を再スケジュール（+L 追従）
       }
     },
-    // #25 非ループ時の lead L（拍）。useTransport が usePlayhead へ渡す（リード区間の 0 待機・弱起表示）。
-    leadBeats,
+    // #25/#13c 非ループ時の総リード（拍）＝弱起 pickupLead ＋仮歌カウントイン countInBeats。useTransport が
+    // usePlayhead へ渡す（リード区間の 0 待機・弱起/カウントイン表示）。仮歌なし＝pickupLead のみ＝従来一致。
+    leadBeats: totalLead,
     stop: () => {
       if (stopped) return; // 冪等
       stopped = true;

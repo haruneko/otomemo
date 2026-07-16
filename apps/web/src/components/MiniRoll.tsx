@@ -155,3 +155,37 @@ export function SectionMini({ neta }: { neta: Neta }) {
     </div>
   );
 }
+
+// 積み棒スカイライン（方向C）の素＝「どのパートが鳴るか」だけの軽量サマリ。SectionMini のセル格子を描かず
+// any（鳴る/鳴らない）だけを固定順で返す純関数。レーン定義(MINI_LANES/SONG_MINI_LANES)は SectionMini と共有
+// ＝kind→part マップの SSOT を二重持ちしない。返す順＝レーン順（メロ→…→リズム）。
+export function activeLanes(childKinds: readonly string[], isSong: boolean): { label: string; color: string }[] {
+  const lanes = isSong ? SONG_MINI_LANES : MINI_LANES;
+  return lanes.filter((l) => childKinds.some((k) => l.kinds.includes(k))).map((l) => ({ label: l.label, color: l.color }));
+}
+
+// フォームストリップのカード内レイヤ帯＝縦積み棒スカイライン（方向C）。鳴るパートだけを固定順（下=リズム→上=メロ）に積み、
+// カードを底揃えで並べると曲のエナジーカーブになる（落ちサビはドラム抜けで低くなる）。子は表示時に遅延取得（SectionMini と同流儀）。
+export function SectionSkyline({ neta }: { neta: Neta }) {
+  const [children, setChildren] = useState<CompositionNode["children"] | null>(null);
+  useEffect(() => {
+    let live = true;
+    void api
+      .getComposition(neta.id)
+      .then((t) => live && setChildren(t?.children ?? []))
+      .catch(() => live && setChildren([]));
+    return () => {
+      live = false;
+    };
+    // neta オブジェクト依存＝reload(配置後/自動保存)で新規参照になり再取得＝編成変更がスカイラインに反映される。
+  }, [neta]);
+  const layers = activeLanes((children ?? []).map((c) => c.node.neta.kind), neta.kind === "song");
+  // 下から積む＝レーン順(メロ…リズム)を逆順に並べ、CSS の column-reverse で最初の子(リズム)を最下段へ。
+  return (
+    <span className="fs-stack" aria-label="section-skyline">
+      {[...layers].reverse().map((l) => (
+        <i key={l.label} title={l.label} style={{ ["--c" as string]: `var(${l.color})` }} />
+      ))}
+    </span>
+  );
+}

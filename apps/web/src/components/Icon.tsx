@@ -196,6 +196,19 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M8 11V7a4 4 0 0 1 7-2" />
         </svg>
       );
+    case "grip": // ⠿ ドラッグつまみ（6点）＝並べ替えのグリップ（フォームストリップ）
+      return (
+        <svg {...s}>
+          <g fill="currentColor">
+            <circle cx="9" cy="6" r="1.6" />
+            <circle cx="15" cy="6" r="1.6" />
+            <circle cx="9" cy="12" r="1.6" />
+            <circle cx="15" cy="12" r="1.6" />
+            <circle cx="9" cy="18" r="1.6" />
+            <circle cx="15" cy="18" r="1.6" />
+          </g>
+        </svg>
+      );
     default:
       return null;
   }

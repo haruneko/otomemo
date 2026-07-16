@@ -729,8 +729,9 @@ export function buildHttp(core: Core): FastifyInstance {
       return reply.code(400).send({ error: "各音符に歌詞(syllable)がありません。先に歌詞を載せて。" });
     }
     try {
-      const { asset, shift, clamped } = await singGeneric(core, notes, bpm ?? 120, speaker);
-      return { assetId: asset.id, shift, clamped, speaker: speaker ?? 3009 };
+      const { asset, shift, clamped, leadRestSec } = await singGeneric(core, notes, bpm ?? 120, speaker);
+      // #13c leadRestSec＝実測の先頭休符長（秒）。web はこれ/spb を仮歌カウントイン量に使う（SSOT・二重定数解消）。
+      return { assetId: asset.id, shift, clamped, speaker: speaker ?? 3009, leadRestSec };
     } catch (e) {
       // engine 未起動/合成失敗/60秒超は 502（上流依存の失敗）＝web はトーストで拾う。
       return reply.code(502).send({ error: `歌唱に失敗：${e instanceof Error ? e.message : String(e)}` });
