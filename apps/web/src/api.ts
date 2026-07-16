@@ -173,8 +173,18 @@ export const api = {
   deleteNeta: (id: string) =>
     http<{ deleted: boolean }>(`/neta/${id}`, { method: "DELETE" }),
 
-  // ライブラリ→プロジェクトにコピー（複製汎用にも）。新規 project ネタが返る。
+  // ライブラリ→プロジェクトにコピー（複製汎用にも）。新規 project ネタが返る。「別物にする」＝deep copy。
   copyNeta: (id: string) => http<Neta>(`/neta/${id}/copy`, { method: "POST" }),
+
+  // 浅い分家（vary＝変奏の一級化・design「分家モデル」S2）。「同じものとして育てる」＝子は参照共有＋variant_of。
+  // 転調ラスサビ/落ちサビ/2番Aメロ（copy-on-write）の土台。新規ネタが返る。
+  vary: (id: string, opts: { title?: string; scope?: "project" | "library" } = {}) =>
+    http<Neta>(`/neta/${id}/vary`, { method: "POST", body: JSON.stringify(opts) }),
+
+  // 共有検出（分家の安全弁）：このネタが何箇所で配置されているか（共有バッジ／copy-on-write プロンプト用）。
+  // placementCount>=2 で「共有」（親2以上 or 同親2配置以上）。
+  getPlacements: (id: string) =>
+    http<{ parents: { parentId: string; positions: number[] }[]; placementCount: number }>(`/neta/${id}/placements`),
   // scope 切替（自作を連想元へ＝library に移す等）。
   setScope: (id: string, scope: "project" | "library") =>
     http<Neta>(`/neta/${id}/scope`, { method: "POST", body: JSON.stringify({ scope }) }),

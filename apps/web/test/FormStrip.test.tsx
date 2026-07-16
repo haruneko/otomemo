@@ -4,14 +4,15 @@ import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
 // FormStrip は SectionEditor(song 経路)から呼ばれる＝実結線で検証（射影 place/remove・×N・挿入）。
-const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link } =
+const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary } =
   vi.hoisted(() => ({
     getComposition: vi.fn(), listNeta: vi.fn(), placeChild: vi.fn(), removeChild: vi.fn(),
     createNeta: vi.fn(), copyNeta: vi.fn(), recommend: vi.fn(), getSong: vi.fn(),
     updateSong: vi.fn(), updateNeta: vi.fn(), music: vi.fn(), link: vi.fn(),
+    getPlacements: vi.fn(), getRelations: vi.fn(), vary: vi.fn(), // S2 分家/共有バッジ
   }));
 vi.mock("../src/api", () => ({
-  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link },
+  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary },
 }));
 
 import { SectionEditor } from "../src/components/SectionEditor";
@@ -37,6 +38,9 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     copyNeta.mockReset();
     createNeta.mockReset();
     listNeta.mockResolvedValue([]);
+    getPlacements.mockResolvedValue({ parents: [], placementCount: 0 }); // 既定＝未共有（バッジ無し）
+    getRelations.mockResolvedValue([]); // 既定＝分家でない
+    vary.mockReset();
   });
 
   it("セクションごとにカード＋役割バッジ／連続同一は×Nに畳む", async () => {
@@ -136,5 +140,44 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     await userEvent.click(screen.getByLabelText("fs-insert-0")); // 先頭に挿入
     await userEvent.click(await screen.findByLabelText("place-newSec"));
     await waitFor(() => expect(placeChild).toHaveBeenCalledWith("g1", "newSec", expect.any(Number), 0));
+  });
+
+  // ── S2 分家/共有/調バッジ ──
+  it("調バッジ＝セクションkeyが曲keyと違う時だけ半音差／共有バッジ＝placementCount>=2／A′＝variant_of", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("g1", "song"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("A", "section", { title: "A", key: 0 }), children: [melodyKid()] } }, // 曲と同調＝バッジ無し
+        { position: 32, ord: 0, node: { neta: mk("L", "section", { title: "ラスサビ", key: 2 }), children: [melodyKid()] } }, // +2 転調
+      ],
+    });
+    // L は共有(2箇所)かつ variant_of を持つ／A は未共有・非分家。
+    getPlacements.mockImplementation(async (id: string) => (id === "L" ? { parents: [], placementCount: 2 } : { parents: [], placementCount: 1 }));
+    getRelations.mockImplementation(async (id: string) => (id === "L" ? [{ type: "variant_of", neta: mk("A", "section") }] : []));
+    render(<SectionEditor neta={mk("g1", "song", { key: 0 })} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("form-card-L");
+    expect(screen.getByLabelText("keychg-L")).toHaveTextContent("+2"); // 曲(C)とラスサビ(D)＝+2半音
+    expect(screen.queryByLabelText("keychg-A")).toBeNull(); // 同調＝バッジ無し
+    await waitFor(() => expect(screen.getByLabelText("shared-L")).toBeInTheDocument()); // 🔗（非同期解決）
+    expect(screen.getByLabelText("variant-L")).toHaveTextContent("′"); // A′
+    expect(screen.queryByLabelText("shared-A")).toBeNull();
+    expect(screen.queryByLabelText("variant-A")).toBeNull();
+  });
+
+  it("分家にする＝vary した新セクションでその配置だけ差し替え（position/ord 維持）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("g1", "song"),
+      children: [
+        sectionChild("A", 0),
+        { position: 32, ord: 0, node: { neta: mk("S", "section", { title: "サビ", key: 0 }), children: [melodyKid()] } },
+      ],
+    });
+    vary.mockResolvedValue(mk("S2", "section", { title: "サビ′", key: 0 }));
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("form-card-S");
+    await userEvent.click(screen.getByLabelText("fs-branch-S"));
+    await waitFor(() => expect(vary).toHaveBeenCalledWith("S")); // サビを分家
+    expect(removeChild).toHaveBeenCalledWith("g1", "S", 32); // 元の配置を外し
+    expect(placeChild).toHaveBeenCalledWith("g1", "S2", 32, 0); // 分家を同 position/ord で置く
   });
 });

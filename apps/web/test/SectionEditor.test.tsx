@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link } =
+const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary } =
   vi.hoisted(() => ({
     getComposition: vi.fn(),
     listNeta: vi.fn(),
@@ -17,12 +17,17 @@ const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta,
     updateNeta: vi.fn(),
     music: vi.fn(),
     link: vi.fn(),
+    getPlacements: vi.fn(), // S2 共有バッジ
+    getRelations: vi.fn(),
+    vary: vi.fn(),
   }));
 vi.mock("../src/api", () => ({
-  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link },
+  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary },
 }));
 
 import { SectionEditor, loopPositions, spanOverlaps } from "../src/components/SectionEditor";
+import { useCowGuard } from "../src/useCowGuard";
+import { CowPrompt } from "../src/components/CowPrompt";
 import { beatsPerBar } from "../src/music";
 import { voiceLeadingBadge } from "../src/useMelodyGen";
 
@@ -91,6 +96,9 @@ describe("SectionEditor (3-lane timeline)", () => {
     updateNeta.mockReset();
     updateNeta.mockResolvedValue({}); // レーン表示/ミュートの content 保存（fire-and-forget）
     copyNeta.mockReset();
+    getPlacements.mockResolvedValue({ parents: [], placementCount: 0 }); // S2 既定＝未共有（バッジ無し）
+    getRelations.mockResolvedValue([]);
+    vary.mockReset();
   });
 
   it("ブロックをタップ＝子ネタを編集画面で開く（潜る・外さない）", async () => {
@@ -1200,5 +1208,111 @@ describe("beatsPerBar (#51)", () => {
     expect(beatsPerBar("2/2")).toBe(4);
     expect(beatsPerBar(null)).toBe(4);
     expect(beatsPerBar("garbage")).toBe(4);
+  });
+});
+
+// ── S2 Fix C：section content を書く直接経路（bars/レーン設定）も CoW ガードを通す ──
+// 落ちサビの常道＝共有セクションのレーンミュート/bars 変更が確認なしに全配置へ効く穴の根治。
+// ハーネス＝NetaDialog と同じ結線（useCowGuard を組んで SectionEditor へ渡し、モーダルは CowPrompt）。
+describe("SectionEditor × CoW（共有 section の直接保存ガード・Fix C）", () => {
+  function CowHarness({ neta, parentId, onForked }: { neta: Neta; parentId: string; onForked?: (n: Neta) => void }) {
+    const cow = useCowGuard(neta, { parentId, onForked });
+    return (
+      <>
+        <SectionEditor neta={neta} keyPc={0} tempo={120} meter="4/4" cow={cow} />
+        <CowPrompt prompt={cow.cowPrompt} onChoose={cow.resolveCow} />
+      </>
+    );
+  }
+  const sharedSection = () => mk("s1", "section", { title: "サビ" });
+
+  beforeEach(() => {
+    // この describe は独立＝上の describe の beforeEach は効かない。必要な既定と履歴リセットをここで。
+    recommend.mockResolvedValue([]);
+    getSong.mockResolvedValue(null);
+    updateSong.mockResolvedValue({});
+    updateNeta.mockReset();
+    updateNeta.mockResolvedValue({});
+    placeChild.mockClear();
+    placeChild.mockResolvedValue({ ok: true });
+    removeChild.mockClear();
+    removeChild.mockResolvedValue({ ok: true });
+    vary.mockReset();
+    getRelations.mockResolvedValue([]);
+    getPlacements.mockClear();
+    getPlacements.mockResolvedValue({ parents: [{ parentId: "song1", positions: [0] }, { parentId: "song1", positions: [32] }], placementCount: 2 });
+    getComposition.mockImplementation(async (id: string) =>
+      id === "song1"
+        ? { neta: mk("song1", "song"), children: [{ position: 0, ord: 0, node: { neta: sharedSection(), children: [] } }, { position: 32, ord: 0, node: { neta: sharedSection(), children: [] } }] }
+        : { neta: sharedSection(), children: [] },
+    );
+  });
+
+  it("共有 section の bars 変更＝確認が出る・「やめる」＝保存せず値も戻る", async () => {
+    render(<CowHarness neta={sharedSection()} parentId="song1" />);
+    await screen.findByLabelText("section-bars");
+    expect(screen.getByLabelText("bars-count").textContent).toBe("8"); // MIN_BARS 既定
+    await userEvent.click(screen.getByLabelText("bars-inc"));
+    await userEvent.click(await screen.findByLabelText("cow-cancel"));
+    await waitFor(() => expect(screen.getByLabelText("bars-count").textContent).toBe("8")); // 楽観更新を戻す＝無変更
+    expect(updateNeta).not.toHaveBeenCalled(); // 原本に書かない
+  });
+
+  it("「この曲だけ変える」＝section を vary→親の該当辺差し替え→bars は分家へ・onForked", async () => {
+    vary.mockResolvedValueOnce(mk("s1b", "section", { title: "サビ′" }));
+    updateNeta.mockImplementation(async (id: string, patch: Record<string, unknown>) => ({ ...mk(id, "section"), ...patch })); // 実APIと同じく更新後ネタを返す
+    const onForked = vi.fn();
+    render(<CowHarness neta={sharedSection()} parentId="song1" onForked={onForked} />);
+    await screen.findByLabelText("section-bars");
+    await userEvent.click(screen.getByLabelText("bars-inc")); // 8→9
+    await userEvent.click(await screen.findByLabelText("cow-branch"));
+    await waitFor(() => expect(vary).toHaveBeenCalledWith("s1")); // section を分家
+    expect(removeChild).toHaveBeenCalledWith("song1", "s1", 0); // 親の該当辺（全配置）を
+    expect(removeChild).toHaveBeenCalledWith("song1", "s1", 32);
+    expect(placeChild).toHaveBeenCalledWith("song1", "s1b", 0, 0); // 分家へ差し替え（position/ord 維持）
+    expect(placeChild).toHaveBeenCalledWith("song1", "s1b", 32, 0);
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("s1b", expect.objectContaining({ bars: 9 }))); // 編集は分家へ
+    expect(updateNeta).not.toHaveBeenCalledWith("s1", expect.anything()); // 原本は無傷
+    await waitFor(() => expect(onForked).toHaveBeenCalledWith(expect.objectContaining({ id: "s1b" })));
+  });
+
+  it("「全部に効かす」＝従来どおり原本へ保存・以降は再確認しない", async () => {
+    render(<CowHarness neta={sharedSection()} parentId="song1" />);
+    await screen.findByLabelText("section-bars");
+    await userEvent.click(screen.getByLabelText("bars-inc"));
+    await userEvent.click(await screen.findByLabelText("cow-all"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("s1", expect.objectContaining({ bars: 9 })));
+    // 2回目の変更＝確認は出ない（決定はセッション内で保持）
+    await userEvent.click(screen.getByLabelText("bars-inc"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("s1", expect.objectContaining({ bars: 10 })));
+    expect(screen.queryByLabelText("cow-prompt")).toBeNull();
+  });
+
+  it("共有 section のレーンミュート＝確認が出る・「やめる」＝保存せず aria-pressed も戻る", async () => {
+    getComposition.mockImplementation(async (id: string) =>
+      id === "song1"
+        ? { neta: mk("song1", "song"), children: [{ position: 0, ord: 0, node: { neta: sharedSection(), children: [] } }, { position: 32, ord: 0, node: { neta: sharedSection(), children: [] } }] }
+        : {
+            neta: sharedSection(),
+            children: [{ position: 0, ord: 0, node: { neta: mk("b1", "bass", { content: { notes: [{ pitch: 40, start: 0, dur: 1 }] } }), children: [] } }],
+          },
+    );
+    render(<CowHarness neta={sharedSection()} parentId="song1" />);
+    await screen.findByLabelText("block-b1@0");
+    const mute = screen.getByLabelText("mute-bass");
+    await userEvent.click(mute);
+    expect(mute).toHaveAttribute("aria-pressed", "true"); // 楽観更新
+    await userEvent.click(await screen.findByLabelText("cow-cancel"));
+    await waitFor(() => expect(mute).toHaveAttribute("aria-pressed", "false")); // やめる＝戻す
+    expect(updateNeta).not.toHaveBeenCalled();
+  });
+
+  it("cow 未指定（トップから開いた等）＝ガード無し＝従来どおり即保存（bit-safe）", async () => {
+    getComposition.mockResolvedValue({ neta: sharedSection(), children: [] });
+    render(<SectionEditor neta={sharedSection()} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("section-bars");
+    await userEvent.click(screen.getByLabelText("bars-inc"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("s1", expect.objectContaining({ bars: 9 })));
+    expect(getPlacements).not.toHaveBeenCalledWith("s1"); // section 自身の共有判定はしない（共有バッジの子引きとは別）
   });
 });

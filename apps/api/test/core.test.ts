@@ -249,6 +249,97 @@ describe("edges: compose (DAG) + relation", () => {
   });
 });
 
+// 分家（vary＝変奏の一級化・design「分家モデル」S2）。copyNeta（deep copy）との差＝子は参照共有＋variant_of。
+describe("vary (shallow branch / variant_of) — S2", () => {
+  it("container を分家＝子は参照共有（deep copy しない）・辺は同 position/ord で複製・variant_of を新→元へ", () => {
+    const sec = core.createNeta({ kind: "section", title: "サビ", key: 0, tags: ["role:chorus"] });
+    const mel = core.createNeta({ kind: "melody", title: "m" });
+    const bass = core.createNeta({ kind: "bass", title: "b" });
+    core.placeChild(sec.id, mel.id, 0, 0);
+    core.placeChild(sec.id, bass.id, 4, 1);
+
+    const branch = core.varyNeta(sec.id, { title: "ラスサビ" })!;
+    expect(branch.id).not.toBe(sec.id);
+    expect(branch.kind).toBe("section");
+    expect(branch.title).toBe("ラスサビ");
+    expect(branch.tags).toContain("role:chorus"); // frame/role はコピー（分家側で自由に変える起点）
+
+    const tree = core.getComposition(branch.id)!;
+    expect(tree.children.length).toBe(2);
+    const childIds = new Set(tree.children.map((c) => c.node.neta.id));
+    expect(childIds.has(mel.id)).toBe(true); // 子は**参照共有**＝元 mel そのもの（copyNeta と真逆）
+    expect(childIds.has(bass.id)).toBe(true);
+    // 辺は同 position/ord で複製
+    expect(tree.children.map((c) => c.position).sort((a, b) => a - b)).toEqual([0, 4]);
+
+    // variant_of＝新→元
+    expect(core.getRelations(branch.id)).toContainEqual({ to: sec.id, type: "variant_of" });
+    // 元は無傷（辺も relation も増えない）
+    expect(core.getComposition(sec.id)!.children.length).toBe(2);
+    expect(core.getRelations(sec.id)).toEqual([]);
+  });
+
+  it("既定 title＝元title′・title 省略時", () => {
+    const sec = core.createNeta({ kind: "section", title: "Aメロ" });
+    const branch = core.varyNeta(sec.id)!;
+    expect(branch.title).toBe("Aメロ′");
+  });
+
+  it("リーフ（辺ゼロ）＝content コピー＋variant_of＝copy_neta 単体と同じ実体だが系譜が残る", () => {
+    const mel = core.createNeta({ kind: "melody", title: "m", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } });
+    const branch = core.varyNeta(mel.id)!;
+    expect(branch.id).not.toBe(mel.id);
+    expect(branch.content).toEqual(mel.content); // content はコピー
+    expect(core.getComposition(branch.id)!.children.length).toBe(0); // 辺ゼロ＝浅い＝深い
+    expect(core.getRelations(branch.id)).toContainEqual({ to: mel.id, type: "variant_of" });
+  });
+
+  it("存在しない id は null", () => {
+    expect(core.varyNeta("nope")).toBeNull();
+  });
+
+  it("元の共有子を編集しても分家に効く＝参照共有の証明（サビを直せば全サビに効く）", () => {
+    const sec = core.createNeta({ kind: "section", title: "サビ" });
+    const mel = core.createNeta({ kind: "melody", title: "m" });
+    core.placeChild(sec.id, mel.id, 0, 0);
+    const branch = core.varyNeta(sec.id)!;
+    // 共有子 mel を更新
+    core.updateNeta(mel.id, { title: "改" });
+    const branchChild = core.getComposition(branch.id)!.children[0]!.node.neta;
+    expect(branchChild.title).toBe("改"); // 分家からも同じ実体が見える
+  });
+});
+
+// 共有検出（分家の安全弁・design「copy-on-write」S2）。placementCount>=2 で「共有」。
+describe("placementsOf (shared detection) — S2", () => {
+  it("複数親からの参照を親ごとの position 群で返す", () => {
+    const secA = core.createNeta({ kind: "section", title: "A" });
+    const secB = core.createNeta({ kind: "section", title: "B" });
+    const mel = core.createNeta({ kind: "melody", title: "m" });
+    core.placeChild(secA.id, mel.id, 0, 0);
+    core.placeChild(secB.id, mel.id, 8, 0);
+    const p = core.placementsOf(mel.id);
+    expect(p.placementCount).toBe(2);
+    expect(p.parents.map((x) => x.parentId).sort()).toEqual([secA.id, secB.id].sort());
+  });
+
+  it("同一親2配置（反復）も placementCount に数える＝ユニゾン反復も共有扱い", () => {
+    const sec = core.createNeta({ kind: "section", title: "S" });
+    const mel = core.createNeta({ kind: "melody", title: "m" });
+    core.placeChild(sec.id, mel.id, 0, 0);
+    core.placeChild(sec.id, mel.id, 4, 1);
+    const p = core.placementsOf(mel.id);
+    expect(p.placementCount).toBe(2);
+    expect(p.parents.length).toBe(1);
+    expect(p.parents[0]!.positions.sort((a, b) => a - b)).toEqual([0, 4]);
+  });
+
+  it("配置ゼロ＝空（未使用ネタ）", () => {
+    const mel = core.createNeta({ kind: "melody", title: "m" });
+    expect(core.placementsOf(mel.id)).toEqual({ parents: [], placementCount: 0 });
+  });
+});
+
 describe("jobs: waiting / answer (#45)", () => {
   it("askQuestion → waiting, answerJob enqueues a continuation and closes original", () => {
     const j = core.enqueueJob({ intent: "suggest", instruction: "歌詞案" });

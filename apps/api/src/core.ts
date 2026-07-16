@@ -117,6 +117,36 @@ export class Core {
     return newId ? this.neta.getNeta(newId) : null;
   }
 
+  /** 浅い分家（vary＝変奏の一級化・design「分家モデル」S2・kind 非依存）。
+   * copyNeta との差は1点＝**子を deep copy しない**：compose_edge を同 child_id/position/ord で複製し
+   * 子ネタ実体は元と参照共有する（サビの進行を直せば全サビに効く＝オーバーレイ機構）。
+   * リーフ（辺ゼロ）は for が空回りするだけで「content コピー＋variant_of」に自然に成る＝kind 分岐を作らない。
+   * 元との系譜＝`relation_edge(variant_of)` を **新→元** に1本張る（「同じものとして育てる」の宣言・copy_neta＝別物とはここで別れる）。
+   * title 既定＝「元title′」（分家の A′ 表示に乗る）。frame/role/tags は元をコピー＝分家側で自由に変える起点。 */
+  varyNeta(id: string, opts: { title?: string; scope?: "project" | "library" } = {}): Neta | null {
+    const src = this.neta.getNeta(id);
+    if (!src) return null;
+    const scope = opts.scope ?? src.scope ?? "project";
+    const made = this.createNeta({
+      kind: src.kind,
+      title: opts.title ?? (src.title ? `${src.title}′` : undefined),
+      content: src.content,
+      text: src.text,
+      key: src.key,
+      mode: src.mode,
+      tempo: src.tempo,
+      meter: src.meter,
+      bars: src.bars,
+      mood: src.mood,
+      scope,
+      tags: src.tags, // role: 等もコピー＝分家側で自由に変える起点（copyNeta と違い「取込」は分家で使わない前提＝残しても無害）
+    });
+    // 子は**参照共有**＝辺だけ同 position/ord で複製（子ネタ実体はコピーしない）。リーフは辺ゼロ＝この for は空。
+    for (const e of this.compose.childEdges(id)) this.compose.placeChild(made.id, e.child_id, e.position, e.ord);
+    this.relation.link(made.id, id, "variant_of"); // 系譜＝新→元（A′ の親を辿れる）
+    return this.neta.getNeta(made.id);
+  }
+
   setScope(id: string, scope: "project" | "library"): Neta | null {
     return this.neta.setScope(id, scope);
   }
@@ -229,6 +259,17 @@ export class Core {
   }
   removeChild(parentId: string, childId: string, position?: number): void {
     this.compose.removeChild(parentId, childId, position);
+  }
+
+  /** 共有検出（分家の安全弁・design「copy-on-write」S2）：このネタが何箇所で配置されているか。
+   * parents＝親ごとの配置 position 群・placementCount＝総配置数（同親2配置以上も数える＝反復も「共有」）。
+   * web はこれで「n箇所で使われています」バッジ／分家プロンプトを出す（placementCount>=2 で共有）。 */
+  placementsOf(childId: string): { parents: { parentId: string; positions: number[] }[]; placementCount: number } {
+    const edges = this.compose.parentEdges(childId);
+    const byParent = new Map<string, number[]>();
+    for (const e of edges) (byParent.get(e.parent_id) ?? byParent.set(e.parent_id, []).get(e.parent_id)!).push(e.position);
+    const parents = [...byParent].map(([parentId, positions]) => ({ parentId, positions }));
+    return { parents, placementCount: edges.length };
   }
 
   /** 合成ツリーを再帰取得（DAGなので訪問済みガードでサイクル防止）。compose辺＋neta ノードを束ねる。 */

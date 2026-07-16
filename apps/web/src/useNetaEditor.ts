@@ -33,8 +33,19 @@ import {
 } from "./music";
 import { skeletonPlaybackNotes } from "./skeletonEdit";
 import { useVocalRender } from "./useVocal";
+import { useCowGuard } from "./useCowGuard";
 
-export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged?: () => void }) {
+export function useNetaEditor(
+  neta: Neta,
+  opts: {
+    onClose: () => void;
+    onChanged?: () => void;
+    // CoW（分家の安全弁・design S2）：この編集画面が「どの親から潜ったか」＝共有子の分家先。
+    // 未指定（トップから開いた）＝ガード無し＝従来どおり通常保存（bit-safe）。
+    parentId?: string;
+    onForked?: (branch: Neta) => void; // 「この曲だけ変える」で分家に差し替えた後、エディタを分家へ載せ替える。
+  },
+) {
   const { onClose, onChanged } = opts;
   const [title, setTitle] = useState(neta.title ?? "");
   const [text, setText] = useState(neta.text ?? "");
@@ -362,22 +373,51 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
   const firstRun = useRef(true);
   const mountedRef = useRef(true); // unmount後の setState を避ける（アンマウント時フラッシュ対策）
 
-  async function flushSave(opts?: { keepalive?: boolean }) {
+  // CoW（分家の安全弁・design「copy-on-write」S2）＝共有された子を**最初に内容変更した瞬間**に一度だけ確認。
+  // ロジックは useCowGuard に集約（SectionEditor の直接 updateNeta 経路と共有＝Fix C）。プロンプトは NetaDialog が描く。
+  const cow = useCowGuard(neta, { parentId: opts.parentId, onForked: opts.onForked, onChanged });
+
+  /** 保存フラッシュ。返り＝false は「CoW でユーザーがやめた」＝呼び出し側（close）は閉じてはいけない（Fix A-3）。 */
+  async function flushSave(saveOpts?: { keepalive?: boolean }): Promise<boolean> {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    if (!dirtyRef.current) return; // 変更が無ければ書かない（onChanged の空振り連発を防ぐ）
+    if (!dirtyRef.current) return true; // 変更が無ければ書かない（onChanged の空振り連発を防ぐ）
+
+    if (saveOpts?.keepalive) {
+      // keepalive（unmount/beforeunload）＝対話できない。共有（or 未解決）かつ未決定なら**原本に書かない**（Fix A-2）
+      // ＝「やめる」した（or 選ばせる前の）編集を裏で流さない（エイリアシング事故＞データ喪失の順で重い）。
+      if (cow.shouldBlockSilentSave()) return true;
+    } else {
+      // ── CoW ゲート：親から潜った編集で、この子が共有(placementCount>=2)なら初回だけ確認（判定は先読みキャッシュ）。
+      const patch = JSON.parse(patchRef.current) as NetaPatch;
+      const res = await cow.guard(patch, (branch) => {
+        // Fix B：ユーザーがこのセッションで title を触っていなければ、vary の付けた「元title′」を patch の
+        // 原値 title で潰さない（分家の A′ 表示が消える表示バグ）。変えていたらユーザー値を尊重。
+        const p = { ...patch };
+        if ((p.title ?? null) === (neta.title ?? null)) p.title = branch.title;
+        return p;
+      });
+      if (res.action === "cancel") return false; // 原本無変更（dirty 維持＝次の保存で再確認）・閉じない
+      if (res.action === "branched") {
+        dirtyRef.current = false; // 編集は分家に載った＝原本分の dirty は解消（onForked が載せ替え）
+        if (mountedRef.current) setSaveStatus("saved");
+        return true;
+      }
+    }
+
     dirtyRef.current = false;
     if (mountedRef.current) setSaveStatus("saving");
     try {
-      await api.updateNeta(neta.id, JSON.parse(patchRef.current) as NetaPatch, opts);
+      await api.updateNeta(neta.id, JSON.parse(patchRef.current) as NetaPatch, saveOpts);
       onChanged?.();
       if (mountedRef.current) setSaveStatus("saved");
     } catch {
       dirtyRef.current = true; // 失敗＝未保存へ戻し、次の編集/クローズで再挑戦
       if (mountedRef.current) setSaveStatus("dirty");
     }
+    return true;
   }
   const flushRef = useRef(flushSave);
   flushRef.current = flushSave; // 毎レンダで最新の flush（timer/unmount が古い state を掴まないよう）
@@ -410,9 +450,11 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     };
   }, []);
 
-  // ← 戻る：未保存ぶんをフラッシュしてから閉じる。
+  // ← 戻る：未保存ぶんをフラッシュしてから閉じる。CoW で「やめる」を選んだら**閉じない**
+  // （閉じると unmount フラッシュ経由で原本に書く穴があった＝Fix A-3。エディタに留まる＝「やめる」の意味を保つ）。
   async function close() {
-    await flushSave();
+    const ok = await flushSave();
+    if (!ok) return;
     onClose();
   }
 
@@ -454,7 +496,10 @@ export function useNetaEditor(neta: Neta, opts: { onClose: () => void; onChanged
     // singNoLyric＝仮歌を選んだが歌詞(syllable)が無い＝フォールバック楽器で鳴る（注記表示用）。
     playable, tp, playPause, vocal, singNoLyric: singingMelody && !vocalHasLyric, editHist, rels, busy, schedId, colorKind,
     // 自動保存：状態＋手動フラッシュ（保存ピル）＋閉じる（← 戻る＝フラッシュしてから）
-    saveStatus, onFlush: () => void flushSave(), flush: () => flushSave(), close,
+    saveStatus, onFlush: () => void flushSave(), flush: async () => { await flushSave(); }, close,
+    // CoW（分家の安全弁・S2）：ガード一式（プロンプト状態＋決定＋guard）。NetaDialog がモーダルを描き、
+    // SectionEditor（bars/レーン設定の直接保存）へも同一インスタンスを配線＝決定はエディタセッションで1つ。
+    cow, cowPrompt: cow.cowPrompt, resolveCow: cow.resolveCow,
     // アクション
     remove, detectKey, toggleSchedule,
     onExtendLen: () => setLen(len + bpb),

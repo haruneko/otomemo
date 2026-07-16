@@ -12,7 +12,7 @@ import { arrayMove, SortableContext, horizontalListSortingStrategy, useSortable 
 import { CSS } from "@dnd-kit/utilities";
 import { api, type Neta } from "../api";
 import { PITCH_NAMES } from "../music";
-import { collapseRuns, cardsToEdges, reconcileEdges, resolveDurById, totalSpanBeats, roleOf, roleInfo, type StripCard, type Edge } from "../formStrip";
+import { collapseRuns, cardsToEdges, reconcileEdges, resolveDurById, totalSpanBeats, roleOf, roleInfo, keyDiffLabel, type StripCard, type Edge } from "../formStrip";
 import { lanesForKind, type Child } from "./sectionLanes";
 import { SectionSkyline } from "./MiniRoll";
 import { SongStatus } from "./SongStatus";
@@ -77,6 +77,30 @@ export function FormStrip({
   // position 昇順の子（＝カードの左→右順）。射影/表示の基準列。
   const sorted = useMemo(() => [...children].sort((a, b) => a.position - b.position), [children]);
   const sortedIds = useMemo(() => sorted.map((c) => c.node.neta.id), [sorted]);
+
+  // 分家/共有バッジ（S2）：各セクション childId ごとに「共有(placementCount>=2)」「分家(variant_of を持つ)」を非同期に解決。
+  // ※地雷：反復配置の node.children は空でも **node.neta 自体は各配置に載る**ので調バッジは node.neta.key で安全。
+  //   共有/分家は配置ツリーに出ない情報なので childId 単位で placements/relations を引く（getComposition に頼らない）。
+  const [badges, setBadges] = useState<Record<string, { shared: boolean; variant: boolean }>>({});
+  const distinctIds = useMemo(() => [...new Set(sortedIds)], [sortedIds]);
+  const distinctKey = distinctIds.join(",");
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const entries = await Promise.all(
+        distinctIds.map(async (id) => {
+          const [pl, rels] = await Promise.all([
+            api.getPlacements(id).catch(() => ({ placementCount: 0 })),
+            api.getRelations(id).catch(() => [] as { type: string }[]),
+          ]);
+          return [id, { shared: (pl.placementCount ?? 0) >= 2, variant: rels.some((r) => r.type === "variant_of") }] as const;
+        }),
+      );
+      if (alive) setBadges(Object.fromEntries(entries));
+    })();
+    return () => { alive = false; };
+    // distinctKey で依存＝並び替え/挿入/削除/分家化のたび引き直す（reload が children を更新→ここへ波及）。
+  }, [distinctKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ×N畳み → 表示単位。連続同一 child は畳み、展開中(expandKey ∈ expanded)なら個別カードに割る。
   const units: DisplayUnit[] = useMemo(() => {
@@ -154,6 +178,20 @@ export function FormStrip({
     await applyOrder(desired, children);
   }
 
+  // 分家にする（S2・「同じものとして育てる」）＝**その配置1つだけ**を vary した新セクションに差し替え。
+  // 転調ラスサビの入口＝サビの1配置を分家化して key+1 等を分家側で自由に。子ネタは参照共有（元サビを直せば効く）。
+  // ×N（畳んだ反復）は先頭配置1つだけを分家（残りは元のまま）＝「ここから別物として育て始める」導線。
+  async function branchUnit(u: DisplayUnit) {
+    const c = sorted[u.indices[0]!]; // この childId の先頭配置（position/ord を維持して差し替え）
+    if (!c) return;
+    const branch = await api.vary(c.node.neta.id).catch(() => null);
+    if (!branch) return;
+    await api.removeChild(neta.id, c.node.neta.id, c.position).catch(() => {});
+    await api.placeChild(neta.id, branch.id, c.position, c.ord).catch(() => {});
+    await reload();
+    onChanged?.();
+  }
+
   // 挿入＝まず末尾に置いて（タイ無し）尺を確定→desired 順（index に差し込み）で射影 normalize。
   async function insertSection(index: number, sectionId: string) {
     const before = await fetchChildren();
@@ -228,8 +266,12 @@ export function FormStrip({
                     unit={u}
                     neta={netaOf(u.childId)}
                     isCurrent={currentIdx != null && u.indices.includes(currentIdx)}
+                    songKey={keyPc}
+                    shared={badges[u.childId]?.shared ?? false}
+                    variant={badges[u.childId]?.variant ?? false}
                     onOpen={() => { const n = netaOf(u.childId); if (n) onOpenNeta?.(n); }}
                     onDelete={() => void removeUnit(u)}
+                    onBranch={() => void branchUnit(u)}
                     onToggleExpand={() => toggleExpand(u.expandKey)}
                     expanded={expanded.has(u.expandKey)}
                     childDur={childDur}
@@ -276,8 +318,12 @@ function FormCard({
   unit,
   neta,
   isCurrent,
+  songKey,
+  shared,
+  variant,
   onOpen,
   onDelete,
+  onBranch,
   onToggleExpand,
   expanded,
   childDur,
@@ -287,8 +333,12 @@ function FormCard({
   unit: DisplayUnit;
   neta: Neta | undefined;
   isCurrent: boolean;
+  songKey: number;
+  shared: boolean; // 2箇所以上で使われている（共有バッジ）
+  variant: boolean; // variant_of を持つ＝分家（A′ バッジ）
   onOpen: () => void;
   onDelete: () => void;
+  onBranch: () => void; // 分家にする（この配置1つだけ vary で差し替え）
   onToggleExpand: () => void;
   expanded: boolean;
   childDur: (c: Child) => number;
@@ -303,6 +353,7 @@ function FormCard({
   const dur = c ? childDur(c) : 0;
   const bars = BPB > 0 ? Math.round(dur / BPB) : 0;
   const title = neta?.title ?? neta?.text ?? "(無題)";
+  const keyChg = keyDiffLabel(neta?.key ?? null, songKey); // 曲と調が違う時だけ「+1」等（同調/未設定は null）
   // 尺でカード幅を可変（設計図として起伏が形になる）。役割色はカード地のティント基準＝--rc に流す（無役割は CSS 既定）。
   const widthClass = bars <= 4 ? "fs-w4" : "fs-w8";
   return (
@@ -318,7 +369,10 @@ function FormCard({
         {unit.count > 1 && (
           <button type="button" className="fs-xn" aria-label={`expand-${unit.childId}`} aria-expanded={expanded} title={`同じセクション ${unit.count} 連続（タップで展開）`} onClick={onToggleExpand}>×{unit.count}</button>
         )}
-        {/* 将来スロット＝調バッジ(<span className="fs-keychg">+2</span>)・分家マーク等をここ（役割行右端）に入れる。 */}
+        {/* S2 バッジ＝役割行右端。調バッジ(曲と違う調)・分家(′)・共有(🔗×n)。既存 CSS 変数のみ・新配色は作らない。 */}
+        {keyChg && <span className="fs-keychg" aria-label={`keychg-${unit.childId}`} title={`曲の調と${keyChg}半音`}>{keyChg}</span>}
+        {variant && <span className="fs-variant" aria-label={`variant-${unit.childId}`} title="分家（元セクションの変奏＝variant_of）">′</span>}
+        {shared && <span className="fs-shared" aria-label={`shared-${unit.childId}`} title="2箇所以上で使われています（共有・直すと全部に効く）">🔗</span>}
         <span className="fs-grip" aria-label={`drag-${unit.childId}`} title="ドラッグで並べ替え" {...attributes} {...listeners}><Icon name="grip" size={14} /></span>
       </div>
       <button type="button" className="fs-card-body" onClick={onOpen} title="タップで中を編集（潜る）">
@@ -327,6 +381,8 @@ function FormCard({
       </button>
       <div className="fs-card-foot">
         <span className="fs-len">{bars}<small>小節</small></span>
+        {/* 分家にする＝同じものとして育てる（この配置だけ vary で差し替え・転調ラスサビの入口）。複製(別物)は NetaList 側。 */}
+        <button type="button" className="fs-branch" aria-label={`fs-branch-${unit.childId}`} title="分家にする（同じものとして育てる＝この配置だけ変奏。転調ラスサビ等）" onClick={onBranch}>分家</button>
         <button type="button" className="fs-del" aria-label={`fs-del-${unit.childId}`} title="このカードを外す" onClick={onDelete}><Icon name="trash" size={14} /></button>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { KindEditorBody } from "./KindEditorBody";
 import { MetaPanel } from "./MetaPanel";
 import { EditorHeader } from "./EditorHeader";
 import { RelationsPanel } from "./RelationsPanel";
+import { CowPrompt } from "./CowPrompt";
 import type { Neta } from "../api";
 
 export function NetaDialog({
@@ -14,6 +15,8 @@ export function NetaDialog({
   onOpenNeta,
   onOpenSkeletonDesk,
   reloadSignal,
+  parentId,
+  onForked,
 }: {
   neta: Neta;
   onClose: () => void;
@@ -21,8 +24,10 @@ export function NetaDialog({
   onOpenNeta?: (n: Neta) => void; // Section のブロックタップ→子ネタを開く（潜る）
   onOpenSkeletonDesk?: (t: import("./SkeletonDesk").SkeletonDeskTarget) => void; // #20 S6：骨格ブロック→机
   reloadSignal?: number; // D&D配置などの外部更新でSectionEditorを再読込
+  parentId?: string; // CoW（S2）：どの親から潜ったか＝共有子の分家先。未指定＝ガード無し。
+  onForked?: (branch: Neta) => void; // CoW：「この曲だけ変える」で分家に載せ替えた時、親がエディタを分家へ。
 }) {
-  const ed = useNetaEditor(neta, { onClose, onChanged });
+  const ed = useNetaEditor(neta, { onClose, onChanged, parentId, onForked });
   const f = ed.flags;
   // メインペーンの中身として描画（design #19：選択中netaの種類で中身が入れ替わる）。
   return (
@@ -96,6 +101,7 @@ export function NetaDialog({
         keyPc={ed.key} mode={ed.mode} tempo={ed.tempo} meter={ed.meter} title={ed.title}
         flush={ed.flush}
         reloadSignal={reloadSignal} onChanged={onChanged} onOpenNeta={onOpenNeta} onOpenSkeletonDesk={onOpenSkeletonDesk}
+        cow={ed.cow} /* CoW ガード（S2 Fix C）＝section の bars/レーン設定の直接保存も安全弁を通す */
         tp={{ lineRef: ed.tp.lineRef, scrollerRef: ed.tp.scrollerRef, beatRef: ed.tp.beatRef, playing: ed.tp.playing }}
       />
       {f.isMusic && (
@@ -122,6 +128,9 @@ export function NetaDialog({
         </p>
       )}
       <RelationsPanel rels={ed.rels} onOpenNeta={onOpenNeta} />
+      {/* CoW（分家の安全弁・design S2）：共有子の初回編集で「全部に効かす／この曲だけ変える（分家）」を選ばせる。
+          useNetaEditor と SectionEditor が同一ガードを共有＝モーダルの描画地点はここ1つ。 */}
+      <CowPrompt prompt={ed.cowPrompt} onChoose={ed.resolveCow} />
     </div>
   );
 }

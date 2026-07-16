@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type Neta } from "../api";
+import { api, type Neta, type NetaPatch } from "../api";
+import type { CowGuard } from "../useCowGuard"; // 型のみ＝実行時依存なし（CoW ガード・S2 Fix C）
 import { KIND_LABEL } from "../kinds";
 import { isProjectTag, projectName } from "../project";
 import { useTransport } from "../useTransport";
@@ -59,6 +60,7 @@ export function SectionEditor({
   onOpenNeta,
   onOpenSkeletonDesk,
   title,
+  cow,
 }: {
   neta: Neta;
   keyPc: number;
@@ -70,6 +72,9 @@ export function SectionEditor({
   onOpenNeta?: (n: Neta) => void; // ブロックタップ→子ネタを編集画面で開く（潜る）
   // #20 S6骨格の机：骨格ブロックタップ→机（全画面）で開く。未指定＝従来どおり onOpenNeta（潜る）。
   onOpenSkeletonDesk?: (t: SkeletonDeskTarget) => void;
+  // CoW ガード（S2 Fix C）＝共有 section の bars/レーン設定（直接 updateNeta）も安全弁を通す。
+  // NetaDialog(useNetaEditor) と同一インスタンス＝決定はエディタセッションで1つ。未指定＝従来どおり（bit-safe）。
+  cow?: CowGuard;
 }) {
   const [children, setChildren] = useState<Child[]>([]);
   const [loadErr, setLoadErr] = useState(false); // getComposition 失敗時＝空白で固まらず再試行を出す（perf耳FB 2026-07-09）
@@ -113,27 +118,42 @@ export function SectionEditor({
   // 表示するレーン／畳んでいるレーン（＝「＋レーン」候補）。song はアレンジ専用＝従来どおり全レーン（畳み無し）。
   const visibleLanesList: readonly Lane[] = isSong ? LANES : sctx.visibleLanes(secCtx, lanesShown, lanesHidden);
   const collapsedLanesList: readonly Lane[] = isSong ? [] : sctx.collapsedLanes(secCtx, lanesShown, lanesHidden);
+  // section 自身への直接書き（bars/レーン設定）＝CoW ガードを通す（S2 Fix C）。落ちサビの常道＝共有セクションの
+  // レーンミュートが確認なしに全配置へ効く穴の根治。cow 未指定（トップから開いた/ハーネス外）＝従来どおり即保存。
+  // 返り＝false は「やめる」＝呼び出し側は楽観更新した state を戻す。"branched"＝分家へ適用済み（onForked が載せ替え）。
+  const writeSelf = async (patch: NetaPatch): Promise<boolean> => {
+    if (cow) {
+      const res = await cow.guard(patch);
+      if (res.action === "cancel") return false;
+      if (res.action === "branched") return true; // 分家に書いた＝原本には書かない（この画面は再マウントされる）
+    }
+    await api.updateNeta(neta.id, patch).catch(() => {});
+    return true;
+  };
   // 手動レーン状態を section content に保存（既存 content を潰さずマージ・fire-and-forget＝setSectionBars 流儀）。
-  // content スキーマは自由形＝api 変更不要（updateNeta の既存経路）。
-  const persistLanes = (next: { lanes_shown: string[]; lanes_hidden: string[]; lanes_muted: string[] }) => {
-    void api.updateNeta(neta.id, { content: { ...secContent, ...next } }).catch(() => {});
+  // content スキーマは自由形＝api 変更不要（updateNeta の既存経路）。revert＝CoW「やめる」時に楽観更新を戻す。
+  const persistLanes = (next: { lanes_shown: string[]; lanes_hidden: string[]; lanes_muted: string[] }, revert?: () => void) => {
+    void writeSelf({ content: { ...secContent, ...next } }).then((ok) => { if (!ok) revert?.(); });
   };
   const showLane = (key: string) => {
     const shown = lanesShown.includes(key) ? lanesShown : [...lanesShown, key];
     const hidden = lanesHidden.filter((k) => k !== key);
+    const prev = { shown: lanesShown, hidden: lanesHidden };
     setLanesShown(shown); setLanesHidden(hidden);
-    persistLanes({ lanes_shown: shown, lanes_hidden: hidden, lanes_muted: lanesMuted });
+    persistLanes({ lanes_shown: shown, lanes_hidden: hidden, lanes_muted: lanesMuted }, () => { setLanesShown(prev.shown); setLanesHidden(prev.hidden); });
   };
   const hideLane = (key: string) => {
     const shown = lanesShown.filter((k) => k !== key);
     const hidden = lanesHidden.includes(key) ? lanesHidden : [...lanesHidden, key];
+    const prev = { shown: lanesShown, hidden: lanesHidden };
     setLanesShown(shown); setLanesHidden(hidden);
-    persistLanes({ lanes_shown: shown, lanes_hidden: hidden, lanes_muted: lanesMuted });
+    persistLanes({ lanes_shown: shown, lanes_hidden: hidden, lanes_muted: lanesMuted }, () => { setLanesShown(prev.shown); setLanesHidden(prev.hidden); });
   };
   const toggleMute = (key: string) => {
     const muted = lanesMuted.includes(key) ? lanesMuted.filter((k) => k !== key) : [...lanesMuted, key];
+    const prev = lanesMuted;
     setLanesMuted(muted);
-    persistLanes({ lanes_shown: lanesShown, lanes_hidden: lanesHidden, lanes_muted: muted });
+    persistLanes({ lanes_shown: lanesShown, lanes_hidden: lanesHidden, lanes_muted: muted }, () => setLanesMuted(prev));
   };
   // セクション尺（小節数）＝可変（評価修正A）。ユーザー設定(secBars=neta.bars)と配置済みcontentの長い方、上限MAX_BARS。
   const [secBars, setSecBars] = useState(() => Math.max(MIN_BARS, neta.bars ?? MIN_BARS));
@@ -146,8 +166,10 @@ export function SectionEditor({
   const trackStyle = BARS > 10 ? { minWidth: `${BARS * 34}px` } : undefined;
   async function setSectionBars(n: number) {
     const b = Math.max(MIN_BARS, Math.min(MAX_BARS, n));
+    const prev = secBars;
     setSecBars(b);
-    await api.updateNeta(neta.id, { bars: b }).catch(() => {});
+    const ok = await writeSelf({ bars: b }); // CoW ガード経由（S2 Fix C）
+    if (!ok) { setSecBars(prev); return; } // やめる＝楽観更新を戻す（無変更）
     onChanged?.();
   }
   // 骨格レーンの「鳴らす」トグル（耳確認・オーナーFB 2026-07-11）。既定OFF＝従来どおり無音。保存しない（セッション内のみ）。
@@ -211,6 +233,27 @@ export function SectionEditor({
   useEffect(() => {
     void load();
   }, [load, reloadSignal]);
+
+  // 共有バッジ（S2）：この子ネタが**複数の親から参照**されている（placementCount>=2）ものを印す＝
+  // 「直すと他の曲/箇所にも効く」の可視化（copy-on-write の予告）。childId 単位で placements を引く
+  // （地雷：反復配置は node.children が空なので配置ツリーには出ない共有情報＝逆引きが要る）。
+  const [sharedChildIds, setSharedChildIds] = useState<Set<string>>(new Set());
+  const distinctChildIds = useMemo(() => [...new Set(children.map((c) => c.node.neta.id))], [children]);
+  const distinctChildKey = distinctChildIds.join(",");
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const shared = new Set<string>();
+      await Promise.all(
+        distinctChildIds.map(async (id) => {
+          const pl = await api.getPlacements(id).catch(() => ({ placementCount: 0 }));
+          if ((pl.placementCount ?? 0) >= 2) shared.add(id);
+        }),
+      );
+      if (alive) setSharedChildIds(shared);
+    })();
+    return () => { alive = false; };
+  }, [distinctChildKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const laneOf = (kind: string) => LANES.find((l) => sctx.inLane(l, kind));
   const others = children.filter((c) => !laneOf(c.node.neta.kind));
@@ -615,6 +658,10 @@ export function SectionEditor({
                   <MiniRoll neta={c.node.neta} notes={blockPreviewNotes(c)} />
                   <span className="lane-block-label">
                     {c.node.neta.title ?? c.node.neta.text ?? KIND_LABEL[c.node.neta.kind] ?? c.node.neta.kind}
+                    {/* 共有バッジ（S2）：2箇所以上で使われている子＝直すと全部に効く（分家の予告）。 */}
+                    {sharedChildIds.has(c.node.neta.id) && (
+                      <span className="lane-block-shared" aria-label={`shared-${c.node.neta.id}`} title="2箇所以上で使われています（直すと全部に効く・この曲だけ変えるには分家）">🔗</span>
+                    )}
                   </span>
                   {/* 骨格ブロック（design #20 S2）：吹く▶＝gen_melody(skeletonNetaId)／コード無し時はコードを推定(harmonize)。 */}
                   {!eraseMode && c.node.neta.kind === "skeleton" && (

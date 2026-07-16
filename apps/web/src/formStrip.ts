@@ -127,3 +127,14 @@ export function roleInfo(role: string | undefined): { label: string; color?: str
   if (!role) return undefined;
   return ROLE_INFO[role] ?? { label: role }; // 未知役割＝生値・無地
 }
+
+// 調バッジ（design「#曲フォーム」S2）：セクションの key が曲(song)の key と違う時だけ半音差を「+1」「-3」形式で。
+// **同じ調 or key 未設定なら null**（バッジを出さない）＝転調ラスサビ(key+1)等だけが目立つ。差は -5..+6 の最短表現
+// （key+11 は同じ音高集合の -1 として出す＝人が読む向きに素直）。分家 A′ とは別スロット（分家＝系譜・調＝frame）。
+export function keyDiffLabel(childKey: number | null | undefined, songKey: number): string | null {
+  if (childKey == null) return null; // 調未設定のセクション＝比較しない
+  const diff = (((childKey - songKey) % 12) + 12) % 12; // 0..11
+  const signed = diff <= 6 ? diff : diff - 12; // -5..+6（最短の転調向き）
+  if (signed === 0) return null; // 曲と同じ調＝バッジ無し
+  return signed > 0 ? `+${signed}` : `${signed}`;
+}

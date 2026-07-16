@@ -445,6 +445,23 @@ export function buildHttp(core: Core): FastifyInstance {
     return n;
   });
 
+  // 浅い分家（vary＝変奏の一級化・design「分家モデル」S2）。子は参照共有（deep copy しない）＋variant_of。
+  // 「別物にする＝copy」（上の /copy）と「同じものとして育てる＝分家」の使い分けはここで別れる。
+  app.post("/neta/:id/vary", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const p = z.object({ title: z.string().optional(), scope: scopeEnum.optional() }).safeParse(req.body ?? {});
+    if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
+    const n = core.varyNeta(id, p.data);
+    if (!n) return reply.code(404).send({ error: "not found" });
+    return n;
+  });
+
+  // 共有検出（分家の安全弁）：このネタが何箇所で配置されているか（copy-on-write プロンプト/共有バッジ用）。
+  app.get("/neta/:id/placements", async (req) => {
+    const { id } = req.params as { id: string };
+    return core.placementsOf(id);
+  });
+
   // scope 切替（自作を連想元へ＝library に移す等）。
   app.post("/neta/:id/scope", async (req, reply) => {
     const { id } = req.params as { id: string };

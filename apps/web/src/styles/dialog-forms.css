@@ -63,6 +63,56 @@ body:has(.dialog-backdrop) {
 .dialog[aria-label="place-picker"] {
   align-content: start;
 }
+/* CoW（分家の安全弁・design S2）＝共有子の初回編集で全部/分家/やめるを選ばせる小モーダル。既存 dialog と同流儀。 */
+.cow-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 20; /* 編集画面の上（dialog-backdrop=10 より前面） */
+}
+.cow-modal {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+}
+.cow-msg {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.cow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cow-btn {
+  flex: 1 1 auto;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.cow-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.cow-btn.ghost {
+  flex: 0 0 auto;
+  font-weight: 500;
+  color: var(--muted);
+}
 .dialog header {
   display: flex;
   justify-content: space-between;

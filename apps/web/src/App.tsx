@@ -765,6 +765,10 @@ export function App() {
               key={active.id} /* ネタを切り替えたら作り直して内部状態を新ネタで初期化 */
               neta={active}
               reloadSignal={composeSignal}
+              /* CoW（分家の安全弁・S2）：潜って開いた子は直近の親を知る＝共有子の初回編集で分家先になる。
+                 トップから開いた（navStack 空）＝親不明＝ガード無し（従来どおり通常保存）。 */
+              parentId={navStack.length ? navStack[navStack.length - 1]!.id : undefined}
+              onForked={(branch) => { setActive(branch); void reload(); }} /* 分家に載せ替え（navStack=親はそのまま・key変化で分家を再初期化） */
               onOpenNeta={drillNeta} /* Section のブロックタップ→子ネタへ潜る */
               onOpenSkeletonDesk={(t) => setDeskTarget(t)} /* #20 S6：骨格ブロック→机（全画面） */
               onClose={() => {

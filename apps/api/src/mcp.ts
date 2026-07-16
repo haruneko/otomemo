@@ -313,6 +313,33 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     },
   );
 
+  // 浅い分家（vary＝変奏の一級化・design「分家モデル」S2・kind 非依存）。子は参照共有＋variant_of の系譜。
+  server.registerTool(
+    "vary",
+    {
+      title: "分家（浅い変奏）",
+      description:
+        "id のネタを浅く分家＝**子ネタは参照共有**（compose_edge を同 position/ord で複製・deep copy しない）＋新→元へ variant_of。container（section/song）＝frame(key/mode/bars)/role/title を分家側で自由に変える起点／リーフ（melody 等）＝content コピー＋系譜。copy_neta（別物にする＝deep copy）との違いは『同じものとして育てる（系譜が残る）』こと。転調ラスサビ/落ちサビ/2番Aメロの土台。title 既定＝「元title′」。",
+      inputSchema: { id: z.string(), title: z.string().optional(), scope: scopeEnum.optional().describe("既定=元と同じ") },
+    },
+    async ({ id, title, scope }) => {
+      const n = core.varyNeta(id, { title, scope });
+      return n ? ok(n) : err("not found");
+    },
+  );
+
+  // 共有検出（分家の安全弁）：このネタが何箇所で配置されているか＝copy-on-write プロンプト/共有バッジの土台。
+  server.registerTool(
+    "get_placements",
+    {
+      title: "配置箇所（共有検出）",
+      description:
+        "id のネタが compose_edge で何箇所に配置されているかを逆引き。返り＝{parents:[{parentId,positions}], placementCount}。placementCount>=2 で『共有』（親2以上 or 同親2配置以上）＝分家の安全弁の判定に使う。",
+      inputSchema: { id: z.string() },
+    },
+    async ({ id }) => ok(core.placementsOf(id)),
+  );
+
   // scope 切替（自作を連想元へ＝library に移す等）。
   server.registerTool(
     "set_scope",

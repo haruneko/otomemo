@@ -50,4 +50,12 @@ export class ComposeRepo {
       .prepare(`SELECT child_id, position, ord FROM compose_edge WHERE parent_id = ? ORDER BY ord, position`)
       .all(parentId) as { child_id: string; position: number; ord: number }[];
   }
+
+  // このネタを子として参照している親辺の逆引き（parent, position, ord）。**共有検出**の土台（分家モデルS2）。
+  // childEdges の逆＝「誰がこの子を使っているか」＝copy-on-write の安全弁（n箇所で使われている）と分家の配置差し替えに要る。
+  parentEdges(childId: string): { parent_id: string; position: number; ord: number }[] {
+    return this.db
+      .prepare(`SELECT parent_id, position, ord FROM compose_edge WHERE child_id = ? ORDER BY parent_id, position`)
+      .all(childId) as { parent_id: string; position: number; ord: number }[];
+  }
 }

@@ -8,6 +8,7 @@ import {
   totalSpanBeats,
   roleOf,
   roleInfo,
+  keyDiffLabel,
   type StripCard,
   type Edge,
 } from "../src/formStrip";
@@ -148,6 +149,21 @@ describe("roleOf / roleInfo（役割タグ→ラベル）", () => {
     expect(roleInfo("chorus")?.color).toBeTruthy();
     expect(roleInfo("weird")).toEqual({ label: "weird" }); // 未知＝生値・無地
     expect(roleInfo(undefined)).toBeUndefined();
+  });
+});
+
+describe("keyDiffLabel（調バッジ＝曲と違う調だけ半音差・S2）", () => {
+  it("同じ調 or key 未設定は null（バッジ無し）", () => {
+    expect(keyDiffLabel(0, 0)).toBeNull(); // 同調
+    expect(keyDiffLabel(null, 0)).toBeNull(); // 未設定
+    expect(keyDiffLabel(undefined, 5)).toBeNull();
+  });
+  it("最短の転調向きで符号付き（+は上・-は下・-5..+6）", () => {
+    expect(keyDiffLabel(1, 0)).toBe("+1"); // 半音上
+    expect(keyDiffLabel(3, 0)).toBe("+3");
+    expect(keyDiffLabel(11, 0)).toBe("-1"); // 11半音上＝1半音下の方が近い
+    expect(keyDiffLabel(0, 2)).toBe("-2"); // 曲がD、セクションがC＝2半音下
+    expect(keyDiffLabel(6, 0)).toBe("+6"); // 6は+側の端
   });
 });
 

@@ -344,7 +344,7 @@ export function NetaCard({
             {assignMenu}
             <button
               className="bs-btn"
-              title="複製（バリエーションの素体に）"
+              title="別物にする＝複製（中身ごと丸ごとコピー・系譜なし・元とは無関係な独立ネタ）"
               onClick={async () => {
                 await api.copyNeta(neta.id);
                 onChanged?.();
@@ -352,6 +352,19 @@ export function NetaCard({
             >
               複製
             </button>
+            {/* 分家＝同じものとして育てる（変奏の一級化・S2）。複製(別物)と対＝子は参照共有＋variant_of で系譜が残る。 */}
+            {(MUSIC_KINDS.includes(neta.kind) || CONTAINER_KINDS.includes(neta.kind)) && (
+              <button
+                className="bs-btn"
+                title="同じものとして育てる＝分家（子ネタは参照共有・元との系譜が残る＝2番/転調ラスサビ等の変奏に）"
+                onClick={async () => {
+                  await api.vary(neta.id);
+                  onChanged?.();
+                }}
+              >
+                分家
+              </button>
+            )}
             <button
               className="bs-btn"
               title="ライブラリ（連想元）へ移す＝この曲/進行を連想の素材にする"

@@ -394,6 +394,11 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }
+/* 共有バッジ（S2）＝ラベル右に小さく。地の text-shadow を継ぐので視認可・新配色なし。 */
+.lane-block-shared {
+  margin-left: 3px;
+  font-size: 0.6rem;
+}
 /* ③ 右端グリップ＝ドラッグでループ伸ばし。掴み代(タッチ域)は14px確保しつつ、
    見た目は控えめに＝右端中央の小さな縦ハンドルだけ（旧: 白線+グラデ帯が"糊代"で後ろに出過ぎ・オーナー指摘）。 */
 .block-resize {
@@ -673,8 +678,35 @@
   font-weight: 500;
   color: var(--muted);
 }
-.fs-del {
+/* 分家バッジ（′）と共有バッジ（🔗）＝役割行右端の S2 スロット。fs-keychg と同じ密度・既存変数のみ（新配色なし）。 */
+.fs-variant {
+  flex: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--k-riff) 70%, var(--fg));
+}
+.fs-shared {
+  flex: none;
+  font-size: 0.62rem;
+  opacity: 0.75;
+}
+/* 分家にする＝footer の控えめボタン（複製=別物 とは別物・こちらは「同じものとして育てる」）。 */
+.fs-branch {
   margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0 4px;
+  opacity: 0.7;
+}
+.fs-branch:hover {
+  opacity: 1;
+  color: color-mix(in srgb, var(--k-riff) 60%, var(--fg));
+}
+.fs-del {
   border: none;
   background: transparent;
   color: var(--muted);
