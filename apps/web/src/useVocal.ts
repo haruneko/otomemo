@@ -17,11 +17,12 @@ export interface SingNote {
 }
 
 export interface VocalJob {
-  key: string; // メロ+テンポで一意（変われば別 wav）
+  key: string; // メロ+テンポ+ensemble+声色で一意（変われば別 wav・A 修正でオクターブ割れ時の stale を防ぐ）
   notes: SingNote[]; // 絶対拍・syllable 付き（弱起=負start も保持）
   bpm: number;
   firstNoteBeat: number; // 歌の初音の絶対拍（弱起なら負）＝楽器と同座標
   speaker?: number;
+  ensemblePitches?: number[]; // A: 同時に歌う全子の結合音高（サーバで唯一のオクターブシフトを決める）
 }
 
 export function useVocalRender() {
@@ -48,7 +49,7 @@ export function useVocalRender() {
       try {
         const notes: string[] = [];
         for (const j of missing) {
-          const r = await api.sing(j.notes, j.bpm, j.speaker); // 同一入力は content-hash で合成スキップ
+          const r = await api.sing(j.notes, j.bpm, j.speaker, j.ensemblePitches); // 同一入力は content-hash で合成スキップ
           const buf = await decodeVocal(await (await fetch(api.assetUrl(r.assetId))).arrayBuffer());
           cacheRef.current.set(j.key, { buffer: buf, leadRestSec: r.leadRestSec });
           if (r.shift) notes.push(`音域を${r.shift > 0 ? "+" : ""}${r.shift}半音移調`);

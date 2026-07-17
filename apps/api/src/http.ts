@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Core } from "./core";
 import { netaInputSchema, netaPatchSchema, jobInputSchema, scopeEnum, scopeQueryEnum } from "./schemas";
-import { singNeta, singGeneric, resolveSingBpm } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
+import { singNeta, singGeneric, resolveSingBpm, chooseOctaveShift } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
 import {
   genChords,
   genMelody,
@@ -738,15 +738,20 @@ export function buildHttp(core: Core): FastifyInstance {
           .min(1, "notes が空です"),
         bpm: z.number().positive().optional(),
         speaker: z.number().int().optional(),
+        // A. 全歌う子の結合音高。渡ればサーバ側で chooseOctaveShift(ensemble) を forcedShift に使う＝
+        //    子ごと独立ジョブでもオクターブ割れしない（境界で輪郭が跳ばない）。未指定＝この子単独で決定（bit一致）。
+        ensemblePitches: z.array(z.number()).optional(),
       })
       .safeParse(req.body ?? {});
     if (!p.success) return reply.code(400).send({ error: p.error.flatten() });
-    const { notes, bpm, speaker } = p.data;
+    const { notes, bpm, speaker, ensemblePitches } = p.data;
     if (!notes.some((n) => n.syllable && n.syllable.trim())) {
       return reply.code(400).send({ error: "各音符に歌詞(syllable)がありません。先に歌詞を載せて。" });
     }
+    // ensemble が来たら結合レンジで唯一のオクターブシフトを決めて forcedShift として全子共通に使う。
+    const forcedShift = ensemblePitches && ensemblePitches.length ? chooseOctaveShift(ensemblePitches) : undefined;
     try {
-      const { asset, shift, clamped, leadRestSec } = await singGeneric(core, notes, bpm ?? 120, speaker);
+      const { asset, shift, clamped, leadRestSec } = await singGeneric(core, notes, bpm ?? 120, speaker, forcedShift);
       // #13c leadRestSec＝実測の先頭休符長（秒）。web はこれ/spb を仮歌カウントイン量に使う（SSOT・二重定数解消）。
       return { assetId: asset.id, shift, clamped, speaker: speaker ?? 3009, leadRestSec };
     } catch (e) {

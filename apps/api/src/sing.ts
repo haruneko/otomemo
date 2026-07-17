@@ -42,6 +42,35 @@ export interface Score { notes: ScoreNote[]; shift: number; clamped: number }
 const framesOf = (beats: number, secPerBeat: number) => Math.max(1, Math.round(beats * secPerBeat * FPS));
 
 /**
+ * C. 単声正規化（monophonic 化）＝VOICEVOX ScoreNote は key 1本＝和音を歌わせるユースケースは無い。
+ * 重複音を残すと notesToScore が直列に詰め wav が膨張し隣の子へはみ出す（Section 通し再生バグの主因）。
+ * (a) 同拍（同 start）複数音 → 最上声（最高 pitch）1音だけ採用。
+ * (b) 部分オーバーラップ（前音が次音 start を越える）→ 前音の dur を次音 start でクリップ（gap<0 を作らない）。
+ * 入力が既に単声なら**そのまま返す＝出力不変（bit一致）**。sorted は start 昇順・dur>0 前提。
+ */
+function monophonic(sorted: SingNote[]): SingNote[] {
+  // (a) 同 start は最高 pitch のみ残す（sorted は start 昇順なので隣接比較で足りる）。
+  const deduped: SingNote[] = [];
+  for (const n of sorted) {
+    const last = deduped[deduped.length - 1];
+    if (last && last.start === n.start) {
+      if (n.pitch > last.pitch) deduped[deduped.length - 1] = n; // 最上声で置換
+    } else {
+      deduped.push(n);
+    }
+  }
+  // (b) 前音の終端が次音 start を越えるならクリップ（同 start は (a) で除去済み＝次音 start は必ず前音 start より大）。
+  const out: SingNote[] = [];
+  for (let i = 0; i < deduped.length; i++) {
+    const n = deduped[i]!;
+    const next = deduped[i + 1];
+    const dur = next && n.start + n.dur > next.start ? next.start - n.start : n.dur;
+    if (dur > 0) out.push(dur === n.dur ? n : { ...n, dur }); // 不変音はそのまま（参照温存＝bit一致意図を明示）
+  }
+  return out;
+}
+
+/**
  * メロ全体を k×12 半音シフトして歌唱バンド[lo,hi]に最も収める最適 k を選ぶ（音ごと折りは輪郭破壊なので廃止）。
  * - 第一基準＝バンド外に出る音数が最小。
  * - 同数タイ＝シフト後の平均ピッチがバンド中央に近い方（極端な片寄りを避け中央寄せ）。
@@ -80,33 +109,47 @@ export function chooseOctaveShift(pitches: number[], lo = RANGE_LO, hi = RANGE_H
  * - 音域＝**全体オクターブシフト**でバンドに寄せ（輪郭保存）、なお外れる音だけ最終手段でクランプ。
  *   shift(半音)・clamped(クランプ発生数) を Score に返す＝黙って変えない（呼び出し側でログ）。
  */
-export function notesToScore(notes: SingNote[], bpm: number, opts: { defaultMora?: string; range?: [number, number] } = {}): Score {
+export function notesToScore(
+  notes: SingNote[],
+  bpm: number,
+  opts: { defaultMora?: string; range?: [number, number]; forcedShift?: number } = {},
+): Score {
   const spb = 60 / (bpm > 0 ? bpm : 120);
   const mora = opts.defaultMora ?? DEFAULT_MORA;
   const [lo, hi] = opts.range ?? [RANGE_LO, RANGE_HI];
-  const sorted = [...notes].filter((n) => n.dur > 0).sort((a, b) => a.start - b.start);
-  const shift = chooseOctaveShift(sorted.map((n) => Math.round(n.pitch)), lo, hi); // 全体シフト量（輪郭保存）
+  // C. 単声正規化＝重複音での wav 膨張を根治（単声入力はそのまま＝bit一致）。
+  const sorted = monophonic([...notes].filter((n) => n.dur > 0).sort((a, b) => a.start - b.start));
+  // A. forcedShift（ensemble 由来）指定時はそれを使う＝子ごと独立正規化のオクターブ割れを防ぐ。
+  //    undefined＝現状の chooseOctaveShift（0 も有効値なので ?? で通す＝bit一致）。
+  const shift = opts.forcedShift ?? chooseOctaveShift(sorted.map((n) => Math.round(n.pitch)), lo, hi);
   let clamped = 0;
   // #13c 先頭休符＝「0.25拍」と「時間床 SING_LEAD_REST_SEC」の大きい方（テンポ非依存の子音前余白）。末尾休符は据え置き。
+  //     B. 先頭/末尾休符は**現行式のまま**＝グリッド原点は最初のノートの start（弱起/カウントインと非衝突・SSOT不変）。
   const leadRestFrames = Math.max(framesOf(0.25, spb), Math.round(SING_LEAD_REST_SEC * FPS));
   const out: ScoreNote[] = [{ key: null, frame_length: leadRestFrames, lyric: "" }]; // 先頭休符（床付き）
-  let cursor = sorted.length ? sorted[0]!.start : 0; // 直前音符の終端（拍）
+  // B. 絶対拍グリッド量子化：各音長を独立丸めせず、絶対拍カーソルの累積フレーム境界を各オンセット/オフセットで求め、
+  //    frame_length = 今回境界 − 前回境界。誤差を各点 ±0.5フレーム(±5.3ms) に有界化＝句内ドリフト（進むほど遅延）の根治。
+  const firstBeat = sorted.length ? sorted[0]!.start : 0; // グリッド原点＝最初のノートの start
+  const boundary = (beat: number) => leadRestFrames + Math.round((beat - firstBeat) * spb * FPS);
+  let prevFrame = leadRestFrames; // 直前に確定した絶対フレーム位置（先頭休符の終端＝boundary(firstBeat)）
   for (let i = 0; i < sorted.length; i++) {
     const n = sorted[i]!;
-    const gap = n.start - cursor;
-    if (gap > 0) out.push({ key: null, frame_length: framesOf(gap, spb), lyric: "" }); // 休符挿入
+    const onsetFrame = boundary(n.start);
+    const restLen = onsetFrame - prevFrame; // gap 休符ぶんの絶対フレーム差
+    if (restLen > 0) out.push({ key: null, frame_length: restLen, lyric: "" }); // 境界差0の休符は挿入しない（frame_length=0不可）
+    const offsetFrame = boundary(n.start + n.dur);
     const isMelisma = n.syllable === "ー" || n.syllable === "ｰ";
     let key = Math.round(n.pitch) + shift; // 全体シフト適用（輪郭不変）
     if (key < lo) { key = lo; clamped++; } // なお外れる音だけ最終手段でクランプ
     else if (key > hi) { key = hi; clamped++; }
     out.push({
       key,
-      frame_length: framesOf(n.dur, spb),
+      frame_length: Math.max(1, offsetFrame - onsetFrame), // 境界差0の音符は min 1フレーム（一回性ズレ・累積しない）
       lyric: isMelisma ? "" : (n.syllable && n.syllable.trim() ? n.syllable : mora), // 空 lyric＝母音継続
     });
-    cursor = Math.max(cursor, n.start) + n.dur; // オーバーラップは詰め（後音を後ろへ）
+    prevFrame = offsetFrame; // 絶対グリッド位置で継続（min 1 の膨らみは次音へ伝播しない＝有界化の要）
   }
-  out.push({ key: null, frame_length: framesOf(0.25, spb), lyric: "" }); // 末尾休符
+  out.push({ key: null, frame_length: framesOf(0.25, spb), lyric: "" }); // 末尾休符（現行式のまま）
   return { notes: out, shift, clamped };
 }
 
@@ -213,8 +256,9 @@ export async function singGeneric(
   notes: SingNote[],
   bpm: number,
   frameDecodeId?: number,
+  forcedShift?: number, // A. ensemble（全歌う子の結合音高）由来のオクターブシフト。undefined＝この子単独で決定（bit一致）
 ): Promise<{ asset: Asset; shift: number; clamped: number; cached: boolean; leadRestSec: number }> {
-  const score = notesToScore(notes, bpm);
+  const score = notesToScore(notes, bpm, { forcedShift });
   // #13c SSOT：実測の先頭休符長（秒）＝再生側カウントイン量。web は leadRestSec/spb を VocalPlay.leadRestBeats に使う。
   const leadRestSec = score.notes[0]!.frame_length / FPS;
   const speaker = frameDecodeId ?? DEFAULT_FRAME_DECODE;

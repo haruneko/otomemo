@@ -178,14 +178,25 @@ export function SectionEditor({
   // 鳴らす（入れ方はメロ側に集約＝Section 側トグルは撤去）。歌う子＝kind=melody かつ sing.enabled かつ歌詞(syllable)あり。
   // 各子は自分の配置オフセットで placed（compositeNotes([child]) で position 移調済み）＝複数メロ混在が自然に成立。
   const singingJobs = useMemo(() => {
-    const jobs: { key: string; notes: { pitch: number; start: number; dur: number; syllable?: string }[]; bpm: number; firstNoteBeat: number; speaker?: number; child: Child }[] = [];
+    // 1st pass：歌う子（melody・sing.enabled・歌詞あり）を集める。ensemble はこの結合音高で決めるので全員揃えてから。
+    const singers: { c: Child; sing: ReturnType<typeof singOf>; vm: ReturnType<typeof vocalMelodyFromComposite> }[] = [];
     // レーンミュート（再生のみ）された子は歌わせない＝ミュート＝合成/歌の両方から外す（一貫性）。
     for (const c of sctx.audibleChildren(secCtx, lanesMuted)) {
       const sing = c.node.neta.kind === "melody" ? singOf(c.node.neta.content) : undefined;
       if (!sing) continue;
       const vm = vocalMelodyFromComposite(compositeNotes([c], keyPc, neta.mode));
       if (!vm.hasLyric) continue; // 歌詞なし＝フォールバック楽器（歌わせない・ミュートもしない）
-      jobs.push({ key: JSON.stringify({ n: vm.notes, t: tempo }), notes: vm.notes, bpm: tempo, firstNoteBeat: vm.minStartBeat, speaker: sing.speaker, child: c });
+      singers.push({ c, sing, vm });
+    }
+    // A：全歌う子の結合音高＝ensemble（サーバがこの結合レンジで唯一のオクターブシフトを決める＝子ごとの割れ防止）。
+    const ensemblePitches = singers.flatMap((s) => s.vm.notes.map((n) => Math.round(n.pitch)));
+    const jobs: { key: string; notes: { pitch: number; start: number; dur: number; syllable?: string }[]; bpm: number; firstNoteBeat: number; speaker?: number; ensemblePitches: number[]; child: Child }[] = [];
+    for (const { c, sing, vm } of singers) {
+      // key に ensemble と speaker を含める＝歌う子の増減/ミュート/声色変更で shift が変わっても stale wav を返さない。
+      jobs.push({
+        key: JSON.stringify({ n: vm.notes, t: tempo, e: ensemblePitches, s: sing!.speaker ?? null }),
+        notes: vm.notes, bpm: tempo, firstNoteBeat: vm.minStartBeat, speaker: sing!.speaker, ensemblePitches, child: c,
+      });
     }
     return jobs;
   }, [children, keyPc, neta.mode, tempo, lanesMuted]); // secCtx は children/keyPc/mode 派生＝上の deps で十分

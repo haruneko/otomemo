@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { notesToScore, scoreSeconds, chooseOctaveShift, resolveSingBpm, singHashOf, SING_LEAD_REST_SEC, FPS } from "../src/sing";
 
+// 本体（先頭/末尾休符を除く）フレーム列を取り出すヘルパ。notes[0]=先頭休符・末尾=末尾休符。
+const bodyFrames = (score: { notes: { key: number | null; frame_length: number }[] }) =>
+  score.notes.slice(1, -1).map((n) => n.frame_length);
+
 // 隣接音程列（輪郭）を取り出すヘルパ：シフトは全音を等しく動かすので輪郭は不変であるべき。
 const intervals = (keys: (number | null)[]) => {
   const ks = keys.filter((k): k is number => k != null);
@@ -158,6 +162,72 @@ describe("notesToScore の先頭休符 時間床（#13c カウントイン）", 
     // 旧挙動（床なし・0.25拍=8）を模した score との hash 差＝別キー（=再レンダ）。
     const old = { ...s, notes: [{ ...s.notes[0]!, frame_length: 8 }, ...s.notes.slice(1)] };
     expect(singHashOf(s, 3009)).not.toBe(singHashOf(old, 3009));
+  });
+});
+
+// ── バグ修正（仮歌 Section 通し再生）＝TDD 赤3本（C 重複音 / B 句内ドリフト / A オクターブ分割） ──
+// 正典＝Fable 承認スペック（2026-07-17）。C→B→A の順で実装。既定 undefined/0＝bit一致が家訓。
+
+describe("C. 重複音の単声正規化（monophonic 化・wav 膨張の根治）", () => {
+  const bpm = 120; // spb=0.5
+  it("部分オーバーラップ [0,2)+[1,3) → 前音の dur を次音 start でクリップ＝本体フレーム合計 = round(2·spb·FPS)", () => {
+    // 旧: cursor 直列詰めで [0,2) dur=2 と [1,1] を後ろへ→本体が 2拍+1拍=3拍ぶんに膨張（隣の子へはみ出す）。
+    const s = notesToScore([
+      { pitch: 60, start: 0, dur: 2, syllable: "あ" },
+      { pitch: 62, start: 1, dur: 1, syllable: "い" },
+    ], bpm);
+    const spb = 60 / bpm;
+    const total = bodyFrames(s).reduce((a, b) => a + b, 0);
+    expect(total).toBe(Math.round(2 * spb * FPS)); // 2拍ぶん（0→2）＝膨張しない
+  });
+  it("同拍（同 start）複数音 → 最上声（最高 pitch）1音だけ採用＝note 数1", () => {
+    const s = notesToScore([
+      { pitch: 60, start: 0, dur: 1, syllable: "し" },
+      { pitch: 67, start: 0, dur: 1, syllable: "た" }, // 同拍・最高音
+      { pitch: 64, start: 0, dur: 1, syllable: "う" },
+    ], bpm);
+    const body = s.notes.slice(1, -1); // 先頭/末尾休符を除く
+    expect(body.length).toBe(1); // 1音だけ
+    expect(body[0]!.key).toBe(67); // 最上声
+  });
+});
+
+describe("B. フレーム丸め句内ドリフト（絶対拍グリッド量子化）", () => {
+  it("♩=132 の8分×16音：各音の累積フレーム位置（先頭休符除く）= round(k·0.5·spb·FPS) と完全一致", () => {
+    const bpm = 132;
+    const spb = 60 / bpm;
+    const src = Array.from({ length: 16 }, (_, k) => ({ pitch: 62, start: k * 0.5, dur: 0.5, syllable: "ら" }));
+    const s = notesToScore(src, bpm);
+    // 本体（連続 8分＝gap 休符なし）の累積フレーム位置＝各音のオンセット位置。
+    const frames = bodyFrames(s);
+    let acc = 0;
+    for (let k = 0; k < 16; k++) {
+      expect(acc).toBe(Math.round(k * 0.5 * spb * FPS)); // オンセット位置＝絶対拍グリッド
+      acc += frames[k]!;
+    }
+  });
+});
+
+describe("A. オクターブ独立正規化（ensemblePitches＝forcedShift で分割前後の輪郭を固定）", () => {
+  it("1本メロを前半/後半に割り forcedShift=全体shift で歌わせると shift 一致・境界音程は真の音程", () => {
+    const src = [72, 74, 76, 79, 81, 83, 84, 86]; // 後半はバンド上限超＝独立だと別シフトになる
+    const first = src.slice(0, 4);
+    const second = src.slice(4);
+    const shift = chooseOctaveShift(src); // 全体（ensemble）で決めた唯一のシフト（=-12）
+    const sFirst = notesToScore(first.map((p, i) => ({ pitch: p, start: i, dur: 1, syllable: "ら" })), 120, { forcedShift: shift });
+    const sSecond = notesToScore(second.map((p, i) => ({ pitch: p, start: i, dur: 1, syllable: "ら" })), 120, { forcedShift: shift });
+    expect(sFirst.shift).toBe(sSecond.shift); // 分割前後で同一シフト（＝境界で k×12 が割れない）
+    // 境界音程＝真の音程（79→81 = +2）。独立正規化だと -10 に跳ぶ（輪郭破壊）。
+    const lastFirst = sFirst.notes.filter((n) => n.key != null).slice(-1)[0]!.key!;
+    const firstSecond = sSecond.notes.filter((n) => n.key != null)[0]!.key!;
+    expect(firstSecond - lastFirst).toBe(2);
+  });
+  it("forcedShift=undefined は現状の chooseOctaveShift＝bit一致（単一子＝ensemble==自分で回帰ゼロ）", () => {
+    const src = [{ pitch: 84, start: 0, dur: 1, syllable: "ら" }, { pitch: 86, start: 1, dur: 1, syllable: "ら" }];
+    const plain = notesToScore(src, 120);
+    const forced = notesToScore(src, 120, { forcedShift: chooseOctaveShift(src.map((n) => n.pitch)) });
+    expect(JSON.stringify(forced.notes)).toBe(JSON.stringify(plain.notes)); // score が一致＝singHash も一致
+    expect(forced.shift).toBe(plain.shift);
   });
 });
 

@@ -240,10 +240,12 @@ export const api = {
   //   ネタ紐付け歌唱は MCP verb sing_neta が /neta/:id/sing を担うため api 側エンドポイントは残置＝web からは未使用。）
   // 返り＝{assetId, shift(音域移調 半音), clamped(丸めた音数), leadRestSec(#13c 先頭休符長 秒＝仮歌カウントイン量 SSOT)}。
   // 同一入力は既存 asset 再利用（自然キャッシュ）。
-  sing: (notes: { pitch: number; start: number; dur: number; syllable?: string }[], bpm: number, speaker?: number) =>
+  // ensemblePitches＝Section で同時に歌う全子の結合音高。渡すとサーバが結合レンジで唯一のオクターブシフトを決め、
+  // 子ごと独立ジョブでも境界で輪郭が跳ばない（A 修正）。単一子時は自分の音高＝従来と同一 wav（bit一致）。
+  sing: (notes: { pitch: number; start: number; dur: number; syllable?: string }[], bpm: number, speaker?: number, ensemblePitches?: number[]) =>
     http<{ assetId: string; shift: number; clamped: number; speaker: number; leadRestSec: number }>("/sing", {
       method: "POST",
-      body: JSON.stringify({ notes, bpm, ...(speaker != null ? { speaker } : {}) }),
+      body: JSON.stringify({ notes, bpm, ...(speaker != null ? { speaker } : {}), ...(ensemblePitches && ensemblePitches.length ? { ensemblePitches } : {}) }),
     }),
 
   // #83 song overlay（段階／次の一手）＋ neta_asset（資産紐付け）

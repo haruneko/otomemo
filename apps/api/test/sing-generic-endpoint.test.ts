@@ -65,8 +65,8 @@ describe("POST /sing（汎用歌唱・Section 仮歌）", () => {
     const j = r.json() as { assetId: string; shift: number; clamped: number; speaker: number };
     expect(j.assetId).toBeTruthy();
     expect(j.speaker).toBe(3010);
-    // singGeneric に notes・bpm・speaker を渡している
-    expect(singGeneric).toHaveBeenCalledWith(core, expect.any(Array), 96, 3010);
+    // singGeneric に notes・bpm・speaker を渡している（ensemble 未指定＝forcedShift undefined）
+    expect(singGeneric).toHaveBeenCalledWith(core, expect.any(Array), 96, 3010, undefined);
     // 資産は audio kind で配信でき、どのネタにも render リンクされていない（汎用＝紐付けない）。
     const asset = core.getAsset(j.assetId)!;
     expect(asset.kind).toBe("audio");
@@ -77,7 +77,15 @@ describe("POST /sing（汎用歌唱・Section 仮歌）", () => {
   it("bpm 省略時は 120 を渡す", async () => {
     const r = await app.inject({ method: "POST", url: "/sing", payload: { notes: [{ pitch: 60, start: 0, dur: 1, syllable: "な" }] } });
     expect(r.statusCode).toBe(200);
-    expect(singGeneric).toHaveBeenCalledWith(core, expect.any(Array), 120, undefined);
+    expect(singGeneric).toHaveBeenCalledWith(core, expect.any(Array), 120, undefined, undefined);
+  });
+
+  it("A. ensemblePitches を渡すと chooseOctaveShift(ensemble) を forcedShift として singGeneric に渡す", async () => {
+    // ensemble=[84,86]（バンド上限超）→ chooseOctaveShift=-24 が forcedShift として届く（子ごと独立正規化の割れ防止）。
+    const notes = [{ pitch: 84, start: 0, dur: 1, syllable: "ら" }];
+    const r = await app.inject({ method: "POST", url: "/sing", payload: { notes, bpm: 120, ensemblePitches: [84, 86] } });
+    expect(r.statusCode).toBe(200);
+    expect(singGeneric).toHaveBeenCalledWith(core, expect.any(Array), 120, undefined, -24);
   });
 
   it("502 when synthesis fails (engine 未起動/60秒超 等)", async () => {
