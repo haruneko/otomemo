@@ -36,7 +36,7 @@ import type { SkeletonDeskTarget } from "./components/SkeletonDesk";
 import { projectTag } from "./project";
 
 const ACTIVE_PROJECT_KEY = "cm-active-project";
-// アプリ表示名（ヘッダ左のロゴ）。リポジトリ名(sketch-it)とは別。「音メモ＝手早く音を出してメモ」。
+// アプリ表示名（ヘッダ左のロゴ）＝リポジトリ名 otomemo と一致。「音メモ＝手早く音を出してメモ」。
 const APP_NAME = "Otomemo";
 
 export function App() {
