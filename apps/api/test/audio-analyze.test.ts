@@ -304,7 +304,7 @@ describe("① アナリーゼ（audio_analyze）", () => {
     const claimed = core.claimQueued(["audio_analyze"])!;
     // 実際の run() reject 形状＝`<絶対パス>/python failed (1): <stderr にパス>`。
     await runAudioAnalyzeJob(core, claimed, async () => "", async () => {
-      throw new Error("/home/shuraba_p/projects/creative_manager/_audio_poc/.venv/bin/python failed (1): No such file: /tmp/cm-audio-xxx/dl.mp3");
+      throw new Error("/home/shuraba_p/projects/creative_manager/apps/audio/.venv/bin/python failed (1): No such file: /tmp/cm-audio-xxx/dl.mp3");
     });
     const err = core.getJob(claimed.id)!.error!;
     expect(err).not.toContain("/home/shuraba_p"); // 内部絶対パスが出ない

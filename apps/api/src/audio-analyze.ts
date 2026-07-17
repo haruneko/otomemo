@@ -1,5 +1,5 @@
 // ① アナリーゼ（音源解析）の api 内実行器。継続調査(research-runner)と同じ骨格：
-// audio_analyze job → ここで Python音声CLI(_audio_poc/analyze.py)を叩き {facts} → Claude が
+// audio_analyze job → ここで Python音声CLI(apps/audio/analyze.py)を叩き {facts} → Claude が
 // アナリーゼ文に統合 → reaper が知見ネタ化 → トレイ。音源/stem は解析後に削除（著30-4＝派生事実のみ残す）。
 import { spawn } from "node:child_process";
 import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -13,9 +13,9 @@ import type { Core } from "./core";
 import type { Job } from "./types";
 
 const REPO = resolve(import.meta.dirname, "../../.."); // apps/api/src → リポジトリルート
-const PY = process.env.CM_AUDIO_PY ?? join(REPO, "_audio_poc/.venv/bin/python");
-const SCRIPT = process.env.CM_AUDIO_SCRIPT ?? join(REPO, "_audio_poc/analyze.py");
-const YTDLP = process.env.CM_YTDLP ?? join(REPO, "_audio_poc/.venv/bin/yt-dlp");
+const PY = process.env.CM_AUDIO_PY ?? join(REPO, "apps/audio/.venv/bin/python");
+const SCRIPT = process.env.CM_AUDIO_SCRIPT ?? join(REPO, "apps/audio/analyze.py");
+const YTDLP = process.env.CM_YTDLP ?? join(REPO, "apps/audio/.venv/bin/yt-dlp");
 
 // 子プロセスを spawn し stdout を集める。timeout / signal(停止) で detached プロセスグループごと kill。
 function run(cmd: string, args: string[], timeoutMs: number, signal?: AbortSignal): Promise<string> {

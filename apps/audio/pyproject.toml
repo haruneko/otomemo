@@ -1,11 +1,14 @@
 [project]
 name = "cm-audio"
 version = "0.0.0"
-description = "creative_manager 音声サイドカー。apps/api(TS)が _audio_poc/.venv/bin/python から spawn する Python スクリプトの依存宣言。analyze.py=音源解析(librosa/demucs htdemucs 分離)・accent.py=日本語アクセント抽出(pyopenjtalk)。生死表は README.md 参照。"
+description = "creative_manager 音声サイドカー。apps/api(TS)が apps/audio/.venv/bin/python から spawn する Python スクリプトの依存宣言。analyze.py=音源解析(librosa/demucs htdemucs 分離)・accent.py=日本語アクセント抽出(pyopenjtalk)。生死表は README.md 参照。"
 requires-python = ">=3.12"
 # トップレベル依存＝スクリプトが直接使うものだけ宣言。transitive は uv.lock が固定。
-# analyze.py: librosa/numpy(音響解析) + torch/demucs/soundfile(htdemucs 音源分離) + yt-dlp(URL DL)
+# analyze.py: librosa/numpy(音響解析) + torch/demucs/soundfile(htdemucs 音源分離)
+#           + pesto(f0/メロ輪郭・basic-pitchは不採用) + yt-dlp(URL DL)
+#           + BTC-ISMIR19(コード検出・sys.path流用の外部repo)が mir_eval/pretty_midi/pandas を import
 # accent.py : pyopenjtalk(日本語読み・アクセント辞書)
+# ※ mido は pretty-midi が、tqdm/six 等は transitive で入る（uv.lock が固定）。
 dependencies = [
     "librosa==0.11.0",
     "numpy==2.4.6",
@@ -17,6 +20,10 @@ dependencies = [
     "torchaudio==2.11.0",
     "pyopenjtalk==0.4.1",
     "yt-dlp==2026.7.4",
+    "pesto-pitch==2.0.1",
+    "mir-eval==0.8.2",
+    "pretty-midi==0.2.11",
+    "pandas==3.0.3",
 ]
 
 # パッケージ化しない（analyze.py/accent.py は spawn で直接叩く素のスクリプト。ビルド不要）。

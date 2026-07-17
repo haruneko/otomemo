@@ -24,16 +24,16 @@ apps/web/e2e/__screenshots__/
 apps/web/.cache/
 
 _quarantine/
-# _audio_poc: uvプロジェクト＝ソース(*.py)+依存宣言(pyproject.toml/uv.lock)は追跡、venv/巨大依存/生成物は無視。
-_audio_poc/.venv/
-_audio_poc/__pycache__/
-_audio_poc/BTC-ISMIR19/
-_audio_poc/*.wav
-_audio_poc/*.pt
-_audio_poc/*.mp3
-_audio_poc/*.mid
-_audio_poc/venv-f1/
-_audio_poc/venv-f2/
-_audio_poc/*.out
-_audio_poc/*.err
+# apps/audio (旧_audio_poc・2026-07-17移動): uvプロジェクト＝ソース(*.py)+依存宣言(pyproject.toml/uv.lock)は追跡、venv/巨大依存/生成物は無視。
+apps/audio/.venv/
+apps/audio/__pycache__/
+apps/audio/BTC-ISMIR19/
+apps/audio/*.wav
+apps/audio/*.pt
+apps/audio/*.mp3
+apps/audio/*.mid
+apps/audio/venv-f1/
+apps/audio/venv-f2/
+apps/audio/*.out
+apps/audio/*.err
 logs/ui-audit-*/

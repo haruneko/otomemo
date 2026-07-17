@@ -1,4 +1,4 @@
-// W-K1 アクセント自動注入：_audio_poc/accent.py（pyopenjtalk）を叩いて日本語アクセント核を取り、
+// W-K1 アクセント自動注入：apps/audio/accent.py（pyopenjtalk）を叩いて日本語アクセント核を取り、
 // analyzeLyricFit(opts.accents) へ供給する薄い spawn ヘルパ。audio-analyze.ts の run() と同型
 // （detached spawn＋timeout＋abort でプロセスグループ kill＋stdout から JSON 抽出）。
 // 正典＝docs/research/2026-07-15-kariuta-accent-feasibility.md（L3・spawn 0.13〜0.23秒/回＝都度起動で十分）。
@@ -7,8 +7,8 @@ import { join, resolve } from "node:path";
 import type { AccentEntry } from "@cm/music-core";
 
 const REPO = resolve(import.meta.dirname, "../../.."); // apps/api/src → リポジトリルート
-const PY = process.env.CM_ACCENT_PY ?? join(REPO, "_audio_poc/.venv/bin/python");
-const SCRIPT = process.env.CM_ACCENT_SCRIPT ?? join(REPO, "_audio_poc/accent.py");
+const PY = process.env.CM_ACCENT_PY ?? join(REPO, "apps/audio/.venv/bin/python");
+const SCRIPT = process.env.CM_ACCENT_SCRIPT ?? join(REPO, "apps/audio/accent.py");
 
 // accent.py の1文ぶんの出力（phrases＝アクセント句ごとの {moras数, kernel核位置}）。
 export interface AccentPhrase { moras: number; kernel: number }

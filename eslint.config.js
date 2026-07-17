@@ -17,7 +17,7 @@ export default tseslint.config(
       "**/*.config.js",
       "**/*.config.ts",
       "_dogfood_ui/**",
-      "_audio_poc/**",
+      "apps/audio/**",
       "apps/worker/**",
       "apps/web/playwright*/**",
       "apps/web/e2e/**",
