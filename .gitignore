@@ -32,4 +32,8 @@ _audio_poc/*.wav
 _audio_poc/*.pt
 _audio_poc/*.mp3
 _audio_poc/*.mid
+_audio_poc/venv-f1/
+_audio_poc/venv-f2/
+_audio_poc/*.out
+_audio_poc/*.err
 logs/ui-audit-*/
