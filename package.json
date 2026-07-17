@@ -1,6 +1,7 @@
 {
   "name": "creative_manager",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.11.0",
   "scripts": {
