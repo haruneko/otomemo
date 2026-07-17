@@ -36,4 +36,7 @@ apps/audio/venv-f1/
 apps/audio/venv-f2/
 apps/audio/*.out
 apps/audio/*.err
+
+# _dogfood_ui: ドッグフード用UIスクショ/計測スクリプト＝リポジトリから外す（README用画像は docs/images/ に別途配置）。
+_dogfood_ui/
 logs/ui-audit-*/
