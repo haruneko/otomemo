@@ -403,7 +403,7 @@ h1 {
 /* ⚡2 select 共通テーマ：素の <select> がネイティブの明るい枠で浮くのを解消。
    appearance を殺してダークトークンで塗り、右端にシェブロン矢印を自前描画（テーマ統一）。
    個別に background を上書きする既存ルールは background-color へ寄せてあり、この矢印を保つ。
-   .chord-row select だけは幅54–64pxの中央寄せ＝矢印が字に被るので shorthand のまま矢印を出さない。 */
+   .chord-sheet-selects select だけは中央寄せ＝矢印が字に被るので shorthand のまま矢印を出さない。 */
 select {
   appearance: none;
   -webkit-appearance: none;

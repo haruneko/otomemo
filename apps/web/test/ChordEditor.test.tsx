@@ -5,123 +5,118 @@ import { ChordEditor } from "../src/components/ChordEditor";
 
 afterEach(() => vi.useRealTimers());
 
-describe("ChordEditor", () => {
-  it("adds a chord with ＋コード（1コード以上のとき＝フット追記）", async () => {
+describe("ChordEditor（折り返しブロックタイムライン・#26）", () => {
+  it("末尾の＋（追加）でコードを足す＝直前の複製→reflow", async () => {
     const onChange = vi.fn();
-    // ＋コードフットは1コード以上のときだけ（空はガイド表示中で非表示・二重解消）。
     render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />);
-    await userEvent.click(screen.getByRole("button", { name: "＋コード" }));
+    await userEvent.click(screen.getByLabelText("chord-append"));
+    // insertAt(chords, len)＝末尾を複製（root0/quality""/dur4 → 同じ）＋reflow。
     expect(onChange).toHaveBeenCalledWith([
       { root: 0, quality: "", start: 0, dur: 4 },
       { root: 0, quality: "", start: 4, dur: 4 },
     ]);
   });
 
-  it("空状態＝初手ガイド表示中は旧「＋コード」ボタン＋「左から順に並びます」ヒントを出さない（二重解消）", () => {
+  it("空状態＝初手ガイド（place-first-chord / pick-progression）を出す。タイムラインは出さない", () => {
     const onChange = vi.fn();
     render(<ChordEditor chords={[]} onChange={onChange} />);
-    // 中央の初手ガイドは出る。
     expect(screen.getByLabelText("place-first-chord")).toBeInTheDocument();
-    // 旧フットの「＋コード」ボタンとヒント文は空のとき非表示（ガイドと二重にしない）。
-    expect(screen.queryByRole("button", { name: "＋コード" })).toBeNull();
-    expect(screen.queryByText("左から順に並びます")).toBeNull();
+    expect(screen.queryByLabelText("chord-timeline")).toBeNull();
+    expect(screen.queryByLabelText("chord-append")).toBeNull();
   });
 
-  it("拡張を足して quality 合成（m に 7 = m7・単発）", async () => {
+  it("ブロックをタップ→シートで拡張を足して quality 合成（m に 7 = m7）", async () => {
     const onChange = vi.fn();
-    render(
-      <ChordEditor chords={[{ root: 0, quality: "m", start: 0, dur: 4 }]} onChange={onChange} />,
-    );
-    await userEvent.selectOptions(screen.getByLabelText("ext-0"), "7"); // m + 7 = m7
+    render(<ChordEditor chords={[{ root: 0, quality: "m", start: 0, dur: 4 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("block-0")); // シートを開く
+    await userEvent.selectOptions(screen.getByLabelText("sheet-ext"), "7"); // m + 7 = m7
     expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "m7", start: 0, dur: 4 }]);
   });
 
-  it("三和音を maj→m に変えると quality も追従（7th 維持 7→m7）", async () => {
+  it("シートで三和音 maj→m（7th 維持 7→m7）", async () => {
     const onChange = vi.fn();
-    render(
-      <ChordEditor chords={[{ root: 0, quality: "7", start: 0, dur: 4 }]} onChange={onChange} />,
-    );
-    await userEvent.selectOptions(screen.getByLabelText("triad-0"), "m"); // C7 → Cm7
+    render(<ChordEditor chords={[{ root: 0, quality: "7", start: 0, dur: 4 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("block-0"));
+    await userEvent.selectOptions(screen.getByLabelText("sheet-triad"), "m"); // C7 → Cm7
     expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "m7", start: 0, dur: 4 }]);
   });
 
-  it("三和音 maj で長7に＝C7(空欄)→Cmaj7(maj)", async () => {
+  it("シートで三和音 maj＝C7(空欄)→Cmaj7(maj)", async () => {
     const onChange = vi.fn();
-    render(
-      <ChordEditor chords={[{ root: 0, quality: "7", start: 0, dur: 4 }]} onChange={onChange} />,
-    );
-    await userEvent.selectOptions(screen.getByLabelText("triad-0"), "maj"); // C7 → Cmaj7
+    render(<ChordEditor chords={[{ root: 0, quality: "7", start: 0, dur: 4 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("block-0"));
+    await userEvent.selectOptions(screen.getByLabelText("sheet-triad"), "maj"); // C7 → Cmaj7
     expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "maj7", start: 0, dur: 4 }]);
   });
 
-  it("removes a chord", async () => {
-    const onChange = vi.fn();
-    render(
-      <ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />,
-    );
-    await userEvent.click(screen.getByLabelText("remove-chord-0"));
-    expect(onChange).toHaveBeenCalledWith([]);
-  });
-
-  it("長さボタンで dur を変え、start は順番から自動フローする（CV1）", async () => {
+  it("消しゴムモード：ブロックをタップ→削除（removeAt→reflow）", async () => {
     const onChange = vi.fn();
     render(
       <ChordEditor
-        chords={[
-          { root: 0, quality: "", start: 0, dur: 4 },
-          { root: 7, quality: "", start: 4, dur: 4 },
-        ]}
+        chords={[{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }]}
         onChange={onChange}
       />,
     );
-    await userEvent.click(screen.getByLabelText("len-0-2")); // 1つ目を2拍に
-    // 1つ目 dur=2 → 2つ目 start は自動で 2 に詰まる（手入力でない）
+    await userEvent.click(screen.getByLabelText("mode-erase")); // 消しゴムへ
+    await userEvent.click(screen.getByLabelText("block-0")); // 1つ目を外す
+    expect(onChange).toHaveBeenCalledWith([{ root: 7, quality: "", start: 0, dur: 4 }]);
+  });
+
+  it("シートの削除ボタンでも消せる", async () => {
+    const onChange = vi.fn();
+    render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("block-0"));
+    await userEvent.click(screen.getByLabelText("sheet-delete"));
+    expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it("シートの長さボタンで dur を変え、start は順番から自動フロー", async () => {
+    const onChange = vi.fn();
+    render(
+      <ChordEditor
+        chords={[{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }]}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getByLabelText("block-0"));
+    await userEvent.click(screen.getByLabelText("sheet-len-2")); // 1つ目を2拍に
     expect(onChange).toHaveBeenCalledWith([
       { root: 0, quality: "", start: 0, dur: 2 },
       { root: 7, quality: "", start: 2, dur: 4 },
     ]);
   });
 
-  it("付点ボタン（行ごと）で長さ×1.5（1拍→1.5＝6/8の付点四分・#2）", async () => {
+  it("シートの付点ボタンで長さ×1.5（1拍→1.5）", async () => {
     const onChange = vi.fn();
     render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 1 }]} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("dot-0")); // その行を付点に
+    await userEvent.click(screen.getByLabelText("block-0"));
+    await userEvent.click(screen.getByLabelText("sheet-dot"));
     expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 1.5 }]);
   });
 
-  it("付点ボタンはトグル（付点1.5→等倍1）＋長さボタンは付点を引き継ぐ", async () => {
+  it("＋シーム挿入＝境界に直前コードを複製→reflowで以降を右送り", async () => {
     const onChange = vi.fn();
-    const { rerender } = render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 1.5 }]} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("dot-0")); // 付点を外す → 1
-    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 1 }]);
-    // 付点1.5拍の行で「2拍」を押すと付点を引き継いで 3
-    rerender(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 1.5 }]} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("len-0-2"));
-    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 3 }]);
+    render(
+      <ChordEditor
+        chords={[{ root: 0, quality: "maj7", start: 0, dur: 4 }, { root: 7, quality: "7", start: 4, dur: 2 }]}
+        onChange={onChange}
+      />,
+    );
+    // block-0 の右境界＝seam-1（コード0と1の間）。直前=chords[0] を複製。
+    await userEvent.click(screen.getByLabelText("seam-1"));
+    expect(onChange).toHaveBeenCalledWith([
+      { root: 0, quality: "maj7", start: 0, dur: 4 },
+      { root: 0, quality: "maj7", start: 4, dur: 4 }, // duplicate of chord0
+      { root: 7, quality: "7", start: 8, dur: 2 },
+    ]);
   });
 
-  it("長さボタン単発（1拍=1）", async () => {
-    const onChange = vi.fn();
-    render(<ChordEditor chords={[{ root: 0, quality: "", start: 0, dur: 4 }]} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("len-0-1"));
-    expect(onChange).toHaveBeenLastCalledWith([{ root: 0, quality: "", start: 0, dur: 1 }]);
-  });
-
-  it("空状態＝初手ガイド：『最初のコードを置く』で1コード追加（#6）", async () => {
+  it("空状態＝『よく使う進行から選ぶ』で定番進行を流し込む（#6）", async () => {
     const onChange = vi.fn();
     render(<ChordEditor chords={[]} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("place-first-chord"));
-    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 4 }]);
-  });
-
-  it("空状態＝『よく使う進行から選ぶ』で定番進行チップを表示→選ぶと流し込む（#6）", async () => {
-    const onChange = vi.fn();
-    render(<ChordEditor chords={[]} onChange={onChange} />);
-    // 初期はチップ非表示
     expect(screen.queryByLabelText("popular-progressions")).toBeNull();
     await userEvent.click(screen.getByLabelText("pick-progression"));
     expect(screen.getByLabelText("popular-progressions")).toBeTruthy();
-    // 王道 I–V–vi–IV を選ぶ＝C→G→Am→F、start は順番から自動フロー
     await userEvent.click(screen.getByLabelText("prog-王道 I–V–vi–IV"));
     expect(onChange).toHaveBeenCalledWith([
       { root: 0, quality: "", start: 0, dur: 4 },
@@ -131,21 +126,25 @@ describe("ChordEditor", () => {
     ]);
   });
 
-  it("highlights the chord under the playhead beat while playing (#76)", () => {
+  it("空状態＝『最初のコードを置く』で1コード追加（#6）", async () => {
+    const onChange = vi.fn();
+    render(<ChordEditor chords={[]} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("place-first-chord"));
+    expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 4 }]);
+  });
+
+  it("再生中はプレイヘッド下のブロックが .playing（#76）", () => {
     vi.useFakeTimers();
     const chords = [
       { root: 0, quality: "", start: 0, dur: 4 },
       { root: 7, quality: "", start: 4, dur: 4 },
     ];
     const beatRef = { current: 5 }; // 2つ目のコード(4..8)内
-    const { container } = render(
-      <ChordEditor chords={chords} onChange={() => {}} beatRef={beatRef} playing />,
-    );
+    render(<ChordEditor chords={chords} onChange={() => {}} beatRef={beatRef} playing />);
     act(() => {
       vi.advanceTimersByTime(120);
     });
-    const rows = container.querySelectorAll(".chord-row");
-    expect(rows[0]!.className).not.toContain("playing");
-    expect(rows[1]!.className).toContain("playing");
+    expect(screen.getByLabelText("block-0").className).not.toContain("playing");
+    expect(screen.getByLabelText("block-1").className).toContain("playing");
   });
 });

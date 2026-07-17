@@ -3,7 +3,8 @@
 スペック層（requirements/architecture/design）にも Task 機能にも載せきれない「いつかやる／保留」をここに貯める。
 着手したら Task 化して、ここからは消すか「→ #NN」と印を付ける。最終更新を都度書く。
 
-最終更新: 2026-07-14（コード楽器arp 幅/区切り・全GM・コード楽器2音色/MIDI音色バグ修正・骨格フォーム回帰skelForm S1/S2・一曲書くE2E受け入れ〈機能/デザイン監査を分離実施〉を反映。耳確認未消化＋デザイン据え置き1件〈極小ブロック〉を追記。**WP-D2（シンコペレンズ＋humanize較正）実装済＝残タスクを下に追記**）
+最終更新: 2026-07-18（コード進行エディタ タイムライン化 #26 の設計確定に伴う後回し群を末尾に追加＝SectionEditor 折り返し対応/表示トグル/他エディタ一般化/再生ハイライト/ボイシング編集レイヤ。いずれもコード編集の折り返しが実地良好とオーナー確認後がゲート）
+旧: 2026-07-14（コード楽器arp 幅/区切り・全GM・コード楽器2音色/MIDI音色バグ修正・骨格フォーム回帰skelForm S1/S2・一曲書くE2E受け入れ〈機能/デザイン監査を分離実施〉を反映。耳確認未消化＋デザイン据え置き1件〈極小ブロック〉を追記。**WP-D2（シンコペレンズ＋humanize較正）実装済＝残タスクを下に追記**）
 
 ## WP-D2（シンコペ密度レンズ＋humanize知覚較正・2026-07-14実装）の残り
 正典＝design.md「humanize 知覚較正」「シンコペ密度スコア＋ノリレンズ」節＋research `2026-07-14-humanize-perception-defaults.md`／`-syncopation-sweet-spot.md`。実装済＝music-core `syncopation.ts`（lhlSyncScore/metricWeights/noriMeter/sectionNoriLens）＋applyFeel の 1/f 化＋部位別 ms リミット＋ヨレ警告、api `syncopationReport.ts`（gen_melody/bass/drums 候補へ meta.sync 添付・MCP/HTTP 両経路）、web「人間味」ノブの段/説明更新＋playback applyFeel に tempo 結線。以下は明示的に送った残：
@@ -291,3 +292,11 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - **localKey 調テンプレ相関emission**：現プロトは「窓内最強三和音」emission＝半音階の濃い曲（DeepSea）で13分割。根治は調プロファイル相関への差し替え（resolveTonic再利用では届かない・F3 doc に記録）。
 - **PESTO 生歌追検証（耳）**：F2の正解はボカロ的レンダー1曲＝絶対値は楽観。生歌別曲で耳＋数値の追検証1回（オーナー手番を含む）。
 - **get_job も chat面射影の対象に**（2026-07-15・蜿蜒アナリーゼ実走で発見）：A2 は read_neta/search を射影したが `get_job` は素通し＝audio_analyze 完了ジョブを引くと生facts 634K文字が丸ごと返る。チャットが get_job でジョブ結果を確認する動線で同じコンテキスト爆発。read_neta と同じ要約射影（facts→統計＋prose）を get_job の result にも。
+
+## コード進行エディタ タイムライン化（#26）の後回し（2026-07-18・検証ゲート付き）
+正典＝design.md #26／research `2026-07-18-chord-editor-timeline.md`。**ゲート＝コード編集の折り返しタイムラインが実地で良好とオーナー耳/手確認できてから**着手（投機的な全書き換えを避ける）。#26 本体（ChordEditor のタイムライン化＝折り返し容器＋ブロック＋ピッカーシート＋＋シーム挿入/消しゴム削除）は着手時に Task 化。以下は #26 が生む "共有容器を他へ広げる" 派生：
+- **SectionEditor の折り返し対応**：#26 で factor する `WrapTimeline` 容器へ差し替え（横スクロール⇄折り返しを選べる容器に）。D&D（dnd-kit droppable セル）・loop ドラッグ（`loopPositions`）・mute/collapse・playhead（`--phb` の px 追従）を**折り返し座標系**へ移す＝成熟コード（SectionEditor 845行）を触るので高リスク・要縦スライス＋回帰。
+- **折り返し⇄横スクロールの表示トグル**：一覧性（折り返し）と兄弟性（横スクロール＝Section と同挙動）の両取り。まずコード編集に付け、良ければ Section にも。
+- **他エディタ（PianoRoll メロ／ChordPatternEditor リズム）への折り返し一般化**：共有容器 `WrapTimeline` の再利用。長い進行/長尺メロの一覧性が要るかは実地で判断してから。
+- **再生中コードのブロックハイライト**：タイムライン化で `.lane-block.playing`／赤左border が自然＝#76 の「行ハイライトは no-rerender 設計と相性悪い」課題を吸収。`usePlayhead --phb` 駆動で実装（#26 本体に含めるか別スライスかは着手時判断）。
+- **ボイシング編集レイヤ（ピアノロールで和音を手で積む）**：#26 で「ピアノロール入力は主入力に不採用」と決めたが、"ボイシングを自分で決めたい" 要求は**別機能**として切り出す余地（スキーマ拡張＝voicing 保存が前提）。現状は響き層（ChordPatternEditor の top/open-close/arp）で足りるか要判断。
