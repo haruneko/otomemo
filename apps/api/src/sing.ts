@@ -178,6 +178,49 @@ async function engineUp(timeoutMs = 1500): Promise<boolean> {
   } catch { return false; }
 }
 
+// ── 歌わせる声の列挙（設計 docs/research/2026-07-17-voicevox-voice-selection.md ②） ────────────
+// engine 問い合わせを本命・curated をフォールバック。列挙のために engine を spawn しない（起きている時だけ ping→/singers）。
+// 声＝frame_decode スタイル id（声色）。type=sing の 6000（query 専用モデル）と talk は選択肢に出さない。
+export interface SingVoice { id: number; character: string; style: string }
+
+// engine 不要フォールバック＝curated 表（web 側 music.ts の CURATED_SING_VOICES と対）。既定 3009 は api 既定と一致。
+export const CURATED_SING_VOICES: SingVoice[] = [
+  { id: 3009, character: "波音リツ", style: "ノーマル" }, // 既定（DEFAULT_FRAME_DECODE）
+  { id: 3003, character: "ずんだもん", style: "ノーマル" },
+  { id: 3002, character: "四国めたん", style: "ノーマル" },
+  { id: 3008, character: "春日部つむぎ", style: "ノーマル" },
+  { id: 3010, character: "雨晴はう", style: "ノーマル" },
+  { id: 3065, character: "波音リツ", style: "クイーン" },
+];
+
+// /singers レスポンス（各キャラ×styles）から frame_decode のみ {id,character,style} で抽出（純関数・TDD）。
+interface RawSinger { name: string; styles?: { id: number; name: string; type?: string }[] }
+export function frameDecodeVoices(singers: RawSinger[]): SingVoice[] {
+  const out: SingVoice[] = [];
+  for (const s of singers) {
+    for (const st of s.styles ?? []) {
+      if (st.type === "frame_decode") out.push({ id: st.id, character: s.name, style: st.name });
+    }
+  }
+  return out;
+}
+
+// 起きている engine の /singers を frame_decode で絞って返す。engine 未起動 or 想定外レスポンスは curated へフォールバック。
+// **spawn しない**（ensureEngine を呼ばない）＝ドロップダウンを開くたび VOICEVOX を起こさない（設計の地雷）。
+// fetchImpl はテスト注入口（既定は global fetch）。ping(/version)→/singers の 2 段で up 判定と列挙を1経路に。
+export async function listSingVoices(fetchImpl: typeof fetch = fetch): Promise<SingVoice[]> {
+  try {
+    const ver = await fetchImpl(`${VV_URL}/version`, { signal: AbortSignal.timeout(1500) });
+    if (!ver.ok) return CURATED_SING_VOICES; // engine down＝curated（spawn しない）
+    const r = await fetchImpl(`${VV_URL}/singers`, { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) return CURATED_SING_VOICES;
+    const voices = frameDecodeVoices((await r.json()) as RawSinger[]);
+    return voices.length ? voices : CURATED_SING_VOICES; // frame_decode ゼロ＝想定外＝curated
+  } catch {
+    return CURATED_SING_VOICES; // ping 例外（未起動）等＝curated
+  }
+}
+
 async function ensureEngine(): Promise<void> {
   if (await engineUp()) return;
   if (!existsSync(join(VV_DIR, "run"))) throw new Error(`VOICEVOX engine が見つかりません（${VV_DIR}/run）。CM_VOICEVOX_DIR を設定してください`);

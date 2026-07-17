@@ -248,6 +248,9 @@ export const api = {
       body: JSON.stringify({ notes, bpm, ...(speaker != null ? { speaker } : {}), ...(ensemblePitches && ensemblePitches.length ? { ensemblePitches } : {}) }),
     }),
 
+  // ♪歌わせる声の一覧（2026-07-17）＝engine の frame_decode 声色（起動時に一度取得してメモ）。engine 未起動は curated。
+  singVoices: () => http<{ voices: import("./music").SingVoice[] }>("/sing/voices").then((r) => r.voices).catch(() => [] as import("./music").SingVoice[]),
+
   // #83 song overlay（段階／次の一手）＋ neta_asset（資産紐付け）
   getSong: (id: string) => http<SongOverlay>(`/neta/${id}/song`).catch(() => null),
   updateSong: (id: string, patch: { stage?: string | null; next_action?: string | null }) =>

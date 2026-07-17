@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-const { updateNeta, deleteNeta, getRelations, detectKeyFromChords, playNotes, phStart, phStop, getPlacements, vary, getComposition, placeChild, removeChild } =
+const { updateNeta, deleteNeta, getRelations, detectKeyFromChords, playNotes, phStart, phStop, getPlacements, vary, getComposition, placeChild, removeChild, singVoices } =
   vi.hoisted(() => ({
     updateNeta: vi.fn().mockResolvedValue({}),
     deleteNeta: vi.fn().mockResolvedValue({ deleted: true }),
@@ -18,8 +18,13 @@ const { updateNeta, deleteNeta, getRelations, detectKeyFromChords, playNotes, ph
     getComposition: vi.fn(),
     placeChild: vi.fn().mockResolvedValue({ ok: true }),
     removeChild: vi.fn().mockResolvedValue({ ok: true }),
+    // 仮歌の声の列挙（2026-07-17）＝起動時に一度取得。engine 非依存にモック。
+    singVoices: vi.fn().mockResolvedValue([
+      { id: 3009, character: "波音リツ", style: "ノーマル" },
+      { id: 3003, character: "ずんだもん", style: "ノーマル" },
+    ]),
   }));
-vi.mock("../src/api", () => ({ api: { updateNeta, deleteNeta, getRelations, detectKeyFromChords, getPlacements, vary, getComposition, placeChild, removeChild } }));
+vi.mock("../src/api", () => ({ api: { updateNeta, deleteNeta, getRelations, detectKeyFromChords, getPlacements, vary, getComposition, placeChild, removeChild, singVoices } }));
 // Tone を読み込まないよう usePlayhead と playNotes だけ差し替え（他の music エクスポートは実物）
 vi.mock("../src/usePlayhead", () => ({
   usePlayhead: () => ({
@@ -325,6 +330,47 @@ describe("NetaDialog", () => {
     await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("x", expect.objectContaining({ text: "改変" }), undefined));
     expect(screen.queryByLabelText("cow-prompt")).toBeNull(); // 確認は出ない
     expect(getPlacements).not.toHaveBeenCalled(); // そもそも共有判定もしない
+  });
+
+  // ── 仮歌の声（VOICEVOX 声色）選択・案B二段（2026-07-17） ──
+  it("案B：音色で『仮歌（歌声）』を選んだ時だけ『声』ドロップダウンが出る（楽器のままなら出ない）", async () => {
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta")); // メタを開く
+    // 楽器（既定）＝声ドロップダウンは出ない
+    expect(screen.queryByLabelText("voice")).toBeNull();
+    // 音色で「仮歌（歌声）」を選ぶ→声ドロップダウンが現れる
+    await userEvent.selectOptions(screen.getByLabelText("program"), "sing");
+    expect(await screen.findByLabelText("voice")).toBeInTheDocument();
+    // 楽器に戻す→声ドロップダウンは消える
+    await userEvent.selectOptions(screen.getByLabelText("program"), "0");
+    expect(screen.queryByLabelText("voice")).toBeNull();
+  });
+
+  it("声を選ぶと content.sing.speaker に保存／未選択（既定）は speaker キー無し（bit一致）", async () => {
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta"));
+    // 歌声を選ぶ（声は未選択＝既定）→保存 content は speaker キーを持たない（後方互換 bit一致）
+    await userEvent.selectOptions(screen.getByLabelText("program"), "sing");
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    expect(updateNeta.mock.calls.at(-1)![1].content).toEqual({
+      notes: [{ pitch: 60, start: 0, dur: 1 }], program: 0, sing: { enabled: true },
+    });
+    // 声を選ぶ→content.sing.speaker が載る
+    await userEvent.selectOptions(screen.getByLabelText("voice"), "3003");
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta.mock.calls.at(-1)![1].content.sing.speaker).toBe(3003));
+    expect(updateNeta.mock.calls.at(-1)![1].content.sing).toEqual({ enabled: true, speaker: 3003 });
+  });
+
+  it("既存 content.sing.speaker はエディタ初期値に反映される", async () => {
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: { notes: [{ pitch: 60, start: 0, dur: 1 }], sing: { enabled: true, speaker: 3065 } } };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta"));
+    const voice = await screen.findByLabelText("voice");
+    expect((voice as HTMLSelectElement).value).toBe("3065");
   });
 
   it("deletes after confirm", async () => {

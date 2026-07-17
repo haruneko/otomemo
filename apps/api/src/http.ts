@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Core } from "./core";
 import { netaInputSchema, netaPatchSchema, jobInputSchema, scopeEnum, scopeQueryEnum } from "./schemas";
-import { singNeta, singGeneric, resolveSingBpm, chooseOctaveShift } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
+import { singNeta, singGeneric, resolveSingBpm, chooseOctaveShift, listSingVoices } from "./sing"; // ♪歌う（W-K3 VOICEVOX 歌唱出口・MCP verb と共用）
 import {
   genChords,
   genMelody,
@@ -758,6 +758,13 @@ export function buildHttp(core: Core): FastifyInstance {
       // engine 未起動/合成失敗/60秒超は 502（上流依存の失敗）＝web はトーストで拾う。
       return reply.code(502).send({ error: `歌唱に失敗：${e instanceof Error ? e.message : String(e)}` });
     }
+  });
+
+  // ♪歌わせる声の一覧（2026-07-17）：engine の /singers を frame_decode で絞って返す（起きている時だけ）。
+  // engine 未起動は curated フォールバック。**列挙のために engine を spawn しない**（listSingVoices が保証）。
+  // web は起動時に一度取得してメモ＝ドロップダウンの選択肢に使う。
+  app.get("/sing/voices", async () => {
+    return { voices: await listSingVoices() };
   });
 
   // プロジェクト＝一曲(or組曲)の器：配下ネタに紐づくファイルを器単位で集約（S2）。

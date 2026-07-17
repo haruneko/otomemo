@@ -696,6 +696,22 @@ export interface SingSetting {
   enabled: boolean;
   speaker?: number; // 声色（frame_decode id）。未指定＝api 既定（波音リツ）。
 }
+// 仮歌の声（VOICEVOX frame_decode 声色）＝案B二段の「声」ドロップダウンの選択肢（設計 2026-07-17）。
+// curated＝engine 不要の初期口＋フォールバック。起動時 GET /sing/voices で全 81 声（frame_decode）に上書き/合流。
+export interface SingVoice { id: number; character: string; style: string }
+// api 側 CURATED_SING_VOICES と対（既定 3009＝api 既定 DEFAULT_FRAME_DECODE と一致）。query 専用 6000 は出さない。
+export const CURATED_SING_VOICES: SingVoice[] = [
+  { id: 3009, character: "波音リツ", style: "ノーマル" },
+  { id: 3003, character: "ずんだもん", style: "ノーマル" },
+  { id: 3002, character: "四国めたん", style: "ノーマル" },
+  { id: 3008, character: "春日部つむぎ", style: "ノーマル" },
+  { id: 3010, character: "雨晴はう", style: "ノーマル" },
+  { id: 3065, character: "波音リツ", style: "クイーン" },
+];
+export function singVoiceLabel(v: SingVoice): string {
+  return `${v.character}・${v.style}`;
+}
+
 export function singOf(content: unknown): SingSetting | undefined {
   if (content && typeof content === "object") {
     const s = (content as { sing?: unknown }).sing;

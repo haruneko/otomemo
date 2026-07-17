@@ -60,6 +60,9 @@ export function NetaDialog({
         program={ed.program}
         sing={ed.sing}
         setSing={ed.setSing}
+        speaker={ed.singSpeaker}
+        setSpeaker={ed.setSingSpeaker}
+        voices={ed.singVoices}
         tags={ed.tags}
         mood={ed.mood}
         setKey={ed.setKey}

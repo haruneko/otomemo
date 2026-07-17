@@ -3,7 +3,7 @@
 // ※MIDI書き出しは単体編集画面から撤去済（2026-07-04）＝Section の いじる▾ のみ。
 // どの枠を出すかは flags で決める（kind 分岐を集約）。折りたたみ状態(localStorage)と要約はここに閉じる。
 import { useState } from "react";
-import { GM_INSTRUMENTS, GM_ALL_FAMILIES, gmLabel, beatsPerBar, PITCH_NAMES as KEY_NAMES } from "../music";
+import { GM_INSTRUMENTS, GM_ALL_FAMILIES, gmLabel, beatsPerBar, singVoiceLabel, PITCH_NAMES as KEY_NAMES, type SingVoice } from "../music";
 import { NumberField } from "./NumberField";
 import { BarsControl } from "./BarsControl";
 import { Icon } from "./Icon";
@@ -33,6 +33,10 @@ export function MetaPanel(p: {
   program: number;
   sing?: boolean; // #13c メロのみ：楽器＝「仮歌（歌声）」を選んでいるか。true＝▶で VOICEVOX 歌唱（歌詞あれば）。
   setSing?: (v: boolean) => void;
+  // 歌わせる声（VOICEVOX frame_decode 声色）。案B二段＝歌声選択時だけ「声」ドロップダウンを出す（2026-07-17）。
+  speaker?: number; // 未選択（undefined）＝api 既定（波音リツ 3009）。content に speaker キーを書かない＝bit一致。
+  setSpeaker?: (v: number | undefined) => void;
+  voices?: SingVoice[]; // 声の選択肢（curated＋engine frame_decode）。キャラ別 optgroup にまとめる。
   tags: string;
   mood: string;
   setKey: (v: number) => void;
@@ -159,6 +163,34 @@ export function MetaPanel(p: {
                       {fam.names.map((name, i) => (
                         <option key={fi * 8 + i} value={fi * 8 + i}>
                           {name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+            )}
+            {/* 案B二段：歌声を選んだ時だけ「声」ドロップダウンを出す（楽器ピッカーを 81 声で汚さない・2026-07-17）。
+                声はキャラ別 optgroup。未選択＝api 既定（波音リツ）＝content に speaker を書かない（bit一致）。 */}
+            {f.isMelody && p.sing && p.setSpeaker && (
+              <label className="meta">
+                声
+                <select
+                  aria-label="voice"
+                  value={p.speaker != null ? String(p.speaker) : ""}
+                  onChange={(e) => p.setSpeaker!(e.target.value === "" ? undefined : Number(e.target.value))}
+                >
+                  <option value="">既定（波音リツ）</option>
+                  {Object.entries(
+                    (p.voices ?? []).reduce<Record<string, SingVoice[]>>((acc, v) => {
+                      (acc[v.character] ??= []).push(v);
+                      return acc;
+                    }, {}),
+                  ).map(([character, vs]) => (
+                    <optgroup key={character} label={character}>
+                      {vs.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {singVoiceLabel(v)}
                         </option>
                       ))}
                     </optgroup>

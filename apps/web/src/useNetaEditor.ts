@@ -22,7 +22,9 @@ import {
   isCompoundMeter,
   isSkeleton,
   singOf,
+  CURATED_SING_VOICES,
   PITCH_NAMES as KEY_NAMES,
+  type SingVoice,
   type Note,
   type ChordEntry,
   type RhythmContent,
@@ -79,6 +81,10 @@ export function useNetaEditor(
   );
   // #13c 仮歌＝メロの楽器を「歌声」に（content.sing.enabled）。program はフォールバック楽器として保持（歌詞なし時）。
   const [sing, setSing] = useState<boolean>(() => !!singOf(neta.content));
+  // 歌わせる声（VOICEVOX frame_decode 声色 id）。初期＝content.sing.speaker（未設定＝undefined＝api 既定 3009・bit一致）。
+  const [singSpeaker, setSingSpeaker] = useState<number | undefined>(() => singOf(neta.content)?.speaker);
+  // 声の選択肢（案B二段のドロップダウン）。curated を土台に、起動時 GET /sing/voices（frame_decode 全声）を合流。
+  const [singVoices, setSingVoices] = useState<SingVoice[]>(CURATED_SING_VOICES);
   const [rollMode, setRollMode] = useState<"draw" | "select" | "erase" | "lyric">("draw"); // ロールの描く/選ぶ/消す/詞（詞=メロのみ・歌詞リタッチ）
   // #bass S2: 絶対(ピアノロール)/相対(度数グリッド)モード切替。content.mode から初期判別。
   const [bassMode, setBassMode] = useState<"absolute" | "relative">(
@@ -178,7 +184,7 @@ export function useNetaEditor(
   }, [tp.state, tp.playPause, vocal.ensure, vocal.busy]);
 
   // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。
-  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, len, pickup };
+  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, singSpeaker, len, pickup };
   const applySnapshot = useCallback((s: typeof snapshot) => {
     setNotes(s.notes);
     setChords(s.chords);
@@ -195,6 +201,7 @@ export function useNetaEditor(
     setTempo(s.tempo);
     setProgram(s.program);
     setSing(s.sing);
+    setSingSpeaker(s.singSpeaker);
     setLen(s.len);
     setPickup(s.pickup);
   }, []);
@@ -227,6 +234,24 @@ export function useNetaEditor(
     };
   }, [neta.id]);
 
+  // 歌わせる声の一覧（2026-07-17）：メロ編集時に一度取得。engine が起きていれば frame_decode 全声、
+  // ダメなら curated（api 側フォールバック）。curated を土台に union＝選択中 id が一覧に無くても option が消えない。
+  useEffect(() => {
+    if (!isMelody) return;
+    let on = true;
+    void Promise.resolve(api.singVoices?.())
+      .then((vs) => {
+        if (!on || !vs || !vs.length) return;
+        const byId = new Map<number, SingVoice>();
+        for (const v of [...CURATED_SING_VOICES, ...vs]) byId.set(v.id, v); // 後勝ち＝engine の正名を優先
+        setSingVoices([...byId.values()]);
+      })
+      .catch(() => {});
+    return () => {
+      on = false;
+    };
+  }, [neta.id, isMelody]);
+
   // #80 テキスト系ネタは「継続して調べる」テーマになりうる（見てない間に research を回す）
   const isThemeable = !isMusic && !isContainer;
   useEffect(() => {
@@ -252,12 +277,12 @@ export function useNetaEditor(
     }
   }
 
-  // #13c 仮歌の content 断片＝メロで sing 選択時のみ {sing:{enabled,speaker?}}。既存 speaker は温存（UIでは編集しない）。
+  // #13c 仮歌の content 断片＝メロで sing 選択時のみ {sing:{enabled,speaker?}}。声は UI で選べる（案B・2026-07-17）。
+  // singSpeaker 未選択（undefined）＝speaker キーを書かない＝api 既定 3009 に委ねる（後方互換 bit一致）。
   // sing 非選択＝空（content から欠落＝従来楽器＝後方互換）。
   function singContent(): { sing?: { enabled: true; speaker?: number } } {
     if (!(isMelody && sing)) return {};
-    const speaker = singOf(neta.content)?.speaker;
-    return { sing: { enabled: true, ...(speaker != null ? { speaker } : {}) } };
+    return { sing: { enabled: true, ...(singSpeaker != null ? { speaker: singSpeaker } : {}) } };
   }
   // kind ごとの保存パッチ（C基準保存・調/拍はヒント）。
   function savePatch(): NetaPatch {
@@ -487,6 +512,7 @@ export function useNetaEditor(
     // 値＋setter
     title, setTitle, text, setText, tags, setTags, mood, setMood,
     key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram, sing, setSing,
+    singSpeaker, setSingSpeaker, singVoices,
     notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat,
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
     rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
