@@ -172,9 +172,10 @@ export function useNetaEditor(
   });
   // 再生＝歌う設定なら先に wav をレンダ（未キャッシュは「歌声を作っています…」busy）→ 同期再生。停止/一時停止は素通し。
   const playPause = useCallback(async () => {
+    if (vocal.busy) return; // 仮歌レンダ中の再押下＝no-op（ensure 二重発火防止・設計2026-07-17）。Space 経路も同関数で塞がる
     if (tp.state === "stopped" && jobsRef.current.length) await vocal.ensure(jobsRef.current);
     tp.playPause();
-  }, [tp.state, tp.playPause, vocal.ensure]);
+  }, [tp.state, tp.playPause, vocal.ensure, vocal.busy]);
 
   // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。
   const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, len, pickup };

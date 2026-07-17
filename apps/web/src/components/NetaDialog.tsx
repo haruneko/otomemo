@@ -116,12 +116,13 @@ export function NetaDialog({
           onRedo={ed.editHist.redo}
           canUndo={ed.editHist.canUndo}
           canRedo={ed.editHist.canRedo}
+          pending={ed.vocal.busy ? (ed.vocal.progress ? `歌声 ${Math.min(ed.vocal.progress.done + 1, ed.vocal.progress.total)}/${ed.vocal.progress.total}…` : "歌声を作っています…") : null}
         />
       )}
       {ed.singNoLyric && (
         <p className="fit-report" aria-label="sing-fallback">仮歌ですが歌詞(syllable)がありません。詞モードで歌詞を載せるまで既定楽器で鳴らします。</p>
       )}
-      {ed.vocal.busy && <p className="fit-report" aria-label="sing-busy">歌声を作っています…</p>}
+      {/* 「歌声を作っています…」段落は撤去（表示を下端トランスポートに一本化・設計2026-07-17）。msg 報告は残す。 */}
       {ed.vocal.msg && (
         <p className="fit-report" aria-label="sing-report" onClick={() => ed.vocal.setMsg(null)}>
           {ed.vocal.msg} <span className="muted">（タップで消す）</span>

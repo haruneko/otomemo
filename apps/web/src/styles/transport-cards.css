@@ -53,11 +53,36 @@
   text-align: right;
 }
 /* #24 backlog: SF2 読込中だけ出る小さな muted テキスト（位置表示の隣）。完了で消える。 */
+/* 再生ローディング表示（設計2026-07-17）：仮歌レンダ中「歌声 N/M…」もこのスロットを共用（優先順位で1本）。 */
 .sf-loading {
   font-size: 0.78rem;
   color: var(--muted);
   white-space: nowrap;
   opacity: 0.85;
+}
+/* 再生ローディング表示（設計2026-07-17）：▶ボタンが準備中は弱め＋スピナー（.proll-sing[aria-busy] と同トーン）。 */
+.tp-main[aria-busy="true"] {
+  opacity: 0.75;
+}
+.tp-spin {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: tp-spin 0.9s linear infinite;
+}
+@keyframes tp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* 動きを抑える設定では回さない（既存イディオム skeleton.css と同じ）。 */
+@media (prefers-reduced-motion: reduce) {
+  .tp-spin {
+    animation: none;
+  }
 }
 /* 音量ミキサー（音割れ対策・耳FB 2026-07-09）＝🔉で上向きに開く小パネル。 */
 .mixer-wrap {

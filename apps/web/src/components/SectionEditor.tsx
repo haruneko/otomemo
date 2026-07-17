@@ -215,9 +215,10 @@ export function SectionEditor({
 
   // 再生＝歌う子があれば先に wav をレンダ（未キャッシュは「歌声を作っています…」busy）→ 伴奏と同期再生。停止/一時停止は素通し。
   const playPause = useCallback(async () => {
+    if (vocal.busy) return; // 仮歌レンダ中の再押下＝no-op（ensure 二重発火→api.sing 重複 fetch を防ぐ・スピナーが応答の証）
     if (tp.state === "stopped" && jobsRef.current.length) await vocal.ensure(jobsRef.current);
     tp.playPause();
-  }, [tp.state, tp.playPause, vocal.ensure]);
+  }, [tp.state, tp.playPause, vocal.ensure, vocal.busy]);
 
   // Space=合成再生/一時停止（design #59）。入力中は無効。
   useEffect(() => {
@@ -499,9 +500,7 @@ export function SectionEditor({
           {gen.fitReport} <span className="muted">（タップで消す）</span>
         </p>
       )}
-      {vocal.busy && (
-        <p className="fit-report" aria-label="sing-busy">歌声を作っています…</p>
-      )}
+      {/* 「歌声を作っています…」段落は撤去（表示を下端トランスポートに一本化・設計2026-07-17）。msg 報告は残す。 */}
       {vocal.msg && (
         <p className="fit-report" aria-label="sing-report" onClick={() => vocal.setMsg(null)}>
           {vocal.msg} <span className="muted">（タップで消す）</span>
@@ -821,6 +820,7 @@ export function SectionEditor({
         onPlayPause={() => void playPause()}
         onRewind={tp.rewind}
         onToggleLoop={tp.toggleLoop}
+        pending={vocal.busy ? (vocal.progress ? `歌声 ${Math.min(vocal.progress.done + 1, vocal.progress.total)}/${vocal.progress.total}…` : "歌声を作っています…") : null}
         extra={(() => {
           // 「骨格を鳴らす」＝再生機能なのでトランスポートへ（オーナーFB 2026-07-12）。骨格レーンに子がある時だけ。
           // ON＝メロをミュートし骨格2声(Strings/Cello)を伴奏に重ねて対位法的に聴く（再生のみ・MIDI書き出しには入らない）。

@@ -664,6 +664,33 @@ export function subscribeSfLoading(cb: (loading: boolean) => void): () => void {
   };
 }
 
+// ── SF2 sampler 準備中フラグ（W3・再生ローディング表示 設計2026-07-17）─────────────────────
+// SF2 本体はロード済みでも、初出の楽器（drum 名/part:program）ごとの loadInstrument で発音直前に
+// サブ秒〜数秒の空白が出る（従来は無表示）。playNotes の prepareDrumKits/prepareMelodicSamplers を
+// 包む間だけ true にし、TransportBar が「楽器準備中…」を出す。sfLoading と同型の通知口（await は増やさない）。
+let sfPreparing = false;
+const sfPreparingListeners = new Set<(v: boolean) => void>();
+function setSfPreparing(v: boolean): void {
+  if (sfPreparing === v) return;
+  sfPreparing = v;
+  for (const cb of sfPreparingListeners) {
+    try {
+      cb(v);
+    } catch {
+      /* 購読側の例外で音を止めない */
+    }
+  }
+}
+export function isSfPreparing(): boolean {
+  return sfPreparing;
+}
+export function subscribeSfPreparing(cb: (v: boolean) => void): () => void {
+  sfPreparingListeners.add(cb);
+  return () => {
+    sfPreparingListeners.delete(cb);
+  };
+}
+
 // waitIfCold=false: 誰もロードしてない冷スタートでは今回フォールバック（裏でロードは進む＝次回から鳴る）。
 // 進行中ロード(alreadyLoading)があっても**#24 で有界待ち**＝≤COLD_START_WAIT_MS だけ待ち、間に合えば
 // 先読みと同じ SF2 を共有して鳴らし(#84)、間に合わなければ null=簡易シンセへ即フォールバック（裏ロード継続）。
@@ -1085,9 +1112,23 @@ export async function playNotes(
   // 冷スタートはブロックせずフォールバック（次回warm）。ただし先読み等のロードが進行中なら待って SF2 で鳴らす。
   const sf = await ensureSoundFont(Tone, defaultProg, false);
   // #7-C reschedule で差し替えるため let（新パート/プログラム/lens/drum が出たら prepare を追加で呼んで更新）。
-  let drumKits = sf ? await prepareDrumKits(notes, Tone) : new Map<number | string, DrumVoice>();
-  // #section音色: パート毎(program毎)の旋律 sampler を用意（合成再生で音色を保つ）
-  let melodicByPart = sf ? await prepareMelodicSamplers(notes, Tone, defaultProg, sf) : new Map<string, any>();
+  // 再生ローディング表示（設計2026-07-17）：SF2 有効時の初回 prepare を「楽器準備中…」で可視化（await 追加なし・
+  // 通知だけ）。SF2 無し（sf=null）は prepare を通らない＝発火しない。
+  let drumKits: Map<number | string, DrumVoice>;
+  let melodicByPart: Map<string, any>;
+  if (sf) {
+    setSfPreparing(true);
+    try {
+      drumKits = await prepareDrumKits(notes, Tone);
+      // #section音色: パート毎(program毎)の旋律 sampler を用意（合成再生で音色を保つ）
+      melodicByPart = await prepareMelodicSamplers(notes, Tone, defaultProg, sf);
+    } finally {
+      setSfPreparing(false);
+    }
+  } else {
+    drumKits = new Map<number | string, DrumVoice>();
+    melodicByPart = new Map<string, any>();
+  }
   // #7-C 開くべきレンズ＝最後に指定された activeLens（setLensGain/reschedule で表示とずれないよう保持）。
   let currentActiveLens = opts.activeLens;
   // フィール層の設定を保持（reschedule でも最新ノートへ同じ跳ねを適用＝初回一括経路と一致）。

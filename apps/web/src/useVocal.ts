@@ -30,6 +30,9 @@ export function useVocalRender() {
   // （web の SING_LEAD_REST_BEATS 直参照を撤去）。leadRestBeats は再生時に leadRestSec/spb で換算。
   const cacheRef = useRef<Map<string, { buffer: AudioBuffer; leadRestSec: number }>>(new Map());
   const [busy, setBusy] = useState(false);
+  // 再生ローディング表示（設計 2026-07-17）：missing のみを分母にした進捗の純粋な副チャネル。
+  // total＝この▶押下で新規レンダが要る job 数、done＝完了本数。表示専用でループ/キャッシュ/key は不変。
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [, bump] = useState(0); // レンダ完了で peek 依存の再描画を促す
 
@@ -46,12 +49,15 @@ export function useVocalRender() {
     if (missing.length) {
       setBusy(true);
       setMsg(null);
+      setProgress({ done: 0, total: missing.length }); // 表示専用の進捗開始（分母＝missing のみ）
       try {
         const notes: string[] = [];
-        for (const j of missing) {
+        for (let i = 0; i < missing.length; i++) {
+          const j = missing[i]!;
           const r = await api.sing(j.notes, j.bpm, j.speaker, j.ensemblePitches); // 同一入力は content-hash で合成スキップ
           const buf = await decodeVocal(await (await fetch(api.assetUrl(r.assetId))).arrayBuffer());
           cacheRef.current.set(j.key, { buffer: buf, leadRestSec: r.leadRestSec });
+          setProgress({ done: i + 1, total: missing.length }); // 1本完了ごとに前進（直列＝意味が保たれる）
           if (r.shift) notes.push(`音域を${r.shift > 0 ? "+" : ""}${r.shift}半音移調`);
           if (r.clamped) notes.push(`${r.clamped}音を歌唱帯へクランプ`);
         }
@@ -60,6 +66,7 @@ export function useVocalRender() {
         setMsg(`仮歌の生成に失敗：${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setBusy(false);
+        setProgress(null); // 完了/失敗で消灯
         bump((v) => v + 1);
       }
     }
@@ -72,5 +79,5 @@ export function useVocalRender() {
     return ready.length ? ready.map(toPlay) : null;
   }, []);
 
-  return { ensure, peek, busy, msg, setMsg };
+  return { ensure, peek, busy, progress, msg, setMsg };
 }
