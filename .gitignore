@@ -24,7 +24,7 @@ apps/web/e2e/__screenshots__/
 apps/web/.cache/
 
 _quarantine/
-# _audio_poc: Python ソース(*.py)は追跡（#S12で本流化＝戦略柱の版管理）、巨大依存/生成物は無視。
+# _audio_poc: uvプロジェクト＝ソース(*.py)+依存宣言(pyproject.toml/uv.lock)は追跡、venv/巨大依存/生成物は無視。
 _audio_poc/.venv/
 _audio_poc/__pycache__/
 _audio_poc/BTC-ISMIR19/

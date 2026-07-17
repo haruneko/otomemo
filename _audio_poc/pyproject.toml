@@ -1,0 +1,35 @@
+[project]
+name = "cm-audio"
+version = "0.0.0"
+description = "creative_manager 音声サイドカー。apps/api(TS)が _audio_poc/.venv/bin/python から spawn する Python スクリプトの依存宣言。analyze.py=音源解析(librosa/demucs htdemucs 分離)・accent.py=日本語アクセント抽出(pyopenjtalk)。生死表は README.md 参照。"
+requires-python = ">=3.12"
+# トップレベル依存＝スクリプトが直接使うものだけ宣言。transitive は uv.lock が固定。
+# analyze.py: librosa/numpy(音響解析) + torch/demucs/soundfile(htdemucs 音源分離) + yt-dlp(URL DL)
+# accent.py : pyopenjtalk(日本語読み・アクセント辞書)
+dependencies = [
+    "librosa==0.11.0",
+    "numpy==2.4.6",
+    "scipy==1.18.0",
+    "numba==0.66.0",
+    "soundfile==0.14.0",
+    "demucs==4.0.1",
+    "torch==2.12.1",
+    "torchaudio==2.11.0",
+    "pyopenjtalk==0.4.1",
+    "yt-dlp==2026.7.4",
+]
+
+# パッケージ化しない（analyze.py/accent.py は spawn で直接叩く素のスクリプト。ビルド不要）。
+[tool.uv]
+package = false
+
+# torch/torchaudio は PyPI でなく PyTorch の CPU 専用 index から取る（CUDA を引かない＝常時起動機は GPU 無し）。
+# 素の PyPI torchaudio は libcudart を要求して轟沈する既知の罠（研究 doc: allin1-beatthis-feasibility 参照）。
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }

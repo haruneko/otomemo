@@ -1,9 +1,19 @@
-# _audio_poc/ ＝ Python サイドカー置き場（本番の生き物と実験が同居）
+# _audio_poc/ ＝ Python サイドカー（本番の生き物と実験が同居・uv管理）
 
 このディレクトリは名前に反して「捨てるPOC」ではない。**本番 API が spawn する現役の Python スクリプト**と、
 **結線されていない実験/開発道具**が同居している。消す前に必ず下の「生死表」を見ること。
 
-`git ls-files _audio_poc/` に出るのは `*.py` だけ（＝ソースは版管理・巨大依存/生成物は `.gitignore`）。
+`apps/worker` と同型の **uv プロジェクト**（`pyproject.toml` + `uv.lock`）。追跡するのは
+`*.py` / `pyproject.toml` / `uv.lock` だけ（＝ソースと依存宣言は版管理・巨大依存/生成物は `.gitignore`）。
+
+## 依存管理＝uv（venv は宣言から再現可能）
+`.venv/` は **uv の既定プロジェクト venv**（＝本番が `.venv/bin/python` で叩く実体）。中身は `pyproject.toml`（トップレベル依存）→ `uv.lock`（60パッケージのグラフ固定）で宣言済み。もう「何が入ってるか不明の1.4GBの塊」ではない。
+
+```
+cd _audio_poc && uv sync      # pyproject/uv.lock から .venv を丸ごと再現（新環境/壊れた時）
+uv add <pkg> / uv lock        # 依存を足す→lock更新（手で pip install しない）
+```
+torch/torchaudio は **PyTorch CPU 専用 index**（`[tool.uv.sources]`）＝GPU無しの常時起動機向け。素の PyPI torchaudio は libcudart を要求して轟沈するので触らない。
 
 ## 生死表
 
