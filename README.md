@@ -5,6 +5,17 @@
 
 （旧称 `creative_manager`。思想と経緯は `docs/`：`requirements.md` / `architecture.md` / `design.md`。）
 
+<p align="center">
+  <img src="docs/images/otomemo-library.png" alt="Otomemo ライブラリ（スマホ優先）" width="260">
+</p>
+<p align="center"><sub><em>スマホ優先。色分けカード＋ミニピアノロールで、細切れ時間でもネタを貯め・探し・組み・書き出す。</em></sub></p>
+
+<p align="center">
+  <img src="docs/images/otomemo-melody-editor.png" alt="メロディ編集（ピアノロール）" width="415">
+  <img src="docs/images/otomemo-section.png" alt="セクション組み立て（レーン）" width="415">
+</p>
+<p align="center"><sub><em>ピアノロールでメロを描き（左）、セクションでパートを重ねて一曲にする（右）。調/拍子/テンポは器が持ち、音は C 基準保存＋トランスポーズ。</em></sub></p>
+
 ## できること
 - **捕獲**：メロ/コード/ベース/リズム/コード楽器/歌詞/テーマ/セクション/曲 を最小手数でメモ（オフラインでも落とさない）。MIDI/楽譜取込・ハミング。
 - **探す**：色分けカード＋種別/ムード絞り＋**意味検索**（日本語 Ruri v3）。**器（プロジェクト）＝一曲の器**で束ねる（作成/削除）。意味検索が落ちてもキーワードへ劣化＋その旨を告知。
