@@ -37,6 +37,24 @@ import { skeletonPlaybackNotes } from "./skeletonEdit";
 import { useVocalRender } from "./useVocal";
 import { useCowGuard } from "./useCowGuard";
 
+// 仮歌ジョブ（再生キー＋声）を組む純関数。key に声(speaker)を含める＝声を変えたら別 wav。
+// 含めないと古い声の wav キャッシュが再利用され「声を変えても反映されない」（2026-07-17 バグ・SectionEditor は
+// 既に {e,s} 込みだが単体エディタ経路が漏れていた）。speaker はライブ選択声を api.sing へ渡す（未選択=既定リツ）。
+export function buildVocalJob(
+  playable: { pitch: number; start: number; dur: number; syllable?: string }[],
+  tempo: number,
+  singSpeaker: number | undefined,
+) {
+  const notes = playable.map((n) => ({ pitch: Math.round(n.pitch), start: n.start, dur: n.dur, syllable: n.syllable }));
+  return {
+    key: JSON.stringify({ n: notes, t: tempo, s: singSpeaker ?? null }),
+    notes,
+    bpm: tempo,
+    firstNoteBeat: playable.length ? Math.min(...playable.map((n) => n.start)) : 0,
+    speaker: singSpeaker,
+  };
+}
+
 export function useNetaEditor(
   neta: Neta,
   opts: {
@@ -153,14 +171,7 @@ export function useNetaEditor(
   // 残す＝尺/スペースの計算に効く。歌詞なしで sing のみ＝フォールバック楽器（program）で普通に鳴らす。
   const singingMelody = isMelody && sing;
   const vocalHasLyric = singingMelody && playable.some((n) => !!n.syllable && n.syllable.trim().length > 0);
-  const vocalJob = vocalHasLyric
-    ? {
-        key: JSON.stringify({ n: playable.map((n) => ({ pitch: Math.round(n.pitch), start: n.start, dur: n.dur, syllable: n.syllable })), t: tempo }),
-        notes: playable.map((n) => ({ pitch: Math.round(n.pitch), start: n.start, dur: n.dur, syllable: n.syllable })),
-        bpm: tempo,
-        firstNoteBeat: playable.length ? Math.min(...playable.map((n) => n.start)) : 0,
-      }
-    : null;
+  const vocalJob = vocalHasLyric ? buildVocalJob(playable, tempo, singSpeaker) : null;
   const playableFinal = vocalHasLyric ? playable.map((n) => ({ ...n, muted: true })) : playable;
   const vocal = useVocalRender();
   const jobsRef = useRef(vocalJob ? [vocalJob] : []);
