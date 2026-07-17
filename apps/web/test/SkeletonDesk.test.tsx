@@ -6,6 +6,11 @@ const playHandle = { stop: vi.fn(), pause: vi.fn(), resume: vi.fn(), setLensGain
 vi.mock("../src/audio", () => ({
   previewNote: vi.fn(),
   playNotes: vi.fn(async () => playHandle),
+  // F1 再生ローディング（PrepStatus）が購読する SF2/sampler 準備ストア＝jsdom では常に false。
+  isSfLoading: () => false,
+  isSfPreparing: () => false,
+  subscribeSfLoading: () => () => {},
+  subscribeSfPreparing: () => () => {},
 }));
 const { getComposition, updateNeta, music, createNeta, placeChild, removeChild, link, getRelations } = vi.hoisted(() => ({
   getComposition: vi.fn(),

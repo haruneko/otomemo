@@ -10,6 +10,7 @@ import { MiniRoll, SectionMini, LazyPreview } from "./MiniRoll";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { KindIcon } from "./KindIcon";
 import { Icon } from "./Icon";
+import { PrepStatus } from "../usePrepPending";
 import {
   playNotes,
   notesForContent,
@@ -68,29 +69,44 @@ export function NetaCard({
 
   // 再生/停止トグル（#73+停止）。playNotes は単一Transportなので別ネタ再生で自動停止。
   const [playing, setPlaying] = useState(false);
+  // F1 再生ローディング（設計2026-07-17・#8）：押下→発音までの「開始中」窓。section は getComposition の
+  // fetch 待ち、単独メロは SF2/sampler 準備待ちがここに入る。この間は▶を busy 表示＋再押下 no-op（TransportBar
+  // と体験を揃える）。グローバルの「音源読込中…/楽器準備中…」文言は <PrepStatus/> が別途出す。
+  const [starting, setStarting] = useState(false);
   const handleRef = useRef<PlaybackHandle | null>(null);
   const alive = useAlive(); // 生成ポーリングは長い＝アンマウント後 setState を防ぐ（poll.ts 共通）
   useEffect(() => () => handleRef.current?.stop(), []); // アンマウントで再生停止
 
   async function toggle(getNotes: () => Note[] | Promise<Note[]>, program?: number) {
+    if (starting) return; // 準備中の再押下は no-op（二重発火を防ぐ）
     if (playing) {
       handleRef.current?.stop();
       handleRef.current = null;
       setPlaying(false);
       return;
     }
-    const notes = await getNotes();
-    if (!notes.length) return;
+    // 押下直後に先に反応（#8）：section は getNotes 内の getComposition fetch が走る＝ここで starting/playing を
+    // 立てておくと fetch 待ちの間もスピナーが出る（旧＝fetch 解決後まで無反応だった）。
+    setStarting(true);
     setPlaying(true);
-    handleRef.current = await playNotes(notes, neta.tempo ?? 120, {
-      program,
-      feel: feelOf(neta.content), // フィール層：単一メロ card の content.feel でスイング（section card は SectionEditor 側で）。
-      compound: isCompoundMeter(neta.meter),
-      onEnd: () => {
+    try {
+      const notes = await getNotes();
+      if (!notes.length) {
         setPlaying(false);
-        handleRef.current = null;
-      },
-    });
+        return;
+      }
+      handleRef.current = await playNotes(notes, neta.tempo ?? 120, {
+        program,
+        feel: feelOf(neta.content), // フィール層：単一メロ card の content.feel でスイング（section card は SectionEditor 側で）。
+        compound: isCompoundMeter(neta.meter),
+        onEnd: () => {
+          setPlaying(false);
+          handleRef.current = null;
+        },
+      });
+    } finally {
+      setStarting(false);
+    }
   }
 
   // #73 section/song を合成（子をsection調へ移調＋位置オフセット）
@@ -144,12 +160,15 @@ export function NetaCard({
     </button>
   );
 
+  // ▶ボタン内グリフ。F1: 開始中（starting）はスピナー＝押下直後の反応（fetch/準備待ちも含む）。
+  const playGlyph = starting ? <span className="tp-spin prep-spin" aria-hidden="true" /> : playing ? "⏹" : "▶";
   // 再生ボタン（カード/リスト両モードで共用）。楽器ネタ=単独再生／器ネタ=合成プレビュー。
   const playBtn = MUSIC_KINDS.includes(neta.kind) ? (
     <button
       className="bs-btn"
       aria-label={`play-${neta.id}`}
-      title={playing ? "停止" : "このネタを単独再生（C基準そのまま）"}
+      aria-busy={starting || undefined}
+      title={starting ? "準備中…" : playing ? "停止" : "このネタを単独再生（C基準そのまま）"}
       onClick={() =>
         void toggle(
           () => notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }),
@@ -157,16 +176,17 @@ export function NetaCard({
         )
       }
     >
-      {playing ? "⏹" : "▶"}
+      {playGlyph}
     </button>
   ) : CONTAINER_KINDS.includes(neta.kind) ? (
     <button
       className="bs-btn"
       aria-label={`play-${neta.id}`}
-      title={playing ? "停止" : "合成プレビュー再生"}
+      aria-busy={starting || undefined}
+      title={starting ? "準備中…" : playing ? "停止" : "合成プレビュー再生"}
       onClick={() => void toggle(sectionNotes)}
     >
-      {playing ? "⏹" : "▶"}
+      {playGlyph}
     </button>
   ) : null;
 
@@ -253,6 +273,7 @@ export function NetaCard({
         </div>
         <div className="bs-tools">
           {playBtn}
+          <PrepStatus />
           {delBtn}
         </div>
       </article>
@@ -314,6 +335,7 @@ export function NetaCard({
       </div>
       <div className="bs-tools" ref={moreRef}>
         {playBtn}
+        <PrepStatus />
         <button className="bs-btn" onClick={() => onChat?.(neta)}>
           相談
         </button>

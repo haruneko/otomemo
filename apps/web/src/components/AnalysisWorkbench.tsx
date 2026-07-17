@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { api, type Neta } from "../api";
 import { playNotes, type PlaybackHandle } from "../audio";
 import type { Note } from "../music";
+import { PrepStatus } from "../usePrepPending";
 
 type Seg = [number, number, string]; // [start_sec, end_sec, label]
 interface Facts {
@@ -112,6 +113,8 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
   const [msg, setMsg] = useState("");
   const handleRef = useRef<PlaybackHandle | null>(null);
   const [playing, setPlaying] = useState(false);
+  // F1 再生ローディング（設計2026-07-17・#11）：発音までの準備窓＝再押下 no-op＋busy 表示（<PrepStatus/> がグローバル文言）。
+  const [starting, setStarting] = useState(false);
   const phRef = useRef<HTMLDivElement>(null); // 再生プレイヘッド（ref直書きで毎フレーム再描画しない）
   const rafRef = useRef<number>(0);
   const startRef = useRef(0);
@@ -221,11 +224,17 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
     if (beat < totalBeat + 0.5) rafRef.current = requestAnimationFrame(() => tick(from));
   }
   async function togglePlay() {
+    if (starting) return; // 準備中の再押下は no-op
     if (playing) { handleRef.current?.stop(); stopPh(); setPlaying(false); return; }
+    setStarting(true);
     setPlaying(true);
     startRef.current = performance.now();
     tick(seekBeat);
-    handleRef.current = await playNotes(buildNotes(seekBeat), bpm, { onEnd: () => { stopPh(); setPlaying(false); } });
+    try {
+      handleRef.current = await playNotes(buildNotes(seekBeat), bpm, { onEnd: () => { stopPh(); setPlaying(false); } });
+    } finally {
+      setStarting(false);
+    }
   }
   // ロールをタップ＝そこを再生開始位置(seek)に。再生中なら止めて位置だけ更新。
   function onSeek(e: ReactMouseEvent) {
@@ -285,7 +294,8 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
       </div>
 
       <div className="awb-tools">
-        <button className="tp-btn" aria-label="play" onClick={() => void togglePlay()}>{playing ? "■ 停止" : "▶ 再生"}</button>
+        <button className="tp-btn" aria-label="play" aria-busy={starting || undefined} onClick={() => void togglePlay()}>{starting ? <><span className="tp-spin prep-spin" aria-hidden="true" /> 準備中</> : playing ? "■ 停止" : "▶ 再生"}</button>
+        <PrepStatus />
         <span className="awb-anchor">小節頭:
           <button className="tp-btn awb-nudge" aria-label="anchor-prev" onClick={() => nudgeAnchor(-1)}>◀拍</button>
           <button className="tp-btn awb-nudge" aria-label="anchor-next" onClick={() => nudgeAnchor(1)}>拍▶</button>

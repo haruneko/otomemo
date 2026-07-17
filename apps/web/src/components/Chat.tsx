@@ -5,6 +5,7 @@ import { playNotes, notesForContent, feelOf, isCompoundMeter } from "../music";
 import { MUSIC_KINDS, KIND_LABEL } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
 import { Icon } from "./Icon";
+import { PrepStatus } from "../usePrepPending";
 import { parseTurnEvent, toolCardFromResult, type ToolCard, type ToolCardItem } from "../chat-stream";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -52,11 +53,22 @@ function ChatToolCard({
 }) {
   const [saved, setSaved] = useState<Set<number>>(new Set());
   const [undone, setUndone] = useState(false);
+  // F1 再生ローディング（設計2026-07-17・#9）：試聴の SF2/sampler 準備中は再押下 no-op＋<PrepStatus/> 表示。
+  const [auditioning, setAuditioning] = useState(false);
+  async function audition(it: ToolCardItem) {
+    if (auditioning) return; // 準備中の再押下は no-op
+    setAuditioning(true);
+    try {
+      await playNotes(notesForContent(it.kind, it.content, { key: 0 }), 120, { feel: feelOf(it.content) });
+    } finally {
+      setAuditioning(false);
+    }
+  }
 
   if (card.klass === "candidate" && card.items && card.items.length > 0) {
     return (
       <div className="tool-card" aria-label="candidate-card">
-        <div className="tool-card-head muted">{card.label}＝候補</div>
+        <div className="tool-card-head muted">{card.label}＝候補<PrepStatus /></div>
         {card.items.map((it, k) => {
           const isMusic = MUSIC_KINDS.includes(it.kind);
           return (
@@ -68,9 +80,10 @@ function ChatToolCard({
                   type="button"
                   className="bs-btn"
                   aria-label="play-candidate"
-                  onClick={() => void playNotes(notesForContent(it.kind, it.content, { key: 0 }), 120, { feel: feelOf(it.content) })}
+                  aria-busy={auditioning || undefined}
+                  onClick={() => void audition(it)}
                 >
-                  ▶ 試聴
+                  {auditioning ? <span className="tp-spin prep-spin" aria-hidden="true" /> : "▶"} 試聴
                 </button>
               )}
               <button
@@ -428,17 +441,31 @@ export function Chat({
     onOpenNeta?.(neta);
     onClose();
   }
+  // F1 再生ローディング（設計2026-07-17・#9）：試聴の準備窓（SF2/sampler・履歴カードは getNeta fetch も含む）。
+  // この間は試聴ボタンを busy 表示＋再押下 no-op。グローバル文言は <PrepStatus/> が出す。
+  const [previewing, setPreviewing] = useState(false);
+  async function runPreview(load: () => Promise<Neta | null> | Neta): Promise<void> {
+    if (previewing) return; // 準備中の再押下は no-op
+    setPreviewing(true);
+    try {
+      const neta = await load();
+      if (!neta) return;
+      // 相対bass は neta の key を tonic に解決して試聴（#bass S2）。
+      await playNotes(notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }), neta.tempo ?? 120, { feel: feelOf(neta.content), compound: isCompoundMeter(neta.meter) });
+    } finally {
+      setPreviewing(false);
+    }
+  }
   // #68 試聴プレビュー（音楽kindのみ）
   function preview(neta: Neta) {
-    // 相対bass は neta の key を tonic に解決して試聴（#bass S2）。
-    void playNotes(notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }), neta.tempo ?? 120, { feel: feelOf(neta.content), compound: isCompoundMeter(neta.meter) });
+    void runPreview(() => neta);
   }
   // #S8 履歴復元のネタカード：スナップショット(id/kind/title)しか無いので、開く/試聴の直前に本体を取り直す。
   async function openNetaById(id: string) {
     try { openNeta(await api.getNeta(id)); } catch { /* 削除済み等＝黙って無視 */ }
   }
-  async function previewById(id: string) {
-    try { preview(await api.getNeta(id)); } catch { /* 削除済み等 */ }
+  function previewById(id: string) {
+    void runPreview(() => api.getNeta(id).catch(() => null)); // 削除済み等＝null で握る
   }
 
   async function saveKnowledge(text: string) {
@@ -621,11 +648,13 @@ export function Chat({
                       type="button"
                       className="bs-btn"
                       aria-label="preview-neta"
+                      aria-busy={previewing || undefined}
                       onClick={() => preview(m.neta!)}
                     >
-                      ▶ 試聴
+                      {previewing ? <span className="tp-spin prep-spin" aria-hidden="true" /> : "▶"} 試聴
                     </button>
                   )}
+                  <PrepStatus />
                 </div>
               )}
               {/* #S8 このターンで作られたネタ＝カードで残す（開き直しても消えない）。ネタ帳と同じ体裁。 */}
@@ -635,8 +664,9 @@ export function Chat({
                   <span className="chat-neta-card-title">{n.title || "(無題)"}</span>
                   <button type="button" className="bs-btn" aria-label="open-neta" onClick={() => void openNetaById(n.id)}>✎ 開く</button>
                   {n.kind && MUSIC_KINDS.includes(n.kind) && (
-                    <button type="button" className="bs-btn" aria-label="preview-neta" onClick={() => void previewById(n.id)}>▶ 試聴</button>
+                    <button type="button" className="bs-btn" aria-label="preview-neta" aria-busy={previewing || undefined} onClick={() => previewById(n.id)}>{previewing ? <span className="tp-spin prep-spin" aria-hidden="true" /> : "▶"} 試聴</button>
                   )}
+                  {n.kind && MUSIC_KINDS.includes(n.kind) && <PrepStatus />}
                 </div>
               ))}
             </div>

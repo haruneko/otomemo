@@ -12,6 +12,7 @@ import { previewNote } from "../audio";
 import { Icon } from "./Icon";
 import { SkeletonEditor } from "./SkeletonEditor";
 import { useTransport } from "../useTransport";
+import { PrepStatus } from "../usePrepPending";
 import { useEditHistory } from "../history";
 import { useMelodyGen, voiceLeadingBadge, realizedMelodyCount, type Cand, type MelodyGenCtx } from "../useMelodyGen";
 import * as sctx from "../sectionContext";
@@ -960,6 +961,8 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
         <span className="desk-time muted" aria-label="desk-time" ref={tp.timeRef as React.Ref<HTMLSpanElement>}>
           1:1
         </span>
+        {/* F1 再生ローディング（設計2026-07-17・#10）：SF2/sampler 準備中は desk-transport にも「音源読込中…/楽器準備中…」。 */}
+        <PrepStatus />
         <span className="tb-spacer" style={{ flex: 1 }} />
         <button type="button" className="tb-tool" aria-label="desk-undo" title="元に戻す" disabled={!hist.canUndo} onClick={hist.undo}>
           <Icon name="undo" size={18} />

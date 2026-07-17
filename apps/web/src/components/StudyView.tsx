@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { type Neta } from "../api";
 import { playNotes, type PlaybackHandle } from "../audio";
 import { notesForContent } from "../music";
+import { PrepStatus } from "../usePrepPending";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -36,13 +37,19 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
   const handleRef = useRef<PlaybackHandle | null>(null);
   const [playKey, setPlayKey] = useState<string | null>(null); // 曲/共通を独立に鳴らせるよう文字列キー
   const [showProse, setShowProse] = useState(false); // 既定=畳む＝長い所見でも主役ループを最初に見せる
+  // F1 再生ローディング（設計2026-07-17・#12）：SF2/sampler 準備中は▶の再押下 no-op（グローバル文言は <PrepStatus/>）。
+  const [starting, setStarting] = useState(false);
 
   function play(example: Slot[], key: string) {
+    if (starting) return; // 準備中の再押下は no-op
     handleRef.current?.stop();
     if (playKey === key) { setPlayKey(null); return; }
     setPlayKey(key);
+    setStarting(true);
     const notes = notesForContent("chord_progression", { chords: example });
-    void playNotes(notes, 100, { onEnd: () => setPlayKey(null) }).then((h) => (handleRef.current = h));
+    void playNotes(notes, 100, { onEnd: () => setPlayKey(null) })
+      .then((h) => (handleRef.current = h))
+      .finally(() => setStarting(false));
   }
 
   const modeStr = Object.entries(c.stats?.modes ?? {}).map(([m, n]) => `${m === "minor" ? "短調" : m === "major" ? "長調" : m}${n}`).join("・");
@@ -53,6 +60,7 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
         <button className="bs-btn" onClick={onClose}>← 戻る</button>
         <strong className="study-title">{neta.title ?? `研究: ${c.topic ?? ""}`}</strong>
         <span className="spacer" />
+        <PrepStatus />
         <span className="meta">{c.stats?.songs ?? members.length}曲 · {modeStr}</span>
       </div>
 

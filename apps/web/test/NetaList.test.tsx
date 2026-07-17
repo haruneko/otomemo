@@ -28,6 +28,19 @@ vi.mock("../src/api", () => ({
   api: { createJob, getJob, createNeta, link, placeChild, assignProject, getComposition, genSection, deleteNeta },
 }));
 
+// F1 再生ローディング（設計2026-07-17）：playNotes を「解決を握れる」フェイクへ差し替え、押下→準備中の
+// 窓（starting）をテストから制御する。notesForContent/compositeNotes は非空固定＝空 notes 早期 return を避ける。
+const { playNotesMock } = vi.hoisted(() => ({ playNotesMock: vi.fn() }));
+vi.mock("../src/music", async (orig) => {
+  const actual = await orig<typeof import("../src/music")>();
+  return {
+    ...actual,
+    playNotes: (...args: unknown[]) => playNotesMock(...args),
+    notesForContent: () => [{ pitch: 60, start: 0, dur: 1 }],
+    compositeNotes: () => [{ pitch: 60, start: 0, dur: 1 }],
+  };
+});
+
 import { NetaList, NetaCard } from "../src/components/NetaList";
 
 const mk = (over: Partial<Neta>): Neta => ({
@@ -249,6 +262,42 @@ describe("NetaList", () => {
     expect(deleteNeta).toHaveBeenCalledWith("d2");
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     spy.mockRestore();
+  });
+
+  // ── F1 再生ローディング表示（設計2026-07-17・漏れ#8 ネタ簡易再生）─────────────────────────
+  // (a) 準備中は busy 表示＋再押下 no-op。playNotes を pending にして starting 窓に留める。
+  it("F1#8: 準備中は▶が busy 表示になり、再押下は no-op（playNotes は1回だけ）", async () => {
+    playNotesMock.mockReset();
+    let resolvePlay!: (h: unknown) => void;
+    playNotesMock.mockImplementation(() => new Promise((res) => { resolvePlay = res; }));
+    render(<NetaCard neta={mk({ id: "p8", kind: "melody", title: "旋律", content: { notes: [] } })} />);
+    const btn = screen.getByLabelText("play-p8");
+    await userEvent.click(btn); // 開始→playNotes pending（starting=true）
+    await waitFor(() => expect(btn).toHaveAttribute("aria-busy", "true"));
+    expect(playNotesMock).toHaveBeenCalledTimes(1);
+    await userEvent.click(btn); // 再押下＝準備中は no-op
+    await userEvent.click(btn);
+    expect(playNotesMock).toHaveBeenCalledTimes(1); // 増えない＝ガード有効
+    resolvePlay({ stop: vi.fn() }); // 後片付け
+    await waitFor(() => expect(btn).not.toHaveAttribute("aria-busy"));
+  });
+
+  // (b) section の toggle は getComposition の await より前に押下反応（starting/playing）を出す。
+  it("F1#8: section の▶は getComposition fetch 待ちの間もすぐ busy 反応する（fetch前フィードバック）", async () => {
+    playNotesMock.mockReset();
+    playNotesMock.mockResolvedValue({ stop: vi.fn() });
+    let resolveComp!: (v: unknown) => void;
+    getComposition.mockImplementationOnce(() => new Promise((res) => { resolveComp = res; }));
+    // dense＝リスト表示（SectionMini プレビューを出さない）＝getComposition の初回呼び出しは toggle 由来に固定。
+    render(<NetaCard dense neta={mk({ id: "s8", kind: "section", title: "曲A" })} />);
+    const btn = screen.getByLabelText("play-s8");
+    await userEvent.click(btn);
+    // getComposition は未解決のまま＝それより前に押下反応（aria-busy）が出ている＝setPlaying(true) が await の前。
+    await waitFor(() => expect(btn).toHaveAttribute("aria-busy", "true"));
+    expect(getComposition).toHaveBeenCalledWith("s8");
+    expect(playNotesMock).not.toHaveBeenCalled(); // まだ fetch 待ち＝発音前
+    resolveComp({ children: [] });
+    await waitFor(() => expect(playNotesMock).toHaveBeenCalled());
   });
 
   // 確認キャンセル → 削除 API を呼ばない（消えない）。

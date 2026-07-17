@@ -4,7 +4,14 @@ import userEvent from "@testing-library/user-event";
 
 const { createNeta, updateNeta } = vi.hoisted(() => ({ createNeta: vi.fn(), updateNeta: vi.fn() }));
 vi.mock("../src/api", () => ({ api: { createNeta, updateNeta } }));
-vi.mock("../src/audio", () => ({ playNotes: vi.fn(async () => ({ stop: vi.fn(), pause: vi.fn(), resume: vi.fn() })) }));
+vi.mock("../src/audio", () => ({
+  playNotes: vi.fn(async () => ({ stop: vi.fn(), pause: vi.fn(), resume: vi.fn() })),
+  // F1 再生ローディング（PrepStatus）が購読する SF2/sampler 準備ストア＝jsdom では常に false。
+  isSfLoading: () => false,
+  isSfPreparing: () => false,
+  subscribeSfLoading: () => () => {},
+  subscribeSfPreparing: () => () => {},
+}));
 
 import { AnalysisWorkbench, fitScale, seekBeatAt, MIN_PXB, AWB_ZOOMS } from "../src/components/AnalysisWorkbench";
 import { playNotes } from "../src/audio";
