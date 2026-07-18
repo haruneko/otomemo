@@ -293,6 +293,15 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - **PESTO 生歌追検証（耳）**：F2の正解はボカロ的レンダー1曲＝絶対値は楽観。生歌別曲で耳＋数値の追検証1回（オーナー手番を含む）。
 - **get_job も chat面射影の対象に**（2026-07-15・蜿蜒アナリーゼ実走で発見）：A2 は read_neta/search を射影したが `get_job` は素通し＝audio_analyze 完了ジョブを引くと生facts 634K文字が丸ごと返る。チャットが get_job でジョブ結果を確認する動線で同じコンテキスト爆発。read_neta と同じ要約射影（facts→統計＋prose）を get_job の result にも。
 
+## 表現力/ヒューマナイズ統一（#29）の残り（2026-07-18・本体3フェーズ実装済 P1 64dd804/P0 f315b7b/P2 752cb65）
+正典＝design.md #29／research 2026-07-18-drum-expressiveness-scope.md §8。全楽器ヒューマナイズ起こし＋ドラム抑揚回収＋長押し分割/アクセントは出荷済み。残：
+- **［耳/手］オーナー実機確認**（機械は全消化）：人間味4段（OFF/弱/中/強）の効き・部位別較正（kickタイト/snare laid-back/hihatルーズ）／12格子シャッフルが正しい尺で鳴る／生成フィルのクレッシェンド／ドラム長押し2連/3連ロール／コード長押し強く/弱く。feel OFF/divs無し/vel無しは byte 一致（テスト担保だが既存ネタで耳確認推奨）。
+- **P1-5＝単体 rhythm ネタに NoriRow**：`useNetaEditor.ts:315` の保存が content を `{rhythm}` で再構成し `content.feel` を落とす＋undo/redo snapshot への feel state 結線が要る（「toolbar 1行」でない）＝別スライス。
+- **トレモロチップ**（コード楽器の分割相当・CellPopover にチップ1個追加する構造は用意済み）。
+- **ストラム時間展開**（じゃら〜ん＝声部ごと10-20msずらし・resolveChordPattern 出力は導出なので契約安全）。
+- **genSectionInst の stab 生成側 vel**（管弦のアクセントを生成時に書く）。
+- **humanize の seed🎲**（同じ設定で揺れ方を振り直す）。
+
 ## 曲(song)再生の per-section フィール（2026-07-18・#27派生）
 `feelOfTree`（music.ts）＝曲再生でネストのメロからフィールを再帰導出し**曲全体に一律**（v1・最初/支配的メロのfeel）で「曲はストレート」バグは解消済み（commit次番）。**残＝per-section フィール**（1曲内でセクションごとに違うスイング/ヒューマナイズ）＝位置レンジ付きfeel適用が要る（単一 Feel でなく beat 範囲→feel マップ）＝別スライス。コメントを feelOfTree/sectionFeel に残置。onset timing自体は0ms実証済み（誤警報・正典 research 2026-07-18-song-vocal-onset-audit.md）。
 
