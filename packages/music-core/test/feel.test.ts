@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { applyFeel, warpTime, unwarpTime, pink1f, humanizeProfile, HUMANIZE_YORE_MS, type Feel, type HumanizeWarn } from "../src/index";
+import { applyFeel, applyFeelByPart, warpTime, unwarpTime, pink1f, humanizeProfile, HUMANIZE_YORE_MS, type Feel, type HumanizeWarn, type HumanizePart } from "../src/index";
 
 type Note = { pitch: number; start: number; dur: number; vel?: number };
 // ストレート格子のサンプル（8分＋16分混在＝衝突が起きうる素材）。
@@ -157,5 +157,74 @@ describe("humanize 知覚較正（1/f・部位別リミット・ヨレ警告）"
     const safe: HumanizeWarn[] = [];
     applyFeel(src, { humanize: 0.25, seed: 3 }, { tempo: 120, part: "kick", onWarn: (w) => safe.push(w) });
     expect(safe.length).toBe(0);
+  });
+});
+
+// ── #29 P1-1: applyFeelByPart＝部位別グループ適用（seed salt で decorrelate）──
+describe("applyFeelByPart（部位別 feel・#29 P1）", () => {
+  // ドラム風の混在ライン（kick/snare/hihat がインターリーブ）。part は pitch で振り分ける。
+  const mixed = (): { pitch: number; start: number; dur: number; part: HumanizePart }[] => {
+    const out: { pitch: number; start: number; dur: number; part: HumanizePart }[] = [];
+    for (let i = 0; i < 16; i++) {
+      const part: HumanizePart = i % 3 === 0 ? "kick" : i % 3 === 1 ? "snare" : "hihat";
+      out.push({ pitch: 36 + (i % 3), start: i * 0.5, dur: 0.5, part });
+    }
+    return out;
+  };
+  const partOf = (n: { part: HumanizePart }) => n.part;
+
+  it("feel 無し＝同一参照（map もしない・bit）", () => {
+    const src = mixed();
+    for (const f of [null, undefined] as (Feel | null | undefined)[]) {
+      expect(applyFeelByPart(src, f, { tempo: 120 }, partOf)).toBe(src);
+    }
+  });
+
+  it("humanize=0（swing のみ）＝単一 applyFeel と deepEqual（part 分割はスイングに無関係）", () => {
+    const src = mixed();
+    for (const feel of [{ swing: 0.6 }, { swing: 1, swingUnit: "sixteenth" as const }, { swing: 0 }]) {
+      const single = applyFeel(src, feel, { tempo: 120 });
+      const byPart = applyFeelByPart(src, feel, { tempo: 120 }, partOf);
+      expect(byPart).toEqual(single);
+    }
+  });
+
+  it("決定性：同 seed で2回＝完全一致", () => {
+    const src = mixed();
+    const a = applyFeelByPart(src, { humanize: 0.35, seed: 7 }, { tempo: 120 }, partOf);
+    const b = applyFeelByPart(src, { humanize: 0.35, seed: 7 }, { tempo: 120 }, partOf);
+    expect(a).toEqual(b);
+  });
+
+  it("音数・多重集合（pitch）不変＝並べ替えのみ（入力破壊なし）", () => {
+    const src = mixed();
+    const snap = JSON.stringify(src);
+    const out = applyFeelByPart(src, { humanize: 0.35, seed: 3 }, { tempo: 120 }, partOf);
+    expect(out.length).toBe(src.length);
+    const bag = (ns: { pitch: number }[]) => ns.map((n) => n.pitch).sort((a, b) => a - b);
+    expect(bag(out)).toEqual(bag(src));
+    expect(JSON.stringify(src)).toBe(snap); // 入力不変（純関数）
+  });
+
+  it("部位差の観測：kick グループの平均|Δstart| < melody グループ（プロファイル起床）", () => {
+    // kick(sd3) と melody(sd10) を等量並べ、同一 feel で片方だけタイトになることを見る。
+    const src: { pitch: number; start: number; dur: number; part: HumanizePart }[] = [];
+    for (let i = 0; i < 12; i++) src.push({ pitch: 36, start: i * 0.5, dur: 0.5, part: "kick" });
+    for (let i = 0; i < 12; i++) src.push({ pitch: 72, start: i * 0.5, dur: 0.5, part: "melody" });
+    const out = applyFeelByPart(src, { humanize: 1, seed: 9 }, { tempo: 120 }, (n) => n.part);
+    const meanAbs = (part: HumanizePart) => {
+      let s = 0, c = 0;
+      out.forEach((n, i) => { if (src[i]!.part === part) { s += Math.abs(n.start - src[i]!.start); c++; } });
+      return c ? s / c : 0;
+    };
+    expect(meanAbs("kick")).toBeLessThan(meanAbs("melody"));
+  });
+
+  it("seed salt：同 seed でも part を変えると異なる系列（decorrelate）", () => {
+    const line = Array.from({ length: 12 }, (_, i) => ({ pitch: 60, start: i * 0.5, dur: 0.5 }));
+    const asKick = applyFeelByPart(line, { humanize: 1, seed: 5 }, { tempo: 120 }, () => "kick" as HumanizePart);
+    const asKickDirect = applyFeel(line, { humanize: 1, seed: 5 + 11 }, { tempo: 120, part: "kick" });
+    // ラッパは seed+salt(kick=11) で applyFeel を呼ぶ＝直呼びと一致。
+    expect(asKick).toEqual(asKickDirect);
   });
 });

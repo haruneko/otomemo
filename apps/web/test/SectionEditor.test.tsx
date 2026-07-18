@@ -670,7 +670,9 @@ describe("SectionEditor (3-lane timeline)", () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });
     await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("palette-dorian")); // 進行の色＝浮遊(dorian)・ハブのchip
+    await userEvent.click(screen.getByLabelText("drawer-common")); // #29 P1：進行の色は「共通」引き出しへ移設
+    await userEvent.click(screen.getByLabelText("palette-dorian")); // 進行の色＝浮遊(dorian)
+    await userEvent.click(screen.getByLabelText("drawer-back")); // 棚（ハブ）へ戻る＝palette 選択は gen 状態に残る
     await userEvent.click(screen.getByLabelText("gen-gen_chords"));
     await waitFor(() => expect(music).toHaveBeenCalled());
     const [opC, bodyC] = music.mock.calls[0] as [string, { frame: Record<string, unknown> }];

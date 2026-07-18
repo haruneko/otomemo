@@ -2,9 +2,9 @@ import { Midi } from "@tonejs/midi";
 import { Chord as TonalChord, Note as TonalNote } from "tonal";
 // 不変の音楽知識（音名・コード品質→インターバル）は @cm/music-core が SSOT（負債D3・design 決定2b）。
 // PITCH_NAMES は re-export して既存の web import 面（useNetaEditor 等）を不変に保つ。
-import { PITCH_NAMES, QUALITY_INTERVALS, applyFeel, type Feel, type Note as CoreNote } from "@cm/music-core";
-export { PITCH_NAMES, applyFeel };
-export type { Feel };
+import { PITCH_NAMES, QUALITY_INTERVALS, applyFeel, applyFeelByPart, type Feel, type HumanizePart, type HumanizeWarn, type Note as CoreNote } from "@cm/music-core";
+export { PITCH_NAMES, applyFeel, applyFeelByPart };
+export type { Feel, HumanizePart, HumanizeWarn };
 
 // フィール層（design.md「フィール層分離」）：スイング/微小タイミングは再生・書き出し境界で **applyFeel**
 // を通す非破壊タイムマップ。SSOTのnotesは常にストレート。6/8等 compound はスイング対象外＝meter から判定。
@@ -66,6 +66,36 @@ export interface Note extends CoreNote {
 
 // ミキサーのパート＝メロ/コード/ベース/ドラム（音量バランスと音割れ対策のパート別ゲイン・耳FB 2026-07-09）。
 export type MixPart = "melody" | "counter" | "chord" | "bass" | "drums";
+
+// ── #29 P1：feel の部位別適用（休眠していた部位別 humanize プロファイルを本番で起こす）──
+// GMドラム番号 → HumanizePart。Kick=基準杭（最タイト）／Snare/Clap/Tom=フィルの腕／HH/Ride/Tamb=タイムキープの腕。
+// Crash 類は構造アンカー＝最タイトの kick プロファイルへ。未マップの percussion は undefined＝default プロファイル。
+const DRUM_HUM_PART: Record<number, HumanizePart> = {
+  35: "kick", 36: "kick", // Acoustic/Electric Bass Drum
+  37: "snare", 38: "snare", 39: "snare", 40: "snare", 41: "snare", 45: "snare", 48: "snare", 50: "snare", // Snare/Clap/Rim/Toms
+  42: "hihat", 44: "hihat", 46: "hihat", 51: "hihat", 53: "hihat", 54: "hihat", // Closed/Pedal/Open HH, Ride, Bell, Tamb
+  49: "kick", 52: "kick", 55: "kick", 57: "kick", // Crash/China/Splash＝構造アンカー
+};
+// MixPart → HumanizePart（music-core は MixPart を知らない＝写像は web に置く・§7-1）。
+const MIX_HUM_PART: Record<MixPart, HumanizePart> = {
+  melody: "melody", counter: "melody", chord: "chords", bass: "bass",
+  drums: "snare", // 未マップ drum の床（実際はほぼ DRUM_HUM_PART で解決）
+};
+// この Note の humanize 部位を解く。ドラムはレーン midi（pitch）で kick/snare/hihat に分ける（§7-1）。
+// 単体再生（part 無し）はメロ扱い（partTracks:987 と同じ防御既定）。
+export function humanizePartOf(n: Note): HumanizePart | undefined {
+  if (n.drum) return DRUM_HUM_PART[n.pitch];
+  return MIX_HUM_PART[n.part ?? "melody"];
+}
+// アンサンブル feel 適用の単一入口（再生 audio.ts と MIDI 書き出し notesToMidi/tracksToMidi が共有）。
+// feel 無しは applyFeelByPart が入力そのまま返す＝bit 一致。humanize>0 のみ部位別プロファイルが起きる。
+export function applyFeelEnsemble(
+  notes: Note[],
+  feel: Feel | null | undefined,
+  ctx: { compound?: boolean; tempo?: number; onWarn?: (w: HumanizeWarn) => void },
+): Note[] {
+  return applyFeelByPart(notes, feel, ctx, humanizePartOf);
+}
 
 // MIDIノート番号→音名（MIDI 60=C4）。負値も安全（(m%12+12)%12）。PITCH_NAMES は @cm/music-core。
 export const pitchName = (midi: number) => `${PITCH_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
@@ -930,7 +960,9 @@ export function notesToMidi(
   // 弱起（負start）は小節単位のオフセットで後ろへシフト（DAW小節整合・オーナー方針）。feel 後に測って
   // シフト＝humanize 等で頭が僅かに負へ振れても拾う。シフトでほぼ全 start>=0 になるが、想定外に残る負は
   // clampNegativeStarts で t=0 保険＝負tick throw（無言DL失敗）を根治。
-  const felt = feelNotes(notes, feel, meter);
+  // #29 P1：再生（audio.ts）と同一の applyFeelEnsemble 経路＝tempo を渡す（従来は tempo 無し＝humanize が
+  // 拍比フォールバックで再生と別の揺れだった＝これを是正）。feel 無しは applyFeelEnsemble が入力そのまま返す＝bit。
+  const felt = applyFeelEnsemble(notes, feel, { compound: isCompoundMeter(meter), tempo: bpm });
   const bpb = beatsPerBar(meter);
   const offset = prerollOffsetBeats(minStartOf(felt), bpb);
   const feltAll = clampNegativeStarts(shiftNotes(felt, offset));
@@ -1016,7 +1048,7 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
   // 弱起シフトは**全トラック共通のオフセット**で揃える（トラックごとに別量シフトすると縦がズレる）。
   // 各トラックへ同一 feel を適用してから全トラック横断の最小 start を測り、小節単位に切り上げてシフト。
   const bpb = beatsPerBar(meter);
-  const felted = tracks.map((t) => feelNotes(t.notes, feel, meter));
+  const felted = tracks.map((t) => applyFeelEnsemble(t.notes, feel, { compound: isCompoundMeter(meter), tempo: bpm })); // #29 P1：tempo 経路統一
   let globalMin = 0;
   for (const ns of felted) { const m = minStartOf(ns); if (m < globalMin) globalMin = m; }
   const offset = prerollOffsetBeats(globalMin, bpb);
@@ -1271,7 +1303,7 @@ export function playbackComposite(children: CompositeChild[], keyPc: number, sec
 // 手組み（AnalysisWorkbench 等の素通し口／エディタの live playable／FormStrip 窓切片）の3種。
 export type PlaybackSource =
   | { kind: "neta"; neta: { kind: string; content: unknown; key?: number | null; mode?: string | null; tempo?: number | null; meter?: string | null } }
-  | { kind: "tree"; children: CompositeChild[]; key: number; mode?: string | null; tempo: number; meter?: string | null }
+  | { kind: "tree"; children: CompositeChild[]; key: number; mode?: string | null; tempo: number; meter?: string | null; feel?: Feel | null }
   | { kind: "notes"; notes: Note[]; tempo: number; meter?: string | null; program?: number; feel?: Feel | null };
 
 export interface PlaybackPlan {
@@ -1303,7 +1335,9 @@ export function buildPlayback(src: PlaybackSource, opts?: { vocal?: boolean }): 
       notes,
       bpm: src.tempo,
       program: undefined, // 合成は per-note program（compositeNotes 付与）
-      feel: undefined,
+      // #29 P1：明示 feel（section content.feel）優先→無ければ子ツリーから拾う＝ネタ帳カード/FormStrip 窓の
+      // section 再生もエディタ外で feel が鳴る（従来は tree=feel undefined で無音の既知ギャップ）。拾えない tree＝bit。
+      feel: src.feel ?? feelOfTree(src.children),
       compound: isCompoundMeter(src.meter),
       vocalJobs: wantVocal ? vocalJobsOf(notes, src.tempo) : [],
     };

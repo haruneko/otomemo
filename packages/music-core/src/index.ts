@@ -269,3 +269,44 @@ export function applyFeel<T extends { start: number; dur: number }>(notes: reado
 
   return out;
 }
+
+// 部位間の seed salt＝各パートの 1/f 系列を非相関化（同 seed だと全パートが同時に同じ向きへよろける不自然さ）。
+// undefined（default プロファイル）＝salt 0。値は任意（互いに素っぽく散らすだけ・決定性には無関係）。
+export const PART_SEED_SALT: Record<HumanizePart, number> = {
+  kick: 11, snare: 23, hihat: 37, bass: 53, chords: 67, melody: 83,
+};
+
+// applyFeel を部位別に被せる薄いラッパ（#29 P1）。notes を partOf でグループ化し、各グループへ
+// 部位別プロファイル（FeelCtx.part）＋seed salt で applyFeel を掛け、元の位置へ書き戻す。
+// 契約（bit 一致の線引き）：
+//  ・feel 無し ⇒ **入力そのまま返す**（同一参照・map もしない）。
+//  ・humanize<=0（swing のみ）⇒ applyFeel を**1回だけ**呼ぶ＝現行と完全一致（swing は per-note 独立写像で分割は無関係）。
+//  ・humanize>0 ⇒ 部位別化（意図的変化）。決定性のみ保証（同 seed 同出力）・音数/多重集合は不変（並べ替えのみ）。
+export function applyFeelByPart<T extends { start: number; dur: number }>(
+  notes: readonly T[],
+  feel: Feel | null | undefined,
+  ctx: FeelCtx,
+  partOf: (n: T) => HumanizePart | undefined,
+): T[] {
+  if (!feel) return notes as T[]; // 無 feel＝恒等（同一参照）＝呼び側の if(feel) ガードと二重で bit 安全。
+  const hum = feelClamp01(feel.humanize ?? 0);
+  if (hum <= 0) return applyFeel(notes, feel, ctx); // swing のみ＝単一 applyFeel＝現行一致。
+  // humanize>0：partOf でグループ化（undefined グループ含む）→ 部位別プロファイル＋seed salt で decorrelate。
+  const groups = new Map<HumanizePart | undefined, { idx: number[]; notes: T[] }>();
+  notes.forEach((n, i) => {
+    const p = partOf(n);
+    let g = groups.get(p);
+    if (!g) { g = { idx: [], notes: [] }; groups.set(p, g); }
+    g.idx.push(i);
+    g.notes.push(n);
+  });
+  const out = new Array<T>(notes.length);
+  for (const [part, g] of groups) {
+    const salt = part ? PART_SEED_SALT[part] : 0;
+    const felt = applyFeel(g.notes, { ...feel, seed: (feel.seed ?? 1) + salt }, { ...ctx, part });
+    // グループ j 番目の出力を元の位置 origIdx[j] へ（長さ・多重集合を保存。humanize 内 sort による同時刻近傍の
+    // 入れ替わりは許容＝スケジューラ/MIDI は順序非依存）。
+    g.idx.forEach((origIdx, j) => { out[origIdx] = felt[j]!; });
+  }
+  return out;
+}

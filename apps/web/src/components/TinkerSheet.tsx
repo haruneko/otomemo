@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Icon } from "./Icon";
+import { NoriRow, humanizeSegOf } from "./NoriRow";
 import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI } from "../useMelodyGen";
 import type { ChordArg } from "../useMelodyGen";
-import type { Note } from "../music";
+import type { Feel, Note } from "../music";
 
 // 「いじる」ボトムシートの中身（design #19 ⑥・正準＝docs/research/2026-07-14-tinker-menu-redesign-fable.md）。
 // ＝ハブ（パーツの棚・スクロール0）＋パーツ別引き出し。状態と送信ロジックは useMelodyGen(gen) が唯一持つ
@@ -17,12 +18,17 @@ export type TinkerSheetProps = {
   isSong: boolean;
   sectionChords: () => ChordArg[];
   sectionBass: () => Note[];
+  // #29 P1「共通」引き出し：セクション共有 feel（跳ね＋人間味）。feel＝sectionFeel() の実効値（子から拾った
+  // feel も見える）→ NoriRow 操作で section content.feel へ昇格保存（両0＝キー削除）。onFeelChange は SectionEditor
+  // の writeSelf 保存（楽観更新＋CoW ガード）。
+  feel?: Feel | undefined;
+  onFeelChange?: (f: Feel | undefined) => void;
   onClose: () => void;
   onExportMidi: () => void;
   onExportMidiSplit: () => void;
 };
 
-type View = "hub" | "melody" | "bass" | "drums" | "skeleton";
+type View = "hub" | "common" | "melody" | "bass" | "drums" | "skeleton";
 
 // GEN_PARTS を op で引ける形に（タイルtap＝おまかせ生成の実体呼び）。
 const PART_BY_OP = Object.fromEntries(GEN_PARTS.map((p) => [p.op, p])) as Record<string, (typeof GEN_PARTS)[number]>;
@@ -55,7 +61,7 @@ type MyPreset = { name: string; label: string; v: Parameters<ReturnType<typeof u
 const MY_PRESETS_KEY = "cm_melody_my_presets";
 const loadMyPresets = (): MyPreset[] => { try { return JSON.parse(localStorage.getItem(MY_PRESETS_KEY) || "[]"); } catch { return []; } };
 
-export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, onExportMidi, onExportMidiSplit }: TinkerSheetProps) {
+export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onFeelChange, onClose, onExportMidi, onExportMidiSplit }: TinkerSheetProps) {
   const [view, setView] = useState<View>("hub");
   // 引き出し内の群アコーディオン開閉（メロ引き出し＝一度に15本を縦に並べない）。
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -113,6 +119,19 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
     return { text: "おまかせ", set: false };
   };
 
+  // 「共通」引き出しのサマリ（ハブ chip の文言）＝進行の色＋ノリ（跳ね/人間味）。未設定は「おまかせ」。
+  const HUM_SEG_LABEL = ["", "弱", "中", "強"];
+  const commonSet = (): boolean => !!gen.palette || (feel?.swing ?? 0) > 0 || (feel?.humanize ?? 0) > 0;
+  const commonSummary = (): string => {
+    const pal = PALETTE_CHIPS.find((p) => p.v === gen.palette)?.label ?? "おまかせ";
+    const parts = [pal];
+    const sw = feel?.swing ?? 0;
+    if (sw > 0) parts.push(`跳ね${Math.round(sw * 10) / 10}`);
+    const hum = feel?.humanize ?? 0;
+    if (hum > 0) parts.push(`人間味${HUM_SEG_LABEL[humanizeSegOf(hum)]}`);
+    return "共通：" + parts.join("・");
+  };
+
   // 群アコーディオンの見出し（▸/▾＋サブ）。前面はchip6±1・seg1行まで、それを超えるノブはここに沈める。
   const gacc = (id: string, label: string, hint: string) => (
     <button type="button" className={"tk-gacc" + (openGroups[id] ? " on" : "")} aria-label={`group-${id}`} aria-expanded={!!openGroups[id]} onClick={() => toggleGroup(id)}>
@@ -140,13 +159,9 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
       </div>
       {!isSong && (
         <>
-          {/* 横断設定＝進行の色（旋法）。ハブ専属＝frame.palette として全生成へ流れる（コード以外も追従）。 */}
-          <div className="tk-hublab">進行の色（全パーツの生成に効く）</div>
-          <div className="tk-palette" aria-label="palette">
-            {PALETTE_CHIPS.map((p) => (
-              <button key={p.v || "omakase"} type="button" className={"chip" + (gen.palette === p.v ? " on" : "")} aria-label={`palette-${p.v || "omakase"}`} aria-pressed={gen.palette === p.v} onClick={() => gen.setPalette(p.v)}>{p.label}</button>
-            ))}
-          </div>
+          {/* 横断設定＝「共通」引き出しへ沈める（ハブ契約：3つ目の横断設定＝ノリ の発動日）。ハブにはサマリ chip 1行だけ
+              残す＝行数純増ゼロ。進行の色（旋法）＋ノリ（跳ね/人間味）は commonDrawer に集約。 */}
+          <button type="button" className={"tk-common-chip" + (commonSet() ? " set" : "")} aria-label="drawer-common" onClick={() => setView("common")}>{commonSummary()} ▾</button>
           {/* ☆おまかせで一式（ヒーロー・§4）＝ドラム→ベース→メロを順に候補へ（コード無ければ先頭にコード）。
               置くのは1件ずつ人間＝「機械は候補まで」。既存 genPart の直列呼び＝新APIゼロ。 */}
           <button type="button" className="tk-hero" aria-label="gen-set" disabled={gen.genBusy} onClick={() => { onClose(); void gen.genSet(); }}>
@@ -429,8 +444,29 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, onClose, 
     </>
   );
 
+  // ---- 共通引き出し（横断設定＝進行の色＋ノリ）＝ハブ契約の「3つ目は共通引き出しへ沈める」の実体 ----
+  const commonDrawer = (
+    <>
+      {drawerHead("共通", () => { gen.setPalette(""); onFeelChange?.(undefined); })}
+      <div className="tk-drawer-body">
+        {/* 進行の色（旋法）＝frame.palette として全生成へ流れる（コード以外も追従）。おまかせ=未送信=bit一致。 */}
+        <div className="tk-hublab">進行の色（全パーツの生成に効く）</div>
+        <div className="tk-palette" aria-label="palette">
+          {PALETTE_CHIPS.map((p) => (
+            <button key={p.v || "omakase"} type="button" className={"chip" + (gen.palette === p.v ? " on" : "")} aria-label={`palette-${p.v || "omakase"}`} aria-pressed={gen.palette === p.v} onClick={() => gen.setPalette(p.v)}>{p.label}</button>
+          ))}
+        </div>
+        {/* ノリ＝セクション共有 feel（跳ね＋人間味）。全トラック同一ワープ＝アンサンブル一貫（design「フィール層分離」）。 */}
+        <div className="tk-hublab">ノリ（跳ね・人間味＝全パーツ同じ揺れ）</div>
+        <NoriRow feel={feel} onChange={(f) => onFeelChange?.(f)} />
+        <p className="tk-drawnote">ノリは置いたパーツ全部（ドラム/コード/ベース/メロ）に同じ跳ね・人間味を掛けます。反映は次の再生から。</p>
+      </div>
+    </>
+  );
+
   const body =
-    view === "melody" ? melodyDrawer
+    view === "common" ? commonDrawer
+    : view === "melody" ? melodyDrawer
     : view === "drums" ? drumsDrawer
     : view === "bass" ? bassDrawer
     : view === "skeleton" ? skeletonDrawer

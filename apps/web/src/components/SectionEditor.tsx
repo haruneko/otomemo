@@ -15,6 +15,7 @@ import {
   downloadMidi,
   downloadMultitrackMidi,
   beatsPerBar,
+  feelOf,
   feelOfTree,
   isSkeleton,
   partTracks,
@@ -93,6 +94,9 @@ export function SectionEditor({
   const [lanesShown, setLanesShown] = useState<string[]>(() => secContent.lanes_shown ?? []);
   const [lanesHidden, setLanesHidden] = useState<string[]>(() => secContent.lanes_hidden ?? []);
   const [lanesMuted, setLanesMuted] = useState<string[]>(() => secContent.lanes_muted ?? []);
+  // #29 P1：セクション共有 feel（ノリ行 UI の保存先）。初期＝section content.feel（無ければ undefined→再生時は
+  // sectionFeel() が子ツリーから拾う）。楽観更新＝触った瞬間 UI/再生に反映、失敗時 revert（persistLanes 流儀）。
+  const [secFeel, setSecFeel] = useState<Feel | undefined>(() => feelOf(neta.content));
   const [addLaneOpen, setAddLaneOpen] = useState(false); // ＋レーン メニュー（畳んだレーンから選んで出す）
   const addLaneRef = useRef<HTMLDivElement>(null);
   useDismiss(addLaneRef, addLaneOpen, useCallback(() => setAddLaneOpen(false), []));
@@ -134,6 +138,13 @@ export function SectionEditor({
   // content スキーマは自由形＝api 変更不要（updateNeta の既存経路）。revert＝CoW「やめる」時に楽観更新を戻す。
   const persistLanes = (next: { lanes_shown: string[]; lanes_hidden: string[]; lanes_muted: string[] }, revert?: () => void) => {
     void writeSelf({ content: { ...secContent, ...next } }).then((ok) => { if (!ok) revert?.(); });
+  };
+  // #29 P1：ノリ行 feel を section content.feel へ保存（両0＝undefined＝キー削除＝無指定 bit 一致へ復帰）。
+  // 楽観更新＋失敗 revert（persistLanes と同型）。writeSelf の JSON 化で feel:undefined はキーごと落ちる。
+  const persistFeel = (next: Feel | undefined) => {
+    const prev = secFeel;
+    setSecFeel(next);
+    void writeSelf({ content: { ...secContent, feel: next } }).then((ok) => { if (!ok) setSecFeel(prev); });
   };
   const showLane = (key: string) => {
     const shown = lanesShown.includes(key) ? lanesShown : [...lanesShown, key];
@@ -393,8 +404,10 @@ export function SectionEditor({
   // song 再生（直下＝section コンテナ）は feelOfTree が**入れ子のメロまで再帰**して feel を拾い曲全体へ適用する
   // ＝song をストレートに潰さない（バグ修正 2026-07-18）。section 単体は直下が leaf のみ＝従来の直下走査と bit 一致。
   // スコープ外：per-section で feel を変える（範囲付き feel 適用が要る大改修）＝backlog（今は先頭優勢メロの feel を曲全体へ）。
+  // #29 P1：section 自身の content.feel を最優先（ノリ行 UI の保存先）→ 無ければ従来どおり子ツリーから拾う。
+  // section content.feel 無し＝先頭子 fallback＝従来と bit 一致。
   function sectionFeel(): Feel | undefined {
-    return feelOfTree(children);
+    return secFeel ?? feelOfTree(children);
   }
   // #55 多トラック書出：レーン(メロ/コード/ベース/リズム)別に1トラックずつ。空レーンは省く。
   // バグ#1(2026-07-13)：各トラックの GM音色を composite notes の program から採る（trackProgramOf）＝
@@ -450,6 +463,8 @@ export function SectionEditor({
               isSong={isSong}
               sectionChords={sectionChords}
               sectionBass={sectionBass}
+              feel={sectionFeel()}
+              onFeelChange={persistFeel}
               onClose={() => setToolsOpen(false)}
               onExportMidi={() => { setToolsOpen(false); downloadMidi(composite(), `${liveTitle || "section"}.mid`, tempo, liveMeter ?? null, undefined, sectionFeel()); }}
               onExportMidiSplit={() => { setToolsOpen(false); downloadMultitrackMidi(isSong ? partTracks(composite()) : laneTracks(), `${liveTitle || "section"}-tracks.mid`, tempo, liveMeter ?? null, sectionFeel()); }}

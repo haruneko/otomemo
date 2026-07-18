@@ -1086,6 +1086,32 @@ article[aria-label="neta-card"].dragging {
   color: var(--muted) !important;
   background: transparent !important;
 }
+/* #29 P1「共通」引き出しのサマリ chip（ハブ専属・進行の色＋ノリを1行に畳む）。 */
+.tk-common-chip {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #191d23;
+  color: var(--muted);
+  font-size: 0.72rem;
+  padding: 8px 11px;
+  margin: 2px 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tk-common-chip.set {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+/* ノリ行（跳ねスライダー＋人間味seg）＝knob-row/knob-seg を流用・行間だけ整える。 */
+.nori-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 /* 書き出し＝ハブ下端の固定行。 */
 .tk-export {
   display: flex;
