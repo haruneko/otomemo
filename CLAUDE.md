@@ -1,4 +1,4 @@
-# Otomemo（リポジトリ creative_manager）— 開発ルール
+# Otomemo（旧称 creative_manager＝ローカルdir/パッケージ名は据置・GitHubは otomemo）— 開発ルール
 
 実装は **SDD（スペック駆動）＋TDD** で進める。スペックが正準、コードは従う。
 
