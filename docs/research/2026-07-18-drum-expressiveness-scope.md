@@ -531,3 +531,26 @@ return Array.from({length: d}, (_, k) => ({ ...note,
 **契約**：feel 無し or 全0＝再生/MIDI byte 一致。swing のみ＝現行一致（part 分割無関係）。humanize>0 のみ意図的変化（部位別起床・決定性は同 seed で担保）。velCurve/beatsPerStep/divs/vel 未指定＝各変換 bit 一致（`vel: undefined` キーも生やさない）。WP-D1 の「velCurve は旧 consumer 無視」条項は**「web 再生が正準として読む」へ昇格**。
 ```
 
+## §9 P2 操作層の改定＝長押しドラッグ＋モード（2026-07-18・オーナーGO・§8-3 の UI を差し替え）
+
+P2 の**編集ロジック（純関数・保存）は §8-3 のまま不変**。**操作層のみ**をチップ・ポップオーバーから「長押しドラッグ＋モード」へ改定（オーナー承認・モック `scratchpad/drum-gesture-mock.html` で実動確認）。design.md #29 の P2 段落と「作らない：連続値UI」条項を本節に合わせて改定済み。
+
+**文法**：
+- **✎鉛筆（既定）**：タップ＝置く/消す（`laneWithHitToggled`・不変）。打点を**長押し 450ms→持ち上がり（scale1.35＋白枠＋kind色ハロー＋vibrate15）→押したまま 縦＝強さ・横＝連打**、離して確定（`onChange`1回＝undo1粒）、pointercancel＝元通り。空セル長押しは無反応。
+- **⌫消しゴム**：タップ＋なぞり一掃（`elementFromPoint` 追跡・erase 中のみ `touch-action:none`）。存在価値＝通常はスクロールに食われる横スワイプ消し。UI＝`.proll-modes`（KindEditorBody/SectionEditor と同型）を `rhythm-toolbar` に。
+- **選択モードは出さない**（複製/ナッジ等の動詞が未実装＝死に道具・将来の小節コピー時に追加）。ドラッグ編集は鉛筆内（モード切替を挟むと1打ごとに2タップ増）。
+
+**軸マップ**：縦＝強さ（**連続値**・0.6vel/px・上限127／**磁石デテント** ghost28/base(=drumVel)/min(127,base+18)・吸着±6・通過時プレビュー音＝フリックで従来3語彙が1動作・スナップ時は既存 `laneWithHitVel` で正準値＋`normVelCurve`）。横＝連打（1→2→3・**44px/段の離散**・現在値からの相対）。**非対称閾値**で縦調整中の指ブレ（±20px）では連打が誤発火しない。
+**スクロール衝突**：静止450msが先→ネイティブスクロール未開始→発火時 `setPointerCapture`＋**non-passive `touchmove` の captured 中のみ `preventDefault`**（React合成イベントは passive 指定不可＝ref で addEventListener）。発火前8px超はスクロールへ。
+**コード楽器**：同ジェスチャの**縦のみ**（横無効＝分割は arp）。デテント CHORD_SOFT64/100/CHORD_ACCENT112・普通確定で vel キー削除（bit）。タップ文法（頭=消す/伸び=長さ/空き=置く）不変・モード行なし（頭タップが消す動詞）。
+**発見性**：持ち上げ＋指上 HUD（弱く/普通/強く＋数値＋n連バッジ＋デテント目盛メータ）＋グリッド下ヒント行（既存イディオム）「タップ=置く/消す・長押し→上下=強さ・左右=連打」。チュートリアル機構は作らない。
+
+**移行ノート（Opus向け・純関数層は無傷）**：
+1. `useLongPress.ts`→**`useHoldDrag.ts`**（450ms/8px/click抑制/contextmenu継承・状態機械 idle→pending→captured・発火時 setPointerCapture・`onDrag({dvel,div})`/`onCommit`/`onCancel`・**急所＝non-passive touchmove を captured 中のみ preventDefault**）。
+2. `music.ts`：**追加のみ** `laneWithHitVelNum(lane,step,vel:number)`（rebuildLane/normVelCurve 再利用の約6行）＋コード用 `chordHitsWithVel(hits,step,vel|undefined)`。デテント時は既存 `laneWithHitVel`/定数。既存関数不変。
+3. `RhythmEditor.tsx`：pop state/pick() 撤去→`dragState{li,step,vel,div}` のローカルプレビュー（--hv/divクラス上書き）＋離した時に一括 onChange。`rhythm-toolbar` に ✎/⌫（`.proll-modes` 再利用・`eraseMode` useState は SectionEditor 同型）。なぞり消し＝erase 中 `elementFromPoint` 追跡。ヒント行追加。
+4. `ChordPatternEditor.tsx`：pop/pickChord 撤去→同 hook 縦のみ。タップ文法不変。
+5. `CellPopover.tsx`：**削除**（両エディタ移行後）＋`chat.css` の `.cell-pop*` 削除、`.rhythm-cell.lift`/`.drag-hud`/erase時 `touch-action` 追加。
+6. テスト：useHoldDrag（発火/移動解除/commit/cancel）・laneWithHitVelNum（正規化・base で velCurve 削除）・確定 onChange1回・erase 掃除（velCurve/divs 同時）。**既存 bit一致テストは全て生きたまま通る**。
+パラメータ：LONG_MS=450・TOL=8px・0.6vel/px・DIV_PX=44・SNAP=±6（モックに実値埋込）。
+
