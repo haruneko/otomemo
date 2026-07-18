@@ -1,6 +1,6 @@
-# creative_manager アーキテクチャ・HOWメモ（v0.1）
+# Otomemo アーキテクチャ・HOWメモ（v0.1）
 
-最終更新: 2026-07-13（systemd 自動起動の記述を実態＝2026-07-07導入済へ更新）
+最終更新: 2026-07-18（表題をプロダクト名 Otomemo に統一。技術識別子＝ディレクトリ `creative_manager`・プロセス `cm-api`/`cm-search`・MCP `creative-manager`・env `CM_*` は実態どおり据置＝design「UI/ブランド刷新」）。systemd 自動起動は 2026-07-07 導入済。
 
 要件は `docs/requirements.md`。ここは HOW（どう作るか）の決定ログ。決まったことだけ書き、未決は「未決・要調査」に置く。
 

@@ -1,4 +1,4 @@
-# creative_manager — 開発ルール
+# Otomemo（リポジトリ creative_manager）— 開発ルール
 
 実装は **SDD（スペック駆動）＋TDD** で進める。スペックが正準、コードは従う。
 

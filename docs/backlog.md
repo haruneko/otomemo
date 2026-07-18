@@ -1,4 +1,4 @@
-# creative_manager — 積みタスク（やりそびれ・あとで）
+# Otomemo — 積みタスク（やりそびれ・あとで）
 
 スペック層（requirements/architecture/design）にも Task 機能にも載せきれない「いつかやる／保留」をここに貯める。
 着手したら Task 化して、ここからは消すか「→ #NN」と印を付ける。最終更新を都度書く。
