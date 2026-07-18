@@ -3,7 +3,8 @@
 // 打点は **click ベース**＝タッチのスクロールでは click が発火しない（PianoRoll の <button onClick> と同方式）。
 // さらに pointerdown からの移動閾値(isTap)＋pointercancel の保険＝スクロールでは絶対に点が置かれない（オーナーFB 2026-07-11）。
 import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
-import { pitchName, pc, isBlack, scalePcSet, beatsPerBar, skeletonPreviewNotes, playNotes, type ChordEntry, type SkeletonBreakpoint, type SkeletonContent, type PlaybackHandle } from "../music";
+import { pitchName, pc, isBlack, scalePcSet, beatsPerBar, skeletonPreviewNotes, buildPlayback, type ChordEntry, type SkeletonBreakpoint, type SkeletonContent, type PlaybackHandle } from "../music";
+import { startPlayback } from "../playback";
 import { previewNote } from "../audio";
 import { api, type Neta } from "../api";
 import { useDismiss } from "../useDismiss";
@@ -276,7 +277,7 @@ export function SkeletonEditor(p: SkeletonEditorProps) {
   async function auditionStub(c: SkelCand) {
     audRef.current?.stop();
     const ns = skeletonPlaybackNotes(candContent(c), { counterpoint: p.counterpoint, chords: p.chords, beatsPerBar: bpb });
-    if (ns.length) audRef.current = await playNotes(ns, p.tempo ?? 120);
+    if (ns.length) audRef.current = await startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: p.tempo ?? 120 }), { vocalMode: "off" }); // 骨格＝歌う対象なし（#27）
   }
   // 採用＝置換（tones/bass/phrases は親 state 経由＝編集履歴 snapshot に乗る＝Undo で戻れる）。
   function adoptStub(c: SkelCand) {

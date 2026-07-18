@@ -3,8 +3,9 @@
 // 検算＝合成メロ＋コード＋クリックを鳴らす（原曲録音は鳴らさない・派生ノート＝著30-4圏）。スマホ対応（button/onClick）。
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { api, type Neta } from "../api";
-import { playNotes, type PlaybackHandle } from "../audio";
-import type { Note } from "../music";
+import { type PlaybackHandle } from "../audio";
+import { buildPlayback, type Note } from "../music";
+import { startPlayback } from "../playback";
 import { PrepStatus } from "../usePrepPending";
 
 type Seg = [number, number, string]; // [start_sec, end_sec, label]
@@ -231,7 +232,8 @@ export function AnalysisWorkbench({ neta, onChanged, onClose }: { neta: Neta; on
     startRef.current = performance.now();
     tick(seekBeat);
     try {
-      handleRef.current = await playNotes(buildNotes(seekBeat), bpm, { onEnd: () => { stopPh(); setPlaying(false); } });
+      // #27：{kind:"notes"}（buildNotes は固有＝残す）→駆動層 off（音源解析は歌う対象なし）。自前 rAF プレイヘッドは据え置き。
+      handleRef.current = await startPlayback(buildPlayback({ kind: "notes", notes: buildNotes(seekBeat), tempo: bpm }), { vocalMode: "off", onEnd: () => { stopPh(); setPlaying(false); } });
     } finally {
       setStarting(false);
     }

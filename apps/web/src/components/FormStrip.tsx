@@ -11,7 +11,8 @@ import {
 import { arrayMove, SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api, type Neta, type FormCandidate, type EnergyPlanLite } from "../api";
-import { PITCH_NAMES, compositeNotes, playNotes, type PlaybackHandle } from "../music";
+import { PITCH_NAMES, buildPlayback, type PlaybackHandle } from "../music";
+import { startPlayback } from "../playback";
 import { collapseRuns, cardsToEdges, reconcileEdges, resolveDurById, totalSpanBeats, roleOf, roleInfo, keyDiffLabel, type StripCard, type Edge } from "../formStrip";
 import { scaffoldPlan, energyChips, transitionWindowNotes, type KeyApplication } from "../formPlan";
 import { FormSuggest, type SuggestCard } from "./FormSuggest";
@@ -265,11 +266,13 @@ export function FormStrip({
     stopTransition();
     setTransAt(null);
     if (wasPlaying) return; // トグル停止
-    // 窓＝[境界-2小節, 境界+2小節)（曲頭尾はクリップ）。ノートは composite（曲全体の再帰合成）から切り出す。
-    const win = transitionWindowNotes(compositeNotes(children, keyPc, mode), boundaryBeat, 2 * BPB);
+    // 窓＝[境界-2小節, 境界+2小節)（曲頭尾はクリップ）。ノートは再生用合成（playbackComposite＝歌う子は sungBy+muted 済）
+    // から切り出す。#27：窓切片の sungBy から窓専用 vocal job を再導出（{kind:"notes"} で再plan）→駆動層で ensure→再生
+    // ＝**backlog「FormStrip つなぎ試聴が仮歌を通していない」の根治**（feel 欠落も構造の帰結として解消）。
+    const win = transitionWindowNotes(buildPlayback({ kind: "tree", children, key: keyPc, mode, tempo, meter: liveMeter }).notes, boundaryBeat, 2 * BPB);
     if (!win.length) return;
     setTransAt(unitIdx);
-    transPlay.current = await playNotes(win, tempo, {});
+    transPlay.current = await startPlayback(buildPlayback({ kind: "notes", notes: win, tempo }), { vocalMode: "ensure" });
     // 窓が鳴り終わったら表示を戻す（連結再生は1回きり＝ループしない）。
     const endBeat = Math.max(...win.map((n) => n.start + n.dur));
     transTimer.current = setTimeout(() => { setTransAt(null); transPlay.current = null; }, (endBeat * 60 * 1000) / Math.max(1, tempo) + 200);

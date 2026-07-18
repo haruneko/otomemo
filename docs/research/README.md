@@ -121,6 +121,7 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [2026-06-21-routing-scenarios](2026-06-21-routing-scenarios.md) — 頼み事の振り分けシナリオ・ベンチ
 - [2026-06-22-association-usecases](2026-06-22-association-usecases.md) — 連想ユースケース群（どの仕組みで実現）
 - [2026-06-22-association-spec-validation](2026-06-22-association-spec-validation.md) — 連想「8機構の地図」の末端検証
+- [2026-07-18-playback-path-unification](2026-07-18-playback-path-unification.md) — **再生経路一本化の根治設計（web）**＝playNotes呼び出し10箇所の現状マップ→PlaybackPlan解決層(sungByマーカー)+単一ドライバ(vocalMode=ensure/peek/off・stale-stop根治)・移行S0〜S5。カード▶仮歌バグとFormStrip遷移仮歌欠落は帰結として解消。design#27起票用文面つき
 
 ## 自己点検・整合・研究計画
 - [2026-07-18-team-reproduction-of-unread-dev](2026-07-18-team-reproduction-of-unread-dev.md) — **コード不読開発を複数人の会社開発で再現する移植設計（チーム展開用）**。壊れるもの6点=裁定の単一点(→DRI表+帰属記録)/main直(→PR必須ゲート=spec diff+機械ゲート緑+受け入れ記録・コード読解は任意)/実物受け入れの属人性(→受け入れ責任者を実装前アサイン・いなければ書かせない)/品質下限の規定者(→文化でなくCI焼き込み)/docs競合(→design領域分割・索引append-only)/コストと評価制度(→モデル階層+パイロット実績で説得)。導入=1人1領域パイロット→計測(基準線revert 1/943)→横展開。既存コードはスペック逆生成+ゴールデン固定。限界=n=1・受け入れ専門性の壁・「失敗を仕組みに変換する反射」は教育対象

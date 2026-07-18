@@ -9,19 +9,19 @@ import { TransportBar } from "./TransportBar";
 import {
   notesForContent,
   compositeNotes,
-  vocalMelodyFromComposite,
-  singOf,
+  buildPlayback,
+  vocalJobsOf,
   trackProgramOf,
   downloadMidi,
   downloadMultitrackMidi,
   beatsPerBar,
   feelOf,
-  isCompoundMeter,
   isSkeleton,
   partTracks,
   type ChordEntry,
   type Feel,
   type Note,
+  type PlaybackPlan,
 } from "../music";
 import type { SkeletonDeskTarget } from "./SkeletonDesk"; // 型のみ＝実行時依存なし（骨格ブロック→机の入口）
 import { MiniRoll } from "./MiniRoll";
@@ -177,48 +177,28 @@ export function SectionEditor({
   // ♪仮歌（メロの楽器＝歌声）：各メロ子ネタの content.sing に従い、歌う子だけ VOICEVOX で歌わせ伴奏と同一クロックで
   // 鳴らす（入れ方はメロ側に集約＝Section 側トグルは撤去）。歌う子＝kind=melody かつ sing.enabled かつ歌詞(syllable)あり。
   // 各子は自分の配置オフセットで placed（compositeNotes([child]) で position 移調済み）＝複数メロ混在が自然に成立。
-  const singingJobs = useMemo(() => {
-    // 1st pass：歌う子（melody・sing.enabled・歌詞あり）を集める。ensemble はこの結合音高で決めるので全員揃えてから。
-    const singers: { c: Child; sing: ReturnType<typeof singOf>; vm: ReturnType<typeof vocalMelodyFromComposite> }[] = [];
-    // レーンミュート（再生のみ）された子は歌わせない＝ミュート＝合成/歌の両方から外す（一貫性）。
-    for (const c of sctx.audibleChildren(secCtx, lanesMuted)) {
-      const sing = c.node.neta.kind === "melody" ? singOf(c.node.neta.content) : undefined;
-      if (!sing) continue;
-      const vm = vocalMelodyFromComposite(compositeNotes([c], keyPc, neta.mode));
-      if (!vm.hasLyric) continue; // 歌詞なし＝フォールバック楽器（歌わせない・ミュートもしない）
-      singers.push({ c, sing, vm });
-    }
-    // A：全歌う子の結合音高＝ensemble（サーバがこの結合レンジで唯一のオクターブシフトを決める＝子ごとの割れ防止）。
-    const ensemblePitches = singers.flatMap((s) => s.vm.notes.map((n) => Math.round(n.pitch)));
-    const jobs: { key: string; notes: { pitch: number; start: number; dur: number; syllable?: string }[]; bpm: number; firstNoteBeat: number; speaker?: number; ensemblePitches: number[]; child: Child }[] = [];
-    for (const { c, sing, vm } of singers) {
-      // key に ensemble と speaker を含める＝歌う子の増減/ミュート/声色変更で shift が変わっても stale wav を返さない。
-      jobs.push({
-        key: JSON.stringify({ n: vm.notes, t: tempo, e: ensemblePitches, s: sing!.speaker ?? null }),
-        notes: vm.notes, bpm: tempo, firstNoteBeat: vm.minStartBeat, speaker: sing!.speaker, ensemblePitches, child: c,
-      });
-    }
-    return jobs;
-  }, [children, keyPc, neta.mode, tempo, lanesMuted]); // secCtx は children/keyPc/mode 派生＝上の deps で十分
-  const singingChildren = useMemo(() => new Set(singingJobs.map((j) => j.child)), [singingJobs]);
-  const vocal = useVocalRender();
-  const jobsRef = useRef(singingJobs);
-  jobsRef.current = singingJobs;
+  const vocal = useVocalRender(); // busy/progress/msg 表示用（ensure/peek は駆動層 startPlayback が回す・#27）
 
   // #49/#58/#59 トランスポート。合成結果を再生／プレイヘッドは TOTAL(グリッド全体)尺・拍子BPB。
-  // 再生ノートは playComposite＝骨格トグルONの間だけ骨格2声が混ざる（書き出しは composite のまま）。
-  // getVocal＝再生押下（playPause で ensure レンダ後）に peek で最新 buffer 群を掴む（歌う子が無ければ null＝従来一致）。
-  const tp = useTransport(() => playComposite(), tempo, {
-    scaleBeats: TOTAL, bpb: BPB, feel: sectionFeel(), compound: isCompoundMeter(liveMeter),
-    getVocal: () => vocal.peek(jobsRef.current),
-  });
-
-  // 再生＝歌う子があれば先に wav をレンダ（未キャッシュは「歌声を作っています…」busy）→ 伴奏と同期再生。停止/一時停止は素通し。
-  const playPause = useCallback(async () => {
-    if (vocal.busy) return; // 仮歌レンダ中の再押下＝no-op（ensure 二重発火→api.sing 重複 fetch を防ぐ・スピナーが応答の証）
-    if (tp.state === "stopped" && jobsRef.current.length) await vocal.ensure(jobsRef.current);
-    tp.playPause();
-  }, [tp.state, tp.playPause, vocal.ensure, vocal.busy]);
+  // #27 再生経路の一本化：getPlan（PlaybackPlan）を渡す。歌う子の melody は playbackComposite が sungBy+muted を付け、
+  // vocalJobsOf が job を再導出（singingJobs/buildVocalJob の手組みは撤去）。レーンミュートは audibleChildren で先に外す
+  // （lane 定義はエディタ所有＝pure 層に持ち込まない）。骨格耳は plan.notes への後段デコレータとして残す（§2.2）。
+  const getPlan = (): PlaybackPlan => {
+    const audibleKids = sctx.audibleChildren(secCtx, lanesMuted);
+    const plan = buildPlayback({ kind: "tree", children: audibleKids, key: keyPc, mode: neta.mode, tempo, meter: liveMeter });
+    // 骨格の耳確認：ONの間だけメロ(part:"melody"・非歌唱)をミュートし骨格2声を伴奏に重ねる（歌う子=muted melody は残す）。
+    // 骨格レーンをミュート中は骨格2声も出さない（ミュート合成の一貫性）。書き出し(composite)は不変。
+    let notes = plan.notes;
+    if (skelAudible) {
+      const skel = !lanesMuted.includes("skeleton") ? skelEar() : [];
+      notes = [...notes.filter((n) => n.part !== "melody" || n.muted), ...skel];
+    }
+    // feel＝sectionFeel（tree ソースは content 由来 feel を持たない＝ここで上書き）。vocalJobs は骨格デコレート後の notes から再導出。
+    return { ...plan, notes, feel: sectionFeel(), vocalJobs: vocalJobsOf(notes, tempo) };
+  };
+  const tp = useTransport(getPlan, tempo, { scaleBeats: TOTAL, bpb: BPB });
+  // #27：再生ラッパは撤去（begin 内の vocalMode:"ensure" が ensure＋二重発火 no-op を吸収）。playPause は tp 直結。
+  const playPause = tp.playPause;
 
   // Space=合成再生/一時停止（design #59）。入力中は無効。
   useEffect(() => {
@@ -407,27 +387,7 @@ export function SectionEditor({
   function composite(): Note[] {
     return compositeNotes(children, keyPc, neta.mode);
   }
-  // 骨格の耳確認（オーナーFB 2026-07-11）：「鳴らす」ON の間だけ再生に骨格2声（メロ実音＋実効ベース+1oct・
-  // Strings/Cello）を混ぜる＝ドラムと合わせて聞ける。**合成(composite)と MIDI 書き出しは不変＝無音のまま**。
-  // コードは compositeNotes と同じ key-aware 移調でセクション実調へ→骨格位置相対に（earChords/skelEar は sectionContext へ委譲・上部）。
-  // 再生専用の合成＝トグルONなら骨格2声を足す。書き出し(downloadMidi/laneTracks)は composite のまま＝混入しない。
-  function playComposite(): Note[] {
-    // レーンミュート（再生のみ・書き出しは全部入り）＝muted レーンの子を鳴らす合成から外す。
-    // 骨格/仮歌のノート除去と同じ機構＝どれかがミュートならミュートで自然に合成される。lanesMuted 空なら children そのまま＝従来一致。
-    const audibleKids = sctx.audibleChildren(secCtx, lanesMuted);
-    // ♪仮歌＝歌う子の楽器音は muted フラグで再生スケジュールから外す（歌本体は vocal 経路の wav で鳴る＝二重化回避）。
-    // ただし notes は残す＝弱起(負start)/尺が leadBeats・終端計算に効く（歌が伴奏と同じ弱起シフトに乗る）。書き出しは不変。
-    const singKids = audibleKids.filter((c) => singingChildren.has(c));
-    const restKids = audibleKids.filter((c) => !singingChildren.has(c));
-    const audible = compositeNotes(restKids, keyPc, neta.mode);
-    const mutedSing = compositeNotes(singKids, keyPc, neta.mode).map((n) => (n.part === "melody" ? { ...n, muted: true } : n));
-    // 骨格を鳴らす＝メロ(part:"melody")をミュートし、骨格2声(Strings/Cello)を伴奏(コード/ベース/ドラム)に重ねて
-    // 対位法的に聴く（メロと骨格の二重化＝ピアノが勝つのを避ける・オーナーFB 2026-07-12）。書き出し(composite)は不変。
-    // 骨格レーン自体をミュートしている時は骨格2声も出さない（ミュート合成の一貫性）。
-    const skel = skelAudible && !lanesMuted.includes("skeleton") ? skelEar() : [];
-    const withSkel = skelAudible ? audible.filter((n) => n.part !== "melody") : audible;
-    return [...withSkel, ...mutedSing, ...skel];
-  }
+  // 再生用合成（骨格耳・レーンミュート・仮歌 sungBy）は getPlan（上）へ移設（#27）。書き出しは composite()＝不変。
   // アンサンブル feel（design.md「フィール層分離」Stage4）：セクション内メロトラックの content.feel を
   // **全トラックに同一適用**＝スイングは声部単位でなく時間軸の共有性質（メロだけ跳ねる事故を避ける）。無ければストレート。
   function sectionFeel(): Feel | undefined {

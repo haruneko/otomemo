@@ -16,8 +16,9 @@ const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta,
 vi.mock("../src/api", () => ({
   api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary, suggestForm, suggestKeyPlan, suggestEnergyPlan },
 }));
-// music は実物を使いつつ playNotes だけ差し替え（compositeNotes/射影 等は実計算＝遷移窓の実結線を通す）。
-vi.mock("../src/music", async (orig) => ({ ...(await orig<typeof import("../src/music")>()), playNotes }));
+// #27：再生は駆動層 playback.ts→audio.playNotes 経由。音源エンジン(playNotes)だけ差し替え、music/playback は実物
+// （buildPlayback/compositeNotes/射影・startPlayback の実結線を通す＝遷移窓の実 notes が audio.playNotes へ届く）。
+vi.mock("../src/audio", async (orig) => ({ ...(await orig<typeof import("../src/audio")>()), playNotes }));
 
 import { SectionEditor } from "../src/components/SectionEditor";
 

@@ -28,18 +28,24 @@ vi.mock("../src/api", () => ({
   api: { createJob, getJob, createNeta, link, placeChild, assignProject, getComposition, genSection, deleteNeta },
 }));
 
-// F1 再生ローディング（設計2026-07-17）：playNotes を「解決を握れる」フェイクへ差し替え、押下→準備中の
-// 窓（starting）をテストから制御する。notesForContent/compositeNotes は非空固定＝空 notes 早期 return を避ける。
+// F1 再生ローディング（設計2026-07-17）＋#27 再生一本化：駆動層 startPlayback を「解決を握れる」フェイクへ差し替え、
+// 押下→準備中の窓（starting）をテストから制御する。notesForContent/compositeNotes は非空固定＝空 notes 早期 return を避ける
+// （buildPlayback は実物＝それらから plan を組む）。playNotesMock は startPlayback の呼び出しを受ける（名前は踏襲）。
 const { playNotesMock } = vi.hoisted(() => ({ playNotesMock: vi.fn() }));
 vi.mock("../src/music", async (orig) => {
   const actual = await orig<typeof import("../src/music")>();
   return {
     ...actual,
-    playNotes: (...args: unknown[]) => playNotesMock(...args),
     notesForContent: () => [{ pitch: 60, start: 0, dur: 1 }],
     compositeNotes: () => [{ pitch: 60, start: 0, dur: 1 }],
   };
 });
+const IDLE_VOCAL = { busy: false, progress: null, msg: null }; // 安定参照（useSyncExternalStore がループしない）
+vi.mock("../src/playback", () => ({
+  startPlayback: (...args: unknown[]) => playNotesMock(...args),
+  subscribeVocalBusy: () => () => {}, // PrepStatus 購読口（本テストでは busy を出さない）
+  vocalBusyState: () => IDLE_VOCAL,
+}));
 
 import { NetaList, NetaCard } from "../src/components/NetaList";
 
@@ -270,7 +276,7 @@ describe("NetaList", () => {
     playNotesMock.mockReset();
     let resolvePlay!: (h: unknown) => void;
     playNotesMock.mockImplementation(() => new Promise((res) => { resolvePlay = res; }));
-    render(<NetaCard neta={mk({ id: "p8", kind: "melody", title: "旋律", content: { notes: [] } })} />);
+    render(<NetaCard neta={mk({ id: "p8", kind: "melody", title: "旋律", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } })} />);
     const btn = screen.getByLabelText("play-p8");
     await userEvent.click(btn); // 開始→playNotes pending（starting=true）
     await waitFor(() => expect(btn).toHaveAttribute("aria-busy", "true"));
@@ -296,7 +302,8 @@ describe("NetaList", () => {
     await waitFor(() => expect(btn).toHaveAttribute("aria-busy", "true"));
     expect(getComposition).toHaveBeenCalledWith("s8");
     expect(playNotesMock).not.toHaveBeenCalled(); // まだ fetch 待ち＝発音前
-    resolveComp({ children: [] });
+    // buildPlayback は実物＝子から compositeNotes で実 notes を組む（非空にして早期 return を避ける）。
+    resolveComp({ children: [{ position: 0, node: { neta: { kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] }, key: 0, mode: "major" } } }] });
     await waitFor(() => expect(playNotesMock).toHaveBeenCalled());
   });
 

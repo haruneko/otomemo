@@ -24,6 +24,7 @@ import { chordChips, applyChordTrial, adoptedChordContent, chordName, dedupeChor
 import { LENS_FOLD, LENS_REAL } from "../deskLens";
 import {
   beatsPerBar,
+  buildPlayback,
   compositeNotes,
   melodyPlacementShift,
   isSkeleton,
@@ -31,6 +32,7 @@ import {
   pitchName,
   type ChordEntry,
   type Note,
+  type PlaybackPlan,
   type SkeletonBreakpoint,
   type SkeletonContent,
 } from "../music";
@@ -312,7 +314,10 @@ export function SkeletonDesk(p: SkeletonDeskProps) {
     // **chordTrial を deps に含める**（effChords が依存）＝試着を停止→再生で反映（欠落バグ #2 の是正 2026-07-13）。
   }, [loaded, bars, tones, bass, phrases, children, BPB, sectionKey, sectionMode, skelPosition, candPreview, focusStage, chordTrial]);
 
-  const tp = useTransport(getNotes, tempo, { scaleBeats: blockSpan, bpb: BPB, activeLens, range: effRange });
+  // #27：useTransport は getPlan（PlaybackPlan）を受ける。机は歌う対象なし＝{kind:"notes"}（sungBy 無し＝vocalJobs=[]・
+  // vocalMode:"off" 相当）。stageAllNotes のレンズ印/ステージ合成は plan.notes への前段解決として getNotes に残す（§2.2）。
+  const getPlan = useCallback((): PlaybackPlan => buildPlayback({ kind: "notes", notes: getNotes(), tempo }), [getNotes, tempo]);
+  const tp = useTransport(getPlan, tempo, { scaleBeats: blockSpan, bpb: BPB, activeLens, range: effRange });
 
   // --- 範囲ブレースのルーラー：ロール（tp.scrollerRef）と横スクロールを同期＝ずれない。 ---
   // 骨格ゾーン（ticks/braces）だけを translate＝ロール content と同じ量だけ左へ流れる（beat 位置が一致）。

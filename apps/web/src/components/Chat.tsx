@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAlive } from "../poll";
 import { api, type Neta, type ChatMessage, type ChatThread } from "../api";
-import { playNotes, notesForContent, feelOf, isCompoundMeter } from "../music";
+import { buildPlayback } from "../music";
+import { startPlayback } from "../playback";
 import { MUSIC_KINDS, KIND_LABEL } from "../kinds";
 import { MiniRoll } from "./MiniRoll";
 import { Icon } from "./Icon";
@@ -59,7 +60,8 @@ function ChatToolCard({
     if (auditioning) return; // 準備中の再押下は no-op
     setAuditioning(true);
     try {
-      await playNotes(notesForContent(it.kind, it.content, { key: 0 }), 120, { feel: feelOf(it.content) });
+      // #27：解決層＋駆動層（peek＝待たない高速試聴）。候補は sing 設定を持たない＝jobs=[]＝実質ドライ。key:0/bpm120 は現行維持。
+      await startPlayback(buildPlayback({ kind: "neta", neta: { kind: it.kind, content: it.content, key: 0, tempo: 120 } }), { vocalMode: "peek" });
     } finally {
       setAuditioning(false);
     }
@@ -451,7 +453,8 @@ export function Chat({
       const neta = await load();
       if (!neta) return;
       // 相対bass は neta の key を tonic に解決して試聴（#bass S2）。
-      await playNotes(notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }), neta.tempo ?? 120, { feel: feelOf(neta.content), compound: isCompoundMeter(neta.meter) });
+      // #27：保存済ネタの試聴は ensure（歌う設定のネタは Chat 試聴でも歌う・previewing 窓が待ちを吸収）。
+      await startPlayback(buildPlayback({ kind: "neta", neta }), { vocalMode: "ensure" });
     } finally {
       setPreviewing(false);
     }

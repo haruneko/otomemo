@@ -58,6 +58,27 @@ export default tseslint.config(
     },
   },
   {
+    // #27 再生経路の一本化 S5：playNotes（音源エンジン）を直接呼んでよいのは駆動層 playback.ts のみ。
+    // UI/エディタ/フックは解決層 buildPlayback（music.ts）→駆動層 startPlayback（playback.ts）を通す＝
+    // 仮歌/feel/mute/compound の手組み欠落を構造的に起こさせない（唯一のチョークポイント）。テストは対象外。
+    files: ["apps/web/src/**/*.{ts,tsx}"],
+    ignores: ["apps/web/src/playback.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/audio", "**/music"],
+              importNames: ["playNotes"],
+              message: "playNotes は駆動層 playback.ts からのみ呼ぶ（#27）。UI/エディタは startPlayback（playback.ts）を使う。",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // テストは any/実験が多い＝さらに緩める（警告ノイズを減らす）。
     files: ["**/*.test.ts", "**/*.test.tsx", "**/test/**"],
     rules: {

@@ -3,8 +3,9 @@
 //   songs[].coreLoops[].example / common[].example = 弾ける実音コード列。
 import { useRef, useState } from "react";
 import { type Neta } from "../api";
-import { playNotes, type PlaybackHandle } from "../audio";
-import { notesForContent } from "../music";
+import { type PlaybackHandle } from "../audio";
+import { notesForContent, buildPlayback } from "../music";
+import { startPlayback } from "../playback";
 import { PrepStatus } from "../usePrepPending";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -47,7 +48,7 @@ export function StudyView({ neta, onClose }: { neta: Neta; onClose: () => void }
     setPlayKey(key);
     setStarting(true);
     const notes = notesForContent("chord_progression", { chords: example });
-    void playNotes(notes, 100, { onEnd: () => setPlayKey(null) })
+    void startPlayback(buildPlayback({ kind: "notes", notes, tempo: 100 }), { vocalMode: "off", onEnd: () => setPlayKey(null) }) // 研究ループ＝歌う対象なし（#27・bpm100 固定は維持）
       .then((h) => (handleRef.current = h))
       .finally(() => setStarting(false));
   }

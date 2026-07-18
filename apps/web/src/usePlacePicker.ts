@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Neta } from "./api";
-import { notesForContent, playNotes, type PlaybackHandle } from "./music";
+import { buildPlayback, type PlaybackHandle } from "./music";
+import { startPlayback } from "./playback";
 import type { Lane } from "./components/sectionLanes";
 import type { PickerState } from "./components/PlacePicker";
 
@@ -129,8 +130,10 @@ export function usePlacePicker(ctx: PlacePickerCtx) {
   // ピッカー項目の試聴＝配置前に耳で確認（相対bass/コード楽器は section の調で解決して鳴らす）。
   async function previewNeta(n: Neta) {
     previewPlay.current?.stop();
-    const notes = notesForContent(n.kind, n.content, { key: n.key ?? keyPc });
-    if (notes.length) previewPlay.current = await playNotes(notes, tempo, { program: ctx.progForKind(n.kind) });
+    // #27：解決層＋駆動層（peek＝待たない）。相対bass/コード楽器は section の調(n.key??keyPc)で解決。program は
+    // ピッカーの progForKind で上書き（音色は配置先レーン基準）。feel/compound の欠落も buildPlayback で直る。
+    const plan = buildPlayback({ kind: "neta", neta: { kind: n.kind, content: n.content, key: n.key ?? keyPc, mode: n.mode, tempo, meter: n.meter } });
+    if (plan.notes.length) previewPlay.current = await startPlayback({ ...plan, program: ctx.progForKind(n.kind) }, { vocalMode: "peek" });
   }
   // ピッカーを閉じたら試聴を止める（鳴りっぱなし防止）。
   useEffect(() => {

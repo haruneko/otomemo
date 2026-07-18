@@ -34,8 +34,9 @@ vi.mock("../src/usePlayhead", () => ({
     stop: phStop,
   }),
 }));
-vi.mock("../src/music", async (orig) => ({
-  ...(await orig<typeof import("../src/music")>()),
+// #27：再生は駆動層 playback.ts→audio.playNotes 経由。音源エンジン(playNotes)だけ差し替え（music/playback は実物）。
+vi.mock("../src/audio", async (orig) => ({
+  ...(await orig<typeof import("../src/audio")>()),
   playNotes,
 }));
 

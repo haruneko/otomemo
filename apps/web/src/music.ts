@@ -39,6 +39,9 @@ export interface Note extends CoreNote {
   // レンズ別ゲインバスで鳴らす側だけ開く（無停止A/B）。未指定＝従来経路（partGains 直結）＝bit一致。
   muted?: boolean; // #13c 仮歌: この音は再生スケジュールから外す（＝楽器音を鳴らさない）が、leadBeats/尺の
   // 計算には残す（弱起・長さを保つ）。歌う声部を wav（vocal 経路）で鳴らす時に楽器音の二重化を避ける。未指定＝通常発音。
+  sungBy?: { singer: string; speaker?: number }; // #27 再生経路の一本化: この音を「誰がどの声で歌うか」の印。
+  // 再生用コンポジット解決（playbackComposite）が歌う子の melody ノートへ付ける（同時に muted:true）。vocalJobsOf が
+  // これでグループし任意のノート切片（FormStrip 窓含む）から vocal job を再導出する。lens/muted と同型の再生用印＝保存 content には書かない。
 }
 
 // ミキサーのパート＝メロ/コード/ベース/ドラム（音量バランスと音割れ対策のパート別ゲイン・耳FB 2026-07-09）。
@@ -1155,5 +1158,164 @@ export function barBeat(beat: number, bpb: number): string {
   return `${bar}:${inBar}`;
 }
 
+// ── #27 再生経路の一本化（PlaybackPlan＋唯一の解決層）─────────────────────────
+// 正典＝docs/research/2026-07-18-playback-path-unification.md / design.md #27。
+// ペイロード（notes/feel/compound/仮歌/mute）の手組みを各所から撤去し、ここ1箇所へ集約する（解決層）。
+// 駆動（ensure→playNotes）は playback.ts（駆動層）が唯一のチョークポイント。
+
+// 仮歌1本ぶんの「歌う仕事」。key=メロ+テンポ+ensemble+声色で一意（変われば別 wav）。
+// （旧 useVocal.ts の定義をここ＝純ドメインへ移設し useVocal から再輸出＝import 面は不変。）
+export interface SingNote { pitch: number; start: number; dur: number; syllable?: string }
+export interface VocalJob {
+  key: string; // JSON of {n,t,e,s}（notes/bpm/ensemble/speaker）＝声/音/テンポ/合奏レンジが変われば別 wav。
+  notes: SingNote[]; // 絶対拍・syllable 付き（弱起=負start も保持）
+  bpm: number;
+  firstNoteBeat: number; // 歌の初音の絶対拍（弱起なら負）＝楽器と同座標
+  speaker?: number;
+  ensemblePitches?: number[]; // A: 同時に歌う全 singer の結合音高（サーバで唯一のオクターブシフトを決める）
+}
+
+// notes 内の sungBy マーカーから vocal job を再導出する純関数。任意のノート切片（FormStrip の窓切り出し含む）で
+// 成立する＝マーカーが切っても生き残るのが #27 の要。singer ごとにグループ（初出順＝ensemble 順が現行 singingJobs と一致）。
+// ensemble＝全 singer の音高を初出順で結合（現行 A 仕様＝サーバが結合レンジで唯一のオクターブシフトを決める）。
+export function vocalJobsOf(notes: Note[], bpm: number): VocalJob[] {
+  const order: string[] = [];
+  const groups = new Map<string, { speaker?: number; notes: SingNote[] }>();
+  for (const n of notes) {
+    if (!n.sungBy) continue;
+    const s = n.sungBy.singer;
+    let g = groups.get(s);
+    if (!g) { g = { speaker: n.sungBy.speaker, notes: [] }; groups.set(s, g); order.push(s); }
+    g.notes.push({ pitch: Math.round(n.pitch), start: n.start, dur: n.dur, syllable: n.syllable });
+  }
+  if (!order.length) return [];
+  for (const s of order) groups.get(s)!.notes.sort((a, b) => a.start - b.start);
+  const ensemble = order.flatMap((s) => groups.get(s)!.notes.map((n) => n.pitch));
+  return order.map((s) => {
+    const g = groups.get(s)!;
+    return {
+      key: JSON.stringify({ n: g.notes, t: bpm, e: ensemble, s: g.speaker ?? null }),
+      notes: g.notes,
+      bpm,
+      firstNoteBeat: g.notes.length ? g.notes[0]!.start : 0,
+      speaker: g.speaker,
+      ensemblePitches: ensemble,
+    };
+  });
+}
+
+// 再生用コンポジット（**書き出し compositeNotes は不変・unmuted**）：歌う melody（kind=melody・sing.enabled・歌詞あり）の
+// ノートへ sungBy マーカー＋muted を付ける（現行 SectionEditor.playComposite の骨格/レンズ以外を吸収）。
+// **任意深さ対応**（#27 修正・曲再生の仮歌欠落根治）：song→section→melody の2段ネストでも歌う melody を拾う（song直下は
+// section＝歌う melody は奥）。歌い手の同定・剪定は leaf 参照で行い、実解決（位置オフセット/移調）は compositeNotes に委ねる
+// ＝ネストのズレを出さない。歌う子ゼロ＝compositeNotes と bit 一致（G1 不変）。1段(section→melody)は挙動不変（回帰緑のまま）。
+export function playbackComposite(children: CompositeChild[], keyPc: number, sectionMode?: string | null): Note[] {
+  // ① 歌う melody ノードを任意深さで集める（section/song コンテナは子へ降りる）。leaf 参照を保持＝以降の剪定で同定に使う。
+  const singers: { c: CompositeChild; speaker?: number }[] = [];
+  const collect = (kids: CompositeChild[]): void => {
+    for (const c of kids) {
+      const kind = c.node.neta.kind;
+      if (kind === "section" || kind === "song") { collect(c.node.children ?? []); continue; }
+      if (kind !== "melody") continue;
+      const sing = singOf(c.node.neta.content);
+      if (!sing) continue;
+      if (!vocalMelodyFromComposite(compositeNotes([c], keyPc, sectionMode)).hasLyric) continue; // 歌詞なし＝フォールバック楽器
+      singers.push({ c, speaker: sing.speaker }); // speaker は各歌う melody 自身の声（セクションでなく）
+    }
+  };
+  collect(children);
+  if (!singers.length) return compositeNotes(children, keyPc, sectionMode); // 歌う子なし＝bit一致（G1 不変）
+
+  // ② leaf を条件で剪定した（section/song コンテナは残す）ツリーを作る deep map。leaf 参照は保持＝singer 同定が効く。
+  const prune = (kids: CompositeChild[], keepLeaf: (c: CompositeChild) => boolean): CompositeChild[] =>
+    kids.flatMap((c) => {
+      const kind = c.node.neta.kind;
+      if (kind === "section" || kind === "song") return [{ ...c, node: { ...c.node, children: prune(c.node.children ?? [], keepLeaf) } }];
+      return keepLeaf(c) ? [c] : [];
+    });
+
+  const singerSet = new Set(singers.map((s) => s.c));
+  // ③ 伴奏＝歌い手 leaf を除いた全ツリー（compositeNotes がネストの position/移調を解決）。
+  const audible = compositeNotes(prune(children, (c) => !singerSet.has(c)), keyPc, sectionMode);
+  // ④ 各歌い手＝その leaf だけ残したツリーを合成＝ネストの絶対位置/移調で解決した melody ノートへ sungBy+muted。
+  //    他 leaf（非歌唱 melody 含む）は剪定済＝結果は歌い手 i の melody のみ＝全ノートが正しく singer i の印を得る。
+  const mutedSing = singers.flatMap((s, i) =>
+    compositeNotes(prune(children, (c) => c === s.c), keyPc, sectionMode).map((n) =>
+      n.part === "melody" && !n.drum && n.dur > 0 ? { ...n, muted: true, sungBy: { singer: `s${i}`, speaker: s.speaker } } : n,
+    ),
+  );
+  return [...audible, ...mutedSing];
+}
+
+// 再生ソース＝解決層 buildPlayback の入口。単体（カード/Chat/ピッカー）・合成（sectionカード/SectionEditor/FormStrip）・
+// 手組み（AnalysisWorkbench 等の素通し口／エディタの live playable／FormStrip 窓切片）の3種。
+export type PlaybackSource =
+  | { kind: "neta"; neta: { kind: string; content: unknown; key?: number | null; mode?: string | null; tempo?: number | null; meter?: string | null } }
+  | { kind: "tree"; children: CompositeChild[]; key: number; mode?: string | null; tempo: number; meter?: string | null }
+  | { kind: "notes"; notes: Note[]; tempo: number; meter?: string | null; program?: number; feel?: Feel | null };
+
+export interface PlaybackPlan {
+  notes: Note[]; // 歌うメロは sungBy+muted 済み。歌なし＝現行と bit 一致（マーカーもmutedも付かない）。
+  bpm: number;
+  program?: number; // 単体kindの既定音色（合成は per-note program 済＝undefined）。サイト固有音色は plan への後段上書きで。
+  feel?: Feel | null; // feelOf(content) 相当（tree は content 由来を持たない＝エディタが sectionFeel で上書き）。
+  compound?: boolean; // isCompoundMeter(meter)
+  vocalJobs: VocalJob[]; // vocalJobsOf(notes,bpm)。[]＝仮歌なし＝レガシー完全一致。
+}
+
+// 唯一のペイロード解決。sungBy 付与→vocalJobsOf まで内側に閉じる＝vocal/feel/mute/compound の欠落が構造的に起こせない。
+// opts.vocal===false＝sungBy を付けない＝完全ドライ（試聴系のオプトアウト。既定 true）。
+export function buildPlayback(src: PlaybackSource, opts?: { vocal?: boolean }): PlaybackPlan {
+  const wantVocal = opts?.vocal !== false;
+  if (src.kind === "notes") {
+    return {
+      notes: src.notes,
+      bpm: src.tempo,
+      program: src.program,
+      feel: src.feel ?? undefined,
+      compound: isCompoundMeter(src.meter),
+      vocalJobs: wantVocal ? vocalJobsOf(src.notes, src.tempo) : [],
+    };
+  }
+  if (src.kind === "tree") {
+    const notes = wantVocal ? playbackComposite(src.children, src.key, src.mode) : compositeNotes(src.children, src.key, src.mode);
+    return {
+      notes,
+      bpm: src.tempo,
+      program: undefined, // 合成は per-note program（compositeNotes 付与）
+      feel: undefined,
+      compound: isCompoundMeter(src.meter),
+      vocalJobs: wantVocal ? vocalJobsOf(notes, src.tempo) : [],
+    };
+  }
+  // kind === "neta"（単体）。notesForContent＋（歌うメロは sungBy+muted）。
+  const neta = src.neta;
+  const notes0 = notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 });
+  const sing = wantVocal && neta.kind === "melody" ? singOf(neta.content) : undefined;
+  const hasLyric = !!sing && notes0.some((n) => !!n.syllable && n.syllable.trim().length > 0);
+  const notes = hasLyric
+    ? notes0.map((n) => (n.part !== "melody" && n.part != null ? n : !n.drum && n.dur > 0 ? { ...n, muted: true, sungBy: { singer: "s0", speaker: sing!.speaker } } : n))
+    : notes0;
+  const bpm = neta.tempo ?? 120;
+  return {
+    notes,
+    program: neta.kind === "rhythm" ? undefined : (programOf(neta.content) ?? 0),
+    bpm,
+    feel: feelOf(neta.content),
+    compound: isCompoundMeter(neta.meter),
+    vocalJobs: vocalJobsOf(notes, bpm),
+  };
+}
+
 // 音源エンジンは audio.ts に分離（S5）。後方互換で再公開＝既存の "../music" import を壊さない。
-export * from "./audio";
+// #27 S5：**playNotes は再輸出しない**（音源エンジンの唯一の呼び出し口は駆動層 playback.ts＝そこは "./audio" 直 import）。
+// これで UI/エディタが "../music" 経由で playNotes を掴む漏れを塞ぐ（ESLint no-restricted-imports と二重で封鎖）。
+// MixPart は music.ts が origin（上で export 済）＝ここでは再輸出しない。
+export type { PlaybackHandle, VocalPlay, DrumVoice } from "./audio";
+export {
+  __setSfTestHooks, decodeVocal, drumDetune, drumKey, drumNameFor, ensureLensGain, ensureMaster,
+  ensureSoundFont, getMix, isSfLoading, isSfPreparing, lensGateTargets, lensesOf, melodicMapKey,
+  pickupSchedule, playEvent, presetBank, presetName, presetNum, previewNote, prewarmSoundFont,
+  primeSf2, probeSoundFont, resolveSF2Ctor, setActiveSoundFont, setMixVolume, subscribeSfLoading,
+  subscribeSfPreparing, velToMidi, vocalSourceSchedule,
+} from "./audio";

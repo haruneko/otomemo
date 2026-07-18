@@ -11,16 +11,8 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { KindIcon } from "./KindIcon";
 import { Icon } from "./Icon";
 import { PrepStatus } from "../usePrepPending";
-import {
-  playNotes,
-  notesForContent,
-  compositeNotes,
-  feelOf,
-  isCompoundMeter,
-  programOf,
-  type Note,
-  type PlaybackHandle,
-} from "../music";
+import { buildPlayback, type PlaybackPlan, type PlaybackHandle } from "../music";
+import { startPlayback } from "../playback";
 
 
 // #65 検索結果の一致種別→質的ラベル（スコア数値は出さない）
@@ -77,7 +69,10 @@ export function NetaCard({
   const alive = useAlive(); // 生成ポーリングは長い＝アンマウント後 setState を防ぐ（poll.ts 共通）
   useEffect(() => () => handleRef.current?.stop(), []); // アンマウントで再生停止
 
-  async function toggle(getNotes: () => Note[] | Promise<Note[]>, program?: number) {
+  // #27 再生経路の一本化：カード▶は解決層 buildPlayback → 駆動層 startPlayback（vocalMode:"ensure"）。歌う設定の
+  // メロ/section は wav をレンダしてから伴奏と同期再生＝**カード▶で歌わない旧クラスバグの根治**（歌う子は muted＋wav）。
+  // ensure の待ちは starting スピナー＋PrepStatus「歌声を作っています…」に自然に乗る。stale-stop はレジストリで無効化。
+  async function toggle(makePlan: () => PlaybackPlan | Promise<PlaybackPlan | null>) {
     if (starting) return; // 準備中の再押下は no-op（二重発火を防ぐ）
     if (playing) {
       handleRef.current?.stop();
@@ -85,34 +80,35 @@ export function NetaCard({
       setPlaying(false);
       return;
     }
-    // 押下直後に先に反応（#8）：section は getNotes 内の getComposition fetch が走る＝ここで starting/playing を
-    // 立てておくと fetch 待ちの間もスピナーが出る（旧＝fetch 解決後まで無反応だった）。
+    // 押下直後に先に反応（#8）：section は makePlan 内の getComposition fetch が走る＝ここで starting/playing を
+    // 立てておくと fetch/仮歌レンダ待ちの間もスピナーが出る。
     setStarting(true);
     setPlaying(true);
     try {
-      const notes = await getNotes();
-      if (!notes.length) {
+      const plan = await makePlan();
+      if (!plan || !plan.notes.length) {
         setPlaying(false);
         return;
       }
-      handleRef.current = await playNotes(notes, neta.tempo ?? 120, {
-        program,
-        feel: feelOf(neta.content), // フィール層：単一メロ card の content.feel でスイング（section card は SectionEditor 側で）。
-        compound: isCompoundMeter(neta.meter),
+      const h = await startPlayback(plan, {
+        vocalMode: "ensure",
         onEnd: () => {
           setPlaying(false);
           handleRef.current = null;
         },
       });
+      if (h) handleRef.current = h;
+      else setPlaying(false); // 二重発火 no-op（他カードの仮歌レンダ中）＝始まらなかった
     } finally {
       setStarting(false);
     }
   }
 
-  // #73 section/song を合成（子をsection調へ移調＋位置オフセット）
-  async function sectionNotes(): Promise<Note[]> {
+  // #73 section/song を合成再生する plan（子をsection調へ移調＋位置オフセット＋歌う子は sungBy+muted・#27）。
+  async function sectionPlan(): Promise<PlaybackPlan | null> {
     const tree = await api.getComposition(neta.id).catch(() => null);
-    return tree ? compositeNotes(tree.children, neta.key ?? 0, neta.mode) : [];
+    if (!tree) return null;
+    return buildPlayback({ kind: "tree", children: tree.children, key: neta.key ?? 0, mode: neta.mode, tempo: neta.tempo ?? 120, meter: neta.meter });
   }
 
   // 全体作例＝決定的 /gen/section（純TS・worker不要/クォータ0）で section＋各パート(コード/コード楽器/
@@ -169,12 +165,7 @@ export function NetaCard({
       aria-label={`play-${neta.id}`}
       aria-busy={starting || undefined}
       title={starting ? "準備中…" : playing ? "停止" : "このネタを単独再生（C基準そのまま）"}
-      onClick={() =>
-        void toggle(
-          () => notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 }),
-          neta.kind === "rhythm" ? undefined : (programOf(neta.content) ?? 0),
-        )
-      }
+      onClick={() => void toggle(() => buildPlayback({ kind: "neta", neta }))}
     >
       {playGlyph}
     </button>
@@ -184,7 +175,7 @@ export function NetaCard({
       aria-label={`play-${neta.id}`}
       aria-busy={starting || undefined}
       title={starting ? "準備中…" : playing ? "停止" : "合成プレビュー再生"}
-      onClick={() => void toggle(sectionNotes)}
+      onClick={() => void toggle(sectionPlan)}
     >
       {playGlyph}
     </button>

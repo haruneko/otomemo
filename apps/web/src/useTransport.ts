@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { playNotes, type Note, type PlaybackHandle, type Feel, type VocalPlay } from "./music";
+import { type PlaybackHandle, type PlaybackPlan } from "./music";
+import { startPlayback } from "./playback";
 import { usePlayhead } from "./usePlayhead";
 
 export type TransportState = "stopped" | "playing" | "paused";
@@ -7,15 +8,15 @@ export type TransportState = "stopped" | "playing" | "paused";
 // #59 トランスポート状態機械。再生/一時停止/頭出し/ループを集約し、
 // NetaDialog・SectionEditor の inline トグルを置換（重複解消）。
 // pause は位置保持（rAFは止めず Transport の凍結した seconds を読むので線も止まる）。
+// #27 再生経路の一本化：入力を getNotes+getVocal の2本から getPlan（PlaybackPlan）1本へ。begin は駆動層
+// startPlayback（唯一のチョークポイント）経由で ensure→playNotes する（仮歌/feel/mute/compound は plan に載る）。
 export function useTransport(
-  getNotes: () => Note[],
+  getPlan: () => PlaybackPlan,
   bpm: number,
   // #20 S6骨格の机: activeLens/range は加算 optional。未指定＝従来完全一致（NetaDialog/SectionEditor 不変）。
-  // activeLens 指定時＝begin の playNotes へ渡し初期ゲート（そのレンズだけ開く）＝レンズ印つき notes 用。
+  // activeLens 指定時＝begin の startPlayback へ渡し初期ゲート（そのレンズだけ開く）＝レンズ印つき notes 用。
   // range 指定時（D1.5）＝ループ区間を [startBeat,endBeat) に絞る。未指定＝全体（0..total）＝従来 bit 一致。
-  // vocal（♪仮歌）＝メロの楽器=歌声の VOICEVOX wav を伴奏と同一クロックで鳴らす。getVocal は begin 時に読む（再生
-  // 押下→レンダ完了後の最新 buffer を掴む＝React state のフラッシュ待ちに依存しない）。未指定/空＝従来一致（bit-safe）。
-  opts: { scaleBeats: number; bpb?: number; program?: number; feel?: Feel | null; compound?: boolean; activeLens?: string; range?: { startBeat: number; endBeat: number }; getVocal?: () => VocalPlay[] | null },
+  opts: { scaleBeats: number; bpb?: number; activeLens?: string; range?: { startBeat: number; endBeat: number } },
 ) {
   const { lineRef, timeRef, scrollerRef, beatRef, start: startPh, stop: stopPh } = usePlayhead();
   const handle = useRef<PlaybackHandle | null>(null);
@@ -24,28 +25,29 @@ export function useTransport(
 
   // 最新値を ref に退避＝コールバックを安定化（stale closure 回避）。activeLens も載せる＝再ループ時の
   // 初期ゲート（そのレンズだけ開く）が最新のレンズ選択で正しく効く（無停止切替は begin を回さないので別経路）。
-  const cfg = useRef({ getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens, range: opts.range, getVocal: opts.getVocal });
-  cfg.current = { getNotes, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, program: opts.program ?? 0, feel: opts.feel, compound: opts.compound, activeLens: opts.activeLens, range: opts.range, getVocal: opts.getVocal };
+  const cfg = useRef({ getPlan, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, activeLens: opts.activeLens, range: opts.range });
+  cfg.current = { getPlan, bpm, scaleBeats: opts.scaleBeats, bpb: opts.bpb ?? 4, activeLens: opts.activeLens, range: opts.range };
 
   const begin = useCallback(
     async (loop: boolean) => {
       const c = cfg.current;
-      const notes = c.getNotes();
-      if (!notes.length) return;
-      const total = notes.reduce((m, n) => Math.max(m, n.start + n.dur), 0);
-      handle.current = await playNotes(notes, c.bpm, {
+      const plan = c.getPlan();
+      if (!plan.notes.length) return;
+      const total = plan.notes.reduce((m, n) => Math.max(m, n.start + n.dur), 0);
+      // 駆動層＝vocalMode:"ensure"（未レンダ仮歌はレンダしてから鳴らす。歌う対象が無い plan は jobs=[] で即再生）。
+      // ensure 進行中の再 start は startPlayback が null（no-op）＝playing に倒さない（旧・editor 側の busy ガードを吸収）。
+      const h = await startPlayback(plan, {
+        vocalMode: "ensure",
         // range 指定時はその区間だけループ（D1.5 範囲ブレース）。未指定＝全体（0..total）＝従来 bit 一致。
         loop: loop ? (c.range ?? { startBeat: 0, endBeat: total }) : undefined,
-        program: c.program,
-        feel: c.feel,
-        compound: c.compound,
         activeLens: c.activeLens, // #20 S6: notes にレンズ印がある時だけ意味を持つ（未指定＝全開＝従来）
-        vocal: c.getVocal?.() ?? null, // ♪仮歌：伴奏と同一クロックで歌う AudioBuffer 群（未指定/空＝従来一致）
         onEnd: () => {
           setState("stopped");
           stopPh();
         },
       });
+      if (!h) return; // 二重発火（ensure 進行中）＝始めなかった
+      handle.current = h;
       setState("playing");
       // #25 弱起（負start）の再生契約：非ループ時は playNotes が算出した lead L を渡す（リード区間の 0 待機・
       // 弱起表示）。ループ時は handle.leadBeats が 0＝従来一致。handle 未確定/旧モックは 0 フォールバック。
@@ -99,7 +101,7 @@ export function useTransport(
     if (state === "stopped") return;
     const c = cfg.current;
     if (c.range) handle.current?.setLoopRange?.(c.range.startBeat, c.range.endBeat);
-    handle.current?.reschedule?.(c.getNotes());
+    handle.current?.reschedule?.(c.getPlan().notes);
   }, [state]);
 
   // #20 S6骨格の机: レンズ別ゲートを**再生を止めずに**開閉（handle パススルー）。begin を回さない＝

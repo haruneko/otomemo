@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { subscribeSfLoading, isSfLoading, subscribeSfPreparing, isSfPreparing } from "./audio";
+import { subscribeVocalBusy, vocalBusyState } from "./playback";
 
 // F1 再生ローディング表示の共有フック（設計2026-07-17・「漏れ5画面」）。
 // TransportBar と同じグローバルストア（audio.ts の subscribeSfLoading / subscribeSfPreparing）を
@@ -9,8 +10,15 @@ import { subscribeSfLoading, isSfLoading, subscribeSfPreparing, isSfPreparing } 
 export function usePrepPending(): string | null {
   const sfLoading = useSyncExternalStore(subscribeSfLoading, isSfLoading, () => false);
   const sfPreparing = useSyncExternalStore(subscribeSfPreparing, isSfPreparing, () => false);
-  // 優先順位「音源読込中…（SF2本体）」＞「楽器準備中…（sampler初出ロード）」。TransportBar と同文言。
-  return sfLoading ? "音源読込中…" : sfPreparing ? "楽器準備中…" : null;
+  // #27：仮歌 wav レンダ中は「歌声を作っています…」（駆動層 playback.ts の busy を購読）。カード▶/Chat/机 等
+  // TransportBar が無い自前 play ボタンの画面でも、ensure（未レンダ仮歌のレンダ）中を可視化＝カードで歌う時の待ちが分かる。
+  const vocal = useSyncExternalStore(subscribeVocalBusy, vocalBusyState, vocalBusyState);
+  // 優先順位「歌声…（仮歌レンダ）」＞「音源読込中…（SF2本体）」＞「楽器準備中…（sampler初出ロード）」。TransportBar と同文言。
+  return vocal.busy
+    ? vocal.progress
+      ? `歌声 ${Math.min(vocal.progress.done + 1, vocal.progress.total)}/${vocal.progress.total}…`
+      : "歌声を作っています…"
+    : sfLoading ? "音源読込中…" : sfPreparing ? "楽器準備中…" : null;
 }
 
 // F1 の見た目の語彙を踏襲した準備中チップ（.sf-loading）。グローバルの SF2/sampler 準備テキストを出す。

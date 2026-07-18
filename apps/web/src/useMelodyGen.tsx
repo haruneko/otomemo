@@ -5,12 +5,13 @@ import { fitReportText } from "./fitReport";
 import { harmonyVoice } from "./harmony";
 import {
   notesForContent,
-  playNotes,
+  buildPlayback,
   skeletonPreviewNotes,
   isSkeleton,
   type Note,
   type PlaybackHandle,
 } from "./music";
+import { startPlayback } from "./playback";
 import { spanOverlaps, type Lane, type Child } from "./components/sectionLanes";
 
 // SectionEditor の「生成/ハモリ道具」（いじる▾）＝メロ生成ノブ・候補トレイ・ハモリ/fit をまとめた
@@ -450,8 +451,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const removeCand = (cid: number) => { setCands((prev) => prev.filter((c) => c.cid !== cid)); setKeptCids((prev) => { const n = new Set(prev); n.delete(cid); return n; }); };
   async function auditionCandidate(c: Cand) {
     candPlay.current?.stop();
+    // #27：解決層＋駆動層（peek＝待たない）。候補は sing 設定を持たない＝実質ドライ（jobs=[]）。音色は progForKind。
     const ns = notesForContent(c.kind, c.content);
-    if (ns.length) candPlay.current = await playNotes(ns, tempo, { program: ctx.progForKind(c.kind) });
+    if (ns.length) candPlay.current = await startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo, program: ctx.progForKind(c.kind) }), { vocalMode: "peek" });
   }
   // position＝置くセクション内位置（拍）。既定 0＝従来（SectionEditor の呼び出しは引数無し＝bit一致）。
   // 骨格の机（D4）は焦点骨格の skelPosition を渡し、骨格が居る位置へ表面メロを置く（＝正しい配置）。

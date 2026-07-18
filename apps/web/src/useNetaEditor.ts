@@ -19,7 +19,7 @@ import {
   resolveChordPattern,
   emptyChordPattern,
   feelOf,
-  isCompoundMeter,
+  buildPlayback,
   isSkeleton,
   singOf,
   CURATED_SING_VOICES,
@@ -32,6 +32,7 @@ import {
   type ChordPatternContent,
   type SkeletonBreakpoint,
   type SkeletonContent,
+  type PlaybackPlan,
 } from "./music";
 import { skeletonPlaybackNotes } from "./skeletonEdit";
 import { useVocalRender } from "./useVocal";
@@ -171,28 +172,28 @@ export function useNetaEditor(
   // 残す＝尺/スペースの計算に効く。歌詞なしで sing のみ＝フォールバック楽器（program）で普通に鳴らす。
   const singingMelody = isMelody && sing;
   const vocalHasLyric = singingMelody && playable.some((n) => !!n.syllable && n.syllable.trim().length > 0);
-  const vocalJob = vocalHasLyric ? buildVocalJob(playable, tempo, singSpeaker) : null;
-  const playableFinal = vocalHasLyric ? playable.map((n) => ({ ...n, muted: true })) : playable;
-  const vocal = useVocalRender();
-  const jobsRef = useRef(vocalJob ? [vocalJob] : []);
-  jobsRef.current = vocalJob ? [vocalJob] : [];
+  const vocal = useVocalRender(); // busy/progress/msg 表示用（ensure/peek は駆動層 startPlayback が回す・#27）
 
-  // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。
+  // #57/#58/#59 トランスポート（再生/一時停止/頭出し/ループ＋プレイヘッド＋小節:拍）。#27：getPlan（PlaybackPlan）を
+  // 渡し、begin が startPlayback 経由で ensure→playNotes する。歌うメロ（sing+歌詞）は playable に sungBy+muted を付ける
+  // ＝vocalJobsOf が job を再導出（buildVocalJob の手組みは撤去）。program/feel/compound は plan に載せる（従来と bit 一致）。
   const span = Math.max(len, ...playable.map((n) => Math.ceil(n.start + n.dur)));
-  const tp = useTransport(() => playableFinal, tempo, {
-    scaleBeats: span,
-    bpb: 4,
-    program: isRhythm ? undefined : isChord ? 48 : program, // コード進行は抽象＝固定GM49(strings)・選択不可(CP1)
-    feel: feelOf(neta.content), // フィール層：この neta の content.feel でスイング/微小揺れ（無ければストレート）。
-    compound: isCompoundMeter(neta.meter),
-    getVocal: () => vocal.peek(jobsRef.current),
-  });
-  // 再生＝歌う設定なら先に wav をレンダ（未キャッシュは「歌声を作っています…」busy）→ 同期再生。停止/一時停止は素通し。
-  const playPause = useCallback(async () => {
-    if (vocal.busy) return; // 仮歌レンダ中の再押下＝no-op（ensure 二重発火防止・設計2026-07-17）。Space 経路も同関数で塞がる
-    if (tp.state === "stopped" && jobsRef.current.length) await vocal.ensure(jobsRef.current);
-    tp.playPause();
-  }, [tp.state, tp.playPause, vocal.ensure, vocal.busy]);
+  const getPlan = (): PlaybackPlan => {
+    const notes = vocalHasLyric
+      ? playable.map((n) => (!n.drum && n.dur > 0 ? { ...n, muted: true, sungBy: { singer: "s0", speaker: singSpeaker } } : n))
+      : playable;
+    return buildPlayback({
+      kind: "notes",
+      notes,
+      tempo,
+      meter: neta.meter, // compound は buildPlayback が isCompoundMeter(meter) で導出
+      program: isRhythm ? undefined : isChord ? 48 : program, // コード進行は抽象＝固定GM48(strings)・選択不可(CP1)
+      feel: feelOf(neta.content), // フィール層：この neta の content.feel でスイング/微小揺れ（無ければストレート）。
+    });
+  };
+  const tp = useTransport(getPlan, tempo, { scaleBeats: span, bpb: 4 });
+  // #27：再生ラッパは撤去（begin 内の vocalMode:"ensure" が ensure＋二重発火 no-op を吸収）。playPause は tp 直結。
+  const playPause = tp.playPause;
 
   // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。
   const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, singSpeaker, len, pickup };
