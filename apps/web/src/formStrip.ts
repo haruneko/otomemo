@@ -1,7 +1,8 @@
 // 曲フォーム＝フォームストリップ（design「#曲フォーム」・正典 docs/research/2026-07-16-song-form-assembly.md §4.2）の純ロジック。
-// song のセクション列を「カード列」として俯瞰・並べ替え・挿入・削除する土台。データ契約(compose_edge/position)は不変で、
-// **position はカード順からの前置和射影**として都度再計算する（グリッド版と同じ辺を読む）。UI(FormStrip.tsx)は
-// これらの純関数を組むだけ＝ロジックはここに集約してテスト可能に保つ。
+// song のセクション列を「縦セットリスト」として俯瞰・並べ替え・挿入・削除する土台（#28 で横カード帯→縦行へ是正）。
+// データ契約(compose_edge/position)は不変で、**position はカード順からの前置和射影**として都度再計算する（グリッド版と同じ辺を読む）。
+// UI(FormStrip.tsx)はこれらの純関数を組むだけ＝ロジックはここに集約してテスト可能に保つ。
+import { PITCH_NAMES } from "./music";
 
 // カード（＝配置1個）の最小情報。position は順序から射影で決まるので持たない（childId＋尺＋ord＋その配置の実position）。
 export type StripCard = {
@@ -119,6 +120,13 @@ const ROLE_INFO: Record<string, { label: string; color: string }> = {
   interlude: { label: "間奏", color: "var(--k-section_inst)" },
   outro: { label: "Outro", color: "var(--k-rhythm)" },
 };
+// #28 役割の付与UI（⋯シート）で選べる役割の並び＝ROLE_INFO の宣言順（イントロ→…→アウトロ）。役割は色/ミニマップ/生成/key_plan の起点。
+export const ROLE_KEYS = Object.keys(ROLE_INFO);
+// tags の role: を差し替える（既存の非 role タグは温存）。role=undefined で役割を外す。
+export function withRole(tags: readonly string[] | null | undefined, role: string | undefined): string[] {
+  const rest = (tags ?? []).filter((t) => !t.startsWith("role:"));
+  return role ? [...rest, `role:${role}`] : rest;
+}
 export function roleOf(tags: readonly string[] | null | undefined): string | undefined {
   const t = (tags ?? []).find((x) => x.startsWith("role:"));
   return t ? t.slice("role:".length) : undefined;
@@ -137,4 +145,51 @@ export function keyDiffLabel(childKey: number | null | undefined, songKey: numbe
   const signed = diff <= 6 ? diff : diff - 12; // -5..+6（最短の転調向き）
   if (signed === 0) return null; // 曲と同じ調＝バッジ無し
   return signed > 0 ? `+${signed}` : `${signed}`;
+}
+
+// #28 実キー名バッジ＝「F +5」形式。謎バッジ「+5」単独を廃し、セクションの実際の調名を主に、曲との半音差を従に。
+// key 未設定（曲キー継承）＝null（バッジを出さない＝転調しているセクションだけ目立つ）。同調なら「F」だけ（差は付けない）。
+export function sectionKeyBadge(
+  childKey: number | null | undefined,
+  childMode: string | null | undefined,
+  songKey: number,
+): string | null {
+  if (childKey == null) return null;
+  const name = `${PITCH_NAMES[((childKey % 12) + 12) % 12]}${childMode === "minor" ? "m" : ""}`;
+  const diff = keyDiffLabel(childKey, songKey);
+  return diff ? `${name} ${diff}` : name;
+}
+
+// #28 時間住所＝「8小節 · 1-8」。前置和射影の副産物（開始 bar と尺）から、グリッド無しで「今どこ・どこから」を読ませる。
+// ×N は count×bars ぶんを1住所にまとめる（畳んだブロックの占有範囲）。1-based（人が読む小節番号）。
+export function timeAddress(startBar: number, bars: number): string {
+  const b = Math.max(0, Math.round(bars));
+  const s = Math.max(1, Math.round(startBar));
+  if (b <= 0) return `${b}小節`;
+  const end = s + b - 1;
+  return `${b}小節 · ${s}-${end}`;
+}
+
+// #28 非破壊フォーム適用（提案▾）＝既存配置を全消しせず、候補の役割枠へ既存セクションをマージする純ロジック。
+// 各候補枠に「同じ役割の既存セクション」があれば温存（その childId を使う）・無ければ空足場を新規作成。
+// 候補に役割枠が無い既存（余り）は末尾に温存＝**作業中アレンジを失わない**（design #28「既存を役割枠へマージ」）。
+// 返り＝並べたい順のアイテム列（existing=温存/new=足場を作る）。position は呼び出し側が前置和射影で振る。
+export type MergeItem = { kind: "existing"; childId: string } | { kind: "new"; role: string; bars: number };
+export function mergeFormPlan(
+  existing: { childId: string; role: string | undefined }[],
+  candidate: { role: string; bars: number }[],
+): MergeItem[] {
+  const pool = [...existing];
+  const out: MergeItem[] = [];
+  for (const slot of candidate) {
+    const i = pool.findIndex((e) => e.role === slot.role); // 同役割の既存を1つ消費（先頭優先）
+    if (i >= 0) {
+      out.push({ kind: "existing", childId: pool[i]!.childId });
+      pool.splice(i, 1);
+    } else {
+      out.push({ kind: "new", role: slot.role, bars: slot.bars });
+    }
+  }
+  for (const e of pool) out.push({ kind: "existing", childId: e.childId }); // 余った既存＝末尾に温存（失わない）
+  return out;
 }

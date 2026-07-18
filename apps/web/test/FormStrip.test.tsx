@@ -4,17 +4,17 @@ import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
 // FormStrip は SectionEditor(song 経路)から呼ばれる＝実結線で検証（射影 place/remove・×N・挿入）。
-const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary, suggestForm, suggestKeyPlan, suggestEnergyPlan, playNotes } =
+const { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, deleteNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary, suggestForm, suggestKeyPlan, suggestEnergyPlan, playNotes } =
   vi.hoisted(() => ({
     getComposition: vi.fn(), listNeta: vi.fn(), placeChild: vi.fn(), removeChild: vi.fn(),
-    createNeta: vi.fn(), copyNeta: vi.fn(), recommend: vi.fn(), getSong: vi.fn(),
+    createNeta: vi.fn(), copyNeta: vi.fn(), deleteNeta: vi.fn(), recommend: vi.fn(), getSong: vi.fn(),
     updateSong: vi.fn(), updateNeta: vi.fn(), music: vi.fn(), link: vi.fn(),
     getPlacements: vi.fn(), getRelations: vi.fn(), vary: vi.fn(), // S2 分家/共有バッジ
     suggestForm: vi.fn(), suggestKeyPlan: vi.fn(), suggestEnergyPlan: vi.fn(), // S3-a 提案▾
     playNotes: vi.fn(), // 遷移試聴（Tone を起動しない）
   }));
 vi.mock("../src/api", () => ({
-  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary, suggestForm, suggestKeyPlan, suggestEnergyPlan },
+  api: { getComposition, listNeta, placeChild, removeChild, createNeta, copyNeta, deleteNeta, recommend, getSong, updateSong, updateNeta, music, link, getPlacements, getRelations, vary, suggestForm, suggestKeyPlan, suggestEnergyPlan },
 }));
 // #27：再生は駆動層 playback.ts→audio.playNotes 経由。音源エンジン(playNotes)だけ差し替え、music/playback は実物
 // （buildPlayback/compositeNotes/射影・startPlayback の実結線を通す＝遷移窓の実 notes が audio.playNotes へ届く）。
@@ -44,6 +44,8 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     removeChild.mockReset();
     removeChild.mockResolvedValue({ ok: true });
     copyNeta.mockReset();
+    deleteNeta.mockReset();
+    deleteNeta.mockResolvedValue({ deleted: true });
     createNeta.mockReset();
     listNeta.mockResolvedValue([]);
     getPlacements.mockResolvedValue({ parents: [], placementCount: 0 }); // 既定＝未共有（バッジ無し）
@@ -106,6 +108,7 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     });
     render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
     await screen.findByLabelText("form-card-B");
+    await userEvent.click(screen.getByLabelText("more-B")); // #28 削除は行の ⋯ シートへ
     await userEvent.click(screen.getByLabelText("fs-del-B")); // B を外す→C が前へ詰まる
     await waitFor(() => expect(removeChild).toHaveBeenCalledWith("g1", "B", 32));
     expect(removeChild).toHaveBeenCalledWith("g1", "C", 64); // C の旧位置も外す
@@ -133,6 +136,7 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     });
     render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
     await screen.findByLabelText("form-card-X");
+    await userEvent.click(screen.getByLabelText("more-X")); // #28 削除は行の ⋯ シートへ
     await userEvent.click(screen.getByLabelText("fs-del-X")); // 先頭Xを外す→A×2＋B が前へ詰め直される
     // B は A×2 の実尺(32×2)を跨いで 64 へ（旧: 反復2個目 childDur=4拍で B が 36 に潜り込み＝重なり破損）
     await waitFor(() => expect(placeChild).toHaveBeenCalledWith("g1", "B", 64, 0));
@@ -188,10 +192,12 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     getRelations.mockImplementation(async (id: string) => (id === "L" ? [{ type: "variant_of", neta: mk("A", "section") }] : []));
     render(<SectionEditor neta={mk("g1", "song", { key: 0 })} keyPc={0} tempo={120} meter="4/4" />);
     await screen.findByLabelText("form-card-L");
-    expect(screen.getByLabelText("keychg-L")).toHaveTextContent("+2"); // 曲(C)とラスサビ(D)＝+2半音
+    // #28 実キー名バッジ「D +2」＝謎バッジ廃止。曲(C)とラスサビ(D)＝+2半音（実キー名を主に半音差を従に）。
+    expect(screen.getByLabelText("keychg-L")).toHaveTextContent("D +2");
     expect(screen.queryByLabelText("keychg-A")).toBeNull(); // 同調＝バッジ無し
-    await waitFor(() => expect(screen.getByLabelText("shared-L")).toBeInTheDocument()); // 🔗（非同期解決）
-    expect(screen.getByLabelText("variant-L")).toHaveTextContent("′"); // A′
+    // #28 共有/分家バッジは言葉で（🔗/′ でなく「共有N」「分家」）。
+    await waitFor(() => expect(screen.getByLabelText("shared-L")).toHaveTextContent("共有2")); // 非同期解決
+    expect(screen.getByLabelText("variant-L")).toHaveTextContent("分家");
     expect(screen.queryByLabelText("shared-A")).toBeNull();
     expect(screen.queryByLabelText("variant-A")).toBeNull();
   });
@@ -207,10 +213,97 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     vary.mockResolvedValue(mk("S2", "section", { title: "サビ′", key: 0 }));
     render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
     await screen.findByLabelText("form-card-S");
+    await userEvent.click(screen.getByLabelText("more-S")); // #28 分家は行の ⋯ シートへ
     await userEvent.click(screen.getByLabelText("fs-branch-S"));
     await waitFor(() => expect(vary).toHaveBeenCalledWith("S")); // サビを分家
     expect(removeChild).toHaveBeenCalledWith("g1", "S", 32); // 元の配置を外し
     expect(placeChild).toHaveBeenCalledWith("g1", "S2", 32, 0); // 分家を同 position/ord で置く
+    // #28 分家直後は取り消しトースト（辺復元＋分家ネタ削除の窓）。
+    expect(await screen.findByLabelText("undo-toast")).toBeInTheDocument();
+  });
+
+  // ── #28 縦セットリスト（ビュー是正） ──
+  it("#28 縦リスト＝ヘッダミニマップ＋各行に時間住所（8小節·1-8）と実キー名（F +5）が出る", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("g1", "song", { key: 0 }),
+      children: [
+        sectionChild("A", 0, ["role:verse"]), // 8小節・曲と同調＝キーバッジ無し
+        { position: 32, ord: 0, node: { neta: mk("L", "section", { title: "ラスサビ", key: 5, tags: ["role:chorus"] }), children: [melodyKid()] } }, // F(+5)
+      ],
+    });
+    render(<SectionEditor neta={mk("g1", "song", { key: 0 })} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("form-card-A");
+    // ヘッダミニマップ＝常時全体（俯瞰の復活）。
+    expect(screen.getByLabelText("form-minimap")).toBeInTheDocument();
+    // 時間住所＝前置和の副産物（A=1-8小節目・L=9-16）。
+    const rowA = screen.getByLabelText("form-card-A");
+    expect(rowA).toHaveTextContent("8小節 · 1-8");
+    expect(screen.getByLabelText("form-card-L")).toHaveTextContent("8小節 · 9-16");
+    // 実キー名バッジ＝転調してるセクションだけ「F +5」（曲と同調の A には出ない）。
+    expect(screen.getByLabelText("keychg-L")).toHaveTextContent("F +5");
+    expect(screen.queryByLabelText("keychg-A")).toBeNull();
+  });
+
+  it("#28 役割を付ける＝⋯シート→役割リストで配置済みセクションに role タグを設定（実体更新＝全配置に効く）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("g1", "song"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("A", "section", { title: "無役割", tags: ["prj:曲A"] }), children: [melodyKid()] } }],
+    });
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("form-card-A");
+    await userEvent.click(screen.getByLabelText("more-A")); // ⋯ シート
+    await userEvent.click(screen.getByLabelText("row-role-A")); // 役割を付ける
+    await userEvent.click(await screen.findByLabelText("role-set-chorus")); // サビ を選ぶ
+    // 既存の非 role タグ（prj:曲A）は温存し role:chorus を足す。
+    await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("A", { tags: ["prj:曲A", "role:chorus"] }));
+  });
+
+  it("#28 削除に取り消しトースト＝取り消すで外した配置が戻る（辺復元）", async () => {
+    let kids = [sectionChild("A", 0), sectionChild("B", 32)];
+    getComposition.mockImplementation(async () => ({ neta: mk("g1", "song"), children: kids }));
+    placeChild.mockImplementation(async (_p: string, cid: string, pos: number) => {
+      kids = [...kids, { position: pos, ord: 0, node: { neta: mk(cid, "section", { title: cid }), children: [melodyKid()] } }];
+      return { ok: true };
+    });
+    removeChild.mockImplementation(async (_p: string, cid: string, pos: number) => {
+      const i = kids.findIndex((k) => k.node.neta.id === cid && Math.abs(k.position - pos) < 1e-6);
+      if (i >= 0) kids.splice(i, 1);
+      return { ok: true };
+    });
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("form-card-B");
+    await userEvent.click(screen.getByLabelText("more-B"));
+    await userEvent.click(screen.getByLabelText("fs-del-B")); // B を外す
+    await waitFor(() => expect(kids.some((k) => k.node.neta.id === "B")).toBe(false)); // 外れた
+    const toast = await screen.findByLabelText("undo-toast");
+    expect(toast).toHaveTextContent("外しました");
+    placeChild.mockClear();
+    await userEvent.click(screen.getByLabelText("undo-op")); // 取り消す＝辺を復元
+    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("g1", "B", 32, 0)); // B@32 が戻る
+  });
+
+  it("#28 提案フォーム適用は非破壊＝同役割の既存を温存し空枠だけ足場化（作業中アレンジを消さない）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("g1", "song"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("A", "section", { title: "既存Cメロ", tags: ["role:bridge"] }), children: [melodyKid()] } }], // 8小節(32拍)・役割=Cメロ
+    });
+    suggestForm.mockResolvedValue({
+      candidates: [{ id: "F1", name: "簡易", sections: [{ role: "intro", bars: 4 }, { role: "bridge", bars: 8 }], totalBars: 12, seconds: 24, withinTarget: true, notes: [] }],
+    });
+    createNeta.mockImplementation(async (input: { tags?: string[] }) => mk(`new-${input.tags?.[0]}`, "section", input as never));
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("form-card-A");
+    await userEvent.click(screen.getByLabelText("suggest-menu"));
+    await userEvent.click(screen.getByLabelText("suggest-form"));
+    await userEvent.click(await screen.findByLabelText("form-cand-F1"));
+    await userEvent.click(await screen.findByLabelText("form-replace-ok"));
+    // intro 枠だけ新規作成（bridge は既存 A で埋まる＝A の複製/削除はしない）。
+    await waitFor(() => expect(createNeta).toHaveBeenCalledWith(expect.objectContaining({ tags: ["role:intro"] })));
+    expect(createNeta).not.toHaveBeenCalledWith(expect.objectContaining({ tags: ["role:bridge"] }));
+    expect(createNeta).toHaveBeenCalledTimes(1); // 空枠は intro だけ
+    // 既存 A は温存され位置だけ intro(4小節=16拍)の後ろへ（削除でなく移動）。deleteNeta は呼ばない。
+    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("g1", "A", 16, 0));
+    expect(deleteNeta).not.toHaveBeenCalled();
   });
 
   // 監査FAIL#7：song の「いじる▾」＝TinkerSheet を開いても落ちない（melodyLaneNotes が song-safe）。

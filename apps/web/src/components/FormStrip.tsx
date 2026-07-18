@@ -8,13 +8,13 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { arrayMove, SortableContext, horizontalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api, type Neta, type FormCandidate, type EnergyPlanLite } from "../api";
-import { PITCH_NAMES, buildPlayback, type PlaybackHandle } from "../music";
+import { buildPlayback, type PlaybackHandle } from "../music";
 import { startPlayback } from "../playback";
-import { collapseRuns, cardsToEdges, reconcileEdges, resolveDurById, totalSpanBeats, roleOf, roleInfo, keyDiffLabel, type StripCard, type Edge } from "../formStrip";
-import { scaffoldPlan, energyChips, transitionWindowNotes, type KeyApplication } from "../formPlan";
+import { collapseRuns, cardsToEdges, reconcileEdges, resolveDurById, totalSpanBeats, roleOf, roleInfo, keyDiffLabel, sectionKeyBadge, timeAddress, mergeFormPlan, withRole, ROLE_KEYS, type StripCard, type Edge } from "../formStrip";
+import { energyChips, transitionWindowNotes, type KeyApplication } from "../formPlan";
 import { FormSuggest, type SuggestCard } from "./FormSuggest";
 import { lanesForKind, type Child } from "./sectionLanes";
 import { SectionSkyline } from "./MiniRoll";
@@ -23,11 +23,12 @@ import { PlacePicker } from "./PlacePicker";
 import { usePlacePicker } from "../usePlacePicker";
 import { Icon } from "./Icon";
 
-// 曲フォーム＝フォームストリップ（design「#曲フォーム」S1・正典 §4.2）。
-// song エディタの小節グリッド→**カード列**へ置換（song kind 専用・section のグリッドは不変）。
-// カード＝役割/尺/レイヤ帯（調バッジ・分家バッジは S2）。並べ替え(dnd-kit)/挿入(PlacePicker)/削除/×N畳み/
-// タップで潜る/今どこハイライト。position は**カード順からの前置和射影**で再計算＝compose_edge/position の契約は不変。
-// ロジックは formStrip.ts の純関数へ出してテスト可能に、本体は結線のみ。
+// 曲フォーム＝縦セットリスト（design #28・正典 §4.2「モバイルは縦1列」への是正＝横カード帯を撤去）。
+// song エディタの小節グリッド→**縦の全幅行リスト**（song kind 専用・section のグリッドは不変）。
+// 各行＝役割チップ/タイトル/時間住所「8小節·1-8」/実キー名「F +5」/共有・分家バッジ（言葉）/レイヤ帯/⋯メニュー。
+// 行間の全幅境界＝縫い目（♪つなぎ試聴＋精密挿入）。ヘッダに常時全体が見えるミニマップ。⋯シートで役割付与/分家/複製/削除＋取り消しトースト。
+// 並べ替え(dnd-kit verticalListSortingStrategy)/挿入(PlacePicker)/削除/×N畳み/タップで潜る/今どこハイライト。
+// position は**カード順からの前置和射影**で再計算＝compose_edge/position の契約は不変。ロジックは formStrip.ts の純関数へ。
 
 const CURRENT_POLL_MS = 120; // 「今どこ」＝再生中に beatRef を低頻度ポーリング（毎フレーム setState しない）
 
@@ -71,6 +72,11 @@ export function FormStrip({
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // 展開中の ×N カード（expandKey）
   const [insertIndex, setInsertIndex] = useState(0); // 挿入位置（カード添字）＝ピッカー確定時に使う
   const [currentIdx, setCurrentIdx] = useState<number | null>(null); // 今どこ＝再生中カードの sorted 添字
+  const [playFrac, setPlayFrac] = useState<number | null>(null); // ミニマップのプレイヘッド位置（0..1・再生中のみ）
+  const [sheetFor, setSheetFor] = useState<string | null>(null); // ⋯ シートを開いている行の unit.id（役割/分家/複製/削除）
+  const [rolePickFor, setRolePickFor] = useState<string | null>(null); // 役割を付ける（childId）＝シート内の役割リスト展開
+  const [toast, setToast] = useState<{ label: string; undo: () => Promise<void> } | null>(null); // 取り消しトースト（分家/複製/削除）
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -84,7 +90,7 @@ export function FormStrip({
   // 分家/共有バッジ（S2）：各セクション childId ごとに「共有(placementCount>=2)」「分家(variant_of を持つ)」を非同期に解決。
   // ※地雷：反復配置の node.children は空でも **node.neta 自体は各配置に載る**ので調バッジは node.neta.key で安全。
   //   共有/分家は配置ツリーに出ない情報なので childId 単位で placements/relations を引く（getComposition に頼らない）。
-  const [badges, setBadges] = useState<Record<string, { shared: boolean; variant: boolean }>>({});
+  const [badges, setBadges] = useState<Record<string, { shared: boolean; count: number; variant: boolean }>>({});
   const distinctIds = useMemo(() => [...new Set(sortedIds)], [sortedIds]);
   const distinctKey = distinctIds.join(",");
   useEffect(() => {
@@ -96,7 +102,8 @@ export function FormStrip({
             api.getPlacements(id).catch(() => ({ placementCount: 0 })),
             api.getRelations(id).catch(() => [] as { type: string }[]),
           ]);
-          return [id, { shared: (pl.placementCount ?? 0) >= 2, variant: rels.some((r) => r.type === "variant_of") }] as const;
+          const count = pl.placementCount ?? 0;
+          return [id, { shared: count >= 2, count, variant: rels.some((r) => r.type === "variant_of") }] as const;
         }),
       );
       if (alive) setBadges(Object.fromEntries(entries));
@@ -125,18 +132,24 @@ export function FormStrip({
   const totalBeats = totalSpanBeats(sorted.map((c) => ({ childId: c.node.neta.id, position: c.position, dur: durOf(c.node.neta.id) })));
   const totalBars = BPB > 0 ? Math.round(totalBeats / BPB) : 0;
   const totalSec = tempo > 0 ? Math.round((totalBeats * 60) / tempo) : 0;
-  const keyLabel = `${PITCH_NAMES[((keyPc % 12) + 12) % 12]}${mode === "minor" ? "m" : ""}`;
+  // ミニマップ＝各配置を尺∝幅・役割色の帯で（常時全体が見える＝スカイラインの正しい生息地・#28）。sorted＝実タイムライン順。
+  const miniSegs = sorted.map((c, i) => {
+    const dur = durOf(c.node.neta.id);
+    const ri = roleInfo(roleOf(c.node.neta.tags));
+    return { key: `${c.node.neta.id}-${i}`, frac: totalBeats > 0 ? dur / totalBeats : 0, color: ri?.color };
+  });
 
-  // 「今どこ」＝再生中だけ beatRef を低頻度ポーリングし、現在拍を含む子の sorted 添字を state に落とす。
+  // 「今どこ」＝再生中だけ beatRef を低頻度ポーリングし、現在拍を含む子の sorted 添字＋ミニマップのプレイヘッド位置(0..1)を state に落とす。
   useEffect(() => {
-    if (!playing) { setCurrentIdx(null); return; }
+    if (!playing) { setCurrentIdx(null); setPlayFrac(null); return; }
     const timer = setInterval(() => {
       const beat = beatRef.current;
       const idx = sorted.findIndex((c) => c.position <= beat + 1e-6 && beat < c.position + childDur(c) - 1e-6);
       setCurrentIdx(idx >= 0 ? idx : null);
+      setPlayFrac(totalBeats > 0 ? Math.min(1, Math.max(0, beat / totalBeats)) : null);
     }, CURRENT_POLL_MS);
     return () => clearInterval(timer);
-  }, [playing, sorted, childDur, beatRef]);
+  }, [playing, sorted, childDur, beatRef, totalBeats]);
 
   // ── 射影 normalize：desiredIds（この順の childId 列）→ place/remove を計算して適用（前置和射影）。
   // current＝最新の loaded children（挿入直後は fetch し直した新しい配列を渡す＝state の遅延反映に依存しない）。
@@ -175,37 +188,112 @@ export function FormStrip({
     await applyOrder(desired, children);
   }
 
-  // 削除＝その表示単位の全配置を外す（×N は N 個まとめて＝1ブロックの削除・展開中は1個）。
+  // ── 取り消しトースト（#28）＝分家/複製/削除は無確認の即時実行のまま、直後にトーストで元に戻せる。
+  // 辺スナップショット→ reconcile で正確に復元（作った分家/複製ネタは deleteNeta で掃除）＝軽量な「最後の1手」undo。
+  const snapshotEdges = (): Edge[] => sorted.map((c) => ({ childId: c.node.neta.id, position: c.position, ord: c.ord }));
+  async function restoreEdges(snapshot: Edge[], deleteNetaId?: string) {
+    const cur = await fetchChildren();
+    const curEdges: Edge[] = cur.map((c) => ({ childId: c.node.neta.id, position: c.position, ord: c.ord }));
+    const { place, remove } = reconcileEdges(curEdges, snapshot);
+    for (const e of remove) await api.removeChild(neta.id, e.childId, e.position).catch(() => {});
+    for (const e of place) await api.placeChild(neta.id, e.childId, e.position, e.ord).catch(() => {});
+    if (deleteNetaId) await api.deleteNeta(deleteNetaId).catch(() => {});
+    await reload();
+    onChanged?.();
+  }
+  const showToast = (label: string, undo: () => Promise<void>) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ label, undo });
+    toastTimer.current = setTimeout(() => setToast(null), 7000); // 数秒で自然消滅（取り消しの窓）
+  };
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+  // 削除＝その表示単位の全配置を外す（×N は N 個まとめて＝1ブロックの削除・展開中は1個）。取り消しトースト付き。
   async function removeUnit(u: DisplayUnit) {
+    const snap = snapshotEdges();
+    const label = netaOf(u.childId)?.title ?? netaOf(u.childId)?.text ?? "セクション";
     const desired = units.filter((x) => x !== u).flatMap((x) => Array(x.count).fill(x.childId) as string[]);
     await applyOrder(desired, children);
+    setSheetFor(null);
+    showToast(`「${label}」を外しました`, () => restoreEdges(snap));
   }
 
   // 分家にする（S2・「同じものとして育てる」）＝**その配置1つだけ**を vary した新セクションに差し替え。
   // 転調ラスサビの入口＝サビの1配置を分家化して key+1 等を分家側で自由に。子ネタは参照共有（元サビを直せば効く）。
-  // ×N（畳んだ反復）は先頭配置1つだけを分家（残りは元のまま）＝「ここから別物として育て始める」導線。
+  // ×N（畳んだ反復）は先頭配置1つだけを分家（残りは元のまま）＝「ここから別物として育て始める」導線。取り消しトースト付き。
   async function branchUnit(u: DisplayUnit) {
     const c = sorted[u.indices[0]!]; // この childId の先頭配置（position/ord を維持して差し替え）
     if (!c) return;
+    const snap = snapshotEdges();
     const branch = await api.vary(c.node.neta.id).catch(() => null);
     if (!branch) return;
     await api.removeChild(neta.id, c.node.neta.id, c.position).catch(() => {});
     await api.placeChild(neta.id, branch.id, c.position, c.ord).catch(() => {});
     await reload();
     onChanged?.();
+    setSheetFor(null);
+    showToast(`「${branch.title ?? "分家"}」を分家にしました`, () => restoreEdges(snap, branch.id));
+  }
+
+  // 複製する（#28・「別物にする＝完全に切り離す」）＝その配置1つだけを copyNeta した独立セクションへ差し替え（variant_of 無し）。
+  // 分家（参照共有・系譜あり）とは別物＝元と縁を切って自由に育てる。取り消しトースト付き。
+  async function duplicateUnit(u: DisplayUnit) {
+    const c = sorted[u.indices[0]!];
+    if (!c) return;
+    const snap = snapshotEdges();
+    const copy = await api.copyNeta(c.node.neta.id).catch(() => null);
+    if (!copy) return;
+    await api.removeChild(neta.id, c.node.neta.id, c.position).catch(() => {});
+    await api.placeChild(neta.id, copy.id, c.position, c.ord).catch(() => {});
+    await reload();
+    onChanged?.();
+    setSheetFor(null);
+    showToast(`「${copy.title ?? "複製"}」を複製にしました`, () => restoreEdges(snap, copy.id));
+  }
+
+  // 役割を付ける（#28）＝配置済みセクションに役割タグを設定（色/ミニマップ/生成プリセット/key_plan の起点）。実体を直接更新＝全配置に効く。
+  async function setUnitRole(childId: string, role: string | undefined) {
+    const cur = netaOf(childId);
+    await api.updateNeta(childId, { tags: withRole(cur?.tags, role) }).catch(() => {});
+    setRolePickFor(null);
+    setSheetFor(null);
+    await reload();
+    onChanged?.();
   }
 
   // ── つなぎ＝計画 verb の適用（S3-a）。候補の fetch/選択/確認は FormSuggest・実行はここ。 ──
-  // suggest_form → 足場化：既存の辺を全除去（ネタ実体は無傷）→空 section を作って前置和射影で並べる。
-  // key は設定しない＝曲の key で再帰合成（compositeNotes の継承）・title＝役割ラベル（formStrip ROLE_INFO が SSOT）。
+  // suggest_form → **非破壊マージ**（#28 是正）：既存配置を全消しせず、候補の役割枠へ同役割の既存セクションを温存、
+  // 空いた枠だけ空 section を新規作成。余った既存は末尾に温存＝作業中アレンジを失わない。position は前置和射影。
+  // 新規足場は key を設定しない＝曲の key で再帰合成（compositeNotes の継承）・title＝役割ラベル（ROLE_INFO が SSOT）。
   async function applyFormCandidate(cand: FormCandidate) {
-    for (const c of sorted) await api.removeChild(neta.id, c.node.neta.id, c.position).catch(() => {});
-    for (const s of scaffoldPlan(cand.sections, BPB)) {
-      const created = await api
-        .createNeta({ kind: "section", title: roleInfo(s.role)?.label ?? s.role, bars: s.bars, meter: liveMeter, tags: [`role:${s.role}`] })
-        .catch(() => null);
-      if (created) await api.placeChild(neta.id, created.id, s.position, 0).catch(() => {});
+    // 既存＝distinct childId（出現順）＋その役割。×N は1枠として扱う。
+    const seen = new Set<string>();
+    const existing: { childId: string; role: string | undefined }[] = [];
+    for (const u of units) {
+      if (seen.has(u.childId)) continue;
+      seen.add(u.childId);
+      existing.push({ childId: u.childId, role: roleOf(netaOf(u.childId)?.tags) });
     }
+    const plan = mergeFormPlan(existing, cand.sections);
+    // 各アイテムを childId＋尺へ解決（new は空 section を作成）。
+    const items: { childId: string; dur: number }[] = [];
+    for (const item of plan) {
+      if (item.kind === "existing") {
+        items.push({ childId: item.childId, dur: durOf(item.childId) });
+      } else {
+        const created = await api
+          .createNeta({ kind: "section", title: roleInfo(item.role)?.label ?? item.role, bars: item.bars, meter: liveMeter, tags: [`role:${item.role}`] })
+          .catch(() => null);
+        if (created) items.push({ childId: created.id, dur: item.bars > 0 ? item.bars * BPB : BPB });
+      }
+    }
+    // 前置和射影→現辺と reconcile（既存は移動だけ・削除はしない＝ネタ温存）。
+    const newEdges = cardsToEdges(items.map((it) => ({ childId: it.childId, dur: it.dur, ord: 0, position: -1 })));
+    const cur = await fetchChildren();
+    const oldEdges: Edge[] = cur.map((c) => ({ childId: c.node.neta.id, position: c.position, ord: c.ord }));
+    const { place, remove } = reconcileEdges(oldEdges, newEdges);
+    for (const e of remove) await api.removeChild(neta.id, e.childId, e.position).catch(() => {});
+    for (const e of place) await api.placeChild(neta.id, e.childId, e.position, e.ord).catch(() => {});
     await reload();
     onChanged?.();
   }
@@ -326,14 +414,25 @@ export function FormStrip({
   const netaOf = (childId: string): Neta | undefined => sorted.find((c) => c.node.neta.id === childId)?.node.neta;
   const toggleExpand = (key: string) => setExpanded((s) => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
+  // 時間住所（#28）＝「8小節·1-8」。unit の先頭配置 position→開始小節、尺×count→占有小節。前置和射影の副産物。
+  const unitAddress = (u: DisplayUnit): string => {
+    const c0 = sorted[u.indices[0]!];
+    const startBar = c0 && BPB > 0 ? Math.round(c0.position / BPB) + 1 : 1;
+    const bars = (BPB > 0 ? Math.round(durOf(u.childId) / BPB) : 0) * u.count;
+    return timeAddress(startBar, bars);
+  };
+
+  // ⋯ シート対象（役割/分家/複製/削除）。開いている行の unit と neta を解決。
+  const sheetUnit = units.find((u) => u.id === sheetFor);
+  const sheetNeta = sheetUnit ? netaOf(sheetUnit.childId) : undefined;
+  const closeSheet = () => { setSheetFor(null); setRolePickFor(null); };
+
   return (
     <div className="form-strip" aria-label="form-strip">
-      {/* 曲ヘッダ＝合計尺・key/mode・tempo・提案▾（S3-a）・段階/次の一手（SongStatus 統合）。 */}
+      {/* 曲ヘッダ＝合計尺＋提案▾（S3-a）。key/tempo は上の設定行に一本化＝二重表示と 412px の 提案▾ 見切れを解消（#28）。 */}
       <div className="fs-header">
         <div className="fs-meta" aria-label="song-meta">
           <span className="fs-total">{totalBars}小節<small>≈{totalSec}秒</small></span>
-          <span className="fs-key">{keyLabel}</span>
-          <span className="fs-tempo">♩={tempo}</span>
           <FormSuggest
             keyPc={keyPc}
             mode={mode}
@@ -345,59 +444,130 @@ export function FormStrip({
             onApplyEnergy={applyEnergyPlan}
           />
         </div>
+        {/* 段階/次の一手＝1行チップ（タップで編集シート）＝一等地を書く頻度に見合った密度へ（#28）。 */}
         <SongStatus netaId={neta.id} />
       </div>
 
+      {/* ヘッダミニマップ（#28）＝常時全体が見える帯（幅∝尺・役割色・プレイヘッド）。12セクションでも1画面に収まり俯瞰が立つ。 */}
+      {sorted.length > 0 && (
+        <div className="fs-minimap" aria-label="form-minimap">
+          <div className="fs-mm">
+            {miniSegs.map((s) => (
+              <span
+                key={s.key}
+                className="fs-seg"
+                style={{ flexGrow: Math.max(s.frac, 0.002), ...(s.color ? { ["--rc" as string]: s.color } : {}) }}
+              />
+            ))}
+            {playFrac != null && <span className="fs-ph" aria-hidden="true" style={{ left: `${playFrac * 100}%` }} />}
+          </div>
+        </div>
+      )}
+
       {sorted.length === 0 ? (
         <p className="fs-empty muted">
-          セクションを並べて曲にします。<button type="button" className="fs-insert fs-insert-empty" aria-label="fs-insert-0" onClick={() => openInsert(0)}>＋ セクションを置く</button>
+          セクションを並べて曲にします。<button type="button" className="fs-insert-empty" aria-label="fs-insert-0" onClick={() => openInsert(0)}>＋ セクションを置く</button>
         </p>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void onDragEnd(e)}>
-          <SortableContext items={units.map((u) => u.id)} strategy={horizontalListSortingStrategy}>
-            <div className="fs-cards" aria-label="form-cards">
+          <SortableContext items={units.map((u) => u.id)} strategy={verticalListSortingStrategy}>
+            <div className="fs-list" aria-label="form-cards">
               {units.map((u, i) => (
                 <Fragment key={u.id}>
-                  <button type="button" className="fs-insert" aria-label={`fs-insert-${i}`} title="ここにセクションを挿す" onClick={() => openInsert(i)}>＋</button>
-                  {/* 遷移試聴（縫い目E）＝内側の境界のみ（先頭カードの前には出さない）。トグルで停止。 */}
-                  {i > 0 && (
-                    <button
-                      type="button"
-                      className="fs-trans"
-                      aria-label={`fs-trans-${i}`}
-                      aria-pressed={transAt === i}
-                      title="つなぎを試聴（前の末2小節＋次の頭2小節）"
-                      onClick={() => void toggleTransition(i, sorted[u.indices[0]!]?.position ?? 0)}
-                    >
-                      {transAt === i ? "⏹" : "♪"}
-                    </button>
-                  )}
-                  <FormCard
+                  {/* 縫い目＝行間の全幅境界（#28 で一級化）。♪つなぎ試聴（内側のみ）＋精密挿入＋。24px 隙間の押し込みを解消。 */}
+                  <div className="fs-seam">
+                    <span className="fs-seam-line" />
+                    {i > 0 && (
+                      <button
+                        type="button"
+                        className="fs-trans"
+                        aria-label={`fs-trans-${i}`}
+                        aria-pressed={transAt === i}
+                        title="つなぎを試聴（前の末2小節＋次の頭2小節）"
+                        onClick={() => void toggleTransition(i, sorted[u.indices[0]!]?.position ?? 0)}
+                      >
+                        {transAt === i ? "⏹ つなぎ" : "♪ つなぎ"}
+                      </button>
+                    )}
+                    <button type="button" className="fs-insert" aria-label={`fs-insert-${i}`} title="ここにセクションを挿す" onClick={() => openInsert(i)}>＋</button>
+                    <span className="fs-seam-line" />
+                  </div>
+                  <FormRow
                     unit={u}
                     neta={netaOf(u.childId)}
                     isCurrent={currentIdx != null && u.indices.includes(currentIdx)}
                     songKey={keyPc}
-                    shared={badges[u.childId]?.shared ?? false}
+                    sharedCount={badges[u.childId]?.count ?? 0}
                     variant={badges[u.childId]?.variant ?? false}
                     energyChip={chips?.[u.indices[0]!]}
+                    address={unitAddress(u)}
                     onOpen={() => { const n = netaOf(u.childId); if (n) onOpenNeta?.(n); }}
-                    onDelete={() => void removeUnit(u)}
-                    onBranch={() => void branchUnit(u)}
+                    onOpenMenu={() => { setSheetFor(u.id); setRolePickFor(null); }}
+                    onSetRole={() => { setSheetFor(u.id); setRolePickFor(u.childId); }}
                     onToggleExpand={() => toggleExpand(u.expandKey)}
                     expanded={expanded.has(u.expandKey)}
-                    childDur={childDur}
-                    childOf={() => sorted.find((c) => c.node.neta.id === u.childId)}
-                    BPB={BPB}
                   />
                 </Fragment>
               ))}
-              {/* 末尾の挿入＝一番後ろに「続き」を足す主導線。空状態の「＋ セクションを置く」と同じく**常時見える
-                  文言ラベル**にする＝タッチ端末（ホバー/focus-visible が無い）でも discoverable（不可視の裸＋スロットで
-                  「続きを置けない」バグの根治・2026-07-18）。カード間の細スロットは precise 挿入用に据え置き。 */}
-              <button type="button" className="fs-insert fs-insert-end" aria-label={`fs-insert-${units.length}`} title="末尾にセクションを足す" onClick={() => openInsert(sortedIds.length)}>＋ セクション</button>
+              {/* 末尾の「続きを足す」＝主導線（常時見える文言ラベル・タッチで discoverable）。行間＋は精密挿入の従。 */}
+              <button type="button" className="fs-insert-end" aria-label={`fs-insert-${units.length}`} title="末尾にセクションを足す" onClick={() => openInsert(sortedIds.length)}>＋ セクションを足す</button>
             </div>
           </SortableContext>
         </DndContext>
+      )}
+
+      {/* 行の ⋯ シート（#28）＝役割を付ける／分家にする／複製する／外す。正典文言「同じものとして育てる／別物にする」を選択の瞬間に。 */}
+      {sheetUnit && (
+        <>
+          <div className="fs-sheet-backdrop" aria-hidden="true" onClick={closeSheet} />
+          <div className="fs-sheet" role="dialog" aria-label="row-menu">
+            <p className="fs-sheet-h">
+              <b>{sheetNeta?.title ?? sheetNeta?.text ?? "(無題)"}</b>
+              <span className="muted"> {sectionKeyBadge(sheetNeta?.key, sheetNeta?.mode, keyPc) ?? ""}</span>
+              <button type="button" className="fs-sheet-x" aria-label="row-menu-close" onClick={closeSheet}>×</button>
+            </p>
+            {rolePickFor === sheetUnit.childId ? (
+              <div className="fs-role-list" aria-label="role-list">
+                <button type="button" className="fs-sheet-item" aria-label="role-set-none" onClick={() => void setUnitRole(sheetUnit.childId, undefined)}>役割なし</button>
+                {ROLE_KEYS.map((r) => (
+                  <button type="button" key={r} className="fs-sheet-item" aria-label={`role-set-${r}`} onClick={() => void setUnitRole(sheetUnit.childId, r)}>
+                    {roleInfo(r)?.label ?? r}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="fs-sheet-acts">
+                <button type="button" className="fs-sheet-item" aria-label={`row-role-${sheetUnit.childId}`} onClick={() => setRolePickFor(sheetUnit.childId)}>
+                  役割を付ける <small className="muted">色・生成プリセット・key_plan の起点</small>
+                </button>
+                <button type="button" className="fs-sheet-item" aria-label={`fs-branch-${sheetUnit.childId}`} onClick={() => void branchUnit(sheetUnit)}>
+                  分家にする <small className="muted">同じものとして育てる（転調ラスサビ・落ちサビ）</small>
+                </button>
+                <button type="button" className="fs-sheet-item" aria-label={`row-dup-${sheetUnit.childId}`} onClick={() => void duplicateUnit(sheetUnit)}>
+                  複製する <small className="muted">別物にする（完全に切り離す）</small>
+                </button>
+                <button type="button" className="fs-sheet-item danger" aria-label={`fs-del-${sheetUnit.childId}`} onClick={() => void removeUnit(sheetUnit)}>
+                  この配置を外す <small className="muted">ネタ自体は消えません</small>
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* 取り消しトースト（#28）＝分家/複製/削除の直後に元へ戻す窓（数秒で自然消滅）。 */}
+      {toast && (
+        <div className="fs-toast" role="status" aria-label="undo-toast">
+          <span>{toast.label}</span>
+          <button
+            type="button"
+            className="fs-toast-undo"
+            aria-label="undo-op"
+            onClick={() => { const u = toast.undo; setToast(null); if (toastTimer.current) clearTimeout(toastTimer.current); void u(); }}
+          >
+            取り消す
+          </button>
+        </div>
       )}
 
       {pk.picker && (
@@ -424,84 +594,76 @@ export function FormStrip({
   );
 }
 
-// 1カード（方向C＝エナジー積み棒スカイライン）。役割はカード地の淡ティント＋色文字、レイヤ帯は縦積み棒、
-// 尺でカード幅が可変（4小節=細/8小節=太）。上部＝役割/×N/将来スロット(調バッジ・分家)/⠿、本体＝タイトル＋積み棒、
-// フッタ＝尺+削除。dnd-kit sortable の1要素。挙動（潜る/削除/展開/ドラッグ）は不変で見た目のみ刷新。
-function FormCard({
+// 1行（#28 縦セットリスト）＝役割チップ／タイトル＋時間住所＋実キー名／共有・分家バッジ（言葉）／レイヤ帯／⋯メニュー。
+// 全幅・役割色を左レール(--rc)に流す。dnd-kit sortable の1要素。タップ本体で潜る・⋯でシート・グリップで並べ替え。
+function FormRow({
   unit,
   neta,
   isCurrent,
   songKey,
-  shared,
+  sharedCount,
   variant,
   energyChip,
+  address,
   onOpen,
-  onDelete,
-  onBranch,
+  onOpenMenu,
+  onSetRole,
   onToggleExpand,
   expanded,
-  childDur,
-  childOf,
-  BPB,
 }: {
   unit: DisplayUnit;
   neta: Neta | undefined;
   isCurrent: boolean;
   songKey: number;
-  shared: boolean; // 2箇所以上で使われている（共有バッジ）
-  variant: boolean; // variant_of を持つ＝分家（A′ バッジ）
-  energyChip?: string; // エナジーΔチップ（S3-a・揮発＝適用中のセッションのみ）
+  sharedCount: number; // 配置数（>=2 で「共有N」）
+  variant: boolean; // variant_of を持つ＝分家
+  energyChip?: string; // エナジーΔチップ（S3-a・揮発）
+  address: string; // 時間住所「8小節·1-8」
   onOpen: () => void;
-  onDelete: () => void;
-  onBranch: () => void; // 分家にする（この配置1つだけ vary で差し替え）
+  onOpenMenu: () => void; // ⋯ シートを開く
+  onSetRole: () => void; // 役割を付ける（シートの役割リストへ直行）
   onToggleExpand: () => void;
   expanded: boolean;
-  childDur: (c: Child) => number;
-  childOf: () => Child | undefined;
-  BPB: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: unit.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : undefined };
   const role = roleOf(neta?.tags);
   const ri = roleInfo(role);
-  const c = childOf();
-  const dur = c ? childDur(c) : 0;
-  const bars = BPB > 0 ? Math.round(dur / BPB) : 0;
   const title = neta?.title ?? neta?.text ?? "(無題)";
-  const keyChg = keyDiffLabel(neta?.key ?? null, songKey); // 曲と調が違う時だけ「+1」等（同調/未設定は null）
-  // 尺でカード幅を可変（設計図として起伏が形になる）。役割色はカード地のティント基準＝--rc に流す（無役割は CSS 既定）。
-  const widthClass = bars <= 4 ? "fs-w4" : "fs-w8";
+  const keyChg = keyDiffLabel(neta?.key ?? null, songKey); // 曲と違う調のときだけ（同調/未設定は null）
+  const keyBadge = keyChg ? sectionKeyBadge(neta?.key, neta?.mode, songKey) : null; // 「F +5」＝転調してるセクションだけ
   return (
     <div
       ref={setNodeRef}
       style={ri?.color ? { ...style, ["--rc" as string]: ri.color } : style}
-      className={`fs-card ${widthClass}`}
+      className="fs-row"
       data-current={isCurrent ? "" : undefined}
       aria-label={`form-card-${unit.childId}`}
     >
-      <div className="fs-card-top">
-        {ri && <span className="fs-role" aria-label={`role-${role}`}>{ri.label}</span>}
+      <span className="fs-rail" aria-hidden="true" />
+      <span className="fs-grip" aria-label={`drag-${unit.childId}`} title="ドラッグで並べ替え" {...attributes} {...listeners}><Icon name="grip" size={14} /></span>
+      {ri ? (
+        <span className="fs-role" aria-label={`role-${role}`}>{ri.label}</span>
+      ) : (
+        <button type="button" className="fs-role fs-role-none" aria-label={`role-set-${unit.childId}`} title="役割を付ける（色・生成の起点）" onClick={onSetRole}>役割</button>
+      )}
+      {/* 本体（潜る）＝タイトル＋時間住所。ネストボタンを避けるためバッジ/×N は兄弟クラスタへ（DOM 妥当性）。 */}
+      <button type="button" className="fs-main" onClick={onOpen} title="タップで中を編集（潜る）">
+        <span className="fs-title">{title}</span>
+        <span className="fs-addr">{address}</span>
+      </button>
+      <span className="fs-tags">
+        {keyBadge && <span className="fs-keychg" aria-label={`keychg-${unit.childId}`} title={`曲の調と${keyChg}半音`}>{keyBadge}</span>}
         {unit.count > 1 && (
           <button type="button" className="fs-xn" aria-label={`expand-${unit.childId}`} aria-expanded={expanded} title={`同じセクション ${unit.count} 連続（タップで展開）`} onClick={onToggleExpand}>×{unit.count}</button>
         )}
-        {/* S2 バッジ＝役割行右端。調バッジ(曲と違う調)・分家(′)・共有(🔗×n)。既存 CSS 変数のみ・新配色は作らない。 */}
-        {/* S3-a エナジーΔチップ（揮発）＝前セクション比の矢印（↑↑/↑/→/↓/↓↓）。 */}
+        {sharedCount >= 2 && <span className="fs-shared" aria-label={`shared-${unit.childId}`} title="2箇所以上で使われています（共有・直すと全部に効く）">共有{sharedCount}</span>}
+        {variant && <span className="fs-variant" aria-label={`variant-${unit.childId}`} title="分家（元セクションの変奏＝variant_of）">分家</span>}
         {energyChip && <span className="fs-energy" aria-label={`energy-${unit.childId}`} title="エナジー（前セクション比・提案の目安＝保存されません）">{energyChip}</span>}
-        {keyChg && <span className="fs-keychg" aria-label={`keychg-${unit.childId}`} title={`曲の調と${keyChg}半音`}>{keyChg}</span>}
-        {variant && <span className="fs-variant" aria-label={`variant-${unit.childId}`} title="分家（元セクションの変奏＝variant_of）">′</span>}
-        {shared && <span className="fs-shared" aria-label={`shared-${unit.childId}`} title="2箇所以上で使われています（共有・直すと全部に効く）">🔗</span>}
-        <span className="fs-grip" aria-label={`drag-${unit.childId}`} title="ドラッグで並べ替え" {...attributes} {...listeners}><Icon name="grip" size={14} /></span>
-      </div>
-      <button type="button" className="fs-card-body" onClick={onOpen} title="タップで中を編集（潜る）">
-        <span className="fs-title">{title}</span>
-        {neta && <SectionSkyline neta={neta} />}
-      </button>
-      <div className="fs-card-foot">
-        <span className="fs-len">{bars}<small>小節</small></span>
-        {/* 分家にする＝同じものとして育てる（この配置だけ vary で差し替え・転調ラスサビの入口）。複製(別物)は NetaList 側。 */}
-        <button type="button" className="fs-branch" aria-label={`fs-branch-${unit.childId}`} title="分家にする（同じものとして育てる＝この配置だけ変奏。転調ラスサビ等）" onClick={onBranch}>分家</button>
-        <button type="button" className="fs-del" aria-label={`fs-del-${unit.childId}`} title="このカードを外す" onClick={onDelete}><Icon name="trash" size={14} /></button>
-      </div>
+      </span>
+      {neta && <span className="fs-band"><SectionSkyline neta={neta} /></span>}
+      <button type="button" className="fs-more" aria-label={`more-${unit.childId}`} title="このセクションの操作（役割/分家/複製/外す）" onClick={onOpenMenu}>⋯</button>
+      {isCurrent && <span className="fs-progress" aria-hidden="true" />}
     </div>
   );
 }

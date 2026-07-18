@@ -205,6 +205,53 @@ details.theme summary {
   color: #5ad17a;
   font-weight: bold;
 }
+.song-status-done {
+  align-self: flex-end;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+/* #28 段階/次の一手の1行チップ（既定表示）＝タップで上の入力欄へ展開。書く頻度に見合う密度へ。 */
+.song-status-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 9px;
+  padding: 7px 11px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.song-status-chip b {
+  color: var(--fg);
+  font-weight: 600;
+  margin-right: 3px;
+}
+.song-status-chip .ss-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--line);
+  flex: none;
+}
+.song-status-chip .ss-edit {
+  margin-left: auto;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 0.72rem;
+}
 
 /* チャット複数会話セッション（Claude/ChatGPT風の一覧） */
 .chat-sessions {

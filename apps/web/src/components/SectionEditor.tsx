@@ -415,25 +415,31 @@ export function SectionEditor({
       {/* 道具は メロ編集画面に整合：[✎通常][⌫消しゴム] modes（左）… [✨いじる▾]（右）。
           生成/ハモリ/書き出しは全部 いじる メニューに集約＝バラ撒きボタンを畳んで薄く（②⑤）。 */}
       <div className="roll-toolbar section-toolbar">
-        <div className="proll-modes" role="group" aria-label="section-mode">
-          <button type="button" aria-label="mode-edit" title="通常（タップで編集）" className={!eraseMode ? "on" : ""} onClick={() => setEraseMode(false)}>
-            <Icon name="edit" size={18} />
-          </button>
-          <button type="button" aria-label="mode-erase" title="消しゴム（タップで外す）" className={eraseMode ? "on" : ""} onClick={() => setEraseMode(true)}>
-            <Icon name="eraser" size={18} />
-          </button>
-        </div>
-        <span className="tb-divider" aria-hidden="true" />
+        {/* #28 song は編成リスト＝グリッド専用の 鉛筆/消しゴム は死に道具なので出さない（section のみ）。 */}
+        {!isSong && (
+          <>
+            <div className="proll-modes" role="group" aria-label="section-mode">
+              <button type="button" aria-label="mode-edit" title="通常（タップで編集）" className={!eraseMode ? "on" : ""} onClick={() => setEraseMode(false)}>
+                <Icon name="edit" size={18} />
+              </button>
+              <button type="button" aria-label="mode-erase" title="消しゴム（タップで外す）" className={eraseMode ? "on" : ""} onClick={() => setEraseMode(true)}>
+                <Icon name="eraser" size={18} />
+              </button>
+            </div>
+            <span className="tb-divider" aria-hidden="true" />
+          </>
+        )}
         <div className="assign-wrap" ref={toolsRef}>
           <button
             type="button"
             className={"tb-tool tools-btn" + (toolsOpen ? " on" : "")}
             aria-label="tools"
             aria-expanded={toolsOpen}
-            title="この進行をいじる（生成・ハモリ・書き出し）"
+            title={isSong ? "曲を書き出す（MIDI・パート別MIDI）" : "この進行をいじる（生成・ハモリ・書き出し）"}
             onClick={() => setToolsOpen((v) => !v)}
           >
-            <Icon name="wand" size={16} /> いじる ▾
+            {/* #28 song の「いじる」は書き出しのみ（design L586）＝ラベルを 書き出し に。section は従来どおり いじる。 */}
+            <Icon name="wand" size={16} /> {isSong ? "書き出し ▾" : "いじる ▾"}
           </button>
           {toolsOpen && <div className="tools-backdrop" aria-hidden="true" onClick={() => setToolsOpen(false)} />}
           {toolsOpen && (

@@ -9,6 +9,10 @@ import {
   roleOf,
   roleInfo,
   keyDiffLabel,
+  sectionKeyBadge,
+  timeAddress,
+  mergeFormPlan,
+  withRole,
   type StripCard,
   type Edge,
 } from "../src/formStrip";
@@ -164,6 +168,73 @@ describe("keyDiffLabel（調バッジ＝曲と違う調だけ半音差・S2）",
     expect(keyDiffLabel(11, 0)).toBe("-1"); // 11半音上＝1半音下の方が近い
     expect(keyDiffLabel(0, 2)).toBe("-2"); // 曲がD、セクションがC＝2半音下
     expect(keyDiffLabel(6, 0)).toBe("+6"); // 6は+側の端
+  });
+});
+
+// ── #28 実キー名バッジ・時間住所・非破壊マージ・役割差し替え ──
+describe("sectionKeyBadge（実キー名＋半音差「F +5」）", () => {
+  it("key 未設定＝null（曲キー継承のセクションは出さない）", () => {
+    expect(sectionKeyBadge(null, null, 0)).toBeNull();
+    expect(sectionKeyBadge(undefined, "major", 5)).toBeNull();
+  });
+  it("転調してるセクション＝実キー名＋半音差", () => {
+    expect(sectionKeyBadge(5, null, 0)).toBe("F +5"); // 曲C→セクションF
+    expect(sectionKeyBadge(1, null, 0)).toBe("C# +1");
+    expect(sectionKeyBadge(9, "minor", 0)).toBe("Am -3"); // 短調は m 付き・最短向き
+  });
+  it("同じ調＝キー名だけ（半音差は付けない）", () => {
+    expect(sectionKeyBadge(0, null, 0)).toBe("C");
+    expect(sectionKeyBadge(5, "minor", 5)).toBe("Fm");
+  });
+});
+
+describe("timeAddress（時間住所「8小節·1-8」＝前置和の副産物）", () => {
+  it("開始小節＋尺→占有範囲", () => {
+    expect(timeAddress(1, 8)).toBe("8小節 · 1-8");
+    expect(timeAddress(9, 9)).toBe("9小節 · 9-17");
+    expect(timeAddress(1, 1)).toBe("1小節 · 1-1");
+  });
+  it("尺0/負の防御", () => {
+    expect(timeAddress(1, 0)).toBe("0小節");
+    expect(timeAddress(3, -4)).toBe("0小節");
+  });
+});
+
+describe("mergeFormPlan（非破壊フォーム適用＝既存を役割枠へマージ）", () => {
+  it("同役割の既存は温存・空枠は新規・余った既存は末尾に温存（失わない）", () => {
+    const existing = [{ childId: "A", role: "bridge" }];
+    const cand = [{ role: "intro", bars: 4 }, { role: "bridge", bars: 8 }];
+    expect(mergeFormPlan(existing, cand)).toEqual([
+      { kind: "new", role: "intro", bars: 4 }, // 空枠
+      { kind: "existing", childId: "A" }, // bridge 枠は既存Aで埋まる
+    ]);
+  });
+  it("候補に無い役割の既存＝末尾に温存", () => {
+    const existing = [{ childId: "X", role: "outro" }, { childId: "V", role: "verse" }];
+    const cand = [{ role: "verse", bars: 8 }];
+    expect(mergeFormPlan(existing, cand)).toEqual([
+      { kind: "existing", childId: "V" }, // verse 枠
+      { kind: "existing", childId: "X" }, // 余り＝末尾
+    ]);
+  });
+  it("同役割の既存が複数＝先頭から1つずつ消費", () => {
+    const existing = [{ childId: "S1", role: "chorus" }, { childId: "S2", role: "chorus" }];
+    const cand = [{ role: "chorus", bars: 8 }, { role: "chorus", bars: 8 }];
+    expect(mergeFormPlan(existing, cand)).toEqual([
+      { kind: "existing", childId: "S1" },
+      { kind: "existing", childId: "S2" },
+    ]);
+  });
+});
+
+describe("withRole（role タグ差し替え・非 role タグ温存）", () => {
+  it("既存 role を置き換え、他タグは温存", () => {
+    expect(withRole(["prj:曲A", "role:verse"], "chorus")).toEqual(["prj:曲A", "role:chorus"]);
+    expect(withRole(["prj:曲A"], "intro")).toEqual(["prj:曲A", "role:intro"]);
+  });
+  it("role=undefined＝役割を外す（他タグは残す）", () => {
+    expect(withRole(["prj:曲A", "role:verse"], undefined)).toEqual(["prj:曲A"]);
+    expect(withRole(null, undefined)).toEqual([]);
   });
 });
 
