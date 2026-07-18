@@ -154,6 +154,25 @@ describe("FormStrip（曲フォーム・song のカード列）", () => {
     await waitFor(() => expect(placeChild).toHaveBeenCalledWith("g1", "newSec", expect.any(Number), 0));
   });
 
+  // 「続きを置けない」バグ（2026-07-18・オーナー報告）：最初の1枚を置いた後、続きを足す末尾スロットが
+  // タッチ端末で不可視（.fs-insert は色 transparent＝ホバー/focus-visible でしか＋が出ず、touch は両方発火しない・
+  // 14px 幅）。＝空状態の「＋ セクションを置く」（.fs-insert-empty＝muted で可視）で1枚目は置けるのに、続きの
+  // 末尾スロットだけ見えない/押せない。→ 末尾の「足す」導線は**常時見える文言ラベル**を持つこと（＋の裸グリフ不可）。
+  it("非空でも末尾の『足す』導線が可視ラベル付きで、続きのセクションを配置できる（続きを置けないバグ）", async () => {
+    getComposition.mockResolvedValue({ neta: mk("g1", "song"), children: [sectionChild("A", 0)] });
+    listNeta.mockResolvedValue([mk("cont", "section", { title: "続きのセクション", meter: "4/4" })]);
+    render(<SectionEditor neta={mk("g1", "song")} keyPc={0} tempo={120} meter="4/4" />);
+    await screen.findByLabelText("form-card-A");
+    // 末尾スロット（fs-insert-<カード数>）＝続きを足す導線。裸の「＋」だけ（＝touch で不可視）ではなく、
+    // 何を足すのか読める文言ラベルを持つ＝discoverable であること。
+    const endInsert = screen.getByLabelText("fs-insert-1");
+    expect(endInsert.textContent ?? "").toContain("セクション");
+    // 実際に続きを配置できる（末尾スロット→ピッカー→選択→配置）。
+    await userEvent.click(endInsert);
+    await userEvent.click(await screen.findByLabelText("place-cont"));
+    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("g1", "cont", expect.any(Number), 0));
+  });
+
   // ── S2 分家/共有/調バッジ ──
   it("調バッジ＝セクションkeyが曲keyと違う時だけ半音差／共有バッジ＝placementCount>=2／A′＝variant_of", async () => {
     getComposition.mockResolvedValue({

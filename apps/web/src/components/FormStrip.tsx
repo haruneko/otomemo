@@ -388,8 +388,10 @@ export function FormStrip({
                   />
                 </Fragment>
               ))}
-              {/* 末尾の挿入＝一番後ろに足す。 */}
-              <button type="button" className="fs-insert" aria-label={`fs-insert-${units.length}`} title="末尾にセクションを足す" onClick={() => openInsert(sortedIds.length)}>＋</button>
+              {/* 末尾の挿入＝一番後ろに「続き」を足す主導線。空状態の「＋ セクションを置く」と同じく**常時見える
+                  文言ラベル**にする＝タッチ端末（ホバー/focus-visible が無い）でも discoverable（不可視の裸＋スロットで
+                  「続きを置けない」バグの根治・2026-07-18）。カード間の細スロットは precise 挿入用に据え置き。 */}
+              <button type="button" className="fs-insert fs-insert-end" aria-label={`fs-insert-${units.length}`} title="末尾にセクションを足す" onClick={() => openInsert(sortedIds.length)}>＋ セクション</button>
             </div>
           </SortableContext>
         </DndContext>
