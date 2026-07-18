@@ -243,6 +243,8 @@ export interface RhythmLane {
   midi: number; // GMドラム番号（移調しない）
   hits: number[]; // ステップindex（0..steps-1）
   vel?: number; // #84 S4 レーン既定ベロシティ(0..127)。未指定は DRUM_VEL の GM 既定
+  velCurve?: number[]; // #29 P0 hits と同順の per-hit ベロシティ（フィル/ビルドのカーブ・api OutLane と同形）。未指定=vel/GM既定
+  divs?: Record<string, 2 | 3>; // #29 P2 で使用（step→セル内分割 2|3）。P0 では型のみ。key=String(step)・hits に無い step は無視
 }
 
 // #84 S4 GMドラム別の既定ベロシティ。ハイハットは打数が多く煩いので控えめ＝音量バランス。
@@ -262,6 +264,20 @@ export interface RhythmContent {
   steps: number;
   lanes: RhythmLane[];
   kit?: number; // ドラムキット(GM bank128 preset 0=Standard)。アコ/エレキ選択。未指定=Standard。
+  bars?: number; // #29 P0 小節数（api genDrums が自己記述）。web 表示は steps/stepsPerBar 由来なので任意。
+  beatsPerStep?: number; // #29 P0 1step=何拍か（自己記述の格子解像度）。未指定=0.25（16分）。1/3=三連12格子（shuffle 型）
+}
+
+// #29 P0 拍値の丸め（syncopation.ts と同式）＝小節末の累積ドリフト抑制。
+const round3 = (x: number): number => Math.round(x * 1000) / 1000;
+
+// #29 P0 beatsPerStep を有理数へスナップ。未指定→0.25（現行 step/4 と厳密同値＝bit）。
+// genDrums は三連格子を round3(1/3)=0.333 で保存するため、そのまま乗算すると小節末で最大 8ms
+// ドリフトする→ |bps−1/3|<1e-3 を 1/3 の有理数へ戻して根治。他の値は素通し。
+export function snapBps(beatsPerStep?: number): number {
+  if (beatsPerStep == null) return 0.25;
+  if (Math.abs(beatsPerStep - 1 / 3) < 1e-3) return 1 / 3;
+  return beatsPerStep;
 }
 
 // 選べるドラムキット（SF2 bank128 のプリセット）。アコ/エレキでグループ。
@@ -305,16 +321,105 @@ export function rhythmOf(content: unknown): RhythmContent {
 }
 
 export function rhythmToNotes(r: RhythmContent): Note[] {
+  const bps = snapBps(r.beatsPerStep); // 未指定→0.25（現行 step/4 と同値＝bit）
   return r.lanes.flatMap((l) =>
-    l.hits.map((step) => ({
+    l.hits.map((step, i) => ({
       pitch: l.midi,
-      start: step / 4,
-      dur: 0.25,
+      start: round3(step * bps), // #29 P0 12格子シャッフル型の誤再生を是正（beatsPerStep 尊重）
+      dur: bps,
       drum: true,
-      vel: drumVel(l.midi, l.vel), // #84 S4 レーン/GM既定ベロシティ
+      vel: l.velCurve?.[i] ?? drumVel(l.midi, l.vel), // #29 P0 velCurve 回収（フィル/ビルドのクレッシェンド復活）
       kit: r.kit, // 選択キット（未指定=Standard）。再生/書出でこの番号のキットを使う。
     })),
   );
+}
+
+// #29 P0 リズムセルの実効ベロシティ（velCurve 優先・無ければ vel/GM 既定）＝濃淡描画と3値編集の SSOT。
+export function hitVel(lane: RhythmLane, i: number): number {
+  return lane.velCurve?.[i] ?? drumVel(lane.midi, lane.vel);
+}
+
+// velCurve を最小化：全要素が基準値（=drumVel）と同値なら undefined（content を最小に保つ＝bit）。
+function normVelCurve(lane: RhythmLane, velCurve: number[] | undefined): number[] | undefined {
+  if (!velCurve) return undefined;
+  const base = drumVel(lane.midi, lane.vel);
+  return velCurve.every((v) => v === base) ? undefined : velCurve;
+}
+
+// レーンを再構築（undefined の velCurve/divs はキーを生やさない＝deepStrictEqual/bit 安全）。
+function rebuildLane(
+  lane: RhythmLane,
+  hits: number[],
+  velCurve: number[] | undefined,
+  divs: Record<string, 2 | 3> | undefined,
+): RhythmLane {
+  const out: RhythmLane = { name: lane.name, midi: lane.midi, hits };
+  if (lane.vel !== undefined) out.vel = lane.vel;
+  if (velCurve) out.velCurve = velCurve;
+  if (divs && Object.keys(divs).length) out.divs = divs;
+  return out;
+}
+
+// #29 P0 hit の on/off を hits・velCurve・divs を整列させたまま切り替える純関数（時限爆弾の解除）。
+// velCurve 付きレーンでも index がずれない。velCurve 無しレーンは hits だけ変わる（bit）。
+export function laneWithHitToggled(
+  lane: RhythmLane,
+  step: number,
+): { lane: RhythmLane; turnedOn: boolean } {
+  if (lane.hits.includes(step)) {
+    // ON→OFF：hits の位置 k を除去。velCurve があれば同 k を除去。divs の該当キーも掃除。
+    const k = lane.hits.indexOf(step);
+    const hits = lane.hits.filter((s) => s !== step);
+    const velCurve = normVelCurve(
+      lane,
+      lane.velCurve ? lane.velCurve.filter((_, j) => j !== k) : undefined,
+    );
+    let divs = lane.divs;
+    if (divs && String(step) in divs) {
+      const rest = { ...divs };
+      delete rest[String(step)];
+      divs = Object.keys(rest).length ? rest : undefined;
+    }
+    return { lane: rebuildLane(lane, hits, velCurve, divs), turnedOn: false };
+  }
+  // OFF→ON：ソート位置 k へ hits 挿入。velCurve があれば同 k へ基準値（=普通）を挿入。
+  const hits = [...lane.hits, step].sort((a, b) => a - b);
+  const k = hits.indexOf(step);
+  const velCurve = normVelCurve(
+    lane,
+    lane.velCurve
+      ? [...lane.velCurve.slice(0, k), drumVel(lane.midi, lane.vel), ...lane.velCurve.slice(k)]
+      : undefined,
+  );
+  return { lane: rebuildLane(lane, hits, velCurve, lane.divs), turnedOn: true };
+}
+
+// #29 P0 hit の3値ベロシティ状態（濃淡・チップ点灯・トグル判定の SSOT）。
+export type HitVelState = "normal" | "accent" | "ghost";
+export const GHOST_VEL = 28; // フィル辞書 V.ghost（drumLibrary.ts:32）と同値＝生成物と編集物で語彙統一
+export const ACCENT_BOOST = 18; // backbeat ブースト（+12/+6）と同スケール感
+export function hitVelState(lane: RhythmLane, step: number): HitVelState {
+  const k = lane.hits.indexOf(step);
+  if (k < 0) return "normal";
+  const base = drumVel(lane.midi, lane.vel);
+  const v = lane.velCurve?.[k] ?? base;
+  if (v > base) return "accent";
+  if (v < base) return "ghost";
+  return "normal";
+}
+
+// #29 P0 hit のベロシティを3値へ書く純関数（velCurve に書く＝新フィールド無し）。
+// normal＝基準値へ戻す（全要素基準なら velCurve 削除）。accent＝min(127,base+18)。ghost＝28。
+// 空セル（hit でない）は no-op。
+export function laneWithHitVel(lane: RhythmLane, step: number, state: HitVelState): RhythmLane {
+  const k = lane.hits.indexOf(step);
+  if (k < 0) return lane; // 空セルは何もしない（誤爆防止）
+  const base = drumVel(lane.midi, lane.vel);
+  const target =
+    state === "accent" ? Math.min(127, base + ACCENT_BOOST) : state === "ghost" ? GHOST_VEL : base;
+  const cur = lane.velCurve ? [...lane.velCurve] : lane.hits.map(() => base);
+  cur[k] = target;
+  return rebuildLane(lane, lane.hits, normVelCurve(lane, cur), lane.divs);
 }
 
 // --- ベース kind の相対モード（#bass S2, design「ベース kind=bass・2モード」） ---

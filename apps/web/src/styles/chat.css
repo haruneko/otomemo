@@ -627,7 +627,42 @@
   border-left: 3px solid #5b6270; /* 小節頭は強め */
 }
 .rhythm-cell.on {
-  background: var(--k, var(--accent)); /* #10④ 打点を kind 色（rhythm=赤）に */
+  /* #10④ 打点を kind 色（rhythm=赤）に。#29 P0 --hv(=vel/127)で濃淡＝ゴースト薄・アクセント濃。
+     --hv 未指定は 0.8（従来の見た目に近い既定濃度）。既存 on 色トークンにそのまま乗る。 */
+  background: color-mix(in srgb, var(--k, var(--accent)) calc(var(--hv, 0.8) * 100%), #1b1e23);
+}
+/* #29 P0-4 セルポップオーバー（長押し）＝チップ1行＋常時表示 backdrop。 */
+.cell-pop-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: transparent; /* 濃淡は不要・タップ外し専用 */
+  z-index: 8;
+}
+.cell-pop {
+  display: flex;
+  gap: 5px;
+  padding: 5px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.7);
+  z-index: 9;
+}
+.cell-pop .chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  background: #191d23;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.cell-pop .chip.on {
+  background: var(--k, var(--accent));
+  border-color: var(--k, var(--accent));
+  color: #fff;
+  font-weight: 700;
 }
 /* コード楽器：音の伸び（sustain）＝薄い kind 色で「押しっぱなし＝伸びてる」を表す。
    頭(on)＝濃い／伸び(sustain)＝薄い。伸びの上をタップで長さ調整（ChordPatternEditor）。 */
