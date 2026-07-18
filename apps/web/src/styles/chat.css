@@ -753,6 +753,10 @@
   gap: 8px;
   min-width: 0;
   min-height: 100%;
+  /* #28回帰是正: flex の .editor-body 内で既定 flex-shrink:1 が中身を縮めて editor-body を
+     オーバーフローさせず＝縦スクロールが死ぬ（レーンが多い/画面が低いと顕在化）。0 で自然高を取らせ
+     editor-body に overflow させる。短い時は min-height:100%+transport margin-top:auto の下端固定を維持。 */
+  flex-shrink: 0;
 }
 .section-editor > .transport {
   margin-top: auto;
