@@ -1,10 +1,31 @@
-import { type Ref, useState } from "react";
-import { type ChordPatternContent, applyCellTap, voicingPreviewPitches, pitchName } from "../music";
+import { type CSSProperties, type Ref, useState } from "react";
+import { type ChordPatternContent, applyCellTap, voicingPreviewPitches, pitchName, CHORD_ACCENT, CHORD_SOFT } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
 import { NoteValuePicker } from "./NoteValuePicker";
+import { CellPopover } from "./CellPopover";
+import { useLongPress } from "../useLongPress";
 import type { Neta } from "../api";
+
+// #29 P2 個別セル。長押し検出をセル単位で持つため小コンポーネントに分離（hooks はセルごと）。
+function ChordCell({
+  ariaLabel,
+  className,
+  hv,
+  onTap,
+  onLongPress,
+}: {
+  ariaLabel: string;
+  className: string;
+  hv: number | null; // onset セルの実効 vel/127（濃淡）。sustain/空は null
+  onTap: () => void;
+  onLongPress: (anchor: DOMRect) => void;
+}) {
+  const lp = useLongPress(onLongPress);
+  const style = hv != null ? ({ "--hv": hv } as CSSProperties) : undefined;
+  return <button type="button" aria-label={ariaLabel} className={className} style={style} onClick={onTap} {...lp} />;
+}
 
 const NAME_PX = 58;
 const BEAT_PX = 88;
@@ -47,6 +68,7 @@ export function ChordPatternEditor({
   const { stepsPerBar, beatStep } = meterSteps(meter);
   const [len, setLen] = useState(4); // 各音の長さ（step数・既定=四分）
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 対応）
+  const [pop, setPop] = useState<{ step: number; anchor: DOMRect } | null>(null); // #29 P2 長押しポップオーバー
   const v = pattern.voicing;
   const top = v.top ?? DEFAULT_TOP;
   const isArp = pattern.mode === "arp";
@@ -64,6 +86,32 @@ export function ChordPatternEditor({
     if (r.placed) for (const p of voicingPreviewPitches({ ...v, top })) void previewNote({ pitch: p, start: 0, dur: 0.5 });
   };
 
+  // #29 P2 長押し＝onset セルのみポップオーバー（sustain/空セルは対象外＝誤爆防止）。
+  const onLongPress = (s: number, anchor: DOMRect) => {
+    if (!startAt(s)) return;
+    setPop({ step: s, anchor });
+  };
+  // チップ選択＝強く(112)/弱く(64) の3値ベロシティ（再選択で普通=vel 削除）、消す=頭タップの削除経路。
+  const pickChord = (id: string) => {
+    if (!pop) return;
+    const h = startAt(pop.step);
+    if (!h) return setPop(null);
+    if (id === "del") {
+      onChange({ ...pattern, hits: applyCellTap(pattern.hits, pop.step, dotted ? len * 1.5 : len).hits });
+    } else {
+      const want = id === "accent" ? CHORD_ACCENT : CHORD_SOFT;
+      const target = h.vel === want ? undefined : want; // 同じ状態を再選択＝普通へ戻す（3状態トグル）
+      onChange({
+        ...pattern,
+        hits: pattern.hits.map((x) =>
+          x.step === pop.step ? (target == null ? { step: x.step, dur: x.dur } : { ...x, vel: target }) : x,
+        ),
+      });
+    }
+    setPop(null);
+  };
+  const popHit = pop ? startAt(pop.step) : undefined;
+
   // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。
   const previewNeta = { kind: "chord_pattern", content: { ...pattern, voicing: { ...v, top } }, key: 0 } as unknown as Neta;
 
@@ -76,15 +124,19 @@ export function ChordPatternEditor({
           <div className="proll-playhead" aria-hidden="true" ref={playheadRef} style={{ left: `calc(${NAME_PX}px + var(--phb, 0) * ${BEAT_PX}px)` }} />
           <div className="rhythm-row">
             <span className="rhythm-name">コード</span>
-            {Array.from({ length: pattern.steps }, (_, s) => (
-              <button
-                key={s}
-                type="button"
-                aria-label={`hit-${s}`}
-                className={"rhythm-cell" + (startAt(s) ? " on" : sustainAt(s) ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
-                onClick={() => toggleHit(s)}
-              />
-            ))}
+            {Array.from({ length: pattern.steps }, (_, s) => {
+              const head = startAt(s);
+              return (
+                <ChordCell
+                  key={s}
+                  ariaLabel={`hit-${s}`}
+                  className={"rhythm-cell" + (head ? " on" : sustainAt(s) ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
+                  hv={head ? (head.vel ?? 100) / 127 : null}
+                  onTap={() => toggleHit(s)}
+                  onLongPress={(anchor) => onLongPress(s, anchor)}
+                />
+              );
+            })}
           </div>
         </div>
         <div className="cp-when-row">
@@ -175,6 +227,18 @@ export function ChordPatternEditor({
           </div>
         )}
       </div>
+      {pop && popHit && (
+        <CellPopover
+          anchor={pop.anchor}
+          chips={[
+            { id: "accent", label: "強く", on: popHit.vel === CHORD_ACCENT },
+            { id: "soft", label: "弱く", on: popHit.vel === CHORD_SOFT },
+            { id: "del", label: "消す" },
+          ]}
+          onPick={pickChord}
+          onClose={() => setPop(null)}
+        />
+      )}
     </div>
   );
 }

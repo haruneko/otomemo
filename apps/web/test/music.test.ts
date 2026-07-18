@@ -354,6 +354,25 @@ describe("music", () => {
       expect(atStart).toEqual([48, 52, 55]); // C E G（close・octave0）
       expect(notes.filter((n) => n.start === 0).every((n) => n.dur === 2)).toBe(true); // 次hit(step8=2拍)まで
     });
+    it("#29 P2 ChordHit.vel 無し ⇒ 出力に vel キーが生えない（deepStrictEqual/形状一致）", () => {
+      const notes = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      expect(notes.every((n) => !("vel" in n))).toBe(true);
+    });
+    it("#29 P2 strum：vel が全声部＋オンベースへ伝播", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4, bass: 7 }]; // C/G（オンベース）
+      const notes = resolveChordPattern(cp({ hits: [{ step: 0, dur: 8, vel: 112 }] }), chords, 0);
+      expect(notes.length).toBeGreaterThanOrEqual(4); // R,3,5 + オンベース
+      expect(notes.every((n) => n.vel === 112)).toBe(true); // 声部もオンベースも同値
+    });
+    it("#29 P2 arp：vel が各 arp 音へ伝播", () => {
+      const notes = resolveChordPattern(
+        cp({ mode: "arp", hits: [{ step: 0, dur: 4, vel: 64 }, { step: 4, dur: 4 }] }),
+        [{ root: 0, quality: "", start: 0, dur: 4 }],
+        0,
+      );
+      expect(notes[0]!.vel).toBe(64); // vel 付き hit
+      expect("vel" in notes[1]!).toBe(false); // vel 無し hit は素通し（キー無し）
+    });
     it("レジスタ安定（決定C）：C進行とB進行のcompingが近接＝ルートで跳ねない", () => {
       const lowOf = (rootPc: number) => {
         const notes = resolveChordPattern(cp({ hits: [{ step: 0, dur: 8 }] }), [{ root: rootPc, quality: "", start: 0, dur: 4 }], 0);

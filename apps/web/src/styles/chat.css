@@ -631,6 +631,23 @@
      --hv 未指定は 0.8（従来の見た目に近い既定濃度）。既存 on 色トークンにそのまま乗る。 */
   background: color-mix(in srgb, var(--k, var(--accent)) calc(var(--hv, 0.8) * 100%), #1b1e23);
 }
+/* #29 P2 セル内分割（divs）＝on セルの上に明るい縦バーを n 本重ねてロール（連打）を可視化。
+   background 色（--hv 濃淡）はそのままに background-image でバーを乗せる（.on.divN の高い詳細度で後勝ち）。
+   バーは各サブヒットの頭（周期 --divw）に 2px の明線＝div2 で 2 本・div3 で 3 本（20px セルでも視認可）。 */
+.rhythm-cell.on.div2,
+.rhythm-cell.on.div3 {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.85) 0 2px,
+    transparent 2px var(--divw)
+  );
+}
+.rhythm-cell.on.div2 {
+  --divw: 50%;
+}
+.rhythm-cell.on.div3 {
+  --divw: 33.34%;
+}
 /* #29 P0-4 セルポップオーバー（長押し）＝チップ1行＋常時表示 backdrop。 */
 .cell-pop-backdrop {
   display: block;

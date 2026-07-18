@@ -223,6 +223,21 @@ describe("sectionDrums（beatsPerStep 混在の防御＝合算不能な子は捨
     const ctx: SectionCtx = { children: [], LANES: SECTION_LANES, keyPc: 0, mode: "major", BPB: 4 };
     expect(sectionDrums(ctx)).toBeNull();
   });
+
+  // #29 P2 旧 consumer の退化＝divs/velCurve はアンカー1打に見える（hits のみ読む＝ベース/メロ結線は骨格に噛む）。
+  it("divs/velCurve 付き content でも hits だけ合算＝divs は不可視（アンカー退化）", () => {
+    const plain = child("rhythm", 0, { rhythm: { steps: 8, beatsPerStep: 0.25, lanes: [{ midi: 36, hits: [0, 4] }] } });
+    const withExtra = child("rhythm", 0, {
+      rhythm: { steps: 8, beatsPerStep: 0.25, lanes: [{ midi: 36, hits: [0, 4], velCurve: [70, 124], divs: { "4": 3 } }] },
+    });
+    const ctxP: SectionCtx = { children: [plain], LANES: SECTION_LANES, keyPc: 0, mode: "major", BPB: 4 };
+    const ctxE: SectionCtx = { children: [withExtra], LANES: SECTION_LANES, keyPc: 0, mode: "major", BPB: 4 };
+    const outP = sectionDrums(ctxP)!;
+    const outE = sectionDrums(ctxE)!;
+    expect(outE.rhythm.lanes[0]!.hits).toEqual([0, 4]); // 分割で膨らまない＝アンカーのまま
+    expect(outE.rhythm.lanes[0]!.hits).toEqual(outP.rhythm.lanes[0]!.hits);
+    expect("divs" in outE.rhythm.lanes[0]!).toBe(false); // divs は出力に出ない
+  });
 });
 
 describe("skelEar（骨格位置相対＋2段座標系）", () => {

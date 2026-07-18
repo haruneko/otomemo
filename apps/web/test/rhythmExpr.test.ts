@@ -4,8 +4,10 @@ import {
   rhythmOf,
   laneWithHitToggled,
   laneWithHitVel,
+  laneWithHitDiv,
   hitVelState,
   hitVel,
+  hitDiv,
   snapBps,
   drumVel,
   DRUMS,
@@ -160,6 +162,88 @@ describe("#29 P0-4 laneWithHitVel 3-state mapping", () => {
     const l: RhythmLane = { name: "Snare", midi: 38, hits: [0, 4], velCurve: [70, 124] };
     expect(hitVel(l, 0)).toBe(70);
     expect(hitVel({ name: "Kick", midi: 36, hits: [0] }, 0)).toBe(drumVel(36));
+  });
+});
+
+describe("#29 P2-1 divs（セル内分割）expansion", () => {
+  it("divs-absent ⇒ rhythmToNotes bit-identical (single anchor per hit)", () => {
+    const r: RhythmContent = { steps: 16, lanes: [{ name: "Snare", midi: 38, hits: [0, 4], velCurve: [70, 124] }] };
+    const noDiv = rhythmToNotes(r);
+    // divs キーを付けても該当 step が無い/空マップなら不変。
+    const withEmpty = rhythmToNotes({ ...r, lanes: [{ ...r.lanes[0]!, divs: {} }] });
+    expect(withEmpty).toEqual(noDiv);
+    expect(noDiv.length).toBe(2); // 展開されず 1 hit=1 note
+  });
+
+  it("div2 splits a hit into 2 sub-hits: start +bps/2, dur bps/2, 2nd vel ×0.85 (rounded)", () => {
+    const r: RhythmContent = {
+      steps: 16,
+      lanes: [{ name: "Snare", midi: 38, hits: [0, 4], vel: 100, divs: { "4": 2 } }],
+    };
+    const notes = rhythmToNotes(r);
+    expect(notes.length).toBe(3); // hit0（単発）＋ hit4→2
+    const sub = notes.filter((n) => n.start >= 1 - 1e-9); // step4=1拍
+    expect(sub.map((n) => n.start)).toEqual([1, 1.125]); // 1拍・1拍+0.25/2
+    expect(sub.map((n) => n.dur)).toEqual([0.125, 0.125]); // 0.25/2
+    expect(sub.map((n) => n.vel)).toEqual([100, 85]); // 先頭=本velocity・2打目=round(100*0.85)
+  });
+
+  it("div3 splits a hit into 3 sub-hits (buzz近似・2/3打目 ×0.85)", () => {
+    const r: RhythmContent = {
+      steps: 16,
+      lanes: [{ name: "Kick", midi: 36, hits: [0], vel: 120, divs: { "0": 3 } }],
+    };
+    const notes = rhythmToNotes(r);
+    expect(notes.length).toBe(3);
+    expect(notes.map((n) => n.start)).toEqual([0, round3(0.25 / 3), round3((2 * 0.25) / 3)]);
+    expect(notes.map((n) => n.dur)).toEqual([round3(0.25 / 3), round3(0.25 / 3), round3(0.25 / 3)]);
+    expect(notes.map((n) => n.vel)).toEqual([120, Math.round(120 * 0.85), Math.round(120 * 0.85)]);
+  });
+
+  it("div on a 12-grid (beatsPerStep≈1/3) uses the cell length as IOI", () => {
+    const r: RhythmContent = {
+      steps: 12,
+      beatsPerStep: 0.333,
+      lanes: [{ name: "Kick", midi: 36, hits: [0, 3], vel: 100, divs: { "3": 2 } }],
+    };
+    const notes = rhythmToNotes(r);
+    const sub = notes.filter((n) => n.start >= 1 - 1e-9); // step3=1拍
+    expect(sub.map((n) => n.start)).toEqual([1, round3(1 + (1 / 3) / 2)]); // セル長=1/3拍
+    expect(sub[0]!.dur).toBe(round3((1 / 3) / 2)); // round3(1/6)=0.167（半セル長）
+  });
+
+  it("invalid div value ⇒ single hit (defensive)", () => {
+    const r: RhythmContent = {
+      steps: 16,
+      lanes: [{ name: "Kick", midi: 36, hits: [0, 4], divs: { "4": 5 as unknown as 2 } }],
+    };
+    expect(rhythmToNotes(r).length).toBe(2); // 5 は 2|3 でない→展開しない
+  });
+});
+
+const round3 = (x: number) => Math.round(x * 1000) / 1000;
+
+describe("#29 P2-2 laneWithHitDiv / hitDiv", () => {
+  const lane: RhythmLane = { name: "Snare", midi: 38, hits: [0, 4] };
+
+  it("writes divs[step]=2|3; null removes; empty map ⇒ no divs key", () => {
+    const d2 = laneWithHitDiv(lane, 4, 2);
+    expect(d2.divs).toEqual({ "4": 2 });
+    expect(hitDiv(d2, 4)).toBe(2);
+    const d3 = laneWithHitDiv(d2, 4, 3);
+    expect(d3.divs).toEqual({ "4": 3 });
+    const cleared = laneWithHitDiv(d3, 4, null);
+    expect("divs" in cleared).toBe(false); // 空マップはキーごと落とす（bit）
+  });
+
+  it("preserves velCurve (division is orthogonal to velocity)", () => {
+    const l: RhythmLane = { name: "Snare", midi: 38, hits: [0, 4], velCurve: [70, 124] };
+    expect(laneWithHitDiv(l, 4, 2).velCurve).toEqual([70, 124]);
+  });
+
+  it("empty (non-hit) cell is a no-op", () => {
+    expect(laneWithHitDiv(lane, 7, 2)).toBe(lane);
+    expect(hitDiv(lane, 7)).toBeUndefined();
   });
 });
 

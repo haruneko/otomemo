@@ -1,13 +1,16 @@
 import { type CSSProperties, type Ref, useState } from "react";
 import {
   type RhythmContent,
+  type RhythmLane,
   DRUM_LABEL,
   DRUM_KITS,
   drumVel,
   hitVel,
   hitVelState,
+  hitDiv,
   laneWithHitToggled,
   laneWithHitVel,
+  laneWithHitDiv,
   snapBps,
 } from "../music";
 import { previewNote } from "../audio";
@@ -100,13 +103,24 @@ export function RhythmEditor({
     setPop({ li, step, anchor });
   }
 
-  // 3値ベロシティを書いて閉じる（同じ状態を再選択＝普通へ戻す＝3状態トグル）。
-  function pickVel(state: "accent" | "ghost") {
+  // チップ選択→純関数でレーンを差し替えて閉じる。強く/弱く=3値ベロシティ、2連/3連=セル内分割
+  // （いずれも同じ状態を再選択で普通/単発へ戻す3状態トグル）、消す=hit OFF（velCurve/divs も掃除）。
+  function pick(id: string) {
     if (!pop) return;
     const lane = rhythm.lanes[pop.li];
     if (!lane) return setPop(null);
-    const cur = hitVelState(lane, pop.step);
-    const next = laneWithHitVel(lane, pop.step, cur === state ? "normal" : state);
+    let next: RhythmLane;
+    if (id === "accent" || id === "ghost") {
+      const cur = hitVelState(lane, pop.step);
+      next = laneWithHitVel(lane, pop.step, cur === id ? "normal" : id);
+    } else if (id === "div2" || id === "div3") {
+      const want = id === "div2" ? 2 : 3;
+      next = laneWithHitDiv(lane, pop.step, hitDiv(lane, pop.step) === want ? null : want);
+    } else if (id === "del") {
+      next = laneWithHitToggled(lane, pop.step).lane;
+    } else {
+      return setPop(null);
+    }
     onChange({ ...rhythm, lanes: rhythm.lanes.map((l, k) => (k === pop.li ? next : l)) });
     setPop(null);
   }
@@ -156,6 +170,7 @@ export function RhythmEditor({
           {Array.from({ length: rhythm.steps }, (_, s) => {
             const hi = l.hits.indexOf(s);
             const on = hi >= 0;
+            const dv = on ? hitDiv(l, s) : undefined; // #29 P2 分割セル＝縦バー n 本描画
             return (
               <RhythmCell
                 key={s}
@@ -163,6 +178,7 @@ export function RhythmEditor({
                 className={
                   "rhythm-cell" +
                   (on ? " on" : "") +
+                  (dv === 2 ? " div2" : dv === 3 ? " div3" : "") +
                   (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")
                 }
                 hv={on ? hitVel(l, hi) / 127 : null}
@@ -179,8 +195,11 @@ export function RhythmEditor({
           chips={[
             { id: "accent", label: "強く", on: hitVelState(popLane, pop.step) === "accent" },
             { id: "ghost", label: "弱く", on: hitVelState(popLane, pop.step) === "ghost" },
+            { id: "div2", label: "2連", on: hitDiv(popLane, pop.step) === 2 },
+            { id: "div3", label: "3連", on: hitDiv(popLane, pop.step) === 3 },
+            { id: "del", label: "消す" },
           ]}
-          onPick={(id) => pickVel(id as "accent" | "ghost")}
+          onPick={pick}
           onClose={() => setPop(null)}
         />
       )}

@@ -323,14 +323,28 @@ export function rhythmOf(content: unknown): RhythmContent {
 export function rhythmToNotes(r: RhythmContent): Note[] {
   const bps = snapBps(r.beatsPerStep); // 未指定→0.25（現行 step/4 と同値＝bit）
   return r.lanes.flatMap((l) =>
-    l.hits.map((step, i) => ({
-      pitch: l.midi,
-      start: round3(step * bps), // #29 P0 12格子シャッフル型の誤再生を是正（beatsPerStep 尊重）
-      dur: bps,
-      drum: true,
-      vel: l.velCurve?.[i] ?? drumVel(l.midi, l.vel), // #29 P0 velCurve 回収（フィル/ビルドのクレッシェンド復活）
-      kit: r.kit, // 選択キット（未指定=Standard）。再生/書出でこの番号のキットを使う。
-    })),
+    l.hits.flatMap((step, i) => {
+      const v = l.velCurve?.[i] ?? drumVel(l.midi, l.vel); // #29 P0 velCurve 回収（フィル/ビルドのクレッシェンド復活）
+      const note: Note = {
+        pitch: l.midi,
+        start: round3(step * bps), // #29 P0 12格子シャッフル型の誤再生を是正（beatsPerStep 尊重）
+        dur: bps,
+        drum: true,
+        vel: v,
+        kit: r.kit, // 選択キット（未指定=Standard）。再生/書出でこの番号のキットを使う。
+      };
+      // #29 P2 セル内分割（divs）＝この step を n 個のサブヒットへ展開。IOI=セル長/n・dur も /n。
+      // 2打目以降 vel×0.85＝ディドル2打目弱の近似（ロールのクレッシェンドはセル間 velCurve の仕事＝直交）。
+      // 不正 div 値（2/3 以外・hits に無い step のエントリ）は単発へ退化（防御）＝divs 無しと bit 一致。
+      const d = l.divs?.[String(step)];
+      if (d !== 2 && d !== 3) return [note];
+      return Array.from({ length: d }, (_, k) => ({
+        ...note,
+        start: round3(step * bps + (k * bps) / d),
+        dur: round3(bps / d),
+        vel: k === 0 ? v : Math.round(v * 0.85),
+      }));
+    }),
   );
 }
 
@@ -420,6 +434,21 @@ export function laneWithHitVel(lane: RhythmLane, step: number, state: HitVelStat
   const cur = lane.velCurve ? [...lane.velCurve] : lane.hits.map(() => base);
   cur[k] = target;
   return rebuildLane(lane, lane.hits, normVelCurve(lane, cur), lane.divs);
+}
+
+// #29 P2 hit のセル内分割（divs）を書く純関数。div=2|3 で分割、null で単発へ戻す（divs エントリ削除）。
+// 空セル（hit でない）は no-op（誤爆防止）。velCurve は素通し（分割はベロと直交）。
+export function laneWithHitDiv(lane: RhythmLane, step: number, div: 2 | 3 | null): RhythmLane {
+  if (!lane.hits.includes(step)) return lane; // 空セルは何もしない
+  const divs: Record<string, 2 | 3> = { ...lane.divs };
+  if (div == null) delete divs[String(step)];
+  else divs[String(step)] = div;
+  return rebuildLane(lane, lane.hits, lane.velCurve, Object.keys(divs).length ? divs : undefined);
+}
+
+// #29 P2 hit の現在の分割数（2|3）or 未分割（undefined）＝チップ点灯とトグル判定の SSOT。
+export function hitDiv(lane: RhythmLane, step: number): 2 | 3 | undefined {
+  return lane.divs?.[String(step)];
 }
 
 // --- ベース kind の相対モード（#bass S2, design「ベース kind=bass・2モード」） ---
@@ -556,7 +585,7 @@ export interface ChordVoicing {
   arpOctaves?: number; // arp の駆け上がり幅（1〜4oct）。voiced を下方へ積み増した拡張プールを巡回＝ハープのグリッサンド。既定1＝従来の voiced 巡回（bit一致）。
   arpReset?: number; // arp の駆け上がり区切り（拍）。この拍数ごとに pool 頭（低音）から登り直す＝「1.5拍ごとに下から駆け上がる」。既定/0＝区切りなし（連続巡回・bit一致）。
 }
-export interface ChordHit { step: number; dur: number } // dur=step数（1step=16分）＝各音の長さを指定
+export interface ChordHit { step: number; dur: number; vel?: number } // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）
 export interface ChordPatternContent {
   mode: ChordPatternMode;
   voicing: ChordVoicing;
@@ -565,6 +594,9 @@ export interface ChordPatternContent {
   program?: number; // 自前の音色（ベースのように選べる）
 }
 const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
+// #29 P2 コード楽器の3値ベロシティ語彙（普通=vel 省略→下流 vel??100）。耳較正で調整可＝保存データは実値なので既存不変。
+export const CHORD_ACCENT = 112; // 強く（+12＝backbeat スケール感）
+export const CHORD_SOFT = 64; // 弱く（コンピングの逃げ音）
 
 // hits は {step,dur} が正。旧 number[] も受ける（既定 dur=4step=四分）＝後方互換。
 function normHits(hits: unknown): ChordHit[] {
@@ -654,6 +686,9 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
     const start = Math.round(step * BASS_STEP_TO_BEAT * 1000) / 1000;
     const dur = Math.round(Math.max(1, hits[h]!.dur) * BASS_STEP_TO_BEAT * 1000) / 1000; // 各音の指定長さ
     if (dur <= 0) continue;
+    // #29 P2 このヒットのベロシティを全声部へ素通し。未指定なら条件 spread で vel キーを生やさない
+    // （`vel: undefined` を作らない＝現行出力と deepStrictEqual 一致）。下流は既に n.vel??100。
+    const velSpread = hits[h]!.vel != null ? { vel: hits[h]!.vel } : {};
     // つんのめり(アンティシペーション)：裏拍始まりでダウンビートを跨いで伸びる音は、跨いだ先のダウンビートの
     // コードで解決する＝「音の終わる方の拍でコードを決める」＝シンコペ分だけコードが先取り（bass 側と同ロジック・
     // 2026-07-10 オーナーFB：コード楽器にだけ抜けていた）。ジャストの音は従来どおり start のコード。
@@ -670,17 +705,17 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
       const pool = arpPool(voiced, v.arpOctaves);
       // arpReset＝この拍数ごとに pool 頭から登り直す（区切り番号が変わったら arpIdx を 0 へ）。既定/0＝連続巡回（bit一致）。
       if (v.arpReset && v.arpReset > 0) { const grp = Math.floor((start + 1e-9) / v.arpReset); if (grp !== arpGrp) { arpIdx = 0; arpGrp = grp; } }
-      out.push({ pitch: pool[arpStep(arpIdx, pool.length, v.arpDir)]!, start, dur });
+      out.push({ pitch: pool[arpStep(arpIdx, pool.length, v.arpDir)]!, start, dur, ...velSpread });
       arpIdx++;
     } else {
-      for (const p of voiced) out.push({ pitch: p, start, dur });
+      for (const p of voiced) out.push({ pitch: p, start, dur, ...velSpread });
       // 分数コード（決定B）：strum はオンベースを voicing の下に1音足す＝最低音が bass に。
       if (ch && ch.bass != null) {
         const bpc = ((ch.bass % 12) + 12) % 12;
         const lowest = Math.min(...voiced);
         let bp = Math.floor(lowest / 12) * 12 + bpc;
         while (bp >= lowest) bp -= 12; // 確実にコードより下へ
-        out.push({ pitch: bp, start, dur });
+        out.push({ pitch: bp, start, dur, ...velSpread });
       }
     }
   }

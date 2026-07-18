@@ -105,6 +105,59 @@ describe("RhythmEditor", () => {
     vi.useRealTimers();
   });
 
+  // #29 P2 長押し→［2連］で divs[step]=2 を書く（点灯トグル）。
+  it("long-press a hit → 2連 writes divs[step]=2", () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    render(
+      <RhythmEditor
+        rhythm={{ steps: 16, lanes: [{ name: "Snare", midi: 38, hits: [0, 4] }] }}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.pointerDown(screen.getByLabelText("hit-Snare-4"), { clientX: 10, clientY: 10 });
+    act(() => void vi.advanceTimersByTime(LONG_PRESS_MS));
+    fireEvent.click(screen.getByRole("menuitem", { name: "2連" }));
+    expect(onChange).toHaveBeenCalledWith({
+      steps: 16,
+      lanes: [{ name: "Snare", midi: 38, hits: [0, 4], divs: { "4": 2 } }],
+    });
+    vi.useRealTimers();
+  });
+
+  // #29 P2 分割セルは div2/div3 クラスで縦バー描画。
+  it("renders div2/div3 class on subdivided cells", () => {
+    render(
+      <RhythmEditor
+        rhythm={{ steps: 16, lanes: [{ name: "Snare", midi: 38, hits: [0, 4, 8], divs: { "4": 2, "8": 3 } }] }}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("hit-Snare-4").className).toContain("div2");
+    expect(screen.getByLabelText("hit-Snare-8").className).toContain("div3");
+    expect(screen.getByLabelText("hit-Snare-0").className).not.toContain("div");
+  });
+
+  // #29 P2 ［消す］＝hit OFF（divs も掃除）。
+  it("long-press → 消す removes the hit and its divs", () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    render(
+      <RhythmEditor
+        rhythm={{ steps: 16, lanes: [{ name: "Snare", midi: 38, hits: [0, 4], divs: { "4": 2 } }] }}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.pointerDown(screen.getByLabelText("hit-Snare-4"), { clientX: 10, clientY: 10 });
+    act(() => void vi.advanceTimersByTime(LONG_PRESS_MS));
+    fireEvent.click(screen.getByRole("menuitem", { name: "消す" }));
+    expect(onChange).toHaveBeenCalledWith({
+      steps: 16,
+      lanes: [{ name: "Snare", midi: 38, hits: [0] }],
+    });
+    vi.useRealTimers();
+  });
+
   it("long-press an empty cell is a no-op (no popover)", () => {
     vi.useFakeTimers();
     render(
