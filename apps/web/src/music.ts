@@ -27,6 +27,26 @@ export function feelOf(content: unknown): Feel | undefined {
   return undefined;
 }
 
+// ツリー（section/song）の feel をアンサンブル全体へ適用するために導出する。
+// 子順に content.feel を探し、section/song コンテナは**奥（入れ子メロ）まで再帰**で潜る。
+// 動機：song の直下は section コンテナ＝直下走査だけだとメロの feel を見つけられず、
+// 曲再生がストレートに潰れる（swing/1/f 消失）。playbackComposite の仮歌ネスト修正(#27 G3-song)と同型。
+// v1：最初に見つかった feel を曲全体へ適用（先頭＝優勢メロの feel）。
+// スコープ外：per-section で feel を変える（範囲付き feel 適用が要る大改修）＝backlog。
+// 1段(section→melody)では section の直下は leaf のみ＝再帰枝に入らず、従来の直下走査と bit 一致。
+export function feelOfTree(children: CompositeChild[]): Feel | undefined {
+  for (const c of children) {
+    const f = feelOf(c.node.neta.content);
+    if (f) return f;
+    const k = c.node.neta.kind;
+    if (k === "section" || k === "song") {
+      const nested = feelOfTree(c.node.children ?? []);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
 // 音楽的中身（docs/design.md #16）。pitch は C基準のMIDI番号、start/dur は拍。
 export interface Note extends CoreNote {
   // pitch / start / dur / vel? / syllable? は CoreNote（@cm/music-core・SSOT・負債#10）から継承。

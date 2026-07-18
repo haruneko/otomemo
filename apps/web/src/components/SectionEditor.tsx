@@ -15,7 +15,7 @@ import {
   downloadMidi,
   downloadMultitrackMidi,
   beatsPerBar,
-  feelOf,
+  feelOfTree,
   isSkeleton,
   partTracks,
   type ChordEntry,
@@ -390,9 +390,11 @@ export function SectionEditor({
   // 再生用合成（骨格耳・レーンミュート・仮歌 sungBy）は getPlan（上）へ移設（#27）。書き出しは composite()＝不変。
   // アンサンブル feel（design.md「フィール層分離」Stage4）：セクション内メロトラックの content.feel を
   // **全トラックに同一適用**＝スイングは声部単位でなく時間軸の共有性質（メロだけ跳ねる事故を避ける）。無ければストレート。
+  // song 再生（直下＝section コンテナ）は feelOfTree が**入れ子のメロまで再帰**して feel を拾い曲全体へ適用する
+  // ＝song をストレートに潰さない（バグ修正 2026-07-18）。section 単体は直下が leaf のみ＝従来の直下走査と bit 一致。
+  // スコープ外：per-section で feel を変える（範囲付き feel 適用が要る大改修）＝backlog（今は先頭優勢メロの feel を曲全体へ）。
   function sectionFeel(): Feel | undefined {
-    for (const c of children) { const f = feelOf(c.node.neta.content); if (f) return f; }
-    return undefined;
+    return feelOfTree(children);
   }
   // #55 多トラック書出：レーン(メロ/コード/ベース/リズム)別に1トラックずつ。空レーンは省く。
   // バグ#1(2026-07-13)：各トラックの GM音色を composite notes の program から採る（trackProgramOf）＝

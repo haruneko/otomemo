@@ -293,6 +293,9 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - **PESTO 生歌追検証（耳）**：F2の正解はボカロ的レンダー1曲＝絶対値は楽観。生歌別曲で耳＋数値の追検証1回（オーナー手番を含む）。
 - **get_job も chat面射影の対象に**（2026-07-15・蜿蜒アナリーゼ実走で発見）：A2 は read_neta/search を射影したが `get_job` は素通し＝audio_analyze 完了ジョブを引くと生facts 634K文字が丸ごと返る。チャットが get_job でジョブ結果を確認する動線で同じコンテキスト爆発。read_neta と同じ要約射影（facts→統計＋prose）を get_job の result にも。
 
+## 曲(song)再生の per-section フィール（2026-07-18・#27派生）
+`feelOfTree`（music.ts）＝曲再生でネストのメロからフィールを再帰導出し**曲全体に一律**（v1・最初/支配的メロのfeel）で「曲はストレート」バグは解消済み（commit次番）。**残＝per-section フィール**（1曲内でセクションごとに違うスイング/ヒューマナイズ）＝位置レンジ付きfeel適用が要る（単一 Feel でなく beat 範囲→feel マップ）＝別スライス。コメントを feelOfTree/sectionFeel に残置。onset timing自体は0ms実証済み（誤警報・正典 research 2026-07-18-song-vocal-onset-audit.md）。
+
 ## 曲編集＝縦セットリスト（#28）の残り（2026-07-18）
 正典＝design.md #28。実装済み（縦リスト/ミニマップ/下端固定/非破壊フォーム適用/役割付与UI/取り消しトースト・commit ab3681f）。残：
 - **提案フォーム候補の色帯可視化**（モックA-4）：`FormSuggest` はまだテキスト列。非破壊マージ適用は実装済みなので機能は足りてる＝見た目のpolish（候補を同じ役割色帯で見せる）。

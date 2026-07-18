@@ -13,6 +13,7 @@ import {
   vocalMelodyFromComposite,
   singOf,
   feelOf,
+  feelOfTree,
   programOf,
   isCompoundMeter,
   type CompositeChild,
@@ -214,5 +215,53 @@ describe("#27 G3 仮歌等値", () => {
     const p = buildPlayback({ kind: "neta", neta: { kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }], sing: { enabled: true } }, tempo: 120 } });
     expect(p.notes.some((n) => n.sungBy)).toBe(false);
     expect(p.vocalJobs).toEqual([]);
+  });
+});
+
+// feel を持つ melody 子（tree ソース用）。content.feel にスイング/humanize を載せる。
+function melChildFeel(position: number, notes: Note[], feel: NonNullable<ReturnType<typeof feelOf>>): CompositeChild {
+  return { position, node: { neta: { kind: "melody", content: { notes, feel }, key: 0, mode: "major" } } };
+}
+
+describe("feelOfTree（バグ修正 2026-07-18：song 再生で入れ子メロの feel が落ちない）", () => {
+  const swing = { swing: 0.6, swingUnit: "eighth" as const };
+  it("section 単体（1段：section→melody）＝直下メロの feel を返す（従来の直下走査と一致）", () => {
+    const children = [
+      chordChild(0, [{ root: 0, quality: "", start: 0, dur: 4 }]),
+      melChildFeel(0, [{ pitch: 60, start: 0, dur: 1 }], swing),
+    ];
+    // 従来の直下走査（バグ前）と bit 一致＝直下で最初に feel を持つ子の feel。
+    const legacy = (() => { for (const c of children) { const f = feelOf(c.node.neta.content); if (f) return f; } return undefined; })();
+    expect(feelOfTree(children)).toEqual(swing);
+    expect(feelOfTree(children)).toEqual(legacy);
+  });
+  it("song（2段：song→section→feel付きmelody）＝入れ子メロの feel を曲全体へ返す（バグ：直下走査だと undefined）", () => {
+    const song = [
+      sectionChild(0, [
+        chordChild(0, [{ root: 0, quality: "", start: 0, dur: 4 }]),
+        melChildFeel(0, [{ pitch: 60, start: 0, dur: 1 }], swing),
+      ]),
+      sectionChild(8, [melChildFeel(0, [{ pitch: 64, start: 0, dur: 1 }], swing)]),
+    ];
+    // バグ再現：直下（section コンテナ）だけ見ると feel なし＝ストレートに潰れていた。
+    const legacyDirectOnly = (() => { for (const c of song) { const f = feelOf(c.node.neta.content); if (f) return f; } return undefined; })();
+    expect(legacyDirectOnly).toBeUndefined(); // ← これが曲全体ストレート化の原因（修正前の挙動）
+    expect(feelOfTree(song)).toEqual(swing); // 修正後：入れ子から拾う
+  });
+  it("song で feel が無い＝undefined（ストレート・非feel曲は従来どおり不変）", () => {
+    const song = [
+      sectionChild(0, [melChild(0, [{ pitch: 60, start: 0, dur: 1 }])]),
+      sectionChild(8, [melChild(0, [{ pitch: 64, start: 0, dur: 1 }])]),
+    ];
+    expect(feelOfTree(song)).toBeUndefined();
+  });
+  it("先頭優勢：複数 feel が奥にあっても子順で最初に見つけた feel を返す（v1＝曲全体一律）", () => {
+    const first = { swing: 0.6, swingUnit: "eighth" as const };
+    const second = { swing: 0.3, swingUnit: "sixteenth" as const };
+    const song = [
+      sectionChild(0, [melChildFeel(0, [{ pitch: 60, start: 0, dur: 1 }], first)]),
+      sectionChild(8, [melChildFeel(0, [{ pitch: 64, start: 0, dur: 1 }], second)]),
+    ];
+    expect(feelOfTree(song)).toEqual(first);
   });
 });
