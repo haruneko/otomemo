@@ -1,22 +1,23 @@
-import { type CSSProperties, type Ref, useState } from "react";
+import { type CSSProperties, type Ref, useEffect, useRef, useState } from "react";
 import {
   type RhythmContent,
-  type RhythmLane,
   DRUM_LABEL,
   DRUM_KITS,
   drumVel,
   hitVel,
-  hitVelState,
   hitDiv,
   laneWithHitToggled,
-  laneWithHitVel,
+  laneWithHitVelNum,
   laneWithHitDiv,
+  GHOST_VEL,
+  ACCENT_BOOST,
   snapBps,
 } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
-import { CellPopover } from "./CellPopover";
-import { useLongPress } from "../useLongPress";
+import { DragHud } from "./DragHud";
+import { Icon } from "./Icon";
+import { useHoldDrag, type HoldDragState, type HoldDragStart } from "../useHoldDrag";
 
 // プレイヘッド位置は CSS 変数(--rname/--rcell)から計算＝セルをmobileで縮めてもズレない（#74）。
 // 1拍=4step、1step=セル幅(--rcell)+行gap(2px)。先頭=ラベル幅(--rname)+gap(2px)。
@@ -41,30 +42,47 @@ function meterSteps(meter?: string, beatsPerStep?: number): { stepsPerBar: numbe
   return { stepsPerBar, beatStep: compound ? 6 : 4 }; // 複合は付点ビート(6step)、単純は四分(4step)
 }
 
-// #29 P0-4 個別セル。長押し検出をセル単位で持つため小コンポーネントに分離（hooks はセルごと）。
+// #29 §9 個別セル。ホールドドラッグ（長押し→縦=強さ/横=連打）をセル単位で持つため小コンポーネントに分離。
+// erase モードでは hold-drag を張らない（tap/なぞりで消す＝親のグリッドが elementFromPoint で処理）。
 function RhythmCell({
   ariaLabel,
   className,
   hv,
+  li,
+  step,
+  eraseMode,
   onToggle,
-  onLongPress,
+  onFire,
+  onDrag,
+  onCommit,
+  onCancel,
 }: {
   ariaLabel: string;
   className: string;
   hv: number | null; // on セルの実効 vel/127（濃淡）。off は null＝--hv 付けない
+  li: number;
+  step: number;
+  eraseMode: boolean;
   onToggle: () => void;
-  onLongPress: (anchor: DOMRect) => void;
+  onFire: (anchor: DOMRect) => HoldDragStart | null;
+  onDrag: (s: HoldDragState) => void;
+  onCommit: (s: { vel: number; div: number }) => void;
+  onCancel: () => void;
 }) {
-  const lp = useLongPress(onLongPress);
+  const hd = useHoldDrag({ axis: "xy", onFire, onDrag, onCommit, onCancel });
   const style = hv != null ? ({ "--hv": hv } as CSSProperties) : undefined;
+  // erase 中はドラッグ検出を張らず（グリッド側で一掃）、tap も抑止（pointerdown で既に消えている）。
+  const gesture = eraseMode ? { ref: hd.ref } : hd;
   return (
     <button
       type="button"
       aria-label={ariaLabel}
       className={className}
       style={style}
-      onClick={onToggle}
-      {...lp}
+      data-li={li}
+      data-step={step}
+      onClick={eraseMode ? undefined : onToggle}
+      {...gesture}
     />
   );
 }
@@ -83,7 +101,12 @@ export function RhythmEditor({
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter, rhythm.beatsPerStep);
-  const [pop, setPop] = useState<{ li: number; step: number; anchor: DOMRect } | null>(null);
+  const [eraseMode, setEraseMode] = useState(false);
+  // #29 §9 ドラッグ中のライブプレビュー（--hv/divクラスをこのセルだけ上書き・HUD 表示）。離した時に一括 onChange。
+  const [drag, setDrag] = useState<
+    { li: number; step: number; vel: number; div: number; base: number; detents: number[]; anchor: DOMRect } | null
+  >(null);
+  const sweeping = useRef(false);
 
   function toggle(li: number, step: number) {
     const lane = rhythm.lanes[li];
@@ -96,34 +119,62 @@ export function RhythmEditor({
       void previewNote({ pitch: lane.midi, start: 0, dur: 0.25, drum: true, kit: rhythm.kit, vel: drumVel(lane.midi, lane.vel) });
   }
 
-  // #29 P0-4 長押し＝ミニポップオーバー。空セル（hit でない）は no-op（誤爆防止）。
-  function onLongPress(li: number, step: number, anchor: DOMRect) {
+  // 発火＝onset のみ持ち上げる（空セルは null＝キャプチャしない・誤爆防止）。開始状態＋磁石デテントを返す。
+  function fireCell(li: number, step: number, anchor: DOMRect): HoldDragStart | null {
     const lane = rhythm.lanes[li];
-    if (!lane || !lane.hits.includes(step)) return;
-    setPop({ li, step, anchor });
+    if (!lane || !lane.hits.includes(step)) return null;
+    const i = lane.hits.indexOf(step);
+    const base = drumVel(lane.midi, lane.vel);
+    const vel = hitVel(lane, i);
+    const div = hitDiv(lane, step) ?? 1;
+    const detents = [GHOST_VEL, base, Math.min(127, base + ACCENT_BOOST)];
+    setDrag({ li, step, vel, div, base, detents, anchor });
+    void previewNote({ pitch: lane.midi, start: 0, dur: 0.25, drum: true, kit: rhythm.kit, vel });
+    return { vel, div, detents };
   }
 
-  // チップ選択→純関数でレーンを差し替えて閉じる。強く/弱く=3値ベロシティ、2連/3連=セル内分割
-  // （いずれも同じ状態を再選択で普通/単発へ戻す3状態トグル）、消す=hit OFF（velCurve/divs も掃除）。
-  function pick(id: string) {
-    if (!pop) return;
-    const lane = rhythm.lanes[pop.li];
-    if (!lane) return setPop(null);
-    let next: RhythmLane;
-    if (id === "accent" || id === "ghost") {
-      const cur = hitVelState(lane, pop.step);
-      next = laneWithHitVel(lane, pop.step, cur === id ? "normal" : id);
-    } else if (id === "div2" || id === "div3") {
-      const want = id === "div2" ? 2 : 3;
-      next = laneWithHitDiv(lane, pop.step, hitDiv(lane, pop.step) === want ? null : want);
-    } else if (id === "del") {
-      next = laneWithHitToggled(lane, pop.step).lane;
-    } else {
-      return setPop(null);
+  function dragCell(li: number, step: number, s: HoldDragState) {
+    setDrag((d) => (d && d.li === li && d.step === step ? { ...d, vel: s.vel, div: s.div } : d));
+    // デテント通過・連打段変化で耳フィードバック（値で決められる＝§9 の設計）。
+    if (s.detentHit || s.divChanged) {
+      const lane = rhythm.lanes[li];
+      if (lane) void previewNote({ pitch: lane.midi, start: 0, dur: 0.2, drum: true, kit: rhythm.kit, vel: s.vel });
     }
-    onChange({ ...rhythm, lanes: rhythm.lanes.map((l, k) => (k === pop.li ? next : l)) });
-    setPop(null);
   }
+
+  // 確定＝縦=velocity（laneWithHitVelNum・連続値）＋横=div（laneWithHitDiv）を1回の onChange で（undo1粒）。
+  function commitCell(li: number, step: number, s: { vel: number; div: number }) {
+    setDrag(null);
+    const lane = rhythm.lanes[li];
+    if (!lane) return;
+    let next = laneWithHitVelNum(lane, step, s.vel);
+    next = laneWithHitDiv(next, step, s.div === 2 || s.div === 3 ? s.div : null);
+    onChange({ ...rhythm, lanes: rhythm.lanes.map((l, k) => (k === li ? next : l)) });
+  }
+
+  // ⌫消しゴム：タップ＋なぞり一掃（elementFromPoint 追跡）。on の hit を laneWithHitToggled で OFF（velCurve/divs 掃除）。
+  function eraseAt(x: number, y: number) {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el || !el.classList.contains("rhythm-cell")) return;
+    const li = Number(el.dataset.li);
+    const step = Number(el.dataset.step);
+    const lane = rhythm.lanes[li];
+    if (!lane || Number.isNaN(step) || !lane.hits.includes(step)) return;
+    const next = laneWithHitToggled(lane, step).lane;
+    onChange({ ...rhythm, lanes: rhythm.lanes.map((l, k) => (k === li ? next : l)) });
+  }
+
+  // なぞり中に指がグリッド外へ出た時／pointercancel でスイープ終了（取りこぼし防止）。
+  useEffect(() => {
+    if (!eraseMode) return;
+    const stop = () => { sweeping.current = false; };
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+  }, [eraseMode]);
 
   // 小節数（1〜4）。1小節=stepsPerBar（拍子依存：4/4=16, 6/8=12）。縮小は**非破壊**。
   const bars = Math.max(1, Math.round(rhythm.steps / stepsPerBar));
@@ -131,11 +182,24 @@ export function RhythmEditor({
     onChange({ ...rhythm, steps: Math.max(1, Math.min(4, n)) * stepsPerBar });
   }
 
-  const popLane = pop ? rhythm.lanes[pop.li] : undefined;
-
   return (
-    <div className="rhythm-editor" ref={scrollerRef}>
+    <div
+      className={"rhythm-editor" + (eraseMode ? " erase-on" : "")}
+      ref={scrollerRef}
+      onPointerDown={eraseMode ? (e) => { sweeping.current = true; eraseAt(e.clientX, e.clientY); } : undefined}
+      onPointerMove={eraseMode ? (e) => { if (sweeping.current) eraseAt(e.clientX, e.clientY); } : undefined}
+      onPointerUp={eraseMode ? () => { sweeping.current = false; } : undefined}
+    >
       <div className="rhythm-toolbar">
+        {/* ✎鉛筆（タップ=置く/消す・長押し→ドラッグ=強弱/連打）／⌫消しゴム（タップ・なぞりで消す）。 */}
+        <div className="proll-modes" role="group" aria-label="rhythm-mode">
+          <button type="button" aria-label="mode-edit" title="鉛筆（タップ=置く/消す・長押し→ドラッグ=表現）" className={!eraseMode ? "on" : ""} onClick={() => setEraseMode(false)}>
+            <Icon name="edit" size={18} />
+          </button>
+          <button type="button" aria-label="mode-erase" title="消しゴム（タップ/なぞりで消す）" className={eraseMode ? "on" : ""} onClick={() => setEraseMode(true)}>
+            <Icon name="eraser" size={18} />
+          </button>
+        </div>
         <BarsControl bars={bars} max={4} onChange={setBars} />
         {/* ドラムキット（アコ/エレキ）選択＝GM bank128 preset。再生＆MIDI ch10 program に反映。 */}
         <label className="drum-kit-pick">
@@ -170,38 +234,40 @@ export function RhythmEditor({
           {Array.from({ length: rhythm.steps }, (_, s) => {
             const hi = l.hits.indexOf(s);
             const on = hi >= 0;
-            const dv = on ? hitDiv(l, s) : undefined; // #29 P2 分割セル＝縦バー n 本描画
+            const isDrag = !!drag && drag.li === li && drag.step === s;
+            // ドラッグ中のセルはプレビュー値で描く（--hv 濃淡＋div クラス）。
+            const dv = isDrag ? (drag.div >= 2 ? drag.div : undefined) : on ? hitDiv(l, s) : undefined;
+            const hv = isDrag ? drag.vel / 127 : on ? hitVel(l, hi) / 127 : null;
             return (
               <RhythmCell
                 key={s}
+                li={li}
+                step={s}
+                eraseMode={eraseMode}
                 ariaLabel={`hit-${l.name}-${s}`}
                 className={
                   "rhythm-cell" +
                   (on ? " on" : "") +
                   (dv === 2 ? " div2" : dv === 3 ? " div3" : "") +
+                  (isDrag ? " lift" : "") +
                   (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")
                 }
-                hv={on ? hitVel(l, hi) / 127 : null}
+                hv={hv}
                 onToggle={() => toggle(li, s)}
-                onLongPress={(anchor) => onLongPress(li, s, anchor)}
+                onFire={(anchor) => fireCell(li, s, anchor)}
+                onDrag={(st) => dragCell(li, s, st)}
+                onCommit={(st) => commitCell(li, s, st)}
+                onCancel={() => setDrag(null)}
               />
             );
           })}
         </div>
       ))}
-      {pop && popLane && (
-        <CellPopover
-          anchor={pop.anchor}
-          chips={[
-            { id: "accent", label: "強く", on: hitVelState(popLane, pop.step) === "accent" },
-            { id: "ghost", label: "弱く", on: hitVelState(popLane, pop.step) === "ghost" },
-            { id: "div2", label: "2連", on: hitDiv(popLane, pop.step) === 2 },
-            { id: "div3", label: "3連", on: hitDiv(popLane, pop.step) === 3 },
-            { id: "del", label: "消す" },
-          ]}
-          onPick={pick}
-          onClose={() => setPop(null)}
-        />
+      <p className="muted rhythm-hint">
+        タップ＝置く/消す ・ 打点を長押し→ <b>上下＝強さ</b>（弱く/普通/強く）・ <b>左右＝連打</b>（2連/3連） ・ 横スワイプ＝スクロール
+      </p>
+      {drag && (
+        <DragHud anchor={drag.anchor} vel={drag.vel} div={drag.div} base={drag.base} detents={drag.detents} />
       )}
     </div>
   );

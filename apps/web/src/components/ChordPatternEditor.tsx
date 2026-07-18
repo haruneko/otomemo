@@ -1,30 +1,38 @@
 import { type CSSProperties, type Ref, useState } from "react";
-import { type ChordPatternContent, applyCellTap, voicingPreviewPitches, pitchName, CHORD_ACCENT, CHORD_SOFT } from "../music";
+import { type ChordPatternContent, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, CHORD_ACCENT, CHORD_SOFT } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
 import { NoteValuePicker } from "./NoteValuePicker";
-import { CellPopover } from "./CellPopover";
-import { useLongPress } from "../useLongPress";
+import { DragHud } from "./DragHud";
+import { useHoldDrag, type HoldDragState, type HoldDragStart } from "../useHoldDrag";
 import type { Neta } from "../api";
 
-// #29 P2 個別セル。長押し検出をセル単位で持つため小コンポーネントに分離（hooks はセルごと）。
+const CHORD_BASE_VEL = 100; // 既定ベロシティ（resolveChordPattern の n.vel ?? 100 と一致）＝デテント/普通判定の基準。
+
+// #29 §9 個別セル。ホールドドラッグ（長押し→縦=強さ・**縦のみ**＝分割は arp 軸へ委譲）をセル単位で持つ。
 function ChordCell({
   ariaLabel,
   className,
   hv,
   onTap,
-  onLongPress,
+  onFire,
+  onDrag,
+  onCommit,
+  onCancel,
 }: {
   ariaLabel: string;
   className: string;
   hv: number | null; // onset セルの実効 vel/127（濃淡）。sustain/空は null
   onTap: () => void;
-  onLongPress: (anchor: DOMRect) => void;
+  onFire: (anchor: DOMRect) => HoldDragStart | null;
+  onDrag: (s: HoldDragState) => void;
+  onCommit: (s: { vel: number; div: number }) => void;
+  onCancel: () => void;
 }) {
-  const lp = useLongPress(onLongPress);
+  const hd = useHoldDrag({ axis: "y", onFire, onDrag, onCommit, onCancel });
   const style = hv != null ? ({ "--hv": hv } as CSSProperties) : undefined;
-  return <button type="button" aria-label={ariaLabel} className={className} style={style} onClick={onTap} {...lp} />;
+  return <button type="button" aria-label={ariaLabel} className={className} style={style} onClick={onTap} {...hd} />;
 }
 
 const NAME_PX = 58;
@@ -68,7 +76,8 @@ export function ChordPatternEditor({
   const { stepsPerBar, beatStep } = meterSteps(meter);
   const [len, setLen] = useState(4); // 各音の長さ（step数・既定=四分）
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 対応）
-  const [pop, setPop] = useState<{ step: number; anchor: DOMRect } | null>(null); // #29 P2 長押しポップオーバー
+  // #29 §9 ホールドドラッグ中のライブプレビュー（--hv をこのセルだけ上書き・HUD 表示）。離した時に一括 onChange。
+  const [drag, setDrag] = useState<{ step: number; vel: number; anchor: DOMRect } | null>(null);
   const v = pattern.voicing;
   const top = v.top ?? DEFAULT_TOP;
   const isArp = pattern.mode === "arp";
@@ -86,31 +95,27 @@ export function ChordPatternEditor({
     if (r.placed) for (const p of voicingPreviewPitches({ ...v, top })) void previewNote({ pitch: p, start: 0, dur: 0.5 });
   };
 
-  // #29 P2 長押し＝onset セルのみポップオーバー（sustain/空セルは対象外＝誤爆防止）。
-  const onLongPress = (s: number, anchor: DOMRect) => {
-    if (!startAt(s)) return;
-    setPop({ step: s, anchor });
+  // #29 §9 発火＝onset セルのみ持ち上げる（sustain/空セルは null＝キャプチャしない・誤爆防止）。
+  // 縦のみ（横=分割は無効＝arp 軸の領分）。デテント＝弱く64/普通100/強く112（磁石スナップ）。
+  const fireChord = (s: number, anchor: DOMRect): HoldDragStart | null => {
+    const h = startAt(s);
+    if (!h) return null;
+    const vel = h.vel ?? CHORD_BASE_VEL;
+    const detents = [CHORD_SOFT, CHORD_BASE_VEL, CHORD_ACCENT];
+    setDrag({ step: s, vel, anchor });
+    for (const p of voicingPreviewPitches({ ...v, top })) void previewNote({ pitch: p, start: 0, dur: 0.4, vel });
+    return { vel, div: 1, detents };
   };
-  // チップ選択＝強く(112)/弱く(64) の3値ベロシティ（再選択で普通=vel 削除）、消す=頭タップの削除経路。
-  const pickChord = (id: string) => {
-    if (!pop) return;
-    const h = startAt(pop.step);
-    if (!h) return setPop(null);
-    if (id === "del") {
-      onChange({ ...pattern, hits: applyCellTap(pattern.hits, pop.step, dotted ? len * 1.5 : len).hits });
-    } else {
-      const want = id === "accent" ? CHORD_ACCENT : CHORD_SOFT;
-      const target = h.vel === want ? undefined : want; // 同じ状態を再選択＝普通へ戻す（3状態トグル）
-      onChange({
-        ...pattern,
-        hits: pattern.hits.map((x) =>
-          x.step === pop.step ? (target == null ? { step: x.step, dur: x.dur } : { ...x, vel: target }) : x,
-        ),
-      });
-    }
-    setPop(null);
+  const dragChord = (s: number, st: HoldDragState) => {
+    setDrag((d) => (d && d.step === s ? { ...d, vel: st.vel } : d));
+    if (st.detentHit) for (const p of voicingPreviewPitches({ ...v, top })) void previewNote({ pitch: p, start: 0, dur: 0.3, vel: st.vel });
   };
-  const popHit = pop ? startAt(pop.step) : undefined;
+  // 確定＝縦=velocity を1回の onChange で（普通=100 は vel キー削除＝bit）。
+  const commitChord = (s: number, st: { vel: number }) => {
+    setDrag(null);
+    const nextVel = st.vel === CHORD_BASE_VEL ? undefined : st.vel;
+    onChange({ ...pattern, hits: chordHitsWithVel(pattern.hits, s, nextVel) });
+  };
 
   // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。
   const previewNeta = { kind: "chord_pattern", content: { ...pattern, voicing: { ...v, top } }, key: 0 } as unknown as Neta;
@@ -126,14 +131,18 @@ export function ChordPatternEditor({
             <span className="rhythm-name">コード</span>
             {Array.from({ length: pattern.steps }, (_, s) => {
               const head = startAt(s);
+              const isDrag = !!drag && drag.step === s;
               return (
                 <ChordCell
                   key={s}
                   ariaLabel={`hit-${s}`}
-                  className={"rhythm-cell" + (head ? " on" : sustainAt(s) ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
-                  hv={head ? (head.vel ?? 100) / 127 : null}
+                  className={"rhythm-cell" + (head ? " on" : sustainAt(s) ? " sustain" : "") + (isDrag ? " lift" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
+                  hv={isDrag ? drag.vel / 127 : head ? (head.vel ?? CHORD_BASE_VEL) / 127 : null}
                   onTap={() => toggleHit(s)}
-                  onLongPress={(anchor) => onLongPress(s, anchor)}
+                  onFire={(anchor) => fireChord(s, anchor)}
+                  onDrag={(st) => dragChord(s, st)}
+                  onCommit={(st) => commitChord(s, st)}
+                  onCancel={() => setDrag(null)}
                 />
               );
             })}
@@ -227,17 +236,8 @@ export function ChordPatternEditor({
           </div>
         )}
       </div>
-      {pop && popHit && (
-        <CellPopover
-          anchor={pop.anchor}
-          chips={[
-            { id: "accent", label: "強く", on: popHit.vel === CHORD_ACCENT },
-            { id: "soft", label: "弱く", on: popHit.vel === CHORD_SOFT },
-            { id: "del", label: "消す" },
-          ]}
-          onPick={pickChord}
-          onClose={() => setPop(null)}
-        />
+      {drag && (
+        <DragHud anchor={drag.anchor} vel={drag.vel} div={1} base={CHORD_BASE_VEL} detents={[CHORD_SOFT, CHORD_BASE_VEL, CHORD_ACCENT]} />
       )}
     </div>
   );

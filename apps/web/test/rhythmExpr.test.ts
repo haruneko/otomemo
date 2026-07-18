@@ -4,6 +4,7 @@ import {
   rhythmOf,
   laneWithHitToggled,
   laneWithHitVel,
+  laneWithHitVelNum,
   laneWithHitDiv,
   hitVelState,
   hitVel,
@@ -162,6 +163,41 @@ describe("#29 P0-4 laneWithHitVel 3-state mapping", () => {
     const l: RhythmLane = { name: "Snare", midi: 38, hits: [0, 4], velCurve: [70, 124] };
     expect(hitVel(l, 0)).toBe(70);
     expect(hitVel({ name: "Kick", midi: 36, hits: [0] }, 0)).toBe(drumVel(36));
+  });
+});
+
+describe("#29 §9 laneWithHitVelNum（連続値ライタ）", () => {
+  const lane: RhythmLane = { name: "Snare", midi: 38, hits: [0, 4] };
+  const base = drumVel(38); // 105
+
+  it("writes a continuous velocity into velCurve at the hit's index", () => {
+    const r = laneWithHitVelNum(lane, 4, 90);
+    expect(r.velCurve).toEqual([base, 90]);
+  });
+
+  it("clamps to 1..127 and rounds", () => {
+    expect(laneWithHitVelNum(lane, 4, 200).velCurve).toEqual([base, 127]);
+    expect(laneWithHitVelNum(lane, 4, -5).velCurve).toEqual([base, 1]);
+    expect(laneWithHitVelNum(lane, 4, 90.7).velCurve).toEqual([base, 91]);
+  });
+
+  it("base value drops velCurve (normalize to minimal content ⇒ bit)", () => {
+    const r = laneWithHitVelNum(lane, 4, base);
+    expect("velCurve" in r).toBe(false);
+  });
+
+  it("preserves other hits' velCurve when writing one", () => {
+    const l: RhythmLane = { name: "Snare", midi: 38, hits: [0, 4, 8], velCurve: [70, 100, 124] };
+    expect(laneWithHitVelNum(l, 4, 50).velCurve).toEqual([70, 50, 124]);
+  });
+
+  it("empty (non-hit) cell is a no-op", () => {
+    expect(laneWithHitVelNum(lane, 7, 90)).toBe(lane);
+  });
+
+  it("preserves divs (velocity is orthogonal to division)", () => {
+    const l: RhythmLane = { name: "Snare", midi: 38, hits: [0, 4], divs: { "4": 2 } };
+    expect(laneWithHitVelNum(l, 0, 60).divs).toEqual({ "4": 2 });
   });
 });
 

@@ -13,6 +13,7 @@ import {
   band,
   resolveRelativeBass,
   resolveChordPattern,
+  chordHitsWithVel,
   compositeNotes,
   scheduleTimes,
   totalSec,
@@ -372,6 +373,16 @@ describe("music", () => {
       );
       expect(notes[0]!.vel).toBe(64); // vel 付き hit
       expect("vel" in notes[1]!).toBe(false); // vel 無し hit は素通し（キー無し）
+    });
+    it("#29 §9 chordHitsWithVel：vel 書き込み・undefined でキー削除（bit）・他 hit 素通し", () => {
+      const hits = [{ step: 0, dur: 4 }, { step: 8, dur: 4, vel: 64 }];
+      const set = chordHitsWithVel(hits, 0, 112);
+      expect(set[0]).toEqual({ step: 0, dur: 4, vel: 112 });
+      expect(set[1]).toBe(hits[1]); // 他 hit は同一参照で素通し
+      // undefined ⇒ {step,dur} のみ（vel キーを生やさない）。
+      const cleared = chordHitsWithVel(hits, 8, undefined);
+      expect(cleared[1]).toEqual({ step: 8, dur: 4 });
+      expect("vel" in cleared[1]!).toBe(false);
     });
     it("レジスタ安定（決定C）：C進行とB進行のcompingが近接＝ルートで跳ねない", () => {
       const lowOf = (rootPc: number) => {

@@ -436,6 +436,19 @@ export function laneWithHitVel(lane: RhythmLane, step: number, state: HitVelStat
   return rebuildLane(lane, lane.hits, normVelCurve(lane, cur), lane.divs);
 }
 
+// #29 §9 hit のベロシティを連続値で書く純関数（ホールドドラッグの縦軸）。laneWithHitVel の連続版：
+// 任意の数値を velCurve[k] へ（1..127 にクランプ・整数化）。base と同値なら normVelCurve が velCurve を落とす
+// ＝bit。デテント（ghost/base/accent）へスナップした時は呼び側で laneWithHitVel を使い正準値に一致させる。
+export function laneWithHitVelNum(lane: RhythmLane, step: number, vel: number): RhythmLane {
+  const k = lane.hits.indexOf(step);
+  if (k < 0) return lane; // 空セルは no-op（誤爆防止）
+  const base = drumVel(lane.midi, lane.vel);
+  const target = Math.max(1, Math.min(127, Math.round(vel)));
+  const cur = lane.velCurve ? [...lane.velCurve] : lane.hits.map(() => base);
+  cur[k] = target;
+  return rebuildLane(lane, lane.hits, normVelCurve(lane, cur), lane.divs);
+}
+
 // #29 P2 hit のセル内分割（divs）を書く純関数。div=2|3 で分割、null で単発へ戻す（divs エントリ削除）。
 // 空セル（hit でない）は no-op（誤爆防止）。velCurve は素通し（分割はベロと直交）。
 export function laneWithHitDiv(lane: RhythmLane, step: number, div: 2 | 3 | null): RhythmLane {
@@ -597,6 +610,12 @@ const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
 // #29 P2 コード楽器の3値ベロシティ語彙（普通=vel 省略→下流 vel??100）。耳較正で調整可＝保存データは実値なので既存不変。
 export const CHORD_ACCENT = 112; // 強く（+12＝backbeat スケール感）
 export const CHORD_SOFT = 64; // 弱く（コンピングの逃げ音）
+
+// #29 §9 コード hit の全声部ベロシティを書く純関数（ホールドドラッグの縦軸・vel=undefined で普通へ戻す）。
+// vel なし ⇒ {step,dur} のみ（vel キーを生やさない＝下流 vel??100・deepStrictEqual/bit 安全）。他 hit は素通し。
+export function chordHitsWithVel(hits: ChordHit[], step: number, vel: number | undefined): ChordHit[] {
+  return hits.map((h) => (h.step === step ? (vel == null ? { step: h.step, dur: h.dur } : { ...h, vel }) : h));
+}
 
 // hits は {step,dur} が正。旧 number[] も受ける（既定 dur=4step=四分）＝後方互換。
 function normHits(hits: unknown): ChordHit[] {

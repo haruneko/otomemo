@@ -648,38 +648,88 @@
 .rhythm-cell.on.div3 {
   --divw: 33.34%;
 }
-/* #29 P0-4 セルポップオーバー（長押し）＝チップ1行＋常時表示 backdrop。 */
-.cell-pop-backdrop {
-  display: block;
-  position: fixed;
-  inset: 0;
-  background: transparent; /* 濃淡は不要・タップ外し専用 */
-  z-index: 8;
+/* #29 §9 ホールドドラッグ：セルを通常はスクロールに譲る（横スワイプ＝パン）。長押し 450ms 静止が先なので
+   ネイティブスクロールは未開始＝発火時 setPointerCapture＋captured 中のみ touchmove preventDefault で取り合い回避。 */
+.rhythm-editor .rhythm-cell {
+  touch-action: pan-x pan-y;
 }
-.cell-pop {
-  display: flex;
-  gap: 5px;
-  padding: 5px;
+/* ⌫消しゴム中＝なぞり消し優先（パンは犠牲・モード退出で復帰）。 */
+.rhythm-editor.erase-on .rhythm-cell {
+  touch-action: none;
+}
+/* 長押しで「持ち上がる」＝キャプチャの合図（発見性の核）。 */
+.rhythm-cell.lift {
+  transform: scale(1.35);
+  z-index: 5;
+  border-color: #fff;
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--k, var(--accent)) 45%, transparent),
+    0 6px 14px -4px rgba(0, 0, 0, 0.8);
+  transition: transform 0.12s ease;
+}
+.rhythm-hint {
+  font-size: 0.68rem;
+  line-height: 1.6;
+  margin: 8px 2px 0;
+}
+.rhythm-hint b {
+  color: var(--fg);
+  font-weight: 600;
+}
+/* #29 §9 指上 HUD（ドラッグ中の読み出し・旧 CellPopover の後継）。セル直上に fixed（--kk=kind 色）。 */
+.drag-hud {
+  z-index: 20;
+  transform: translate(-50%, -100%);
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 10px;
+  padding: 7px 10px 8px;
   box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.7);
-  z-index: 9;
+  pointer-events: none;
+  min-width: 132px;
 }
-.cell-pop .chip {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 0.76rem;
-  background: #191d23;
-  color: var(--fg);
+.drag-hud .hud-label {
+  font-size: 0.78rem;
+  font-weight: 700;
   white-space: nowrap;
 }
-.cell-pop .chip.on {
-  background: var(--k, var(--accent));
-  border-color: var(--k, var(--accent));
+.drag-hud .hud-num {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.7rem;
+  margin-left: 5px;
+}
+.drag-hud .hud-div {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.66rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--kk, var(--k, var(--accent)));
   color: #fff;
   font-weight: 700;
+}
+.drag-hud .hud-meter {
+  position: relative;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: #242830;
+}
+.drag-hud .hud-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 3px;
+  background: var(--kk, var(--k, var(--accent)));
+}
+.drag-hud .hud-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: #7d8794;
+  border-radius: 1px;
 }
 /* コード楽器：音の伸び（sustain）＝薄い kind 色で「押しっぱなし＝伸びてる」を表す。
    頭(on)＝濃い／伸び(sustain)＝薄い。伸びの上をタップで長さ調整（ChordPatternEditor）。 */
