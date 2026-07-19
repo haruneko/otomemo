@@ -24,6 +24,9 @@ apps/web/e2e/__screenshots__/
 apps/web/.cache/
 
 _quarantine/
+
+# works: 作詞作曲PoCの生データ置き場（過去歌詞・観察メモ・試作）＝git管理外。2026-07-18。
+works/
 # apps/audio (旧_audio_poc・2026-07-17移動): uvプロジェクト＝ソース(*.py)+依存宣言(pyproject.toml/uv.lock)は追跡、venv/巨大依存/生成物は無視。
 apps/audio/.venv/
 apps/audio/__pycache__/
