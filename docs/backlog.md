@@ -35,13 +35,13 @@ S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。~~残＝S3群
   - ✅**#10 Note型一元化**：基本形 `Note={pitch,start,dur,vel?,syllable?}` を @cm/music-core に新設し SSOT 化。api の voiceLeading/phrase/voiceLeadingReport/evalMelody/melodyCells が import、chordDetect は `Note&{channel?}` 交差、web music.ts の Note は `extends CoreNote` へ。**派生は無理に統一せず残置**＝corpusBias/fit（start?/dur? 任意・fit は harmonize が import）。匿名インライン（generate.ts 等）は挙動不変優先で未着手＝#11 のノブ再編時に。
 - **音価(agogic)**：上の「音価バリエーション不足」項の(a)骨格に長音アンカー案は、骨格層ではdurを持たない設計（分割方式）にしたため**リズムパーツ層（S4）の長音パーツ**で実現する方針に変わった（design #20）。
 - **S4-2 L2 の web 小節ペイントUI（未実装・着手時Task化）**：S4-2（Task#8）で placement（小節ごとにパーツ名指し）＋custom（インラインパーツ）＋採取（extract_rhythm_part）は **api/MCP に実装済＝Claudeチャット経由で使える**が、web は L1 の rotate ピッカーのみ（現状維持）。bar 単位でパーツを塗る/採取ボタン→customに積む UI は大きいので送り。着手時は SectionEditor のメロ生成ノブ段に「小節×パーツ」グリッド＋「このメロから採取」を足す（design #20 S4-2 参照）。
-- **骨格の机（design #20 S6・2026-07-12設計確定）から明示的に送った分**（**実装スライスD0〜D6は実装済＝2026-07-12全mainコミット**・handoff=`docs/research/2026-07-12-skeleton-desk-handoff.md`・以下は明示的に送った分＝着手したらTask化）：
+- **骨格の机**（『机』＝design #20 S6 の設計語。UI では骨格エディタ）**（design #20 S6・2026-07-12設計確定）から明示的に送った分**（**実装スライスD0〜D6は実装済＝2026-07-12全mainコミット**・handoff=`docs/research/2026-07-12-skeleton-desk-handoff.md`・以下は明示的に送った分＝着手したらTask化）：
   - **B本格＝変更来歴の永続追跡**：コード区間→依存骨格接点の逆引きをDB/relationに持ち、共有 chord_progression の編集が**別セクション**の骨格対位を腐らせた時に波及通知（背骨レールの「B波及」バッジ含む）。机内のセッション内 stale（B-lite・D6）で価値を実測してから。realized_from 逆引きと同じ建付け。
-  - **E＝背骨（曲）楽器の遷移試聴**：前セクション末小節→次セクション頭小節を鳴らす「縫い目→耳」。机はセクション楽器＝曲レベルは別楽器（song エディタ側）・共有は transport/ループ選択/在庫のみ（design S6 の線引き）。
+  - **E＝曲レベル楽器の遷移試聴**：前セクション末小節→次セクション頭小節を鳴らす、セクション間の遷移試聴（縫い目E裁定）。机はセクション楽器＝曲レベルは別楽器（song エディタ側）・共有は transport/ループ選択/保存済みネタ（設計語：在庫）のみ（design S6 の線引き）。
   - **単品 SkeletonEditor の撤去/共通化判断**：机の実使用後。ロール部品の共用抽出（SkeletonRoll）と同時に。
   - **机の後続小物**：3/4・6/4 の snap 表（付点系）・句単位再抽選（「句2だけ引き直す」）・②聴き方「コードだけ」（旧「和声だけ」・用語対応表＝design #20 S6）の voicing 込み化。
-  - **①ドラム/分岐スタックの潜り導線（机に onOpenNeta）**：D4/D5 の裁定で一覧・表示のみに留めた分（design #20「D7パーキング」参照）。机に onOpenNeta 導線を1本足せば①ドラム行タップ→ドラム編集・分岐スタックタップ→旧メロへ潜れる。
-  - **D3b＝②コードの「他N箇所で使用」バッジ＋複製して切り離す（copy_neta）**（2026-07-12・D3コアから切り出し）：コード進行ネタの**他セクション配置数**を出す＝`compose_edge` の逆引き（親/placements）を返す **read api が現状無い**（`/neta/:id/relations` は realized_from のみ）。S6「api無改変（生成契約を足さない）」に対し read クエリ追加の是非を要判断。api足すなら `getBacklinks(id,"compose_edge")` 相当の薄い read route＋web で N表示＋copy_neta→この配置だけ removeChild/placeChild 差し替え。D3コア（チップ/導出ベース/substitute試着採用）は着地済。
+  - **①ドラム/分岐スタックの潜り導線（潜り＝入れ子のネタを開く導線のこと）（机に onOpenNeta）**：D4/D5 の裁定で一覧・表示のみに留めた分（design #20「D7パーキング」参照）。机に onOpenNeta 導線を1本足せば①ドラム行タップ→ドラム編集・分岐スタックタップ→旧メロへ潜れる。
+  - **D3b＝②コードの「他N箇所で使用」バッジ＋複製して切り離す（copy_neta）**（2026-07-12・D3コアから切り出し）：コード進行ネタの**他セクション配置数**を出す＝`compose_edge` の逆引き（親/placements）を返す **read api が現状無い**（`/neta/:id/relations` は realized_from のみ）。S6「api無改変（生成契約を足さない）」に対し read クエリ追加の是非を要判断。api足すなら `getBacklinks(id,"compose_edge")` 相当の薄い read route＋web で N表示＋copy_neta→この配置だけ removeChild/placeChild 差し替え。D3コア（チップ/導出ベース/substitute試着採用）（設計語：試着＝UI では試聴に改称）は着地済。
 - **机レビュー(2026-07-13・Fable/Sonnet 3観点)由来の送り分**（P0=#1再スケジュール鮮度/#2 chordTrial deps/#3トレイ埋没/#4音名ガター/#5②レンズ窓切り/#8 undoChord stale＝**修正済コミット**。以下は判断/低優先で送り）：
   - ~~**#8b SF2フォールバック時レンズゲート素通し**~~ **→ 対応せず（オーナー裁定2026-07-13）**：SF2未ロード時の簡易シンセ再生で聴き方2択が両方鳴る件。**基本 SF2 が正の機能＝フォールバックは鳴らなくてよい**。修正しない。
   - ~~**sectionChords/Bass の位置=小節扱い(×BPB)＝#6**~~ **→ ✅済(2026-07-13・c.position を拍で統一・×BPB撤去・earChords と一致)**：非0位置にコード/ベースを置くと gen/fit へ4倍ずれた和声文脈が渡っていた既存潜在バグ（D0以前35fbacc由来）。オーナー承認（踏んでるデータがあっても直す）で是正。生成出力は非0位置配置のケースで変わる（正しい方へ）。
