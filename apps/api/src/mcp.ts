@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Core } from "./core";
 import type { Neta } from "./types";
+import { loadChordTransitions, hasChordTransitions } from "./music/corpusStats"; // (D) コード遷移統計＝next_chord/gen_chords を実J-POP手癖へ寄せる（既定OFF）
 import {
   identifyProgression,
   analyzeProgression,
@@ -472,11 +473,13 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         chords: chordsSchema,
         key: z.number().int().min(0).max(11),
         mode: z.enum(["major", "minor"]).optional(),
+        corpus: z.boolean().optional().describe("実J-POPコーパスの遷移統計で候補を並べ替える（既定OFF＝機能文法順）。頻度は弾かず並べるだけ＝正当性は機能文法が担保。"),
       },
     },
-    async ({ chords, key, mode }) => {
+    async ({ chords, key, mode, corpus }) => {
       const degs = toDegrees(chords, key);
-      const cands = nextChordCandidates(degs, { mode });
+      const transitions = corpus && hasChordTransitions(core.db) ? loadChordTransitions(core.db, "pop", mode ?? "major") : undefined;
+      const cands = nextChordCandidates(degs, { mode, transitions });
       return ok(cands.map((c) => ({ ...c, root: (c.degree + key) % 12 })));
     },
   );
@@ -1237,11 +1240,14 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "generate",
-    { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝weave を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional() } },
-    async ({ kind, frame, name, seed, role, structure }) => {
+    { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝weave を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional(), corpus: z.boolean().optional().describe("中間のつなぎを実J-POPコーパスの手癖へ寄せる（既定OFF＝bit一致・境界/終止は構造層のまま）"), temperature: z.number().optional().describe("意外性ダイヤル（低=王道/最頻・高=攻め/裾の正当候補も顔を出す・既定1）。corpus:true時のみ有効") } },
+    async ({ kind, frame, name, seed, role, structure, corpus, temperature }) => {
       if (role || structure) return err("role/structure は未対応（③-7）。構造(連結等)は assemble/continue で組む。");
       if (name) return ok(genNamedProgression(name, frame));
-      if (kind === "chord_progression") return ok(genChords(frame, seed));
+      if (kind === "chord_progression") {
+        const transitions = corpus && hasChordTransitions(core.db) ? loadChordTransitions(core.db, "pop", isMinorFrame(normalizeFrame(frame)) ? "minor" : "major") : undefined;
+        return ok(genChords(frame, seed, undefined, transitions ? { transitions, temperature } : undefined));
+      }
       return ok(genDrums(frame, seed));
     },
   );

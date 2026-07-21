@@ -10,6 +10,7 @@ import { meterInfo } from "./meter";
 import { classifyNCT, isChordTone } from "./degree";
 import { melodyEssence } from "./melodyEssence";
 import { Rng } from "./rng";
+import { chordTok, transitionWeights, type ChordTransitionModel } from "./corpusStats"; // (D) コード遷移統計＝genChords の中間つなぎを実J-POP手癖へ寄せる（既定OFFでbit一致）
 import {
   isMinorMood,
   densityBias,
@@ -227,7 +228,7 @@ export const barsOf = (frame: Frame): number =>
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 /** 機能和声ルールでコード進行を生成（T始まり・T終わり）。返り #85 items 形。 */
-export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal" | "aeolian", opts?: { borrow?: number; secondaryDom?: number; loop?: boolean; palette?: Palette; variety?: number; genre?: "citypop"; transition?: TransitionPrep }): GenResult {
+export function genChords(frame?: Frame | null, seed?: number | null, cadence?: "full" | "half" | "deceptive" | "plagal" | "aeolian", opts?: { borrow?: number; secondaryDom?: number; loop?: boolean; palette?: Palette; variety?: number; genre?: "citypop"; transition?: TransitionPrep; transitions?: ChordTransitionModel; temperature?: number }): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed);
   const mood = f.mood ?? "";
@@ -247,9 +248,22 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
   for (let i = 0; i < funcs.length; i++) {
     const fn = funcs[i]!;
     const cands = dcands(fn, minor);
-    // D機能は V を厚く（裸の vii°/dim ブロックはレア＝実用進行の比率へ）。
-    const w = fn === "D" ? [5, 1] : [3, 2, 1];
-    let d = rng.choices(cands, w.slice(0, cands.length));
+    let d: number;
+    // (D) コーパス在＋直前コードの遷移統計がある中間スロットだけ、実J-POPの count 重み(意外性=温度)で候補を引く。
+    //   注入無し/ctx 未ヒット＝下の固定重み(現行)へ＝bit一致。先頭・末尾(=I)は後段で上書き＝緊張の置き場は構造層が担う。
+    let trEntries: [string, number][] | undefined;
+    if (opts?.transitions && i > 0) {
+      const pe = table[degrees[i - 1]!]!; // [root_pc, quality]
+      trEntries = opts.transitions.bigram.get(chordTok({ root: pe[0], quality: pe[1] }));
+    }
+    if (trEntries?.length) {
+      const toks = cands.map((dg) => { const e = table[dg]!; return chordTok({ root: e[0], quality: e[1] }); });
+      d = rng.choices(cands, transitionWeights(toks, trEntries, { temperature: opts?.temperature }));
+    } else {
+      // D機能は V を厚く（裸の vii°/dim ブロックはレア＝実用進行の比率へ）。
+      const w = fn === "D" ? [5, 1] : [3, 2, 1];
+      d = rng.choices(cands, w.slice(0, cands.length));
+    }
     // 隣接同度数の回避：同じなら同機能の別候補へシフト（無ければ許容）。
     if (i > 0 && d === degrees[i - 1] && cands.length > 1) {
       const alt = cands.find((c) => c !== d);
