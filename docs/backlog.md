@@ -257,7 +257,7 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 ## 留保（自律ラン 2026-07-21・「行けるとこまで」で clean 分は消化・残りは要判断/複雑/要検証）
 自律ランで backend の bit安全・TDD検証できる分を消化（diverse chord候補・バリデータ常設）。以下は**前進の妨げになる分岐ゆえ留保**：
 - **和声リズム制御⑨（コード交替速度）**：`genChords` は `chords=base.map(1/bar)`（`generate.ts:348`）＝1小節1和音が構造に焼き付いてる。可変にするには**度数ウォーク(funcs/degrees)をコード枠単位に作り直す**必要＝bit安全な小改修でなく設計案件（既定1/barでbit一致は保てるが本体は invasive）。design 先。
-- **メロ音価バリエーション（rhythmicContrast）**：sampleBarRhythm への音価分布prior＝統計は motif-model(rhythm)に在るが結線は rhythm gen ホットパス＝要慎重TDD。WP-M1第2スライス級。
+- ✅**メロ音価バリエーション（rhythmicContrast）＝実装済（2026-07-21・commit 229b45f）**：耳FBの正体は CV でなく**付点long-shortペア欠落**（生成0%/実POP16.7%）と実測で判明→`mkMotif` リズム語彙を付点セルへ重み差替（既定0でbit一致・6/8対象外・句末はflow領分）。ON で付点ペア3.8%→13-15%・CV帯内。正典＝research `2026-07-21-melody-note-value-and-harmonic-rhythm.md`＋design #12-M。多段(Fable指示→Opus実装→Fable監査→修正→受入)で実施。**残＝耳確認＋rc既定値/flow句末較正**（オーナー手番）。旧「音価が一律」項(上方)もこれで解消。
 - **WP-M1 第2スライス（cadDeg/contour）**：cadDeg は着地がルール固定でsmp非経由・contour は rng構造に触る＝slice A(degHist)と違い bit安全でない。design 先。
 - **web: コードトーンハイライト**：スケールハイライトは実装済(PianoRoll)。コードトーンは PianoRoll に chords 文脈を渡す配線＋pc算出＝実装可だが**視覚検証はオーナーの目**（jsdomはレイアウト測れない）。
 - **web: メロvelocity編集**：コード/ドラムの useHoldDrag 流用＝実装可だが視覚/操作検証はオーナー。
