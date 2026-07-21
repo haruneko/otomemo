@@ -200,6 +200,22 @@ CREATE TABLE IF NOT EXISTS corpus_chord_transition (
   count    INTEGER NOT NULL,
   PRIMARY KEY (style, mode, ngram, from_ctx, to_tok)
 );
+-- (A) メロ句辞書（#21拡張・2026-07-21）。在DB melody library(phase_ok pop 句)を**度数+リズム**へ相対化して持つ。
+--   リテラル絶対pitchは非保存（deg=tonic相対pc/oct/相対拍＝著作権セーフ・design「コーパス遷移統計テーブル 第2弾」(A)）。
+--   投入＝scripts/build-phrase-pattern.ts。生成の候補源(WP-M1)がコーパス在時のみ引く（既定生成は無変更）。
+CREATE TABLE IF NOT EXISTS corpus_phrase_pattern (
+  id           TEXT NOT NULL,     -- 度数列シグネチャのハッシュ（同型句は1行へ畳み count 加算）
+  style        TEXT NOT NULL,     -- pop（先行・game/irish は phase 再正規化が M2 raw 依存で保留）
+  mode         TEXT NOT NULL,     -- major|minor
+  tonic_pc     INTEGER NOT NULL,  -- 0（C基準・keyless 断片）
+  meter        TEXT NOT NULL,
+  bars         INTEGER NOT NULL,
+  pickup_beats REAL NOT NULL,
+  degrees      TEXT NOT NULL,     -- JSON [{deg(0..11 tonic相対), oct, start, dur}]
+  count        INTEGER NOT NULL,
+  phase_ok     INTEGER NOT NULL,  -- メトリック健全ゲート（1のみ投入＝R0§2.1）
+  PRIMARY KEY (style, mode, id)
+);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {
