@@ -237,60 +237,6 @@ export function transitionWeights(cands: string[], entries: [string, number][] |
   return cands.map((c) => Math.pow((cnt.get(c) ?? 0) + floor, 1 / T));
 }
 
-// ══ (A) メロ句辞書（#21拡張・2026-07-21・design「コーパス遷移統計テーブル 第2弾」(A)）══
-//   在DB melody library の phase_ok 句を**度数+リズム**へ相対化＝リテラル絶対pitch非保存（著作権セーフ）。
-//   生成の候補源(WP-M1)がコーパス在時のみ引く＝既定生成は無変更（note_transition と同じ storage+read 段階）。
-export type PhraseNote = { deg: number; oct: number; start: number; dur: number };
-export interface CorpusMelody { notes: { pitch: number; start: number; dur: number }[]; mode?: string; count?: number; meter?: string; bars?: number; pickup?: number; phaseOk?: boolean }
-export interface PhrasePatternRow { id: string; mode: string; tonic_pc: number; meter: string; bars: number; pickup_beats: number; degrees: string; count: number; phase_ok: number }
-// djb2（短い決定的ハッシュ・36進）＝同型句の畳み込みキー。乱数不使用＝テスト決定的。
-function hashStr(s: string): string { let h = 5381; for (let i = 0; i < s.length; i++) h = (((h << 5) + h + s.charCodeAt(i)) >>> 0); return h.toString(36); }
-// 純関数：メロ列 → 度数+リズムの句パターン行（同型は count 加算で畳む・tonic_pc=0 C基準）。
-export function buildPhrasePatterns(melodies: CorpusMelody[]): PhrasePatternRow[] {
-  const acc = new Map<string, PhrasePatternRow>();
-  for (const m of melodies ?? []) {
-    const degs: PhraseNote[] = (m.notes ?? [])
-      .filter((n) => Number.isFinite(n?.pitch))
-      .map((n) => ({ deg: (((n.pitch % 12) + 12) % 12), oct: Math.floor(n.pitch / 12), start: n.start, dur: n.dur }));
-    if (degs.length === 0) continue;
-    const mode = m.mode === "minor" ? "minor" : "major";
-    const meter = m.meter ?? "4/4";
-    const bars = Number.isFinite(m.bars) ? Number(m.bars) : 4;
-    const pickup = Number.isFinite(m.pickup) ? Number(m.pickup) : 0;
-    const degrees = JSON.stringify(degs);
-    const id = hashStr(`${mode}|${meter}|${bars}|${pickup}|${degrees}`);
-    const w = m.count && m.count > 0 ? m.count : 1;
-    const key = `${mode}|${id}`;
-    const ex = acc.get(key);
-    if (ex) ex.count += w;
-    else acc.set(key, { id, mode, tonic_pc: 0, meter, bars, pickup_beats: pickup, degrees, count: w, phase_ok: m.phaseOk ? 1 : 0 });
-  }
-  return [...acc.values()];
-}
-export function ingestPhrasePatterns(db: Db, rows: PhrasePatternRow[], style = "pop"): number {
-  const ins = db.prepare(`INSERT OR REPLACE INTO corpus_phrase_pattern (id, style, mode, tonic_pc, meter, bars, pickup_beats, degrees, count, phase_ok) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  let n = 0;
-  const run = db.transaction(() => { for (const r of rows) { ins.run(r.id, style, r.mode, r.tonic_pc, r.meter, r.bars, r.pickup_beats, r.degrees, Math.round(r.count), r.phase_ok); n++; } });
-  run();
-  return n;
-}
-export function hasPhrasePatterns(db: Db): boolean {
-  const row = db.prepare(`SELECT COUNT(*) c FROM corpus_phrase_pattern`).get() as { c: number };
-  return (row?.c ?? 0) > 0;
-}
-export interface PhrasePattern { id: string; tonic_pc: number; meter: string; bars: number; pickup_beats: number; degrees: PhraseNote[]; count: number }
-export function loadPhrasePatterns(db: Db, style: string, mode: string): PhrasePattern[] {
-  const rows = db.prepare(`SELECT id, tonic_pc, meter, bars, pickup_beats, degrees, count FROM corpus_phrase_pattern WHERE style=? AND mode=? ORDER BY count DESC`)
-    .all(style, mode) as { id: string; tonic_pc: number; meter: string; bars: number; pickup_beats: number; degrees: string; count: number }[];
-  const out: PhrasePattern[] = [];
-  for (const r of rows) {
-    let degrees: PhraseNote[] = [];
-    try { degrees = JSON.parse(r.degrees) as PhraseNote[]; } catch { continue; } // 壊れ JSON はスキップ（防御的）
-    out.push({ id: r.id, tonic_pc: r.tonic_pc, meter: r.meter, bars: r.bars, pickup_beats: r.pickup_beats, degrees, count: r.count });
-  }
-  return out;
-}
-
 // ── (WP-M1) 骨格度数 prior：loadSkeletonPriors（bin=クロマチックpc "0".."11"）→ **スケール度0..6** の重み Map。
 //   `genSkeletonFromModel` の度数サンプルは 0..6 空間ゆえ pc→度数へ写す。非ダイアトニックbin（各<1%）は破棄・合計1へ正規化。
 //   骨格構造音の度数分布を POP909 degHist へ弱バイアス（既定OFF＝未注入で bit 一致）。乱数不使用＝決定的。
