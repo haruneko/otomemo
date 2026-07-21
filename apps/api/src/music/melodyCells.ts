@@ -148,13 +148,23 @@ export function learnSkeleton(units: { chordRel: number; prevDeg: number; deg: n
   }
   return { trans };
 }
-function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, r: () => number): number {
+// blendDeg（WP-M1・2026-07-21）：分布 h の各キーの count を**スケール度prior で乗算補正**（新キー追加なし＝支持集合・
+//   列順・draw数すべて不変）。sd=((key%7)+7)%7 で degPrior を引く。genChords の transitionWeights と同思想。
+function blendDeg(h: Map<number, number>, prior: Map<number, number>, strength: number): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const [k, c] of h) { const f = 1 + strength * (prior.get((((k % 7) + 7) % 7)) ?? 0); out.set(k, c * (f > 0 ? f : 0)); }
+  return out;
+}
+function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, r: () => number, degPrior?: Map<number, number>, degPriorStrength = 1): number {
   const cr = ((chordRel % 12) + 12) % 12;
   let h = model.trans.get(`${cr}|${prevDeg}`);
   if (!h || !h.size) h = model.trans.get(`${cr}|-1`);                                   // 直前無視
   if (!h || !h.size) for (const [k, m] of model.trans) { if (k.startsWith(`${cr}|`) && m.size) { h = m; break; } } // 任意prev・同コード
   if (!h || !h.size) for (const [, m] of model.trans) { if (m.size) { h = m; break; } } // 何でも
-  return h && h.size ? weightedPickNum(h, r) : 0;
+  if (!h || !h.size) return 0;
+  // (WP-M1) degPrior 注入時のみ count を prior で補正＝度数分布を寄せる。未注入＝h そのまま＝weightedPickNum が現行と bit 一致。
+  const hh = degPrior && degPrior.size ? blendDeg(h, degPrior, degPriorStrength) : h;
+  return weightedPickNum(hh, r);
 }
 // コード根(調相対pc)列＋学習モデル → 骨格ピッチ列(bars*beatsPerBar)。各強拍で度数をサンプルし声部進行で配置、次強拍まで保持。
 // フォーム型リテラル回帰の計画（design #12-M・2026-07-13）：各ユニット u に「複写元ユニット src（null=fresh）」を与える。
@@ -210,7 +220,7 @@ export function skelFormPlanNew(form: SkelForm | undefined, nu: number): SkelFor
   return out;
 }
 
-export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: SkelForm; skelColor?: number; contour?: SkelContour; chordPcsPerBar?: number[][] } = {}): number[] {
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: SkelForm; skelColor?: number; contour?: SkelContour; chordPcsPerBar?: number[][]; degPrior?: Map<number, number>; degPriorStrength?: number } = {}): number[] {
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
   const bpb = opts.beatsPerBar ?? 4;
   const strongQ = opts.strongQuarters ?? [0, 2];
@@ -275,7 +285,7 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   const rep = opts.repetition ?? 0.85;
   const useMotif = opts.motif !== false && rep > 0;
   const I: number[] = new Array(slots.length).fill(tonicIdx);
-  const smp = (cr: number, pv: number) => ((sampleSkelDeg(model, cr, pv, r) % 7) + 7) % 7;
+  const smp = (cr: number, pv: number) => ((sampleSkelDeg(model, cr, pv, r, opts.degPrior, opts.degPriorStrength) % 7) + 7) % 7;
   let pv = -1, pi = ctrOf(0), hA: number[] | null = null, hB: number[] | null = null; // 開始は Kopfton レジスタ（旧: 主音）
   const nu = nuAll;
   // D-P1(2026-07-09 監査D)：句割りを骨格に伝える。phraseEnds 指定時は unit尾のバーが句末なら句のカデンツ度数へ着地
@@ -483,7 +493,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt; degPrior?: Map<number, number>; degPriorStrength?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -881,7 +891,7 @@ export function genMotifMelodyV2(
   const phraseEnds = opts.phrases?.map((p) => ({ bar: Math.max(0, Math.floor((p.startBeat + p.beats - 0.001) / barLen)), deg: p.cadenceDegree === 5 ? 4 : p.cadenceDegree === 2 ? 1 : 0 }));
   // 骨格注入（design #20）：opts.skel（人間製/機械候補の SkeletonContent 由来・1拍粒度 number[]）が来たら
   // genSkeletonFromModel をバイパスしてそれを構造線に使う。未指定＝従来どおりモデル生成＝bit一致。
-  const skel = opts.skel ?? genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: strongPos, start: opts.skelStart ?? 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds, arc: opts.arc, skelColor: opts.skelColor, chordPcsPerBar }); // C4/F4: 骨格ノブをV2でも透過。skelColor=強拍倚音の脱平面化(WP-M1・未指定=bit一致)。skelStart=前セクション最終音の近傍（section.prevEndPitch・未指定=62=bit一致）
+  const skel = opts.skel ?? genSkeletonFromModel(chordRootsPerBar, opts.skelModel ?? loadSkeletonModel(minor), sp, { tonicPc, seed, beatsPerBar: barLen, strongQuarters: strongPos, start: opts.skelStart ?? 62, repetition: opts.repetition, rangeSteps: opts.rangeSteps, phraseEnds, arc: opts.arc, skelColor: opts.skelColor, chordPcsPerBar, degPrior: opts.degPrior, degPriorStrength: opts.degPriorStrength }); // C4/F4: 骨格ノブをV2でも透過。skelColor=強拍倚音の脱平面化(WP-M1・未指定=bit一致)。skelStart=前セクション最終音の近傍（section.prevEndPitch・未指定=62=bit一致）
   const r = makeRng(seed + 5);
   // seedMotif 指定時は genBest をスキップしてそれを M に（補完=与モチーフを発展）。既定(未指定)は現挙動と完全一致。
   const M = opts.seedMotif ?? genBest(r);

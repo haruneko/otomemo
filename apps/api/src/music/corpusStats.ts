@@ -290,3 +290,21 @@ export function loadPhrasePatterns(db: Db, style: string, mode: string): PhraseP
   }
   return out;
 }
+
+// ── (WP-M1) 骨格度数 prior：loadSkeletonPriors（bin=クロマチックpc "0".."11"）→ **スケール度0..6** の重み Map。
+//   `genSkeletonFromModel` の度数サンプルは 0..6 空間ゆえ pc→度数へ写す。非ダイアトニックbin（各<1%）は破棄・合計1へ正規化。
+//   骨格構造音の度数分布を POP909 degHist へ弱バイアス（既定OFF＝未注入で bit 一致）。乱数不使用＝決定的。
+const MAJOR_PC2DEG = new Map<number, number>([[0, 0], [2, 1], [4, 2], [5, 3], [7, 4], [9, 5], [11, 6]]);
+const MINOR_PC2DEG = new Map<number, number>([[0, 0], [2, 1], [3, 2], [5, 3], [7, 4], [8, 5], [10, 6]]);
+export function skeletonDegPrior(priors: Record<string, PriorEntry[]>, feature: "degHist" | "startDeg" | "cadDeg", minor: boolean): Map<number, number> {
+  const pc2deg = minor ? MINOR_PC2DEG : MAJOR_PC2DEG;
+  const acc = new Map<number, number>();
+  for (const e of priors[feature] ?? []) {
+    const deg = pc2deg.get((((Number(e.bin) % 12) + 12) % 12));
+    if (deg === undefined) continue; // 非ダイアトニック（各<1%）は畳まず破棄
+    acc.set(deg, (acc.get(deg) ?? 0) + (Number(e.pct) || 0));
+  }
+  const total = [...acc.values()].reduce((a, b) => a + b, 0);
+  if (total > 0) for (const [k, v] of acc) acc.set(k, v / total); // 正規化＝strength の意味を安定に
+  return acc;
+}
