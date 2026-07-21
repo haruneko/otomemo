@@ -254,6 +254,16 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - ✅**他者 literal メロを統計化＋git外退避（commit 1cf55cb＋irish撤去・`scripts/migrate-corpus-compliance.ts`）**：CLAUDE.md「他者コーパスからは統計のみ抽出＝リテラルな旋律/モチーフは保存しない」に合わせ、cm.sqlite の**他者メロ全て（POP909 pop1087＋game100＝1187、＋irish転写157＝計1344句）を撤去**→git外(`data/backups/*.ndjson`＋DB丸ごと)退避。**library melody 1344→0**。生成の肌触りは motif モデル(rhythm+move count Map＝統計・full由来)を `data/corpus-stats/motif-model.json`(git外)へ焼き `learnMotifModelFromLibrary` が統計優先ロード＝**生成 bit 不変**（model(undefined)=224/15 維持を実機確認）。(A)literal句辞書も撤去済(a79c411)。irish も他者転写ゆえ撤去（`--tags=irish --no-stats`＝統計は full 保持で壊さず）。
 - **残（運用）**：①**picker おすすめのメロが空に**＝他者literal全除去の当然の帰結。**自作コーパス投入**(requirements:243「自分の素材＝伸びしろ」)で埋めるのが本筋。②**self-authored を library へ足す運用時＝motif-model 再焼き**（stats優先ゆえ live 追加が模型に入らない・将来 merge 化も可）。③コード進行 library(chord_progression 210)は**非著作物ゆえ据え置き**（(D)統計＋在DB literal とも可）。
 
+## 留保（自律ラン 2026-07-21・「行けるとこまで」で clean 分は消化・残りは要判断/複雑/要検証）
+自律ランで backend の bit安全・TDD検証できる分を消化（diverse chord候補・バリデータ常設）。以下は**前進の妨げになる分岐ゆえ留保**：
+- **和声リズム制御⑨（コード交替速度）**：`genChords` は `chords=base.map(1/bar)`（`generate.ts:348`）＝1小節1和音が構造に焼き付いてる。可変にするには**度数ウォーク(funcs/degrees)をコード枠単位に作り直す**必要＝bit安全な小改修でなく設計案件（既定1/barでbit一致は保てるが本体は invasive）。design 先。
+- **メロ音価バリエーション（rhythmicContrast）**：sampleBarRhythm への音価分布prior＝統計は motif-model(rhythm)に在るが結線は rhythm gen ホットパス＝要慎重TDD。WP-M1第2スライス級。
+- **WP-M1 第2スライス（cadDeg/contour）**：cadDeg は着地がルール固定でsmp非経由・contour は rng構造に触る＝slice A(degHist)と違い bit安全でない。design 先。
+- **web: コードトーンハイライト**：スケールハイライトは実装済(PianoRoll)。コードトーンは PianoRoll に chords 文脈を渡す配線＋pc算出＝実装可だが**視覚検証はオーナーの目**（jsdomはレイアウト測れない）。
+- **web: メロvelocity編集**：コード/ドラムの useHoldDrag 流用＝実装可だが視覚/操作検証はオーナー。
+- **gen_chords 多様候補の web 表示**：n>1 の複数items は chat-stream が候補カード化するはずだが**実機での見え方はオーナーの目**。
+共通＝**耳/目/創作判断が要る分と、design を起こす必要がある分**。機械で安全に出せる範囲は出し切った。
+
 ## データ収集（要ユーザー関与）
 - メロコーパスのデータ収集（Hooktheory 型・Task #59）。
 - 確認リストの維持（自走中の不明点・Task #10）。
