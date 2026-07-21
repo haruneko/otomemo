@@ -251,8 +251,8 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - ✔**既存: Chat生Markdown壁＝偽陽性**（大手術無関係・調査で棄却）：現行AIメッセージは P/OL/TABLE/UL/HR へ完全パース（ReactMarkdown+remarkGfm 正常・改行保持）。監査が見た壁は再現せず＝ストリーム途中orその1メッセージ固有の崩れ。**コード修正対象なし**（捏造修正しない）。もし現物で再現するメッセージがあれば別途調査。
 
 ## 著作権コンプライアンス（2026-07-21・他者literalコーパスの統計化）
-- ✅**他者 literal メロを統計化＋git外退避（commit 1cf55cb・`scripts/migrate-corpus-compliance.ts`）**：CLAUDE.md「他者コーパスからは統計のみ抽出＝リテラルな旋律/モチーフは保存しない」に合わせ、cm.sqlite の他者メロ（POP909 pop1087＋game100＝1187句）を撤去→git外(`data/backups/*.ndjson`＋DB丸ごと)退避。生成の肌触りは motif モデル(rhythm+move count Map＝統計)を `data/corpus-stats/motif-model.json`(git外)へ焼き `learnMotifModelFromLibrary` が統計優先ロード＝**生成 bit 不変**。library melody 1344→157(irish=PD残置)。(A)literal句辞書は撤去済(a79c411)。
-- **残（要判断）**：①**irish(157)を残すか**＝PD trad として残置したが、転写元の権利を厳格に見るなら撤去も（今は placeable）。②**picker おすすめのメロが irish のみに**＝他者literal除去の意図どおりだが、自作コーパス投入(requirements:243「自分の素材＝伸びしろ」)で埋めるのが本筋。③**self-authored を library へ足す運用時＝motif-model 再焼き**を忘れない（stats優先ゆえ live 追加が模型に入らない・将来 merge 化も可）。
+- ✅**他者 literal メロを統計化＋git外退避（commit 1cf55cb＋irish撤去・`scripts/migrate-corpus-compliance.ts`）**：CLAUDE.md「他者コーパスからは統計のみ抽出＝リテラルな旋律/モチーフは保存しない」に合わせ、cm.sqlite の**他者メロ全て（POP909 pop1087＋game100＝1187、＋irish転写157＝計1344句）を撤去**→git外(`data/backups/*.ndjson`＋DB丸ごと)退避。**library melody 1344→0**。生成の肌触りは motif モデル(rhythm+move count Map＝統計・full由来)を `data/corpus-stats/motif-model.json`(git外)へ焼き `learnMotifModelFromLibrary` が統計優先ロード＝**生成 bit 不変**（model(undefined)=224/15 維持を実機確認）。(A)literal句辞書も撤去済(a79c411)。irish も他者転写ゆえ撤去（`--tags=irish --no-stats`＝統計は full 保持で壊さず）。
+- **残（運用）**：①**picker おすすめのメロが空に**＝他者literal全除去の当然の帰結。**自作コーパス投入**(requirements:243「自分の素材＝伸びしろ」)で埋めるのが本筋。②**self-authored を library へ足す運用時＝motif-model 再焼き**（stats優先ゆえ live 追加が模型に入らない・将来 merge 化も可）。③コード進行 library(chord_progression 210)は**非著作物ゆえ据え置き**（(D)統計＋在DB literal とも可）。
 
 ## データ収集（要ユーザー関与）
 - メロコーパスのデータ収集（Hooktheory 型・Task #59）。

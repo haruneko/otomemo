@@ -14,7 +14,9 @@ import { openDb } from "../src/db";
 import { Core } from "../src/core";
 import { buildMotifModel, serializeMotifModel, deserializeMotifModel, type MotifModelStat } from "../src/music/corpusBias";
 
-const REMOVE_TAGS = ["pop", "game"]; // 他者copyright（POP909/ゲーム）。irish=PD は残す。
+// 撤去対象タグ＝既定 pop+game（他者copyright）。`--tags=irish` 等で上書き（irish転写も消す等）。
+const tagsArg = process.argv.find((a) => a.startsWith("--tags="));
+const REMOVE_TAGS = tagsArg ? tagsArg.slice("--tags=".length).split(",").map((s) => s.trim()).filter(Boolean) : ["pop", "game"];
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 
 function deepEqualModel(a: unknown, b: unknown): boolean { return JSON.stringify(a) === JSON.stringify(b); }
@@ -23,14 +25,17 @@ function main(): void {
   const dbPath = process.env.CM_DB;
   if (!dbPath) { console.error("usage: CM_DB=<path> tsx scripts/migrate-corpus-compliance.ts [--dry]"); process.exit(1); }
   const dry = process.argv.includes("--dry");
+  // --no-stats＝motif-model.json を焼かない（既に full library から焼き済みの時＝2回目以降の撤去で stats を壊さない）。
+  const noStats = process.argv.includes("--no-stats");
   const db = openDb(dbPath);
   const core = new Core(db);
 
   const allMels = core.listNeta({ kind: "melody", scope: "library", limit: 999999 } as never);
   const styleTags = ["pop", "irish", "game"];
-  console.log(`library melody: ${allMels.length}（${styleTags.map((t) => `${t}=${allMels.filter((m) => (m.tags ?? []).includes(t)).length}`).join(" / ")}）`);
+  console.log(`library melody: ${allMels.length}（${styleTags.map((t) => `${t}=${allMels.filter((m) => (m.tags ?? []).includes(t)).length}`).join(" / ")}）／remove tags=${REMOVE_TAGS.join("+")}${noStats ? " ／ --no-stats(既存statsを保持)" : ""}`);
 
   // ① style 別 motif モデルを焼く（__all__＝全 library・各 style＝タグ絞り）。serialize は配列＝順序保持。
+  // ※--no-stats 時はスキップ＝既存 motif-model.json(full library 由来) を壊さない。
   const stats: Record<string, MotifModelStat> = {};
   const put = (key: string, mels: typeof allMels) => {
     const m = buildMotifModel(mels);
@@ -40,12 +45,13 @@ function main(): void {
     stats[key] = ser;
     console.log(`  "${key}": rhythm ${ser.rhythm.length}パターン / move ${ser.move.length}遷移`);
   };
-  put("__all__", allMels);
-  for (const t of styleTags) put(t, allMels.filter((m) => (m.tags ?? []).includes(t)));
-
-  const statsPath = join(scriptDir, "..", "..", "..", "data", "corpus-stats", "motif-model.json");
-  if (dry) console.log(`[dry] would write ${statsPath}`);
-  else { mkdirSync(dirname(statsPath), { recursive: true }); writeFileSync(statsPath, JSON.stringify(stats)); console.log(`wrote ${statsPath}`); }
+  if (!noStats) {
+    put("__all__", allMels);
+    for (const t of styleTags) put(t, allMels.filter((m) => (m.tags ?? []).includes(t)));
+    const statsPath = join(scriptDir, "..", "..", "..", "data", "corpus-stats", "motif-model.json");
+    if (dry) console.log(`[dry] would write ${statsPath}`);
+    else { mkdirSync(dirname(statsPath), { recursive: true }); writeFileSync(statsPath, JSON.stringify(stats)); console.log(`wrote ${statsPath}`); }
+  } else console.log("  --no-stats: motif-model.json は既存を保持（再計算しない）");
 
   // ② pop+game の literal メロを git外(data/backups)へ退避＋③ DELETE。
   const removeMels = allMels.filter((m) => (m.tags ?? []).some((t) => REMOVE_TAGS.includes(t)));
