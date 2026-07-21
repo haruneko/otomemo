@@ -358,6 +358,11 @@
   flex-direction: column;
   gap: 10px;
 }
+/* #26 横スクロール表示＝1段を幅いっぱいに広げて横スクロール（Section と同じ兄弟性）。strip の min-width は JSX でbar数×px。 */
+.chord-timeline.scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
 .chord-tl-strip {
   display: flex;
   flex-direction: column;

@@ -59,6 +59,7 @@ export function ChordEditor({
   const [pickProg, setPickProg] = useState(false); // 空状態の「よく使う進行から選ぶ」を開いているか
   const [activeIdx, setActiveIdx] = useState(-1); // 再生中コード（プレイヘッド下）
   const [barsPerRow, setBarsPerRow] = useState(4); // 折り返し＝1段の小節数（幅で自動・既定4）
+  const [layout, setLayout] = useState<"wrap" | "scroll">("wrap"); // #26 折り返し(既定・一覧性)⇔横スクロール(1段・Sectionと同じ兄弟性)
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const chordsRef = useRef(chords); // ドラッグ中の最新値参照（move クロージャの stale 回避）
   chordsRef.current = chords;
@@ -155,7 +156,11 @@ export function ChordEditor({
     window.addEventListener("pointerup", up);
   }
 
-  const rows = wrapRows(chords, bpb, barsPerRow);
+  const totalBeats = chords.reduce((s, c) => s + c.dur, 0);
+  const totalBars = Math.max(1, Math.ceil(totalBeats / bpb));
+  // #26 横スクロール＝全小節を1段に収める（wrapRows が単一段を返す）。折り返し(既定)＝幅測定 barsPerRow で不変。
+  const effBarsPerRow = layout === "scroll" ? totalBars : barsPerRow;
+  const rows = wrapRows(chords, bpb, effBarsPerRow);
   // 段の絶対開始拍（累積）＋各コードの終端が乗る段（＝グリップ/シームを置く段）。
   let acc = 0;
   const rowAbs = rows.map((r) => {
@@ -165,7 +170,6 @@ export function ChordEditor({
   });
   const lastRowOf = new Map<number, number>();
   rows.forEach((r, ri) => r.segments.forEach((s) => lastRowOf.set(s.index, ri)));
-  const totalBeats = chords.reduce((s, c) => s + c.dur, 0);
 
   return (
     <div className="chord-editor">
@@ -181,6 +185,11 @@ export function ChordEditor({
             </button>
           </div>
           <span className="muted chord-total">計 {totalBeats}拍（{Math.round((totalBeats / bpb) * 10) / 10}小節）</span>
+          {/* #26 折り返し⇔横スクロールの表示トグル（既定=折り返し・状態はローカルのみ）。 */}
+          <div className="proll-modes chord-layout" aria-label="chord-layout">
+            <button type="button" aria-label="layout-wrap" title="折り返し（一覧性）" className={layout === "wrap" ? "on" : ""} onClick={() => setLayout("wrap")}>折返</button>
+            <button type="button" aria-label="layout-scroll" title="横スクロール（Sectionと同じ並び）" className={layout === "scroll" ? "on" : ""} onClick={() => setLayout("scroll")}>横</button>
+          </div>
         </div>
       )}
 
@@ -207,16 +216,16 @@ export function ChordEditor({
           )}
         </div>
       ) : (
-        <div className="chord-timeline" ref={wrapRef} aria-label="chord-timeline">
+        <div className={"chord-timeline" + (layout === "scroll" ? " scroll" : "")} ref={wrapRef} aria-label="chord-timeline">
           {rows.map((row, ri) => {
             const spanBeats = Math.max(1, row.bars * bpb);
             const endSegs = row.segments.filter((s) => lastRowOf.get(s.index) === ri);
             return (
-              <div className="chord-tl-strip" key={ri}>
+              <div className="chord-tl-strip" key={ri} style={layout === "scroll" ? { minWidth: `${totalBars * 64}px` } : undefined}>
                 {/* 小節番号ルーラ（この段の小節数だけ・グローバル通し番号）。 */}
                 <div className="chord-tl-ruler" aria-hidden="true">
                   {Array.from({ length: row.bars }).map((_, b) => (
-                    <span className="chord-bar-num" key={b}>{ri * barsPerRow + b + 1}</span>
+                    <span className="chord-bar-num" key={b}>{ri * effBarsPerRow + b + 1}</span>
                   ))}
                 </div>
                 <div className="chord-tl-row">

@@ -133,6 +133,22 @@ describe("ChordEditor（折り返しブロックタイムライン・#26）", ()
     expect(onChange).toHaveBeenCalledWith([{ root: 0, quality: "", start: 0, dur: 4 }]);
   });
 
+  it("#26 表示トグル：横スクロールで1段に畳む・折り返しは複数段（既定=折り返し）", async () => {
+    const onChange = vi.fn();
+    // 6コード×4拍=6小節。barsPerRow=4（jsdom は ResizeObserver 無し=既定4）→折り返し2段。
+    const chords = Array.from({ length: 6 }, (_, i) => ({ root: (i * 5) % 12, quality: "", start: i * 4, dur: 4 }));
+    const { container } = render(<ChordEditor chords={chords} onChange={onChange} />);
+    expect(container.querySelectorAll(".chord-tl-strip").length).toBe(2); // 折り返し=6/4=2段
+    expect(container.querySelector(".chord-timeline")!.className).not.toContain("scroll");
+
+    await userEvent.click(screen.getByLabelText("layout-scroll"));
+    expect(container.querySelectorAll(".chord-tl-strip").length).toBe(1); // 横スクロール=全小節1段
+    expect(container.querySelector(".chord-timeline")!.className).toContain("scroll");
+
+    await userEvent.click(screen.getByLabelText("layout-wrap"));
+    expect(container.querySelectorAll(".chord-tl-strip").length).toBe(2); // 折り返しへ戻る
+  });
+
   it("再生中はプレイヘッド下のブロックが .playing（#76）", () => {
     vi.useFakeTimers();
     const chords = [
