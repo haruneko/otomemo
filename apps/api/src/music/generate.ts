@@ -367,6 +367,30 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
   return withBarsWarning({ items: [{ kind: "chord_progression", content: { chords }, label }], edges: [], ...(meta ? { meta } : {}) }, frame);
 }
 
+// (D補強) 多様なコード候補＝1本に潰さず「王道〜攻め」を跨ぐ N 進行を返す（design「候補が無いと始まらない／最尤1本禁止」）。
+// corpus 在時は温度を段階的に振る（低=王道/高=攻め）＋seed を振り、同一進行は畳む。corpus 無しは seed だけ振る。
+// n=1（既定）は genChords 1本と同一＝bit 一致（gen_chords 既定経路は不変）。
+export function genChordCandidates(frame?: Frame | null, seed?: number | null, cadence?: Parameters<typeof genChords>[2], opts?: Parameters<typeof genChords>[3], n = 1): GenResult {
+  const N = Math.max(1, Math.floor(n));
+  if (N === 1) return genChords(frame, seed, cadence, opts); // 既定＝従来1本（bit一致）
+  const base = seed ?? 1;
+  const spread = opts?.transitions ? true : false; // corpus 在時のみ温度スプレッド
+  const items: GenResult["items"] = [];
+  const seen = new Set<string>();
+  for (let attempt = 0; attempt < N * 4 && items.length < N; attempt++) {
+    const pos = items.length; // 何本目か
+    const temp = spread ? 0.4 + (1.9 - 0.4) * (N > 1 ? pos / (N - 1) : 0) : opts?.temperature; // 王道(0.4)→攻め(1.9)
+    const r = genChords(frame, base + attempt, cadence, { ...opts, ...(spread ? { temperature: temp } : {}) });
+    const chords = ((r.items[0]?.content as { chords?: { root: number; quality: string }[] })?.chords) ?? [];
+    const key = JSON.stringify(chords.map((c) => [((c.root % 12) + 12) % 12, c.quality]));
+    if (seen.has(key)) continue; // 同一進行は畳む
+    seen.add(key);
+    const label = spread ? (temp! <= 0.7 ? "王道" : temp! >= 1.5 ? "攻め" : "標準") : `案${pos + 1}`;
+    items.push({ kind: "chord_progression", content: { chords }, label });
+  }
+  return { items, edges: [] };
+}
+
 function chordAt(t: number, chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[]) {
   for (const c of chords ?? []) {
     const s = Number(c.start ?? 0);

@@ -13,6 +13,7 @@ import {
   harmonize,
   nextChordCandidates,
   genChords,
+  genChordCandidates,
   genMelody,
   genMelodyCandidates,
   genLyricMelodyCandidates,
@@ -1243,13 +1244,13 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "generate",
-    { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝weave を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional(), corpus: z.boolean().optional().describe("中間のつなぎを実J-POPコーパスの手癖へ寄せる（既定OFF＝bit一致・境界/終止は構造層のまま）"), temperature: z.number().optional().describe("意外性ダイヤル（低=王道/最頻・高=攻め/裾の正当候補も顔を出す・既定1）。corpus:true時のみ有効") } },
-    async ({ kind, frame, name, seed, role, structure, corpus, temperature }) => {
+    { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝weave を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional(), corpus: z.boolean().optional().describe("中間のつなぎを実J-POPコーパスの手癖へ寄せる（既定OFF＝bit一致・境界/終止は構造層のまま）"), temperature: z.number().optional().describe("意外性ダイヤル（低=王道/最頻・高=攻め/裾の正当候補も顔を出す・既定1）。corpus:true時のみ有効"), n: z.number().int().min(1).max(6).optional().describe("候補数（既定1）。>1で王道〜攻めを跨ぐ複数進行を返す（corpus:true時は温度スプレッド・人が選ぶ用）") } },
+    async ({ kind, frame, name, seed, role, structure, corpus, temperature, n }) => {
       if (role || structure) return err("role/structure は未対応（③-7）。構造(連結等)は assemble/continue で組む。");
       if (name) return ok(genNamedProgression(name, frame));
       if (kind === "chord_progression") {
         const transitions = corpus && hasChordTransitions(core.db) ? loadChordTransitions(core.db, "pop", isMinorFrame(normalizeFrame(frame)) ? "minor" : "major") : undefined;
-        return ok(genChords(frame, seed, undefined, transitions ? { transitions, temperature } : undefined));
+        return ok(genChordCandidates(frame, seed, undefined, transitions ? { transitions, temperature } : undefined, n ?? 1));
       }
       return ok(genDrums(frame, seed));
     },

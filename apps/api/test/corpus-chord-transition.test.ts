@@ -10,7 +10,7 @@ import {
   type ChordTransitionModel,
 } from "../src/music/corpusStats";
 import { nextChordCandidates } from "../src/music/continuation";
-import { genChords } from "../src/music/generate";
+import { genChords, genChordCandidates } from "../src/music/generate";
 
 // (D) コード遷移統計（#21拡張・design「コーパス遷移統計テーブル 第2弾」＋緊張補強）。
 // 思想＝頻度は idiom バイアスであってランカーでない。正当性は文法・緊張は構造層+スパイス。ここは地の手癖のみ。
@@ -162,5 +162,31 @@ describe("(D) genChords 結線（注入無し=bit一致・注入時=手癖反映
       if (JSON.stringify(a) !== JSON.stringify(genChords(frame, seed))) anyDiff = true;
     }
     expect(anyDiff).toBe(true); // 少なくとも一部 seed で手癖が出力を動かす
+  });
+});
+
+describe("(D補強) genChordCandidates 多様候補（n=1=bit一致・n>1=複数・corpus=温度スプレッド）", () => {
+  const frame = { bars: 8, meter: "4/4", key: 0 };
+
+  it("n=1（既定）＝genChords 1本と bit 一致（回帰ゼロ）", () => {
+    for (const seed of [1, 2, 7]) {
+      expect(JSON.stringify(genChordCandidates(frame, seed, undefined, undefined, 1))).toBe(JSON.stringify(genChords(frame, seed)));
+    }
+  });
+
+  it("n>1＝複数の異なる進行を返す（seed 振り・同一は畳む）", () => {
+    const r = genChordCandidates(frame, 1, undefined, undefined, 3);
+    expect(r.items.length).toBeGreaterThanOrEqual(2);
+    const keys = r.items.map((it) => JSON.stringify((it.content as { chords: { root: number; quality: string }[] }).chords.map((c) => [c.root, c.quality])));
+    expect(new Set(keys).size).toBe(keys.length); // 重複なし
+    expect(r.items.every((it) => it.kind === "chord_progression")).toBe(true);
+  });
+
+  it("corpus 在＝温度スプレッドで王道/攻めラベルが付く", () => {
+    const bigram = new Map<string, [string, number][]>([["0q", [["5q", 70], ["7q", 26]]]]);
+    const r = genChordCandidates(frame, 1, undefined, { transitions: { bigram, trigram: new Map() } }, 3);
+    const labels = r.items.map((it) => it.label);
+    expect(labels).toContain("王道"); // pos0=温度0.4
+    expect(r.items.length).toBeGreaterThanOrEqual(2);
   });
 });
