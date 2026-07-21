@@ -493,7 +493,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt; degPrior?: Map<number, number>; degPriorStrength?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt; degPrior?: Map<number, number>; degPriorStrength?: number; rhythmicContrast?: number } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -528,12 +528,26 @@ export function genMotifMelodyV2(
   const finSkip = (s: number): boolean => (opts.finest === "eighth" ? s % 2 !== 0 : opts.finest === "quarter" ? s % 4 !== 0 : false);
   const runPairs = (p: string): number => { let c = 0; for (let i = 0; i + 1 < p.length; i++) if (p[i] === "x" && p[i + 1] === "x") c++; return c; };
   const runW = (p: string): number => (rns === undefined ? 1 : Math.pow(runPairs(p) + 1, rns * 1.5));
-  const rhythmVocab: Record<string, number> = dens === undefined && rns === undefined
+  // rhythmicContrast(2026-07-21・rc・正典 docs/research/2026-07-21-melody-note-value-and-harmonic-rhythm.md §5.1)：
+  // 句内リズム語彙に**付点 long-short セル**を注入し音価分布を正規化する乗算係数（densW/runW と同型）。「機械的」の芯＝
+  // 生成の付点ペア 0%（実POP16.7%）＝均等8分＋過大白玉の二極で中間階調が皆無＝これを付点注入で埋める。句末着地は flow の
+  // 領分＝rc は触らない。未指定/0＝係数1＝生語彙 bit一致（rc=0 は Math.pow(x,0)=1・×1.0 が IEEE754 厳密不変）。
+  const rc = opts.rhythmicContrast === undefined ? undefined : Math.max(0, Math.min(1, opts.rhythmicContrast));
+  // dottedCells(p)＝パターン p の隣接 onset 間隔が 3slot(0.75拍=付点8分) or 6slot(1.5拍=付点4分) の数＝付点セル。
+  const dottedCells = (p: string): number => {
+    let c = 0, prev = -1;
+    for (let i = 0; i < p.length; i++) { if (p[i] !== "x") continue; if (prev >= 0) { const g = i - prev; if (g === 3 || g === 6) c++; } prev = i; }
+    return c;
+  };
+  const rcW = (p: string): number => (rc === undefined ? 1 : Math.pow(dottedCells(p) + 1, 3 * rc));
+  const rhythmVocab: Record<string, number> = dens === undefined && rns === undefined && rc === undefined
     ? motif16.rhythm16
-    : Object.fromEntries(Object.entries(motif16.rhythm16).map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length) * runW(p)]));
+    : Object.fromEntries(Object.entries(motif16.rhythm16).map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length) * runW(p) * rcW(p)]));
 
   // 6/8リズム＝統一12枠語彙（RHYTHM68_DATA・16分基底）を densW×runW で再重み付けして抽選＝4/4 rhythmVocab と同型。
   // runW は runs未指定で ≡1 ＝既定は8分主体語が優勢。runs>0 で隣接16分ペア語（走句）が増幅。jig性格は語彙重みが担う。
+  // ★rc は 4/4 系のみ（rcW を掛けない）＝付点 long-short 対の実測は 4/4 pop 限定。複合12slot格子では g=6=6/8の素の1拍・
+  //   g=3=16分クロスで別物＝根拠なし（「6/8はドラム3ノブ対象外」と同じ前例）。∴6/8 は rc 有無で bit一致（テストで担保）。
   const pick68u = (r: () => number): string => {
     const rows = RHYTHM68_DATA.map(([p, w]) => [p, w * densW((p.match(/x/g) ?? []).length) * runW(p)] as [string, number]);
     const tot = rows.reduce((a, b) => a + b[1], 0);

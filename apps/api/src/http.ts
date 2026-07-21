@@ -245,6 +245,7 @@ export function buildHttp(core: Core): FastifyInstance {
             flow: num(b.flow), pickup: num(b.pickup), arc: b.arc === "arch" ? "arch" : undefined, // 句フレージング（連結/長音・弱起・山なり弧・2026-07-11・未指定=従来 bit 一致・role で自動発火）
             skeleton, // 骨格から吹き直す（design #20・未指定=従来 bit 一致）
             rhythmParts: sanitizeRhythmParts(b.rhythmParts, { bars: typeof b.frame?.bars === "number" ? b.frame.bars : undefined }), // リズムパーツ層 L1/L2（design #20 S4-1/S4-2・placement>rotate>L0・custom・未指定/不正=bit一致）
+            rhythmicContrast: num(b.rhythmicContrast), // 音価の長短対比＝付点long-short注入（2026-07-21・未指定/0=bit一致・句末はflow領分）
           });
           // 対位法レポートの添付（design #20 S3d・読み取り専用＝候補ノートは不変）。lower＝bass 明示/骨格明示ベース+コード導出/コード root 代用の順。
           attachMelodyVoiceLeading(res, { bass: bassN.length ? bassN : undefined, skeleton, chords: asChords(b.chords), beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });

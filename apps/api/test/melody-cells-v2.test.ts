@@ -860,3 +860,118 @@ describe("生成契約：dur>0・同一onset重複なし（監査バグ 2026-07-
     }
   });
 });
+
+// ── rhythmicContrast（rc・2026-07-21）：句内リズム語彙に付点 long-short セルを注入し音価分布を正規化 ──
+// 正典＝docs/research/2026-07-21-melody-note-value-and-harmonic-rhythm.md。既定 undefined/0＝生語彙 bit一致。
+// 芯＝「生成メロが機械的」の正体は CV0 でなく**付点 long-short ペアの欠落**（生成の付点系≈0%／実POP≈16.7%）。
+// rc は句内語彙に付点セル(onset間隔 0.75/1.5)を注入して分布を正規化する（句末着地は flow の領分＝rc は触らない）。
+import { RHYTHM_PART_PRESETS as RC_PARTS, partPatternOnsets as rcPartOnsets } from "../src/music/rhythmParts";
+describe("rhythmicContrast（rc・付点long-short注入・既定=bit一致）", () => {
+  const genRc = (seed: number, o: Record<string, unknown>) =>
+    genMotifMelodyV2(pcsPerBar, ROOTS, QUALS, sp, motif16, { seed, tonicPc: 0, minor: false, ...o }).sort((a, b) => a.start - b.start);
+  const nearD = (a: number, b: number) => Math.abs(a - b) < 0.06;
+  const median = (xs: number[]) => { const a = [...xs].sort((x, y) => x - y); return a.length ? (a.length % 2 ? a[(a.length - 1) / 2]! : (a[a.length / 2 - 1]! + a[a.length / 2]!) / 2) : 0; };
+  const isForbidden = (a: number) => a === 6 || a === 10 || a === 11 || a > 12;
+
+  it("OFF：rc 未指定/0＝多seed 全音一致（単独＋density/runs/flow 併用でも bit一致・回帰ゼロ）", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const base = JSON.stringify(gen(seed));
+      expect(JSON.stringify(genRc(seed, {})), `seed=${seed} rc未指定`).toBe(base);
+      expect(JSON.stringify(genRc(seed, { rhythmicContrast: 0 })), `seed=${seed} rc=0`).toBe(base);
+      // density/runs/flow との併用でも rc未指定=0 は現行と一致（生語彙 bit一致・×1.0 厳密不変）
+      for (const combo of [{ density: 0.7 }, { runs: 0.6 }, { flow: 0.35 }, { density: 0.5, runs: 0.4, flow: 0.35 }]) {
+        const b2 = JSON.stringify(genRc(seed, combo));
+        expect(JSON.stringify(genRc(seed, { ...combo, rhythmicContrast: 0 })), `seed=${seed} rc=0 ${JSON.stringify(combo)}`).toBe(b2);
+      }
+    }
+  });
+
+  it("ON：rc=1（flow=0.35・40seed×8小節）で付点 long-short ペアが実POP帯へ・CVが帯へ低下・種類増", () => {
+    const offLS: number[] = [], onLS: number[] = [], onCV: number[] = [], onKinds: number[] = [];
+    for (let seed = 1; seed <= 40; seed++) {
+      const off = genRc(seed, { flow: 0.35 });
+      const on = genRc(seed, { flow: 0.35, rhythmicContrast: 1 });
+      const lsRate = (ns: { dur: number }[]) => {
+        let ls = 0, pairs = 0;
+        for (let i = 0; i + 1 < ns.length; i++) { pairs++; const d0 = ns[i]!.dur, d1 = ns[i + 1]!.dur; if ((nearD(d0, 0.75) && d1 < 0.7) || (nearD(d0, 1.5) && d1 < 1.4)) ls++; }
+        return pairs ? ls / pairs : 0;
+      };
+      offLS.push(lsRate(off)); onLS.push(lsRate(on));
+      const win = on.filter((n) => n.start < 16).map((n) => n.dur);
+      if (win.length >= 2) { const m = win.reduce((a, b) => a + b, 0) / win.length; const v = win.reduce((a, b) => a + (b - m) ** 2, 0) / win.length; onCV.push(Math.sqrt(v) / m); onKinds.push(new Set(win.map((d) => Math.round(d * 100))).size); }
+    }
+    const offMed = median(offLS), onMed = median(onLS), cvMed = median(onCV), kindsMed = median(onKinds);
+    expect(offMed, `OFF 付点ペア率(${(offMed * 100).toFixed(1)}%)は僅少（実POPの欠落を再現）`).toBeLessThan(0.08);
+    expect(onMed, `ON 付点long-shortペア率 中央(${(onMed * 100).toFixed(1)}%) ≥8%`).toBeGreaterThanOrEqual(0.08);
+    expect(onMed, `ON 付点ペア率が OFF を上回る`).toBeGreaterThan(offMed);
+    expect(cvMed, `ON 句内CV 中央(${cvMed.toFixed(3)}) が 0.50-0.70 帯`).toBeGreaterThanOrEqual(0.50);
+    expect(cvMed, `ON 句内CV 中央(${cvMed.toFixed(3)}) が 0.50-0.70 帯`).toBeLessThanOrEqual(0.70);
+    expect(kindsMed, `ON 音価種類 中央(${kindsMed}) ≥4`).toBeGreaterThanOrEqual(4);
+  });
+
+  it("ON：rc=1でも既存不変量を維持（禁則ゼロ/dur>0/終止コード音着地・同seed再現一致）", () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const notes = genRc(seed, { flow: 0.35, rhythmicContrast: 1 });
+      expect(JSON.stringify(genRc(seed, { flow: 0.35, rhythmicContrast: 1 })), `seed=${seed} 決定的`).toBe(JSON.stringify(notes));
+      expect(notes.every((n) => n.dur > 0), `seed=${seed} 全 dur>0`).toBe(true);
+      for (let i = 1; i < notes.length; i++) {
+        const a = Math.abs(notes[i]!.pitch - notes[i - 1]!.pitch);
+        if (isForbidden(a)) expect(arpOK(notes, i), `seed=${seed} i=${i} 禁則跳躍(${a})は両端コード音のアルペジオのみ`).toBe(true);
+      }
+      // 終止＝最終onsetは「その音が居る小節」のコード音へ着地（B1・tonic∈最終コードなら主音／無ければ最寄りコード音）。
+      const lastN = notes[notes.length - 1]!, lp = ((lastN.pitch % 12) + 12) % 12;
+      const lastBarPcs = pcsPerBar[Math.min(pcsPerBar.length - 1, Math.floor(lastN.start / 4))]!;
+      expect(lastBarPcs.includes(lp), `seed=${seed} 終止音(bar${Math.floor(lastN.start / 4)})がコード音に着地`).toBe(true);
+    }
+  });
+
+  it("ON+rhythmParts 活性＝rc バイパス（onset はパーツ優先・rc有無で同一 onset 列）", () => {
+    const rp = { rotate: ["whole", "eighths", "sixteenths"] };
+    for (let seed = 1; seed <= 8; seed++) {
+      const onsetsOf = (rc?: number) => genRc(seed, { rhythmParts: rp, rhythmicContrast: rc }).map((n) => Math.round(n.start * 1000));
+      expect(onsetsOf(1), `seed=${seed} パーツ活性時 rc=1 の onset がパーツ通り(rc未指定と一致)`).toEqual(onsetsOf(undefined));
+      // パーツonsetそのもの（bar0=whole＝拍0のみ）＝rc が語彙を触っていない証拠
+      const bar0 = genRc(seed, { rhythmParts: rp, rhythmicContrast: 1 }).filter((n) => n.start < 4).map((n) => n.start);
+      expect(bar0, `seed=${seed} bar0=whole のonset`).toEqual(rcPartOnsets(RC_PARTS.whole!, 4));
+    }
+  });
+
+  // ── 監査修正#1（2026-07-21）：6/8(compound) は rc 対象外＝付点対比は 4/4 系のみ。6/8 は rc 有無で bit一致 ──
+  it("6/8(compound)＝rc 非対象（rc=1/0.5 でも rc未指定と bit一致・pick68u に rcW を掛けない）", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const base = JSON.stringify(genRc(seed, { compound: true }));
+      expect(JSON.stringify(genRc(seed, { compound: true, rhythmicContrast: 1 })), `seed=${seed} 6/8 rc=1`).toBe(base);
+      expect(JSON.stringify(genRc(seed, { compound: true, rhythmicContrast: 0.5 })), `seed=${seed} 6/8 rc=0.5`).toBe(base);
+    }
+  });
+
+  // ── 監査修正#2（2026-07-21）：モチーフ反復(A/A')が rc で壊れない＝bar i と bar i+2 の onset 列が一致（監査実測1.000）──
+  it("A/A' onset 同一性：repetition=0.9・rc=1 で bar0≡bar2・bar1≡bar3 の onset 列が一致（rc が反復を壊さない）", () => {
+    // 16分格子へ量子化した「小節内 onset 集合」文字列。bar b の音を bar 頭相対で 16分(×4)へ丸める。
+    const barGrid = (notes: { start: number }[], b: number): string =>
+      [...new Set(notes.filter((n) => Math.floor(n.start / 4) === b).map((n) => Math.round((n.start - b * 4) * 4)))].sort((x, y) => x - y).join(",");
+    for (let seed = 1; seed <= 20; seed++) {
+      const on = genRc(seed, { repetition: 0.9, rhythmicContrast: 1 });
+      expect(barGrid(on, 2), `seed=${seed} bar2 の onset 列が bar0(A) と一致`).toBe(barGrid(on, 0));
+      expect(barGrid(on, 3), `seed=${seed} bar3 の onset 列が bar1(A') と一致`).toBe(barGrid(on, 1));
+    }
+  });
+
+  // ── 監査修正#3（2026-07-21）：GPR2b 偽境界の弁＝句中の「長音＋休符」(dur≥1 & gap≥0.5)件数が ON ≤ OFF（監査実測 ON49<OFF77）──
+  it("GPR2b 偽境界：句中の dur≥1 かつ 次onsetまで gap≥0.5 の件数が rc=1(ON) ≤ OFF（40seed 合計・偽の句切れを増やさない）", () => {
+    let onTotal = 0, offTotal = 0;
+    const falseBoundaries = (notes: { start: number; dur: number }[]): number => {
+      let c = 0;
+      for (let i = 0; i + 1 < notes.length; i++) {
+        const gap = notes[i + 1]!.start - (notes[i]!.start + notes[i]!.dur); // 音の後の休符（IOI - dur）
+        if (notes[i]!.dur >= 1 && gap >= 0.5) c++;
+      }
+      return c;
+    };
+    for (let seed = 1; seed <= 40; seed++) {
+      offTotal += falseBoundaries(genRc(seed, { flow: 0.35 }));
+      onTotal += falseBoundaries(genRc(seed, { flow: 0.35, rhythmicContrast: 1 }));
+    }
+    expect(onTotal, `ON(rc=1) 偽境界 合計${onTotal} ≤ OFF 合計${offTotal}`).toBeLessThanOrEqual(offTotal);
+  });
+});
