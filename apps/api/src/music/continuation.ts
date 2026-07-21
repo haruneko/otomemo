@@ -44,11 +44,14 @@ export function nextChordCandidates(progression: Degree[], opts: { mode?: Mode; 
   }
   const seen = new Set<number>();
   let res = out.filter((c) => (seen.has(c.degree) ? false : (seen.add(c.degree), true)));
-  // (D) コーパス在時＝bigram(ctx=直前コードトークン)の count で安定降順に並べ替え（同 count は元順＝機能文法順を保持）。
-  //   ctx 未ヒット or count 0 のみ＝並びは不変＝実質 bit 一致（degrade gracefully）。
+  // (D) コーパス在時＝直前2コードの trigram（無ければ直前1コードの bigram）の count で安定降順に並べ替え
+  //   （同 count は元順＝機能文法順を保持）。ctx 未ヒット＝並び不変＝実質 bit 一致（degrade gracefully）。
   const tr = opts.transitions;
   if (tr && last) {
-    const entries = tr.bigram.get(chordTok({ root: lastDeg, quality: last.quality }));
+    const lastTok = chordTok({ root: lastDeg, quality: last.quality });
+    const prev = prog[prog.length - 2];
+    const triEntries = prev ? tr.trigram.get(`${chordTok({ root: ((prev.degree % 12) + 12) % 12, quality: prev.quality })}>${lastTok}`) : undefined;
+    const entries = triEntries?.length ? triEntries : tr.bigram.get(lastTok);
     if (entries?.length) {
       const cnt = new Map(entries);
       res = res

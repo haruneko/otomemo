@@ -253,8 +253,10 @@ export function genChords(frame?: Frame | null, seed?: number | null, cadence?: 
     //   注入無し/ctx 未ヒット＝下の固定重み(現行)へ＝bit一致。先頭・末尾(=I)は後段で上書き＝緊張の置き場は構造層が担う。
     let trEntries: [string, number][] | undefined;
     if (opts?.transitions && i > 0) {
-      const pe = table[degrees[i - 1]!]!; // [root_pc, quality]
-      trEntries = opts.transitions.bigram.get(chordTok({ root: pe[0], quality: pe[1] }));
+      const p1 = table[degrees[i - 1]!]!; // [root_pc, quality]
+      const tok1 = chordTok({ root: p1[0], quality: p1[1] });
+      if (i >= 2) { const p2 = table[degrees[i - 2]!]!; trEntries = opts.transitions.trigram.get(`${chordTok({ root: p2[0], quality: p2[1] })}>${tok1}`); } // 直前2コードの trigram 優先
+      trEntries = trEntries?.length ? trEntries : opts.transitions.bigram.get(tok1); // 無ければ bigram フォールバック
     }
     if (trEntries?.length) {
       const toks = cands.map((dg) => { const e = table[dg]!; return chordTok({ root: e[0], quality: e[1] }); });
