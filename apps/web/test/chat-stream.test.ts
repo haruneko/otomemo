@@ -79,7 +79,7 @@ describe("classifyTool", () => {
     expect(classifyTool("revise")).toBe("write");
     expect(classifyTool("assemble")).toBe("write");
     expect(classifyTool("generate")).toBe("candidate");
-    expect(classifyTool("fit")).toBe("candidate");
+    expect(classifyTool("weave")).toBe("candidate"); // 旧 fit（2026-07-21 改名）
     expect(classifyTool("search")).toBe("read");
     expect(classifyTool("analyze")).toBe("read");
   });
