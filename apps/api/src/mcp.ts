@@ -906,7 +906,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   } // ← if(legacy) ここまで＝full のみ legacy を登録。surface="chat" は以下の共通 verbs だけ。
 
   // ── #101 目的ツール面（10 thin verbs）。chat面はこれだけ＝モデルが旧ツールを掴まない。既存エンジンへ dispatch、未実装は明示エラー(捏造禁止)。
-  //    A 書込: capture/revise/assemble ｜ B 生成(候補・保存しない): generate/fit/reshape/convert/continue ｜ C 読取: search/analyze
+  //    A 書込: capture/revise/assemble ｜ B 生成(候補・保存しない): generate/weave/reshape/convert/continue ｜ C 読取: search/analyze
   //    横断概念(range/feel/style)はB群の修飾引数で吸収(fat化させない)。role/structure(連結)は assemble/continue 側。
   server.registerTool(
     "capture",
@@ -1237,7 +1237,7 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   );
   server.registerTool(
     "generate",
-    { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝fit を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional() } },
+    { title: "作る（枠/様式から・候補）", description: "既存に依存せず枠/様式からコード進行(or rhythm)候補を作る。melody/bass は基準が要る＝weave を使う。保存しない。", inputSchema: { kind: z.enum(["chord_progression", "rhythm"]), frame: frameSchema, name: z.string().optional().describe("名前付き進行(丸の内/カノン等)"), seed: z.number().int().optional(), role: z.string().optional(), structure: z.string().optional() } },
     async ({ kind, frame, name, seed, role, structure }) => {
       if (role || structure) return err("role/structure は未対応（③-7）。構造(連結等)は assemble/continue で組む。");
       if (name) return ok(genNamedProgression(name, frame));
@@ -1246,15 +1246,15 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     },
   );
   server.registerTool(
-    "fit",
-    { title: "合わせる（基準に噛ませる・候補）", description: "コードやメロという「基準」に噛み合う音（メロ/ベース/ハモ/対旋律）を作る・直したいとき使う。※歌詞は扱わない＝「メロに歌詞を合わせたい／詞に合うメロを作りたい」なら gen_melody の lyrics（歌詞→音数ぴったりのメロ）・suggest_lyric_rhythm（歌詞の譜割りを先に見る）・analyze_lyric_fit（乗せた後の歌いやすさ点検）へ。必ず基準(chords/melody)を入力に取りそれに噛み合うものを作る/直す。コードに合うメロ・既存メロの補正・ハモ付け・対旋律(counter=主メロの間まに絡む第2声)。候補は generate と同じ items 形({items:[{kind,content}]})で返る。保存しない。", inputSchema: { target: z.enum(["melody", "bass", "chords", "counter"]), frame: frameSchema, chords: chordsSchema.optional(), melody: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), seed: z.number().int().optional(), style: z.string().optional().describe("コーパスstyle(irish/game等)。melody新規生成時に歩幅をその統計へ寄せる") } },
+    "weave",
+    { title: "絡める（基準＝コード/メロに噛み合うパートを作る・候補）", description: "コードやメロという「基準」に噛み合う音（メロ/ベース/ハモ/対旋律）を作る・直したいとき使う。※歌詞は扱わない＝「メロに歌詞を合わせたい／詞に合うメロを作りたい」なら gen_melody の lyrics（歌詞→音数ぴったりのメロ）・suggest_lyric_rhythm（歌詞の譜割りを先に見る）・analyze_lyric_fit（乗せた後の歌いやすさ点検）へ。必ず基準(chords/melody)を入力に取りそれに噛み合うものを作る/直す。コードに合うメロ・既存メロの補正・ハモ付け・対旋律(counter=主メロの間まに絡む第2声)。候補は generate と同じ items 形({items:[{kind,content}]})で返る。保存しない。", inputSchema: { target: z.enum(["melody", "bass", "chords", "counter"]), frame: frameSchema, chords: chordsSchema.optional(), melody: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), seed: z.number().int().optional(), style: z.string().optional().describe("コーパスstyle(irish/game等)。melody新規生成時に歩幅をその統計へ寄せる") } },
     async ({ target, frame, chords, melody, key, mode, seed, style }) => {
       if (target === "counter") { // WP-X3a 対旋律＝主メロ(melody)必須。主メロの間まに絡む第2声（音域分離/相補/2度回避/反行）。
-        if (!melody?.length) return err("fit counter は基準 melody(主メロ) が必須");
+        if (!melody?.length) return err("weave counter は基準 melody(主メロ) が必須");
         return ok(genCounter(frame, melody, chords, seed));
       }
       if (target === "melody") {
-        if (!chords) return err("fit melody は基準 chords が必須");
+        if (!chords) return err("weave melody は基準 chords が必須");
         if (melody) {
           const r = fitToChords(melody, chords, key); // 既存メロをコードへ追従(U10)
           // C③ 候補は generate と同じ items 形に統一（web/脳が返り型で分岐せずに済む）。補正スコアは meta へ。
@@ -1264,14 +1264,14 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
         // corpusModel＝ライブラリ学習(自分/コーパスらしさ)。seed 明示時は決定的な単一（従来どおり）。
         const corpusModel = learnMotifModelFromLibrary(core, style);
         // J2c(2026-07-11)：useV2:true＝gen_melody と同じ本線へ（従来この経路だけ useV2 無し＝旧経路③④に落ちていた。
-        // fit のメロ候補の質を V2 に揃える意図的変更。4/4|複合拍+chords はV2・ゲート外れは従来どおりフォールバック）。
+        // weave のメロ候補の質を V2 に揃える意図的変更。4/4|複合拍+chords はV2・ゲート外れは従来どおりフォールバック）。
         return ok(genMelodyCandidates(frame, chords, seed, { useV2: true, motifModel: corpusModel ?? undefined, corpusModel })); // コードに合う新規メロ候補(U3・style でコーパス bias)
       }
       if (target === "bass") {
-        if (!chords) return err("fit bass は基準 chords が必須");
+        if (!chords) return err("weave bass は基準 chords が必須");
         return ok(genBass(frame, chords));
       }
-      if (!melody) return err("fit chords(ハモ付け) は基準 melody が必須");
+      if (!melody) return err("weave chords(ハモ付け) は基準 melody が必須");
       // C③ ハモ付けも items 形に統一：各小節の最有力を1進行に、代替候補は meta.bars に残す。
       const bpb = meterInfo(frame?.meter).beatsPerBar;
       const bars = harmonize(melody, key ?? 0, { mode });

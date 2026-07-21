@@ -40,7 +40,7 @@ function isKnowledgeWorthy(text?: string): boolean {
   return t.includes("\n") || t.length >= KNOWLEDGE_MIN_CHARS;
 }
 
-// #100④-S3b turn 中の tool 結果カード。候補（generate/fit…）＝試聴＋保存／書込（capture）＝開く＋取り消す(可逆)。
+// #100④-S3b turn 中の tool 結果カード。候補（generate/weave…）＝試聴＋保存／書込（capture）＝開く＋取り消す(可逆)。
 function ChatToolCard({
   card,
   onOpen,

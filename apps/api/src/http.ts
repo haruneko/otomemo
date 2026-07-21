@@ -954,7 +954,7 @@ export function buildHttp(core: Core): FastifyInstance {
       // ③ 対象ネタの文脈：thread が neta id なら「今どのネタの話か」を Claude に伝える＝song_state 等が使える。
       const target = core.getNeta(thread);
       const targetNote = target
-        ? `[Current neta] You are working on neta id="${target.id}" (kind=${target.kind}${target.title ? `, title="${target.title}"` : ""}). When the user refers to "this song / this melody / 次どうする / 詰まった", operate on this id (e.g. song_state, analyze, fit).`
+        ? `[Current neta] You are working on neta id="${target.id}" (kind=${target.kind}${target.title ? `, title="${target.title}"` : ""}). When the user refers to "this song / this melody / 次どうする / 詰まった", operate on this id (e.g. song_state, analyze, weave).`
         : "";
       // ④ 機材相談：専用グローバルスレッド。器に紐づかない全曲共通の知識として答え/貯める。
       const gearNote = thread === "gear"

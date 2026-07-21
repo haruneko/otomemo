@@ -83,7 +83,7 @@ export function parseTurnEvent(ev: Ev): TurnAction[] {
 }
 
 const WRITE_VERBS = new Set(["capture", "revise", "assemble"]);
-const CANDIDATE_VERBS = new Set(["generate", "fit", "reshape", "continue", "convert"]);
+const CANDIDATE_VERBS = new Set(["generate", "weave", "reshape", "continue", "convert"]); // weave＝旧 fit（2026-07-21 改名）
 
 /** ツールを 書込/候補/読取 に分類（カードの描き分け）。 */
 export function classifyTool(name: string): "write" | "candidate" | "read" {
@@ -98,7 +98,7 @@ export interface ToolCard {
   tool: string; // verb（prefix 無し）
   label: string; // 人間語
   klass: "write" | "candidate" | "read";
-  items?: ToolCardItem[]; // 候補（generate/fit…）
+  items?: ToolCardItem[]; // 候補（generate/weave…）
   neta?: { id?: string; kind?: string; content?: unknown; text?: string | null; key?: number; tempo?: number }; // 書込結果
 }
 

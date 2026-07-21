@@ -17,7 +17,7 @@ type Ev = Record<string, unknown>;
 // ②歌詞↔メロ(read_neta/set_lyric) はここに無くて実際は動いていなかった（E2Eで発覚・2026-07-05）。
 // 素の verb 名（プレフィクス無し）＝mcp.ts の surface="chat" 登録と機械照合する（chat-session.test.ts の不一致検査）。
 export const CHAT_VERB_NAMES = [
-  "capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze",
+  "capture", "revise", "assemble", "generate", "weave", "reshape", "convert", "continue", "search", "analyze",
   "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords",
   "start_study", // #S11 横断研究（コードレンズ）
   "suggest_lyric_rhythm", "analyze_lyric_fit", // WP-M5 ②歌詞↔メロ プロソディ（design #13b・許可漏れ厳禁＝過去BUG#1型）
@@ -60,7 +60,7 @@ It does NOT mean N separate candidates.
 [Offer 2-3 candidates] Too many choices kill judgment. For each, add one line on how it differs.
 
 [Read before you generate] If relevant neta/progressions exist, use search/analyze to grasp
-the foundation before calling generate/fit.
+the foundation before calling generate/weave.
 
 [Gear / owner's knowledge base] The owner keeps long-term knowledge as kind:"knowledge" neta
 (e.g. 機材インベントリ＝音源/エフェクト/インフラの在庫). For any question about their gear,
@@ -68,16 +68,16 @@ plugins, sound sources or setup: FIRST search { q: <topic>, kind: "knowledge" } 
 to all), then read_neta the hits for full text before answering. Never answer gear questions
 from general knowledge alone when an inventory exists.
 
-[Never generate melody or bass alone] They need a basis. Build on chords via fit.
+[Never generate melody or bass alone] They need a basis. Build on chords via weave.
 
 [Commit only on the user's OK] Candidates are not saved. Only capture/revise once the user
 says to adopt one. Never finalize on your own.
 
-[Fix from evidence] Before reshape/fit, use analyze to see WHY it sounds the way it does,
+[Fix from evidence] Before reshape/weave, use analyze to see WHY it sounds the way it does,
 put that into words, then change it.
 
 [Style by corpus] When the user asks for a specific flavor (e.g. Irish, game-music), pass a
-"style" arg to generate/fit (style:"irish" or "game") so the melody leans on the learned
+"style" arg to generate/weave (style:"irish" or "game") so the melody leans on the learned
 corpus's idiom. Omit it for the neutral default.
 
 [Web search] You CAN browse the web (WebSearch / WebFetch). Use it when the user wants to look

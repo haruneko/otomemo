@@ -5,7 +5,7 @@ import { openDb } from "../src/db";
 import { Core } from "../src/core";
 import { buildMcpServer } from "../src/mcp";
 
-// C③：fit はどの target/引数でも generate と同じ items 形 {items:[{kind,content}]} で返す
+// C③：weave（旧 fit・2026-07-21 改名）はどの target/引数でも generate と同じ items 形 {items:[{kind,content}]} で返す
 //（web の chat-stream は payload.items を前提にカード化＝形が崩れると候補が描画されない）。
 // C④：drums(rhythm) は beatsPerStep を持ち step↔拍 が自己記述になっている。
 
@@ -30,10 +30,10 @@ const MELODY = [
   { pitch: 67, start: 4, dur: 1 },
 ];
 
-describe("C③ fit は全 target で items 形に統一", () => {
+describe("C③ weave は全 target で items 形に統一", () => {
   it("target=melody・既存メロ補正：items[0].content.notes＋meta.before/after", async () => {
     const { client } = await connect();
-    const p = payload(await client.callTool({ name: "fit", arguments: { target: "melody", frame: { meter: "4/4" }, chords: CHORDS, melody: MELODY } }));
+    const p = payload(await client.callTool({ name: "weave", arguments: { target: "melody", frame: { meter: "4/4" }, chords: CHORDS, melody: MELODY } }));
     expect(Array.isArray(p.items), "items 配列").toBe(true);
     expect(p.items[0].kind).toBe("melody");
     expect(Array.isArray(p.items[0].content.notes)).toBe(true);
@@ -43,7 +43,7 @@ describe("C③ fit は全 target で items 形に統一", () => {
 
   it("target=melody・新規メロ：items 形", async () => {
     const { client } = await connect();
-    const p = payload(await client.callTool({ name: "fit", arguments: { target: "melody", frame: { meter: "4/4", bars: 2 }, chords: CHORDS } }));
+    const p = payload(await client.callTool({ name: "weave", arguments: { target: "melody", frame: { meter: "4/4", bars: 2 }, chords: CHORDS } }));
     expect(Array.isArray(p.items)).toBe(true);
     expect(p.items[0].content.notes.length).toBeGreaterThan(0);
   });
@@ -51,7 +51,7 @@ describe("C③ fit は全 target で items 形に統一", () => {
   it("target=melody・新規メロは V2 本線に乗る（J2c 2026-07-11＝useV2 無しで旧経路③④に落ちていた是正）", async () => {
     const { client } = await connect();
     const args = { target: "melody", frame: { meter: "4/4", bars: 2 }, chords: CHORDS, seed: 7 };
-    const p = payload(await client.callTool({ name: "fit", arguments: args }));
+    const p = payload(await client.callTool({ name: "weave", arguments: args }));
     // gen_melody（常に useV2:true）と同一 seed・同一入力で同一ノートになる＝同じ本線を通っている証拠。
     const g = payload(await client.callTool({ name: "gen_melody", arguments: { frame: { meter: "4/4", bars: 2 }, chords: CHORDS, seed: 7 } }));
     expect(JSON.stringify(p.items[0].content.notes)).toBe(JSON.stringify(g.items[0].content.notes));
@@ -59,14 +59,14 @@ describe("C③ fit は全 target で items 形に統一", () => {
 
   it("target=bass：items 形", async () => {
     const { client } = await connect();
-    const p = payload(await client.callTool({ name: "fit", arguments: { target: "bass", frame: { meter: "4/4", bars: 2 }, chords: CHORDS } }));
+    const p = payload(await client.callTool({ name: "weave", arguments: { target: "bass", frame: { meter: "4/4", bars: 2 }, chords: CHORDS } }));
     expect(Array.isArray(p.items)).toBe(true);
     expect(p.items[0].kind).toBe("bass");
   });
 
   it("target=chords・ハモ付け：items[0].content.chords＋meta.bars に代替候補", async () => {
     const { client } = await connect();
-    const p = payload(await client.callTool({ name: "fit", arguments: { target: "chords", frame: { meter: "4/4" }, melody: MELODY, key: 0 } }));
+    const p = payload(await client.callTool({ name: "weave", arguments: { target: "chords", frame: { meter: "4/4" }, melody: MELODY, key: 0 } }));
     expect(Array.isArray(p.items)).toBe(true);
     expect(p.items[0].kind).toBe("chord_progression");
     expect(Array.isArray(p.items[0].content.chords)).toBe(true);

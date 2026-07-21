@@ -120,10 +120,10 @@ describe("mcp tool layer", () => {
 });
 
 // #101 目的ツール面（10 thin verbs）。機械動作名(39)を目的語へ畳む。既存39は残置(additive)、チャットは --tools で10だけ見る。
-// 研究反映：transform は fat tool 回避で reshape(feel/range)＋convert(移調/拍子・確定) に2分割。generate↔fit は入力で排他。
+// 研究反映：transform は fat tool 回避で reshape(feel/range)＋convert(移調/拍子・確定) に2分割。generate↔weave は入力で排他。
 describe("purpose tool surface (#101)", () => {
   // ③ song_state/plan_next・② read_neta/set_lyric・① analyze_audio・#S11 start_study・WP-M5 ②プロソディ2本・WP-C3 suggest_cliche・WP-C2 suggest_key_plan を追加（10→21）。旧39は隠したまま。
-  const VERBS = ["capture", "revise", "assemble", "generate", "fit", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords", "start_study", "suggest_lyric_rhythm", "analyze_lyric_fit", "sing_neta", "suggest_cliche", "suggest_key_plan", "suggest_form", "suggest_energy_plan", "suggest_emotion_params", "check_loop", "check_originality"];
+  const VERBS = ["capture", "revise", "assemble", "generate", "weave", "reshape", "convert", "continue", "search", "analyze", "song_state", "plan_next", "read_neta", "set_lyric", "analyze_audio", "fetch_chords", "start_study", "suggest_lyric_rhythm", "analyze_lyric_fit", "sing_neta", "suggest_cliche", "suggest_key_plan", "suggest_form", "suggest_energy_plan", "suggest_emotion_params", "check_loop", "check_originality"];
 
   it("目的ツール(20)を公開する", async () => {
     const { client } = await connect();
@@ -213,13 +213,13 @@ describe("purpose tool surface (#101)", () => {
     expect(textOf(r)).toContain("notes");
   });
 
-  it("P1：fit(target:melody) は1本に潰さず複数の候補を返す（自己進化ループ）", async () => {
+  it("P1：weave(target:melody) は1本に潰さず複数の候補を返す（自己進化ループ）", async () => {
     const { client } = await connect();
     const chords = [
       { root: 0, quality: "", start: 0, dur: 4 }, { root: 9, quality: "m", start: 4, dur: 4 },
       { root: 5, quality: "", start: 8, dur: 4 }, { root: 7, quality: "", start: 12, dur: 4 },
     ];
-    const r = JSON.parse(textOf(await client.callTool({ name: "fit", arguments: { target: "melody", frame: { bars: 4, meter: "4/4", key: 0 }, chords } })));
+    const r = JSON.parse(textOf(await client.callTool({ name: "weave", arguments: { target: "melody", frame: { bars: 4, meter: "4/4", key: 0 }, chords } })));
     expect(Array.isArray(r.items)).toBe(true);
     expect(r.items.length).toBeGreaterThanOrEqual(2); // 候補（1本に潰さない）
     for (const it of r.items) {
@@ -228,7 +228,7 @@ describe("purpose tool surface (#101)", () => {
       expect(it.score).toBeUndefined(); // 総合スコアは出さない（哲学：候補まで）
     }
     // seed 明示は決定的な単一（従来の1本）。
-    const one = JSON.parse(textOf(await client.callTool({ name: "fit", arguments: { target: "melody", frame: { bars: 4, meter: "4/4", key: 0 }, chords, seed: 3 } })));
+    const one = JSON.parse(textOf(await client.callTool({ name: "weave", arguments: { target: "melody", frame: { bars: 4, meter: "4/4", key: 0 }, chords, seed: 3 } })));
     expect(one.items.length).toBe(1);
   });
 
