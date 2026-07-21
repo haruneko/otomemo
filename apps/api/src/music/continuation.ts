@@ -2,6 +2,7 @@
 // 「この進行の次は？/サビへ緊張を作る」の足場。質は進行間の遷移統計（コーパス）で上がる＝今は素朴版（confirm-list）。
 import { type Degree, DIATONIC_CHORDS_MAJOR, DIATONIC_CHORDS_MINOR } from "./theory";
 import { functionOf, type Mode, type Func } from "./function";
+import { chordTok, type ChordTransitionModel } from "./corpusStats";
 
 // ダイアトニック＝theory.ts の正準表（短調はV7/vii°込み＝生成側と一致・A4統一 2026-07-08）。
 const DIA_MAJOR = DIATONIC_CHORDS_MAJOR;
@@ -20,8 +21,11 @@ function whyFor(from: Func, to: Func): string {
   return "次の機能へ";
 }
 
-/** 進行の最後のコードの機能から、次に来やすいコード候補を上位 top件（既定4）。 */
-export function nextChordCandidates(progression: Degree[], opts: { mode?: Mode; top?: number } = {}): NextCandidate[] {
+/** 進行の最後のコードの機能から、次に来やすいコード候補を上位 top件（既定4）。
+ *  opts.transitions 注入時＝機能文法で作った"正当"候補を、実J-POPの遷移カウント(bigram)で安定降順に並べ替える
+ *  （未見は末尾・弾かない＝正当性は文法が担う／design「コーパス遷移統計テーブル 第2弾」の補強＝頻度はランカーでなく
+ *  並べ替え眼鏡）。**注入無し＝現行の機能文法順（bit一致）**。緊張の"置き場"は別層＝ここは同機能内の手癖だけ効かせる。 */
+export function nextChordCandidates(progression: Degree[], opts: { mode?: Mode; top?: number; transitions?: ChordTransitionModel } = {}): NextCandidate[] {
   const mode = opts.mode ?? "major";
   const dia = mode === "minor" ? DIA_MINOR : DIA_MAJOR;
   const prog = progression ?? [];
@@ -39,6 +43,19 @@ export function nextChordCandidates(progression: Degree[], opts: { mode?: Mode; 
     }
   }
   const seen = new Set<number>();
-  const res = out.filter((c) => (seen.has(c.degree) ? false : (seen.add(c.degree), true)));
+  let res = out.filter((c) => (seen.has(c.degree) ? false : (seen.add(c.degree), true)));
+  // (D) コーパス在時＝bigram(ctx=直前コードトークン)の count で安定降順に並べ替え（同 count は元順＝機能文法順を保持）。
+  //   ctx 未ヒット or count 0 のみ＝並びは不変＝実質 bit 一致（degrade gracefully）。
+  const tr = opts.transitions;
+  if (tr && last) {
+    const entries = tr.bigram.get(chordTok({ root: lastDeg, quality: last.quality }));
+    if (entries?.length) {
+      const cnt = new Map(entries);
+      res = res
+        .map((c, i) => ({ c, i, w: cnt.get(chordTok({ root: c.degree, quality: c.quality })) ?? 0 }))
+        .sort((a, b) => b.w - a.w || a.i - b.i)
+        .map((x) => x.c);
+    }
+  }
   return res.slice(0, Math.max(1, opts.top ?? 4));
 }

@@ -188,6 +188,18 @@ CREATE TABLE IF NOT EXISTS corpus_motif_transform (
   pct        REAL,
   PRIMARY KEY (scope_bars, feature, bin)
 );
+-- (D) コード遷移統計（#21拡張・2026-07-21）。在DB正規化進行(neta chord_progression, scope=library)から
+--   root+正準品質トークンの n-gram を数える。note_transition の to_deg(整数度数)に対し進行は品質を要するので to_tok(文字列)。
+--   投入＝scripts/build-chord-transition.ts。生成結線は既定OFFで seed bit 一致（design「コーパス遷移統計テーブル 第2弾」）。
+CREATE TABLE IF NOT EXISTS corpus_chord_transition (
+  style    TEXT NOT NULL,     -- pop（在DB U-FRET J-POP 進行）
+  mode     TEXT NOT NULL,     -- major|minor
+  ngram    INTEGER NOT NULL,  -- 2=bigram / 3=trigram
+  from_ctx TEXT NOT NULL,     -- 前文脈のコードトークン列（"0q" or "0q>7q"）
+  to_tok   TEXT NOT NULL,     -- 次コードトークン＝度数+正準品質（例 I="0q"・vi="9qm"・V7="7q7"）
+  count    INTEGER NOT NULL,
+  PRIMARY KEY (style, mode, ngram, from_ctx, to_tok)
+);
 `;
 
 export function openDb(path = ":memory:"): Database.Database {

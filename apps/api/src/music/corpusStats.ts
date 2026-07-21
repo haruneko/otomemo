@@ -165,3 +165,74 @@ export function sampleByCount<T extends { count?: number }>(entries: (T & { coun
   for (const [v, c] of pairs) { if (c <= 0) continue; x -= c; if (x <= 1e-9) return v; }
   return pairs[pairs.length - 1]![0];
 }
+
+// ══ (D) コード遷移統計（#21拡張・2026-07-21・正典＝design「コーパス遷移統計テーブル 第2弾」）══
+//   在DB正規化進行から root+正準品質トークンの n-gram を数え、next_chord/genChords の**重み**にする。
+//   思想（design 補強）＝頻度は idiom バイアスであってランカーではない。正当性は文法が、緊張の置き場は
+//   構造層が、レアな妙味はスパイス関数が担う。ここは「同機能内でどれが手癖か」の地の部分だけに効かせる。
+export type ChordTokInput = { root: number; quality: string };
+// コードトークン＝度数(0..11)＋正準品質。">" を含まない（from_ctx 連結が安全）。例 I="0q"・vi="9qm"・V7="7q7"。負値も安全。
+export function chordTok(c: ChordTokInput): string {
+  return `${(((c.root % 12) + 12) % 12)}q${c.quality ?? ""}`;
+}
+export interface CorpusProgression { chords: ChordTokInput[]; mode?: string; count?: number }
+export interface ChordTransitionRow { mode: string; ngram: number; from_ctx: string; to_tok: string; count: number }
+// 純関数：正規化進行列 → n-gram カウント行（進行の count で重み付け・線形＝ループ折り返しはしない[初版]）。
+export function buildChordTransitions(progs: CorpusProgression[]): ChordTransitionRow[] {
+  const acc = new Map<string, number>(); // key = mode|ngram|from_ctx|to_tok
+  const add = (mode: string, ngram: number, from: string, to: string, w: number) => {
+    const k = `${mode}|${ngram}|${from}|${to}`;
+    acc.set(k, (acc.get(k) ?? 0) + w);
+  };
+  for (const p of progs ?? []) {
+    const mode = p.mode === "minor" ? "minor" : "major";
+    const w = p.count && p.count > 0 ? p.count : 1;
+    const toks = (p.chords ?? []).map(chordTok);
+    for (let i = 1; i < toks.length; i++) {
+      add(mode, 2, toks[i - 1]!, toks[i]!, w);
+      if (i >= 2) add(mode, 3, `${toks[i - 2]}>${toks[i - 1]}`, toks[i]!, w);
+    }
+  }
+  const rows: ChordTransitionRow[] = [];
+  for (const [k, count] of acc) {
+    const [mode, ngramS, from_ctx, to_tok] = k.split("|");
+    rows.push({ mode: mode!, ngram: Number(ngramS), from_ctx: from_ctx!, to_tok: to_tok!, count });
+  }
+  return rows;
+}
+// 投入（追加のみ・冪等 INSERT OR REPLACE）。build スクリプト/CLI から呼ぶ。style は "pop"（在DB U-FRET）。
+export function ingestChordTransitions(db: Db, rows: ChordTransitionRow[], style = "pop"): number {
+  const ins = db.prepare(`INSERT OR REPLACE INTO corpus_chord_transition (style, mode, ngram, from_ctx, to_tok, count) VALUES (?, ?, ?, ?, ?, ?)`);
+  let n = 0;
+  const run = db.transaction(() => { for (const r of rows) { ins.run(style, r.mode, r.ngram, r.from_ctx, r.to_tok, Math.round(r.count)); n++; } });
+  run();
+  return n;
+}
+export function hasChordTransitions(db: Db): boolean {
+  const row = db.prepare(`SELECT COUNT(*) c FROM corpus_chord_transition`).get() as { c: number };
+  return (row?.c ?? 0) > 0;
+}
+export interface ChordTransitionModel {
+  bigram: Map<string, [string, number][]>;  // from_ctx(tok) → [to_tok, count][]（count 降順）
+  trigram: Map<string, [string, number][]>; // "tokA>tokB" → 同上
+}
+export function loadChordTransitions(db: Db, style: string, mode: string): ChordTransitionModel {
+  const rows = db.prepare(`SELECT ngram, from_ctx, to_tok, count FROM corpus_chord_transition WHERE style=? AND mode=? ORDER BY count DESC`)
+    .all(style, mode) as { ngram: number; from_ctx: string; to_tok: string; count: number }[];
+  const bigram = new Map<string, [string, number][]>();
+  const trigram = new Map<string, [string, number][]>();
+  for (const r of rows) {
+    const map = r.ngram === 3 ? trigram : bigram;
+    (map.get(r.from_ctx) ?? map.set(r.from_ctx, []).get(r.from_ctx)!).push([r.to_tok, r.count]);
+  }
+  return { bigram, trigram };
+}
+// ── 意外性（温度）ダイヤル（design 補強 2026-07-21）：頻度は**ランカーでなく重み**。w_i = (count_i + floor)^(1/T)。
+//   T<1=王道（最頻へ尖る）／T>1=攻め（裾の"正当"候補が顔を出す）。floor>0＝コーパス未見の正当候補も0にしない
+//   （正当性は文法が担う＝頻度で弾かない）。空/未ヒット＝全て floor＝一様（素通し）。生成側は sampleByCount で消費。
+export function transitionWeights(cands: string[], entries: [string, number][] | undefined, opts: { temperature?: number; floor?: number } = {}): number[] {
+  const T = Math.max(0.05, Math.min(8, opts.temperature ?? 1));
+  const floor = Math.max(1e-6, opts.floor ?? 0.5);
+  const cnt = new Map(entries ?? []);
+  return cands.map((c) => Math.pow((cnt.get(c) ?? 0) + floor, 1 / T));
+}
