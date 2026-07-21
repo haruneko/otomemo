@@ -860,7 +860,11 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
   server.registerTool(
     "gen_riff",
     { title: "リフを生成", description: "歌でない反復核＝リフ/オスティナート（ギター/シンセ/ピアノ/ゲームBGMの刻み）を候補生成する（WP-X3b）。2部構造が基底＝核 motif(1小節・3〜6音・コードトーン軸)＋反復/終止改変。和声関係は3類型を自動判定：コード列のルートがペダル候補(I/V)と半音以内で近接なら indep(維持＝tonic ペダルで全小節同一音列)、そうでなければ follow(追従＝各コードのコードトーンへ度数写像)。ループ適性＝最終小節の末尾16分を空ける(継ぎ目)。返り kind=\"riff\" の content={notes,program}。「機械は候補まで・仕上げは人間」。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), harmony: z.enum(["indep", "follow"]).optional().describe("和声依存度。indep=維持(ペダル・コード変化に不動)/follow=追従(各コードのコードトーンへ写像)。未指定=コード進行から自動判定") } },
-    async ({ frame, chords, seed, harmony }) => ok(genRiff(frame, chords, seed, { harmony })),
+    async ({ frame, chords, seed, harmony }) => {
+      const res = genRiff(frame, chords, seed, { harmony });
+      attachStructureWarnings(res, { bars: barsOf(normalizeFrame(frame)), bpb: meterInfo(frame?.meter).beatsPerBar, pitchRange: [0, 127], kinds: ["riff"] }); // 生成後の構造バリデータ（常設・警告のみ）
+      return ok(res);
+    },
   );
   server.registerTool(
     "gen_section_inst",
@@ -1259,27 +1263,29 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     "weave",
     { title: "絡める（基準＝コード/メロに噛み合うパートを作る・候補）", description: "コードやメロという「基準」に噛み合う音（メロ/ベース/ハモ/対旋律）を作る・直したいとき使う。※歌詞は扱わない＝「メロに歌詞を合わせたい／詞に合うメロを作りたい」なら gen_melody の lyrics（歌詞→音数ぴったりのメロ）・suggest_lyric_rhythm（歌詞の譜割りを先に見る）・analyze_lyric_fit（乗せた後の歌いやすさ点検）へ。必ず基準(chords/melody)を入力に取りそれに噛み合うものを作る/直す。コードに合うメロ・既存メロの補正・ハモ付け・対旋律(counter=主メロの間まに絡む第2声)。候補は generate と同じ items 形({items:[{kind,content}]})で返る。保存しない。", inputSchema: { target: z.enum(["melody", "bass", "chords", "counter"]), frame: frameSchema, chords: chordsSchema.optional(), melody: notesSchema.optional(), key: z.number().int().min(0).max(11).optional(), mode: z.enum(["major", "minor"]).optional(), seed: z.number().int().optional(), style: z.string().optional().describe("コーパスstyle(irish/game等)。melody新規生成時に歩幅をその統計へ寄せる") } },
     async ({ target, frame, chords, melody, key, mode, seed, style }) => {
+      // 生成後の構造バリデータ常設（警告のみ・bit安全）＝weave の音符系候補にも付ける。
+      const chk = <T>(res: T): T => { attachStructureWarnings(res as never, { bars: barsOf(normalizeFrame(frame)), bpb: meterInfo(frame?.meter).beatsPerBar, pitchRange: [0, 127] }); return res; };
       if (target === "counter") { // WP-X3a 対旋律＝主メロ(melody)必須。主メロの間まに絡む第2声（音域分離/相補/2度回避/反行）。
         if (!melody?.length) return err("weave counter は基準 melody(主メロ) が必須");
-        return ok(genCounter(frame, melody, chords, seed));
+        return ok(chk(genCounter(frame, melody, chords, seed)));
       }
       if (target === "melody") {
         if (!chords) return err("weave melody は基準 chords が必須");
         if (melody) {
           const r = fitToChords(melody, chords, key); // 既存メロをコードへ追従(U10)
           // C③ 候補は generate と同じ items 形に統一（web/脳が返り型で分岐せずに済む）。補正スコアは meta へ。
-          return ok({ items: [{ kind: "melody", content: { notes: r.notes }, label: "コードへ補正" }], meta: { before: r.before, after: r.after }, edges: [] });
+          return ok(chk({ items: [{ kind: "melody", content: { notes: r.notes }, label: "コードへ補正" }], meta: { before: r.before, after: r.after }, edges: [] }));
         }
         // P1 自己進化ループ：1本に潰さず「多め生成→らしさ(E-corpus)順→多様な top-k」で候補を返す。
         // corpusModel＝ライブラリ学習(自分/コーパスらしさ)。seed 明示時は決定的な単一（従来どおり）。
         const corpusModel = learnMotifModelFromLibrary(core, style);
         // J2c(2026-07-11)：useV2:true＝gen_melody と同じ本線へ（従来この経路だけ useV2 無し＝旧経路③④に落ちていた。
         // weave のメロ候補の質を V2 に揃える意図的変更。4/4|複合拍+chords はV2・ゲート外れは従来どおりフォールバック）。
-        return ok(genMelodyCandidates(frame, chords, seed, { useV2: true, motifModel: corpusModel ?? undefined, corpusModel })); // コードに合う新規メロ候補(U3・style でコーパス bias)
+        return ok(chk(genMelodyCandidates(frame, chords, seed, { useV2: true, motifModel: corpusModel ?? undefined, corpusModel }))); // コードに合う新規メロ候補(U3・style でコーパス bias)
       }
       if (target === "bass") {
         if (!chords) return err("weave bass は基準 chords が必須");
-        return ok(genBass(frame, chords));
+        return ok(chk(genBass(frame, chords)));
       }
       if (!melody) return err("weave chords(ハモ付け) は基準 melody が必須");
       // C③ ハモ付けも items 形に統一：各小節の最有力を1進行に、代替候補は meta.bars に残す。
