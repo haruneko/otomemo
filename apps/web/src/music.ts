@@ -597,6 +597,8 @@ export interface ChordVoicing {
   arpDir?: "up" | "down" | "updown";
   arpOctaves?: number; // arp の駆け上がり幅（1〜4oct）。voiced を下方へ積み増した拡張プールを巡回＝ハープのグリッサンド。既定1＝従来の voiced 巡回（bit一致）。
   arpReset?: number; // arp の駆け上がり区切り（拍）。この拍数ごとに pool 頭（低音）から登り直す＝「1.5拍ごとに下から駆け上がる」。既定/0＝区切りなし（連続巡回・bit一致）。
+  style?: "keyboard" | "guitar"; // ボイシング奏法（2026-07-22 研究doc guitar-comping-vocabulary）。既定 keyboard＝現行 voiceToTop（不変）。guitar＝voiceGuitar（最低声=根音・3度1個・根音/5度重複・弦チューニング由来の度数分布）。
+  strumMs?: number; // 弦順ロールの1弦あたり時差（ms）。style:"guitar"＋mode:"strum"＋テンポ既知のとき和音内各声をダウン=低→高に strumMs ずつ決定的にずらす（研究doc §3）。既定/0＝時差なし＝全声同時（bit一致）。
 }
 export interface ChordHit { step: number; dur: number; vel?: number } // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）
 export interface ChordPatternContent {
@@ -658,7 +660,43 @@ function voiceToTop(root: number, quality: string, powerChord: boolean, top: num
   return open ? voices.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : voices;
 }
 
+// ギター的ボイシング（style:"guitar"・研究doc 2026-07-22 §1）：鍵盤的クローズド積みでなく
+// 6弦標準チューニング由来の度数分布へ。E-shape バレー（弦6→1 = R 5 R 3 5 R）を土台に
+// ①最低声=根音 ②3度は1個・中〜高域 ③根音/5度をオクターブ重複、を満たす。7th 等の色音は各1個を
+// 中高域へ挿し、声数が6を超えたら「高5度→中根音」の順に間引く（§1.2 省略定石）。パワーコードは R+5(+R')。
+// 全体を top（既定72）最寄りのオクターブへ平行移動＝keyboard と同じ「top は磁石」。open は guitar では
+// 現状 no-op（ギターは元来オープン＝二重に広げない・design 要耳較正）。返りは昇順ソート済み。
+function voiceGuitar(root: number, quality: string, powerChord: boolean, top: number): number[] {
+  const r = (((Math.round(root) % 12) + 12) % 12);
+  if (powerChord) {
+    const offs = [0, 7, 12]; // R 5 R'（歪み向け・3度抜き）
+    return placeGuitar(r, offs, top);
+  }
+  const ivals = (QUALITY_INTERVALS[quality] ?? [0, 4, 7]).map((iv) => ((iv % 12) + 12) % 12);
+  // 5度＝{6,7,8}（dim/perfect/aug）から採る（無ければ完全5度で補う＝R/5 の骨格を必ず立てる）。
+  const fifth = ivals.find((iv) => iv >= 6 && iv <= 8) ?? 7;
+  // 色音＝根音・5度以外（3度・7度・6th 等）。各1個を「12+度数」＝中高域へ。昇順。
+  const colors = ivals.filter((iv) => iv !== 0 && iv !== fifth).sort((a, b) => a - b).map((iv) => 12 + iv);
+  // E-shape 骨格：R(0) 5 R(12) [色音…] 5(12+5th) R(24)。色音を挟んで昇順化・重複除去。
+  const skeleton = [0, fifth, 12, 12 + fifth, 24];
+  let offs = [...new Set([...skeleton, ...colors])].sort((a, b) => a - b);
+  // 6声に収める：高5度(12+fifth)→中根音(12) の順に間引く（§1.2 の省略定石・R/3/色音とトップRは残す）。
+  while (offs.length > 6 && offs.includes(12 + fifth)) offs = offs.filter((o) => o !== 12 + fifth);
+  while (offs.length > 6 && offs.includes(12)) offs = offs.filter((o) => o !== 12);
+  return placeGuitar(r, offs, top);
+}
+// 度数オフセット列（最上=最大オフセット）を root pc から積み、最上声を top 最寄りのオクターブへ寄せる。
+// 最低声＝root（オフセット0）は平行移動後も root pc・最低のまま。
+function placeGuitar(r: number, offs: number[], top: number): number[] {
+  const topOff = Math.max(...offs);
+  const topPitch0 = r + topOff;
+  const nearestTop = Math.round((top - topPitch0) / 12) * 12 + topPitch0;
+  const shift = nearestTop - topPitch0;
+  return offs.map((o) => r + o + shift).sort((a, b) => a - b);
+}
+
 function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
+  if (v.style === "guitar") return voiceGuitar(root, quality, v.powerChord === true, v.top ?? 72);
   if (v.top != null) return voiceToTop(root, quality, v.powerChord === true, v.top, v.openClose === "open");
   const r = (((Math.round(root) % 12) + 12) % 12);
   const anchor = CHORD_BASE + (v.octave ?? 0) * 12;
@@ -694,10 +732,16 @@ function arpStep(i: number, n: number, dir?: "up" | "down" | "updown"): number {
 }
 
 // コード楽器パターンをコードに当てて実音 notes へ（strum=和音ブロック／arp=構成音を巡回）。相対型＝進行に解決。
-export function resolveChordPattern(content: ChordPatternContent, chords: ChordEntry[] = [], key = 0): Note[] {
+// tempo（BPM）＝弦順ロール（style:"guitar"＋strum＋strumMs>0）の ms→拍換算に使う。未指定/無効なら roll 無し
+// （＝ストレート同時発音＝bit一致）＝レンダ境界（buildPlayback）でテンポが既知の場所からのみ流す（feel 層と同流儀）。
+export function resolveChordPattern(content: ChordPatternContent, chords: ChordEntry[] = [], key = 0, tempo?: number): Note[] {
   const mode = content?.mode ?? "strum";
   const v = content?.voicing ?? { tones: ["R", "3", "5"], openClose: "close", octave: 0 };
   const hits = normHits(content?.hits).sort((a, b) => a.step - b.step);
+  // 弦順ロールの発火条件：guitar × strum × strumMs>0 × 有効テンポ。1弦あたりオフセット（拍）を先に算出。
+  const strumMs = v.strumMs ?? 0;
+  const rollActive = v.style === "guitar" && mode === "strum" && strumMs > 0 && typeof tempo === "number" && Number.isFinite(tempo) && tempo > 0;
+  const rollBeatPerVoice = rollActive ? (strumMs * tempo!) / 60000 : 0; // ms→拍＝ms/1000 × BPM/60
   const out: Note[] = [];
   let arpIdx = 0, arpGrp = -1; // arpGrp＝arpReset の区切り番号（変わったら arpIdx を頭へ戻す）
   for (let h = 0; h < hits.length; h++) {
@@ -726,6 +770,22 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
       if (v.arpReset && v.arpReset > 0) { const grp = Math.floor((start + 1e-9) / v.arpReset); if (grp !== arpGrp) { arpIdx = 0; arpGrp = grp; } }
       out.push({ pitch: pool[arpStep(arpIdx, pool.length, v.arpDir)]!, start, dur, ...velSpread });
       arpIdx++;
+    } else if (rollActive) {
+      // 弦順ロール（研究doc §3）：和音内の各声（＋オンベース）を昇順（低→高＝ダウンストローク）に並べ、
+      // idx ぶんの決定的時差でずらす。vel は触らない（今回はダウンのみ・時差だけ）。dur は据え置き（各声が鳴り続ける）。
+      const chordVoices = [...voiced];
+      if (ch && ch.bass != null) {
+        const bpc = ((ch.bass % 12) + 12) % 12;
+        const lowest = Math.min(...voiced);
+        let bp = Math.floor(lowest / 12) * 12 + bpc;
+        while (bp >= lowest) bp -= 12;
+        chordVoices.push(bp);
+      }
+      chordVoices.sort((a, b) => a - b); // 低→高＝弦順（オンベースが最低＝idx0＝最初に立ち上がる）
+      chordVoices.forEach((p, idx) => {
+        const st = Math.round((start + idx * rollBeatPerVoice) * 1000) / 1000;
+        out.push({ pitch: p, start: st, dur, ...velSpread });
+      });
     } else {
       for (const p of voiced) out.push({ pitch: p, start, dur, ...velSpread });
       // 分数コード（決定B）：strum はオンベースを voicing の下に1音足す＝最低音が bass に。
@@ -767,6 +827,7 @@ export { MUSIC_KINDS } from "./kinds"; // SSOT＝kinds.ts（後方互換で musi
 export interface BassContext {
   key?: number;
   chords?: ChordEntry[];
+  tempo?: number; // BPM。chord_pattern のギター弦順ロール（resolveChordPattern）の ms→拍換算に使う。未指定=roll無し（bit一致）。
 }
 
 // 骨格（design #20）：ブレークポイント列 content。dur を持たず各音は次の点/句末/曲末まで支配。
@@ -806,7 +867,7 @@ export function notesForContent(kind: string, content: unknown, ctx?: BassContex
   // コード楽器パターン／管弦(section_inst・WP-X3c)：進行(or preview)に当てて voicing で実音化（相対型・多声）。
   if ((kind === "chord_pattern" || kind === "section_inst") && isChordPattern(content)) {
     const chords = ctx?.chords ?? (content as ChordPatternContent & { preview_chords?: ChordEntry[] }).preview_chords ?? [];
-    return resolveChordPattern(content, chords, ctx?.key ?? 0);
+    return resolveChordPattern(content, chords, ctx?.key ?? 0, ctx?.tempo);
   }
   // bass 絶対モードは melody と同型(notes)。counter(対旋律・WP-X3a)・riff(反復核・WP-X3b) も単音ライン＝notes 同型。
   if (kind === "melody" || kind === "bass" || kind === "counter" || kind === "riff") return notesOf(content);
@@ -829,6 +890,7 @@ export function compositeNotes(
   children: CompositeChild[],
   keyPc: number,
   sectionMode?: string | null,
+  tempo?: number, // BPM。chord_pattern のギター弦順ロールへ流す（未指定=roll無し＝bit一致）。
 ): Note[] {
   // #bass S2: 相対bass の子は section のコードレーンに当てて解決する（コードが無ければ key）。
   // コードを section 位置・調へ展開。**コード進行の自分の調(key)から section 調へ key-aware 移調**
@@ -850,7 +912,7 @@ export function compositeNotes(
       const subKey = ((c.node.neta.key ?? keyPc) % 12 + 12) % 12;
       // ネストした section は**自分の調号(key+mode)**で再帰合成（メロ配置規則も内側の調で効く）。
       const subMode = c.node.neta.mode ?? (c.node.neta.key == null ? sectionMode : null);
-      return compositeNotes(c.node.children ?? [], subKey, subMode).map((n) => ({ ...n, start: n.start + c.position }));
+      return compositeNotes(c.node.children ?? [], subKey, subMode, tempo).map((n) => ({ ...n, start: n.start + c.position }));
     }
     // ①（2026-07-03）コード進行トラックは**無音の骨格**＝自分は発音しない（伴奏は chord_pattern が
     // 担う・CP1）。和声の解決文脈は上の sectionChords から既に供給済み＝役目は保持。
@@ -874,7 +936,7 @@ export function compositeNotes(
     if ((kind === "chord_pattern" || kind === "section_inst") && isChordPattern(c.node.neta.content)) {
       // コード楽器パターン／管弦(section_inst)：section の調・コードで実音解決済み＝移調しない（position だけ）。自前音色・多声。
       const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
-      return notesForContent(kind, c.node.neta.content, { key: keyPc, chords }).map((n) => ({
+      return notesForContent(kind, c.node.neta.content, { key: keyPc, chords, tempo }).map((n) => ({
         ...n,
         start: n.start + c.position,
         program: prog,
@@ -1420,7 +1482,7 @@ export function vocalJobsOf(notes: Note[], bpm: number): VocalJob[] {
 // **任意深さ対応**（#27 修正・曲再生の仮歌欠落根治）：song→section→melody の2段ネストでも歌う melody を拾う（song直下は
 // section＝歌う melody は奥）。歌い手の同定・剪定は leaf 参照で行い、実解決（位置オフセット/移調）は compositeNotes に委ねる
 // ＝ネストのズレを出さない。歌う子ゼロ＝compositeNotes と bit 一致（G1 不変）。1段(section→melody)は挙動不変（回帰緑のまま）。
-export function playbackComposite(children: CompositeChild[], keyPc: number, sectionMode?: string | null): Note[] {
+export function playbackComposite(children: CompositeChild[], keyPc: number, sectionMode?: string | null, tempo?: number): Note[] {
   // ① 歌う melody ノードを任意深さで集める（section/song コンテナは子へ降りる）。leaf 参照を保持＝以降の剪定で同定に使う。
   const singers: { c: CompositeChild; speaker?: number }[] = [];
   const collect = (kids: CompositeChild[]): void => {
@@ -1435,7 +1497,7 @@ export function playbackComposite(children: CompositeChild[], keyPc: number, sec
     }
   };
   collect(children);
-  if (!singers.length) return compositeNotes(children, keyPc, sectionMode); // 歌う子なし＝bit一致（G1 不変）
+  if (!singers.length) return compositeNotes(children, keyPc, sectionMode, tempo); // 歌う子なし＝bit一致（G1 不変）
 
   // ② leaf を条件で剪定した（section/song コンテナは残す）ツリーを作る deep map。leaf 参照は保持＝singer 同定が効く。
   const prune = (kids: CompositeChild[], keepLeaf: (c: CompositeChild) => boolean): CompositeChild[] =>
@@ -1447,11 +1509,11 @@ export function playbackComposite(children: CompositeChild[], keyPc: number, sec
 
   const singerSet = new Set(singers.map((s) => s.c));
   // ③ 伴奏＝歌い手 leaf を除いた全ツリー（compositeNotes がネストの position/移調を解決）。
-  const audible = compositeNotes(prune(children, (c) => !singerSet.has(c)), keyPc, sectionMode);
+  const audible = compositeNotes(prune(children, (c) => !singerSet.has(c)), keyPc, sectionMode, tempo);
   // ④ 各歌い手＝その leaf だけ残したツリーを合成＝ネストの絶対位置/移調で解決した melody ノートへ sungBy+muted。
   //    他 leaf（非歌唱 melody 含む）は剪定済＝結果は歌い手 i の melody のみ＝全ノートが正しく singer i の印を得る。
   const mutedSing = singers.flatMap((s, i) =>
-    compositeNotes(prune(children, (c) => c === s.c), keyPc, sectionMode).map((n) =>
+    compositeNotes(prune(children, (c) => c === s.c), keyPc, sectionMode, tempo).map((n) =>
       n.part === "melody" && !n.drum && n.dur > 0 ? { ...n, muted: true, sungBy: { singer: `s${i}`, speaker: s.speaker } } : n,
     ),
   );
@@ -1489,7 +1551,7 @@ export function buildPlayback(src: PlaybackSource, opts?: { vocal?: boolean }): 
     };
   }
   if (src.kind === "tree") {
-    const notes = wantVocal ? playbackComposite(src.children, src.key, src.mode) : compositeNotes(src.children, src.key, src.mode);
+    const notes = wantVocal ? playbackComposite(src.children, src.key, src.mode, src.tempo) : compositeNotes(src.children, src.key, src.mode, src.tempo);
     return {
       notes,
       bpm: src.tempo,
@@ -1503,13 +1565,13 @@ export function buildPlayback(src: PlaybackSource, opts?: { vocal?: boolean }): 
   }
   // kind === "neta"（単体）。notesForContent＋（歌うメロは sungBy+muted）。
   const neta = src.neta;
-  const notes0 = notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 });
+  const bpm = neta.tempo ?? 120;
+  const notes0 = notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, tempo: bpm });
   const sing = wantVocal && neta.kind === "melody" ? singOf(neta.content) : undefined;
   const hasLyric = !!sing && notes0.some((n) => !!n.syllable && n.syllable.trim().length > 0);
   const notes = hasLyric
     ? notes0.map((n) => (n.part !== "melody" && n.part != null ? n : !n.drum && n.dur > 0 ? { ...n, muted: true, sungBy: { singer: "s0", speaker: sing!.speaker } } : n))
     : notes0;
-  const bpm = neta.tempo ?? 120;
   return {
     notes,
     program: neta.kind === "rhythm" ? undefined : (programOf(neta.content) ?? 0),

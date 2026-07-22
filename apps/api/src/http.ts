@@ -317,7 +317,11 @@ export function buildHttp(core: Core): FastifyInstance {
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
           return res;
         }
-        case "gen_chord_pattern": return genChordPattern(b.frame, b.seed);
+        case "gen_chord_pattern": { // ギター奏法(style/strumMs)は voicing 既定値として載せるだけ＝実音化は web。未指定=従来 bit 一致
+          const cpStyle = b.style === "guitar" || b.style === "keyboard" ? b.style : undefined;
+          const cpStrumMs = typeof b.strumMs === "number" ? b.strumMs : undefined;
+          return genChordPattern(b.frame, b.seed, cpStyle != null || cpStrumMs != null ? { style: cpStyle, strumMs: cpStrumMs } : undefined);
+        }
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
         case "analyze_voiceleading": { // #8：メロ×低音の声部進行レンズ（bass明示 or chordsのルートを低域で代用）

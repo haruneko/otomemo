@@ -923,8 +923,14 @@ export function genFromEssence(
 }
 
 /** コード楽器パターン（コンピング/アルペジオ・CP4）：素直な既定パターンを生成（音は出さない＝
- * content のパターンのみ。実音化は合成側 resolveChordPattern が進行に当てて行う）。決定的(seed)。 */
-export function genChordPattern(frame?: Frame | null, seed?: number | null): GenResult {
+ * content のパターンのみ。実音化は合成側 resolveChordPattern が進行に当てて行う）。決定的(seed)。
+ * opts.style/strumMs＝ギター奏法（2026-07-22）を voicing の既定値として content に載せるだけ＝実音化は web 側
+ * （現行分業を維持・api は実音化しない）。未指定は voicing にキーを生やさない＝従来出力と deepStrictEqual 一致。 */
+export function genChordPattern(
+  frame?: Frame | null,
+  seed?: number | null,
+  opts?: { style?: "keyboard" | "guitar"; strumMs?: number } | null,
+): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 5);
   const info = meterInfo(f.meter);
@@ -936,7 +942,16 @@ export function genChordPattern(frame?: Frame | null, seed?: number | null): Gen
   const hits: { step: number; dur: number }[] = [];
   for (let s = 0; s < steps; s += per) hits.push({ step: s, dur: per }); // 各音は次の発音まで＝つながるコンピング
   const mode = rng.next() < 0.25 ? "arp" : "strum"; // たまにアルペジオ
-  const content = { mode, voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps, hits };
+  // 既定値（未指定はキーを生やさない＝bit一致）。style は keyboard を明示しても resolve は既定と同義だが、
+  // 既存出力との deepStrictEqual を守るため「指定された時だけ」載せる。
+  const voicing = {
+    tones: ["R", "3", "5"],
+    openClose: "close",
+    octave: 0,
+    ...(opts?.style != null ? { style: opts.style } : {}),
+    ...(opts?.strumMs != null ? { strumMs: opts.strumMs } : {}),
+  };
+  const content = { mode, voicing, steps, hits };
   return { items: [{ kind: "chord_pattern", content, label: "コード楽器" }], edges: [] };
 }
 

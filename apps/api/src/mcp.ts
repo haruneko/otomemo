@@ -24,6 +24,7 @@ import {
   genRiff,
   genSectionInst,
   genDrums,
+  genChordPattern,
   analyzeFit,
   fitToChords,
   detectKeyFromNotes,
@@ -876,6 +877,11 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
     "gen_section_inst",
     { title: "管弦(ホーン/ストリングス)を生成", description: "セクション楽器＝ホーン隊/ストリングスの伴奏帯を候補生成する（WP-X3c・伴奏先行）。**1ネタ多声**（進行追従の多声ボイシング＝chord_pattern の親戚）。role=pad(持続和音で床を張る＝コード変わり目にアタックし伸ばす・既定 Strings48)/stab(裏を短く突く和音ヒット＝リズム楽器化・既定 Brass61)。ボイシングは close(密集)＝top 狙い音で最上声を決め下へ密に積む。GM音色は content.program。返り kind=\"section_inst\" の content(ChordPatternContent 形＝strum/voicing/hits＋program/role)。web 側で resolveChordPattern が実音化。旋律的セクションライン(counter の厚いやつ)はスコープ外(後続)。", inputSchema: { frame: frameSchema, chords: chordsSchema.optional(), seed: z.number().int().optional(), role: z.enum(["pad", "stab"]).optional().describe("役割。pad=持続和音で床(ストリングス本命)/stab=裏の短い和音ヒット(ホーン本命)。未指定=pad") } },
     async ({ frame, chords, seed, role }) => ok(genSectionInst(frame, chords, seed, { role })),
+  );
+  server.registerTool(
+    "gen_chord_pattern",
+    { title: "コード楽器パターンを生成", description: "コンピング/アルペジオの伴奏パターン（コード楽器・CP4）を候補生成する。**進行に解決する相対型**＝度数抽象のパターンだけ返し(音は出さない)、実音化は web `resolveChordPattern` が section の進行に当てて行う（現行分業を維持）。content=ChordPatternContent（mode:strum(和音ブロック)/arp(構成音巡回)・voicing(tones/openClose/octave)・steps(16分グリッド)・hits{step,dur}）。密度は frame.mood/tempo から自動(sparse=小節頭/busy=八分/既定=拍頭)。決定的(seed)。**style**=ボイシング奏法 keyboard(既定・鍵盤的クローズド積み)/guitar(ギター的＝最低声=根音・3度1個・根音/5度オクターブ重複・弦チューニング由来の度数分布)。**strumMs**=弦順ロールの1弦あたり時差(ms)＝guitar×strum のとき和音内各声をダウン=低→高に決定的にずらす(実音化は web・研究doc 2026-07-22)。style/strumMs 未指定=従来 bit 一致(voicing にキーを生やさない)。返り kind=\"chord_pattern\"。", inputSchema: { frame: frameSchema, seed: z.number().int().optional(), style: z.enum(["keyboard", "guitar"]).optional().describe("ボイシング奏法。keyboard=鍵盤的クローズド積み(既定)/guitar=ギター的ボイシング(最低声=根音・3度1個・根音/5度重複)。未指定=keyboard=従来"), strumMs: z.number().min(0).max(60).optional().describe("弦順ロールの1弦あたり時差(ms・0〜60)。guitar×strum で各声を低→高に決定的にずらす(実音化は web)。相場=10ms/弦・バラードは20〜35。0/未指定=時差なし=従来bit一致") } },
+    async ({ frame, seed, style, strumMs }) => ok(genChordPattern(frame, seed, style != null || strumMs != null ? { style, strumMs } : undefined)),
   );
   server.registerTool(
     "gen_drums",

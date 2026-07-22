@@ -560,6 +560,66 @@ describe("music", () => {
       const open = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "open", octave: 0 } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.start === 0).map((n) => n.pitch).sort((a, b) => a - b);
       expect(open).not.toEqual(close.sort((a, b) => a - b)); // 広げる＝別配置
     });
+
+    // ── ギター奏法（voicing.style="guitar" ＋ 弦順ロール・研究doc 2026-07-22）──
+    const gcp = (over: Partial<import("../src/music").ChordVoicing> = {}) =>
+      ({ mode: "strum" as const, voicing: { tones: [] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0, top: 72, style: "guitar" as const, ...over }, steps: 16, hits: [{ step: 0, dur: 8 }] });
+    it("bit一致：style/strumMs 未指定は既存 keyboard 出力と完全一致（voiceToTop 不変）", () => {
+      const kb = resolveChordPattern(cp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      const same = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      expect(same).toEqual(kb); // style 無し＝従来経路（deepStrictEqual）
+      // guitar 指定でも strumMs/tempo 無しならロールは発火せず＝全声同時（start 一致）
+      const g = resolveChordPattern(gcp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      expect(g.every((n) => n.start === 0)).toBe(true);
+      expect(g.every((n) => !("vel" in n))).toBe(true); // vel は触らない
+    });
+    it("guitar ボイシング：最低声＝根音・3度は1個・根音/5度がオクターブ重複", () => {
+      const g = resolveChordPattern(gcp(), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      const pitches = g.map((n) => n.pitch);
+      const pc = (p: number) => ((p % 12) + 12) % 12;
+      expect(pc(Math.min(...pitches))).toBe(0); // 最低声=根音(C)
+      expect(pitches.filter((p) => pc(p) === 4).length).toBe(1); // 3度(E)は1個だけ
+      expect(pitches.filter((p) => pc(p) === 0).length).toBeGreaterThanOrEqual(2); // 根音オクターブ重複
+      expect(pitches.filter((p) => pc(p) === 7).length).toBeGreaterThanOrEqual(2); // 5度オクターブ重複
+    });
+    it("guitar ボイシングは B コードでも最低声＝根音・3度1個（keyboard の密積みと質が違う）", () => {
+      const g = resolveChordPattern(gcp(), [{ root: 11, quality: "", start: 0, dur: 4 }], 0); // B major (R=B,3=D#,5=F#)
+      const pc = (p: number) => ((p % 12) + 12) % 12;
+      const pitches = g.map((n) => n.pitch);
+      expect(pc(Math.min(...pitches))).toBe(11); // 最低声=B
+      expect(pitches.filter((p) => pc(p) === 3).length).toBe(1); // 長3度(D#=pc3)は1個
+    });
+    it("guitar パワーコード：R+5 のみ（3度抜き・弦順の重複はあってよい）", () => {
+      const g = resolveChordPattern(gcp({ powerChord: true }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0);
+      const pcs = new Set(g.map((n) => ((n.pitch % 12) + 12) % 12));
+      expect(pcs).toEqual(new Set([0, 7])); // C G（3度=E 無し）
+    });
+    it("弦順ロール：guitar×strum×strumMs>0×tempo で各声が低→高へ単調増加の時差・決定的", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const rolled = resolveChordPattern(gcp({ strumMs: 20 }), chords, 0, 120); // 20ms/弦, 120BPM → 0.04拍/弦
+      // 低→高順に並べ、start が単調増加（＝ダウンストローク）。
+      const byPitch = [...rolled].sort((a, b) => a.pitch - b.pitch);
+      for (let i = 1; i < byPitch.length; i++) expect(byPitch[i]!.start).toBeGreaterThan(byPitch[i - 1]!.start);
+      expect(byPitch[0]!.start).toBe(0); // 最低声は打点そのまま
+      // 1弦あたり 20*120/60000 = 0.04拍。2声目=0.04。
+      expect(byPitch[1]!.start).toBeCloseTo(0.04, 6);
+      // 決定的＝同一入力で同一出力
+      expect(resolveChordPattern(gcp({ strumMs: 20 }), chords, 0, 120)).toEqual(rolled);
+    });
+    it("弦順ロール OFF 条件（既定・bit）：strumMs=0／tempo 無し／keyboard は全声同時（時差ゼロ）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const noMs = resolveChordPattern(gcp({ strumMs: 0 }), chords, 0, 120); // strumMs=0
+      const noTempo = resolveChordPattern(gcp({ strumMs: 20 }), chords, 0); // tempo 無し
+      const kbRoll = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, strumMs: 20 }, hits: [{ step: 0, dur: 8 }] }), chords, 0, 120); // keyboard は roll 対象外
+      for (const notes of [noMs, noTempo, kbRoll]) expect(notes.every((n) => n.start === 0)).toBe(true);
+    });
+    it("弦順ロール：オンベース（分数コード）が最低声＝idx0＝最初に立ち上がる", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4, bass: 7 }]; // C/G
+      const rolled = resolveChordPattern(gcp({ strumMs: 20 }), chords, 0, 120);
+      const lowest = [...rolled].sort((a, b) => a.pitch - b.pitch)[0]!;
+      expect(((lowest.pitch % 12) + 12) % 12).toBe(7); // 最低=オンベース G
+      expect(lowest.start).toBe(0); // 最初に鳴る
+    });
   });
 
   describe("playback scheduling (#57)", () => {
