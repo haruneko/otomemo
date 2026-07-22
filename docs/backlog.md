@@ -19,6 +19,8 @@
 - **ベース細かく群**：キックに噛む（弱0.6/強0.8/逆相-0.6）・2・4で抜く（0.4/0.8）・接近音（0.3/0.6）の段階値。**slashBass**＝IAC終止でベースが第3音に乗る鳴り。
 - **feel共有**：/gen/section で swing 指定→メロ/ベース/コード楽器が同一ワープで跳ねる一体感。synth低域（33帯）の humanize が可聴/適量か。じゃら〜んロール×swing の干渉。
 - **voiceGuitar レジスタ**：GMギター各種（Nylon/Steel/Clean/Overdrive）で top磁石±2oct が妥当か。open=no-op の判断。
+- **域外テンポの型提示**（E2E所見修正 2026-07-22）：tempo域内皆無時はジャンル語彙をテンポ距離順で提示に変更＝tempo120でバラード型（本来60-95帯）が出る。敷けば鳴るが「その速さで白玉/16分うねりがどう聞こえるか」は耳判断。
+- **［UX・要判断］左手行の埋もれ**：E2E所見＝左手プリセットは響きゾーン5行目＝CP編集で要スクロール＋チャットFABが被り気味。対処案＝(a)このまま（行契約優先） (b)響きゾーンを「基本/奏法」の2見出しに分割 (c)FABをエディタ内で退避。オーナー裁定待ち。
 
 ## WP-D2（シンコペ密度レンズ＋humanize知覚較正・2026-07-14実装）の残り
 正典＝design.md「humanize 知覚較正」「シンコペ密度スコア＋ノリレンズ」節＋research `2026-07-14-humanize-perception-defaults.md`／`-syncopation-sweet-spot.md`。実装済＝music-core `syncopation.ts`（lhlSyncScore/metricWeights/noriMeter/sectionNoriLens）＋applyFeel の 1/f 化＋部位別 ms リミット＋ヨレ警告、api `syncopationReport.ts`（gen_melody/bass/drums 候補へ meta.sync 添付・MCP/HTTP 両経路）、web「人間味」ノブの段/説明更新＋playback applyFeel に tempo 結線。以下は明示的に送った残：

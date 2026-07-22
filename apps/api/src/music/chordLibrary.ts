@@ -202,8 +202,10 @@ export function compTypeById(id: string): CompType | undefined { return COMP_TYP
 
 // ジャンル×役割→候補型ID（正典 §1 の適用セクション準拠・優先順）。tempo で絞れないときの fallback 母集団。
 const GENRE_TABLE: Record<string, Partial<Record<Role, string[]>>> = {
-  ballad: { intro: ["PB-WHOLE"], verse: ["PB-WHOLE", "PB-ARP8"], prechorus: ["PB-ARP8"], chorus: ["PB-ARP16", "PB-WHOLE"], bridge: ["PB-ARP8"], outro: ["PB-WHOLE"] },
-  rock: { intro: ["PR-8TH"], verse: ["PR-8TH"], prechorus: ["PR-8TH"], chorus: ["PR-SUS", "PR-8TH"], bridge: ["PR-SUS"], interlude: ["PR-8TH"], outro: ["PR-8TH"] },
+  // E2E所見(2026-07-22)修正：ballad にギター弾き語り(GT-BALLAD)・rock にギターロック型(genre:"rock" なのに表から
+  //   漏れていた GT-DOWN4/8/16・GT-BACKBEAT)を補充＝「聴いて選ぶ」の語彙を鍵盤/ギター混成に。
+  ballad: { intro: ["PB-WHOLE", "GT-BALLAD"], verse: ["PB-WHOLE", "PB-ARP8", "GT-BALLAD"], prechorus: ["PB-ARP8"], chorus: ["PB-ARP16", "PB-WHOLE"], bridge: ["PB-ARP8", "GT-BALLAD"], outro: ["PB-WHOLE"] },
+  rock: { intro: ["PR-8TH", "GT-DOWN4"], verse: ["PR-8TH", "GT-BACKBEAT", "GT-DOWN8"], prechorus: ["PR-8TH"], chorus: ["PR-SUS", "PR-8TH", "GT-DOWN8", "GT-BACKBEAT"], bridge: ["PR-SUS"], interlude: ["PR-8TH", "GT-DOWN16"], outro: ["PR-8TH"] },
   citypop: { intro: ["CP-SYNC16"], verse: ["CP-SYNC16", "CP-16CUT"], prechorus: ["CP-SYNC16"], chorus: ["CP-16CUT", "CP-SYNC16"], bridge: ["CP-SYNC16"], interlude: ["CP-16CUT"], outro: ["CP-SYNC16"] },
   dance: { intro: ["DN-OFFBEAT"], verse: ["DN-OFFBEAT"], prechorus: ["DN-ANTICIP"], chorus: ["DN-ANTICIP", "DN-OFFBEAT"], bridge: ["DN-OFFBEAT"], outro: ["DN-OFFBEAT"] },
   anison: { intro: ["AN-VERSE"], verse: ["AN-VERSE"], prechorus: ["AN-VERSE"], chorus: ["AN-CHORUS", "AN-VERSE"], bridge: ["AN-CHORUS"], interlude: ["AN-VERSE"], outro: ["AN-VERSE"] },
@@ -270,10 +272,17 @@ export function pickCompTypes(genre: string, role: Role | undefined, tempo: numb
     cands = orderedIds.map(compTypeById).filter((t): t is CompType => !!t);
     if (cands.length === 0) return [];
   }
-  // tempo 域で絞る（bassLibrary/pickCompType と同流儀）。域内皆無＝空。
+  // tempo 域で絞る。**域内皆無＝空にしない**＝ジャンル語彙をテンポ距離の近い順で提示（安定ソート・同距離は元優先順）。
+  //   理由（E2E所見 2026-07-22）：section 既定 tempo120 で ballad(max95)/citypop(max115) が全滅→従来経路の汎用1件に
+  //   落ち「聴いて選ぶ」が成立しなかった。トレイの目的は候補提示＝空トレイより域外提示（型は敷けば鳴る・要耳較正）。
+  //   ※単数経路 pickCompType（style ノブ）は従来どおり厳格（域外 null）＝挙動不変。
   if (tempo != null) {
-    cands = cands.filter((t) => tempo >= t.tempoMin && tempo <= t.tempoMax);
-    if (cands.length === 0) return [];
+    const inRange = cands.filter((t) => tempo >= t.tempoMin && tempo <= t.tempoMax);
+    if (inRange.length > 0) cands = inRange;
+    else {
+      const dist = (t: CompType) => (tempo < t.tempoMin ? t.tempoMin - tempo : tempo - t.tempoMax);
+      cands = cands.map((t, i) => ({ t, i })).sort((a, b) => dist(a.t) - dist(b.t) || a.i - b.i).map((x) => x.t);
+    }
   }
   // distinct（id）＝重複型を出さない。順序は上の優先を保つ。
   const uniq: CompType[] = [];
