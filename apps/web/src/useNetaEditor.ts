@@ -110,12 +110,32 @@ export function useNetaEditor(
   const [bassMode, setBassMode] = useState<"absolute" | "relative">(
     isRelativeBass(neta.content) ? "relative" : "absolute",
   );
-  const [bassPattern, setBassPattern] = useState<BassStep[]>(
+  const [bassPattern, setBassPatternRaw] = useState<BassStep[]>(
     isRelativeBass(neta.content) ? neta.content.pattern : [],
   );
   const [bassSteps, setBassSteps] = useState<number>(() =>
     isRelativeBass(neta.content) ? (neta.content.steps ?? 32) : 32,
   ); // 相対ベースの小節数（16step=1小節）。既定2小節。
+  // S7（修理#3 決定②④）：適用した相対ビート型ID（来歴）＋手編集の（改）印。初期＝content から。
+  const [bassPatternId, setBassPatternId] = useState<string | undefined>(() =>
+    isRelativeBass(neta.content) ? neta.content.patternId : undefined,
+  );
+  const [bassPatternEdited, setBassPatternEdited] = useState<boolean>(() =>
+    isRelativeBass(neta.content) ? !!neta.content.patternEdited : false,
+  );
+  // 手編集（BassStepEditor グリッド）＝patternId 有時のみ（改）を立てる（RhythmEditor/ChordPatternEditor editContent と同流儀）。
+  // patternId 無し（従来/手作り相対ネタ）は新キーを生やさない＝bit 一致。applySnapshot/帯の適用は raw を使い（改）を触らない。
+  const setBassPattern = useCallback((p: BassStep[]) => {
+    setBassPatternRaw(p);
+    if (bassPatternId) setBassPatternEdited(true);
+  }, [bassPatternId]);
+  // 帯の適用（S7 i）＝候補 content で pattern/steps/patternId を置換し（改）を解除。1イベント＝1 render＝Undo 1操作。
+  const applyBassPattern = useCallback((c: { pattern: BassStep[]; steps: number; patternId?: string }) => {
+    setBassPatternRaw(c.pattern);
+    setBassSteps(c.steps);
+    setBassPatternId(c.patternId);
+    setBassPatternEdited(false);
+  }, []);
   const [mood, setMood] = useState(neta.mood ?? "");
   const [len, setLen] = useState(() =>
     Math.max(16, (neta.bars ?? 0) * beatsPerBar(neta.meter), ...notesOf(neta.content).map((n) => Math.ceil(n.start + n.dur))),
@@ -200,13 +220,15 @@ export function useNetaEditor(
   const playPause = tp.playPause;
 
   // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。
-  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, singSpeaker, len, pickup, feel };
+  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, bassPatternId, bassPatternEdited, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, singSpeaker, len, pickup, feel };
   const applySnapshot = useCallback((s: typeof snapshot) => {
     setNotes(s.notes);
     setChords(s.chords);
     setRhythm(s.rhythm);
-    setBassPattern(s.bassPattern);
+    setBassPatternRaw(s.bassPattern); // raw＝undo/redo は（改）を再付与しない（snapshot の bassPatternEdited をそのまま復元）
     setBassSteps(s.bassSteps);
+    setBassPatternId(s.bassPatternId);
+    setBassPatternEdited(s.bassPatternEdited);
     setChordPat(s.chordPat);
     setTones(s.tones);
     setSkelBass(s.skelBass);
@@ -305,7 +327,9 @@ export function useNetaEditor(
   function savePatch(): NetaPatch {
     // C-6：chordPat 系以外の全 content 再構成に feel を透過（`feel?{feel}:{}`＝両0/未指定はキーを生やさない＝bit一致）。
     if (isRelBass)
-      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program, ...(feel ? { feel } : {}) }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
+      // S7（決定②④）：patternId（来歴）／patternEdited（改）を content へ透過。無指定はキーを生やさない＝patternId 無しネタは
+      // 現行 byte 一致（program は feel より前＝現行の並びを保つ）。feel は S3 の透過（両0/未指定はキー無し＝bit）。
+      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, ...(bassPatternId ? { patternId: bassPatternId } : {}), ...(bassPatternEdited ? { patternEdited: true } : {}), program, ...(feel ? { feel } : {}) }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
     // meter は単体パートでも保存＝roll のグリッドと MIDI 拍子ヘッダに効く（container 限定を解消・監査 MB-05）。
     if (isMelody || isBass || isCounter || isRiff) return { content: { notes, program, ...singContent(), ...(feel ? { feel } : {}) }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
     if (isSkel) {
@@ -537,6 +561,8 @@ export function useNetaEditor(
     singSpeaker, setSingSpeaker, singVoices,
     notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat, feel, setFeel,
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
+    bassPatternId, bassPatternEdited, applyBassPattern, // S7：相対ビート型の来歴／（改）／帯適用
+
     rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
     // 崩し候補（①道具）
     candidate, candStrength, reshaping, reshape, saveCandidate, discardCandidate, detectKeyFromMelody,

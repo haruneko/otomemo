@@ -1,6 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// S7（修理#3 決定②）：「パターンを選ぶ」帯＝api.music("gen_bass",…) を叩く／試聴で startPlayback。stub。
+const api = vi.hoisted(() => ({ music: vi.fn() }));
+vi.mock("../src/api", () => ({ api }));
+vi.mock("../src/playback", () => ({ startPlayback: vi.fn(async () => null) }));
+
 import { BassStepEditor } from "../src/components/BassStepEditor";
 import type { BassStep } from "../src/music";
 
@@ -74,5 +80,87 @@ describe("BassStepEditor (#bass S2 度数レーン×ステップ)", () => {
       expect(next.find((p) => p.step === 8 && p.degree === "b7")).toBeFalsy(); // 同 step は置換
       expect(next.find((p) => p.step === 10 && p.degree === "6")).toBeTruthy(); // 別 step は保持
     });
+  });
+});
+
+// S7（修理#3 決定②④）：「パターンを選ぶ」帯＝相対ビート型の入口をベースの家へ。
+// seed×4 並列 gen_bass(relative:true・style 必須)→mode!=="relative" 番兵→patternId dedupe→最大4件→適用/（改）/compound 非表示。
+describe("BassStepEditor パターンを選ぶ帯（S7）", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  // 相対 content 候補を patternId 付きで返すヘルパ。
+  const relItem = (id: string, pat: BassStep[] = [{ step: 0, degree: "R", dur: 4 }]) => ({
+    kind: "bass", content: { mode: "relative", steps: 16, pattern: pat, patternId: id },
+  });
+
+  it("帯 fetch＝seed×4 並列で gen_bass を relative:true＋style 必須で呼ぶ（おまかせも style を必ず付ける）", async () => {
+    api.music.mockResolvedValue({ items: [relItem("RK-8ROOT")] });
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await userEvent.click(screen.getByLabelText("pattern-fetch")); // おまかせ（先頭 chip・v:""）で候補
+    expect(api.music).toHaveBeenCalledTimes(4);
+    for (const call of api.music.mock.calls) {
+      expect(call[0]).toBe("gen_bass");
+      const body = call[1] as { relative?: boolean; style?: string };
+      expect(body.relative).toBe(true);
+      expect(typeof body.style).toBe("string");
+      expect(body.style!.length).toBeGreaterThan(0); // relative は style 必須＝おまかせも決定的にジャンルを付ける
+    }
+  });
+
+  it("dedupe＝同 patternId は1件に畳む（4件→2件）", async () => {
+    // seed 偶奇で2種の型を返す＝4呼び出し→2ユニーク。
+    api.music.mockImplementation(async (_m: string, body: { seed: number }) =>
+      ({ items: [body.seed % 2 === 0 ? relItem("RK-8ROOT") : relItem("BL-WHOLE")] }));
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await userEvent.click(screen.getByLabelText("pattern-fetch"));
+    await screen.findByLabelText("pattern-card-0");
+    expect(screen.getByLabelText("pattern-card-0")).toBeTruthy();
+    expect(screen.getByLabelText("pattern-card-1")).toBeTruthy();
+    expect(screen.queryByLabelText("pattern-card-2")).toBeNull(); // 2ユニークのみ
+  });
+
+  it("番兵＝mode!=='relative'（絶対フォールバック）候補は捨てる", async () => {
+    // 1つ目は絶対 notes（relativeFallback）／2つ目以降は相対。絶対は除外され相対だけ残る。
+    api.music.mockImplementation(async (_m: string, body: { seed: number }) =>
+      body.seed % 4 === 0
+        ? { items: [{ kind: "bass", content: { notes: [{ pitch: 40, start: 0, dur: 1 }] } }] } // 絶対＝番兵で除外
+        : { items: [relItem("RK-8ROOT")] });
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await userEvent.click(screen.getByLabelText("pattern-fetch"));
+    await screen.findByLabelText("pattern-card-0");
+    // 相対 RK-8ROOT が1件だけ（絶対候補は捨てられ、相対は同 patternId で dedupe）。
+    expect(screen.getByLabelText("pattern-card-0").textContent).toContain("RK-8ROOT");
+    expect(screen.queryByLabelText("pattern-card-1")).toBeNull();
+  });
+
+  it("適用＝onApplyPattern に pattern/steps/patternId を渡す", async () => {
+    const pat: BassStep[] = [{ step: 0, degree: "R", dur: 4 }, { step: 8, degree: "5", dur: 4 }];
+    api.music.mockResolvedValue({ items: [relItem("RK-8ROOT", pat)] });
+    const onApplyPattern = vi.fn();
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" onApplyPattern={onApplyPattern} />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await userEvent.click(screen.getByLabelText("pattern-fetch"));
+    await userEvent.click(await screen.findByLabelText("pattern-apply-0"));
+    expect(onApplyPattern).toHaveBeenCalledWith({ pattern: pat, steps: 16, patternId: "RK-8ROOT" });
+  });
+
+  it("帯見出し＝patternEdited 有りで「いま：<型>（改）」／無しは型名のみ", () => {
+    const { rerender } = render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} patternId="RK-8ROOT" />);
+    expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：RK-8ROOT");
+    rerender(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} patternId="RK-8ROOT" patternEdited />);
+    expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：RK-8ROOT（改）");
+  });
+
+  it("patternId 無しネタは「いま：」帯見出しが出ない", () => {
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} />);
+    expect(screen.queryByLabelText("pattern-now")).toBeNull();
+  });
+
+  it("compound meter（6/8）は帯ごと非表示", () => {
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={12} onStepsChange={vi.fn()} meter="6/8" />);
+    expect(screen.queryByLabelText("pattern-picker")).toBeNull();
   });
 });

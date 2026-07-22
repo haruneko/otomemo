@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
@@ -463,5 +463,88 @@ describe("NetaDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "削除" }));
     await waitFor(() => expect(deleteNeta).toHaveBeenCalledWith("x"));
     expect(onChanged).toHaveBeenCalled();
+  });
+});
+
+// ── S7（修理#3 決定②④・ベースの家 本丸）：相対 bass の patternId/patternEdited/feel 透過・（改）・トグル confirm・管弦ゲート ──
+describe("NetaDialog S7 ベースの家（相対 bass）", () => {
+  beforeEach(() => {
+    updateNeta.mockClear();
+    updateNeta.mockResolvedValue({});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const relBass = (over: Record<string, unknown> = {}): Neta => ({
+    ...neta, kind: "bass", text: null, key: 0, mode: "major", tempo: 120, meter: "4/4",
+    content: { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }], ...over },
+  });
+
+  it("patternId 持ち相対ネタ：patternId と feel を保存で透過（pattern も保持）", async () => {
+    const nb = relBass({ patternId: "RK-8ROOT", feel: { swing: 0.5, humanize: 0.25, seed: 1 } });
+    render(<NetaDialog neta={nb} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta"));
+    await userEvent.selectOptions(screen.getByLabelText("key"), "9"); // 何か1つ編集＝自動保存
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content.patternId).toBe("RK-8ROOT");
+    expect(patch.content.feel).toEqual({ swing: 0.5, humanize: 0.25, seed: 1 });
+    expect(patch.content.pattern).toEqual([{ step: 0, degree: "R", dur: 4 }]);
+    expect("patternEdited" in patch.content).toBe(false); // メタ編集（key）では（改）は付かない
+  });
+
+  it("patternId 持ち相対ネタの手編集（セル配置）→ patternEdited:true 付与", async () => {
+    const nb = relBass({ patternId: "RK-8ROOT" });
+    render(<NetaDialog neta={nb} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("bass-5-4")); // 空セルへ5度＝グリッド手編集
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content.patternEdited).toBe(true);
+    expect(patch.content.patternId).toBe("RK-8ROOT"); // 来歴は残す
+    expect(patch.content.pattern.find((p: { step: number; degree: string }) => p.step === 4 && p.degree === "5")).toBeTruthy();
+  });
+
+  it("patternId 無し相対ネタの手編集→ patternEdited は生えない＝現行 byte 一致", async () => {
+    render(<NetaDialog neta={relBass()} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("bass-5-4")); // 手編集
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect("patternEdited" in patch.content).toBe(false);
+    expect("patternId" in patch.content).toBe(false);
+    // キー順＝現行（mode/steps/pattern/program）。新キーが割り込まない＝byte 一致。
+    expect(Object.keys(patch.content)).toEqual(["mode", "steps", "pattern", "program"]);
+    expect(patch.content.mode).toBe("relative");
+    expect(patch.content.program).toBe(33); // bass 既定音色
+  });
+
+  it("絶対↔相対トグル：現モードに中身が有れば confirm（中身有→出る）", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false); // やめる＝切替しない
+    // 絶対 bass（notes 有り）＝初期 absolute モード。
+    const ab: Neta = { ...neta, kind: "bass", text: null, key: 0, meter: "4/4", content: { notes: [{ pitch: 40, start: 0, dur: 1 }] } };
+    render(<NetaDialog neta={ab} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "相対" }));
+    expect(confirmSpy).toHaveBeenCalledTimes(1); // 中身有＝確認が出る
+    // やめた＝相対グリッドに切り替わらない（絶対のまま＝bass-R-0 度数セルが無い）。
+    expect(screen.queryByLabelText("bass-R-0")).toBeNull();
+  });
+
+  it("絶対↔相対トグル：現モードが空なら confirm を出さず即切替（空→出ない）", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const ab: Neta = { ...neta, kind: "bass", text: null, key: 0, meter: "4/4", content: { notes: [] } };
+    render(<NetaDialog neta={ab} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "相対" }));
+    expect(confirmSpy).not.toHaveBeenCalled(); // 空＝無言で切替
+    expect(await screen.findByLabelText("bass-R-0")).toBeTruthy(); // 相対グリッドへ
+  });
+
+  it("管弦(section_inst)では「パターンを選ぶ」帯が消える（ゲート発効）／コード楽器では出る", () => {
+    const cpContent = { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 4 }] };
+    const { unmount } = render(<NetaDialog neta={{ ...neta, kind: "section_inst", text: null, content: cpContent }} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(screen.queryByLabelText("pattern-picker")).toBeNull(); // 管弦＝帯なし（型の誤適用を断つ）
+    unmount();
+    render(<NetaDialog neta={{ ...neta, kind: "chord_pattern", text: null, content: cpContent }} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(screen.getByLabelText("pattern-picker")).toBeTruthy(); // コード楽器＝従来どおり帯あり
   });
 });

@@ -1,8 +1,26 @@
-import { useState, type Ref } from "react";
-import type { BassStep } from "../music";
+import { useRef, useState, type Ref } from "react";
+import { type BassStep, type PlaybackHandle, isCompoundMeter, notesForContent, buildPlayback } from "../music";
 import { previewNote } from "../audio";
+import { startPlayback } from "../playback";
+import { api } from "../api";
+import { PatternPickerBar, type PatternCand } from "./PatternPickerBar";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
+
+// ベースの相対ビート型ジャンルchip（S7・修理#3 決定②）＝gen_bass の style ジャンル名と対応（先頭＝おまかせ番兵 v:""）。
+// コード楽器(COMP_GENRE_CHIPS)/ドラム(DRUM_GENRE_CHIPS)とは genre 集合が違う（ベース＝rock/ballad/citypop/funk/edm/vocarock）。
+const BASS_GENRE_CHIPS: { v: string; label: string }[] = [
+  { v: "", label: "おまかせ" },
+  { v: "rock", label: "ロック" },
+  { v: "ballad", label: "バラード" },
+  { v: "citypop", label: "シティポップ" },
+  { v: "funk", label: "ファンク" },
+  { v: "edm", label: "EDM" },
+  { v: "vocarock", label: "ボカロック" },
+];
+// おまかせ＝relative は style 必須（未指定は relativeFallback で絶対 notes が返り相対エディタに混入する事故の口）。
+// seed から6ジャンルを**決定的**に選び style を必ず付ける＝api 無改変で塞ぐ（修理#3 決定②）。
+const BASS_OMAKASE_GENRES = ["rock", "ballad", "citypop", "funk", "edm", "vocarock"];
 
 // このエディタが grid で編集する 6 レーンの度数（BassStep.degree はこれより広い＝修理#2 で 2/6/クロマチック/next を追加）。
 // レーン外の度数（型生成された相対ベースの b7/6/#4 や next）は grid には現れないが pattern には**非破壊で保持**される
@@ -43,6 +61,13 @@ export function BassStepEditor({
   onChange,
   steps,
   onStepsChange,
+  patternId,
+  patternEdited,
+  onApplyPattern,
+  meter,
+  keyPc,
+  tempo,
+  program,
   playheadRef,
   scrollerRef,
 }: {
@@ -50,9 +75,64 @@ export function BassStepEditor({
   onChange: (p: BassStep[]) => void;
   steps: number;
   onStepsChange: (steps: number) => void;
+  patternId?: string; // 適用した相対ビート型ID（帯「いま：<型>」）。手編集後は patternEdited で「（改）」（決定④）。
+  patternEdited?: boolean; // 手編集済みの印（帯見出しに「（改）」）。
+  onApplyPattern?: (c: { pattern: BassStep[]; steps: number; patternId?: string }) => void; // 帯の適用＝pattern/steps/patternId 置換＋（改）解除（親が snapshot 1操作で Undo）。
+  meter?: string; // 拍子（compound=6/8系は帯非表示）。
+  keyPc?: number; // 調（型試聴の度数→実音の tonic）。
+  tempo?: number; // 型試聴の実音化テンポ。
+  program?: number; // ベース音色（GM・試聴用・既定33）。
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
+  const ppPlay = useRef<PlaybackHandle | null>(null);
+  // 「パターンを選ぶ ▸」帯（S7・修理#3 決定②）＝相対ビート型の入口をベースの家（相対ビュー）へ。
+  // gen_bass に variety が無い＝ドラム帯と同流儀（seed×4 並列・frame から tempo を外して pool を広げる＝要耳較正）。
+  const fetchPatterns = async (genre: string): Promise<PatternCand[]> => {
+    const bars = Math.max(1, Math.round(steps / 16)); // 相対ベースは常に4/4（16step=1小節）。
+    const base = Math.floor(Math.random() * 1e6);
+    const results = await Promise.all(
+      [0, 1, 2, 3].map((d) => {
+        // おまかせ＝seed から決定的にジャンルを選び style を必ず付ける（relative は style 必須＝絶対混入を塞ぐ）。
+        const style = genre || BASS_OMAKASE_GENRES[(base + d) % BASS_OMAKASE_GENRES.length]!;
+        return api.music<{ items: { content: unknown }[] }>("gen_bass", {
+          frame: { key: keyPc ?? 0, meter, bars }, // tempo は外す＝候補 pool を広げる（ドラム帯と同流儀）
+          style,
+          relative: true,
+          seed: base + d,
+        });
+      }),
+    );
+    const seen = new Set<string>();
+    const out: PatternCand[] = [];
+    for (const it of results.flatMap((r) => r.items ?? [])) {
+      const c = it.content as { mode?: string; pattern?: BassStep[]; steps?: number; patternId?: string } | null;
+      if (!c || c.mode !== "relative") continue; // 番兵＝relativeFallback で絶対 notes が来た候補は捨てる（style 未経路の保険）
+      const k = c.patternId ?? JSON.stringify(it.content); // 型経路は patternId で・稀な無ID相対は content で dedupe
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({
+        key: k,
+        name: c.patternId ?? "おまかせ",
+        audition: () => auditionPattern(it.content),
+        apply: () => applyPattern(it.content),
+      });
+      if (out.length >= 4) break;
+    }
+    return out;
+  };
+  // 試聴＝度数を調(key)の tonic に当てて実音化（既存試聴の流儀・notesForContent("bass")）。
+  const auditionPattern = (content: unknown) => {
+    ppPlay.current?.stop();
+    const ns = notesForContent("bass", content, { key: keyPc ?? 0 });
+    if (ns.length) void startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: tempo ?? 120, program: program ?? 33 }), { vocalMode: "peek" }).then((h) => { ppPlay.current = h; });
+  };
+  // 適用＝pattern/steps/patternId を親へ渡し置換＋（改）解除（親が snapshot 1操作で Undo に乗せる）。
+  const applyPattern = (content: unknown) => {
+    ppPlay.current?.stop();
+    const c = content as { pattern: BassStep[]; steps?: number; patternId?: string };
+    onApplyPattern?.({ pattern: c.pattern, steps: c.steps ?? steps, patternId: c.patternId });
+  };
   const [len, setLen] = useState(2); // 既定 8分
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 の付点音価に対応）
   const bars = Math.max(1, Math.round(steps / 16));
@@ -80,6 +160,16 @@ export function BassStepEditor({
 
   return (
     <div className="bass-step">
+      {/* 「パターンを選ぶ ▸」帯（S7）＝相対ビート型の入口。既定閉＝開くまで既存DOM/挙動不変。
+          compound meter（6/8系）は型ライブラリが4/4前提＝帯非表示（gen_bass の style も6-8は絶対フォールバック）。
+          nowLabel＝patternId（＋手編集後は「（改）」）。（改）表現は渡す文字列で行う＝PatternPickerBar は器のまま（決定④）。 */}
+      {!isCompoundMeter(meter) && (
+        <PatternPickerBar
+          nowLabel={patternId ? patternId + (patternEdited ? "（改）" : "") : undefined}
+          chips={BASS_GENRE_CHIPS}
+          onFetch={fetchPatterns}
+        />
+      )}
       <BarsControl bars={bars} max={4} onChange={setBars} />
       <div className="bass-lens">
         <NoteValuePicker

@@ -39,6 +39,10 @@ export interface KindEditorBodyProps {
   setBassSteps: (n: number) => void;
   bassMode: "absolute" | "relative";
   setBassMode: (m: "absolute" | "relative") => void;
+  // S7（修理#3 決定②④）：相対ビート型の来歴／（改）／帯の適用（BassStepEditor の「パターンを選ぶ」帯へ）。
+  bassPatternId?: string;
+  bassPatternEdited?: boolean;
+  onApplyBassPattern?: (c: { pattern: BassStep[]; steps: number; patternId?: string }) => void;
   rollMode: "draw" | "select" | "erase" | "lyric"; // lyric=詞モード（メロのみ・歌詞リタッチ）
   setRollMode: (v: "draw" | "select" | "erase" | "lyric") => void;
   // 骨格（design #20 S2）
@@ -97,6 +101,15 @@ export function KindEditorBody(p: KindEditorBodyProps) {
   // トランスポーズ（①道具・純クライアント＝Undo可）。全ノートのピッチを移動。
   const transpose = (d: number) =>
     p.setNotes(p.notes.map((n) => ({ ...n, pitch: Math.max(0, Math.min(127, n.pitch + d)) })));
+  // #bass S7（決定①）：絶対↔相対の破壊的トグルに確認。現モードに中身が有り切替先で保存すると失われる時だけ confirm。
+  // 空なら無言で切替（データ喪失に見えない）。変換ロジックは新設しない（絶対→度数逆算は研究級＝backlog）。
+  const switchBassMode = (m: "absolute" | "relative") => {
+    if (m === p.bassMode) return;
+    const hasContent = p.bassMode === "absolute" ? p.notes.length > 0 : p.bassPattern.length > 0;
+    const lost = p.bassMode === "absolute" ? "絶対ノート" : "相対パターン";
+    if (hasContent && !window.confirm(`「${lost}」は切り替えて保存すると失われます。切り替えますか？`)) return;
+    p.setBassMode(m);
+  };
   // 似たメロ（①道具・retrieval・読むだけv1）：連想元コーパスから近いメロを近い順に。
   async function findSimilar() {
     setToolsOpen(false);
@@ -121,10 +134,10 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           {/* #bass S2: bass は 絶対(ピアノロール)/相対(度数グリッド) をモード切替 */}
           {isBass && (
             <div className="input-toggle">
-              <button type="button" className={p.bassMode === "absolute" ? "on" : ""} onClick={() => p.setBassMode("absolute")}>
+              <button type="button" className={p.bassMode === "absolute" ? "on" : ""} onClick={() => switchBassMode("absolute")}>
                 絶対
               </button>
-              <button type="button" className={p.bassMode === "relative" ? "on" : ""} onClick={() => p.setBassMode("relative")}>
+              <button type="button" className={p.bassMode === "relative" ? "on" : ""} onClick={() => switchBassMode("relative")}>
                 相対
               </button>
             </div>
@@ -135,6 +148,13 @@ export function KindEditorBody(p: KindEditorBodyProps) {
               onChange={p.setBassPattern}
               steps={p.bassSteps}
               onStepsChange={p.setBassSteps}
+              patternId={p.bassPatternId}
+              patternEdited={p.bassPatternEdited}
+              onApplyPattern={p.onApplyBassPattern}
+              meter={p.meter}
+              keyPc={p.keyPc}
+              tempo={p.tempo}
+              program={p.program}
               playheadRef={tp.lineRef}
               scrollerRef={tp.scrollerRef}
             />
@@ -257,7 +277,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           )}
         </div>
       ) : p.flags.isChordPat || p.flags.isSectionInst ? ( // 管弦(section_inst・WP-X3c)も進行追従の多声＝ChordPatternEditor を共有
-        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
+        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} showPicker={p.flags.isChordPat} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />
       ) : isRhythm ? (
