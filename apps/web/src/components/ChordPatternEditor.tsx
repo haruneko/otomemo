@@ -1,6 +1,10 @@
-import { type CSSProperties, type Ref, useState } from "react";
-import { type ChordPatternContent, type ChordLhContent, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
+import { type CSSProperties, type Ref, useRef, useState } from "react";
+import { type ChordPatternContent, type ChordLhContent, type ChordEntry, type PlaybackHandle, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, notesForContent, buildPlayback, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
 import { previewNote } from "../audio";
+import { startPlayback } from "../playback";
+import { api } from "../api";
+import { COMP_GENRE_CHIPS } from "../useMelodyGen";
+import { PatternPickerBar, type PatternCand } from "./PatternPickerBar";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -70,11 +74,22 @@ function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
 //   これ以上ノブが要る日は【群アコーディオンへ沈める】（前面はこの5行で打ち止め）＝スマホ縦で詰め込まない
 //   （タップ標的28px＝密度耐性が低い・design「奏法UI」決定）。奏法行=4行目（Fable UX監査①＝読み取り専用サマリ＋じゃら〜ん。
 //   奏法の変更手段は MetaPanel「奏法」select 一本＝ここは表示のみ）・左手seg=5行目（keyboard 解決時のみ・S3）。
+// プレビュー進行（型試聴用）＝C→Am→F→G（ネタ key へ移調）。ネタに preview_chords があればそちら優先（帯の試聴文脈）。
+const PREVIEW_PROG: { root: number; quality: string }[] = [
+  { root: 0, quality: "" }, { root: 9, quality: "m" }, { root: 5, quality: "" }, { root: 7, quality: "" },
+];
+function previewChordsForKey(key: number): ChordEntry[] {
+  return PREVIEW_PROG.map((c, i) => ({ root: (((c.root + key) % 12) + 12) % 12, quality: c.quality, start: i * 4, dur: 4 }));
+}
+
 export function ChordPatternEditor({
   pattern,
   onChange,
   meter,
   program,
+  tempo,
+  keyPc,
+  previewChords,
   playheadRef,
   scrollerRef,
 }: {
@@ -82,10 +97,50 @@ export function ChordPatternEditor({
   onChange: (p: ChordPatternContent) => void;
   meter?: string;
   program?: number; // 音色（GM）。voicing.style="auto" の奏法導出＋「じゃら〜ん」行の出し分け（ギター解決時のみ）に使う。
+  tempo?: number; // 型試聴の実音化＋候補フレームの tempo（修理#1「パターンを選ぶ」帯）
+  keyPc?: number; // 調（型試聴のプレビュー進行の移調＋候補フレームの key）
+  previewChords?: ChordEntry[]; // ネタ固有のプレビュー進行（あれば型試聴に使う・無ければ C→Am→F→G）
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
+  const ppPlay = useRef<PlaybackHandle | null>(null);
+  // 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1）＝型辞書の入口を単体エディタへ。候補取得/試聴/適用の中身を注入する。
+  const fetchPatterns = async (genre: string): Promise<PatternCand[]> => {
+    const bars = Math.max(1, Math.round(pattern.steps / stepsPerBar));
+    const r = await api.music<{ items: { content: unknown; label?: string }[] }>("gen_chord_pattern", {
+      frame: { key: keyPc ?? 0, meter, tempo, bars },
+      pattern: genre || "omakase",
+      variety: 4,
+      seed: Math.floor(Math.random() * 1e6),
+    });
+    return (r.items ?? []).map((it, i) => {
+      const label = it.label ?? "";
+      const sp = label.indexOf(" ");
+      const id = sp >= 0 ? label.slice(0, sp) : label; // label=`型ID 場面`
+      const scene = sp >= 0 ? label.slice(sp + 1) : undefined;
+      return {
+        key: `${id}-${i}`,
+        name: id || "コード楽器",
+        scene,
+        audition: () => auditionPattern(it.content),
+        apply: () => applyPattern(it.content),
+      };
+    });
+  };
+  // 試聴＝ネタ preview_chords（あれば）or プレビュー進行に当てて resolveChordPattern で実音化（tempo/program 込み）。
+  const auditionPattern = (content: unknown) => {
+    ppPlay.current?.stop();
+    const chords = previewChords?.length ? previewChords : previewChordsForKey(keyPc ?? 0);
+    const ns = notesForContent("chord_pattern", content, { key: keyPc ?? 0, chords, tempo, program: program ?? (content as ChordPatternContent).program });
+    if (ns.length) void startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: tempo ?? 120, program }), { vocalMode: "peek" }).then((h) => { ppPlay.current = h; });
+  };
+  // 適用＝候補 content で置換（mode/voicing/steps/hits/lh/patternId）。program 等メタは現ネタを保持＝onChange で Undo に乗る。
+  const applyPattern = (content: unknown) => {
+    ppPlay.current?.stop();
+    const c = content as ChordPatternContent;
+    onChange({ ...c, ...(pattern.program != null ? { program: pattern.program } : {}) });
+  };
   const [len, setLen] = useState(4); // 各音の長さ（step数・既定=四分）
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 対応）
   // #29 §9 ホールドドラッグ中のライブプレビュー（--hv をこのセルだけ上書き・HUD 表示）。離した時に一括 onChange。
@@ -153,6 +208,8 @@ export function ChordPatternEditor({
 
   return (
     <div className="cp-editor">
+      {/* 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1）＝型辞書の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。 */}
+      <PatternPickerBar nowLabel={pattern.patternId} chips={COMP_GENRE_CHIPS} onFetch={fetchPatterns} />
       {/* ① いつ弾く（主役）：グリッド＋長さ＋小節 */}
       <div className="cp-when">
         <p className="cp-zlabel">いつ弾く（タップで配置{isArp ? "＝各hitで次の音" : ""}）</p>

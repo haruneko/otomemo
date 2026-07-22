@@ -1,6 +1,7 @@
 import { type CSSProperties, type Ref, useEffect, useRef, useState } from "react";
 import {
   type RhythmContent,
+  type PlaybackHandle,
   DRUM_LABEL,
   DRUM_KITS,
   drumVel,
@@ -12,9 +13,25 @@ import {
   GHOST_VEL,
   ACCENT_BOOST,
   snapBps,
+  notesForContent,
+  buildPlayback,
 } from "../music";
 import { previewNote } from "../audio";
+import { startPlayback } from "../playback";
+import { api } from "../api";
+import { PatternPickerBar, type PatternCand } from "./PatternPickerBar";
 import { BarsControl } from "./BarsControl";
+
+// ドラムの定型ビート型ライブラリ（drumLibrary の genre）＋おまかせ番兵（v:""＝従来 default 生成）。
+// コード楽器の COMP_GENRE_CHIPS とは genre 集合が違う（ドラムは jpop/rock/dance/ballad/funk）ので別立て。
+const DRUM_GENRE_CHIPS: { v: string; label: string }[] = [
+  { v: "", label: "おまかせ" },
+  { v: "jpop", label: "J-POP" },
+  { v: "rock", label: "ロック" },
+  { v: "dance", label: "4つ打ち" },
+  { v: "ballad", label: "バラード" },
+  { v: "funk", label: "ファンク" },
+];
 import { DragHud } from "./DragHud";
 import { Icon } from "./Icon";
 import { useHoldDrag, type HoldDragState, type HoldDragStart } from "../useHoldDrag";
@@ -91,16 +108,63 @@ export function RhythmEditor({
   rhythm,
   onChange,
   meter,
+  tempo,
   playheadRef,
   scrollerRef,
 }: {
   rhythm: RhythmContent;
   onChange: (r: RhythmContent) => void;
   meter?: string; // 拍子（6/8 等で grid を変える）
+  tempo?: number; // 型試聴の実音化テンポ（修理#1「パターンを選ぶ」帯）
   playheadRef?: Ref<HTMLDivElement>; // #74 再生プレイヘッド
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter, rhythm.beatsPerStep);
+  const ppPlay = useRef<PlaybackHandle | null>(null);
+  // 「パターンを選ぶ ▸」帯（修理#1）＝定型ビート型の入口を単体エディタへ。gen_drums に variety が無いので seed 違い4件→dedupe。
+  const fetchPatterns = async (genre: string): Promise<PatternCand[]> => {
+    const bars = Math.max(1, Math.round(rhythm.steps / stepsPerBar));
+    const base = Math.floor(Math.random() * 1e6);
+    // tempo は外す＝pickBeatPattern の pool を役割候補全体に広げ、seed 連番で別々の型を引き当てる（要耳較正）。
+    const results = await Promise.all(
+      [0, 1, 2, 3].map((d) =>
+        api.music<{ items: { content: unknown }[] }>("gen_drums", {
+          frame: { meter, bars },
+          ...(genre ? { style: genre } : {}),
+          seed: base + d,
+        }),
+      ),
+    );
+    const seen = new Set<string>();
+    const out: PatternCand[] = [];
+    for (const it of results.flatMap((r) => r.items ?? [])) {
+      const rc = (it.content as { rhythm?: RhythmContent } | null)?.rhythm;
+      if (!rc) continue;
+      const k = rc.patternId ?? JSON.stringify(it.content); // 型経路は patternId で・おまかせは content で dedupe
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({
+        key: k,
+        name: rc.patternId ?? "おまかせ",
+        audition: () => auditionPattern(it.content),
+        apply: () => applyPattern(it.content),
+      });
+      if (out.length >= 4) break;
+    }
+    return out;
+  };
+  // 試聴＝ドラムは進行不要。rhythm content をそのまま鳴らす（notesForContent("rhythm")）。
+  const auditionPattern = (content: unknown) => {
+    ppPlay.current?.stop();
+    const ns = notesForContent("rhythm", content);
+    if (ns.length) void startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: tempo ?? 120 }), { vocalMode: "peek" }).then((h) => { ppPlay.current = h; });
+  };
+  // 適用＝候補 rhythm で置換（steps/lanes/patternId）。kit（音色）は現ネタを保持＝onChange で Undo に乗る。
+  const applyPattern = (content: unknown) => {
+    ppPlay.current?.stop();
+    const rc = (content as { rhythm: RhythmContent }).rhythm;
+    onChange({ ...rc, ...(rhythm.kit != null ? { kit: rhythm.kit } : {}) });
+  };
   const [eraseMode, setEraseMode] = useState(false);
   // #29 §9 ドラッグ中のライブプレビュー（--hv/divクラスをこのセルだけ上書き・HUD 表示）。離した時に一括 onChange。
   const [drag, setDrag] = useState<
@@ -183,6 +247,9 @@ export function RhythmEditor({
   }
 
   return (
+   <>
+    {/* 「パターンを選ぶ ▸」帯（修理#1）＝定型ビート型の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。 */}
+    <PatternPickerBar nowLabel={rhythm.patternId} chips={DRUM_GENRE_CHIPS} onFetch={fetchPatterns} />
     <div
       className={"rhythm-editor" + (eraseMode ? " erase-on" : "")}
       ref={scrollerRef}
@@ -270,5 +337,6 @@ export function RhythmEditor({
         <DragHud anchor={drag.anchor} vel={drag.vel} div={drag.div} base={drag.base} detents={drag.detents} />
       )}
     </div>
+   </>
   );
 }

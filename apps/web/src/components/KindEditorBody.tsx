@@ -257,11 +257,11 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           )}
         </div>
       ) : p.flags.isChordPat || p.flags.isSectionInst ? ( // 管弦(section_inst・WP-X3c)も進行追従の多声＝ChordPatternEditor を共有
-        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
+        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />
       ) : isRhythm ? (
-        <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
+        <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} tempo={p.tempo} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : p.flags.isSkel ? (
         <div className="melody-input">
           {/* 描く/選ぶ/消す（メロと同じモード流儀）。骨格の点は次点/句境界まで支配。 */}

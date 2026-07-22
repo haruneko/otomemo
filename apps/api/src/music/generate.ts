@@ -962,10 +962,12 @@ export function genChordPattern(
     };
     // S3 左手内蔵：keyboard 型に LH データがあれば content.lh を custom で載せる（web keyboard 解決時のみ鳴る）。
     //   guitar 型は lh を出さない（ギターに左手レーンは無い）。effStyle が guitar 上書きなら lh を載せない。
+    // 型IDの残留（修理#1・監査違反③）：採用後の content から「どの型で生まれたか」を辿れるよう patternId を刻む。
+    //   単数経路・variety 複数経路の両方が buildCompContent 経由＝両方に載る。従来経路（compType 未解決）は通らない＝bit一致。
     const content: {
       mode: CompMode; voicing: typeof voicing; steps: number;
-      hits: typeof hits; lh?: { mode: "custom"; hits: { step: number; dur: number; deg: string }[] };
-    } = { mode: compType.mode, voicing, steps, hits };
+      hits: typeof hits; patternId: string; lh?: { mode: "custom"; hits: { step: number; dur: number; deg: string }[] };
+    } = { mode: compType.mode, voicing, steps, hits, patternId: compType.id };
     if (effStyle !== "guitar" && compType.style !== "guitar" && compType.lh) {
       const lhHits: { step: number; dur: number; deg: string }[] = [];
       for (let bar = 0; bar < bars; bar++) for (const h of compLhHitsForBar(compType.lh, bar * stepsPerBar)) lhHits.push(h);
@@ -1474,7 +1476,7 @@ const GM = { Kick: 36, Snare: 38, HiHat: 42, OpenHat: 46 };
 /** GMドラム（16ステップ1小節）を **mood/tempo/seed で可変**生成。切ない=ハーフタイム/疎、
  * 明るい/速い=16分ハット・キック増、既定=8ビート。返り #85 items 形（rhythm）。 */
 // ドラム content 形（rhythm.lanes は OutLane＝{name,midi,hits,vel,velCurve?}）。
-type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[] } };
+type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[]; patternId?: string } };
 export interface DrumsGenOpts { style?: string; fill?: number | string }
 
 /** GMバックビートを生成（WP-D1 で style/fill ノブ追加・**opts 無し/両ノブ未指定は従来と bit 一致**）。
@@ -1562,7 +1564,8 @@ function resolveStyleContent(frame: Frame, style: string, seed: number): DrumCon
   if (!compound && pat.meter === "6/8") return null;
   const beatsPerStep = round3(beatsPerBar(f.meter) / pat.grid);
   const lanes: OutLane[] = pat.lanes.map((l) => ({ name: l.name, midi: l.midi, hits: [...l.hits], vel: l.vel }));
-  return { rhythm: { steps: pat.grid * pat.bars, bars: pat.bars, beatsPerStep, lanes } };
+  // 型IDの残留（修理#1・監査違反③）：解決した型を content に刻む（未解決＝defaultDrumBar 経路は載せない＝bit一致）。
+  return { rhythm: { steps: pat.grid * pat.bars, bars: pat.bars, beatsPerStep, lanes, patternId: pat.id } };
 }
 
 // フィル挿入：base(1小節 or 型)を frame.bars 本へタイル＋末尾の遷移小節へフィル型＋着地(次小節頭 crash+kick)。
@@ -1607,5 +1610,6 @@ function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, s
     const allSame = vels.every((v) => v === vels[0]);
     return allSame ? { name, midi: e.midi, hits, vel: vels[0] ?? 100 } : { name, midi: e.midi, hits, vel: Math.max(...vels), velCurve: vels };
   });
-  return { rhythm: { steps: N * grid, bars: N, beatsPerStep: base.rhythm.beatsPerStep, lanes } };
+  // 型IDの残留（修理#1）：style+fill でも base（型経路）の patternId を継承（fill だけ＝base=default＝patternId 無し）。
+  return { rhythm: { steps: N * grid, bars: N, beatsPerStep: base.rhythm.beatsPerStep, lanes, ...(base.rhythm.patternId != null ? { patternId: base.rhythm.patternId } : {}) } };
 }

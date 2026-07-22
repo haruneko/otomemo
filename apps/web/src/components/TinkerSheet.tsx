@@ -13,6 +13,10 @@ import type { Feel, Note } from "../music";
 //   新ノブ/型は【そのパーツの引き出しの中】へ（前面はchip6±1・seg1行まで、超過は群アコーディオンへ沈める）。
 //   横断設定は【旋法＋一式の2枠で打ち止め】（3つ目が要る日は「共通」引き出しを新設して沈める）。
 //   ＝パーツが7→12に増えてもハブは無スクロールのまま壊れない。
+//   ★永続条項（修理#1・2026-07-22 責務分割監査・正典＝docs/research/2026-07-22-performance-editing-architecture-audit.md）：
+//     入口（引き出し）に足してよい生成ノブは、**効果が採用時に content（パターン/キー）へ刻まれるもの**だけ。
+//     content に残らない「設定の家」を入口に作らない（入口が家を兼ねる非対称＝型辞書がSection専用になった歪みを再生産しない）。
+//     content に刻まれる決定は、後からその content の家＝ネタ単体エディタで再編集できねばならない（型辞書＝「パターンを選ぶ」帯へ）。
 export type TinkerSheetProps = {
   gen: ReturnType<typeof useMelodyGen>;
   isSong: boolean;

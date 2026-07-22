@@ -1945,6 +1945,18 @@
 /* コード楽器：コントロール群（枠の外）＋グリッド（横スクロール枠）を縦に。min-width:0 で
    子がビューポートを超えて広がらない＝モバイルで横はみ出さない。 */
 .cp-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* 「パターンを選ぶ ▸」帯（修理#1）＝型辞書の入口を単体エディタへ。既定閉のたたみ帯（コード楽器／ドラム共用）。 */
+.pattern-picker { border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 4px 6px; min-width: 0; }
+.pp-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; padding: 4px; font-size: 0.78rem; color: inherit; cursor: pointer; }
+.pp-now { color: var(--muted); font-size: 0.72rem; }
+.pp-body { display: flex; flex-direction: column; gap: 8px; padding: 6px 2px 2px; }
+.pp-genres { flex-wrap: wrap; }
+.pp-fetch { align-self: flex-start; padding: 4px 12px; border-radius: 6px; }
+.pp-cards { display: flex; flex-direction: column; gap: 6px; }
+.pp-card { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 1px solid var(--line, #eee); border-radius: 6px; flex-wrap: wrap; }
+.pp-card-name { font-weight: 600; font-size: 0.76rem; }
+.pp-card-scene { font-size: 0.7rem; flex: 1 1 auto; min-width: 0; }
+.pp-audition, .pp-apply { padding: 2px 10px; border-radius: 6px; }
 /* ゾーンの小見出し（いつ弾く／響き）。 */
 .cp-zlabel { font-size: 0.68rem; color: var(--muted); margin: 0 0 6px; }
 /* ①「いつ弾く」＝主役：グリッド＋長さ＋小節をまとめた枠。 */

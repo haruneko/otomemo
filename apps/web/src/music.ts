@@ -266,6 +266,7 @@ export interface RhythmContent {
   kit?: number; // ドラムキット(GM bank128 preset 0=Standard)。アコ/エレキ選択。未指定=Standard。
   bars?: number; // #29 P0 小節数（api genDrums が自己記述）。web 表示は steps/stepsPerBar 由来なので任意。
   beatsPerStep?: number; // #29 P0 1step=何拍か（自己記述の格子解像度）。未指定=0.25（16分）。1/3=三連12格子（shuffle 型）
+  patternId?: string; // 修理#1（監査違反③）：適用した定型ビート型ID（来歴・選び直しの現在型ハイライト）。未指定＝手編集/従来ネタ＝bit一致
 }
 
 // #29 P0 拍値の丸め（syncopation.ts と同式）＝小節末の累積ドリフト抑制。
@@ -615,6 +616,7 @@ export interface ChordPatternContent {
   hits: ChordHit[]; // 発音する step とその長さ
   program?: number; // 自前の音色（ベースのように選べる）
   lh?: ChordLhContent; // S3 左手土台（keyboard 解決時のみ実音化・未定義＝左手なし＝bit一致）
+  patternId?: string; // 修理#1（監査違反③）：適用した型辞書ID（来歴・選び直しの現在型ハイライト）。未指定＝素の手編集/従来ネタ＝bit一致
 }
 const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
 // #29 P2 コード楽器の3値ベロシティ語彙（普通=vel 省略→下流 vel??100）。耳較正で調整可＝保存データは実値なので既存不変。

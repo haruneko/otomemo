@@ -99,6 +99,26 @@ describe("genDrums 定型ビート＋フィル（WP-D1）", () => {
   });
 });
 
+// ── 修理#1：型IDの残留（patternId・監査違反③）───────────────────────────────
+describe("genDrums patternId（型経路のみ・未解決は生やさない＝bit一致）", () => {
+  const pid = (r: ReturnType<typeof genDrums>) => (r.items[0]!.content as { rhythm: { patternId?: string } }).rhythm.patternId;
+  it("style=型ID＝rhythm.patternId にその型ID", () => {
+    expect(pid(genDrums({ meter: "4/4" }, 1, { style: "beat8.syncopated" }))).toBe("beat8.syncopated");
+  });
+  it("style=ジャンル名＝解決した型の id が載る", () => {
+    const id = pid(genDrums({ meter: "4/4", tempo: 140, section: { role: "chorus" } }, 3, { style: "jpop" }));
+    expect(id).toBe("four.rock");
+  });
+  it("style+fill＝base（型経路）の patternId を継承", () => {
+    expect(pid(genDrums({ meter: "4/4", bars: 4 }, 5, { style: "beat8.basic", fill: 0.6 }))).toBe("beat8.basic");
+  });
+  it("従来経路（opts無し/未知style/fillのみ）は patternId キーを生やさない（bit一致）", () => {
+    expect("patternId" in (genDrums({ meter: "4/4", mood: "明るい" }, 7).items[0]!.content as { rhythm: object }).rhythm).toBe(false);
+    expect("patternId" in (genDrums({ meter: "4/4" }, 4, { style: "nonexistent.pattern" }).items[0]!.content as { rhythm: object }).rhythm).toBe(false);
+    expect("patternId" in (genDrums({ meter: "4/4", bars: 4 }, 5, { fill: 0.8 }).items[0]!.content as { rhythm: object }).rhythm).toBe(false);
+  });
+});
+
 // WP-X4 ビルドアップ／ドロップのテンプレ（正準＝docs/research/2026-07-14-buildup-drop-mechanics.md §5-1）。
 describe("ビルドアップ・テンプレ（WP-X4）", () => {
   const bt = (id: string) => FILL_TYPES.find((f) => f.id === id)!;

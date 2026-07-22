@@ -487,6 +487,19 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
   - **web：候補トレイ動線＝既存を流用**：ジャンルchip→`genPart({op:"gen_chord_pattern"})` が `pattern`（=compStyle or `omakase`）＋`variety=4` を送り、返る複数 item を**既存の候補トレイ**（cand-card＋`auditionCandidate`＋採用）へ全件積む（先頭は kind 差替・以降 append）。候補は `label`（型名/説明）を持ち cand-meta に表示。
   - **試聴＝セクションの進行＋テンポ＋音色で実音化**：`auditionCandidate`／候補カード MiniRoll は chord_pattern のとき `notesForContent(kind, content, { key, chords: sectionChords, tempo, program })`＝既存 `resolveChordPattern` 経路（進行に当てる二層）を通す（従来は ctx 無し＝空進行で無音だった）。採用＝既存 `placeCandidate`（CoW ガード＋巻き込み確認）に従う。
   - **bit一致の約束**：`variety` 未指定/1＝単数経路＝S2/S3 既存出力と deepStrictEqual 一致（`gen-chord-library.test.ts` (g) で証明）。web は chord_pattern 以外の候補経路（メロ/ベース等）を触らない＝送信 payload 不変。
+
+### パターン選択の家＝ネタエディタ（修理#1・2026-07-22・正典＝`docs/research/2026-07-22-performance-editing-architecture-audit.md` 推奨差分1/3）
+- **問題（監査 H1・違反①③）**：伴奏パターン型辞書の入口は **Section「いじる▾」（TinkerSheet）にしか無い**＝奏法(style/strumMs/左手/D-U)は正しくネタに常在させたのに、同じ演奏層である「型辞書」だけが Section に取り残された（入口が家を兼ねている）。加えて採用後の content から「どの型で生まれたか」が消える（型ID不残＝来歴喪失）。**入口はどこにあってもよいが、content に効果を残す決定は、後からその content の家（＝ネタ単体エディタ）で再編集できねばならない**。
+- **決定A：型IDの残留（contract・additive）**：`ChordPatternContent.patternId?: string`（適用した型ID・省略可）／ドラムは `RhythmContent.patternId?: string`（同流儀）。
+  - **api**：`genChordPattern` の型経路（`buildCompContent`＝単数 `compTypeById?/pickCompType` と variety 複数 `pickCompTypes` の両方）が content に `patternId: compType.id` を刻む。`genDrums` の style 経路（`resolveStyleContent`＝`beatPatternById?/pickBeatPattern` で解決した型）が `rhythm.patternId: pat.id` を刻む（style+fill は `applyDrumFill` が base の patternId を継承）。
+  - **未指定経路は従来どおりキーを生やさない＝bit一致**：pattern/style 未指定・未知・6-8非4拍 fallback・数値fillのみ・おまかせ未解決＝patternId 無し。既存 `gen-chord-library.test.ts` (a)(g)／`gen-drums-library.test.ts`／`gen-feel-attach.test.ts`／`generate.test.ts`／`generate-invariants.test.ts` の deepStrictEqual 群が緑のままであることが機械証明（型経路の比較はいずれも型経路どうし＝両方 patternId を持つので一致・従来経路の subset/決定的 assertion は無関係）。
+- **決定B：ChordPatternEditor「パターンを選ぶ ▸」帯**（「① いつ弾く」の直上・**既定閉＝開かなければ candidate 機構は非活性で既存ゾーンは同一描画**）。開くと：ジャンルchip6種（`COMP_GENRE_CHIPS` 流用＝おまかせ/バラード/ロック/シティポップ/4つ打ち/フォーク）＋「候補を出す」→カード最大4件（型名＋場面・▶試聴・適用）。**現在 `pattern.patternId` があれば帯見出しに「いま：<型ID>」を表示**（選び直し兼用の家＝monito 差分3）。
+  - **候補取得**：HTTP `/music/gen_chord_pattern`（body＝`{ frame:{ key, meter, tempo, bars }, pattern: 選択ジャンル or "omakase", variety:4, seed }`）。返る items（label＝`型ID 場面`）をカードへ。
+  - **試聴**：ネタに `preview_chords` があればそれ、無ければプレビュー進行 C→Am→F→G（ネタ key に移調）で `notesForContent("chord_pattern", cand.content, { key, chords, tempo, program })`＝既存 `resolveChordPattern` 二層経路→`startPlayback`（前試聴は stop）。
+  - **適用**：`onChange({ ...cand.content, program 保持 })`＝content 置換（mode/voicing/steps/hits/lh/patternId／program・title 等メタ不変）。onChange は `useNetaEditor` の snapshot（chordPat）に載り **useEditHistory の Undo で1操作で戻る**（新機構ゼロ・CoW も NetaDialog 既存ガード経由）。
+- **決定C：RhythmEditor（ドラム単体）にも同じ帯**。ジャンルchip＝drumLibrary の genre（おまかせ/jpop/rock/dance/ballad/funk）。候補取得＝`/music/gen_drums`（style=ジャンル）。**gen_drums に variety が無い**ので **seed 違い4件を並行取得→patternId（無ければ content JSON）で dedupe** して最大4件（型が別々になるよう frame から tempo を外し pickBeatPattern の pool を役割候補全体に広げる＝**要耳較正**）。試聴はドラム＝進行不要（`notesForContent("rhythm", cand.content)`→`startPlayback`）。適用＝`onChange({ ...cand.content.rhythm, kit 保持 })`＝rhythm content 置換＋patternId。
+- **決定D：ハブ契約への再発防止条項（TinkerSheet L8-15 に追記）**：**入口（引き出し）に足してよい生成ノブは、効果が採用時に content（パターン/キー）へ刻まれるものだけ**。content に残らない設定の家を入口に作らない（入口が家を兼ねる非対称＝今回の修理対象を再生産しない・正典＝2026-07-22 責務分割監査）。
+- **境界（監査 §5-6・スコープ外）**：ベースの相対パターン昇格（H2・工事順3-7）は本修理#1に含めない（別スライス）。共有ネタは既存 CoW ガードがそのまま受ける（新機構不要）。
 - **コード入力/section UX（CV・✅実装済）**：ChordEditor＝start自動フロー(順番)・長さボタン・ピアノロール表示・合計尺。SectionEditor＝レーン層モデル順(進行→メロ→コード楽器→ベース→リズム→section)・**占有セルのみ配置不可**(別小節は自由)。トグル/構成音の選択色＝OFF地色付与で是正(E2E)。
 
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
