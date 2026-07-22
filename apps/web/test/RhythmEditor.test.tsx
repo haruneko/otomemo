@@ -9,7 +9,7 @@ import type { RhythmContent } from "../src/music";
 
 // 修理#3 決定④「（改）」帯（S5）＝apply で patternEdited が解除される流れを検証するため api/playback を stub。
 // 帯を開いて候補取得しない大半のテストには無影響（api は fetch 時のみ呼ばれる）。
-const api = vi.hoisted(() => ({ music: vi.fn() }));
+const api = vi.hoisted(() => ({ music: vi.fn(), listNeta: vi.fn() }));
 vi.mock("../src/api", () => ({ api }));
 vi.mock("../src/playback", () => ({ startPlayback: vi.fn(async () => null) }));
 
@@ -307,10 +307,11 @@ describe("RhythmEditor 手編集の（改）フラグ（修理#3 決定④）", 
   });
 
   it("apply（候補で置換）で patternEdited は自然消滅（（改）解除）", async () => {
-    // 候補＝patternId 有り・patternEdited 無しの rhythm。
-    api.music.mockResolvedValue({
-      items: [{ content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4, 8, 12] }], patternId: "eight.beat" } } }],
-    });
+    // 候補＝patternId 有り・patternEdited 無しの rhythm（Task2/L3：出所はライブラリネタ＝listNeta）。
+    api.listNeta.mockResolvedValue([
+      { id: "r1", kind: "rhythm", title: "eight.beat", text: null, scope: "library", tags: [], key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "",
+        content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4, 8, 12] }], patternId: "eight.beat" } } },
+    ]);
     const user = userEvent.setup();
 
     function Harness() {

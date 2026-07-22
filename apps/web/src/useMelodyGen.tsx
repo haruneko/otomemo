@@ -14,6 +14,7 @@ import {
 } from "./music";
 import { startPlayback } from "./playback";
 import { spanOverlaps, type Lane, type Child } from "./components/sectionLanes";
+import { fetchLibraryPatternNetas } from "./components/patternLibrary";
 
 // SectionEditor の「生成/ハモリ道具」（いじる▾）＝メロ生成ノブ・候補トレイ・ハモリ/fit をまとめた
 // カスタムフック（Task#2 機械分割＝挙動不変）。SectionEditor が section 文脈(ctx)を渡し、当フックは
@@ -296,6 +297,25 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     if (part.needsChords && !chords.length && !opts?.skeletonNetaId) return;
     setGenBusy(true);
     try {
+      // Task2/L3（design「### Task2/L3」(b)）：コード楽器/ドラム/ベースの候補**出所**を生成器→ネタ帳ライブラリへ。
+      // 生成器は第二経路として残す（design L3「gen_* の style/pattern ノブの後方互換」）＝ライブラリに無い形を求める
+      // ノブ（drum fill／bass fill・kickLock・snareGap・approach・分数／骨格ベース表面化）が立っている時だけ生成器へ。
+      // 既定（おまかせ・ノブ無し）はライブラリ検索＝seed 未投入なら候補0＝空トレイ（従来の域外と同じ・エラーにしない）。
+      const drumsWantsGen = typeof drumFill === "number" ? drumFill > 0 : !!drumFill;
+      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash;
+      const libKind =
+        part.op === "gen_chord_pattern" ? "chord_pattern"
+        : part.op === "gen_drums" && !drumsWantsGen ? "rhythm"
+        : part.op === "gen_bass" && !bassWantsGen ? "bass"
+        : null;
+      if (libKind) {
+        const genre = libKind === "chord_pattern" ? compStyle : libKind === "rhythm" ? drumStyle : bassStyle;
+        const netas = await fetchLibraryPatternNetas(libKind, genre);
+        const usable = libKind === "bass" ? netas.filter((n) => (n.content as { mode?: string } | null)?.mode === "relative") : netas;
+        // 複数候補を全件トレイへ（先頭＝kind差替 or append／以降＝append）＝コード楽器の既存 forEach と同流儀。
+        usable.forEach((n, i) => pushCand({ kind: libKind, content: n.content, label: n.title ?? undefined }, (opts?.append ?? false) || i > 0));
+        return; // finally が setGenBusy(false)
+      }
       // 2026-07-08 耳FB：section の mode を宣言（短調でメジャー生成＝濁りの主因）。メロは density/swing ノブも渡す。
       const secMode = secModeOf();
       // セクション役割（2026-07-10・design#12-M）：Section ネタ tags の `role:` を frame.section.role へ（無ければ渡さない＝従来）。

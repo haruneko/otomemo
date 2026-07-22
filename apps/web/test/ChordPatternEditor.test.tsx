@@ -2,8 +2,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// S4 applyPattern テスト用＝帯 fetch は api.music を叩く（既存テストは帯を開かない＝mock 未使用で無害）。
-const api = vi.hoisted(() => ({ music: vi.fn() }));
+// S4 applyPattern テスト用＝帯 fetch は Task2/L3 で api.listNeta を叩く（既存テストは帯を開かない＝mock 未使用で無害）。
+const api = vi.hoisted(() => ({ music: vi.fn(), listNeta: vi.fn() }));
 vi.mock("../src/api", () => ({ api }));
 
 import { ChordPatternEditor } from "../src/components/ChordPatternEditor";
@@ -373,9 +373,10 @@ describe("ChordPatternEditor S4 帯ゲート＋（改）フラグ", () => {
 
   it("applyPattern（候補 content で置換）で patternEdited が消える／program は付与しない", async () => {
     const onChange = vi.fn();
-    vi.mocked(api.music).mockResolvedValue({
-      items: [{ label: "GT-FOLK8 弾き語り", content: pat({ patternId: "GT-FOLK8", hits: [{ step: 0, dur: 8 }] }) }],
-    });
+    vi.mocked(api.listNeta).mockResolvedValue([
+      { id: "cp1", kind: "chord_pattern", title: "GT-FOLK8 弾き語り", text: null, scope: "library", tags: ["scene:verse"], key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "",
+        content: pat({ patternId: "GT-FOLK8", hits: [{ step: 0, dur: 8 }] }) },
+    ]);
     render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8", patternEdited: true })} onChange={onChange} keyPc={0} />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
     await userEvent.click(screen.getByLabelText("pattern-fetch"));

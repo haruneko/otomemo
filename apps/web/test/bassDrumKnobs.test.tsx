@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   removeChild: vi.fn(),
   link: vi.fn(),
   music: vi.fn(),
+  listNeta: vi.fn(),
 }));
 vi.mock("../src/api", () => ({ api }));
 
@@ -35,14 +36,17 @@ describe("ベース×ドラム『細かく』群→ gen_bass payload（スライ
   beforeEach(() => {
     vi.clearAllMocks();
     api.music.mockResolvedValue({ items: [{ kind: "bass", content: { notes: [] } }] });
+    api.listNeta.mockResolvedValue([]); // Task2/L3：既定（ノブ無し）はライブラリ検索＝seed 未投入なら空
   });
 
-  it("既定（全OFF）＝ kickLock/snareGap/approach/slashBass/drums を送らない（bit一致）", async () => {
+  // Task2/L3：既定（全OFF）はライブラリ検索へ寄る＝生成器 gen_bass は叩かない（ノブが立つと第二経路＝生成器へ・下記）。
+  it("既定（全OFF）＝ライブラリ検索（kind:'bass' scope:'library'）へ・gen_bass 生成器は叩かない", async () => {
     const { result } = renderHook(() => useMelodyGen(makeCtx()));
     await act(async () => { await result.current.genPart(GEN_BASS); });
-    const body = api.music.mock.calls[0]![1] as Record<string, unknown>;
-    expect(api.music.mock.calls[0]![0]).toBe("gen_bass");
-    for (const k of ["kickLock", "snareGap", "approach", "slashBass", "drums"]) expect(body).not.toHaveProperty(k);
+    expect(api.music).not.toHaveBeenCalled();
+    const q = api.listNeta.mock.calls[0]![0] as { kind: string; scope: string };
+    expect(q.kind).toBe("bass");
+    expect(q.scope).toBe("library");
   });
 
   it("ノブを立てると payload に値＋drums が載る", async () => {

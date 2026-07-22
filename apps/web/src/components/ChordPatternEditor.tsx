@@ -2,9 +2,9 @@ import { type CSSProperties, type Ref, useRef, useState } from "react";
 import { type ChordPatternContent, type ChordLhContent, type ChordEntry, type PlaybackHandle, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, notesForContent, buildPlayback, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
-import { api } from "../api";
 import { COMP_GENRE_CHIPS } from "../useMelodyGen";
 import { PatternPickerBar, type PatternCand } from "./PatternPickerBar";
+import { fetchLibraryPatternNetas, netaToPatternCand } from "./patternLibrary";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -121,28 +121,13 @@ export function ChordPatternEditor({
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
   const ppPlay = useRef<PlaybackHandle | null>(null);
-  // 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1）＝型辞書の入口を単体エディタへ。候補取得/試聴/適用の中身を注入する。
+  // 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1／Task2/L3）＝候補の出所を生成器→ネタ帳ライブラリへ。
+  // scope:"library" のコード楽器ネタを genre タグで引き、content を既存 audition/apply へそのまま載せる（実音経路不変）。
   const fetchPatterns = async (genre: string): Promise<PatternCand[]> => {
-    const bars = Math.max(1, Math.round(pattern.steps / stepsPerBar));
-    const r = await api.music<{ items: { content: unknown; label?: string }[] }>("gen_chord_pattern", {
-      frame: { key: keyPc ?? 0, meter, tempo, bars },
-      pattern: genre || "omakase",
-      variety: 4,
-      seed: Math.floor(Math.random() * 1e6),
-    });
-    return (r.items ?? []).map((it, i) => {
-      const label = it.label ?? "";
-      const sp = label.indexOf(" ");
-      const id = sp >= 0 ? label.slice(0, sp) : label; // label=`型ID 場面`
-      const scene = sp >= 0 ? label.slice(sp + 1) : undefined;
-      return {
-        key: `${id}-${i}`,
-        name: id || "コード楽器",
-        scene,
-        audition: () => auditionPattern(it.content),
-        apply: () => applyPattern(it.content),
-      };
-    });
+    const netas = await fetchLibraryPatternNetas("chord_pattern", genre);
+    return netas.map((n) =>
+      netaToPatternCand(n, { audition: auditionPattern, apply: applyPattern, scene: true, fallbackName: "コード楽器" }),
+    );
   };
   // 試聴＝ネタ preview_chords（あれば）or プレビュー進行に当てて resolveChordPattern で実音化（tempo/program 込み）。
   const auditionPattern = (content: unknown) => {

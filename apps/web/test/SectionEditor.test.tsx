@@ -939,9 +939,11 @@ describe("SectionEditor (3-lane timeline)", () => {
     expect(body.style).toBe("rock"); // ジャンルコードがそのまま
     expect(body.fill).toBeCloseTo(0.6);
   });
-  it("T4 ドラム：おまかせ既定は style/fill を送らない（未送信＝bit一致の鉄則）", async () => {
+  it("T4 ドラム：おまかせ既定（fill 無し）はライブラリ検索へ（Task2/L3・生成器は叩かない）", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });
+    listNeta.mockReset();
+    listNeta.mockResolvedValue([]); // seed 未投入＝候補0＝空トレイ
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
       children: [
@@ -952,10 +954,12 @@ describe("SectionEditor (3-lane timeline)", () => {
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("gen-gen_drums")); // ハブのドラムタイル＝おまかせ即生成
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const body = music.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body.style).toBeUndefined();
-    expect(body.fill).toBeUndefined();
+    await waitFor(() => expect(listNeta).toHaveBeenCalled());
+    expect(music).not.toHaveBeenCalled(); // 生成器は叩かない（既定＝ライブラリ）
+    const q = listNeta.mock.calls[0]![0] as { kind: string; scope: string; tags?: string[] };
+    expect(q.kind).toBe("rhythm");
+    expect(q.scope).toBe("library");
+    expect(q.tags).toBeUndefined(); // おまかせ＝genre タグ無し
   });
   it("T4 ベース型chip化＝ジャンルchip/フィルsegが既存 style/fill を送る（bit一致）", async () => {
     music.mockReset();
@@ -981,11 +985,11 @@ describe("SectionEditor (3-lane timeline)", () => {
   });
   it("T5 おまかせで一式＝コード有ならドラム→ベース→メロを順に生成し候補をkind別グループで積む", async () => {
     music.mockReset();
-    // 各 op ごとに対応 kind の候補を返す（呼ばれた op から kind を決める）。
-    music.mockImplementation((op: string) => {
-      const kind = op === "gen_drums" ? "rhythm" : op === "gen_bass" ? "bass" : "melody";
-      return Promise.resolve({ items: [{ kind, content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
-    });
+    listNeta.mockReset();
+    // Task2/L3：ドラム/ベース（ノブ無し）はライブラリ検索（listNeta）・メロは生成器（music）。
+    listNeta.mockImplementation((q: { kind: string }) =>
+      Promise.resolve([mk("lib", q.kind, { title: q.kind, scope: "library", content: q.kind === "bass" ? { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }] } : { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } })]));
+    music.mockResolvedValue({ items: [{ kind: "melody", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }] });
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
       children: [
@@ -996,8 +1000,9 @@ describe("SectionEditor (3-lane timeline)", () => {
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("gen-set")); // ☆おまかせで一式
-    // 3 op が呼ばれる（drums→bass→melody の依存順）
-    await waitFor(() => expect(music.mock.calls.map((c) => c[0])).toEqual(["gen_drums", "gen_bass", "gen_melody"]));
+    // ドラム→ベースはライブラリ（rhythm→bass）・メロは生成器（gen_melody）＝依存順は維持。
+    await waitFor(() => expect(listNeta.mock.calls.map((c) => (c[0] as { kind: string }).kind)).toEqual(["rhythm", "bass"]));
+    expect(music.mock.calls.map((c) => c[0])).toEqual(["gen_melody"]);
     // 候補トレイに 3 グループ（別kindでも置換せず積む＝一式のkind別保持）
     await screen.findByLabelText("part-candidate");
     expect(await screen.findByLabelText("cand-group-rhythm")).toBeInTheDocument();
@@ -1007,16 +1012,17 @@ describe("SectionEditor (3-lane timeline)", () => {
   });
   it("T5 一式＝コード無しなら先頭にコード＋ドラム（コード相手が要る2本は次回に回す）", async () => {
     music.mockReset();
-    music.mockImplementation((op: string) => {
-      const kind = op === "gen_chords" ? "chord_progression" : "rhythm";
-      return Promise.resolve({ items: [{ kind, content: op === "gen_chords" ? { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } : { notes: [{ pitch: 36, start: 0, dur: 1 }] } }] });
-    });
+    listNeta.mockReset();
+    // コードは生成器（gen_chords）・ドラムはライブラリ検索（Task2/L3）。
+    music.mockResolvedValue({ items: [{ kind: "chord_progression", content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }] });
+    listNeta.mockResolvedValue([mk("lib", "rhythm", { scope: "library", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } })]);
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("timeline");
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("gen-set"));
-    await waitFor(() => expect(music.mock.calls.map((c) => c[0])).toEqual(["gen_chords", "gen_drums"]));
+    await waitFor(() => expect(music.mock.calls.map((c) => c[0])).toEqual(["gen_chords"]));
+    expect(listNeta.mock.calls.map((c) => (c[0] as { kind: string }).kind)).toEqual(["rhythm"]);
   });
   it("sizes bars by meter — 6/8 bar1 = position 3 (#51)", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section", { meter: "6/8" }), children: [] });
@@ -1405,9 +1411,10 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     neta: mk("s1", "section"),
     children: [{ position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } }],
   });
-  const cpItem = (id: string, scenes: string) => ({
-    kind: "chord_pattern",
-    label: `${id} ${scenes}`,
+  // Task2/L3：候補の出所はライブラリネタ（listNeta）＝トレイの label は neta.title（型ID＋場面）。
+  const cpNeta = (id: string, scenes: string) => mk(id, "chord_pattern", {
+    title: `${id} ${scenes}`,
+    scope: "library",
     content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 16, hits: [{ step: 0, dur: 4 }, { step: 8, dur: 4 }] },
   });
   beforeEach(() => {
@@ -1418,11 +1425,12 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     getPlacements.mockResolvedValue({ parents: [], placementCount: 0 });
     getRelations.mockResolvedValue([]);
     music.mockReset();
+    listNeta.mockReset();
     createNeta.mockReset(); placeChild.mockReset(); link.mockReset(); link.mockResolvedValue({});
   });
 
-  it("ジャンルchip→候補を出す＝pattern＋variety を送り、複数候補が型名/説明つきでトレイに並ぶ", async () => {
-    music.mockResolvedValue({ items: [cpItem("PB-WHOLE", "白玉"), cpItem("PB-ARP8", "8分アルペジオ"), cpItem("PB-ARP16", "16分うねり")] });
+  it("ジャンルchip→候補を出す＝listNeta を genre タグで引き、複数候補が型名/説明つきでトレイに並ぶ", async () => {
+    listNeta.mockResolvedValue([cpNeta("PB-WHOLE", "白玉"), cpNeta("PB-ARP8", "8分アルペジオ"), cpNeta("PB-ARP16", "16分うねり")]);
     getComposition.mockResolvedValue(withChords());
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-ch1@0");
@@ -1430,25 +1438,30 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     await userEvent.click(screen.getByLabelText("drawer-chordinst")); // コード楽器引き出し（新パーツのタイル）
     await userEvent.click(screen.getByLabelText("comp-genre-ballad")); // バラード chip
     await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern")); // 🎲 候補を出す
-    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_chord_pattern", expect.objectContaining({ pattern: "ballad", variety: 4 })));
+    await waitFor(() => expect(listNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "chord_pattern", scope: "library", tags: ["genre:ballad"] })));
+    expect(music).not.toHaveBeenCalled();
     await screen.findByLabelText("candidate-tray");
     expect(screen.getAllByLabelText("candidate-card")).toHaveLength(3); // 別々の型が3件
     expect(screen.getAllByLabelText("candidate-label").map((e) => e.textContent)).toEqual(["PB-WHOLE 白玉", "PB-ARP8 8分アルペジオ", "PB-ARP16 16分うねり"]);
   });
 
-  it("おまかせ（chip未選択）＝pattern:omakase を送る（role/tempo 全体から）", async () => {
-    music.mockResolvedValue({ items: [cpItem("PB-WHOLE", "白玉")] });
+  it("おまかせ（chip未選択）＝genre タグ無しで scope:library を引く（role/tempo 全体から）", async () => {
+    listNeta.mockResolvedValue([cpNeta("PB-WHOLE", "白玉")]);
     getComposition.mockResolvedValue(withChords());
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("drawer-chordinst"));
     await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
-    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_chord_pattern", expect.objectContaining({ pattern: "omakase", variety: 4 })));
+    await waitFor(() => expect(listNeta).toHaveBeenCalled());
+    const q = listNeta.mock.calls[0]![0] as { kind: string; scope: string; tags?: string[] };
+    expect(q.kind).toBe("chord_pattern");
+    expect(q.scope).toBe("library");
+    expect(q.tags).toBeUndefined();
   });
 
   it("候補を採用＝createNeta(chord_pattern)＋placeChild で置く（既存の候補採用フロー）", async () => {
-    music.mockResolvedValue({ items: [cpItem("PB-WHOLE", "白玉")] });
+    listNeta.mockResolvedValue([cpNeta("PB-WHOLE", "白玉")]);
     getComposition.mockResolvedValue(withChords());
     createNeta.mockResolvedValue(mk("newcp", "chord_pattern"));
     placeChild.mockResolvedValue({ ok: true });

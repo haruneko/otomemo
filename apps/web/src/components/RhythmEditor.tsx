@@ -18,8 +18,8 @@ import {
 } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
-import { api } from "../api";
 import { PatternPickerBar, type PatternCand } from "./PatternPickerBar";
+import { fetchLibraryPatternNetas, netaToPatternCand } from "./patternLibrary";
 import { BarsControl } from "./BarsControl";
 
 // ドラムの定型ビート型ライブラリ（drumLibrary の genre）＋おまかせ番兵（v:""＝従来 default 生成）。
@@ -121,37 +121,13 @@ export function RhythmEditor({
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter, rhythm.beatsPerStep);
   const ppPlay = useRef<PlaybackHandle | null>(null);
-  // 「パターンを選ぶ ▸」帯（修理#1）＝定型ビート型の入口を単体エディタへ。gen_drums に variety が無いので seed 違い4件→dedupe。
+  // 「パターンを選ぶ ▸」帯（修理#1／Task2/L3）＝候補の出所を生成器→ネタ帳ライブラリへ。
+  // scope:"library" のドラム(rhythm)ネタを genre タグで引き、content（{rhythm:…}）を既存 audition/apply へそのまま載せる。
   const fetchPatterns = async (genre: string): Promise<PatternCand[]> => {
-    const bars = Math.max(1, Math.round(rhythm.steps / stepsPerBar));
-    const base = Math.floor(Math.random() * 1e6);
-    // tempo は外す＝pickBeatPattern の pool を役割候補全体に広げ、seed 連番で別々の型を引き当てる（要耳較正）。
-    const results = await Promise.all(
-      [0, 1, 2, 3].map((d) =>
-        api.music<{ items: { content: unknown }[] }>("gen_drums", {
-          frame: { meter, bars },
-          ...(genre ? { style: genre } : {}),
-          seed: base + d,
-        }),
-      ),
+    const netas = await fetchLibraryPatternNetas("rhythm", genre);
+    return netas.map((n) =>
+      netaToPatternCand(n, { audition: auditionPattern, apply: applyPattern, fallbackName: "おまかせ" }),
     );
-    const seen = new Set<string>();
-    const out: PatternCand[] = [];
-    for (const it of results.flatMap((r) => r.items ?? [])) {
-      const rc = (it.content as { rhythm?: RhythmContent } | null)?.rhythm;
-      if (!rc) continue;
-      const k = rc.patternId ?? JSON.stringify(it.content); // 型経路は patternId で・おまかせは content で dedupe
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push({
-        key: k,
-        name: rc.patternId ?? "おまかせ",
-        audition: () => auditionPattern(it.content),
-        apply: () => applyPattern(it.content),
-      });
-      if (out.length >= 4) break;
-    }
-    return out;
   };
   // 試聴＝ドラムは進行不要。rhythm content をそのまま鳴らす（notesForContent("rhythm")）。
   const auditionPattern = (content: unknown) => {
