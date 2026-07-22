@@ -3,7 +3,8 @@
 スペック層（requirements/architecture/design）にも Task 機能にも載せきれない「いつかやる／保留」をここに貯める。
 着手したら Task 化して、ここからは消すか「→ #NN」と印を付ける。最終更新を都度書く。
 
-最終更新: 2026-07-21（B/C群の実装状況を実コードで裏取り＝backlog腐り修正。仮歌(歌声合成)=実装済／スケールハイライト=実装済(コードトーンのみ未)／#26本体=実装済でオーナー実機評「良好」→ゲート解除／和声・終止 brush-up ①②⑤⑥⑩=実装済・③④=部分実装(「未監視」は誤り)・⑨=未／テンションvoicing=コード品質次第で鳴る(comping生成器のノブは未)／Capture=撤去済で決着・Chatポーリング=15s化+自動送信ボタン化済・AnalysisWorkbenchコード帯=可変スケール+ズーム済。各節に注記）
+最終更新: 2026-07-22（design案件3件＝⑨和声リズム(#30・後処理split採用)／WP-M1第2(cadDeg/contour・骨格層限定)／PAC-IAC+声部進行減点 を「設計→Fable監査→直列実装→Fable検収」で完走。**作業ツリー未コミット**・私自身の実行で api 119ファイル/1345緑・tsc clean・bit一致既定維持を確認。各節に✅注記。nit=cadenceSoprano記述ドリフト/preset優先/leadingTonePenalty文字列root注記は design.md 修正済）
+旧: 2026-07-21（B/C群の実装状況を実コードで裏取り＝backlog腐り修正。仮歌(歌声合成)=実装済／スケールハイライト=実装済(コードトーンのみ未)／#26本体=実装済でオーナー実機評「良好」→ゲート解除／和声・終止 brush-up ①②⑤⑥⑩=実装済・③④=部分実装(「未監視」は誤り)・⑨=未／テンションvoicing=コード品質次第で鳴る(comping生成器のノブは未)／Capture=撤去済で決着・Chatポーリング=15s化+自動送信ボタン化済・AnalysisWorkbenchコード帯=可変スケール+ズーム済。各節に注記）
 旧: 2026-07-18（コード進行エディタ タイムライン化 #26 の設計確定に伴う後回し群を末尾に追加＝SectionEditor 折り返し対応/表示トグル/他エディタ一般化/再生ハイライト/ボイシング編集レイヤ。いずれもコード編集の折り返しが実地良好とオーナー確認後がゲート）
 旧: 2026-07-14（コード楽器arp 幅/区切り・全GM・コード楽器2音色/MIDI音色バグ修正・骨格フォーム回帰skelForm S1/S2・一曲書くE2E受け入れ〈機能/デザイン監査を分離実施〉を反映。耳確認未消化＋デザイン据え置き1件〈極小ブロック〉を追記。**WP-D2（シンコペレンズ＋humanize較正）実装済＝残タスクを下に追記**）
 
@@ -125,15 +126,15 @@ genMotifMelodyV2 は production 本線（`gen_melody` useV2）。利用時コン
 
 ## 和声/終止 brush-up（理論裏打ち済＝`docs/research/harmony-cadence-theory.md`・盲点top10）
 メロ側と別に**和声・終止・声部進行**が手薄……**だったが2026-07-21 実コード裏取りで①②⑤⑥⑩は実装済・③④は部分実装と判明**（corpus/citypop/generate.ts の作業で入ったのに本節へ未反映＝腐っていた）。未着手は⑨と⑦⑧のみ（⑦⑧はメロ側 brush-up ②③と同件）。効き順（①〜④=正しく聞こえる土台／⑤〜⑧=らしさ・切なさ）：
-- ✅**① 終止タイプ選択器**＝**実装済(部分)**：生成側 cadence セレクタ half/deceptive/plagal/aeolian/full（`generate.ts:273-281`・MCP `mcp.ts:706` cadence enum）。**残＝PAC/IAC の区別**（ソプラノ主音・転回形制約）は生成側に無い（解析側 `function.ts` のみ）。「close=1度/open=5度の1種のみ」は腐り。
+- ✅**① 終止タイプ選択器**＝**実装済(部分)**：生成側 cadence セレクタ half/deceptive/plagal/aeolian/full（`generate.ts:273-281`・MCP `mcp.ts:706` cadence enum）。~~**残＝PAC/IAC の区別**（ソプラノ主音・転回形制約）は生成側に無い~~ → ✅**実装済（2026-07-22・未コミット）**：`gen_chords cadence:pac|iac`（pac=V根音→I根音／iac=V→I転回=bass第3音・`generate.ts`）＋`gen_melody cadenceSoprano:tonic|third|fifth`（ソプラノ非主音着地）。design「終止タイプ(PAC/IAC)の生成側結線」節参照。残＝IAC生成側実体の標準化(I6/非主音どれを標準か)はオーナー裁定。
 - ✅**② 偽終止(deceptive V→vi)**＝**実装済**：`generate.ts:276` cadence=deceptive で degrees[last]=6/pen=5。1番サビ末=偽終止/ラスト=V→I回収 の**テンプレ運用**は別途。
-- ◐**③ メロ×低音の声部進行 減点関数**＝**部分実装**：読み取りレポート有り（`voiceLeading.ts:44-47` 並行/隠伏 P5/P8・声部交差）＋`gen_melody counter` ノブが対ベース反行/斜行優先・並行完全協和/b9回避の soft バイアス（`generate.ts:1147`）。**残＝正式な減点スコアを候補選別に結線**（導音解決の明示減点含む）。「完全に未監視」は誤り。
+- ◐**③ メロ×低音の声部進行 減点関数**＝**部分実装**：読み取りレポート有り（`voiceLeading.ts:44-47` 並行/隠伏 P5/P8・声部交差）＋`gen_melody counter` ノブが対ベース反行/斜行優先・並行完全協和/b9回避の soft バイアス（`generate.ts:1147`）。~~**残＝正式な減点スコアを候補選別に結線**（導音解決の明示減点含む）~~ → ✅**実装済（2026-07-22・未コミット）**：`gen_melody vlWeight:n`（並行/隠伏5度8度・声部交差・導音未解決を減点＝soft reranker・候補は落とさない・seed未指定=候補生成時のみ有効）＋`vlAtCadenceOnly`（導音減点をV/V7/vii°区間に限定・既定true）。`voiceLeading.ts leadingTonePenalty`。既定 vlWeight=0=bit一致。残＝重み較正はオーナー耳/実測。「完全に未監視」は誤り。
 - ◐**④ avoid-note 回避**＝**部分実装(メロ側のみ)**：弱拍の露出 m2/m9 を最寄り安全音へ寄せる後処理（`melodyCells.ts:1318-1344`・passing は保護）＋強拍質評価に b9/avoid 重み（`:820-825`）。**残＝voicing/コード側の avoid 回避**。
 - ✅**⑤ 二次ドミナント(V/x)**＝**実装済**：`generate.ts:292-294` secondaryDom（非トニック直前へ完全5度上 dom7）＋転調準備 computeSecondaryDom（`:347`）。MCP 露出済。
 - ✅**⑥ サブドミナントマイナー(iv＝♭6→5)**＝**実装済**：`generate.ts:289-291` borrow（長調 IV→iv）。MCP 露出済。
 - **⑦ 強拍 suspension/appoggiatura 許容**＝**未**（melody brush-up ③と同件）。
 - **⑧ 非和声音を型に**＝**未**（PT/NT/APP/SUS/ET/ANT/Pedal を拍で出し分け・melody brush-up ②と同件）。
-- **⑨ 和声リズム制御**＝**未着手**：`genChords` は常に1小節1和音固定（`generate.ts:332` start:i*bpb/dur:bpb）。小節内でコードを変える/疎密制御するノブは無い。
+- ✅**⑨ 和声リズム制御**＝**実装済（2026-07-22・未コミット・design #30）**：設計パネルで立場A(slot第一級化=genChords大手術)を却下し**立場B(後処理スプリット/マージ)採用**＝新純関数 `applyHarmonicRhythm`（`music/harmonicRhythm.ts`・citypop変換の後・return直前）。`gen_chords harmonicRhythm:{preset,pattern}`＝preset=cadenceAccel(終止加速)/drive(畳み掛け=2和音/小節)/sustain(伸ばし=2小節1和音)、pattern=拍配列(合計=bpb・半小節/整数拍)。既定OFF=bit一致。残＝sustain実測裏付けゼロ(在DB0/210・理論のみ)・emotionMap織り込み・耳審判はオーナー。
 - ✅**⑩ T–PD–D–T 方向バイアス＋終止前定型**＝**実装済**：機能マルコフ FUNC_NEXT（T→S/D・S→D・D→T 偏重・`generate.ts:54-58`）＋終止強制（末尾=T/終止前=D・`:243-245`）＋D=V厚め（`:250-251`）。
 J-POP特効＝サブドミナントマイナー(♭6→5)・偽終止の構成的使い分け・ラインクリシェ(半音下行)・王道のV→iii。
 
@@ -256,9 +257,9 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 
 ## 留保（自律ラン 2026-07-21・「行けるとこまで」で clean 分は消化・残りは要判断/複雑/要検証）
 自律ランで backend の bit安全・TDD検証できる分を消化（diverse chord候補・バリデータ常設）。以下は**前進の妨げになる分岐ゆえ留保**：
-- **和声リズム制御⑨（コード交替速度）**：`genChords` は `chords=base.map(1/bar)`（`generate.ts:348`）＝1小節1和音が構造に焼き付いてる。可変にするには**度数ウォーク(funcs/degrees)をコード枠単位に作り直す**必要＝bit安全な小改修でなく設計案件（既定1/barでbit一致は保てるが本体は invasive）。design 先。
+- ~~**和声リズム制御⑨（コード交替速度）**~~ → ✅**実装済（2026-07-22・design #30・未コミット）**：invasive な度数ウォーク作り直し(立場A)は却下し、**後処理スプリット/マージ(立場B)**で着地＝`applyHarmonicRhythm`（度数ウォーク無改変・生成後にコード枠を分割/併合）。上方「和声/終止 brush-up ⑨」節に詳細。
 - ✅**メロ音価バリエーション（rhythmicContrast）＝実装済（2026-07-21・commit 229b45f）**：耳FBの正体は CV でなく**付点long-shortペア欠落**（生成0%/実POP16.7%）と実測で判明→`mkMotif` リズム語彙を付点セルへ重み差替（既定0でbit一致・6/8対象外・句末はflow領分）。ON で付点ペア3.8%→13-15%・CV帯内。正典＝research `2026-07-21-melody-note-value-and-harmonic-rhythm.md`＋design #12-M。多段(Fable指示→Opus実装→Fable監査→修正→受入)で実施。**残＝耳確認＋rc既定値/flow句末較正**（オーナー手番）。旧「音価が一律」項(上方)もこれで解消。
-- **WP-M1 第2スライス（cadDeg/contour）**：cadDeg は着地がルール固定でsmp非経由・contour は rng構造に触る＝slice A(degHist)と違い bit安全でない。design 先。
+- ◐**WP-M1 第2スライス（cadDeg/contour）**＝**実装済だが骨格層限定（2026-07-22・未コミット）**：監査が「`gen_melody` の cadDeg は罠ノブ＝表面が句末をルール度数で上書き＝効かない」と実コードで暴いたため、**`gen_skeleton` 骨格層に縮小**して着地＝`gen_skeleton cadDegStrength:n`（句末着地度数をコーパスcadDeg分布へ・候補は安定音{1̂2̂3̂5̂6̂}限定/汚染7̂4̂除外・統計は窓ズレ近似ゆえ低め1-2推奨）＋`contourCorpus`（輪郭型を曲単位で抽選）。既定OFF=bit一致。**残＝表面(gen_melody)への伝播は別スライス**（表面カデンツパスが骨格のサンプル済み着地度数を受け取る contract 拡張が要る）＋strength較正はオーナー耳。
 - **web: コードトーンハイライト**：スケールハイライトは実装済(PianoRoll)。コードトーンは PianoRoll に chords 文脈を渡す配線＋pc算出＝実装可だが**視覚検証はオーナーの目**（jsdomはレイアウト測れない）。
 - **web: メロvelocity編集**：コード/ドラムの useHoldDrag 流用＝実装可だが視覚/操作検証はオーナー。
 - **gen_chords 多様候補の web 表示**：n>1 の複数items は chat-stream が候補カード化するはずだが**実機での見え方はオーナーの目**。
@@ -273,7 +274,7 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - **R0§6の遷移統計テーブル化**：~~（phrase_pattern / note_transition / chord_transition）辞書→遷移統計の器が未着手~~ → **(B) note_transition＝骨格n-gram＋M9変換文法は ✅WP-0(#21・cf06399)で器実装済**（`corpus_note_transition`/`corpus_skeleton_prior`/`corpus_motif_transform`＋読み出し純関数 `corpusStats.ts`・生成側結線は WP-M1/M2）。**残＝(A) phrase_pattern の literal 句・(C/D) chord_transition**。
   - ✅**(D) 進行遷移統計＝実装済・LIVE（2026-07-21）**：正典＝design.md「コーパス遷移統計テーブル 第2弾」#21拡張（＋緊張補強＝頻度はランカーでなく idiom バイアス／正当性=文法・緊張=構造層+スパイス／意外性温度ダイヤル）。実装＝`corpus_chord_transition` 表（`db.ts`）＋`corpusStats.ts`（chordTok/buildChordTransitions/ingest/has/load/**transitionWeights=温度ダイヤル**）＋`continuation.ts` next_chord ランク結線＋`generate.ts` genChords 中間つなぎの count 重み結線（**既定OFFで seed bit 一致**・境界/cadence/spice は後段上書き）＋`scripts/build-chord-transition.ts`。**在DB210進行→1178遷移行を投入済**（サニティ I→IV73>V26>I17>vi12）。MCP＝`next_chord corpus:true`／`gen_chords corpus:true temperature:n`。コミット 89fc6f5/0cc4a7b・api 1273緑。**残＝耳で(D)の効き＋温度既定値の較正（オーナー手番）**。
   - ❌**(A) メロ句辞書（literal 句）＝撤回（2026-07-21・著作権）**：一旦データ層を実装(c0ae1bd)し1087句投入したが、**句の度数列+リズム丸ごと保存＝キーで元メロ復元可＝リテラルなモチーフ保存**で、コンセプト（CLAUDE.md「他者コーパスからは統計のみ抽出＝リテラルな旋律/モチーフは保存しない」）に反する（pop句はPOP909由来の実J-POP）。「度数相対＝著作権セーフ」は誤読。**撤去済**＝表DROP・build/ingest/load/build-phrase-pattern.ts/test 削除。**句を素材にするなら統計のみ**（音価/IOI分布・句長分布＝復元不能）＝必要になったら statistics として設計しなおす。正典 design「コーパス遷移統計テーブル 第2弾」の著作権注記。
-  - ✅**WP-M1 slice A＝骨格度数 prior 結線 LIVE（2026-07-21・コミット 0df8b87）**：`skeletonDegPrior`（loadSkeletonPriors→スケール度0..6・正規化）＋`sampleSkelDeg` の degPrior blend（genChords と同型・draw数不変で bit一致）＋genSkeletonFromModel/genMotifMelodyV2/genMelodyCandidates へ透過＋`gen_melody corpus:true corpusStrength:n`。骨格構造音の度数分布が POP909 degHist(tonic0.21/2̂1̂5̂主)へ寄る。既定OFF＝api 1285緑(既存メロbit一致テストが番人)。**残＝WP-M1 第2スライス**＝cadDeg/contour/(A)句辞書を効かせる（着地/seed経路に触る＝rng構造変更を伴う）＋耳での効き＋strength較正（オーナー手番）。note_transition の生成結線も同枠。
+  - ✅**WP-M1 slice A＝骨格度数 prior 結線 LIVE（2026-07-21・コミット 0df8b87）**：`skeletonDegPrior`（loadSkeletonPriors→スケール度0..6・正規化）＋`sampleSkelDeg` の degPrior blend（genChords と同型・draw数不変で bit一致）＋genSkeletonFromModel/genMotifMelodyV2/genMelodyCandidates へ透過＋`gen_melody corpus:true corpusStrength:n`。骨格構造音の度数分布が POP909 degHist(tonic0.21/2̂1̂5̂主)へ寄る。既定OFF＝api 1285緑(既存メロbit一致テストが番人)。**残＝WP-M1 第2スライス**＝~~cadDeg/contour~~ **→ ✅骨格層で実装済(2026-07-22・上方「留保」節参照)**／(A)句辞書は撤回(著作権)。**残＝表面(gen_melody)への cadDeg/contour 伝播**（着地/seed経路に触る＝別スライス）＋耳での効き＋strength較正（オーナー手番）。note_transition の生成結線も同枠。
   - **保留（raw 依存＝M2 とセット）**：game/irish 句の phase 再正規化（pop のみ再構築済）・note_transition の beat_phase/ioi バケット拡張・game キー推定信頼度フラグ＝いずれも raw MIDI+テンポマップ再取得が前提。(C) chord_progression_pattern 別表化も後回し（在DB neta が既に正規化・`find_progressions` で引ける＝生成に効くのは (D)）。
 - game句のキー推定漏れ（数%）への信頼度フラグ
 - 再構築後コーパスの**耳での質確認**（生成経由で崩れ有無・要api再起動後）

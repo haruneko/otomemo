@@ -155,6 +155,31 @@ function blendDeg(h: Map<number, number>, prior: Map<number, number>, strength: 
   for (const [k, c] of h) { const f = 1 + strength * (prior.get((((k % 7) + 7) % 7)) ?? 0); out.set(k, c * (f > 0 ? f : 0)); }
   return out;
 }
+// sampleCadDeg（WP-M1 第2スライス・2026-07-22）：句末カデンツの着地度数を「ルール度数へのアンカー(重み1)＋
+//   strength·cadPrior（安定音のみ）」の**加算候補集合**から抽選＝カデンツがルール度数から動ける（blendDeg が既存キー
+//   再重み付けなのと対照）。候補は安定音 {1̂,2̂,3̂,5̂,6̂}＝スケール度 {0,1,2,4,5} に制限（cadDeg 統計の窓ズレ/クロマ
+//   汚染で 7̂(deg6)/4̂(deg3) が混じるのを排除・研究doc §4-1 自己申告）。strength=0 なら候補={ruleDeg:1}＝決定的。
+const CAD_STABLE_DEG = new Set<number>([0, 1, 2, 4, 5]); // 安定音 1̂/2̂/3̂/5̂/6̂（4̂=deg3・7̂=deg6 は除外）
+export function sampleCadDeg(ruleDeg: number, cadPrior: Map<number, number>, strength: number, r: () => number): number {
+  const cand = new Map<number, number>();
+  cand.set(ruleDeg, 1); // ルール度数アンカー（strength=0 でも必ず残る＝ここだけなら決定的）
+  for (const [deg, pct] of cadPrior) { if (!CAD_STABLE_DEG.has(deg)) continue; cand.set(deg, (cand.get(deg) ?? 0) + strength * (pct > 0 ? pct : 0)); }
+  return weightedPickNum(cand, r);
+}
+// sampleContour（WP-M1 第2スライス）：コーパス輪郭分布 [label,pct][] を pct 重みで曲単位に1型抽選し SkelContour へ写す。
+//   wave/flat は「型付けしない骨格」＝undefined（正規化し直さず＝コーパス比率に忠実）。RNG は独立 rCon を1 draw。
+export function sampleContour(prior: [string, number][], r: () => number): SkelContour | undefined {
+  const dist = new Map<string, number>();
+  for (const [label, pct] of prior) dist.set(label, (dist.get(label) ?? 0) + (pct > 0 ? pct : 0));
+  if (dist.size === 0) return undefined;
+  switch (weightedPick(dist, r)) {
+    case "arch": return "arch";
+    case "valley": return "valley";
+    case "ascending": return "asc";
+    case "descending": return "desc";
+    default: return undefined; // wave/flat（及び未知ラベル）＝型なし
+  }
+}
 function sampleSkelDeg(model: SkeletonModel, chordRel: number, prevDeg: number, r: () => number, degPrior?: Map<number, number>, degPriorStrength = 1): number {
   const cr = ((chordRel % 12) + 12) % 12;
   let h = model.trans.get(`${cr}|${prevDeg}`);
@@ -220,7 +245,7 @@ export function skelFormPlanNew(form: SkelForm | undefined, nu: number): SkelFor
   return out;
 }
 
-export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: SkelForm; skelColor?: number; contour?: SkelContour; chordPcsPerBar?: number[][]; degPrior?: Map<number, number>; degPriorStrength?: number } = {}): number[] {
+export function genSkeletonFromModel(chordRootsPerBar: number[], model: SkeletonModel, scalePitches: number[], opts: { tonicPc?: number; seed?: number; beatsPerBar?: number; strongQuarters?: number[]; start?: number; motif?: boolean; repetition?: number; rangeSteps?: number; phraseEnds?: { bar: number; deg: number }[]; arc?: "arch"; skelForm?: SkelForm; skelColor?: number; contour?: SkelContour; chordPcsPerBar?: number[][]; degPrior?: Map<number, number>; degPriorStrength?: number; cadPrior?: Map<number, number>; cadDegStrength?: number; contourPrior?: [string, number][] } = {}): number[] {
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
   const bpb = opts.beatsPerBar ?? 4;
   const strongQ = opts.strongQuarters ?? [0, 2];
@@ -260,14 +285,15 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   // §6.2「cost += λ·dist(pitch,target)」を度数二乗コストで実現＝モデル提案 idx と target の凸結合（mix=λ/(1+λ)）。ハード置換でない。
   // 効くのは**中間スロットのみ**（unit末=カデンツと skelForm 複写スロットは保護）＝WP-M1の轍（終止/句末アンカーが soft包絡を上書き）を回避。
   // "asc"は始点を下げ終点(カデンツ主音)を残す→終音>始音／"arch"は頂点を中央帯へ。既定 undefined＝発火せず bit一致。
-  const contour = opts.contour;
+  // WP-M1 第2スライス：module const contour を廃し ctype 仮引数化（`ctype=opts.contour` を渡す限り恒等）。
+  //   コーパス輪郭 prior を曲単位で抽選した unitContour（下記）を渡せる＝WP-M1b の決定的 nudge をそのまま再利用。
   const ampC = Math.max(2, Math.min(hi - tonicIdx, kopf)); // 包絡振幅（音階ステップ・kopf≈5̂＝レンジ窓内）
   const LAMBDA_C = 1.0;                                     // 初期λ＝効果が実測できる最小域（受け入れで較正・mix=0.5）
   const mixC = LAMBDA_C / (1 + LAMBDA_C);
   const clI2 = (i: number) => Math.max(0, Math.min(scalePitches.length - 1, i));
-  const contourTargetIdx = (frac: number): number => {           // 型の3点包絡（Huron I–M–F）→ tonicIdx からの音階ステップ
+  const contourTargetIdx = (frac: number, ctype: SkelContour | undefined): number => { // 型の3点包絡（Huron I–M–F）→ tonicIdx からの音階ステップ
     let off: number;
-    switch (contour) {
+    switch (ctype) {
       case "arch": off = ampC * Math.sin(Math.PI * frac); break;   // I<M>F＝山（頂点≈中央）
       case "valley": off = -ampC * Math.sin(Math.PI * frac); break; // I>M<F＝谷
       case "asc": off = ampC * (2 * frac - 1); break;              // I<M<F＝始点低→終点高
@@ -276,8 +302,8 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
     }
     return cl(tonicIdx + Math.round(off));
   };
-  const applyContourNudge = (idx: number, frac: number, prevI: number): number => { // idx を target へ mix 寄せ＋前音跳躍ガード
-    let ni = cl(Math.round(idx + mixC * (contourTargetIdx(frac) - idx)));
+  const applyContourNudge = (idx: number, frac: number, prevI: number, ctype: SkelContour | undefined): number => { // idx を target へ mix 寄せ＋前音跳躍ガード
+    let ni = cl(Math.round(idx + mixC * (contourTargetIdx(frac, ctype) - idx)));
     for (let g = 0; g < 6; g++) { const iv = Math.abs(scalePitches[clI2(ni)]! - scalePitches[clI2(prevI)]!); if (iv !== 6 && iv <= 12) break; ni = cl(ni + Math.sign(prevI - ni || 1)); } // 三全音/8度超は前音側へ戻す（E-rule 不変）
     return ni;
   };
@@ -296,6 +322,16 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
   // formNew!=null のときだけ下段の新枝が走る＝period/aaba/undefined は完全 bit一致（rF は消費されず r 列も不変）。
   const formNew = skelFormPlanNew(opts.skelForm, nu);
   const rF = makeRng((opts.seed ?? 1) * 2654435761 + 101); // 変奏判定用の独立RNG（既定路の r 消費を変えない）
+  // WP-M1 第2スライス：cadDeg／contour のコーパス prior 結線（gen_skeleton 専用・既定OFF=bit一致）。
+  //   両者とも rF/rA と同じ「主 r を消費しない独立RNG」の手筋＝無条件構築だが gate false では未 draw＝主 r 列を摂動しない。
+  const cadPrior = opts.cadPrior;
+  const cadActive = !!(cadPrior?.size && (opts.cadDegStrength ?? 0) > 0);        // prior 在＋strength>0 でのみ発火
+  const rCad = makeRng((opts.seed ?? 1) * 40503 + 271);                          // カデンツ度数抽選の独立RNG
+  const cadDegOf = (d: number): number => cadActive ? sampleCadDeg(d, cadPrior!, opts.cadDegStrength!, rCad) : d; // OFF=恒等（引数までバイト同一）
+  const contourPrior = opts.contourPrior;
+  const contourActive = !!(contourPrior?.length) && opts.contour === undefined;  // 明示 contour enum が勝つ
+  const rCon = makeRng((Math.imul(opts.seed ?? 1, 2246822519) >>> 0) + 59);      // 輪郭型抽選の独立RNG（Math.imul でオーバーフロー穴を塞ぐ）
+  const unitContour = contourActive ? sampleContour(contourPrior!, rCon) : opts.contour; // 曲単位=1骨格1型（u ループ前に1回）
   for (let u = 0; u < nu; u++) {
     const base = u * spu, reuse = !useMotif ? null : (u % 4 === 1 ? hA : u % 4 === 3 ? hB : null), phraseEnd = u % 2 === 1, lastU = u === nu - 1, ctr = ctrOf(u);
     const src = formSrc ? formSrc[u] : null; // フォーム複写元ユニット（null=fresh）
@@ -307,7 +343,7 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
       let fromCopy = false; // skelForm のリテラル複写スロットか（輪郭priorはここを保護＝フレーズ同一性を壊さない）
       if (formNew) { // WP-M2 新形：距離条件付き変奏＋リズム保存音高再フィット（M9文法）
         const fu = formNew[u]!;
-        if (s === spu - 1) idx = lastU ? idxOf(0, pi, tonicIdx) : pe ? (peHit ? idxOf(peHit.deg, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)) : (phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)); // 終止＝句末ルールで保つ（形式が終止の役割を担保）
+        if (s === spu - 1) idx = lastU ? idxOf(0, pi, tonicIdx) : pe ? (peHit ? idxOf(cadDegOf(peHit.deg), pi, ctr) : idxOf(smp(cr, pv), pi, ctr)) : (phraseEnd ? idxOf(cadDegOf(4), pi, ctr) : idxOf(smp(cr, pv), pi, ctr)); // 終止＝句末ルールで保つ（形式が終止の役割を担保）
         else if (fu.src == null) idx = idxOf(smp(cr, pv), pi, ctr); // fresh＝提示 basic idea／対の先行句（度数サンプル）
         else {
           const headHalf = Math.max(1, Math.floor(spu / 2));
@@ -325,15 +361,15 @@ export function genSkeletonFromModel(chordRootsPerBar: number[], model: Skeleton
         }
       }
       else if (src != null && s < spu - 1) { idx = I[src * spu + s]!; fromCopy = true; } // フォーム：ユニットを頭からリテラル複写（カデンツ除く）＝輪郭prior保護
-      else if (src != null) idx = pe ? (lastU ? idxOf(0, pi, tonicIdx) : peHit ? idxOf(peHit.deg, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)) : (lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr)); // フォームのカデンツ＝句末ルール（終止の役割は形式で保つ）
+      else if (src != null) idx = pe ? (lastU ? idxOf(0, pi, tonicIdx) : peHit ? idxOf(cadDegOf(peHit.deg), pi, ctr) : idxOf(smp(cr, pv), pi, ctr)) : (lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(cadDegOf(4), pi, ctr) : idxOf(smp(cr, pv), pi, ctr)); // フォームのカデンツ＝句末ルール（終止の役割は形式で保つ）
       else if (!reuse || s === 0) idx = idxOf(smp(cr, pv), pi, ctr);
       else if (s < spu - 1) { // 頭＝動機の反復。repetition＝「頭の正確なステップ移動を反復」する確率。残りはfresh＝varied反復。
         idx = r() < rep ? cl(pi + (reuse[s] ?? 0)) : idxOf(smp(cr, pv), pi, ctr);
-      } else if (pe) idx = lastU ? idxOf(0, pi, tonicIdx) : peHit ? idxOf(peHit.deg, pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 句割り駆動：句末は cadence度数着地・非句末は自由
-      else idx = lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(4, pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 従来：最終=主音/中間句末=5̂
-      // 輪郭prior（WP-M1b）：中間スロット（unit末カデンツ=保護／skelForm複写=保護）だけ型の包絡へλソフト制約で寄せる。
-      // 決定的（RNG非消費）＝contour 未指定では発火せず bit一致。skelColor はこの後段で強拍倚音を足す＝合成順=form＞contour＞color。
-      if (contour && s !== spu - 1 && !fromCopy) idx = applyContourNudge(idx, slots.length > 1 ? (base + s) / (slots.length - 1) : 0, pi);
+      } else if (pe) idx = lastU ? idxOf(0, pi, tonicIdx) : peHit ? idxOf(cadDegOf(peHit.deg), pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 句割り駆動：句末は cadence度数着地・非句末は自由
+      else idx = lastU ? idxOf(0, pi, tonicIdx) : phraseEnd ? idxOf(cadDegOf(4), pi, ctr) : idxOf(smp(cr, pv), pi, ctr); // 従来：最終=主音/中間句末=5̂
+      // 輪郭prior（WP-M1b＋第2スライス）：中間スロット（unit末カデンツ=保護／skelForm複写=保護）だけ型の包絡へλソフト制約で寄せる。
+      // 決定的（RNG非消費）＝unitContour 未定（明示 contour 無し＋prior 無し）では発火せず bit一致。skelColor はこの後段で強拍倚音を足す＝合成順=form＞contour＞color。
+      if (unitContour && s !== spu - 1 && !fromCopy) idx = applyContourNudge(idx, slots.length > 1 ? (base + s) / (slots.length - 1) : 0, pi, unitContour);
       I[base + s] = idx; pi = idx; pv = ((idx - tonicIdx) % 7 + 7) % 7;
     }
     if (useMotif && u % 4 === 0) { hA = [0]; for (let s = 1; s < spu; s++) hA.push((I[base + s] ?? tonicIdx) - (I[base + s - 1] ?? tonicIdx)); } // 連続ステップ移動(符号付き大きさ)を記録＝正確な輪郭の反復用
@@ -493,7 +529,7 @@ export function genMotifMelodyV2(
   chordQuals: string[],
   scalePitches: number[],
   motif16: MotifModel16,
-  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt; degPrior?: Map<number, number>; degPriorStrength?: number; rhythmicContrast?: number } = {},
+  opts: { seed?: number; tonicPc?: number; minor?: boolean; skelModel?: SkeletonModel; skel?: number[]; motifBars?: number; compound?: boolean; beatsPerBar?: number; seedMotif?: Motif16; keepFirstBlocks?: number; repetition?: number; rangeSteps?: number; chordPcsAt?: (t: number) => number[]; density?: number; swing?: number; expression?: number; phrases?: { startBeat: number; beats: number; cadenceDegree: number }[]; runs?: number; push?: number; foreground?: number; breathe?: number; humanize?: number; form?: "sentence"; skelStart?: number; bassPitchAt?: (t: number) => number | null; counter?: number; drums?: { kick?: number[]; snare?: number[]; densityByBar?: number[] }; drumLock?: number; backbeat?: number; converse?: number; hook?: number; articulation?: number; inflect?: number; motifMode?: "preserve"; finest?: "quarter" | "eighth"; flow?: number; pickup?: number; arc?: "arch"; skelColor?: number; restMask?: { start: number; end: number }[]; rhythmParts?: RhythmPartsOpt; degPrior?: Map<number, number>; degPriorStrength?: number; rhythmicContrast?: number; cadenceSoprano?: "tonic" | "third" | "fifth" } = {},
 ): Note[] {
   const seed = opts.seed ?? 1;
   const tonicPc = (((opts.tonicPc ?? 0) % 12) + 12) % 12;
@@ -1295,6 +1331,28 @@ export function genMotifMelodyV2(
     // カデンツ着地は li→li+1（次句頭）の跳躍を無検査＝preserve+phrases で三全音が残る穴（コードレビュー#3）。
     // preserve のみ着地後に禁則掃除を1回（default は経路に入らず bit一致・既存の穴は別スコープ）。
     if (preserve) fixForbidden();
+  }
+
+  // ── 終止ソプラノ再ターゲット（PAC/IAC の生成側結線・2026-07-22・SDD 監査反映v2）──
+  // opts.cadenceSoprano 指定時のみ、最終音（終止音）を要求階名（tonic/third/fifth）の pc へ寄せる＝
+  // IAC のソプラノ非主音着地（3̂/5̂）を作る。既定 undefined＝ブロック不到達＝notes は句末カデンツ着地までの出力のまま＝bit一致。
+  // 後続パス（表情/弱拍掃除/pickup/flow 等）は最終音の pitch を触らない（i=1..len-2 or timing/dur/vel のみ）ため、
+  // ここで確定させて安全。骨格休符(restMask)が最終音を落とし得るエッジは notes.length と最終音存在をガードして no-op。
+  if (opts.cadenceSoprano && notes.length && notes[notes.length - 1]) {
+    const li = notes.length - 1;
+    const off = opts.cadenceSoprano === "third" ? (minor ? 3 : 4) : opts.cadenceSoprano === "fifth" ? 7 : 0;
+    const want = (((tonicPc + off) % 12) + 12) % 12; // 要求階名の pc（調主音基準・tonic/third/fifth は必ず調スケール内）
+    const cur = notes[li]!.pitch;
+    // 終止音を要求階名 pc の最寄りスケール音へ寄せる（cadenceSoprano は調のソプラノ着地音の明示指定＝コード非依存）。
+    let np = cur, bd = 99;
+    for (const q of sp) { if (((q % 12) + 12) % 12 !== want) continue; if (Math.abs(q - cur) < bd) { bd = Math.abs(q - cur); np = q; } }
+    if (bd === 99) np = ctP(cur, pcsAtT(notes[li]!.start)); // 防御：スケールに want が無い異常時のみコード音へ
+    notes[li]!.pitch = np;
+    // 着地への禁則跳躍は着地を保護し直前音を寄せて回収（句末カデンツ着地と同流儀）。
+    if (li > 0 && isForbiddenIv(Math.abs(np - notes[li - 1]!.pitch))) {
+      const anchors = [np, ...(li - 2 >= 0 ? [notes[li - 2]!.pitch] : [])];
+      placeNonForbidden(li - 1, np - (Math.sign(np - notes[li - 1]!.pitch) || 1) * 3, anchors);
+    }
   }
 
   // ── 表情パス＝強拍非和声(expression ノブ・design#12-M Step1・2026-07-09)──

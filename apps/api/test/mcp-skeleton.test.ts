@@ -4,6 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { openDb } from "../src/db";
 import { Core } from "../src/core";
 import { buildMcpServer } from "../src/mcp";
+import { ingestCorpusStats } from "../src/music/corpusStats";
 
 async function connect() {
   const core = new Core(openDb(":memory:"));
@@ -52,6 +53,70 @@ describe("mcp gen_skeleton / gen_melody skeleton injection (design #20)", () => 
       if (sig(colored) !== sig(plain)) differ++;
     }
     expect(differ).toBeGreaterThan(0); // MCP スキーマが skelColor を通し、色付けで骨格が変わる seed がある
+  });
+
+  // WP-M1 第2スライス：gen_skeleton の corpus/cadDegStrength/contourCorpus（骨格層のみ・既定OFF=bit一致）。
+  const eight = { key: 0, mode: "major", meter: "4/4", bars: 8 };
+  const eightChords = [0, 9, 5, 7, 0, 9, 5, 7].map((r, i) => ({ root: r, quality: i % 4 === 1 ? "m" : "", start: i * 4, dur: 4 }));
+  const sig = (o: any) => o.items[0].content.tones.map((t: any) => `${t.start}:${t.pitch}`).join(",");
+  const lastTone = (o: any) => o.items[0].content.tones[o.items[0].content.tones.length - 1].pitch;
+  function ingestSkelPriors(core: any) {
+    // 句末を非5̂の安定音へ寄せる cadDeg（2̂=pc2/3̂=pc4/1̂=pc0）＋輪郭は ascending 支配（nudge を強制発火）。
+    ingestCorpusStats(core.db, {
+      skeleton: {
+        major: {
+          cadDeg: [{ pc: 0, pct: 30, n: 300 }, { pc: 2, pct: 40, n: 400 }, { pc: 4, pct: 30, n: 300 }],
+          degHist: [{ pc: 0, pct: 25, n: 250 }, { pc: 4, pct: 25, n: 250 }, { pc: 7, pct: 25, n: 250 }, { pc: 9, pct: 25, n: 250 }],
+          contour: [["ascending", 900, 90], ["arch", 100, 10]],
+        },
+      },
+    });
+  }
+
+  it("gen_skeleton(corpus:true, cadDegStrength:0) は baseline とバイト一致（gate OFF）", async () => {
+    const { client, core } = await connect();
+    ingestSkelPriors(core);
+    for (const seed of [1, 3, 5, 7]) {
+      const base = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed } })));
+      const c0 = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed, corpus: true, cadDegStrength: 0 } })));
+      expect(sig(c0)).toBe(sig(base));
+    }
+  });
+
+  it("gen_skeleton(contourCorpus:false) は baseline とバイト一致（既定OFF）", async () => {
+    const { client, core } = await connect();
+    ingestSkelPriors(core);
+    for (const seed of [1, 3, 5, 7]) {
+      const base = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed } })));
+      const c0 = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed, corpus: true } })));
+      expect(sig(c0)).toBe(sig(base)); // corpus:true でも cadDegStrength=0（既定）＋contourCorpus 未指定＝bit一致
+    }
+  });
+
+  it("gen_skeleton(corpus:true, cadDegStrength:8) は句末を寄せつつ最終音=主音を保持", async () => {
+    const { client, core } = await connect();
+    ingestSkelPriors(core);
+    let differ = 0;
+    for (const seed of [1, 3, 5, 7, 9, 11, 13, 15]) {
+      const base = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed } })));
+      const cad = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed, corpus: true, cadDegStrength: 8 } })));
+      if (sig(cad) !== sig(base)) differ++;
+      expect(((lastTone(cad) % 12) + 12) % 12).toBe(0); // 曲末=主音pc（C）を硬く保持
+    }
+    expect(differ).toBeGreaterThan(0); // cadDeg バイアスで句末が動く seed がある
+  });
+
+  it("gen_skeleton(contourCorpus:true) は構造線を寄せつつ最終音=主音を保持", async () => {
+    const { client, core } = await connect();
+    ingestSkelPriors(core);
+    let differ = 0;
+    for (const seed of [1, 3, 5, 7, 9, 11, 13, 15]) {
+      const base = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed } })));
+      const con = JSON.parse(textOf(await client.callTool({ name: "gen_skeleton", arguments: { frame: eight, chords: eightChords, seed, corpus: true, contourCorpus: true } })));
+      if (sig(con) !== sig(base)) differ++;
+      expect(((lastTone(con) % 12) + 12) % 12).toBe(0);
+    }
+    expect(differ).toBeGreaterThan(0); // 輪郭型抽選→nudge で構造線が動く seed がある
   });
 
   it("gen_melody(skeletonNetaId) injects a captured skeleton and echoes the id for linking", async () => {
