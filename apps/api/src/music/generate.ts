@@ -409,7 +409,7 @@ export function genChordCandidates(frame?: Frame | null, seed?: number | null, c
   return { items, edges: [] };
 }
 
-function chordAt(t: number, chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[]) {
+function chordAt(t: number, chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[]) {
   for (const c of chords ?? []) {
     const s = Number(c.start ?? 0);
     const d = Number(c.dur ?? 0);
@@ -991,10 +991,10 @@ export const KICK_LOCK_PRESETS = { weak: 0.6, strong: 0.8, max: 0.85 } as const;
  * 第二経路の追加。melodyCells push/swing/humanize と同じ流儀＝係数0は段ごとスキップ・段は独立 seed 派生 Rng）。 */
 export function genBass(
   frame?: Frame | null,
-  chords?: { root?: number | string; quality?: string; start?: number; dur?: number }[],
+  chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[],
   seed?: number | null,
   drums?: DrumsInput | null,
-  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string },
+  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean },
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
@@ -1006,6 +1006,12 @@ export function genBass(
   const perBar = bpb;
   // 時刻 t で鳴るコードのルート pc（不在時は曲の主音）。スタイル型/フィルの度数→実音写像で共用。
   const rootAtBeat = (t: number): number => { const ch = chordAt(Math.floor(t), chords); return ch ? normRoot(ch.root ?? 0) : (f.key ?? 0); };
+  // 分数コード/転回（chord.bass）の低音をアンカー（小節頭・チェンジ頭）へ伝播＝web resolveChordPattern と対称化
+  //   （genChords が citypop 分数化/IAC 第1転回で出す ch.bass を genBass が読まず非対称だった gap の是正）。
+  // **既定 OFF（未指定/false）＝chord.bass を無視＝bass 有無で bit 一致**（新ノブの鉄則）。分数でも和音の同一性は root ＝
+  //   間の5度/オクターブは root 基準のまま（アンカー＝最低音の指定のみ bass へ）。style 型格子は対象外（型の度数は root 相対）。
+  const slashBass = opts?.slashBass === true;
+  const anchorPcAt = (t: number): number => { const ch = chordAt(Math.floor(t), chords); const r = ch ? normRoot(ch.root ?? 0) : (f.key ?? 0); return slashBass && ch?.bass != null ? normRoot(ch.bass) : r; };
   // ジャンル型ライブラリ（WP-B1）：style=型ID or ジャンル名（役割/tempo で候補を絞り決定的に1つ）。
   //   4/4系のみ（型は全て4/4格子）。**style 未指定=null=従来経路（bit 一致）**。型格子を正準に鳴らす＝
   //   kickLock とは二重適用しない（排他＝kickPath より優先）。
@@ -1059,9 +1065,10 @@ export function genBass(
         if (dur <= 0) return;
         const ch = chordAt(Math.floor(t), chords);
         const root = ch ? normRoot(ch.root ?? 0) : (f.key ?? 0);
+        const anchorPc = slashBass && ch?.bass != null ? normRoot(ch.bass) : root; // 分数/転回：低音を指定 pc へ（OFF=root=bit一致）
         const rootP = bassPcToWindow(root); // ルートを低域窓の最下 oct へ（実測較正・A/A#/B は1oct 降下）
         let pitch: number;
-        if (i === 0 || root !== prevRoot) pitch = rootP; // アンカー＝小節内最初 or チェンジ頭＝ルート
+        if (i === 0 || root !== prevRoot) pitch = bassPcToWindow(anchorPc); // アンカー＝小節内最初 or チェンジ頭＝低音（分数時は bass・間の5度/octは root 基準）
         else {
           // B: 間＝R/5度/オクターブ。5度は原則「上」＝root+7 実音。窓上端 BASS_HI を超える候補（高ルートの5度上/oct）は
           //    刈る＝実測窓（p95=A2）逸脱を防ぐ＝高ルートは root 集中（(root+7)%12 の下転回はしない設計を維持）。
@@ -1087,7 +1094,8 @@ export function genBass(
         if (dur <= 0) return;
         // 拍頭(小節/拍の頭)=ルート、間=5度。たまにオクターブ上で動きを。
         const fifth = (root + 7) % 12;
-        const pc = off === 0 && (onBar || i === 0) ? root : rng.next() < 0.5 ? fifth : root;
+        // アンカー（拍頭）は slashBass 時 chord.bass の pc へ（anchorPcAt は OFF 時 root を返す＝bit一致・RNG 不消費も不変）。
+        const pc = off === 0 && (onBar || i === 0) ? anchorPcAt(beat) : rng.next() < 0.5 ? fifth : root;
         notes.push({ pitch: bassPcToWindow(pc), start: Math.round(t * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 });
       });
       beat += fig.span;
@@ -1109,7 +1117,7 @@ export function genBass(
       const strong = Number.isInteger(pos) && pos % 2 === 0; // 4/4 の 1・3拍頭＝強拍
       if (strong || n.dur > 1 + 1e-6 || cs - n.start > 1.5 + 1e-6) continue;
       if (aRng.next() >= approach) continue;
-      const target = bassPcToWindow(normRoot(c.root ?? 0)); // beat1=ターゲット（次ルート・低域窓）
+      const target = bassPcToWindow(slashBass && c.bass != null ? normRoot(c.bass) : normRoot(c.root ?? 0)); // beat1=ターゲット（次ルート／分数時は次低音・低域窓）
       n.pitch = Math.max(BASS_LO, Math.min(BASS_HI, aRng.choice([target - 1, target + 1, target - 2]))); // 半音下/上・全音下
     }
   }

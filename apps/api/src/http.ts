@@ -283,7 +283,7 @@ export function buildHttp(core: Core): FastifyInstance {
           // WP-B1：style(型ID/ジャンル名)／fill(0..1 or 型ID) 透過。未指定=従来 bit 一致。
           const style = typeof b.style === "string" ? b.style : undefined;
           const fill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
-          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill });
+          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true });
           // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
           attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
