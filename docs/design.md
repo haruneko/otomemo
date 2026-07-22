@@ -586,6 +586,13 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **統一原理との整合（確認）**：①〜⑥はすべて「content は人が仕上げる単位」の帰結＝背景パートはパターン（＋feel・来歴キー）が
   content に住み、家はネタエディタに常在。前景（メロ/リフ/counter）には何も外挿しない。
 
+### L0＝コード楽器レンダの真因修正（案A・2026-07-23・正典＝`docs/research/2026-07-22-pattern-quality-root-cause.md` §3 案A）
+オーナー耳評定「コード楽器の候補が貧弱／左手がいまいち」の**支配的真因はレンダバグ**（研究doc H-c・寄与序列①）。語彙の薄さ(H-b/H-d)より先に「鳴り」を本来設計へ戻す最小工事。
+- **真因（研究doc H-c・支配的）**：`buildCompContent`（`generate.ts`）が組む鍵盤型 voicing が `{tones:["R","3","5"], octave:0, top なし}` で、web `voiceChord`（`music.ts`）の `top!=null`→`voiceToTop` 分岐に乗れず**2026-07-04 以前の後方互換 tones 経路**（anchor=`CHORD_BASE`=48）で実音化されていた。帰結＝鍵盤13型で RH が1oct 低い（実測 G2..C4）・7th/テンション全落ち（R/3/5 のみ積む）・LH が RH 最上声とめり込む。手作りネタ（`emptyChordPattern`）は既に `top:72` を持つ＝**型辞書経由だけが旧経路という逆転**（S2/S3 が「hits が16分格子に落ちる」ことだけ検証し実音化経路を検証しなかった設計の抜け）。
+- **修正1（api・top を積む）**：`buildCompContent` の voicing に **keyboard 型のとき `top:72`（C5 目安）** を加える。条件＝`effStyle!=="guitar" && compType.style!=="guitar"`（＝lh 配線と同条件）。これで keyboard 型が `voiceToTop` 経路に乗り 7th 復活・RH が C4–C5 帯へ上がる。**ギター型は top を積まない**（`voiceGuitar` 経路＝内部で `v.top ?? 72` を使うため出力不変）。top:72 は型ごと最適を追わず一律（研究doc BONUS_top72 で事前確認済み・**要耳較正**）。
+- **修正2（web・LH 窓 fold）**：`resolveLh` custom 枝の度数解決で、構造音 **R/5/8 の算出 pitch が LH 窓上限 `LH_HI`=48(C3) を超える場合は 1oct 下げて LH 窓（C2–C3）へ fold**（`while(pitch>LH_HI) pitch-=12`）。従来は色音(3/7)の LIL 上げガードのみで **R/5/8 は上方向無制限**＝5度等が root の上に積まれ RH 最上声と同音衝突していた（研究doc H-e＝GS-STRIDE×Am の「5度」が E3 で RH と潰れる）。色音の LIL 上げガード（`pitch<LH_HI`→+12）は不変。RH を C4-C5 へ戻す（修正1）と合わせて衝突は消える。
+- **bit 一致の担保範囲（鉄則＝回帰ゼロ）**：修正1 は `buildCompContent`（型辞書経由の新規 content）**だけ**に効く＝**従来 fallback 経路（compType 未解決＝pattern 未指定/未知/6-8非4拍）の voicing・手作りネタ（`emptyChordPattern`）・ギター型は完全に bit 一致**（`gen-chord-library.test.ts` (a)/(d) 群が緑）。修正2 は custom lh（辞書由来のみ）に効く＝**preset(root/root5/oct)・色音の既存挙動は不変**。R は常に `lhBand`(<48)＝fold 発火せず不変・5/8 のみ高 root で fold。
+
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
 **問題（ユーザー指摘）**：①品質語彙が不足＝テンション(9/11/13/add9)・dim7・altered(7♭9/7♯9/7♯5)が無い。しかも ChordEditor は「9」を選べるのに `QUALITY_INTERVALS` に定義が無く **major トライアドにフォールバック＝壊れている**。②分数コード(slash/on-chord)が表現できない＝`ChordEntry` に bass 欄が無い。③コード楽器(comping)の高さが**ルートのpcぶん跳ねる**(`base = 48 + octave*12 + root_pc`)＝進行が動くたびレジスタが上下。「大体の高さを決める」＋スムーズに置きたい。
 

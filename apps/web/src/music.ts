@@ -840,8 +840,15 @@ function resolveLh(lh: ChordLhContent, steps: number, chords: ChordEntry[], key:
       const quality = ch ? ch.quality : "";
       const deg = h.deg ?? "R";
       let pitch = lhBand(rootPc) + degreeInterval(deg, quality);
-      // LIL ガード：色音(3/7 等＝非 R/5/8)は C3(48)未満で濁る＝1oct 上げる（5度/オクターブは低域可）。
-      if (deg !== "R" && deg !== "5" && deg !== "8") while (pitch < LH_HI) pitch += 12;
+      if (deg !== "R" && deg !== "5" && deg !== "8") {
+        // LIL ガード：色音(3/7 等＝非 R/5/8)は C3(48)未満で濁る＝1oct 上げる。
+        while (pitch < LH_HI) pitch += 12;
+      } else {
+        // L0（案A・研究doc 2026-07-22-pattern-quality-root-cause §3・H-e）：構造音 R/5/8 が LH 窓上限(C3=48)を
+        //   超えたら 1oct 下げて LH 窓（C2-C3）へ fold。従来は上方向無制限で 5度/8va が root の上に積まれ
+        //   RH 最上声と同音衝突していた（R は常に lhBand<48＝fold 発火せず不変＝bit 一致）。
+        while (pitch > LH_HI) pitch -= 12;
+      }
       out.push({ pitch, start, dur, vel: h.vel ?? LH_VEL });
     }
     return out;

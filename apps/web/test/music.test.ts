@@ -799,6 +799,41 @@ describe("music", () => {
       expect(((third.pitch % 12) + 12) % 12).toBe(4); // E
       expect(third.pitch).toBeGreaterThanOrEqual(48); // LIL：色音は C3 以上（36+4=40<48→+12=52）
     });
+    // ── L0：レンダ真因修正（案A・研究doc 2026-07-22-pattern-quality-root-cause）──────────
+    it("(L0) 鍵盤 top:72 で maj7 の7th(色音)が復活・RH が旧 tones 経路より上帯へ", () => {
+      const chords = [{ root: 5, quality: "maj7", start: 0, dur: 4 }]; // F maj7 = F A C E（7th=E・pc4）
+      const topV = resolveChordPattern(cp({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 } }), chords, 0).filter((n) => n.start === 0);
+      const legacy = resolveChordPattern(cp(), chords, 0).filter((n) => n.start === 0); // top なし＝後方互換 tones 経路
+      const pcsTop = new Set(topV.map((n) => ((n.pitch % 12) + 12) % 12));
+      const pcsLeg = new Set(legacy.map((n) => ((n.pitch % 12) + 12) % 12));
+      expect(pcsTop.has(4)).toBe(true); // 7th=E が鳴る（voiceToTop は QUALITY_INTERVALS 全構成音を積む）
+      expect(pcsLeg.has(4)).toBe(false); // 旧経路は R/3/5 のみ＝7th 全落ち（研究doc H-c-2）
+      expect(Math.max(...topV.map((n) => n.pitch))).toBe(72); // top は磁石（最上声=C5）
+      expect(Math.max(...topV.map((n) => n.pitch))).toBeGreaterThan(Math.max(...legacy.map((n) => n.pitch))); // RH が上帯へ（1oct 低下の是正）
+    });
+    it("(L0) LH custom：5度/8va が LH窓上限(C3=48)超なら1oct下げて窓へfold（R は不変）", () => {
+      const chords = [{ root: 9, quality: "", start: 0, dur: 4 }]; // Am：lhBand(9)=45
+      const five = resolveChordPattern(cp({ lh: { mode: "custom", hits: [{ step: 0, dur: 4, deg: "5" }] } }), chords, 0).filter((n) => n.vel === 106);
+      expect(five.length).toBe(1);
+      expect(five[0]!.pitch).toBe(40); // 45+7=52(E3・C3超)→fold→40(E2)＝窓内
+      expect(five[0]!.pitch).toBeLessThanOrEqual(48);
+      const oct = resolveChordPattern(cp({ lh: { mode: "custom", hits: [{ step: 0, dur: 4, deg: "8" }] } }), chords, 0).filter((n) => n.vel === 106);
+      expect(oct[0]!.pitch).toBe(45); // 45+12=57→fold→45(A2)＝窓内
+      expect(oct[0]!.pitch).toBeLessThanOrEqual(48);
+      // R は常に lhBand(<48)＝fold 発火せず不変（bit 一致）
+      const r = resolveChordPattern(cp({ lh: { mode: "custom", hits: [{ step: 0, dur: 4, deg: "R" }] } }), chords, 0).filter((n) => n.vel === 106);
+      expect(r[0]!.pitch).toBe(45); // A2（lhBand(9)・fold 対象外）
+    });
+    it("(L0) LH fold＋top:72 で左手が右手にめり込まない（LH最高 < RH最低・研究doc H-e）", () => {
+      const chords = [{ root: 9, quality: "", start: 0, dur: 4 }]; // Am（研究doc GS-STRIDE×Am の衝突例）
+      const notes = resolveChordPattern(
+        cp({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 }, lh: { mode: "custom", hits: [{ step: 0, dur: 4, deg: "R" }, { step: 4, dur: 4, deg: "5" }] } }),
+        chords, 0,
+      ).filter((n) => n.start < 3);
+      const lh = notes.filter((n) => n.vel === 106);
+      const rh = notes.filter((n) => n.vel !== 106);
+      expect(Math.max(...lh.map((n) => n.pitch))).toBeLessThan(Math.min(...rh.map((n) => n.pitch))); // LH 帯 < RH 帯＝分離
+    });
     it("LH は guitar 解決では鳴らない（ギターに左手なし）＝lh 有無で同一", () => {
       const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
       const g = { ...gcp(), lh: { mode: "root" as const } };

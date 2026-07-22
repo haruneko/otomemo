@@ -952,10 +952,16 @@ export function genChordPattern(
     // style は guitar のみ content に載せる（opts.style が明示ならそれが勝つ）。strumMs は opts 優先→型の相場。
     const effStyle = opts?.style ?? (compType.style === "guitar" ? "guitar" : undefined);
     const effStrumMs = opts?.strumMs ?? compType.strumMs;
+    // L0（案A・研究doc 2026-07-22-pattern-quality-root-cause §3・H-c）：keyboard 型に top:72(C5目安)を積み
+    //   web voiceChord を voiceToTop 経路へ乗せる（7th 復活・RH C4-C5・LH 分離）。top 無しだと旧 tones 経路
+    //   （anchor=CHORD_BASE=48）で鳴り RH 1oct 低下＋7th 全落ちになるレンダバグの根治。keyboard 判定は lh 配線
+    //   と同条件（effStyle も compType.style も guitar でない）。ギター型は voiceGuitar が内部で top を補う＝積まない＝出力不変。
+    const isKeyboard = effStyle !== "guitar" && compType.style !== "guitar";
     const voicing = {
       tones: ["R", "3", "5"],
       openClose: compType.openClose ?? "close",
       octave: 0,
+      ...(isKeyboard ? { top: 72 } : {}),
       ...(compType.powerChord ? { powerChord: true } : {}),
       ...(effStyle != null ? { style: effStyle } : {}),
       ...(effStrumMs != null ? { strumMs: effStrumMs } : {}),

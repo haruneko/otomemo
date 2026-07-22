@@ -172,6 +172,48 @@ describe("(d) ギター型で voicing.style==='guitar'／strumMs が載る", () 
   });
 });
 
+// ── L0：レンダ真因修正（案A・研究doc 2026-07-22-pattern-quality-root-cause §3）─────────
+// 鍵盤型 voicing に top:72 を積み voiceToTop 経路へ乗せる（7th 復活・RH C4-C5）。ギター型/従来経路は不変。
+describe("(L0) keyboard 型の buildCompContent は voicing.top=72 を積む／guitar・従来経路は不変", () => {
+  const voicingOf = (r: ReturnType<typeof genChordPattern>): Record<string, unknown> => (r.items[0]!.content as { voicing: Record<string, unknown> }).voicing;
+  it("鍵盤型（PB-WHOLE/CP-SYNC16/GS-STRIDE）は voicing.top===72", () => {
+    for (const id of ["PB-WHOLE", "CP-SYNC16", "GS-STRIDE"]) {
+      const v = voicingOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: id }));
+      expect(v.top, id).toBe(72);
+    }
+  });
+  it("全鍵盤型（style!=='guitar'）が top===72／全ギター型は top を持たない（voiceGuitar 経路のまま）", () => {
+    for (const t of COMP_TYPES) {
+      const v = voicingOf(genChordPattern({ bars: 1, meter: "4/4" }, 7, { pattern: t.id }));
+      if (t.style === "guitar") expect("top" in v, `${t.id} guitar は top なし`).toBe(false);
+      else expect(v.top, `${t.id} keyboard は top=72`).toBe(72);
+    }
+  });
+  it("variety 複数経路（ballad×3）も各候補の鍵盤型に top=72 が載る", () => {
+    const r = genChordPattern({ bars: 2, meter: "4/4", section: { role: "verse" } }, 3, { pattern: "ballad", variety: 3 });
+    for (const it of r.items) {
+      const v = (it.content as { voicing: Record<string, unknown> }).voicing;
+      // ballad 語彙は全て鍵盤型（PB-*・GT-BALLAD はギター）→ style で分岐
+      if (v.style === "guitar") expect("top" in v, it.label).toBe(false);
+      else expect(v.top, it.label).toBe(72);
+    }
+  });
+  it("opts.style=guitar 上書き（鍵盤型を guitar 解決）は top を積まない（ギター経路）", () => {
+    const v = voicingOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "PB-WHOLE", style: "guitar" }));
+    expect("top" in v).toBe(false);
+    expect(v.style).toBe("guitar");
+  });
+  it("従来経路（pattern 未指定/未知/6-8非4拍）の voicing は top キーを生やさない＝bit 一致", () => {
+    for (const r of [
+      genChordPattern({ bars: 2, meter: "4/4" }, 3),
+      genChordPattern({ bars: 2, meter: "4/4" }, 3, { pattern: "NOPE-XX" }),
+      genChordPattern({ bars: 4, meter: "6/8" }, 3, { pattern: "PB-WHOLE" }),
+    ]) {
+      expect("top" in (r.items[0]!.content as { voicing: Record<string, unknown> }).voicing).toBe(false);
+    }
+  });
+});
+
 // ── スライスC：候補を複数返す（variety）──────────────────────────────────────
 describe("(g) variety＝候補を複数（別々の型）返す・未指定/1 は従来 bit 一致", () => {
   it("variety 未指定/1 は単数経路と deepStrictEqual（ジャンル・型ID・omakase 横断）", () => {
