@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>奏法UI 三層モック（A音色連動/Bじゃら〜ん行/C聴いて選ぶ/Dベース細かく）</title>
+<style>
+/* 2026-07-14 tinker-menu-redesign-mock の流儀 */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0d1016; --panel:#1a1e2a; --panel2:#202634; --panel3:#262d3e; --line:#2b3245;
+  --ink:#e9edf5; --dim:#96a0b5; --faint:#5d6577; --acc:#8fb7ff; --pri:#3b6bd6;
+  --ok:#8fe0a8; --warn:#ffd479; --new:#ffd479;
+  --k-chord:#a887e0; --k-bass:#35b8a8;
+}
+html,body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.5}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+select{font:inherit;background:var(--panel3);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px;max-width:100%}
+[hidden]{display:none!important}
+#page{max-width:430px;margin:0 auto;padding:10px 8px 40px}
+h1{font-size:15px}
+.sub{color:var(--dim);font-size:11px;line-height:1.6;margin:4px 0 8px}
+.sub b{color:var(--warn)}
+
+#modeTabs{display:flex;gap:5px;margin:8px 0 10px;position:sticky;top:0;z-index:9;background:var(--bg);padding:4px 0}
+#modeTabs button{flex:1;padding:8px 2px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-weight:700;font-size:12px;color:var(--dim)}
+#modeTabs button.on{background:#233052;border-color:var(--acc);color:var(--ink)}
+#modeTabs button small{display:block;font-weight:400;font-size:9px;color:var(--dim)}
+
+#frame{position:relative;max-width:390px;margin:0 auto;background:#11141b;border:1px solid var(--line);border-radius:18px;overflow:hidden;min-height:560px;display:flex;flex-direction:column}
+#screen{flex:1;overflow-y:auto;padding:12px 10px 10px}
+.ed-title{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.ed-title .tt{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-weight:700;font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.row:last-child{margin-bottom:0}
+.row .lb{flex:0 0 58px;font-size:12px;color:var(--dim)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{padding:7px 11px;font-size:12px;color:var(--dim);border-right:1px solid var(--line)}
+.seg button:last-child{border-right:none}
+.seg button.on{background:var(--pri);color:var(--ink);font-weight:700}
+.pm{display:inline-flex;align-items:center;gap:5px}
+.pm button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;color:var(--dim)}
+.pm b{min-width:34px;text-align:center;font-size:13px}
+.newb{display:inline-block;border:1px solid var(--new);color:var(--new);font-size:9px;border-radius:6px;padding:0 5px;margin-left:5px;vertical-align:2px}
+.newline{border-color:#5d5330!important;background:rgba(255,212,121,.05)!important}
+.hint{font-size:10px;color:var(--faint);margin-top:6px;line-height:1.6}
+.hint em{color:var(--dim);font-style:normal}
+
+/* グリッド（いつ弾く） */
+.grid{display:grid;grid-template-columns:repeat(16,1fr);gap:2px;margin-bottom:4px}
+.grid i{height:26px;border-radius:4px;background:#181d2b;border:1px solid #20263a}
+.grid i.hit{background:var(--k-chord);opacity:.85}
+.grid i.hit.w{opacity:.45}
+
+/* ミニロール（響きプレビュー） */
+.mroll{position:relative;height:64px;border-radius:8px;background:#151a28;border:1px solid var(--line);overflow:hidden;margin-top:6px}
+.mroll i{position:absolute;height:5px;border-radius:2px;background:var(--k-chord)}
+
+/* chips */
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;color:var(--dim);background:var(--panel2)}
+.chip.on{border-color:var(--acc);color:var(--ink);background:rgba(143,183,255,.1);font-weight:700}
+.genb{width:100%;padding:11px;border-radius:12px;background:var(--pri);font-weight:700;font-size:13px;margin-top:10px}
+
+/* 候補トレイ */
+.tray{border:1.5px solid var(--acc);border-radius:12px;background:rgba(143,183,255,.05);padding:8px;margin-top:10px}
+.tray .thead{font-size:12px;color:var(--acc);font-weight:700;margin-bottom:6px}
+.ccard{display:flex;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px;margin-bottom:6px}
+.ccard .roll{flex:0 0 92px;height:38px;border-radius:6px;background:#151a28;position:relative;overflow:hidden}
+.ccard .roll i{position:absolute;height:4px;border-radius:2px;background:var(--k-chord)}
+.ccard .cmeta{flex:1;font-size:10px;color:var(--dim);line-height:1.5}
+.ccard .cmeta b{display:block;font-size:11px;color:var(--ink)}
+.ccard .cbtns{display:flex;gap:4px}
+.ccard .cbtns button{width:34px;height:32px;border:1px solid var(--line);border-radius:8px;font-size:12px;background:var(--panel3)}
+.ccard .cbtns button.pri{background:var(--pri);border-color:var(--pri);font-weight:700;width:auto;padding:0 10px}
+
+/* アコーディオン */
+.gacc{border:1px solid var(--line);border-radius:10px;margin-top:8px;overflow:hidden}
+.gacc>button{width:100%;text-align:left;padding:9px 10px;font-size:12px;color:var(--dim);background:var(--panel2)}
+.gacc .gbody{padding:8px 10px;border-top:1px solid var(--line)}
+.note{font-size:11px;color:var(--dim);background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:8px 10px;margin-top:10px;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="page">
+<h1>奏法UI 三層モック</h1>
+<p class="sub">「三層」＝下の <b>A/B/C</b> の役割分担のこと（＋D=ベースノブ露出）。<b>黄枠＝新設</b>・それ以外は今ある画面の再現。全ノブ既定OFF＝既存の曲は1音も変わらない。タブで切替。</p>
+
+<div id="modeTabs">
+  <button class="on" data-t="a">A 音色連動<small>ゼロ操作の既定</small></button>
+  <button data-t="b">B じゃら〜ん<small>エディタ微調整</small></button>
+  <button data-t="c">C 聴いて選ぶ<small>パターン型</small></button>
+  <button data-t="d">D ベース細かく<small>ノブ露出</small></button>
+</div>
+
+<div id="frame"><div id="screen">
+
+<!-- ============ A：音色→奏法の二段（MetaPanel＝ネタ属性行） ============ -->
+<section id="scr-a">
+  <div class="ed-title"><div class="tt">🎸 サビのコード（chord_pattern）</div></div>
+  <div class="card">
+    <div class="row"><span class="lb">キー</span><span class="pm"><button>−</button><b>C</b><button>＋</button></span>
+      <span class="lb" style="flex:0 0 auto">テンポ</span><span class="pm"><button>−</button><b>120</b><button>＋</button></span></div>
+    <div class="row"><span class="lb">音色</span>
+      <select id="aProg">
+        <option value="pf">Acoustic Piano</option>
+        <option value="ep">Electric Piano</option>
+        <option value="gt" selected>Steel Guitar</option>
+        <option value="ng">Nylon Guitar</option>
+        <option value="pad">Strings Pad</option>
+      </select></div>
+    <div class="row newline card" style="margin:0;padding:8px" id="aStyleRow"><span class="lb">奏法<span class="newb">新</span></span>
+      <select id="aStyle"></select></div>
+    <p class="hint">仮歌の「歌声を選ぶと『声』が出る」と同じ二段。音色を選ぶと奏法既定が付いてくる＝<em>出先メモではここを触らず「おまかせ」のまま再生すればその楽器らしく鳴る</em>。ピアノ系/パッド系に切り替えると中身が変わるのを試してください。</p>
+  </div>
+  <div class="note">選択肢はファミリ単位（ギター系/鍵盤系/パッド系）で出し分け。「鍵盤風に弾く」＝従来の鳴り方への退避も残す。</div>
+</section>
+
+<!-- ============ B：ChordPatternEditor 第4行 ============ -->
+<section id="scr-b" hidden>
+  <div class="ed-title"><div class="tt">🎸 サビのコード — 編集</div></div>
+  <div class="card">
+    <div style="font-size:11px;color:var(--dim);margin-bottom:4px">① いつ弾く</div>
+    <div class="grid" id="bGrid"></div>
+  </div>
+  <div class="card">
+    <div style="font-size:11px;color:var(--dim);margin-bottom:6px">② 響き</div>
+    <div class="row"><span class="lb">打ち方</span><span class="seg"><button class="on">ストラム</button><button>アルペジオ</button></span></div>
+    <div class="row"><span class="lb">トップ</span><span class="pm"><button>−</button><b>C5</b><button>＋</button></span>
+      <span class="seg"><button class="on">密</button><button>広</button></span></div>
+    <div class="row"><span class="lb">パワー</span><span class="seg"><button class="on">OFF</button><button>ON</button></span>
+      <span class="lb" style="flex:0 0 auto">高さ</span><span class="pm"><button>−</button><b>0</b><button>＋</button></span></div>
+    <div class="row newline card" style="margin:0;padding:8px">
+      <span class="lb">奏法<span class="newb">新</span></span>
+      <span class="seg" id="bStyle"><button data-v="kb">鍵盤</button><button data-v="gt" class="on">ギター</button></span>
+      <span id="bStrumWrap"><span class="lb" style="flex:0 0 auto">じゃら〜ん</span>
+      <span class="seg" id="bStrum"><button data-v="0">OFF</button><button data-v="1">弱</button><button data-v="2" class="on">中</button><button data-v="3">強</button></span></span>
+    </div>
+    <div class="mroll" id="bRoll"></div>
+    <p class="hint">第4行＝今回の追加はこの1行だけ（<em>「響きは最大4行・超過は畳む」を行契約として明文化</em>）。ロールのプレビューは弦順の時差＝じゃら〜ん量で音の頭が斜めになる。触った瞬間に和音が鳴る既存挙動はそのまま。</p>
+  </div>
+</section>
+
+<!-- ============ C：パターンを聴いて選ぶ（TinkerSheet コード引き出し） ============ -->
+<section id="scr-c" hidden>
+  <div class="ed-title"><div class="tt">いじる ▾ — コードの引き出し</div></div>
+  <div class="card">
+    <div style="font-size:11px;color:var(--dim);margin-bottom:6px">パターン<span class="newb">新</span></div>
+    <div class="chips" id="cChips">
+      <button class="chip on">おまかせ</button><button class="chip">バラード</button><button class="chip">ロック</button>
+      <button class="chip">シティポップ</button><button class="chip">4つ打ち</button><button class="chip">フォーク</button>
+    </div>
+    <button class="genb" id="cGen">🎲 候補を出す</button>
+    <div class="tray" id="cTray" hidden>
+      <div class="thead">候補 — ▶で聴いて選ぶ</div>
+      <div class="ccard"><div class="roll" data-r="sync"></div><div class="cmeta"><b>裏食いコンピング</b>シティポップ／2.5拍前借り</div><div class="cbtns"><button>▶</button><button class="pri">採用</button></div></div>
+      <div class="ccard"><div class="roll" data-r="cut"></div><div class="cmeta"><b>16カッティング</b>ファンク寄り／ゴースト入り</div><div class="cbtns"><button>▶</button><button class="pri">採用</button></div></div>
+      <div class="ccard"><div class="roll" data-r="whole"></div><div class="cmeta"><b>白玉＋前借り</b>バラード／サビ前の溜め</div><div class="cbtns"><button>▶</button><button class="pri">採用</button></div></div>
+    </div>
+    <p class="hint">型辞書28型を<em>名前で選ばせない</em>＝ジャンルで絞って耳で選ぶ。ベース引き出しの「ジャンルchip＋型直指定は沈み」と同じ構造。型ID直指定は「細かく」に沈める。</p>
+  </div>
+</section>
+
+<!-- ============ D：ベース引き出しの「細かく」群 ============ -->
+<section id="scr-d" hidden>
+  <div class="ed-title"><div class="tt">いじる ▾ — ベースの引き出し</div></div>
+  <div class="card">
+    <div style="font-size:11px;color:var(--dim);margin-bottom:6px">ジャンル（既存のまま）</div>
+    <div class="chips">
+      <button class="chip on">おまかせ</button><button class="chip">ロック</button><button class="chip">バラード</button>
+      <button class="chip">シティポップ</button><button class="chip">ファンク</button><button class="chip">EDM</button>
+    </div>
+    <div class="gacc"><button id="dAcc">細かく ▸<span class="newb">新</span></button>
+      <div class="gbody" id="dBody" hidden>
+        <div class="row"><span class="lb">キックに噛む</span><span class="seg"><button class="on">OFF</button><button>弱</button><button>強</button><button>逆相</button></span></div>
+        <div class="row"><span class="lb">2・4で抜く</span><span class="seg"><button class="on">OFF</button><button>弱</button><button>強</button></span></div>
+        <div class="row"><span class="lb">接近音</span><span class="seg"><button class="on">OFF</button><button>たまに</button><button>よく</button></span></div>
+        <div class="row"><span class="lb">分数の低音</span><span class="seg"><button class="on">OFF</button><button>ON</button></span></div>
+        <p class="hint">API実装済・UI未露出だった4ノブ（kickLock/snareGap/approach/slashBass）。前面のchip契約は守り<em>全部この畳みの中</em>。ドラムが居る時だけ上3つが効く。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div></div>
+
+<div class="note" style="max-width:390px;margin:10px auto 0">
+<b style="color:var(--ink)">層の役割</b>：A=既定を決める（触らなくても楽器らしい）／C=選択肢を並べる（候補まで機械・選ぶのは人間）／B=最後の微調整（1行だけ）／D=ベースの空き地埋め。<br>
+実装順の提案：A→B（小さい・S1の実装が既に下にある）→C（型辞書S2完成後）→D（随時）。
+</div>
+</div>
+
+<script>
+// タブ切替
+const tabs=document.querySelectorAll('#modeTabs button');
+tabs.forEach(b=>b.addEventListener('click',()=>{
+  tabs.forEach(x=>x.classList.toggle('on',x===b));
+  for(const id of ['a','b','c','d']) document.getElementById('scr-'+id).hidden=(b.dataset.t!==id);
+}));
+// A: 音色→奏法の出し分け
+const A_OPTS={
+  gt:['おまかせ（ギター・ストローク）','ストローク（じゃら〜ん強め）','アルペジオ','カッティング','鍵盤風に弾く'],
+  ng:['おまかせ（ギター・アルペジオ）','ストローク','アルペジオ','鍵盤風に弾く'],
+  pf:['おまかせ（鍵盤・コンピング）','白玉','コンピング','アルペジオ'],
+  ep:['おまかせ（エレピ・軽め）','白玉','コンピング'],
+  pad:['おまかせ（白玉パッド）'],
+};
+const aProg=document.getElementById('aProg'),aStyle=document.getElementById('aStyle');
+function fillA(){aStyle.innerHTML=A_OPTS[aProg.value].map(o=>`<option>${o}</option>`).join('');}
+aProg.addEventListener('change',fillA);fillA();
+// B: グリッド＋ロール描画
+const g=document.getElementById('bGrid');
+for(let i=0;i<16;i++){const c=document.createElement('i');if(i%4===0)c.className='hit';else if(i===6||i===14)c.className='hit w';g.appendChild(c);}
+const bRoll=document.getElementById('bRoll'),bStrum=document.getElementById('bStrum'),bStyle=document.getElementById('bStyle'),bWrap=document.getElementById('bStrumWrap');
+let strumLv=2,styleV='gt';
+function drawRoll(){
+  bRoll.innerHTML='';
+  const lag=styleV==='gt'?strumLv*3:0; // px/声
+  for(let hit=0;hit<4;hit++)for(let v=0;v<5;v++){
+    const n=document.createElement('i');
+    n.style.left=(8+hit*90+ (4-1-v)*0 + v*lag)+'px'; // 低い声から先に
+    n.style.top=(50-v*10)+'px'; n.style.width=(80-v*lag)+'px';
+    bRoll.appendChild(n);
+  }
+}
+bStrum.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+  bStrum.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));strumLv=+b.dataset.v;drawRoll();}));
+bStyle.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+  bStyle.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));styleV=b.dataset.v;
+  bWrap.style.display=styleV==='gt'?'':'none';drawRoll();}));
+drawRoll();
+// C: 候補トレイ＋ロール模様
+document.getElementById('cGen').addEventListener('click',()=>{document.getElementById('cTray').hidden=false;});
+document.querySelectorAll('#cChips .chip').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#cChips .chip').forEach(x=>x.classList.toggle('on',x===b));}));
+const R={sync:[[2,0],[10,1],[18,0],[26,2],[40,0],[50,1],[58,0],[70,2]],
+  cut:[[2,0],[8,1],[14,0],[20,2],[26,0],[32,1],[38,0],[46,2],[52,0],[58,1],[66,0],[74,2]],
+  whole:[[2,0],[40,1],[70,2]]};
+document.querySelectorAll('.ccard .roll').forEach(r=>{
+  (R[r.dataset.r]||[]).forEach(([x,row])=>{const n=document.createElement('i');
+    n.style.left=x+'px';n.style.top=(8+row*11)+'px';n.style.width=(r.dataset.r==='whole'?26:7)+'px';r.appendChild(n);});
+});
+// D: アコーディオン
+document.getElementById('dAcc').addEventListener('click',()=>{
+  const b=document.getElementById('dBody');b.hidden=!b.hidden;});
+// 汎用：seg のトグル見た目（モック用）
+document.querySelectorAll('#scr-d .seg, #scr-b .seg:not(#bStyle):not(#bStrum)').forEach(seg=>{
+  seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    seg.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));}));
+});
+</script>
+</body>
+</html>
