@@ -1127,7 +1127,11 @@ export function genBass(
     const bf: BassFill | null = fillBar >= 0 ? resolveBassFill(opts!.fill!, seed ?? 42) : null;
     for (let bar = 0; bar < bars; bar++) cellsToSteps(bar === fillBar && bf ? bf.cells : styleType.cells, bar);
     const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 42); // 相対 content にも feel を載せる（絶対と対称・applyFeelEnsemble が消費）
-    const content = feel ? { mode: "relative", steps: bars * 16, pattern, feel } : { mode: "relative", steps: bars * 16, pattern };
+    // patternId＝base 型 id を刻む（修理#3・S1・design 決定②）。fill 差替えでも base 型 id を維持（ドラム applyDrumFill 継承と同流儀）。
+    //   帯の dedupe と「いま：<型名>」表示の土台。opt-in（relative:true）経路のみ＝既定（絶対）は不変＝bit 一致。
+    const content = feel
+      ? { mode: "relative", steps: bars * 16, pattern, patternId: styleType.id, feel }
+      : { mode: "relative", steps: bars * 16, pattern, patternId: styleType.id };
     return withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
   }
 

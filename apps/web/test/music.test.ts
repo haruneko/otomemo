@@ -228,6 +228,46 @@ describe("music", () => {
       expect(onbeat[0]!.pitch).toBe(band(0)); // C(36)
     });
 
+    // 修理#3 決定②：BassStep.vel → Note.vel 反映（UI 先行だと無音編集の齟齬＝resolver 先行）。
+    it("BassStep.vel → Note.vel へ反映（vel 付き step は vel が載る）", () => {
+      const notes = resolveRelativeBass(
+        [
+          { step: 0, degree: "R", dur: 1, vel: 28 }, // ghost
+          { step: 1, degree: "5", dur: 1, vel: 120 }, // accent
+        ],
+        [],
+        0,
+      );
+      expect(notes[0]).toEqual({ pitch: 36, start: 0, dur: 0.25, vel: 28 });
+      expect(notes[1]).toEqual({ pitch: 43, start: 0.25, dur: 0.25, vel: 120 });
+    });
+    it("vel 無し step は vel キーを出さない＝現行 resolve 出力と deepStrictEqual 不変（bit）", () => {
+      const pattern = [
+        { step: 0, degree: "R" as const, dur: 1 },
+        { step: 1, degree: "5" as const, dur: 1 },
+        { step: 2, degree: "8" as const, dur: 1 },
+      ];
+      const notes = resolveRelativeBass(pattern, [], 0);
+      expect(notes).toEqual([
+        { pitch: 36, start: 0, dur: 0.25 },
+        { pitch: 43, start: 0.25, dur: 0.25 },
+        { pitch: 48, start: 0.5, dur: 0.25 },
+      ]);
+      expect(notes.every((n) => !("vel" in n))).toBe(true); // vel キー無し（deepStrictEqual/形状一致）
+    });
+    it("vel 混在：vel 付き step だけ vel が載り、無い step は素通し", () => {
+      const notes = resolveRelativeBass(
+        [
+          { step: 0, degree: "R", dur: 1 }, // vel 無し
+          { step: 1, degree: "R", dur: 1, vel: 90 }, // vel 有り
+        ],
+        [],
+        0,
+      );
+      expect("vel" in notes[0]!).toBe(false);
+      expect(notes[1]!.vel).toBe(90);
+    });
+
     it("notesForContent resolves relative bass (single preview uses key tonic)", () => {
       const content = { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }] };
       expect(notesForContent("bass", content, { key: 0 })).toEqual([{ pitch: 36, start: 0, dur: 1 }]);

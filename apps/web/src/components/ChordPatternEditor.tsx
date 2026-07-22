@@ -90,6 +90,7 @@ export function ChordPatternEditor({
   tempo,
   keyPc,
   previewChords,
+  showPicker = true,
   playheadRef,
   scrollerRef,
 }: {
@@ -100,6 +101,7 @@ export function ChordPatternEditor({
   tempo?: number; // 型試聴の実音化＋候補フレームの tempo（修理#1「パターンを選ぶ」帯）
   keyPc?: number; // 調（型試聴のプレビュー進行の移調＋候補フレームの key）
   previewChords?: ChordEntry[]; // ネタ固有のプレビュー進行（あれば型試聴に使う・無ければ C→Am→F→G）
+  showPicker?: boolean; // 修理#3 決定③：「パターンを選ぶ ▸」帯の出し分け（既定 true＝従来描画＝bit一致）。管弦(section_inst)＝false で非表示（型の誤適用を断つ）。
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
@@ -152,8 +154,14 @@ export function ChordPatternEditor({
   const startAt = (s: number) => pattern.hits.find((h) => h.step === s);
   const sustainAt = (s: number) => pattern.hits.some((h) => h.step < s && s < h.step + h.dur);
 
+  // 手編集の共通ゲート（修理#3 決定④）＝演奏内容を変える onChange を1箇所に集約し、**patternId が在る時だけ**
+  // patternEdited を立てる（来歴＝patternId は保ったまま帯に「（改）」を出す＝正直表示）。patternId 無し＝新キーを
+  // 生やさない＝bit一致。program 等メタ変更（applyPattern の program 継承）はこの setter を通さない＝付与しない。
+  // applyPattern は候補 content で丸ごと置換＝候補側に patternEdited が無い＝（改）は自然消滅。
+  const editContent = (next: ChordPatternContent) =>
+    onChange(next.patternId != null ? { ...next, patternEdited: true } : next);
   // 響き変更は必ず top を書き込む（旧パターンも触った瞬間から新モデルで鳴る）。
-  const setV = (patch: Partial<typeof v>) => onChange({ ...pattern, voicing: { ...v, top, ...patch } });
+  const setV = (patch: Partial<typeof v>) => editContent({ ...pattern, voicing: { ...v, top, ...patch } });
   // S3 奏法の解決結果（style:"auto" は program のファミリで分岐）。guitar＝D/Uストリップ・keyboard＝左手行。
   const guitarResolved = v.style === "guitar" || (v.style === "auto" && isGuitarProgram(program));
   const keyboardResolved = !guitarResolved;
@@ -164,7 +172,7 @@ export function ChordPatternEditor({
     const r = applyCellTap(pattern.hits, s, dotted ? len * 1.5 : len); // 頭=消す／伸び=長さ調整／空き=新規
     // S3：guitar 解決の新規打点は dir を明示で書く（表D裏U を可聴化＝既存ネタは触らないので不変）。
     const hits = r.placed && guitarResolved ? r.hits.map((h) => (h.step === s ? { ...h, dir: duDefault(s) } : h)) : r.hits;
-    onChange({ ...pattern, hits });
+    editContent({ ...pattern, hits });
     // 置いた合図＝現在の voicing で C を和音プレビュー（ドミソ／単音でなく響きで確認）。
     if (r.placed) for (const p of voicingPreviewPitches({ ...v, top }, program)) void previewNote({ pitch: p, start: 0, dur: 0.5 });
   };
@@ -173,12 +181,12 @@ export function ChordPatternEditor({
     const h = pattern.hits.find((x) => x.step === s);
     if (!h) return;
     const next: "D" | "U" = (h.dir ?? duDefault(s)) === "D" ? "U" : "D";
-    onChange({ ...pattern, hits: pattern.hits.map((x) => (x.step === s ? { ...x, dir: next } : x)) });
+    editContent({ ...pattern, hits: pattern.hits.map((x) => (x.step === s ? { ...x, dir: next } : x)) });
   };
   // 左手（S3）：seg 選択＝lh.mode を書く／OFF＝lh キー削除（bit）。
   const setLh = (lh: ChordLhContent | undefined) => {
-    if (!lh) { const { lh: _drop, ...rest } = pattern; onChange(rest); }
-    else onChange({ ...pattern, lh });
+    if (!lh) { const { lh: _drop, ...rest } = pattern; editContent(rest); }
+    else editContent({ ...pattern, lh });
   };
 
   // #29 §9 発火＝onset セルのみ持ち上げる（sustain/空セルは null＝キャプチャしない・誤爆防止）。
@@ -200,7 +208,7 @@ export function ChordPatternEditor({
   const commitChord = (s: number, st: { vel: number }) => {
     setDrag(null);
     const nextVel = st.vel === CHORD_BASE_VEL ? undefined : st.vel;
-    onChange({ ...pattern, hits: chordHitsWithVel(pattern.hits, s, nextVel) });
+    editContent({ ...pattern, hits: chordHitsWithVel(pattern.hits, s, nextVel) });
   };
 
   // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。
@@ -208,8 +216,16 @@ export function ChordPatternEditor({
 
   return (
     <div className="cp-editor">
-      {/* 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1）＝型辞書の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。 */}
-      <PatternPickerBar nowLabel={pattern.patternId} chips={COMP_GENRE_CHIPS} onFetch={fetchPatterns} />
+      {/* 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1）＝型辞書の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。
+          修理#3 決定③：showPicker=false（管弦=section_inst）で帯ごと非表示＝コード楽器型の誤適用を断つ。
+          決定④：手編集済みは patternId に「（改）」を添えて帯が嘘をつかない。 */}
+      {showPicker && (
+        <PatternPickerBar
+          nowLabel={pattern.patternId != null ? pattern.patternId + (pattern.patternEdited ? "（改）" : "") : undefined}
+          chips={COMP_GENRE_CHIPS}
+          onFetch={fetchPatterns}
+        />
+      )}
       {/* ① いつ弾く（主役）：グリッド＋長さ＋小節 */}
       <div className="cp-when">
         <p className="cp-zlabel">いつ弾く（タップで配置{isArp ? "＝各hitで次の音" : ""}）</p>
@@ -267,7 +283,7 @@ export function ChordPatternEditor({
           <div className="proll-tools">
             <NoteValuePicker options={LENGTHS} value={len} dotted={dotted} onChange={setLen} onToggleDotted={() => setDotted((d) => !d)} />
           </div>
-          <BarsControl bars={bars} max={4} onChange={(n) => onChange({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
+          <BarsControl bars={bars} max={4} onChange={(n) => editContent({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
         </div>
       </div>
 
@@ -277,8 +293,8 @@ export function ChordPatternEditor({
         <div className="cp-vrow">
           <span className="cp-vlbl">打ち方</span>
           <div className="seg" role="group" aria-label="mode">
-            <button type="button" className={!isArp ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "strum" })}>ストローク</button>
-            <button type="button" className={isArp ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "arp" })}>アルペジオ</button>
+            <button type="button" className={!isArp ? "on" : ""} onClick={() => editContent({ ...pattern, mode: "strum" })}>ストローク</button>
+            <button type="button" className={isArp ? "on" : ""} onClick={() => editContent({ ...pattern, mode: "arp" })}>アルペジオ</button>
           </div>
         </div>
         <div className="cp-vrow">

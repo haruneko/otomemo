@@ -24,6 +24,7 @@ import {
   singOf,
   CURATED_SING_VOICES,
   PITCH_NAMES as KEY_NAMES,
+  type Feel,
   type SingVoice,
   type Note,
   type ChordEntry,
@@ -122,6 +123,9 @@ export function useNetaEditor(
   // 弱起（アウフタクト）：拍0の前の lead-in 拍数。既存の負 start を包む値で初期化。
   const [pickup, setPickup] = useState(() => Math.max(0, Math.ceil(-Math.min(0, ...notesOf(neta.content).map((n) => n.start)))));
   const [chordPat, setChordPat] = useState<ChordPatternContent>(() => (isChordPattern(neta.content) ? neta.content : emptyChordPattern()));
+  // C-6「feel の家」（修理#3 決定①）：跳ね/人間味を単体ネタでも見て・触って・保存で落とさない。
+  // 初期＝content.feel（生成が刻んだ feel）。savePatch が chordPat 系以外の再構成で feel を落とす非対称バグの根治。
+  const [feel, setFeel] = useState<Feel | undefined>(() => feelOf(neta.content));
   // 骨格（design #20 S2）：ブレークポイント列 tones/bass ＋句 phrases。合成では無音・単体は白玉/対位法プレビュー。
   const skel0 = isSkeleton(neta.content) ? neta.content : null;
   const [tones, setTones] = useState<SkeletonBreakpoint[]>(skel0?.tones ?? []);
@@ -188,7 +192,7 @@ export function useNetaEditor(
       tempo,
       meter: neta.meter, // compound は buildPlayback が isCompoundMeter(meter) で導出
       program: isRhythm ? undefined : isChord ? 48 : program, // コード進行は抽象＝固定GM48(strings)・選択不可(CP1)
-      feel: feelOf(neta.content), // フィール層：この neta の content.feel でスイング/微小揺れ（無ければストレート）。
+      feel, // フィール層：この neta の feel（初期＝content.feel・NoriRow で編集）でスイング/微小揺れ（無ければストレート）。
     });
   };
   const tp = useTransport(getPlan, tempo, { scaleBeats: span, bpb: 4 });
@@ -196,7 +200,7 @@ export function useNetaEditor(
   const playPause = tp.playPause;
 
   // 編集 Undo/Redo（design 決定U1/U2）：単体エディタの content 一式を snapshot 履歴で管理。
-  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, singSpeaker, len, pickup };
+  const snapshot = { notes, chords, rhythm, bassPattern, bassSteps, chordPat, tones, skelBass, phrases, skelBars, key, mode, tempo, program, sing, singSpeaker, len, pickup, feel };
   const applySnapshot = useCallback((s: typeof snapshot) => {
     setNotes(s.notes);
     setChords(s.chords);
@@ -216,6 +220,7 @@ export function useNetaEditor(
     setSingSpeaker(s.singSpeaker);
     setLen(s.len);
     setPickup(s.pickup);
+    setFeel(s.feel); // C-6：undo/redo で feel も戻す（NoriRow の操作を1手として巻き戻す）。
   }, []);
   const editHist = useEditHistory(snapshot, applySnapshot, { resetKey: neta.id });
 
@@ -298,21 +303,23 @@ export function useNetaEditor(
   }
   // kind ごとの保存パッチ（C基準保存・調/拍はヒント）。
   function savePatch(): NetaPatch {
+    // C-6：chordPat 系以外の全 content 再構成に feel を透過（`feel?{feel}:{}`＝両0/未指定はキーを生やさない＝bit一致）。
     if (isRelBass)
-      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
+      return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, program, ...(feel ? { feel } : {}) }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
     // meter は単体パートでも保存＝roll のグリッドと MIDI 拍子ヘッダに効く（container 限定を解消・監査 MB-05）。
-    if (isMelody || isBass || isCounter || isRiff) return { content: { notes, program, ...singContent() }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
+    if (isMelody || isBass || isCounter || isRiff) return { content: { notes, program, ...singContent(), ...(feel ? { feel } : {}) }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
     if (isSkel) {
       // 骨格＝ブレークポイント列（dur無し）。bass/phrases は空なら省く。preview_chords は導出ベースの源として保持。
-      const content: SkeletonContent & { preview_chords?: ChordEntry[] } = { bars: skelBars, tones };
+      const content: SkeletonContent & { preview_chords?: ChordEntry[]; feel?: Feel } = { bars: skelBars, tones };
       if (skelBass.length) content.bass = skelBass;
       if (phrases.length) content.phrases = phrases;
       if (skelChords.length) content.preview_chords = skelChords;
+      if (feel) content.feel = feel;
       return { content, key, mode, tempo, meter, bars: skelBars };
     }
-    if (isChordPatLike) return { content: { ...chordPat, program }, key, mode, tempo, meter }; // コード楽器/管弦＝自前音色（role 等の付随フィールドは chordPat spread で保持）
-    if (isChord) return { content: { chords }, key, mode, tempo, meter }; // 進行は抽象＝program持たない(CP1)
-    if (isRhythm) return { content: { rhythm }, tempo, meter };
+    if (isChordPatLike) return { content: { ...chordPat, program }, key, mode, tempo, meter }; // コード楽器/管弦＝自前音色（role 等の付随フィールドは chordPat spread で保持・feel も spread で生存＝二重載せしない）
+    if (isChord) return { content: { chords, ...(feel ? { feel } : {}) }, key, mode, tempo, meter }; // 進行は抽象＝program持たない(CP1)
+    if (isRhythm) return { content: { rhythm, ...(feel ? { feel } : {}) }, tempo, meter };
     if (isContainer) return { key, mode, tempo, meter };
     return {};
   }
@@ -508,6 +515,9 @@ export function useNetaEditor(
     }
   }
 
+  // C-6「ノリ」行の表示＝単音/複声ライン系のみ（melody/bass/counter/riff・相対bass は isBass 内）。
+  // chord（抽象）/chord_pattern（section 側で操作）/skeleton（合成で無音）/rhythm（drum humanize は別経路）には出さない。
+  const showFeel = isMelody || isBass || isCounter || isRiff;
   const showKey = (isMusic || isContainer) && !isRhythm; // 調（rhythm以外の音楽/section）
   const showMeta = isMusic || isContainer; // テンポ
   const collapsibleMeta = isMusic || isContainer; // メタ折りたたみ対象（MetaPanel）
@@ -518,14 +528,14 @@ export function useNetaEditor(
 
   return {
     // フラグ
-    flags: { isMelody, isBass, isCounter, isRiff, isChord, isChordPat, isSectionInst, isRhythm, isSkel, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, hasChords: chords.length > 0 },
+    flags: { isMelody, isBass, isCounter, isRiff, isChord, isChordPat, isSectionInst, isRhythm, isSkel, isContainer, isRelBass, isMusic, isThemeable, showKey, showMeta, collapsibleMeta, showRollBars, showFeel, hasChords: chords.length > 0 },
     // 骨格（design #20 S2）
     tones, setTones, skelBass, setSkelBass, phrases, setPhrases, skelBars, setSkelBars, skelChords, skelCounter, setSkelCounter,
     // 値＋setter
     title, setTitle, text, setText, tags, setTags, mood, setMood,
     key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram, sing, setSing,
     singSpeaker, setSingSpeaker, singVoices,
-    notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat,
+    notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat, feel, setFeel,
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
     rollMode, setRollMode, len, setLen, pickup, setPickup, pre,
     // 崩し候補（①道具）

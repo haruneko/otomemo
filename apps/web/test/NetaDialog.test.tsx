@@ -374,6 +374,88 @@ describe("NetaDialog", () => {
     expect((voice as HTMLSelectElement).value).toBe("3065");
   });
 
+  // ── C-6「feel の家」（修理#3 決定①）：単体ネタで跳ね/人間味を保持・編集・undo する ──
+  it("feel を持つメロを編集保存しても content.feel が残る（savePatch 再構成漏れバグの根治＝意図的変更）", async () => {
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: { notes: [{ pitch: 60, start: 0, dur: 1 }], feel: { swing: 0.5, humanize: 0.25, seed: 1 } } };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta"));
+    await userEvent.selectOptions(screen.getByLabelText("key"), "9"); // 何か1つ編集＝自動保存が走る
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content.feel).toEqual({ swing: 0.5, humanize: 0.25, seed: 1 }); // 旧実装は再構成で落ちていた
+    expect(patch.content.notes).toEqual([{ pitch: 60, start: 0, dur: 1 }]); // 元 notes は保持
+  });
+
+  it("feel を持たないメロは保存しても content に feel キーが生えない（byte一致）", async () => {
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta"));
+    await userEvent.selectOptions(screen.getByLabelText("key"), "9");
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }], program: 0 }); // feel キー無し
+    expect("feel" in patch.content).toBe(false);
+  });
+
+  it("ノリ行で跳ね/人間味を両0にすると content.feel が消える（キー削除＝無指定へ復帰）", async () => {
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: { notes: [{ pitch: 60, start: 0, dur: 1 }], feel: { swing: 0, humanize: 0.15, seed: 1 } } };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta"));
+    await userEvent.click(screen.getByLabelText("nori-humanize-off")); // 人間味OFF＋跳ね0＝両0→undefined
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content).toEqual({ notes: [{ pitch: 60, start: 0, dur: 1 }], program: 0 });
+  });
+
+  it("ノリ行の変更は undo で戻る（feel が snapshot に載っている）", async () => {
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: { notes: [{ pitch: 60, start: 0, dur: 1 }], feel: { swing: 0, humanize: 0.15, seed: 1 } } };
+    render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta"));
+    await userEvent.click(screen.getByLabelText("nori-humanize-strong")); // humanize 0.15→0.35
+    await userEvent.click(screen.getByLabelText("undo")); // 戻す＝feel が元へ
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    expect(updateNeta.mock.calls.at(-1)![1].content.feel).toEqual({ swing: 0, humanize: 0.15, seed: 1 });
+  });
+
+  it("ノリ行は melody/bass/counter/riff にだけ出る（chord/rhythm/chord_pattern には出さない）", async () => {
+    // toggle-meta の開閉は localStorage 記憶＝連続 render で持ち越す。aria-expanded を見て open を保証する。
+    const ensureMetaOpen = async () => {
+      const t = screen.getByLabelText("toggle-meta");
+      if (t.getAttribute("aria-expanded") !== "true") await userEvent.click(t);
+    };
+    const melody: Neta = { ...neta, kind: "melody", text: null, content: null };
+    const { unmount } = render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await ensureMetaOpen();
+    expect(screen.getByLabelText("nori-swing")).toBeInTheDocument(); // melody＝出る
+    unmount();
+    const rhythmNeta: Neta = { ...neta, kind: "rhythm", text: null, content: null };
+    render(<NetaDialog neta={rhythmNeta} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await ensureMetaOpen();
+    expect(screen.queryByLabelText("nori-swing")).toBeNull(); // rhythm＝出さない
+  });
+
+  it("chord_pattern は spread で feel を保持（二重載せしない・ノリ行は出さない）", async () => {
+    const cp: Neta = {
+      ...neta,
+      kind: "chord_pattern",
+      text: null,
+      content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, powerChord: false, arpDir: "up", style: "auto" }, steps: 32, hits: [{ step: 0, dur: 8 }], lh: { mode: "root" }, feel: { swing: 0.3, humanize: 0.15, seed: 5 } },
+    };
+    render(<NetaDialog neta={cp} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("toggle-meta"));
+    expect(screen.queryByLabelText("nori-swing")).toBeNull(); // chord_pattern＝ノリ行は出さない
+    await userEvent.selectOptions(screen.getByLabelText("program"), "24"); // 音色を変える＝自動保存
+    await userEvent.click(screen.getByLabelText("save-status"));
+    await waitFor(() => expect(updateNeta).toHaveBeenCalled());
+    const patch = updateNeta.mock.calls.at(-1)![1];
+    expect(patch.content.feel).toEqual({ swing: 0.3, humanize: 0.15, seed: 5 }); // spread で生存
+    expect(patch.content.program).toBe(24);
+  });
+
   it("deletes after confirm", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const onChanged = vi.fn();

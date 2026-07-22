@@ -4,7 +4,7 @@ import { MetaPanel, perfKeyOf, perfPatch, perfOptionsFor, type PerfState } from 
 
 // 奏法UIスライスA：chord_pattern の時だけ音色の直下に「奏法」二段（音色→奏法）。写像できる項目だけ露出。
 const base = (over: Partial<Parameters<typeof MetaPanel>[0]> = {}): Parameters<typeof MetaPanel>[0] => ({
-  flags: { collapsible: false, showKey: true, showMeta: true, isChord: false, isContainer: false, isMelody: false, isBass: false, isChordPat: false, isMusic: true, isThemeable: false, hasChords: false },
+  flags: { collapsible: false, showKey: true, showMeta: true, isChord: false, isContainer: false, isMelody: false, isBass: false, isChordPat: false, isMusic: true, isThemeable: false, hasChords: false, showFeel: false },
   keyPc: 0, mode: "major", meter: "4/4", tempo: 120, program: 25, tags: "", mood: "",
   setKey: vi.fn(), setMode: vi.fn(), setMeter: vi.fn(), setTempo: vi.fn(), setProgram: vi.fn(), setTags: vi.fn(), setMood: vi.fn(),
   onDetectKey: vi.fn(), onExtendLen: vi.fn(), onToggleSchedule: vi.fn(), schedId: null,

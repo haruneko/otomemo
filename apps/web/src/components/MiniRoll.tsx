@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { notesForContent, beatsPerBar, programOf } from "../music";
+import { notesForContent, beatsPerBar, programOf, isRelativeBass } from "../music";
 import { api, type Neta, type CompositionNode } from "../api";
 
 // 画面に入ったカードだけプレビューを描画・取得する遅延マウント（perf 耳FB 2026-07-09）。
@@ -39,10 +39,13 @@ export function LazyPreview({ children, minHeight = 40 }: { children: ReactNode;
 // #48: カードにメロ/コード/ベース/リズムの概形（小さなピアノロール）を出す。音楽以外は何も描かない。
 // notes を渡すと content の代わりにそれを描く（section/song ブロック＝合成した概形を出す用・#5）。
 export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import("../music").Note[] }) {
-  // 相対bass は単体プレビュー＝neta の key を tonic に解決（#bass S2）。
+  // 相対bass は単体プレビュー＝neta の key を tonic に解決（#bass S2）。相対 bass 相対切替アーク（修理#3 決定⑥ R1）：
+  // content が相対 bass で preview_chords を持つときは、その進行を ctx.chords へ注入＝「進行無視の絵」を先回りで塞ぐ
+  // （帯 S7 で相対ネタが生まれ始めるため）。preview_chords 無しは従来どおり key の tonic に落ちる＝bit一致。
   // 不正 content 由来の NaN ノートは弾く（NaN が maxT/span に伝播して <rect> が NaN 属性・描画破綻するのを防ぐ・監査 堅牢性）。
   // program＝chord_pattern の voicing.style="auto" の奏法導出（guitar系→guitar）に使う（非 auto/非 chord_pattern は無影響＝bit一致）。
-  const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, program: programOf(neta.content) })).filter(
+  const relPreview = isRelativeBass(neta.content) ? neta.content.preview_chords : undefined;
+  const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, program: programOf(neta.content), ...(relPreview ? { chords: relPreview } : {}) })).filter(
     (n) => Number.isFinite(n.pitch) && Number.isFinite(n.start) && Number.isFinite(n.dur),
   );
   if (!notes.length) return null;

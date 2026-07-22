@@ -267,6 +267,7 @@ export interface RhythmContent {
   bars?: number; // #29 P0 小節数（api genDrums が自己記述）。web 表示は steps/stepsPerBar 由来なので任意。
   beatsPerStep?: number; // #29 P0 1step=何拍か（自己記述の格子解像度）。未指定=0.25（16分）。1/3=三連12格子（shuffle 型）
   patternId?: string; // 修理#1（監査違反③）：適用した定型ビート型ID（来歴・選び直しの現在型ハイライト）。未指定＝手編集/従来ネタ＝bit一致
+  patternEdited?: true; // 修理#3 決定④：patternId 持ちネタを手編集した印（帯「いま：<型>（改）」）。patternId が在る時だけ付与＝patternId 無しネタは不変＝bit一致
 }
 
 // #29 P0 拍値の丸め（syncopation.ts と同式）＝小節末の累積ドリフト抑制。
@@ -480,7 +481,7 @@ export interface BassStep {
   degree: BassDegree;
   dur: number; // step 数
   next?: boolean; // R>/8>＝次小節頭のコードルート基準で解決（先取り着地・realizeBassGrid と対称）。既定=当拍のコード。
-  vel?: number; // ghost/アクセント用（1..127・任意）。現状 resolve は音価/ピッチのみ使用（vel 反映は将来）。
+  vel?: number; // ghost/アクセント用（1..127・任意）。修理#3 決定②：resolve が Note.vel へ反映（vel 無し step は vel キーを出さない＝bit一致）。
 }
 export interface RelativeBassContent {
   mode: "relative";
@@ -488,6 +489,8 @@ export interface RelativeBassContent {
   pattern: BassStep[];
   preview_chords?: ChordEntry[]; // 単体プレビュー用の任意コード列（無ければ key の tonic）
   program?: number;
+  patternId?: string; // 修理#3 決定②：適用した相対ビート型ID（来歴・帯の現在型ハイライト）。api 相対出力が styleType.id を刻む。未指定＝手編集/従来ネタ＝bit一致
+  patternEdited?: true; // 修理#3 決定④：patternId 持ちネタを手編集した印（帯「いま：<型>（改）」）。patternId が在る時だけ付与＝patternId 無しネタは不変＝bit一致
 }
 
 // レジスタ統一（修理#2・2026-07-22・design WP-1 較正が正典）：旧 28..39（E1..D#2・較正前）→ **33..48（A1..C3）**。
@@ -622,7 +625,8 @@ export function resolveRelativeBass(
       const refPc = e.degree === "R" ? bassPc : chRootPc;
       pitch = foldBass(band(refPc) + degreeSemi(e.degree, quality));
     }
-    notes.push({ pitch, start, dur });
+    // 修理#3 決定②：BassStep.vel を Note.vel へ反映。vel 無し step は vel キーを出さない（deepStrictEqual/bit 一致）。
+    notes.push(e.vel != null ? { pitch, start, dur, vel: e.vel } : { pitch, start, dur });
     prevPitch = pitch;
   });
   return notes;
@@ -665,6 +669,7 @@ export interface ChordPatternContent {
   program?: number; // 自前の音色（ベースのように選べる）
   lh?: ChordLhContent; // S3 左手土台（keyboard 解決時のみ実音化・未定義＝左手なし＝bit一致）
   patternId?: string; // 修理#1（監査違反③）：適用した型辞書ID（来歴・選び直しの現在型ハイライト）。未指定＝素の手編集/従来ネタ＝bit一致
+  patternEdited?: true; // 修理#3 決定④：patternId 持ちネタを手編集した印（帯「いま：<型>（改）」）。patternId が在る時だけ付与＝patternId 無しネタは不変＝bit一致
 }
 const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
 // #29 P2 コード楽器の3値ベロシティ語彙（普通=vel 省略→下流 vel??100）。耳較正で調整可＝保存データは実値なので既存不変。

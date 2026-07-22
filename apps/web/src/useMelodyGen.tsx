@@ -8,6 +8,7 @@ import {
   buildPlayback,
   skeletonPreviewNotes,
   isSkeleton,
+  isRelativeBass,
   type Note,
   type PlaybackHandle,
 } from "./music";
@@ -510,7 +511,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     const program = ctx.progForKind(c.kind);
     // コード楽器/管弦（chord_pattern/section_inst・スライスC）＝進行に解決する相対型＝セクションの進行/テンポ/音色で実音化。
     //   ctx 無し（従来）は空進行＝無音だった。resolveChordPattern の既存経路を通す（buildPlayback の tempo/program 結線を流用）。
-    const isRel = c.kind === "chord_pattern" || c.kind === "section_inst";
+    //   相対 bass（修理#3 決定⑥ R1）も同じ相対型＝セクション進行で試聴（帯 S7 で相対ネタが生まれ始める先回り）。絶対 bass は false のまま＝bit一致。
+    const isRel = c.kind === "chord_pattern" || c.kind === "section_inst" || isRelativeBass(c.content);
     const chords = isRel ? ctx.sectionChords().map((ch) => ({ root: ch.root ?? 0, quality: ch.quality ?? "", start: ch.start ?? 0, dur: ch.dur ?? ctx.BPB })) : undefined;
     const ns = notesForContent(c.kind, c.content, isRel ? { key: keyPc, chords, tempo, program } : undefined);
     if (ns.length) candPlay.current = await startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo, program }), { vocalMode: "peek" });

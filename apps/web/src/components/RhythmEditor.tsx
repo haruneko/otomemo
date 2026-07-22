@@ -165,6 +165,11 @@ export function RhythmEditor({
     const rc = (content as { rhythm: RhythmContent }).rhythm;
     onChange({ ...rc, ...(rhythm.kit != null ? { kit: rhythm.kit } : {}) });
   };
+  // 手編集の共通 setter（修理#3 決定④）＝content の演奏内容（hits/vel/div/小節数）を変える系はここを通す。
+  // patternId が在る時だけ patternEdited を立てる（来歴保持＋帯「いま：<型>（改）」）。patternId 無しネタは
+  // 新キーが生えない＝bit 一致。kit（音色メタ）や applyPattern（置換）はこの setter を通さない＝（改）は付かない/消える。
+  const editContent = (next: RhythmContent) =>
+    onChange(rhythm.patternId ? { ...next, patternEdited: true } : next);
   const [eraseMode, setEraseMode] = useState(false);
   // #29 §9 ドラッグ中のライブプレビュー（--hv/divクラスをこのセルだけ上書き・HUD 表示）。離した時に一括 onChange。
   const [drag, setDrag] = useState<
@@ -177,7 +182,7 @@ export function RhythmEditor({
     if (!lane) return;
     const { lane: next, turnedOn } = laneWithHitToggled(lane, step);
     const lanes = rhythm.lanes.map((l, k) => (k === li ? next : l));
-    onChange({ ...rhythm, lanes });
+    editContent({ ...rhythm, lanes });
     // 打点を置いた時だけそのドラム音を鳴らす（選択キットで）。
     if (turnedOn)
       void previewNote({ pitch: lane.midi, start: 0, dur: 0.25, drum: true, kit: rhythm.kit, vel: drumVel(lane.midi, lane.vel) });
@@ -213,7 +218,7 @@ export function RhythmEditor({
     if (!lane) return;
     let next = laneWithHitVelNum(lane, step, s.vel);
     next = laneWithHitDiv(next, step, s.div === 2 || s.div === 3 ? s.div : null);
-    onChange({ ...rhythm, lanes: rhythm.lanes.map((l, k) => (k === li ? next : l)) });
+    editContent({ ...rhythm, lanes: rhythm.lanes.map((l, k) => (k === li ? next : l)) });
   }
 
   // ⌫消しゴム：タップ＋なぞり一掃（elementFromPoint 追跡）。on の hit を laneWithHitToggled で OFF（velCurve/divs 掃除）。
@@ -225,7 +230,7 @@ export function RhythmEditor({
     const lane = rhythm.lanes[li];
     if (!lane || Number.isNaN(step) || !lane.hits.includes(step)) return;
     const next = laneWithHitToggled(lane, step).lane;
-    onChange({ ...rhythm, lanes: rhythm.lanes.map((l, k) => (k === li ? next : l)) });
+    editContent({ ...rhythm, lanes: rhythm.lanes.map((l, k) => (k === li ? next : l)) });
   }
 
   // なぞり中に指がグリッド外へ出た時／pointercancel でスイープ終了（取りこぼし防止）。
@@ -243,13 +248,18 @@ export function RhythmEditor({
   // 小節数（1〜4）。1小節=stepsPerBar（拍子依存：4/4=16, 6/8=12）。縮小は**非破壊**。
   const bars = Math.max(1, Math.round(rhythm.steps / stepsPerBar));
   function setBars(n: number) {
-    onChange({ ...rhythm, steps: Math.max(1, Math.min(4, n)) * stepsPerBar });
+    editContent({ ...rhythm, steps: Math.max(1, Math.min(4, n)) * stepsPerBar });
   }
 
   return (
    <>
     {/* 「パターンを選ぶ ▸」帯（修理#1）＝定型ビート型の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。 */}
-    <PatternPickerBar nowLabel={rhythm.patternId} chips={DRUM_GENRE_CHIPS} onFetch={fetchPatterns} />
+    {/* nowLabel＝patternId（＋手編集後は「（改）」）。（改）表現は渡す文字列で行う＝PatternPickerBar は器のまま（決定④）。 */}
+    <PatternPickerBar
+      nowLabel={rhythm.patternId ? rhythm.patternId + (rhythm.patternEdited ? "（改）" : "") : undefined}
+      chips={DRUM_GENRE_CHIPS}
+      onFetch={fetchPatterns}
+    />
     <div
       className={"rhythm-editor" + (eraseMode ? " erase-on" : "")}
       ref={scrollerRef}

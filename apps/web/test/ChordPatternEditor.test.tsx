@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// S4 applyPattern テスト用＝帯 fetch は api.music を叩く（既存テストは帯を開かない＝mock 未使用で無害）。
+const api = vi.hoisted(() => ({ music: vi.fn() }));
+vi.mock("../src/api", () => ({ api }));
+
 import { ChordPatternEditor } from "../src/components/ChordPatternEditor";
 import type { ChordPatternContent } from "../src/music";
 import { LONG_PRESS_MS } from "../src/useHoldDrag";
@@ -240,5 +245,64 @@ describe("ChordPatternEditor S3 左手行＋D/Uストリップ", () => {
     await userEvent.click(screen.getByLabelText("hit-2"));
     const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
     expect(arg.hits[0]!).toEqual({ step: 2, dur: 4 }); // dir 無し
+  });
+});
+
+// S4（修理#3 決定③④）：showPicker ゲート（管弦への型誤適用を断つ）＋patternEdited（改）表示。
+describe("ChordPatternEditor S4 帯ゲート＋（改）フラグ", () => {
+  it("showPicker 未指定＝帯を描画（既定 true＝従来どおり＝bit一致）", () => {
+    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("pattern-picker")).toBeTruthy();
+  });
+
+  it("showPicker=false＝帯なし（section_inst＝コード楽器型の誤適用を断つ）", () => {
+    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} showPicker={false} />);
+    expect(screen.queryByLabelText("pattern-picker")).toBeNull();
+  });
+
+  it("patternId 有りネタの手編集→patternEdited:true 付与（来歴 patternId は保持）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8" })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("hit-4")); // hits 変更＝手編集
+    expect(onChange).toHaveBeenCalledWith(
+      pat({ patternId: "GT-FOLK8", hits: [{ step: 0, dur: 4 }, { step: 4, dur: 4 }], patternEdited: true }),
+    );
+  });
+
+  it("帯 nowLabel＝patternEdited で「<型>（改）」表示", () => {
+    render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8", patternEdited: true })} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("pattern-now").textContent).toContain("GT-FOLK8（改）");
+  });
+
+  it("patternId 無しネタの手編集→patternEdited が生えない（bit一致）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("hit-4"));
+    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
+    expect("patternEdited" in arg).toBe(false);
+  });
+
+  it("voicing 変更（響き）でも patternId 有りなら（改）付与", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8" })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("top-inc")); // トップ＝voicing 変更
+    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
+    expect(arg.patternEdited).toBe(true);
+    expect(arg.patternId).toBe("GT-FOLK8");
+  });
+
+  it("applyPattern（候補 content で置換）で patternEdited が消える／program は付与しない", async () => {
+    const onChange = vi.fn();
+    vi.mocked(api.music).mockResolvedValue({
+      items: [{ label: "GT-FOLK8 弾き語り", content: pat({ patternId: "GT-FOLK8", hits: [{ step: 0, dur: 8 }] }) }],
+    });
+    render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8", patternEdited: true })} onChange={onChange} keyPc={0} />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await userEvent.click(screen.getByLabelText("pattern-fetch"));
+    await userEvent.click(await screen.findByLabelText("pattern-apply-0"));
+    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
+    expect("patternEdited" in arg).toBe(false); // 候補 content に無い＝自然消滅
+    expect("program" in arg).toBe(false); // 現ネタ program 無し＝メタ継承なし＝（改）と無関係
+    expect(arg.patternId).toBe("GT-FOLK8");
   });
 });

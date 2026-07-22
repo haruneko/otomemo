@@ -18,6 +18,7 @@ import {
   feelOf,
   feelOfTree,
   isSkeleton,
+  isRelativeBass,
   partTracks,
   type ChordEntry,
   type Feel,
@@ -522,7 +523,8 @@ export function SectionEditor({
                   </div>
                   {grp.cands.map((c) => {
                     // コード楽器/管弦（chord_pattern/section_inst・スライスC）＝進行に解決する相対型＝セクションの進行/テンポ/音色でミニロール実音化。
-                    const isRel = c.kind === "chord_pattern" || c.kind === "section_inst";
+                    // 相対 bass（修理#3 決定⑥ R1）も同じ相対型＝セクション進行で描画（帯 S7 で相対ネタが生まれ始める先回り）。絶対 bass は false のまま＝bit一致。
+                    const isRel = c.kind === "chord_pattern" || c.kind === "section_inst" || isRelativeBass(c.content);
                     const relChords: ChordEntry[] = isRel ? sectionChords().map((ch) => ({ root: ch.root ?? 0, quality: ch.quality ?? "", start: ch.start ?? 0, dur: ch.dur ?? BPB })) : [];
                     const cn = notesForContent(c.kind, c.content, isRel ? { key: keyPc, chords: relChords, tempo, program: progForKind(c.kind) } : undefined);
                     const bars = cn.length ? Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6)) : 0;

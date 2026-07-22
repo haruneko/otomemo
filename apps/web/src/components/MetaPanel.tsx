@@ -3,9 +3,10 @@
 // ※MIDI書き出しは単体編集画面から撤去済（2026-07-04）＝Section の いじる▾ のみ。
 // どの枠を出すかは flags で決める（kind 分岐を集約）。折りたたみ状態(localStorage)と要約はここに閉じる。
 import { useState } from "react";
-import { GM_INSTRUMENTS, GM_ALL_FAMILIES, gmLabel, beatsPerBar, singVoiceLabel, isGuitarProgram, PITCH_NAMES as KEY_NAMES, type SingVoice } from "../music";
+import { GM_INSTRUMENTS, GM_ALL_FAMILIES, gmLabel, beatsPerBar, singVoiceLabel, isGuitarProgram, PITCH_NAMES as KEY_NAMES, type SingVoice, type Feel } from "../music";
 import { NumberField } from "./NumberField";
 import { BarsControl } from "./BarsControl";
+import { NoriRow } from "./NoriRow";
 import { Icon } from "./Icon";
 
 const METERS = ["4/4", "3/4", "6/8", "2/4", "5/4", "12/8"];
@@ -65,6 +66,7 @@ export interface MetaFlags {
   isMusic: boolean;
   isThemeable: boolean;
   hasChords: boolean; // 調を推定ボタン（コードあり）
+  showFeel: boolean; // C-6「ノリ」行（跳ね/人間味）を出すか＝melody/bass/counter/riff/相対bass のみ
 }
 
 export function MetaPanel(p: {
@@ -81,6 +83,9 @@ export function MetaPanel(p: {
   setSpeaker?: (v: number | undefined) => void;
   voices?: SingVoice[]; // 声の選択肢（curated＋engine frame_decode）。キャラ別 optgroup にまとめる。
   perf?: PerfState; // 奏法UIスライスA：chord_pattern の時だけ「奏法」二段（音色→奏法）。未指定＝出さない（他 kind）。
+  // C-6「ノリ」行＝この単体ネタの content.feel（跳ね/人間味）。両0＝undefined＝feel キー削除（bit一致）。
+  feel?: Feel;
+  onFeelChange?: (f: Feel | undefined) => void;
   tags: string;
   mood: string;
   setKey: (v: number) => void;
@@ -274,6 +279,11 @@ export function MetaPanel(p: {
               </button>
             )}
           </div>
+          {/* C-6「ノリ」行＝単音/複声ライン系（melody/bass/counter/riff/相対bass）に跳ね/人間味を常設。
+              保存先＝この単体ネタの content.feel（section の TinkerSheet とは別・楽器単位）。両0＝キー削除でbit一致。 */}
+          {f.showFeel && p.onFeelChange && (
+            <NoriRow feel={p.feel} onChange={p.onFeelChange} />
+          )}
           {/* 小節/弱起（roll のみ・縦詰めで設定内へ移動）。 */}
           {p.rollBars && (
             <div className="roll-controls">

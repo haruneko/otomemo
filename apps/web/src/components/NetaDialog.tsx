@@ -52,7 +52,10 @@ export function NetaDialog({
           isMusic: f.isMusic,
           isThemeable: f.isThemeable,
           hasChords: f.hasChords,
+          showFeel: f.showFeel,
         }}
+        feel={ed.feel}
+        onFeelChange={ed.setFeel}
         keyPc={ed.key}
         mode={ed.mode}
         meter={ed.meter}
