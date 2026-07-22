@@ -6,7 +6,7 @@
 //  (d) ギター型で voicing.style==="guitar"／strumMs が載る
 import { describe, it, expect } from "vitest";
 import { genChordPattern, type Frame } from "../src/music/generate";
-import { COMP_TYPES, compTypeById, pickCompType, parseCompRh, parseCompLh, compHitsForBar, compLhHitsForBar, CHORD_ACCENT, CHORD_GHOST } from "../src/music/chordLibrary";
+import { COMP_TYPES, compTypeById, pickCompType, pickCompTypes, parseCompRh, parseCompLh, compHitsForBar, compLhHitsForBar, CHORD_ACCENT, CHORD_GHOST } from "../src/music/chordLibrary";
 
 type Hit = { step: number; dur: number; vel?: number };
 type Content = { mode: string; voicing: Record<string, unknown>; steps: number; hits: Hit[] };
@@ -169,6 +169,66 @@ describe("(d) ギター型で voicing.style==='guitar'／strumMs が載る", () 
     const c = contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "PB-WHOLE", style: "guitar", strumMs: 30 }));
     expect(c.voicing.style).toBe("guitar");
     expect(c.voicing.strumMs).toBe(30);
+  });
+});
+
+// ── スライスC：候補を複数返す（variety）──────────────────────────────────────
+describe("(g) variety＝候補を複数（別々の型）返す・未指定/1 は従来 bit 一致", () => {
+  it("variety 未指定/1 は単数経路と deepStrictEqual（ジャンル・型ID・omakase 横断）", () => {
+    const frames: Frame[] = [
+      { bars: 2, meter: "4/4", section: { role: "verse" } },
+      { bars: 4, meter: "4/4", tempo: 90, section: { role: "chorus" } },
+      { bars: 2, meter: "4/4" },
+    ];
+    for (const f of frames) for (const seed of SEEDS) for (const pat of ["ballad", "rock", "PB-WHOLE", "GT-FOLK8", "omakase"]) {
+      const base = J(genChordPattern(f, seed, { pattern: pat }));
+      expect(J(genChordPattern(f, seed, { pattern: pat, variety: 1 })), `${pat} v1 ${f.meter}#${seed}`).toBe(base);
+      // variety=1 は変えないので undefined と一致（従来 bit 一致の担保）。
+    }
+  });
+  it("ballad×variety=3＝別々の型が items に並ぶ（distinct・決定的・各 label に型ID＋場面）", () => {
+    const f: Frame = { bars: 2, meter: "4/4", section: { role: "verse" } };
+    const r = genChordPattern(f, 3, { pattern: "ballad", variety: 3 });
+    expect(r.items.length).toBe(3); // ballad 語彙＝PB-WHOLE/PB-ARP8/PB-ARP16
+    // 別々の型＝content が全部異なる
+    const conts = r.items.map((it) => J(it.content));
+    expect(new Set(conts).size).toBe(3);
+    // label に型IDが入る（型名で選ぶ＝型ID＋場面タグ）
+    for (const it of r.items) expect(/^[A-Z]{2}-[A-Z0-9]+ /.test(it.label), it.label).toBe(true);
+    expect(r.items.every((it) => it.kind === "chord_pattern")).toBe(true);
+    // 決定的：同 seed で完全一致
+    expect(J(genChordPattern(f, 3, { pattern: "ballad", variety: 3 }))).toBe(J(r));
+  });
+  it("omakase×variety=4＝全型から別々に4件（role/tempo 全体から・distinct）", () => {
+    const r = genChordPattern({ bars: 1, meter: "4/4" }, 2, { pattern: "omakase", variety: 4 });
+    expect(r.items.length).toBe(4);
+    expect(new Set(r.items.map((it) => J(it.content))).size).toBe(4);
+  });
+  it("型ID直指定＋variety=3 は単数固定（多分岐スキップ＝1件・bit）", () => {
+    const r = genChordPattern({ bars: 1, meter: "4/4" }, 5, { pattern: "PB-WHOLE", variety: 3 });
+    expect(r.items.length).toBe(1);
+    expect(J(r)).toBe(J(genChordPattern({ bars: 1, meter: "4/4" }, 5, { pattern: "PB-WHOLE" })));
+  });
+  it("6/8・非4拍は variety>=2 でも従来経路（単数・bit）", () => {
+    for (const meter of ["6/8", "3/4"]) {
+      const r = genChordPattern({ bars: 2, meter }, 1, { pattern: "ballad", variety: 3 });
+      expect(r.items.length).toBe(1);
+      expect(J(r)).toBe(J(genChordPattern({ bars: 2, meter }, 1)));
+    }
+  });
+  it("pickCompTypes：distinct・最大 n・決定的・tempo 域絞り・未知は空", () => {
+    const a = pickCompTypes("ballad", "verse", undefined, 3, 3);
+    expect(a.length).toBe(3);
+    expect(new Set(a.map((t) => t.id)).size).toBe(3); // distinct
+    expect(pickCompTypes("ballad", "verse", undefined, 3, 3).map((t) => t.id)).toEqual(a.map((t) => t.id)); // 決定的
+    // tempo=200 は ballad 域外＝空（従来 fallback）
+    expect(pickCompTypes("ballad", "verse", 200, 1, 3)).toEqual([]);
+    // 未知ジャンル＝空
+    expect(pickCompTypes("nope", "verse", undefined, 1, 3)).toEqual([]);
+    // n 過多でも母集団を超えない
+    expect(pickCompTypes("ballad", "verse", undefined, 1, 99).length).toBeLessThanOrEqual(COMP_TYPES.length);
+    // omakase は全型から
+    expect(pickCompTypes("omakase", undefined, undefined, 1, 5).length).toBe(5);
   });
 });
 

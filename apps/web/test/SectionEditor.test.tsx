@@ -1398,3 +1398,79 @@ describe("SectionEditor × CoW（共有 section の直接保存ガード・Fix C
     expect(vary).not.toHaveBeenCalled();
   });
 });
+
+// スライスC：伴奏パターンを「聴いて選ぶ」トレイ（コード楽器タイル＋ジャンルchip＋候補トレイ）。
+describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器トレイ）", () => {
+  const withChords = () => ({
+    neta: mk("s1", "section"),
+    children: [{ position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } }],
+  });
+  const cpItem = (id: string, scenes: string) => ({
+    kind: "chord_pattern",
+    label: `${id} ${scenes}`,
+    content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 16, hits: [{ step: 0, dur: 4 }, { step: 8, dur: 4 }] },
+  });
+  beforeEach(() => {
+    recommend.mockResolvedValue([]);
+    getSong.mockResolvedValue(null);
+    updateSong.mockResolvedValue({});
+    updateNeta.mockReset(); updateNeta.mockResolvedValue({});
+    getPlacements.mockResolvedValue({ parents: [], placementCount: 0 });
+    getRelations.mockResolvedValue([]);
+    music.mockReset();
+    createNeta.mockReset(); placeChild.mockReset(); link.mockReset(); link.mockResolvedValue({});
+  });
+
+  it("ジャンルchip→候補を出す＝pattern＋variety を送り、複数候補が型名/説明つきでトレイに並ぶ", async () => {
+    music.mockResolvedValue({ items: [cpItem("PB-WHOLE", "白玉"), cpItem("PB-ARP8", "8分アルペジオ"), cpItem("PB-ARP16", "16分うねり")] });
+    getComposition.mockResolvedValue(withChords());
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst")); // コード楽器引き出し（新パーツのタイル）
+    await userEvent.click(screen.getByLabelText("comp-genre-ballad")); // バラード chip
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern")); // 🎲 候補を出す
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_chord_pattern", expect.objectContaining({ pattern: "ballad", variety: 4 })));
+    await screen.findByLabelText("candidate-tray");
+    expect(screen.getAllByLabelText("candidate-card")).toHaveLength(3); // 別々の型が3件
+    expect(screen.getAllByLabelText("candidate-label").map((e) => e.textContent)).toEqual(["PB-WHOLE 白玉", "PB-ARP8 8分アルペジオ", "PB-ARP16 16分うねり"]);
+  });
+
+  it("おまかせ（chip未選択）＝pattern:omakase を送る（role/tempo 全体から）", async () => {
+    music.mockResolvedValue({ items: [cpItem("PB-WHOLE", "白玉")] });
+    getComposition.mockResolvedValue(withChords());
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    await waitFor(() => expect(music).toHaveBeenCalledWith("gen_chord_pattern", expect.objectContaining({ pattern: "omakase", variety: 4 })));
+  });
+
+  it("候補を採用＝createNeta(chord_pattern)＋placeChild で置く（既存の候補採用フロー）", async () => {
+    music.mockResolvedValue({ items: [cpItem("PB-WHOLE", "白玉")] });
+    getComposition.mockResolvedValue(withChords());
+    createNeta.mockResolvedValue(mk("newcp", "chord_pattern"));
+    placeChild.mockResolvedValue({ ok: true });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    await screen.findByLabelText("candidate-tray");
+    await userEvent.click(screen.getByLabelText("place-candidate"));
+    await waitFor(() => expect(createNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "chord_pattern" })));
+    expect(placeChild).toHaveBeenCalled();
+  });
+
+  it("コード無しセクションではコード楽器タイルは出ない（needsChords・進行が要る）", async () => {
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [{ position: 0, ord: 0, node: { neta: mk("m1", "melody", { content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } }), children: [] } }],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-m1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    expect(screen.queryByLabelText("drawer-chordinst")).toBeNull(); // 進行が無い＝タイル非表示
+  });
+});

@@ -248,3 +248,40 @@ export function pickCompType(genre: string, role: Role | undefined, tempo: numbe
   }
   return pool[((seed % pool.length) + pool.length) % pool.length] ?? null;
 }
+
+// スライスC「聴いて選ぶ」＝候補を複数（別々の型＝distinct id）返す（genChordPattern variety 用）。
+//   ジャンル名＝GENRE_TABLE[genre] の**全役割の型IDを union**（role 指定時はその役割を先頭に優先）＝ジャンルの
+//     全語彙から候補を出す（単一 role の 1〜2 型では「候補を出す」に足りない）。
+//   おまかせ（omakase/any/all）＝全 COMP_TYPES を role 適用可否＋tempo で絞る（role/tempo 全体から）。
+//   tempo 域で絞り（域内皆無＝空＝従来経路へ fallback）、seed 起点の回転で最大 n 件（決定的）。
+export function pickCompTypes(genre: string, role: Role | undefined, tempo: number | undefined, seed: number, n: number): CompType[] {
+  const N = Math.max(1, Math.floor(n));
+  const g = GENRE_ALIAS[genre] ?? genre;
+  let cands: CompType[];
+  if (g === "omakase" || g === "any" || g === "all") {
+    cands = COMP_TYPES.filter((t) => !role || t.roles.includes(role));
+    if (cands.length === 0) cands = COMP_TYPES.slice(); // role 該当皆無＝全型（絞り過ぎ回避）
+  } else {
+    const table = GENRE_TABLE[g];
+    if (!table) return [];
+    const roleIds = table[role ?? "verse"] ?? table.verse ?? [];
+    const allIds = Object.values(table).flat(); // ジャンルの全語彙（全役割）
+    const orderedIds = [...roleIds, ...allIds]; // role の型を先頭に優先
+    cands = orderedIds.map(compTypeById).filter((t): t is CompType => !!t);
+    if (cands.length === 0) return [];
+  }
+  // tempo 域で絞る（bassLibrary/pickCompType と同流儀）。域内皆無＝空。
+  if (tempo != null) {
+    cands = cands.filter((t) => tempo >= t.tempoMin && tempo <= t.tempoMax);
+    if (cands.length === 0) return [];
+  }
+  // distinct（id）＝重複型を出さない。順序は上の優先を保つ。
+  const uniq: CompType[] = [];
+  const seen = new Set<string>();
+  for (const t of cands) if (!seen.has(t.id)) { seen.add(t.id); uniq.push(t); }
+  // seed 起点の回転で最大 N 件（決定的）。
+  const start = ((seed % uniq.length) + uniq.length) % uniq.length;
+  const out: CompType[] = [];
+  for (let i = 0; i < uniq.length && out.length < N; i++) out.push(uniq[(start + i) % uniq.length]!);
+  return out;
+}

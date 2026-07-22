@@ -521,7 +521,10 @@ export function SectionEditor({
                     )}
                   </div>
                   {grp.cands.map((c) => {
-                    const cn = notesForContent(c.kind, c.content);
+                    // コード楽器/管弦（chord_pattern/section_inst・スライスC）＝進行に解決する相対型＝セクションの進行/テンポ/音色でミニロール実音化。
+                    const isRel = c.kind === "chord_pattern" || c.kind === "section_inst";
+                    const relChords: ChordEntry[] = isRel ? sectionChords().map((ch) => ({ root: ch.root ?? 0, quality: ch.quality ?? "", start: ch.start ?? 0, dur: ch.dur ?? BPB })) : [];
+                    const cn = notesForContent(c.kind, c.content, isRel ? { key: keyPc, chords: relChords, tempo, program: progForKind(c.kind) } : undefined);
                     const bars = cn.length ? Math.max(1, Math.ceil(Math.max(...cn.map((n) => n.start + n.dur)) / BPB - 1e-6)) : 0;
                     const kept = gen.keptCids.has(c.cid);
                     // 対位法バッジ（design #20 S3d・指摘のみ・禁止しない）：違反ありは ⚠＋種別、無ければ小さく「対位OK」。
@@ -534,6 +537,8 @@ export function SectionEditor({
                           <span className="cand-preview" aria-label="candidate-preview">
                             <MiniRoll neta={neta} notes={cn} />
                             <span className="cand-meta">
+                              {/* 候補の型名/説明（スライスC＝コード楽器は「型ID＋場面タグ」。他パーツは label 無し）。 */}
+                              {c.label && <span className="cand-label" aria-label="candidate-label">{c.label}</span>}
                               {bars}小節・{cn.length}音{kept ? " ♡" : ""}
                               {vl && <span className={"cand-vl" + (vl.warn ? " warn" : " ok")} aria-label="voiceleading-badge" title={c.meta?.voiceLeadingSummary}>{vl.text}</span>}
                               {lb && <span className="cand-lens" aria-label="lens-badge" title={`${lb.label}スコア（並べ替えの目安・審判ではない）`}>{lb.label} {lb.text}</span>}

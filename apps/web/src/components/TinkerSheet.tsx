@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Icon } from "./Icon";
 import { NoriRow, humanizeSegOf } from "./NoriRow";
-import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI } from "../useMelodyGen";
+import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI, COMP_GENRE_CHIPS, COMP_TYPE_IDS } from "../useMelodyGen";
 import type { ChordArg } from "../useMelodyGen";
 import type { Feel, Note } from "../music";
 
@@ -28,7 +28,7 @@ export type TinkerSheetProps = {
   onExportMidiSplit: () => void;
 };
 
-type View = "hub" | "common" | "melody" | "bass" | "drums" | "skeleton";
+type View = "hub" | "common" | "melody" | "bass" | "drums" | "skeleton" | "chordinst";
 
 // GEN_PARTS を op で引ける形に（タイルtap＝おまかせ生成の実体呼び）。
 const PART_BY_OP = Object.fromEntries(GEN_PARTS.map((p) => [p.op, p])) as Record<string, (typeof GEN_PARTS)[number]>;
@@ -38,6 +38,9 @@ const TILES: { id: string; label: string; kind: string; op?: string; needsChords
   { id: "bass", label: "ベース", kind: "bass", op: "gen_bass", needsChords: true, drawer: "bass" },
   { id: "drums", label: "ドラム", kind: "rhythm", op: "gen_drums", needsChords: false, drawer: "drums" },
   { id: "chord", label: "コード", kind: "chord", op: "gen_chords", needsChords: false },
+  // コード楽器＝伴奏パターン（chord_pattern・スライスC「聴いて選ぶ」）＝新パーツのタイル+1（ハブ契約）。
+  //   進行に解決＝needsChords。引き出し＝ジャンルchip＋候補生成（型ID直指定は「細かく」select へ沈める）。
+  { id: "chordinst", label: "コード楽器", kind: "chord", op: "gen_chord_pattern", needsChords: true, drawer: "chordinst" },
   { id: "skeleton", label: "骨格", kind: "skeleton", op: undefined, needsChords: false, drawer: "skeleton" },
   { id: "riff", label: "リフ", kind: "riff", op: "gen_riff", needsChords: true },
   { id: "orch", label: "管弦", kind: "section_inst", op: "gen_section_inst", needsChords: true },
@@ -114,6 +117,10 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
       const set = !!gen.bassStyle || gen.bassFill > 0;
       const g = BASS_GENRE_LABEL[gen.bassStyle] ?? (gen.bassStyle ? "型指定" : "");
       return { text: set ? [g, gen.bassFill > 0 ? "フィル" : ""].filter(Boolean).join("・") || "設定あり" : "おまかせ", set };
+    }
+    if (id === "chordinst") {
+      const g = COMP_GENRE_CHIPS.find((c) => c.v === gen.compStyle)?.label ?? (gen.compStyle ? "型指定" : "");
+      return { text: gen.compStyle ? g : "おまかせ", set: !!gen.compStyle };
     }
     if (id === "skeleton") return { text: gen.skelForm || "おまかせ", set: !!gen.skelForm };
     return { text: "おまかせ", set: false };
@@ -459,6 +466,36 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
     </>
   );
 
+  // ---- コード楽器引き出し（スライスC「聴いて選ぶ」・モックCタブ）＝ジャンルchip前面／型直指定は「細かく」に沈める。
+  //   ジャンルchip→「候補を出す」で variety=4 の別々の型を候補トレイへ（cand-card＋▶試聴＋採用の既存動線）。
+  const chordInstDrawer = (
+    <>
+      {drawerHead("コード楽器", () => gen.setCompStyle(""))}
+      <div className="tk-drawer-body">
+        <div className="tk-hublab">伴奏のジャンル（型を名前で選ばず耳で選ぶ）</div>
+        <div className="tk-palette" aria-label="comp-genre">
+          {COMP_GENRE_CHIPS.map((c) => (
+            <button key={c.v || "omakase"} type="button" className={"chip" + (gen.compStyle === c.v ? " on" : "")} aria-label={`comp-genre-${c.v || "omakase"}`} aria-pressed={gen.compStyle === c.v} onClick={() => gen.setCompStyle(c.v)}>{c.label}</button>
+          ))}
+        </div>
+        <p className="tk-drawnote">ジャンルで絞って「候補を出す」＝別々の型が候補トレイに並びます。▶で進行に当てて試聴・採用で置く。</p>
+        {gacc("compfine", "細かく（型直指定）", "型IDを直に")}
+        {openGroups.compfine && (
+          <label className="knob-row" aria-label="comp-style">
+            <span className="knob-name">型直指定</span>
+            <select value={COMP_TYPE_IDS.some((t) => t.v === gen.compStyle) ? gen.compStyle : ""} onChange={(e) => gen.setCompStyle(e.target.value)}>
+              <option value="">—（ジャンルにまかせる）</option>
+              {COMP_TYPE_IDS.map((t) => <option key={t.v} value={t.v}>{t.label}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
+      <div className="tk-drawer-foot">
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_chord_pattern" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る（先に進行を置く）" : "候補を出す"} onClick={() => drawerGen("gen_chord_pattern")}>🎲 候補を出す</button>
+      </div>
+    </>
+  );
+
   // ---- 骨格引き出し（構造＝フォームの使い回し）----
   const skeletonDrawer = (
     <>
@@ -507,6 +544,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
     : view === "melody" ? melodyDrawer
     : view === "drums" ? drumsDrawer
     : view === "bass" ? bassDrawer
+    : view === "chordinst" ? chordInstDrawer
     : view === "skeleton" ? skeletonDrawer
     : hub;
 

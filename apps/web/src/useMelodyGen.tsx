@@ -43,6 +43,9 @@ export const GEN_PARTS = [
   // コード進行そのものを生成（WP-C1・2026-07-14）＝旋法パレット(下の select)を試す入口。needsChords:false＝進行が無くても押せる。
   // ※ GEN_PARTS[0]=メロ/[1]=ベースは blowSkeleton から index 参照＝並びを崩さないため末尾に足す。
   { label: "コード", op: "gen_chords", needsChords: false },
+  // コード楽器＝伴奏パターン（chord_pattern・スライスC「聴いて選ぶ」）。進行に解決する相対型＝needsChords:true。
+  //   ジャンルchip→variety で別々の型を候補トレイへ（下 genPart の gen_chord_pattern 分岐）。末尾に足す（index 参照を崩さない）。
+  { label: "コード楽器", op: "gen_chord_pattern", needsChords: true },
 ] as const;
 
 // リズムパーツ層 L1（design #20 S4-1）：プリセット id/label を web に複写（パターン本体は api 唯一持ち＝ids のみ参照）。
@@ -67,7 +70,31 @@ export type VoiceLeadingReport = { score: number; parallelFifths: number; parall
 // 候補レンズ（design #12-M・WP-M3）：API が gen_melody 候補の meta に添付する3軸 headline スコア（全て高い=良い）。
 export type MelodyLenses = { expectation: number; hook: number; singability: number };
 export type CandMeta = { voiceLeading?: VoiceLeadingReport; voiceLeadingSummary?: string; lenses?: MelodyLenses };
-export type Cand = { kind: string; content: unknown; cid: number; skeletonNetaId?: string; meta?: CandMeta };
+export type Cand = { kind: string; content: unknown; cid: number; skeletonNetaId?: string; meta?: CandMeta; label?: string };
+
+// コード楽器（chord_pattern）のジャンルchip（スライスC・モックCタブ）＝chordLibrary の genre と対応。
+// おまかせ＝omakase 番兵（role/tempo 全体から）。値は genPart が body.pattern へ流す（型ID直指定は「細かく」select へ沈める）。
+export const COMP_GENRE_CHIPS: { v: string; label: string }[] = [
+  { v: "", label: "おまかせ" },
+  { v: "ballad", label: "バラード" },
+  { v: "rock", label: "ロック" },
+  { v: "citypop", label: "シティポップ" },
+  { v: "dance", label: "4つ打ち" },
+  { v: "folk", label: "フォーク" },
+];
+// 型ID直指定（「細かく」select・前面に出さない）。chordLibrary の代表型（鍵盤/ギター）。
+export const COMP_TYPE_IDS: { v: string; label: string }[] = [
+  { v: "PB-WHOLE", label: "白玉(バラード)" },
+  { v: "PB-ARP8", label: "8分アルペジオ" },
+  { v: "CP-SYNC16", label: "裏食い(シティポップ)" },
+  { v: "DN-OFFBEAT", label: "裏スタブ(4つ打ち)" },
+  { v: "AN-VERSE", label: "8分刻み(アニソン)" },
+  { v: "GT-FOLK8", label: "フォークストローク" },
+  { v: "GT-DU8", label: "ダウンアップ8分" },
+  { v: "GT-DOWN8", label: "オールダウン8分" },
+  { v: "GT-FUNK16", label: "16カッティング" },
+  { v: "GT-POWER16", label: "パワーコード刻み" },
+];
 
 // 候補トレイの並べ替え軸（design #12-M「候補レンズ」）。既定 ""＝生成順＝挿入順＝bit一致（審判にしない＝弾かず並べ替えるだけ）。
 export type LensAxis = "" | "expectation" | "hook" | "singability";
@@ -181,6 +208,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、bassFill=0..1(0=OFF=未送信)。
   const [bassStyle, setBassStyle] = useState<string>("");
   const [bassFill, setBassFill] = useState<number>(0);
+  // コード楽器（chord_pattern）の伴奏パターン型ライブラリ（スライスC「聴いて選ぶ」）：""=おまかせ(omakase＝role/tempo 全体から)。
+  // ジャンル名(ballad/rock/citypop/dance/folk) or 型ID直指定。genPart(gen_chord_pattern) が variety と共に body.pattern へ流す。
+  const [compStyle, setCompStyle] = useState<string>("");
   // ベース×ドラムノブ（奏法UIスライスD・design「gen_bass×ドラム結線」／slashBass）：UI未露出だった4ノブを「細かく（ドラム絡み）」群へ。
   // 全て 0/false＝未送信＝従来 bit 一致。kickLock/snareGap/approach はドラム在時のみ効く（API 挙動＝hint 文言で伝える）。
   const [bassKickLock, setBassKickLock] = useState<number>(0); // キックに噛む -1..1（負=逆相・キック裏8分）。0=OFF。
@@ -324,11 +354,22 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         if (bassApproach > 0) body.approach = bassApproach;
         if (bassSlash) body.slashBass = true;
       }
-      const r = await api.music<{ items: { kind: string; content: unknown; meta?: CandMeta }[] }>(part.op, body);
-      const item = r.items?.[0];
-      // 候補に骨格コンテキストを持たせる＝置く時に realized_from を張る相手が候補ごとに確定（ref の撒き漏れを排す）。
-      // meta＝対位法レポート（design #20 S3d・指摘のみ）を候補へ運ぶ＝カードにバッジ表示。
-      if (item) pushCand({ kind: item.kind, content: item.content, skeletonNetaId: opts?.skeletonNetaId, meta: item.meta }, opts?.append);
+      // コード楽器＝伴奏パターン（chord_pattern・スライスC）：ジャンルchip(compStyle) を pattern へ、variety で別々の型を複数取る。
+      //   ""＝おまかせ＝omakase 番兵（role/tempo 全体から）。型ID直指定は api 側で単数固定（compTypeById が真＝variety 無視）。
+      if (part.op === "gen_chord_pattern") {
+        body.pattern = compStyle || "omakase";
+        body.variety = 4;
+      }
+      const r = await api.music<{ items: { kind: string; content: unknown; label?: string; meta?: CandMeta }[] }>(part.op, body);
+      // コード楽器は複数候補を全件トレイへ積む（先頭＝kind差替 or append／以降＝append）。他パーツは従来どおり先頭1件。
+      if (part.op === "gen_chord_pattern") {
+        (r.items ?? []).forEach((it, i) => pushCand({ kind: it.kind, content: it.content, label: it.label, meta: it.meta }, (opts?.append ?? false) || i > 0));
+      } else {
+        const item = r.items?.[0];
+        // 候補に骨格コンテキストを持たせる＝置く時に realized_from を張る相手が候補ごとに確定（ref の撒き漏れを排す）。
+        // meta＝対位法レポート（design #20 S3d・指摘のみ）を候補へ運ぶ＝カードにバッジ表示。
+        if (item) pushCand({ kind: item.kind, content: item.content, label: item.label, skeletonNetaId: opts?.skeletonNetaId, meta: item.meta }, opts?.append);
+      }
     } finally {
       setGenBusy(false);
     }
@@ -458,7 +499,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   }
   // 候補を追加（生成/別案は同種を積む・別種は入れ替え）／単発（ハモリ・崩し）は1件で置換。
   // append=true（おまかせで一式・T5）＝別kindでも置換せず積む＝候補トレイを kind 別グループで保持。
-  const pushCand = (c: { kind: string; content: unknown; skeletonNetaId?: string; meta?: CandMeta }, append = false) =>
+  const pushCand = (c: { kind: string; content: unknown; skeletonNetaId?: string; meta?: CandMeta; label?: string }, append = false) =>
     setCands((prev) => { if (!append && prev.length && prev[0]!.kind !== c.kind) { setKeptCids(new Set()); return [{ ...c, cid: candId.current++ }]; } return [...prev, { ...c, cid: candId.current++ }]; });
   const setSingleCand = (c: { kind: string; content: unknown }) => { setKeptCids(new Set()); setCands([{ ...c, cid: candId.current++ }]); }; // 別種入替＝keep掃除（監査F4）
   const toggleKeep = (cid: number) => setKeptCids((prev) => { const n = new Set(prev); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
@@ -466,8 +507,13 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   async function auditionCandidate(c: Cand) {
     candPlay.current?.stop();
     // #27：解決層＋駆動層（peek＝待たない）。候補は sing 設定を持たない＝実質ドライ（jobs=[]）。音色は progForKind。
-    const ns = notesForContent(c.kind, c.content);
-    if (ns.length) candPlay.current = await startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo, program: ctx.progForKind(c.kind) }), { vocalMode: "peek" });
+    const program = ctx.progForKind(c.kind);
+    // コード楽器/管弦（chord_pattern/section_inst・スライスC）＝進行に解決する相対型＝セクションの進行/テンポ/音色で実音化。
+    //   ctx 無し（従来）は空進行＝無音だった。resolveChordPattern の既存経路を通す（buildPlayback の tempo/program 結線を流用）。
+    const isRel = c.kind === "chord_pattern" || c.kind === "section_inst";
+    const chords = isRel ? ctx.sectionChords().map((ch) => ({ root: ch.root ?? 0, quality: ch.quality ?? "", start: ch.start ?? 0, dur: ch.dur ?? ctx.BPB })) : undefined;
+    const ns = notesForContent(c.kind, c.content, isRel ? { key: keyPc, chords, tempo, program } : undefined);
+    if (ns.length) candPlay.current = await startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo, program }), { vocalMode: "peek" });
   }
   // position＝置くセクション内位置（拍）。既定 0＝従来（SectionEditor の呼び出しは引数無し＝bit一致）。
   // 骨格の机（D4）は焦点骨格の skelPosition を渡し、骨格が居る位置へ表面メロを置く（＝正しい配置）。
@@ -546,6 +592,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
     drumStyle, setDrumStyle, drumFill, setDrumFill, // ドラム定型ビート＋フィル（WP-D1）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
+    compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ

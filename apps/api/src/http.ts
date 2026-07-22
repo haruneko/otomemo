@@ -321,7 +321,8 @@ export function buildHttp(core: Core): FastifyInstance {
           const cpPattern = typeof b.pattern === "string" ? b.pattern : undefined;
           const cpStyle = b.style === "guitar" || b.style === "keyboard" ? b.style : undefined;
           const cpStrumMs = typeof b.strumMs === "number" ? b.strumMs : undefined;
-          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs } : undefined);
+          const cpVariety = typeof b.variety === "number" ? b.variety : undefined; // スライスC：候補を複数返す（既定1=単数=bit一致）
+          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety } : undefined);
         }
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
