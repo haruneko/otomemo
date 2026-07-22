@@ -500,6 +500,7 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **決定C：RhythmEditor（ドラム単体）にも同じ帯**。ジャンルchip＝drumLibrary の genre（おまかせ/jpop/rock/dance/ballad/funk）。候補取得＝`/music/gen_drums`（style=ジャンル）。**gen_drums に variety が無い**ので **seed 違い4件を並行取得→patternId（無ければ content JSON）で dedupe** して最大4件（型が別々になるよう frame から tempo を外し pickBeatPattern の pool を役割候補全体に広げる＝**要耳較正**）。試聴はドラム＝進行不要（`notesForContent("rhythm", cand.content)`→`startPlayback`）。適用＝`onChange({ ...cand.content.rhythm, kit 保持 })`＝rhythm content 置換＋patternId。
 - **決定D：ハブ契約への再発防止条項（TinkerSheet L8-15 に追記）**：**入口（引き出し）に足してよい生成ノブは、効果が採用時に content（パターン/キー）へ刻まれるものだけ**。content に残らない設定の家を入口に作らない（入口が家を兼ねる非対称＝今回の修理対象を再生産しない・正典＝2026-07-22 責務分割監査）。
 - **境界（監査 §5-6・スコープ外）**：ベースの相対パターン昇格（H2・工事順3-7）は本修理#1に含めない（別スライス）。共有ネタは既存 CoW ガードがそのまま受ける（新機構不要）。
+- **統一原理（2026-07-22・メロ外挿の思考実験で確定＝`docs/research/2026-07-22-melody-pattern-thought-experiment.md`）**：**content は「人が仕上げる単位」**。背景パート（ドラム/コード楽器/ベース）＝人はパターンを仕上げる→**パターンが content**（H2）。前景（メロ）＝人はノートを仕上げる→**notes が content**（メロへのH2外挿はしない＝タイル反復・度数再解決・局所判定の前提を全部破る。パターンを content にすると手編集が resolver の下に潜り「仕上げは人間」が壊れる）。メロの型（リズムパーツ/モチーフ図形/骨格テンプレ）は**生成の上流に住む**＝既に3系統実装済みで足りている（kind="motif" 一級化は実需が出るまで着手しない）。
 - **コード入力/section UX（CV・✅実装済）**：ChordEditor＝start自動フロー(順番)・長さボタン・ピアノロール表示・合計尺。SectionEditor＝レーン層モデル順(進行→メロ→コード楽器→ベース→リズム→section)・**占有セルのみ配置不可**(別小節は自由)。トグル/構成音の選択色＝OFF地色付与で是正(E2E)。
 
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
