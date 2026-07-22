@@ -526,6 +526,66 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **編集の家（web）**：`BassStepEditor` は現行6レーン（R/3/5/7/8/approach）を維持＝拡張語彙（2/6/クロマチック/next）は grid に現れないが pattern には**非破壊で保持**（範囲外音と同流儀）。フル度数編集 UI（「その他」レーン・next トグル）は**次スライス**（監査 B'3）＝今回は開ける・可視レーン編集・非破壊往復をテストで担保。
 - **境界（スコープ外・次スライス）**：ベース単体エディタへの「型から選ぶ ▸」帯（修理#1と同UI・工事順6）／相対を UI 既定へ昇格／BassStepEditor 度数語彙拡張（工事順7）／既定切替の裁定。**要耳較正**＝窓統一後の style 相対の鳴り（synth C2 基準・オーナー）。
 
+### H1/H2 残工事の一括裁定（修理#3・2026-07-22・正典＝`docs/research/2026-07-22-surgery-plan.md`＋監査 `2026-07-22-performance-editing-architecture-audit.md`／統一原理＝`2026-07-22-melody-pattern-thought-experiment.md`）
+修理#1/#2 が残した工事（監査 工事順6-7・feel の家 C-6・patternId 乖離 B-5・共有バッジ・管弦への帯誤適用）を一括裁定。
+鉄則は従来どおり**既定 bit 一致**。例外は②（相対 opt-in 出力の golden 更新）と③（feel 保持＝バグ修正）のみ＝下で個別に正当化。
+- **決定①：feel の家（C-6・バグ根治込み）**。`useNetaEditor.savePatch()` が content を既知キーで再構成するため
+  content.feel が保存で落ちる（melody/bass/counter/riff/相対bass/rhythm/skeleton/chords。chordPat 系のみ `{...chordPat}` spread で生存＝非対称がバグの正体）。
+  → useNetaEditor に `feel` state（初期＝`feelOf(neta.content)`）を設け、**chordPat 系以外の全 content 再構成枝**に
+  `...(feel ? { feel } : {})` を織り込む（chordPat 系は spread 既存＝触らない＝二重載せ回避）。snapshot/applySnapshot に feel を追加（undo 結線）。
+  編集 UI＝既存 `NoriRow`（section で本番稼働中）を **MetaPanel「ノリ」行**として条件出現（melody/bass/counter/riff/相対bass のみ。
+  chord＝抽象・skeleton＝無音・rhythm＝genDrums 未添付＋drum humanize 経路との二重掛け審査未了＝UI は出さない。保存透過だけ先回りで塞ぐ＝backlog #29 P1-5 の解）。
+  **bit の意味論**：feel 無しネタ＝保存 JSON byte 一致（`feel?{feel}:{}` はキーを生やさない・NoriRow の「両0＝undefined＝キー削除」契約と対称）。
+  feel 持ちネタ＝保存で feel が残る＝**意図的変更**。正当化＝生成が刻んだ content.feel を保存が落とすのは savePatch の再構成漏れ＝
+  **落とすのが誤り**（feel は演奏層＝content に住む・監査 §1）。修正後の挙動が正。
+- **決定②：ベースの「編集の家」完成（監査 工事順6-7）**。
+  - **patternId（相対 content・additive）**：`RelativeBassContent.patternId?: string`。api は `relative:true` の相対出力に
+    `styleType.id` を刻む（fill 差替えでも base 型 id 維持＝ドラム applyDrumFill 継承と同流儀）。rhythm/chord_pattern と同一流儀（違反③の残り）。
+    **既定（relative 未指定）＝絶対 notes＝bit 一致不変**。相対 opt-in 経路の golden（`gen-bass-relative.test.ts` (b)群）は更新＝
+    **意図的変更**（opt-in のみ・実データの相対ネタ 0＝後方互換の実害なし）。
+  - **「パターンを選ぶ ▸」帯（BassStepEditor＝相対ビュー内・修理#1 決定B と同 UI）**：ジャンル chip6（rock/ballad/citypop/funk/edm/vocarock）
+    ＋おまかせ＝**web 側で seed から6ジャンルを決定的に選び style を必ず付ける**（relative は style 必須＝style 未指定 fallback の絶対 notes
+    が相対エディタへ混入する事故の口を塞ぐ）。候補取得＝gen_bass に variety が無いため**ドラム流儀**（`seed×4` 並列・
+    **frame から tempo を外して pool を広げる**＝修理#1 決定C と同文・**要耳較正**）→ `mode!=="relative"` の候補は捨てる（番兵）→
+    `patternId ?? JSON.stringify(content)` dedupe→最大4件。試聴＝`notesForContent("bass",…,{key})`（既存経路）。
+    適用＝pattern/steps/patternId 置換（Undo＝既存 snapshot で1操作）。compound meter（6/8）は帯非表示。帯見出し「いま：<型ID>」＋（改）（決定④）。
+  - **絶対↔相対トグル＝破壊的切替の追認＋確認**：変換ロジックは新設しない（絶対→度数の逆算は前例なしの研究級＝backlog。
+    相対→絶対の「実音に焼く」も文脈選択 UX が要る＝backlog）。現モードに中身が有り切替先で保存すると失われる場合のみ
+    confirm を出す（無言のデータ喪失に見える UX の是正）。帯は相対ビュー専用＝絶対ネタで使うにはトグル（確認付き）を先に通る＝動線一本。
+  - **拡張語彙の編集 UI（監査 B'3＝案1）**：前面6レーン不変。「その他」レーン1行＋セルポップオーバー（度数 b2..#7・2・6／next／vel）。
+    **同 step 排他＝モノフォニック置換を正式仕様化**（可視レーン配置→同 step の隠れ度数を置換／「その他」配置→可視レーン音を置換）。
+  - **vel の実音化を UI より先行**：`resolveRelativeBass` が `BassStep.vel` を Note.vel へ反映（無音編集の齟齬防止）。
+    vel 無し content＝resolve 出力 deepStrictEqual 不変（生成側は ghost=休符扱い＝既存生成物に vel 無し＝回帰ゼロ）。**要耳較正**。
+- **決定③：管弦(section_inst)への帯の誤適用＝ゲートで止血（A-3）**。帯（gen_chord_pattern＝コード楽器26型）を管弦に適用すると
+  role（pad/stab）恒久喪失＋guitar 型なら弦楽器にギター奏法（voicing.style/strumMs/D-U 帯）が載る＝確実な劣化。
+  → `ChordPatternEditor` に **`showPicker?: boolean`（既定 true＝未指定は従来描画＝bit 一致）** を追加し、KindEditorBody で
+  `showPicker={isChordPat}` を渡す（section_inst＝false＝帯なし）。管弦に型選択 UI は元々無い＝機能後退ゼロ。role は将来の
+  出し入れ計画（horn-string 研究doc §6-3）の布石メタ＝喪失経路を断つこと自体に価値。**管弦用 SectionType 辞書（同 §6）と
+  role 切替帯（gen_section_inst）は本手術外＝backlog**（multi-part voicing は resolveChordPattern 未対応＝実音化拡張とセットの別アーク）。
+  既に帯適用で汚染された保存ネタの自動修復はしない（ソロ開発・存在未確認）。
+- **決定④：patternId 乖離＝（改）フラグ（B-5・折衷）**。手編集ハンドラは `{...pattern}` spread で patternId を保持したまま
+  onChange する＝帯が元の型名を出し続ける（乖離）。→ **patternId は消さず**（来歴保持＝違反③を再発させない）、
+  `ChordPatternContent.patternEdited?: true`／`RhythmContent.patternEdited?: true`／`RelativeBassContent.patternEdited?: true`（additive）を
+  **patternId が在る時だけ** content 変更系ハンドラ（hits/vel/dir/lh/voicing/小節数。program・title 等メタは対象外）で付与。
+  帯表示＝「いま：GT-FOLK8**（改）**」。applyPattern＝候補 content 置換＝フラグ自然消滅。Undo＝snapshot 方式で自動復元（特別対応不要）。
+  正準 content との一致判定（buildCompContent 再構成）は**やらない**（frame 依存で脆い・api 往復が要る）。
+  **bit**：patternId 無しの既存ネタ＝編集しても新キーが生えない＝不変。patternId 持ちネタ（修理#1 以降の生成物）の編集でフラグが付く＝
+  意図的変更（帯が嘘をつかないための正直表示）。
+- **決定⑤：共有ネタ「N箇所で使用中」バッジ（C-7・監査 §5 工事順10）**。`GET /neta/:id/placements`（**既存**・web ラッパ
+  `api.getPlacements` も既存＝backlog D3b の「read api が無い」は実態と乖離＝backlog を訂正）で `placementCount>=2` のとき
+  **NetaDialog ヘッダ**に小バッジ（常時視認＝折りたたみの外）。マウント時1回 fetch・`.catch(()=>null)`＝失敗時非表示。
+  トップ開きの3択ガードは入れない（parentId 無し＝ガード無効は意図的設計の維持・バッジは「気づき」の緩和策）。api 無改変・読み取りのみ。
+- **決定⑥：相対ベース既定切替の推奨と準備（B-4・実施は別裁定）**。推奨＝**(b) UI 既定＝新規のみ相対**（web genPart が style 指定時に
+  `relative:true` を送る。api 既定 false 据置＝bit 証明12件が生存・`/gen/section` は絶対のまま・最低リスク）→実績後に (c)
+  （api 側 style 時のみ相対既定）へ二段構え。**切替の実施＝オーナー耳確認後の別裁定＝本手術に含めない**。
+  本手術で先回りするのは**表示文脈のみ（R1）**：候補トレイ試聴/描画の `isRel` に相対 bass を追加＋MiniRoll に preview_chords 注入
+  ＝既定 bit 一致（絶対経路不変・相対 bass は現状トレイに来ない）。帯（決定②）で相対ネタが生まれ始めるため
+  「進行無視の絵/試聴」の劣化を先に塞ぐ。**切替アークの宿題（実施時に必須）**：R2 api 側メタ（voiceLeadingReport/syncopationReport）の
+  相対解決（api に resolver 無し＝要新設）／R4 `/gen/section` relative 透過／R5 相対時のドラム連動ノブ（kickLock/snareGap/approach/slashBass）
+  無効化/非表示の UI 分岐（「動かないツマミ」問題）／R6 「未指定＝絶対」bit 証明テストの再設計。
+- **統一原理との整合（確認）**：①〜⑥はすべて「content は人が仕上げる単位」の帰結＝背景パートはパターン（＋feel・来歴キー）が
+  content に住み、家はネタエディタに常在。前景（メロ/リフ/counter）には何も外挿しない。
+
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
 **問題（ユーザー指摘）**：①品質語彙が不足＝テンション(9/11/13/add9)・dim7・altered(7♭9/7♯9/7♯5)が無い。しかも ChordEditor は「9」を選べるのに `QUALITY_INTERVALS` に定義が無く **major トライアドにフォールバック＝壊れている**。②分数コード(slash/on-chord)が表現できない＝`ChordEntry` に bass 欄が無い。③コード楽器(comping)の高さが**ルートのpcぶん跳ねる**(`base = 48 + octave*12 + root_pc`)＝進行が動くたびレジスタが上下。「大体の高さを決める」＋スムーズに置きたい。
 

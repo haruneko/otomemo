@@ -22,6 +22,16 @@
 - **域外テンポの型提示**（E2E所見修正 2026-07-22）：tempo域内皆無時はジャンル語彙をテンポ距離順で提示に変更＝tempo120でバラード型（本来60-95帯）が出る。敷けば鳴るが「その速さで白玉/16分うねりがどう聞こえるか」は耳判断。
 - **［UX・要判断］左手行の埋もれ**：E2E所見＝左手プリセットは響きゾーン5行目＝CP編集で要スクロール＋チャットFABが被り気味。対処案＝(a)このまま（行契約優先） (b)響きゾーンを「基本/奏法」の2見出しに分割 (c)FABをエディタ内で退避。オーナー裁定待ち。
 
+## 修理#3（大手術・2026-07-22）の送り分＝design「H1/H2 残工事の一括裁定」より
+- 管弦の型辞書アーク：(c) role 切替帯（gen_section_inst・pad/stab chip・PatternPickerBar 流用＝TinkerSheet 管弦の role 未指定穴も埋まる）
+  →(b) SectionType 辞書（horn-string 研究doc §6・multi-part voicing＝resolveChordPattern 拡張とセット・CC11 可否要調査）。修理#3 決定③の続き。
+- ベース絶対↔相対の変換：相対→絶対「実音に焼く」（resolveRelativeBass 流用・焼く文脈の UX 設計要）／絶対→相対の度数逆算（研究級・優先度低）。
+- 相対ベース既定切替アーク（修理#3 決定⑥の宿題）：R2 api 側メタの相対解決・R4 /gen/section 透過・R5 ドラム連動ノブの UI 分岐・R6 bit テスト再設計＋オーナー耳確認。
+- chordPat 系（chord_pattern/section_inst）への NoriRow：spread 流儀と feel state の整合設計後に。rhythm の NoriRow＝genDrums feel 添付と
+  drum humanize 二重掛け審査とセット（#29 P1-5 の残り半分）。
+- D3b 訂正：逆引き read api は `GET /neta/:id/placements` として既存（本doc下方D3b節の前提は古い）。バッジは修理#3 決定⑤で実装へ。
+  「複製して切り離す」動線のみ残る（useCowGuard の branch 経路が実装の手本）。
+
 ## WP-D2（シンコペ密度レンズ＋humanize知覚較正・2026-07-14実装）の残り
 正典＝design.md「humanize 知覚較正」「シンコペ密度スコア＋ノリレンズ」節＋research `2026-07-14-humanize-perception-defaults.md`／`-syncopation-sweet-spot.md`。実装済＝music-core `syncopation.ts`（lhlSyncScore/metricWeights/noriMeter/sectionNoriLens）＋applyFeel の 1/f 化＋部位別 ms リミット＋ヨレ警告、api `syncopationReport.ts`（gen_melody/bass/drums 候補へ meta.sync 添付・MCP/HTTP 両経路）、web「人間味」ノブの段/説明更新＋playback applyFeel に tempo 結線。以下は明示的に送った残：
 - **humanize の part 別付与（混在ストリーム分離）**：web playback の applyFeel は notes 全体に一括適用＝現状 default プロファイル（SD8/limit40）。ノート毎の part（kick/snare/hihat/bass/melody/chords）を渡して部位別リミット（K/S/HH20・Bass30）を実効化する（applyFeel は ctx.part 対応済＝呼び出し側でレーン/program→part マップして分割適用 or per-note 解決を足す）。
