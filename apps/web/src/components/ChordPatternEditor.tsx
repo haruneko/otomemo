@@ -59,6 +59,20 @@ const LH_LANES: { d: LhLaneDeg; label: string }[] = [
 // プレビュー用：度数→実音高（C 基準・入力FB）。R=C2(36)/3=E2(40)/5=G2(43)/8=C3(48)。実配置の
 // オクターブ/LH窓 fold は再生時 resolveLh（L0）が担う＝ここは度数の高さを鳴らすだけ。
 const LH_PAD_PREVIEW: Record<LhLaneDeg, number> = { R: 36, "3": 40, "5": 43, "8": 48 };
+// Task1b：preset(root/root5/oct)→度数パッド hits へ materialize（表示＋編集の土台＋注入ボタンで共有）。
+// 各小節頭（step 0, stepsPerBar ごと）に全音符（dur=stepsPerBar）で：root→R／root5→R+5／oct→R+8。
+// content は書き換えない＝**表示のみ**（未編集の preset ネタは bit 一致）。注入/セルタップの編集操作でだけ custom へ焼く。
+// resolveLh preset は「小節頭 ∪ コードチェンジ」を anchor に白玉にするが、エディタ表示はコード非依存＝小節頭のみ
+// （和音変わり目 anchor はパッドに出ない＝現行 preset→custom 変換でも失われる分＝退行なし・design Task1b）。
+function materializeLhPreset(mode: "root" | "root5" | "oct", steps: number, stepsPerBar: number): NonNullable<ChordLhContent["hits"]> {
+  const extra: LhLaneDeg[] = mode === "root5" ? ["5"] : mode === "oct" ? ["8"] : [];
+  const hits: NonNullable<ChordLhContent["hits"]> = [];
+  for (let s = 0; s < steps; s += stepsPerBar) {
+    hits.push({ step: s, deg: "R", dur: stepsPerBar });
+    for (const d of extra) hits.push({ step: s, deg: d, dur: stepsPerBar });
+  }
+  return hits;
+}
 
 // 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える。
 const LENGTHS = [
@@ -87,7 +101,8 @@ function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
 //   **響きゾーンは最大5行**（打ち方／トップ・広がり／高さ・パワー(arp時=向き・幅・区切り)／奏法／左手）。
 //   これ以上ノブが要る日は【群アコーディオンへ沈める】（前面はこの5行で打ち止め）＝スマホ縦で詰め込まない
 //   （タップ標的28px＝密度耐性が低い・design「奏法UI」決定）。奏法行=4行目（Fable UX監査①＝読み取り専用サマリ＋じゃら〜ん。
-//   奏法の変更手段は MetaPanel「奏法」select 一本＝ここは表示のみ）・左手seg=5行目（keyboard 解決時のみ・S3）。
+//   奏法の変更手段は MetaPanel「奏法」select 一本＝ここは表示のみ）・左手=5行目（keyboard 解決時のみ・S3／
+//   Task1b で seg 廃止＝注入ボタン＋常時パッドの「両手一体ビュー」）。
 // プレビュー進行（型試聴用）＝C→Am→F→G（ネタ key へ移調）。ネタに preview_chords があればそちら優先（帯の試聴文脈）。
 const PREVIEW_PROG: { root: number; quality: string }[] = [
   { root: 0, quality: "" }, { root: 9, quality: "m" }, { root: 5, quality: "" }, { root: 7, quality: "" },
@@ -182,28 +197,34 @@ export function ChordPatternEditor({
     const next: "D" | "U" = (h.dir ?? duDefault(s)) === "D" ? "U" : "D";
     editContent({ ...pattern, hits: pattern.hits.map((x) => (x.step === s ? { ...x, dir: next } : x)) });
   };
-  // 左手（S3＋Task1）：seg 選択＝lh.mode を書く／OFF＝lh キー削除（bit）。
-  // custom で人がパッド編集した hits は、preset へ戻しても**非破壊で保持**（描画しないだけ＝メロ/ベースの
-  // 範囲外音と同流儀）。preset→custom は保持 hits を復元。hits が無いネタの preset は clean（{mode}＝bit一致）。
-  const lhHits = pattern.lh?.hits ?? [];
-  const setLhMode = (mode: "off" | "root" | "root5" | "oct" | "custom") => {
-    if (mode === "off") { const { lh: _drop, ...rest } = pattern; editContent(rest); return; }
-    if (mode === "custom") { editContent({ ...pattern, lh: { mode: "custom", hits: lhHits } }); return; }
-    // preset：authored hits があれば非破壊保持・無ければ hits キーを生やさない（bit一致）。
-    editContent({ ...pattern, lh: lhHits.length ? { mode, hits: lhHits } : { mode } });
-  };
-  // パッド：(lane×step) の hit（deg 省略＝R 扱い＝resolveLh の deg??"R" と同契約）を探す。
-  const lhStartAt = (lane: LhLaneDeg, s: number) => lhHits.find((h) => h.step === s && (h.deg ?? "R") === lane);
+  // 左手（S3＋Task1＋Task1b「両手一体ビュー」）：パッドに出す度数 hit 群＝**表示用の materialize ビュー**。
+  //   lh 未定義→空（左手なし）／custom→その hits／preset(root/root5/oct)→小節頭 materialize（表示のみ・content 不変）。
+  // この displayHits は「見えているもの」＝セルタップ/sustain 判定/編集の土台がすべてこれ1つ＝WYSIWYG。
+  const displayHits: NonNullable<ChordLhContent["hits"]> = !pattern.lh
+    ? []
+    : pattern.lh.mode === "custom"
+      ? (pattern.lh.hits ?? [])
+      : materializeLhPreset(pattern.lh.mode, pattern.steps, stepsPerBar);
+  // 注入ボタン [ルート][+5度][8va]＝preset を materialize した custom hits を書く（＝各小節頭に全音符）。
+  // 押した瞬間 lh.mode:"custom" に確定＝以後パッドでリズム/度数を微調整できる（design Task1b）。
+  const injectLh = (mode: "root" | "root5" | "oct") =>
+    editContent({ ...pattern, lh: { mode: "custom", hits: materializeLhPreset(mode, pattern.steps, stepsPerBar) } });
+  // [クリア]（左手OFF）＝lh キー削除＝左手なし（空パッド＝左手なしと等価・bit一致）。
+  const clearLh = () => { const { lh: _drop, ...rest } = pattern; editContent(rest); };
+  // パッド：(lane×step) の hit（deg 省略＝R 扱い＝resolveLh の deg??"R" と同契約）を表示ビューから探す。
+  const lhStartAt = (lane: LhLaneDeg, s: number) => displayHits.find((h) => h.step === s && (h.deg ?? "R") === lane);
   const lhSustainAt = (lane: LhLaneDeg, s: number) =>
-    lhHits.some((h) => (h.deg ?? "R") === lane && h.step < s && s < h.step + (h.dur || 1));
-  // セルタップ＝その (lane×step) の hit だけ add/remove（**同 step 他レーンは消さない**＝ポリフォニック）。
+    displayHits.some((h) => (h.deg ?? "R") === lane && h.step < s && s < h.step + (h.dur || 1));
+  // セルタップ（materialize 込み）＝現 lh が preset なら **materialize した表示 hits を土台に**その (lane×step) を
+  // add/remove→ lh.mode:"custom" 確定（preset の骨を残して編集開始）。custom は現行どおり（**同 step 他レーンは
+  // 消さない**＝ポリフォニック）。lh 未定義＝空を土台に新規1点。編集操作なので content が custom へ焼けてよい。
   const toggleLhPad = (lane: LhLaneDeg, s: number) => {
     const dur = dotted ? len * 1.5 : len;
     let hits: NonNullable<ChordLhContent["hits"]>;
     if (lhStartAt(lane, s)) {
-      hits = lhHits.filter((h) => !(h.step === s && (h.deg ?? "R") === lane)); // 同じ所をタップ＝消す
+      hits = displayHits.filter((h) => !(h.step === s && (h.deg ?? "R") === lane)); // 同じ所をタップ＝消す
     } else {
-      hits = [...lhHits, { step: s, deg: lane, dur }].sort((a, b) => a.step - b.step);
+      hits = [...displayHits, { step: s, deg: lane, dur }].sort((a, b) => a.step - b.step);
       void previewNote({ pitch: LH_PAD_PREVIEW[lane], start: 0, dur: 0.4, program }); // 置いた度数を即鳴らす
     }
     editContent({ ...pattern, lh: { mode: "custom", hits } });
@@ -404,48 +425,47 @@ export function ChordPatternEditor({
             </span>
           )}
         </div>
-        {/* ⑤左手（CP行契約の5行目・S3＋Task1）：keyboard 解決時のみ。OFF/ルート/+5度/8va＝lh.mode preset＋
-            「自分で」＝custom（Task1）。custom を選ぶと度数パッド（R/3/5/8 × steps・ポリフォニック）を行下に展開。
-            style 無し(既存ネタ)でも keyboard 解決＝表示。 */}
+        {/* ⑤左手（CP行契約の5行目・S3＋Task1＋Task1b「両手一体ビュー」）：keyboard 解決時のみ・**常時展開**
+            （`自分で` トグル廃止＝右手と対等な「ピアノの片手」）。注入ボタン [ルート][+5度][8va] は preset を
+            materialize した custom hits を一括で書く（種）／[クリア] は lh キー削除（左手なし）。
+            style 無し(既存ネタ)でも keyboard 解決＝表示。preset ネタは materialize 表示＝触るまで content 不変（bit）。 */}
         {keyboardResolved && (
           <>
             <div className="cp-vrow">
-              <span className="cp-vlbl">左手</span>
-              <div className="seg seg-chord" role="group" aria-label="lh-mode">
-                <button type="button" aria-label="lh-off" className={!pattern.lh ? "on" : ""} onClick={() => setLhMode("off")}>OFF</button>
-                <button type="button" aria-label="lh-root" className={pattern.lh?.mode === "root" ? "on" : ""} onClick={() => setLhMode("root")}>ルート</button>
-                <button type="button" aria-label="lh-root5" className={pattern.lh?.mode === "root5" ? "on" : ""} onClick={() => setLhMode("root5")}>+5度</button>
-                <button type="button" aria-label="lh-oct" className={pattern.lh?.mode === "oct" ? "on" : ""} onClick={() => setLhMode("oct")}>8va</button>
-                <button type="button" aria-label="lh-custom" className={pattern.lh?.mode === "custom" ? "on" : ""} onClick={() => setLhMode("custom")}>自分で</button>
+              <span className="cp-vlbl">左手（土台）</span>
+              <div className="seg seg-chord" role="group" aria-label="lh-inject">
+                <button type="button" aria-label="lh-root" onClick={() => injectLh("root")}>ルート</button>
+                <button type="button" aria-label="lh-root5" onClick={() => injectLh("root5")}>+5度</button>
+                <button type="button" aria-label="lh-oct" onClick={() => injectLh("oct")}>8va</button>
+                <button type="button" aria-label="lh-clear" className={!pattern.lh ? "on" : ""} onClick={clearLh}>クリア</button>
               </div>
             </div>
-            {/* Task1 左手パッド＝度数レーン（上から 8/5/3/R）×ステップ。セルタップで (lane×step) の hit だけ
-                add/remove＝**同 step 複数レーン ON 可（ポリフォニック）**。音長＝上の長さツール（NoteValuePicker）を共有。 */}
-            {pattern.lh?.mode === "custom" && (
-              <div className="cp-lh-pad" role="grid" aria-label="lh-pad">
-                {LH_LANES.map((lane) => (
-                  <div className="cp-lh-lane" role="row" key={lane.d}>
-                    <div className="cp-lh-label">{lane.label}</div>
-                    {Array.from({ length: pattern.steps }, (_, s) => {
-                      const on = !!lhStartAt(lane.d, s);
-                      const sus = lhSustainAt(lane.d, s);
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          aria-label={`lh-pad-${lane.d}-${s}`}
-                          aria-pressed={on}
-                          className={"cp-lh-cell" + (on ? " on" : sus ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
-                          onClick={() => toggleLhPad(lane.d, s)}
-                        >
-                          {on ? lane.label : ""}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* 左手パッド＝度数レーン（上から 8/5/3/R）×ステップ。**常時表示**（preset は materialize 表示・
+                custom はその hits・lh 未定義は空）。セルタップで (lane×step) の hit だけ add/remove＝**同 step 複数
+                レーン ON 可（ポリフォニック）**＝custom 確定。音長＝上の長さツール（NoteValuePicker）を共有。 */}
+            <div className="cp-lh-pad" role="grid" aria-label="lh-pad">
+              {LH_LANES.map((lane) => (
+                <div className="cp-lh-lane" role="row" key={lane.d}>
+                  <div className="cp-lh-label">{lane.label}</div>
+                  {Array.from({ length: pattern.steps }, (_, s) => {
+                    const on = !!lhStartAt(lane.d, s);
+                    const sus = lhSustainAt(lane.d, s);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        aria-label={`lh-pad-${lane.d}-${s}`}
+                        aria-pressed={on}
+                        className={"cp-lh-cell" + (on ? " on" : sus ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
+                        onClick={() => toggleLhPad(lane.d, s)}
+                      >
+                        {on ? lane.label : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </>
         )}
         {pattern.hits.length > 0 && (

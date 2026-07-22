@@ -163,7 +163,7 @@ describe("ChordPatternEditor 語彙/折返し（監査②⑥）", () => {
     expect(onChange).toHaveBeenCalledWith(pat({ mode: "strum" })); // データ値は strum のまま
   });
 
-  it("左手ラベルは短縮＝OFF/ルート/+5度/8va（オクターブ・ルート＋5度は折れ元＝改名）", () => {
+  it("左手注入ボタンのラベルは短縮＝ルート/+5度/8va（オクターブ・ルート＋5度は折れ元＝改名）", () => {
     render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
     expect(screen.getByLabelText("lh-root5").textContent).toBe("+5度");
     expect(screen.getByLabelText("lh-oct").textContent).toBe("8va");
@@ -175,47 +175,22 @@ describe("ChordPatternEditor S3 左手行＋D/Uストリップ", () => {
   const guitarPat = (over: Partial<ChordPatternContent> = {}) =>
     pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" }, ...over });
 
-  it("keyboard 解決（style無し）＝左手行が出る・D/Uストリップは出ない", () => {
+  it("keyboard 解決（style無し）＝左手パッドが常時出る・D/Uストリップは出ない（Task1b：seg廃止）", () => {
     render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("lh-mode")).toBeTruthy();
+    expect(screen.getByLabelText("lh-pad")).toBeTruthy();
     expect(screen.queryByLabelText("du-strip")).toBeNull();
   });
-  it("guitar 解決＝D/Uストリップが出る・左手行は出ない", () => {
+  it("guitar 解決＝D/Uストリップが出る・左手パッドは出ない", () => {
     render(<ChordPatternEditor pattern={guitarPat()} onChange={vi.fn()} />);
     expect(screen.getByLabelText("du-strip")).toBeTruthy();
-    expect(screen.queryByLabelText("lh-mode")).toBeNull();
+    expect(screen.queryByLabelText("lh-pad")).toBeNull();
+    expect(screen.queryByLabelText("lh-inject")).toBeNull();
   });
-  it("auto×ギター音色（program25）でも D/Uストリップ・左手行なし", () => {
+  it("auto×ギター音色（program25）でも D/Uストリップ・左手パッドなし", () => {
     const autoPat = pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "auto" } });
     render(<ChordPatternEditor pattern={autoPat} onChange={vi.fn()} program={25} />);
     expect(screen.getByLabelText("du-strip")).toBeTruthy();
-    expect(screen.queryByLabelText("lh-mode")).toBeNull();
-  });
-
-  it("左手 ルートを押すと lh:{mode:root} を書く", async () => {
-    const onChange = vi.fn();
-    render(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("lh-root"));
-    expect(onChange).toHaveBeenCalledWith(pat({ lh: { mode: "root" } }));
-  });
-  it("左手 OFF で lh キー削除（bit）", async () => {
-    const onChange = vi.fn();
-    render(<ChordPatternEditor pattern={pat({ lh: { mode: "root" } })} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("lh-off"));
-    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
-    expect("lh" in arg).toBe(false);
-  });
-  it("lh 無し＝OFF が選択・root で置くと root が選択（seg 表示）", () => {
-    const { rerender } = render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("lh-off").className).toContain("on");
-    rerender(<ChordPatternEditor pattern={pat({ lh: { mode: "root5" } })} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("lh-root5").className).toContain("on");
-  });
-  it("custom＝『自分で』seg 選択＋パッド展開（Task1：型表示は廃止）", () => {
-    render(<ChordPatternEditor pattern={pat({ lh: { mode: "custom", hits: [] } })} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("lh-custom").className).toContain("on");
-    expect(screen.getByLabelText("lh-pad")).toBeTruthy();
-    for (const l of ["lh-off", "lh-root", "lh-root5", "lh-oct"]) expect(screen.getByLabelText(l).className).not.toContain("on");
+    expect(screen.queryByLabelText("lh-pad")).toBeNull();
   });
 
   it("D/Uストリップ：dir 無し hit は自動既定を薄表示（表拍D・裏U）", () => {
@@ -255,29 +230,6 @@ describe("ChordPatternEditor Task1 左手 custom パッド", () => {
   const custom = (hits: { step: number; deg?: string; dur: number; vel?: number }[] = []) =>
     pat({ lh: { mode: "custom", hits } });
 
-  it("『自分で』seg で lh:{mode:custom} を書く／選択でハイライト", async () => {
-    const onChange = vi.fn();
-    const { rerender } = render(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("lh-custom"));
-    expect(onChange).toHaveBeenCalledWith(pat({ lh: { mode: "custom", hits: [] } }));
-    rerender(<ChordPatternEditor pattern={custom()} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("lh-custom").className).toContain("on");
-  });
-
-  it("パッドは keyboard×custom のときだけ表示（preset/ギター解決は非表示）", () => {
-    const { rerender } = render(<ChordPatternEditor pattern={custom()} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("lh-pad")).toBeTruthy();
-    rerender(<ChordPatternEditor pattern={pat({ lh: { mode: "root" } })} onChange={vi.fn()} />);
-    expect(screen.queryByLabelText("lh-pad")).toBeNull(); // preset＝パッド無し
-    rerender(
-      <ChordPatternEditor
-        pattern={pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" }, lh: { mode: "custom", hits: [] } })}
-        onChange={vi.fn()}
-      />,
-    );
-    expect(screen.queryByLabelText("lh-pad")).toBeNull(); // guitar 解決＝左手行ごと無し
-  });
-
   it("空セルタップ＝新規 hit（deg=lane・dur=長さツール既定=4）", async () => {
     const onChange = vi.fn();
     render(<ChordPatternEditor pattern={custom()} onChange={onChange} />);
@@ -306,25 +258,103 @@ describe("ChordPatternEditor Task1 左手 custom パッド", () => {
     render(<ChordPatternEditor pattern={custom([{ step: 4, dur: 4 }])} onChange={vi.fn()} />);
     expect(screen.getByLabelText("lh-pad-R-4").getAttribute("aria-pressed")).toBe("true");
   });
+});
 
-  it("custom→preset は hits を非破壊保持・preset→custom で復元", async () => {
-    const onChange = vi.fn();
-    const authored = custom([{ step: 0, deg: "R", dur: 4 }]);
-    const { rerender } = render(<ChordPatternEditor pattern={authored} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("lh-root")); // custom→preset（hits 保持）
-    expect(onChange).toHaveBeenLastCalledWith(pat({ lh: { mode: "root", hits: [{ step: 0, deg: "R", dur: 4 }] } }));
-    onChange.mockClear();
-    rerender(<ChordPatternEditor pattern={pat({ lh: { mode: "root", hits: [{ step: 0, deg: "R", dur: 4 }] } })} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("lh-custom")); // preset→custom で復元
-    expect(onChange).toHaveBeenLastCalledWith(pat({ lh: { mode: "custom", hits: [{ step: 0, deg: "R", dur: 4 }] } }));
+// Task1b（2026-07-23）：左手を「両手一体ビュー」で常時表示。seg（OFF/…/自分で）廃止＝注入ボタン＋常時パッド。
+// preset ネタは materialize 表示（触るまで content 不変＝bit一致）・注入/クリア/セルタップの編集で custom 確定。
+describe("ChordPatternEditor Task1b 両手一体ビュー（常時パッド＋注入/クリア＋materialize）", () => {
+  // (a) keyboard 解決で左手パッドが常時 DOM に在る（`自分で` トグルが無い）。
+  it("keyboard 解決＝左手パッド常時表示・旧 seg（自分で/OFF/lh-mode）は無い", () => {
+    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-pad")).toBeTruthy();
+    expect(screen.getByLabelText("lh-inject")).toBeTruthy();
+    expect(screen.queryByLabelText("lh-mode")).toBeNull();
+    expect(screen.queryByLabelText("lh-custom")).toBeNull();
+    expect(screen.queryByLabelText("lh-off")).toBeNull();
   });
 
-  it("hits 無しネタの preset 選択は clean（{mode:root}＝bit一致・hits キー生えない）", async () => {
+  // (b) 注入ボタン：[ルート]→R小節頭・[+5度]→R+5・[8va]→R+8（全音符 dur=stepsPerBar・lh.mode:custom）。
+  it("[ルート]注入＝各小節頭に R 全音符（steps16→step0 のみ・dur16・custom 確定）", async () => {
     const onChange = vi.fn();
     render(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
     await userEvent.click(screen.getByLabelText("lh-root"));
-    expect(onChange).toHaveBeenCalledWith(pat({ lh: { mode: "root" } }));
-    expect("hits" in (onChange.mock.calls[0]![0] as ChordPatternContent).lh!).toBe(false);
+    expect(onChange).toHaveBeenCalledWith(pat({ lh: { mode: "custom", hits: [{ step: 0, deg: "R", dur: 16 }] } }));
+  });
+  it("[ルート]注入＝2小節（steps32）で各小節頭 step0/16 に R 全音符", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ steps: 32 })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-root"));
+    expect(onChange).toHaveBeenCalledWith(pat({ steps: 32, lh: { mode: "custom", hits: [{ step: 0, deg: "R", dur: 16 }, { step: 16, deg: "R", dur: 16 }] } }));
+  });
+  it("[+5度]注入＝小節頭に R と 5・[8va]注入＝R と 8", async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-root5"));
+    expect(onChange).toHaveBeenLastCalledWith(pat({ lh: { mode: "custom", hits: [{ step: 0, deg: "R", dur: 16 }, { step: 0, deg: "5", dur: 16 }] } }));
+    rerender(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-oct"));
+    expect(onChange).toHaveBeenLastCalledWith(pat({ lh: { mode: "custom", hits: [{ step: 0, deg: "R", dur: 16 }, { step: 0, deg: "8", dur: 16 }] } }));
+  });
+
+  // (c) preset lh ネタを開くとパッドに materialize 表示・**未編集なら content 不変**・セルタップで custom 確定。
+  it("preset root ネタ＝パッドに小節頭 R が点灯（materialize 表示）", () => {
+    render(<ChordPatternEditor pattern={pat({ steps: 32, lh: { mode: "root" } })} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-pad-R-0").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("lh-pad-R-16").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("lh-pad-R-8").getAttribute("aria-pressed")).toBe("false"); // 小節頭以外は消灯
+  });
+  it("preset root5 ネタ＝小節頭に R と 5 が点灯・root は 5 消灯", () => {
+    const { rerender } = render(<ChordPatternEditor pattern={pat({ lh: { mode: "root5" } })} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-pad-R-0").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("lh-pad-5-0").getAttribute("aria-pressed")).toBe("true");
+    rerender(<ChordPatternEditor pattern={pat({ lh: { mode: "root" } })} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-pad-5-0").getAttribute("aria-pressed")).toBe("false");
+  });
+  it("preset oct ネタ＝小節頭に R と 8 が点灯", () => {
+    render(<ChordPatternEditor pattern={pat({ lh: { mode: "oct" } })} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-pad-R-0").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("lh-pad-8-0").getAttribute("aria-pressed")).toBe("true");
+  });
+  it("preset ネタは**開くだけ／表示だけでは onChange 発火せず content 不変（bit）**", () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ lh: { mode: "root" } })} onChange={onChange} />);
+    expect(onChange).not.toHaveBeenCalled(); // materialize は表示のみ＝書き込まない
+  });
+  it("preset ネタのセルタップ＝materialize 土台に足して custom 確定（小節頭 R を残す）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ lh: { mode: "root" } })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-pad-3-8")); // step8 に 3度を足す
+    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
+    expect(arg.lh).toEqual({ mode: "custom", hits: [{ step: 0, deg: "R", dur: 16 }, { step: 8, deg: "3", dur: 4 }] });
+  });
+  it("preset ネタのセルタップ＝materialize 済み小節頭 R をタップで消せる（custom 確定）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ lh: { mode: "root" } })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-pad-R-0")); // materialize された R を消す
+    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
+    expect(arg.lh).toEqual({ mode: "custom", hits: [] });
+  });
+
+  // (d) [クリア] で lh キー削除（左手なし）。
+  it("[クリア]で lh キー削除（bit）・lh 無しでクリアが選択表示", async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<ChordPatternEditor pattern={pat({ lh: { mode: "root" } })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-clear"));
+    expect("lh" in (onChange.mock.calls[0]![0] as ChordPatternContent)).toBe(false);
+    rerender(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />); // pat() は lh 無し＝クリア選択
+    expect(screen.getByLabelText("lh-clear").className).toContain("on");
+  });
+  it("lh 未定義＝パッドは全消灯（空）", () => {
+    const { lh: _drop, ...noLh } = pat({ lh: { mode: "root" } });
+    render(<ChordPatternEditor pattern={noLh as ChordPatternContent} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-pad-R-0").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  // (e) guitar 解決で左手非表示（不変）。
+  it("guitar 解決＝左手パッド・注入ボタンとも非表示", () => {
+    render(<ChordPatternEditor pattern={pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" }, lh: { mode: "root" } })} onChange={vi.fn()} />);
+    expect(screen.queryByLabelText("lh-pad")).toBeNull();
+    expect(screen.queryByLabelText("lh-inject")).toBeNull();
   });
 });
 
