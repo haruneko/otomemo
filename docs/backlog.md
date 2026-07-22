@@ -3,10 +3,22 @@
 スペック層（requirements/architecture/design）にも Task 機能にも載せきれない「いつかやる／保留」をここに貯める。
 着手したら Task 化して、ここからは消すか「→ #NN」と印を付ける。最終更新を都度書く。
 
-最終更新: 2026-07-22（design案件3件＝⑨和声リズム(#30・後処理split採用)／WP-M1第2(cadDeg/contour・骨格層限定)／PAC-IAC+声部進行減点 を「設計→Fable監査→直列実装→Fable検収」で完走。**作業ツリー未コミット**・私自身の実行で api 119ファイル/1345緑・tsc clean・bit一致既定維持を確認。各節に✅注記。nit=cadenceSoprano記述ドリフト/preset優先/leadingTonePenalty文字列root注記は design.md 修正済）
+最終更新: 2026-07-22b（**伴奏・演奏アーク完走**＝研究3本(ピアノ/ギター奏法語彙・スタイルエンジン)→ベースslashBass→S1 voiceGuitar+じゃら〜ん→S2型辞書26型→UI三層A/B/D+モック→S3左手内蔵+ギターD/U→C聴いて選ぶトレイ→S4 feel添付。a82d028〜c52ca10・全既定OFF=bit一致・api1396/web989緑・dist焼き+restart済。**耳確認リストを下に新設**。ストラム時間展開(#29残)を✅化）
+旧: 2026-07-22（design案件3件＝⑨和声リズム(#30・後処理split採用)／WP-M1第2(cadDeg/contour・骨格層限定)／PAC-IAC+声部進行減点 を「設計→Fable監査→直列実装→Fable検収」で完走。**作業ツリー未コミット**・私自身の実行で api 119ファイル/1345緑・tsc clean・bit一致既定維持を確認。各節に✅注記。nit=cadenceSoprano記述ドリフト/preset優先/leadingTonePenalty文字列root注記は design.md 修正済）
 旧: 2026-07-21（B/C群の実装状況を実コードで裏取り＝backlog腐り修正。仮歌(歌声合成)=実装済／スケールハイライト=実装済(コードトーンのみ未)／#26本体=実装済でオーナー実機評「良好」→ゲート解除／和声・終止 brush-up ①②⑤⑥⑩=実装済・③④=部分実装(「未監視」は誤り)・⑨=未／テンションvoicing=コード品質次第で鳴る(comping生成器のノブは未)／Capture=撤去済で決着・Chatポーリング=15s化+自動送信ボタン化済・AnalysisWorkbenchコード帯=可変スケール+ズーム済。各節に注記）
 旧: 2026-07-18（コード進行エディタ タイムライン化 #26 の設計確定に伴う後回し群を末尾に追加＝SectionEditor 折り返し対応/表示トグル/他エディタ一般化/再生ハイライト/ボイシング編集レイヤ。いずれもコード編集の折り返しが実地良好とオーナー確認後がゲート）
 旧: 2026-07-14（コード楽器arp 幅/区切り・全GM・コード楽器2音色/MIDI音色バグ修正・骨格フォーム回帰skelForm S1/S2・一曲書くE2E受け入れ〈機能/デザイン監査を分離実施〉を反映。耳確認未消化＋デザイン据え置き1件〈極小ブロック〉を追記。**WP-D2（シンコペレンズ＋humanize較正）実装済＝残タスクを下に追記**）
+
+## 伴奏・演奏アーク（2026-07-22）の耳確認リスト［耳/手＝オーナー実機・機械は全消化］
+正典＝design.md の S1〜S4/UI 各決定ブロック＋research `2026-07-22-{piano,guitar}-comping-vocabulary.md`／`-accompaniment-style-engines.md`。実機反映済（dist焼き+restart 2026-07-22）。試すときは**新規ネタ or ノブONで**（既存ネタは既定OFF＝従来のまま鳴る）。
+- **ゼロ操作の主動線**：新規コード楽器ネタ→音色をギター系に→そのまま再生＝ギターボイシング＋じゃら〜ん（おまかせ=auto）。ピアノ系＝左手ルート土台込み。これが「出先メモがそれっぽく」の合格ラインか。
+- **じゃら〜ん段階**（OFF/弱8/中14/強25ms）と**ストローク既定=中14**の相場。
+- **ギターD/U**：アップ=上位4声・0.78×・時差0.75×の軽さ。D/Uストリップの視覚（打点タップで入替）。
+- **左手**：LH_VEL=106（やや強め）・C2-C3窓・oct(R+R')の鳴り。root5/octの使い分け。
+- **型辞書26型**：ジャンルchip→候補4件の質（特に GT-FUNK16/GT-FUNKSYNC の実コード配置・JZ-CHARL の dur・CP-16CUT の open 既定・citypop が2型で薄め）。ゴースト=vel40近似の是非。
+- **ベース細かく群**：キックに噛む（弱0.6/強0.8/逆相-0.6）・2・4で抜く（0.4/0.8）・接近音（0.3/0.6）の段階値。**slashBass**＝IAC終止でベースが第3音に乗る鳴り。
+- **feel共有**：/gen/section で swing 指定→メロ/ベース/コード楽器が同一ワープで跳ねる一体感。synth低域（33帯）の humanize が可聴/適量か。じゃら〜んロール×swing の干渉。
+- **voiceGuitar レジスタ**：GMギター各種（Nylon/Steel/Clean/Overdrive）で top磁石±2oct が妥当か。open=no-op の判断。
 
 ## WP-D2（シンコペ密度レンズ＋humanize知覚較正・2026-07-14実装）の残り
 正典＝design.md「humanize 知覚較正」「シンコペ密度スコア＋ノリレンズ」節＋research `2026-07-14-humanize-perception-defaults.md`／`-syncopation-sweet-spot.md`。実装済＝music-core `syncopation.ts`（lhlSyncScore/metricWeights/noriMeter/sectionNoriLens）＋applyFeel の 1/f 化＋部位別 ms リミット＋ヨレ警告、api `syncopationReport.ts`（gen_melody/bass/drums 候補へ meta.sync 添付・MCP/HTTP 両経路）、web「人間味」ノブの段/説明更新＋playback applyFeel に tempo 結線。以下は明示的に送った残：
@@ -319,7 +331,7 @@ Playwright実測(CPU6倍絞り)＝一覧4.3s/初回セクション展開2.5s。*
 - **［耳/手］オーナー実機確認**（機械は全消化）：人間味4段（OFF/弱/中/強）の効き・部位別較正（kickタイト/snare laid-back/hihatルーズ）／12格子シャッフルが正しい尺で鳴る／生成フィルのクレッシェンド／ドラム長押し2連/3連ロール／コード長押し強く/弱く。feel OFF/divs無し/vel無しは byte 一致（テスト担保だが既存ネタで耳確認推奨）。
 - **P1-5＝単体 rhythm ネタに NoriRow**：`useNetaEditor.ts:315` の保存が content を `{rhythm}` で再構成し `content.feel` を落とす＋undo/redo snapshot への feel state 結線が要る（「toolbar 1行」でない）＝別スライス。
 - **トレモロチップ**（コード楽器の分割相当・CellPopover にチップ1個追加する構造は用意済み）。
-- **ストラム時間展開**（じゃら〜ん＝声部ごと10-20msずらし・resolveChordPattern 出力は導出なので契約安全）。
+- ~~**ストラム時間展開**（じゃら〜ん＝声部ごと10-20msずらし・resolveChordPattern 出力は導出なので契約安全）。~~ → ✅**実装済（2026-07-22 伴奏・演奏アーク d9a817e）**：`voicing.style:"guitar"`×strum×`strumMs`>0×tempo既知で弦順ロール（D=低→高・U=高→低/上位4声/0.78×・40673b9）。UIは CP第4行「じゃら〜ん」OFF/弱8/中14/強25ms。
 - **genSectionInst の stab 生成側 vel**（管弦のアクセントを生成時に書く）。
 - **humanize の seed🎲**（同じ設定で揺れ方を振り直す）。
 
