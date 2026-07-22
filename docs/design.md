@@ -593,6 +593,17 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **修正2（web・LH 窓 fold）**：`resolveLh` custom 枝の度数解決で、構造音 **R/5/8 の算出 pitch が LH 窓上限 `LH_HI`=48(C3) を超える場合は 1oct 下げて LH 窓（C2–C3）へ fold**（`while(pitch>LH_HI) pitch-=12`）。従来は色音(3/7)の LIL 上げガードのみで **R/5/8 は上方向無制限**＝5度等が root の上に積まれ RH 最上声と同音衝突していた（研究doc H-e＝GS-STRIDE×Am の「5度」が E3 で RH と潰れる）。色音の LIL 上げガード（`pitch<LH_HI`→+12）は不変。RH を C4-C5 へ戻す（修正1）と合わせて衝突は消える。
 - **bit 一致の担保範囲（鉄則＝回帰ゼロ）**：修正1 は `buildCompContent`（型辞書経由の新規 content）**だけ**に効く＝**従来 fallback 経路（compType 未解決＝pattern 未指定/未知/6-8非4拍）の voicing・手作りネタ（`emptyChordPattern`）・ギター型は完全に bit 一致**（`gen-chord-library.test.ts` (a)/(d) 群が緑）。修正2 は custom lh（辞書由来のみ）に効く＝**preset(root/root5/oct)・色音の既存挙動は不変**。R は常に `lhBand`(<48)＝fold 発火せず不変・5/8 のみ高 root で fold。
 
+### Task1＝コード楽器の左手 custom パッド（2026-07-23・オーナーFB「ベースみたいにリズムと1/3/5/8度でどこを弾くか選べる・ピアノなので複数選択可」・裁定「chord_pattern 内蔵＋パッド追加」・正典＝`docs/research/2026-07-22-piano-comping-vocabulary.md` §2）
+S3（上「決定：ピアノ左手(LH)内蔵」）で `ChordPatternContent.lh` を内蔵したが、**custom は辞書由来を「型」表示するだけで人が編集できない**。Task1 でその留保を解く＝**度数レーン×ステップのポリフォニックパッド**で custom LH を authoring 可能にする。モデル＝`BassStepEditor.tsx`（相対ベースの度数パッド）。**L0 依存**＝custom LH の実音化は L0（top 積み＋LH 窓 fold）後でないと RH と衝突・音域破綻して耳評価不能ゆえ、L0 land 後に実装（本節は L0 の直後）。
+- **契約は据え置き（additive なし）**：`lh.hits:{step,dur,deg?,vel?}[]` のまま。**ポリフォニー＝同一 step に別 deg の hit を複数置く**（deg 配列化しない＝`resolveLh` は各 custom hit を独立に `lhBand(root)+degreeInterval(deg)` で解決済み＝現行のまま）。ベースがモノフォニック（同 step 排他）なのに対し、**左手パッドは同 step 複数レーン ON 可**が唯一の差。
+- **レーン度数＝R/3/5/8**（オーナー指定「1,3,5,8」＝R/3rd/5th/octave）。上から 8/5/3/R（ピアノロール向き）。approach/next 等ベース固有語彙は無し（左手＝土台＝歩かない）。将来 R10（3rd の1oct 上・研究doc §2-3）を足すなら別スライス。
+- **toggle 挙動**：セルタップ＝その (lane×step) の hit だけ add/remove。**同 step 他レーンは消さない**（＝ポリフォニック。`BassStepEditor` の同 step 排他 `rest = pattern.filter(p=>p.step!==step)` を**外す**）。音長＝長さツール（既存 `NoteValuePicker` 流用）。
+- **UI（`ChordPatternEditor` 左手行の拡張）**：現行の左手 seg（OFF/ルート/+5度/8va＝`lh.mode` の preset）に **「自分で置く」＝custom** を追加。選ぶとパッド（R/3/5/8 × steps）を行下に展開。custom→preset に戻すと hits は**非破壊保持**（描画されないだけ＝メロ/ベースの範囲外音と同流儀）。**keyboard 解決時のみ表示**（guitar は左手レーン無し＝S3 条項踏襲）。
+- **プレビュー音高（C 基準・入力FB用）**：R=C2(36)/3=E2(40)/5=G2(43)/8=C3(48)。program はコード楽器音色。実配置のオクターブ/LIL fold は再生時 `resolveLh`（L0 の LH 窓 fold）が担う。
+- **bit 一致**：`lh` 未定義・preset（root/root5/oct）・辞書由来 custom は不変。人がパッドで編集した時だけ `lh.mode:"custom"`＋authored hits になる。既存 deepStrictEqual 群は preset/未定義経路で緑のまま。
+- **CP 行契約**：「響きゾーンは最大5行」（S3 で更新済）。左手行は custom 展開時にパッドを行下に持つ＝群アコーディオン内で成立するか実装時に確認。
+- **TDD**：(a) パッドで同 step 複数レーン ON→ lh.hits に同 step 別 deg が複数入る／レンダで複数実音（ポリフォニー）。(b) custom→preset 切替で hits 非破壊保持。(c) 回帰＝preset/未定義/辞書由来 custom は既存出力と deepStrictEqual 一致。(d) keyboard 解決時のみパッド表示・guitar 解決で非表示。
+
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
 **問題（ユーザー指摘）**：①品質語彙が不足＝テンション(9/11/13/add9)・dim7・altered(7♭9/7♯9/7♯5)が無い。しかも ChordEditor は「9」を選べるのに `QUALITY_INTERVALS` に定義が無く **major トライアドにフォールバック＝壊れている**。②分数コード(slash/on-chord)が表現できない＝`ChordEntry` に bass 欄が無い。③コード楽器(comping)の高さが**ルートのpcぶん跳ねる**(`base = 48 + octave*12 + root_pc`)＝進行が動くたびレジスタが上下。「大体の高さを決める」＋スムーズに置きたい。
 
