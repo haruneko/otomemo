@@ -114,7 +114,7 @@ h1{font-size:15px}
       <select id="aStyle"></select></div>
     <p class="hint">仮歌の「歌声を選ぶと『声』が出る」と同じ二段。音色を選ぶと奏法既定が付いてくる＝<em>出先メモではここを触らず「おまかせ」のまま再生すればその楽器らしく鳴る</em>。ピアノ系/パッド系に切り替えると中身が変わるのを試してください。</p>
   </div>
-  <div class="note">選択肢はファミリ単位（ギター系/鍵盤系/パッド系）で出し分け。「鍵盤風に弾く」＝従来の鳴り方への退避も残す。</div>
+  <div class="note">選択肢はファミリ単位（ギター系/鍵盤系/パッド系）で出し分け。「鍵盤風に弾く」＝従来の鳴り方への退避も残す。<b>鍵盤系の「おまかせ」は左手の土台（低域ルート）込み・ギター系はD/U（表D裏U）込み</b>＝出先ではやはりゼロ操作。</div>
 </section>
 
 <!-- ============ B：ChordPatternEditor 第4行 ============ -->
@@ -123,6 +123,8 @@ h1{font-size:15px}
   <div class="card">
     <div style="font-size:11px;color:var(--dim);margin-bottom:4px">① いつ弾く</div>
     <div class="grid" id="bGrid"></div>
+    <div id="bDuWrap"><div class="grid" id="bDu" style="margin-top:2px"></div>
+    <p class="hint" style="margin-top:2px">ストローク向き<span class="newb">新</span>＝<em>表拍=ダウン(D)・裏=アップ(U)が自動既定</em>・タップで入替。アップは軽く・鳴る弦少なめで鳴る。</p></div>
   </div>
   <div class="card">
     <div style="font-size:11px;color:var(--dim);margin-bottom:6px">② 響き</div>
@@ -137,8 +139,12 @@ h1{font-size:15px}
       <span id="bStrumWrap"><span class="lb" style="flex:0 0 auto">じゃら〜ん</span>
       <span class="seg" id="bStrum"><button data-v="0">OFF</button><button data-v="1">弱</button><button data-v="2" class="on">中</button><button data-v="3">強</button></span></span>
     </div>
+    <div class="row newline card" style="margin:6px 0 0;padding:8px" id="bLhRow" hidden>
+      <span class="lb">左手<span class="newb">新</span></span>
+      <span class="seg" id="bLh"><button>OFF</button><button class="on">ルート</button><button>ルート＋5度</button><button>オクターブ</button></span>
+    </div>
     <div class="mroll" id="bRoll"></div>
-    <p class="hint">第4行＝今回の追加はこの1行だけ（<em>「響きは最大4行・超過は畳む」を行契約として明文化</em>）。ロールのプレビューは弦順の時差＝じゃら〜ん量で音の頭が斜めになる。触った瞬間に和音が鳴る既存挙動はそのまま。</p>
+    <p class="hint">奏法＝鍵盤のとき「左手」行が出る＝低域にルート系の土台を同じピアノ音色で自動追加（低域の濁り回避込み）。ギターのときはD/U行（上のグリッド下）が出る。<em>「響きは最大5行・超過は畳む」を行契約として明文化</em>。触った瞬間に和音が鳴る既存挙動はそのまま。</p>
   </div>
 </section>
 
@@ -213,7 +219,16 @@ aProg.addEventListener('change',fillA);fillA();
 const g=document.getElementById('bGrid');
 for(let i=0;i<16;i++){const c=document.createElement('i');if(i%4===0)c.className='hit';else if(i===6||i===14)c.className='hit w';g.appendChild(c);}
 const bRoll=document.getElementById('bRoll'),bStrum=document.getElementById('bStrum'),bStyle=document.getElementById('bStyle'),bWrap=document.getElementById('bStrumWrap');
+const bDu=document.getElementById('bDu'),bDuWrap=document.getElementById('bDuWrap'),bLhRow=document.getElementById('bLhRow');
 let strumLv=2,styleV='gt';
+// D/U ストリップ：hit セルにだけ D/U 文字（表拍=D・裏=U 自動既定）・タップで入替
+const HIT_DU={0:'D',4:'D',6:'U',8:'D',12:'D',14:'U'};
+for(let i=0;i<16;i++){const c=document.createElement('i');
+  if(HIT_DU[i]){c.textContent=HIT_DU[i];c.style.cssText='display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-style:normal;color:var(--warn);background:rgba(255,212,121,.08);border-color:#5d5330;cursor:pointer;height:20px';
+    c.addEventListener('click',()=>{c.textContent=c.textContent==='D'?'U':'D';});}
+  else c.style.height='20px';
+  bDu.appendChild(c);}
+function syncStyleUI(){bWrap.style.display=styleV==='gt'?'':'none';bDuWrap.hidden=styleV!=='gt';bLhRow.hidden=styleV!=='kb';}
 function drawRoll(){
   bRoll.innerHTML='';
   const lag=styleV==='gt'?strumLv*3:0; // px/声
@@ -228,8 +243,8 @@ bStrum.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
   bStrum.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));strumLv=+b.dataset.v;drawRoll();}));
 bStyle.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
   bStyle.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));styleV=b.dataset.v;
-  bWrap.style.display=styleV==='gt'?'':'none';drawRoll();}));
-drawRoll();
+  syncStyleUI();drawRoll();}));
+syncStyleUI();drawRoll();
 // C: 候補トレイ＋ロール模様
 document.getElementById('cGen').addEventListener('click',()=>{document.getElementById('cTray').hidden=false;});
 document.querySelectorAll('#cChips .chip').forEach(b=>b.addEventListener('click',()=>{

@@ -63,6 +63,7 @@ export interface KindEditorBodyProps {
   mode: string; // 長調/短調（"major"/"minor"）＝P0-a スケール音ハイライトの判定に使う
   tempo: number;
   meter: string;
+  program?: number; // 音色（GM）＝chord_pattern の奏法（style:"auto" 導出／じゃら〜ん出し分け）に使う。
   title?: string; // 編集中ライブタイトル（section の生成/MIDI名に使う・stale活性対策）
   // 崩し候補（①道具）：候補があれば PianoRoll に候補=実線/元=ゴーストで表示・再生は候補。
   candidate?: import("../music").Note[] | null;
@@ -256,7 +257,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           )}
         </div>
       ) : p.flags.isChordPat || p.flags.isSectionInst ? ( // 管弦(section_inst・WP-X3c)も進行追従の多声＝ChordPatternEditor を共有
-        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
+        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />
       ) : isRhythm ? (

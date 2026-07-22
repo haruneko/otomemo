@@ -13,6 +13,7 @@ import {
   band,
   resolveRelativeBass,
   resolveChordPattern,
+  isGuitarProgram,
   chordHitsWithVel,
   compositeNotes,
   scheduleTimes,
@@ -619,6 +620,42 @@ describe("music", () => {
       const lowest = [...rolled].sort((a, b) => a.pitch - b.pitch)[0]!;
       expect(((lowest.pitch % 12) + 12) % 12).toBe(7); // 最低=オンベース G
       expect(lowest.start).toBe(0); // 最初に鳴る
+    });
+
+    // ── 奏法UIスライスA：style:"auto"＝program のファミリから奏法導出（guitar系24-31→guitar／他→keyboard）──
+    it("bit一致：style 無しは program（ギター音色）を渡しても不変（auto でないので program 無視）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const base = resolveChordPattern(cp(), chords, 0, 120); // program 無し
+      expect(resolveChordPattern(cp(), chords, 0, 120, 25)).toEqual(base); // program=25(Steel Guitar) でも style 無し＝不変
+      expect(resolveChordPattern(cp(), chords, 0, 120, 0)).toEqual(base); // ピアノでも不変
+    });
+    it("auto×ギター系program（24-31）→guitar ボイシング＝明示 guitar と完全一致", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const autoCp = { ...gcp(), voicing: { ...gcp().voicing, style: "auto" as const } };
+      for (const prog of [24, 25, 27, 30, 31]) {
+        expect(resolveChordPattern(autoCp, chords, 0, 120, prog)).toEqual(resolveChordPattern(gcp(), chords, 0, 120, prog));
+      }
+    });
+    it("auto×非ギターprogram（またはprogram無し）→keyboard ボイシング＝明示 keyboard と一致", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const autoCp = { ...gcp(), voicing: { ...gcp().voicing, style: "auto" as const } };
+      const kbEquiv = { ...gcp(), voicing: { ...gcp().voicing, style: "keyboard" as const } };
+      expect(resolveChordPattern(autoCp, chords, 0, 120, 0)).toEqual(resolveChordPattern(kbEquiv, chords, 0, 120, 0)); // ピアノ
+      expect(resolveChordPattern(autoCp, chords, 0, 120, 48)).toEqual(resolveChordPattern(kbEquiv, chords, 0, 120, 48)); // Strings
+      expect(resolveChordPattern(autoCp, chords, 0, 120)).toEqual(resolveChordPattern(kbEquiv, chords, 0, 120)); // program 無し＝keyboard 相当
+    });
+    it("auto×ギター系program＋strumMs>0＋tempo で弦順ロールが発火（明示 guitar と同じく時差）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const autoRoll = { ...gcp({ strumMs: 20 }), voicing: { ...gcp({ strumMs: 20 }).voicing, style: "auto" as const } };
+      const rolled = resolveChordPattern(autoRoll, chords, 0, 120, 25);
+      expect(rolled.some((n) => n.start > 0)).toBe(true); // ロール発火（時差あり）
+      // 非ギター音色では auto→keyboard＝ロール対象外＝全声同時
+      expect(resolveChordPattern(autoRoll, chords, 0, 120, 0).every((n) => n.start === 0)).toBe(true);
+    });
+    it("isGuitarProgram：24-31 が guitar・境界外/undefined は false", () => {
+      for (const p of [24, 28, 31]) expect(isGuitarProgram(p)).toBe(true);
+      for (const p of [23, 32, 0, 48]) expect(isGuitarProgram(p)).toBe(false);
+      expect(isGuitarProgram(undefined)).toBe(false);
     });
   });
 

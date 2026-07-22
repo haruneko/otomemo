@@ -3,12 +3,55 @@
 // ※MIDI書き出しは単体編集画面から撤去済（2026-07-04）＝Section の いじる▾ のみ。
 // どの枠を出すかは flags で決める（kind 分岐を集約）。折りたたみ状態(localStorage)と要約はここに閉じる。
 import { useState } from "react";
-import { GM_INSTRUMENTS, GM_ALL_FAMILIES, gmLabel, beatsPerBar, singVoiceLabel, PITCH_NAMES as KEY_NAMES, type SingVoice } from "../music";
+import { GM_INSTRUMENTS, GM_ALL_FAMILIES, gmLabel, beatsPerBar, singVoiceLabel, isGuitarProgram, PITCH_NAMES as KEY_NAMES, type SingVoice } from "../music";
 import { NumberField } from "./NumberField";
 import { BarsControl } from "./BarsControl";
 import { Icon } from "./Icon";
 
 const METERS = ["4/4", "3/4", "6/8", "2/4", "5/4", "12/8"];
+
+// 奏法UIスライスA：chord_pattern の「奏法」二段（音色→奏法・「歌声→声」と同型）。
+// content.voicing.style/strumMs＋content.mode に写像できる項目だけ露出する（写像不能＝カッティング/白玉/コンピング
+// ＝S2 型辞書 or リズム hits 待ち＝出さない）。ゼロ操作の主動線＝おまかせ(auto)が既定。
+export type PerfKey = "auto" | "stroke" | "arp" | "keyboard";
+export interface PerfState {
+  style?: "keyboard" | "guitar" | "auto";
+  strumMs?: number;
+  mode: "strum" | "arp";
+  program: number; // 音色ファミリで選択肢を出し分け＋auto の奏法導出（ギター系→ギター）に使う。
+  set: (patch: { style?: "keyboard" | "guitar" | "auto"; strumMs?: number; mode?: "strum" | "arp" }) => void;
+}
+// 音色ファミリ→奏法選択肢（ギター系は4択・他は2択＝写像できるものだけ）。
+export function perfOptionsFor(program: number): { key: PerfKey; label: string }[] {
+  if (isGuitarProgram(program))
+    return [
+      { key: "auto", label: "おまかせ（ギター）" },
+      { key: "stroke", label: "ストローク（じゃら〜ん）" },
+      { key: "arp", label: "アルペジオ" },
+      { key: "keyboard", label: "鍵盤風に弾く" },
+    ];
+  return [
+    { key: "auto", label: "おまかせ" },
+    { key: "arp", label: "アルペジオ" },
+  ];
+}
+// 現在の (style, mode) → 選択キー（mode:arp を最優先＝arp は style を問わず「アルペジオ」）。style 無し＝おまかせ相当だが
+// 新規は auto 既定。keyboard 明示＝鍵盤風。guitar 明示＝ストローク。
+export function perfKeyOf(style: PerfState["style"], mode: "strum" | "arp"): PerfKey {
+  if (mode === "arp") return "arp";
+  if (style === "guitar") return "stroke";
+  if (style === "keyboard") return "keyboard";
+  return "auto";
+}
+// 選択キー→ content パッチ（style/strumMs/mode）。ストロークだけ strumMs を中(14)に載せる（細かい段は CP エディタ＝スライスB）。
+export function perfPatch(key: PerfKey): { style?: "keyboard" | "guitar" | "auto"; strumMs?: number; mode: "strum" | "arp" } {
+  switch (key) {
+    case "stroke": return { style: "guitar", mode: "strum", strumMs: 14 };
+    case "arp": return { style: "auto", mode: "arp" };
+    case "keyboard": return { style: "keyboard", mode: "strum" };
+    default: return { style: "auto", mode: "strum" }; // auto
+  }
+}
 
 export interface MetaFlags {
   collapsible: boolean; // 折りたたみUIを出すか（音楽ネタ＋section/song）
@@ -37,6 +80,7 @@ export function MetaPanel(p: {
   speaker?: number; // 未選択（undefined）＝api 既定（波音リツ 3009）。content に speaker キーを書かない＝bit一致。
   setSpeaker?: (v: number | undefined) => void;
   voices?: SingVoice[]; // 声の選択肢（curated＋engine frame_decode）。キャラ別 optgroup にまとめる。
+  perf?: PerfState; // 奏法UIスライスA：chord_pattern の時だけ「奏法」二段（音色→奏法）。未指定＝出さない（他 kind）。
   tags: string;
   mood: string;
   setKey: (v: number) => void;
@@ -170,6 +214,25 @@ export function MetaPanel(p: {
                 </select>
               </label>
             )}
+            {/* 奏法UIスライスA：chord_pattern の時だけ「奏法」二段を音色の直下に出す（「歌声→声」と同型）。
+                選択肢は音色ファミリで出し分け（perfOptionsFor）。写像できる項目だけ＝細かい段は CP エディタ（スライスB）。 */}
+            {f.isChordPat && p.perf && (() => {
+              const perf = p.perf;
+              const cur = perfKeyOf(perf.style, perf.mode);
+              const opts = perfOptionsFor(perf.program);
+              // 現在キーが選択肢に無い（他ファミリで明示 guitar 等）時も光らせるため補う。
+              const all = opts.some((o) => o.key === cur) ? opts : [...opts, { key: cur, label: cur }];
+              return (
+                <label className="meta">
+                  奏法
+                  <select aria-label="performance" value={cur} onChange={(e) => perf.set(perfPatch(e.target.value as PerfKey))}>
+                    {all.map((o) => (
+                      <option key={o.key} value={o.key}>{o.label}</option>
+                    ))}
+                  </select>
+                </label>
+              );
+            })()}
             {/* 案B二段：歌声を選んだ時だけ「声」ドロップダウンを出す（楽器ピッカーを 81 声で汚さない・2026-07-17）。
                 声はキャラ別 optgroup。未選択＝api 既定（波音リツ）＝content に speaker を書かない（bit一致）。 */}
             {f.isMelody && p.sing && p.setSpeaker && (

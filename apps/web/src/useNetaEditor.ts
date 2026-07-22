@@ -157,7 +157,7 @@ export function useNetaEditor(
   const playable = isRelBass
     ? resolveRelativeBass(bassPattern, [], key)
     : isChordPatLike
-      ? resolveChordPattern(chordPat, [], key) // 単体プレビュー＝key の tonic コードに解決（chord_pattern/管弦 共通・多声）
+      ? resolveChordPattern(chordPat, [], key, tempo, program) // 単体プレビュー＝key の tonic コードに解決（chord_pattern/管弦 共通・多声）。tempo/program＝ギター弦順ロール＋style:"auto" の奏法導出（bit一致=style無しなら不変）
       : isSkel
         ? skeletonPlaybackNotes({ bars: skelBars, tones, bass: skelBass, phrases }, { counterpoint: skelCounter, chords: skelChords, beatsPerBar: bpb, melProgram: program }) // 骨格＝2声(対位法/実音)
         : isMelody || isBass || isCounter || isRiff

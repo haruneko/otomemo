@@ -597,7 +597,7 @@ export interface ChordVoicing {
   arpDir?: "up" | "down" | "updown";
   arpOctaves?: number; // arp の駆け上がり幅（1〜4oct）。voiced を下方へ積み増した拡張プールを巡回＝ハープのグリッサンド。既定1＝従来の voiced 巡回（bit一致）。
   arpReset?: number; // arp の駆け上がり区切り（拍）。この拍数ごとに pool 頭（低音）から登り直す＝「1.5拍ごとに下から駆け上がる」。既定/0＝区切りなし（連続巡回・bit一致）。
-  style?: "keyboard" | "guitar"; // ボイシング奏法（2026-07-22 研究doc guitar-comping-vocabulary）。既定 keyboard＝現行 voiceToTop（不変）。guitar＝voiceGuitar（最低声=根音・3度1個・根音/5度重複・弦チューニング由来の度数分布）。
+  style?: "keyboard" | "guitar" | "auto"; // ボイシング奏法（2026-07-22 研究doc guitar-comping-vocabulary）。未指定＝keyboard＝現行 voiceToTop（不変）。guitar＝voiceGuitar（最低声=根音・3度1個・根音/5度重複・弦チューニング由来の度数分布）。auto＝レンダ時に program の GM ファミリから導出（guitar系24-31→guitar／他→keyboard・奏法UIスライスA/B）＝program 未知なら keyboard 相当。
   strumMs?: number; // 弦順ロールの1弦あたり時差（ms）。style:"guitar"＋mode:"strum"＋テンポ既知のとき和音内各声をダウン=低→高に strumMs ずつ決定的にずらす（研究doc §3）。既定/0＝時差なし＝全声同時（bit一致）。
 }
 export interface ChordHit { step: number; dur: number; vel?: number } // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）
@@ -626,7 +626,9 @@ function normHits(hits: unknown): ChordHit[] {
 
 export function emptyChordPattern(): ChordPatternContent {
   // top を持たせて新モデル（構成音自動＋トップ狙い）で動く。tones は後方互換で残置。
-  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, powerChord: false, arpDir: "up" }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
+  // 奏法UIスライスA：新規ネタ既定＝style:"auto"＝program のファミリから奏法が自動で付く（ギター音色→ギター奏法）。
+  // 既存ネタ（style 無し）は keyboard のまま不変＝新規のみ auto。
+  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, powerChord: false, arpDir: "up", style: "auto" }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
 }
 
 // コードを voicing で実音化（決定C・伴奏レジスタ）：構成音(R/3/5/7)を**アンカーの最寄りオクターブ**に
@@ -731,12 +733,24 @@ function arpStep(i: number, n: number, dir?: "up" | "down" | "updown"): number {
   return i % n; // up（既定）
 }
 
+// GM ギターファミリ（24..31＝Acoustic/Electric/Clean/Muted/Overdrive/Distortion/Harmonics）。auto の奏法導出に使う。
+export function isGuitarProgram(program?: number): boolean {
+  return typeof program === "number" && program >= 24 && program <= 31;
+}
+// 奏法UIスライスA：voicing.style="auto" を program のファミリから具体奏法へ解決（guitar系→guitar／他→keyboard）。
+// auto でない（未指定/keyboard/guitar）は素通し＝bit一致（新しい voicing オブジェクトを作らない）。
+function resolveAutoStyle(v: ChordVoicing, program?: number): ChordVoicing {
+  if (v.style !== "auto") return v;
+  return { ...v, style: isGuitarProgram(program) ? "guitar" : "keyboard" };
+}
+
 // コード楽器パターンをコードに当てて実音 notes へ（strum=和音ブロック／arp=構成音を巡回）。相対型＝進行に解決。
 // tempo（BPM）＝弦順ロール（style:"guitar"＋strum＋strumMs>0）の ms→拍換算に使う。未指定/無効なら roll 無し
 // （＝ストレート同時発音＝bit一致）＝レンダ境界（buildPlayback）でテンポが既知の場所からのみ流す（feel 層と同流儀）。
-export function resolveChordPattern(content: ChordPatternContent, chords: ChordEntry[] = [], key = 0, tempo?: number): Note[] {
+// program＝voicing.style="auto" の奏法導出（GM ファミリ）に使う。未指定＝auto は keyboard 相当（bit一致）。
+export function resolveChordPattern(content: ChordPatternContent, chords: ChordEntry[] = [], key = 0, tempo?: number, program?: number): Note[] {
   const mode = content?.mode ?? "strum";
-  const v = content?.voicing ?? { tones: ["R", "3", "5"], openClose: "close", octave: 0 };
+  const v = resolveAutoStyle(content?.voicing ?? { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, program);
   const hits = normHits(content?.hits).sort((a, b) => a.step - b.step);
   // 弦順ロールの発火条件：guitar × strum × strumMs>0 × 有効テンポ。1弦あたりオフセット（拍）を先に算出。
   const strumMs = v.strumMs ?? 0;
@@ -812,8 +826,9 @@ export function applyCellTap(hits: ChordHit[], s: number, placeLen: number): { h
 }
 
 // 入力時プレビュー用＝現在の voicing で C を鳴らした実音（ドミソ）。単音でなく和音で確認できる。
-export function voicingPreviewPitches(v: ChordVoicing): number[] {
-  return voiceChord(0, "", v); // C メジャーを現在の voicing で（top/close-open/powerChord 反映）
+// program＝voicing.style="auto" の奏法導出（guitar系→guitar）に使う（CP エディタの奏法 seg プレビュー）。未指定=auto は keyboard 相当。
+export function voicingPreviewPitches(v: ChordVoicing, program?: number): number[] {
+  return voiceChord(0, "", resolveAutoStyle(v, program)); // C メジャーを現在の voicing で（top/close-open/powerChord 反映）
 }
 
 export function isChordPattern(content: unknown): content is ChordPatternContent {
@@ -828,6 +843,7 @@ export interface BassContext {
   key?: number;
   chords?: ChordEntry[];
   tempo?: number; // BPM。chord_pattern のギター弦順ロール（resolveChordPattern）の ms→拍換算に使う。未指定=roll無し（bit一致）。
+  program?: number; // GM program。chord_pattern の voicing.style="auto" の奏法導出（guitar系→guitar）に使う。未指定=auto は keyboard 相当（bit一致）。
 }
 
 // 骨格（design #20）：ブレークポイント列 content。dur を持たず各音は次の点/句末/曲末まで支配。
@@ -867,7 +883,8 @@ export function notesForContent(kind: string, content: unknown, ctx?: BassContex
   // コード楽器パターン／管弦(section_inst・WP-X3c)：進行(or preview)に当てて voicing で実音化（相対型・多声）。
   if ((kind === "chord_pattern" || kind === "section_inst") && isChordPattern(content)) {
     const chords = ctx?.chords ?? (content as ChordPatternContent & { preview_chords?: ChordEntry[] }).preview_chords ?? [];
-    return resolveChordPattern(content, chords, ctx?.key ?? 0, ctx?.tempo);
+    // program＝ctx 明示（合成の per-part）優先→無ければ content.program（単体プレビュー）＝auto の奏法導出に使う。
+    return resolveChordPattern(content, chords, ctx?.key ?? 0, ctx?.tempo, ctx?.program ?? programOf(content));
   }
   // bass 絶対モードは melody と同型(notes)。counter(対旋律・WP-X3a)・riff(反復核・WP-X3b) も単音ライン＝notes 同型。
   if (kind === "melody" || kind === "bass" || kind === "counter" || kind === "riff") return notesOf(content);
@@ -935,8 +952,9 @@ export function compositeNotes(
     }
     if ((kind === "chord_pattern" || kind === "section_inst") && isChordPattern(c.node.neta.content)) {
       // コード楽器パターン／管弦(section_inst)：section の調・コードで実音解決済み＝移調しない（position だけ）。自前音色・多声。
+      // program＝下で notes へ付与する prog と同一を渡す＝voicing.style="auto" の奏法導出（guitar系→guitar）を鳴る音色と一致させる。
       const chords = sectionChords.map((ch) => ({ ...ch, start: ch.start - c.position }));
-      return notesForContent(kind, c.node.neta.content, { key: keyPc, chords, tempo }).map((n) => ({
+      return notesForContent(kind, c.node.neta.content, { key: keyPc, chords, tempo, program: prog }).map((n) => ({
         ...n,
         start: n.start + c.position,
         program: prog,
@@ -1566,7 +1584,7 @@ export function buildPlayback(src: PlaybackSource, opts?: { vocal?: boolean }): 
   // kind === "neta"（単体）。notesForContent＋（歌うメロは sungBy+muted）。
   const neta = src.neta;
   const bpm = neta.tempo ?? 120;
-  const notes0 = notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, tempo: bpm });
+  const notes0 = notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, tempo: bpm, program: programOf(neta.content) });
   const sing = wantVocal && neta.kind === "melody" ? singOf(neta.content) : undefined;
   const hasLyric = !!sing && notes0.some((n) => !!n.syllable && n.syllable.trim().length > 0);
   const notes = hasLyric

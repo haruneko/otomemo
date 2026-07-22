@@ -181,6 +181,12 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、bassFill=0..1(0=OFF=未送信)。
   const [bassStyle, setBassStyle] = useState<string>("");
   const [bassFill, setBassFill] = useState<number>(0);
+  // ベース×ドラムノブ（奏法UIスライスD・design「gen_bass×ドラム結線」／slashBass）：UI未露出だった4ノブを「細かく（ドラム絡み）」群へ。
+  // 全て 0/false＝未送信＝従来 bit 一致。kickLock/snareGap/approach はドラム在時のみ効く（API 挙動＝hint 文言で伝える）。
+  const [bassKickLock, setBassKickLock] = useState<number>(0); // キックに噛む -1..1（負=逆相・キック裏8分）。0=OFF。
+  const [bassSnareGap, setBassSnareGap] = useState<number>(0); // 2・4で抜く 0..1（スネア頭で音価を切る）。0=OFF。
+  const [bassApproach, setBassApproach] = useState<number>(0); // 接近音 0..1（チェンジ直前を半音/全音接近）。0=OFF。
+  const [bassSlash, setBassSlash] = useState<boolean>(false); // 分数の低音（chord.bass をアンカーに伝播）。false=OFF。
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
   // P4：プリセット主役。選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）。
   const [preset, setPreset] = useState<string>("");
@@ -309,6 +315,14 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       if (part.op === "gen_bass" && !opts?.skeletonNetaId) {
         if (bassStyle) body.style = bassStyle;
         if (bassFill > 0) body.fill = bassFill;
+        // ベース×ドラムノブ（スライスD）：0/false＝未送信＝bit一致。kickLock/snareGap/approach はドラム入力が要る＝
+        // ドラム在時のみ drums を渡す（melody と同流儀・全係数0で drums 付きでも従来 bit 一致＝design 鉄則）。
+        const bassDrums = ctx.sectionDrums();
+        if (bassDrums && (bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0)) body.drums = bassDrums;
+        if (bassKickLock !== 0) body.kickLock = bassKickLock;
+        if (bassSnareGap > 0) body.snareGap = bassSnareGap;
+        if (bassApproach > 0) body.approach = bassApproach;
+        if (bassSlash) body.slashBass = true;
       }
       const r = await api.music<{ items: { kind: string; content: unknown; meta?: CandMeta }[] }>(part.op, body);
       const item = r.items?.[0];
@@ -532,6 +546,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
     drumStyle, setDrumStyle, drumFill, setDrumFill, // ドラム定型ビート＋フィル（WP-D1）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
+    bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,

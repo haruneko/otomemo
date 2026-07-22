@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { notesForContent, beatsPerBar } from "../music";
+import { notesForContent, beatsPerBar, programOf } from "../music";
 import { api, type Neta, type CompositionNode } from "../api";
 
 // 画面に入ったカードだけプレビューを描画・取得する遅延マウント（perf 耳FB 2026-07-09）。
@@ -41,7 +41,8 @@ export function LazyPreview({ children, minHeight = 40 }: { children: ReactNode;
 export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import("../music").Note[] }) {
   // 相対bass は単体プレビュー＝neta の key を tonic に解決（#bass S2）。
   // 不正 content 由来の NaN ノートは弾く（NaN が maxT/span に伝播して <rect> が NaN 属性・描画破綻するのを防ぐ・監査 堅牢性）。
-  const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0 })).filter(
+  // program＝chord_pattern の voicing.style="auto" の奏法導出（guitar系→guitar）に使う（非 auto/非 chord_pattern は無影響＝bit一致）。
+  const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, program: programOf(neta.content) })).filter(
     (n) => Number.isFinite(n.pitch) && Number.isFinite(n.start) && Number.isFinite(n.dur),
   );
   if (!notes.length) return null;

@@ -378,7 +378,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE"];
   const bassDrawer = (
     <>
-      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); })}
+      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">ベースのジャンル</div>
         <div className="tk-palette" aria-label="bass-genre">
@@ -414,6 +414,44 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
             </select>
           </label>
         )}
+        {/* ベース×ドラムの「細かく」群（スライスD・モックD）＝API実装済/UI未露出だった4ノブを畳みへ。前面 chip 契約は不変。
+            既存「型直指定」とは別の畳み（id 衝突回避＝bassdrumfine）。全 OFF＝未送信＝bit一致。 */}
+        {gacc("bassdrumfine", "細かく（ドラム絡み・分数）", "キック/2・4/接近/分数")}
+        {openGroups.bassdrumfine && <>
+          <div className="knob-seg" aria-label="bass-kicklock">
+            <span className="knob-name">キックに噛む<small>キックにベースを乗せる</small></span>
+            <span className="seg-ctl">
+              {([["OFF", 0], ["弱", 0.6], ["強", 0.8], ["逆相", -0.6]] as [string, number][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.bassKickLock === v ? " on" : "")} aria-label={`bass-kicklock-${v}`} aria-pressed={gen.bassKickLock === v} onClick={() => gen.setBassKickLock(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
+          <div className="knob-seg" aria-label="bass-snaregap">
+            <span className="knob-name">2・4で抜く<small>スネア頭で音を切る</small></span>
+            <span className="seg-ctl">
+              {([["OFF", 0], ["弱", 0.4], ["強", 0.8]] as [string, number][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.bassSnareGap === v ? " on" : "")} aria-label={`bass-snaregap-${v}`} aria-pressed={gen.bassSnareGap === v} onClick={() => gen.setBassSnareGap(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
+          <div className="knob-seg" aria-label="bass-approach">
+            <span className="knob-name">接近音<small>チェンジ直前に半音寄せ</small></span>
+            <span className="seg-ctl">
+              {([["OFF", 0], ["たまに", 0.3], ["よく", 0.6]] as [string, number][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.bassApproach === v ? " on" : "")} aria-label={`bass-approach-${v}`} aria-pressed={gen.bassApproach === v} onClick={() => gen.setBassApproach(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
+          <div className="knob-seg" aria-label="bass-slash">
+            <span className="knob-name">分数の低音<small>分数/転回の低音を使う</small></span>
+            <span className="seg-ctl">
+              {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.bassSlash === v ? " on" : "")} aria-label={`bass-slash-${v ? "on" : "off"}`} aria-pressed={gen.bassSlash === v} onClick={() => gen.setBassSlash(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
+          <p className="tk-drawnote">ドラムが居る時だけ上3つ（キック/2・4/接近）が効きます。分数の低音は単独で効きます。</p>
+        </>}
       </div>
       <div className="tk-drawer-foot">
         <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_bass" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る" : "ベースを生成"} onClick={() => drawerGen("gen_bass")}>ベースを生成</button>

@@ -63,6 +63,27 @@ export function NetaDialog({
         speaker={ed.singSpeaker}
         setSpeaker={ed.setSingSpeaker}
         voices={ed.singVoices}
+        perf={
+          f.isChordPat
+            ? {
+                style: ed.chordPat.voicing.style,
+                strumMs: ed.chordPat.voicing.strumMs,
+                mode: ed.chordPat.mode,
+                program: ed.program,
+                // 奏法UIスライスA：奏法 select→content 更新（voicing.style/strumMs＋mode）。属性行からの content 編集の流儀。
+                set: (patch) =>
+                  ed.setChordPat({
+                    ...ed.chordPat,
+                    mode: patch.mode ?? ed.chordPat.mode,
+                    voicing: {
+                      ...ed.chordPat.voicing,
+                      ...(patch.style !== undefined ? { style: patch.style } : {}),
+                      ...(patch.strumMs !== undefined ? { strumMs: patch.strumMs } : {}),
+                    },
+                  }),
+              }
+            : undefined
+        }
         tags={ed.tags}
         mood={ed.mood}
         setKey={ed.setKey}
@@ -101,7 +122,7 @@ export function NetaDialog({
         len={ed.len} setLen={ed.setLen}
         pickup={ed.pre} setPickup={ed.setPickup}
         text={ed.text} setText={ed.setText}
-        keyPc={ed.key} mode={ed.mode} tempo={ed.tempo} meter={ed.meter} title={ed.title}
+        keyPc={ed.key} mode={ed.mode} tempo={ed.tempo} meter={ed.meter} program={ed.program} title={ed.title}
         flush={ed.flush}
         reloadSignal={reloadSignal} onChanged={onChanged} onOpenNeta={onOpenNeta} onOpenSkeletonDesk={onOpenSkeletonDesk}
         cow={ed.cow} /* CoW ガード（S2 Fix C）＝section の bars/レーン設定の直接保存も安全弁を通す */

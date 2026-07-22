@@ -1,5 +1,5 @@
 import { type CSSProperties, type Ref, useState } from "react";
-import { type ChordPatternContent, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, CHORD_ACCENT, CHORD_SOFT } from "../music";
+import { type ChordPatternContent, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
@@ -38,6 +38,8 @@ function ChordCell({
 const NAME_PX = 58;
 const BEAT_PX = 88;
 const DEFAULT_TOP = 72; // C5（トップ狙い音の既定）
+// 奏法UIスライスB：じゃら〜ん（strumMs）の段階＝OFF/弱/中/強。相場は design「奏法UI」決定（研究doc §3.2・要耳較正）。
+const STRUM_MS_STAGES = [0, 8, 14, 25];
 // 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える。
 const LENGTHS = [
   { label: "16", v: 1 },
@@ -58,18 +60,25 @@ function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
 
 // コード楽器パターン（CP3・響きモデル作り替え 2026-07-04）：2ゾーン構成。
 //  ①「いつ弾く」＝リズムstepグリッド(hits)＋長さ＋小節（主役・上）。
-//  ②「響き」＝打ち方/トップ狙い/広がり/高さ/パワーコード(＋arpは向き)（音の作り込み・下・静か）。
+//  ②「響き」＝打ち方/トップ狙い/広がり/高さ/パワーコード(＋arpは向き)＋奏法（音の作り込み・下・静か）。
 // 構成音の手選択は撤去＝鳴る音はコードの質から自動（resolveChordPattern/voiceToTop）。
+//
+// ★CP行契約（不変条件・肥大化ガード・TinkerSheet ハブ契約 L8-15 と同文体）：
+//   **響きゾーンは最大4行**（打ち方／トップ・広がり／高さ・パワー(arp時=向き・幅・区切り)／奏法）。
+//   これ以上ノブが要る日は【群アコーディオンへ沈める】（前面はこの4行で打ち止め）＝スマホ縦で詰め込まない
+//   （タップ標的28px＝密度耐性が低い・design「奏法UI」決定）。奏法seg=4行目＝今回の追加はこの1行だけ。
 export function ChordPatternEditor({
   pattern,
   onChange,
   meter,
+  program,
   playheadRef,
   scrollerRef,
 }: {
   pattern: ChordPatternContent;
   onChange: (p: ChordPatternContent) => void;
   meter?: string;
+  program?: number; // 音色（GM）。voicing.style="auto" の奏法導出＋「じゃら〜ん」行の出し分け（ギター解決時のみ）に使う。
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
@@ -92,7 +101,7 @@ export function ChordPatternEditor({
     const r = applyCellTap(pattern.hits, s, dotted ? len * 1.5 : len); // 頭=消す／伸び=長さ調整／空き=新規
     onChange({ ...pattern, hits: r.hits });
     // 置いた合図＝現在の voicing で C を和音プレビュー（ドミソ／単音でなく響きで確認）。
-    if (r.placed) for (const p of voicingPreviewPitches({ ...v, top })) void previewNote({ pitch: p, start: 0, dur: 0.5 });
+    if (r.placed) for (const p of voicingPreviewPitches({ ...v, top }, program)) void previewNote({ pitch: p, start: 0, dur: 0.5 });
   };
 
   // #29 §9 発火＝onset セルのみ持ち上げる（sustain/空セルは null＝キャプチャしない・誤爆防止）。
@@ -103,12 +112,12 @@ export function ChordPatternEditor({
     const vel = h.vel ?? CHORD_BASE_VEL;
     const detents = [CHORD_SOFT, CHORD_BASE_VEL, CHORD_ACCENT];
     setDrag({ step: s, vel, anchor });
-    for (const p of voicingPreviewPitches({ ...v, top })) void previewNote({ pitch: p, start: 0, dur: 0.4, vel });
+    for (const p of voicingPreviewPitches({ ...v, top }, program)) void previewNote({ pitch: p, start: 0, dur: 0.4, vel });
     return { vel, div: 1, detents };
   };
   const dragChord = (s: number, st: HoldDragState) => {
     setDrag((d) => (d && d.step === s ? { ...d, vel: st.vel } : d));
-    if (st.detentHit) for (const p of voicingPreviewPitches({ ...v, top })) void previewNote({ pitch: p, start: 0, dur: 0.3, vel: st.vel });
+    if (st.detentHit) for (const p of voicingPreviewPitches({ ...v, top }, program)) void previewNote({ pitch: p, start: 0, dur: 0.3, vel: st.vel });
   };
   // 確定＝縦=velocity を1回の onChange で（普通=100 は vel キー削除＝bit）。
   const commitChord = (s: number, st: { vel: number }) => {
@@ -118,7 +127,7 @@ export function ChordPatternEditor({
   };
 
   // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。
-  const previewNeta = { kind: "chord_pattern", content: { ...pattern, voicing: { ...v, top } }, key: 0 } as unknown as Neta;
+  const previewNeta = { kind: "chord_pattern", content: { ...pattern, voicing: { ...v, top }, program }, key: 0 } as unknown as Neta;
 
   return (
     <div className="cp-editor">
@@ -229,6 +238,31 @@ export function ChordPatternEditor({
               <button type="button" aria-label="oct-inc" onClick={() => setV({ octave: Math.min(2, v.octave + 1) })}>＋</button>
             </div>
           </span>
+        </div>
+        {/* ④奏法（CP行契約の4行目・スライスB）：おまかせ(auto=音色から導出)/鍵盤/ギター。ギター解決時のみ「じゃら〜ん」(strumMs)。
+            style 無し(既存ネタ)は「鍵盤」表示＝触らない限り書かない＝bit一致。 */}
+        <div className="cp-vrow">
+          <span className="cp-vlbl">奏法</span>
+          <div className="seg seg-chord" role="group" aria-label="voicing-style">
+            <button type="button" aria-label="style-auto" className={v.style === "auto" ? "on" : ""} onClick={() => setV({ style: "auto" })}>おまかせ</button>
+            <button type="button" aria-label="style-keyboard" className={v.style !== "auto" && v.style !== "guitar" ? "on" : ""} onClick={() => setV({ style: "keyboard" })}>鍵盤</button>
+            <button type="button" aria-label="style-guitar" className={v.style === "guitar" ? "on" : ""} onClick={() => setV({ style: "guitar" })}>ギター</button>
+          </div>
+          {(v.style === "guitar" || (v.style === "auto" && isGuitarProgram(program))) && (
+            <span className="cp-unit">
+              <span className="cp-vlbl">じゃら〜ん</span>
+              <div className="seg seg-chord" role="group" aria-label="strum-ms">
+                {["OFF", "弱", "中", "強"].map((lab, i) => {
+                  const cur = (v.strumMs ?? 0);
+                  // 現在値を最寄り段へ（保存値が段の代表値でなくても正しい段が光る）。
+                  const selIdx = STRUM_MS_STAGES.reduce((best, ms, idx) => (Math.abs(ms - cur) < Math.abs(STRUM_MS_STAGES[best]! - cur) ? idx : best), 0);
+                  return (
+                    <button key={lab} type="button" aria-label={`strum-${i}`} className={selIdx === i ? "on" : ""} onClick={() => setV({ strumMs: STRUM_MS_STAGES[i] })}>{lab}</button>
+                  );
+                })}
+              </div>
+            </span>
+          )}
         </div>
         {pattern.hits.length > 0 && (
           <div className="chord-roll" aria-label="voicing-roll">

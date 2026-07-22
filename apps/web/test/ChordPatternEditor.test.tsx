@@ -98,3 +98,39 @@ describe("ChordPatternEditor #29 §9 hold-drag velocity (vertical only)", () => 
     expect(onChange).toHaveBeenCalledWith(pat({ hits: [] }));
   });
 });
+
+// 奏法UIスライスB：響きゾーン第4行＝奏法 seg（おまかせ/鍵盤/ギター）＋ギター解決時のみ「じゃら〜ん」(strumMs)。
+describe("ChordPatternEditor 奏法行（スライスB・第4行）", () => {
+  it("style 無し（既存ネタ）＝『鍵盤』が選択・じゃら〜ん行は非表示", () => {
+    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("style-keyboard").className).toContain("on");
+    expect(screen.getByLabelText("style-auto").className).not.toContain("on");
+    expect(screen.getByLabelText("style-guitar").className).not.toContain("on");
+    expect(screen.queryByLabelText("strum-ms")).toBeNull(); // 鍵盤＝じゃら〜ん無し
+  });
+
+  it("ギターを押すと voicing.style:'guitar' を書く（top も付く）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("style-guitar"));
+    expect(onChange).toHaveBeenCalledWith(pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" } }));
+  });
+
+  it("style:'guitar' のときだけ『じゃら〜ん』が現れ、弱=strumMs8 を書く", async () => {
+    const onChange = vi.fn();
+    const guitarPat = pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" } });
+    render(<ChordPatternEditor pattern={guitarPat} onChange={onChange} />);
+    expect(screen.getByLabelText("strum-ms")).toBeTruthy();
+    await userEvent.click(screen.getByLabelText("strum-1")); // 弱
+    expect(onChange).toHaveBeenCalledWith(pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar", strumMs: 8 } }));
+  });
+
+  it("style:'auto'＋ギター音色（program 25）ならじゃら〜ん表示・非ギター音色なら非表示", () => {
+    const autoPat = pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "auto" } });
+    const { rerender } = render(<ChordPatternEditor pattern={autoPat} onChange={vi.fn()} program={25} />);
+    expect(screen.getByLabelText("style-auto").className).toContain("on");
+    expect(screen.getByLabelText("strum-ms")).toBeTruthy(); // auto→guitar（program 25）
+    rerender(<ChordPatternEditor pattern={autoPat} onChange={vi.fn()} program={0} />);
+    expect(screen.queryByLabelText("strum-ms")).toBeNull(); // auto→keyboard（ピアノ）
+  });
+});
