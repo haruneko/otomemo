@@ -317,10 +317,11 @@ export function buildHttp(core: Core): FastifyInstance {
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
           return res;
         }
-        case "gen_chord_pattern": { // ギター奏法(style/strumMs)は voicing 既定値として載せるだけ＝実音化は web。未指定=従来 bit 一致
+        case "gen_chord_pattern": { // pattern(型ID/ジャンル・S2)＋ギター奏法(style/strumMs)＝voicing 既定値として載せる＝実音化は web。未指定=従来 bit 一致
+          const cpPattern = typeof b.pattern === "string" ? b.pattern : undefined;
           const cpStyle = b.style === "guitar" || b.style === "keyboard" ? b.style : undefined;
           const cpStrumMs = typeof b.strumMs === "number" ? b.strumMs : undefined;
-          return genChordPattern(b.frame, b.seed, cpStyle != null || cpStrumMs != null ? { style: cpStyle, strumMs: cpStrumMs } : undefined);
+          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs } : undefined);
         }
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
