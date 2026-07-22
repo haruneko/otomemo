@@ -604,6 +604,35 @@ S3（上「決定：ピアノ左手(LH)内蔵」）で `ChordPatternContent.lh` 
 - **CP 行契約**：「響きゾーンは最大5行」（S3 で更新済）。左手行は custom 展開時にパッドを行下に持つ＝群アコーディオン内で成立するか実装時に確認。
 - **TDD**：(a) パッドで同 step 複数レーン ON→ lh.hits に同 step 別 deg が複数入る／レンダで複数実音（ポリフォニー）。(b) custom→preset 切替で hits 非破壊保持。(c) 回帰＝preset/未定義/辞書由来 custom は既存出力と deepStrictEqual 一致。(d) keyboard 解決時のみパッド表示・guitar 解決で非表示。
 
+### Task2/L1＝パターンライブラリのタグ/scope 設計（2026-07-23・オーナー方針「パターンはネタ帳のライブラリ扱い」・正典＝`docs/research/2026-07-22-pattern-library-arc-plan.md`）
+「演奏パターンを選ぶ」の出所を**コード内辞書→ネタ帳ライブラリ**へ移す（L2 シード・L3 ピッカー差し替えの契約基盤）。統一原理「content は人が仕上げる単位」の帰結＝パターンが content ならその置き場もネタ（量産＝コンテンツ作業）。**汚染対策＝案A**（一覧を工場出荷で埋めない）を**既存の `scope` 機構で実現**（オーナー既定裁定・可逆＝後で案B棚分離に変更可）。
+- **置き場＝`scope:"library"`**：工場出荷/採取パターンは `scope:"library"` のネタ（`chord_progression` の falcom 前例＝`scripts/ingest-falcom-chords.ts` と同流儀）。**既定のネタ帳一覧（`scope:"project"`）には出ない**＝汚染対策の本体。検索/ピッカーは `scope:"library"` を明示クエリして拾う（`listNeta` が scope+tags+kind を一撃で絞れる＝`repo/neta-repo.ts:113-156`）。**新 kind は作らない**（作成タイル/フィルタ肥大の病理回避）＝既存 kind（chord_pattern / rhythm / bass 相対）のまま。
+- **タグ語彙**（`tag.name`＝`<prefix>:<value>` 単一文字列・`prj:`/`role:` と同流儀）:
+  - `lib:factory`（工場出荷）／`lib:user`（自作・採取＝省略可）＝来歴。
+  - `genre:<g>`（rock/citypop/ballad/dance/… 既存ジャンル語彙と統一）。
+  - `scene:<role>`（verse/chorus/…＝適用場面・旧 roles）。
+  - `tempo:<min>-<max>`（テンポ域＝絞り＋表示）。
+  - `pat:<patternId>`（由来の型ID＝来歴/重複検出）。
+  - **楽器系統は kind＋content.program で表現済＝`inst:` タグは作らない**（重複回避）。
+- **facets 分離**：`lib:`/`genre:`/`scene:`/`tempo:`/`pat:` は `isProjectTag`（`prj:` 判定）と同型の prefix 判定で意味タグ一覧から分離（`facets`＝`repo/neta-repo.ts:190-221`）。ただし `scope:"library"` で既に project 一覧から外れる＝分離は最小でよい。
+- **契約基盤（L2/L3 が守る）**：L2 は各型を `scope:"library"`＋上記タグで seed（下記 L2 節）。L3 は同タグ集合で `listNeta({kind, scope:"library", tags:["genre:<g>"]})` を引きピッカー候補にする（下記 L3 節）。**この節がタグ文字列の SSOT**＝L2 の付与と L3 のクエリは同じ prefix:value を使う。
+
+### Task2/L2＝辞書→ライブラリネタのシードパイプライン（2026-07-23）
+コード内3辞書（`chordLibrary.ts` 26型／`bassLibrary.ts` 33型／`drumLibrary.ts` 18型）を**シードの源に格下げ**し、ライブラリネタへ一括変換する冪等スクリプト。**L0 の top 修正が生成器に入った後**＝seed content は本来の響きで焼ける。
+- **実装＝`apps/api/scripts/seed-pattern-library.ts`**（`ingest-falcom-chords.ts` を雛形）：`new Core(openDb(CM_DB))`。`COMP_TYPES`/`BASS_TYPES`/`BEAT_PATTERNS` を回し、各型を frame（key0・4/4・bars=型の bars）付きで `genChordPattern({pattern:型ID})`／`genBass({style:型ID, relative:true})`／`genDrums({style:型ID})` に通し content 化 → `createNeta({kind, title:型ID+scenes, content, scope:"library", tags:[L1タグ群]})`。
+- **冪等**＝識別（`lib:factory`＋scope:"library"）で `listNeta`→`deleteNeta`→再投入（falcom 流儀）。再実行で重複しない。
+- **タグ付与**＝L1 の SSOT どおり `lib:factory`＋`genre:<型のgenre>`＋`scene:<型のrole>`（複数 role は複数 scene タグ）＋`tempo:<min>-<max>`＋`pat:<型ID>`。
+- **量産（L4）はこの後・別スライス**＝新パターンを**ネタ登録（コンテンツ作業）**で足す。研究doc未実装分（管弦8型・左手リズム型・薄いジャンル）はここ。**L4 は耳確認＋作風裁定が要る＝本スライスに含めない**（L2 は既存辞書の移設まで）。
+- **実行タイミング**：seed は `scope:"library"`＝既定一覧を汚さない＝オーナー DB へ流して安全（可逆＝タグで一括削除可）。
+
+### Task2/L3＝ピッカーをライブラリ検索へ差し替え（2026-07-23）
+「パターンを選ぶ」帯／Section 引き出しの候補の**出所を生成器→ライブラリ検索**へ。`PatternCand` 契約（`PatternPickerBar.tsx:8-14`）は不変＝最小侵襲。
+- **差し替え対象**＝(a) 3エディタの `fetchPatterns`（`ChordPatternEditor.tsx:125`／`RhythmEditor.tsx:125`／`BassStepEditor.tsx:108`）と (b) Section 側 `useMelodyGen.genPart` の op 分岐（`useMelodyGen.tsx:338-367`）。
+- **新しい候補取得**＝`GET /neta`（`listNeta`）を `{kind, scope:"library", tags:["genre:<chip>"]}` で引く（chip「おまかせ」＝genre タグ無しで scope:"library" 全体からシャッフル/先頭N）。返り neta の `content` をそのまま `PatternCand.audition`／`apply` に載せる（試聴＝現行 `notesForContent`＋`buildPlayback`／適用＝現行の content 置換＝**ライブラリ原本は読むだけ・不変**＝copy_neta 不要）。
+- **kind 対応**：コード楽器帯→`kind:"chord_pattern"`／ドラム帯→`kind:"rhythm"`／ベース帯→`kind:"bass"`（相対 content のみ）。
+- **生成器の去就**＝当面 API は残す（第二経路＝「ライブラリに無い形が欲しい時」・gen_* の style/pattern ノブの後方互換）。「おまかせ」の既定はライブラリシャッフルへ寄せる（位置づけ整理は L5・**オーナー裁定は L4/L5 で**）。
+- **bit一致/回帰**：`PatternCand` 契約・帯UI・試聴/適用の実音経路は不変＝差し替えは `fetchPatterns` の中身（候補の source）のみ。seed 未実行なら候補0＝空トレイ（従来の域外と同じ挙動）。
+
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
 **問題（ユーザー指摘）**：①品質語彙が不足＝テンション(9/11/13/add9)・dim7・altered(7♭9/7♯9/7♯5)が無い。しかも ChordEditor は「9」を選べるのに `QUALITY_INTERVALS` に定義が無く **major トライアドにフォールバック＝壊れている**。②分数コード(slash/on-chord)が表現できない＝`ChordEntry` に bass 欄が無い。③コード楽器(comping)の高さが**ルートのpcぶん跳ねる**(`base = 48 + octave*12 + root_pc`)＝進行が動くたびレジスタが上下。「大体の高さを決める」＋スムーズに置きたい。
 
