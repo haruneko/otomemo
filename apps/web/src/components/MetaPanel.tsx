@@ -26,7 +26,7 @@ export function perfOptionsFor(program: number): { key: PerfKey; label: string }
   if (isGuitarProgram(program))
     return [
       { key: "auto", label: "おまかせ（ギター）" },
-      { key: "stroke", label: "ストローク（じゃら〜ん）" },
+      { key: "stroke", label: "ストローク" },
       { key: "arp", label: "アルペジオ" },
       { key: "keyboard", label: "鍵盤風に弾く" },
     ];

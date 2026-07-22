@@ -594,7 +594,7 @@ export function Chat({
             {projectInstructions.length > 60 ? "…" : ""}
           </div>
         )}
-        {gear && <div className="chat-target"><span className="ic-inline"><Icon name="sliders" size={14} /></span> 機材の相談（全曲共通・器に紐づかない）</div>}
+        {gear && <div className="chat-target"><span className="ic-inline"><Icon name="sliders" size={14} /></span> 機材の相談（全曲共通・プロジェクトに紐づかない）</div>}
         {targetLabel && (
           // target 付きで開いても自動送信しない（課金安全化・2026-07-15 オーナー承認）。
           // 旧実装は開いた瞬間に run(...) して1ターン消費していた＝押した時だけ送るボタンへ。

@@ -555,7 +555,7 @@ export function App() {
                 role="tab"
                 aria-selected={scope === "project" && unassignedOnly}
                 className={"proj-chip" + (scope === "project" && unassignedOnly ? " on" : "")}
-                title="どの器にも入れていないネタ"
+                title="どのプロジェクトにも入れていないネタ"
                 onClick={() => {
                   setScope("project");
                   setUnassignedOnly(true);
@@ -582,7 +582,7 @@ export function App() {
               <button
                 className="proj-chip add"
                 aria-label="new-project"
-                title="新しい器を作る"
+                title="新しいプロジェクトを作る"
                 onClick={() => void newProject()}
               >
                 ＋

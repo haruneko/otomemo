@@ -128,16 +128,16 @@ describe("NetaList", () => {
     expect(screen.queryByRole("button", { name: "作例を生成" })).not.toBeInTheDocument();
   });
 
-  it("P3: 「…」→「器へ」ピッカーで既存器に入れる(member=true)", async () => {
+  it("P3: 「…」→「プロジェクトへ」ピッカーで既存プロジェクトに入れる(member=true)", async () => {
     assignProject.mockResolvedValue({});
     render(<NetaCard neta={mk({ id: "x", kind: "melody", title: "m" })} projects={["みなそこ"]} />);
     await userEvent.click(screen.getByLabelText("more-x"));
-    await userEvent.click(screen.getByLabelText("assign-x")); // 器へ ▾
+    await userEvent.click(screen.getByLabelText("assign-x")); // プロジェクトへ ▾
     await userEvent.click(screen.getByRole("button", { name: "みなそこ" }));
     expect(assignProject).toHaveBeenCalledWith("x", "みなそこ", true);
   });
 
-  it("P3: 在籍している器は✓表示＝押すと出す(member=false)", async () => {
+  it("P3: 在籍しているプロジェクトは✓表示＝押すと出す(member=false)", async () => {
     assignProject.mockResolvedValue({});
     render(
       <NetaCard
@@ -151,7 +151,7 @@ describe("NetaList", () => {
     expect(assignProject).toHaveBeenCalledWith("y", "みなそこ", false);
   });
 
-  it("P3: 「＋新しい器」で作成しつつ入れる", async () => {
+  it("P3: 「＋新しいプロジェクト」で作成しつつ入れる", async () => {
     assignProject.mockResolvedValue({});
     const spy = vi.spyOn(window, "prompt").mockReturnValue("新器");
     render(<NetaCard neta={mk({ id: "z", kind: "melody", title: "m" })} projects={[]} />);

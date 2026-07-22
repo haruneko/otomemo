@@ -297,7 +297,7 @@ export function ChordPatternEditor({
           </span>
           {guitarResolved && (
             <span className="cp-unit">
-              <span className="cp-vlbl">じゃら〜ん</span>
+              <span className="cp-vlbl">ストロークの速さ</span>
               <div className="seg seg-chord" role="group" aria-label="strum-ms">
                 {STRUM_MS_LABELS.map((lab, i) => {
                   const cur = (v.strumMs ?? 0);

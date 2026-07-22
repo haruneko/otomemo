@@ -149,7 +149,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   // 引き出しヘッダ（←棚へ／パーツ名／おまかせに戻す／✕）。
   const drawerHead = (name: string, reset: () => void) => (
     <div className="tk-drawer-head">
-      <button type="button" className="tk-back" aria-label="drawer-back" onClick={() => setView("hub")}>← 棚へ</button>
+      <button type="button" className="tk-back" aria-label="drawer-back" onClick={() => setView("hub")}>← 一覧へ</button>
       <span className="sheet-title">{name}</span>
       <button type="button" className="tk-reset" aria-label="drawer-reset" onClick={reset}>おまかせに戻す</button>
       <button type="button" className="sheet-close" aria-label="close-tools" onClick={onClose}>✕</button>
@@ -426,9 +426,9 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
         {gacc("bassdrumfine", "細かく（ドラム絡み・分数）", "キック/2・4/接近/分数")}
         {openGroups.bassdrumfine && <>
           <div className="knob-seg" aria-label="bass-kicklock">
-            <span className="knob-name">キックに噛む<small>キックにベースを乗せる</small></span>
+            <span className="knob-name">キックに合わせる<small>キックにベースを乗せる</small></span>
             <span className="seg-ctl">
-              {([["OFF", 0], ["弱", 0.6], ["強", 0.8], ["逆相", -0.6]] as [string, number][]).map(([lab, v]) => (
+              {([["OFF", 0], ["弱", 0.6], ["強", 0.8], ["外す", -0.6]] as [string, number][]).map(([lab, v]) => (
                 <button key={lab} type="button" className={"seg-b" + (gen.bassKickLock === v ? " on" : "")} aria-label={`bass-kicklock-${v}`} aria-pressed={gen.bassKickLock === v} onClick={() => gen.setBassKickLock(v)}>{lab}</button>
               ))}
             </span>
@@ -511,7 +511,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
             <option value="sentence">提示→畳み掛け(sentence)</option>
           </select>
         </label>
-        <p className="tk-drawnote">置いた骨格のブロックをタップ＝骨格の机（動線は現行のまま）。ここは生成の設定だけ。</p>
+        <p className="tk-drawnote">置いた骨格のブロックをタップ＝骨格エディタ（動線は現行のまま）。ここは生成の設定だけ。</p>
       </div>
       <div className="tk-drawer-foot">
         <button type="button" className="tool-item primary tk-gen" aria-label="gen-skeleton" disabled={gen.genBusy} onClick={() => drawerGen(undefined)}>候補を出す</button>

@@ -648,7 +648,7 @@ function FormRow({
         <button type="button" className="fs-role fs-role-none" aria-label={`role-set-${unit.childId}`} title="役割を付ける（色・生成の起点）" onClick={onSetRole}>役割</button>
       )}
       {/* 本体（潜る）＝タイトル＋時間住所。ネストボタンを避けるためバッジ/×N は兄弟クラスタへ（DOM 妥当性）。 */}
-      <button type="button" className="fs-main" onClick={onOpen} title="タップで中を編集（潜る）">
+      <button type="button" className="fs-main" onClick={onOpen} title="タップで中を開いて編集">
         <span className="fs-title">{title}</span>
         <span className="fs-addr">{address}</span>
       </button>

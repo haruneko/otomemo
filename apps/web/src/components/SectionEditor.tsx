@@ -515,7 +515,7 @@ export function SectionEditor({
                     {laneOf(grp.kind)?.label ?? grp.kind}候補 {grp.cands.length}件
                     {/* 候補レンズ（design #12-M・WP-M3）：選んだ軸で並べ替えるだけ＝候補は弾かない。既定=生成順=bit一致。メロ候補のみ。 */}
                     {grp.kind === "melody" && (
-                      <select className="lens-select" aria-label="lens-axis" value={gen.lensAxis} onChange={(e) => gen.setLensAxis(e.target.value as typeof gen.lensAxis)} title="並べ替え軸（レンズ＝候補を弾かず並べ替えるだけ）">
+                      <select className="lens-select" aria-label="lens-axis" value={gen.lensAxis} onChange={(e) => gen.setLensAxis(e.target.value as typeof gen.lensAxis)} title="並べ替え軸（候補を弾かず並べ替えるだけ）">
                         {LENS_AXES.map((a) => <option key={a.id} value={a.id}>並べ替え：{a.label}</option>)}
                       </select>
                     )}

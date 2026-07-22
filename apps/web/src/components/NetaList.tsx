@@ -188,7 +188,7 @@ export function NetaCard({
     onChanged?.();
   }
   async function assignNewProject() {
-    const name = window.prompt("新しい器（プロジェクト）名")?.trim();
+    const name = window.prompt("新しいプロジェクト名")?.trim();
     if (!name) return;
     await toggleProject(name, true);
   }
@@ -199,10 +199,10 @@ export function NetaCard({
         <button
           className="bs-btn"
           aria-label={`assign-${neta.id}`}
-          title="この曲/ネタを器（プロジェクト）へ入れる・出す"
+          title="この曲/ネタをプロジェクトへ入れる・出す"
           onClick={() => setAssignOpen((v) => !v)}
         >
-          器へ ▾
+          プロジェクトへ ▾
         </button>
         {assignOpen && (
           <div className="assign-menu" aria-label={`assign-menu-${neta.id}`}>
@@ -211,14 +211,14 @@ export function NetaCard({
                 key={p}
                 className={"bs-btn" + (memberOf(p) ? " on" : "")}
                 onClick={() => void toggleProject(p, !memberOf(p))}
-                title={memberOf(p) ? "この器から出す" : `「${p}」へ入れる`}
+                title={memberOf(p) ? "このプロジェクトから出す" : `「${p}」へ入れる`}
               >
                 {memberOf(p) ? "✓ " : ""}
                 {p}
               </button>
             ))}
             <button className="bs-btn" aria-label={`assign-new-${neta.id}`} onClick={() => void assignNewProject()}>
-              ＋新しい器
+              ＋新しいプロジェクト
             </button>
           </div>
         )}

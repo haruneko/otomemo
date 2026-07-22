@@ -40,7 +40,7 @@ describe("lensBadge（候補レンズのスコアバッジ）", () => {
     expect(lensBadge(meta, "")).toBeNull();
   });
   it("選んだ軸のスコアを % で・ラベル付きで返す", () => {
-    expect(lensBadge(meta, "expectation")).toEqual({ text: "82", label: "期待理論" });
+    expect(lensBadge(meta, "expectation")).toEqual({ text: "82", label: "自然な流れ" });
     expect(lensBadge(meta, "hook")).toEqual({ text: "45", label: "フック度" });
     expect(lensBadge(meta, "singability")).toEqual({ text: "90", label: "歌いやすさ" });
   });

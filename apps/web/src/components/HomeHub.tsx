@@ -42,7 +42,7 @@ export function HomeHub({
     <div className="home-hub" aria-label="home-hub">
       {activeProject && (
         <div className="hh-project" aria-label="home-hub-project">
-          <span className="hh-project-label muted">器</span>
+          <span className="hh-project-label muted">プロジェクト</span>
           <b className="hh-project-name">{activeProject}</b>
         </div>
       )}

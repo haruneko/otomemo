@@ -60,7 +60,7 @@ export const RHYTHM_PART_UI: { id: string; label: string }[] = [
   { id: "sixteenths", label: "駆け16分" },
   { id: "syncope", label: "シンコペ" },
   { id: "offhead", label: "頭抜き" },
-  { id: "backbeat", label: "アフター" },
+  { id: "backbeat", label: "裏打ち" },
 ];
 
 export type ChordArg = { root?: number; quality?: string; start?: number; dur?: number };
@@ -100,7 +100,7 @@ export const COMP_TYPE_IDS: { v: string; label: string }[] = [
 export type LensAxis = "" | "expectation" | "hook" | "singability";
 export const LENS_AXES: { id: LensAxis; label: string }[] = [
   { id: "", label: "生成順" },
-  { id: "expectation", label: "期待理論" },
+  { id: "expectation", label: "自然な流れ" },
   { id: "hook", label: "フック度" },
   { id: "singability", label: "歌いやすさ" },
 ];

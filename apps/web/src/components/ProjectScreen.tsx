@@ -140,10 +140,10 @@ export function ProjectScreen({
   async function deleteProject() {
     const n = songs.length;
     const warn =
-      `器「${project}」を削除します。\n` +
+      `プロジェクト「${project}」を削除します。\n` +
       (n > 0
-        ? `中の曲・パーツ(${n}件+)は削除されず「未仕分け」に残ります（器のラベルと説明だけ消えます）。`
-        : "（説明・指示だけの空の器です。ネタは影響しません。）");
+        ? `中の曲・パーツ(${n}件+)は削除されず「未仕分け」に残ります（プロジェクトのラベルと説明だけ消えます）。`
+        : "（説明・指示だけの空のプロジェクトです。ネタは影響しません。）");
     if (!window.confirm(warn)) return;
     await api.deleteProject(project).catch(() => {});
     onDeleted?.();
@@ -161,7 +161,7 @@ export function ProjectScreen({
       </div>
       {!editing && meta?.description && <p className="ps-desc">{meta.description}</p>}
       {!editing && meta?.instructions && (
-        <p className="ps-instr muted" title="この器での会話に効く指示">
+        <p className="ps-instr muted" title="このプロジェクトでの会話に効く指示">
           <Icon name="pin" size={15} /> {meta.instructions}
         </p>
       )}
@@ -179,7 +179,7 @@ export function ProjectScreen({
             />
           </label>
           <label>
-            AIへの指示（この器の会話に常に効く）
+            AIへの指示（このプロジェクトの会話に常に効く）
             <textarea
               aria-label="project-instructions"
               rows={3}
@@ -195,10 +195,10 @@ export function ProjectScreen({
             <button
               className="ps-delete"
               aria-label="delete-project"
-              title="この器を削除（ネタは未仕分けに残る）"
+              title="このプロジェクトを削除（ネタは未仕分けに残る）"
               onClick={() => void deleteProject()}
             >
-              器を削除
+              プロジェクトを削除
             </button>
           </div>
         </div>
@@ -255,7 +255,7 @@ export function ProjectScreen({
             {importing && (
               <div className="ps-import" aria-label="import-panel">
                 <div className="ps-import-head">
-                  <span className="muted">未仕分けの会話を選んでこの器へ</span>
+                  <span className="muted">未仕分けの会話を選んでこのプロジェクトへ</span>
                   <button type="button" aria-label="close-import" onClick={() => setImporting(false)}>
                     ✕
                   </button>
