@@ -566,6 +566,112 @@ article[aria-label="neta-card"].dragging {
 .step-cell.deg.sustain {
   background: color-mix(in srgb, var(--k, var(--k-melody)) 34%, transparent); /* 音長の伸び（薄色） */
 }
+/* 「その他」レーン（S8・拡張語彙）＝可視6レーンの下に1行。空セルは薄地、拡張度数を持つ step は
+   アクセント地でマーカー（可視レーンの kind 色と差別化＝「別の語彙」だと分かる）。 */
+.bass-lane-other {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px dashed var(--line);
+}
+.step-cell.deg.ext {
+  font-size: 11px;
+  color: var(--muted);
+}
+.step-cell.deg.ext.on {
+  background: color-mix(in srgb, var(--accent) 82%, transparent); /* 拡張度数マーカー＝アクセント（可視レーンのシアンと差別化） */
+  color: #fff;
+}
+/* 拡張度数ポップオーバー（S8・案1）＝タップしたセルの直下に浮く小パネル。背後クリックで閉じる。 */
+.ext-pop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: transparent;
+}
+.ext-pop {
+  position: fixed;
+  z-index: 41;
+  width: min(280px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.ext-pop-degs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.ext-deg-chip {
+  flex: 0 0 auto;
+  min-width: 40px;
+  padding: 8px 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.ext-deg-chip.on {
+  background: var(--k-melody); /* 選択色＝青系（M5 一貫性＝他エディタの active と統一） */
+  border-color: var(--k-melody);
+  color: #fff;
+}
+.ext-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ext-vel-lab {
+  flex: 0 0 auto;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.ext-toggle,
+.ext-vel-chip {
+  flex: 1;
+  min-height: 34px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.ext-toggle.on,
+.ext-vel-chip.on {
+  background: var(--k-melody);
+  border-color: var(--k-melody);
+  color: #fff;
+  font-weight: 600;
+}
+.ext-pop-foot {
+  display: flex;
+  gap: 7px;
+  margin-top: 2px;
+}
+.ext-pop-foot button {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 8px;
+}
+.ext-remove {
+  background: #2b2f36;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.ext-place {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  font-weight: 700;
+}
 .lane-cell.over {
   background: var(--accent);
   opacity: 0.7; /* ドロップ可の強調 */

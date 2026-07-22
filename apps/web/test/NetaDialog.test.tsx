@@ -329,8 +329,9 @@ describe("NetaDialog", () => {
     await userEvent.clear(ta);
     await userEvent.type(ta, "改変");
     await waitFor(() => expect(updateNeta).toHaveBeenCalledWith("x", expect.objectContaining({ text: "改変" }), undefined));
-    expect(screen.queryByLabelText("cow-prompt")).toBeNull(); // 確認は出ない
-    expect(getPlacements).not.toHaveBeenCalled(); // そもそも共有判定もしない
+    expect(screen.queryByLabelText("cow-prompt")).toBeNull(); // 3択ガードは出ない（parentId 無し＝ガード無効の維持）
+    // S9：共有バッジは parentId 無しでも出る（トップ開きのガード欠如を補う「気づき」＝design 決定⑤）。
+    expect(await screen.findByText("5箇所で使用中")).toBeInTheDocument();
   });
 
   // ── 仮歌の声（VOICEVOX 声色）選択・案B二段（2026-07-17） ──
@@ -466,11 +467,52 @@ describe("NetaDialog", () => {
   });
 });
 
+// ── S9（共有バッジ・修理#3 決定⑤）：ヘッダに placementCount>=2 の「N箇所で使用中」小バッジ ──
+// マウント時 api.getPlacements(neta.id) を1回・.catch(()=>null)＝失敗時非表示。parentId 無しでも出す
+// （＝トップ開きの3択ガード欠如を補う「気づき」の緩和策・design 決定⑤）。api 無改変・読み取りのみ。
+describe("NetaDialog 共有バッジ（S9）", () => {
+  beforeEach(() => {
+    getPlacements.mockReset();
+  });
+  afterEach(() => {
+    // 後続 describe（S7 等）へ拒否/未定義モックを持ち越さない（benign な既定へ戻す）。
+    getPlacements.mockReset();
+    getPlacements.mockResolvedValue({ parents: [], placementCount: 0 });
+  });
+
+  it("placementCount>=2 なら「N箇所で使用中」バッジを出す", async () => {
+    getPlacements.mockResolvedValue({
+      parents: [{ parentId: "s1", positions: [0] }, { parentId: "s2", positions: [0] }],
+      placementCount: 2,
+    });
+    render(<NetaDialog neta={neta} onClose={vi.fn()} onChanged={vi.fn()} />);
+    expect(await screen.findByText("2箇所で使用中")).toBeInTheDocument();
+    expect(getPlacements).toHaveBeenCalledWith("x");
+  });
+
+  it("placementCount<=1 ならバッジを出さない", async () => {
+    getPlacements.mockResolvedValue({ parents: [{ parentId: "s1", positions: [0] }], placementCount: 1 });
+    render(<NetaDialog neta={neta} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await waitFor(() => expect(getPlacements).toHaveBeenCalledWith("x"));
+    expect(screen.queryByText(/箇所で使用中/)).toBeNull();
+  });
+
+  it("getPlacements 失敗時はバッジを出さない（.catch→非表示）", async () => {
+    getPlacements.mockRejectedValue(new Error("boom"));
+    render(<NetaDialog neta={neta} onClose={vi.fn()} onChanged={vi.fn()} />);
+    await waitFor(() => expect(getPlacements).toHaveBeenCalledWith("x"));
+    expect(screen.queryByText(/箇所で使用中/)).toBeNull();
+  });
+});
+
 // ── S7（修理#3 決定②④・ベースの家 本丸）：相対 bass の patternId/patternEdited/feel 透過・（改）・トグル confirm・管弦ゲート ──
 describe("NetaDialog S7 ベースの家（相対 bass）", () => {
   beforeEach(() => {
     updateNeta.mockClear();
     updateNeta.mockResolvedValue({});
+    // S9：マウント時に共有バッジが getPlacements を1回引く。afterEach の restoreAllMocks が
+    // hoisted モックの実装を消す（undefined 返し）ため、毎テスト benign な既定を張り直す。
+    getPlacements.mockResolvedValue({ parents: [], placementCount: 0 });
   });
   afterEach(() => vi.restoreAllMocks());
 

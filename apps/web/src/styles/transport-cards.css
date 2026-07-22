@@ -1324,6 +1324,17 @@
   color: #fff;
   border: 0;
 }
+/* S9：共有バッジ（design 決定⑤）＝ヘッダ直下・折りたたみの外で常時視認する「N箇所で使用中」小バッジ。 */
+.shared-badge {
+  align-self: flex-start;
+  margin: 2px 0 4px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  color: var(--fg);
+  background: #2b2f36;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
 .proll-wrap {
   display: grid;
   gap: 6px;

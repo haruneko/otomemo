@@ -80,6 +80,91 @@ describe("BassStepEditor (#bass S2 度数レーン×ステップ)", () => {
       expect(next.find((p) => p.step === 8 && p.degree === "b7")).toBeFalsy(); // 同 step は置換
       expect(next.find((p) => p.step === 10 && p.degree === "6")).toBeTruthy(); // 別 step は保持
     });
+
+    // S8（修理#3 決定②＝案1）：「その他」レーン1行＋セルポップオーバーで拡張語彙（b2..#7・2・6／next／vel）を編集。
+    // 同 step 排他＝モノフォニック置換（可視レーン配置→同 step の隠れ度数を置換／「その他」配置→可視レーン音を置換）。
+    describe("「その他」レーン＋ポップオーバー（S8）", () => {
+      it("「その他」レーンは可視6レーン外の度数を持つ step にマーカーを出す（可視度数は出さない）", () => {
+        render(<BassStepEditor pattern={EXTENDED} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} />);
+        expect(screen.getByLabelText("bass-other-8").getAttribute("aria-pressed")).toBe("true"); // b7＝レーン外
+        expect(screen.getByLabelText("bass-other-10").getAttribute("aria-pressed")).toBe("true"); // 6＝レーン外
+        expect(screen.getByLabelText("bass-other-0").getAttribute("aria-pressed")).toBe("false"); // R＝可視レーン
+        expect(screen.getByLabelText("bass-other-2").getAttribute("aria-pressed")).toBe("false"); // 8＝可視レーン
+      });
+
+      it("ポップオーバーで拡張度数を置くと pattern に載る（既定長=8分=2step）", async () => {
+        const onChange = vi.fn();
+        render(<BassStepEditor pattern={[]} onChange={onChange} steps={16} onStepsChange={vi.fn()} />);
+        await userEvent.click(screen.getByLabelText("bass-other-4")); // 「その他」セル→ポップオーバー
+        await userEvent.click(screen.getByLabelText("ext-deg-b7"));
+        await userEvent.click(screen.getByLabelText("ext-place"));
+        expect(onChange).toHaveBeenCalledWith([{ step: 4, degree: "b7", dur: 2 }]);
+      });
+
+      it("「その他」配置は同 step の可視レーン音を置換する（モノフォニック・逆方向）", async () => {
+        const onChange = vi.fn();
+        render(<BassStepEditor pattern={[{ step: 0, degree: "R", dur: 2 }]} onChange={onChange} steps={16} onStepsChange={vi.fn()} />);
+        await userEvent.click(screen.getByLabelText("bass-other-0"));
+        await userEvent.click(screen.getByLabelText("ext-deg-6"));
+        await userEvent.click(screen.getByLabelText("ext-place"));
+        const next = onChange.mock.calls[0]![0] as BassStep[];
+        expect(next.find((p) => p.step === 0 && p.degree === "6")).toBeTruthy();
+        expect(next.find((p) => p.step === 0 && p.degree === "R")).toBeFalsy(); // 可視 R は消える
+      });
+
+      it("「その他」配置は他 step の音（可視/隠れ/next）を非破壊に保持する", async () => {
+        const onChange = vi.fn();
+        render(<BassStepEditor pattern={EXTENDED} onChange={onChange} steps={16} onStepsChange={vi.fn()} />);
+        await userEvent.click(screen.getByLabelText("bass-other-4")); // 空 step へ拡張度数
+        await userEvent.click(screen.getByLabelText("ext-deg-4"));
+        await userEvent.click(screen.getByLabelText("ext-place"));
+        const next = onChange.mock.calls[0]![0] as BassStep[];
+        expect(next.find((p) => p.step === 4 && p.degree === "4")).toBeTruthy();
+        expect(next.find((p) => p.step === 0 && p.degree === "R")).toBeTruthy();
+        expect(next.find((p) => p.step === 8 && p.degree === "b7")).toBeTruthy();
+        expect(next.find((p) => p.step === 10 && p.degree === "6")).toBeTruthy();
+        expect(next.find((p) => p.step === 15 && p.next === true)).toBeTruthy();
+      });
+
+      it("vel プリセットを選ぶと step に vel が載る", async () => {
+        const onChange = vi.fn();
+        render(<BassStepEditor pattern={[]} onChange={onChange} steps={16} onStepsChange={vi.fn()} />);
+        await userEvent.click(screen.getByLabelText("bass-other-2"));
+        await userEvent.click(screen.getByLabelText("ext-deg-b3"));
+        await userEvent.click(screen.getByLabelText("ext-vel-72"));
+        await userEvent.click(screen.getByLabelText("ext-place"));
+        expect(onChange).toHaveBeenCalledWith([{ step: 2, degree: "b3", dur: 2, vel: 72 }]);
+      });
+
+      it("「次を先取り」トグルで next が載る", async () => {
+        const onChange = vi.fn();
+        render(<BassStepEditor pattern={[]} onChange={onChange} steps={16} onStepsChange={vi.fn()} />);
+        await userEvent.click(screen.getByLabelText("bass-other-0"));
+        await userEvent.click(screen.getByLabelText("ext-deg-b7"));
+        await userEvent.click(screen.getByLabelText("ext-next"));
+        await userEvent.click(screen.getByLabelText("ext-place"));
+        expect(onChange).toHaveBeenCalledWith([{ step: 0, degree: "b7", dur: 2, next: true }]);
+      });
+
+      it("「消す」で その step の拡張度数だけ消える（他 step は保持）", async () => {
+        const onChange = vi.fn();
+        render(<BassStepEditor pattern={EXTENDED} onChange={onChange} steps={16} onStepsChange={vi.fn()} />);
+        await userEvent.click(screen.getByLabelText("bass-other-8")); // b7@8
+        await userEvent.click(screen.getByLabelText("ext-remove"));
+        const next = onChange.mock.calls[0]![0] as BassStep[];
+        expect(next.find((p) => p.step === 8)).toBeFalsy(); // 8 の拡張度数は消える
+        expect(next.find((p) => p.step === 10 && p.degree === "6")).toBeTruthy(); // 別 step は残る
+        expect(next.find((p) => p.step === 0 && p.degree === "R")).toBeTruthy();
+      });
+
+      it("既存の拡張度数を持つ step を開くとポップオーバーが現在値を反映する（度数/next）", async () => {
+        const onChange = vi.fn();
+        render(<BassStepEditor pattern={EXTENDED} onChange={onChange} steps={16} onStepsChange={vi.fn()} />);
+        await userEvent.click(screen.getByLabelText("bass-other-8")); // b7@8（next 無し）
+        expect(screen.getByLabelText("ext-deg-b7").getAttribute("aria-pressed")).toBe("true");
+        expect(screen.getByLabelText("ext-next").getAttribute("aria-pressed")).toBe("false");
+      });
+    });
   });
 });
 

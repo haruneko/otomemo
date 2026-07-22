@@ -1,4 +1,5 @@
 // 編集画面＝共有パーツの薄い合成（共通パーツ化 CP3）。state/ロジックは useNetaEditor に集約。
+import { useEffect, useState } from "react";
 import { useNetaEditor } from "../useNetaEditor";
 import { TransportBar } from "./TransportBar";
 import { KindEditorBody } from "./KindEditorBody";
@@ -6,7 +7,7 @@ import { MetaPanel } from "./MetaPanel";
 import { EditorHeader } from "./EditorHeader";
 import { RelationsPanel } from "./RelationsPanel";
 import { CowPrompt } from "./CowPrompt";
-import type { Neta } from "../api";
+import { api, type Neta } from "../api";
 
 export function NetaDialog({
   neta,
@@ -29,6 +30,22 @@ export function NetaDialog({
 }) {
   const ed = useNetaEditor(neta, { onClose, onChanged, parentId, onForked });
   const f = ed.flags;
+  // S9（共有バッジ・修理#3 決定⑤）：この原本が何箇所で使われているかをマウント時に1回だけ読む。
+  // placementCount>=2 なら「気づき」の小バッジをヘッダに常時表示（parentId 無し＝トップ開きの3択ガード
+  // 欠如を補う緩和策）。失敗は非表示（.catch）＝読み取りのみ・api 無改変。3択ガードの挙動は一切触らない。
+  const [placementCount, setPlacementCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    // Promise.resolve + 省略可能呼び出し＝失敗/未提供でも同期例外を出さず「非表示（count=0）」へ穏当に縮退。
+    Promise.resolve(api.getPlacements?.(neta.id))
+      .then((pl) => {
+        if (alive) setPlacementCount(pl?.placementCount ?? 0);
+      })
+      .catch(() => null); // 失敗＝非表示のまま（count=0）
+    return () => {
+      alive = false;
+    };
+  }, [neta.id]);
   // メインペーンの中身として描画（design #19：選択中netaの種類で中身が入れ替わる）。
   return (
     <div
@@ -39,6 +56,12 @@ export function NetaDialog({
       style={{ ["--k" as string]: `var(--k-${ed.colorKind})` }}
     >
       <EditorHeader kind={neta.kind} title={ed.title} setTitle={ed.setTitle} onClose={ed.close} saveStatus={ed.saveStatus} onFlush={ed.onFlush} onDelete={ed.remove} busy={ed.busy} />
+      {/* S9：共有バッジ＝折りたたみの外で常時視認（design 決定⑤）。placementCount>=2 のときだけ出す。 */}
+      {placementCount >= 2 && (
+        <div className="shared-badge" aria-label="shared-badge">
+          {placementCount}箇所で使用中
+        </div>
+      )}
       <MetaPanel
         flags={{
           collapsible: f.collapsibleMeta,

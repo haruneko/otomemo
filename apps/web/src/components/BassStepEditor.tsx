@@ -1,5 +1,5 @@
 import { useRef, useState, type Ref } from "react";
-import { type BassStep, type PlaybackHandle, isCompoundMeter, notesForContent, buildPlayback } from "../music";
+import { type BassStep, type BassDegree, type PlaybackHandle, isCompoundMeter, notesForContent, buildPlayback } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
 import { api } from "../api";
@@ -46,6 +46,23 @@ const LANES: { d: BassLaneDegree; label: string }[] = [
   { d: "3", label: "3" },
   { d: "R", label: "R" },
   { d: "approach", label: "→" }, // approach=次の解決ルートへ半音で寄せる（歩く）
+];
+// 可視6レーンの度数集合（この外の度数＝「その他」レーンで扱う拡張語彙）。
+const VISIBLE_DEGREES = new Set<string>(LANES.map((l) => l.d));
+const isOtherDegree = (d: string) => !VISIBLE_DEGREES.has(d);
+// 「その他」レーンのポップオーバーが提供する拡張度数（2/6/クロマチック）＝半音順に代表1綴りずつ
+// （enharmonic の重複は避ける・可視レーンの R/3/5/7/8 と被る半音は出さない）。music.ts の BassDegree 部分集合。
+const EXT_DEGREES: BassDegree[] = ["b2", "2", "b3", "4", "#4", "b6", "6", "b7", "#7"];
+// 拡張度数のプレビュー音高（C2=36 基準・music.ts DEGREE_SEMI のミラー・入力フィードバック用）。
+const EXT_PREVIEW_SEMI: Record<string, number> = {
+  b2: 1, "2": 2, b3: 3, "4": 5, "#4": 6, b6: 8, "6": 9, b7: 10, "#7": 11,
+};
+// vel プリセット（ghost/弱/強＝ドラムのデテント語彙に揃える。v:0＝vel キー無し＝bit 一致）。
+const VEL_PRESETS: { label: string; v: number }[] = [
+  { label: "無", v: 0 },
+  { label: "ゴースト", v: 40 },
+  { label: "弱", v: 72 },
+  { label: "強", v: 112 },
 ];
 // 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/コード楽器)と揃える。
 const LENGTHS = [
@@ -158,6 +175,43 @@ export function BassStepEditor({
     void previewNote({ pitch: BASS_PREVIEW_PITCH[lane], start: 0, dur: 0.4, program: 33 });
   }
 
+  // ── 「その他」レーン（拡張語彙・S8） ──────────────────────────────
+  // 可視6レーン外の度数（2/6/クロマチック）を持つ step を探す＝マーカー表示＆ポップオーバー初期値。
+  const otherAt = (step: number) => pattern.find((p) => p.step === step && isOtherDegree(p.degree));
+  // 開いているポップオーバー（step＋アンカー座標）。度数/next/vel はローカル下書き（「置く」で確定）。
+  const [pop, setPop] = useState<{ step: number; x: number; y: number } | null>(null);
+  const [popDeg, setPopDeg] = useState<BassDegree>("b7");
+  const [popNext, setPopNext] = useState(false);
+  const [popVel, setPopVel] = useState(0); // 0＝vel キー無し
+
+  function openOther(step: number, el: HTMLElement) {
+    const ex = otherAt(step); // 既存の拡張度数があれば下書きに反映（再編集）。
+    setPopDeg(ex?.degree ?? "b7");
+    setPopNext(!!ex?.next);
+    setPopVel(ex?.vel ?? 0);
+    const r = el.getBoundingClientRect();
+    setPop({ step, x: r.left, y: r.bottom + 4 });
+  }
+  const previewExt = (d: BassDegree) =>
+    void previewNote({ pitch: 36 + (EXT_PREVIEW_SEMI[d] ?? 0), start: 0, dur: 0.4, program: 33 });
+  // 「その他」配置＝同 step 排他（可視レーン音も隠れ度数も置換＝モノフォニック一貫）。
+  function placeOther() {
+    if (!pop) return;
+    const rest = pattern.filter((p) => p.step !== pop.step);
+    const s: BassStep = { step: pop.step, degree: popDeg, dur: dotted ? len * 1.5 : len };
+    if (popNext) s.next = true;
+    if (popVel > 0) s.vel = popVel;
+    onChange([...rest, s].sort((a, b) => a.step - b.step));
+    previewExt(popDeg);
+    setPop(null);
+  }
+  // 「消す」＝その step の拡張度数だけ除去（可視レーン音・他 step は非破壊）。
+  function clearOther() {
+    if (!pop) return;
+    onChange(pattern.filter((p) => !(p.step === pop.step && isOtherDegree(p.degree))));
+    setPop(null);
+  }
+
   return (
     <div className="bass-step">
       {/* 「パターンを選ぶ ▸」帯（S7）＝相対ビート型の入口。既定閉＝開くまで既存DOM/挙動不変。
@@ -212,7 +266,85 @@ export function BassStepEditor({
             })}
           </div>
         ))}
+        {/* 「その他」レーン（S8・案1）＝可視6レーン外の度数（2/6/クロマチック）を持つ step にマーカー。
+            セルタップでポップオーバー（度数 b2..#7・2・6／next／vel）。可視レーンは不変＝拡張語彙だけここへ隔離。 */}
+        <div className="bass-lane bass-lane-other" role="row">
+          <div className="bass-lane-label">他</div>
+          {Array.from({ length: steps }, (_, s) => {
+            const ex = otherAt(s);
+            return (
+              <button
+                key={s}
+                type="button"
+                aria-label={`bass-other-${s}`}
+                aria-pressed={!!ex}
+                className={"step-cell deg ext" + (ex ? " on" : "") + (s % 4 === 0 ? " beat" : "")}
+                onClick={(e) => openOther(s, e.currentTarget)}
+              >
+                {ex ? ex.degree : ""}
+              </button>
+            );
+          })}
+        </div>
       </div>
+      {pop && (
+        <>
+          <div className="ext-pop-backdrop" aria-hidden="true" onClick={() => setPop(null)} />
+          <div className="ext-pop" role="dialog" aria-label="ext-popover" style={{ left: pop.x, top: pop.y }}>
+            <div className="ext-pop-degs">
+              {EXT_DEGREES.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  aria-label={`ext-deg-${d}`}
+                  aria-pressed={popDeg === d}
+                  className={"ext-deg-chip" + (popDeg === d ? " on" : "")}
+                  onClick={() => {
+                    setPopDeg(d);
+                    previewExt(d);
+                  }}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+            <div className="ext-pop-row">
+              <button
+                type="button"
+                aria-label="ext-next"
+                aria-pressed={popNext}
+                className={"ext-toggle" + (popNext ? " on" : "")}
+                onClick={() => setPopNext((v) => !v)}
+              >
+                次を先取り
+              </button>
+            </div>
+            <div className="ext-pop-row ext-vel-row">
+              <span className="ext-vel-lab">強さ</span>
+              {VEL_PRESETS.map((p) => (
+                <button
+                  key={p.v}
+                  type="button"
+                  aria-label={`ext-vel-${p.v}`}
+                  aria-pressed={popVel === p.v}
+                  className={"ext-vel-chip" + (popVel === p.v ? " on" : "")}
+                  onClick={() => setPopVel(p.v)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="ext-pop-foot">
+              <button type="button" aria-label="ext-remove" className="ext-remove" onClick={clearOther}>
+                消す
+              </button>
+              <button type="button" aria-label="ext-place" className="ext-place" onClick={placeOther}>
+                置く
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
