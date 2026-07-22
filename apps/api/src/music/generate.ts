@@ -932,10 +932,14 @@ export function genFromEssence(
 export function genChordPattern(
   frame?: Frame | null,
   seed?: number | null,
-  opts?: { style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number } | null,
+  opts?: { style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number } | null,
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 5);
+  // フィール層（S4・2026-07-22）：swing/humanize を content.feel へ（genMelody/genBass と同契約＝同 buildFeel）。
+  // 未指定/0＝undefined＝feel キー無し＝従来 content と bit 一致。web applyFeelEnsemble が part=chord(→chords) で消費。
+  const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 5);
+  const withFeel = <T extends object>(content: T): T | (T & { feel: Feel }) => (feel ? { ...content, feel } : content);
   const info = meterInfo(f.meter);
   const bars = barsOf(f);
   const stepsPerBar = Math.round(info.beatsPerBar * 4); // 16分グリッド：4/4=16, 6/8=12, 3/4=12
@@ -976,7 +980,7 @@ export function genChordPattern(
   if (canLib && variety >= 2 && !compTypeById(opts!.pattern!)) {
     const types = pickCompTypes(opts!.pattern!, f.section?.role, f.tempo, seed ?? 5, variety);
     if (types.length) {
-      return { items: types.map((ct) => ({ kind: "chord_pattern", content: buildCompContent(ct), label: `${ct.id} ${ct.scenes}` })), edges: [] };
+      return { items: types.map((ct) => ({ kind: "chord_pattern", content: withFeel(buildCompContent(ct)), label: `${ct.id} ${ct.scenes}` })), edges: [] };
     }
   }
   // 伴奏パターン型辞書（chordLibrary・S2）：pattern=型ID or ジャンル名。**4/4系のみ**（型は全て16セル4/4格子）。
@@ -985,7 +989,7 @@ export function genChordPattern(
     ? (compTypeById(opts!.pattern!) ?? pickCompType(opts!.pattern!, f.section?.role, f.tempo, seed ?? 5))
     : null;
   if (compType) {
-    return { items: [{ kind: "chord_pattern", content: buildCompContent(compType), label: "コード楽器" }], edges: [] };
+    return { items: [{ kind: "chord_pattern", content: withFeel(buildCompContent(compType)), label: "コード楽器" }], edges: [] };
   }
   const bias = densityBias(f.mood ?? "", f.tempo);
   const per = bias.long >= 1.5 ? stepsPerBar : bias.busy >= 1.5 ? 2 : 4; // sparse=小節頭/busy=八分/既定=拍頭
@@ -1002,7 +1006,7 @@ export function genChordPattern(
     ...(opts?.strumMs != null ? { strumMs: opts.strumMs } : {}),
   };
   const content = { mode, voicing, steps, hits };
-  return { items: [{ kind: "chord_pattern", content, label: "コード楽器" }], edges: [] };
+  return { items: [{ kind: "chord_pattern", content: withFeel(content), label: "コード楽器" }], edges: [] };
 }
 
 // ドラム入力（genDrums content と同形）＝gen_bass のドラム結線用（design「gen_bass×ドラム結線」2026-07-10）。
@@ -1059,7 +1063,7 @@ export function genBass(
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[],
   seed?: number | null,
   drums?: DrumsInput | null,
-  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean },
+  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number },
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
@@ -1248,7 +1252,10 @@ export function genBass(
   }
 
   if (notes.length === 0) notes.push({ pitch: 36, start: 0, dur: 1 });
-  return withBarsWarning({ items: [{ kind: "bass", content: { notes }, label: "ベース" }], edges: [] }, frame);
+  // フィール層（S4・2026-07-22）：swing/humanize を notes に焼かず content.feel へ（genMelody と同契約＝同 buildFeel）。
+  // 未指定/0＝undefined＝feel キー無し＝従来 content 形（bit一致）。web applyFeelEnsemble が part=bass プロファイルで消費。
+  const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 42);
+  return withBarsWarning({ items: [{ kind: "bass", content: feel ? { notes, feel } : { notes }, label: "ベース" }], edges: [] }, frame);
 }
 
 // ベース定型型/フィルの16分格子→実音（WP-B1）。度数×リズム（BassCell[]）を1小節分（barStart 起点・perBar 拍）へ realize。

@@ -283,7 +283,7 @@ export function buildHttp(core: Core): FastifyInstance {
           // WP-B1：style(型ID/ジャンル名)／fill(0..1 or 型ID) 透過。未指定=従来 bit 一致。
           const style = typeof b.style === "string" ? b.style : undefined;
           const fill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
-          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true });
+          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true, swing: num(b.swing), humanize: num(b.humanize) }); // S4：swing/humanize=feel 添付（未指定=従来）
           // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
           attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
@@ -322,7 +322,9 @@ export function buildHttp(core: Core): FastifyInstance {
           const cpStyle = b.style === "guitar" || b.style === "keyboard" ? b.style : undefined;
           const cpStrumMs = typeof b.strumMs === "number" ? b.strumMs : undefined;
           const cpVariety = typeof b.variety === "number" ? b.variety : undefined; // スライスC：候補を複数返す（既定1=単数=bit一致）
-          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety } : undefined);
+          const cpSwing = typeof b.swing === "number" ? b.swing : undefined; // S4：swing/humanize=feel 添付（未指定=従来 bit 一致）
+          const cpHumanize = typeof b.humanize === "number" ? b.humanize : undefined;
+          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize } : undefined);
         }
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
@@ -382,7 +384,7 @@ export function buildHttp(core: Core): FastifyInstance {
   // gen→compose ワンショット（dogfood P4）：コードを土台に各パートを生成→ネタ化→section に合成、を1コール。
   // 「叩き台を一発で組む」。決定的(seed)。返り＝section ネタ＋合成木。全部 project・tags:["生成"]。
   app.post("/gen/section", async (req) => {
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string }; feel?: { swing?: number; humanize?: number } };
     const frame = b.frame ?? {};
     const key = typeof frame.key === "number" ? frame.key : 0;
     // part 名は素直な別名も受ける（chords→chord_progression, drums→rhythm 等）。指定の揺れで落とさない。
@@ -400,11 +402,14 @@ export function buildHttp(core: Core): FastifyInstance {
     // ドラムをベースとメロへ・生成済みベースをメロへ渡す。配置(ord)は従来の 進行→楽器→メロ→ベース→リズム のまま。
     // ドラム定型ビート＋フィル（WP-D1）：body.drums:{style,fill}＝未指定は従来 bit 一致。bass/melody へ渡す依存順は不変。
     const dOpts = b.drums && (b.drums.style != null || b.drums.fill != null) ? { style: b.drums.style, fill: b.drums.fill } : undefined;
+    // セクション共有 feel（S4・swing-feel-layer-audit Stage 4「全トラック同一ワープ」）：body.feel:{swing,humanize} を
+    // melody/bass/chord_pattern へ同一透過＝メロ・ベース・コード楽器が同じノリで跳ねる。未指定=undefined=各生成器へ渡らず従来 bit 一致。
+    const feelOpt = b.feel && (b.feel.swing != null || b.feel.humanize != null) ? { swing: b.feel.swing, humanize: b.feel.humanize } : undefined;
     const drums = want.has("rhythm") ? genDrums(frame, b.seed, dOpts).items[0]!.content : undefined;
-    const bassContent = want.has("bass") ? (genBass(frame, chords, b.seed, drums as Parameters<typeof genBass>[3], b.bass).items[0]!.content as { notes: { pitch: number; start: number; dur: number }[] }) : undefined;
+    const bassContent = want.has("bass") ? (genBass(frame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(b.bass ?? {}), ...feelOpt } : b.bass).items[0]!.content as { notes: { pitch: number; start: number; dur: number }[]; feel?: unknown }) : undefined;
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
-    if (want.has("chord_pattern")) place("chord_pattern", genChordPattern(frame, b.seed).items[0]!.content, "コード楽器");
-    if (want.has("melody")) place("melody", genMelody(frame, chords, b.seed, { useV2: true, bass: bassContent?.notes, counter: b.melody?.counter, drums: drums as Parameters<typeof genBass>[3], drumLock: b.melody?.drumLock, backbeat: b.melody?.backbeat, converse: b.melody?.converse }).items[0]!.content, "メロ"); // V2化(2026-07-09)＋対位＋ドラム（melody.* 未指定=0=従来 bit 一致）
+    if (want.has("chord_pattern")) place("chord_pattern", genChordPattern(frame, b.seed, feelOpt).items[0]!.content, "コード楽器");
+    if (want.has("melody")) place("melody", genMelody(frame, chords, b.seed, { useV2: true, bass: bassContent?.notes, counter: b.melody?.counter, drums: drums as Parameters<typeof genBass>[3], drumLock: b.melody?.drumLock, backbeat: b.melody?.backbeat, converse: b.melody?.converse, ...(feelOpt ?? {}) }).items[0]!.content, "メロ"); // V2化(2026-07-09)＋対位＋ドラム＋共有feel（melody.*/feel 未指定=従来 bit 一致）
     if (want.has("bass")) place("bass", bassContent, "ベース");
     if (want.has("rhythm")) place("rhythm", drums, "ドラム");
     return { section: core.getNeta(section.id), composition: core.getComposition(section.id) };
