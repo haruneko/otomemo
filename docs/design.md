@@ -604,6 +604,16 @@ S3（上「決定：ピアノ左手(LH)内蔵」）で `ChordPatternContent.lh` 
 - **CP 行契約**：「響きゾーンは最大5行」（S3 で更新済）。左手行は custom 展開時にパッドを行下に持つ＝群アコーディオン内で成立するか実装時に確認。
 - **TDD**：(a) パッドで同 step 複数レーン ON→ lh.hits に同 step 別 deg が複数入る／レンダで複数実音（ポリフォニー）。(b) custom→preset 切替で hits 非破壊保持。(c) 回帰＝preset/未定義/辞書由来 custom は既存出力と deepStrictEqual 一致。(d) keyboard 解決時のみパッド表示・guitar 解決で非表示。
 
+### Task1b＝左手を「両手一体ビュー」で常時表示（2026-07-23・オーナーFB「ピアノの左手は独立しない＝ピアノの中に入れたい」・裁定「両手一体ビュー（常時表示）」）
+Task1 で左手パッドは実装したが、`自分で` トグルの奥（響きゾーン5行目）に隠れ**右手のオマケ＝独立して見える**＝オーナーの「左手は独立させない」イメージと UI がかけちがっていた。**レンダ（`resolveLh`）と content 契約は一切変えず、エディタの見せ方だけ**を「右手と対等な"ピアノの片手"」へ直す（既存ネタは鳴り・content とも bit 一致）。
+- **常時表示**：keyboard 解決時、左手セクション「左手（土台）」を**右手グリッドの直下に常時展開**（`自分で` トグルを廃止）。度数レーン R/3/5/8 × steps のパッドを常に出す。
+- **注入ボタン**：`[ルート][+5度][8va]` を**パッドへの一括注入**に置換（旧 preset seg の役目を移す）。押すと custom hits を書く＝各小節頭に `ルート`＝R／`+5度`＝R+5／`8va`＝R+8 の全音符（`lh.mode:"custom"`）。ユーザーはその後パッドでリズム/度数を微調整。
+- **クリア（左手OFF）**：`[クリア]` で `lh` キー削除＝左手なし（空パッド＝左手なしと等価・bit一致）。
+- **preset ネタの表示**：**レンダは従来 preset（root/root5/oct）を維持**（既存ネタ・`emptyChordPattern` 既定 `lh:{mode:"root"}` は不変＝bit一致）。エディタは preset lh を**パッド上に materialize 表示**（root→各小節頭に R／root5→R+5／oct→R+8）＝空パッドで誤魔化さない。**編集（注入 or セルタップ）した瞬間に custom へ確定**（＝現行 Task1 と同じ「触ったら custom」・触るまでは content 不変＝bit一致）。preset の和音変わり目 anchor はパッドに出ないが、現行の preset→custom 変換でも元々失われる＝退行なし（むしろ空でなく小節頭 R を種にする分改善）。
+- **セルタップ（materialize 込み）**：現 lh が preset なら、タップ時にまず materialize（小節頭 R 群）→ その (lane×step) をトグル＝preset の骨を残して編集開始。custom は現行どおり。
+- **bit一致**：`resolveLh`・content 契約・`emptyChordPattern` 既定・辞書由来 custom は不変。変更は `ChordPatternEditor` の左手 UI（seg 廃止＋常時パッド＋注入/クリア）と materialize 表示ロジックのみ。既存 deepStrictEqual 群は緑のまま。
+- **TDD**：(a) keyboard 解決で左手パッドが常時 DOM に在る（`自分で` 無し）。(b) `[ルート]`注入で R レーンに小節頭 hit・`[+5度]`で R+5・`[8va]`で R+8 が入る。(c) preset lh のネタを開くとパッドに materialize 表示・**未編集なら content 不変（bit）**・セルタップで custom 確定。(d) `[クリア]`で lh キー削除。(e) guitar 解決で左手非表示（不変）。
+
 ### Task2/L1＝パターンライブラリのタグ/scope 設計（2026-07-23・オーナー方針「パターンはネタ帳のライブラリ扱い」・正典＝`docs/research/2026-07-22-pattern-library-arc-plan.md`）
 「演奏パターンを選ぶ」の出所を**コード内辞書→ネタ帳ライブラリ**へ移す（L2 シード・L3 ピッカー差し替えの契約基盤）。統一原理「content は人が仕上げる単位」の帰結＝パターンが content ならその置き場もネタ（量産＝コンテンツ作業）。**汚染対策＝案A**（一覧を工場出荷で埋めない）を**既存の `scope` 機構で実現**（オーナー既定裁定・可逆＝後で案B棚分離に変更可）。
 - **置き場＝`scope:"library"`**：工場出荷/採取パターンは `scope:"library"` のネタ（`chord_progression` の falcom 前例＝`scripts/ingest-falcom-chords.ts` と同流儀）。**既定のネタ帳一覧（`scope:"project"`）には出ない**＝汚染対策の本体。検索/ピッカーは `scope:"library"` を明示クエリして拾う（`listNeta` が scope+tags+kind を一撃で絞れる＝`repo/neta-repo.ts:113-156`）。**新 kind は作らない**（作成タイル/フィルタ肥大の病理回避）＝既存 kind（chord_pattern / rhythm / bass 相対）のまま。
