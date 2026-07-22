@@ -321,7 +321,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
         )}
       </div>
       <div className="tk-drawer-foot">
-        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_melody" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る" : "メロを生成"} onClick={() => drawerGen("gen_melody")}>メロを生成（{gen.preset ? PRESET_LABEL[gen.preset] : "おまかせ"}）</button>
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_melody" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る" : "メロを生成"} onClick={() => drawerGen("gen_melody")}>候補を出す（{gen.preset ? PRESET_LABEL[gen.preset] : "おまかせ"}）</button>
       </div>
     </>
   );
@@ -376,7 +376,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
         </>}
       </div>
       <div className="tk-drawer-foot">
-        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_drums" disabled={gen.genBusy} onClick={() => drawerGen("gen_drums")}>ドラムを生成</button>
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_drums" disabled={gen.genBusy} onClick={() => drawerGen("gen_drums")}>候補を出す</button>
       </div>
     </>
   );
@@ -461,7 +461,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
         </>}
       </div>
       <div className="tk-drawer-foot">
-        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_bass" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る" : "ベースを生成"} onClick={() => drawerGen("gen_bass")}>ベースを生成</button>
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_bass" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る" : "ベースを生成"} onClick={() => drawerGen("gen_bass")}>候補を出す</button>
       </div>
     </>
   );
@@ -491,7 +491,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
         )}
       </div>
       <div className="tk-drawer-foot">
-        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_chord_pattern" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る（先に進行を置く）" : "候補を出す"} onClick={() => drawerGen("gen_chord_pattern")}>🎲 候補を出す</button>
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_chord_pattern" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る（先に進行を置く）" : "候補を出す"} onClick={() => drawerGen("gen_chord_pattern")}>候補を出す</button>
       </div>
     </>
   );
@@ -514,7 +514,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
         <p className="tk-drawnote">置いた骨格のブロックをタップ＝骨格の机（動線は現行のまま）。ここは生成の設定だけ。</p>
       </div>
       <div className="tk-drawer-foot">
-        <button type="button" className="tool-item primary tk-gen" aria-label="gen-skeleton" disabled={gen.genBusy} onClick={() => drawerGen(undefined)}>骨格を生成</button>
+        <button type="button" className="tool-item primary tk-gen" aria-label="gen-skeleton" disabled={gen.genBusy} onClick={() => drawerGen(undefined)}>候補を出す</button>
       </div>
     </>
   );

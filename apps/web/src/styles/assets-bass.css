@@ -870,13 +870,15 @@ article[aria-label="neta-card"].dragging {
   color: var(--muted);
 }
 .knob-name {
-  flex: 0 0 64px;
+  flex: 0 0 80px; /* 64→80：「キックに噛む」「2・4で抜く」（6字≈73px）が360pxで主文が折れないよう基幅を確保（Fable UX監査⑥） */
   color: var(--fg);
   font-size: 0.76rem;
   line-height: 1.15;
+  white-space: nowrap; /* 主文（キックに噛む 等）は折り返さない＝「キックに噛/む」の分断を解消 */
 }
 .knob-name small {
   display: block;
+  white-space: normal; /* 副文（説明）は従来どおり折り返す（nowrap の継承を打ち消す） */
   color: var(--muted);
   font-size: 0.62rem;
   font-weight: 400;

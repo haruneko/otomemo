@@ -38,8 +38,10 @@ function ChordCell({
 const NAME_PX = 58;
 const BEAT_PX = 88;
 const DEFAULT_TOP = 72; // C5（トップ狙い音の既定）
-// 奏法UIスライスB：じゃら〜ん（strumMs）の段階＝OFF/弱/中/強。相場は design「奏法UI」決定（研究doc §3.2・要耳較正）。
+// 奏法UIスライスB：じゃら〜ん（strumMs）の段階。strumMs は弦をずらす「時間差」（ms/弦）＝音量でなく速さ。
+// ms が大きいほどロールが遅い＝ゆっくり（design「Fable UX監査」③の訂正・研究doc §3.2・要耳較正）。
 const STRUM_MS_STAGES = [0, 8, 14, 25];
+const STRUM_MS_LABELS = ["OFF", "速い", "ふつう", "ゆっくり"]; // STRUM_MS_STAGES と同順（0=OFF/8=速い/14=ふつう/25=ゆっくり）
 // 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える。
 const LENGTHS = [
   { label: "16", v: 1 },
@@ -66,7 +68,8 @@ function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
 // ★CP行契約（不変条件・肥大化ガード・TinkerSheet ハブ契約 L8-15 と同文体）：
 //   **響きゾーンは最大5行**（打ち方／トップ・広がり／高さ・パワー(arp時=向き・幅・区切り)／奏法／左手）。
 //   これ以上ノブが要る日は【群アコーディオンへ沈める】（前面はこの5行で打ち止め）＝スマホ縦で詰め込まない
-//   （タップ標的28px＝密度耐性が低い・design「奏法UI」決定）。奏法seg=4行目・左手seg=5行目（keyboard 解決時のみ・S3）。
+//   （タップ標的28px＝密度耐性が低い・design「奏法UI」決定）。奏法行=4行目（Fable UX監査①＝読み取り専用サマリ＋じゃら〜ん。
+//   奏法の変更手段は MetaPanel「奏法」select 一本＝ここは表示のみ）・左手seg=5行目（keyboard 解決時のみ・S3）。
 export function ChordPatternEditor({
   pattern,
   onChange,
@@ -217,7 +220,7 @@ export function ChordPatternEditor({
         <div className="cp-vrow">
           <span className="cp-vlbl">打ち方</span>
           <div className="seg" role="group" aria-label="mode">
-            <button type="button" className={!isArp ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "strum" })}>ストラム</button>
+            <button type="button" className={!isArp ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "strum" })}>ストローク</button>
             <button type="button" className={isArp ? "on" : ""} onClick={() => onChange({ ...pattern, mode: "arp" })}>アルペジオ</button>
           </div>
         </div>
@@ -284,20 +287,19 @@ export function ChordPatternEditor({
             </div>
           </span>
         </div>
-        {/* ④奏法（CP行契約の4行目・スライスB）：おまかせ(auto=音色から導出)/鍵盤/ギター。ギター解決時のみ「じゃら〜ん」(strumMs)。
-            style 無し(既存ネタ)は「鍵盤」表示＝触らない限り書かない＝bit一致。 */}
+        {/* ④奏法（CP行契約の4行目・スライスB／Fable UX監査①＝案イ）：奏法の変更手段は MetaPanel「奏法」select 一本に一本化。
+            ここは**読み取り専用サマリ**＝auto 解決結果を文言表示（タップ不可）。編集子でなく表示子。
+            ギター解決時のみ「じゃら〜ん」(strumMs) を残す＝唯一の微調整ノブ（速さ）。 */}
         <div className="cp-vrow">
           <span className="cp-vlbl">奏法</span>
-          <div className="seg seg-chord" role="group" aria-label="voicing-style">
-            <button type="button" aria-label="style-auto" className={v.style === "auto" ? "on" : ""} onClick={() => setV({ style: "auto" })}>おまかせ</button>
-            <button type="button" aria-label="style-keyboard" className={v.style !== "auto" && v.style !== "guitar" ? "on" : ""} onClick={() => setV({ style: "keyboard" })}>鍵盤</button>
-            <button type="button" aria-label="style-guitar" className={v.style === "guitar" ? "on" : ""} onClick={() => setV({ style: "guitar" })}>ギター</button>
-          </div>
-          {(v.style === "guitar" || (v.style === "auto" && isGuitarProgram(program))) && (
+          <span className="cp-perf-summary" aria-label="voicing-style-summary">
+            いまの奏法：{guitarResolved ? (v.style === "auto" ? "ギター（音色から）" : "ギター") : (v.style === "auto" ? "鍵盤（音色から）" : "鍵盤")}
+          </span>
+          {guitarResolved && (
             <span className="cp-unit">
               <span className="cp-vlbl">じゃら〜ん</span>
               <div className="seg seg-chord" role="group" aria-label="strum-ms">
-                {["OFF", "弱", "中", "強"].map((lab, i) => {
+                {STRUM_MS_LABELS.map((lab, i) => {
                   const cur = (v.strumMs ?? 0);
                   // 現在値を最寄り段へ（保存値が段の代表値でなくても正しい段が光る）。
                   const selIdx = STRUM_MS_STAGES.reduce((best, ms, idx) => (Math.abs(ms - cur) < Math.abs(STRUM_MS_STAGES[best]! - cur) ? idx : best), 0);
@@ -317,8 +319,8 @@ export function ChordPatternEditor({
             <div className="seg seg-chord" role="group" aria-label="lh-mode">
               <button type="button" aria-label="lh-off" className={!pattern.lh ? "on" : ""} onClick={() => setLh(undefined)}>OFF</button>
               <button type="button" aria-label="lh-root" className={pattern.lh?.mode === "root" ? "on" : ""} onClick={() => setLh({ mode: "root" })}>ルート</button>
-              <button type="button" aria-label="lh-root5" className={pattern.lh?.mode === "root5" ? "on" : ""} onClick={() => setLh({ mode: "root5" })}>ルート＋5度</button>
-              <button type="button" aria-label="lh-oct" className={pattern.lh?.mode === "oct" ? "on" : ""} onClick={() => setLh({ mode: "oct" })}>オクターブ</button>
+              <button type="button" aria-label="lh-root5" className={pattern.lh?.mode === "root5" ? "on" : ""} onClick={() => setLh({ mode: "root5" })}>+5度</button>
+              <button type="button" aria-label="lh-oct" className={pattern.lh?.mode === "oct" ? "on" : ""} onClick={() => setLh({ mode: "oct" })}>8va</button>
             </div>
             {pattern.lh?.mode === "custom" && <span className="cp-vlbl" aria-label="lh-custom">型</span>}
           </div>

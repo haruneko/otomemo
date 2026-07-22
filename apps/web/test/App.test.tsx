@@ -204,6 +204,20 @@ describe("App", () => {
     expect(screen.getByLabelText("open-filter-drawer")).toBeInTheDocument();
   });
 
+  // Fable UX監査⑤：チャットFAB は一覧では出るが、ネタを開いている間（active）は隠す＝エディタを覆わない。
+  it("hides the chat FAB while a neta is open (editor view) — 監査⑤", async () => {
+    // content 付きの resume ネタ＝openTop が getNeta を介さず即 setActive（NetaDialog を開く）。
+    const lyric: Neta = { ...mk("lyric"), title: "歌詞ネタ", content: "ラララ", updated: "2026-07-20" };
+    (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue([lyric]);
+    render(<App />);
+    // 一覧（active 無し）では FAB が出る。
+    expect(await screen.findByLabelText("chat")).toBeInTheDocument();
+    // つづき行 tap → ネタを開く（active セット）。
+    await userEvent.click(await screen.findByLabelText("resume"));
+    // エディタ表示中は FAB が消える。
+    await waitFor(() => expect(screen.queryByLabelText("chat")).toBeNull());
+  });
+
   // S3：トップ種別タイルをtap→kindFilter が効いて listNeta が kind 付きで呼ばれる（絞り込み動線1タップ）。
   it("filters by tapping a top kind tile — S3", async () => {
     (api.listNeta as ReturnType<typeof vi.fn>).mockResolvedValue(itemsOf({ melody: 2, bass: 1 }));

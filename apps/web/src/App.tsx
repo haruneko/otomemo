@@ -804,7 +804,9 @@ export function App() {
         </section>
         </div>
       </DndContext>
-      {!chatOpen && !deskTarget && !shelfOpen && !filterDrawerOpen && (
+      {/* Fable UX監査⑤：ネタを開いている間（active＝NetaDialog/AnalysisWorkbench/StudyView）は FAB を隠す
+          ＝エディタの「左手」ボタンやプレビューを覆わない。既存の「オーバーレイ中は隠す」条項に !active を1つ足す最小工事。 */}
+      {!active && !chatOpen && !deskTarget && !shelfOpen && !filterDrawerOpen && (
         <button
           className="chat-bubble"
           aria-label="chat"

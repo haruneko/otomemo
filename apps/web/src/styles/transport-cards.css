@@ -1969,11 +1969,13 @@
 .cp-vlbl { font-size: 0.75rem; color: var(--muted); }
 /* 響きゾーンの select（区切り等）＝周囲のピル/ステッパーに見た目を揃える（素の select 見た目の浮きを解消）。 */
 .cp-select { border: 1px solid var(--line); border-radius: 8px; background-color: #22252b; color: var(--fg); font-size: 0.82rem; padding: 5px 22px 5px 8px; height: 32px; cursor: pointer; }
-/* セグメント（二択/多択）：選択だけ色・他はグレー＝全部青を避ける。既定=accent／chord系=種別色。 */
+/* セグメント（二択/多択）：選択だけ色・他はグレー。選択色は青1色に統一（Fable UX監査④）。
+   紫(--k-chord)はパーツ識別色専用に戻す＝選択状態には使わない。white-space:nowrap＝360px でラベルが折れない（監査⑥）。 */
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.seg button { background: transparent; border: 0; color: var(--muted); padding: 6px 12px; font-size: 0.85rem; cursor: pointer; }
+.seg button { background: transparent; border: 0; color: var(--muted); padding: 6px 12px; font-size: 0.85rem; cursor: pointer; white-space: nowrap; }
 .seg button.on { background: var(--accent); color: #fff; }
-.seg.seg-chord button.on { background: var(--k-chord); color: #fff; }
+/* 奏法サマリ（読み取り専用・監査①）：seg でなく静かな文言表示。 */
+.cp-perf-summary { font-size: 0.78rem; color: var(--fg); }
 /* トップ狙い・高さのステッパー（無彩色＝±が青くならない）。 */
 .cp-top { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 2px 4px; }
 .cp-top button { width: 28px; height: 28px; border: 0; background: #22252b; color: var(--fg); border-radius: 6px; font-size: 15px; cursor: pointer; }

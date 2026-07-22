@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChordPatternEditor } from "../src/components/ChordPatternEditor";
 import type { ChordPatternContent } from "../src/music";
@@ -99,39 +99,69 @@ describe("ChordPatternEditor #29 §9 hold-drag velocity (vertical only)", () => 
   });
 });
 
-// 奏法UIスライスB：響きゾーン第4行＝奏法 seg（おまかせ/鍵盤/ギター）＋ギター解決時のみ「じゃら〜ん」(strumMs)。
-describe("ChordPatternEditor 奏法行（スライスB・第4行）", () => {
-  it("style 無し（既存ネタ）＝『鍵盤』が選択・じゃら〜ん行は非表示", () => {
+// 奏法UIスライスB／Fable UX監査①（案イ）：響きゾーン第4行＝奏法は**読み取り専用サマリ**（編集は MetaPanel 一本）
+// ＋ギター解決時のみ「じゃら〜ん」(strumMs・段ラベル＝速さ)。データ値 mode:"strum" は不変。
+describe("ChordPatternEditor 奏法行（スライスB・監査①＝読み取り専用サマリ）", () => {
+  it("style 無し（既存ネタ）＝サマリ『鍵盤』・じゃら〜ん行は非表示・編集segは無い", () => {
     render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("style-keyboard").className).toContain("on");
-    expect(screen.getByLabelText("style-auto").className).not.toContain("on");
-    expect(screen.getByLabelText("style-guitar").className).not.toContain("on");
+    expect(screen.getByLabelText("voicing-style-summary").textContent).toContain("鍵盤");
+    expect(screen.queryByLabelText("style-auto")).toBeNull(); // 編集seg は格下げ＝存在しない
+    expect(screen.queryByLabelText("style-guitar")).toBeNull();
     expect(screen.queryByLabelText("strum-ms")).toBeNull(); // 鍵盤＝じゃら〜ん無し
   });
 
-  it("ギターを押すと voicing.style:'guitar' を書く（top も付く）", async () => {
+  it("奏法サマリは読み取り専用＝表示だけ（style を書く手段は CP エディタに無い）", () => {
     const onChange = vi.fn();
     render(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
-    await userEvent.click(screen.getByLabelText("style-guitar"));
-    expect(onChange).toHaveBeenCalledWith(pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" } }));
+    const summary = screen.getByLabelText("voicing-style-summary");
+    expect(summary.tagName).toBe("SPAN"); // ボタンでない＝タップ不可
+    expect(screen.queryByRole("button", { name: /style-/ })).toBeNull();
   });
 
-  it("style:'guitar' のときだけ『じゃら〜ん』が現れ、弱=strumMs8 を書く", async () => {
+  it("明示 guitar＝サマリ『ギター』・『じゃら〜ん』が現れ、strum-1=速い は strumMs8 を書く（値は不変）", async () => {
     const onChange = vi.fn();
     const guitarPat = pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" } });
     render(<ChordPatternEditor pattern={guitarPat} onChange={onChange} />);
+    expect(screen.getByLabelText("voicing-style-summary").textContent).toContain("ギター");
     expect(screen.getByLabelText("strum-ms")).toBeTruthy();
-    await userEvent.click(screen.getByLabelText("strum-1")); // 弱
+    expect(screen.getByLabelText("strum-1").textContent).toBe("速い"); // 弱→速い（強弱でなく速さ）
+    await userEvent.click(screen.getByLabelText("strum-1"));
     expect(onChange).toHaveBeenCalledWith(pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar", strumMs: 8 } }));
   });
 
-  it("style:'auto'＋ギター音色（program 25）ならじゃら〜ん表示・非ギター音色なら非表示", () => {
+  it("じゃら〜んの段ラベルは速さ＝OFF/速い/ふつう/ゆっくり（0/8/14/25ms）", () => {
+    const guitarPat = pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" } });
+    render(<ChordPatternEditor pattern={guitarPat} onChange={vi.fn()} />);
+    expect(["strum-0", "strum-1", "strum-2", "strum-3"].map((l) => screen.getByLabelText(l).textContent)).toEqual(["OFF", "速い", "ふつう", "ゆっくり"]);
+  });
+
+  it("style:'auto'＝サマリに『（音色から）』／ギター音色でじゃら〜ん表示・非ギター音色なら非表示", () => {
     const autoPat = pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "auto" } });
     const { rerender } = render(<ChordPatternEditor pattern={autoPat} onChange={vi.fn()} program={25} />);
-    expect(screen.getByLabelText("style-auto").className).toContain("on");
+    expect(screen.getByLabelText("voicing-style-summary").textContent).toContain("ギター（音色から）");
     expect(screen.getByLabelText("strum-ms")).toBeTruthy(); // auto→guitar（program 25）
     rerender(<ChordPatternEditor pattern={autoPat} onChange={vi.fn()} program={0} />);
+    expect(screen.getByLabelText("voicing-style-summary").textContent).toContain("鍵盤（音色から）");
     expect(screen.queryByLabelText("strum-ms")).toBeNull(); // auto→keyboard（ピアノ）
+  });
+});
+
+// Fable UX監査②⑥：語彙統一（ストラム→ストローク・データ値 mode:"strum" 不変）＋左手ラベル短縮（折返し解消）。
+describe("ChordPatternEditor 語彙/折返し（監査②⑥）", () => {
+  it("打ち方＝『ストローク』表示（ストラムから改名）・押すと mode:'strum' を書く（値は不変）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ mode: "arp" })} onChange={onChange} />);
+    const seg = screen.getByLabelText("mode");
+    expect(seg.textContent).toContain("ストローク");
+    expect(seg.textContent).not.toContain("ストラム");
+    await userEvent.click(within(seg).getByText("ストローク"));
+    expect(onChange).toHaveBeenCalledWith(pat({ mode: "strum" })); // データ値は strum のまま
+  });
+
+  it("左手ラベルは短縮＝OFF/ルート/+5度/8va（オクターブ・ルート＋5度は折れ元＝改名）", () => {
+    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-root5").textContent).toBe("+5度");
+    expect(screen.getByLabelText("lh-oct").textContent).toBe("8va");
   });
 });
 
