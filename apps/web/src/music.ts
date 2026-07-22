@@ -467,11 +467,20 @@ export function hitDiv(lane: RhythmLane, step: number): 2 | 3 | undefined {
 
 // --- ベース kind の相対モード（#bass S2, design「ベース kind=bass・2モード」） ---
 // 度数をコードに当てて再生時に解決する依存型コンテンツ。worker の bass.py と同じ契約を移植。
-export type BassDegree = "R" | "3" | "5" | "7" | "8" | "approach";
+// 語彙統一（修理#2・2026-07-22・監査 §2 B'1）：api bassLibrary の BassCell DSL へ additive に拡張。
+//   - 既存の質依存度数 R/3/5/7/8/approach は不変（design 286・既存相対ネタと互換）。
+//   - **クロマチック度数**（b2..#7＝ジャンル型辞書の半音アプローチ/経過音）＋**2/6**（質非依存＝固定半音 DEGREE_SEMI）。
+//   - **next**（R>/8>＝次コードルート先取り＝つんのめり明示）／**vel**（ghost 用・現状 realize は休符扱い＝正典 §8）。
+export type BassDegree =
+  | "R" | "3" | "5" | "7" | "8" | "approach" // 既存（質依存・不変）
+  | "2" | "6" // 追加（固定半音）
+  | "b2" | "#1" | "b3" | "4" | "#4" | "b5" | "#5" | "b6" | "#6" | "b7" | "#7"; // クロマチック（固定半音）
 export interface BassStep {
   step: number; // ステップindex（1step=16分=0.25拍）
   degree: BassDegree;
   dur: number; // step 数
+  next?: boolean; // R>/8>＝次小節頭のコードルート基準で解決（先取り着地・realizeBassGrid と対称）。既定=当拍のコード。
+  vel?: number; // ghost/アクセント用（1..127・任意）。現状 resolve は音価/ピッチのみ使用（vel 反映は将来）。
 }
 export interface RelativeBassContent {
   mode: "relative";
@@ -481,16 +490,44 @@ export interface RelativeBassContent {
   program?: number;
 }
 
-const BASS_FLOOR = 28; // E1（エレキ4弦ベースの最低音）
+// レジスタ統一（修理#2・2026-07-22・design WP-1 較正が正典）：旧 28..39（E1..D#2・較正前）→ **33..48（A1..C3）**。
+//   api genBass の実測較正窓（bassPcToWindow）と一致＝style 型経路の絶対出力と相対解決が音楽的に等価に。
+//   ★意図的 bit 破壊（相対モードのみ・既存相対ネタの鳴りが下方シフト＝A/A#/B ルートは1oct 降下・高ルートの5度上/octは窓上端48で fold）。
+const BASS_FLOOR = 33; // A1（実測較正窓の下端・design WP-1）
+const BASS_CEIL = 48; // C3（実測較正窓の上端）
 const BASS_STEP_TO_BEAT = 0.25; // 1step=16分=0.25拍
 
 // コード品質 → ルートからの半音インターバルは @cm/music-core の QUALITY_INTERVALS が SSOT（負債D3）。
 const DEGREE_CHORD_INDEX: Record<string, number> = { "3": 1, "5": 2, "7": 3 };
 
-// ピッチクラス(0-11)を最低オクターブ帯 E1..D#2(28..39) の代表音 MIDI へ。
-// band(pc)=28+((pc-4) mod 12)。E(4)→28（床）, C(0)→36, G(7)→31。
+// 度数トークン→ルートからの半音（固定・質非依存）＝api bassLibrary.DEGREE_SEMI と同一表（SSOT ミラー）。
+// 2/6/クロマチックの解決に使う（R/3/5/7/8 は degreeSemi で質依存側へ分岐）。
+const DEGREE_SEMI: Record<string, number> = {
+  R: 0, "8": 12, b2: 1, "#1": 1, "2": 2, b3: 3, "3": 4, "4": 5, "#4": 6, b5: 6,
+  "5": 7, "#5": 8, b6: 8, "6": 9, "#6": 10, b7: 10, "7": 11, "#7": 11,
+};
+
+// ピッチクラス(0-11)を較正窓 [33,48] の最下オクターブ（33..44）へ。C(0)→36, G(7)→43, A(9)→33（1oct 降下）。
+// ＝api bassPcToWindow と同一。
 export function band(pc: number): number {
-  return BASS_FLOOR + (((Math.round(pc) - 4) % 12) + 12) % 12;
+  return BASS_FLOOR + ((((Math.round(pc) - BASS_FLOOR) % 12) + 12) % 12);
+}
+
+// ピッチを較正窓 [33,48] へオクターブで畳む（api foldBassPitch と同流儀）＝度数積み上げが上端48を超えたら1oct 下げ。
+function foldBass(p: number): number {
+  let x = p;
+  while (x < BASS_FLOOR) x += 12;
+  while (x > BASS_CEIL) x -= 12;
+  return Math.max(BASS_FLOOR, Math.min(BASS_CEIL, x));
+}
+
+// 度数→ルートからの半音。R/3/5/7 は**質依存**（design 286・既存契約）、8=オクターブ、
+//   それ以外（2/6/クロマチック b2..#7＝bassLibrary DSL）は**固定半音**（DEGREE_SEMI・質非依存）。
+function degreeSemi(degree: string, quality: string): number {
+  if (degree === "R") return 0;
+  if (degree === "8") return 12;
+  if (degree === "3" || degree === "5" || degree === "7") return degreeInterval(degree, quality);
+  return DEGREE_SEMI[degree] ?? 0;
 }
 
 export function isRelativeBass(content: unknown): content is RelativeBassContent {
@@ -537,11 +574,13 @@ function nextRootPc(entries: BassStep[], i: number, chords: ChordEntry[], key: n
 }
 
 // 相対ベースの pattern をコード(or key の tonic)に当てて実音高 notes へ解決（worker と同契約）。
-// chords が空なら key の tonic を I コードとみなす（単体プレビュー）。床(28)未満は出さない。
+// chords が空なら key の tonic を I コードとみなす（単体プレビュー）。較正窓 [33,48] に fold（api realizeBassGrid と等価）。
+//   beatsPerBar＝next（R>/8>）の「次小節頭」判定に使う（既定4＝4/4・ベース型は全て4/4）。
 export function resolveRelativeBass(
   pattern: BassStep[],
   chords: ChordEntry[] = [],
   key = 0,
+  beatsPerBar = 4,
 ): Note[] {
   if (!pattern?.length) return [];
   const k = ((key % 12) + 12) % 12;
@@ -551,16 +590,23 @@ export function resolveRelativeBass(
   entries.forEach((e, i) => {
     const start = Math.round(e.step * BASS_STEP_TO_BEAT * 1000) / 1000;
     const dur = Math.round((e.dur ?? 1) * BASS_STEP_TO_BEAT * 1000) / 1000;
-    // つんのめり(アンティシペーション)：裏拍始まりでダウンビートを跨いで伸びる音は、跨いだ先の
-    // ダウンビートのコードで相対解決する（例 2拍裏から四分→3拍目表のコード基準）。4/4ロックの押し感。
-    const nextBeat = Math.floor(start + 1e-9) + 1;
-    const offBeat = Math.abs(start - Math.round(start)) > 1e-9;
-    const refBeat = offBeat && nextBeat < start + dur - 1e-9 ? nextBeat : start;
-    const ch = bassChordAt(refBeat, chords);
-    const chRootPc = ch ? ((ch.root % 12) + 12) % 12 : k;
-    // 分数コード（決定B）：オンベースがあれば R（ルート）はその低音を弾く。3/5/7 はコードのルート基準。
-    const bassPc = ch && ch.bass != null ? ((ch.bass % 12) + 12) % 12 : chRootPc;
-    const quality = ch ? ch.quality : "";
+    // 参照コード：既定＝当拍（つんのめり込み）／next（R>/8>）＝次小節頭のコード（先取り着地・realizeBassGrid と対称）。
+    let refCh: ChordEntry | null;
+    if (e.next) {
+      const barStart = Math.floor(start / beatsPerBar + 1e-9) * beatsPerBar;
+      refCh = bassChordAt(barStart + beatsPerBar, chords); // 次小節頭のコード
+    } else {
+      // つんのめり(アンティシペーション)：裏拍始まりでダウンビートを跨いで伸びる音は、跨いだ先の
+      // ダウンビートのコードで相対解決する（例 2拍裏から四分→3拍目表のコード基準）。4/4ロックの押し感。
+      const nextBeat = Math.floor(start + 1e-9) + 1;
+      const offBeat = Math.abs(start - Math.round(start)) > 1e-9;
+      const refBeat = offBeat && nextBeat < start + dur - 1e-9 ? nextBeat : start;
+      refCh = bassChordAt(refBeat, chords);
+    }
+    const chRootPc = refCh ? ((refCh.root % 12) + 12) % 12 : k;
+    // 分数コード（決定B）：オンベースがあれば R（ルート）はその低音を弾く。他の度数はコードのルート基準。
+    const bassPc = refCh && refCh.bass != null ? ((refCh.bass % 12) + 12) % 12 : chRootPc;
+    const quality = refCh ? refCh.quality : "";
     let pitch: number;
     if (e.degree === "approach") {
       const target = band(nextRootPc(entries, i, chords, k));
@@ -568,12 +614,14 @@ export function resolveRelativeBass(
       const down = target - 1;
       const ref = prevPitch ?? target;
       pitch = Math.abs(up - ref) <= Math.abs(down - ref) ? up : down;
+      while (pitch < BASS_FLOOR) pitch += 12; // 床未満は救済（approach は fold せず床合わせのみ＝従来挙動）
+      while (pitch > BASS_CEIL) pitch -= 12;
+      pitch = Math.max(BASS_FLOOR, Math.min(BASS_CEIL, pitch));
     } else {
-      // 度数はルートから上に積む（5度=root+7 等）。R のみオンベース基準。
+      // 度数はルートから上に積む（5度=root+7 等）。R のみオンベース基準。窓 [33,48] へ fold＝realizeBassGrid と一致。
       const refPc = e.degree === "R" ? bassPc : chRootPc;
-      pitch = band(refPc) + degreeInterval(e.degree, quality);
+      pitch = foldBass(band(refPc) + degreeSemi(e.degree, quality));
     }
-    while (pitch < BASS_FLOOR) pitch += 12; // 床(28)より下は出さない（approach 救済）
     notes.push({ pitch, start, dur });
     prevPitch = pitch;
   });

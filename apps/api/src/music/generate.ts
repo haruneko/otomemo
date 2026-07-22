@@ -1065,7 +1065,7 @@ export function genBass(
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[],
   seed?: number | null,
   drums?: DrumsInput | null,
-  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number },
+  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean },
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
@@ -1099,6 +1099,37 @@ export function genBass(
   const approach = dr ? Math.max(0, Math.min(1, opts?.approach ?? 0)) : 0;
   // A/A' キック骨格＝4/4系のみ・ドラムの1小節長が拍子と一致する時のみ（6/8 は push/swing と同じ除外方針）。
   const kickPath = !!dr && kickLock !== 0 && info.grouping !== "compound" && Math.abs(dr.steps * dr.bps - perBar) < 1e-6;
+
+  // --- 相対パターン昇格（修理#2・2026-07-22・H2・監査 §4 B'2）：opts.relative=true で **実音化せず相対 content を出す**。
+  //   style 型経路のみ対応（BassCell→BassStep 直写像＝realizeBassGrid を web resolveRelativeBass へ移送）。fill も BassCell ゆえ
+  //   同時対応（末尾1つ手前の小節を fill 型セルへ差替え）。**escape hatch**＝skeleton 明示ベース／6-8／style 未指定（fig/kick 経路）は
+  //   絶対のまま（下でフォールバック理由 relativeFallback を添付＝報告用）。**relative 未指定/false＝従来の絶対 notes＝bit 一致**。
+  //   合奏層ノブ（kickLock/snareGap/approach）は絶対空間の後処理＝相対 style 経路では非適用（H2＝道具の効果は型格子に既に刻まれている）。
+  const wantRelative = opts?.relative === true;
+  const skelHasBass = (opts?.skeleton?.bass?.length ?? 0) > 0;
+  if (wantRelative && styleType && info.grouping !== "compound" && !skelHasBass) {
+    const pattern: { step: number; degree: string; dur: number; next?: boolean }[] = [];
+    // BassCell[16セル]（1小節）→ BassStep[]。on=発音（続く tie を音価に足す）／rest/ghost/tie(消費済)=スキップ。
+    const cellsToSteps = (cells: BassCell[], barIdx: number) => {
+      let i = 0;
+      while (i < 16) {
+        const c = cells[i]!;
+        if (c.kind === "on") {
+          let run = 1;
+          while (i + run < 16 && cells[i + run]!.kind === "tie") run++; // 続く tie を音価に足す（realizeBassGrid と同規則）
+          pattern.push({ step: barIdx * 16 + i, degree: c.deg ?? "R", dur: run, ...(c.next ? { next: true } : {}) });
+          i += run;
+        } else i++;
+      }
+    };
+    // fill（末尾1つ手前の小節）：型ID/数値を解決し当該小節だけ fill セルへ差替え（bars>=2・6-8除外は上のゲートで担保）。
+    const fillBar = opts?.fill != null && bars >= 2 ? bars - 2 : -1;
+    const bf: BassFill | null = fillBar >= 0 ? resolveBassFill(opts!.fill!, seed ?? 42) : null;
+    for (let bar = 0; bar < bars; bar++) cellsToSteps(bar === fillBar && bf ? bf.cells : styleType.cells, bar);
+    const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 42); // 相対 content にも feel を載せる（絶対と対称・applyFeelEnsemble が消費）
+    const content = feel ? { mode: "relative", steps: bars * 16, pattern, feel } : { mode: "relative", steps: bars * 16, pattern };
+    return withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
+  }
 
   if (styleType) {
     // --- Sty: ジャンル型ライブラリ（WP-B1）：型の16分格子を各小節へ敷き、度数→実音（低域窓）へ写像。
@@ -1257,7 +1288,13 @@ export function genBass(
   // フィール層（S4・2026-07-22）：swing/humanize を notes に焼かず content.feel へ（genMelody と同契約＝同 buildFeel）。
   // 未指定/0＝undefined＝feel キー無し＝従来 content 形（bit一致）。web applyFeelEnsemble が part=bass プロファイルで消費。
   const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 42);
-  return withBarsWarning({ items: [{ kind: "bass", content: feel ? { notes, feel } : { notes }, label: "ベース" }], edges: [] }, frame);
+  const out = withBarsWarning({ items: [{ kind: "bass", content: feel ? { notes, feel } : { notes }, label: "ベース" }], edges: [] }, frame);
+  // relative 要求だが style 経路でない（fig/kick／6-8／skeleton 明示ベース）＝絶対のままフォールバック（escape hatch・報告用）。
+  if (wantRelative) {
+    (out as GenResult & { relativeFallback?: string }).relativeFallback =
+      info.grouping === "compound" ? "compound-meter" : skelHasBass ? "skeleton-explicit-bass" : !styleType ? "no-style-pattern" : "unknown";
+  }
+  return out;
 }
 
 // ベース定型型/フィルの16分格子→実音（WP-B1）。度数×リズム（BassCell[]）を1小節分（barStart 起点・perBar 拍）へ realize。

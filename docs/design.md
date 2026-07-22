@@ -503,6 +503,29 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **統一原理（2026-07-22・メロ外挿の思考実験で確定＝`docs/research/2026-07-22-melody-pattern-thought-experiment.md`）**：**content は「人が仕上げる単位」**。背景パート（ドラム/コード楽器/ベース）＝人はパターンを仕上げる→**パターンが content**（H2）。前景（メロ）＝人はノートを仕上げる→**notes が content**（メロへのH2外挿はしない＝タイル反復・度数再解決・局所判定の前提を全部破る。パターンを content にすると手編集が resolver の下に潜り「仕上げは人間」が壊れる）。メロの型（リズムパーツ/モチーフ図形/骨格テンプレ）は**生成の上流に住む**＝既に3系統実装済みで足りている（kind="motif" 一級化は実需が出るまで着手しない）。
 - **コード入力/section UX（CV・✅実装済）**：ChordEditor＝start自動フロー(順番)・長さボタン・ピアノロール表示・合計尺。SectionEditor＝レーン層モデル順(進行→メロ→コード楽器→ベース→リズム→section)・**占有セルのみ配置不可**(別小節は自由)。トグル/構成音の選択色＝OFF地色付与で是正(E2E)。
 
+### ベースの相対パターン昇格（修理#2・2026-07-22・正典＝`docs/research/2026-07-22-performance-editing-architecture-audit.md` H2/推奨差分2＝工事順3-5）
+- **問題（監査 H2・違反②）**：伴奏系4kindのうちベースだけが**絶対 notes 焼き込みの例外**＝genBass が bassLibrary の度数 DSL（相対）で組んだ型を**出力直前に実音化して捨て**、web に既存の相対受け皿（`RelativeBassContent`＋`resolveRelativeBass`＋`BassStepEditor`＝#bass S2）へ繋いでいなかった（「相対の材料は上流・受け皿は下流・両方あるのに中間で絶対化」）。→ 相対で生むと**パターンがネタに常在し、ベースエディタで再編集できる**（鳴らし方がネタに住む＝H1×H2）。
+- **決定A：相対 contract の語彙統一（web `BassStep`・additive）**：web の度数語彙を api `bassLibrary.BassCell`（DEGREE_SEMI）へ拡張。既存 `R/3/5/7/8/approach`（**質依存**・design 286）は不変で、追加＝**固定半音**の `2`/`6`＋クロマチック `b2/#1/b3/4/#4/b5/#5/b6/#6/b7/#7`、および `BassStep.next?`（R>/8>＝次小節頭コード先取り）／`BassStep.vel?`（ghost/アクセント用・現状 resolve は音価/ピッチのみ使用）。**語彙対応表**：
+  | BassCell（api・型辞書） | BassStep（web・受け皿） | 備考 |
+  |---|---|---|
+  | `deg: R/3/5/8`（+quality非依存の固定半音） | `degree: R/3/5/8` | R/3/5/8 は既存レーン。**質依存 vs 固定**の差＝major/dominant 文脈では一致・minor 等では相対側がコード追従（下記 §差分） |
+  | `deg: 2/6/b2/#1/b3/4/#4/b5/#5/b6/#6/b7/#7` | `degree` 同名（固定半音・新規） | クロマチック経過音/半音アプローチ。resolve は DEGREE_SEMI 固定 |
+  | `next: true`（R>/8>） | `next: true` | 次小節頭のコードで解決（つんのめり明示） |
+  | `kind: tie`（-） | 直前 BassStep の `dur` を延長 | run長＝tie連続数+1（realizeBassGrid と同規則） |
+  | `kind: rest`（.）/`ghost`（x） | ステップ省略 | ghost は bass vel 未対応＝休符扱い（正典 §8・絶対と一致） |
+- **決定B：レジスタ統一（33..48・意図的 bit 破壊）**：web resolveRelativeBass の窓を旧 **28..39（E1..D#2・較正前）→ 33..48（A1..C3）** へ（api `bassPcToWindow`＝design WP-1 実測較正が正典）。`band()` 再定義＋度数積み上げを `foldBass`（[33,48] へ畳む・realizeBassGrid と等価）で。**相対モードのみの bit 破壊**（既存相対ネタの鳴りが下方シフト＝A/A#/B ルート1oct 降下・高ルートの5度上/octは48で fold）。実データの相対ベースネタは**ゼロ**（新kind 昇格前）＝実害なし。web テストの既存 31/[30,32] 期待は新窓（43/[42,44]）へ更新。
+- **決定C：genBass `relative` opt-in（api・経路別可否）**：`genBass(...opts{relative:true})` で **style 型経路のみ**を相対 content で出力（`realizeBassGrid` を呼ばず BassCell→BassStep 直写像＋fill 型も同時＝末尾1つ手前小節をフィル型セルへ差替え）。**経路別**：
+  - **style 型経路**＝✅相対化（本命・最小）。度数がそのまま BassStep に保存＝来歴が読める。
+  - **fig（従来）/kick 経路**（style 未指定）＝❌相対化しない＝**絶対のままフォールバック**（RNG の root/5度選択が絶対空間で確定済＝度数逆写像は脆い）。返りに `relativeFallback:"no-style-pattern"`。
+  - **6/8（compound）**＝❌絶対のまま（`relativeFallback:"compound-meter"`）。型辞書が4/4のみ（従来除外方針と一致）。
+  - **skeleton 明示ベース**＝❌絶対のまま維持（**escape hatch**＝絶対ピッチ上書きは相対と直交・監査 §6-3）。`relativeFallback:"skeleton-explicit-bass"`。
+  - **合奏層ノブ**（kickLock/snareGap/approach）＝相対 style 経路では**非適用**（絶対空間の後処理・H2＝道具の効果は型格子に既に刻まれている＝パターンを直せばよい）。
+  - feel（swing/humanize）は相対 content にも添付（絶対と対称・`applyFeelEnsemble` が消費）。
+- **鉄則＝`relative` 未指定/false は従来の絶対 notes ＝bit 一致**（機械証明＝既存 `gen-bass-library`/`gen-bass-drums`/`gen-bass-slash`/`gen-feel-attach`/`generate-invariants` の deepStrictEqual 群が緑のまま）。**既定切替（relative を UI/生成の既定へ）は実機実績後の別裁定**（監査 工事順6）＝今回は opt-in 露出（MCP `gen_bass`/HTTP `/music/gen_bass` の `relative` ブール）まで。`POST /gen/section` へは**渡さない**（既定切替の一部＝別裁定）。
+- **§差分（等価性・test c）**：style 相対を resolveRelativeBass で実音化した結果は、**major/dominant 進行では絶対出力（realizeBassGrid）と完全一致**（BASS_TYPES 28型は bare `7` を含まず質依存/固定が一致）。minor 等の非長三和音では相対側が**コード追従**（`3`→短3度等）＝絶対の固定半音と ≤2半音差＝**相対の方が文脈適応（H2 の狙いそのもの）**。フィル `FL-RUNUP16` のみ bare `7`（型辞書=導音11／resolver=質依存の短7度10）で長三和音上でも1半音差（経過音）＝許容・文書化。
+- **編集の家（web）**：`BassStepEditor` は現行6レーン（R/3/5/7/8/approach）を維持＝拡張語彙（2/6/クロマチック/next）は grid に現れないが pattern には**非破壊で保持**（範囲外音と同流儀）。フル度数編集 UI（「その他」レーン・next トグル）は**次スライス**（監査 B'3）＝今回は開ける・可視レーン編集・非破壊往復をテストで担保。
+- **境界（スコープ外・次スライス）**：ベース単体エディタへの「型から選ぶ ▸」帯（修理#1と同UI・工事順6）／相対を UI 既定へ昇格／BassStepEditor 度数語彙拡張（工事順7）／既定切替の裁定。**要耳較正**＝窓統一後の style 相対の鳴り（synth C2 基準・オーナー）。
+
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
 **問題（ユーザー指摘）**：①品質語彙が不足＝テンション(9/11/13/add9)・dim7・altered(7♭9/7♯9/7♯5)が無い。しかも ChordEditor は「9」を選べるのに `QUALITY_INTERVALS` に定義が無く **major トライアドにフォールバック＝壊れている**。②分数コード(slash/on-chord)が表現できない＝`ChordEntry` に bass 欄が無い。③コード楽器(comping)の高さが**ルートのpcぶん跳ねる**(`base = 48 + octave*12 + root_pc`)＝進行が動くたびレジスタが上下。「大体の高さを決める」＋スムーズに置きたい。
 

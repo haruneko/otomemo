@@ -145,15 +145,16 @@ describe("music", () => {
   });
 
   // #bass S2 相対モード：度数→コード解決（worker bass.py と同契約を web に移植）
-  describe("relative bass (#bass S2)", () => {
-    it("band places pc into E1..D#2 register", () => {
-      expect(band(4)).toBe(28); // E → E1（床）
-      expect(band(0)).toBe(36); // C → C2
-      expect(band(7)).toBe(31); // G → G1
-      expect(band(3)).toBe(39); // D# → D#2（上端）
+  // 修理#2（2026-07-22）：レジスタを 28..39→**33..48（A1..C3・design WP-1 較正）**へ統一。既存の 31/[30,32] 期待を新窓へ更新。
+  describe("relative bass (#bass S2 / 修理#2 window 33..48)", () => {
+    it("band places pc into 較正窓 33..48 の最下オクターブ（33..44・api bassPcToWindow と一致）", () => {
+      expect(band(0)).toBe(36); // C → C2（据え置き）
+      expect(band(7)).toBe(43); // G → G2
+      expect(band(9)).toBe(33); // A → A1（窓の床・1oct 降下）
+      expect(band(11)).toBe(35); // B → B1
       for (let pc = 0; pc < 12; pc++) {
-        expect(band(pc)).toBeGreaterThanOrEqual(28);
-        expect(band(pc)).toBeLessThanOrEqual(39);
+        expect(band(pc)).toBeGreaterThanOrEqual(33);
+        expect(band(pc)).toBeLessThanOrEqual(44); // 最下オクターブ（度数積み上げ前）
       }
     });
 
@@ -167,13 +168,13 @@ describe("music", () => {
         [],
         0,
       );
-      expect(notes.map((n) => n.pitch)).toEqual([36, 43, 48]); // C2 / G2(root+7) / C3(root+12)
+      expect(notes.map((n) => n.pitch)).toEqual([36, 43, 48]); // C2 / G2(root+7) / C3(root+12・fold で 48 内）
       // 1step=16分=0.25拍
       expect(notes[0]!.start).toBe(0);
       expect(notes[1]!.start).toBe(0.25);
     });
 
-    it("resolves 3rd/7th from chord quality (G7)", () => {
+    it("resolves 3rd/7th from chord quality (G7・新窓)", () => {
       const notes = resolveRelativeBass(
         [
           { step: 0, degree: "R", dur: 1 },
@@ -183,15 +184,17 @@ describe("music", () => {
         [{ root: 7, quality: "7", start: 0, dur: 4 }],
         0,
       );
-      expect(notes.map((n) => n.pitch)).toEqual([31, 35, 41]); // G1 / B1(root+4) / F2(root+10) 度数はルートから上
+      // G→band(7)=43。3=root+4=47・7(dom7)=root+10=53→fold(53,33,48)=41。度数はルートから上・窓 [33,48] へ fold。
+      expect(notes.map((n) => n.pitch)).toEqual([43, 47, 41]);
     });
 
-    it("minor 3rd is short third (Am → C)", () => {
+    it("minor 3rd is short third (Am → C)＝質依存は不変", () => {
       const notes = resolveRelativeBass([{ step: 0, degree: "3", dur: 1 }], [{ root: 9, quality: "m", start: 0, dur: 4 }], 0);
-      expect(notes[0]!.pitch).toBe(band(0)); // C → 36
+      // Am root→band(9)=33、短3度(+3)=36＝C。質依存の 3 は既存契約どおり（修理#2でも不変）。
+      expect(notes[0]!.pitch).toBe(36);
     });
 
-    it("approach walks a half-step toward the next chord root", () => {
+    it("approach walks a half-step toward the next chord root（新窓）", () => {
       const notes = resolveRelativeBass(
         [
           { step: 0, degree: "R", dur: 4 },
@@ -199,27 +202,27 @@ describe("music", () => {
         ],
         [
           { root: 0, quality: "", start: 0, dur: 1 },
-          { root: 7, quality: "", start: 2, dur: 2 }, // 次コード G → ルート band(7)=31
+          { root: 7, quality: "", start: 2, dur: 2 }, // 次コード G → ルート band(7)=43
         ],
         0,
       );
-      // 31±1（30/32）のうち直前音(36)に近い側＝32
-      expect([30, 32]).toContain(notes[1]!.pitch);
+      // 43±1（42/44）のうち直前音（R=36）に近い側＝42
+      expect([42, 44]).toContain(notes[1]!.pitch);
     });
 
-    it("never emits below the E1 floor (28)", () => {
-      const notes = resolveRelativeBass([{ step: 0, degree: "R", dur: 1 }], [], 4); // E→28
-      expect(notes.every((n) => n.pitch >= 28)).toBe(true);
+    it("never emits below the 較正窓 floor (33)", () => {
+      const notes = resolveRelativeBass([{ step: 0, degree: "R", dur: 1 }], [], 9); // A→33（床）
+      expect(notes.every((n) => n.pitch >= 33)).toBe(true);
     });
 
-    it("つんのめり：裏拍始まりで次のダウンビートを跨ぐ音は、跨いだ先のコードで相対解決", () => {
+    it("つんのめり：裏拍始まりで次のダウンビートを跨ぐ音は、跨いだ先のコードで相対解決（新窓）", () => {
       // 2拍裏(step10=2.5拍)から四分(4step=1拍)→3.5拍まで＝3拍目(G)を跨ぐ→Gルート基準。
       const chords = [
         { root: 0, quality: "", start: 0, dur: 3 }, // 0..3拍目前 = C
         { root: 7, quality: "", start: 3, dur: 1 }, // 3拍目 = G
       ];
       const anticip = resolveRelativeBass([{ step: 10, degree: "R", dur: 4 }], chords, 0);
-      expect(anticip[0]!.pitch).toBe(band(7)); // G(31)＝跨いだ先のコードで解決（つんのめり）
+      expect(anticip[0]!.pitch).toBe(band(7)); // G(43)＝跨いだ先のコードで解決（つんのめり）
       // 対照：拍頭(step8=2拍)始まりは始点のコード C のまま（つんのめらない）
       const onbeat = resolveRelativeBass([{ step: 8, degree: "R", dur: 4 }], chords, 0);
       expect(onbeat[0]!.pitch).toBe(band(0)); // C(36)
@@ -230,7 +233,7 @@ describe("music", () => {
       expect(notesForContent("bass", content, { key: 0 })).toEqual([{ pitch: 36, start: 0, dur: 1 }]);
       // preview_chords があればそれで鳴らす
       const withChords = { ...content, preview_chords: [{ root: 7, quality: "", start: 0, dur: 4 }] };
-      expect(notesForContent("bass", withChords)[0]!.pitch).toBe(31); // G1
+      expect(notesForContent("bass", withChords)[0]!.pitch).toBe(43); // G2（新窓）
     });
 
     it("compositeNotes resolves relative bass against the section chord lane", () => {
@@ -245,8 +248,63 @@ describe("music", () => {
         },
       ];
       const notes = compositeNotes(children, 0);
-      // section コードレーンの G に当たり band(7)=31（相対bassは移調しない＝解決済み実音高）
-      expect(notes.find((n) => n.pitch === 31)).toBeTruthy();
+      // section コードレーンの G に当たり band(7)=43（相対bassは移調しない＝解決済み実音高）
+      expect(notes.find((n) => n.pitch === 43)).toBeTruthy();
+    });
+
+    // --- 修理#2：語彙統一（クロマチック度数・2/6・next）＋ style 相対の等価性（realizeBassGrid と一致） ---
+    describe("拡張語彙＋等価性（修理#2・H2）", () => {
+      const C = [{ root: 0, quality: "", start: 0, dur: 64 }]; // C 敷き詰め
+      // 較正窓 [33,48] へ fold（api foldBassPitch と等価）＝期待値算出の参照実装。
+      const fold = (p: number) => { let x = p; while (x < 33) x += 12; while (x > 48) x -= 12; return x; };
+      const DEG: Record<string, number> = { R: 0, "8": 12, "2": 2, "5": 7, "6": 9, b6: 8, b7: 10, "#4": 6, "#7": 11 };
+
+      it("固定半音のクロマチック度数（2/6/b6/b7/#4/#7）を DEGREE_SEMI で解決（質非依存）", () => {
+        const degs = ["2", "6", "b6", "b7", "#4", "#7"];
+        const notes = resolveRelativeBass(degs.map((d, i) => ({ step: i, degree: d as never, dur: 1 })), C, 0);
+        expect(notes.map((n) => n.pitch)).toEqual(degs.map((d) => fold(36 + DEG[d]!)));
+      });
+
+      it("next（R>/8>）は次小節頭のコードで解決＝先取り着地", () => {
+        const chords = [
+          { root: 0, quality: "", start: 0, dur: 4 }, // bar0 = C
+          { root: 7, quality: "", start: 4, dur: 4 }, // bar1 = G
+        ];
+        // bar0 の末尾 step15 に R>（next）→ 次小節頭 G のルートで解決＝band(7)=43。
+        const notes = resolveRelativeBass([{ step: 15, degree: "R", dur: 1, next: true }], chords, 0);
+        expect(notes[0]!.pitch).toBe(43);
+        // next 無しの同 step は当拍（bar0=C）で解決＝36。
+        const noNext = resolveRelativeBass([{ step: 15, degree: "R", dur: 1 }], chords, 0);
+        expect(noNext[0]!.pitch).toBe(36);
+      });
+
+      // ★ 等価性（test c）：genBass の style 相対 content（apps/api/test/gen-bass-relative.test.ts と同一リテラル）を
+      //    resolveRelativeBass で実音化した結果が、絶対経路（gen-bass-library.test.ts の期待値）と一致。
+      it("RK-8ROOT 相対＝絶対（8分ルート連打・pitch36×8・starts 0..3.5・dur0.25）", () => {
+        const pattern = [0, 2, 4, 6, 8, 10, 12, 14].map((s) => ({ step: s, degree: "R" as const, dur: 1 }));
+        const notes = resolveRelativeBass(pattern, C, 0);
+        expect(notes.map((n) => n.pitch)).toEqual(Array(8).fill(36)); // gen-bass-library (b): pitch36
+        expect(notes.map((n) => n.start)).toEqual([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]); // 同 (b): starts
+        expect(notes.every((n) => n.dur === 0.25)).toBe(true);
+      });
+
+      it("CP-OCT8 相対＝絶対（R↔オクターブ往復 36/48 交互）", () => {
+        const pattern = [0, 2, 4, 6, 8, 10, 12, 14].map((s, i) => ({ step: s, degree: (i % 2 === 0 ? "R" : "8") as "R" | "8", dur: 1 }));
+        const notes = resolveRelativeBass(pattern, C, 0);
+        expect(notes.map((n) => n.pitch)).toEqual([36, 48, 36, 48, 36, 48, 36, 48]); // gen-bass-library (b) と一致
+      });
+
+      it("CP-CHROMA 相対＝クロマチック下降（R/8/b7/6/b6/5＋末尾 next）が窓内で正しく解決", () => {
+        // gen-bass-relative.test.ts (b) の CP-CHROMA content と同一 pattern。
+        const pattern = [
+          { step: 0, degree: "R" }, { step: 2, degree: "8" }, { step: 4, degree: "R" }, { step: 6, degree: "8" },
+          { step: 8, degree: "b7" }, { step: 10, degree: "6" }, { step: 12, degree: "b6" }, { step: 14, degree: "5" },
+          { step: 15, degree: "R", next: true },
+        ].map((s) => ({ ...s, degree: s.degree as never, dur: 1 }));
+        const notes = resolveRelativeBass(pattern, C, 0);
+        // 全て C 基準・window fold。R36/8→48/b7→46/6→45/b6→44/5→43/R>(次小節=無コード→key C)→36。
+        expect(notes.map((n) => n.pitch)).toEqual([36, 48, 36, 48, 46, 45, 44, 43, 36]);
+      });
     });
 
     it("compositeNotes carries per-part program (合成再生で音色を保つ)", () => {
