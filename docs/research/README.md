@@ -104,6 +104,11 @@ SDD構造への接続：設計の確定事項は `docs/design.md`（特に #12-M
 - [2026-06-22-jp-chord-sources](2026-06-22-jp-chord-sources.md) — 日本の曲のコード進行を大量に仕入れる現実解
 - [2026-06-22-key-degree-tech](2026-06-22-key-degree-tech.md) — コード進行→調→度数 変換の要素技術
 
+## 伴奏・演奏（コード楽器/ベースの奏法抽象化）
+- [2026-07-22-accompaniment-style-engines](2026-07-22-accompaniment-style-engines.md) — **先行スタイルエンジン調査（BiaB/Yamaha SFF/MMA/impro-visor）＝設計の裏付け**。全員同じ骨格＝「固定パターン断片（度数×リズム×vel・データ）＋コード適応の変換規則（純関数）」二層・ML本流でない。芯=Yamaha NTR×NTT（パート=楽器役割ごとに変換規則切替＝楽器別の差の持ち方）。バリエーション/フィル=重み付き選択＋小節種別A/B＋マスク。既知の失敗=単純ランダム化は逆効果(BiaB)・継ぎ目=RTR再発音規則・コード変化ずれ=アンティシペーション処理。**Otomemoの chord_pattern＋resolveChordPattern は既にこの型**＝拡張は「テンプレ増」「変換規則の表現力」の2方向。線引き=スタイル中身はデータ/変換規則はコード=純関数TDD
+- [2026-07-22-guitar-comping-vocabulary](2026-07-22-guitar-comping-vocabulary.md) — **ギター奏法語彙（外部サーベイ）**。6弦・4フレット制約→鍵盤クローズド不可＝「最低声=根音・3度1個中高域・R/5オクターブ重複」の度数×MIDIノート集合表（開放弦/バレー/パワーコード/rootless）。ストラム15型（D/U/ゴースト/アクセント・16分グリッド）・ダウン/アップのMIDI相場（アップ=高→低・上位3-4声・vel0.78×）・ロール5-30ms/弦は**奏法＝レンダ層担当**（feel層と二重掛けしない線引き）。設計含意=`voicing.style:"keyboard"|"guitar"`追加（mode増やさない）・変換はレンダ層＝保存スペックは度数抽象のまま・strumMs既定0=bit一致。縦スライス順①voiceGuitar→⑤カッティング
+- [2026-07-22-piano-comping-vocabulary](2026-07-22-piano-comping-vocabulary.md) — **ピアノ/鍵盤コンピング語彙13型（外部サーベイ）**。LH/RH度数テキスト譜（16分グリッド）×テンポ帯×場面。左右手分業則（LH=C2-C3のR/5/oct/R10・RH=C4-C5の3-4声・low interval limit実値）・前借りシンコペ(step7/15)定石・音色差分(アコピ/EP/パッド/ブラス)。GM制約=和音内vel差は本書管轄・roll/swingはfeel層へ（二重適用回避の住み分け明記）。設計含意=chord_pattern hits が16分グリッド既設→**型辞書はJSONデータで持てる**・最大欠損=左手(ベース土台)フィールド・ノブは既定OFF=bit一致方式
+
 ## 横断研究(study)＝クロス曲の共通進行(#S11)
 - [2026-07-06-hayashibara-loop-reproduction](2026-07-06-hayashibara-loop-reproduction.md) — **曲内ループ・レンズの再現テスト(n=2)**＝林原めぐみ5曲(公式Topic音源)。レンズは再現(各曲に固有ループ×5〜18)、但し**共有核は薄い**(Northern lightsのみ純Aeolian、infinity/KOIBUMIは本物のV、feel wellは単純メジャー)＝**歌手は複数作曲者で手癖がぼける**。SURFACE(単一作曲者)で立ち林原(複数)で正しく立たない＝**メソッドは判別力あり・手癖の単位は作曲者**。実装GOの根拠。設計含意=studyは作曲者で括る
 - [2026-07-06-within-song-loop-lens](2026-07-06-within-song-loop-lens.md) — **レンズ転換の実測**＝「曲間頻度」は全曲の最小公倍数(♭VI–♭VII–i)だけ見せ各曲の色を平均で消す欠陥。**曲内反復ループ**でSURFACE4曲を見ると2曲は本当に♭VI–♭VII–i循環がフック、残り2曲は曲間レンズが消してた個性(本物のV／ジャジーmaj7ループ)が出た。手法の罠2つ(被覆=回数×長さは2連断片を贔屓／保存にdur落とすと調が出現数重みに劣化し誤検出)も記録。**設計提案=study主レンズをper-song core loopへ＋生コード列(dur込)保存**
