@@ -657,6 +657,104 @@ describe("music", () => {
       for (const p of [23, 32, 0, 48]) expect(isGuitarProgram(p)).toBe(false);
       expect(isGuitarProgram(undefined)).toBe(false);
     });
+
+    // ── 左手(LH)内蔵（S3・研究doc piano §2）＝keyboard 解決時のみ・C2-C3 窓・vel やや強め ──
+    it("LH bit一致：lh 未定義は既存出力と完全一致（deepStrictEqual）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      expect(resolveChordPattern(cp({ lh: undefined }), chords, 0)).toEqual(resolveChordPattern(cp(), chords, 0));
+    });
+    it("LH root：低域ルート白玉1音を足す（C2-C3 窓・vel=106）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const base = resolveChordPattern(cp(), chords, 0);
+      const withLh = resolveChordPattern(cp({ lh: { mode: "root" } }), chords, 0);
+      expect(withLh.length).toBe(base.length + 1); // 1小節=anchor1つ=LH1音
+      const lh = withLh.filter((n) => n.vel === 106);
+      expect(lh.length).toBe(1);
+      expect(((lh[0]!.pitch % 12) + 12) % 12).toBe(0); // ルート C
+      expect(lh[0]!.pitch).toBeGreaterThanOrEqual(36); // C2
+      expect(lh[0]!.pitch).toBeLessThanOrEqual(48); // C3 窓
+    });
+    it("LH root5：R+P5 の2音（C2 + G2）", () => {
+      const lh = resolveChordPattern(cp({ lh: { mode: "root5" } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.vel === 106);
+      expect(lh.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([36, 43]); // C2 + G2
+    });
+    it("LH oct：R+オクターブの2音（C2 + C3・研究doc §2-3 oct(R+R)）", () => {
+      const lh = resolveChordPattern(cp({ lh: { mode: "oct" } }), [{ root: 0, quality: "", start: 0, dur: 4 }], 0).filter((n) => n.vel === 106);
+      expect(lh.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([36, 48]); // C2 + C3
+    });
+    it("LH は小節頭＋コードチェンジを anchor に白玉（C→G の2anchor・次anchorまで伸ばす）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 2 }, { root: 7, quality: "", start: 2, dur: 2 }];
+      const lh = resolveChordPattern(cp({ lh: { mode: "root" } }), chords, 0).filter((n) => n.vel === 106);
+      expect(lh.length).toBe(2);
+      expect(lh.map((n) => ((n.pitch % 12) + 12) % 12)).toEqual([0, 7]); // C・G
+      expect(lh[0]!.start).toBe(0); expect(lh[0]!.dur).toBe(2); // 次コードまで
+      expect(lh[1]!.start).toBe(2);
+    });
+    it("LH custom：hits を度数解決／色音(3rd)は LIL ガードで C3 以上へ", () => {
+      const lh = resolveChordPattern(
+        cp({ lh: { mode: "custom", hits: [{ step: 0, dur: 4, deg: "R" }, { step: 8, dur: 4, deg: "3" }] } }),
+        [{ root: 0, quality: "", start: 0, dur: 4 }], 0,
+      ).filter((n) => n.vel === 106);
+      expect(lh.length).toBe(2);
+      expect(lh.find((n) => n.start === 0)!.pitch).toBe(36); // R=C2
+      const third = lh.find((n) => Math.abs(n.start - 2) < 1e-6)!;
+      expect(((third.pitch % 12) + 12) % 12).toBe(4); // E
+      expect(third.pitch).toBeGreaterThanOrEqual(48); // LIL：色音は C3 以上（36+4=40<48→+12=52）
+    });
+    it("LH は guitar 解決では鳴らない（ギターに左手なし）＝lh 有無で同一", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const g = { ...gcp(), lh: { mode: "root" as const } };
+      expect(resolveChordPattern(g, chords, 0)).toEqual(resolveChordPattern(gcp(), chords, 0));
+    });
+    it("LH は auto→guitar 解決(ギター音色)でも鳴らない", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const autoLh = { ...gcp(), voicing: { ...gcp().voicing, style: "auto" as const }, lh: { mode: "root" as const } };
+      expect(resolveChordPattern(autoLh, chords, 0, 120, 25).every((n) => n.vel !== 106)).toBe(true); // program25=guitar
+      // 非ギター音色（auto→keyboard）なら LH が鳴る
+      expect(resolveChordPattern(autoLh, chords, 0, 120, 0).some((n) => n.vel === 106)).toBe(true);
+    });
+
+    // ── ギター D/U（S3・研究doc §3）＝guitar×strum のみ・dir 明示で opt-in ──
+    const gdir = (dir?: "D" | "U", vov: Partial<import("../src/music").ChordVoicing> = {}) => ({
+      mode: "strum" as const,
+      voicing: { tones: [] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0, top: 72, style: "guitar" as const, ...vov },
+      steps: 16, hits: [dir ? { step: 0, dur: 8, dir } : { step: 0, dur: 8 }],
+    });
+    it("dir='D' は未指定と同一出力（現行S1挙動を素通し・bit）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      expect(resolveChordPattern(gdir("D", { strumMs: 20 }), chords, 0, 120)).toEqual(resolveChordPattern(gdir(undefined, { strumMs: 20 }), chords, 0, 120));
+      expect(resolveChordPattern(gdir("D"), chords, 0)).toEqual(resolveChordPattern(gdir(undefined), chords, 0));
+    });
+    it("dir='U'：高→低・上位最大4声・vel=78（ダウンより軽く声数少）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const down = resolveChordPattern(gdir("D"), chords, 0);
+      const up = resolveChordPattern(gdir("U"), chords, 0);
+      expect(up.length).toBeLessThanOrEqual(4);
+      expect(up.length).toBeLessThan(down.length); // U は声数が減る
+      expect(up.every((n) => n.vel === 78)).toBe(true); // 100×0.78
+      expect(Math.max(...up.map((n) => n.pitch))).toBe(Math.max(...down.map((n) => n.pitch))); // トップ共有
+    });
+    it("dir='U' ロール：strumMs>0×tempo で高→低に時差×0.75（アップは速い）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const up = resolveChordPattern(gdir("U", { strumMs: 20 }), chords, 0, 120); // 0.04拍/弦 ×0.75=0.03
+      expect(up[0]!.start).toBe(0); // 最初=最高声
+      for (let i = 1; i < up.length; i++) expect(up[i]!.start).toBeGreaterThan(up[i - 1]!.start);
+      expect(up[0]!.pitch).toBeGreaterThan(up[up.length - 1]!.pitch); // 高→低
+      expect(up[1]!.start).toBeCloseTo(0.03, 6); // 0.04×0.75
+    });
+    it("dir='U' は roll 無し(strumMs=0)でも声数減＋vel78（時差0＝全声 start0）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const up = resolveChordPattern(gdir("U"), chords, 0, 120); // strumMs 未指定=0
+      expect(up.every((n) => n.start === 0)).toBe(true);
+      expect(up.every((n) => n.vel === 78)).toBe(true);
+      expect(up.length).toBeLessThanOrEqual(4);
+    });
+    it("dir は keyboard では効かない（U でも全声・vel 触らない）＝bit", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const kbU = { mode: "strum" as const, voicing: { tones: ["R", "3", "5"] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0 }, steps: 16, hits: [{ step: 0, dur: 8, dir: "U" as const }] };
+      const kbPlain = { ...kbU, hits: [{ step: 0, dur: 8 }] };
+      expect(resolveChordPattern(kbU, chords, 0, 120)).toEqual(resolveChordPattern(kbPlain, chords, 0, 120));
+    });
   });
 
   describe("playback scheduling (#57)", () => {

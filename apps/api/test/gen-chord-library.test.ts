@@ -6,7 +6,7 @@
 //  (d) ギター型で voicing.style==="guitar"／strumMs が載る
 import { describe, it, expect } from "vitest";
 import { genChordPattern, type Frame } from "../src/music/generate";
-import { COMP_TYPES, compTypeById, pickCompType, parseCompRh, compHitsForBar, CHORD_ACCENT, CHORD_UP, CHORD_GHOST } from "../src/music/chordLibrary";
+import { COMP_TYPES, compTypeById, pickCompType, parseCompRh, parseCompLh, compHitsForBar, compLhHitsForBar, CHORD_ACCENT, CHORD_GHOST } from "../src/music/chordLibrary";
 
 type Hit = { step: number; dur: number; vel?: number };
 type Content = { mode: string; voicing: Record<string, unknown>; steps: number; hits: Hit[] };
@@ -41,7 +41,7 @@ describe("辞書の健全性（純データ）", () => {
     expect(c[4]).toEqual({ kind: "attack", vel: 64 });
     expect(c[5]).toEqual({ kind: "attack", dir: "D" });
     expect(c[6]).toEqual({ kind: "attack", vel: CHORD_ACCENT, dir: "D" });
-    expect(c[7]).toEqual({ kind: "attack", vel: CHORD_UP, dir: "U" });
+    expect(c[7]).toEqual({ kind: "attack", dir: "U" }); // S3：plain U は dir のみ（vel は焼かない＝render で×0.78 一元化）
     expect(c[8]).toEqual({ kind: "attack", vel: CHORD_GHOST, ghost: true });
   });
   it("compHitsForBar：dur=1+直後 hold 数・rest で打ち切り・ghost は dur1・vel は素通し", () => {
@@ -177,5 +177,68 @@ describe("回帰：compTypeById／既知 ID", () => {
     expect(compTypeById("GT-FOLK8")?.genre).toBe("folk");
     expect(compTypeById("CP-SYNC16")?.genre).toBe("citypop");
     expect(compTypeById("XX")).toBeUndefined();
+  });
+});
+
+// ── S3：左手(LH)内蔵＋ギター D/U 配線 ──────────────────────────────────────────
+describe("S3 (e) ギター型の hits に dir(D/U) が透過", () => {
+  it("GT-DU8＝表拍D・裏U が hit.dir へ（U は vel を焼かない＝render で×0.78）", () => {
+    const c = contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "GT-DU8" }));
+    // GT-DU8 rh = "D - U - | D - U - | D - U - | D - U -" → D=step0,4,8,12 / U=step2,6,10,14
+    const dirs = new Map(c.hits.map((h) => [h.step, h.dir]));
+    expect(dirs.get(0)).toBe("D");
+    expect(dirs.get(2)).toBe("U");
+    // plain U は vel を持たない（dir のみ）＝二重掛け回避。
+    expect(c.hits.find((h) => h.step === 2)!.vel).toBeUndefined();
+    // アクセントダウン `d`(GT-BACKBEAT 等)は vel を保持
+    const b = contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "GT-BACKBEAT" }));
+    const accentDown = b.hits.find((h) => h.dir === "D" && h.vel === CHORD_ACCENT);
+    expect(accentDown, "GT-BACKBEAT にアクセントダウンあり").toBeTruthy();
+  });
+  it("鍵盤型（PB-WHOLE）の hits に dir キーは生えない（bit）", () => {
+    const c = contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "PB-WHOLE" }));
+    expect(c.hits.every((h) => !("dir" in h))).toBe(true);
+  });
+  it("compHitsForBar：dir セルは dir を透過・dir 無しセルはキーを生やさない", () => {
+    const hits = compHitsForBar(parseCompRh("D - U - | . . . . | . . . . | . . . ."), 0);
+    expect(hits[0]).toEqual({ step: 0, dur: 2, dir: "D" }); // D + hold
+    expect(hits[1]).toEqual({ step: 2, dur: 2, dir: "U" }); // U + hold（vel 無し）
+    const kb = compHitsForBar(parseCompRh("A - - - | . . . . | . . . . | . . . ."), 0);
+    expect("dir" in kb[0]!).toBe(false); // dir 無しセルは dir キー無し
+  });
+});
+
+describe("S3 (f) keyboard 型は content.lh を custom で載せる／guitar 型は載せない", () => {
+  it("PB-WHOLE＝content.lh={mode:custom, hits(deg)}・小節ぶん敷かれる", () => {
+    const c = contentOf(genChordPattern({ bars: 2, meter: "4/4" }, 1, { pattern: "PB-WHOLE" })) as unknown as { lh?: { mode: string; hits: { step: number; dur: number; deg: string }[] } };
+    expect(c.lh?.mode).toBe("custom");
+    // PB-WHOLE lh = "R - - - | - - - - | - - - - | - - - -" → 1小節=step0 の R（dur16）。2小節=step0,16。
+    expect(c.lh?.hits.map((h) => h.step)).toEqual([0, 16]);
+    expect(c.lh?.hits.every((h) => h.deg === "R")).toBe(true);
+  });
+  it("PB-ARP16＝lh に R/5 が度数で載る（deg 透過）", () => {
+    const c = contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "PB-ARP16" })) as unknown as { lh?: { hits: { deg: string }[] } };
+    // PB-ARP16 lh = "R - - - | 5 - - - | R - - - | 5 - - -"
+    expect(c.lh?.hits.map((h) => h.deg)).toEqual(["R", "5", "R", "5"]);
+  });
+  it("ギター型（GT-FOLK8）は content.lh を持たない（ギターに左手なし）", () => {
+    const c = contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "GT-FOLK8" })) as unknown as { lh?: unknown };
+    expect("lh" in c).toBe(false);
+  });
+  it("opts.style=guitar で鍵盤型を上書き＝lh を載せない（ギター解決だから）", () => {
+    const c = contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "PB-WHOLE", style: "guitar" })) as unknown as { lh?: unknown };
+    expect("lh" in c).toBe(false);
+  });
+  it("従来経路（pattern 未指定）は lh/dir を触らない（bit 一致・鉄則の再確認）", () => {
+    const c = contentOf(genChordPattern({ bars: 2, meter: "4/4" }, 3)) as unknown as { lh?: unknown; hits: { dir?: string }[] };
+    expect("lh" in c).toBe(false);
+    expect(c.hits.every((h) => !("dir" in h))).toBe(true);
+  });
+  it("compLhHitsForBar：attack を deg 付き hit へ・hold で dur 伸長・rest 打ち切り", () => {
+    const cells = parseCompLh("R - - - | 5 - . . | . . . . | . . . .");
+    expect(compLhHitsForBar(cells, 0)).toEqual([
+      { step: 0, dur: 4, deg: "R" }, // R + 3 hold
+      { step: 4, dur: 2, deg: "5" }, // 5 + 1 hold（次が rest）
+    ]);
   });
 });

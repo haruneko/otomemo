@@ -600,13 +600,21 @@ export interface ChordVoicing {
   style?: "keyboard" | "guitar" | "auto"; // ボイシング奏法（2026-07-22 研究doc guitar-comping-vocabulary）。未指定＝keyboard＝現行 voiceToTop（不変）。guitar＝voiceGuitar（最低声=根音・3度1個・根音/5度重複・弦チューニング由来の度数分布）。auto＝レンダ時に program の GM ファミリから導出（guitar系24-31→guitar／他→keyboard・奏法UIスライスA/B）＝program 未知なら keyboard 相当。
   strumMs?: number; // 弦順ロールの1弦あたり時差（ms）。style:"guitar"＋mode:"strum"＋テンポ既知のとき和音内各声をダウン=低→高に strumMs ずつ決定的にずらす（研究doc §3）。既定/0＝時差なし＝全声同時（bit一致）。
 }
-export interface ChordHit { step: number; dur: number; vel?: number } // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）
+export interface ChordHit { step: number; dur: number; vel?: number; dir?: "D" | "U" } // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）。S3 dir?=ギター×strum のストローク向き（D=ダウン低→高・U=アップ高→低の上位声・0.78×）。未指定=従来（=D 相当）＝bit一致。
+// 左手（LH・S3・2026-07-22・研究doc piano §2）：コード楽器ネタに内蔵する左手土台。resolved style が keyboard の
+// ときだけ実音化（guitar は無視）。未定義＝左手なし＝既存全ネタと bit 一致。preset(root/root5/oct)＝RH の小節頭＋
+// コードチェンジを anchor に白玉（保守的既定）。custom＝hits を度数解決してそのまま（辞書由来）。
+export interface ChordLhContent {
+  mode: "root" | "root5" | "oct" | "custom";
+  hits?: { step: number; dur: number; deg?: string; vel?: number }[]; // custom のみ（度数トークン R/5/8/3…）
+}
 export interface ChordPatternContent {
   mode: ChordPatternMode;
   voicing: ChordVoicing;
   steps: number; // 1step=16分（リズム/相対ベースと同じグリッド）
   hits: ChordHit[]; // 発音する step とその長さ
   program?: number; // 自前の音色（ベースのように選べる）
+  lh?: ChordLhContent; // S3 左手土台（keyboard 解決時のみ実音化・未定義＝左手なし＝bit一致）
 }
 const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
 // #29 P2 コード楽器の3値ベロシティ語彙（普通=vel 省略→下流 vel??100）。耳較正で調整可＝保存データは実値なので既存不変。
@@ -628,7 +636,9 @@ export function emptyChordPattern(): ChordPatternContent {
   // top を持たせて新モデル（構成音自動＋トップ狙い）で動く。tones は後方互換で残置。
   // 奏法UIスライスA：新規ネタ既定＝style:"auto"＝program のファミリから奏法が自動で付く（ギター音色→ギター奏法）。
   // 既存ネタ（style 無し）は keyboard のまま不変＝新規のみ auto。
-  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, powerChord: false, arpDir: "up", style: "auto" }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })) };
+  // S3 左手内蔵：新規ネタ既定＝lh:{mode:"root"}（style:"auto" と同じ「新規のみ」原則＝既存ネタ不変）。
+  // ギター音色なら style 解決で guitar になり lh は鳴らない＝矛盾なし。
+  return { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, powerChord: false, arpDir: "up", style: "auto" }, steps: 32, hits: [0, 8, 16, 24].map((s) => ({ step: s, dur: 8 })), lh: { mode: "root" } };
 }
 
 // コードを voicing で実音化（決定C・伴奏レジスタ）：構成音(R/3/5/7)を**アンカーの最寄りオクターブ**に
@@ -744,6 +754,65 @@ function resolveAutoStyle(v: ChordVoicing, program?: number): ChordVoicing {
   return { ...v, style: isGuitarProgram(program) ? "guitar" : "keyboard" };
 }
 
+// ── 左手(LH・S3・研究doc piano §2)＝コード楽器ネタ内蔵の土台。keyboard 解決時のみ実音化 ──
+const LH_LO = 36; // C2（左手窓の下限）
+const LH_HI = 48; // C3（左手窓の上限＝色音の LIL 下限）
+const LH_VEL = 106; // 左手やや強め（研究doc §5-1・RH 既定100 より上・要耳較正）
+const GUITAR_UP_VEL = 0.78; // アップ＝ダウンの ~0.78×（研究doc §3.5）
+const GUITAR_UP_ROLL = 0.75; // アップの弦時差＝ダウンの ~0.75×（手返しが速い・研究doc §3.5）
+// ルート pc(0..11) を左手窓の最下オクターブ C2..B2(36..47) の実音へ。
+function lhBand(pc: number): number { return LH_LO + ((((Math.round(pc) % 12) + 12) % 12)); }
+// 左手 preset の度数音（低→高）。root:{R}／root5:{R,R+P5}／oct:{R,R+oct}（研究doc §2-3 oct(R+R)）。
+function lhModePitches(mode: "root" | "root5" | "oct", rootPc: number): number[] {
+  const base = lhBand(rootPc);
+  if (mode === "root5") return [base, base + 7];
+  if (mode === "oct") return [base, base + 12];
+  return [base];
+}
+// content.lh を進行に当てて左手 notes へ。preset＝小節頭(16step)＋コードチェンジを anchor に白玉。
+// custom＝hits を度数解決（LIL ガード：色音が C3 未満なら 1oct 上げ）。呼び出しは keyboard 解決時のみ。
+function resolveLh(lh: ChordLhContent, steps: number, chords: ChordEntry[], key: number): Note[] {
+  const k = ((key % 12) + 12) % 12;
+  const out: Note[] = [];
+  if (lh.mode === "custom") {
+    const hits = [...(lh.hits ?? [])].sort((a, b) => a.step - b.step);
+    for (const h of hits) {
+      const start = Math.round(h.step * BASS_STEP_TO_BEAT * 1000) / 1000;
+      const dur = Math.round(Math.max(1, h.dur) * BASS_STEP_TO_BEAT * 1000) / 1000;
+      if (dur <= 0) continue;
+      const ch = bassChordAt(start, chords);
+      const rootPc = ch ? ((ch.root % 12) + 12) % 12 : k;
+      const quality = ch ? ch.quality : "";
+      const deg = h.deg ?? "R";
+      let pitch = lhBand(rootPc) + degreeInterval(deg, quality);
+      // LIL ガード：色音(3/7 等＝非 R/5/8)は C3(48)未満で濁る＝1oct 上げる（5度/オクターブは低域可）。
+      if (deg !== "R" && deg !== "5" && deg !== "8") while (pitch < LH_HI) pitch += 12;
+      out.push({ pitch, start, dur, vel: h.vel ?? LH_VEL });
+    }
+    return out;
+  }
+  // preset：anchor = 小節頭(16step 境界)∪コードチェンジ step。各 anchor は次 anchor/末尾まで白玉。
+  const barSteps = 16;
+  const anchorSet = new Set<number>();
+  for (let s = 0; s < steps; s += barSteps) anchorSet.add(s);
+  for (const c of chords) {
+    const st = Math.round(c.start / BASS_STEP_TO_BEAT);
+    if (st >= 0 && st < steps) anchorSet.add(st);
+  }
+  const anchors = [...anchorSet].sort((a, b) => a - b);
+  for (let i = 0; i < anchors.length; i++) {
+    const s = anchors[i]!;
+    const nextS = i + 1 < anchors.length ? anchors[i + 1]! : steps;
+    const start = Math.round(s * BASS_STEP_TO_BEAT * 1000) / 1000;
+    const dur = Math.round((nextS - s) * BASS_STEP_TO_BEAT * 1000) / 1000;
+    if (dur <= 0) continue;
+    const ch = bassChordAt(start, chords);
+    const rootPc = ch ? ((ch.root % 12) + 12) % 12 : k;
+    for (const pitch of lhModePitches(lh.mode, rootPc)) out.push({ pitch, start, dur, vel: LH_VEL });
+  }
+  return out;
+}
+
 // コード楽器パターンをコードに当てて実音 notes へ（strum=和音ブロック／arp=構成音を巡回）。相対型＝進行に解決。
 // tempo（BPM）＝弦順ロール（style:"guitar"＋strum＋strumMs>0）の ms→拍換算に使う。未指定/無効なら roll 無し
 // （＝ストレート同時発音＝bit一致）＝レンダ境界（buildPlayback）でテンポが既知の場所からのみ流す（feel 層と同流儀）。
@@ -784,6 +853,16 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
       if (v.arpReset && v.arpReset > 0) { const grp = Math.floor((start + 1e-9) / v.arpReset); if (grp !== arpGrp) { arpIdx = 0; arpGrp = grp; } }
       out.push({ pitch: pool[arpStep(arpIdx, pool.length, v.arpDir)]!, start, dur, ...velSpread });
       arpIdx++;
+    } else if (v.style === "guitar" && hits[h]!.dir === "U") {
+      // アップストローク（研究doc §3.3/§3.5）：高→低・上位最大4声のみ（低音弦=根音を落とす）・vel×0.78・
+      // ロール発火時は弦時差×0.75。dir="D"/未指定は下の既存経路（低→高・全声）＝bit一致。
+      const upVoices = [...voiced].sort((a, b) => b - a).slice(0, 4); // 高→低の上位4声
+      const upVel = Math.round((hits[h]!.vel ?? 100) * GUITAR_UP_VEL); // ダウン基準100の0.78×（既定U打点）
+      const perVoice = rollActive ? rollBeatPerVoice * GUITAR_UP_ROLL : 0;
+      upVoices.forEach((p, idx) => {
+        const st = Math.round((start + idx * perVoice) * 1000) / 1000;
+        out.push({ pitch: p, start: st, dur, vel: upVel });
+      });
     } else if (rollActive) {
       // 弦順ロール（研究doc §3）：和音内の各声（＋オンベース）を昇順（低→高＝ダウンストローク）に並べ、
       // idx ぶんの決定的時差でずらす。vel は触らない（今回はダウンのみ・時差だけ）。dur は据え置き（各声が鳴り続ける）。
@@ -811,6 +890,11 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
         out.push({ pitch: bp, start, dur, ...velSpread });
       }
     }
+  }
+  // 左手（S3）：resolved style が keyboard のときだけ content.lh を実音化して土台を足す（guitar は無視）。
+  // lh 未定義＝何も足さない＝bit一致。LH は白玉＝strum ロールの対象外。
+  if (content?.lh && v.style !== "guitar") {
+    out.push(...resolveLh(content.lh, content?.steps ?? 16, chords, key));
   }
   return out;
 }

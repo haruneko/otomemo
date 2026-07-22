@@ -1,5 +1,5 @@
 import { type CSSProperties, type Ref, useState } from "react";
-import { type ChordPatternContent, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
+import { type ChordPatternContent, type ChordLhContent, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
@@ -64,9 +64,9 @@ function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
 // 構成音の手選択は撤去＝鳴る音はコードの質から自動（resolveChordPattern/voiceToTop）。
 //
 // ★CP行契約（不変条件・肥大化ガード・TinkerSheet ハブ契約 L8-15 と同文体）：
-//   **響きゾーンは最大4行**（打ち方／トップ・広がり／高さ・パワー(arp時=向き・幅・区切り)／奏法）。
-//   これ以上ノブが要る日は【群アコーディオンへ沈める】（前面はこの4行で打ち止め）＝スマホ縦で詰め込まない
-//   （タップ標的28px＝密度耐性が低い・design「奏法UI」決定）。奏法seg=4行目＝今回の追加はこの1行だけ。
+//   **響きゾーンは最大5行**（打ち方／トップ・広がり／高さ・パワー(arp時=向き・幅・区切り)／奏法／左手）。
+//   これ以上ノブが要る日は【群アコーディオンへ沈める】（前面はこの5行で打ち止め）＝スマホ縦で詰め込まない
+//   （タップ標的28px＝密度耐性が低い・design「奏法UI」決定）。奏法seg=4行目・左手seg=5行目（keyboard 解決時のみ・S3）。
 export function ChordPatternEditor({
   pattern,
   onChange,
@@ -96,12 +96,31 @@ export function ChordPatternEditor({
 
   // 響き変更は必ず top を書き込む（旧パターンも触った瞬間から新モデルで鳴る）。
   const setV = (patch: Partial<typeof v>) => onChange({ ...pattern, voicing: { ...v, top, ...patch } });
+  // S3 奏法の解決結果（style:"auto" は program のファミリで分岐）。guitar＝D/Uストリップ・keyboard＝左手行。
+  const guitarResolved = v.style === "guitar" || (v.style === "auto" && isGuitarProgram(program));
+  const keyboardResolved = !guitarResolved;
+  // D/U 自動既定（表拍=D・裏=U）。新規打点と、dir 未指定 hit の薄表示に使う（モックB）。
+  const duDefault = (s: number): "D" | "U" => (s % beatStep === 0 ? "D" : "U");
 
   const toggleHit = (s: number) => {
     const r = applyCellTap(pattern.hits, s, dotted ? len * 1.5 : len); // 頭=消す／伸び=長さ調整／空き=新規
-    onChange({ ...pattern, hits: r.hits });
+    // S3：guitar 解決の新規打点は dir を明示で書く（表D裏U を可聴化＝既存ネタは触らないので不変）。
+    const hits = r.placed && guitarResolved ? r.hits.map((h) => (h.step === s ? { ...h, dir: duDefault(s) } : h)) : r.hits;
+    onChange({ ...pattern, hits });
     // 置いた合図＝現在の voicing で C を和音プレビュー（ドミソ／単音でなく響きで確認）。
     if (r.placed) for (const p of voicingPreviewPitches({ ...v, top }, program)) void previewNote({ pitch: p, start: 0, dur: 0.5 });
+  };
+  // D/U ストリップのタップ＝現在の表示 dir（明示 or 自動既定）を反転して明示で書く。
+  const toggleDir = (s: number) => {
+    const h = pattern.hits.find((x) => x.step === s);
+    if (!h) return;
+    const next: "D" | "U" = (h.dir ?? duDefault(s)) === "D" ? "U" : "D";
+    onChange({ ...pattern, hits: pattern.hits.map((x) => (x.step === s ? { ...x, dir: next } : x)) });
+  };
+  // 左手（S3）：seg 選択＝lh.mode を書く／OFF＝lh キー削除（bit）。
+  const setLh = (lh: ChordLhContent | undefined) => {
+    if (!lh) { const { lh: _drop, ...rest } = pattern; onChange(rest); }
+    else onChange({ ...pattern, lh });
   };
 
   // #29 §9 発火＝onset セルのみ持ち上げる（sustain/空セルは null＝キャプチャしない・誤爆防止）。
@@ -156,7 +175,33 @@ export function ChordPatternEditor({
               );
             })}
           </div>
+          {/* S3 D/U ストリップ（guitar 解決時のみ・モックB）：hit のあるセルに D/U を表示（明示=実線／自動既定=薄）・タップで反転。 */}
+          {guitarResolved && (
+            <div className="rhythm-row cp-du-row" aria-label="du-strip">
+              <span className="rhythm-name">D/U</span>
+              {Array.from({ length: pattern.steps }, (_, s) => {
+                const head = startAt(s);
+                if (!head) return <span key={s} className="rhythm-cell cp-du-cell empty" aria-hidden="true" />;
+                const explicit = head.dir != null;
+                const d = head.dir ?? duDefault(s);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    aria-label={`dir-${s}`}
+                    className={"rhythm-cell cp-du-cell" + (explicit ? " on" : " auto") + (d === "U" ? " up" : " down")}
+                    onClick={() => toggleDir(s)}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
+        {guitarResolved && (
+          <p className="cp-hint">ストローク向き＝表拍D・裏Uが自動既定・タップで入替。アップは軽く・上位の弦だけ鳴る。</p>
+        )}
         <div className="cp-when-row">
           {/* 長さツールはメロ編集(PianoRoll)と同じ proll-tools で包む＝見た目・選択表示を統一。 */}
           <div className="proll-tools">
@@ -264,6 +309,20 @@ export function ChordPatternEditor({
             </span>
           )}
         </div>
+        {/* ⑤左手（CP行契約の5行目・S3）：keyboard 解決時のみ。OFF/ルート/ルート＋5度/オクターブ＝lh.mode。
+            custom（辞書由来）は seg 非選択＋「型」表示（最小表現）。style 無し(既存ネタ)でも keyboard 解決＝表示。 */}
+        {keyboardResolved && (
+          <div className="cp-vrow">
+            <span className="cp-vlbl">左手</span>
+            <div className="seg seg-chord" role="group" aria-label="lh-mode">
+              <button type="button" aria-label="lh-off" className={!pattern.lh ? "on" : ""} onClick={() => setLh(undefined)}>OFF</button>
+              <button type="button" aria-label="lh-root" className={pattern.lh?.mode === "root" ? "on" : ""} onClick={() => setLh({ mode: "root" })}>ルート</button>
+              <button type="button" aria-label="lh-root5" className={pattern.lh?.mode === "root5" ? "on" : ""} onClick={() => setLh({ mode: "root5" })}>ルート＋5度</button>
+              <button type="button" aria-label="lh-oct" className={pattern.lh?.mode === "oct" ? "on" : ""} onClick={() => setLh({ mode: "oct" })}>オクターブ</button>
+            </div>
+            {pattern.lh?.mode === "custom" && <span className="cp-vlbl" aria-label="lh-custom">型</span>}
+          </div>
+        )}
         {pattern.hits.length > 0 && (
           <div className="chord-roll" aria-label="voicing-roll">
             <MiniRoll neta={previewNeta} />

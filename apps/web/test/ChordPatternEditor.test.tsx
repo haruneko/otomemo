@@ -134,3 +134,81 @@ describe("ChordPatternEditor 奏法行（スライスB・第4行）", () => {
     expect(screen.queryByLabelText("strum-ms")).toBeNull(); // auto→keyboard（ピアノ）
   });
 });
+
+// S3：左手行（keyboard 解決時のみ）＋D/Uストリップ（guitar 解決時のみ）＝モックB準拠。
+describe("ChordPatternEditor S3 左手行＋D/Uストリップ", () => {
+  const guitarPat = (over: Partial<ChordPatternContent> = {}) =>
+    pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" }, ...over });
+
+  it("keyboard 解決（style無し）＝左手行が出る・D/Uストリップは出ない", () => {
+    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-mode")).toBeTruthy();
+    expect(screen.queryByLabelText("du-strip")).toBeNull();
+  });
+  it("guitar 解決＝D/Uストリップが出る・左手行は出ない", () => {
+    render(<ChordPatternEditor pattern={guitarPat()} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("du-strip")).toBeTruthy();
+    expect(screen.queryByLabelText("lh-mode")).toBeNull();
+  });
+  it("auto×ギター音色（program25）でも D/Uストリップ・左手行なし", () => {
+    const autoPat = pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "auto" } });
+    render(<ChordPatternEditor pattern={autoPat} onChange={vi.fn()} program={25} />);
+    expect(screen.getByLabelText("du-strip")).toBeTruthy();
+    expect(screen.queryByLabelText("lh-mode")).toBeNull();
+  });
+
+  it("左手 ルートを押すと lh:{mode:root} を書く", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-root"));
+    expect(onChange).toHaveBeenCalledWith(pat({ lh: { mode: "root" } }));
+  });
+  it("左手 OFF で lh キー削除（bit）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ lh: { mode: "root" } })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-off"));
+    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
+    expect("lh" in arg).toBe(false);
+  });
+  it("lh 無し＝OFF が選択・root で置くと root が選択（seg 表示）", () => {
+    const { rerender } = render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-off").className).toContain("on");
+    rerender(<ChordPatternEditor pattern={pat({ lh: { mode: "root5" } })} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-root5").className).toContain("on");
+  });
+  it("custom（辞書由来）は seg 非選択＋『型』表示（最小表現）", () => {
+    render(<ChordPatternEditor pattern={pat({ lh: { mode: "custom", hits: [] } })} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-custom")).toBeTruthy();
+    for (const l of ["lh-off", "lh-root", "lh-root5", "lh-oct"]) expect(screen.getByLabelText(l).className).not.toContain("on");
+  });
+
+  it("D/Uストリップ：dir 無し hit は自動既定を薄表示（表拍D・裏U）", () => {
+    render(<ChordPatternEditor pattern={guitarPat({ hits: [{ step: 0, dur: 2 }, { step: 2, dur: 2 }] })} onChange={vi.fn()} />);
+    const d0 = screen.getByLabelText("dir-0"); // 表拍→D
+    const d2 = screen.getByLabelText("dir-2"); // 裏→U
+    expect(d0.textContent).toBe("D");
+    expect(d0.className).toContain("auto"); // 未明示=薄
+    expect(d2.textContent).toBe("U");
+  });
+  it("D/Uストリップ タップ＝dir を明示反転（自動D→明示U）", async () => {
+    const onChange = vi.fn();
+    const gp = guitarPat({ hits: [{ step: 0, dur: 2 }] });
+    render(<ChordPatternEditor pattern={gp} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("dir-0"));
+    expect(onChange).toHaveBeenCalledWith({ ...gp, hits: [{ step: 0, dur: 2, dir: "U" }] });
+  });
+  it("guitar 解決の新規打点は dir=自動既定を書く（裏拍→U）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={guitarPat({ hits: [] })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("hit-2")); // 裏拍→U・既定len=4
+    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
+    expect(arg.hits).toEqual([{ step: 2, dur: 4, dir: "U" }]);
+  });
+  it("keyboard 解決の新規打点は dir を書かない（bit）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ hits: [] })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("hit-2"));
+    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
+    expect(arg.hits[0]!).toEqual({ step: 2, dur: 4 }); // dir 無し
+  });
+});

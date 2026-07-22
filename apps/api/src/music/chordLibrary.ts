@@ -5,11 +5,11 @@
 // 方針（bassLibrary.ts と同流儀）：型は**16分グリッド×vel層の純データ**として保持し、chord_pattern content
 //   （mode/voicing/steps/hits）への組み立ては生成器(generate.ts genChordPattern)が行い、実音化は web
 //   resolveChordPattern（進行に当てる二層設計）。本ファイルは「不変知識」＝生成器から分離。
-// スコープ留保：
-//  - **左手(LH)レーンはデータとして収録するが今回は配線しない**（S3=左手フィールドの設計判断がオーナー裁定待ち）。
-//    型に `lh?`/`lhPattern?` を持たせ将来用に温存し、hits 化は RH/ストラム面のみ（design 明記）。
-//  - **ギターの D/U はvelアクセント（ダウン強/アップ弱の相場値）へ写像**して収録。`dir?`（D/U）はセルに温存するが
-//    genChordPattern は使わない（アップの声数間引き等は将来スライス）。
+// S3（2026-07-22）で配線完了（旧留保を解除・design「ピアノ左手(LH)内蔵＋ギター D/U（S3）」）：
+//  - **左手(LH)** ＝ keyboard 型の `lh` を `compLhHitsForBar` で度数 hits 化し genChordPattern が `content.lh={mode:"custom",…}`
+//    へ配線＝web resolveChordPattern が keyboard 解決時のみ実音化（裁定＝コード楽器ネタに内蔵）。ギター型は lh を出さない。
+//  - **ギター D/U** ＝ `compHitsForBar` が `dir`(D/U) を hit へ透過＝web が dir で実音化（U=高→低・上位声・0.78×）。
+//    plain `U` は dir-only（vel を焼かない）＝render の ×0.78 と二重掛けしない（parseCompRh 参照）。
 
 // セクション役割（generate.ts SectionRole と同一・循環回避のためローカル定義＝bassLibrary と同じ流儀）。
 type Role = "intro" | "verse" | "prechorus" | "chorus" | "bridge" | "interlude" | "outro";
@@ -65,7 +65,9 @@ export function parseCompRh(pattern: string): CompCell[] {
       case "o": return { kind: "attack", vel: CHORD_SOFT };
       case "D": return { kind: "attack", dir: "D" };
       case "d": return { kind: "attack", vel: CHORD_ACCENT, dir: "D" };
-      case "U": return { kind: "attack", vel: CHORD_UP, dir: "U" };
+      // S3：plain U は dir のみ（vel を焼かない）。softness は web render の dir==="U"→×0.78 に一元化
+      //   ＝dir 実音化と CHORD_UP の二重掛け(78×0.78)を避ける。CHORD_UP は render 既定 78 の相場基準として温存。
+      case "U": return { kind: "attack", dir: "U" };
       case "x": return { kind: "attack", vel: CHORD_GHOST, ghost: true };
       default: throw new Error(`chordLibrary: 未知のRHトークン "${t}"`);
     }
@@ -84,15 +86,33 @@ export function parseCompLh(pattern: string): CompLhCell[] {
 
 // RH セル列（16）→ chord_pattern hits（1小節分・base=小節先頭 step）。
 //   dur = 1 + 直後の連続 hold 数（rest/attack/末尾で打ち切り＝小節内でクランプ）。ghost は常に dur1（短打）。
-//   vel は cell.vel をそのまま（未指定=キーを生やさない＝下流 vel??100）。dir は使わない（将来用）。
-export function compHitsForBar(cells: CompCell[], base: number): { step: number; dur: number; vel?: number }[] {
-  const hits: { step: number; dur: number; vel?: number }[] = [];
+//   vel は cell.vel をそのまま（未指定=キーを生やさない＝下流 vel??100）。S3：dir(D/U) を hit へ透過
+//   （ギター型が web render で D/U 実音化＝dir 無しセルは dir キーを生やさない＝keyboard 型は不変・bit一致）。
+export function compHitsForBar(cells: CompCell[], base: number): { step: number; dur: number; vel?: number; dir?: "D" | "U" }[] {
+  const hits: { step: number; dur: number; vel?: number; dir?: "D" | "U" }[] = [];
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i]!;
     if (c.kind !== "attack") continue;
     let dur = 1;
     if (!c.ghost) for (let j = i + 1; j < cells.length && cells[j]!.kind === "hold"; j++) dur++;
-    hits.push(c.vel != null ? { step: base + i, dur, vel: c.vel } : { step: base + i, dur });
+    const hit: { step: number; dur: number; vel?: number; dir?: "D" | "U" } = { step: base + i, dur };
+    if (c.vel != null) hit.vel = c.vel;
+    if (c.dir) hit.dir = c.dir;
+    hits.push(hit);
+  }
+  return hits;
+}
+
+// LH セル列（16）→ chord_pattern lh.hits（1小節分・base=小節先頭 step）。RH と同じ dur ルール。
+//   deg=度数トークン（R/5/8/3…）。custom 左手として web resolveChordPattern が度数解決する（S3）。
+export function compLhHitsForBar(cells: CompLhCell[], base: number): { step: number; dur: number; deg: string }[] {
+  const hits: { step: number; dur: number; deg: string }[] = [];
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i]!;
+    if (c.kind !== "attack") continue;
+    let dur = 1;
+    for (let j = i + 1; j < cells.length && cells[j]!.kind === "hold"; j++) dur++;
+    hits.push({ step: base + i, dur, deg: c.deg ?? "R" });
   }
   return hits;
 }

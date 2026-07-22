@@ -1950,6 +1950,16 @@
 /* ①「いつ弾く」＝主役：グリッド＋長さ＋小節をまとめた枠。 */
 .cp-when { min-width: 0; }
 .cp-when-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+/* S3 D/U ストリップ（グリッド下・guitar 解決時のみ）。rhythm-cell の幅を継承して真下に整列。
+   明示(on)=実線・自動既定(auto)=薄／ダウン=コード色寄り・アップ=warn 寄りで向きを一目に。 */
+.cp-du-row { margin-top: 2px; }
+.cp-du-cell { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; line-height: 1; border: 1px solid var(--line); border-radius: 4px; background: #181d2b; color: var(--muted); cursor: pointer; padding: 0; }
+.cp-du-cell.empty { background: transparent; border-color: transparent; pointer-events: none; }
+.cp-du-cell.auto { opacity: 0.45; }
+.cp-du-cell.on.down { color: #fff; background: color-mix(in srgb, var(--k-chord) 45%, #181d2b); border-color: var(--k-chord); }
+.cp-du-cell.on.up { color: #1a1c22; background: var(--warn, #ffd479); border-color: var(--warn, #ffd479); }
+/* 奏法/左手/D-U の補足文（静かに）。 */
+.cp-hint { font-size: 0.66rem; color: var(--muted); margin: 4px 0 0; line-height: 1.5; }
 /* ②「響き」＝音の作り込みを1枠に集約・静かに（青の壁を解体）。 */
 .cp-voicing { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #191c21; }
 .cp-vrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 9px; }
