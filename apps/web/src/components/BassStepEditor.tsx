@@ -190,7 +190,15 @@ export function BassStepEditor({
     setPopNext(!!ex?.next);
     setPopVel(ex?.vel ?? 0);
     const r = el.getBoundingClientRect();
-    setPop({ step, x: r.left, y: r.bottom + 4 });
+    // ビューポート下端クランプ＋上フリップ（受け入れE2E所見 2026-07-22＝「その他」は最下段レーン＝
+    // fixed が下へ 171px はみ出し「置く」が押せなかった）。ポップ実測高 ≈240px・下に収まらなければセル上辺へ反転。
+    const POP_H = 248;
+    const POP_W = 232;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const x = Math.max(4, Math.min(r.left, vw - POP_W - 4));
+    const y = r.bottom + 4 + POP_H <= vh ? r.bottom + 4 : Math.max(4, r.top - 4 - POP_H);
+    setPop({ step, x, y });
   }
   const previewExt = (d: BassDegree) =>
     void previewNote({ pitch: 36 + (EXT_PREVIEW_SEMI[d] ?? 0), start: 0, dur: 0.4, program: 33 });
