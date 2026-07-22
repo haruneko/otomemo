@@ -46,6 +46,20 @@ const DEFAULT_TOP = 72; // C5（トップ狙い音の既定）
 // ms が大きいほどロールが遅い＝ゆっくり（design「Fable UX監査」③の訂正・研究doc §3.2・要耳較正）。
 const STRUM_MS_STAGES = [0, 8, 14, 25];
 const STRUM_MS_LABELS = ["OFF", "速い", "ふつう", "ゆっくり"]; // STRUM_MS_STAGES と同順（0=OFF/8=速い/14=ふつう/25=ゆっくり）
+// Task1（2026-07-23）左手 custom パッド＝度数レーン（上から 8/5/3/R＝ピアノロール向き）×ステップ。
+// BassStepEditor をモデルにしつつ**同 step 排他を外す＝ポリフォニック**（同 step 複数レーン ON 可＝ピアノ左手）。
+// レーン度数＝R/3/5/8（オーナー指定「1,3,5,8」）。approach/next 等ベース固有語彙は無し（左手＝土台＝歩かない）。
+type LhLaneDeg = "8" | "5" | "3" | "R";
+const LH_LANES: { d: LhLaneDeg; label: string }[] = [
+  { d: "8", label: "8" },
+  { d: "5", label: "5" },
+  { d: "3", label: "3" },
+  { d: "R", label: "R" },
+];
+// プレビュー用：度数→実音高（C 基準・入力FB）。R=C2(36)/3=E2(40)/5=G2(43)/8=C3(48)。実配置の
+// オクターブ/LH窓 fold は再生時 resolveLh（L0）が担う＝ここは度数の高さを鳴らすだけ。
+const LH_PAD_PREVIEW: Record<LhLaneDeg, number> = { R: 36, "3": 40, "5": 43, "8": 48 };
+
 // 音長（step数・1step=16分）。16/8/4/2/1 を他エディタ(メロ/ベース)と揃える。
 const LENGTHS = [
   { label: "16", v: 1 },
@@ -183,10 +197,31 @@ export function ChordPatternEditor({
     const next: "D" | "U" = (h.dir ?? duDefault(s)) === "D" ? "U" : "D";
     editContent({ ...pattern, hits: pattern.hits.map((x) => (x.step === s ? { ...x, dir: next } : x)) });
   };
-  // 左手（S3）：seg 選択＝lh.mode を書く／OFF＝lh キー削除（bit）。
-  const setLh = (lh: ChordLhContent | undefined) => {
-    if (!lh) { const { lh: _drop, ...rest } = pattern; editContent(rest); }
-    else editContent({ ...pattern, lh });
+  // 左手（S3＋Task1）：seg 選択＝lh.mode を書く／OFF＝lh キー削除（bit）。
+  // custom で人がパッド編集した hits は、preset へ戻しても**非破壊で保持**（描画しないだけ＝メロ/ベースの
+  // 範囲外音と同流儀）。preset→custom は保持 hits を復元。hits が無いネタの preset は clean（{mode}＝bit一致）。
+  const lhHits = pattern.lh?.hits ?? [];
+  const setLhMode = (mode: "off" | "root" | "root5" | "oct" | "custom") => {
+    if (mode === "off") { const { lh: _drop, ...rest } = pattern; editContent(rest); return; }
+    if (mode === "custom") { editContent({ ...pattern, lh: { mode: "custom", hits: lhHits } }); return; }
+    // preset：authored hits があれば非破壊保持・無ければ hits キーを生やさない（bit一致）。
+    editContent({ ...pattern, lh: lhHits.length ? { mode, hits: lhHits } : { mode } });
+  };
+  // パッド：(lane×step) の hit（deg 省略＝R 扱い＝resolveLh の deg??"R" と同契約）を探す。
+  const lhStartAt = (lane: LhLaneDeg, s: number) => lhHits.find((h) => h.step === s && (h.deg ?? "R") === lane);
+  const lhSustainAt = (lane: LhLaneDeg, s: number) =>
+    lhHits.some((h) => (h.deg ?? "R") === lane && h.step < s && s < h.step + (h.dur || 1));
+  // セルタップ＝その (lane×step) の hit だけ add/remove（**同 step 他レーンは消さない**＝ポリフォニック）。
+  const toggleLhPad = (lane: LhLaneDeg, s: number) => {
+    const dur = dotted ? len * 1.5 : len;
+    let hits: NonNullable<ChordLhContent["hits"]>;
+    if (lhStartAt(lane, s)) {
+      hits = lhHits.filter((h) => !(h.step === s && (h.deg ?? "R") === lane)); // 同じ所をタップ＝消す
+    } else {
+      hits = [...lhHits, { step: s, deg: lane, dur }].sort((a, b) => a.step - b.step);
+      void previewNote({ pitch: LH_PAD_PREVIEW[lane], start: 0, dur: 0.4, program }); // 置いた度数を即鳴らす
+    }
+    editContent({ ...pattern, lh: { mode: "custom", hits } });
   };
 
   // #29 §9 発火＝onset セルのみ持ち上げる（sustain/空セルは null＝キャプチャしない・誤爆防止）。
@@ -384,19 +419,49 @@ export function ChordPatternEditor({
             </span>
           )}
         </div>
-        {/* ⑤左手（CP行契約の5行目・S3）：keyboard 解決時のみ。OFF/ルート/ルート＋5度/オクターブ＝lh.mode。
-            custom（辞書由来）は seg 非選択＋「型」表示（最小表現）。style 無し(既存ネタ)でも keyboard 解決＝表示。 */}
+        {/* ⑤左手（CP行契約の5行目・S3＋Task1）：keyboard 解決時のみ。OFF/ルート/+5度/8va＝lh.mode preset＋
+            「自分で」＝custom（Task1）。custom を選ぶと度数パッド（R/3/5/8 × steps・ポリフォニック）を行下に展開。
+            style 無し(既存ネタ)でも keyboard 解決＝表示。 */}
         {keyboardResolved && (
-          <div className="cp-vrow">
-            <span className="cp-vlbl">左手</span>
-            <div className="seg seg-chord" role="group" aria-label="lh-mode">
-              <button type="button" aria-label="lh-off" className={!pattern.lh ? "on" : ""} onClick={() => setLh(undefined)}>OFF</button>
-              <button type="button" aria-label="lh-root" className={pattern.lh?.mode === "root" ? "on" : ""} onClick={() => setLh({ mode: "root" })}>ルート</button>
-              <button type="button" aria-label="lh-root5" className={pattern.lh?.mode === "root5" ? "on" : ""} onClick={() => setLh({ mode: "root5" })}>+5度</button>
-              <button type="button" aria-label="lh-oct" className={pattern.lh?.mode === "oct" ? "on" : ""} onClick={() => setLh({ mode: "oct" })}>8va</button>
+          <>
+            <div className="cp-vrow">
+              <span className="cp-vlbl">左手</span>
+              <div className="seg seg-chord" role="group" aria-label="lh-mode">
+                <button type="button" aria-label="lh-off" className={!pattern.lh ? "on" : ""} onClick={() => setLhMode("off")}>OFF</button>
+                <button type="button" aria-label="lh-root" className={pattern.lh?.mode === "root" ? "on" : ""} onClick={() => setLhMode("root")}>ルート</button>
+                <button type="button" aria-label="lh-root5" className={pattern.lh?.mode === "root5" ? "on" : ""} onClick={() => setLhMode("root5")}>+5度</button>
+                <button type="button" aria-label="lh-oct" className={pattern.lh?.mode === "oct" ? "on" : ""} onClick={() => setLhMode("oct")}>8va</button>
+                <button type="button" aria-label="lh-custom" className={pattern.lh?.mode === "custom" ? "on" : ""} onClick={() => setLhMode("custom")}>自分で</button>
+              </div>
             </div>
-            {pattern.lh?.mode === "custom" && <span className="cp-vlbl" aria-label="lh-custom">型</span>}
-          </div>
+            {/* Task1 左手パッド＝度数レーン（上から 8/5/3/R）×ステップ。セルタップで (lane×step) の hit だけ
+                add/remove＝**同 step 複数レーン ON 可（ポリフォニック）**。音長＝上の長さツール（NoteValuePicker）を共有。 */}
+            {pattern.lh?.mode === "custom" && (
+              <div className="cp-lh-pad" role="grid" aria-label="lh-pad">
+                {LH_LANES.map((lane) => (
+                  <div className="cp-lh-lane" role="row" key={lane.d}>
+                    <div className="cp-lh-label">{lane.label}</div>
+                    {Array.from({ length: pattern.steps }, (_, s) => {
+                      const on = !!lhStartAt(lane.d, s);
+                      const sus = lhSustainAt(lane.d, s);
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          aria-label={`lh-pad-${lane.d}-${s}`}
+                          aria-pressed={on}
+                          className={"cp-lh-cell" + (on ? " on" : sus ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
+                          onClick={() => toggleLhPad(lane.d, s)}
+                        >
+                          {on ? lane.label : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
         {pattern.hits.length > 0 && (
           <div className="chord-roll" aria-label="voicing-roll">

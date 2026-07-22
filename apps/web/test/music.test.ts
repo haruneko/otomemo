@@ -799,6 +799,16 @@ describe("music", () => {
       expect(((third.pitch % 12) + 12) % 12).toBe(4); // E
       expect(third.pitch).toBeGreaterThanOrEqual(48); // LIL：色音は C3 以上（36+4=40<48→+12=52）
     });
+    it("(Task1) LH custom ポリフォニー：同 step 別 deg が複数実音（keyboard・パッド）", () => {
+      const chords = [{ root: 0, quality: "", start: 0, dur: 4 }];
+      const lh = resolveChordPattern(
+        cp({ lh: { mode: "custom", hits: [{ step: 0, dur: 4, deg: "R" }, { step: 0, dur: 4, deg: "5" }] } }),
+        chords, 0,
+      ).filter((n) => n.vel === 106);
+      expect(lh.length).toBe(2); // 同 step に2声＝ポリフォニー（ベースのモノフォニックとの唯一の差）
+      expect(lh.every((n) => n.start === 0)).toBe(true);
+      expect(lh.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([36, 43]); // C2(R) + G2(5度)
+    });
     // ── L0：レンダ真因修正（案A・研究doc 2026-07-22-pattern-quality-root-cause）──────────
     it("(L0) 鍵盤 top:72 で maj7 の7th(色音)が復活・RH が旧 tones 経路より上帯へ", () => {
       const chords = [{ root: 5, quality: "maj7", start: 0, dur: 4 }]; // F maj7 = F A C E（7th=E・pc4）

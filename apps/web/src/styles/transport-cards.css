@@ -2006,6 +2006,16 @@
 /* パワーコード＝チェック風トグル（OFF=地色／ON=コード色）。 */
 .cp-chk { background: #191c21; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); padding: 6px 10px; font-size: 0.78rem; cursor: pointer; }
 .cp-chk.on { border-color: var(--k-chord); color: var(--fg); background: color-mix(in srgb, var(--k-chord) 20%, #191c21); }
+/* Task1 左手 custom パッド＝度数レーン（8/5/3/R）×ステップ・ポリフォニック。ベースの度数グリッドと
+   同じ密度感（22px セル）だがコード色（--k-chord）でパーツを区別。横スクロール（小節が増えても収まる）。 */
+.cp-lh-pad { display: grid; gap: 2px; margin: 0 0 9px; overflow-x: auto; }
+.cp-lh-lane { display: flex; gap: 2px; align-items: center; }
+.cp-lh-label { flex: 0 0 24px; text-align: center; font-size: 0.75rem; font-weight: 600; color: var(--muted); position: sticky; left: 0; z-index: 1; background: #191c21; }
+.cp-lh-cell { flex: 0 0 22px; height: 22px; padding: 0; border: 1px solid #2a2d33; background: #1b1e23; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 600; color: #e6e8ec; display: flex; align-items: center; justify-content: center; }
+.cp-lh-cell.beat { border-left: 2px solid #3a3f49; }
+.cp-lh-cell.bar { border-left: 2px solid color-mix(in srgb, var(--k-chord) 60%, #3a3f49); }
+.cp-lh-cell.on { background: var(--k-chord); color: #fff; border-color: var(--k-chord); }
+.cp-lh-cell.sustain { background: color-mix(in srgb, var(--k-chord) 34%, transparent); }
 @media (max-width: 480px) {
   .cp-vrow { gap: 6px; }
 }
