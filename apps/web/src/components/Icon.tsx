@@ -18,6 +18,14 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
           <path {...st} d="M4 13 6 5h12l2 8v6H4z" />
         </svg>
       );
+    case "import": // 取り込み＝下向き矢印が受け皿（箱）に入る＝万国共通の import 記号（library=コピー的と区別）
+      return (
+        <svg {...s}>
+          <path {...st} d="M12 3v9" />
+          <path {...st} d="M8 9l4 4 4-4" />
+          <path {...st} d="M4 14v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+        </svg>
+      );
     case "gear": {
       // 歯付きの歯車（外周に歯＋中央ハブ）。設定ボタン専用＝金属的なアンバー→オレンジのグラデで
       // 他のヘッダアイコン(muted)より"効く"色に（オーナー「歯車の色をリッチに」）。

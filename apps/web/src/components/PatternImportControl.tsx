@@ -44,7 +44,7 @@ export function PatternImportControl({
         title="ライブラリから読み込む"
         onClick={() => setOpen(true)}
       >
-        <Icon name="library" size={18} />
+        <Icon name="import" size={18} />
       </button>
       {nowLabel && (
         <span className="pp-now" aria-label="pattern-now">
