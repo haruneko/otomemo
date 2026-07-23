@@ -565,14 +565,14 @@
      （実機で顕在化）。横スクロールだけ欲しいので overflow-y を明示 hidden（1pxは丸め＝実害なし）。 */
   overflow-y: hidden;
   position: relative; /* #74 プレイヘッド基準 */
-  --rcell: 20px; /* ステップ幅。プレイヘッド計算も同値を参照（RhythmEditor PLAYHEAD_LEFT） */
-  --rname: 56px; /* レーン名（ラベル）幅 */
+  --rcell: 16px; /* ステップ幅。プレイヘッド計算も同値を参照（RhythmEditor PLAYHEAD_LEFT）。Task1e：20→16（全エディタ統一） */
+  --rname: 36px; /* レーン名（ラベル）幅。Task1e：56→36（全エディタ統一） */
 }
-/* 狭い画面：セル/ラベルを縮めて 1小節(16step) が横スクロール無しで収まるように（プレイヘッドは変数追従） */
+/* 狭い画面：セル/ラベルは base で既に 1小節(16step) が収まる圧縮寸法（16/36）＝Task1e で統一（プレイヘッドは変数追従） */
 @media (max-width: 480px) {
   .rhythm-editor {
-    --rcell: 14px;
-    --rname: 50px;
+    --rcell: 16px;
+    --rname: 36px;
   }
   .rhythm-name {
     font-size: 0.56rem;
@@ -598,7 +598,7 @@
 .rhythm-row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px; /* Task1e：2→1px（1step=--rcell(16)+1=17px・PLAYHEAD_LEFT と整合） */
 }
 .rhythm-name {
   width: var(--rname);

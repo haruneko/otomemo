@@ -37,8 +37,8 @@ import { Icon } from "./Icon";
 import { useHoldDrag, type HoldDragState, type HoldDragStart } from "../useHoldDrag";
 
 // プレイヘッド位置は CSS 変数(--rname/--rcell)から計算＝セルをmobileで縮めてもズレない（#74）。
-// 1拍=4step、1step=セル幅(--rcell)+行gap(2px)。先頭=ラベル幅(--rname)+gap(2px)。
-const PLAYHEAD_LEFT = "calc(var(--rname, 56px) + 2px + var(--phb, 0) * (var(--rcell, 20px) + 2px) * 4)";
+// 1拍=4step、1step=セル幅(--rcell)+行gap(1px)。先頭=ラベル幅(--rname)+gap(1px)。Task1e：cell16/gap1/rname36。
+const PLAYHEAD_LEFT = "calc(var(--rname, 36px) + 1px + var(--phb, 0) * (var(--rcell, 16px) + 1px) * 4)";
 
 // リズムのステップグリッド（design #19「リズム step（自作・小）」）。レーン×ステップを on/off。
 // 拍子→1小節のstep数（1step=16分=0.25拍）。4/4=16, 6/8=12, 3/4=12。複合(6/8系)はビート=6step毎。

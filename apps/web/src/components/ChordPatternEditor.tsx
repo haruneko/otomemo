@@ -46,8 +46,8 @@ function ChordCell({
   );
 }
 
-const NAME_PX = 44; // 両手グリッドのラベル列幅（.cp-hand-label と一致・プレイヘッド左基準）。
-const BEAT_PX = 88; // 1拍=4step×(20px セル+2px gap)=88px。プレイヘッドの px/beat。
+const NAME_PX = 36; // 両手グリッドのラベル列幅（.cp-hand-label と一致・プレイヘッド左基準）。Task1e：44→36。
+const BEAT_PX = 68; // 1拍=4step×(16px セル+1px gap)=68px。プレイヘッドの px/beat。Task1e：88→68。
 // Task1c：区切り（arpReset）＝ドロップダウンからセグメントへ（他ノブと統一）。0=なし〜4=1小節。短ラベルで7段を横に。
 const ARP_RESET_OPTS: { v: number; label: string }[] = [
   { v: 0, label: "なし" },

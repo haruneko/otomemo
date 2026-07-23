@@ -33,7 +33,7 @@ const BASS_PREVIEW_PITCH: Record<BassLaneDegree, number> = {
 // **度数レーン**(行=R/3/5/7/8/approach)×**ステップ**(列)。各ステップはモノフォニック＝1度数だけ。
 // セルをタップでそのレーン×ステップに置く（同ステップの他レーンは消える）。音長は長さツールで選ぶ。
 // 度数はコード/調に当てて再生時に解決＝ここは「何度を・いつ・どれだけ」だけ編集（オクターブは自動）。
-const BEAT_PX = 88; // 1拍=4step（20px cell+2px gap）＝プレイヘッドの px/beat。1小節=16step。
+const BEAT_PX = 68; // 1拍=4step（16px cell+1px gap＝17px×4）＝プレイヘッドの px/beat。1小節=16step。Task1e：88→68。
 // 上ほど高い度数（ピアノロールと同じ向き）：上から 8/7/5/3/R、approach は最下段。
 const LANES: { d: BassLaneDegree; label: string }[] = [
   { d: "8", label: "8" },
@@ -216,7 +216,7 @@ export function BassStepEditor({
           className="proll-playhead"
           aria-hidden="true"
           ref={playheadRef}
-          style={{ left: `calc(40px + var(--phb, 0) * ${BEAT_PX}px)` }}
+          style={{ left: `calc(36px + var(--phb, 0) * ${BEAT_PX}px)` }}
         />
         {LANES.map((lane) => (
           <div className="bass-lane" role="row" key={lane.d}>

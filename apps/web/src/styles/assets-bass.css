@@ -534,11 +534,11 @@ article[aria-label="neta-card"].dragging {
 }
 .bass-lane {
   display: flex;
-  gap: 2px;
+  gap: 1px; /* Task1e：2→1px（1step=16+1=17px・BEAT_PX=68 と整合） */
   align-items: center;
 }
 .bass-lane-label {
-  flex: 0 0 38px;
+  flex: 0 0 36px; /* Task1e：38→36px（全エディタ統一・playhead 36px オフセットと一致） */
   text-align: center;
   font-size: 0.78rem;
   font-weight: 600;
@@ -551,7 +551,7 @@ article[aria-label="neta-card"].dragging {
   box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.55); /* 右影＝フローズン列（かぶり解消） */
 }
 .step-cell.deg {
-  flex: 0 0 28px;
+  flex: 0 0 16px; /* Task1e：28→16px（全エディタ統一・1小節を360pxに） */
   height: 26px;
   font-size: 12px;
   font-weight: 600;
