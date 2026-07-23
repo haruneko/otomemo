@@ -156,6 +156,7 @@ describe("ChordPatternEditor 語彙/折返し（監査②⑥）", () => {
   it("打ち方＝『ストローク』表示（ストラムから改名）・押すと mode:'strum' を書く（値は不変）", async () => {
     const onChange = vi.fn();
     render(<ChordPatternEditor pattern={pat({ mode: "arp" })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("voicing-toggle")); // Task1c：響きは折りたたみ＝展開して打ち方へ
     const seg = screen.getByLabelText("mode");
     expect(seg.textContent).toContain("ストローク");
     expect(seg.textContent).not.toContain("ストラム");
@@ -395,6 +396,7 @@ describe("ChordPatternEditor S4 帯ゲート＋（改）フラグ", () => {
   it("voicing 変更（響き）でも patternId 有りなら（改）付与", async () => {
     const onChange = vi.fn();
     render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8" })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("voicing-toggle")); // Task1c：響きは折りたたみ＝展開してトップへ
     await userEvent.click(screen.getByLabelText("top-inc")); // トップ＝voicing 変更
     const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
     expect(arg.patternEdited).toBe(true);
@@ -415,5 +417,95 @@ describe("ChordPatternEditor S4 帯ゲート＋（改）フラグ", () => {
     expect("patternEdited" in arg).toBe(false); // 候補 content に無い＝自然消滅
     expect("program" in arg).toBe(false); // 現ネタ program 無し＝メタ継承なし＝（改）と無関係
     expect(arg.patternId).toBe("GT-FOLK8");
+  });
+});
+
+// Task1c（2026-07-23）：両手一体グリッドへ作り直し。並び順=パターン帯→小節→長さ→グリッド／右手↔破線↔左手を単一容器で
+// 縦に揃える／「響き」は折りたたみ＋サマリ。content 契約・resolve は不変＝編集が書く値は従来と同一（bit）。
+describe("ChordPatternEditor Task1c 両手一体グリッド", () => {
+  const guitarPat = (over: Partial<ChordPatternContent> = {}) =>
+    pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" }, ...over });
+  const follows = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  // (a) DOM 縦順＝パターン帯 → 小節[−+] → 長さ(分) → 両手グリッド（ベース BassStepEditor と同順）。
+  it("(a) DOM 縦順＝パターン帯→小節→長さ→両手グリッド", () => {
+    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
+    const picker = screen.getByLabelText("pattern-picker");
+    const bars = screen.getByLabelText("bars-count");
+    const len = screen.getByLabelText("dotted"); // 長さツール（NoteValuePicker）
+    const grid = screen.getByLabelText("two-hand-grid");
+    expect(follows(picker, bars)).toBe(true);
+    expect(follows(bars, len)).toBe(true);
+    expect(follows(len, grid)).toBe(true);
+  });
+
+  // (b) 右手レーンと左手レーンが単一グリッド容器内・破線区切りで隣接・同ステップ数。
+  it("(b) 右手・左手が単一グリッド容器内／破線区切り／同ステップ数", () => {
+    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
+    const grid = screen.getByLabelText("two-hand-grid");
+    const rh = screen.getByLabelText("right-hand");
+    const lhPad = screen.getByLabelText("lh-pad");
+    expect(grid.contains(rh)).toBe(true); // 上帯＝右手は容器内
+    expect(grid.contains(lhPad)).toBe(true); // 下帯＝左手も同一容器内
+    expect(grid.querySelector(".cp-lh-block")).toBeTruthy(); // 破線区切り（bass-lane-other 資産流用）
+    const rhCells = rh.querySelectorAll('[aria-label^="hit-"]').length;
+    const lhRCells = lhPad.querySelectorAll('[aria-label^="lh-pad-R-"]').length;
+    expect(rhCells).toBe(16); // pattern.steps
+    expect(lhRCells).toBe(rhCells); // 上下で同ステップ数＝縦に揃う
+  });
+
+  // (c) 「響き」既定折りたたみ・サマリに現在値・展開で7ノブ。
+  it("(c) 響き＝既定折りたたみ（ノブ非表示）・サマリに現在値", () => {
+    render(<ChordPatternEditor pattern={pat({ mode: "arp", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, arpDir: "updown", arpOctaves: 1 } })} onChange={vi.fn()} />);
+    expect(screen.queryByLabelText("mode")).toBeNull(); // 既定=閉＝ノブは DOM に無い
+    const toggle = screen.getByLabelText("voicing-toggle");
+    expect(toggle.textContent).toContain("アルペジオ"); // サマリに現在値
+    expect(toggle.textContent).toContain("↑↓");
+    expect(toggle.textContent).toContain("1oct");
+  });
+  it("(c) 響き展開＝7ノブ（打ち方/トップ/広がり/向き/駆け上がり幅/区切り/高さ）", async () => {
+    render(<ChordPatternEditor pattern={pat({ mode: "arp" })} onChange={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("voicing-toggle"));
+    for (const l of ["mode", "top", "spread", "arp-dir", "arp-octaves-ctrl", "arp-reset", "octave-ctrl"]) {
+      expect(screen.getByLabelText(l)).toBeTruthy();
+    }
+  });
+
+  // (d) 注入チップ／区切りセグメント／奏法バッジの存在。
+  it("(d) 左手注入チップ・区切りセグメント・奏法バッジが在る", async () => {
+    render(<ChordPatternEditor pattern={pat({ mode: "arp" })} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("lh-inject")).toBeTruthy(); // 注入「種」チップ
+    expect(screen.getByLabelText("voicing-style-summary").tagName).toBe("SPAN"); // 奏法バッジ（読み取り専用）
+    await userEvent.click(screen.getByLabelText("voicing-toggle"));
+    const reset = screen.getByLabelText("arp-reset"); // 区切り＝セグメント（select でない）
+    expect(reset.tagName).not.toBe("SELECT");
+    expect(within(reset).getAllByRole("button").length).toBe(7); // 7段のセグメント
+  });
+
+  // (e) guitar 解決で左手帯非表示・右手（＋D/U）のみの一枚。
+  it("(e) guitar 解決＝左手帯なし・右手＋D/U のみ", () => {
+    render(<ChordPatternEditor pattern={guitarPat()} onChange={vi.fn()} />);
+    expect(screen.getByLabelText("right-hand")).toBeTruthy();
+    expect(screen.getByLabelText("du-strip")).toBeTruthy();
+    expect(screen.queryByLabelText("lh-pad")).toBeNull();
+    expect(screen.queryByLabelText("lh-inject")).toBeNull();
+  });
+
+  // (f) 回帰＝編集操作が書く content（hits/voicing/lh）は従来と同一値（bit）。
+  it("(f) 右手タップ＝従来どおり {step,dur}／左手注入＝従来どおり materialize", async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<ChordPatternEditor pattern={pat({ hits: [] })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("hit-4"));
+    expect(onChange).toHaveBeenLastCalledWith(pat({ hits: [{ step: 4, dur: 4 }] })); // 右手＝配置文法不変
+    rerender(<ChordPatternEditor pattern={pat()} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("lh-root")); // 左手注入＝小節頭 R 全音符（従来値）
+    expect(onChange).toHaveBeenLastCalledWith(pat({ lh: { mode: "custom", hits: [{ step: 0, deg: "R", dur: 16 }] } }));
+  });
+  it("(f) 響き展開で打ち方を変えても書く値は mode のみ（従来と同一・bit）", async () => {
+    const onChange = vi.fn();
+    render(<ChordPatternEditor pattern={pat({ mode: "arp" })} onChange={onChange} />);
+    await userEvent.click(screen.getByLabelText("voicing-toggle"));
+    await userEvent.click(within(screen.getByLabelText("mode")).getByText("ストローク"));
+    expect(onChange).toHaveBeenCalledWith(pat({ mode: "strum" }));
   });
 });

@@ -1970,21 +1970,44 @@
 .pp-audition, .pp-apply { padding: 2px 10px; border-radius: 6px; }
 /* ゾーンの小見出し（いつ弾く／響き）。 */
 .cp-zlabel { font-size: 0.68rem; color: var(--muted); margin: 0 0 6px; }
-/* ①「いつ弾く」＝主役：グリッド＋長さ＋小節をまとめた枠。 */
-.cp-when { min-width: 0; }
-.cp-when-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-/* S3 D/U ストリップ（グリッド下・guitar 解決時のみ）。rhythm-cell の幅を継承して真下に整列。
-   明示(on)=実線・自動既定(auto)=薄／ダウン=コード色寄り・アップ=warn 寄りで向きを一目に。 */
-.cp-du-row { margin-top: 2px; }
-.cp-du-cell { display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; line-height: 1; border: 1px solid var(--line); border-radius: 4px; background: #181d2b; color: var(--muted); cursor: pointer; padding: 0; }
-.cp-du-cell.empty { background: transparent; border-color: transparent; pointer-events: none; }
-.cp-du-cell.auto { opacity: 0.45; }
-.cp-du-cell.on.down { color: #fff; background: color-mix(in srgb, var(--k-chord) 45%, #181d2b); border-color: var(--k-chord); }
-.cp-du-cell.on.up { color: #1a1c22; background: var(--warn, #ffd479); border-color: var(--warn, #ffd479); }
+/* Task1c 両手一体グリッド（一枚容器・同一ステップ列を共有）＝上帯:右手／破線／下帯:左手。
+   ベース(BassStepEditor)の .step-cell 系に見た目を寄せる（塗り＋ラベル＋拍/小節線＋sustain・vel 濃淡）。 */
+.cp-grid { display: flex; flex-direction: column; gap: 2px; overflow-x: auto; overflow-y: hidden; position: relative; padding-top: 2px; min-width: 0; }
+.cp-hand { display: flex; gap: 2px; align-items: center; }
+/* ラベル列（右手/D/U/8/5/3/R）＝横スクロールで左に固定＝列頭を揃える（全エディタ統一のフローズン列）。幅=NAME_PX。 */
+.cp-hand-label { flex: 0 0 44px; text-align: center; font-size: 0.72rem; font-weight: 600; color: var(--muted); position: sticky; left: 0; z-index: 2; background: var(--card); box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.55); }
+/* 共通セル（右手/左手/D/U）＝1step=20px+2px gap（BEAT_PX=88 と整合）。塗り/濃淡は帯ごとに上書き。 */
+.cp-cell { flex: 0 0 20px; height: 24px; padding: 0; border: 1px solid #2a2d33; background: #1b1e23; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; line-height: 1; color: #fff; position: relative; }
+.cp-cell.beat { border-left: 2px solid #3a3f49; }
+.cp-cell.bar { border-left: 2px solid color-mix(in srgb, var(--k-chord) 60%, #3a3f49); }
+/* 右手＝コード色。vel は --hv（=vel/127）で濃淡（ゴースト薄・アクセント濃）。 */
+.cp-cell.rh { touch-action: pan-x pan-y; }
+.cp-cell.rh.on { background: color-mix(in srgb, var(--k-chord) calc(var(--hv, 0.8) * 100%), #1b1e23); border-color: var(--k-chord); }
+.cp-cell.rh.sustain { background: color-mix(in srgb, var(--k-chord) 30%, transparent); }
+/* arp グリフ＝斜め階段（向き記号はセル内テキスト）。ストローク時は無地ブロック（.arp を付けない）。 */
+.cp-cell.rh.arp { background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0 1.5px, transparent 1.5px 5px); }
+.cp-cell.rh.lift { outline: 2px solid #fff; outline-offset: -1px; z-index: 3; }
+/* 左手＝コード色（塗り一定・vel なし）。 */
+.cp-cell.lh.on { background: var(--k-chord); border-color: var(--k-chord); }
+.cp-cell.lh.sustain { background: color-mix(in srgb, var(--k-chord) 34%, transparent); }
+/* D/U（guitar 解決時・右手直下の同一列）：明示(on)=実線・自動(auto)=薄／ダウン=コード色寄り・アップ=warn 寄り。 */
+.cp-cell.du { font-size: 9px; color: var(--muted); background: #181d2b; border-color: var(--line); }
+.cp-cell.du.empty { background: transparent; border-color: transparent; pointer-events: none; cursor: default; }
+.cp-cell.du.auto { opacity: 0.45; }
+.cp-cell.du.on.down { color: #fff; background: color-mix(in srgb, var(--k-chord) 45%, #181d2b); border-color: var(--k-chord); }
+.cp-cell.du.on.up { color: #1a1c22; background: var(--warn, #ffd479); border-color: var(--warn, #ffd479); }
+/* 破線区切り（bass-lane-other 資産流用）＝右手↔左手の境界。左手ブロックの上辺に。 */
+.cp-lh-block { margin-top: 3px; padding-top: 3px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 2px; }
+.cp-lh-lanes { display: flex; flex-direction: column; gap: 2px; }
+/* 注入ボタンを小さな「種」チップへ縮小（グリッドを主役に）＝左手帯ラベル脇に寄せる。 */
+.cp-lh-seed { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 2px; }
+.cp-lh-seed-label { font-size: 0.72rem; font-weight: 600; color: var(--muted); }
+.cp-seed-seg button { padding: 3px 9px; font-size: 0.72rem; }
+.cp-lh-hint { font-size: 0.64rem; color: var(--muted); }
 /* 奏法/左手/D-U の補足文（静かに）。 */
 .cp-hint { font-size: 0.66rem; color: var(--muted); margin: 4px 0 0; line-height: 1.5; }
 /* ②「響き」＝音の作り込みを1枠に集約・静かに（青の壁を解体）。 */
-.cp-voicing { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #191c21; }
+.cp-voicing { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: #191c21; overflow: hidden; }
 .cp-vrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 9px; }
 .cp-vrow:last-child { margin-bottom: 0; }
 /* ラベル＋操作子を1ユニットに束ね、折り返しはユニット間だけ＝モバイルで「駆け上がり幅」ラベルと ±oct が分離しない。 */
@@ -2006,16 +2029,16 @@
 /* パワーコード＝チェック風トグル（OFF=地色／ON=コード色）。 */
 .cp-chk { background: #191c21; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); padding: 6px 10px; font-size: 0.78rem; cursor: pointer; }
 .cp-chk.on { border-color: var(--k-chord); color: var(--fg); background: color-mix(in srgb, var(--k-chord) 20%, #191c21); }
-/* Task1 左手 custom パッド＝度数レーン（8/5/3/R）×ステップ・ポリフォニック。ベースの度数グリッドと
-   同じ密度感（22px セル）だがコード色（--k-chord）でパーツを区別。横スクロール（小節が増えても収まる）。 */
-.cp-lh-pad { display: grid; gap: 2px; margin: 0 0 9px; overflow-x: auto; }
-.cp-lh-lane { display: flex; gap: 2px; align-items: center; }
-.cp-lh-label { flex: 0 0 24px; text-align: center; font-size: 0.75rem; font-weight: 600; color: var(--muted); position: sticky; left: 0; z-index: 1; background: #191c21; }
-.cp-lh-cell { flex: 0 0 22px; height: 22px; padding: 0; border: 1px solid #2a2d33; background: #1b1e23; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 600; color: #e6e8ec; display: flex; align-items: center; justify-content: center; }
-.cp-lh-cell.beat { border-left: 2px solid #3a3f49; }
-.cp-lh-cell.bar { border-left: 2px solid color-mix(in srgb, var(--k-chord) 60%, #3a3f49); }
-.cp-lh-cell.on { background: var(--k-chord); color: #fff; border-color: var(--k-chord); }
-.cp-lh-cell.sustain { background: color-mix(in srgb, var(--k-chord) 34%, transparent); }
+/* Task1c 奏法バッジ（読み取り専用・格下げ＝ピル）＋速さノブ（guitar のみ）＝常時可視の1行。 */
+.cp-perf-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.cp-perf-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 0.68rem; color: var(--muted); background: #181b20; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+/* Task1c「響き」＝折りたたみ（既定=閉）＋現在値サマリ。MetaPanel の ▸設定 と同じ disclosure 作法。 */
+.cp-voicing-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; color: inherit; padding: 8px 10px; font-size: 0.8rem; cursor: pointer; text-align: left; }
+.cp-voicing-caret { color: var(--muted); white-space: nowrap; }
+.cp-voicing-summary { color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-voicing-body { padding: 2px 10px 10px; }
+/* 区切りセグメント（7段）＝横スクロールで収める（他ノブと統一しつつ幅を食わない）。 */
+.cp-reset-seg { overflow-x: auto; max-width: 100%; }
 @media (max-width: 480px) {
   .cp-vrow { gap: 6px; }
 }
