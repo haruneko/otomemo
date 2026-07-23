@@ -229,13 +229,6 @@ export function RhythmEditor({
 
   return (
    <>
-    {/* 「パターンを選ぶ ▸」帯（修理#1）＝定型ビート型の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。 */}
-    {/* nowLabel＝patternId（＋手編集後は「（改）」）。（改）表現は渡す文字列で行う＝PatternPickerBar は器のまま（決定④）。 */}
-    <PatternPickerBar
-      nowLabel={rhythm.patternId ? rhythm.patternId + (rhythm.patternEdited ? "（改）" : "") : undefined}
-      chips={DRUM_GENRE_CHIPS}
-      onFetch={fetchPatterns}
-    />
     <div
       className={"rhythm-editor" + (eraseMode ? " erase-on" : "")}
       ref={scrollerRef}
@@ -274,6 +267,14 @@ export function RhythmEditor({
             </optgroup>
           </select>
         </label>
+        {/* Task1f：「パターンを選ぶ」帯は設定行（rhythm-toolbar）の右端に寄せた二次リンク「ライブラリから読み込む」へ格下げ（variant="link"）。
+            nowLabel＝patternId（＋手編集後は「（改）」）＝PatternPickerBar は器のまま。 */}
+        <PatternPickerBar
+          variant="link"
+          nowLabel={rhythm.patternId ? rhythm.patternId + (rhythm.patternEdited ? "（改）" : "") : undefined}
+          chips={DRUM_GENRE_CHIPS}
+          onFetch={fetchPatterns}
+        />
       </div>
       <div
         className="proll-playhead"

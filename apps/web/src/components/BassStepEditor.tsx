@@ -194,14 +194,19 @@ export function BassStepEditor({
       {/* 「パターンを選ぶ ▸」帯（S7）＝相対ビート型の入口。既定閉＝開くまで既存DOM/挙動不変。
           compound meter（6/8系）は型ライブラリが4/4前提＝帯非表示（gen_bass の style も6-8は絶対フォールバック）。
           nowLabel＝patternId（＋手編集後は「（改）」）。（改）表現は渡す文字列で行う＝PatternPickerBar は器のまま（決定④）。 */}
-      {!isCompoundMeter(meter) && (
-        <PatternPickerBar
-          nowLabel={patternId ? patternId + (patternEdited ? "（改）" : "") : undefined}
-          chips={BASS_GENRE_CHIPS}
-          onFetch={fetchPatterns}
-        />
-      )}
-      <BarsControl bars={bars} max={4} onChange={setBars} />
+      {/* Task1f：「パターンを選ぶ」帯は設定行（小節行）の右端に寄せた二次リンク「ライブラリから読み込む」へ格下げ（variant="link"）。
+          compound meter（6/8系）非表示・（改）表示は不変。 */}
+      <div className="editor-setrow">
+        <BarsControl bars={bars} max={4} onChange={setBars} />
+        {!isCompoundMeter(meter) && (
+          <PatternPickerBar
+            variant="link"
+            nowLabel={patternId ? patternId + (patternEdited ? "（改）" : "") : undefined}
+            chips={BASS_GENRE_CHIPS}
+            onFetch={fetchPatterns}
+          />
+        )}
+      </div>
       <div className="bass-lens">
         <NoteValuePicker
           options={LENGTHS}

@@ -308,15 +308,19 @@ export function ChordPatternEditor({
       {/* 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1）＝型辞書の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。
           修理#3 決定③：showPicker=false（管弦=section_inst）で帯ごと非表示＝コード楽器型の誤適用を断つ。
           決定④：手編集済みは patternId に「（改）」を添えて帯が嘘をつかない。 */}
-      {showPicker && (
-        <PatternPickerBar
-          nowLabel={pattern.patternId != null ? pattern.patternId + (pattern.patternEdited ? "（改）" : "") : undefined}
-          chips={COMP_GENRE_CHIPS}
-          onFetch={fetchPatterns}
-        />
-      )}
-      {/* Task1c 並び順＝ベース(BassStepEditor)へ統一：小節[−+] → 長さ(分) → 両手グリッド。 */}
-      <BarsControl bars={bars} max={4} onChange={(n) => editContent({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
+      {/* Task1c 並び順＝ベース(BassStepEditor)へ統一：小節[−+] → 長さ(分) → 両手グリッド。
+          Task1f：「パターンを選ぶ」帯は設定行（小節行）の右端に寄せた二次リンク「ライブラリから読み込む」へ格下げ（variant="link"）。 */}
+      <div className="editor-setrow">
+        <BarsControl bars={bars} max={4} onChange={(n) => editContent({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
+        {showPicker && (
+          <PatternPickerBar
+            variant="link"
+            nowLabel={pattern.patternId != null ? pattern.patternId + (pattern.patternEdited ? "（改）" : "") : undefined}
+            chips={COMP_GENRE_CHIPS}
+            onFetch={fetchPatterns}
+          />
+        )}
+      </div>
       {/* 長さツールはメロ編集(PianoRoll)と同じ proll-tools で包む＝見た目・選択表示を統一。右手/左手 hit の音長を共有。 */}
       <div className="proll-tools">
         <NoteValuePicker options={LENGTHS} value={len} dotted={dotted} onChange={setLen} onToggleDotted={() => setDotted((d) => !d)} />

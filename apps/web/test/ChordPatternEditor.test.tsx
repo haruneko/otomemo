@@ -420,15 +420,17 @@ describe("ChordPatternEditor Task1c 両手一体グリッド", () => {
     pat({ voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72, style: "guitar" }, ...over });
   const follows = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-  // (a) DOM 縦順＝パターン帯 → 小節[−+] → 長さ(分) → 両手グリッド（ベース BassStepEditor と同順）。
-  it("(a) DOM 縦順＝パターン帯→小節→長さ→両手グリッド", () => {
+  // (a) DOM 縦順＝設定行[小節[−+] → ライブラリから読み込む(二次リンク・右端)] → 長さ(分) → 両手グリッド。
+  //     Task1f：「パターンを選ぶ」帯は設定行の右端リンク（variant="link"）へ格下げ＝小節の後・設定行内に同居。
+  it("(a) DOM 縦順＝小節→ライブラリリンク→長さ→両手グリッド（Task1f 設定行配置）", () => {
     render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
-    const picker = screen.getByLabelText("pattern-picker");
     const bars = screen.getByLabelText("bars-count");
+    const picker = screen.getByLabelText("pattern-picker"); // Task1f＝設定行の二次リンク
     const len = screen.getByLabelText("dotted"); // 長さツール（NoteValuePicker）
     const grid = screen.getByLabelText("two-hand-grid");
-    expect(follows(picker, bars)).toBe(true);
-    expect(follows(bars, len)).toBe(true);
+    expect(picker.classList.contains("pp-link")).toBe(true); // 格下げ＝link variant
+    expect(follows(bars, picker)).toBe(true); // 設定行内で小節の右にリンク
+    expect(follows(picker, len)).toBe(true);
     expect(follows(len, grid)).toBe(true);
   });
 
