@@ -671,6 +671,13 @@ Fable 実機監査＝360px幅で16step グリッドの step13-15 が画面外・
 - **再利用の線引き**（実装は extend/extract いずれでも可・**place モード bit一致を最優先**）：再利用＝dialog枠・検索・カード・MiniRoll・▶試聴／新設＝`onPick(neta)`・library scope フラグ・kind＋genre/scene 絞り／不使用＝`placeAt`(copyNeta+placeChild)・`createInLane`・`pickerRecs`。
 - **TDD**：(a) リンク→pick ダイアログが開く（place でない）。(b) pick は library+project の当該 kind のみ（多kind混入なし・bass relative 番兵）。(c) タップ＝`onPick(neta)`→`applyPattern(content)`＝従来 apply と同一（copy_neta 呼ばない）。(d) place モード（SectionEditor/FormStrip）は DOM/挙動不変（既存テスト緑）。(e) 試聴・genre/scene 絞り。
 
+### Task1h＝読み込みダイアログにジャンルの小アクセント（2026-07-23・オーナーFB「単一kindで色一つ＝さみしい・でも色分けの是非が不明」・裁定「ジャンルの小アクセント（色=kind の約束は崩さない）」）
+`PatternImportDialog` は単一 kind＝全カードが kind 色（`--k-chord` 等）一色で単調。**「色=kind」はアプリ全体の約束**（`kindColor` SSOT・LANE_COLOR）なのでカード本体は塗り替えず、**小さなジャンル色ドット＋ジャンル名ラベル**をカードに足す＝変化＋「これ何用？」情報を両取り（オーナー裁定）。
+- **`genreColor(genre)`／`genreLabel(genre)` を新設（SSOT・theme-aware）**：配色は dataviz 検証済みカテゴリカル8色（light/dark）を土台に、全ジャンルへ固定割当（label 常時併記＝二次エンコード＝厳密CVDは不要だが各ジャンル固定・不変が鉄則）。ラベルは既存 chip 定数（`COMP_GENRE_CHIPS`/`BASS_GENRE_CHIPS`/`DRUM_GENRE_CHIPS`）の日本語を流用＋不足を補完（rock→ロック等）。
+- **カード表示**：`MiniRoll`＋名＋メタ行に `●<ジャンル名>`（ドット色=genreColor・複数 genre タグは先頭 or 主要1つ）＋既存 scene タグ。カード本体色・kind 色は不変。
+- **範囲＝pick ダイアログのみ**（place ピッカー・Section・一覧は「色=kind」のまま不変）。純追加UI＝content/apply/試聴/bit一致に無影響。
+- **TDD**：(a) カードにジャンルドット＋ラベルが出る（genre タグ有り時）。(b) genreColor は各ジャンル固定。(c) genre タグ無しネタはドット無し（自作パターン等）で崩れない。(d) place/一覧の色は不変。
+
 ### Task2/L1＝パターンライブラリのタグ/scope 設計（2026-07-23・オーナー方針「パターンはネタ帳のライブラリ扱い」・正典＝`docs/research/2026-07-22-pattern-library-arc-plan.md`）
 「演奏パターンを選ぶ」の出所を**コード内辞書→ネタ帳ライブラリ**へ移す（L2 シード・L3 ピッカー差し替えの契約基盤）。統一原理「content は人が仕上げる単位」の帰結＝パターンが content ならその置き場もネタ（量産＝コンテンツ作業）。**汚染対策＝案A**（一覧を工場出荷で埋めない）を**既存の `scope` 機構で実現**（オーナー既定裁定・可逆＝後で案B棚分離に変更可）。
 - **置き場＝`scope:"library"`**：工場出荷/採取パターンは `scope:"library"` のネタ（`chord_progression` の falcom 前例＝`scripts/ingest-falcom-chords.ts` と同流儀）。**既定のネタ帳一覧（`scope:"project"`）には出ない**＝汚染対策の本体。検索/ピッカーは `scope:"library"` を明示クエリして拾う（`listNeta` が scope+tags+kind を一撃で絞れる＝`repo/neta-repo.ts:113-156`）。**新 kind は作らない**（作成タイル/フィルタ肥大の病理回避）＝既存 kind（chord_pattern / rhythm / bass 相対）のまま。
