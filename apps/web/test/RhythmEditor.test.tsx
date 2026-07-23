@@ -331,9 +331,7 @@ describe("RhythmEditor 手編集の（改）フラグ（修理#3 決定④）", 
     expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：four.rock（改）");
 
     await user.click(screen.getByLabelText("pattern-picker-toggle"));
-    await user.click(screen.getByLabelText("pattern-fetch"));
-    await screen.findByLabelText("pattern-card-0");
-    await user.click(screen.getByLabelText("pattern-apply-0"));
+    await user.click(await screen.findByLabelText("import-pick-0"));
 
     // patternId は差し替わり patternEdited は消える＝「（改）」解除。
     expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：eight.beat");

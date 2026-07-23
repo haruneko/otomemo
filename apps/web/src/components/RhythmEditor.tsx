@@ -18,20 +18,9 @@ import {
 } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
-import { PatternPickerBar, type PatternCand } from "./PatternPickerBar";
-import { fetchLibraryPatternNetas, netaToPatternCand } from "./patternLibrary";
+import { PatternPickerBar } from "./PatternPickerBar";
+import { PatternImportDialog } from "./PatternImportDialog";
 import { BarsControl } from "./BarsControl";
-
-// ドラムの定型ビート型ライブラリ（drumLibrary の genre）＋おまかせ番兵（v:""＝従来 default 生成）。
-// コード楽器の COMP_GENRE_CHIPS とは genre 集合が違う（ドラムは jpop/rock/dance/ballad/funk）ので別立て。
-const DRUM_GENRE_CHIPS: { v: string; label: string }[] = [
-  { v: "", label: "おまかせ" },
-  { v: "jpop", label: "J-POP" },
-  { v: "rock", label: "ロック" },
-  { v: "dance", label: "4つ打ち" },
-  { v: "ballad", label: "バラード" },
-  { v: "funk", label: "ファンク" },
-];
 import { DragHud } from "./DragHud";
 import { Icon } from "./Icon";
 import { useHoldDrag, type HoldDragState, type HoldDragStart } from "../useHoldDrag";
@@ -121,14 +110,9 @@ export function RhythmEditor({
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter, rhythm.beatsPerStep);
   const ppPlay = useRef<PlaybackHandle | null>(null);
-  // 「パターンを選ぶ ▸」帯（修理#1／Task2/L3）＝候補の出所を生成器→ネタ帳ライブラリへ。
-  // scope:"library" のドラム(rhythm)ネタを genre タグで引き、content（{rhythm:…}）を既存 audition/apply へそのまま載せる。
-  const fetchPatterns = async (genre: string): Promise<PatternCand[]> => {
-    const netas = await fetchLibraryPatternNetas("rhythm", genre);
-    return netas.map((n) =>
-      netaToPatternCand(n, { audition: auditionPattern, apply: applyPattern, fallbackName: "おまかせ" }),
-    );
-  };
+  // Task1g：ライブラリから読み込む＝pick ダイアログ（PatternImportDialog）。入口リンクのクリックで開き、
+  // タップ＝onPick(neta)→既存 applyPattern(neta.content) へ配線（apply/試聴は現行のまま＝bit一致）。
+  const [importOpen, setImportOpen] = useState(false);
   // 試聴＝ドラムは進行不要。rhythm content をそのまま鳴らす（notesForContent("rhythm")）。
   const auditionPattern = (content: unknown) => {
     ppPlay.current?.stop();
@@ -267,13 +251,11 @@ export function RhythmEditor({
             </optgroup>
           </select>
         </label>
-        {/* Task1f：「パターンを選ぶ」帯は設定行（rhythm-toolbar）の右端に寄せた二次リンク「ライブラリから読み込む」へ格下げ（variant="link"）。
-            nowLabel＝patternId（＋手編集後は「（改）」）＝PatternPickerBar は器のまま。 */}
+        {/* Task1g：設定行（rhythm-toolbar）右端の二次リンク「⤓ ライブラリから読み込む」＝クリックで pick ダイアログを開く。
+            nowLabel＝patternId（＋手編集後は「（改）」）＝PatternPickerBar は入口リンクの器のまま。 */}
         <PatternPickerBar
-          variant="link"
           nowLabel={rhythm.patternId ? rhythm.patternId + (rhythm.patternEdited ? "（改）" : "") : undefined}
-          chips={DRUM_GENRE_CHIPS}
-          onFetch={fetchPatterns}
+          onOpen={() => setImportOpen(true)}
         />
       </div>
       <div
@@ -324,6 +306,17 @@ export function RhythmEditor({
         <DragHud anchor={drag.anchor} vel={drag.vel} div={drag.div} base={drag.base} detents={drag.detents} />
       )}
     </div>
+    {/* Task1g pick ダイアログ＝ライブラリ全体（scope:"all"）から rhythm を検索/ブラウズ。
+        タップ＝onPick→applyPattern(content)（copy_neta 不使用）・▶＝auditionPattern(content)＝現行の実音経路。 */}
+    {importOpen && (
+      <PatternImportDialog
+        kind="rhythm"
+        fallbackName="おまかせ"
+        onPreview={(n) => auditionPattern(n.content)}
+        onPick={(n) => { applyPattern(n.content); setImportOpen(false); }}
+        onClose={() => { ppPlay.current?.stop(); setImportOpen(false); }}
+      />
+    )}
    </>
   );
 }

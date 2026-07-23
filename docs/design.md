@@ -660,7 +660,7 @@ Fable 実機監査＝360px幅で16step グリッドの step13-15 が画面外・
 - **入口**：3エディタの「⤓ ライブラリから読み込む」リンク（Task1f）は維持。クリックで chip帯でなく**ネタ選択ダイアログ（pick モード）を開く**。「いま：<型>」は維持。
 - **ダイアログ＝`PlacePicker` の共通UIを再利用**（`dialog` 枠・検索欄・カード＝`MiniRoll`＋メタ＋▶試聴・リスト）。**place モード（`SectionEditor`/`FormStrip` の `placeAt`＝copyNeta+placeChild）は無改修＝bit一致**。追加する pick モード：
   - `mode:"pick"`＋**`onPick(neta)`**：タップ＝**placeChild せず `neta.content` を呼び側へ返す**（copy_neta 不使用＝content コピー）。place 専用UI（小節位置パンくず・`createInLane`・コーパスおすすめ strip）は pick では出さない。
-  - **ライブラリを見せる**（`PlacePicker.tsx` の `n.scope !== "library"` 除外を pick では反転）＝`427-C`「library を隠す」を pick モードで反転（用途別・上参照）。母集団＝`scope:"library"`（工場出荷 `lib:factory` 71件）＋`scope:"project"` の自作パターン（同 kind）。
+  - **ライブラリを見せる**（`PlacePicker.tsx` の `n.scope !== "library"` 除外を pick では反転）＝`427-C`「library を隠す」を pick モードで反転（用途別・上参照）。母集団＝`scope:"library"`（工場出荷 `lib:factory` 71件）＋`scope:"project"` の自作パターン（同 kind）。**実装（Task1g 完了）＝`api.listNeta({kind, scope:"all"})` 1回**で両 scope を一括取得（`neta-repo.ts:117` の `scope!=="all"` 分岐＝scope フィルタ無し＝project+library を返す）＝母集団は仕様どおり。ダイアログは新設 `PatternImportDialog.tsx`（pick 専用）＝`PlacePicker.tsx` は**無改修**（place モード bit 一致）で dialog 枠/検索/カード/MiniRoll/▶ の CSS クラスと `MiniRoll` コンポーネントだけ共有。
   - **kind 固定**：開いたエディタの kind（chord_pattern / bass(relative) / rhythm）だけに絞る（多kind混在防止）。bass は `content.mode==="relative"` 番兵をフィルタで温存。
   - **genre/scene タグ絞り**（chip でなく絞り込みフィルタ）を追加。テキスト検索は現行 substring を流用。**意味検索(cm-search)は将来拡張＝今回見送り**。
 - **適用（apply）＝content コピー不変**：`onPick(neta)` → 各エディタの既存 `applyPattern(neta.content)`（chord=voicing/hits/lh／bass=relative／rhythm=rhythm）＝bit一致。試聴＝現行 `notesForContent`＋`buildPlayback` 不変。

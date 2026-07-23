@@ -2,22 +2,11 @@ import { useRef, useState, type Ref } from "react";
 import { type BassStep, type BassDegree, type PlaybackHandle, isCompoundMeter, notesForContent, buildPlayback } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
-import { PatternPickerBar, type PatternCand } from "./PatternPickerBar";
-import { fetchLibraryPatternNetas, netaToPatternCand } from "./patternLibrary";
+import { PatternPickerBar } from "./PatternPickerBar";
+import { PatternImportDialog } from "./PatternImportDialog";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
 
-// ベースの相対ビート型ジャンルchip（S7・修理#3 決定②）＝gen_bass の style ジャンル名と対応（先頭＝おまかせ番兵 v:""）。
-// コード楽器(COMP_GENRE_CHIPS)/ドラム(DRUM_GENRE_CHIPS)とは genre 集合が違う（ベース＝rock/ballad/citypop/funk/edm/vocarock）。
-const BASS_GENRE_CHIPS: { v: string; label: string }[] = [
-  { v: "", label: "おまかせ" },
-  { v: "rock", label: "ロック" },
-  { v: "ballad", label: "バラード" },
-  { v: "citypop", label: "シティポップ" },
-  { v: "funk", label: "ファンク" },
-  { v: "edm", label: "EDM" },
-  { v: "vocarock", label: "ボカロック" },
-];
 // このエディタが grid で編集する 6 レーンの度数（BassStep.degree はこれより広い＝修理#2 で 2/6/クロマチック/next を追加）。
 // レーン外の度数（型生成された相対ベースの b7/6/#4 や next）は grid には現れないが pattern には**非破壊で保持**される
 // （メロ/リズムの範囲外音と同じ流儀）。フルな度数編集 UI は次スライス（監査 §4 B'3「その他」レーン）。
@@ -99,14 +88,10 @@ export function BassStepEditor({
   scrollerRef?: Ref<HTMLDivElement>;
 }) {
   const ppPlay = useRef<PlaybackHandle | null>(null);
-  // 「パターンを選ぶ ▸」帯（S7・修理#3 決定②／Task2/L3）＝候補の出所を生成器→ネタ帳ライブラリへ。
-  // scope:"library" の相対ベース(bass)ネタを genre タグで引く。**相対 content のみ**採用（絶対 notes ネタは番兵で捨てる）。
-  const fetchPatterns = async (genre: string): Promise<PatternCand[]> => {
-    const netas = await fetchLibraryPatternNetas("bass", genre);
-    return netas
-      .filter((n) => (n.content as { mode?: string } | null)?.mode === "relative")
-      .map((n) => netaToPatternCand(n, { audition: auditionPattern, apply: applyPattern, fallbackName: "おまかせ" }));
-  };
+  // Task1g：ライブラリから読み込む＝pick ダイアログ（PatternImportDialog）。入口リンクのクリックで開き、
+  // タップ＝onPick(neta)→既存 applyPattern(neta.content) へ配線（apply/試聴は現行のまま＝bit一致）。
+  // 母集団は bass の **相対 content のみ**（絶対 notes ネタは番兵 contentFilter で捨てる）。
+  const [importOpen, setImportOpen] = useState(false);
   // 試聴＝度数を調(key)の tonic に当てて実音化（既存試聴の流儀・notesForContent("bass")）。
   const auditionPattern = (content: unknown) => {
     ppPlay.current?.stop();
@@ -194,19 +179,29 @@ export function BassStepEditor({
       {/* 「パターンを選ぶ ▸」帯（S7）＝相対ビート型の入口。既定閉＝開くまで既存DOM/挙動不変。
           compound meter（6/8系）は型ライブラリが4/4前提＝帯非表示（gen_bass の style も6-8は絶対フォールバック）。
           nowLabel＝patternId（＋手編集後は「（改）」）。（改）表現は渡す文字列で行う＝PatternPickerBar は器のまま（決定④）。 */}
-      {/* Task1f：「パターンを選ぶ」帯は設定行（小節行）の右端に寄せた二次リンク「ライブラリから読み込む」へ格下げ（variant="link"）。
+      {/* Task1g：設定行（小節行）右端の二次リンク「⤓ ライブラリから読み込む」＝クリックで pick ダイアログを開く。
           compound meter（6/8系）非表示・（改）表示は不変。 */}
       <div className="editor-setrow">
         <BarsControl bars={bars} max={4} onChange={setBars} />
         {!isCompoundMeter(meter) && (
           <PatternPickerBar
-            variant="link"
             nowLabel={patternId ? patternId + (patternEdited ? "（改）" : "") : undefined}
-            chips={BASS_GENRE_CHIPS}
-            onFetch={fetchPatterns}
+            onOpen={() => setImportOpen(true)}
           />
         )}
       </div>
+      {/* Task1g pick ダイアログ＝ライブラリ全体（scope:"all"）から bass の相対 content を検索/ブラウズ。
+          タップ＝onPick→applyPattern(content)（copy_neta 不使用）・▶＝auditionPattern(content)＝現行の実音経路。 */}
+      {importOpen && (
+        <PatternImportDialog
+          kind="bass"
+          fallbackName="おまかせ"
+          contentFilter={(n) => (n.content as { mode?: string } | null)?.mode === "relative"}
+          onPreview={(n) => auditionPattern(n.content)}
+          onPick={(n) => { applyPattern(n.content); setImportOpen(false); }}
+          onClose={() => { ppPlay.current?.stop(); setImportOpen(false); }}
+        />
+      )}
       <div className="bass-lens">
         <NoteValuePicker
           options={LENGTHS}

@@ -396,16 +396,16 @@ describe("ChordPatternEditor S4 帯ゲート＋（改）フラグ", () => {
     expect(arg.patternId).toBe("GT-FOLK8");
   });
 
-  it("applyPattern（候補 content で置換）で patternEdited が消える／program は付与しない", async () => {
+  it("pick（ライブラリ content で置換）で patternEdited が消える／program は付与しない", async () => {
     const onChange = vi.fn();
+    // Task1g：pick ダイアログはライブラリ全体（scope:"all"）を引く。タップ＝onPick→applyPattern(content)。
     vi.mocked(api.listNeta).mockResolvedValue([
       { id: "cp1", kind: "chord_pattern", title: "GT-FOLK8 弾き語り", text: null, scope: "library", tags: ["scene:verse"], key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "",
         content: pat({ patternId: "GT-FOLK8", hits: [{ step: 0, dur: 8 }] }) },
     ]);
     render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8", patternEdited: true })} onChange={onChange} keyPc={0} />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await userEvent.click(screen.getByLabelText("pattern-fetch"));
-    await userEvent.click(await screen.findByLabelText("pattern-apply-0"));
+    await userEvent.click(await screen.findByLabelText("import-pick-0"));
     const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
     expect("patternEdited" in arg).toBe(false); // 候補 content に無い＝自然消滅
     expect("program" in arg).toBe(false); // 現ネタ program 無し＝メタ継承なし＝（改）と無関係

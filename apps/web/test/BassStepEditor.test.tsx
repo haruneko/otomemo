@@ -174,43 +174,39 @@ describe("BassStepEditor パターンを選ぶ帯（S7）", () => {
   afterEach(() => vi.clearAllMocks());
 
   // 相対 content の library ネタ（scope:"library"）を patternId 付きで返すヘルパ。
-  const relNeta = (id: string, pat: BassStep[] = [{ step: 0, degree: "R", dur: 4 }]) => ({
-    id, kind: "bass", title: id, text: null, scope: "library" as const, tags: [], key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "",
+  const relNeta = (id: string, pat: BassStep[] = [{ step: 0, degree: "R", dur: 4 }], tags: string[] = []) => ({
+    id, kind: "bass", title: id, text: null, scope: "library" as const, tags, key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "",
     content: { mode: "relative", steps: 16, pattern: pat, patternId: id },
   });
 
-  it("帯 fetch＝listNeta を kind:'bass' scope:'library' で引く（おまかせ＝genre タグ無し・生成器は叩かない）", async () => {
+  it("リンク→ダイアログ＝listNeta を kind:'bass' scope:'all' で引く（生成器は叩かない）", async () => {
     api.listNeta.mockResolvedValue([relNeta("RK-8ROOT")]);
     render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await userEvent.click(screen.getByLabelText("pattern-fetch")); // おまかせ（先頭 chip・v:""）で候補
+    await screen.findByLabelText("import-card-0");
     expect(api.music).not.toHaveBeenCalled();
-    expect(api.listNeta).toHaveBeenCalledTimes(1);
-    const q = api.listNeta.mock.calls[0]![0] as { kind: string; scope: string; tags?: string[] };
+    const q = api.listNeta.mock.calls[0]![0] as { kind: string; scope: string };
     expect(q.kind).toBe("bass");
-    expect(q.scope).toBe("library");
-    expect(q.tags).toBeUndefined(); // おまかせ＝genre タグ無し
+    expect(q.scope).toBe("all"); // library（工場出荷）＋project（自作）を一括＝ライブラリを見せる
   });
 
-  it("ジャンル chip 選択＝tags に genre:<g> が載る", async () => {
-    api.listNeta.mockResolvedValue([relNeta("RK-8ROOT")]);
+  it("ジャンル絞り＝select で genre タグ一致だけ残す", async () => {
+    api.listNeta.mockResolvedValue([relNeta("RK-8ROOT", undefined, ["genre:rock"]), relNeta("BL-WHOLE", undefined, ["genre:ballad"])]);
     render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await userEvent.click(screen.getByLabelText("pgenre-rock"));
-    await userEvent.click(screen.getByLabelText("pattern-fetch"));
-    const q = api.listNeta.mock.calls[0]![0] as { tags?: string[] };
-    expect(q.tags).toEqual(["genre:rock"]);
+    await screen.findByLabelText("import-card-1");
+    await userEvent.selectOptions(screen.getByLabelText("import-genre"), "rock");
+    expect(screen.getByLabelText("import-card-0").textContent).toContain("RK-8ROOT");
+    expect(screen.queryByLabelText("import-card-1")).toBeNull(); // ballad が消え1件
   });
 
   it("複数の相対ネタがそれぞれカードに並ぶ", async () => {
     api.listNeta.mockResolvedValue([relNeta("RK-8ROOT"), relNeta("BL-WHOLE")]);
     render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await userEvent.click(screen.getByLabelText("pattern-fetch"));
-    await screen.findByLabelText("pattern-card-0");
-    expect(screen.getByLabelText("pattern-card-0")).toBeTruthy();
-    expect(screen.getByLabelText("pattern-card-1")).toBeTruthy();
-    expect(screen.queryByLabelText("pattern-card-2")).toBeNull();
+    await screen.findByLabelText("import-card-0");
+    expect(screen.getByLabelText("import-card-1")).toBeTruthy();
+    expect(screen.queryByLabelText("import-card-2")).toBeNull();
   });
 
   it("番兵＝mode!=='relative'（絶対 notes ネタ）候補は捨てる", async () => {
@@ -221,20 +217,18 @@ describe("BassStepEditor パターンを選ぶ帯（S7）", () => {
     ]);
     render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await userEvent.click(screen.getByLabelText("pattern-fetch"));
-    await screen.findByLabelText("pattern-card-0");
-    expect(screen.getByLabelText("pattern-card-0").textContent).toContain("RK-8ROOT");
-    expect(screen.queryByLabelText("pattern-card-1")).toBeNull(); // 絶対は捨てられ相対1件のみ
+    await screen.findByLabelText("import-card-0");
+    expect(screen.getByLabelText("import-card-0").textContent).toContain("RK-8ROOT");
+    expect(screen.queryByLabelText("import-card-1")).toBeNull(); // 絶対は捨てられ相対1件のみ
   });
 
-  it("適用＝onApplyPattern に pattern/steps/patternId を渡す", async () => {
+  it("タップ＝onApplyPattern に pattern/steps/patternId を渡す", async () => {
     const pat: BassStep[] = [{ step: 0, degree: "R", dur: 4 }, { step: 8, degree: "5", dur: 4 }];
     api.listNeta.mockResolvedValue([relNeta("RK-8ROOT", pat)]);
     const onApplyPattern = vi.fn();
     render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" onApplyPattern={onApplyPattern} />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await userEvent.click(screen.getByLabelText("pattern-fetch"));
-    await userEvent.click(await screen.findByLabelText("pattern-apply-0"));
+    await userEvent.click(await screen.findByLabelText("import-pick-0"));
     expect(onApplyPattern).toHaveBeenCalledWith({ pattern: pat, steps: 16, patternId: "RK-8ROOT" });
   });
 

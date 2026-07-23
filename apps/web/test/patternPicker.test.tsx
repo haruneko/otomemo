@@ -3,78 +3,99 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
-// 修理#1「パターンを選ぶ ▸」帯（正典＝docs/research/2026-07-22-performance-editing-architecture-audit.md 推奨差分1）：
-//  ・既定閉＝開かなければ candidate 機構は非活性（chip/候補が DOM に出ない）
-//  ・開く→ジャンルchip→候補を出す→カード→適用＝content 置換（patternId が刻まれ program/kit メタは保持）
-//  ・適用は onChange 経由＝useEditHistory の Undo で1操作で戻る
-// Task2/L3：候補の出所は生成器→ネタ帳ライブラリ（api.listNeta）＝帯 fetch は listNeta を叩く（契約＝PatternCand は不変）。
-const api = vi.hoisted(() => ({ music: vi.fn(), listNeta: vi.fn() }));
+// Task1g（design「### Task1g＝パターン取得を『ネタ選択ダイアログでライブラリをブラウズ』へ作り直す」）：
+// 3エディタの「⤓ ライブラリから読み込む」リンク→pick ダイアログ（PatternImportDialog）。TDD (a)-(e)：
+//  (a) リンク→pick ダイアログが開く（place でない＝placeChild/copy_neta を呼ばない）。
+//  (b) pick は library+project の当該 kind のみ（scope:"all"・kind 固定＝多kind混入なし・bass relative 番兵）。
+//  (c) タップ＝onPick(neta)→applyPattern(neta.content)＝従来 apply と同一（content コピー・copy_neta 呼ばない）。
+//  (d) place モード（SectionEditor/FormStrip）は無改修＝別テストで緑（本ファイルは copyNeta/placeChild 不使用を裏取り）。
+//  (e) 試聴（auditionPattern）・genre/scene 絞り。
+const api = vi.hoisted(() => ({ listNeta: vi.fn(), copyNeta: vi.fn(), placeChild: vi.fn(), music: vi.fn() }));
 vi.mock("../src/api", () => ({ api }));
-
-// ライブラリネタ（scope:"library"）を候補として返すヘルパ＝content をそのまま帯 audition/apply へ載せる。
-const libNeta = (id: string, kind: string, content: unknown, title: string) => ({
-  id, kind, title, text: null, content, key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null,
-  scope: "library" as const, tags: [], created: "", updated: "",
-});
-
-// startPlayback は試聴でしか呼ばれない（このテストは試聴しない）が、import 解決のため軽く stub。
 vi.mock("../src/playback", () => ({ startPlayback: vi.fn(async () => null) }));
 
+import { startPlayback } from "../src/playback";
 import { ChordPatternEditor } from "../src/components/ChordPatternEditor";
 import { RhythmEditor } from "../src/components/RhythmEditor";
+import { BassStepEditor } from "../src/components/BassStepEditor";
 import { useEditHistory } from "../src/history";
-import type { ChordPatternContent, RhythmContent } from "../src/music";
+import type { ChordPatternContent, RhythmContent, BassStep } from "../src/music";
 
 if (typeof (globalThis as { PointerEvent?: unknown }).PointerEvent === "undefined") {
   (globalThis as { PointerEvent?: unknown }).PointerEvent = class extends MouseEvent {} as unknown;
 }
 
-const chordCand: ChordPatternContent = {
-  mode: "strum",
-  voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, style: "guitar", strumMs: 14 },
-  steps: 16,
-  hits: [{ step: 0, dur: 2, dir: "D" }],
-  patternId: "GT-FOLK8",
+// ライブラリネタ（scope 混在の母集団）＝pick はこれを検索/ブラウズ。content をそのまま onPick へ返す。
+const neta = (over: Partial<Record<string, unknown>> = {}) => ({
+  id: "n1", kind: "chord_pattern", title: "GT-FOLK8 フォーク", text: null, content: {},
+  key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null,
+  scope: "library" as const, tags: [] as string[], created: "", updated: "", ...over,
+});
+
+const chordContent: ChordPatternContent = {
+  mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 },
+  steps: 16, hits: [{ step: 0, dur: 4 }], patternId: "GT-FOLK8",
+};
+const chordPat0: ChordPatternContent = {
+  mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 },
+  steps: 16, hits: [{ step: 0, dur: 4 }], program: 25,
 };
 
-const drumCand = {
-  rhythm: {
-    steps: 16, bars: 1, beatsPerStep: 0.25,
-    lanes: [{ name: "Kick", midi: 36, hits: [0, 4, 8, 12], vel: 115 }],
-    patternId: "four.rock",
-  } as RhythmContent,
-};
-
-describe("ChordPatternEditor 「パターンを選ぶ ▸」帯（修理#1）", () => {
+describe("Task1g (a) リンク→pick ダイアログが開く（place でない）", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  const pat0: ChordPatternContent = {
-    mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 },
-    steps: 16, hits: [{ step: 0, dur: 4 }], program: 25,
-  };
+  it("既定＝ダイアログ閉。リンク押下でダイアログが開く（copy_neta/place_child は呼ばれない）", async () => {
+    api.listNeta.mockResolvedValue([]);
+    render(<ChordPatternEditor pattern={chordPat0} onChange={vi.fn()} meter="4/4" keyPc={0} />);
+    expect(screen.queryByLabelText("pattern-import")).toBeNull();
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    expect(screen.getByLabelText("pattern-import")).toBeTruthy(); // pick ダイアログ
+    expect(api.copyNeta).not.toHaveBeenCalled();
+    expect(api.placeChild).not.toHaveBeenCalled();
+  });
+});
 
-  it("既定閉＝トグルは在るがジャンルchip/候補は出ていない（開くまで既存挙動不変）", () => {
-    render(<ChordPatternEditor pattern={pat0} onChange={vi.fn()} meter="4/4" tempo={120} keyPc={0} />);
-    expect(screen.getByLabelText("pattern-picker-toggle")).toBeTruthy();
-    expect(screen.queryByLabelText("pattern-genres")).toBeNull();
-    expect(screen.queryByLabelText("pattern-fetch")).toBeNull();
+describe("Task1g (b) 母集団＝library+project の当該 kind のみ（scope:all・kind 固定）", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("chord＝listNeta を {kind:'chord_pattern', scope:'all'} で引く", async () => {
+    api.listNeta.mockResolvedValue([neta({ content: chordContent })]);
+    render(<ChordPatternEditor pattern={chordPat0} onChange={vi.fn()} meter="4/4" keyPc={0} />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await screen.findByLabelText("import-card-0");
+    const q = api.listNeta.mock.calls[0]![0] as { kind: string; scope: string };
+    expect(q.kind).toBe("chord_pattern");
+    expect(q.scope).toBe("all"); // library（工場出荷）＋project（自作）を一括＝ライブラリを見せる
   });
 
-  it("patternId があれば見出しに『いま：<型名>』を表示（選び直し兼用の家）", () => {
-    render(<ChordPatternEditor pattern={{ ...pat0, patternId: "PB-WHOLE" }} onChange={vi.fn()} meter="4/4" />);
-    expect(screen.getByLabelText("pattern-now").textContent).toContain("PB-WHOLE");
+  it("bass＝relative 番兵：絶対 notes ネタは母集団から捨て相対 content だけ出す", async () => {
+    api.listNeta.mockResolvedValue([
+      neta({ id: "abs", kind: "bass", title: "abs", content: { notes: [{ pitch: 40, start: 0, dur: 1 }] } }),
+      neta({ id: "rel", kind: "bass", title: "RK-8ROOT", content: { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }], patternId: "RK-8ROOT" } }),
+    ]);
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await screen.findByLabelText("import-card-0");
+    expect(screen.getByLabelText("import-card-0").textContent).toContain("RK-8ROOT");
+    expect(screen.queryByLabelText("import-card-1")).toBeNull(); // 絶対は捨てられ相対1件のみ
+    const q = api.listNeta.mock.calls[0]![0] as { kind: string; scope: string };
+    expect(q.kind).toBe("bass");
+    expect(q.scope).toBe("all");
   });
+});
 
-  it("開く→候補を出す→適用＝候補 content で置換（patternId 刻む・program 保持）／Undo で戻る", async () => {
-    api.listNeta.mockResolvedValue([libNeta("cp1", "chord_pattern", chordCand, "GT-FOLK8 フォーク定番")]);
+describe("Task1g (c) タップ＝onPick→applyPattern(content)（copy_neta 呼ばない・従来 apply と同一）", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("chord＝content 置換で patternId 刻む・program 保持／Undo で戻る／copy_neta 不使用", async () => {
+    api.listNeta.mockResolvedValue([neta({ content: chordContent })]);
     const user = userEvent.setup();
-
     function Harness() {
-      const [pat, setPat] = useState<ChordPatternContent>(pat0);
+      const [pat, setPat] = useState<ChordPatternContent>(chordPat0);
       const hist = useEditHistory(pat, setPat, { resetKey: "x" });
       return (
         <>
-          <ChordPatternEditor pattern={pat} onChange={setPat} meter="4/4" tempo={120} keyPc={0} program={25} />
+          <ChordPatternEditor pattern={pat} onChange={setPat} meter="4/4" keyPc={0} program={25} />
           <button aria-label="undo" onClick={hist.undo}>undo</button>
           <span aria-label="pid">{pat.patternId ?? "none"}</span>
           <span aria-label="prog">{pat.program ?? "none"}</span>
@@ -82,93 +103,94 @@ describe("ChordPatternEditor 「パターンを選ぶ ▸」帯（修理#1）", 
       );
     }
     render(<Harness />);
-
     await user.click(screen.getByLabelText("pattern-picker-toggle"));
-    expect(screen.getByLabelText("pattern-genres")).toBeTruthy();
-    await user.click(screen.getByLabelText("pattern-fetch"));
-    // カードが出る（型名＋場面）。
-    const card = await screen.findByLabelText("pattern-card-0");
-    expect(card.textContent).toContain("GT-FOLK8");
-    // 出所＝listNeta を chord_pattern・scope:"library" で引く（既定 chip＝おまかせ＝genre タグ無し）。
-    const q = api.listNeta.mock.calls[0]![0] as Record<string, unknown>;
-    expect(q.kind).toBe("chord_pattern");
-    expect(q.scope).toBe("library");
-    expect(q).not.toHaveProperty("tags"); // おまかせ
-
-    await user.click(screen.getByLabelText("pattern-apply-0"));
-    expect(screen.getByLabelText("pid").textContent).toBe("GT-FOLK8"); // patternId 刻まれた
-    expect(screen.getByLabelText("prog").textContent).toBe("25"); // program 保持
-
+    await user.click(await screen.findByLabelText("import-pick-0"));
+    expect(screen.getByLabelText("pid").textContent).toBe("GT-FOLK8"); // content の patternId
+    expect(screen.getByLabelText("prog").textContent).toBe("25"); // 現ネタ program 継承（apply 不変）
+    expect(api.copyNeta).not.toHaveBeenCalled(); // pick は content コピー＝copy_neta を呼ばない
+    expect(screen.queryByLabelText("pattern-import")).toBeNull(); // 採用でダイアログを閉じる
     await user.click(screen.getByLabelText("undo"));
-    expect(screen.getByLabelText("pid").textContent).toBe("none"); // 適用前へ戻る
+    expect(screen.getByLabelText("pid").textContent).toBe("none");
   });
 
-  it("ジャンルchip を選ぶと listNeta の tags に genre:<g> が載る", async () => {
-    api.listNeta.mockResolvedValue([]);
+  it("rhythm＝rhythm 置換で patternId 刻む・kit 保持", async () => {
+    const drum = { rhythm: { steps: 16, bars: 1, lanes: [{ name: "Kick", midi: 36, hits: [0, 4, 8, 12], vel: 115 }], patternId: "four.rock" } as RhythmContent };
+    api.listNeta.mockResolvedValue([neta({ id: "r1", kind: "rhythm", title: "four.rock", content: drum })]);
     const user = userEvent.setup();
-    render(<ChordPatternEditor pattern={pat0} onChange={vi.fn()} meter="4/4" tempo={120} keyPc={0} />);
-    await user.click(screen.getByLabelText("pattern-picker-toggle"));
-    await user.click(screen.getByLabelText("pgenre-rock"));
-    await user.click(screen.getByLabelText("pattern-fetch"));
-    const q = api.listNeta.mock.calls[0]![0] as { tags?: string[] };
-    expect(q.tags).toEqual(["genre:rock"]);
-  });
-});
-
-describe("RhythmEditor 「パターンを選ぶ ▸」帯（修理#1・seed 違い→dedupe）", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  const rhythm0: RhythmContent = { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }], kit: 8 };
-
-  it("既定閉＝chip/候補は出ていない", () => {
-    render(<RhythmEditor rhythm={rhythm0} onChange={vi.fn()} meter="4/4" tempo={120} />);
-    expect(screen.getByLabelText("pattern-picker-toggle")).toBeTruthy();
-    expect(screen.queryByLabelText("pattern-genres")).toBeNull();
-  });
-
-  it("開く→候補を出す→適用＝rhythm 置換（patternId 刻む・kit 保持）／Undo で戻る", async () => {
-    api.listNeta.mockResolvedValue([libNeta("r1", "rhythm", drumCand, "four.rock")]);
-    const user = userEvent.setup();
-
     function Harness() {
-      const [r, setR] = useState<RhythmContent>(rhythm0);
-      const hist = useEditHistory(r, setR, { resetKey: "x" });
+      const [r, setR] = useState<RhythmContent>({ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }], kit: 8 });
       return (
         <>
           <RhythmEditor rhythm={r} onChange={setR} meter="4/4" tempo={120} />
-          <button aria-label="undo" onClick={hist.undo}>undo</button>
           <span aria-label="pid">{r.patternId ?? "none"}</span>
           <span aria-label="kit">{r.kit ?? "none"}</span>
         </>
       );
     }
     render(<Harness />);
-
     await user.click(screen.getByLabelText("pattern-picker-toggle"));
-    await user.click(screen.getByLabelText("pattern-fetch"));
-    const card = await screen.findByLabelText("pattern-card-0");
-    expect(card.textContent).toContain("four.rock");
-    // 出所＝listNeta を rhythm・scope:"library" で1回引く（生成器 gen_drums は叩かない）。
-    expect(api.listNeta.mock.calls.length).toBe(1);
-    expect(api.music).not.toHaveBeenCalled();
-    const q = api.listNeta.mock.calls[0]![0] as { kind: string; scope: string };
-    expect(q.kind).toBe("rhythm");
-    expect(q.scope).toBe("library");
-    expect(screen.queryByLabelText("pattern-card-1")).toBeNull(); // 候補1件のみ
-
-    await user.click(screen.getByLabelText("pattern-apply-0"));
+    await user.click(await screen.findByLabelText("import-pick-0"));
     expect(screen.getByLabelText("pid").textContent).toBe("four.rock");
-    expect(screen.getByLabelText("kit").textContent).toBe("8"); // kit 保持
-
-    await user.click(screen.getByLabelText("undo"));
-    expect(screen.getByLabelText("pid").textContent).toBe("none");
+    expect(screen.getByLabelText("kit").textContent).toBe("8"); // kit（音色）保持
+    expect(api.copyNeta).not.toHaveBeenCalled();
   });
 
-  it("ジャンル chip＝ドラムの genre（jpop/rock/dance/ballad/funk＋おまかせ）", async () => {
-    render(<RhythmEditor rhythm={rhythm0} onChange={vi.fn()} meter="4/4" />);
+  it("bass＝onApplyPattern に pattern/steps/patternId を渡す（copy_neta 不使用）", async () => {
+    const pat: BassStep[] = [{ step: 0, degree: "R", dur: 4 }, { step: 8, degree: "5", dur: 4 }];
+    api.listNeta.mockResolvedValue([neta({ id: "rel", kind: "bass", title: "RK-8ROOT", content: { mode: "relative", steps: 16, pattern: pat, patternId: "RK-8ROOT" } })]);
+    const onApplyPattern = vi.fn();
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" onApplyPattern={onApplyPattern} />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    for (const g of ["omakase", "jpop", "rock", "dance", "ballad", "funk"]) {
-      expect(screen.getByLabelText(`pgenre-${g}`)).toBeTruthy();
-    }
+    await userEvent.click(await screen.findByLabelText("import-pick-0"));
+    expect(onApplyPattern).toHaveBeenCalledWith({ pattern: pat, steps: 16, patternId: "RK-8ROOT" });
+    expect(api.copyNeta).not.toHaveBeenCalled();
+  });
+});
+
+describe("Task1g (e) 試聴＋genre/scene 絞り", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("▶＝auditionPattern→startPlayback（rhythm）", async () => {
+    const drum = { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4, 8, 12] }], patternId: "four.rock" } as RhythmContent };
+    api.listNeta.mockResolvedValue([neta({ id: "r1", kind: "rhythm", title: "four.rock", content: drum })]);
+    render(<RhythmEditor rhythm={{ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] }} onChange={vi.fn()} meter="4/4" tempo={120} />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await userEvent.click(await screen.findByLabelText("import-preview-0"));
+    expect(vi.mocked(startPlayback)).toHaveBeenCalled();
+  });
+
+  it("genre 絞り＝select で genre タグ一致だけ残す", async () => {
+    api.listNeta.mockResolvedValue([
+      neta({ id: "a", title: "A rock", content: chordContent, tags: ["genre:rock"] }),
+      neta({ id: "b", title: "B rock", content: chordContent, tags: ["genre:rock"] }),
+      neta({ id: "c", title: "C ballad", content: chordContent, tags: ["genre:ballad"] }),
+    ]);
+    render(<ChordPatternEditor pattern={chordPat0} onChange={vi.fn()} meter="4/4" keyPc={0} />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await screen.findByLabelText("import-card-2"); // 3件
+    await userEvent.selectOptions(screen.getByLabelText("import-genre"), "rock");
+    expect(screen.getByLabelText("import-card-1")).toBeTruthy();
+    expect(screen.queryByLabelText("import-card-2")).toBeNull(); // ballad が消え2件
+  });
+
+  it("scene 絞り＝コード楽器のみ scene select が出て scene タグ一致だけ残す", async () => {
+    api.listNeta.mockResolvedValue([
+      neta({ id: "a", title: "verse one", content: chordContent, tags: ["scene:verse"] }),
+      neta({ id: "b", title: "chorus one", content: chordContent, tags: ["scene:chorus"] }),
+    ]);
+    render(<ChordPatternEditor pattern={chordPat0} onChange={vi.fn()} meter="4/4" keyPc={0} />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await screen.findByLabelText("import-card-1");
+    await userEvent.selectOptions(screen.getByLabelText("import-scene"), "verse");
+    expect(screen.getByLabelText("import-card-0").textContent).toContain("verse one");
+    expect(screen.queryByLabelText("import-card-1")).toBeNull();
+  });
+
+  it("rhythm/bass は scene select を出さない（コード楽器のみ）", async () => {
+    api.listNeta.mockResolvedValue([neta({ id: "r1", kind: "rhythm", title: "four.rock", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }], patternId: "four.rock" } }, tags: ["scene:verse"] })]);
+    render(<RhythmEditor rhythm={{ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] }} onChange={vi.fn()} meter="4/4" />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await screen.findByLabelText("import-card-0");
+    expect(screen.queryByLabelText("import-scene")).toBeNull();
   });
 });

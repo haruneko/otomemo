@@ -1,5 +1,13 @@
 import { api, type Neta } from "../api";
-import type { PatternCand } from "./PatternPickerBar";
+// Task1g：3エディタは PatternImportDialog（pick）へ移行し PatternCand 抽象を使わない。この型/写しは
+// useMelodyGen 経路（第4消費者・据え置き）のため patternLibrary 内に自足させる（旧 PatternPickerBar への依存を切る）。
+export interface PatternCand {
+  key: string; // React key＋dedupe キー（型IDが基本・無ければ content JSON）
+  name: string; // 型名（型ID or 「おまかせ」）
+  scene?: string; // 場面タグ（コード楽器のみ・ドラムは無し）
+  audition: () => void; // ▶試聴（消費者が notesForContent→startPlayback を注入）
+  apply: () => void; // 適用＝content 置換（onChange・Undo に自然に乗る）
+}
 
 // Task2/L3（design「### Task2/L3＝ピッカーをライブラリ検索へ差し替え」）：パターン候補の**出所**を
 // 生成器（gen_*）→ネタ帳ライブラリ（scope:"library"）へ移す共通口。「パターンを選ぶ」帯（3単体エディタ）と
