@@ -1996,10 +1996,11 @@
 .editor-setrow .bars-control { margin-bottom: 0; }
 /* Task1j＝「ライブラリから読み込む」入口＝ライブラリアイコン付きの控えめなボタン（PatternImportControl）。
    設定行の右端に寄せる。二次アクションの範囲＝枠/背景を軽く（リンク下線はやめてボタン見た目に）。 */
-.pattern-picker.pp-link { border: none; padding: 0; margin-left: auto; display: flex; align-items: center; }
-.pp-link-toggle { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; background: var(--card, #22252b); border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; color: var(--muted); cursor: pointer; }
-.pp-link-toggle:hover { color: inherit; border-color: var(--muted); }
-.pp-link-toggle svg { flex: none; }
+.pattern-picker.pp-link { border: none; padding: 0; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+/* オーナーFB「アイコンだけで」＝ライブラリ取込は library アイコン単体の正方ボタン（文言は title/aria）。 */
+.pp-icon-btn { display: inline-flex; align-items: center; justify-content: center; background: var(--card, #22252b); border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 6px; color: var(--muted); cursor: pointer; }
+.pp-icon-btn:hover { color: inherit; border-color: var(--muted); }
+.pp-icon-btn svg { flex: none; display: block; }
 /* ゾーンの小見出し（いつ弾く／響き）。 */
 .cp-zlabel { font-size: 0.68rem; color: var(--muted); margin: 0 0 6px; }
 /* Task1c 両手一体グリッド（一枚容器・同一ステップ列を共有）＝上帯:右手／破線／下帯:左手。

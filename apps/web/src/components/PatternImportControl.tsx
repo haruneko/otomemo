@@ -35,17 +35,22 @@ export function PatternImportControl({
   const [open, setOpen] = useState(false);
   return (
     <div className="pattern-picker pp-link" aria-label="pattern-picker">
-      {/* 入口＝ライブラリアイコン（積み重なったコレクション）＋「ライブラリから読み込む」＝控えめなボタン見た目。
-          「いま：<型>」は選び直し兼用で維持（＝現在 patternId・手編集後は呼び側が「（改）」を付す）。 */}
-      <button type="button" className="pp-link-toggle" aria-label="pattern-picker-toggle" onClick={() => setOpen(true)}>
-        <Icon name="library" size={16} />
-        <span className="pp-link-text">ライブラリから読み込む</span>
-        {nowLabel && (
-          <span className="pp-now" aria-label="pattern-now">
-            いま：{nowLabel}
-          </span>
-        )}
+      {/* 入口＝ライブラリアイコン（積み重なったコレクション）**単体のボタン**（オーナーFB「アイコンだけで」）。
+          文言はホバー/読み上げ用の title/aria に退避。「いま：<型>」は選び直し兼用でボタン外の小テキストに維持。 */}
+      <button
+        type="button"
+        className="pp-icon-btn"
+        aria-label="pattern-picker-toggle"
+        title="ライブラリから読み込む"
+        onClick={() => setOpen(true)}
+      >
+        <Icon name="library" size={18} />
       </button>
+      {nowLabel && (
+        <span className="pp-now" aria-label="pattern-now">
+          いま：{nowLabel}
+        </span>
+      )}
       {open && (
         <PatternImportDialog
           kind={kind}

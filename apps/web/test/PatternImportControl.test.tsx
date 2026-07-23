@@ -23,12 +23,12 @@ const neta = (over: Partial<Neta> = {}): Neta => ({
 describe("Task1j PatternImportControl（共通化＝入口ボタン＋dialog）", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("(a) 入口＝library アイコン付きボタン＋『ライブラリから読み込む』＋『いま：<型>』", () => {
+  it("(a) 入口＝library アイコン単体のボタン（文言は title へ）＋『いま：<型>』", () => {
     render(<PatternImportControl kind="chord_pattern" fallbackName="コード楽器" nowLabel="GT-FOLK8（改）" onApply={vi.fn()} onAudition={vi.fn()} />);
     const btn = screen.getByLabelText("pattern-picker-toggle");
     expect(btn.tagName).toBe("BUTTON"); // リンクでなくボタン
     expect(btn.querySelector("svg")).toBeTruthy(); // Icon name="library"（SVG）
-    expect(btn.textContent).toContain("ライブラリから読み込む");
+    expect(btn.getAttribute("title")).toBe("ライブラリから読み込む"); // アイコンだけ＝文言は title/aria へ退避（オーナーFB）
     expect(screen.getByLabelText("pattern-now").textContent).toContain("いま：GT-FOLK8（改）");
     expect(screen.getByLabelText("pattern-picker").classList.contains("pp-link")).toBe(true);
   });
