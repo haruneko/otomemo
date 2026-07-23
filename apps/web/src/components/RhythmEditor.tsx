@@ -100,6 +100,7 @@ export function RhythmEditor({
   tempo,
   playheadRef,
   scrollerRef,
+  activeProject,
 }: {
   rhythm: RhythmContent;
   onChange: (r: RhythmContent) => void;
@@ -107,6 +108,7 @@ export function RhythmEditor({
   tempo?: number; // 型試聴の実音化テンポ（修理#1「パターンを選ぶ」帯）
   playheadRef?: Ref<HTMLDivElement>; // #74 再生プレイヘッド
   scrollerRef?: Ref<HTMLDivElement>;
+  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りを PatternImportDialog へ下ろす（純追加）。
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter, rhythm.beatsPerStep);
   const ppPlay = useRef<PlaybackHandle | null>(null);
@@ -312,6 +314,7 @@ export function RhythmEditor({
       <PatternImportDialog
         kind="rhythm"
         fallbackName="おまかせ"
+        activeProject={activeProject}
         onPreview={(n) => auditionPattern(n.content)}
         onPick={(n) => { applyPattern(n.content); setImportOpen(false); }}
         onClose={() => { ppPlay.current?.stop(); setImportOpen(false); }}

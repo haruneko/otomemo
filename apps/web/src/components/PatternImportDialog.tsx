@@ -3,6 +3,7 @@ import { api, type Neta } from "../api";
 import { MiniRoll } from "./MiniRoll";
 import { sceneTagOf } from "./patternLibrary";
 import { genreColor, genreLabel, genreTagOf } from "../genres";
+import { projectTag } from "../project";
 
 // Task1g（design「### Task1g＝パターン取得を…ライブラリをブラウズ」）：パターン取得を「ネタ選択ダイアログで
 // ライブラリ全体を検索/ブラウズして1件選ぶ」形に作り直す pick モードのダイアログ。
@@ -33,6 +34,7 @@ export function PatternImportDialog({
   fallbackName,
   showScene = false,
   contentFilter,
+  activeProject,
   onPreview,
   onPick,
   onClose,
@@ -41,6 +43,9 @@ export function PatternImportDialog({
   fallbackName: string; // title/patternId 欠落時のカード名。
   showScene?: boolean; // scene:<role> 絞り＋カードの場面タグ（コード楽器のみ true）。
   contentFilter?: (n: Neta) => boolean; // bass relative 番兵など母集団の追加フィルタ。
+  // Task1i（design「### Task1i」）：Source（プロジェクト軸）絞り。App のグローバル activeProject を optional で下ろす
+  // （純追加＝未配線/空なら「このプロジェクト」option を出さない＝従来どおり全部見せる）。
+  activeProject?: string;
   onPreview: (n: Neta) => void; // ▶試聴（呼び側が既存 auditionPattern(content) を注入＝実音経路不変）。
   onPick: (n: Neta) => void; // タップ＝採用（呼び側が既存 applyPattern(content) を注入＝content コピー・copy_neta 不使用）。
   onClose: () => void;
@@ -49,6 +54,7 @@ export function PatternImportDialog({
   const [q, setQ] = useState("");
   const [genre, setGenre] = useState("");
   const [scene, setScene] = useState("");
+  const [source, setSource] = useState<"" | "library" | "project">(""); // Task1i：""＝全部／library＝工場出荷/非プロジェクト／project＝自プロジェクト所属。
   const [loading, setLoading] = useState(true);
 
   // 母集団取得＝ライブラリ＋自作を同 kind で一括（scope:"all"＝工場出荷 library も見せる＝pick は「ライブラリを見せる」）。
@@ -70,13 +76,17 @@ export function PatternImportDialog({
   const scenes = useMemo(() => tagValues(all, "scene:"), [all]);
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
+    const prjTag = activeProject ? projectTag(activeProject) : "";
     return all.filter((n) => {
+      // Task1i：Source 絞り（genre/scene と AND）。""＝全部／library＝scope:library／project＝scope:project かつ prj:<activeProject> を含む。
+      if (source === "library" && n.scope !== "library") return false;
+      if (source === "project" && !(n.scope === "project" && prjTag && (n.tags ?? []).includes(prjTag))) return false;
       if (genre && !(n.tags ?? []).includes(`genre:${genre}`)) return false;
       if (scene && !(n.tags ?? []).includes(`scene:${scene}`)) return false;
       if (needle && !`${n.title ?? ""} ${n.text ?? ""}`.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [all, q, genre, scene]);
+  }, [all, q, genre, scene, source, activeProject]);
 
   return (
     <div className="dialog-backdrop" onClick={onClose}>
@@ -98,17 +108,24 @@ export function PatternImportDialog({
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        {/* genre/scene タグ絞り（chip でなく select）。母集団に在るタグ値だけを出す（seed 済みのみ）。 */}
+        {/* Source（Task1i）＋genre/scene タグ絞り（chip でなく select）。母集団に在るタグ値だけを出す（seed 済みのみ）。
+            案C＝短縮ラベル（「：すべて」を落とす）で3 select が 360px で1行に収まる（実機実測は親）。 */}
         <div className="picker-filter-row">
+          {/* Task1i：Source（プロジェクト軸）。"このプロジェクト" は activeProject がある時だけ出す（純追加フォールバック）。 */}
+          <select aria-label="import-source" value={source} onChange={(e) => setSource(e.target.value as "" | "library" | "project")}>
+            <option value="">ソース</option>
+            <option value="library">ライブラリ</option>
+            {activeProject && <option value="project">このプロジェクト</option>}
+          </select>
           <select aria-label="import-genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
-            <option value="">ジャンル：すべて</option>
+            <option value="">ジャンル</option>
             {genres.map((g) => (
               <option key={g} value={g}>{g}</option>
             ))}
           </select>
           {showScene && scenes.length > 0 && (
             <select aria-label="import-scene" value={scene} onChange={(e) => setScene(e.target.value)}>
-              <option value="">場面：すべて</option>
+              <option value="">場面</option>
               {scenes.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}

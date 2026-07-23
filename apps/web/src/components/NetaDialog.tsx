@@ -18,6 +18,7 @@ export function NetaDialog({
   reloadSignal,
   parentId,
   onForked,
+  activeProject,
 }: {
   neta: Neta;
   onClose: () => void;
@@ -27,6 +28,7 @@ export function NetaDialog({
   reloadSignal?: number; // D&D配置などの外部更新でSectionEditorを再読込
   parentId?: string; // CoW（S2）：どの親から潜ったか＝共有子の分家先。未指定＝ガード無し。
   onForked?: (branch: Neta) => void; // CoW：「この曲だけ変える」で分家に載せ替えた時、親がエディタを分家へ。
+  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りのため PatternImportDialog へ下ろす（純追加・optional）。
 }) {
   const ed = useNetaEditor(neta, { onClose, onChanged, parentId, onForked });
   const f = ed.flags;
@@ -154,6 +156,7 @@ export function NetaDialog({
         reloadSignal={reloadSignal} onChanged={onChanged} onOpenNeta={onOpenNeta} onOpenSkeletonDesk={onOpenSkeletonDesk}
         cow={ed.cow} /* CoW ガード（S2 Fix C）＝section の bars/レーン設定の直接保存も安全弁を通す */
         tp={{ lineRef: ed.tp.lineRef, scrollerRef: ed.tp.scrollerRef, beatRef: ed.tp.beatRef, playing: ed.tp.playing }}
+        activeProject={activeProject} /* Task1i：PatternImportDialog の Source 絞りへ下ろす（純追加） */
       />
       {f.isMusic && (
         <TransportBar

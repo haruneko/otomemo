@@ -771,6 +771,7 @@ export function App() {
               onForked={(branch) => { setActive(branch); void reload(); }} /* 分家に載せ替え（navStack=親はそのまま・key変化で分家を再初期化） */
               onOpenNeta={drillNeta} /* Section のブロックタップ→子ネタへ潜る */
               onOpenSkeletonDesk={(t) => setDeskTarget(t)} /* #20 S6：骨格ブロック→机（全画面） */
+              activeProject={activeProject || undefined} /* Task1i：PatternImportDialog の Source（プロジェクト軸）絞りへ */
               onClose={() => {
                 if (navStack.length) {
                   // 潜っている途中＝親 Section に戻る（一覧に落とさない）。

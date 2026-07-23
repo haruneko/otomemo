@@ -87,6 +87,7 @@ export interface KindEditorBodyProps {
   cow?: import("../useCowGuard").CowGuard; // CoW ガード（S2 Fix C）＝section 直接保存の安全弁（未指定＝従来どおり）
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
   tp: { lineRef: any; scrollerRef: any; beatRef: any; playing: boolean };
+  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りのため 3エディタ→PatternImportDialog へ下ろす（純追加）。
 }
 
 export function KindEditorBody(p: KindEditorBodyProps) {
@@ -157,6 +158,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
               program={p.program}
               playheadRef={tp.lineRef}
               scrollerRef={tp.scrollerRef}
+              activeProject={p.activeProject}
             />
           ) : (
             <>
@@ -277,11 +279,11 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           )}
         </div>
       ) : p.flags.isChordPat || p.flags.isSectionInst ? ( // 管弦(section_inst・WP-X3c)も進行追従の多声＝ChordPatternEditor を共有
-        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} showPicker={p.flags.isChordPat} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
+        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} showPicker={p.flags.isChordPat} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} activeProject={p.activeProject} />
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />
       ) : isRhythm ? (
-        <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} tempo={p.tempo} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
+        <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} tempo={p.tempo} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} activeProject={p.activeProject} />
       ) : p.flags.isSkel ? (
         <div className="melody-input">
           {/* 描く/選ぶ/消す（メロと同じモード流儀）。骨格の点は次点/句境界まで支配。 */}

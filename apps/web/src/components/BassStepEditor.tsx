@@ -72,6 +72,7 @@ export function BassStepEditor({
   program,
   playheadRef,
   scrollerRef,
+  activeProject,
 }: {
   pattern: BassStep[];
   onChange: (p: BassStep[]) => void;
@@ -86,6 +87,7 @@ export function BassStepEditor({
   program?: number; // ベース音色（GM・試聴用・既定33）。
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
+  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りを PatternImportDialog へ下ろす（純追加）。
 }) {
   const ppPlay = useRef<PlaybackHandle | null>(null);
   // Task1g：ライブラリから読み込む＝pick ダイアログ（PatternImportDialog）。入口リンクのクリックで開き、
@@ -197,6 +199,7 @@ export function BassStepEditor({
           kind="bass"
           fallbackName="おまかせ"
           contentFilter={(n) => (n.content as { mode?: string } | null)?.mode === "relative"}
+          activeProject={activeProject}
           onPreview={(n) => auditionPattern(n.content)}
           onPick={(n) => { applyPattern(n.content); setImportOpen(false); }}
           onClose={() => { ppPlay.current?.stop(); setImportOpen(false); }}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within, waitFor, fireEvent } from "@testing-library/react";
 import type { Neta } from "../src/api";
 
 // Task1h（design「### Task1h＝読み込みダイアログにジャンルの小アクセント」）カード表示 TDD：
@@ -84,5 +84,100 @@ describe("Task1h (d) 既存の名・scene・MiniRoll は不変（純追加）", 
     expect(card.textContent).toContain("verse"); // scene タグ 不変
     expect(card.textContent).toContain("バラード"); // 純追加＝ジャンル
     expect((screen.getByLabelText("import-genre-tag-0").querySelector(".pi-genre-dot") as HTMLElement).style.background).toBe("var(--genre-violet)");
+  });
+});
+
+// ── Task1i（design「### Task1i＝読み込みダイアログに Source（プロジェクト軸）絞り」）───────────
+// 母集団：ライブラリ物（scope:library）＋自プロジェクト物（scope:project＋prj:みなそこ）＋他プロジェクト物。
+const POP: Neta[] = [
+  neta({ id: "lib-rock", title: "工場ロック", scope: "library", tags: ["genre:rock", "scene:chorus"] }),
+  neta({ id: "lib-ballad", title: "工場バラード", scope: "library", tags: ["genre:ballad"] }),
+  neta({ id: "prj-mine", title: "みなそこ用", scope: "project", tags: ["prj:みなそこ", "genre:rock"] }),
+  neta({ id: "prj-other", title: "別曲用", scope: "project", tags: ["prj:べつ", "genre:rock"] }),
+];
+const titlesShown = () =>
+  screen.queryAllByText(/工場ロック|工場バラード|みなそこ用|別曲用/).map((el) => el.textContent!.trim());
+
+async function openImport(props: Partial<React.ComponentProps<typeof PatternImportDialog>> = {}) {
+  api.listNeta.mockResolvedValue(POP);
+  const onPick = vi.fn();
+  render(
+    <PatternImportDialog
+      kind="chord_pattern"
+      fallbackName="コード楽器"
+      showScene
+      onPreview={vi.fn()}
+      onPick={onPick}
+      onClose={vi.fn()}
+      {...props}
+    />,
+  );
+  await waitFor(() => expect(screen.queryByText("読み込み中…")).toBeNull());
+  return { onPick };
+}
+
+describe("Task1i Source（プロジェクト軸）絞り", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // (a) Source select は3値。activeProject 有無で「このプロジェクト」option の出/不出。
+  it("(a) Source select＝3値・activeProject 有りで『このプロジェクト』が出る", async () => {
+    await openImport({ activeProject: "みなそこ" });
+    const sel = screen.getByLabelText("import-source") as HTMLSelectElement;
+    const values = within(sel).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
+    expect(values).toEqual(["", "library", "project"]);
+    expect(screen.getByText("このプロジェクト")).toBeTruthy();
+  });
+
+  // (c) activeProject 無し＝『このプロジェクト』option を出さない（フォールバック）。既定は全部。
+  it("(c) activeProject 無し＝project option 非表示・既定は母集団まるごと", async () => {
+    await openImport({});
+    const sel = screen.getByLabelText("import-source") as HTMLSelectElement;
+    const values = within(sel).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
+    expect(values).toEqual(["", "library"]);
+    expect(screen.queryByText("このプロジェクト")).toBeNull();
+    expect(titlesShown().sort()).toEqual(["みなそこ用", "別曲用", "工場バラード", "工場ロック"]);
+  });
+
+  // (b) library＝scope:library のみ／project＝scope:project＋prj一致のみ／全部＝両方。
+  it("(b) library＝scope:library のみ", async () => {
+    await openImport({ activeProject: "みなそこ" });
+    fireEvent.change(screen.getByLabelText("import-source"), { target: { value: "library" } });
+    expect(titlesShown().sort()).toEqual(["工場バラード", "工場ロック"]);
+  });
+
+  it("(b) このプロジェクト＝scope:project かつ prj 一致のみ（他プロジェクトは出ない）", async () => {
+    await openImport({ activeProject: "みなそこ" });
+    fireEvent.change(screen.getByLabelText("import-source"), { target: { value: "project" } });
+    expect(titlesShown()).toEqual(["みなそこ用"]);
+  });
+
+  it("(b) 全部（既定 ''）＝library と project の両方", async () => {
+    await openImport({ activeProject: "みなそこ" });
+    expect(titlesShown().sort()).toEqual(["みなそこ用", "別曲用", "工場バラード", "工場ロック"]);
+  });
+
+  // (d) genre/scene と AND。
+  it("(d) Source は genre 絞りと AND（library ∧ rock）", async () => {
+    await openImport({ activeProject: "みなそこ" });
+    fireEvent.change(screen.getByLabelText("import-source"), { target: { value: "library" } });
+    fireEvent.change(screen.getByLabelText("import-genre"), { target: { value: "rock" } });
+    expect(titlesShown()).toEqual(["工場ロック"]);
+  });
+
+  // 短縮ラベル（案C）：既定 option は「ジャンル」「場面」「ソース」（「：すべて」を落とす）。
+  it("(案C) 既定ラベルが短縮されている（ソース/ジャンル/場面）", async () => {
+    await openImport({ activeProject: "みなそこ" });
+    expect((within(screen.getByLabelText("import-source")).getAllByRole("option")[0] as HTMLOptionElement).textContent).toBe("ソース");
+    expect((within(screen.getByLabelText("import-genre")).getAllByRole("option")[0] as HTMLOptionElement).textContent).toBe("ジャンル");
+    expect((within(screen.getByLabelText("import-scene")).getAllByRole("option")[0] as HTMLOptionElement).textContent).toBe("場面");
+  });
+
+  // (e) onPick は選んだ neta をそのまま返す（apply/試聴 経路 bit 一致・Source は候補の絞りだけ）。
+  it("(e) onPick は選んだ neta を無改変で返す", async () => {
+    const { onPick } = await openImport({ activeProject: "みなそこ" });
+    fireEvent.change(screen.getByLabelText("import-source"), { target: { value: "project" } });
+    fireEvent.click(screen.getByLabelText("import-pick-0"));
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect((onPick.mock.calls[0]![0] as Neta).id).toBe("prj-mine");
   });
 });

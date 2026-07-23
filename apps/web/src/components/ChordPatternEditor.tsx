@@ -138,6 +138,7 @@ export function ChordPatternEditor({
   showPicker = true,
   playheadRef,
   scrollerRef,
+  activeProject,
 }: {
   pattern: ChordPatternContent;
   onChange: (p: ChordPatternContent) => void;
@@ -149,6 +150,7 @@ export function ChordPatternEditor({
   showPicker?: boolean; // 修理#3 決定③：「パターンを選ぶ ▸」帯の出し分け（既定 true＝従来描画＝bit一致）。管弦(section_inst)＝false で非表示（型の誤適用を断つ）。
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
+  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りを PatternImportDialog へ下ろす（純追加）。
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
   const ppPlay = useRef<PlaybackHandle | null>(null);
@@ -320,6 +322,7 @@ export function ChordPatternEditor({
           kind="chord_pattern"
           fallbackName="コード楽器"
           showScene
+          activeProject={activeProject}
           onPreview={(n) => auditionPattern(n.content)}
           onPick={(n) => { applyPattern(n.content); setImportOpen(false); }}
           onClose={() => { ppPlay.current?.stop(); setImportOpen(false); }}
