@@ -18,8 +18,7 @@ import {
 } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
-import { PatternPickerBar } from "./PatternPickerBar";
-import { PatternImportDialog } from "./PatternImportDialog";
+import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
 import { DragHud } from "./DragHud";
 import { Icon } from "./Icon";
@@ -112,9 +111,8 @@ export function RhythmEditor({
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter, rhythm.beatsPerStep);
   const ppPlay = useRef<PlaybackHandle | null>(null);
-  // Task1g：ライブラリから読み込む＝pick ダイアログ（PatternImportDialog）。入口リンクのクリックで開き、
-  // タップ＝onPick(neta)→既存 applyPattern(neta.content) へ配線（apply/試聴は現行のまま＝bit一致）。
-  const [importOpen, setImportOpen] = useState(false);
+  // Task1g/Task1j：ライブラリから読み込む＝pick ダイアログ（PatternImportControl が入口ボタン＋開閉＋dialog を内包）。
+  // ここは apply/試聴だけ Control へ注入（apply/試聴は現行のまま＝bit一致）。
   // 試聴＝ドラムは進行不要。rhythm content をそのまま鳴らす（notesForContent("rhythm")）。
   const auditionPattern = (content: unknown) => {
     ppPlay.current?.stop();
@@ -214,7 +212,6 @@ export function RhythmEditor({
   }
 
   return (
-   <>
     <div
       className={"rhythm-editor" + (eraseMode ? " erase-on" : "")}
       ref={scrollerRef}
@@ -253,11 +250,16 @@ export function RhythmEditor({
             </optgroup>
           </select>
         </label>
-        {/* Task1g：設定行（rhythm-toolbar）右端の二次リンク「⤓ ライブラリから読み込む」＝クリックで pick ダイアログを開く。
-            nowLabel＝patternId（＋手編集後は「（改）」）＝PatternPickerBar は入口リンクの器のまま。 */}
-        <PatternPickerBar
+        {/* Task1g/Task1j：設定行（rhythm-toolbar）右端の「ライブラリから読み込む」ボタン（PatternImportControl が入口＋dialog を内包）。
+            nowLabel＝patternId（＋手編集後は「（改）」）。 */}
+        <PatternImportControl
+          kind="rhythm"
+          fallbackName="おまかせ"
           nowLabel={rhythm.patternId ? rhythm.patternId + (rhythm.patternEdited ? "（改）" : "") : undefined}
-          onOpen={() => setImportOpen(true)}
+          activeProject={activeProject}
+          onApply={applyPattern}
+          onAudition={auditionPattern}
+          onClose={() => ppPlay.current?.stop()}
         />
       </div>
       <div
@@ -308,18 +310,5 @@ export function RhythmEditor({
         <DragHud anchor={drag.anchor} vel={drag.vel} div={drag.div} base={drag.base} detents={drag.detents} />
       )}
     </div>
-    {/* Task1g pick ダイアログ＝ライブラリ全体（scope:"all"）から rhythm を検索/ブラウズ。
-        タップ＝onPick→applyPattern(content)（copy_neta 不使用）・▶＝auditionPattern(content)＝現行の実音経路。 */}
-    {importOpen && (
-      <PatternImportDialog
-        kind="rhythm"
-        fallbackName="おまかせ"
-        activeProject={activeProject}
-        onPreview={(n) => auditionPattern(n.content)}
-        onPick={(n) => { applyPattern(n.content); setImportOpen(false); }}
-        onClose={() => { ppPlay.current?.stop(); setImportOpen(false); }}
-      />
-    )}
-   </>
   );
 }

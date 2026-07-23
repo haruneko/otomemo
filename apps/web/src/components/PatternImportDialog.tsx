@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Neta } from "../api";
 import { MiniRoll } from "./MiniRoll";
 import { sceneTagOf } from "./patternLibrary";
-import { genreColor, genreLabel, genreTagOf } from "../genres";
+import { genreColor, genreLabel, genreTagOf, sceneLabel } from "../genres";
 import { projectTag } from "../project";
 
 // Task1g（design「### Task1g＝パターン取得を…ライブラリをブラウズ」）：パターン取得を「ネタ選択ダイアログで
@@ -32,7 +32,6 @@ function displayName(n: Neta, fallback: string): string {
 export function PatternImportDialog({
   kind,
   fallbackName,
-  showScene = false,
   contentFilter,
   activeProject,
   onPreview,
@@ -41,7 +40,6 @@ export function PatternImportDialog({
 }: {
   kind: string; // 開いたエディタの kind（固定・多kind混入なし）。
   fallbackName: string; // title/patternId 欠落時のカード名。
-  showScene?: boolean; // scene:<role> 絞り＋カードの場面タグ（コード楽器のみ true）。
   contentFilter?: (n: Neta) => boolean; // bass relative 番兵など母集団の追加フィルタ。
   // Task1i（design「### Task1i」）：Source（プロジェクト軸）絞り。App のグローバル activeProject を optional で下ろす
   // （純追加＝未配線/空なら「このプロジェクト」option を出さない＝従来どおり全部見せる）。
@@ -74,6 +72,7 @@ export function PatternImportDialog({
 
   const genres = useMemo(() => tagValues(all, "genre:"), [all]);
   const scenes = useMemo(() => tagValues(all, "scene:"), [all]);
+  const hasScene = scenes.length > 0; // Task1j：母集団に scene: タグが在れば場面 UI（絞り＋カードタグ）を出す＝データ駆動。
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const prjTag = activeProject ? projectTag(activeProject) : "";
@@ -120,14 +119,16 @@ export function PatternImportDialog({
           <select aria-label="import-genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
             <option value="">ジャンル</option>
             {genres.map((g) => (
-              <option key={g} value={g}>{g}</option>
+              <option key={g} value={g}>{genreLabel(g)}</option>
             ))}
           </select>
-          {showScene && scenes.length > 0 && (
+          {/* Task1j：scene 絞りは **母集団に scene: タグがあれば自動表示**（showScene ハードコード撤去）＝データ駆動で
+              全楽器統一（bass(scene有)は出る・drum(scene無)は出ない・chord は出る）。ラベルは sceneLabel で日本語化。 */}
+          {scenes.length > 0 && (
             <select aria-label="import-scene" value={scene} onChange={(e) => setScene(e.target.value)}>
               <option value="">場面</option>
               {scenes.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{sceneLabel(s)}</option>
               ))}
             </select>
           )}
@@ -152,7 +153,7 @@ export function PatternImportDialog({
                   </div>
                   <div className="picker-item-meta">
                     <strong>{displayName(n, fallbackName)}</strong>
-                    {(gc || (showScene && sceneTagOf(n))) && (
+                    {(gc || (hasScene && sceneTagOf(n))) && (
                       <span className="pi-meta-row">
                         {gc && (
                           <span className="pi-genre" aria-label={`import-genre-tag-${i}`}>
@@ -160,7 +161,7 @@ export function PatternImportDialog({
                             {genreLabel(g!)}
                           </span>
                         )}
-                        {showScene && sceneTagOf(n) && <span className="muted">{sceneTagOf(n)}</span>}
+                        {hasScene && sceneTagOf(n) && <span className="muted">{sceneLabel(sceneTagOf(n)!)}</span>}
                       </span>
                     )}
                   </div>

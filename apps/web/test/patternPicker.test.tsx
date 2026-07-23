@@ -173,7 +173,8 @@ describe("Task1g (e) 試聴＋genre/scene 絞り", () => {
     expect(screen.queryByLabelText("import-card-2")).toBeNull(); // ballad が消え2件
   });
 
-  it("scene 絞り＝コード楽器のみ scene select が出て scene タグ一致だけ残す", async () => {
+  // Task1j：scene 絞りは **母集団に scene: タグが在れば自動表示**（データ駆動＝コード固定を撤去）。chord で出る。
+  it("scene 絞り＝母集団に scene: 有りで自動表示・scene タグ一致だけ残す（chord）", async () => {
     api.listNeta.mockResolvedValue([
       neta({ id: "a", title: "verse one", content: chordContent, tags: ["scene:verse"] }),
       neta({ id: "b", title: "chorus one", content: chordContent, tags: ["scene:chorus"] }),
@@ -186,8 +187,20 @@ describe("Task1g (e) 試聴＋genre/scene 絞り", () => {
     expect(screen.queryByLabelText("import-card-1")).toBeNull();
   });
 
-  it("rhythm/bass は scene select を出さない（コード楽器のみ）", async () => {
-    api.listNeta.mockResolvedValue([neta({ id: "r1", kind: "rhythm", title: "four.rock", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }], patternId: "four.rock" } }, tags: ["scene:verse"] })]);
+  // Task1j (b)：データ駆動＝bass も母集団に scene: 有りなら scene select が出る（「他の楽器も直して」の実体）。
+  it("bass＝母集団に scene: 有りなら scene select が出る（データ駆動）", async () => {
+    api.listNeta.mockResolvedValue([
+      neta({ id: "rv", kind: "bass", title: "RK-8ROOT verse", content: { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }], patternId: "RK-8ROOT" }, tags: ["scene:verse"] }),
+    ]);
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
+    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
+    await screen.findByLabelText("import-card-0");
+    expect(screen.getByLabelText("import-scene")).toBeTruthy(); // scene: タグ有り＝自動で出る
+  });
+
+  // Task1j (b)：逆に scene: タグの無い母集団（工場出荷ドラム）では scene select を出さない（drum で出ない）。
+  it("drum＝母集団に scene: 無しなら scene select を出さない（データ駆動）", async () => {
+    api.listNeta.mockResolvedValue([neta({ id: "r1", kind: "rhythm", title: "four.rock", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }], patternId: "four.rock" } }, tags: [] })]);
     render(<RhythmEditor rhythm={{ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] }} onChange={vi.fn()} meter="4/4" />);
     await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
     await screen.findByLabelText("import-card-0");

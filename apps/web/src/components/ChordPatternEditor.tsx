@@ -2,8 +2,7 @@ import { type CSSProperties, type ReactNode, type Ref, useRef, useState } from "
 import { type ChordPatternContent, type ChordLhContent, type ChordEntry, type PlaybackHandle, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, notesForContent, buildPlayback, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
-import { PatternPickerBar } from "./PatternPickerBar";
-import { PatternImportDialog } from "./PatternImportDialog";
+import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -154,9 +153,8 @@ export function ChordPatternEditor({
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
   const ppPlay = useRef<PlaybackHandle | null>(null);
-  // Task1g：ライブラリから読み込む＝pick ダイアログ（PatternImportDialog）。入口リンク（下の PatternPickerBar）の
-  // クリックで開き、タップ＝onPick(neta)→既存 applyPattern(neta.content) へ配線（apply/試聴は現行のまま＝bit一致）。
-  const [importOpen, setImportOpen] = useState(false);
+  // Task1g/Task1j：ライブラリから読み込む＝pick ダイアログ（PatternImportControl が入口ボタン＋開閉＋dialog を内包）。
+  // ここは applyPattern/auditionPattern（editor 固有＝content 形・再生文脈）だけを Control へ注入する（apply/試聴は現行のまま＝bit一致）。
   // 試聴＝ネタ preview_chords（あれば）or プレビュー進行に当てて resolveChordPattern で実音化（tempo/program 込み）。
   const auditionPattern = (content: unknown) => {
     ppPlay.current?.stop();
@@ -301,33 +299,23 @@ export function ChordPatternEditor({
 
   return (
     <div className="cp-editor">
-      {/* 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1）＝型辞書の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。
-          修理#3 決定③：showPicker=false（管弦=section_inst）で帯ごと非表示＝コード楽器型の誤適用を断つ。
-          決定④：手編集済みは patternId に「（改）」を添えて帯が嘘をつかない。 */}
-      {/* Task1c 並び順＝ベース(BassStepEditor)へ統一：小節[−+] → 長さ(分) → 両手グリッド。
-          Task1g：設定行（小節行）右端の二次リンク「⤓ ライブラリから読み込む」＝クリックで pick ダイアログを開く。 */}
+      {/* 設定行＝Task1c 並び順（ベースへ統一）：小節[−+] → ライブラリから読み込む（右端ボタン） → 長さ(分) → 両手グリッド。
+          Task1j：入口ボタン＋dialog は PatternImportControl が内包。showPicker=false（管弦=section_inst）で丸ごと非表示＝
+          コード楽器型の誤適用を断つ（決定③）。手編集済みは nowLabel に「（改）」を添える（決定④）。 */}
       <div className="editor-setrow">
         <BarsControl bars={bars} max={4} onChange={(n) => editContent({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
         {showPicker && (
-          <PatternPickerBar
+          <PatternImportControl
+            kind="chord_pattern"
+            fallbackName="コード楽器"
             nowLabel={pattern.patternId != null ? pattern.patternId + (pattern.patternEdited ? "（改）" : "") : undefined}
-            onOpen={() => setImportOpen(true)}
+            activeProject={activeProject}
+            onApply={applyPattern}
+            onAudition={auditionPattern}
+            onClose={() => ppPlay.current?.stop()}
           />
         )}
       </div>
-      {/* Task1g pick ダイアログ＝ライブラリ全体（scope:"all"＝工場出荷＋自作）から chord_pattern を検索/ブラウズ。
-          タップ＝onPick→applyPattern(content)（copy_neta 不使用）・▶＝auditionPattern(content)＝現行の実音経路。 */}
-      {importOpen && (
-        <PatternImportDialog
-          kind="chord_pattern"
-          fallbackName="コード楽器"
-          showScene
-          activeProject={activeProject}
-          onPreview={(n) => auditionPattern(n.content)}
-          onPick={(n) => { applyPattern(n.content); setImportOpen(false); }}
-          onClose={() => { ppPlay.current?.stop(); setImportOpen(false); }}
-        />
-      )}
       {/* 長さツールはメロ編集(PianoRoll)と同じ proll-tools で包む＝見た目・選択表示を統一。右手/左手 hit の音長を共有。 */}
       <div className="proll-tools">
         <NoteValuePicker options={LENGTHS} value={len} dotted={dotted} onChange={setLen} onToggleDotted={() => setDotted((d) => !d)} />

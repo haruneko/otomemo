@@ -2,8 +2,7 @@ import { useRef, useState, type Ref } from "react";
 import { type BassStep, type BassDegree, type PlaybackHandle, isCompoundMeter, notesForContent, buildPlayback } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
-import { PatternPickerBar } from "./PatternPickerBar";
-import { PatternImportDialog } from "./PatternImportDialog";
+import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
 
@@ -90,10 +89,8 @@ export function BassStepEditor({
   activeProject?: string; // Task1i：Source（プロジェクト軸）絞りを PatternImportDialog へ下ろす（純追加）。
 }) {
   const ppPlay = useRef<PlaybackHandle | null>(null);
-  // Task1g：ライブラリから読み込む＝pick ダイアログ（PatternImportDialog）。入口リンクのクリックで開き、
-  // タップ＝onPick(neta)→既存 applyPattern(neta.content) へ配線（apply/試聴は現行のまま＝bit一致）。
-  // 母集団は bass の **相対 content のみ**（絶対 notes ネタは番兵 contentFilter で捨てる）。
-  const [importOpen, setImportOpen] = useState(false);
+  // Task1g/Task1j：ライブラリから読み込む＝pick ダイアログ（PatternImportControl が入口ボタン＋開閉＋dialog を内包）。
+  // 母集団は bass の **相対 content のみ**（絶対 notes ネタは番兵 contentFilter で捨てる）。ここは apply/試聴だけ Control へ注入。
   // 試聴＝度数を調(key)の tonic に当てて実音化（既存試聴の流儀・notesForContent("bass")）。
   const auditionPattern = (content: unknown) => {
     ppPlay.current?.stop();
@@ -178,33 +175,24 @@ export function BassStepEditor({
 
   return (
     <div className="bass-step">
-      {/* 「パターンを選ぶ ▸」帯（S7）＝相対ビート型の入口。既定閉＝開くまで既存DOM/挙動不変。
-          compound meter（6/8系）は型ライブラリが4/4前提＝帯非表示（gen_bass の style も6-8は絶対フォールバック）。
-          nowLabel＝patternId（＋手編集後は「（改）」）。（改）表現は渡す文字列で行う＝PatternPickerBar は器のまま（決定④）。 */}
-      {/* Task1g：設定行（小節行）右端の二次リンク「⤓ ライブラリから読み込む」＝クリックで pick ダイアログを開く。
-          compound meter（6/8系）非表示・（改）表示は不変。 */}
+      {/* Task1j：設定行（小節行）右端の「ライブラリから読み込む」ボタン（PatternImportControl が入口＋dialog を内包）。
+          compound meter（6/8系）は型ライブラリが4/4前提＝非表示（gen_bass の style も6-8は絶対フォールバック）。
+          nowLabel＝patternId（＋手編集後は「（改）」）。相対 content のみ（contentFilter 番兵）。 */}
       <div className="editor-setrow">
         <BarsControl bars={bars} max={4} onChange={setBars} />
         {!isCompoundMeter(meter) && (
-          <PatternPickerBar
+          <PatternImportControl
+            kind="bass"
+            fallbackName="おまかせ"
             nowLabel={patternId ? patternId + (patternEdited ? "（改）" : "") : undefined}
-            onOpen={() => setImportOpen(true)}
+            contentFilter={(n) => (n.content as { mode?: string } | null)?.mode === "relative"}
+            activeProject={activeProject}
+            onApply={applyPattern}
+            onAudition={auditionPattern}
+            onClose={() => ppPlay.current?.stop()}
           />
         )}
       </div>
-      {/* Task1g pick ダイアログ＝ライブラリ全体（scope:"all"）から bass の相対 content を検索/ブラウズ。
-          タップ＝onPick→applyPattern(content)（copy_neta 不使用）・▶＝auditionPattern(content)＝現行の実音経路。 */}
-      {importOpen && (
-        <PatternImportDialog
-          kind="bass"
-          fallbackName="おまかせ"
-          contentFilter={(n) => (n.content as { mode?: string } | null)?.mode === "relative"}
-          activeProject={activeProject}
-          onPreview={(n) => auditionPattern(n.content)}
-          onPick={(n) => { applyPattern(n.content); setImportOpen(false); }}
-          onClose={() => { ppPlay.current?.stop(); setImportOpen(false); }}
-        />
-      )}
       <div className="bass-lens">
         <NoteValuePicker
           options={LENGTHS}

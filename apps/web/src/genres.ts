@@ -46,3 +46,18 @@ export function genreLabel(genre: string): string {
 export function genreTagOf(neta: Neta): string | undefined {
   return neta.tags?.find((t) => t.startsWith("genre:"))?.slice("genre:".length) || undefined;
 }
+
+// scene:<role>（適用場面）→日本語ラベル（design「### Task1j」＝英語タグ値の生表示をやめる・データ駆動 scene 絞り用）。
+// 語彙は L1 の scene:<role>（旧 roles）＝intro/verse/prechorus/chorus/bridge/interlude/outro。未知は原文（保険）。
+const SCENE_LABEL: Record<string, string> = {
+  intro: "イントロ",
+  verse: "Aメロ",
+  prechorus: "プレサビ",
+  chorus: "サビ",
+  bridge: "ブリッジ",
+  interlude: "間奏",
+  outro: "アウトロ",
+};
+export function sceneLabel(role: string): string {
+  return SCENE_LABEL[role] ?? role;
+}

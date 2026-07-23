@@ -1994,13 +1994,12 @@
 /* Task1f＝設定行（小節行）＝小節ステッパー＋二次リンクを1行に。モバイルで収まらなければ折返す（flex-wrap）。 */
 .editor-setrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .editor-setrow .bars-control { margin-bottom: 0; }
-/* Task1f＝「ライブラリから読み込む」二次リンク（variant="link"）＝設定行の右端に寄せた控えめなテキストリンク。
-   閉時はリンク1個ぶん・開くと body（chip/候補/▶/読み込む）を full 幅で下展開（:has）。variant="bar" の帯 CSS は不変。 */
-.pattern-picker.pp-link { border: none; padding: 0; margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; }
-.pattern-picker.pp-link:has(.pp-body) { flex-basis: 100%; }
-.pp-link-toggle { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; background: none; border: none; padding: 2px 0; font-size: 0.72rem; color: var(--muted); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
-.pp-link-toggle:hover { color: inherit; }
-.pattern-picker.pp-link .pp-body { align-self: stretch; }
+/* Task1j＝「ライブラリから読み込む」入口＝ライブラリアイコン付きの控えめなボタン（PatternImportControl）。
+   設定行の右端に寄せる。二次アクションの範囲＝枠/背景を軽く（リンク下線はやめてボタン見た目に）。 */
+.pattern-picker.pp-link { border: none; padding: 0; margin-left: auto; display: flex; align-items: center; }
+.pp-link-toggle { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; background: var(--card, #22252b); border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 4px 10px; font-size: 0.72rem; color: var(--muted); cursor: pointer; }
+.pp-link-toggle:hover { color: inherit; border-color: var(--muted); }
+.pp-link-toggle svg { flex: none; }
 /* ゾーンの小見出し（いつ弾く／響き）。 */
 .cp-zlabel { font-size: 0.68rem; color: var(--muted); margin: 0 0 6px; }
 /* Task1c 両手一体グリッド（一枚容器・同一ステップ列を共有）＝上帯:右手／破線／下帯:左手。

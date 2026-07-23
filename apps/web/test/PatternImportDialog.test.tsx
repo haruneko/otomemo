@@ -19,13 +19,12 @@ const neta = (over: Partial<Neta> = {}): Neta => ({
   bars: null, mood: null, scope: "library", tags: [], created: "", updated: "", ...over,
 });
 
-const open = (netas: Neta[], showScene = false) => {
+const open = (netas: Neta[]) => {
   api.listNeta.mockResolvedValue(netas);
   render(
     <PatternImportDialog
       kind="chord_pattern"
       fallbackName="コード楽器"
-      showScene={showScene}
       onPreview={vi.fn()}
       onPick={vi.fn()}
       onClose={vi.fn()}
@@ -77,11 +76,11 @@ describe("Task1h (d) 既存の名・scene・MiniRoll は不変（純追加）", 
   beforeEach(() => vi.clearAllMocks());
 
   it("genre＋scene＝MiniRoll・名前・場面タグは従来どおり＋ジャンルが加わるだけ", async () => {
-    open([neta({ title: "verse comp", tags: ["genre:ballad", "scene:verse"] })], true);
+    open([neta({ title: "パターンX", tags: ["genre:ballad", "scene:verse"] })]);
     const card = await screen.findByLabelText("import-card-0");
     expect(card.querySelector('[data-testid="mini-roll"]')).toBeTruthy(); // MiniRoll 不変
-    expect(card.textContent).toContain("verse comp"); // 名前 不変
-    expect(card.textContent).toContain("verse"); // scene タグ 不変
+    expect(card.textContent).toContain("パターンX"); // 名前 不変
+    expect(card.textContent).toContain("Aメロ"); // Task1j：場面タグは sceneLabel で日本語化（verse→Aメロ）
     expect(card.textContent).toContain("バラード"); // 純追加＝ジャンル
     expect((screen.getByLabelText("import-genre-tag-0").querySelector(".pi-genre-dot") as HTMLElement).style.background).toBe("var(--genre-violet)");
   });
@@ -105,7 +104,6 @@ async function openImport(props: Partial<React.ComponentProps<typeof PatternImpo
     <PatternImportDialog
       kind="chord_pattern"
       fallbackName="コード楽器"
-      showScene
       onPreview={vi.fn()}
       onPick={onPick}
       onClose={vi.fn()}
@@ -179,5 +177,47 @@ describe("Task1i Source（プロジェクト軸）絞り", () => {
     fireEvent.click(screen.getByLabelText("import-pick-0"));
     expect(onPick).toHaveBeenCalledTimes(1);
     expect((onPick.mock.calls[0]![0] as Neta).id).toBe("prj-mine");
+  });
+});
+
+// ── Task1j（design「### Task1j」）＝絞りの日本語化＋データ駆動 scene の TDD ─────────────────
+describe("Task1j (c) genre/scene option が日本語ラベル（genreLabel/sceneLabel）", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("genre option＝英語 value・日本語ラベル（rock→ロック／ballad→バラード）", async () => {
+    await openImport({ activeProject: "みなそこ" });
+    const genreOpts = within(screen.getByLabelText("import-genre")).getAllByRole("option") as HTMLOptionElement[];
+    // value は英語タグ値のまま（絞りロジック不変）・表示は日本語。
+    const rock = genreOpts.find((o) => o.value === "rock")!;
+    const ballad = genreOpts.find((o) => o.value === "ballad")!;
+    expect(rock.textContent).toBe("ロック");
+    expect(ballad.textContent).toBe("バラード");
+    expect(genreOpts[0]!.textContent).toBe("ジャンル"); // 既定ラベル（案C 短縮）
+  });
+
+  it("scene option＝英語 value・日本語ラベル（chorus→サビ）", async () => {
+    await openImport({ activeProject: "みなそこ" });
+    const sceneOpts = within(screen.getByLabelText("import-scene")).getAllByRole("option") as HTMLOptionElement[];
+    const chorus = sceneOpts.find((o) => o.value === "chorus")!;
+    expect(chorus.textContent).toBe("サビ");
+    expect(sceneOpts[0]!.textContent).toBe("場面");
+  });
+});
+
+describe("Task1j (b) scene UI は母集団に scene: 有りで自動表示（showScene 撤去＝データ駆動）", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("母集団に scene: タグが無ければ scene select を出さない", async () => {
+    api.listNeta.mockResolvedValue([neta({ tags: ["genre:rock"] })]); // scene: 無し
+    render(<PatternImportDialog kind="chord_pattern" fallbackName="x" onPreview={vi.fn()} onPick={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText("読み込み中…")).toBeNull());
+    expect(screen.queryByLabelText("import-scene")).toBeNull();
+  });
+
+  it("母集団に scene: タグが有れば scene select を出す（kind に依らずデータ駆動）", async () => {
+    api.listNeta.mockResolvedValue([neta({ kind: "bass", tags: ["scene:verse"] })]);
+    render(<PatternImportDialog kind="bass" fallbackName="x" onPreview={vi.fn()} onPick={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText("読み込み中…")).toBeNull());
+    expect(screen.getByLabelText("import-scene")).toBeTruthy();
   });
 });
