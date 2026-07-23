@@ -1977,7 +1977,7 @@
 /* ラベル列（右手/D/U/8/5/3/R）＝横スクロールで左に固定＝列頭を揃える（全エディタ統一のフローズン列）。幅=NAME_PX。 */
 .cp-hand-label { flex: 0 0 44px; text-align: center; font-size: 0.72rem; font-weight: 600; color: var(--muted); position: sticky; left: 0; z-index: 2; background: var(--card); box-shadow: 3px 0 5px -2px rgba(0, 0, 0, 0.55); }
 /* 共通セル（右手/左手/D/U）＝1step=20px+2px gap（BEAT_PX=88 と整合）。塗り/濃淡は帯ごとに上書き。 */
-.cp-cell { flex: 0 0 20px; height: 24px; padding: 0; border: 1px solid #2a2d33; background: #1b1e23; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; line-height: 1; color: #fff; position: relative; }
+.cp-cell { flex: 0 0 20px; min-width: 0; overflow: hidden; box-sizing: border-box; height: 24px; padding: 0; border: 1px solid #2a2d33; background: #1b1e23; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; line-height: 1; color: #fff; position: relative; }
 .cp-cell.beat { border-left: 2px solid #3a3f49; }
 .cp-cell.bar { border-left: 2px solid color-mix(in srgb, var(--k-chord) 60%, #3a3f49); }
 /* 右手＝コード色。vel は --hv（=vel/127）で濃淡（ゴースト薄・アクセント濃）。 */
