@@ -8,6 +8,7 @@ import { fetchLibraryPatternNetas, netaToPatternCand } from "./patternLibrary";
 import { BarsControl } from "./BarsControl";
 import { MiniRoll } from "./MiniRoll";
 import { NoteValuePicker } from "./NoteValuePicker";
+import { Icon } from "./Icon";
 import { DragHud } from "./DragHud";
 import { useHoldDrag, type HoldDragState, type HoldDragStart } from "../useHoldDrag";
 import type { Neta } from "../api";
@@ -177,6 +178,10 @@ export function ChordPatternEditor({
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 対応）
   // Task1c：「響き」を折りたたみへ降格（既定=閉）。前面は両手グリッドが主役＝響き7ノブは disclosure 内へ退避。
   const [voicingOpen, setVoicingOpen] = useState(false);
+  // Task1d：右手モードツール（描く/消す）＝UI state のみ（content 契約不変）。既定=描く。
+  //   描く＝配置＋伸びタップ長さ調整＋長押し縦ドラッグ vel（toggleHit/fireChord）／消す＝タップで hit 削除。
+  //   「選ぶ」は作らない（per-hit 複数選択編集は 2026-07-04「シーケンサー化しない」裁定に抵触）。
+  const [rhMode, setRhMode] = useState<"draw" | "erase">("draw");
   // #29 §9 ホールドドラッグ中のライブプレビュー（--hv をこのセルだけ上書き・HUD 表示）。離した時に一括 onChange。
   const [drag, setDrag] = useState<{ step: number; vel: number; anchor: DOMRect } | null>(null);
   const v = pattern.voicing;
@@ -225,6 +230,13 @@ export function ChordPatternEditor({
     // 置いた合図＝現在の voicing で C を和音プレビュー（ドミソ／単音でなく響きで確認）。
     if (r.placed) for (const p of voicingPreviewPitches({ ...v, top }, program)) void previewNote({ pitch: p, start: 0, dur: 0.5 });
   };
+  // Task1d 消すモード＝セルタップで当該 hit を削除（頭 or その音を覆う sustain セル→所有 hit を削除）。
+  //   頭タップ削除（従来 toggleHit の頭タップ）と同結果＝書く content は従来と同一（bit）。空/該当なしは no-op。
+  const eraseHit = (s: number) => {
+    const h = startAt(s) ?? pattern.hits.find((x) => x.step < s && s < x.step + x.dur);
+    if (!h) return;
+    editContent({ ...pattern, hits: pattern.hits.filter((x) => x !== h) });
+  };
   // D/U ストリップのタップ＝現在の表示 dir（明示 or 自動既定）を反転して明示で書く。
   const toggleDir = (s: number) => {
     const h = pattern.hits.find((x) => x.step === s);
@@ -240,12 +252,6 @@ export function ChordPatternEditor({
     : pattern.lh.mode === "custom"
       ? (pattern.lh.hits ?? [])
       : materializeLhPreset(pattern.lh.mode, pattern.steps, stepsPerBar);
-  // 注入ボタン [ルート][+5度][8va]＝preset を materialize した custom hits を書く（＝各小節頭に全音符）。
-  // 押した瞬間 lh.mode:"custom" に確定＝以後パッドでリズム/度数を微調整できる（design Task1b）。
-  const injectLh = (mode: "root" | "root5" | "oct") =>
-    editContent({ ...pattern, lh: { mode: "custom", hits: materializeLhPreset(mode, pattern.steps, stepsPerBar) } });
-  // [クリア]（左手OFF）＝lh キー削除＝左手なし（空パッド＝左手なしと等価・bit一致）。
-  const clearLh = () => { const { lh: _drop, ...rest } = pattern; editContent(rest); };
   // パッド：(lane×step) の hit（deg 省略＝R 扱い＝resolveLh の deg??"R" と同契約）を表示ビューから探す。
   const lhStartAt = (lane: LhLaneDeg, s: number) => displayHits.find((h) => h.step === s && (h.deg ?? "R") === lane);
   const lhSustainAt = (lane: LhLaneDeg, s: number) =>
@@ -262,7 +268,14 @@ export function ChordPatternEditor({
       hits = [...displayHits, { step: s, deg: lane, dur }].sort((a, b) => a.step - b.step);
       void previewNote({ pitch: LH_PAD_PREVIEW[lane], start: 0, dur: 0.4, program }); // 置いた度数を即鳴らす
     }
-    editContent({ ...pattern, lh: { mode: "custom", hits } });
+    // Task1d 左手 OFF の bit 安全化＝土台ボタン[クリア]撤去の代替：最後の hit を消して空になったら lh キーごと削除
+    //   （空でも lh:{mode:"custom",hits:[]} を残さない＝「左手なし（lh 未定義）」と bit 一致・Task1b「空パッド＝左手なし」の裏取り）。
+    if (hits.length === 0) {
+      const { lh: _drop, ...rest } = pattern;
+      editContent(rest);
+    } else {
+      editContent({ ...pattern, lh: { mode: "custom", hits } });
+    }
   };
 
   // #29 §9 発火＝onset セルのみ持ち上げる（sustain/空セルは null＝キャプチャしない・誤爆防止）。
@@ -290,8 +303,6 @@ export function ChordPatternEditor({
   // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。
   const previewNeta = { kind: "chord_pattern", content: { ...pattern, voicing: { ...v, top }, program }, key: 0 } as unknown as Neta;
 
-  const lhEmpty = displayHits.length === 0; // 空左手＝ヒント表示（"タップで土台"）。
-
   return (
     <div className="cp-editor">
       {/* 「パターンを選ぶ ▸」帯（修理#1・監査推奨差分1）＝型辞書の入口を単体エディタへ。既定閉＝開くまで既存DOM/挙動不変。
@@ -311,6 +322,23 @@ export function ChordPatternEditor({
         <NoteValuePicker options={LENGTHS} value={len} dotted={dotted} onChange={setLen} onToggleDotted={() => setDotted((d) => !d)} />
       </div>
 
+      {/* Task1d 右手モードツール（描く/消す）＝メロの proll-modes 流用・arp/ストローク両方で常時表示。
+          描く＝現行の配置＋伸びタップ長さ＋長押し縦ドラッグ vel／消す＝タップで hit 削除（頭タップ削除の不可視を解消）。
+          「選ぶ」は作らない（per-hit 複数選択は「シーケンサー化しない」裁定に抵触）。arp の向き/幅/区切りは響き（折りたたみ）に据置＝per-hit 化しない。 */}
+      <div className="roll-toolbar cp-rh-toolbar">
+        <div className="proll-modes" role="group" aria-label="rh-modes">
+          <button type="button" aria-label="rh-mode-draw" title="描く（置く/伸ばして長さ/長押しで強弱）" className={rhMode === "draw" ? "on" : ""} onClick={() => setRhMode("draw")}>
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor" />
+            </svg>
+          </button>
+          <button type="button" aria-label="rh-mode-erase" title="消す（タップで削除）" className={rhMode === "erase" ? "on" : ""} onClick={() => setRhMode("erase")}>
+            <Icon name="eraser" size={18} />
+          </button>
+        </div>
+        <span className="cp-hint cp-rh-hint">描く＝置く・伸ばして長さ・長押しで強弱／消す＝タップで削除</span>
+      </div>
+
       {/* Task1c 両手一体グリッド（一枚容器・同一ステップ列を共有）：上帯=右手(コードのリズム・1レーン)／破線／下帯=左手(度数 R/3/5/8)。
           content 契約・resolveChordPattern/resolveLh は不変＝編集操作が書く値は従来と同一（bit）。 */}
       <div className="cp-grid" role="grid" aria-label="two-hand-grid" ref={scrollerRef}>
@@ -327,8 +355,8 @@ export function ChordPatternEditor({
                 ariaLabel={`hit-${s}`}
                 className={"cp-cell rh" + (head ? " on" : sustainAt(s) ? " sustain" : "") + (head && isArp ? " arp" : "") + (isDrag ? " lift" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
                 hv={isDrag ? drag.vel / 127 : head ? (head.vel ?? CHORD_BASE_VEL) / 127 : null}
-                onTap={() => toggleHit(s)}
-                onFire={(anchor) => fireChord(s, anchor)}
+                onTap={() => (rhMode === "erase" ? eraseHit(s) : toggleHit(s))}
+                onFire={(anchor) => (rhMode === "draw" ? fireChord(s, anchor) : null)}
                 onDrag={(st) => dragChord(s, st)}
                 onCommit={(st) => commitChord(s, st)}
                 onCancel={() => setDrag(null)}
@@ -361,20 +389,11 @@ export function ChordPatternEditor({
             })}
           </div>
         )}
-        {/* 下帯＝左手（keyboard 解決時のみ・S3）。破線区切り（bass-lane-other 資産流用）で右手と隔てる＝両手一体。
-            注入ボタンは小さな「種」チップへ縮小（グリッドを主役に）。パッドは常時表示（Task1b）＝preset は materialize。 */}
+        {/* 下帯＝左手（keyboard 解決時のみ・S3）。破線区切り（.cp-lh-block の border-top）で右手と隔てる＝両手一体。
+            Task1d：土台ボタン[ルート/+5度/8va/クリア]＋「左手」ラベルを撤去＝パッド（度数レーン R/3/5/8）が自己ラベル＋破線で識別。
+            ベースと同じ直接ペイントに統一（preset は materialize 表示＝種は最初から見える・触るまで content 不変）。 */}
         {keyboardResolved && (
           <div className="cp-lh-block">
-            <div className="cp-lh-seed">
-              <span className="cp-lh-seed-label">左手</span>
-              <div className="seg seg-chord cp-seed-seg" role="group" aria-label="lh-inject">
-                <button type="button" aria-label="lh-root" onClick={() => injectLh("root")}>ルート</button>
-                <button type="button" aria-label="lh-root5" onClick={() => injectLh("root5")}>+5度</button>
-                <button type="button" aria-label="lh-oct" onClick={() => injectLh("oct")}>8va</button>
-                <button type="button" aria-label="lh-clear" className={!pattern.lh ? "on" : ""} onClick={clearLh}>クリア</button>
-              </div>
-              {lhEmpty && <span className="cp-lh-hint">タップで土台</span>}
-            </div>
             <div className="cp-lh-lanes" role="grid" aria-label="lh-pad">
               {LH_LANES.map((lane) => (
                 <div className="cp-hand cp-lh-lane" role="row" key={lane.d}>
