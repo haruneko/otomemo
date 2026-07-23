@@ -680,7 +680,7 @@ Fable 実機監査＝360px幅で16step グリッドの step13-15 が画面外・
 
 ### Task1i＝読み込みダイアログに Source（プロジェクト軸）絞り（2026-07-23・オーナーFB「プロジェクト所属/非プロジェクト/全部を選びたい」・モック実測で案C＝コンパクト1行採用）
 `PatternImportDialog` は今 `scope:"all"` で工場出荷＋自作を無差別に出す。**プロジェクト軸の絞り**を足す（オーナー）。360px 実測（モック）＝素直に3 select は末尾が切れる→**案C＝短縮ラベルで1行**採用。
-- **Source select（案C・コンパクト）**：フィルタ行に3つ目。既定 option ラベル＝**「Source」**（value ""＝全部・未絞り）／`ライブラリ`（`scope:"library"`＝工場出荷・非プロジェクト）／`このプロジェクト`（`scope:"project"`＋`prj:<activeProject>`＝自プロジェクト所属）。**ジャンル/場面の既定ラベルも「ジャンル」「場面」に短縮**（「：すべて」を落とす）＝3つが1行に収まる（実機実測で切れ確認）。
+- **ソース select（案C・コンパクト）**：フィルタ行に3つ目。既定 option ラベル＝**「ソース」**（カタカナ＝UIの日本語に統一・オーナー裁定／value ""＝全部・未絞り）／`ライブラリ`（`scope:"library"`＝工場出荷・非プロジェクト）／`このプロジェクト`（`scope:"project"`＋`prj:<activeProject>`＝自プロジェクト所属）。**ジャンル/場面の既定ラベルも「ジャンル」「場面」に短縮**（「：すべて」を落とす）＝3つが1行に収まる（実機実測で切れ確認）。
 - **配線**：`activeProject`（`App.tsx` グローバル）を **NetaDialog→KindEditorBody→3エディタ→PatternImportDialog** へ**追加 optional prop**（`activeProject?`）で下ろす（純追加＝既存経路 bit 一致）。`activeProject` 空/未配線なら「このプロジェクト」option は非表示 or「自作（scope:project 全部）」にフォールバック。
 - **絞りロジック**：""＝全 netas／`library`＝`scope==="library"`／`project`＝`scope==="project"`＋`prj:` に activeProject を含む。genre/scene 絞りと AND。
 - **範囲＝pick ダイアログのみ**・純追加（content/apply/試聴/onPick 無変更＝bit一致）。place/一覧不変。3エディタ（chord/bass/drum）共通。
