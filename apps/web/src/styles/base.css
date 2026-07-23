@@ -36,6 +36,47 @@
   --fit-red: #e8533f;
   --fit-yellow: #e0a83c;
   --fit-info: #8a93a6;
+
+  /* Task1h＝読み込みダイアログのジャンル小アクセント（design「### Task1h」・genres.ts:genreColor が参照）。
+     dataviz 検証済みカテゴリカル8色＋調和色7。**各ジャンル固定・不変**。二次エンコード（ラベル常時併記）＝
+     カード本体色/kind 色とは無関係。:root＝dark 値（本アプリは color-scheme:dark 固定）／light 値は
+     下の @media(prefers-color-scheme:light) で切替（theme-aware・kindColor と同じ CSS 変数の作法）。 */
+  --genre-blue: #3987e5;
+  --genre-green: #008300;
+  --genre-magenta: #d55181;
+  --genre-yellow: #c98500;
+  --genre-aqua: #199e70;
+  --genre-orange: #d95926;
+  --genre-violet: #9085e9;
+  --genre-red: #e66767;
+  --genre-cyan: #35bcd6;
+  --genre-indigo: #7d8ae0;
+  --genre-amber: #c8944f;
+  --genre-plum: #d16a94;
+  --genre-sage: #86b56e;
+  --genre-lime: #adc247;
+  --genre-slate: #8a94a3;
+}
+/* Task1h：light サーフェス用の値（両値・theme-aware）。本アプリは現状 dark 固定だが、将来の light テーマ
+   （または light-OS）でジャンルドットが白地でも沈まないよう dataviz の light 列を用意。 */
+@media (prefers-color-scheme: light) {
+  :root {
+    --genre-blue: #2a78d6;
+    --genre-green: #008300;
+    --genre-magenta: #e87ba4;
+    --genre-yellow: #eda100;
+    --genre-aqua: #1baf7a;
+    --genre-orange: #eb6834;
+    --genre-violet: #4a3aa7;
+    --genre-red: #e34948;
+    --genre-cyan: #0f8fb0;
+    --genre-indigo: #3b4a9e;
+    --genre-amber: #9a6a2e;
+    --genre-plum: #a83f6b;
+    --genre-sage: #5f8a4a;
+    --genre-lime: #7f9a1f;
+    --genre-slate: #5a6472;
+  }
 }
 * {
   box-sizing: border-box;

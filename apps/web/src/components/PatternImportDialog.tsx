@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Neta } from "../api";
 import { MiniRoll } from "./MiniRoll";
 import { sceneTagOf } from "./patternLibrary";
+import { genreColor, genreLabel, genreTagOf } from "../genres";
 
 // Task1g（design「### Task1g＝パターン取得を…ライブラリをブラウズ」）：パターン取得を「ネタ選択ダイアログで
 // ライブラリ全体を検索/ブラウズして1件選ぶ」形に作り直す pick モードのダイアログ。
@@ -120,7 +121,12 @@ export function PatternImportDialog({
           ) : list.length === 0 ? (
             <p className="muted">ライブラリに該当パターンがありません（絞り込みを緩めてください）</p>
           ) : (
-            list.map((n, i) => (
+            list.map((n, i) => {
+              // Task1h＝ジャンルの小アクセント（design「### Task1h」）：genre: タグ先頭→色ドット＋日本語ラベル。
+              // genre タグ無し/未知＝genreColor が ""＝ドット・ラベルを出さない（純追加＝自作パターンでも崩れない）。
+              const g = genreTagOf(n);
+              const gc = g ? genreColor(g) : "";
+              return (
               <div key={n.id} className="picker-item" data-kind={n.kind} aria-label={`import-card-${i}`}>
                 {/* タップ＝onPick(neta)＝content を呼び側へ返す（placeChild/copy_neta 不使用）。 */}
                 <button type="button" className="picker-item-tap" aria-label={`import-pick-${i}`} onClick={() => onPick(n)}>
@@ -129,14 +135,25 @@ export function PatternImportDialog({
                   </div>
                   <div className="picker-item-meta">
                     <strong>{displayName(n, fallbackName)}</strong>
-                    {showScene && sceneTagOf(n) && <span className="muted">{sceneTagOf(n)}</span>}
+                    {(gc || (showScene && sceneTagOf(n))) && (
+                      <span className="pi-meta-row">
+                        {gc && (
+                          <span className="pi-genre" aria-label={`import-genre-tag-${i}`}>
+                            <span className="pi-genre-dot" style={{ background: gc }} aria-hidden="true" />
+                            {genreLabel(g!)}
+                          </span>
+                        )}
+                        {showScene && sceneTagOf(n) && <span className="muted">{sceneTagOf(n)}</span>}
+                      </span>
+                    )}
                   </div>
                 </button>
                 <button type="button" className="picker-play" aria-label={`import-preview-${i}`} title="試聴" onClick={() => onPreview(n)}>
                   ▶
                 </button>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

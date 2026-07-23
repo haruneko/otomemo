@@ -1292,6 +1292,29 @@
 .picker-item-meta .muted {
   font-size: 0.72rem;
 }
+/* Task1h＝ジャンルの小アクセント（design「### Task1h」）：●<ジャンル名>。二次エンコード＝小さめ。
+   ドット色は genreColor(g)＝var(--genre-<key>)（各ジャンル固定・theme-aware）。カード本体色/kind 色は不変。 */
+.picker-item-meta .pi-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+}
+.picker-item-meta .pi-genre {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.picker-item-meta .pi-genre-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  /* 背景色はインライン style で var(--genre-<key>) を差す（genreColor の返値）。 */
+}
 /* ※.section-children/.section-child*/.section-matches は撤去済みUIの死にCSS＝削除（監査）。 */
 .editor-bar select,
 .editor-bar input[type="number"],
