@@ -2037,6 +2037,13 @@
 .cp-lh-seed-label { font-size: 0.72rem; font-weight: 600; color: var(--muted); }
 .cp-seed-seg button { padding: 3px 9px; font-size: 0.72rem; }
 .cp-lh-hint { font-size: 0.64rem; color: var(--muted); }
+/* Task1k 概形ロール＝両手グリッド直下の1帯（同一 cp-grid スクロール内）。破線区切りで両手と隔てつつ列は共有。
+   ラベル(36px sticky)は既存 .cp-hand-label を流用し、最上/最下音を上下に出す（高さの尺）。strip はノートを
+   絶対配置（left/width/top は JS 側で列ピッチ17px と音程から算出）＝パッド列と縦に厳密整列。 */
+.cp-roll-lane { align-items: stretch; margin-top: 3px; padding-top: 3px; border-top: 1px dashed var(--line); }
+.cp-roll-label { flex-direction: column; justify-content: space-between; padding: 2px 0; font-size: 0.6rem; line-height: 1; }
+.cp-roll-strip { position: relative; flex: 0 0 auto; background: #15171b; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line); }
+.cp-roll-note { position: absolute; height: 4px; border-radius: 2px; background: var(--k-chord); }
 /* 奏法/左手/D-U の補足文（静かに）。 */
 .cp-hint { font-size: 0.66rem; color: var(--muted); margin: 4px 0 0; line-height: 1.5; }
 /* ②「響き」＝音の作り込みを1枠に集約・静かに（青の壁を解体）。 */

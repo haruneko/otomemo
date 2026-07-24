@@ -4,12 +4,10 @@ import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
 import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
-import { MiniRoll } from "./MiniRoll";
 import { NoteValuePicker } from "./NoteValuePicker";
 import { Icon } from "./Icon";
 import { DragHud } from "./DragHud";
 import { useHoldDrag, type HoldDragState, type HoldDragStart } from "../useHoldDrag";
-import type { Neta } from "../api";
 
 const CHORD_BASE_VEL = 100; // 既定ベロシティ（resolveChordPattern の n.vel ?? 100 と一致）＝デテント/普通判定の基準。
 
@@ -46,6 +44,40 @@ function ChordCell({
 
 const NAME_PX = 36; // 両手グリッドのラベル列幅（.cp-hand-label と一致・プレイヘッド左基準）。Task1e：44→36。
 const BEAT_PX = 68; // 1拍=4step×(16px セル+1px gap)=68px。プレイヘッドの px/beat。Task1e：88→68。
+// Task1k 概形ロール（下段ピアノロール）の寸法。列ジオメトリは両手グリッドと厳密共有＝パッドと縦に揃う。
+const STEP_PX = 17; // 1step=セル16px+gap1px＝グリッド列ピッチ（.cp-cell と一致）。
+const GAP_PX = 1; // セル間 gap（ノート幅の末尾で1つ引く＝隣接ステップと重ならない）。
+const BEATS_PER_STEP = 0.25; // 1step=16分=0.25拍（music.ts BASS_STEP_TO_BEAT と同値・解決ノートの拍→step 換算）。
+const ROLL_H = 76; // 概形帯の高さ（固定＝レイアウト揺れ無し）。
+const ROLL_PAD = 4; // 上下パディング。
+const ROLL_BAR = 4; // ノート棒の高さ（CSS .cp-roll-note と一致）。
+
+// Task1k：解決ノート（拍単位）を「グリッド列と同ピッチ(17px/step)の x」×「音程の高さ y」の矩形へ写す純関数。
+// x はステップ列に厳密整列（step = start/BEATS_PER_STEP）＝上のパッドと縦に揃う（真因＝旧 MiniRoll の全幅引き伸ばし）。
+// y は最上/最下音を帯高いっぱいに配して高音ほど上（小さい y）。単音/同高(range=0)は中央寄せ（frac=0.5）。空は rects なし。
+// 返す lo/hi は左ラベルの音名（高さの尺）に使う。stripW は最終セル右端に flush（steps*17−1）＝列と一致。
+export function voicingRollRects(
+  notes: readonly { pitch: number; start: number; dur: number }[],
+  stepsTotal: number,
+): { rects: { x: number; w: number; y: number; pitch: number }[]; lo: number; hi: number; stripW: number } {
+  const stripW = Math.max(1, stepsTotal * STEP_PX - GAP_PX);
+  if (!notes.length) return { rects: [], lo: 0, hi: 0, stripW };
+  const ps = notes.map((n) => n.pitch);
+  const lo = Math.min(...ps);
+  const hi = Math.max(...ps);
+  const range = hi - lo;
+  const avail = ROLL_H - ROLL_PAD * 2 - ROLL_BAR; // ノート棒の上端が動ける縦幅
+  const rects = notes.map((n) => {
+    const step = n.start / BEATS_PER_STEP;
+    const stepDur = Math.max(1, n.dur / BEATS_PER_STEP);
+    const x = step * STEP_PX;
+    const w = Math.max(stepDur * STEP_PX - GAP_PX, 2);
+    const frac = range > 0 ? (n.pitch - lo) / range : 0.5; // 高音→1／同高→中央
+    const y = ROLL_PAD + (1 - frac) * avail;
+    return { x, w, y, pitch: n.pitch };
+  });
+  return { rects, lo, hi, stripW };
+}
 // Task1c：区切り（arpReset）＝ドロップダウンからセグメントへ（他ノブと統一）。0=なし〜4=1小節。短ラベルで7段を横に。
 const ARP_RESET_OPTS: { v: number; label: string }[] = [
   { v: 0, label: "なし" },
@@ -294,8 +326,13 @@ export function ChordPatternEditor({
     editContent({ ...pattern, hits: chordHitsWithVel(pattern.hits, s, nextVel) });
   };
 
-  // プレビューは常に新モデル（top 込み）で描く＝旧パターンでも結果が見える。
-  const previewNeta = { kind: "chord_pattern", content: { ...pattern, voicing: { ...v, top }, program }, key: 0 } as unknown as Neta;
+  // Task1k 概形＝型試聴（auditionPattern）と同じプレビュー進行に当てて実音化＝「見た目＝聞こえ」。
+  //   ネタ preview_chords があればそれ／無ければ C→Am→F→G を key へ移調（固定Cから改善＝和声が動く）。
+  //   resolveChordPattern は keyboard 解決時に content.lh を含める＝右手ボイシング＋左手土台が1枚のロールに出る。
+  //   tempo は渡さない＝guitar 弦順ロール off＝ノートが step 境界に乗る（列整列を崩さない）。
+  const rollChords = previewChords?.length ? previewChords : previewChordsForKey(keyPc ?? 0);
+  const rollNotes = notesForContent("chord_pattern", { ...pattern, voicing: { ...v, top }, program }, { key: keyPc ?? 0, chords: rollChords, program });
+  const roll = voicingRollRects(rollNotes, pattern.steps);
 
   return (
     <div className="cp-editor">
@@ -418,16 +455,25 @@ export function ChordPatternEditor({
             </div>
           </div>
         )}
+        {/* Task1k 概形＝下段ピアノロール。cp-grid 内＝上のパッドと同一横スクロール・同一列ピッチ(17px/step)を共有し、
+            解決ノート（右手ボイシング＋左手土台）を「列の真下・音程の高さ」に置く＝パッドと縦に揃う。左ラベルに
+            最上/最下音の音名を出して高さの尺を示す（arp 階段/トップ/広がり/左手の答え合わせ）。 */}
+        {roll.rects.length > 0 && (
+          <div className="cp-hand cp-roll-lane" role="row" aria-label="voicing-roll">
+            <div className="cp-hand-label cp-roll-label">
+              <span aria-label="roll-hi">{pitchName(roll.hi)}</span>
+              <span aria-label="roll-lo">{pitchName(roll.lo)}</span>
+            </div>
+            <div className="cp-roll-strip" style={{ width: roll.stripW, height: ROLL_H }}>
+              {roll.rects.map((r, i) => (
+                <i key={i} className="cp-roll-note" style={{ left: r.x, width: r.w, top: r.y }} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       {guitarResolved && (
         <p className="cp-hint">ストローク向き＝表拍D・裏Uが自動既定・タップで入替。アップは軽く・上位の弦だけ鳴る。</p>
-      )}
-
-      {/* 実音（トップ含む）を目で確認＝MiniRoll をグリッド直下に（arp グリフの答え合わせ）。 */}
-      {pattern.hits.length > 0 && (
-        <div className="chord-roll" aria-label="voicing-roll">
-          <MiniRoll neta={previewNeta} />
-        </div>
       )}
 
       {/* 奏法バッジ（読み取り専用・格下げ＝小バッジ）＋ギター解決時のみストロークの速さ（唯一の微調整）。常時可視。 */}

@@ -1734,9 +1734,8 @@ article header {
 }
 
 /* #26 でコード編集は折り返しブロックタイムラインへ（.chord-len/.chord-foot の行リスト表示は撤去）。
-   長さラベルはピッカーシート内で継続利用。.chord-roll は ChordPatternEditor（コード楽器/管弦）のボイシング表示で継続利用＝残す。 */
-.chord-roll { margin-bottom: 6px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #15171b; }
-.chord-roll .mini-roll { width: 100%; height: 72px; display: block; }
+   長さラベルはピッカーシート内で継続利用。.chord-roll（旧ボイシング概形＝MiniRoll 引き伸ばし）は Task1k で
+   パッド整列の下段ピアノロール（.cp-roll-lane・transport-cards.css）へ作り直し＝撤去。 */
 .chord-len-label { font-size: 0.72rem; color: var(--muted); margin-right: 3px; } /* シートの「長さ」ラベル */
 /* CV3：埋まってる単一パートのセルは置けない（淡色・Section で使用） */
 .lane-cell.locked { opacity: 0.35; cursor: not-allowed; }
