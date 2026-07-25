@@ -5,6 +5,7 @@ import { startPlayback } from "../playback";
 import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
+import { Icon } from "./Icon";
 
 // このエディタが grid で編集する 6 レーンの度数（BassStep.degree はこれより広い＝修理#2 で 2/6/クロマチック/next を追加）。
 // レーン外の度数（型生成された相対ベースの b7/6/#4 や next）は grid には現れないが pattern には**非破壊で保持**される
@@ -57,6 +58,16 @@ const LENGTHS = [
   { label: "1", v: 16 },
 ];
 
+// 拍子→1小節step数（1step=16分）。4/4=16, 6/8=12, 3/4=12。複合(6/8系)はビート=6step。
+// M5 B1：ChordPatternEditor/RhythmEditor と同じ meterSteps でベースも小節線/拍子に追従（16固定を撤廃）。
+function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
+  const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
+  const n = m ? Number(m[1]) : 4;
+  const d = m ? Number(m[2]) : 4;
+  const stepsPerBar = n > 0 && d > 0 ? Math.round((n * 16) / d) : 16;
+  return { stepsPerBar, beatStep: d === 8 && n % 3 === 0 && n >= 6 ? 6 : 4 };
+}
+
 export function BassStepEditor({
   pattern,
   onChange,
@@ -105,24 +116,33 @@ export function BassStepEditor({
   };
   const [len, setLen] = useState(2); // 既定 8分
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 の付点音価に対応）
-  const bars = Math.max(1, Math.round(steps / 16));
+  const [eraseMode, setEraseMode] = useState(false); // M5 B3：描く/消すモード（他エディタと一貫）。
+  const { stepsPerBar, beatStep } = meterSteps(meter); // M5 B1：拍子追従の小節線/拍線。
+  const bars = Math.max(1, Math.round(steps / stepsPerBar));
   // 小節数を変える：縮小は**非破壊**（範囲外の音は描画しないだけで保持・melodyと同じ）。
-  const setBars = (n: number) => onStepsChange(Math.max(1, Math.min(4, n)) * 16);
+  const setBars = (n: number) => onStepsChange(Math.max(1, Math.min(4, n)) * stepsPerBar);
 
   const startAt = (lane: BassLaneDegree, step: number) =>
     pattern.find((p) => p.step === step && p.degree === lane);
   // このレーンで step を覆っている音（start < step < start+dur）＝サステイン表示用
   const sustainAt = (lane: BassLaneDegree, step: number) =>
     pattern.some((p) => p.degree === lane && p.step < step && step < p.step + (p.dur || 1));
+  // この step を覆っている音（頭でも sustain でも・どのレーンでも）＝モノフォニックの占有判定。
+  const coversStep = (p: BassStep, step: number) => p.step <= step && step < p.step + (p.dur || 1);
 
   function toggle(lane: BassLaneDegree, step: number) {
+    if (eraseMode) {
+      // M5 B3 消すモード＝このレーンで step を覆う音（頭 or sustain）を削除。空/該当なしは no-op。
+      onChange(pattern.filter((p) => !(p.degree === lane && coversStep(p, step))));
+      return;
+    }
     if (startAt(lane, step)) {
       // 同じ所をタップ＝消す
       onChange(pattern.filter((p) => !(p.step === step && p.degree === lane)));
       return;
     }
-    // モノフォニック：同ステップ始まりの音を消してから置く
-    const rest = pattern.filter((p) => p.step !== step);
+    // モノフォニック：この step を覆う音（頭でも sustain でも・全レーン）を消してから置く＝重なり音を作らない（M5 B3）。
+    const rest = pattern.filter((p) => !coversStep(p, step));
     onChange([...rest, { step, degree: lane, dur: dotted ? len * 1.5 : len }].sort((a, b) => a.step - b.step));
     // 置いた度数を即鳴らす（C基準の代表音・ベース音色）。
     void previewNote({ pitch: BASS_PREVIEW_PITCH[lane], start: 0, dur: 0.4, program: 33 });
@@ -179,6 +199,15 @@ export function BassStepEditor({
           compound meter（6/8系）は型ライブラリが4/4前提＝非表示（gen_bass の style も6-8は絶対フォールバック）。
           nowLabel＝patternId（＋手編集後は「（改）」）。相対 content のみ（contentFilter 番兵）。 */}
       <div className="editor-setrow">
+        {/* M5 B3：描く/消すモード（RhythmEditor と同じ proll-modes・Icon edit/eraser で3エディタ一貫）。 */}
+        <div className="proll-modes" role="group" aria-label="bass-mode">
+          <button type="button" aria-label="mode-draw" title="描く（タップで置く・同じ所で消す）" className={!eraseMode ? "on" : ""} onClick={() => setEraseMode(false)}>
+            <Icon name="edit" size={18} />
+          </button>
+          <button type="button" aria-label="mode-erase" title="消す（タップで削除）" className={eraseMode ? "on" : ""} onClick={() => setEraseMode(true)}>
+            <Icon name="eraser" size={18} />
+          </button>
+        </div>
         <BarsControl bars={bars} max={4} onChange={setBars} />
         {!isCompoundMeter(meter) && (
           <PatternImportControl
@@ -224,7 +253,7 @@ export function BassStepEditor({
                   className={
                     "step-cell deg" +
                     (on ? " on" : sus ? " sustain" : "") +
-                    (s % 4 === 0 ? " beat" : "")
+                    (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")
                   }
                   onClick={() => toggle(lane.d, s)}
                 >
@@ -246,8 +275,12 @@ export function BassStepEditor({
                 type="button"
                 aria-label={`bass-other-${s}`}
                 aria-pressed={!!ex}
-                className={"step-cell deg ext" + (ex ? " on" : "") + (s % 4 === 0 ? " beat" : "")}
-                onClick={(e) => openOther(s, e.currentTarget)}
+                className={"step-cell deg ext" + (ex ? " on" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
+                onClick={(e) =>
+                  eraseMode
+                    ? onChange(pattern.filter((p) => !(p.step === s && isOtherDegree(p.degree)))) // M5 B3：消すモードは「その他」度数も削除。
+                    : openOther(s, e.currentTarget)
+                }
               >
                 {ex ? ex.degree : ""}
               </button>

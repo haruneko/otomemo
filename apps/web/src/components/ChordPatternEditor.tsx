@@ -303,6 +303,22 @@ export function ChordPatternEditor({
       editContent({ ...pattern, lh: { mode: "custom", hits } });
     }
   };
+  // M5 B2 消すモードの左手パッド＝この (lane×step) の hit（頭 or 覆う sustain）を削除（右手 eraseHit と同流儀）。
+  //   モードツールはグリッド全体の直上に出るのに左手だけ rhMode を無視し「消す中にタップ→音が置かれる」破綻を是正。
+  //   空になったら lh キーごと削除（toggleLhPad と同じ bit 安全化）。該当なしは no-op。
+  const eraseLhPad = (lane: LhLaneDeg, s: number) => {
+    const h =
+      displayHits.find((x) => x.step === s && (x.deg ?? "R") === lane) ??
+      displayHits.find((x) => (x.deg ?? "R") === lane && x.step < s && s < x.step + (x.dur || 1));
+    if (!h) return;
+    const hits = displayHits.filter((x) => x !== h);
+    if (hits.length === 0) {
+      const { lh: _drop, ...rest } = pattern;
+      editContent(rest);
+    } else {
+      editContent({ ...pattern, lh: { mode: "custom", hits } });
+    }
+  };
 
   // #29 §9 発火＝onset セルのみ持ち上げる（sustain/空セルは null＝キャプチャしない・誤爆防止）。
   // 縦のみ（横=分割は無効＝arp 軸の領分）。デテント＝弱く64/普通100/強く112（磁石スナップ）。
@@ -444,7 +460,7 @@ export function ChordPatternEditor({
                         aria-label={`lh-pad-${lane.d}-${s}`}
                         aria-pressed={on}
                         className={"cp-cell lh" + (on ? " on" : sus ? " sustain" : "") + (s % stepsPerBar === 0 ? " bar" : s % beatStep === 0 ? " beat" : "")}
-                        onClick={() => toggleLhPad(lane.d, s)}
+                        onClick={() => (rhMode === "erase" ? eraseLhPad(lane.d, s) : toggleLhPad(lane.d, s))}
                       >
                         {on ? lane.label : ""}
                       </button>

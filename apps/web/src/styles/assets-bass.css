@@ -497,6 +497,9 @@ article[aria-label="neta-card"].dragging {
 .step-cell.beat {
   border-left: 2px solid #3a3f49;
 }
+.step-cell.bar {
+  border-left: 3px solid #5b6270; /* 小節頭は強め（rhythm-cell.bar と同語彙・M5 B1＝ベースにも小節線） */
+}
 .step-cell.on {
   background: var(--k, var(--k-melody, var(--accent))); /* #10④ kind 色（ベース=シアン）に */
 }
