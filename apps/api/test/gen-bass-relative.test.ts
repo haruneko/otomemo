@@ -73,16 +73,18 @@ describe("(b) relative:true＋style＝相対 content（BassCell→BassStep 直�
       { step: 14, degree: "5", dur: 1 }, { step: 15, degree: "R", dur: 1, next: true },
     ]);
   });
-  it("複数小節＝各小節に型を敷く（steps=bars*16・全型で pattern 非空・relativeFallback 無し）", () => {
+  it("複数小節＝各小節に型を敷く（steps=bars*grid・全型で pattern 非空・relativeFallback 無し）", () => {
     for (const t of BASS_TYPES) {
-      const r = genBass({ bars: 2, meter: "4/4" }, C1, 4, undefined, { style: t.id, relative: true });
+      const meter = t.grid === 12 ? "6/8" : "4/4"; // world68 は 6/8 枠（相対 content・grid=12）
+      const steps = 2 * t.grid;
+      const r = genBass({ bars: 2, meter }, C1, 4, undefined, { style: t.id, relative: true });
       const c = content(r);
       expect(c.mode, t.id).toBe("relative");
-      expect(c.steps, t.id).toBe(32);
+      expect(c.steps, t.id).toBe(steps);
       expect((c.pattern as Step[]).length, t.id).toBeGreaterThan(0);
       expect((r as { relativeFallback?: string }).relativeFallback, t.id).toBeUndefined();
       // 全 step が正しい小節範囲・degree/dur 正当。
-      for (const s of c.pattern as Step[]) { expect(s.step).toBeGreaterThanOrEqual(0); expect(s.step).toBeLessThan(32); expect(s.dur).toBeGreaterThanOrEqual(1); }
+      for (const s of c.pattern as Step[]) { expect(s.step).toBeGreaterThanOrEqual(0); expect(s.step).toBeLessThan(steps); expect(s.dur).toBeGreaterThanOrEqual(1); }
     }
   });
 });
@@ -95,7 +97,8 @@ describe("(f) 相対 content に patternId: styleType.id を刻む（修理#3・
   });
   it("全 style 型で patternId＝指定 id と一致（複数小節でも base 型 id）", () => {
     for (const t of BASS_TYPES) {
-      const c = content(genBass({ bars: 2, meter: "4/4" }, C1, 4, undefined, { style: t.id, relative: true }));
+      const meter = t.grid === 12 ? "6/8" : "4/4"; // world68 は 6/8 枠
+      const c = content(genBass({ bars: 2, meter }, C1, 4, undefined, { style: t.id, relative: true }));
       expect(c.patternId, t.id).toBe(t.id);
     }
   });

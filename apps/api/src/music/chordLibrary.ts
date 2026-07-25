@@ -35,7 +35,7 @@ export interface CompType {
   genre: string; // ballad/rock/citypop/dance/anison/gospel/jazz/folk/funk/reggae/pop/metal
   coGenres?: string[]; // L4トラックA（2026-07-25）：併記ジャンルタグ（横串 co-tag・データ欄のみ）。消費者は seed の genre タグ展開だけ＝生成器 GENRE_TABLE 経路は不変（出音・選抜に無影響）。
   scenes: string; // 場面タグ（日本語・監査用 SSOT）
-  grid: 16; // 4/4・1小節16分（型は全て4/4）
+  grid: 16 | 12; // 4/4=16（1小節16分）／6/8=12（1小節12・world68・裁定D 2026-07-25）。grid=セル数＝genChordPattern stepsPerBar と一致必須。
   tempoMin: number; tempoMax: number;
   mode: CompMode;
   style: CompStyle; // keyboard/guitar（voicing.style の既定＝guitar のみ content に載せる）
@@ -118,17 +118,18 @@ export function compLhHitsForBar(cells: CompLhCell[], base: number): { step: num
   return hits;
 }
 
-// 型ファクトリ。RH は必ず16セル。LH は任意（データのみ）。
+// 型ファクトリ。RH は 16セル（4/4）or 12セル（6/8・world68）。grid はセル数で判定。LH は任意（RH と同 grid）。
 const T = (t: {
   id: string; genre: string; coGenres?: string[]; scenes: string; tempoMin: number; tempoMax: number; mode: CompMode; style: CompStyle;
   roles: Role[]; rh: string; lh?: string; strumMs?: number; powerChord?: boolean; openClose?: "open" | "close";
 }): CompType => {
   const rh = parseCompRh(t.rh);
-  if (rh.length !== 16) throw new Error(`chordLibrary: ${t.id} のRHは16セルでない（${rh.length}）`);
+  if (rh.length !== 16 && rh.length !== 12) throw new Error(`chordLibrary: ${t.id} のRHは16/12セルでない（${rh.length}）`);
+  const grid = rh.length as 16 | 12;
   const lh = t.lh ? parseCompLh(t.lh) : undefined;
-  if (lh && lh.length !== 16) throw new Error(`chordLibrary: ${t.id} のLHは16セルでない（${lh.length}）`);
+  if (lh && lh.length !== grid) throw new Error(`chordLibrary: ${t.id} のLHは${grid}セルでない（${lh.length}）`);
   return {
-    id: t.id, genre: t.genre, coGenres: t.coGenres, scenes: t.scenes, grid: 16, tempoMin: t.tempoMin, tempoMax: t.tempoMax,
+    id: t.id, genre: t.genre, coGenres: t.coGenres, scenes: t.scenes, grid, tempoMin: t.tempoMin, tempoMax: t.tempoMax,
     mode: t.mode, style: t.style, strumMs: t.strumMs, powerChord: t.powerChord, openClose: t.openClose,
     roles: t.roles, rh, lh, rhPattern: t.rh, lhPattern: t.lh,
   };
@@ -219,7 +220,33 @@ const GUITAR_TYPES: CompType[] = [
     rh: "D . D . | D . D . | D . D . | D . D ." }),
 ];
 
-export const COMP_TYPES: CompType[] = [...KEYBOARD_TYPES, ...GUITAR_TYPES];
+// ── 6/8 無国籍民族調 10型（world68・裁定D 2026-07-25・正典＝research/2026-07-25-68-world-accompaniment-vocabulary.md §3） ──
+//   grid:12（1小節12・16分基底）。大拍=step0/6。旋法色はコード側＋scale差替で注入（型は素の格子）。
+//   keyboard（drone5/pad/thumb/arp6/roll12）＝LH/RH分業 or 分散／guitar（strum-*/pm）＝D/U・パームミュートは x で近似（GMにミュート音無し＝要耳較正）。
+const WORLD68_TYPES: CompType[] = [
+  T({ id: "w68-ch-drone5", genre: "world68", scenes: "開放5度ドローン＋上声（長短曖昧ベッド）", tempoMin: 30, tempoMax: 132, mode: "strum", style: "keyboard", roles: ["intro", "verse", "bridge", "outro"],
+    rh: "A - - - - - | A - - - - -", lh: "R - - - - - | - - - - - -" }),
+  T({ id: "w68-ch-pad", genre: "world68", scenes: "大拍パッド（白玉・遅い叙情）", tempoMin: 30, tempoMax: 96, mode: "strum", style: "keyboard", roles: ["intro", "verse", "outro"],
+    rh: "A - - - - - | A - - - - -", lh: "R . . . . . | 5 . . . . ." }),
+  T({ id: "w68-ch-arp6", genre: "world68", scenes: "6音循環アルペジオ（山型・中速リルト）", tempoMin: 40, tempoMax: 96, mode: "arp", style: "keyboard", roles: ["verse", "chorus", "interlude"],
+    rh: "A . A . A . | A . A . A ." }),
+  T({ id: "w68-ch-thumb", genre: "world68", scenes: "親指ベース＋上声ロール（指弾き）", tempoMin: 60, tempoMax: 96, mode: "arp", style: "keyboard", roles: ["verse", "prechorus"],
+    rh: ". . A . A . | . . A . A .", lh: "R . . . . . | 5 . . . . ." }),
+  T({ id: "w68-ch-strum-all", genre: "world68", scenes: "全ダウン8分ストラム（アクセント1,7）", tempoMin: 60, tempoMax: 132, mode: "strum", style: "guitar", strumMs: 12, roles: ["chorus", "interlude"],
+    rh: "D . D . D . | D . D . D ." }),
+  T({ id: "w68-ch-strum-dud", genre: "world68", scenes: "D-U-D-D-U-D リルト（フォークの揺れ）", tempoMin: 60, tempoMax: 96, mode: "strum", style: "guitar", strumMs: 14, roles: ["chorus", "prechorus"],
+    rh: "D . U . D . | D . U . D ." }),
+  T({ id: "w68-ch-strum-jig", genre: "world68", scenes: "ジグ的跳ねストラム（D-DU-DU・舞曲）", tempoMin: 100, tempoMax: 132, mode: "strum", style: "guitar", strumMs: 10, roles: ["chorus", "interlude"],
+    rh: "D . . . D . | U . D . U ." }),
+  T({ id: "w68-ch-strum-sync", genre: "world68", scenes: "シンコペストラム（step3抜き・前のめり）", tempoMin: 60, tempoMax: 96, mode: "strum", style: "guitar", strumMs: 12, roles: ["prechorus", "chorus"],
+    rh: "D . . . U . | D . U . D ." }),
+  T({ id: "w68-ch-pm", genre: "world68", scenes: "パームミュート薄刻み（1,7開放・間はミュート・要耳較正）", tempoMin: 60, tempoMax: 132, mode: "strum", style: "guitar", strumMs: 10, roles: ["intro", "verse", "prechorus"],
+    rh: "D . x . x . | D . x . x ." }),
+  T({ id: "w68-ch-roll12", genre: "world68", scenes: "12音フルロール（遅い曲の厚み・幻想）", tempoMin: 30, tempoMax: 60, mode: "arp", style: "keyboard", roles: ["chorus", "bridge"],
+    rh: "A A A A A A | A A A A A A" }),
+];
+
+export const COMP_TYPES: CompType[] = [...KEYBOARD_TYPES, ...GUITAR_TYPES, ...WORLD68_TYPES];
 
 export function compTypeById(id: string): CompType | undefined { return COMP_TYPES.find((t) => t.id === id); }
 

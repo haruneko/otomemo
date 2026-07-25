@@ -19,13 +19,14 @@ const mkDrums = (kick: number[], snare: number[], steps = 16, beatsPerStep = 0.2
 });
 
 describe("辞書の健全性（純データ）", () => {
-  it("34型＋5フィル・全て16セル・tempoMin<=tempoMax", () => {
-    expect(BASS_TYPES.length).toBe(34); // 28＋L4トラックA新6（BL3+VR2+ED1）＝34（FL は別リスト）
+  it("42型＋5フィル・cells は grid セル（16=4/4・12=6/8 world68）・tempoMin<=tempoMax", () => {
+    expect(BASS_TYPES.length).toBe(42); // 34（L4トラックA）＋ world68 bass8（裁定D 2026-07-25）＝42（FL は別リスト）
     expect(BASS_FILLS.length).toBe(5);
-    for (const t of BASS_TYPES) { expect(t.cells.length).toBe(16); expect(t.tempoMin).toBeLessThanOrEqual(t.tempoMax); }
-    for (const f of BASS_FILLS) expect(f.cells.length).toBe(16);
-    // 合計 34+5=39。
-    expect(BASS_TYPES.length + BASS_FILLS.length).toBe(39);
+    for (const t of BASS_TYPES) { expect(t.grid === 16 || t.grid === 12, t.id).toBe(true); expect(t.cells.length, t.id).toBe(t.grid); expect(t.tempoMin).toBeLessThanOrEqual(t.tempoMax); }
+    for (const f of BASS_FILLS) expect(f.cells.length).toBe(16); // フィルは4/4のみ
+    expect(BASS_TYPES.filter((t) => t.grid === 12).length).toBe(8); // world68 bass は8型
+    // 合計 42+5=47。
+    expect(BASS_TYPES.length + BASS_FILLS.length).toBe(47);
   });
   it("パーサ：tie/rest/ghost/slide/next を正しく分類", () => {
     const c = parseBassPattern("/R - . x | 5 8> . . | . . . . | . . . .");
@@ -69,9 +70,10 @@ describe("(b) style=型ID＝当該グリッドを固定出力（seed 非依存�
     expect(out.map((n) => n.pitch)).toEqual([36, 48, 36, 48, 36, 48, 36, 48]);
     expect(out.map((n) => n.start)).toEqual([0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
   });
-  it("全型・全 seed で音域窓 33..48 内（度数→実音は fold）", () => {
+  it("全型・全 seed で音域窓 33..48 内（度数→実音は fold・型 grid に合う拍子で敷く）", () => {
     for (const t of BASS_TYPES) for (const seed of SEEDS) {
-      const out = notesOf(genBass({ bars: 2, meter: "4/4" }, [{ root: 7, quality: "", start: 0, dur: 64 }], seed, undefined, { style: t.id }));
+      const meter = t.grid === 12 ? "6/8" : "4/4"; // world68 は 6/8 枠（realizeBassGrid grid=12）
+      const out = notesOf(genBass({ bars: 2, meter }, [{ root: 7, quality: "", start: 0, dur: 64 }], seed, undefined, { style: t.id }));
       for (const n of out) { expect(n.pitch, `${t.id}#${seed}`).toBeGreaterThanOrEqual(33); expect(n.pitch).toBeLessThanOrEqual(48); }
     }
   });
@@ -98,13 +100,54 @@ describe("(c) style=ジャンル→候補から決定的1つ・テンポ域外�
   });
 });
 
-describe("(d) 6/8 は style/fill 対象外＝従来経路（bit 一致）", () => {
-  it("6/8 に style/fill を指定しても従来と一致", () => {
+describe("(d) 6/8 で 4/4型/fill は対象外＝従来経路（grid ガード・bit 一致）", () => {
+  it("6/8 に 4/4 型(RK-8ROOT)や fill を指定しても従来と一致（world68 6/8型は別テスト w68）", () => {
     const f: Frame = { bars: 4, meter: "6/8" };
     for (const seed of SEEDS) {
-      expect(J(genBass(f, C1, seed, undefined, { style: "RK-8ROOT" })), `style#${seed}`).toBe(J(genBass(f, C1, seed)));
+      expect(J(genBass(f, C1, seed, undefined, { style: "RK-8ROOT" })), `style#${seed}`).toBe(J(genBass(f, C1, seed))); // grid16 型は 6/8 枠で敷けない
       expect(J(genBass(f, C1, seed, undefined, { fill: "FL-WALKUP" })), `fill#${seed}`).toBe(J(genBass(f, C1, seed)));
     }
+  });
+});
+
+// ── 裁定D：6/8 無国籍民族調（world68・grid:12・realizeBassGrid grid=12）───────────
+describe("(w68) world68 bass＝6/8 枠で12セル格子・4/4枠では従来経路（grid ガード）", () => {
+  const W = [{ root: 0, quality: "", start: 0, dur: 64 }]; // C 敷き詰め（6/8）
+  it("world68 は8型・genre:world68・grid:12", () => {
+    const w = BASS_TYPES.filter((t) => t.genre === "world68");
+    expect(w.length).toBe(8);
+    for (const t of w) { expect(t.grid, t.id).toBe(12); expect(t.cells.length, t.id).toBe(12); }
+  });
+  it("w68-bs-anchor（6/8・C）＝大拍 step0/6＝拍0と3に R（step×0.25拍・BASS_STEP_TO_BEAT）", () => {
+    const out = notesOf(genBass({ bars: 1, meter: "6/8" }, W, 1, undefined, { style: "w68-bs-anchor" }));
+    expect(out.map((n) => n.start)).toEqual([0, 1.5]); // step0=0拍, step6=1.5拍（大拍2つ＝付点4分=3拍/2）
+    expect(out.every((n) => n.pitch === 36)).toBe(true); // R=C2
+  });
+  it("w68-bs-drone（6/8・C）＝1発 dur3拍（1小節=3拍・step0..11 タイ）", () => {
+    const out = notesOf(genBass({ bars: 1, meter: "6/8" }, W, 1, undefined, { style: "w68-bs-drone" }));
+    expect(out).toEqual([{ pitch: 36, start: 0, dur: 3 }]);
+  });
+  it("w68-bs-jig（6/8・C）＝奇数step歩行 R-5-6-8-6-5（大拍0/1.5含む・全 onset 拍位置正）", () => {
+    const out = notesOf(genBass({ bars: 1, meter: "6/8" }, W, 3, undefined, { style: "w68-bs-jig" }));
+    expect(out.map((n) => n.start)).toEqual([0, 0.5, 1, 1.5, 2, 2.5]); // step0,2,4,6,8,10 ×0.25拍
+    expect(out.map((n) => n.pitch)).toEqual([36, 43, 45, 48, 45, 43]); // R36,5=43,6=45,8=48,6=45,5=43
+  });
+  it("relative:true＝mode relative・steps=bars*12・patternId（seed 冪等）", () => {
+    const c = genBass({ bars: 2, meter: "6/8" }, W, 1, undefined, { style: "w68-bs-anchor", relative: true }).items[0]!.content as { mode: string; steps: number; patternId: string };
+    expect(c.mode).toBe("relative");
+    expect(c.steps).toBe(24); // 2小節×12
+    expect(c.patternId).toBe("w68-bs-anchor");
+  });
+  it("w68-bs-approach＝末尾 #7> が next（次小節頭ルートへ先取り）で BassStep に保存", () => {
+    const c = genBass({ bars: 1, meter: "6/8" }, W, 1, undefined, { style: "w68-bs-approach", relative: true }).items[0]!.content as { pattern: { step: number; degree: string; next?: boolean }[] };
+    const last = c.pattern[c.pattern.length - 1]!;
+    expect(last.degree).toBe("#7");
+    expect(last.next).toBe(true);
+    expect(last.step).toBe(10); // step10（大拍外・次頭を予告）
+  });
+  it("world68 型を 4/4 枠に指定＝grid ガードで従来経路（bit 一致）", () => {
+    const f: Frame = { bars: 2, meter: "4/4" };
+    for (const seed of SEEDS) expect(J(genBass(f, C1, seed, undefined, { style: "w68-bs-anchor" })), `#${seed}`).toBe(J(genBass(f, C1, seed)));
   });
 });
 

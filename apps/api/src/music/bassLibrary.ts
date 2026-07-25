@@ -25,8 +25,8 @@ export interface BassCell { kind: "on" | "tie" | "rest" | "ghost"; deg?: string;
 
 export interface BassType {
   id: string;
-  genre: string; // rock/ballad/citypop/funk/edm/vocarock
-  grid: 16; // 4/4・1小節16分（正典の型は全て4/4）
+  genre: string; // rock/ballad/citypop/funk/edm/vocarock/world68
+  grid: 16 | 12; // 4/4=16（1小節16分）／6/8=12（1小節12・world68・裁定D 2026-07-25）。grid=セル数。
   tempoMin: number; tempoMax: number;
   kickRel: KickRel; // キック絡み（メタ）
   roles: Role[]; // 適用セクション（候補フィルタ）
@@ -54,8 +54,8 @@ const T = (
   id: string, genre: string, tempoMin: number, tempoMax: number, kickRel: KickRel, roles: Role[], pattern: string,
 ): BassType => {
   const cells = parseBassPattern(pattern);
-  if (cells.length !== 16) throw new Error(`bassLibrary: ${id} は16セルでない（${cells.length}）`);
-  return { id, genre, grid: 16, tempoMin, tempoMax, kickRel, roles, cells, pattern };
+  if (cells.length !== 16 && cells.length !== 12) throw new Error(`bassLibrary: ${id} は16/12セルでない（${cells.length}）`);
+  return { id, genre, grid: cells.length as 16 | 12, tempoMin, tempoMax, kickRel, roles, cells, pattern };
 };
 
 // ── ジャンル別ベースライン型辞書（正典 §1-6・33型） ───────────────────────
@@ -103,6 +103,17 @@ export const BASS_TYPES: BassType[] = [
   T("VR-OCTRUN", "vocarock", 160, 210, "interlock", ["verse", "chorus"], "R . 8 . | R . 8 . | R . 8 . | R . 8 ."),
   T("VR-LINE8", "vocarock", 160, 200, "unison", ["verse", "chorus"], "R . R . | R . R . | R . b7 . | 6 . 5 R>"),
   T("ED-GATE8", "edm", 120, 128, "counter", ["verse", "chorus"], ". . R - | . . R - | . . R - | . . R -"),
+  // ── 6/8 無国籍民族調 8型（world68・裁定D 2026-07-25・正典＝research/2026-07-25-68-world-accompaniment-vocabulary.md §4） ──
+  //   grid:12（1小節12・16分基底）。大拍=step0/6。度数は R/5/6/8 中心（3度回避＝旋法曖昧の維持・特性音はコード側）。
+  //   #7>＝approach の半音下接近音を次小節頭ルートへ先取り着地（realizeBassGrid/resolveRelativeBass の next 経路）。
+  T("w68-bs-anchor", "world68", 30, 132, "unison", ["intro", "verse", "outro"], "R . . . . . | R . . . . ."),
+  T("w68-bs-drone", "world68", 30, 96, "unison", ["intro", "verse", "bridge"], "R - - - - - | - - - - - -"),
+  T("w68-bs-r5", "world68", 40, 132, "unison", ["verse", "prechorus"], "R . . . . . | 5 . . . . ."),
+  T("w68-bs-r56", "world68", 60, 96, "interlock", ["prechorus", "chorus"], "R . . . . . | 5 . . . 6 ."),
+  T("w68-bs-approach", "world68", 40, 96, "counter", ["verse", "prechorus"], "R . . . . . | 5 . . . #7> ."),
+  T("w68-bs-oct", "world68", 60, 132, "unison", ["chorus", "interlude"], "R . . . . . | 8 . . . 5 ."),
+  T("w68-bs-hemi", "world68", 60, 132, "interlock", ["prechorus", "chorus"], "R . . . 5 . | . . R . . ."),
+  T("w68-bs-jig", "world68", 100, 132, "interlock", ["chorus", "interlude"], "R . 5 . 6 . | 8 . 6 . 5 ."),
 ];
 
 // ── フィル型辞書（正典 §7・セクション末の駆け上がり／下がり・5型） ─────────

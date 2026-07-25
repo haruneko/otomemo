@@ -15,16 +15,18 @@ const J = (x: unknown) => JSON.stringify(x);
 const SEEDS = [1, 2, 3, 5, 42];
 
 describe("辞書の健全性（純データ）", () => {
-  it("35型・全RH16セル・tempoMin<=tempoMax・ID 一意", () => {
-    expect(COMP_TYPES.length).toBe(35); // 鍵盤13+新8＝21／ギター13+新1＝14＝35（L4トラックA 2026-07-25で chord9型追加）
+  it("45型・RH は grid セル（16=4/4・12=6/8 world68）・tempoMin<=tempoMax・ID 一意", () => {
+    expect(COMP_TYPES.length).toBe(45); // 35（L4トラックA）＋ world68 chord10（裁定D 2026-07-25）＝45
     const ids = new Set<string>();
     for (const t of COMP_TYPES) {
-      expect(t.rh.length, t.id).toBe(16);
-      if (t.lh) expect(t.lh.length, t.id).toBe(16);
+      expect(t.grid === 16 || t.grid === 12, t.id).toBe(true);
+      expect(t.rh.length, t.id).toBe(t.grid); // 4/4=16・6/8=12
+      if (t.lh) expect(t.lh.length, t.id).toBe(t.grid);
       expect(t.tempoMin, t.id).toBeLessThanOrEqual(t.tempoMax);
       expect(ids.has(t.id), `dup ${t.id}`).toBe(false);
       ids.add(t.id);
     }
+    expect(COMP_TYPES.filter((t) => t.grid === 12).length).toBe(10); // world68 chord は10型
   });
   it("ギター型は style==='guitar'＋strumMs を持つ／鍵盤型は keyboard", () => {
     for (const t of COMP_TYPES) {
@@ -95,17 +97,19 @@ describe("(b) pattern=型ID＝当該グリッドを決定的に敷く（16分格
     expect(c.hits.map((h) => h.step)).toEqual([2, 6, 10, 14]);
     expect(c.hits.every((h) => h.dur === 1 && h.vel === CHORD_ACCENT)).toBe(true);
   });
-  it("全型・全 seed：hits は 16分格子内（0<=step<steps・step 整数・dur>=1）", () => {
+  it("全型・全 seed：hits は grid 格子内（4/4=16・6/8 world68=12・0<=step<steps・step 整数・dur>=1）", () => {
     for (const t of COMP_TYPES) for (const seed of SEEDS) {
-      const c = contentOf(genChordPattern({ bars: 2, meter: "4/4" }, seed, { pattern: t.id }));
-      expect(c.steps, t.id).toBe(32);
+      const meter = t.grid === 12 ? "6/8" : "4/4"; // 型 grid に合う拍子で敷く（4/4枠に6/8型は grid ガードで従来経路＝別テスト）
+      const steps = 2 * t.grid; // 2小節
+      const c = contentOf(genChordPattern({ bars: 2, meter }, seed, { pattern: t.id }));
+      expect(c.steps, t.id).toBe(steps);
       expect(c.hits.length, `${t.id} は空でない`).toBeGreaterThan(0);
       for (const h of c.hits) {
         expect(Number.isInteger(h.step), `${t.id} step 整数`).toBe(true);
         expect(h.step, t.id).toBeGreaterThanOrEqual(0);
-        expect(h.step, t.id).toBeLessThan(32);
+        expect(h.step, t.id).toBeLessThan(steps);
         expect(h.dur, t.id).toBeGreaterThanOrEqual(1);
-        expect(h.step + h.dur, `${t.id} dur が小節内`).toBeLessThanOrEqual(32);
+        expect(h.step + h.dur, `${t.id} dur が小節内`).toBeLessThanOrEqual(steps);
         if (h.vel != null) { expect(h.vel, t.id).toBeGreaterThanOrEqual(1); expect(h.vel, t.id).toBeLessThanOrEqual(127); }
       }
     }
@@ -151,7 +155,8 @@ describe("(d) ギター型で voicing.style==='guitar'／strumMs が載る", () 
   });
   it("全ギター型で style=guitar＋strumMs が content に載る", () => {
     for (const t of COMP_TYPES.filter((x) => x.style === "guitar")) {
-      const c = contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 7, { pattern: t.id }));
+      const meter = t.grid === 12 ? "6/8" : "4/4"; // world68 のギター型（strum-*/pm）は 6/8 枠で敷く
+      const c = contentOf(genChordPattern({ bars: 1, meter }, 7, { pattern: t.id }));
       expect(c.voicing.style, t.id).toBe("guitar");
       expect(typeof c.voicing.strumMs, t.id).toBe("number");
     }
@@ -184,7 +189,8 @@ describe("(L0) keyboard 型の buildCompContent は voicing.top=72 を積む／g
   });
   it("全鍵盤型（style!=='guitar'）が top===72／全ギター型は top を持たない（voiceGuitar 経路のまま）", () => {
     for (const t of COMP_TYPES) {
-      const v = voicingOf(genChordPattern({ bars: 1, meter: "4/4" }, 7, { pattern: t.id }));
+      const meter = t.grid === 12 ? "6/8" : "4/4"; // world68 も型 grid に合う拍子で敷く
+      const v = voicingOf(genChordPattern({ bars: 1, meter }, 7, { pattern: t.id }));
       if (t.style === "guitar") expect("top" in v, `${t.id} guitar は top なし`).toBe(false);
       else expect(v.top, `${t.id} keyboard は top=72`).toBe(72);
     }
@@ -311,6 +317,51 @@ describe("(h) patternId＝適用した型IDを content に刻む（未解決経�
       genChordPattern({ bars: 2, meter: "4/4" }, 3, { pattern: "omakase" }), // 単数 omakase は未解決→従来
     ]) {
       expect("patternId" in (r.items[0]!.content as object)).toBe(false);
+    }
+  });
+});
+
+// ── 裁定D：6/8 無国籍民族調（world68・grid:12）──────────────────────────────
+describe("(w68) world68 chord＝6/8 枠で12セル・4/4枠では従来経路（grid ガード）", () => {
+  const gridOf = (r: ReturnType<typeof genChordPattern>) => (r.items[0]!.content as { steps: number; patternId?: string }).steps;
+  it("world68 は10型・genre:world68・grid:12・全 role/tempo 健全", () => {
+    const w = COMP_TYPES.filter((t) => t.genre === "world68");
+    expect(w.length).toBe(10);
+    for (const t of w) { expect(t.grid, t.id).toBe(12); expect(t.rh.length, t.id).toBe(12); expect(t.roles.length, t.id).toBeGreaterThan(0); expect(t.tempoMin).toBeLessThanOrEqual(t.tempoMax); }
+  });
+  it("6/8 枠で型ID＝steps=bars*12（1小節=12・2小節=24）・patternId 刻む", () => {
+    const c1 = contentOf(genChordPattern({ bars: 1, meter: "6/8" }, 1, { pattern: "w68-ch-drone5" }));
+    expect(c1.steps).toBe(12);
+    expect((c1 as unknown as { patternId: string }).patternId).toBe("w68-ch-drone5");
+    expect(gridOf(genChordPattern({ bars: 2, meter: "6/8" }, 1, { pattern: "w68-ch-drone5" }))).toBe(24);
+  });
+  it("w68-ch-drone5＝大拍(step0/6)に打鍵・LH に R ドローン（keyboard top=72）", () => {
+    const c = contentOf(genChordPattern({ bars: 1, meter: "6/8" }, 1, { pattern: "w68-ch-drone5" })) as unknown as { hits: { step: number }[]; voicing: { top?: number }; lh?: { hits: { step: number; deg: string }[] } };
+    expect(c.hits.map((h) => h.step)).toEqual([0, 6]); // 大拍
+    expect(c.voicing.top).toBe(72); // keyboard
+    expect(c.lh?.hits[0]).toEqual({ step: 0, dur: 12, deg: "R" }); // R を1小節タイ（ドローン）
+  });
+  it("w68-ch-arp6＝mode arp・onset は8分（step0,2,4,6,8,10）", () => {
+    const c = contentOf(genChordPattern({ bars: 1, meter: "6/8" }, 1, { pattern: "w68-ch-arp6" }));
+    expect(c.mode).toBe("arp");
+    expect(c.hits.map((h) => h.step)).toEqual([0, 2, 4, 6, 8, 10]);
+  });
+  it("world68 ギター型（strum-all）＝style guitar＋strumMs（6/8 枠）", () => {
+    const c = contentOf(genChordPattern({ bars: 1, meter: "6/8" }, 1, { pattern: "w68-ch-strum-all" }));
+    expect(c.voicing.style).toBe("guitar");
+    expect(typeof c.voicing.strumMs).toBe("number");
+  });
+  it("world68 型を 4/4 枠に指定＝grid ガードで従来経路（bit 一致・patternId 無し）", () => {
+    for (const seed of SEEDS) {
+      const r = genChordPattern({ bars: 2, meter: "4/4" }, seed, { pattern: "w68-ch-drone5" });
+      expect(J(r), `#${seed}`).toBe(J(genChordPattern({ bars: 2, meter: "4/4" }, seed)));
+      expect("patternId" in (r.items[0]!.content as object)).toBe(false);
+    }
+  });
+  it("4/4 型を 6/8 枠に指定＝grid ガードで従来経路（bit 一致）", () => {
+    for (const seed of SEEDS) {
+      const r = genChordPattern({ bars: 2, meter: "6/8" }, seed, { pattern: "PB-WHOLE" });
+      expect(J(r), `#${seed}`).toBe(J(genChordPattern({ bars: 2, meter: "6/8" }, seed)));
     }
   });
 });

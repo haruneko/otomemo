@@ -56,6 +56,7 @@
   --genre-sage: #86b56e;
   --genre-lime: #adc247;
   --genre-slate: #8a94a3;
+  --genre-terra: #c67b45; /* 裁定D（world68・民族調6/8）＝earthy テラコッタ（dark 既定） */
 }
 /* Task1h：light サーフェス用の値（両値・theme-aware）。本アプリは現状 dark 固定だが、将来の light テーマ
    （または light-OS）でジャンルドットが白地でも沈まないよう dataviz の light 列を用意。 */
@@ -76,6 +77,7 @@
     --genre-sage: #5f8a4a;
     --genre-lime: #7f9a1f;
     --genre-slate: #5a6472;
+    --genre-terra: #b06a3a; /* 裁定D（world68）＝light サーフェス用 */
   }
 }
 * {

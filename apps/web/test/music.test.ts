@@ -334,6 +334,28 @@ describe("music", () => {
         expect(notes.map((n) => n.pitch)).toEqual([36, 48, 36, 48, 36, 48, 36, 48]); // gen-bass-library (b) と一致
       });
 
+      // ── 裁定D：6/8 無国籍民族調（world68）＝step×0.25拍で大拍が拍0/1.5へ・next の barStart は beatsPerBar 由来（6/8=3）──
+      it("w68-bs-anchor 相対（6/8）＝大拍 step0/6 が拍0/1.5（step×0.25・meter 非依存タイミング）", () => {
+        // notesForContent 経由（meter:"6/8" を渡す）＝1step=16分=0.25拍。付点4分の大拍2つ＝拍0,1.5。
+        const content = { mode: "relative" as const, steps: 12, pattern: [{ step: 0, degree: "R" as const, dur: 6 }, { step: 6, degree: "R" as const, dur: 6 }] };
+        const notes = notesForContent("bass", content, { key: 0, meter: "6/8" });
+        expect(notes.map((n) => n.start)).toEqual([0, 1.5]); // 大拍（付点4分＝3拍/2）
+        expect(notes.every((n) => n.pitch === 36)).toBe(true); // C の R
+      });
+      it("w68-bs-approach の next(#7>)＝barStart は beatsPerBar(6/8=3) 由来＝正しい次小節頭コードで解決", () => {
+        // 6/8 の1小節=3拍。step10=2.5拍。next の barStart=floor(2.5/3)*3=0 → 次小節頭=拍3のコードで解決。
+        const chords = [
+          { root: 0, quality: "", start: 0, dur: 3 }, // bar0(6/8) = C
+          { root: 7, quality: "", start: 3, dur: 1 }, // bar1 頭 = G（拍3）
+          { root: 0, quality: "", start: 4, dur: 2 }, // 以降 C（拍4）＝4/4誤前提だとここを拾う
+        ];
+        const pat = [{ step: 10, degree: "#7" as const, dur: 1, next: true }];
+        // 正：beatsPerBar=3（6/8）→ 拍3=G(pc7)。#7=leading tone＝band(7)+11=54→fold42。
+        expect(notesForContent("bass", { mode: "relative" as const, steps: 12, pattern: pat }, { key: 0, chords, meter: "6/8" })[0]!.pitch).toBe(42);
+        // 誤：meter 未指定（既定 beatsPerBar=4）→ 拍4=C(pc0)＝band(0)+11=47。＝4/4前提の取り違えが起きる証拠（回帰ガード）。
+        expect(resolveRelativeBass(pat, chords, 0, 4)[0]!.pitch).toBe(47);
+      });
+
       it("CP-CHROMA 相対＝クロマチック下降（R/8/b7/6/b6/5＋末尾 next）が窓内で正しく解決", () => {
         // gen-bass-relative.test.ts (b) の CP-CHROMA content と同一 pattern。
         const pattern = [

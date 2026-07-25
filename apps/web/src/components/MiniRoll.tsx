@@ -45,7 +45,7 @@ export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import(".
   // 不正 content 由来の NaN ノートは弾く（NaN が maxT/span に伝播して <rect> が NaN 属性・描画破綻するのを防ぐ・監査 堅牢性）。
   // program＝chord_pattern の voicing.style="auto" の奏法導出（guitar系→guitar）に使う（非 auto/非 chord_pattern は無影響＝bit一致）。
   const relPreview = isRelativeBass(neta.content) ? neta.content.preview_chords : undefined;
-  const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, program: programOf(neta.content), ...(relPreview ? { chords: relPreview } : {}) })).filter(
+  const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, program: programOf(neta.content), meter: neta.meter ?? undefined, ...(relPreview ? { chords: relPreview } : {}) })).filter(
     (n) => Number.isFinite(n.pitch) && Number.isFinite(n.start) && Number.isFinite(n.dur),
   );
   if (!notes.length) return null;

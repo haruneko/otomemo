@@ -105,7 +105,7 @@ export function BassStepEditor({
   // 試聴＝度数を調(key)の tonic に当てて実音化（既存試聴の流儀・notesForContent("bass")）。
   const auditionPattern = (content: unknown) => {
     ppPlay.current?.stop();
-    const ns = notesForContent("bass", content, { key: keyPc ?? 0 });
+    const ns = notesForContent("bass", content, { key: keyPc ?? 0, meter: meter ?? undefined });
     if (ns.length) void startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: tempo ?? 120, program: program ?? 33 }), { vocalMode: "peek" }).then((h) => { ppPlay.current = h; });
   };
   // 適用＝pattern/steps/patternId を親へ渡し置換＋（改）解除（親が snapshot 1操作で Undo に乗せる）。

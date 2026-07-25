@@ -981,21 +981,24 @@ export function genChordPattern(
     }
     return content;
   };
-  const canLib = opts?.pattern != null && info.grouping !== "compound" && info.beatsPerBar === 4;
+  // 型格子を敷ける拍子＝4/4（16分16セル）または 6/8（compound・12セル・world68・裁定D 2026-07-25）。3/4 等の非4拍は従来経路。
+  //   型の grid が stepsPerBar と一致する型だけ敷ける（4/4枠に6/8型・6/8枠に4/4型は不可＝grid ガードで従来経路へ落とす）。
+  const canLib = opts?.pattern != null && ((info.grouping !== "compound" && info.beatsPerBar === 4) || (info.grouping === "compound" && stepsPerBar === 12));
   // スライスC「聴いて選ぶ」（variety>=2）：pattern がジャンル名/おまかせ（型IDでない）なら別々の型を最大 n 件返す。
-  //   各 label＝型の日本語（型ID＋場面タグ）。空（域外/未知）は従来経路へ fall through。variety 未指定/1＝従来 bit 一致。
+  //   各 label＝型の日本語（型ID＋場面タグ）。空（域外/未知/grid不一致）は従来経路へ fall through。variety 未指定/1＝従来 bit 一致。
   const variety = Math.max(1, Math.floor(opts?.variety ?? 1));
   if (canLib && variety >= 2 && !compTypeById(opts!.pattern!)) {
-    const types = pickCompTypes(opts!.pattern!, f.section?.role, f.tempo, seed ?? 5, variety);
+    const types = pickCompTypes(opts!.pattern!, f.section?.role, f.tempo, seed ?? 5, variety).filter((ct) => ct.grid === stepsPerBar);
     if (types.length) {
       return { items: types.map((ct) => ({ kind: "chord_pattern", content: withFeel(buildCompContent(ct)), label: `${ct.id} ${ct.scenes}` })), edges: [] };
     }
   }
-  // 伴奏パターン型辞書（chordLibrary・S2）：pattern=型ID or ジャンル名。**4/4系のみ**（型は全て16セル4/4格子）。
-  //   pattern 未指定/未解決/6-8系/非4拍は null＝従来経路（bit 一致）＝bassLibrary style と同流儀。
-  const compType: CompType | null = canLib
+  // 伴奏パターン型辞書（chordLibrary・S2）：pattern=型ID or ジャンル名。4/4（16セル）＋6/8（12セル・world68）。
+  //   pattern 未指定/未解決/非4拍/grid不一致は null＝従来経路（bit 一致）＝bassLibrary style と同流儀。
+  let compType: CompType | null = canLib
     ? (compTypeById(opts!.pattern!) ?? pickCompType(opts!.pattern!, f.section?.role, f.tempo, seed ?? 5))
     : null;
+  if (compType && compType.grid !== stepsPerBar) compType = null; // grid 不一致（4/4型を6/8枠へ等）は敷けない＝従来経路
   if (compType) {
     return { items: [{ kind: "chord_pattern", content: withFeel(buildCompContent(compType)), label: "コード楽器" }], edges: [] };
   }
@@ -1090,10 +1093,12 @@ export function genBass(
   const slashBass = opts?.slashBass === true;
   const anchorPcAt = (t: number): number => { const ch = chordAt(Math.floor(t), chords); const r = ch ? normRoot(ch.root ?? 0) : (f.key ?? 0); return slashBass && ch?.bass != null ? normRoot(ch.bass) : r; };
   // ジャンル型ライブラリ（WP-B1）：style=型ID or ジャンル名（役割/tempo で候補を絞り決定的に1つ）。
-  //   4/4系のみ（型は全て4/4格子）。**style 未指定=null=従来経路（bit 一致）**。型格子を正準に鳴らす＝
-  //   kickLock とは二重適用しない（排他＝kickPath より優先）。
-  const styleType: BassType | null = opts?.style != null && info.grouping !== "compound"
-    ? (bassTypeById(opts.style) ?? pickBassType(opts.style, f.section?.role, f.tempo, seed ?? 42))
+  //   4/4（16セル格子）＋6/8（12セル・world68・裁定D 2026-07-25）。**style 未指定=null=従来経路（bit 一致）**。型格子を正準に鳴らす＝
+  //   kickLock とは二重適用しない（排他＝kickPath より優先）。grid ガード＝拍子に合う grid（4/4=16・6/8=12）の型のみ（4/4型を6/8枠へ等は従来経路）。
+  const compound = info.grouping === "compound";
+  const styleGrid: 16 | 12 = compound ? 12 : 16;
+  const styleType: BassType | null = opts?.style != null
+    ? ((): BassType | null => { const t = bassTypeById(opts.style) ?? pickBassType(opts.style, f.section?.role, f.tempo, seed ?? 42); return t && t.grid === styleGrid ? t : null; })()
     : null;
   const bias = densityBias(f.mood ?? "", f.tempo);
   const notes: { pitch: number; start: number; dur: number }[] = [];
@@ -1113,31 +1118,32 @@ export function genBass(
   //   合奏層ノブ（kickLock/snareGap/approach）は絶対空間の後処理＝相対 style 経路では非適用（H2＝道具の効果は型格子に既に刻まれている）。
   const wantRelative = opts?.relative === true;
   const skelHasBass = (opts?.skeleton?.bass?.length ?? 0) > 0;
-  if (wantRelative && styleType && info.grouping !== "compound" && !skelHasBass) {
+  if (wantRelative && styleType && !skelHasBass) {
+    const grid = styleType.cells.length; // 16（4/4）or 12（6/8・world68）＝1小節のセル数
     const pattern: { step: number; degree: string; dur: number; next?: boolean }[] = [];
-    // BassCell[16セル]（1小節）→ BassStep[]。on=発音（続く tie を音価に足す）／rest/ghost/tie(消費済)=スキップ。
+    // BassCell[grid セル]（1小節）→ BassStep[]。on=発音（続く tie を音価に足す）／rest/ghost/tie(消費済)=スキップ。
     const cellsToSteps = (cells: BassCell[], barIdx: number) => {
       let i = 0;
-      while (i < 16) {
+      while (i < cells.length) {
         const c = cells[i]!;
         if (c.kind === "on") {
           let run = 1;
-          while (i + run < 16 && cells[i + run]!.kind === "tie") run++; // 続く tie を音価に足す（realizeBassGrid と同規則）
-          pattern.push({ step: barIdx * 16 + i, degree: c.deg ?? "R", dur: run, ...(c.next ? { next: true } : {}) });
+          while (i + run < cells.length && cells[i + run]!.kind === "tie") run++; // 続く tie を音価に足す（realizeBassGrid と同規則）
+          pattern.push({ step: barIdx * grid + i, degree: c.deg ?? "R", dur: run, ...(c.next ? { next: true } : {}) });
           i += run;
         } else i++;
       }
     };
-    // fill（末尾1つ手前の小節）：型ID/数値を解決し当該小節だけ fill セルへ差替え（bars>=2・6-8除外は上のゲートで担保）。
-    const fillBar = opts?.fill != null && bars >= 2 ? bars - 2 : -1;
+    // fill（末尾1つ手前の小節）：型ID/数値を解決し当該小節だけ fill セルへ差替え（bars>=2・6-8はフィル対象外＝除外）。
+    const fillBar = opts?.fill != null && bars >= 2 && !compound ? bars - 2 : -1;
     const bf: BassFill | null = fillBar >= 0 ? resolveBassFill(opts!.fill!, seed ?? 42) : null;
     for (let bar = 0; bar < bars; bar++) cellsToSteps(bar === fillBar && bf ? bf.cells : styleType.cells, bar);
     const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 42); // 相対 content にも feel を載せる（絶対と対称・applyFeelEnsemble が消費）
     // patternId＝base 型 id を刻む（修理#3・S1・design 決定②）。fill 差替えでも base 型 id を維持（ドラム applyDrumFill 継承と同流儀）。
     //   帯の dedupe と「いま：<型名>」表示の土台。opt-in（relative:true）経路のみ＝既定（絶対）は不変＝bit 一致。
     const content = feel
-      ? { mode: "relative", steps: bars * 16, pattern, patternId: styleType.id, feel }
-      : { mode: "relative", steps: bars * 16, pattern, patternId: styleType.id };
+      ? { mode: "relative", steps: bars * grid, pattern, patternId: styleType.id, feel }
+      : { mode: "relative", steps: bars * grid, pattern, patternId: styleType.id };
     return withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
   }
 
@@ -1314,14 +1320,15 @@ function realizeBassGrid(
   cells: BassCell[], barStart: number, perBar: number, total: number,
   rootAt: (t: number) => number, nextRoot: number,
 ): { pitch: number; start: number; dur: number }[] {
-  const slot = perBar / 16; // 16分1スロットの拍長
+  const grid = cells.length; // 16（4/4）or 12（6/8・world68）＝1小節のセル数
+  const slot = perBar / grid; // 16分1スロットの拍長（4/4=4/16=0.25・6/8=3/12=0.25）
   const out: { pitch: number; start: number; dur: number }[] = [];
   let i = 0;
-  while (i < 16) {
+  while (i < grid) {
     const c = cells[i]!;
     if (c.kind === "on") {
       let run = 1;
-      while (i + run < 16 && cells[i + run]!.kind === "tie") run++; // 続く tie を音価に足す
+      while (i + run < grid && cells[i + run]!.kind === "tie") run++; // 続く tie を音価に足す
       const t = barStart + i * slot;
       if (t < total - 1e-9) {
         const rootPc = c.next ? nextRoot : rootAt(t);

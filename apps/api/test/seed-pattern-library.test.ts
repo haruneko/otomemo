@@ -13,23 +13,24 @@ import { BASS_TYPES } from "../src/music/bassLibrary";
 import { BEAT_PATTERNS } from "../src/music/drumLibrary";
 
 const freshCore = (): Core => new Core(openDb(":memory:"));
-const DRUMS_44 = BEAT_PATTERNS.filter((t) => t.meter === "4/4"); // 6/8（six8.ballad）は除外
+// seed 対象 drum＝4/4 型 ∪ world68（6/8・裁定D 2026-07-25）。それ以外の非4/4（six8.ballad）は除外。
+const DRUMS_SEEDED = BEAT_PATTERNS.filter((t) => t.meter === "4/4" || t.genres.includes("world68"));
 
 describe("(a) 3 kind のネタが型数ぶん作られる", () => {
-  it("chord=35型・bass=34型・drum=4/4型のみ（six8.ballad 除外・L4トラックA 2026-07-25）", () => {
+  it("chord=全型・bass=全型・drum=4/4∪world68（six8.ballad 除外・裁定D 2026-07-25）", () => {
     const core = freshCore();
     const r = seedPatternLibrary(core);
-    expect(r.chord).toBe(COMP_TYPES.length); // 26
-    expect(r.bass).toBe(BASS_TYPES.length); // 33
-    expect(r.drum).toBe(DRUMS_44.length); // 17（18-1）
+    expect(r.chord).toBe(COMP_TYPES.length); // 45（35＋world68 10）
+    expect(r.bass).toBe(BASS_TYPES.length); // 42（34＋world68 8）
+    expect(r.drum).toBe(DRUMS_SEEDED.length); // 31（4/4 23＋world68 8）
     expect(r.deleted).toBe(0); // 初回は旧 seed 無し
 
     // scope:"library"＋kind 別の件数が seed 数と一致。
     const lib = { scope: "library" as const, tags: ["lib:factory"], limit: 99999 };
     expect(core.listNeta({ ...lib, kind: "chord_pattern" }).length).toBe(COMP_TYPES.length);
     expect(core.listNeta({ ...lib, kind: "bass" }).length).toBe(BASS_TYPES.length);
-    expect(core.listNeta({ ...lib, kind: "rhythm" }).length).toBe(DRUMS_44.length);
-    // 6/8 型は seed されない（pat タグで確認）。
+    expect(core.listNeta({ ...lib, kind: "rhythm" }).length).toBe(DRUMS_SEEDED.length);
+    // six8.ballad（6/8だが world68 でない）は seed されない（pat タグで確認）。
     expect(core.listNeta({ scope: "library", tags: ["pat:six8.ballad"], limit: 10 }).length).toBe(0);
   });
 
@@ -85,6 +86,43 @@ describe("(b) タグが L1 SSOT どおり付く", () => {
     expect(tags).toContain("scene:intro");
     expect(tags).toContain("scene:verse");
     expect(n!.kind).toBe("rhythm");
+  });
+});
+
+// ── 裁定D：6/8 無国籍民族調（world68）が genre:world68＋meter:6/8 で各パート seed される ──
+describe("(w68) world68 が 6/8・genre:world68・scene タグで seed される", () => {
+  it("chord/bass/drum 各パート world68 が seed され meter:6/8・genre:world68・scene:", () => {
+    const core = freshCore();
+    seedPatternLibrary(core);
+    const [ch] = core.listNeta({ scope: "library", tags: ["pat:w68-ch-drone5"], limit: 10 });
+    expect(ch, "chord world68 seeded").toBeTruthy();
+    expect(ch!.kind).toBe("chord_pattern");
+    expect(ch!.meter).toBe("6/8");
+    expect(ch!.tags).toContain("genre:world68");
+    expect(ch!.tags.some((t) => t.startsWith("scene:"))).toBe(true);
+    expect((ch!.content as { steps: number }).steps).toBe(12); // 1小節=12
+
+    const [bs] = core.listNeta({ scope: "library", tags: ["pat:w68-bs-anchor"], limit: 10 });
+    expect(bs!.kind).toBe("bass");
+    expect(bs!.meter).toBe("6/8");
+    expect(bs!.tags).toContain("genre:world68");
+    expect((bs!.content as { mode: string; steps: number }).mode).toBe("relative");
+    expect((bs!.content as { steps: number }).steps).toBe(12);
+
+    const [dr] = core.listNeta({ scope: "library", tags: ["pat:w68-dr-full"], limit: 10 });
+    expect(dr!.kind).toBe("rhythm");
+    expect(dr!.meter).toBe("6/8");
+    expect(dr!.tags).toContain("genre:world68");
+    expect(dr!.tags.some((t) => t.startsWith("scene:"))).toBe(true);
+    expect((dr!.content as { rhythm: { steps: number } }).rhythm.steps).toBe(12);
+  });
+  it("genre:world68 の3パートが各≥8件（chord10/bass8/drum8）", () => {
+    const core = freshCore();
+    seedPatternLibrary(core);
+    const cnt = (kind: "chord_pattern" | "bass" | "rhythm") => core.listNeta({ scope: "library", tags: ["genre:world68"], kind, limit: 99999 }).length;
+    expect(cnt("chord_pattern")).toBe(10);
+    expect(cnt("bass")).toBe(8);
+    expect(cnt("rhythm")).toBe(8);
   });
 });
 

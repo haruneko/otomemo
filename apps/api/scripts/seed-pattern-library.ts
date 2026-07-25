@@ -37,14 +37,16 @@ export function seedPatternLibrary(core: Core): SeedCounts {
   // ── コード楽器（kind:"chord_pattern"・COMP_TYPES＝鍵盤13＋ギター13＝26型・全4/4） ──
   //   genChordPattern が型ID→content（mode/voicing/steps/hits/patternId・keyboard は voicing.top=72＋lh）を組む。
   for (const t of COMP_TYPES) {
-    const frame: Frame = { key: 0, meter: "4/4", bars: 1, tempo: t.tempoMin, section: { role: t.roles[0] } };
+    // 拍子＝grid で判定（16=4/4・12=6/8 world68・裁定D 2026-07-25）。genChordPattern stepsPerBar が meter に追従。
+    const meter = t.grid === 12 ? "6/8" : "4/4";
+    const frame: Frame = { key: 0, meter, bars: 1, tempo: t.tempoMin, section: { role: t.roles[0] } };
     const content = genChordPattern(frame, seed, { pattern: t.id }).items[0]!.content;
     core.createNeta(withLib({
       kind: "chord_pattern",
       title: `${t.id} ${t.scenes}`,
       content,
       key: 0,
-      meter: "4/4",
+      meter,
       tempo: t.tempoMin,
       // L4トラックA（2026-07-25）：genre は単数フィールド＋coGenres（横串 co-tag）ぶんも genre タグ展開。
       tags: [`genre:${t.genre}`, ...(t.coGenres ?? []).map((g) => `genre:${g}`), ...t.roles.map((r) => `scene:${r}`), tempoTag(t.tempoMin, t.tempoMax), `pat:${t.id}`],
@@ -55,7 +57,9 @@ export function seedPatternLibrary(core: Core): SeedCounts {
   // ── ベース（kind:"bass"・BASS_TYPES 33型・全4/4）＝相対 content（mode:"relative"・度数×step）のみ。 ──
   //   relative:true で実音化せず相対 content を出す。絶対 notes が来たら設計違反＝捨てる（throw）。
   for (const t of BASS_TYPES) {
-    const frame: Frame = { key: 0, meter: "4/4", bars: 1, tempo: t.tempoMin, section: { role: t.roles[0] } };
+    // 拍子＝grid で判定（16=4/4・12=6/8 world68）。6/8 も relative 経路（genBass styleType grid ガード＋realizeBassGrid 相当）で相対 content を出す。
+    const meter = t.grid === 12 ? "6/8" : "4/4";
+    const frame: Frame = { key: 0, meter, bars: 1, tempo: t.tempoMin, section: { role: t.roles[0] } };
     const content = genBass(frame, undefined, seed, undefined, { style: t.id, relative: true }).items[0]!.content;
     if ((content as { mode?: string })?.mode !== "relative") {
       throw new Error(`seed-pattern-library: bass ${t.id} の content が relative でない（絶対 notes は捨てる）`);
@@ -65,7 +69,7 @@ export function seedPatternLibrary(core: Core): SeedCounts {
       title: `${t.id} ${t.genre} ${t.roles.join("/")}`,
       content,
       key: 0,
-      meter: "4/4",
+      meter,
       tempo: t.tempoMin,
       tags: [`genre:${t.genre}`, ...t.roles.map((r) => `scene:${r}`), tempoTag(t.tempoMin, t.tempoMax), `pat:${t.id}`],
     }));
@@ -76,14 +80,15 @@ export function seedPatternLibrary(core: Core): SeedCounts {
   //   L4トラックA（2026-07-25）：BeatPattern.roles を追加＝chord/bass と同様に scene タグ化（従来 drum は scene 無し）。
   //   genres は配列（co-tag 併記込み）＝genre タグは複数付く。bars=型の bars（amen/bossa=2）。
   for (const t of BEAT_PATTERNS) {
-    if (t.meter !== "4/4") continue; // 非4/4（6/8）は L3 ピッカーが4/4前提ゆえスキップ。
-    const frame: Frame = { key: 0, meter: "4/4", bars: t.bars, tempo: t.tempoMin };
+    // 4/4 と world68（6/8）を seed。それ以外の非4/4（six8.ballad 等）は L3 ピッカーが4/4前提ゆえスキップ（裁定D 2026-07-25＝world68 のみ 6/8 解禁）。
+    if (t.meter !== "4/4" && !t.genres.includes("world68")) continue;
+    const frame: Frame = { key: 0, meter: t.meter, bars: t.bars, tempo: t.tempoMin };
     const content = genDrums(frame, seed, { style: t.id }).items[0]!.content;
     core.createNeta(withLib({
       kind: "rhythm",
       title: `${t.id} ${t.genres.join("/")}`,
       content,
-      meter: "4/4",
+      meter: t.meter,
       tempo: t.tempoMin,
       bars: t.bars,
       tags: [...t.genres.map((g) => `genre:${g}`), ...(t.roles ?? []).map((r) => `scene:${r}`), tempoTag(t.tempoMin, t.tempoMax), `pat:${t.id}`],

@@ -23,11 +23,11 @@ const NEW_BASS = ["BL-2BEAT", "BL-ARPUP", "BL-8ROOT", "VR-OCTRUN", "VR-LINE8", "
 const NEW_DRUM = ["ballad.rim8", "ballad.soft16", "halftime.ballad", "beat8.ride", "four.edm16", "four.clapride"];
 
 describe("(1) 型数＋新21型の解決", () => {
-  it("chord35・bass34・drum24（seed 対象 drum=23）", () => {
-    expect(COMP_TYPES.length).toBe(35);
-    expect(BASS_TYPES.length).toBe(34);
-    expect(BEAT_PATTERNS.length).toBe(24);
-    expect(BEAT_PATTERNS.filter((p) => p.meter === "4/4").length).toBe(23); // six8.ballad(6/8)を除く
+  it("chord45・bass42・drum32（4/4 drum=23・裁定D で world68 追加後）", () => {
+    expect(COMP_TYPES.length).toBe(45); // 35＋world68 10
+    expect(BASS_TYPES.length).toBe(42); // 34＋world68 8
+    expect(BEAT_PATTERNS.length).toBe(32); // 24＋world68 8
+    expect(BEAT_PATTERNS.filter((p) => p.meter === "4/4").length).toBe(23); // six8.ballad+world68(6/8)を除く
   });
   it("新21型が compTypeById/bassTypeById/beatPatternById で全解決・ID 一意", () => {
     for (const id of NEW_CHORD) expect(compTypeById(id), id).toBeTruthy();
@@ -38,7 +38,7 @@ describe("(1) 型数＋新21型の解決", () => {
     for (const arr of [COMP_TYPES.map((t) => t.id), BASS_TYPES.map((t) => t.id), BEAT_PATTERNS.map((p) => p.id)]) {
       expect(new Set(arr).size).toBe(arr.length);
     }
-    expect(allIds.length).toBe(35 + 34 + 24);
+    expect(allIds.length).toBe(45 + 42 + 32);
   });
   it("新chord9型に coGenres 欄（co-tag 型のみ）／新bass/drum roles が付く", () => {
     // co-tag を持つ新型：GT-MUTE8/AN-SYNC=vocarock, DN-*=edm。PB-* は coGenres 無し。

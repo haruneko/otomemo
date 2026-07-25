@@ -11,6 +11,7 @@ export const DRUM = {
   Kick: 36, Snare: 38, SideStick: 37, Clap: 39,
   HHc: 42, HHpedal: 44, HHopen: 46, Ride: 51, RideBell: 53, Tamb: 54,
   TomHi: 48, TomMid: 45, TomFloor: 41, Crash: 49,
+  Shaker: 69, // カバサ（world68・§0-4 GM代用＝シェイカー持続層）
 } as const;
 
 // 出力レーン（genDrums content の rhythm.lanes と同形）。
@@ -121,6 +122,33 @@ export const BEAT_PATTERNS: BeatPattern[] = [
   ] },
   { id: "four.clapride", meter: "4/4", grid: 16, bars: 1, tempoMin: 120, tempoMax: 140, genres: ["dance", "edm"], roles: ["chorus", "outro"], lanes: [
     L("Ride", DRUM.Ride, [0, 2, 4, 6, 8, 10, 12, 14], V.ride), L("Clap", DRUM.Clap, [4, 12], V.clap), L("Kick", DRUM.Kick, [0, 4, 8, 12], V.kick),
+  ] },
+  // ── 6/8 無国籍民族調 8型（world68・裁定D 2026-07-25・正典＝research/2026-07-25-68-world-accompaniment-vocabulary.md §5） ──
+  //   meter:"6/8"・grid:12（16分基底）。GM代用（§0-4）：Dum=TomFloor41／Tek=SideStick37／ka=HHc42／Shaker=69／Tamb=54／Clap=39。
+  //   族の骨格抽象（Dum-tek 層構造）＝特定伝承リズムのリテラル再現ではない（先例 break.amen_abstract）。genDrums の style 経路（resolveStyleContent）が realize。
+  { id: "w68-dr-shaker", meter: "6/8", grid: 12, bars: 1, tempoMin: 30, tempoMax: 132, genres: ["world68"], roles: ["intro", "verse", "bridge", "outro"], lanes: [
+    L("Shaker", DRUM.Shaker, [0, 2, 4, 6, 8, 10], 45),
+  ] },
+  { id: "w68-dr-clap-beat", meter: "6/8", grid: 12, bars: 1, tempoMin: 40, tempoMax: 96, genres: ["world68"], roles: ["intro", "verse"], lanes: [
+    L("Shaker", DRUM.Shaker, [0, 2, 4, 6, 8, 10], 45), L("Clap", DRUM.Clap, [0, 6], V.clap),
+  ] },
+  { id: "w68-dr-dumtek-a", meter: "6/8", grid: 12, bars: 1, tempoMin: 60, tempoMax: 96, genres: ["world68"], roles: ["verse", "interlude"], lanes: [
+    L("Ka", DRUM.HHc, [2, 4, 8, 10], 50), L("Tek", DRUM.SideStick, [6], V.side), L("Dum", DRUM.TomFloor, [0], 110),
+  ] },
+  { id: "w68-dr-dumtek-b", meter: "6/8", grid: 12, bars: 1, tempoMin: 60, tempoMax: 96, genres: ["world68"], roles: ["chorus", "interlude"], lanes: [
+    L("Ka", DRUM.HHc, [2, 10], 50), L("Tek", DRUM.SideStick, [4, 6, 8], V.side), L("Dum", DRUM.TomFloor, [0], 110),
+  ] },
+  { id: "w68-dr-jigskel", meter: "6/8", grid: 12, bars: 1, tempoMin: 100, tempoMax: 132, genres: ["world68"], roles: ["verse", "interlude"], lanes: [
+    L("Ka", DRUM.HHc, [2, 4, 8, 10], 50), L("Dum", DRUM.TomFloor, [0, 6], 110),
+  ] },
+  { id: "w68-dr-tarantella", meter: "6/8", grid: 12, bars: 1, tempoMin: 100, tempoMax: 132, genres: ["world68"], roles: ["chorus", "interlude"], lanes: [
+    L("Tamb", DRUM.Tamb, [0, 2, 4, 6, 8, 10], 72), L("Dum", DRUM.TomFloor, [0, 6], 110),
+  ] },
+  { id: "w68-dr-clap-hemiola", meter: "6/8", grid: 12, bars: 1, tempoMin: 60, tempoMax: 132, genres: ["world68"], roles: ["prechorus", "chorus"], lanes: [
+    L("Shaker", DRUM.Shaker, [0, 2, 4, 6, 8, 10], 45), L("Clap", DRUM.Clap, [0, 4, 8], V.clap), L("Dum", DRUM.TomFloor, [0, 6], 110),
+  ] },
+  { id: "w68-dr-full", meter: "6/8", grid: 12, bars: 1, tempoMin: 60, tempoMax: 132, genres: ["world68"], roles: ["chorus", "outro"], lanes: [
+    L("Shaker", DRUM.Shaker, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 45), L("Tek", DRUM.SideStick, [2, 4, 8, 10], V.side), L("Dum", DRUM.TomFloor, [0, 6], 110),
   ] },
 ];
 

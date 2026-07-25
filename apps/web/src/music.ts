@@ -990,6 +990,7 @@ export interface BassContext {
   chords?: ChordEntry[];
   tempo?: number; // BPM。chord_pattern のギター弦順ロール（resolveChordPattern）の ms→拍換算に使う。未指定=roll無し（bit一致）。
   program?: number; // GM program。chord_pattern の voicing.style="auto" の奏法導出（guitar系→guitar）に使う。未指定=auto は keyboard 相当（bit一致）。
+  meter?: string; // 拍子。相対 bass の next(R>/8>/#7>) の「次小節頭」判定に使う beatsPerBar 導出（4/4=4・6/8=3・world68）。未指定=4/4（bit一致）。
 }
 
 // 骨格（design #20）：ブレークポイント列 content。dur を持たず各音は次の点/句末/曲末まで支配。
@@ -1023,8 +1024,9 @@ export function notesForContent(kind: string, content: unknown, ctx?: BassContex
   if (kind === "skeleton" && isSkeleton(content)) return skeletonPreviewNotes(content).map((n) => ({ ...n, program: 48, part: "melody" as const }));
   if (kind === "bass" && isRelativeBass(content)) {
     // 相対モード：コードに当てて実音高へ解決。chords が無ければ preview_chords→key の tonic。
+    // beatsPerBar＝meter 由来（4/4=4・6/8=3・world68 裁定D 2026-07-25）＝next(R>/8>/#7>) の「次小節頭」判定に使う。未指定＝4（従来 bit 一致）。
     const chords = ctx?.chords ?? content.preview_chords ?? [];
-    return resolveRelativeBass(content.pattern, chords, ctx?.key ?? 0);
+    return resolveRelativeBass(content.pattern, chords, ctx?.key ?? 0, beatsPerBar(ctx?.meter));
   }
   // コード楽器パターン／管弦(section_inst・WP-X3c)：進行(or preview)に当てて voicing で実音化（相対型・多声）。
   if ((kind === "chord_pattern" || kind === "section_inst") && isChordPattern(content)) {

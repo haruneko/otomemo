@@ -42,7 +42,7 @@ describe("Task1h genreLabel＝既存 chip 日本語＋補完", () => {
     expect(genreLabel("rock")).toBe("ロック");
     expect(genreLabel("citypop")).toBe("シティポップ");
     expect(genreLabel("dance")).toBe("4つ打ち");
-    expect(genreLabel("vocarock")).toBe("ボカロック");
+    expect(genreLabel("vocarock")).toBe("Jロック"); // オーナー語彙（2026-07-25）＝タグは vocarock・表示は「Jロック」（genres.ts と同期）
   });
   it("不足を補完（rock 以外の追加語彙）", () => {
     expect(genreLabel("jazz")).toBe("ジャズ");
@@ -54,6 +54,10 @@ describe("Task1h genreLabel＝既存 chip 日本語＋補完", () => {
   });
   it("未知は原文を返す（保険）", () => {
     expect(genreLabel("weirdgenre")).toBe("weirdgenre");
+  });
+  it("裁定D world68＝民族調(6/8) ラベル＋terra 色（base.css --genre-terra）", () => {
+    expect(genreLabel("world68")).toBe("民族調(6/8)");
+    expect(genreColor("world68")).toBe("var(--genre-terra)");
   });
 });
 

@@ -29,6 +29,7 @@ const GENRE_META: Record<string, { color: string; label: string }> = {
   folk: { color: "sage", label: "フォーク" },
   reggae: { color: "lime", label: "レゲエ" },
   metal: { color: "slate", label: "メタル" },
+  world68: { color: "terra", label: "民族調(6/8)" }, // 裁定D（2026-07-25）＝6/8 無国籍民族調。terra=earthy 調和色（base.css --genre-terra）
 };
 
 // ジャンル→ドット色の CSS 変数（SSOT・theme-aware）。未知/空＝""（＝呼び側はドットを出さない・fallback しない）。
