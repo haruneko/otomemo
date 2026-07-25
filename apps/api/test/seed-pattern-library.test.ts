@@ -16,7 +16,7 @@ const freshCore = (): Core => new Core(openDb(":memory:"));
 const DRUMS_44 = BEAT_PATTERNS.filter((t) => t.meter === "4/4"); // 6/8（six8.ballad）は除外
 
 describe("(a) 3 kind のネタが型数ぶん作られる", () => {
-  it("chord=26型・bass=33型・drum=4/4型のみ（six8.ballad 除外）", () => {
+  it("chord=35型・bass=34型・drum=4/4型のみ（six8.ballad 除外・L4トラックA 2026-07-25）", () => {
     const core = freshCore();
     const r = seedPatternLibrary(core);
     expect(r.chord).toBe(COMP_TYPES.length); // 26
@@ -70,17 +70,20 @@ describe("(b) タグが L1 SSOT どおり付く", () => {
     expect(n!.kind).toBe("bass");
   });
 
-  it("drum 型：genre（複数可）/tempo/pat・scene は付かない（型に roles 無し）", () => {
+  it("drum 型：genre（複数可・co-tag込み）/scene（L4トラックA roles）/tempo/pat", () => {
     const core = freshCore();
     seedPatternLibrary(core);
     const [n] = core.listNeta({ scope: "library", tags: ["pat:beat8.basic"], limit: 10 });
     const tags = n!.tags;
     expect(tags).toContain("lib:factory");
-    expect(tags).toContain("genre:jpop"); // genres=["jpop","rock","pop"]＝複数 genre タグ
+    expect(tags).toContain("genre:jpop"); // genres=["jpop","rock","pop","vocarock"]＝複数 genre タグ
     expect(tags).toContain("genre:rock");
+    expect(tags).toContain("genre:vocarock"); // L4トラックA co-tag（seed 専用・生成器不変）
     expect(tags).toContain("tempo:70-140");
     expect(tags).toContain("pat:beat8.basic");
-    expect(tags.some((t) => t.startsWith("scene:"))).toBe(false); // drum は scene 無し
+    // L4トラックA（2026-07-25）：BeatPattern.roles → scene タグ（beat8.basic roles=intro/verse）。
+    expect(tags).toContain("scene:intro");
+    expect(tags).toContain("scene:verse");
     expect(n!.kind).toBe("rhythm");
   });
 });

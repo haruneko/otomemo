@@ -46,7 +46,8 @@ export function seedPatternLibrary(core: Core): SeedCounts {
       key: 0,
       meter: "4/4",
       tempo: t.tempoMin,
-      tags: [`genre:${t.genre}`, ...t.roles.map((r) => `scene:${r}`), tempoTag(t.tempoMin, t.tempoMax), `pat:${t.id}`],
+      // L4トラックA（2026-07-25）：genre は単数フィールド＋coGenres（横串 co-tag）ぶんも genre タグ展開。
+      tags: [`genre:${t.genre}`, ...(t.coGenres ?? []).map((g) => `genre:${g}`), ...t.roles.map((r) => `scene:${r}`), tempoTag(t.tempoMin, t.tempoMax), `pat:${t.id}`],
     }));
     chord++;
   }
@@ -72,8 +73,8 @@ export function seedPatternLibrary(core: Core): SeedCounts {
   }
 
   // ── ドラム（kind:"rhythm"・BEAT_PATTERNS）＝meter:"4/4" の型のみ（6/8=six8.ballad は L3 4/4前提でスキップ）。 ──
-  //   BeatPattern は roles を持たない（ジャンル×役割の対応は GENRE_TABLE 側）＝scene タグは付けない。
-  //   genres は配列＝genre タグは複数付く。bars=型の bars（amen/bossa=2）。
+  //   L4トラックA（2026-07-25）：BeatPattern.roles を追加＝chord/bass と同様に scene タグ化（従来 drum は scene 無し）。
+  //   genres は配列（co-tag 併記込み）＝genre タグは複数付く。bars=型の bars（amen/bossa=2）。
   for (const t of BEAT_PATTERNS) {
     if (t.meter !== "4/4") continue; // 非4/4（6/8）は L3 ピッカーが4/4前提ゆえスキップ。
     const frame: Frame = { key: 0, meter: "4/4", bars: t.bars, tempo: t.tempoMin };
@@ -85,7 +86,7 @@ export function seedPatternLibrary(core: Core): SeedCounts {
       meter: "4/4",
       tempo: t.tempoMin,
       bars: t.bars,
-      tags: [...t.genres.map((g) => `genre:${g}`), tempoTag(t.tempoMin, t.tempoMax), `pat:${t.id}`],
+      tags: [...t.genres.map((g) => `genre:${g}`), ...(t.roles ?? []).map((r) => `scene:${r}`), tempoTag(t.tempoMin, t.tempoMax), `pat:${t.id}`],
     }));
     drum++;
   }

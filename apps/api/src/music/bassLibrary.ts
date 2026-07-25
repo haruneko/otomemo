@@ -87,13 +87,22 @@ export const BASS_TYPES: BassType[] = [
   T("ED-OFFBEAT", "edm", 120, 128, "counter", ["intro", "verse"], ". . R . | . . R . | . . R . | . . R ."),
   T("ED-OFF16", "edm", 122, 128, "counter", ["verse"], ". . R . | . R . R | . . R . | . R . R"),
   T("ED-SUSTAIN", "edm", 120, 140, "unison", ["chorus", "bridge"], "R - - - | - - - - | - - - - | - - - -"),
-  T("ED-PULSE", "edm", 124, 130, "unison", ["chorus"], "R . R . | R . R . | R . R . | R . R ."),
+  T("ED-PULSE", "edm", 124, 130, "unison", ["verse", "chorus"], "R . R . | R . R . | R . R . | R . R ."), // L4トラックA（2026-07-25）：roles に verse 追加（8分パルスは低エネ verse の土台にも定石）。roles=scene タグ SSOT＝GENRE_TABLE 独立＝出音不変。
+
   T("ED-ROOT5", "edm", 120, 126, "counter", ["chorus"], ". . R . | . . 5 . | . . R . | . . 8 ."),
   // §6 ボカロック（高速8分・ルート駆動）
   T("VR-8DRIVE", "vocarock", 160, 200, "unison", ["verse", "chorus"], "R . R . | R . R . | R . R . | R . R ."),
   T("VR-GALLOP", "vocarock", 170, 210, "interlock", ["chorus", "interlude"], "R . R R | R . R R | R . R R | R . R R"),
   T("VR-CHORDFAST", "vocarock", 160, 195, "unison", ["verse", "bridge"], "R . R . | 5 . 5 . | R . R . | 5 . 5 ."),
   T("VR-PUSH", "vocarock", 165, 200, "mixed", ["prechorus"], "R . R . | R . R . | R . R . | R R 5 8>"),
+  // ── L4トラックA 新型（bass6型・2026-07-25・研究doc 2026-07-25-L4-trackA-definitions.md §B） ──
+  //   BL-ARPUP＝受け入れ監査#1でフォールバック採用（末尾10度を落とす）＝R-5-8 で確実に上行（"3"譜は resolveRelativeBass/realizeBassGrid が長6度下へ折れ上行が崩れる）。
+  T("BL-2BEAT", "ballad", 60, 90, "unison", ["verse"], "R . . . | . . . . | 5 . . . | . . . ."),
+  T("BL-ARPUP", "ballad", 60, 95, "unison", ["verse", "chorus"], "R - - - | 5 - - - | 8 - - - | - - - -"),
+  T("BL-8ROOT", "ballad", 65, 95, "unison", ["chorus"], "R . R . | R . R . | R . R . | R . R ."),
+  T("VR-OCTRUN", "vocarock", 160, 210, "interlock", ["verse", "chorus"], "R . 8 . | R . 8 . | R . 8 . | R . 8 ."),
+  T("VR-LINE8", "vocarock", 160, 200, "unison", ["verse", "chorus"], "R . R . | R . R . | R . b7 . | 6 . 5 R>"),
+  T("ED-GATE8", "edm", 120, 128, "counter", ["verse", "chorus"], ". . R - | . . R - | . . R - | . . R -"),
 ];
 
 // ── フィル型辞書（正典 §7・セクション末の駆け上がり／下がり・5型） ─────────

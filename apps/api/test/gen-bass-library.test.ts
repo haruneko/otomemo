@@ -19,13 +19,13 @@ const mkDrums = (kick: number[], snare: number[], steps = 16, beatsPerStep = 0.2
 });
 
 describe("辞書の健全性（純データ）", () => {
-  it("33型＋5フィル・全て16セル・tempoMin<=tempoMax", () => {
-    expect(BASS_TYPES.length).toBe(28); // RK4+BL5+CP5+FK5+ED5+VR4=28（FL は別リスト）
+  it("34型＋5フィル・全て16セル・tempoMin<=tempoMax", () => {
+    expect(BASS_TYPES.length).toBe(34); // 28＋L4トラックA新6（BL3+VR2+ED1）＝34（FL は別リスト）
     expect(BASS_FILLS.length).toBe(5);
     for (const t of BASS_TYPES) { expect(t.cells.length).toBe(16); expect(t.tempoMin).toBeLessThanOrEqual(t.tempoMax); }
     for (const f of BASS_FILLS) expect(f.cells.length).toBe(16);
-    // 合計 28+5=33（正典 §10 の型カウント）。
-    expect(BASS_TYPES.length + BASS_FILLS.length).toBe(33);
+    // 合計 34+5=39。
+    expect(BASS_TYPES.length + BASS_FILLS.length).toBe(39);
   });
   it("パーサ：tie/rest/ghost/slide/next を正しく分類", () => {
     const c = parseBassPattern("/R - . x | 5 8> . . | . . . . | . . . .");

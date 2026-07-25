@@ -26,77 +26,101 @@ export interface BeatPattern {
   bars: number; // パターン自体の小節数（amen/bossa=2）
   tempoMin: number; tempoMax: number;
   genres: string[];
+  roles?: Role[]; // L4トラックA（2026-07-25）：適用セクション（場面）。**seed の scene タグ SSOT** ＝genDrums/pickBeatPattern の GENRE_TABLE 経路とは独立（消費者は seed のみ＝生成器 bit 不変）。plan §5「GENRE_TABLE 逆引き初期値＋co-tag 上書き」。
   lanes: OutLane[]; // hits は 0..grid*bars-1 の絶対 step
 }
 
 const V = { kick: 115, snare: 105, ghost: 28, hh8: 55, hh16: 42, open: 70, ride: 60, bell: 75, clap: 100, side: 92, tamb: 60 };
 const L = (name: string, midi: number, hits: number[], vel: number): OutLane => ({ name, midi, hits, vel });
 
-// ── 定型ビート辞書（D5 §2-7・代表18型） ───────────────────────────────
+// ── 定型ビート辞書（D5 §2-7・代表18型＋L4トラックA新6型＝24型） ───────────────────────────────
+//   roles＝L4トラックA（2026-07-25）で全型に付与＝seed の scene タグ SSOT（GENRE_TABLE とは独立・生成器 bit 不変）。
+//   plan §5「GENRE_TABLE 逆引き初期値（既存5ジャンルの全役割 union）＋co-tag 上書き」。genres への vocarock/edm 併記も
+//   seed 専用（生成器は GENRE_TABLE 経由＝genres 配列を読まない）＝co-tag は出音・選抜に無影響。
 export const BEAT_PATTERNS: BeatPattern[] = [
   // §2 8ビート系
-  { id: "beat8.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 70, tempoMax: 140, genres: ["jpop", "rock", "pop"], lanes: [
+  { id: "beat8.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 70, tempoMax: 140, genres: ["jpop", "rock", "pop", "vocarock"], roles: ["intro", "verse"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14], V.hh8), L("Snare", DRUM.Snare, [4, 12], V.snare), L("Kick", DRUM.Kick, [0, 8], V.kick),
   ] },
-  { id: "beat8.offbeat_hh", meter: "4/4", grid: 16, bars: 1, tempoMin: 100, tempoMax: 132, genres: ["dance", "idol", "pop"], lanes: [
+  { id: "beat8.offbeat_hh", meter: "4/4", grid: 16, bars: 1, tempoMin: 100, tempoMax: 132, genres: ["dance", "idol", "pop", "vocarock", "edm"], roles: ["intro", "verse", "prechorus", "chorus"], lanes: [
     L("OpenHat", DRUM.HHopen, [2, 6, 10, 14], V.open), L("Snare", DRUM.Snare, [4, 12], V.snare), L("Kick", DRUM.Kick, [0, 8], V.kick),
   ] },
-  { id: "beat8.syncopated", meter: "4/4", grid: 16, bars: 1, tempoMin: 80, tempoMax: 150, genres: ["jpop", "pop", "rock"], lanes: [
+  { id: "beat8.syncopated", meter: "4/4", grid: 16, bars: 1, tempoMin: 80, tempoMax: 150, genres: ["jpop", "pop", "rock", "vocarock"], roles: ["verse"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14], V.hh8), L("Snare", DRUM.Snare, [4, 12], V.snare), L("Kick", DRUM.Kick, [0, 8, 10, 12], V.kick),
   ] },
   // §3 16ビート系
-  { id: "beat16.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 70, tempoMax: 110, genres: ["citypop", "ballad", "rnb"], lanes: [
+  { id: "beat16.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 70, tempoMax: 110, genres: ["citypop", "ballad", "rnb"], roles: ["intro", "verse", "prechorus", "chorus"], lanes: [
     L("HiHat", DRUM.HHc, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], V.hh16), L("Snare", DRUM.Snare, [4, 12], V.snare), L("Kick", DRUM.Kick, [0, 6, 8], V.kick),
   ] },
-  { id: "beat16.ghost", meter: "4/4", grid: 16, bars: 1, tempoMin: 75, tempoMax: 115, genres: ["funk", "citypop", "rnb"], lanes: [
+  { id: "beat16.ghost", meter: "4/4", grid: 16, bars: 1, tempoMin: 75, tempoMax: 115, genres: ["funk", "citypop", "rnb"], roles: ["intro", "verse", "prechorus", "outro"], lanes: [
     L("HiHat", DRUM.HHc, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], V.hh16), L("Snare", DRUM.Snare, [4, 12], V.snare), L("SnareGhost", DRUM.Snare, [2, 6, 9, 14], V.ghost), L("Kick", DRUM.Kick, [0, 6, 8, 11], V.kick),
   ] },
   // §4 4つ打ち系
-  { id: "four.house", meter: "4/4", grid: 16, bars: 1, tempoMin: 118, tempoMax: 140, genres: ["dance", "idol"], lanes: [
+  { id: "four.house", meter: "4/4", grid: 16, bars: 1, tempoMin: 118, tempoMax: 140, genres: ["dance", "idol", "edm"], roles: ["intro", "verse", "prechorus", "chorus", "outro"], lanes: [
     L("OpenHat", DRUM.HHopen, [2, 6, 10, 14], V.open), L("Clap", DRUM.Clap, [4, 12], V.clap), L("Kick", DRUM.Kick, [0, 4, 8, 12], V.kick),
   ] },
-  { id: "four.rock", meter: "4/4", grid: 16, bars: 1, tempoMin: 120, tempoMax: 170, genres: ["rock", "jpop", "dance"], lanes: [
+  { id: "four.rock", meter: "4/4", grid: 16, bars: 1, tempoMin: 120, tempoMax: 170, genres: ["rock", "jpop", "dance", "vocarock", "edm"], roles: ["chorus", "outro"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14], V.hh8), L("Snare", DRUM.Snare, [4, 12], V.snare), L("Kick", DRUM.Kick, [0, 4, 8, 12], V.kick),
   ] },
   // §5 ハーフ/ダブル/シャッフル
-  { id: "halftime.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 120, tempoMax: 170, genres: ["jpop", "rock", "emo"], lanes: [
+  { id: "halftime.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 120, tempoMax: 170, genres: ["jpop", "rock", "emo", "vocarock", "edm"], roles: ["verse", "prechorus", "bridge"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14], V.hh8), L("Snare", DRUM.Snare, [8], V.snare), L("Kick", DRUM.Kick, [0, 12], V.kick),
   ] },
-  { id: "doubletime.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 70, tempoMax: 110, genres: ["punk", "rock"], lanes: [
+  { id: "doubletime.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 70, tempoMax: 110, genres: ["punk", "rock"], roles: ["verse", "chorus"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14], V.hh8), L("Snare", DRUM.Snare, [2, 6, 10, 14], V.snare), L("Kick", DRUM.Kick, [0, 4, 8, 12], V.kick),
   ] },
-  { id: "shuffle.basic", meter: "4/4", grid: 12, triplet: true, bars: 1, tempoMin: 80, tempoMax: 140, genres: ["blues", "citypop"], lanes: [
+  { id: "shuffle.basic", meter: "4/4", grid: 12, triplet: true, bars: 1, tempoMin: 80, tempoMax: 140, genres: ["blues", "citypop"], roles: ["verse", "chorus"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 3, 5, 6, 8, 9, 11], V.hh8), L("Snare", DRUM.Snare, [3, 9], V.snare), L("Kick", DRUM.Kick, [0, 6], V.kick),
   ] },
-  { id: "shuffle.halftime", meter: "4/4", grid: 12, triplet: true, bars: 1, tempoMin: 80, tempoMax: 100, genres: ["aor", "citypop", "funk"], lanes: [
+  { id: "shuffle.halftime", meter: "4/4", grid: 12, triplet: true, bars: 1, tempoMin: 80, tempoMax: 100, genres: ["aor", "citypop", "funk"], roles: ["verse"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 3, 5, 6, 8, 9, 11], V.hh8), L("Snare", DRUM.Snare, [6], V.snare), L("SnareGhost", DRUM.Snare, [1, 2, 4, 5, 8, 10, 11], V.ghost), L("Kick", DRUM.Kick, [0, 9], V.kick),
   ] },
   // §6 ブレイク（構造抽象・2小節）
-  { id: "break.amen_abstract", meter: "4/4", grid: 16, bars: 2, tempoMin: 90, tempoMax: 180, genres: ["dnb", "breakbeat"], lanes: [
+  { id: "break.amen_abstract", meter: "4/4", grid: 16, bars: 2, tempoMin: 90, tempoMax: 180, genres: ["dnb", "breakbeat"], roles: ["verse", "interlude"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30], V.hh8),
     L("Snare", DRUM.Snare, [4, 12, 20, 30], V.snare), L("SnareGhost", DRUM.Snare, [2, 10, 19, 23, 26, 29], V.ghost),
     L("Kick", DRUM.Kick, [0, 6, 14, 16, 22, 25], V.kick),
   ] },
   // §7 モータウン/ラテン/6-8/ロック極型
-  { id: "motown.four_on_snare", meter: "4/4", grid: 16, bars: 1, tempoMin: 110, tempoMax: 140, genres: ["motown", "pop"], lanes: [
+  { id: "motown.four_on_snare", meter: "4/4", grid: 16, bars: 1, tempoMin: 110, tempoMax: 140, genres: ["motown", "pop"], roles: ["verse", "chorus"], lanes: [
     L("Tamb", DRUM.Tamb, [2, 6, 10, 14], V.tamb), L("Snare", DRUM.Snare, [0, 4, 8, 12], V.snare), L("Kick", DRUM.Kick, [0, 8], V.kick),
   ] },
-  { id: "bossa.basic", meter: "4/4", grid: 16, bars: 2, tempoMin: 110, tempoMax: 170, genres: ["bossa", "latin"], lanes: [
+  { id: "bossa.basic", meter: "4/4", grid: 16, bars: 2, tempoMin: 110, tempoMax: 170, genres: ["bossa", "latin"], roles: ["verse", "bridge"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30], V.ride),
     L("SideStick", DRUM.SideStick, [0, 6, 12, 18, 22, 28], V.side), L("Kick", DRUM.Kick, [0, 8, 16, 24], V.kick),
   ] },
-  { id: "samba.simplified", meter: "4/4", grid: 16, bars: 1, tempoMin: 95, tempoMax: 130, genres: ["samba", "latin"], lanes: [
+  { id: "samba.simplified", meter: "4/4", grid: 16, bars: 1, tempoMin: 95, tempoMax: 130, genres: ["samba", "latin"], roles: ["verse", "chorus"], lanes: [
     L("HiHat", DRUM.HHc, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], V.hh16),
     L("SnareGhost", DRUM.Snare, [2, 4, 7, 10, 12, 15], V.ghost), L("Kick", DRUM.Kick, [0, 3, 4, 7, 8, 11, 12, 15], V.kick),
   ] },
-  { id: "six8.ballad", meter: "6/8", grid: 12, bars: 1, tempoMin: 50, tempoMax: 80, genres: ["ballad", "gospel", "rnb"], lanes: [
+  { id: "six8.ballad", meter: "6/8", grid: 12, bars: 1, tempoMin: 50, tempoMax: 80, genres: ["ballad", "gospel", "rnb"], roles: ["intro", "verse", "chorus", "bridge", "outro"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10], V.hh8), L("Snare", DRUM.Snare, [6], V.snare), L("Kick", DRUM.Kick, [0], V.kick),
   ] },
-  { id: "dbeat.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 160, tempoMax: 220, genres: ["punk", "hardcore"], lanes: [
+  { id: "dbeat.basic", meter: "4/4", grid: 16, bars: 1, tempoMin: 160, tempoMax: 220, genres: ["punk", "hardcore", "vocarock"], roles: ["verse", "chorus"], lanes: [
     L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14], V.hh8), L("Snare", DRUM.Snare, [4, 12], V.snare), L("Kick", DRUM.Kick, [0, 2, 6, 8, 10, 14], V.kick),
   ] },
-  { id: "blast.traditional", meter: "4/4", grid: 16, bars: 1, tempoMin: 200, tempoMax: 300, genres: ["metal"], lanes: [
+  { id: "blast.traditional", meter: "4/4", grid: 16, bars: 1, tempoMin: 200, tempoMax: 300, genres: ["metal"], roles: ["verse", "chorus"], lanes: [
     L("HiHat", DRUM.HHc, [0, 4, 8, 12], V.hh8), L("Snare", DRUM.Snare, [2, 6, 10, 14], V.snare), L("Kick", DRUM.Kick, [0, 4, 8, 12], V.kick),
+  ] },
+  // ── L4トラックA 新型（drum6型・2026-07-25・研究doc 2026-07-25-L4-trackA-definitions.md §C） ──
+  //   バラード3型＋Jロック/EDM各系。ballad 系 vel は実数直書き（kick100/HH38/SN90 等）。SideStick=37/Ride=51/Clap=39。
+  { id: "ballad.rim8", meter: "4/4", grid: 16, bars: 1, tempoMin: 60, tempoMax: 100, genres: ["ballad", "citypop"], roles: ["intro", "verse", "chorus"], lanes: [
+    L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14], V.hh8), L("SideStick", DRUM.SideStick, [4, 12], V.side), L("Kick", DRUM.Kick, [0, 8], 100),
+  ] },
+  { id: "ballad.soft16", meter: "4/4", grid: 16, bars: 1, tempoMin: 60, tempoMax: 100, genres: ["ballad", "rnb"], roles: ["intro", "verse", "chorus"], lanes: [
+    L("HiHat", DRUM.HHc, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], 38), L("Snare", DRUM.Snare, [4, 12], 90), L("Kick", DRUM.Kick, [0, 8], 95),
+  ] },
+  { id: "halftime.ballad", meter: "4/4", grid: 16, bars: 1, tempoMin: 65, tempoMax: 100, genres: ["ballad", "emo"], roles: ["verse", "prechorus", "chorus", "bridge"], lanes: [
+    L("HiHat", DRUM.HHc, [0, 2, 4, 6, 8, 10, 12, 14], V.hh8), L("Snare", DRUM.Snare, [8], 108), L("Kick", DRUM.Kick, [0, 6], V.kick),
+  ] },
+  { id: "beat8.ride", meter: "4/4", grid: 16, bars: 1, tempoMin: 100, tempoMax: 160, genres: ["jpop", "rock", "vocarock"], roles: ["chorus", "outro"], lanes: [
+    L("Ride", DRUM.Ride, [0, 2, 4, 6, 8, 10, 12, 14], V.ride), L("Snare", DRUM.Snare, [4, 12], V.snare), L("Kick", DRUM.Kick, [0, 8], V.kick),
+  ] },
+  { id: "four.edm16", meter: "4/4", grid: 16, bars: 1, tempoMin: 120, tempoMax: 140, genres: ["dance", "edm"], roles: ["verse", "chorus"], lanes: [
+    L("HiHat", DRUM.HHc, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], V.hh16), L("Clap", DRUM.Clap, [4, 12], V.clap), L("Kick", DRUM.Kick, [0, 4, 8, 12], V.kick),
+  ] },
+  { id: "four.clapride", meter: "4/4", grid: 16, bars: 1, tempoMin: 120, tempoMax: 140, genres: ["dance", "edm"], roles: ["chorus", "outro"], lanes: [
+    L("Ride", DRUM.Ride, [0, 2, 4, 6, 8, 10, 12, 14], V.ride), L("Clap", DRUM.Clap, [4, 12], V.clap), L("Kick", DRUM.Kick, [0, 4, 8, 12], V.kick),
   ] },
 ];
 

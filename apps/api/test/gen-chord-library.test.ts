@@ -15,8 +15,8 @@ const J = (x: unknown) => JSON.stringify(x);
 const SEEDS = [1, 2, 3, 5, 42];
 
 describe("辞書の健全性（純データ）", () => {
-  it("26型・全RH16セル・tempoMin<=tempoMax・ID 一意", () => {
-    expect(COMP_TYPES.length).toBe(26);
+  it("35型・全RH16セル・tempoMin<=tempoMax・ID 一意", () => {
+    expect(COMP_TYPES.length).toBe(35); // 鍵盤13+新8＝21／ギター13+新1＝14＝35（L4トラックA 2026-07-25で chord9型追加）
     const ids = new Set<string>();
     for (const t of COMP_TYPES) {
       expect(t.rh.length, t.id).toBe(16);

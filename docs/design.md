@@ -722,11 +722,21 @@ Fable 実機監査＝360px幅で16step グリッドの step13-15 が画面外・
   - 正典＝`docs/research/2026-07-25-L4-trackA-authoring-plan.md`（本分類で起草）＋`genres.ts`（UIラベル SSOT）。
 - **契約基盤（L2/L3 が守る）**：L2 は各型を `scope:"library"`＋上記タグで seed（下記 L2 節）。L3 は同タグ集合で `listNeta({kind, scope:"library", tags:["genre:<g>"]})` を引きピッカー候補にする（下記 L3 節）。**この節がタグ文字列の SSOT**＝L2 の付与と L3 のクエリは同じ prefix:value を使う。
 
+#### Task2/L4 トラックA＝新21型＋co-tag＋roles を辞書化（2026-07-25・正典＝`docs/research/2026-07-25-L4-trackA-definitions.md`＋同 `authoring-plan.md`）
+オーナー選定3ジャンル（バラード `ballad`／Jロック `vocarock`／EDM `edm`）× verse/chorus × 3パートの**18セルを各4件以上**に埋める起草分を辞書化。辞書件数＝**chord 26→35・bass 28→34・drum 18→24**（seed 対象 drum＝23＝6/8 の six8.ballad 除外）。
+- **新21型**（研究doc §A/B/C）：chord9＝`PB-WHOLE-R10`/`PB-LH8OCT`/`PB-BLOCK8`/`PB-SUSBLD`（ballad）・`GT-MUTE8`（rock/co:vocarock・**要耳較正**＝GMにミュート音無し）・`AN-SYNC`（anison/co:vocarock）・`DN-PLUCK8`/`DN-GATE16`/`DN-PAD4`（dance/co:edm・**DN-GATE16/PAD4 は要耳較正**）。bass6＝`BL-2BEAT`/`BL-ARPUP`/`BL-8ROOT`（ballad）・`VR-OCTRUN`/`VR-LINE8`（vocarock）・`ED-GATE8`（edm）。drum6＝`ballad.rim8`/`ballad.soft16`/`halftime.ballad`（ballad）・`beat8.ride`（jpop/rock/vocarock）・`four.edm16`/`four.clapride`（dance/edm）。
+- **`BL-ARPUP`＝フォールバック譜 `R-5-8`（末尾10度を落とす）**：`resolveRelativeBass`/`realizeBassGrid` は度数をルートから上へ積むので `3`(=長3度)は10度でなく低位置へ落ち上行が崩れる（octave-aware 写像は api+web 二重実装＝スコープ外）。R-5-8 で確実に上行（key0/I で 36<43<48）。
+- **スキーマ追記（データ欄のみ・生成器コード不変）**：`CompType.coGenres?: string[]`（chord の横串 co-tag）／`BeatPattern.roles?: Role[]`（drum の場面軸）。BassType は既存 `roles` を使用（bass co-tag 0件）。
+- **co-tag（横串ジャンル併記・17件）**：chord＝GT-BALLAD(+ballad)・AN-VERSE/AN-CHORUS/GT-DOWN8/GT-POWER16(+vocarock)・DN-OFFBEAT/DN-ANTICIP(+edm)。drum＝beat8.basic/beat8.syncopated/dbeat.basic(+vocarock)・four.house(+edm)・four.rock/halftime.basic/beat8.offbeat_hh(+vocarock,+edm)。**seed が genre タグを複数展開**（co-tag 型は `genre:` タグ2個以上）。
+- **drum roles の機械導出**（plan §5）＝**GENRE_TABLE 逆引き（既存5ジャンルの全役割 union）を初期値**に、4件目標へ本計画で上書き（halftime.basic に verse・ballad.soft16 に chorus・halftime.ballad に verse 等）。roles は**seed の scene タグ SSOT**。
+- **【GENRE_TABLE 据え置き＝生成器出音不変】**：新21型は chord/bass/drum いずれの `GENRE_TABLE` にも登録しない＝`pickCompType`/`pickBassType`/`pickBeatPattern`（生成器第二経路）は既存型のみを従来と同一 ID で返す（bit 一致）。`coGenres`/`roles`/drum `genres` co-tag の**唯一の消費者は seed のタグ組み立て**＝生成・出音・型選抜に一切影響しない。`roles`＝ライブラリ scene タグの SSOT で GENRE_TABLE とは独立。
+- **耳確認待ち（機械は content/タグ/件数まで保証）**：GT-MUTE8 のミュート近似・DN-GATE16/DN-PAD4 のシンセ近似・vel/strumMs・VR kickRel・ED-GATE8 の裏長め＝プローブ束で採否（研究doc §6 手順6）。
+
 ### Task2/L2＝辞書→ライブラリネタのシードパイプライン（2026-07-23）
-コード内3辞書（`chordLibrary.ts` 26型／`bassLibrary.ts` 33型／`drumLibrary.ts` 18型）を**シードの源に格下げ**し、ライブラリネタへ一括変換する冪等スクリプト。**L0 の top 修正が生成器に入った後**＝seed content は本来の響きで焼ける。
+コード内3辞書（`chordLibrary.ts` 35型／`bassLibrary.ts` 34型／`drumLibrary.ts` 24型＝2026-07-25 L4トラックA後・当初は26/28/18）を**シードの源に格下げ**し、ライブラリネタへ一括変換する冪等スクリプト。**L0 の top 修正が生成器に入った後**＝seed content は本来の響きで焼ける。
 - **実装＝`apps/api/scripts/seed-pattern-library.ts`**（`ingest-falcom-chords.ts` を雛形）：`new Core(openDb(CM_DB))`。`COMP_TYPES`/`BASS_TYPES`/`BEAT_PATTERNS` を回し、各型を frame（key0・4/4・bars=型の bars）付きで `genChordPattern({pattern:型ID})`／`genBass({style:型ID, relative:true})`／`genDrums({style:型ID})` に通し content 化 → `createNeta({kind, title:型ID+scenes, content, scope:"library", tags:[L1タグ群]})`。
 - **冪等**＝識別（`lib:factory`＋scope:"library"）で `listNeta`→`deleteNeta`→再投入（falcom 流儀）。再実行で重複しない。
-- **タグ付与**＝L1 の SSOT どおり `lib:factory`＋`genre:<型のgenre>`＋`scene:<型のrole>`（複数 role は複数 scene タグ）＋`tempo:<min>-<max>`＋`pat:<型ID>`。
+- **タグ付与**＝L1 の SSOT どおり `lib:factory`＋`genre:<型のgenre＋coGenres>`（L4トラックA co-tag ぶんも展開）＋`scene:<型のrole>`（複数 role は複数 scene タグ・**drum も `BeatPattern.roles` から付与**＝2026-07-25 以降）＋`tempo:<min>-<max>`＋`pat:<型ID>`。
 - **量産（L4）はこの後・別スライス**＝新パターンを**ネタ登録（コンテンツ作業）**で足す。研究doc未実装分（管弦8型・左手リズム型・薄いジャンル）はここ。**L4 は耳確認＋作風裁定が要る＝本スライスに含めない**（L2 は既存辞書の移設まで）。
 - **実行タイミング**：seed は `scope:"library"`＝既定一覧を汚さない＝オーナー DB へ流して安全（可逆＝タグで一括削除可）。
 

@@ -33,6 +33,7 @@ export interface CompLhCell { kind: "attack" | "hold" | "rest"; deg?: string }
 export interface CompType {
   id: string;
   genre: string; // ballad/rock/citypop/dance/anison/gospel/jazz/folk/funk/reggae/pop/metal
+  coGenres?: string[]; // L4トラックA（2026-07-25）：併記ジャンルタグ（横串 co-tag・データ欄のみ）。消費者は seed の genre タグ展開だけ＝生成器 GENRE_TABLE 経路は不変（出音・選抜に無影響）。
   scenes: string; // 場面タグ（日本語・監査用 SSOT）
   grid: 16; // 4/4・1小節16分（型は全て4/4）
   tempoMin: number; tempoMax: number;
@@ -119,7 +120,7 @@ export function compLhHitsForBar(cells: CompLhCell[], base: number): { step: num
 
 // 型ファクトリ。RH は必ず16セル。LH は任意（データのみ）。
 const T = (t: {
-  id: string; genre: string; scenes: string; tempoMin: number; tempoMax: number; mode: CompMode; style: CompStyle;
+  id: string; genre: string; coGenres?: string[]; scenes: string; tempoMin: number; tempoMax: number; mode: CompMode; style: CompStyle;
   roles: Role[]; rh: string; lh?: string; strumMs?: number; powerChord?: boolean; openClose?: "open" | "close";
 }): CompType => {
   const rh = parseCompRh(t.rh);
@@ -127,7 +128,7 @@ const T = (t: {
   const lh = t.lh ? parseCompLh(t.lh) : undefined;
   if (lh && lh.length !== 16) throw new Error(`chordLibrary: ${t.id} のLHは16セルでない（${lh.length}）`);
   return {
-    id: t.id, genre: t.genre, scenes: t.scenes, grid: 16, tempoMin: t.tempoMin, tempoMax: t.tempoMax,
+    id: t.id, genre: t.genre, coGenres: t.coGenres, scenes: t.scenes, grid: 16, tempoMin: t.tempoMin, tempoMax: t.tempoMax,
     mode: t.mode, style: t.style, strumMs: t.strumMs, powerChord: t.powerChord, openClose: t.openClose,
     roles: t.roles, rh, lh, rhPattern: t.rh, lhPattern: t.lh,
   };
@@ -150,18 +151,36 @@ const KEYBOARD_TYPES: CompType[] = [
     rh: "A - . . | . . A - | . . A - | . . A .", lh: "R - - - | - - - - | - - 5 - | - - - -" }),
   T({ id: "CP-16CUT", genre: "citypop", scenes: "AOR/ファンク（16分カッティング的・staccato）", tempoMin: 90, tempoMax: 110, mode: "strum", style: "keyboard", openClose: "open", roles: ["verse", "chorus", "interlude"],
     rh: "A . A . | . A . A | . A . . | A . A .", lh: "R - - - | - - - - | 5 - - - | - - - -" }),
-  T({ id: "DN-OFFBEAT", genre: "dance", scenes: "4つ打ち/EDM（裏スタブ・staccato）", tempoMin: 118, tempoMax: 130, mode: "strum", style: "keyboard", roles: ["verse", "chorus"],
+  T({ id: "DN-OFFBEAT", genre: "dance", coGenres: ["edm"], scenes: "4つ打ち/EDM（裏スタブ・staccato）", tempoMin: 118, tempoMax: 130, mode: "strum", style: "keyboard", roles: ["verse", "chorus"],
     rh: ". . > . | . . > . | . . > . | . . > .", lh: "R . . . | R . . . | R . . . | R . . ." }),
-  T({ id: "DN-ANTICIP", genre: "dance", scenes: "ハウスサビ（前借り連打）", tempoMin: 120, tempoMax: 128, mode: "strum", style: "keyboard", roles: ["chorus", "bridge"],
+  T({ id: "DN-ANTICIP", genre: "dance", coGenres: ["edm"], scenes: "ハウスサビ（前借り連打）", tempoMin: 120, tempoMax: 128, mode: "strum", style: "keyboard", roles: ["chorus", "bridge"],
     rh: "A - - - | - - A - | A - - - | - - A -", lh: "R . . . | . . . . | 5 . . . | . . . ." }),
-  T({ id: "AN-VERSE", genre: "anison", scenes: "アニソン/ボカロAメロ（8分刻み）", tempoMin: 130, tempoMax: 175, mode: "strum", style: "keyboard", roles: ["verse", "prechorus"],
+  T({ id: "AN-VERSE", genre: "anison", coGenres: ["vocarock"], scenes: "アニソン/ボカロAメロ（8分刻み）", tempoMin: 130, tempoMax: 175, mode: "strum", style: "keyboard", roles: ["verse", "prechorus"],
     rh: "A . A . | A . A . | A . A . | A . A .", lh: "R . R . | R . R . | R . R . | R . R ." }),
-  T({ id: "AN-CHORUS", genre: "anison", scenes: "アニソン/ボカロサビ（16分密アルペジオ）", tempoMin: 130, tempoMax: 180, mode: "arp", style: "keyboard", roles: ["chorus", "bridge"],
+  T({ id: "AN-CHORUS", genre: "anison", coGenres: ["vocarock"], scenes: "アニソン/ボカロサビ（16分密アルペジオ）", tempoMin: 130, tempoMax: 180, mode: "arp", style: "keyboard", roles: ["chorus", "bridge"],
     rh: "A A A A | A A A A | A A A A | A A A A", lh: "R - - - | 5 - - - | R - - - | 5 - - -" }),
   T({ id: "GS-STRIDE", genre: "gospel", scenes: "ゴスペル/カントリー（boom-chuck・裏で和音）", tempoMin: 90, tempoMax: 130, mode: "strum", style: "keyboard", roles: ["verse", "chorus"],
     rh: ". . . . | > - - - | . . . . | > - - -", lh: "R - - - | - - - - | 5 - - - | - - - -" }),
   T({ id: "JZ-CHARL", genre: "jazz", scenes: "ジャズ・コンピング（チャールストン＝拍1＋2.5拍）", tempoMin: 80, tempoMax: 220, mode: "strum", style: "keyboard", roles: ["verse", "chorus", "bridge"],
     rh: "> . . . | . . A . | . . . . | . . . .", lh: "R - - - | - - - - | 5 - - - | - - - -" }),
+  // ── L4トラックA 新型（chord9型のうち keyboard 8型・2026-07-25・研究doc 2026-07-25-L4-trackA-definitions.md §A） ──
+  //   coGenres＝横串 co-tag（データ欄のみ・GENRE_TABLE 不変＝出音無影響）。LH `3`→10度化は web resolveLh の LIL ガード。
+  T({ id: "PB-WHOLE-R10", genre: "ballad", scenes: "バラードAメロ/イントロ（白玉＋左手R→10度分散・最静）", tempoMin: 60, tempoMax: 85, mode: "strum", style: "keyboard", roles: ["intro", "verse"],
+    rh: "A - - - | - - - - | - - - - | - - - -", lh: "R - - - | - - - - | 3 - - - | - - - -" }),
+  T({ id: "PB-LH8OCT", genre: "ballad", scenes: "バラードサビ（右手面・左手オクターブ8分の分業）", tempoMin: 65, tempoMax: 95, mode: "strum", style: "keyboard", roles: ["chorus"],
+    rh: "A - - - | - - - - | A - - - | - - - -", lh: "R - 8 - | R - 8 - | R - 8 - | R - 8 -" }),
+  T({ id: "PB-BLOCK8", genre: "ballad", scenes: "バラードサビ（8分ブロック・拍頭長/裏短の長短対比）", tempoMin: 65, tempoMax: 95, mode: "strum", style: "keyboard", roles: ["chorus"],
+    rh: "> - o . | > - o . | > - o . | > - o .", lh: "R - - - | - - - - | 5 - - - | - - - -" }),
+  T({ id: "PB-SUSBLD", genre: "ballad", scenes: "パワーバラード（白玉＋半小節打ち直し・rock-sustain 低速）", tempoMin: 60, tempoMax: 90, mode: "strum", style: "keyboard", roles: ["chorus", "bridge"],
+    rh: "> - - - | - - - - | > - - - | - - - -", lh: "R - - - | - - - - | 5 - - - | - - - -" }),
+  T({ id: "AN-SYNC", genre: "anison", coGenres: ["vocarock"], scenes: "ボカロ/アニソン サビ前の食い（拍1アクセント＋前借り）", tempoMin: 130, tempoMax: 180, mode: "strum", style: "keyboard", roles: ["prechorus", "chorus"],
+    rh: "> - . . | . . A - | > - . . | . . A -", lh: "R - R - | R - R - | R - R - | R - R -" }),
+  T({ id: "DN-PLUCK8", genre: "dance", coGenres: ["edm"], scenes: "EDM（シンセ pluck 8分スタブ・粒立ち）", tempoMin: 118, tempoMax: 130, mode: "strum", style: "keyboard", openClose: "open", roles: ["verse", "chorus"],
+    rh: "A . A . | A . A . | A . A . | A . A .", lh: "R . . . | R . . . | R . . . | R . . ." }),
+  T({ id: "DN-GATE16", genre: "dance", coGenres: ["edm"], scenes: "EDM（トランスゲート・16分非対称オンオフ刻み）", tempoMin: 124, tempoMax: 140, mode: "strum", style: "keyboard", openClose: "open", roles: ["verse", "chorus"],
+    rh: "A . A A | . A . A | A . A A | . A . A", lh: "R . . . | R . . . | R . . . | R . . ." }),
+  T({ id: "DN-PAD4", genre: "dance", coGenres: ["edm"], scenes: "EDM（パッド拍打ち直し・サイドチェイン/ポンピング近似）", tempoMin: 120, tempoMax: 128, mode: "strum", style: "keyboard", openClose: "open", roles: ["verse"],
+    rh: "> - - - | A - - - | > - - - | A - - -", lh: "R . . . | R . . . | R . . . | R . . ." }),
 ];
 
 // ── ギターストラム13型（guitar-comping-vocabulary §2）。D/U→vel・ghost はチャック ────────────
@@ -170,13 +189,13 @@ const KEYBOARD_TYPES: CompType[] = [
 const GUITAR_TYPES: CompType[] = [
   T({ id: "GT-DOWN4", genre: "rock", scenes: "4つ打ちダウン（硬派・安定）", tempoMin: 60, tempoMax: 120, mode: "strum", style: "guitar", strumMs: 22, roles: ["intro", "verse", "chorus"],
     rh: "D - - - | D - - - | D - - - | D - - -" }),
-  T({ id: "GT-DOWN8", genre: "rock", scenes: "8分オールダウン（パンク/ハードロックの推進）", tempoMin: 100, tempoMax: 180, mode: "strum", style: "guitar", strumMs: 12, roles: ["verse", "chorus", "interlude"],
+  T({ id: "GT-DOWN8", genre: "rock", coGenres: ["vocarock"], scenes: "8分オールダウン（パンク/ハードロックの推進）", tempoMin: 100, tempoMax: 180, mode: "strum", style: "guitar", strumMs: 12, roles: ["verse", "chorus", "interlude"],
     rh: "D - D - | D - D - | D - D - | D - D -" }),
   T({ id: "GT-DU8", genre: "folk", scenes: "8分ダウンアップ（ポップ/フォークの基本）", tempoMin: 80, tempoMax: 140, mode: "strum", style: "guitar", strumMs: 14, roles: ["verse", "chorus"],
     rh: "D - U - | D - U - | D - U - | D - U -" }),
   T({ id: "GT-FOLK8", genre: "folk", scenes: "フォーク定番（D-DU-UDU・万能）", tempoMin: 80, tempoMax: 140, mode: "strum", style: "guitar", strumMs: 14, roles: ["verse", "prechorus", "chorus"],
     rh: "D - . - | D - U - | . - U - | D - U -" }),
-  T({ id: "GT-BALLAD", genre: "folk", scenes: "弾き語りバラード（2拍目頭抜き・エモい）", tempoMin: 60, tempoMax: 100, mode: "strum", style: "guitar", strumMs: 26, roles: ["intro", "verse", "bridge"],
+  T({ id: "GT-BALLAD", genre: "folk", coGenres: ["ballad"], scenes: "弾き語りバラード（2拍目頭抜き・エモい）", tempoMin: 60, tempoMax: 100, mode: "strum", style: "guitar", strumMs: 26, roles: ["intro", "verse", "bridge"],
     rh: "D - - - | - - U - | . - U - | D - U -" }),
   T({ id: "GT-DOWN16", genre: "rock", scenes: "16分オールダウン（重い推進）", tempoMin: 70, tempoMax: 110, mode: "strum", style: "guitar", strumMs: 8, roles: ["verse", "chorus"],
     rh: "D D D D | D D D D | D D D D | D D D D" }),
@@ -190,10 +209,14 @@ const GUITAR_TYPES: CompType[] = [
     rh: "x x D U | x d x x | x D x U | d x x x" }),
   T({ id: "GT-SKANK", genre: "reggae", scenes: "レゲエ/スカ・スキャンク（裏拍チョップ）", tempoMin: 80, tempoMax: 160, mode: "strum", style: "guitar", strumMs: 8, roles: ["verse", "chorus"],
     rh: ". . d . | . . d . | . . d . | . . d ." }),
-  T({ id: "GT-POWER16", genre: "metal", scenes: "パワーコード刻み（16分ダウン＋ブリッジミュート）", tempoMin: 120, tempoMax: 200, mode: "strum", style: "guitar", strumMs: 8, powerChord: true, roles: ["verse", "chorus", "interlude"],
+  T({ id: "GT-POWER16", genre: "metal", coGenres: ["vocarock"], scenes: "パワーコード刻み（16分ダウン＋ブリッジミュート）", tempoMin: 120, tempoMax: 200, mode: "strum", style: "guitar", strumMs: 8, powerChord: true, roles: ["verse", "chorus", "interlude"],
     rh: "D D D D | D D D D | D D D D | D D D D" }),
   T({ id: "GT-BACKBEAT", genre: "rock", scenes: "8ビート・バックビート強調（2/4拍アクセント）", tempoMin: 90, tempoMax: 140, mode: "strum", style: "guitar", strumMs: 12, roles: ["verse", "chorus"],
     rh: "D - U - | d - U - | D - U - | d - U -" }),
+  // ── L4トラックA 新型（chord9型のうち guitar 1型・2026-07-25・研究doc §A）＝パームミュート近似の低エネAメロ ──
+  //   **要耳較正**（GM にブリッジミュート音無し＝strumMs10 の短dur ダウンで近似）。coGenres vocarock で Jロック棚に載る。
+  T({ id: "GT-MUTE8", genre: "rock", coGenres: ["vocarock"], scenes: "ミュート8分オールダウン（低ダイナミクスAメロ・要耳較正）", tempoMin: 100, tempoMax: 180, mode: "strum", style: "guitar", strumMs: 10, roles: ["verse"],
+    rh: "D . D . | D . D . | D . D . | D . D ." }),
 ];
 
 export const COMP_TYPES: CompType[] = [...KEYBOARD_TYPES, ...GUITAR_TYPES];
