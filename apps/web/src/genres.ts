@@ -23,7 +23,7 @@ const GENRE_META: Record<string, { color: string; label: string }> = {
   rock: { color: "red", label: "ロック" }, // 8 red
   // — 追加の調和色（8色で足りない分・theme-aware・各ジャンル固定）—
   edm: { color: "cyan", label: "EDM" },
-  vocarock: { color: "indigo", label: "ボカロック" },
+  vocarock: { color: "indigo", label: "Jロック" }, // オーナー語彙（2026-07-25）＝タグは vocarock・表示は「Jロック」
   jazz: { color: "amber", label: "ジャズ" },
   gospel: { color: "plum", label: "ゴスペル" },
   folk: { color: "sage", label: "フォーク" },
@@ -49,12 +49,14 @@ export function genreTagOf(neta: Neta): string | undefined {
 
 // scene:<role>（適用場面）→日本語ラベル（design「### Task1j」＝英語タグ値の生表示をやめる・データ駆動 scene 絞り用）。
 // 語彙は L1 の scene:<role>（旧 roles）＝intro/verse/prechorus/chorus/bridge/interlude/outro。未知は原文（保険）。
+// UIラベル＝日本語で統一（2026-07-25 オーナー裁定＝ボカロ/J-pop 構成の横串共通語彙）。
+// 内部タグ（intro/verse/prechorus/chorus/interlude/bridge/outro）は不変・表示だけ日本語。
 const SCENE_LABEL: Record<string, string> = {
   intro: "イントロ",
   verse: "Aメロ",
-  prechorus: "プレサビ",
+  prechorus: "Bメロ",
   chorus: "サビ",
-  bridge: "ブリッジ",
+  bridge: "Cメロ",
   interlude: "間奏",
   outro: "アウトロ",
 };

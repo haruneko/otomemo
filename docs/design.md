@@ -715,6 +715,11 @@ Fable 実機監査＝360px幅で16step グリッドの step13-15 が画面外・
   - `pat:<patternId>`（由来の型ID＝来歴/重複検出）。
   - **楽器系統は kind＋content.program で表現済＝`inst:` タグは作らない**（重複回避）。
 - **facets 分離**：`lib:`/`genre:`/`scene:`/`tempo:`/`pat:` は `isProjectTag`（`prj:` 判定）と同型の prefix 判定で意味タグ一覧から分離（`facets`＝`repo/neta-repo.ts:190-221`）。ただし `scope:"library"` で既に project 一覧から外れる＝分離は最小でよい。
+- **共通分類の横串統一（2026-07-25・オーナー裁定／基本対象＝ボカロ系）＝L4量産のSSOT**：タグ語彙を全ジャンル・全パート横串で統一し、UIラベルは日本語で固定する。
+  - **場面 `scene:` は7種固定**＝`intro/verse/prechorus/chorus/interlude/bridge/outro`（内部タグは英語で不変）。**UIラベルは日本語＝`apps/web/src/genres.ts` SCENE_LABEL が SSOT**＝イントロ/Aメロ/Bメロ/サビ/間奏/Cメロ/アウトロ。**chord/bass/drum の3パートすべてが同じ7場面を持つ**（drum は `BeatPattern.roles` 追加で場面軸を得る＝`2026-07-25-L4-trackA-authoring-plan.md` §5）。4件目標の主要場面＝**Aメロ・サビ**（Bメロ準主要／他は2件で可）。
+  - **ジャンル `genre:` は類型にまとめる（細分しない・ボカロ系前提）**＝バラード(`ballad`)／Jロック(`vocarock`)／EDM(`edm`)…。重なり（1型が複数ジャンルで通る）は **co-tag（`coGenres`）で吸収**＝1類型に縛らない＝細分をやめても取りこぼさない。UIラベルは日本語（`genres.ts` GENRE_META・**`vocarock` の表示は「Jロック」**）。
+  - **フィルの語彙も横串統一**＝フィルイン（ハーフ/1小節/2小節）・ビルドアップ・ブレイク・ターンアラウンド（ベース）。フィルは候補カード（4件競争）ではなく適用側の飾り＝**seed 対象外は据え置き**（L4計画 §1-4）。名前だけジャンル非依存に固定＝「サビ前フィル」が全ジャンルで同義。
+  - 正典＝`docs/research/2026-07-25-L4-trackA-authoring-plan.md`（本分類で起草）＋`genres.ts`（UIラベル SSOT）。
 - **契約基盤（L2/L3 が守る）**：L2 は各型を `scope:"library"`＋上記タグで seed（下記 L2 節）。L3 は同タグ集合で `listNeta({kind, scope:"library", tags:["genre:<g>"]})` を引きピッカー候補にする（下記 L3 節）。**この節がタグ文字列の SSOT**＝L2 の付与と L3 のクエリは同じ prefix:value を使う。
 
 ### Task2/L2＝辞書→ライブラリネタのシードパイプライン（2026-07-23）
