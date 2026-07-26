@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作詞補助UI モック6枚（判定材料・2026-07-27）</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #16181c; --card: #22252b; --line: #33373f;
+    --fg: #e6e8ec; --muted: #9aa0aa; --accent: #3a6df0;
+    --k-lyric: #f0c544; --k-melody: #4fa8e0; --k-song: #d98cc4; --k-section: #e08a3c;
+    --fit-red: #e8533f; --fit-yellow: #e0a83c; --fit-info: #8a93a6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0e1013; color: var(--fg); font-family: system-ui, sans-serif; line-height: 1.6; }
+  .page { max-width: 860px; margin: 0 auto; padding: 16px 12px 64px; }
+  h1 { font-size: 1.15rem; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  h2 { font-size: 1.02rem; margin: 40px 0 4px; color: var(--k-lyric); }
+  .note { color: var(--muted); font-size: .82rem; margin: 4px 0 14px; }
+  .lead { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: .86rem; }
+
+  /* 電話枠 */
+  .phones { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .phone { width: 340px; max-width: 100%; background: var(--bg); border: 2px solid #3a3f48; border-radius: 18px; overflow: hidden; flex-shrink: 0; }
+  .phone .cap { text-align: center; font-size: .75rem; color: var(--muted); padding: 4px 0; background: #1a1d22; border-bottom: 1px solid var(--line); }
+  .scr { padding: 10px 10px 14px; min-height: 300px; }
+
+  /* アプリ風ヘッダ */
+  .ahead { display: flex; align-items: center; gap: 8px; padding: 6px 4px 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; font-size: .9rem; }
+  .ahead .back { color: var(--muted); }
+  .ahead .ttl { font-weight: 600; }
+  .ahead .sp { flex: 1; }
+  .chip { font-size: .72rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; color: var(--muted); }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* バッジ */
+  .b-new, .b-reuse { font-size: .66rem; border-radius: 4px; padding: 0 5px; vertical-align: middle; margin-left: 6px; }
+  .b-new { background: #4b2c86; color: #d9c8ff; }
+  .b-reuse { background: #1e4633; color: #9fe0bd; }
+
+  /* 全体画面: セクションと句 */
+  .sec { margin-bottom: 14px; }
+  .sec h4 { margin: 0 0 6px; font-size: .78rem; color: var(--k-section); letter-spacing: .08em; }
+  .ku { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px 5px; margin-bottom: 6px; }
+  .ku .txt { font-size: .92rem; letter-spacing: .04em; }
+  .ku .txt .hole { color: var(--k-lyric); letter-spacing: .12em; }
+  .ku .meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .band { height: 4px; border-radius: 2px; flex: 1; }
+  .band.on { background: var(--k-melody); }
+  .band.off { background: none; border-top: 2px dashed #3d4450; }
+  .ku .mc { font-size: .66rem; color: var(--muted); white-space: nowrap; }
+  .ku.plan { border-style: dashed; border-color: #4a5160; background: #1b1e24; }
+  .ku.plan .txt { color: var(--muted); font-size: .82rem; }
+  .ku.sel { outline: 2px solid var(--accent); }
+
+  /* 穴の編集画面 */
+  .ctx { font-size: .84rem; color: var(--muted); padding: 4px 2px; }
+  .ctx .hole { color: var(--k-lyric); }
+  .pane { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; margin: 8px 0; }
+  .pane h5 { margin: 0 0 6px; font-size: .72rem; color: var(--muted); font-weight: 600; }
+  .pane input[type=text] { width: 100%; background: #16181c; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); padding: 6px 8px; font-size: .9rem; }
+  .frame-row { display: flex; gap: 10px; flex-wrap: wrap; font-size: .84rem; }
+  .frame-row .fv { background: #16181c; border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+  .frame-row .fv small { color: var(--muted); display: block; font-size: .64rem; }
+  .auto { font-size: .62rem; color: var(--k-melody); }
+  .accent-glyph { font-family: monospace; letter-spacing: 2px; }
+  .btn { display: block; width: 100%; text-align: center; background: var(--accent); color: #fff; border-radius: 8px; padding: 8px 0; font-size: .9rem; margin: 10px 0 4px; }
+  .cand { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; font-size: .9rem; }
+  .cand .w { flex: 1; }
+  .cand .fit { font-size: .66rem; color: var(--muted); white-space: nowrap; }
+  .cand .meter { width: 52px; height: 5px; border-radius: 3px; background: #33373f; overflow: hidden; }
+  .cand .meter i { display: block; height: 100%; background: var(--k-melody); }
+  .cand .put { font-size: .74rem; border: 1px solid var(--accent); color: var(--accent); border-radius: 6px; padding: 2px 10px; }
+  .grp { font-size: .7rem; color: var(--muted); margin: 10px 0 4px; border-bottom: 1px dashed var(--line); padding-bottom: 2px; }
+
+  /* 推敲表示 */
+  .vch { display: inline-block; min-width: 1.2em; text-align: center; border-radius: 4px; font-size: .78rem; margin-left: 6px; }
+  .v-a { background: #4a2f6e; } .v-i { background: #1e4d5e; } .v-e { background: #5e421e; } .v-o { background: #2f5030; }
+  .mark-r { border-bottom: 2px solid var(--fit-red); }
+  .mark-y { border-bottom: 2px solid var(--fit-yellow); }
+  .legend { font-size: .68rem; color: var(--muted); margin-top: 6px; }
+  .legend .r { color: var(--fit-red); } .legend .y { color: var(--fit-yellow); }
+
+  /* 導線図 */
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .flow .arr { color: var(--muted); font-size: 1.3rem; padding: 0 2px; }
+  .mini { width: 210px; background: var(--bg); border: 1.5px solid #3a3f48; border-radius: 12px; overflow: hidden; flex-shrink: 0; }
+  .mini .cap { font-size: .66rem; color: var(--muted); text-align: center; padding: 2px 0; background: #1a1d22; border-bottom: 1px solid var(--line); }
+  .mini .bd { padding: 8px; font-size: .74rem; min-height: 120px; }
+  .mini .row { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin-bottom: 5px; }
+  .mini .row.hl { border-color: var(--accent); color: #cdd9ff; }
+  .mini .lane { display: flex; gap: 4px; margin-bottom: 5px; }
+  .mini .lane i { flex: 1; height: 14px; border-radius: 3px; background: #2c313a; font-style: normal; font-size: .58rem; text-align: center; color: var(--muted); line-height: 14px; }
+  .verdict { font-size: .82rem; background: var(--card); border-left: 3px solid var(--k-lyric); border-radius: 6px; padding: 8px 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>作詞補助UI モック6枚（統合イメージの判定材料）</h1>
+<p class="lead">
+これは<strong>絵＝判定材料</strong>で、設計の確定ではありません。歌詞・単語はすべて<strong>ダミー（画面の詰め物）</strong>で、創作の提案ではありません。
+<span class="b-new">新規</span>＝丸ごと新しく作る部分、<span class="b-reuse">再利用</span>=既存アプリの部品をそのまま/薄く改造して使う部分。
+下敷き＝候補A/Bの共有骨格＋オーナー裁定（空白区間=句＋予定マーク／入口=意味と音の二欄並置／候補の並び=両方見比べ）。
+</p>
+
+<!-- ================= 1. 導線A ================= -->
+<h2>絵1. 導線A＝曲から開く <span class="b-new">入口ボタンのみ新規</span></h2>
+<p class="note">曲の配置画面（既存SectionEditor）に「歌詞」の面を足す。「歌詞は曲の姿の一面」という位置づけ。曲⊃セクション構造がそのまま句の骨組みになる。</p>
+<div class="flow">
+  <div class="mini"><div class="cap">既存: 曲の配置画面</div><div class="bd">
+    <div style="font-weight:600; margin-bottom:6px;">← 夏のうた（仮）</div>
+    <div class="lane"><i>Aメロ</i><i>Bメロ</i><i>サビ</i></div>
+    <div class="lane"><i>メロ</i><i>コード</i><i>ベース</i></div>
+    <div class="row hl">📝 歌詞 — 穴 4（詞2・音1・予定1）</div>
+  </div></div>
+  <div class="arr">→</div>
+  <div class="mini"><div class="cap">新規: 歌詞全体画面（絵3）</div><div class="bd">
+    <div class="row">Aメロ ▸ あさのひかり…</div>
+    <div class="row">サビ ▸ ふりむいて ○○○○○</div>
+  </div></div>
+</div>
+<div class="verdict">根拠: 要求の芯「穴の空いたまま曲全体が存在し続ける」＝歌詞面は曲の一部。弱点: 曲ネタがまだ無い初期状態（モチーフ一節だけ・B-7）では、先に曲の器を作る一手が要る。</div>
+
+<!-- ================= 2. 導線B ================= -->
+<h2>絵2. 導線B＝ホームから独立に開く <span class="b-new">入口タイル新規</span></h2>
+<p class="note">ホーム（既存HomeHub）に「作詞の続き」を曲と対等の入口として置く。出先の細切れ時間に直行しやすい。</p>
+<div class="flow">
+  <div class="mini"><div class="cap">既存: ホーム</div><div class="bd">
+    <div style="font-weight:600; margin-bottom:6px;">♪ Otomemo</div>
+    <div class="row">▶ つづきから</div>
+    <div class="row">🗂 ネタ帳</div>
+    <div class="row hl">📝 作詞のつづき — 夏のうた（穴4）</div>
+  </div></div>
+  <div class="arr">→</div>
+  <div class="mini"><div class="cap">曲を選ぶ（新規・薄い）</div><div class="bd">
+    <div class="row hl">夏のうた（仮）— 穴4</div>
+    <div class="row">冬の曲スケッチ — 穴9</div>
+  </div></div>
+  <div class="arr">→</div>
+  <div class="mini"><div class="cap">新規: 歌詞全体画面（絵3）</div><div class="bd">
+    <div class="row">Aメロ ▸ あさのひかり…</div>
+    <div class="row">サビ ▸ ふりむいて ○○○○○</div>
+  </div></div>
+</div>
+<div class="verdict">根拠: 使用場面の原点＝スマホ出先の細切れ時間（最短で作詞に戻れる）。弱点: 曲と歌詞面が別入口に見え、「歌詞は曲の一部」という実態と表象がずれる＋どの曲かを選ぶ一手が挟まる。<br>
+<strong>補足: AとBは排他ではない。</strong>中身は同じ画面で入口だけ2つ、は既存アプリの作法（チャットは既に入口3つ: FAB/機材相談/ネタの相談）。判定は「どちらを主とするか」。</div>
+
+<!-- ================= 3. 歌詞全体画面 ================= -->
+<h2>絵3. 歌詞全体画面（本体・ホーム） <span class="b-new">画面新規</span></h2>
+<p class="note">句の縦並び＝通しで読める歌詞が第一。メロは有無の帯だけ（実線=あり/点線=なし）。穴の4状態が全部見える。集約は既存 getComposition の射影<span class="b-reuse">再利用</span>＋句データ<span class="b-new">新規</span>。</p>
+<div class="phones">
+<div class="phone"><div class="cap">スマホ幅・縦スクロール</div><div class="scr">
+  <div class="ahead"><span class="back">←</span><span class="ttl">夏のうた（仮）の歌詞</span><span class="sp"></span><span class="chip on">素</span><span class="chip">音韻</span><span class="chip">イント</span></div>
+
+  <div class="sec"><h4>Aメロ</h4>
+    <div class="ku"><div class="txt">あさのひかり まちをそめて</div><div class="meta"><div class="band on"></div><span class="mc">12音</span></div></div>
+    <div class="ku"><div class="txt">きのうのこと ゆめのつづき</div><div class="meta"><div class="band on"></div><span class="mc">12音</span></div></div>
+    <div class="ku"><div class="txt"><span class="hole">○○○○○○○</span></div><div class="meta"><div class="band on"></div><span class="mc">7音の詞が未定</span></div></div>
+    <div class="ku"><div class="txt">ポケットのなか さがすことば</div><div class="meta"><div class="band off"></div><span class="mc">メロ未定</span></div></div>
+  </div>
+
+  <div class="sec"><h4>Bメロ</h4>
+    <div class="ku"><div class="txt">いそぎあしの ひとのなみ</div><div class="meta"><div class="band on"></div><span class="mc">11音</span></div></div>
+    <div class="ku plan"><div class="txt">⟡ ここに句が入る（当て: 8音くらい）</div></div>
+    <div class="ku"><div class="txt">こたえはまだ とおくにある</div><div class="meta"><div class="band off"></div><span class="mc">メロ未定</span></div></div>
+  </div>
+
+  <div class="sec"><h4>サビ</h4>
+    <div class="ku"><div class="txt">はしりだした きもちのさきに</div><div class="meta"><div class="band on"></div><span class="mc">13音</span></div></div>
+    <div class="ku"><div class="txt">かぜがふいて せかいがひらく</div><div class="meta"><div class="band on"></div><span class="mc">13音</span></div></div>
+    <div class="ku sel"><div class="txt">ふりむいて <span class="hole">○○○○○</span></div><div class="meta"><div class="band on"></div><span class="mc">5音の詞が未定 ← タップで絵4へ</span></div></div>
+  </div>
+</div></div>
+</div>
+<p class="note">4状態の見せ分け（C-14）: ①詞も音もある=普通の文字+実線帯 ②詞のみ=文字+点線帯 ③音のみ=音数分の伏せ字○+実線帯 ④双方空白=予定マーク（破線枠）。「サビは最後の一言だけ無い」（D-1）が読み流しの中で分かる。</p>
+
+<!-- ================= 4. 穴の編集（適合度順） ================= -->
+<h2>絵4. 穴の編集画面 — 候補の並び【A: 適合度順】 <span class="b-new">画面新規</span></h2>
+<p class="note">サビ「ふりむいて ○○○○○」の穴を開いたところ。前後の固定＝材料として上下に見せる。意味欄と音の枠欄は同格の二欄並置（裁定済み）。枠の自動入力はメロ由来<span class="b-reuse">再利用: analyzeMoras/lyricFit</span>。語彙検索そのものは<span class="b-new">新規（語彙資源ごと）</span>。</p>
+<div class="phones">
+<div class="phone"><div class="cap">候補=枠への嵌り具合で並べる</div><div class="scr">
+  <div class="ahead"><span class="back">← 全体へ</span><span class="ttl">サビ・3句目の穴</span></div>
+  <div class="ctx">前: かぜがふいて せかいがひらく<br>この句: ふりむいて <span class="hole">○○○○○</span><br>後: （サビ終わり）</div>
+  <div class="pane"><h5>意味（言いたいこと）</h5><input type="text" value="通り過ぎる"></div>
+  <div class="pane"><h5>音の枠 <span class="auto">← メロから自動</span></h5>
+    <div class="frame-row">
+      <div class="fv"><small>音数</small>5音</div>
+      <div class="fv"><small>アクセント</small><span class="accent-glyph">＿￣￣￣＿</span></div>
+      <div class="fv"><small>語尾</small>指定なし</div>
+    </div>
+  </div>
+  <div class="btn">候補を出す</div>
+  <div class="cand"><span class="w">すれちがう</span><span class="meter"><i style="width:100%"></i></span><span class="fit">5音・アクセント一致</span><span class="put">置く</span></div>
+  <div class="cand"><span class="w">かけぬける</span><span class="meter"><i style="width:100%"></i></span><span class="fit">5音・アクセント一致</span><span class="put">置く</span></div>
+  <div class="cand"><span class="w">ゆきすぎて</span><span class="meter"><i style="width:66%"></i></span><span class="fit">5音・アクセント△</span><span class="put">置く</span></div>
+  <div class="cand"><span class="w">みおくって</span><span class="meter"><i style="width:66%"></i></span><span class="fit">5音・アクセント△</span><span class="put">置く</span></div>
+  <div class="cand"><span class="w">とおりすぎる</span><span class="meter"><i style="width:40%"></i></span><span class="fit">6音=字余り1</span><span class="put">置く</span></div>
+  <p class="note" style="margin:8px 0 0">置く＝人間のタップ（機械は自動で置かない）。置いた後はただのテキスト＝その場で書き換え可。</p>
+</div></div>
+</div>
+
+<!-- ================= 5. 穴の編集（事実区分） ================= -->
+<h2>絵5. 同じ画面 — 候補の並び【B: 事実区分のみ・順位なし】</h2>
+<p class="note">上と同じ穴・同じ候補。並べ方だけが違う＝「完全一致/字余り/アクセント不一致」という事実のグループ分けのみで、優劣の順位を付けない。</p>
+<div class="phones">
+<div class="phone"><div class="cap">候補=事実の区分でグループ分け</div><div class="scr">
+  <div class="ahead"><span class="back">← 全体へ</span><span class="ttl">サビ・3句目の穴</span></div>
+  <div class="ctx">この句: ふりむいて <span class="hole">○○○○○</span>（5音・<span class="accent-glyph">＿￣￣￣＿</span>）</div>
+  <div class="grp">枠に完全に合う（2件）</div>
+  <div class="cand"><span class="w">かけぬける</span><span class="fit">5音・一致</span><span class="put">置く</span></div>
+  <div class="cand"><span class="w">すれちがう</span><span class="fit">5音・一致</span><span class="put">置く</span></div>
+  <div class="grp">アクセントが合わない（2件）</div>
+  <div class="cand"><span class="w">ゆきすぎて</span><span class="fit">5音・<span style="color:var(--fit-yellow)">アクセント△</span></span><span class="put">置く</span></div>
+  <div class="cand"><span class="w">みおくって</span><span class="fit">5音・<span style="color:var(--fit-yellow)">アクセント△</span></span><span class="put">置く</span></div>
+  <div class="grp">字余り・字足らず（1件）</div>
+  <div class="cand"><span class="w">とおりすぎる</span><span class="fit">6音=字余り1</span><span class="put">置く</span></div>
+  <p class="note" style="margin:8px 0 0">グループ内の並びは五十音順＝機械の好みが混ざらない。</p>
+</div></div>
+</div>
+
+<!-- ================= 6. 推敲表示切替 ================= -->
+<h2>絵6. 推敲の表示切替（全体画面のモード） <span class="b-reuse">計算は既存 analyzeLyricFit 再利用</span></h2>
+<p class="note">別画面にしない＝絵3の右上チップで切替。左=音韻（行末母音の対応）、右=イントネーション（アクセントとメロの食い違いに印）。印は指摘であって減点ではない（点数なし）。</p>
+<div class="phones">
+<div class="phone"><div class="cap">音韻の表示（行末母音）</div><div class="scr">
+  <div class="ahead"><span class="back">←</span><span class="ttl">夏のうた（仮）</span><span class="sp"></span><span class="chip">素</span><span class="chip on">音韻</span><span class="chip">イント</span></div>
+  <div class="sec"><h4>サビ</h4>
+    <div class="ku"><div class="txt">はしりだした きもちのさきに<span class="vch v-i">i</span></div></div>
+    <div class="ku"><div class="txt">かぜがふいて せかいがひらく<span class="vch v-a">u</span></div></div>
+    <div class="ku"><div class="txt">きみのこえが きこえたなら<span class="vch v-a">a</span></div></div>
+    <div class="ku"><div class="txt">ふりむいて <span class="hole">○○○○○</span><span class="vch" style="background:#33373f">?</span></div></div>
+  </div>
+  <div class="legend">行末の母音を並べて表示＝響きの対応を通しで追う。穴は「?」＝ここの母音はまだ決められる、と読める。</div>
+</div></div>
+<div class="phone"><div class="cap">イントネーションの表示</div><div class="scr">
+  <div class="ahead"><span class="back">←</span><span class="ttl">夏のうた（仮）</span><span class="sp"></span><span class="chip">素</span><span class="chip">音韻</span><span class="chip on">イント</span></div>
+  <div class="sec"><h4>Aメロ</h4>
+    <div class="ku"><div class="txt">あさのひかり <span class="mark-y">まちを</span>そめて ⓘ</div><div class="meta"><div class="band on"></div></div></div>
+    <div class="ku"><div class="txt">きのうのこと <span class="mark-r">ゆめの</span>つづき ⓘ</div><div class="meta"><div class="band on"></div></div></div>
+  </div>
+  <div class="legend"><span class="r">赤</span>=語アクセントとメロの向きが逆行（語義誤解のおそれ）／<span class="y">黄</span>=注意。ⓘタップで理由。既存PianoRollの赤黄と同じ物差し＝<span class="b-reuse">再利用</span>。</div>
+</div></div>
+</div>
+
+<hr style="border-color:var(--line); margin-top:44px">
+<p class="note">出自: 下敷き＝設計候補A/B共有骨格＋オーナー裁定3点（2026-07-27）。作画＝Sonnet 5。既存アプリのCSS変数（apps/web/src/styles/base.css）を流用して見た目を寄せた。歌詞・候補語はすべてダミー。</p>
+
+</div>
+</body>
+</html>
