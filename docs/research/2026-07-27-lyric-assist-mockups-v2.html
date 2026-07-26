@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作詞補助UI モックv2＝境界要求R-1〜23全採の姿（判定材料）</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #16181c; --card: #22252b; --line: #33373f;
+    --fg: #e6e8ec; --muted: #9aa0aa; --accent: #3a6df0;
+    --k-lyric: #f0c544; --k-melody: #4fa8e0; --k-song: #d98cc4; --k-section: #e08a3c;
+    --fit-red: #e8533f; --fit-yellow: #e0a83c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0e1013; color: var(--fg); font-family: system-ui, sans-serif; line-height: 1.6; }
+  .page { max-width: 900px; margin: 0 auto; padding: 16px 12px 64px; }
+  h1 { font-size: 1.12rem; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  h2 { font-size: 1.0rem; margin: 42px 0 4px; color: var(--k-lyric); }
+  .note { color: var(--muted); font-size: .82rem; margin: 4px 0 14px; }
+  .lead { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: .86rem; }
+
+  .rtag { display: inline-block; font-size: .6rem; background: #4b2c86; color: #d9c8ff; border-radius: 4px; padding: 0 4px; vertical-align: super; margin-left: 3px; font-weight: 600; letter-spacing: .02em; }
+
+  .phones { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .phone { width: 350px; max-width: 100%; background: var(--bg); border: 2px solid #3a3f48; border-radius: 18px; overflow: hidden; flex-shrink: 0; }
+  .phone .cap { text-align: center; font-size: .74rem; color: var(--muted); padding: 4px 0; background: #1a1d22; border-bottom: 1px solid var(--line); }
+  .scr { padding: 10px 10px 14px; min-height: 260px; position: relative; }
+
+  .ahead { display: flex; align-items: center; gap: 7px; padding: 6px 4px 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; font-size: .84rem; }
+  .ahead .back { color: var(--muted); white-space: nowrap; }
+  .crumb { color: var(--muted); font-size: .78rem; }
+  .crumb b { color: var(--fg); font-weight: 600; }
+  .ahead .sp { flex: 1; }
+  .chip { font-size: .7rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--muted); white-space: nowrap; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .transport { display: flex; align-items: center; gap: 8px; font-size: .74rem; color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; margin-bottom: 8px; }
+
+  .sec { margin-bottom: 12px; }
+  .sec h4 { margin: 0 0 5px; font-size: .76rem; color: var(--k-section); letter-spacing: .08em; }
+  .part-mark { font-size: .64rem; color: var(--muted); border-bottom: 1px dashed #3d4450; margin: 4px 0 5px; text-align: right; }
+  .ku { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 5px; margin-bottom: 5px; }
+  .ku .txt { font-size: .9rem; letter-spacing: .04em; }
+  .ku .txt .hole { color: var(--k-lyric); letter-spacing: .12em; }
+  .ku .txt.draft { border-bottom: 2px dotted var(--k-lyric); display: inline-block; }
+  .ku .meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .band { height: 4px; border-radius: 2px; flex: 1; }
+  .band.on { background: var(--k-melody); }
+  .band.off { background: none; border-top: 2px dashed #3d4450; }
+  .ku .mc { font-size: .64rem; color: var(--muted); white-space: nowrap; }
+  .ku.plan { border-style: dashed; border-color: #4a5160; background: #1b1e24; }
+  .ku.plan .txt { color: var(--muted); font-size: .8rem; }
+  .ku.sel { outline: 2px solid var(--accent); }
+  .ku.playing { background: #1d2c46; }
+  .tag-s { font-size: .62rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; color: var(--muted); margin-left: 6px; }
+  .draft-chip { font-size: .62rem; background: #4a3d12; color: var(--k-lyric); border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+
+  .minimap { position: absolute; right: 3px; top: 90px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .minimap i { width: 7px; height: 22px; border-radius: 3px; background: #2c313a; font-style: normal; }
+  .minimap i.cur { background: var(--accent); }
+  .minimap i.has-hole { border: 1px solid var(--k-lyric); }
+
+  .legend { font-size: .66rem; color: var(--muted); margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+
+  .ctx { font-size: .82rem; color: var(--muted); padding: 3px 2px; }
+  .ctx .hole { color: var(--k-lyric); }
+  .ctx .lock { font-size: .66rem; border: 1px solid #3d4450; border-radius: 4px; padding: 0 4px; margin-left: 5px; }
+  .pane { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; margin: 7px 0; }
+  .pane h5 { margin: 0 0 5px; font-size: .7rem; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .pane h5 .sp { flex: 1; }
+  .pane input[type=text] { width: 100%; background: #16181c; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); padding: 5px 8px; font-size: .88rem; }
+  .frame-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: .82rem; }
+  .frame-row .fv { background: #16181c; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+  .frame-row .fv small { color: var(--muted); display: block; font-size: .62rem; }
+  .auto { font-size: .6rem; color: var(--k-melody); }
+  .accent-glyph { font-family: monospace; letter-spacing: 2px; }
+  .btnrow { display: flex; gap: 6px; margin: 8px 0 4px; }
+  .btn { flex: 1; text-align: center; background: var(--accent); color: #fff; border-radius: 8px; padding: 7px 4px; font-size: .78rem; }
+  .btn.sub { background: none; border: 1px solid var(--accent); color: #7fa3ff; }
+  .cand { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; font-size: .86rem; }
+  .cand .w { flex: 1; }
+  .cand .fit { font-size: .64rem; color: var(--muted); white-space: nowrap; }
+  .cand .put { font-size: .72rem; border: 1px solid var(--accent); color: var(--accent); border-radius: 6px; padding: 2px 9px; }
+  .smallbtn { font-size: .66rem; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; color: var(--muted); }
+
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .flow .arr { color: var(--muted); font-size: 1.2rem; padding: 0 1px; }
+  .mini { width: 235px; background: var(--bg); border: 1.5px solid #3a3f48; border-radius: 12px; overflow: hidden; flex-shrink: 0; }
+  .mini .cap { font-size: .64rem; color: var(--muted); text-align: center; padding: 2px 0; background: #1a1d22; border-bottom: 1px solid var(--line); }
+  .mini .bd { padding: 8px; font-size: .72rem; min-height: 100px; }
+  .mini .row { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin-bottom: 5px; }
+  .mini .row.hl { border-color: var(--accent); color: #cdd9ff; }
+  .mini .row.dim { color: var(--muted); }
+  .mini .head { font-weight: 600; margin-bottom: 5px; font-size: .72rem; }
+  .callout { font-size: .78rem; background: var(--card); border-left: 3px solid #4b2c86; border-radius: 6px; padding: 7px 11px; margin-top: 10px; }
+  .mark-r { border-bottom: 2px solid var(--fit-red); }
+  .mark-y { border-bottom: 2px solid var(--fit-yellow); }
+
+  table.covmap { border-collapse: collapse; font-size: .76rem; width: 100%; }
+  table.covmap th, table.covmap td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
+  table.covmap th { color: var(--muted); font-weight: 600; }
+  .wrapx { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>モックv2 ＝ 境界要求R-1〜R-23を「全部採用した」場合の姿</h1>
+<p class="lead">
+裁定表（boundary-requirements-draft）の23件を<strong>全採と仮置き</strong>して絵に反映したものです。紫の小さな札 <span class="rtag">R-8</span> が「この要素はR-8の反映」の印。<strong>絵を見て、要らない札・過剰な札を外してください＝それがそのまま裁定になります</strong>。歌詞・候補語はすべてダミー。末尾に R番号→どの絵のどこ、の対応表があります。
+</p>
+
+<!-- ============ 絵A 入口 ============ -->
+<h2>絵A. 入口＝4箇所から同じ歌詞全体画面へ <span class="rtag">R-1</span><span class="rtag">R-2</span></h2>
+<p class="note">入口を1つに限らない（チャットが既に3入口である作法に合わせる）。ホームの「作詞のつづき」は前回の場所へ直行＝2タップで穴に着く。</p>
+<div class="flow">
+  <div class="mini"><div class="cap">ホーム</div><div class="bd">
+    <div class="head">♪ Otomemo</div>
+    <div class="row hl">📝 作詞のつづき: 夏のうた › サビ3句目<span class="rtag">R-2</span><span class="rtag">R-10</span></div>
+    <div class="row dim">🗂 ネタ帳 ／ ▶ つづきから</div>
+  </div></div>
+  <div class="mini"><div class="cap">プロジェクト画面</div><div class="bd">
+    <div class="head">星空の唄</div>
+    <div class="row hl">📝 歌詞（穴4）→全体画面</div>
+  </div></div>
+  <div class="mini"><div class="cap">曲の配置画面（既存）</div><div class="bd">
+    <div class="head">← 夏のうた</div>
+    <div class="row hl">📝 歌詞 — 穴4（詞2・音1・予定1）</div>
+  </div></div>
+  <div class="mini"><div class="cap">メロのPianoRoll（既存）</div><div class="bd">
+    <div class="head">← Cメロ一回目</div>
+    <div class="row hl">📖 歌詞全体へ<span class="rtag">R-4</span></div>
+  </div></div>
+</div>
+<div class="callout">4つとも行き先は同じ画面。どの入口から来ても「戻る」は来た場所へ帰り、端末の戻ると同じ結果<span class="rtag">R-7</span>。</div>
+
+<!-- ============ 絵B 全体画面v2 ============ -->
+<h2>絵B. 歌詞全体画面v2（全採の密度）</h2>
+<p class="note">v1との差分＝パンくず・右端の現在地レール・再生バー・下書き/意図の印・パート区切り。<strong>密度が過剰ならどの札を外すかが裁定</strong>。</p>
+<div class="phones">
+<div class="phone"><div class="cap">スマホ幅・縦スクロール</div><div class="scr">
+  <div class="ahead"><span class="back">←</span><span class="crumb"><b>夏のうた</b> の歌詞<span class="rtag">R-8</span></span><span class="sp"></span><span class="chip on">素</span><span class="chip">音韻</span><span class="chip">イント</span></div>
+  <div class="transport">▶ 仮歌で再生 ・ 位置 サビ 1:1<span class="rtag">R-22</span></div>
+  <div class="minimap"><i></i><i class="has-hole"></i><i class="cur has-hole"></i></div>
+
+  <div class="sec"><h4>Aメロ</h4>
+    <div class="ku"><div class="txt">あさのひかり まちをそめて</div><div class="meta"><div class="band on"></div><span class="mc">12音</span></div></div>
+    <div class="ku"><div class="txt"><span class="hole">○○○○○○○</span></div><div class="meta"><div class="band on"></div><span class="mc">7音の詞が未定</span></div></div>
+    <div class="ku"><div class="txt">ららら らら<span class="tag-s">詞なし（意図）<span class="rtag">R-16</span></span></div><div class="meta"><div class="band on"></div><span class="mc">6音</span></div></div>
+  </div>
+
+  <div class="sec"><h4>Bメロ</h4>
+    <div class="ku"><div class="txt">いそぎあしの ひとのなみ</div><div class="meta"><div class="band on"></div><span class="mc">11音</span></div></div>
+    <div class="part-mark">— パート 3/4 —<span class="rtag">R-18</span></div>
+    <div class="ku plan"><div class="txt">⟡ ここに句が入る（当て: 8音くらい）</div></div>
+    <div class="ku"><div class="txt draft">こたえはまだ とおくにある</div><span class="draft-chip">下書き<span class="rtag">R-11</span></span><div class="meta"><div class="band off"></div><span class="mc">メロ未定</span></div></div>
+  </div>
+
+  <div class="sec"><h4>サビ</h4>
+    <div class="ku playing"><div class="txt">はしりだした きもちのさきに<span class="tag-s">♪再生中<span class="rtag">R-22</span></span></div><div class="meta"><div class="band on"></div><span class="mc">13音</span></div></div>
+    <div class="ku"><div class="txt">かぜがふいて せかいがひらく</div><div class="meta"><div class="band on"></div><span class="mc">13音</span></div></div>
+    <div class="ku sel"><div class="txt">ふりむいて <span class="hole">○○○○○</span></div><div class="meta"><div class="band on"></div><span class="mc">タップ一手で穴の編集へ<span class="rtag">R-5</span></span></div></div>
+  </div>
+  <div class="legend">○=詞未定 ／ 点線帯=メロ未定 ／ ⟡=予定（双方空白） ／ 「詞なし(意図)」=意図して詞を付けない音<span class="rtag">R-16</span> ／ 点線下線=下書き。右端のレール=いま見ているセクションと穴の所在<span class="rtag">R-9</span></div>
+</div></div>
+</div>
+<div class="callout">推敲の音韻/イント表示はこの画面の切替のまま（v1絵6と同じ）で、印はセクションやメロブロックの境界をまたいで通しで連続する<span class="rtag">R-23</span>。ここは新しい絵は増やしていない。</div>
+
+<!-- ============ 絵C 穴の編集v2 ============ -->
+<h2>絵C. 穴の編集画面v2（全採の密度）</h2>
+<div class="phones">
+<div class="phone"><div class="cap">サビ3句目の穴を開いたところ</div><div class="scr">
+  <div class="ahead"><span class="back">← 全体へ</span><span class="crumb"><b>夏のうた</b> › サビ › 3句目<span class="rtag">R-8</span></span></div>
+  <div class="ctx">前: かぜがふいて せかいがひらく<span class="lock">🔒 穴の外は書き換えない<span class="rtag">R-15</span></span><br>
+  この句: ふりむいて <span class="hole">○○○○○</span><br>
+  次: （Cメロ頭）よるのむこう<span class="lock">🔒</span> <span class="rtag">R-17</span></div>
+  <div class="pane"><h5>意味（言いたいこと）<span class="sp"></span><span class="smallbtn">ネタ帳から引く<span class="rtag">R-19</span></span></h5><input type="text" value="通り過ぎる"></div>
+  <div class="pane"><h5>音の枠 <span class="auto">← メロから自動</span></h5>
+    <div class="frame-row">
+      <div class="fv"><small>音数</small>5音</div>
+      <div class="fv"><small>アクセント</small><span class="accent-glyph">＿￣￣￣＿</span></div>
+      <div class="fv"><small>語尾</small>指定なし</div>
+    </div>
+  </div>
+  <div class="btnrow">
+    <span class="btn">候補を出す</span>
+    <span class="btn sub">相談<span class="rtag">R-20</span></span>
+    <span class="btn sub">メロを開く<span class="rtag">R-4</span></span>
+  </div>
+  <div class="cand"><span class="w">すれちがう</span><span class="fit">5音・一致</span><span class="put">置く</span></div>
+  <div class="cand"><span class="w">かけぬける</span><span class="fit">5音・一致</span><span class="put">置く</span></div>
+  <p class="note" style="margin:6px 0 0">候補の生成が長いときは画面を離れてよい＝結果は受け取りトレイへ届く<span class="rtag">R-12</span>。並べ方（適合度順/事実区分）は別件の裁定待ちのため2件だけの素の表示。</p>
+</div></div>
+</div>
+
+<!-- ============ 絵D 行き来 ============ -->
+<h2>絵D. 行き来＝同じ箇所を指したまま一周 <span class="rtag">R-4</span><span class="rtag">R-6</span><span class="rtag">R-13</span></h2>
+<p class="note">穴の編集「メロを開く」→ PianoRollが同じ小節へスクロールした状態で開く → 直して戻ると全体画面は同じ位置・直した内容が即反映。</p>
+<div class="flow">
+  <div class="mini"><div class="cap">① 穴の編集（サビ3句目）</div><div class="bd">
+    <div class="head">夏のうた › サビ › 3句目</div>
+    <div class="row hl">メロを開く →</div>
+  </div></div>
+  <div class="arr">→</div>
+  <div class="mini"><div class="cap">② PianoRoll（既存＋パンくず）</div><div class="bd">
+    <div class="head">夏のうた › サビ › サビメロ<span class="rtag">R-8</span></div>
+    <div class="row hl">🎹 小節5-6が画面内・該当ノート強調<span class="rtag">R-4</span></div>
+    <div class="row dim">📖 歌詞全体へ ／ ← 戻る</div>
+  </div></div>
+  <div class="arr">→</div>
+  <div class="mini"><div class="cap">③ 戻る＝全体画面</div><div class="bd">
+    <div class="head">夏のうた の歌詞</div>
+    <div class="row hl">サビが画面内のまま（先頭に戻らない）<span class="rtag">R-6</span></div>
+    <div class="row">音符を直した分が反映済み<span class="rtag">R-13</span></div>
+  </div></div>
+</div>
+<div class="callout">歌詞のデータは一本＝メロ側の音符に付く詞（syllable）が正で、全体画面はその映し。どちらで直しても食い違わない<span class="rtag">R-13</span>。</div>
+
+<!-- ============ 絵E 既存画面への反映 ============ -->
+<h2>絵E. 既存画面に足すもの <span class="rtag">R-14</span></h2>
+<p class="note">曲の配置画面のセクションカードに歌詞の埋まり具合チップ。メロ未定・詞未定・予定の別まで見える。</p>
+<div class="flow">
+  <div class="mini"><div class="cap">曲の配置画面（既存＋チップ）</div><div class="bd">
+    <div class="head">← 夏のうた</div>
+    <div class="row">Aメロ <span class="tag-s">詞 穴1<span class="rtag">R-14</span></span></div>
+    <div class="row">Bメロ <span class="tag-s">詞 穴1・メロ 穴1・⟡1</span></div>
+    <div class="row">サビ <span class="tag-s">詞 穴1</span></div>
+  </div></div>
+  <div class="mini"><div class="cap">セクションのレーン配置（既存＋チップ）</div><div class="bd">
+    <div class="head">← サビ</div>
+    <div class="row dim">メロ｜コード｜ベース｜リズム</div>
+    <div class="row">メロブロックに 詞3/4 の印<span class="rtag">R-14</span> → タップで穴の編集<span class="rtag">R-1</span></div>
+  </div></div>
+</div>
+
+<!-- ============ 絵F 中断と受け取り ============ -->
+<h2>絵F. 中断・割り込み・後から受け取り <span class="rtag">R-10</span><span class="rtag">R-12</span><span class="rtag">R-21</span></h2>
+<div class="flow">
+  <div class="mini"><div class="cap">数時間後にアプリを開いた</div><div class="bd">
+    <div class="head">♪ Otomemo</div>
+    <div class="row hl">📝 作詞のつづき: 夏のうた › サビ3句目（書きかけ「とお…」）<span class="rtag">R-10</span></div>
+  </div></div>
+  <div class="mini"><div class="cap">受け取りトレイ</div><div class="bd">
+    <div class="head">📥 受け取りトレイ</div>
+    <div class="row hl">歌詞候補 5件 — 宛先: 夏のうた › サビ3句目<span class="rtag">R-21</span> → 穴で見る</div>
+    <div class="row dim">（他の生成結果と同じ列に並ぶ）</div>
+  </div></div>
+  <div class="mini"><div class="cap">相談（チャット）を開いた</div><div class="bd">
+    <div class="head">💬 相談</div>
+    <div class="row dim">文脈: 夏のうた › サビ3句目・5音・＿￣￣￣＿<span class="rtag">R-20</span></div>
+    <div class="row">候補カードに「この穴に当てる」<span class="rtag">R-21</span></div>
+  </div></div>
+</div>
+
+<!-- ============ 絵G 初期状態 ============ -->
+<h2>絵G. ほぼ空の初期状態でも成立 <span class="rtag">R-3</span></h2>
+<div class="phones">
+<div class="phone"><div class="cap">モチーフ一節しか無い曲</div><div class="scr">
+  <div class="ahead"><span class="back">←</span><span class="crumb"><b>新しい曲（仮）</b> の歌詞</span></div>
+  <div class="sec"><h4>未整理</h4>
+    <div class="ku"><div class="txt">ららら ららら<span class="tag-s">モチーフ</span></div><div class="meta"><div class="band on"></div><span class="mc">仮の音</span></div></div>
+    <div class="ku plan"><div class="txt">⟡ ここから広げる（セクション分けはあとから）</div></div>
+  </div>
+  <p class="note">セクションが未定でも「未整理」の1区画で全体画面が立つ。曲の器が無い段階でもホームの入口から作り始められる。</p>
+</div></div>
+</div>
+
+<!-- ============ 対応表 ============ -->
+<h2>R番号 → 絵のどこ（判定用の索引）</h2>
+<div class="wrapx">
+<table class="covmap">
+<tr><th>R</th><th>反映先</th><th>R</th><th>反映先</th></tr>
+<tr><td>R-1</td><td>絵A（4入口）・絵E（レーンから）</td><td>R-13</td><td>絵D③（即反映・データ一本）</td></tr>
+<tr><td>R-2</td><td>絵A（作詞のつづき=2タップ）</td><td>R-14</td><td>絵E（セクションカードのチップ）</td></tr>
+<tr><td>R-3</td><td>絵G（未整理区画）</td><td>R-15</td><td>絵C（前後の🔒）</td></tr>
+<tr><td>R-4</td><td>絵C「メロを開く」・絵D②・絵A（PianoRoll入口）</td><td>R-16</td><td>絵B「詞なし(意図)」タグ＋凡例</td></tr>
+<tr><td>R-5</td><td>絵B（穴タップ一手）</td><td>R-17</td><td>絵C（次=Cメロ頭まで表示）</td></tr>
+<tr><td>R-6</td><td>絵D③（同じ位置に戻る）</td><td>R-18</td><td>絵B（パート3/4の区切り線）</td></tr>
+<tr><td>R-7</td><td>絵A注記（戻る一貫）</td><td>R-19</td><td>絵C「ネタ帳から引く」</td></tr>
+<tr><td>R-8</td><td>絵B/C/D のパンくず</td><td>R-20</td><td>絵C「相談」・絵F（文脈チップ）</td></tr>
+<tr><td>R-9</td><td>絵B 右端レール</td><td>R-21</td><td>絵F（トレイの宛先付き候補）</td></tr>
+<tr><td>R-10</td><td>絵A/絵F（作詞のつづきカード）</td><td>R-22</td><td>絵B（再生バー・♪再生中）</td></tr>
+<tr><td>R-11</td><td>絵B（下書きチップ・点線下線）</td><td>R-23</td><td>絵B注記（印は通しで連続）</td></tr>
+<tr><td>R-12</td><td>絵C注記・絵F（トレイ）</td><td></td><td></td></tr>
+</table>
+</div>
+
+<hr style="border-color:var(--line); margin-top:40px">
+<p class="note">出自: 裁定表R-1〜R-23（boundary-requirements-draft）の全採仮置き。v1（mockups.html・絵1〜6）の骨格＝オーナー裁定3点（句＋予定マーク／二欄並置／候補並びは比較中）は維持。作画=メインセッション。歌詞・候補語はすべてダミー。</p>
+
+</div>
+</body>
+</html>
