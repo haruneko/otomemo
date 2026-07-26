@@ -760,6 +760,14 @@ Fable 実機監査＝360px幅で16step グリッドの step13-15 が画面外・
 - **生成器の去就**＝当面 API は残す（第二経路＝「ライブラリに無い形が欲しい時」・gen_* の style/pattern ノブの後方互換）。「おまかせ」の既定はライブラリシャッフルへ寄せる（位置づけ整理は L5・**オーナー裁定は L4/L5 で**）。
 - **bit一致/回帰**：`PatternCand` 契約・帯UI・試聴/適用の実音経路は不変＝差し替えは `fetchPatterns` の中身（候補の source）のみ。seed 未実行なら候補0＝空トレイ（従来の域外と同じ挙動）。
 
+### Task2/L5＝整理（縮退判断・生成器の位置づけ・文言）の確定（2026-07-25・L4完了後）
+L4（トラックA21型＋world68 26型＝ライブラリ118件）が実って初めて可能になる後片付け。**上位裁定④（生成器の位置づけ）を design に確定**し、arc を締める。実コードで裏取りした結論：
+- **① コード内辞書の縮退判断＝「残置確定・削除しない」**。理由＝**辞書はライブラリを焼く唯一の金型（seed 源）**。量産方式(a)＝「辞書に型追加→再seed」（`seed-pattern-library.ts` が `scope:library+lib:factory` を全削除→再投入）ゆえ、辞書を消すと**次回 seed が全ライブラリを消して 0 件投入＝ライブラリ崩壊**。よって「ライブラリが安定したら縮退」（L3 節・plan §3-3）の答えは **"縮退しない・seed源として恒久保持"**。辞書の役割は「seed 源（一次）＋生成器 escape hatch の語彙（二次）」に確定。
+- **② 生成器の位置づけ＝降格済み（裁定④の実装確認）**。ピッカー/トレイは**既にライブラリ先**＝(a) 3単体エディタ＝`PatternImportDialog`（`listNeta scope:all`・生成器不使用）、(b) メロ生成トレイ＝`useMelodyGen.tsx:305-313`（`gen_chord_pattern`/`gen_bass`(!bassWantsGen)/`gen_drums`(!drumsWantsGen) は `fetchLibraryPatternNetas` へ）。生成器 `gen_*` は **「ライブラリに無い形が欲しい時」の escape hatch**＝knobs ON（wantsGen）時のみ・MCP/chat/seed でも現役。**escape hatch は撤去しない**（裁定④＝第二経路として残す）。撤去は将来オーナー裁定（要耳＝おまかせ挙動が変わる）。
+- **③ gen_* style ノブとの整合＝一貫**。seed は各型を `pat:<型ID>` タグ＋content patternId で焼く＝**ライブラリ適用と生成器生成が同 patternId・同 content**（bit一致の延長）。`GENRE_TABLE` 据え置き＝生成器の候補選抜経路は L4/裁定D を通して不変。
+- **④ 帯/トレイの表示文言＝確定済**。UI は「ライブラリから読み込む」（Task1f 帯格下げ→Task1j アイコンボタン）。「おまかせ」＝ジャンル無し絞りから**ライブラリ shuffle**（`fetchLibraryPatternNetas` の genre 空枝＝`patternLibrary.ts`）。造語なし・場面/ジャンルは共通分類の日本語（Task2/L1 共通分類）。
+- **arc 締め**：パターンライブラリ化アーク L0-L5＋Task1＋M5 完了。**残＝(1)耳確認プローブ束**（A21+world68 26＝47型の採否/較正＝オーナーの物差し）**(2)更なるジャンル拡充**（jazz/reggae/folk/gospel 等・作風裁定）。いずれもコード完了後の創作判断＝機械の担保はここまで。
+
 ### コード語彙拡張＋分数コード＋伴奏レジスタ（2026-06-30・要件「コードが不足」）
 **問題（ユーザー指摘）**：①品質語彙が不足＝テンション(9/11/13/add9)・dim7・altered(7♭9/7♯9/7♯5)が無い。しかも ChordEditor は「9」を選べるのに `QUALITY_INTERVALS` に定義が無く **major トライアドにフォールバック＝壊れている**。②分数コード(slash/on-chord)が表現できない＝`ChordEntry` に bass 欄が無い。③コード楽器(comping)の高さが**ルートのpcぶん跳ねる**(`base = 48 + octave*12 + root_pc`)＝進行が動くたびレジスタが上下。「大体の高さを決める」＋スムーズに置きたい。
 
