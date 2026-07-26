@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作詞補助UI モックv3＝メロ概形入り・「穴」表記なし・極端な状態（判定材料）</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #16181c; --card: #22252b; --line: #33373f;
+    --fg: #e6e8ec; --muted: #9aa0aa; --accent: #3a6df0;
+    --k-lyric: #f0c544; --k-melody: #4fa8e0; --k-section: #e08a3c;
+    --fit-red: #e8533f; --fit-yellow: #e0a83c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0e1013; color: var(--fg); font-family: system-ui, sans-serif; line-height: 1.6; }
+  .page { max-width: 900px; margin: 0 auto; padding: 16px 12px 64px; }
+  h1 { font-size: 1.1rem; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  h2 { font-size: 1.0rem; margin: 42px 0 4px; color: var(--k-lyric); }
+  .note { color: var(--muted); font-size: .82rem; margin: 4px 0 14px; }
+  .lead { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: .86rem; }
+  .rtag { display: inline-block; font-size: .6rem; background: #4b2c86; color: #d9c8ff; border-radius: 4px; padding: 0 4px; vertical-align: super; margin-left: 3px; font-weight: 600; }
+
+  .phones { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .phone { width: 350px; max-width: 100%; background: var(--bg); border: 2px solid #3a3f48; border-radius: 18px; overflow: hidden; flex-shrink: 0; }
+  .phone .cap { text-align: center; font-size: .74rem; color: var(--muted); padding: 4px 0; background: #1a1d22; border-bottom: 1px solid var(--line); }
+  .scr { padding: 10px 10px 14px; min-height: 240px; position: relative; }
+
+  .ahead { display: flex; align-items: center; gap: 7px; padding: 6px 4px 8px; border-bottom: 1px solid var(--line); margin-bottom: 8px; font-size: .84rem; }
+  .ahead .back { color: var(--muted); white-space: nowrap; }
+  .crumb { color: var(--muted); font-size: .78rem; }
+  .crumb b { color: var(--fg); font-weight: 600; }
+  .ahead .sp { flex: 1; }
+  .chip { font-size: .7rem; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--muted); white-space: nowrap; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .transport { display: flex; align-items: center; gap: 8px; font-size: .74rem; color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; margin-bottom: 8px; }
+
+  .sec { margin-bottom: 12px; }
+  .sec h4 { margin: 0 0 5px; font-size: .76rem; color: var(--k-section); letter-spacing: .08em; }
+  .sec h4 .state { font-weight: 400; color: var(--muted); margin-left: 8px; font-size: .68rem; }
+  .part-mark { font-size: .64rem; color: var(--muted); border-bottom: 1px dashed #3d4450; margin: 4px 0 5px; text-align: right; }
+  .ku { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 4px; margin-bottom: 5px; }
+  .ku .txt { font-size: .9rem; letter-spacing: .04em; }
+  .ku .txt.faint { color: var(--muted); font-size: .8rem; }
+  .ku .txt.draft { border-bottom: 2px dotted var(--k-lyric); display: inline-block; }
+  .cont { display: block; width: 100%; height: 26px; margin-top: 2px; }
+  .cont polyline { fill: none; stroke: #39404c; stroke-width: 1; }
+  .cont circle.f { fill: var(--k-melody); }
+  .cont circle.g { fill: #6b7280; }
+  .cont circle.h { fill: none; stroke: var(--k-lyric); stroke-width: 1.6; }
+  .nomelo { border-top: 2px dashed #3d4450; margin-top: 6px; padding-top: 1px; font-size: .62rem; color: var(--muted); }
+  .ku .mc { font-size: .63rem; color: var(--muted); }
+  .ku.plan { border-style: dashed; border-color: #4a5160; background: #1b1e24; }
+  .ku.plan .txt { color: var(--muted); font-size: .8rem; }
+  .ku.sel { outline: 2px solid var(--accent); }
+  .tag-s { font-size: .62rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; color: var(--muted); margin-left: 6px; }
+  .draft-chip { font-size: .62rem; background: #4a3d12; color: var(--k-lyric); border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+  .minimap { position: absolute; right: 3px; top: 90px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .minimap i { width: 7px; height: 20px; border-radius: 3px; background: #2c313a; }
+  .minimap i.cur { background: var(--accent); }
+  .minimap i.open { border: 1px solid var(--k-lyric); }
+  .legend { font-size: .66rem; color: var(--muted); margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+  .legend svg { vertical-align: -3px; }
+
+  .ctx { font-size: .82rem; color: var(--muted); padding: 3px 2px; }
+  .ctx .lock { font-size: .66rem; border: 1px solid #3d4450; border-radius: 4px; padding: 0 4px; margin-left: 5px; }
+  .focusbox { background: var(--card); border: 1px solid var(--accent); border-radius: 10px; padding: 8px 11px; margin: 7px 0; }
+  .pane { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; margin: 7px 0; }
+  .pane h5 { margin: 0 0 5px; font-size: .7rem; color: var(--muted); font-weight: 600; display: flex; gap: 6px; }
+  .pane h5 .sp { flex: 1; }
+  .pane input[type=text] { width: 100%; background: #16181c; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); padding: 5px 8px; font-size: .88rem; }
+  .frame-row { display: flex; gap: 8px; flex-wrap: wrap; font-size: .82rem; }
+  .frame-row .fv { background: #16181c; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; }
+  .frame-row .fv small { color: var(--muted); display: block; font-size: .62rem; }
+  .auto { font-size: .6rem; color: var(--k-melody); }
+  .accent-glyph { font-family: monospace; letter-spacing: 2px; }
+  .btnrow { display: flex; gap: 6px; margin: 8px 0 4px; }
+  .btn { flex: 1; text-align: center; background: var(--accent); color: #fff; border-radius: 8px; padding: 7px 4px; font-size: .78rem; }
+  .btn.sub { background: none; border: 1px solid var(--accent); color: #7fa3ff; }
+  .cand { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; font-size: .86rem; }
+  .cand .w { flex: 1; }
+  .cand .fit { font-size: .64rem; color: var(--muted); white-space: nowrap; }
+  .cand .put { font-size: .72rem; border: 1px solid var(--accent); color: var(--accent); border-radius: 6px; padding: 2px 9px; }
+  .smallbtn { font-size: .66rem; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; color: var(--muted); }
+  .callout { font-size: .78rem; background: var(--card); border-left: 3px solid #4b2c86; border-radius: 6px; padding: 7px 11px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>モックv3 ＝ メロ概形入り・「穴」をUIから消す・極端な状態も描く</h1>
+<p class="lead">
+v2へのオーナー指摘3点の反映：①<strong>句ごとにメロディ概形</strong>（音高の上下の点線。●=詞が付いた音・○=音はあるが詞が空）②<strong>「穴」「伏せ字○○○」をUI表記から撤去</strong>＝空きは概形の中の空白の点として見せる（「穴」はdocs側のドメイン語として残すだけ）③<strong>極端な状態</strong>＝「メロはあるが詞ゼロ」「詞はあるがメロゼロ」「双方ゼロ」のセクションを通しの中に描いた。紫のRタグ＝境界要求の対応（v2と同じ・外す札の指定が裁定）。歌詞は全部ダミー。
+</p>
+
+<!-- ============ 絵B' 全体画面v3・1番 ============ -->
+<h2>絵B'. 歌詞全体画面v3 —— 前半（部分的な空きの見え方）</h2>
+<p class="note">文字は文字のまま読め、その下の概形で「音があるか・詞が付いているか・どこが空いているか」が分かる。○の連なり＝音はあるのに言葉が無い場所（旧・伏せ字の代替）。</p>
+<div class="phones">
+<div class="phone"><div class="cap">スマホ幅・縦スクロール（1/2）</div><div class="scr">
+  <div class="ahead"><span class="back">←</span><span class="crumb"><b>夏のうた</b> の歌詞<span class="rtag">R-8</span></span><span class="sp"></span><span class="chip on">素</span><span class="chip">音韻</span><span class="chip">イント</span></div>
+  <div class="transport">▶ 仮歌で再生<span class="rtag">R-22</span></div>
+  <div class="minimap"><i class="cur"></i><i class="open"></i><i class="open"></i><i></i></div>
+
+  <div class="sec"><h4>Aメロ</h4>
+    <div class="ku"><div class="txt">あさのひかり まちをそめて</div>
+      <svg class="cont" viewBox="0 0 300 26"><polyline points="12,20 36,16 60,12 84,14 108,10 132,8 156,14 180,12 204,10 228,8 252,12 276,14"/><circle class="f" cx="12" cy="20" r="3"/><circle class="f" cx="36" cy="16" r="3"/><circle class="f" cx="60" cy="12" r="3"/><circle class="f" cx="84" cy="14" r="3"/><circle class="f" cx="108" cy="10" r="3"/><circle class="f" cx="132" cy="8" r="3"/><circle class="f" cx="156" cy="14" r="3"/><circle class="f" cx="180" cy="12" r="3"/><circle class="f" cx="204" cy="10" r="3"/><circle class="f" cx="228" cy="8" r="3"/><circle class="f" cx="252" cy="12" r="3"/><circle class="f" cx="276" cy="14" r="3"/></svg></div>
+    <div class="ku"><div class="txt faint">（7音・ことばはまだ）</div>
+      <svg class="cont" viewBox="0 0 300 26"><polyline points="20,18 60,14 100,12 140,10 180,12 220,14 260,16"/><circle class="h" cx="20" cy="18" r="3"/><circle class="h" cx="60" cy="14" r="3"/><circle class="h" cx="100" cy="12" r="3"/><circle class="h" cx="140" cy="10" r="3"/><circle class="h" cx="180" cy="12" r="3"/><circle class="h" cx="220" cy="14" r="3"/><circle class="h" cx="260" cy="16" r="3"/></svg></div>
+    <div class="ku"><div class="txt">ららら らら<span class="tag-s">詞なし（意図）<span class="rtag">R-16</span></span></div>
+      <svg class="cont" viewBox="0 0 300 26"><polyline points="25,16 70,14 115,12 160,12 205,14 250,16"/><circle class="g" cx="25" cy="16" r="3"/><circle class="g" cx="70" cy="14" r="3"/><circle class="g" cx="115" cy="12" r="3"/><circle class="g" cx="160" cy="12" r="3"/><circle class="g" cx="205" cy="14" r="3"/><circle class="g" cx="250" cy="16" r="3"/></svg></div>
+  </div>
+
+  <div class="sec"><h4>Bメロ</h4>
+    <div class="ku"><div class="txt">いそぎあしの ひとのなみ</div>
+      <svg class="cont" viewBox="0 0 300 26"><polyline points="15,18 42,16 69,14 96,12 123,14 150,12 177,10 204,12 231,14 258,12 285,16"/><circle class="f" cx="15" cy="18" r="3"/><circle class="f" cx="42" cy="16" r="3"/><circle class="f" cx="69" cy="14" r="3"/><circle class="f" cx="96" cy="12" r="3"/><circle class="f" cx="123" cy="14" r="3"/><circle class="f" cx="150" cy="12" r="3"/><circle class="f" cx="177" cy="10" r="3"/><circle class="f" cx="204" cy="12" r="3"/><circle class="f" cx="231" cy="14" r="3"/><circle class="f" cx="258" cy="12" r="3"/><circle class="f" cx="285" cy="16" r="3"/></svg></div>
+    <div class="part-mark">— パート 3/4 —<span class="rtag">R-18</span></div>
+    <div class="ku plan"><div class="txt">⟡ これから（当て: 8音くらい）</div></div>
+    <div class="ku"><div class="txt draft">こたえはまだ とおくにある</div><span class="draft-chip">下書き<span class="rtag">R-11</span></span>
+      <div class="nomelo">メロはまだ無い</div></div>
+  </div>
+
+  <div class="sec"><h4>サビ</h4>
+    <div class="ku"><div class="txt">かぜがふいて せかいがひらく</div>
+      <svg class="cont" viewBox="0 0 300 26"><polyline points="12,16 38,12 64,8 90,10 116,8 142,6 168,10 194,8 220,12 246,10 272,14 290,16"/><circle class="f" cx="12" cy="16" r="3"/><circle class="f" cx="38" cy="12" r="3"/><circle class="f" cx="64" cy="8" r="3"/><circle class="f" cx="90" cy="10" r="3"/><circle class="f" cx="116" cy="8" r="3"/><circle class="f" cx="142" cy="6" r="3"/><circle class="f" cx="168" cy="10" r="3"/><circle class="f" cx="194" cy="8" r="3"/><circle class="f" cx="220" cy="12" r="3"/><circle class="f" cx="246" cy="10" r="3"/><circle class="f" cx="272" cy="14" r="3"/><circle class="f" cx="290" cy="16" r="3"/></svg></div>
+    <div class="ku sel"><div class="txt">ふりむいて<span class="tag-s">つづき 5音が空・タップで編集<span class="rtag">R-5</span></span></div>
+      <svg class="cont" viewBox="0 0 300 26"><polyline points="12,18 40,14 68,12 96,10 124,12 158,10 188,8 218,6 248,8 278,12"/><circle class="f" cx="12" cy="18" r="3"/><circle class="f" cx="40" cy="14" r="3"/><circle class="f" cx="68" cy="12" r="3"/><circle class="f" cx="96" cy="10" r="3"/><circle class="f" cx="124" cy="12" r="3"/><circle class="h" cx="158" cy="10" r="3"/><circle class="h" cx="188" cy="8" r="3"/><circle class="h" cx="218" cy="6" r="3"/><circle class="h" cx="248" cy="8" r="3"/><circle class="h" cx="278" cy="12" r="3"/></svg></div>
+  </div>
+  <div class="legend">
+    <svg width="16" height="12"><circle cx="8" cy="6" r="3" fill="#4fa8e0"/></svg>=詞が付いた音 ／
+    <svg width="16" height="12"><circle cx="8" cy="6" r="3" fill="none" stroke="#f0c544" stroke-width="1.6"/></svg>=音はあるが詞が空 ／
+    点線の下線=メロがまだ無い詞 ／ ⟡=これから（詞も音も無い） ／ 右端レール=現在地と空きの所在<span class="rtag">R-9</span>
+  </div>
+</div></div>
+
+<!-- ============ 絵B'' 極端な状態 ============ -->
+<div class="phone"><div class="cap">同じ曲のつづき（2/2）＝極端な状態</div><div class="scr">
+  <div class="sec"><h4>Cメロ<span class="state">メロはある・詞はまだ一文字も無い</span></h4>
+    <div class="ku"><div class="txt faint">（11音）</div>
+      <svg class="cont" viewBox="0 0 300 26"><polyline points="15,20 42,18 69,14 96,12 123,10 150,8 177,10 204,12 231,10 258,14 285,16"/><circle class="h" cx="15" cy="20" r="3"/><circle class="h" cx="42" cy="18" r="3"/><circle class="h" cx="69" cy="14" r="3"/><circle class="h" cx="96" cy="12" r="3"/><circle class="h" cx="123" cy="10" r="3"/><circle class="h" cx="150" cy="8" r="3"/><circle class="h" cx="177" cy="10" r="3"/><circle class="h" cx="204" cy="12" r="3"/><circle class="h" cx="231" cy="10" r="3"/><circle class="h" cx="258" cy="14" r="3"/><circle class="h" cx="285" cy="16" r="3"/></svg></div>
+    <div class="ku"><div class="txt faint">（9音）</div>
+      <svg class="cont" viewBox="0 0 300 26"><polyline points="20,16 52,12 84,10 116,8 148,10 180,8 212,6 244,10 276,14"/><circle class="h" cx="20" cy="16" r="3"/><circle class="h" cx="52" cy="12" r="3"/><circle class="h" cx="84" cy="10" r="3"/><circle class="h" cx="116" cy="8" r="3"/><circle class="h" cx="148" cy="10" r="3"/><circle class="h" cx="180" cy="8" r="3"/><circle class="h" cx="212" cy="6" r="3"/><circle class="h" cx="244" cy="10" r="3"/><circle class="h" cx="276" cy="14" r="3"/></svg></div>
+  </div>
+
+  <div class="sec"><h4>2番Aメロ<span class="state">詞はある・メロはまだ全く無い</span></h4>
+    <div class="ku"><div class="txt">ゆうぐれのバス ゆれるかばん</div><div class="nomelo">メロはまだ無い</div></div>
+    <div class="ku"><div class="txt">まどのそとに ながれるまち</div><div class="nomelo">メロはまだ無い</div></div>
+  </div>
+
+  <div class="sec"><h4>Dメロ（仮）<span class="state">詞も音もまだ無い</span></h4>
+    <div class="ku plan"><div class="txt">⟡ これから（長さの当ても未定）</div></div>
+  </div>
+  <p class="note" style="margin-top:10px">「まったく無い」の3態：詞ゼロ＝○だけの概形が並ぶ／メロゼロ＝文字だけが並び点線の底線／双方ゼロ＝⟡の区画だけ。どれも同じ縦スクロールの中に居る＝曲全体がまだらのまま存在し続ける。</p>
+</div></div>
+</div>
+
+<!-- ============ 絵C' 編集画面 ============ -->
+<h2>絵C'. 空きを開いたところ（v3）</h2>
+<p class="note">「穴」の語を使わず、選んだ場所＝概形ごと拡大して見せる。○の位置に候補が嵌るのが見た目で分かる。</p>
+<div class="phones">
+<div class="phone"><div class="cap">サビ・2句目のつづきを開いた</div><div class="scr">
+  <div class="ahead"><span class="back">← 全体へ</span><span class="crumb"><b>夏のうた</b> › サビ › 2句目<span class="rtag">R-8</span></span></div>
+  <div class="focusbox">
+    <div class="txt" style="font-size:.9rem">ふりむいて <span style="color:var(--k-lyric)">＋5音ぶんの言葉</span></div>
+    <svg class="cont" viewBox="0 0 300 26"><polyline points="12,18 40,14 68,12 96,10 124,12 158,10 188,8 218,6 248,8 278,12"/><circle class="f" cx="12" cy="18" r="3"/><circle class="f" cx="40" cy="14" r="3"/><circle class="f" cx="68" cy="12" r="3"/><circle class="f" cx="96" cy="10" r="3"/><circle class="f" cx="124" cy="12" r="3"/><circle class="h" cx="158" cy="10" r="3"/><circle class="h" cx="188" cy="8" r="3"/><circle class="h" cx="218" cy="6" r="3"/><circle class="h" cx="248" cy="8" r="3"/><circle class="h" cx="278" cy="12" r="3"/></svg>
+    <div class="ctx">前後は書き換えない<span class="lock">🔒<span class="rtag">R-15</span></span>　次: （Cメロ頭）<span class="rtag">R-17</span></div>
+  </div>
+  <div class="pane"><h5>意味（言いたいこと）<span class="sp"></span><span class="smallbtn">ネタ帳から引く<span class="rtag">R-19</span></span></h5><input type="text" value="通り過ぎる"></div>
+  <div class="pane"><h5>音の枠 <span class="auto">← メロから自動</span></h5>
+    <div class="frame-row">
+      <div class="fv"><small>音数</small>5音</div>
+      <div class="fv"><small>アクセント</small><span class="accent-glyph">＿￣￣￣＿</span></div>
+    </div>
+  </div>
+  <div class="btnrow">
+    <span class="btn">候補を出す</span>
+    <span class="btn sub">相談<span class="rtag">R-20</span></span>
+    <span class="btn sub">メロを開く<span class="rtag">R-4</span></span>
+  </div>
+  <div class="cand"><span class="w">すれちがう</span><span class="fit">5音・一致</span><span class="put">置く</span></div>
+  <div class="cand"><span class="w">かけぬける</span><span class="fit">5音・一致</span><span class="put">置く</span></div>
+</div></div>
+
+<div class="phone"><div class="cap">メロが無い側を開いた場合</div><div class="scr">
+  <div class="ahead"><span class="back">← 全体へ</span><span class="crumb"><b>夏のうた</b> › 2番Aメロ › 1句目</span></div>
+  <div class="focusbox">
+    <div class="txt" style="font-size:.9rem">ゆうぐれのバス ゆれるかばん</div>
+    <div class="nomelo">メロはまだ無い（12音・抑揚: <span class="accent-glyph">＿￣￣＿…</span> ← 詞から自動）</div>
+  </div>
+  <div class="btnrow">
+    <span class="btn">メロ案を出す（詞の抑揚から）</span>
+    <span class="btn sub">メロを自分で置く<span class="rtag">R-4</span></span>
+  </div>
+  <p class="note" style="margin:6px 0 0">同じ編集画面で、空いている側（詞/メロ）に応じて出るものが変わる。曲先/詞先のモード切替は無い。</p>
+</div></div>
+</div>
+
+<h2>変わっていないもの</h2>
+<p class="note">入口4箇所（v2絵A）・行き来の一周（v2絵D）・既存画面へのチップ（v2絵E）・中断と受け取り（v2絵F）・初期状態（v2絵G）はv2のまま（表記の「穴」だけ「空き」に読み替え）。候補の並べ方（適合度順/事実区分）はv1絵4/5で比較中のまま。Rタグの体系もv2と同一＝<strong>外す札の指定がそのまま裁定</strong>。</p>
+
+<hr style="border-color:var(--line); margin-top:40px">
+<p class="note">出自: v2へのオーナー指摘（2026-07-27）「①メロディ概形がないとわけがわからない ②『穴』は見せると分からない ③まったく無い状態が表現できていない」の反映。作画=メインセッション。歌詞・概形の形はすべてダミー。</p>
+
+</div>
+</body>
+</html>
