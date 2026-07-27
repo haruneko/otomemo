@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作詞補助UI モック v4（判定材料・詞は全部ダミー）</title>
+<style>
+:root{
+  --bg:#16181c; --card:#22252b; --line:#33373f; --fg:#e6e8ec; --muted:#9aa0aa;
+  --accent:#3a6df0; --mel:#4fa8e0; --fit-red:#e8533f; --fit-yellow:#e0a83c; --fit-info:#8a93a6;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 24px 60px;background:#0e1013;color:var(--fg);
+  font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.55}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:12px;margin:0 0 26px;max-width:760px}
+h2.fcap{font-size:15px;margin:0 0 8px;color:var(--fg)}
+h2.fcap .no{display:inline-block;background:var(--accent);color:#fff;border-radius:6px;
+  font-size:12px;padding:1px 7px;margin-right:8px;vertical-align:2px}
+.frames{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start}
+.frame{flex:0 0 auto;width:352px}
+.frame.wide{width:740px}
+.desc{color:var(--muted);font-size:12px;margin:10px 2px 0;line-height:1.6}
+.desc b{color:var(--fg);font-weight:600}
+
+/* ===== 電話枠 ===== */
+.ph{width:352px;background:var(--bg);border:1px solid #3c414a;border-radius:20px;
+  padding:12px 11px 10px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+.ph.mini{width:352px}
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.back{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:5px 10px;font-size:13px;white-space:nowrap}
+.ttl{flex:1;background:#1b1e24;border:1px solid var(--line);border-radius:10px;
+  padding:5px 10px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbtn{background:var(--card);border:1px solid var(--accent);color:#9db8f7;border-radius:10px;
+  padding:5px 10px;font-size:12px;white-space:nowrap}
+.crumb{flex:1;background:#1b1e24;border:1px solid var(--line);border-radius:10px;
+  padding:5px 10px;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumb b{color:var(--fg);font-weight:600}
+.seg{display:flex;gap:4px;background:#1b1e24;border:1px solid var(--line);border-radius:10px;
+  padding:3px;margin-bottom:8px}
+.seg span{flex:1;text-align:center;font-size:12px;color:var(--muted);padding:4px 0;border-radius:7px}
+.seg .on{background:var(--accent);color:#fff}
+.legend{font-size:10.5px;color:var(--muted);margin:0 2px 8px}
+.legend .r{color:var(--fit-red)} .legend .y{color:var(--fit-yellow)}
+
+/* ===== セクション見出し ===== */
+.sec{display:flex;flex-wrap:wrap;align-items:center;gap:5px 7px;background:var(--card);border:1px solid var(--line);
+  border-radius:9px;padding:6px 9px;margin:12px 0 4px}
+.sname{white-space:nowrap}
+.sec.kari{border-style:dashed;border-color:#59606c;background:#1c1f25}
+.grip{color:#5b616c;font-size:12px;letter-spacing:-2px}
+.sname{font-weight:600;font-size:13px}
+.sbars{color:var(--muted);font-size:11px}
+.karichip{font-size:10px;color:#c9b27a;border:1px dashed #8a7a4d;border-radius:6px;padding:0 5px}
+.secbtn{margin-left:auto;font-size:10px;color:var(--muted);border:1px solid var(--line);
+  border-radius:7px;padding:1px 7px;white-space:nowrap}
+
+/* ===== 状態ID札（判定用注記・UIには出ない） ===== */
+.st{font-size:9px;color:#a99ad0;border:1px dashed #6b5f8a;border-radius:4px;
+  padding:0 4px;white-space:nowrap;vertical-align:1px;margin-left:4px}
+.sec .st,.zone .st{margin-left:auto}
+.sec .secbtn + .st, .sec .st + .st{margin-left:4px}
+
+/* ===== 句の行 ===== */
+.ku{position:relative;padding:6px 2px 7px;border-bottom:1px solid #1f2228}
+.ku.now{outline:1px solid var(--accent);border-radius:8px;background:rgba(58,109,240,.07)}
+.now .nowmark{position:absolute;left:-2px;top:4px;color:var(--accent);font-size:10px}
+.melo{height:24px;margin-bottom:3px}
+.melo.none{height:12px}
+.melo svg{display:block}
+.band{fill:rgba(79,168,224,.13);stroke:rgba(79,168,224,.30);stroke-width:.6}
+.ct{fill:var(--mel)} .cl{stroke:rgba(79,168,224,.55);stroke-width:1;fill:none}
+.ly{display:flex;align-items:center;flex-wrap:wrap;gap:2px;font-size:13.5px;min-height:20px}
+.ly .pos{margin-left:auto;color:#6d7480;font-size:10px;white-space:nowrap;padding-left:6px}
+.kb{display:inline-block;width:15px;height:18px;border:1px solid #4d535d;background:#1a1d22;
+  border-radius:3px;margin:0 1px;vertical-align:-3px}
+.dsh{display:inline-block;width:13px;height:2px;background:#7a828e;border-radius:1px;margin:0 3px;vertical-align:4px}
+.nolabel{font-size:10.5px;color:var(--muted);margin-left:4px}
+.dslot{display:inline-flex;align-items:center;border:1px dashed #565d69;border-radius:6px;
+  padding:2px 8px;color:var(--muted);font-size:11px;margin-left:4px}
+.fd{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:5px}
+.fd.r{background:var(--fit-red)} .fd.y{background:var(--fit-yellow)}
+
+/* 点線の区間（中身の無い範囲） */
+.zone{display:flex;align-items:center;gap:8px;border:1px dashed #565d69;border-radius:9px;
+  padding:12px 10px;margin:6px 0;color:var(--muted);font-size:11.5px}
+.zone .pos{margin-left:0;color:#6d7480;font-size:10px}
+
+/* 時間位置に緩く揃えた文字（切替表示） */
+.ta{display:flex;font-size:13.5px}
+.ta span{width:24px;text-align:center}
+.ta .mr{box-shadow:inset 0 -2px 0 var(--fit-red)}
+.ta .my{box-shadow:inset 0 -2px 0 var(--fit-yellow)}
+
+/* 追加操作・置き場 */
+.addrow{display:flex;gap:8px;margin:14px 0 4px}
+.addbtn{flex:1;text-align:center;border:1px dashed #565d69;border-radius:10px;
+  padding:9px 4px;color:var(--muted);font-size:12.5px}
+.stockhd{color:var(--muted);font-size:11px;margin:16px 2px 2px;border-top:1px solid var(--line);padding-top:10px}
+.stock .ku{border-bottom:none;background:#1a1d22;border:1px solid var(--line);border-radius:9px;padding:7px 8px}
+.placebtn{font-size:10.5px;color:#9db8f7;border:1px solid var(--accent);border-radius:7px;padding:1px 7px;margin-left:6px}
+
+/* 再生バー */
+.playbar{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);
+  margin-top:12px;padding-top:9px}
+.pb{width:42px;height:34px;border:1px solid var(--line);background:var(--card);border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--fg)}
+.pb.play{background:var(--accent);border-color:var(--accent);width:50px}
+.pb.sp{margin-left:auto;border:none;background:none;color:var(--muted);font-size:12px;width:auto}
+
+/* ===== 編集画面 ===== */
+.ghost{opacity:.45}
+.ghostlbl{font-size:10px;color:var(--muted);margin:8px 2px 0}
+.target{border:1px solid var(--accent);border-radius:10px;padding:8px 8px 9px;margin:4px 0;background:#181c25}
+.target .melo{height:30px}
+.fieldrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.field{border:1px solid var(--line);border-radius:10px;background:#1b1e24;padding:7px 8px;min-height:86px}
+.field h4{margin:0 0 5px;font-size:11px;color:var(--muted);font-weight:600}
+.field .fill{font-size:12.5px;color:var(--fg)}
+.field .auto{font-size:10px;color:#6d7480;margin-top:5px}
+.field .ph-empty{color:#565d69;font-size:12px}
+.ops{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.op{border:1px solid var(--line);background:var(--card);border-radius:9px;
+  padding:5px 9px;font-size:11.5px;color:var(--fg)}
+.op.main{border-color:var(--accent);color:#9db8f7}
+.sheet{border:1px solid var(--line);border-top:2px solid #4a5160;border-radius:14px 14px 12px 12px;
+  background:#1d2026;margin-top:12px;padding:9px 9px 8px}
+.sheet h3{margin:0 0 7px;font-size:12px;color:var(--fg)}
+.sheet h3 .mode{font-size:10px;color:var(--muted);font-weight:400;margin-left:6px}
+.cand{border:1px solid var(--line);border-radius:9px;background:var(--card);
+  padding:6px 8px;margin-bottom:6px}
+.cand .w{font-size:14px}
+.cand .facts{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.fact{font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:7px;padding:0 5px}
+.fact.y{color:var(--fit-yellow);border-color:#6b5a34}
+.fact.r{color:var(--fit-red);border-color:#6b4034}
+.cand .dest{font-size:9.5px;color:#6d7480;margin-top:3px}
+.cgroup{font-size:11px;color:var(--muted);margin:9px 0 5px;border-bottom:1px solid var(--line);padding-bottom:2px}
+.mr2{box-shadow:inset 0 -2px 0 var(--fit-red)}
+.my2{box-shadow:inset 0 -2px 0 var(--fit-yellow)}
+
+/* インセット小パネル */
+.inset{background:var(--bg);border:1px solid #3c414a;border-radius:14px;padding:10px 11px;margin-top:14px}
+.inset h3{margin:0 0 7px;font-size:12px;color:var(--fg)}
+.inp{display:inline-block;min-width:62px;border:1px solid var(--accent);background:#1b2333;
+  border-radius:5px;padding:1px 6px;font-size:12.5px;color:#565d69;vertical-align:-2px}
+.inp i{font-style:normal;color:var(--fg)}
+.pop{display:inline-flex;gap:5px;margin-left:8px;vertical-align:-2px}
+.pop span{font-size:10.5px;border:1px solid var(--line);background:var(--card);border-radius:7px;padding:2px 7px;color:var(--fg)}
+.pop .p1{border-color:var(--accent);color:#9db8f7}
+.formrow{display:flex;align-items:center;gap:7px;margin:6px 0;font-size:12px}
+.formrow label{color:var(--muted);font-size:11px;width:88px}
+.fin{border:1px solid var(--line);background:#1b1e24;border-radius:6px;padding:2px 7px;
+  color:#565d69;font-size:11.5px;flex:1}
+.fin.s{flex:0 0 64px}
+
+/* ===== 既存画面への足し込み ===== */
+.card{display:flex;align-items:center;gap:8px;background:#241f1a;border:1px solid #4a3d2c;
+  border-left:4px solid #e08a3c;border-radius:11px;padding:9px 9px;margin:8px 0}
+.card .cn{font-weight:600;font-size:13.5px}
+.card .cb{color:var(--muted);font-size:11px}
+.card .rolechip{font-size:10px;color:#c9a26b;border:1px dashed #8a6f45;border-radius:6px;padding:1px 6px}
+.card .cfacts{margin-left:auto;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+.blk{display:flex;align-items:center;gap:8px;background:rgba(79,168,224,.12);
+  border:1px solid rgba(79,168,224,.4);border-radius:9px;padding:6px 9px;margin:6px 0;font-size:12px}
+.tools{display:flex;gap:6px;margin:8px 0}
+.tl{width:44px;height:34px;border:1px solid var(--line);background:var(--card);border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-size:13px}
+.tl.on{background:var(--accent);border-color:var(--accent)}
+.tl.wide2{width:auto;padding:0 10px;font-size:11.5px;border-color:var(--accent);color:#9db8f7}
+
+/* 遷移図 */
+.flow{background:var(--bg);border:1px solid #3c414a;border-radius:14px;padding:14px}
+.fbox{display:inline-block;border:1px solid var(--line);background:var(--card);border-radius:9px;
+  padding:5px 10px;font-size:12px;margin:3px 2px}
+.fbox.newp{border-color:var(--accent);color:#cdd9f9;font-weight:600}
+.fbox.gate{border-style:dashed;border-color:#8a7a4d;color:#c9b27a;font-size:11px}
+.frow{display:flex;align-items:center;flex-wrap:wrap;gap:2px;margin:6px 0}
+.arr{color:var(--muted);font-size:13px;padding:0 4px}
+.fnote{font-size:10.5px;color:var(--muted);margin:2px 0 8px 4px}
+
+/* 検証表 */
+table.cov{border-collapse:collapse;font-size:12px;margin-top:10px}
+table.cov th,table.cov td{border:1px solid var(--line);padding:4px 9px;text-align:left}
+table.cov th{background:var(--card);color:var(--muted);font-weight:600}
+.covwrap{margin-top:44px;max-width:900px}
+.covwrap h2{font-size:16px}
+.mini3{display:flex;flex-direction:column;gap:18px}
+.strip{border:1px solid var(--line);border-radius:10px;background:#1a1d22;padding:7px 9px;margin-top:10px;font-size:11px;color:var(--muted)}
+.strip .row{display:flex;align-items:center;gap:6px;margin:4px 0}
+.strip .cell{border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:10.5px;background:var(--card);color:var(--fg)}
+.strip .cell.tg{border-color:var(--accent);color:#9db8f7}
+.strip .cell.emp{border-style:dashed;color:#565d69;background:none}
+</style>
+</head>
+<body>
+
+<h1>作詞補助UI モック v4</h1>
+<p class="sub"><b>判定材料・詞は全部ダミー</b>（意味の薄い日常語の詰め物。作品ではありません）。
+情報設計 2026-07-27 の§4作画指示書＋§6オーナー裁定に基づく7枚。
+紫の点線の小札（A1×B1 等）は判定用の状態ID注記で、<b>UIには出ない</b>。
+幅350px級の電話枠・既存アプリの暗色調に合わせた。</p>
+
+<div class="frames">
+
+<!-- ================================================================ -->
+<!-- 枚1: 歌詞全体画面・素の表示（主サンプル曲・全長） -->
+<!-- ================================================================ -->
+<div class="frame">
+<h2 class="fcap"><span class="no">1</span>歌詞全体画面・素の表示（全長）</h2>
+<div class="ph">
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲</span></div>
+  <div class="seg"><span class="on">素</span><span>音韻</span><span>イントネーション</span></div>
+  <div class="legend">行の右端の ●＝印のある箇所あり（<span class="r">赤=アクセント逆行</span>・<span class="y">黄=注意</span>）。印なし＝指摘なし。切替表示で箇所を確認</div>
+
+  <!-- 前奏（畳み・裁定3） -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">前奏</span><span class="sbars">4小節（歌なし）</span><span class="st">E1</span></div>
+
+  <!-- 1番Aメロ -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">1番Aメロ</span><span class="sbars">8小節</span><span class="st">E1</span></div>
+
+  <!-- 句1: 完備＋帯内休符 D5 -->
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,16 40,12 68,9 96,11 124,7"/>
+      <polyline class="cl" points="205,14 233,10 261,8 289,12 316,16"/>
+      <circle class="ct" cx="12" cy="16" r="2.3"/><circle class="ct" cx="40" cy="12" r="2.3"/><circle class="ct" cx="68" cy="9" r="2.3"/><circle class="ct" cx="96" cy="11" r="2.3"/><circle class="ct" cx="124" cy="7" r="2.3"/>
+      <circle class="ct" cx="205" cy="14" r="2.3"/><circle class="ct" cx="233" cy="10" r="2.3"/><circle class="ct" cx="261" cy="8" r="2.3"/><circle class="ct" cx="289" cy="12" r="2.3"/><circle class="ct" cx="316" cy="16" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>あさおきて　まどをあける</span><span class="pos">1–2小節</span><span class="st">D5</span></div>
+  </div>
+
+  <!-- 句2: 語ぶんの詞だけ無い A1×B1（黄の印つき） -->
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,15 41,11 70,13 99,8 128,10 157,6 186,9 215,12 250,9 285,12 316,15"/>
+      <circle class="ct" cx="12" cy="15" r="2.3"/><circle class="ct" cx="41" cy="11" r="2.3"/><circle class="ct" cx="70" cy="13" r="2.3"/><circle class="ct" cx="99" cy="8" r="2.3"/><circle class="ct" cx="128" cy="10" r="2.3"/><circle class="ct" cx="157" cy="6" r="2.3"/><circle class="ct" cx="186" cy="9" r="2.3"/><circle class="ct" cx="215" cy="12" r="2.3"/>
+      <circle class="ct" cx="250" cy="9" r="2.3"/><circle class="ct" cx="285" cy="12" r="2.3"/><circle class="ct" cx="316" cy="15" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>みずをのんでから</span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="fd y"></span><span class="pos">3–4小節</span><span class="st">A1×B1</span></div>
+  </div>
+
+  <!-- 句3: 語ぶんのメロだけ無い A1×B2 -->
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="168" height="18" rx="4"/>
+      <polyline class="cl" points="14,14 42,10 70,12 98,7 126,10 152,13"/>
+      <circle class="ct" cx="14" cy="14" r="2.3"/><circle class="ct" cx="42" cy="10" r="2.3"/><circle class="ct" cx="70" cy="12" r="2.3"/><circle class="ct" cx="98" cy="7" r="2.3"/><circle class="ct" cx="126" cy="10" r="2.3"/><circle class="ct" cx="152" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>かぎをかけて　そとにでる</span><span class="pos">5–6小節</span><span class="st">A1×B2</span></div>
+  </div>
+
+  <!-- 句4: 語ぶんの詞も音も無い A1×B3＋D3 -->
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="150" height="18" rx="4"/>
+      <polyline class="cl" points="14,15 41,11 68,8 95,11 122,9 140,13"/>
+      <circle class="ct" cx="14" cy="15" r="2.3"/><circle class="ct" cx="41" cy="11" r="2.3"/><circle class="ct" cx="68" cy="8" r="2.3"/><circle class="ct" cx="95" cy="11" r="2.3"/><circle class="ct" cx="122" cy="9" r="2.3"/><circle class="ct" cx="140" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>バスをまって</span><span class="dslot">あと5音くらい</span><span class="pos">7–8小節</span><span class="st">A1×B3</span><span class="st">D3</span></div>
+  </div>
+
+  <!-- 1番Bメロ -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">1番Bメロ</span><span class="sbars">8小節</span><span class="st">E1</span></div>
+
+  <!-- 句1: 完備＋嵌り具合の印（裁定2＝D2の色分けは廃止） -->
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,17 45,13 78,10 111,12 144,8 177,6 210,9 243,7 276,11 312,14"/>
+      <circle class="ct" cx="12" cy="17" r="2.3"/><circle class="ct" cx="45" cy="13" r="2.3"/><circle class="ct" cx="78" cy="10" r="2.3"/><circle class="ct" cx="111" cy="12" r="2.3"/><circle class="ct" cx="144" cy="8" r="2.3"/><circle class="ct" cx="177" cy="6" r="2.3"/><circle class="ct" cx="210" cy="9" r="2.3"/><circle class="ct" cx="243" cy="7" r="2.3"/><circle class="ct" cx="276" cy="11" r="2.3"/><circle class="ct" cx="312" cy="14" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>ふくをたたんで　たなにいれる</span><span class="fd r"></span><span class="pos">9–10小節</span><span class="st">裁定2:印</span></div>
+  </div>
+
+  <!-- 句2: 句まるごと詞が無い A2×B1 -->
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="14,14 50,10 86,12 122,7 158,9 194,6 230,10 266,13 302,16"/>
+      <circle class="ct" cx="14" cy="14" r="2.3"/><circle class="ct" cx="50" cy="10" r="2.3"/><circle class="ct" cx="86" cy="12" r="2.3"/><circle class="ct" cx="122" cy="7" r="2.3"/><circle class="ct" cx="158" cy="9" r="2.3"/><circle class="ct" cx="194" cy="6" r="2.3"/><circle class="ct" cx="230" cy="10" r="2.3"/><circle class="ct" cx="266" cy="13" r="2.3"/><circle class="ct" cx="302" cy="16" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">11–12小節</span><span class="st">A2×B1</span></div>
+  </div>
+
+  <!-- 後半: パートの詞も音も無い A3×B3（注記なし。オーナー例の形） -->
+  <div class="zone"><span>まだ何も無い区間</span><span class="pos">13–16小節</span><span class="st">A3×B3</span></div>
+
+  <!-- 1番サビ -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">1番サビ</span><span class="sbars">8小節</span><span class="st">E1</span></div>
+
+  <!-- 句1: 完備（再生中の強調 R-22・黄の印） -->
+  <div class="ku now"><span class="nowmark">▶</span>
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,16 40,11 68,8 96,6 124,9 152,6 180,4 208,7 236,10 264,8 292,12 316,15"/>
+      <circle class="ct" cx="12" cy="16" r="2.3"/><circle class="ct" cx="40" cy="11" r="2.3"/><circle class="ct" cx="68" cy="8" r="2.3"/><circle class="ct" cx="96" cy="6" r="2.3"/><circle class="ct" cx="124" cy="9" r="2.3"/><circle class="ct" cx="152" cy="6" r="2.3"/><circle class="ct" cx="180" cy="4" r="2.3"/><circle class="ct" cx="208" cy="7" r="2.3"/><circle class="ct" cx="236" cy="10" r="2.3"/><circle class="ct" cx="264" cy="8" r="2.3"/><circle class="ct" cx="292" cy="12" r="2.3"/><circle class="ct" cx="316" cy="15" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>きょうのよていを　かみにかく</span><span class="fd y"></span><span class="pos">17–18小節</span><span class="st">R-22</span></div>
+  </div>
+
+  <!-- 句2: 句まるごとメロが無い A2×B2 -->
+  <div class="ku">
+    <div class="melo none"></div>
+    <div class="ly"><span>まどのそと　みちがみえる</span><span class="pos">19–20小節</span><span class="st">A2×B2</span></div>
+  </div>
+
+  <!-- 句3: 意図して詞なし D1 -->
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="14,13 55,9 96,11 137,6 178,8 219,5 260,9 301,12"/>
+      <circle class="ct" cx="14" cy="13" r="2.3"/><circle class="ct" cx="55" cy="9" r="2.3"/><circle class="ct" cx="96" cy="11" r="2.3"/><circle class="ct" cx="137" cy="6" r="2.3"/><circle class="ct" cx="178" cy="8" r="2.3"/><circle class="ct" cx="219" cy="5" r="2.3"/><circle class="ct" cx="260" cy="9" r="2.3"/><circle class="ct" cx="301" cy="12" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="dsh"></span><span class="dsh"></span><span class="dsh"></span><span class="dsh"></span><span class="dsh"></span><span class="dsh"></span><span class="dsh"></span><span class="dsh"></span><span class="nolabel">詞なし</span><span class="pos">21–22小節</span><span class="st">D1</span></div>
+  </div>
+
+  <!-- 句4: 手で置いた予定 A2×B3＋D3 -->
+  <div class="ku">
+    <div class="melo none"></div>
+    <div class="ly"><span class="dslot">8音くらい・しめの一言</span><span class="pos">23–24小節</span><span class="st">A2×B3</span><span class="st">D3</span></div>
+  </div>
+
+  <!-- 2番Aメロ A4×B1 -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">2番Aメロ</span><span class="sbars">8小節</span><span class="st">E1</span><span class="st">A4×B1</span></div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,16 42,12 72,9 102,11 132,7 162,10 192,6 222,9 252,12 282,10 312,14"/>
+      <circle class="ct" cx="12" cy="16" r="2.3"/><circle class="ct" cx="42" cy="12" r="2.3"/><circle class="ct" cx="72" cy="9" r="2.3"/><circle class="ct" cx="102" cy="11" r="2.3"/><circle class="ct" cx="132" cy="7" r="2.3"/><circle class="ct" cx="162" cy="10" r="2.3"/><circle class="ct" cx="192" cy="6" r="2.3"/><circle class="ct" cx="222" cy="9" r="2.3"/><circle class="ct" cx="252" cy="12" r="2.3"/><circle class="ct" cx="282" cy="10" r="2.3"/><circle class="ct" cx="312" cy="14" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">25–26小節</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="14,15 50,11 86,13 122,8 158,10 194,7 230,9 266,12 302,15"/>
+      <circle class="ct" cx="14" cy="15" r="2.3"/><circle class="ct" cx="50" cy="11" r="2.3"/><circle class="ct" cx="86" cy="13" r="2.3"/><circle class="ct" cx="122" cy="8" r="2.3"/><circle class="ct" cx="158" cy="10" r="2.3"/><circle class="ct" cx="194" cy="7" r="2.3"/><circle class="ct" cx="230" cy="9" r="2.3"/><circle class="ct" cx="266" cy="12" r="2.3"/><circle class="ct" cx="302" cy="15" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">27–28小節</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,14 48,10 84,7 120,9 156,12 192,8 228,11 264,9 300,13"/>
+      <circle class="ct" cx="12" cy="14" r="2.3"/><circle class="ct" cx="48" cy="10" r="2.3"/><circle class="ct" cx="84" cy="7" r="2.3"/><circle class="ct" cx="120" cy="9" r="2.3"/><circle class="ct" cx="156" cy="12" r="2.3"/><circle class="ct" cx="192" cy="8" r="2.3"/><circle class="ct" cx="228" cy="11" r="2.3"/><circle class="ct" cx="264" cy="9" r="2.3"/><circle class="ct" cx="300" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">29–32小節</span></div>
+  </div>
+
+  <!-- 2番Bメロ A4×B1（2番Aメロと連続で A5×B1） -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">2番Bメロ</span><span class="sbars">8小節</span><span class="st">E1</span><span class="st">A4×B1</span><span class="st">A5×B1</span></div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,17 48,13 84,10 120,12 156,8 192,6 228,9 264,7 300,11"/>
+      <circle class="ct" cx="12" cy="17" r="2.3"/><circle class="ct" cx="48" cy="13" r="2.3"/><circle class="ct" cx="84" cy="10" r="2.3"/><circle class="ct" cx="120" cy="12" r="2.3"/><circle class="ct" cx="156" cy="8" r="2.3"/><circle class="ct" cx="192" cy="6" r="2.3"/><circle class="ct" cx="228" cy="9" r="2.3"/><circle class="ct" cx="264" cy="7" r="2.3"/><circle class="ct" cx="300" cy="11" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">33–36小節</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="14,15 55,11 96,8 137,10 178,6 219,9 260,12 301,15"/>
+      <circle class="ct" cx="14" cy="15" r="2.3"/><circle class="ct" cx="55" cy="11" r="2.3"/><circle class="ct" cx="96" cy="8" r="2.3"/><circle class="ct" cx="137" cy="10" r="2.3"/><circle class="ct" cx="178" cy="6" r="2.3"/><circle class="ct" cx="219" cy="9" r="2.3"/><circle class="ct" cx="260" cy="12" r="2.3"/><circle class="ct" cx="301" cy="15" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">37–40小節</span></div>
+  </div>
+
+  <!-- 2番サビ A4×B2 -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">2番サビ</span><span class="sbars">8小節</span><span class="st">E1</span><span class="st">A4×B2</span></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>でんきをけして　へやをでる</span><span class="pos">41–42小節</span></div></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>かさをもって　かいだんおりる</span><span class="pos">43–44小節</span></div></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>ドアをしめて　かぎをかける</span><span class="pos">45–48小節</span></div></div>
+
+  <!-- Cメロ A4×B2（2番サビと連続で A5×B2） -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">Cメロ</span><span class="sbars">8小節</span><span class="st">E1</span><span class="st">A4×B2</span><span class="st">A5×B2</span></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>テレビをけして　おちゃをのむ</span><span class="pos">49–50小節</span></div></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>ざっしをとじて　めをとじる</span><span class="pos">51–52小節</span></div></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>とけいのはりを　ながめてる</span><span class="pos">53–56小節</span></div></div>
+
+  <!-- Dメロ（A3×B1・A3×B2 を担う追加セクション） -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">Dメロ</span><span class="sbars">12小節</span><span class="st">E1</span></div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,15 48,11 84,8 120,10 156,6 192,9 228,7 264,11 300,14"/>
+      <circle class="ct" cx="12" cy="15" r="2.3"/><circle class="ct" cx="48" cy="11" r="2.3"/><circle class="ct" cx="84" cy="8" r="2.3"/><circle class="ct" cx="120" cy="10" r="2.3"/><circle class="ct" cx="156" cy="6" r="2.3"/><circle class="ct" cx="192" cy="9" r="2.3"/><circle class="ct" cx="228" cy="7" r="2.3"/><circle class="ct" cx="264" cy="11" r="2.3"/><circle class="ct" cx="300" cy="14" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>くつをそろえて　げんかんへ</span><span class="pos">57–58小節</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="14,14 55,10 96,12 137,7 178,9 219,6 260,10 301,13"/>
+      <circle class="ct" cx="14" cy="14" r="2.3"/><circle class="ct" cx="55" cy="10" r="2.3"/><circle class="ct" cx="96" cy="12" r="2.3"/><circle class="ct" cx="137" cy="7" r="2.3"/><circle class="ct" cx="178" cy="9" r="2.3"/><circle class="ct" cx="219" cy="6" r="2.3"/><circle class="ct" cx="260" cy="10" r="2.3"/><circle class="ct" cx="301" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>ポストのてがみを　とりにいく</span><span class="pos">59–60小節</span></div>
+  </div>
+  <!-- 句3〜4: パートの詞だけ無い A3×B1 -->
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,16 48,12 84,9 120,11 156,7 192,10 228,8 264,12 300,15"/>
+      <circle class="ct" cx="12" cy="16" r="2.3"/><circle class="ct" cx="48" cy="12" r="2.3"/><circle class="ct" cx="84" cy="9" r="2.3"/><circle class="ct" cx="120" cy="11" r="2.3"/><circle class="ct" cx="156" cy="7" r="2.3"/><circle class="ct" cx="192" cy="10" r="2.3"/><circle class="ct" cx="228" cy="8" r="2.3"/><circle class="ct" cx="264" cy="12" r="2.3"/><circle class="ct" cx="300" cy="15" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">61–62小節</span><span class="st">A3×B1</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="14,13 55,9 96,11 137,6 178,8 219,5 260,9 301,12"/>
+      <circle class="ct" cx="14" cy="13" r="2.3"/><circle class="ct" cx="55" cy="9" r="2.3"/><circle class="ct" cx="96" cy="11" r="2.3"/><circle class="ct" cx="137" cy="6" r="2.3"/><circle class="ct" cx="178" cy="8" r="2.3"/><circle class="ct" cx="219" cy="5" r="2.3"/><circle class="ct" cx="260" cy="9" r="2.3"/><circle class="ct" cx="301" cy="12" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">63–64小節</span><span class="st">A3×B1</span></div>
+  </div>
+  <!-- 句5〜6: パートのメロだけ無い A3×B2 -->
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>シャツのボタンを　とめなおす</span><span class="pos">65–66小節</span><span class="st">A3×B2</span></div></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>メモをたたんで　ポケットへ</span><span class="pos">67–68小節</span><span class="st">A3×B2</span></div></div>
+
+  <!-- 間奏2 A4×B3 -->
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">間奏2</span><span class="sbars">4小節</span><span class="st">E1</span></div>
+  <div class="zone"><span>まだ何も無い区間・しずかめに（8音×2くらい）</span><span class="pos">69–72小節</span><span class="st">A4×B3</span><span class="st">D3</span></div>
+
+  <!-- 大サビ（仮）・アウトロ（仮） A5×B3＋E2 -->
+  <div class="sec kari"><span class="grip">⋮⋮</span><span class="sname">大サビ</span><span class="karichip">仮</span><span class="sbars">8小節くらい</span><span class="secbtn">確定にする</span><span class="st">E2</span><span class="st">A5×B3</span></div>
+  <div class="zone"><span>まだ何も無い区間</span></div>
+  <div class="sec kari"><span class="grip">⋮⋮</span><span class="sname">アウトロ</span><span class="karichip">仮</span><span class="sbars">小節数未定</span><span class="secbtn">確定にする</span><span class="st">E2</span></div>
+  <div class="zone"><span>まだ何も無い区間</span></div>
+
+  <div class="addrow"><span class="addbtn">＋ セクションを足す</span><span class="addbtn">＋ 予定を置く</span></div>
+
+  <!-- 並びの外の置き場 D4 -->
+  <div class="stockhd">まだ並びに入れていないもの</div>
+  <div class="stock"><div class="ku">
+    <div class="melo"><svg width="308" height="24" viewBox="0 0 308 24">
+      <rect class="band" x="0" y="3" width="308" height="18" rx="4"/>
+      <polyline class="cl" points="12,15 42,11 72,8 102,10 132,6 162,9 192,7 222,11 252,9 288,13"/>
+      <circle class="ct" cx="12" cy="15" r="2.3"/><circle class="ct" cx="42" cy="11" r="2.3"/><circle class="ct" cx="72" cy="8" r="2.3"/><circle class="ct" cx="102" cy="10" r="2.3"/><circle class="ct" cx="132" cy="6" r="2.3"/><circle class="ct" cx="162" cy="9" r="2.3"/><circle class="ct" cx="192" cy="7" r="2.3"/><circle class="ct" cx="222" cy="11" r="2.3"/><circle class="ct" cx="252" cy="9" r="2.3"/><circle class="ct" cx="288" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>ゆうがたのみちをあるく</span><span class="placebtn">並びに入れる</span><span class="pos">場所: 未定</span><span class="st">D4</span></div>
+  </div></div>
+
+  <div class="playbar"><span class="pb">&#124;◀</span><span class="pb play">▶</span><span class="pb">⟳</span><span class="pb sp">1:1</span><span class="pb">◀<small style="font-size:9px">)))</small></span></div>
+</div>
+
+<div class="desc">主サンプル曲の全長。<b>意図的に長く、スクロールで全長を見せること自体が「俯瞰はスクロールでよい」の確認材料</b>。
+セクション見出しはスクロール中も上端に貼り付く（R-9・静止画のため表現省略）。
+帯=メロあり／帯の中の空白=休符／帯なし=メロ未定／空きの枠=音数ぶんの記入欄／横棒=詞なし／点線=まだ何も無い（注記は任意）。
+仮の見出しの「確定にする」を押すまで既存曲画面に実体は作られない（裁定5）。
+再生中の句は左に▶と枠の強調（R-22）。</div>
+
+<!-- インセット: 裁定1 その場入力 -->
+<div class="inset">
+  <h3>枚1補: 空きの枠をタップしたとき（語1つ程度・裁定1）</h3>
+  <div class="ku" style="border-bottom:none">
+    <div class="ly"><span>みずをのんでから</span><span class="inp">3音<i>｜</i></span><span class="pop"><span class="p1">候補を探す</span><span>編集画面で開く</span></span></div>
+  </div>
+  <div class="desc" style="margin-top:4px">語1つ程度の空きは通しの面でその場入力（枠がそのまま入力欄になり音数を薄く示す）。句以上の空き・意味から書きたいときはタップで編集画面へ（1手）。</div>
+</div>
+
+<!-- インセット: 裁定6 予定を置く -->
+<div class="inset">
+  <h3>枚1補: 「予定を置く」の記入（裁定6・すべて任意）</h3>
+  <div class="formrow"><label>メモ（任意）</label><span class="fin">しめの一言</span></div>
+  <div class="formrow"><label>小節数（任意）</label><span class="fin s">2</span></div>
+  <div class="formrow"><label>音数（任意）</label><span class="fin s">8</span></div>
+  <div class="pop" style="margin-top:6px"><span class="p1">置く</span><span>やめる</span></div>
+  <div class="desc" style="margin-top:6px">自由記述＋数値欄の両方を持ち、どれも必須にしない。数値は候補依頼の条件にそのまま使える。</div>
+</div>
+</div>
+
+<!-- ================================================================ -->
+<!-- 枚2: 表示切替（イントネーション表示） -->
+<!-- ================================================================ -->
+<div class="frame">
+<h2 class="fcap"><span class="no">2</span>歌詞全体画面・表示切替（イントネーション）</h2>
+<div class="ph">
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲</span></div>
+  <div class="seg"><span>素</span><span>音韻</span><span class="on">イントネーション</span></div>
+  <div class="legend"><span class="r">赤=アクセント逆行</span>・<span class="y">黄=注意</span>・印なし=指摘なし（既存の韻律チェックと同じ作法）</div>
+
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">前奏</span><span class="sbars">4小節（歌なし）</span></div>
+
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">1番Aメロ</span><span class="sbars">8小節</span></div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,16 36,12 60,9 84,11 108,7"/>
+      <polyline class="cl" points="180,14 204,10 228,8 252,12 276,16"/>
+      <circle class="ct" cx="12" cy="16" r="2.3"/><circle class="ct" cx="36" cy="12" r="2.3"/><circle class="ct" cx="60" cy="9" r="2.3"/><circle class="ct" cx="84" cy="11" r="2.3"/><circle class="ct" cx="108" cy="7" r="2.3"/>
+      <circle class="ct" cx="180" cy="14" r="2.3"/><circle class="ct" cx="204" cy="10" r="2.3"/><circle class="ct" cx="228" cy="8" r="2.3"/><circle class="ct" cx="252" cy="12" r="2.3"/><circle class="ct" cx="276" cy="16" r="2.3"/>
+    </svg></div>
+    <div class="ta"><span>あ</span><span>さ</span><span>お</span><span>き</span><span>て</span><span></span><span></span><span>ま</span><span>ど</span><span>を</span><span>あ</span><span>け</span><span>る</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,15 36,11 60,13 84,8 108,10 132,6 156,9 180,12 216,9 252,12 288,15"/>
+      <circle class="ct" cx="12" cy="15" r="2.3"/><circle class="ct" cx="36" cy="11" r="2.3"/><circle class="ct" cx="60" cy="13" r="2.3"/><circle class="ct" cx="84" cy="8" r="2.3"/><circle class="ct" cx="108" cy="10" r="2.3"/><circle class="ct" cx="132" cy="6" r="2.3"/><circle class="ct" cx="156" cy="9" r="2.3"/><circle class="ct" cx="180" cy="12" r="2.3"/><circle class="ct" cx="216" cy="9" r="2.3"/><circle class="ct" cx="252" cy="12" r="2.3"/><circle class="ct" cx="288" cy="15" r="2.3"/>
+    </svg></div>
+    <div class="ta"><span>み</span><span>ず</span><span>を</span><span class="my">の</span><span>ん</span><span>で</span><span>か</span><span>ら</span><span class="kb" style="width:15px"></span><span class="kb" style="width:15px"></span><span class="kb" style="width:15px"></span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="150" height="18" rx="4"/>
+      <polyline class="cl" points="12,14 36,10 60,12 84,7 108,10 132,13"/>
+      <circle class="ct" cx="12" cy="14" r="2.3"/><circle class="ct" cx="36" cy="10" r="2.3"/><circle class="ct" cx="60" cy="12" r="2.3"/><circle class="ct" cx="84" cy="7" r="2.3"/><circle class="ct" cx="108" cy="10" r="2.3"/><circle class="ct" cx="132" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ta"><span>か</span><span>ぎ</span><span>を</span><span>か</span><span>け</span><span>て</span><span>そ</span><span>と</span><span>に</span><span>で</span><span>る</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="150" height="18" rx="4"/>
+      <polyline class="cl" points="12,15 36,11 60,8 84,11 108,9 132,13"/>
+      <circle class="ct" cx="12" cy="15" r="2.3"/><circle class="ct" cx="36" cy="11" r="2.3"/><circle class="ct" cx="60" cy="8" r="2.3"/><circle class="ct" cx="84" cy="11" r="2.3"/><circle class="ct" cx="108" cy="9" r="2.3"/><circle class="ct" cx="132" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="ta" style="display:inline-flex"><span>バ</span><span>ス</span><span>を</span><span>ま</span><span>っ</span><span>て</span></span><span class="dslot">あと5音くらい</span></div>
+  </div>
+
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">1番Bメロ</span><span class="sbars">8小節</span></div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,17 36,13 60,10 84,12 108,8 132,6 156,9 180,7 204,11 228,14 252,12 276,10 300,13"/>
+      <circle class="ct" cx="12" cy="17" r="2.3"/><circle class="ct" cx="36" cy="13" r="2.3"/><circle class="ct" cx="60" cy="10" r="2.3"/><circle class="ct" cx="84" cy="12" r="2.3"/><circle class="ct" cx="108" cy="8" r="2.3"/><circle class="ct" cx="132" cy="6" r="2.3"/><circle class="ct" cx="156" cy="9" r="2.3"/><circle class="ct" cx="180" cy="7" r="2.3"/><circle class="ct" cx="204" cy="11" r="2.3"/><circle class="ct" cx="228" cy="14" r="2.3"/><circle class="ct" cx="252" cy="12" r="2.3"/><circle class="ct" cx="276" cy="10" r="2.3"/><circle class="ct" cx="300" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ta"><span>ふ</span><span>く</span><span>を</span><span class="mr">た</span><span>た</span><span>ん</span><span>で</span><span>た</span><span>な</span><span>に</span><span>い</span><span>れ</span><span>る</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="14,14 50,10 86,12 122,7 158,9 194,6 230,10 266,13 302,16"/>
+      <circle class="ct" cx="14" cy="14" r="2.3"/><circle class="ct" cx="50" cy="10" r="2.3"/><circle class="ct" cx="86" cy="12" r="2.3"/><circle class="ct" cx="122" cy="7" r="2.3"/><circle class="ct" cx="158" cy="9" r="2.3"/><circle class="ct" cx="194" cy="6" r="2.3"/><circle class="ct" cx="230" cy="10" r="2.3"/><circle class="ct" cx="266" cy="13" r="2.3"/><circle class="ct" cx="302" cy="16" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span></div>
+  </div>
+  <div class="zone"><span>まだ何も無い区間</span><span class="pos">13–16小節</span></div>
+
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">1番サビ</span><span class="sbars">8小節</span></div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,16 34,11 56,8 78,6 100,9 122,6 144,4 166,7 188,10 210,8 232,12 254,10 276,13 298,15"/>
+      <circle class="ct" cx="12" cy="16" r="2.3"/><circle class="ct" cx="34" cy="11" r="2.3"/><circle class="ct" cx="56" cy="8" r="2.3"/><circle class="ct" cx="78" cy="6" r="2.3"/><circle class="ct" cx="100" cy="9" r="2.3"/><circle class="ct" cx="122" cy="6" r="2.3"/><circle class="ct" cx="144" cy="4" r="2.3"/><circle class="ct" cx="166" cy="7" r="2.3"/><circle class="ct" cx="188" cy="10" r="2.3"/><circle class="ct" cx="210" cy="8" r="2.3"/><circle class="ct" cx="232" cy="12" r="2.3"/><circle class="ct" cx="254" cy="10" r="2.3"/><circle class="ct" cx="276" cy="13" r="2.3"/><circle class="ct" cx="298" cy="15" r="2.3"/>
+    </svg></div>
+    <div class="ta" style="font-size:12.5px"><span style="width:22px">き</span><span style="width:22px">ょ</span><span style="width:22px">う</span><span style="width:22px">の</span><span class="my" style="width:22px">よ</span><span style="width:22px">て</span><span style="width:22px">い</span><span style="width:22px">を</span><span style="width:22px">か</span><span style="width:22px">み</span><span style="width:22px">に</span><span style="width:22px">か</span><span style="width:22px">く</span></div>
+  </div>
+
+  <div class="zone" style="border-style:none;padding:6px 4px"><span>（以下の並びは枚1と同じ。印と文字の時間揃えだけが替わる）</span></div>
+
+  <div class="playbar"><span class="pb">&#124;◀</span><span class="pb play">▶</span><span class="pb">⟳</span><span class="pb sp">1:1</span><span class="pb">◀<small style="font-size:9px">)))</small></span></div>
+</div>
+<div class="desc">同じ曲の表示切替。<b>文字を音符の時間位置に緩く揃え</b>、印は文字への付け足し（下線色）で出す。
+点数・優劣は出さない。「音韻」切替も同じ作法（付け足す印の種類だけが替わる）。
+裁定2の反映＝下書き/確定の色分けは無し。嵌り具合は「印の有無」という事実で見え、印なし＝指摘なし。</div>
+</div>
+
+<!-- ================================================================ -->
+<!-- 枚3: 初期状態3態 -->
+<!-- ================================================================ -->
+<div class="frame">
+<h2 class="fcap"><span class="no">3</span>初期状態3態（短い曲3つ）</h2>
+<div class="mini3">
+
+<!-- 3a: A6×B1 -->
+<div class="ph mini">
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲B</span></div>
+  <div class="seg"><span class="on">素</span><span>音韻</span><span>イントネーション</span></div>
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">Aメロ</span><span class="sbars">8小節</span><span class="st">A6×B1</span></div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,15 48,11 84,8 120,10 156,6 192,9 228,7 264,11 300,14"/>
+      <circle class="ct" cx="12" cy="15" r="2.3"/><circle class="ct" cx="48" cy="11" r="2.3"/><circle class="ct" cx="84" cy="8" r="2.3"/><circle class="ct" cx="120" cy="10" r="2.3"/><circle class="ct" cx="156" cy="6" r="2.3"/><circle class="ct" cx="192" cy="9" r="2.3"/><circle class="ct" cx="228" cy="7" r="2.3"/><circle class="ct" cx="264" cy="11" r="2.3"/><circle class="ct" cx="300" cy="14" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">1–4小節</span></div>
+  </div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="14,14 55,10 96,12 137,7 178,9 219,6 260,10 301,13"/>
+      <circle class="ct" cx="14" cy="14" r="2.3"/><circle class="ct" cx="55" cy="10" r="2.3"/><circle class="ct" cx="96" cy="12" r="2.3"/><circle class="ct" cx="137" cy="7" r="2.3"/><circle class="ct" cx="178" cy="9" r="2.3"/><circle class="ct" cx="219" cy="6" r="2.3"/><circle class="ct" cx="260" cy="10" r="2.3"/><circle class="ct" cx="301" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">5–8小節</span></div>
+  </div>
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">サビ</span><span class="sbars">8小節</span></div>
+  <div class="ku">
+    <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
+      <rect class="band" x="0" y="3" width="328" height="18" rx="4"/>
+      <polyline class="cl" points="12,16 48,11 84,7 120,9 156,5 192,8 228,6 264,10 300,13"/>
+      <circle class="ct" cx="12" cy="16" r="2.3"/><circle class="ct" cx="48" cy="11" r="2.3"/><circle class="ct" cx="84" cy="7" r="2.3"/><circle class="ct" cx="120" cy="9" r="2.3"/><circle class="ct" cx="156" cy="5" r="2.3"/><circle class="ct" cx="192" cy="8" r="2.3"/><circle class="ct" cx="228" cy="6" r="2.3"/><circle class="ct" cx="264" cy="10" r="2.3"/><circle class="ct" cx="300" cy="13" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">9–16小節</span></div>
+  </div>
+  <div class="playbar"><span class="pb">&#124;◀</span><span class="pb play">▶</span><span class="pb">⟳</span><span class="pb sp">1:1</span><span class="pb">◀<small style="font-size:9px">)))</small></span></div>
+</div>
+
+<!-- 3b: A6×B2 -->
+<div class="ph mini">
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲C</span></div>
+  <div class="seg"><span class="on">素</span><span>音韻</span><span>イントネーション</span></div>
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">Aメロ</span><span class="sbars">当てなし</span><span class="st">A6×B2</span></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>あめのひは　かさをさして</span></div></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>えきまでの　みちをあるく</span></div></div>
+  <div class="sec"><span class="grip">⋮⋮</span><span class="sname">サビ</span><span class="sbars">当てなし</span></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>しんごうが　あおにかわる</span></div></div>
+  <div class="ku"><div class="melo none"></div>
+    <div class="ly"><span>ふみきりの　おとがきこえる</span></div></div>
+  <div class="playbar"><span class="pb">&#124;◀</span><span class="pb play">▶</span><span class="pb">⟳</span><span class="pb sp">1:1</span><span class="pb">◀<small style="font-size:9px">)))</small></span></div>
+</div>
+
+<!-- 3c: A6×B3 + E3 -->
+<div class="ph mini">
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲D</span></div>
+  <div class="seg"><span class="on">素</span><span>音韻</span><span>イントネーション</span></div>
+  <div class="zone" style="margin-top:10px"><span>セクションはまだありません</span><span class="st">A6×B3</span><span class="st">E3</span></div>
+  <div class="addrow"><span class="addbtn">＋ セクションを足す</span><span class="addbtn">＋ 予定を置く</span></div>
+  <div class="stockhd">まだ並びに入れていないもの</div>
+  <div class="stock"><div class="ku">
+    <div class="melo"><svg width="308" height="24" viewBox="0 0 308 24">
+      <rect class="band" x="0" y="3" width="308" height="18" rx="4"/>
+      <polyline class="cl" points="12,14 46,10 80,7 114,9 148,5 182,8 216,11 250,9 284,12"/>
+      <circle class="ct" cx="12" cy="14" r="2.3"/><circle class="ct" cx="46" cy="10" r="2.3"/><circle class="ct" cx="80" cy="7" r="2.3"/><circle class="ct" cx="114" cy="9" r="2.3"/><circle class="ct" cx="148" cy="5" r="2.3"/><circle class="ct" cx="182" cy="8" r="2.3"/><circle class="ct" cx="216" cy="11" r="2.3"/><circle class="ct" cx="250" cy="9" r="2.3"/><circle class="ct" cx="284" cy="12" r="2.3"/>
+    </svg></div>
+    <div class="ly"><span>まちのあかりがともるころ</span><span class="placebtn">並びに入れる</span><span class="pos">場所: 未定</span></div>
+  </div></div>
+  <div class="playbar"><span class="pb">&#124;◀</span><span class="pb play">▶</span><span class="pb">⟳</span><span class="pb sp">1:1</span><span class="pb">◀<small style="font-size:9px">)))</small></span></div>
+</div>
+
+</div>
+<div class="desc">上=曲全体で詞が無い（メロは通しである・A6×B1）。中=曲全体でメロが無い（歌詞ネタから取り込んだ直後の姿・A6×B2）。
+下=断片以外なにも無い（A6×B3＋E3）。並びが空でも同じ画面が最初の作業場として成立し、断片は「まだ並びに入れていないもの」に見える。
+どの状態でも例外の描き方を作らず、同じ原則の繰り返しで読める。</div>
+</div>
+
+<!-- ================================================================ -->
+<!-- 枚4: 句の編集画面（詞の空き・C1・候補=適合度順） -->
+<!-- ================================================================ -->
+<div class="frame">
+<h2 class="fcap"><span class="no">4</span>句の編集画面（詞の空き・前後あり・候補=順に並べる案）</h2>
+<div class="ph">
+  <div class="hd"><span class="back">← 戻る</span><span class="crumb"><b>サンプル曲</b> › 1番Aメロ › 3–4小節</span></div>
+
+  <div class="ghostlbl">前の句</div>
+  <div class="ku ghost" style="border-bottom:none">
+    <div class="melo"><svg width="328" height="20" viewBox="0 0 328 20">
+      <rect class="band" x="0" y="2" width="328" height="16" rx="4"/>
+      <polyline class="cl" points="12,13 60,10 108,7 156,9 204,11 252,8 300,12"/>
+      <circle class="ct" cx="12" cy="13" r="2"/><circle class="ct" cx="60" cy="10" r="2"/><circle class="ct" cx="108" cy="7" r="2"/><circle class="ct" cx="156" cy="9" r="2"/><circle class="ct" cx="204" cy="11" r="2"/><circle class="ct" cx="252" cy="8" r="2"/><circle class="ct" cx="300" cy="12" r="2"/>
+    </svg></div>
+    <div class="ly" style="font-size:12px"><span>あさおきて　まどをあける</span></div>
+  </div>
+
+  <div class="target"><span class="st" style="float:right">A1×B1</span><span class="st" style="float:right">C1</span>
+    <div class="melo"><svg width="310" height="30" viewBox="0 0 310 30">
+      <rect class="band" x="0" y="4" width="310" height="22" rx="5"/>
+      <polyline class="cl" points="12,19 39,14 66,16 93,10 120,12 147,8 174,11 201,15 236,11 271,15 298,19"/>
+      <circle class="ct" cx="12" cy="19" r="2.6"/><circle class="ct" cx="39" cy="14" r="2.6"/><circle class="ct" cx="66" cy="16" r="2.6"/><circle class="ct" cx="93" cy="10" r="2.6"/><circle class="ct" cx="120" cy="12" r="2.6"/><circle class="ct" cx="147" cy="8" r="2.6"/><circle class="ct" cx="174" cy="11" r="2.6"/><circle class="ct" cx="201" cy="15" r="2.6"/>
+      <circle class="ct" cx="236" cy="11" r="2.6"/><circle class="ct" cx="271" cy="15" r="2.6"/><circle class="ct" cx="298" cy="19" r="2.6"/>
+    </svg></div>
+    <div class="ly" style="font-size:15px"><span>みずをのんでから</span><span class="kb" style="width:17px;height:20px"></span><span class="kb" style="width:17px;height:20px"></span><span class="kb" style="width:17px;height:20px"></span></div>
+
+    <div class="fieldrow">
+      <div class="field"><h4>意味（言いたいこと）</h4>
+        <div class="fill">でかける前のようす。急がない感じ</div></div>
+      <div class="field"><h4>音の枠</h4>
+        <div class="fill">3音・4小節目<br>アクセント: 低高高</div>
+        <div class="auto">メロから自動で入っています</div></div>
+    </div>
+  </div>
+
+  <div class="ghostlbl">次の句</div>
+  <div class="ku ghost" style="border-bottom:none">
+    <div class="melo"><svg width="328" height="20" viewBox="0 0 328 20">
+      <rect class="band" x="0" y="2" width="160" height="16" rx="4"/>
+      <polyline class="cl" points="12,12 42,9 72,11 102,7 132,10"/>
+      <circle class="ct" cx="12" cy="12" r="2"/><circle class="ct" cx="42" cy="9" r="2"/><circle class="ct" cx="72" cy="11" r="2"/><circle class="ct" cx="102" cy="7" r="2"/><circle class="ct" cx="132" cy="10" r="2"/>
+    </svg></div>
+    <div class="ly" style="font-size:12px"><span>かぎをかけて　そとにでる</span></div>
+  </div>
+
+  <div class="ops">
+    <span class="op main">候補を探す</span><span class="op">歌詞ネタから引く</span><span class="op">相談</span>
+    <span class="op">メロを開く</span><span class="op">配置を開く</span><span class="op">この範囲は詞を付けない</span>
+  </div>
+
+  <div class="sheet">
+    <h3>候補<span class="mode">合いそうなものから順に（点数は出さない）</span><span class="st">裁定7(a)</span></h3>
+    <div class="cand"><div class="w">まちへ</div>
+      <div class="facts"><span class="fact">音数ぴったり</span><span class="fact">アクセント一致</span></div>
+      <div class="dest">宛先: サンプル曲 › 1番Aメロ › 3–4小節の句</div></div>
+    <div class="cand"><div class="w">そ<span class="my2">と</span>へ</div>
+      <div class="facts"><span class="fact">音数ぴったり</span><span class="fact y">注意の印 1</span></div>
+      <div class="dest">宛先: サンプル曲 › 1番Aメロ › 3–4小節の句</div></div>
+    <div class="cand"><div class="w">えきまで</div>
+      <div class="facts"><span class="fact y">字余り 1</span></div>
+      <div class="dest">宛先: サンプル曲 › 1番Aメロ › 3–4小節の句</div></div>
+    <div class="cand"><div class="w"><span class="mr2">に</span>わへ</div>
+      <div class="facts"><span class="fact">音数ぴったり</span><span class="fact r">アクセント逆行 1</span></div>
+      <div class="dest">宛先: サンプル曲 › 1番Aメロ › 3–4小節の句</div></div>
+  </div>
+</div>
+<div class="desc">通しの面で空きをタップして1手で開く。<b>両端固定（C1）</b>＝前後の句が薄く出て、候補は嵌め込みの性格。
+「意味」と「音の枠」は左右同格の二欄並置（順序で優劣を付けない）。音の枠はメロから自動で入る。
+候補一覧はこの面の中のボトムシート。並べ方(a)=合いそうなものから順。各候補には事実の小札と嵌りの印（下線）と宛先。選ぶのは人。
+裁定2の反映＝「確定にする」の操作は置かない。</div>
+</div>
+
+<!-- ================================================================ -->
+<!-- 枚5: 候補=事実区分 -->
+<!-- ================================================================ -->
+<div class="frame">
+<h2 class="fcap"><span class="no">5</span>句の編集画面（候補=事実で区分する案）</h2>
+<div class="ph">
+  <div class="hd"><span class="back">← 戻る</span><span class="crumb"><b>サンプル曲</b> › 1番Aメロ › 3–4小節</span></div>
+
+  <div class="target" style="opacity:.55">
+    <div class="ly" style="font-size:15px"><span>みずをのんでから</span><span class="kb" style="width:17px;height:20px"></span><span class="kb" style="width:17px;height:20px"></span><span class="kb" style="width:17px;height:20px"></span></div>
+  </div>
+
+  <div class="sheet" style="margin-top:8px">
+    <h3>候補<span class="mode">事実で区分（区分の中の並びに意味は持たせない）</span><span class="st">裁定7(b)</span></h3>
+    <div class="cgroup">音数ぴったり</div>
+    <div class="cand"><div class="w">まちへ</div>
+      <div class="facts"><span class="fact">アクセント一致</span></div>
+      <div class="dest">宛先: サンプル曲 › 1番Aメロ › 3–4小節の句</div></div>
+    <div class="cand"><div class="w">そ<span class="my2">と</span>へ</div>
+      <div class="facts"><span class="fact y">注意の印 1</span></div>
+      <div class="dest">宛先: サンプル曲 › 1番Aメロ › 3–4小節の句</div></div>
+    <div class="cgroup">字余り 1</div>
+    <div class="cand"><div class="w">えきまで</div>
+      <div class="facts"></div>
+      <div class="dest">宛先: サンプル曲 › 1番Aメロ › 3–4小節の句</div></div>
+    <div class="cgroup">アクセント違い</div>
+    <div class="cand"><div class="w"><span class="mr2">に</span>わへ</div>
+      <div class="facts"><span class="fact r">アクセント逆行 1</span></div>
+      <div class="dest">宛先: サンプル曲 › 1番Aメロ › 3–4小節の句</div></div>
+  </div>
+</div>
+<div class="desc">枚4と同じ画面で、候補一覧の並べ方だけ差し替えた比較用。
+並べ方(b)=「音数ぴったり」「字余り1」「アクセント違い」という<b>事実の見出しで区分</b>し、優劣の順位を作らない。
+どちらを採るかはこの2枚の比較で裁定いただく（裁定7）。</div>
+</div>
+
+<!-- ================================================================ -->
+<!-- 枚6: メロ側の空き＋孤立（C4）＋前後表示の4態 -->
+<!-- ================================================================ -->
+<div class="frame">
+<h2 class="fcap"><span class="no">6</span>句の編集画面（メロ側の空き）＋孤立の前後表示</h2>
+<div class="ph">
+  <div class="hd"><span class="back">← 戻る</span><span class="crumb"><b>サンプル曲</b> › Cメロ › 51–52小節</span></div>
+
+  <div class="ghostlbl">前の句</div>
+  <div class="ku ghost" style="border-bottom:none"><div class="melo none"></div>
+    <div class="ly" style="font-size:12px"><span>テレビをけして　おちゃをのむ</span><span class="pos">メロなし</span></div></div>
+
+  <div class="target"><span class="st" style="float:right">A4×B2の句</span><span class="st" style="float:right">S-8</span>
+    <div class="melo none" style="border:1px dashed #3c414a;border-radius:6px;height:26px;display:flex;align-items:center;justify-content:center;color:#565d69;font-size:11px">まだメロがありません</div>
+    <div class="ly" style="font-size:15px;margin-top:5px"><span>ざっしをとじて　めをとじる</span></div>
+    <div class="fieldrow">
+      <div class="field"><h4>意味（言いたいこと）</h4>
+        <div class="fill">ひと息ついて休む場面</div></div>
+      <div class="field"><h4>音の枠</h4>
+        <div class="fill">12音<br>アクセント: 低高高高低…</div>
+        <div class="auto">詞から自動で出しています</div></div>
+    </div>
+  </div>
+
+  <div class="ghostlbl">次の句</div>
+  <div class="ku ghost" style="border-bottom:none"><div class="melo none"></div>
+    <div class="ly" style="font-size:12px"><span>とけいのはりを　ながめてる</span><span class="pos">メロなし</span></div></div>
+
+  <div class="ops">
+    <span class="op main">メロ候補を頼む</span><span class="op">ピアノロールで置く</span><span class="op">配置を開く</span><span class="op">相談</span>
+  </div>
+
+  <!-- C4: 孤立の前後表示 -->
+  <div class="strip"><b style="color:var(--fg)">別の箇所を開いたとき＝孤立（前後とも何も無い）</b><span class="st">C4</span><span class="st">A2×B3</span>
+    <div class="row"><span>前</span><span class="cell emp">まだ何も無い</span></div>
+    <div class="row"><span>対象</span><span class="cell tg">大サビ（仮）の中の予定「8音くらい」・意味/音の枠とも空</span></div>
+    <div class="row"><span>次</span><span class="cell emp">まだ何も無い</span></div>
+    <div style="margin-top:4px">前後欄が空であること自体が表示（特別な名札は付けない）。候補は発散寄りの性格になる。</div>
+  </div>
+
+  <!-- C2/C3 -->
+  <div class="strip"><b style="color:var(--fg)">前後表示の残り2態</b>
+    <div class="row"><span class="st">C2</span><span class="cell">前の句あり</span><span class="cell tg">対象</span><span class="cell emp">点線のまま</span></div>
+    <div class="row"><span class="st">C3</span><span class="cell emp">点線のまま</span><span class="cell tg">対象</span><span class="cell">後ろの句あり</span></div>
+  </div>
+</div>
+<div class="desc">メロ側の空き＝決まっている詞を主に出し（音数・アクセントは詞から自動）、操作が「メロ候補を頼む」「ピアノロールで置く」になる。
+前後の句はメロが無くても文字で薄く出る。下段は前後の固定度の残り3態（C4=孤立、C2=前だけ、C3=後ろだけ）。C1は枚4。</div>
+</div>
+
+<!-- ================================================================ -->
+<!-- 枚7: 既存画面への足し込み＋遷移図 -->
+<!-- ================================================================ -->
+<div class="frame wide">
+<h2 class="fcap"><span class="no">7</span>既存画面への足し込みと遷移図</h2>
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+
+<!-- 7a 曲画面 -->
+<div>
+<div class="ph" style="width:352px">
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲</span><span class="hbtn">歌詞</span></div>
+  <div class="card">
+    <span class="grip">⋮⋮</span>
+    <div><div class="cn">1番Aメロ</div><div class="cb">8小節・1–8</div></div>
+    <span class="rolechip">役割</span>
+    <div class="cfacts"><span class="fact">詞の空き 2か所</span><span class="fact">メロ未定 1範囲</span></div>
+  </div>
+  <div class="blk"><span style="color:var(--mel)">メロ「Aメロまえはん」</span><span class="fact" style="margin-left:auto">詞の空き 3音</span></div>
+  <div class="card">
+    <span class="grip">⋮⋮</span>
+    <div><div class="cn">1番サビ</div><div class="cb">8小節・17–24</div></div>
+    <span class="rolechip">役割</span>
+    <div class="cfacts"><span class="fact">詞なし 1範囲</span><span class="fact">詞の空き 1か所</span></div>
+  </div>
+  <div class="card">
+    <span class="grip">⋮⋮</span>
+    <div><div class="cn">Cメロ</div><div class="cb">8小節・49–56</div></div>
+    <span class="rolechip">役割</span>
+    <div class="cfacts"><span class="fact">メロの空き 3句</span></div>
+  </div>
+  <div class="addrow"><span class="addbtn">＋ セクションを足す</span></div>
+  <div class="playbar"><span class="pb">&#124;◀</span><span class="pb play">▶</span><span class="pb">⟳</span><span class="pb sp">1:1</span><span class="pb">◀<small style="font-size:9px">)))</small></span></div>
+</div>
+<div class="desc" style="width:352px">曲画面（既存）への足し込み: ヘッダに「歌詞」ボタン（R-1）。セクションカードとメロブロックに<b>事実の表示</b>（R-14。点数化しない）。
+<b>大サビ（仮）・アウトロ（仮）はここに現れない</b>＝確定の明示操作まで実体を作らない（裁定5）。</div>
+</div>
+
+<!-- 7b ピアノロール -->
+<div>
+<div class="ph" style="width:352px">
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">Aメロまえはん</span></div>
+  <div class="tools"><span class="tl on">✎</span><span class="tl">⬚</span><span class="tl">◫</span><span class="tl">詞</span><span class="tl wide2">歌詞で見る</span></div>
+  <div class="legend">☑ 韻律チェック　<span class="r">赤=アクセント逆行</span>　<span class="y">黄=注意</span></div>
+  <div style="border:1px solid var(--line);border-radius:9px;height:120px;background:
+    repeating-linear-gradient(0deg,#191c21 0 14px,#1d2026 14px 28px);position:relative;overflow:hidden">
+    <div style="position:absolute;left:18px;top:56px;width:34px;height:13px;background:#7fc0e8;border-radius:3px;font-size:9px;color:#123;text-align:center">み</div>
+    <div style="position:absolute;left:58px;top:42px;width:34px;height:13px;background:#7fc0e8;border-radius:3px;font-size:9px;color:#123;text-align:center;box-shadow:inset 0 -2px 0 var(--fit-yellow)">ず</div>
+    <div style="position:absolute;left:98px;top:48px;width:34px;height:13px;background:#7fc0e8;border-radius:3px;font-size:9px;color:#123;text-align:center">を</div>
+    <div style="position:absolute;left:138px;top:34px;width:34px;height:13px;background:#7fc0e8;border-radius:3px;font-size:9px;color:#123;text-align:center">の</div>
+    <div style="position:absolute;left:178px;top:40px;width:34px;height:13px;background:#7fc0e8;border-radius:3px;font-size:9px;color:#123;text-align:center">ん</div>
+  </div>
+  <div class="playbar"><span class="pb">&#124;◀</span><span class="pb play">▶</span><span class="pb">⟳</span><span class="pb sp">1:1</span><span class="pb">◀<small style="font-size:9px">)))</small></span></div>
+</div>
+<div class="desc" style="width:352px">PianoRoll（既存・詞モード）への足し込み: ツール列に<b>「歌詞で見る」</b>。押すと同じ箇所の歌詞全体画面へ移り、該当句へスクロールして強調（R-4・M-16）。</div>
+</div>
+
+<!-- 7c 遷移図 -->
+<div style="flex:1;min-width:320px">
+<div class="flow">
+  <div class="fnote">入口（R-1: 1つに限らない）</div>
+  <div class="frow"><span class="fbox">ホーム「歌詞」タイル → 曲を選ぶ</span></div>
+  <div class="frow"><span class="fbox">曲画面「歌詞」ボタン</span><span class="fbox">プロジェクトタブ</span></div>
+  <div class="frow"><span class="fbox">PianoRoll「歌詞で見る」</span></div>
+  <div class="frow"><span class="fbox">メロネタ単体「歌詞で見る」</span><span class="arr">→</span><span class="fbox gate">確認: 曲を選ぶ／新しく作る（裁定4: 暗黙に曲を作らない）</span></div>
+  <div class="frow"><span class="arr">↓ どの入口からも1手</span></div>
+  <div class="frow"><span class="fbox newp">歌詞全体画面（通しの面）</span><span class="arr">⇄ 句・空き・区間をタップ（1手・戻ると同じ位置）</span><span class="fbox newp">句の編集画面</span></div>
+  <div class="frow"><span class="arr">↑</span><span class="fnote" style="margin:0">仮セクションは「確定にする」の明示操作ではじめて曲画面に実体化（裁定5）</span></div>
+  <div class="fnote" style="margin-top:10px">編集画面からの橋（同じ箇所を指したまま・R-4）</div>
+  <div class="frow"><span class="fbox newp">句の編集画面</span><span class="arr">→</span><span class="fbox">PianoRoll（メロを開く）</span><span class="fbox">配置画面（配置を開く）</span></div>
+  <div class="frow"><span class="arr" style="visibility:hidden">→</span><span class="arr">→</span><span class="fbox">歌詞ネタ（引用⇄曲へ渡す）</span><span class="fbox">チャット（文脈付き相談）</span><span class="fbox">トレイ（宛先付き候補・R-21）</span></div>
+</div>
+<div class="desc">遷移の骨格。新しい場は2つだけ（範囲の広さで割る）。既存画面へは同じ箇所を指したまま行き来し、戻ったとき元の位置・表示に戻る（R-6）。</div>
+</div>
+
+</div>
+</div>
+
+</div><!-- /frames -->
+
+<!-- ================================================================ -->
+<!-- 状態網羅の対応表（機械検証用） -->
+<!-- ================================================================ -->
+<div class="covwrap">
+<h2>状態網羅の対応表（判定・機械検証用）</h2>
+<table class="cov">
+<tr><th>状態ID</th><th>登場箇所</th></tr>
+<tr><td>A1×B1</td><td>枚1 1番Aメロ句2（枚2・枚4・枚5にも同じ句）</td></tr>
+<tr><td>A1×B2</td><td>枚1 1番Aメロ句3</td></tr>
+<tr><td>A1×B3</td><td>枚1 1番Aメロ句4（D3の注記つき）</td></tr>
+<tr><td>A2×B1</td><td>枚1 1番Bメロ句2</td></tr>
+<tr><td>A2×B2</td><td>枚1 1番サビ句2</td></tr>
+<tr><td>A2×B3</td><td>枚1 1番サビ句4（手で置いた予定・D3）／枚6 孤立の対象</td></tr>
+<tr><td>A3×B1</td><td>枚1 Dメロ句3〜4（連続する帯＋空きの枠）</td></tr>
+<tr><td>A3×B2</td><td>枚1 Dメロ句5〜6（連続する文字だけ・帯なし）</td></tr>
+<tr><td>A3×B3</td><td>枚1 1番Bメロ後半の点線区間（注記なし・オーナー例の形）</td></tr>
+<tr><td>A4×B1</td><td>枚1 2番Aメロ（全行 帯＋空きの枠）</td></tr>
+<tr><td>A4×B2</td><td>枚1 2番サビ（全行 文字だけ・帯なし）</td></tr>
+<tr><td>A4×B3</td><td>枚1 間奏2（実線見出し＋点線区間のみ）</td></tr>
+<tr><td>A5×B1</td><td>枚1 2番Aメロ＋2番Bメロの連続</td></tr>
+<tr><td>A5×B2</td><td>枚1 2番サビ＋Cメロの連続</td></tr>
+<tr><td>A5×B3</td><td>枚1 大サビ（仮）＋アウトロ（仮）の連続</td></tr>
+<tr><td>A6×B1</td><td>枚3上（サンプル曲B）</td></tr>
+<tr><td>A6×B2</td><td>枚3中（サンプル曲C）</td></tr>
+<tr><td>A6×B3</td><td>枚3下（サンプル曲D）</td></tr>
+<tr><td>C1</td><td>枚4（前後の句が両方薄く出る）</td></tr>
+<tr><td>C2</td><td>枚6 下段の帯図（前だけ固定）</td></tr>
+<tr><td>C3</td><td>枚6 下段の帯図（後ろだけ固定）</td></tr>
+<tr><td>C4</td><td>枚6 中段（前後欄とも空）</td></tr>
+<tr><td>D1</td><td>枚1 1番サビ句3（横棒＋「詞なし」）</td></tr>
+<tr><td>D2</td><td><b>裁定2により廃止</b>（下書き/確定の色分けはしない）。代替=嵌り具合の印: 枚1右端の赤黄ドット・枚2の文字下線・枚4/5候補の事実小札。印なし=指摘なし。編集画面から「確定にする」も撤去</td></tr>
+<tr><td>D3</td><td>枚1 1番Aメロ句4「あと5音くらい」／1番サビ句4「8音くらい・しめの一言」／間奏2（自由記述＋数値の併記例）／枚1補の記入フォーム（裁定6）</td></tr>
+<tr><td>D4</td><td>枚1・枚3下「まだ並びに入れていないもの」の断片（場所: 未定）</td></tr>
+<tr><td>D5</td><td>枚1 1番Aメロ句1（帯は続き、中の空白=休符。帯なし=未定との見分け）</td></tr>
+<tr><td>E1</td><td>枚1 実線の見出し群（前奏〜間奏2）</td></tr>
+<tr><td>E2</td><td>枚1 大サビ（仮）・アウトロ（仮）＝点線見出し＋「仮」</td></tr>
+<tr><td>E3</td><td>枚3下（並びが空・「セクションを足す」入口＋断片の置き場）</td></tr>
+</table>
+
+<h2 style="margin-top:26px">裁定の反映箇所</h2>
+<table class="cov">
+<tr><th>裁定</th><th>反映</th></tr>
+<tr><td>1 直接入力</td><td>採用: 語1つ程度の空きは通しの面でその場入力（枚1補のその場入力）。句以上は編集画面へ1手。編集画面へ寄せる妥協はしていない</td></tr>
+<tr><td>2 状況の表示</td><td>下書き/確定の色分け廃止。欠けの状態（体系表の描き分け）＋嵌り具合（赤/黄の印・事実の小札・印なし=指摘なし）で「状況」を出す。点数・優劣なし</td></tr>
+<tr><td>3 前奏・間奏</td><td>畳んだ一行で出す（枚1 前奏）。歌の無い確定セクションも長さと再生位置の感覚を保つ</td></tr>
+<tr><td>4 暗黙の操作</td><td>メロネタ単体から開くときは「曲を選ぶ／新しく作る」の確認を挟む（枚7 遷移図）</td></tr>
+<tr><td>5 仮の実体化</td><td>仮セクションは「確定にする」の明示操作まで既存曲画面に現れない（枚1 見出しのボタン・枚7 注記）</td></tr>
+<tr><td>6 予定の当て</td><td>自由記述＋小節数＋音数、すべて任意（枚1補のフォーム・枚1の注記例）</td></tr>
+<tr><td>7 候補の並び</td><td>枚4=合いそうなものから順（点数なし）／枚5=事実で区分。両案並置で比較判定</td></tr>
+</table>
+</div>
+
+</body>
+</html>
