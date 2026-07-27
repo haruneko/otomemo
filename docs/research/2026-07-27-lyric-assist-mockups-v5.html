@@ -161,21 +161,15 @@ h2.fcap .no{display:inline-block;background:var(--accent);color:#fff;border-radi
   justify-content:center;color:#565d69;font-size:11px}
 .prcap{font-size:9.5px;color:#6d7480;margin-top:3px}
 
-/* 断片の直下＝時間位置に揃えた文字＋辞書式の高低線（上下比較・重ねない） */
+/* 断片の直下＝時間位置に揃えた文字＋VOICEVOX下部イントネーション欄ふうの高低線（§7裁定2改・上下比較・重ねない） */
 .cmp{position:relative;height:34px;margin-top:7px}
 .cmp svg{position:absolute;left:0;top:0}
-.cmp .tc{position:absolute;top:15px;text-align:center;font-size:13px}
-.cmp .kb2{position:absolute;top:13px;height:18px;border:1px solid #4d535d;background:#1a1d22;border-radius:3px}
+.cmp .tc{position:absolute;top:14px;height:18px;line-height:18px;text-align:center;font-size:13px;
+  border:1px solid #4d535d;background:#1a1d22;border-radius:3px}
+.cmp .tc.brk{border-right-color:#8a929e}
+.cmp .kb2{position:absolute;top:14px;height:18px;border:1px solid #4d535d;background:#1a1d22;border-radius:3px}
 .pl{stroke:#9aa0aa;stroke-width:1.3;fill:none}
 .cmpcap{font-size:9.5px;color:#6d7480;margin-top:2px}
-
-/* 高低線の参考並置 */
-.refbox{display:flex;gap:10px;margin-top:6px}
-.refcell{flex:1;border:1px solid var(--line);border-radius:9px;background:#1b1e24;padding:7px 8px}
-.refcell h4{margin:0 0 6px;font-size:10.5px;color:var(--muted);font-weight:600}
-.updn{font-size:13px}
-.updn .hi{position:relative;top:-5px}
-.updn .lo{position:relative;top:4px}
 
 /* インセット小パネル */
 .inset{background:var(--bg);border:1px solid #3c414a;border-radius:14px;padding:10px 11px;margin-top:14px}
@@ -237,7 +231,7 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 <p class="sub"><b>判定材料・詞は全部ダミー</b>（意味の薄い日常語の詰め物。作品ではありません）。
 情報設計 2026-07-27 の§4作画指示書＋§6裁定に、<b>§7（メロディ表現の体系）と§7への追記裁定を全面反映した8枚</b>。
 v4からの差分＝点＋折れ線の概形を全面廃止し、メロの形は常に<b>矩形</b>（全体画面=縮小ピアノロール・矩形の横幅=音の長さ・横位置=リズム・縦位置=相対音高）。
-編集画面は実PianoRoll断片の常設埋め込み＋辞書式の高低線。赤黄の印は断片側の音符に。遷移図は独立の1枚に分離。
+編集画面は実PianoRoll断片の常設埋め込み＋VOICEVOX下部イントネーション欄ふうの高低線（モーラ単位の段状の折れ線）。赤黄の印は断片側の音符に。遷移図は独立の1枚に分離。
 紫の点線の小札（A1×B1 等）は判定用の状態ID注記で、<b>UIには出ない</b>。幅350px級の電話枠・既存アプリの暗色調に合わせた。</p>
 
 <div class="frames">
@@ -608,10 +602,10 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
     </div>
     <div class="prcap">実メロの断片（読み取り専用・<span class="r" style="color:var(--fit-red)">赤</span>/<span style="color:var(--fit-yellow)">黄</span>の印は音符側）。タップするとピアノロールが開きます</div>
 
-    <!-- 断片の直下: 詞の文字＋辞書式の高低線（時間位置で揃えて上下比較・重ねない） -->
+    <!-- 断片の直下: 詞の文字＋VOICEVOX下部イントネーション欄ふうの高低線（時間位置で揃えて上下比較・重ねない） -->
     <div class="cmp">
       <svg width="300" height="13" viewBox="0 0 300 13">
-        <path class="pl" d="M20 3 H108 V10"/>
+        <path class="pl" d="M2 10 H18 L20 3 H36 L38 3 H54 L56 6 H72 L74 3 H90 L92 3 H108 L110 6 H126 L128 10 H144"/>
       </svg>
       <span class="tc" style="left:2px;width:16px">み</span>
       <span class="tc" style="left:20px;width:16px">ず</span>
@@ -625,7 +619,7 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
       <span class="kb2" style="left:190px;width:34px"></span>
       <span class="kb2" style="left:228px;width:66px"></span>
     </div>
-    <div class="cmpcap">文字の上の細い線＝詞を読んだときの高低（詞から自動・編集不可）。上のメロの上下と目で照らして比べる</div>
+    <div class="cmpcap">モーラごとの区画＋区画の真上の線分＝詞を読んだときの相対的な高さ（VOICEVOXの下部イントネーション欄と同じ形。詞から自動・編集不可）。区画は文字幅基準の等幅なので、上の実メロ断片の音符幅とは厳密に揃わず、モーラ⇄音符の対応が読める程度の緩い揃え</div>
 
     <div class="fieldrow">
       <div class="field"><h4>意味（言いたいこと）</h4>
@@ -664,29 +658,10 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
   </div>
 </div>
 <div class="desc">通しの面で空きをタップして1手で開く。<b>対象＝実メロの断片（既存PianoRollと同じ見た目・読み取り専用・句の音域に縦を詰める・音名列なし）を常設</b>（§7裁定1・案a）。
-その直下に、詞の文字を音符の時間位置に揃えて置き、文字の上に<b>辞書式の高低線</b>（高く読む拍の上に線・下がり目で折る）＝上段=メロの上下（矩形）・下段=詞の高低（線）が縦位置で揃い、重ねずに比較できる。
+その直下に、詞の文字をモーラ単位の等幅の区画に並べ、区画の真上に<b>そのモーラの相対的な高さを示す短い線分</b>を置き、隣のモーラへ線で繋いで段状の折れ線にする（VOICEVOX下部のイントネーション欄と同じ形。§7裁定2改・2026-07-27）＝上段=メロの上下（矩形）・下段=詞の高低（段状の折れ線）が縦位置で揃い、重ねずに比較できる。区画はモーラ基準の等幅なので、断片の音符幅と厳密には揃わない（モーラ⇄音符の対応が読める程度の緩い揃えでよい）。
 <b>赤黄の印は断片側の音符に</b>（§7裁定3・既存PianoRollと同じ作法。文字側は高低線に専念）。詞の無い音は断片では文字なしの音符・下段では空きの枠。
 断片をタップするとPianoRollへ（同じ箇所を指したまま・R-4）。前後の句は縮小表示（矩形）＋文字のまま＝対象だけが実表記で視線が集まる。
 「意味」と「音の枠」は左右同格の二欄並置。候補は下からのシート、並べ方(a)=合いそうなものから順。裁定2の反映＝「確定にする」の操作は置かない。</div>
-
-<!-- インセット: 高低線の参考並置（§7裁定2） -->
-<div class="inset">
-  <h3>枚4補: 高低線の描き方の参考並置（§7裁定2）</h3>
-  <div class="refbox">
-    <div class="refcell"><h4>辞書式（この案の主）</h4>
-      <div style="position:relative;height:34px">
-        <svg width="130" height="13" viewBox="0 0 130 13" style="position:absolute;left:0;top:0">
-          <path class="pl" d="M14 3 H90 V10"/>
-        </svg>
-        <span style="position:absolute;top:14px;left:0;font-size:13px">みずをのんで</span>
-      </div>
-    </div>
-    <div class="refcell"><h4>別形＝文字の上下配置</h4>
-      <div class="updn" style="margin-top:10px"><span class="lo">み</span><span class="hi">ずをのんで</span></div>
-    </div>
-  </div>
-  <div class="desc" style="margin-top:6px">同じ内容の別の描き方を<b>比較用の参考</b>として並置（採否はオーナー）。モックの他の箇所はすべて辞書式で描いている。</div>
-</div>
 </div>
 
 <!-- ================================================================ -->
@@ -713,7 +688,7 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
       <div class="n" style="left:228px;top:50px;width:66px"></div>
     </div>
     <div class="cmp" style="height:30px">
-      <svg width="300" height="13" viewBox="0 0 300 13"><path class="pl" d="M20 3 H108 V10"/></svg>
+      <svg width="300" height="13" viewBox="0 0 300 13"><path class="pl" d="M2 10 H18 L20 3 H36 L38 3 H54 L56 6 H72 L74 3 H90 L92 3 H108 L110 6 H126 L128 10 H144"/></svg>
       <span class="tc" style="left:2px;width:16px">み</span><span class="tc" style="left:20px;width:16px">ず</span><span class="tc" style="left:38px;width:16px">を</span><span class="tc" style="left:56px;width:16px">の</span><span class="tc" style="left:74px;width:16px">ん</span><span class="tc" style="left:92px;width:16px">で</span><span class="tc" style="left:110px;width:16px">か</span><span class="tc" style="left:128px;width:16px">ら</span>
       <span class="kb2" style="left:152px;width:34px"></span><span class="kb2" style="left:190px;width:34px"></span><span class="kb2" style="left:228px;width:66px"></span>
     </div>
@@ -761,10 +736,10 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
     <!-- 詞＋高低線だけが残る＝詞の高低の下見（時間の基準は無いので等間隔） -->
     <div class="cmp">
       <svg width="300" height="13" viewBox="0 0 300 13">
-        <path class="pl" d="M24 3 H150 V10"/>
-        <path class="pl" d="M186 3 H268"/>
+        <path class="pl" d="M0 10 H20 L22 3 H42 L44 3 H64 L66 3 H86 L88 6 H108 L110 3 H130 L132 10 H152"/>
+        <path class="pl" d="M164 10 H184 L186 3 H206 L208 3 H228 L230 6 H250 L252 10 H272"/>
       </svg>
-      <span class="tc" style="left:0;width:20px">ざ</span><span class="tc" style="left:22px;width:20px">っ</span><span class="tc" style="left:44px;width:20px">し</span><span class="tc" style="left:66px;width:20px">を</span><span class="tc" style="left:88px;width:20px">と</span><span class="tc" style="left:110px;width:20px">じ</span><span class="tc" style="left:132px;width:20px">て</span>
+      <span class="tc" style="left:0;width:20px">ざ</span><span class="tc" style="left:22px;width:20px">っ</span><span class="tc" style="left:44px;width:20px">し</span><span class="tc" style="left:66px;width:20px">を</span><span class="tc" style="left:88px;width:20px">と</span><span class="tc" style="left:110px;width:20px">じ</span><span class="tc brk" style="left:132px;width:20px">て</span>
       <span class="tc" style="left:164px;width:20px">め</span><span class="tc" style="left:186px;width:20px">を</span><span class="tc" style="left:208px;width:20px">と</span><span class="tc" style="left:230px;width:20px">じ</span><span class="tc" style="left:252px;width:20px">る</span>
     </div>
     <div class="cmpcap">メロが無くても詞の高低は見える（メロを付けるときの下見になる）</div>
@@ -975,8 +950,8 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
 <table class="cov">
 <tr><th>§7の項</th><th>反映</th></tr>
 <tr><td>裁定4 全体画面の概形=縮小ピアノロール</td><td>全枚の上段を矩形に差し替え（横幅=音の長さ・横位置=リズム・縦=相対音高。点＋折れ線は全面廃止）。空きの枠・横棒も音符の矩形と同じ位置に揃えた（意味はv4のまま・位置決めが矩形基準）</td></tr>
-<tr><td>裁定1 編集画面=実PianoRoll断片の常設埋め込み（案a）</td><td>枚4・枚5（読み取り専用・句の音域に縦を詰め高さ100px級・音名列なし・グリッド薄く）。直下に時間位置で揃えた詞の文字＋辞書式の高低線＝上下比較・重ねない。断片タップでPianoRollへ。メロ無しの句（枚6）は断片の場所が空表示になり詞＋高低線だけ残る</td></tr>
-<tr><td>裁定2 高低線=辞書式＋参考並置</td><td>枚4・枚5・枚6の高低線（高く読む拍の上に線・下がり目で折る・細い無彩色）。枚4補に別形（文字の上下配置）を比較用の参考として1箇所並置（採否はオーナー）</td></tr>
+<tr><td>裁定1 編集画面=実PianoRoll断片の常設埋め込み（案a）</td><td>枚4・枚5（読み取り専用・句の音域に縦を詰め高さ100px級・音名列なし・グリッド薄く）。直下に時間位置で揃えた詞の文字＋VOICEVOXふうの高低線＝上下比較・重ねない。断片タップでPianoRollへ。メロ無しの句（枚6）は断片の場所が空表示になり詞＋高低線だけ残る</td></tr>
+<tr><td>裁定2（改） 高低線=VOICEVOX下部イントネーション欄ふう</td><td>枚4・枚5・枚6の高低線＝モーラ（文字）を等幅の区画に並べ、区画の真上に相対的な高さの短い線分（複数段）を置き、隣のモーラへ線で繋いだ段状の折れ線（細い無彩色）。アクセント句の切れ目は区画の区切りをやや強く（枚6の「て」）。辞書式・文字上下配置の参考並置（旧枚4補）は落選＝撤去（2026-07-27改裁定・スクショ提示による）</td></tr>
 <tr><td>裁定3 赤黄の印=断片側</td><td>枚4・枚5の断片の音符に既存PianoRollと同じ作法（下線＋丸印）で出し、文字側は高低線に専念。全体画面の表示切替の文字下線・行末ドットはv4のまま維持</td></tr>
 <tr><td>課題C 遷移図の独立</td><td>枚8=箱と矢印だけの独立した1枚（画面の中身を描かない）。既存画面への足し込みの絵は枚7に分離</td></tr>
 </table>
