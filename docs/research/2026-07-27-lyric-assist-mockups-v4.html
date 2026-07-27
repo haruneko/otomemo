@@ -56,6 +56,9 @@ h2.fcap .no{display:inline-block;background:var(--accent);color:#fff;border-radi
 .secbtn{margin-left:auto;font-size:10px;color:var(--muted);border:1px solid var(--line);
   border-radius:7px;padding:1px 7px;white-space:nowrap}
 
+/* パート境界の区切り線（セクション内の範囲の区切り。見出しではない） */
+.partsep{border-top:1px dashed #454b56;margin:9px 2px 0;height:1px}
+
 /* ===== 状態ID札（判定用注記・UIには出ない） ===== */
 .st{font-size:9px;color:#a99ad0;border:1px dashed #6b5f8a;border-radius:4px;
   padding:0 4px;white-space:nowrap;vertical-align:1px;margin-left:4px}
@@ -210,7 +213,7 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 <div class="frame">
 <h2 class="fcap"><span class="no">1</span>歌詞全体画面・素の表示（全長）</h2>
 <div class="ph">
-  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲</span></div>
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲（サンプルEP）</span></div>
   <div class="seg"><span class="on">素</span><span>音韻</span><span>イントネーション</span></div>
   <div class="legend">行の右端の ●＝印のある箇所あり（<span class="r">赤=アクセント逆行</span>・<span class="y">黄=注意</span>）。印なし＝指摘なし。切替表示で箇所を確認</div>
 
@@ -406,6 +409,9 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
     </svg></div>
     <div class="ly"><span>ポストのてがみを　とりにいく</span><span class="pos">59–60小節</span></div>
   </div>
+  <!-- パート境界の区切り線（体系表A3×B1・数小節ごとの区切りでパート範囲が読める） -->
+  <div class="partsep"></div>
+
   <!-- 句3〜4: パートの詞だけ無い A3×B1 -->
   <div class="ku">
     <div class="melo"><svg width="328" height="24" viewBox="0 0 328 24">
@@ -423,6 +429,9 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
     </svg></div>
     <div class="ly"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">63–64小節</span><span class="st">A3×B1</span></div>
   </div>
+  <!-- パート境界の区切り線 -->
+  <div class="partsep"></div>
+
   <!-- 句5〜6: パートのメロだけ無い A3×B2 -->
   <div class="ku"><div class="melo none"></div>
     <div class="ly"><span>シャツのボタンを　とめなおす</span><span class="pos">65–66小節</span><span class="st">A3×B2</span></div></div>
@@ -459,7 +468,9 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 セクション見出しはスクロール中も上端に貼り付く（R-9・静止画のため表現省略）。
 帯=メロあり／帯の中の空白=休符／帯なし=メロ未定／空きの枠=音数ぶんの記入欄／横棒=詞なし／点線=まだ何も無い（注記は任意）。
 仮の見出しの「確定にする」を押すまで既存曲画面に実体は作られない（裁定5）。
-再生中の句は左に▶と枠の強調（R-22）。</div>
+再生中の句は左に▶と枠の強調（R-22）。
+Dメロの薄い横線はパートの区切り（体系表A3×B1・数小節ごとにパートの範囲が読める）。
+<b>行末の赤黄ドット（嵌り具合の要約）はこの設計からの提案</b>で、原則10の「文字への付け足し（下線）」とは別に置いた要約表示。切替表示に入らなくても嵌りの有無だけ分かるようにする狙い。採否は判定材料。</div>
 
 <!-- インセット: 裁定1 その場入力 -->
 <div class="inset">
@@ -487,7 +498,7 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 <div class="frame">
 <h2 class="fcap"><span class="no">2</span>歌詞全体画面・表示切替（イントネーション）</h2>
 <div class="ph">
-  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲</span></div>
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲（サンプルEP）</span></div>
   <div class="seg"><span>素</span><span>音韻</span><span class="on">イントネーション</span></div>
   <div class="legend"><span class="r">赤=アクセント逆行</span>・<span class="y">黄=注意</span>・印なし=指摘なし（既存の韻律チェックと同じ作法）</div>
 
@@ -576,7 +587,7 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 
 <!-- 3a: A6×B1 -->
 <div class="ph mini">
-  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲B</span></div>
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲B（サンプルEP）</span></div>
   <div class="seg"><span class="on">素</span><span>音韻</span><span>イントネーション</span></div>
   <div class="sec"><span class="grip">⋮⋮</span><span class="sname">Aメロ</span><span class="sbars">8小節</span><span class="st">A6×B1</span></div>
   <div class="ku">
@@ -609,7 +620,7 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 
 <!-- 3b: A6×B2 -->
 <div class="ph mini">
-  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲C</span></div>
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲C（サンプルEP）</span></div>
   <div class="seg"><span class="on">素</span><span>音韻</span><span>イントネーション</span></div>
   <div class="sec"><span class="grip">⋮⋮</span><span class="sname">Aメロ</span><span class="sbars">当てなし</span><span class="st">A6×B2</span></div>
   <div class="ku"><div class="melo none"></div>
@@ -626,7 +637,7 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 
 <!-- 3c: A6×B3 + E3 -->
 <div class="ph mini">
-  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲D</span></div>
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲D（サンプルEP）</span></div>
   <div class="seg"><span class="on">素</span><span>音韻</span><span>イントネーション</span></div>
   <div class="zone" style="margin-top:10px"><span>セクションはまだありません</span><span class="st">A6×B3</span><span class="st">E3</span></div>
   <div class="addrow"><span class="addbtn">＋ セクションを足す</span><span class="addbtn">＋ 予定を置く</span></div>
@@ -805,6 +816,45 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 </div>
 <div class="desc">メロ側の空き＝決まっている詞を主に出し（音数・アクセントは詞から自動）、操作が「メロ候補を頼む」「ピアノロールで置く」になる。
 前後の句はメロが無くても文字で薄く出る。下段は前後の固定度の残り3態（C4=孤立、C2=前だけ、C3=後ろだけ）。C1は枚4。</div>
+
+<!-- インセット: 点線区間を開いた編集画面（A2×B3/A3×B3の編集の面）＋次の句のセクションまたぎ実例 -->
+<div class="inset">
+  <h3>枚6補: 点線の区間を開いたとき（詞もメロも無い区間・A2×B3/A3×B3の編集の面）<span class="st">A2×B3</span><span class="st">A3×B3</span></h3>
+  <div class="crumb" style="margin-bottom:8px"><b>サンプル曲</b> › 1番Bメロ › 13–16小節</div>
+
+  <div class="ghostlbl">前の句</div>
+  <div class="ku ghost" style="border-bottom:none">
+    <div class="melo"><svg width="328" height="20" viewBox="0 0 328 20">
+      <rect class="band" x="0" y="2" width="328" height="16" rx="4"/>
+      <polyline class="cl" points="14,12 60,9 106,11 152,7 198,9 244,6 290,10"/>
+      <circle class="ct" cx="14" cy="12" r="2"/><circle class="ct" cx="60" cy="9" r="2"/><circle class="ct" cx="106" cy="11" r="2"/><circle class="ct" cx="152" cy="7" r="2"/><circle class="ct" cx="198" cy="9" r="2"/><circle class="ct" cx="244" cy="6" r="2"/><circle class="ct" cx="290" cy="10" r="2"/>
+    </svg></div>
+    <div class="ly" style="font-size:12px"><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="kb"></span><span class="pos">11–12小節</span></div>
+  </div>
+
+  <div class="zone" style="flex-direction:column;align-items:stretch;gap:7px;padding:11px 10px">
+    <div style="display:flex;justify-content:space-between;color:var(--fg)"><span>区間の長さ</span><span>4小節</span></div>
+    <div class="formrow"><label>メモ（任意）</label><span class="fin"></span></div>
+    <div class="formrow"><label>小節数（任意）</label><span class="fin s"></span></div>
+    <div class="formrow"><label>音数（任意）</label><span class="fin s"></span></div>
+  </div>
+
+  <div class="ops" style="margin-top:8px"><span class="op main">句を足す</span><span class="op">予定を置く</span></div>
+
+  <div class="ghostlbl">次の句<span style="color:#6d7480;font-weight:400">（次セクション「1番サビ」の頭）</span></div>
+  <div class="ku ghost" style="border-bottom:none">
+    <div class="melo"><svg width="328" height="20" viewBox="0 0 328 20">
+      <rect class="band" x="0" y="2" width="328" height="16" rx="4"/>
+      <polyline class="cl" points="12,13 34,9 56,7 78,5 100,8 122,5 144,4 166,6 188,9 210,7 232,10 254,9 276,11 298,13"/>
+      <circle class="ct" cx="12" cy="13" r="2"/><circle class="ct" cx="34" cy="9" r="2"/><circle class="ct" cx="56" cy="7" r="2"/><circle class="ct" cx="78" cy="5" r="2"/><circle class="ct" cx="100" cy="8" r="2"/><circle class="ct" cx="122" cy="5" r="2"/><circle class="ct" cx="144" cy="4" r="2"/><circle class="ct" cx="166" cy="6" r="2"/><circle class="ct" cx="188" cy="9" r="2"/><circle class="ct" cx="210" cy="7" r="2"/><circle class="ct" cx="232" cy="10" r="2"/><circle class="ct" cx="254" cy="9" r="2"/><circle class="ct" cx="276" cy="11" r="2"/><circle class="ct" cx="298" cy="13" r="2"/>
+    </svg></div>
+    <div class="ly" style="font-size:12px"><span>きょうのよていを　かみにかく</span><span class="pos">17–18小節</span></div>
+  </div>
+
+  <div class="desc" style="margin-top:6px">枚1の同じ区間（注記なし）を開いた絵。区間の長さは小節から表示。当て（メモ・小節数・音数）は<b>すべて任意</b>（裁定6）で、
+  ここではまだ何も書いていない状態。操作は「句を足す」「予定を置く」の2つ。前後があれば薄く見える＝ここでは前が1番Bメロの空きの句、
+  <b>次がセクション境界をまたいで1番サビの頭の句</b>（境界またぎでも前後を出す。R-17・§1.4 C1）。</div>
+</div>
 </div>
 
 <!-- ================================================================ -->
@@ -817,7 +867,7 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 <!-- 7a 曲画面 -->
 <div>
 <div class="ph" style="width:352px">
-  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲</span><span class="hbtn">歌詞</span></div>
+  <div class="hd"><span class="back">← 戻る</span><span class="ttl">サンプル曲（サンプルEP）</span><span class="hbtn">歌詞</span></div>
   <div class="card">
     <span class="grip">⋮⋮</span>
     <div><div class="cn">1番Aメロ</div><div class="cb">8小節・1–8</div></div>
@@ -898,10 +948,10 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 <tr><td>A1×B3</td><td>枚1 1番Aメロ句4（D3の注記つき）</td></tr>
 <tr><td>A2×B1</td><td>枚1 1番Bメロ句2</td></tr>
 <tr><td>A2×B2</td><td>枚1 1番サビ句2</td></tr>
-<tr><td>A2×B3</td><td>枚1 1番サビ句4（手で置いた予定・D3）／枚6 孤立の対象</td></tr>
+<tr><td>A2×B3</td><td>枚1 1番サビ句4（手で置いた予定・D3）／枚6 孤立の対象／枚6補（編集の面＝区間の長さ＋当てを書く＋句を足す・予定を置く）</td></tr>
 <tr><td>A3×B1</td><td>枚1 Dメロ句3〜4（連続する帯＋空きの枠）</td></tr>
 <tr><td>A3×B2</td><td>枚1 Dメロ句5〜6（連続する文字だけ・帯なし）</td></tr>
-<tr><td>A3×B3</td><td>枚1 1番Bメロ後半の点線区間（注記なし・オーナー例の形）</td></tr>
+<tr><td>A3×B3</td><td>枚1 1番Bメロ後半の点線区間（注記なし・オーナー例の形）／枚6補（同区間を開いた編集の面・次の句がセクションまたぎの実例も兼ねる）</td></tr>
 <tr><td>A4×B1</td><td>枚1 2番Aメロ（全行 帯＋空きの枠）</td></tr>
 <tr><td>A4×B2</td><td>枚1 2番サビ（全行 文字だけ・帯なし）</td></tr>
 <tr><td>A4×B3</td><td>枚1 間奏2（実線見出し＋点線区間のみ）</td></tr>
@@ -933,7 +983,7 @@ table.cov th{background:var(--card);color:var(--muted);font-weight:600}
 <tr><td>3 前奏・間奏</td><td>畳んだ一行で出す（枚1 前奏）。歌の無い確定セクションも長さと再生位置の感覚を保つ</td></tr>
 <tr><td>4 暗黙の操作</td><td>メロネタ単体から開くときは「曲を選ぶ／新しく作る」の確認を挟む（枚7 遷移図）</td></tr>
 <tr><td>5 仮の実体化</td><td>仮セクションは「確定にする」の明示操作まで既存曲画面に現れない（枚1 見出しのボタン・枚7 注記）</td></tr>
-<tr><td>6 予定の当て</td><td>自由記述＋小節数＋音数、すべて任意（枚1補のフォーム・枚1の注記例）</td></tr>
+<tr><td>6 予定の当て</td><td>自由記述＋小節数＋音数、すべて任意（枚1補のフォーム・枚1の注記例・枚6補の区間編集フォーム）</td></tr>
 <tr><td>7 候補の並び</td><td>枚4=合いそうなものから順（点数なし）／枚5=事実で区分。両案並置で比較判定</td></tr>
 </table>
 </div>
