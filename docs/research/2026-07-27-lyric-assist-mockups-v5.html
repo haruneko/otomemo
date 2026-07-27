@@ -161,7 +161,7 @@ h2.fcap .no{display:inline-block;background:var(--accent);color:#fff;border-radi
   justify-content:center;color:#565d69;font-size:11px}
 .prcap{font-size:9.5px;color:#6d7480;margin-top:3px}
 
-/* 断片の直下＝時間位置に揃えた文字＋VOICEVOX下部イントネーション欄ふうの高低線（§7裁定2改・上下比較・重ねない） */
+/* 断片の直下＝実メロ断片の音符矩形にx位置/幅を揃えた文字＋高低線（§7裁定2改・上下比較・重ねない・縦揃え必須＝2026-07-27追裁定）。枚4はデータ源2案（2段/多段）を上下に並べる */
 .cmp{position:relative;height:34px;margin-top:7px}
 .cmp svg{position:absolute;left:0;top:0}
 .cmp .tc{position:absolute;top:14px;height:18px;line-height:18px;text-align:center;font-size:13px;
@@ -170,6 +170,8 @@ h2.fcap .no{display:inline-block;background:var(--accent);color:#fff;border-radi
 .cmp .kb2{position:absolute;top:14px;height:18px;border:1px solid #4d535d;background:#1a1d22;border-radius:3px}
 .pl{stroke:#9aa0aa;stroke-width:1.3;fill:none}
 .cmpcap{font-size:9.5px;color:#6d7480;margin-top:2px}
+.cmplabel{font-size:10px;color:var(--fg);font-weight:600;margin:8px 2px 1px}
+.cmplabel .cmplsub{font-weight:400;color:var(--muted);margin-left:6px;font-size:9.5px}
 
 /* インセット小パネル */
 .inset{background:var(--bg);border:1px solid #3c414a;border-radius:14px;padding:10px 11px;margin-top:14px}
@@ -602,10 +604,11 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
     </div>
     <div class="prcap">実メロの断片（読み取り専用・<span class="r" style="color:var(--fit-red)">赤</span>/<span style="color:var(--fit-yellow)">黄</span>の印は音符側）。タップするとピアノロールが開きます</div>
 
-    <!-- 断片の直下: 詞の文字＋VOICEVOX下部イントネーション欄ふうの高低線（時間位置で揃えて上下比較・重ねない） -->
+    <!-- 断片の直下: 詞の文字＋高低線を2段重ねでデータ源2案を比較（時間位置＝実メロ断片の音符矩形に揃えて上下比較・重ねない・2026-07-27追裁定） -->
+    <div class="cmplabel">高低（2段）<span class="cmplsub">pyopenjtalk想定・高い/低いの2値</span></div>
     <div class="cmp">
       <svg width="300" height="13" viewBox="0 0 300 13">
-        <path class="pl" d="M2 10 H18 L20 3 H36 L38 3 H54 L56 6 H72 L74 3 H90 L92 3 H108 L110 6 H126 L128 10 H144"/>
+        <path class="pl" d="M2 9 H18 L20 3 H36 L38 3 H54 L56 3 H72 L74 3 H90 L92 3 H108 L110 9 H126 L128 9 H144"/>
       </svg>
       <span class="tc" style="left:2px;width:16px">み</span>
       <span class="tc" style="left:20px;width:16px">ず</span>
@@ -619,7 +622,25 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
       <span class="kb2" style="left:190px;width:34px"></span>
       <span class="kb2" style="left:228px;width:66px"></span>
     </div>
-    <div class="cmpcap">モーラごとの区画＋区画の真上の線分＝詞を読んだときの相対的な高さ（VOICEVOXの下部イントネーション欄と同じ形。詞から自動・編集不可）。区画は文字幅基準の等幅なので、上の実メロ断片の音符幅とは厳密に揃わず、モーラ⇄音符の対応が読める程度の緩い揃え</div>
+
+    <div class="cmplabel">高低（多段）<span class="cmplsub">VOICEVOX想定・モーラごとに連続的に違う高さ</span></div>
+    <div class="cmp">
+      <svg width="300" height="13" viewBox="0 0 300 13">
+        <path class="pl" d="M2 9 H18 L20 4 H36 L38 6 H54 L56 3 H72 L74 5 H90 L92 2 H108 L110 5 H126 L128 8 H144"/>
+      </svg>
+      <span class="tc" style="left:2px;width:16px">み</span>
+      <span class="tc" style="left:20px;width:16px">ず</span>
+      <span class="tc" style="left:38px;width:16px">を</span>
+      <span class="tc" style="left:56px;width:16px">の</span>
+      <span class="tc" style="left:74px;width:16px">ん</span>
+      <span class="tc" style="left:92px;width:16px">で</span>
+      <span class="tc" style="left:110px;width:16px">か</span>
+      <span class="tc" style="left:128px;width:16px">ら</span>
+      <span class="kb2" style="left:152px;width:34px"></span>
+      <span class="kb2" style="left:190px;width:34px"></span>
+      <span class="kb2" style="left:228px;width:66px"></span>
+    </div>
+    <div class="cmpcap">データ源の2案＝上:採用辞書の高低2値／下:VOICEVOXの連続ピッチ。どちらを採るかはオーナー裁定待ち。区画のx位置・幅は真上の実メロ断片の音符矩形と一致（縦揃え）</div>
 
     <div class="fieldrow">
       <div class="field"><h4>意味（言いたいこと）</h4>
@@ -658,7 +679,7 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
   </div>
 </div>
 <div class="desc">通しの面で空きをタップして1手で開く。<b>対象＝実メロの断片（既存PianoRollと同じ見た目・読み取り専用・句の音域に縦を詰める・音名列なし）を常設</b>（§7裁定1・案a）。
-その直下に、詞の文字をモーラ単位の等幅の区画に並べ、区画の真上に<b>そのモーラの相対的な高さを示す短い線分</b>を置き、隣のモーラへ線で繋いで段状の折れ線にする（VOICEVOX下部のイントネーション欄と同じ形。§7裁定2改・2026-07-27）＝上段=メロの上下（矩形）・下段=詞の高低（段状の折れ線）が縦位置で揃い、重ねずに比較できる。区画はモーラ基準の等幅なので、断片の音符幅と厳密には揃わない（モーラ⇄音符の対応が読める程度の緩い揃えでよい）。
+その直下に、詞の文字をモーラ単位の区画に並べる。<b>区画のx位置・幅は真上の実メロ断片の音符矩形と一致</b>させる（1音符=1モーラの対応があるため同じ座標でそのまま揃う。等幅で緩く揃える描き方は廃止＝2026-07-27追裁定）。区画の真上に、そのモーラの相対的な高さを示す短い線分を置き、隣のモーラへ線で繋いで段状の折れ線にする（VOICEVOX下部のイントネーション欄と同じ形。§7裁定2改・2026-07-27）＝上段=メロの上下（矩形）・下段=詞の高低（段状の折れ線）が縦位置で揃い、重ねずに比較できる。<b>この枚は高低線を2段重ねにし、データ源2案（上=高低2段＝pyopenjtalk想定の2値／下=高低多段＝VOICEVOX想定の連続ピッチ）を同じ句で見比べられるようにした</b>（どちらを採るかはオーナー裁定待ち）。
 <b>赤黄の印は断片側の音符に</b>（§7裁定3・既存PianoRollと同じ作法。文字側は高低線に専念）。詞の無い音は断片では文字なしの音符・下段では空きの枠。
 断片をタップするとPianoRollへ（同じ箇所を指したまま・R-4）。前後の句は縮小表示（矩形）＋文字のまま＝対象だけが実表記で視線が集まる。
 「意味」と「音の枠」は左右同格の二欄並置。候補は下からのシート、並べ方(a)=合いそうなものから順。裁定2の反映＝「確定にする」の操作は置かない。</div>
@@ -688,7 +709,7 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
       <div class="n" style="left:228px;top:50px;width:66px"></div>
     </div>
     <div class="cmp" style="height:30px">
-      <svg width="300" height="13" viewBox="0 0 300 13"><path class="pl" d="M2 10 H18 L20 3 H36 L38 3 H54 L56 6 H72 L74 3 H90 L92 3 H108 L110 6 H126 L128 10 H144"/></svg>
+      <svg width="300" height="13" viewBox="0 0 300 13"><path class="pl" d="M2 9 H18 L20 4 H36 L38 6 H54 L56 3 H72 L74 5 H90 L92 2 H108 L110 5 H126 L128 8 H144"/></svg>
       <span class="tc" style="left:2px;width:16px">み</span><span class="tc" style="left:20px;width:16px">ず</span><span class="tc" style="left:38px;width:16px">を</span><span class="tc" style="left:56px;width:16px">の</span><span class="tc" style="left:74px;width:16px">ん</span><span class="tc" style="left:92px;width:16px">で</span><span class="tc" style="left:110px;width:16px">か</span><span class="tc" style="left:128px;width:16px">ら</span>
       <span class="kb2" style="left:152px;width:34px"></span><span class="kb2" style="left:190px;width:34px"></span><span class="kb2" style="left:228px;width:66px"></span>
     </div>
@@ -742,7 +763,7 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
       <span class="tc" style="left:0;width:20px">ざ</span><span class="tc" style="left:22px;width:20px">っ</span><span class="tc" style="left:44px;width:20px">し</span><span class="tc" style="left:66px;width:20px">を</span><span class="tc" style="left:88px;width:20px">と</span><span class="tc" style="left:110px;width:20px">じ</span><span class="tc brk" style="left:132px;width:20px">て</span>
       <span class="tc" style="left:164px;width:20px">め</span><span class="tc" style="left:186px;width:20px">を</span><span class="tc" style="left:208px;width:20px">と</span><span class="tc" style="left:230px;width:20px">じ</span><span class="tc" style="left:252px;width:20px">る</span>
     </div>
-    <div class="cmpcap">メロが無くても詞の高低は見える（メロを付けるときの下見になる）</div>
+    <div class="cmpcap">メロが無くても詞の高低は見える（メロを付けるときの下見になる）。<b>メロなしの句では文字の並びに沿う</b>（音符が無いので音符矩形への縦揃えは対象外）</div>
     <div class="fieldrow">
       <div class="field"><h4>意味（言いたいこと）</h4>
         <div class="fill">ひと息ついて休む場面</div></div>
@@ -951,7 +972,7 @@ Dメロの薄い横線はパートの区切り。<b>行末の赤黄ドット（�
 <tr><th>§7の項</th><th>反映</th></tr>
 <tr><td>裁定4 全体画面の概形=縮小ピアノロール</td><td>全枚の上段を矩形に差し替え（横幅=音の長さ・横位置=リズム・縦=相対音高。点＋折れ線は全面廃止）。空きの枠・横棒も音符の矩形と同じ位置に揃えた（意味はv4のまま・位置決めが矩形基準）</td></tr>
 <tr><td>裁定1 編集画面=実PianoRoll断片の常設埋め込み（案a）</td><td>枚4・枚5（読み取り専用・句の音域に縦を詰め高さ100px級・音名列なし・グリッド薄く）。直下に時間位置で揃えた詞の文字＋VOICEVOXふうの高低線＝上下比較・重ねない。断片タップでPianoRollへ。メロ無しの句（枚6）は断片の場所が空表示になり詞＋高低線だけ残る</td></tr>
-<tr><td>裁定2（改） 高低線=VOICEVOX下部イントネーション欄ふう</td><td>枚4・枚5・枚6の高低線＝モーラ（文字）を等幅の区画に並べ、区画の真上に相対的な高さの短い線分（複数段）を置き、隣のモーラへ線で繋いだ段状の折れ線（細い無彩色）。アクセント句の切れ目は区画の区切りをやや強く（枚6の「て」）。辞書式・文字上下配置の参考並置（旧枚4補）は落選＝撤去（2026-07-27改裁定・スクショ提示による）</td></tr>
+<tr><td>裁定2（改） 高低線=VOICEVOX下部イントネーション欄ふう</td><td>枚4・枚5・枚6の高低線＝モーラ（文字）を区画に並べ、区画の真上に相対的な高さの短い線分を置き、隣のモーラへ線で繋いだ段状の折れ線（細い無彩色）。アクセント句の切れ目は区画の区切りをやや強く（枚6の「て」）。<b>メロがある句は区画のx位置・幅を真上の実メロ断片の音符矩形に一致させ縦揃え</b>（等幅の緩い揃えは廃止＝2026-07-27追裁定）。<b>枚4はデータ源2案を上下2段で比較</b>＝上「高低（2段）」pyopenjtalk想定の高低2値／下「高低（多段）」VOICEVOX想定の連続ピッチ（どちらを採るかはオーナー裁定待ち）。枚5は多段版のみ（候補並びの比較が主題のため）。枚6はメロが無い句なので区画は文字の並びに沿う（縦揃え対象外）。辞書式・文字上下配置の参考並置（旧枚4補）は落選＝撤去（2026-07-27改裁定・スクショ提示による）</td></tr>
 <tr><td>裁定3 赤黄の印=断片側</td><td>枚4・枚5の断片の音符に既存PianoRollと同じ作法（下線＋丸印）で出し、文字側は高低線に専念。全体画面の表示切替の文字下線・行末ドットはv4のまま維持</td></tr>
 <tr><td>課題C 遷移図の独立</td><td>枚8=箱と矢印だけの独立した1枚（画面の中身を描かない）。既存画面への足し込みの絵は枚7に分離</td></tr>
 </table>
