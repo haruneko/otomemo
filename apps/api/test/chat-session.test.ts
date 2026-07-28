@@ -1,5 +1,33 @@
 import { describe, it, expect } from "vitest";
-import { sessionIdForThread, isIdle, CHAT_TOOLS } from "../src/chat-session";
+import { sessionIdForThread, isIdle, CHAT_TOOLS, CHAT_VERB_NAMES, COMPOSE_PLAYBOOK } from "../src/chat-session";
+
+// BUG#1型の機械的再発防止：プレイブック本文（Claude への指示）が「呼べ」と言っている verb が
+// CHAT_VERB_NAMES（＝allowedTools 許可リスト）に無いと、指示どおり呼んでも is_error で自動拒否され
+// 黙って死ぬ（実例＝gen_melody が漏れていて詞先メロが呼べなかった・2026-07-27発覚）。
+// 抽出＝本文中の verb 名は snake_case（複合語）で書かれる規約（capture/revise/generate/weave/search/
+// analyze 等の単語verbは通常の英文中に紛れ機械判別できないので対象外＝人間レビュー領分。単語verbは
+// #100 初期からの固定10種＋既存テストで別途カバー済）。データフィールド名/kind値も snake_case で紛れる
+// ので、既知の非verbトークンだけ明示的に denylist する（新規で紛れが増えたらここが伸びる＝気付ける設計）。
+describe("プレイブック本文の verb 呼び出し ⊆ CHAT_VERB_NAMES（BUG#1型の機械的再発防止）", () => {
+  const NOT_A_VERB = new Set([
+    // 「アナリーゼ neta の raw 時系列」節（read_neta の戻りフィールド名の説明）で言及される非verbトークン
+    "bass_notes", "beat_times", "chords_timeline", "drum_onsets", "melody_f0", "melody_notes",
+    // kind値／状態フィールド名（呼び出し対象ではなく引数/戻り値の中身の説明）
+    "chord_progression", "next_action",
+  ]);
+
+  it("本文中の snake_case トークンは全て CHAT_VERB_NAMES に含まれる（既知の非verb denylist を除く）", () => {
+    const tokens = Array.from(new Set(COMPOSE_PLAYBOOK.match(/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g) ?? []));
+    const verbTokens = tokens.filter((t) => !NOT_A_VERB.has(t));
+    expect(verbTokens.length).toBeGreaterThan(10); // 抽出ロジックが壊れて空/激減していないことの健全性チェック
+    for (const v of verbTokens) {
+      expect(
+        CHAT_VERB_NAMES,
+        `playbook says to call "${v}" but it's missing from CHAT_VERB_NAMES（allowedTools）— the call would be silently rejected`,
+      ).toContain(v);
+    }
+  });
+});
 
 describe("CHAT_TOOLS（チャットに見せる/事前承認するツール一式）", () => {
   it("MCP 作曲動詞＋Web 検索を含み、Bash 等の危険ツールは含まない（#100④-S7）", () => {

@@ -96,9 +96,14 @@ describe("gen_melody(lyrics) MCP e2e", () => {
   });
 });
 
-describe("CHAT_VERBS 整合（gen_melody は既存 verb＝新 verb を足していない）", () => {
-  it("gen_melody は CHAT からは呼ばない生成系だが verb 追加は無い（整合テストを壊さない）", () => {
-    // 歌詞先行は既存 gen_melody のオプションで実装＝CHAT_VERB_NAMES に新規追加なし。
+describe("CHAT_VERBS 整合（gen_melody は既存 verb＝新 verb 名を足していない）", () => {
+  it("歌詞先行は新規 verb 名(gen_lyric_melody)を作らず既存 gen_melody への lyrics オプションで実装", () => {
     expect(CHAT_VERB_NAMES).not.toContain("gen_lyric_melody");
+  });
+  // 2026-07-27是正：design #13d(c) の「既存 chat verb gen_melody」という前提は当時実は誤り（legacy専用ブロックに
+  // 取り残され chat面未登録＋CHAT_VERB_NAMES 許可漏れ＝プレイブックの指示が黙って死んでいた＝BUG#1型）。
+  // ここで前提を実態に合わせた（gen_melody を chat面へ移設＋許可リストに追加）＝以下でその整合を確認する。
+  it("gen_melody は CHAT_VERB_NAMES に含まれる（design #13d(c)の前提＝chatから呼べる既存verb、を実態に合わせた是正）", () => {
+    expect(CHAT_VERB_NAMES).toContain("gen_melody");
   });
 });

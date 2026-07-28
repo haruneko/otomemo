@@ -28,6 +28,8 @@ export const CHAT_VERB_NAMES = [
   "suggest_emotion_params", // 感情→生成パラメータ提案（mcp.ts:998 で chat面登録済だが許可漏れだった＝A2/F4 で是正・BUG#1型）
   "check_loop", // WP-X2 ゲームBGMループ境界チェック（指摘系・許可漏れ厳禁＝過去BUG#1型）
   "check_originality", // WP-M8 独自性/焼き直し警告（cryptomnesia・警告のみ・許可漏れ厳禁＝過去BUG#1型）
+  "gen_melody", // design #13d 歌詞先行メロ（lyrics引数）。プレイブックは呼べと指示していたが許可漏れで黙って死んでいた
+  // （2026-07-27発覚＝BUG#1型）。mcp.ts 側も legacy専用ブロックにあり chat面に未登録だった＝あわせて是正。
 ];
 const CHAT_VERBS = CHAT_VERB_NAMES.map((n) => `mcp__creative-manager__${n}`);
 
@@ -41,7 +43,9 @@ export const CHAT_TOOLS = [...CHAT_VERBS, ...WEB_TOOLS];
 
 // #100④ 脳の作法（A）：設計#16(枠は最後まで効く)・#86(Claude=言葉→構造化の翻訳、音符は記号エンジンが保証)を
 // 脳の眼前に置く。ツールの段取りを束ねる上位指示＝ここが空だと「16小節→16進行」等の取りこぼしが出る。
-const COMPOSE_PLAYBOOK = `You are a composer's partner. Your job is not to finish the work, but to give the user
+// export＝chat-session.test.ts がプレイブック本文から verb 呼び出しを機械抽出し CHAT_VERB_NAMES との
+// 突き合わせに使う（BUG#1型＝本文は呼べと言うが許可リストに無く黙って死ぬ、を再発防止）。
+export const COMPOSE_PLAYBOOK = `You are a composer's partner. Your job is not to finish the work, but to give the user
 material they can JUDGE, and help them steer. The user always makes the final call.
 
 Reply in the same language the user writes in.
