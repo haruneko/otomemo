@@ -1,0 +1,3124 @@
+{
+ "command": "/home/shuraba_p/projects/creative_manager/apps/audio/.venv/bin/python accent.py (cwd=/home/shuraba_p/projects/creative_manager/apps/audio, stdin=1行1文) ＋ /home/shuraba_p/projects/creative_manager/apps/audio/.venv/bin/python frontend.py (cwd=/tmp/claude-1000/-home-shuraba-p-projects-creative-manager/3e82f859-464a-41b2-beef-d4b0d626b784/scratchpad/v8)",
+ "ranAt": "2026-07-28T12:17:00.729Z",
+ "note": "entries[].accent = accent.py の入出力・entries[].frontend = run_frontend の形態素列（spans の材料）",
+ "entries": [
+  {
+   "key": "A-1A-k1",
+   "feed": "朝起きて　窓を開ける",
+   "accent": {
+    "moras": [
+     "a",
+     "sa",
+     "o",
+     "ki",
+     "te",
+     "ma",
+     "do",
+     "o",
+     "a",
+     "ke",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 11
+   },
+   "frontend": [
+    {
+     "string": "朝",
+     "read": "アサ",
+     "pron": "アサ",
+     "mora_size": 2
+    },
+    {
+     "string": "起き",
+     "read": "オキ",
+     "pron": "オキ",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "窓",
+     "read": "マド",
+     "pron": "マド",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "開ける",
+     "read": "アケル",
+     "pron": "アケル",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k2",
+   "feed": "水を飲んでから",
+   "accent": {
+    "moras": [
+     "mi",
+     "zu",
+     "o",
+     "no",
+     "N",
+     "de",
+     "ka",
+     "ra"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 5,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 8
+   },
+   "frontend": [
+    {
+     "string": "水",
+     "read": "ミズ",
+     "pron": "ミズ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "飲ん",
+     "read": "ノン",
+     "pron": "ノン",
+     "mora_size": 2
+    },
+    {
+     "string": "で",
+     "read": "デ",
+     "pron": "デ",
+     "mora_size": 1
+    },
+    {
+     "string": "から",
+     "read": "カラ",
+     "pron": "カラ",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k3",
+   "feed": "鍵をかけて　外に出る",
+   "accent": {
+    "moras": [
+     "ka",
+     "gi",
+     "o",
+     "ka",
+     "ke",
+     "te",
+     "so",
+     "to",
+     "ni",
+     "de",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 11
+   },
+   "frontend": [
+    {
+     "string": "鍵",
+     "read": "カギ",
+     "pron": "カギ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "かけ",
+     "read": "カケ",
+     "pron": "カケ",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "外",
+     "read": "ソト",
+     "pron": "ソト",
+     "mora_size": 2
+    },
+    {
+     "string": "に",
+     "read": "ニ",
+     "pron": "ニ",
+     "mora_size": 1
+    },
+    {
+     "string": "出る",
+     "read": "デル",
+     "pron": "デル",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k4",
+   "feed": "バスを待って",
+   "accent": {
+    "moras": [
+     "ba",
+     "su",
+     "o",
+     "ma",
+     "cl",
+     "te"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 6
+   },
+   "frontend": [
+    {
+     "string": "バス",
+     "read": "バス",
+     "pron": "バス",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "待っ",
+     "read": "マッ",
+     "pron": "マッ",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "A-1B-k1",
+   "feed": "服をたたんで　棚に入れる",
+   "accent": {
+    "moras": [
+     "fU",
+     "ku",
+     "o",
+     "ta",
+     "ta",
+     "N",
+     "de",
+     "ta",
+     "na",
+     "ni",
+     "i",
+     "re",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     1,
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 13
+   },
+   "frontend": [
+    {
+     "string": "服",
+     "read": "フク",
+     "pron": "フ’ク",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "たたん",
+     "read": "タタン",
+     "pron": "タタン",
+     "mora_size": 3
+    },
+    {
+     "string": "で",
+     "read": "デ",
+     "pron": "デ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "棚",
+     "read": "タナ",
+     "pron": "タナ",
+     "mora_size": 2
+    },
+    {
+     "string": "に",
+     "read": "ニ",
+     "pron": "ニ",
+     "mora_size": 1
+    },
+    {
+     "string": "入れる",
+     "read": "イレル",
+     "pron": "イレル",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "A-1S-k1",
+   "feed": "今日の予定を　紙に書く",
+   "accent": {
+    "moras": [
+     "kyo",
+     "o",
+     "no",
+     "yo",
+     "te",
+     "e",
+     "o",
+     "ka",
+     "mi",
+     "ni",
+     "ka",
+     "ku"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "今日",
+     "read": "キョウ",
+     "pron": "キョー",
+     "mora_size": 2
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "予定",
+     "read": "ヨテイ",
+     "pron": "ヨテー",
+     "mora_size": 3
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "紙",
+     "read": "カミ",
+     "pron": "カミ",
+     "mora_size": 2
+    },
+    {
+     "string": "に",
+     "read": "ニ",
+     "pron": "ニ",
+     "mora_size": 1
+    },
+    {
+     "string": "書く",
+     "read": "カク",
+     "pron": "カク",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-1S-k2",
+   "feed": "窓の外　道が見える",
+   "accent": {
+    "moras": [
+     "ma",
+     "do",
+     "no",
+     "so",
+     "to",
+     "mi",
+     "chi",
+     "ga",
+     "mi",
+     "e",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   },
+   "frontend": [
+    {
+     "string": "窓",
+     "read": "マド",
+     "pron": "マド",
+     "mora_size": 2
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "外",
+     "read": "ソト",
+     "pron": "ソト",
+     "mora_size": 2
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "道",
+     "read": "ミチ",
+     "pron": "ミチ",
+     "mora_size": 2
+    },
+    {
+     "string": "が",
+     "read": "ガ",
+     "pron": "ガ",
+     "mora_size": 1
+    },
+    {
+     "string": "見える",
+     "read": "ミエル",
+     "pron": "ミエル",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "A-2A-k1",
+   "feed": "夜が来て　窓を閉める",
+   "accent": {
+    "moras": [
+     "yo",
+     "ru",
+     "ga",
+     "ki",
+     "te",
+     "ma",
+     "do",
+     "o",
+     "shi",
+     "me",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   },
+   "frontend": [
+    {
+     "string": "夜",
+     "read": "ヨル",
+     "pron": "ヨル",
+     "mora_size": 2
+    },
+    {
+     "string": "が",
+     "read": "ガ",
+     "pron": "ガ",
+     "mora_size": 1
+    },
+    {
+     "string": "来",
+     "read": "キ",
+     "pron": "キ",
+     "mora_size": 1
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "窓",
+     "read": "マド",
+     "pron": "マド",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "閉める",
+     "read": "シメル",
+     "pron": "シメル",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "A-2S-k1",
+   "feed": "電気を消して　部屋を出る",
+   "accent": {
+    "moras": [
+     "de",
+     "N",
+     "ki",
+     "o",
+     "ke",
+     "shI",
+     "te",
+     "he",
+     "ya",
+     "o",
+     "de",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "電気",
+     "read": "デンキ",
+     "pron": "デンキ",
+     "mora_size": 3
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "消し",
+     "read": "ケシ",
+     "pron": "ケシ’",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "部屋",
+     "read": "ヘヤ",
+     "pron": "ヘヤ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "出る",
+     "read": "デル",
+     "pron": "デル",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-2S-k2",
+   "feed": "傘を持って",
+   "accent": {
+    "moras": [
+     "ka",
+     "sa",
+     "o",
+     "mo",
+     "cl",
+     "te"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 6
+   },
+   "frontend": [
+    {
+     "string": "傘",
+     "read": "カサ",
+     "pron": "カサ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "持っ",
+     "read": "モッ",
+     "pron": "モッ",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "A-2S-k3",
+   "feed": "ドアを閉めて　鍵をかける",
+   "accent": {
+    "moras": [
+     "do",
+     "a",
+     "o",
+     "shi",
+     "me",
+     "te",
+     "ka",
+     "gi",
+     "o",
+     "ka",
+     "ke",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "ドア",
+     "read": "ドア",
+     "pron": "ドア",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "閉め",
+     "read": "シメ",
+     "pron": "シメ",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "鍵",
+     "read": "カギ",
+     "pron": "カギ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "かける",
+     "read": "カケル",
+     "pron": "カケル",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "A-C-k1",
+   "feed": "テレビを消して　お茶を飲む",
+   "accent": {
+    "moras": [
+     "te",
+     "re",
+     "bi",
+     "o",
+     "ke",
+     "shI",
+     "te",
+     "o",
+     "cha",
+     "o",
+     "no",
+     "mu"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     1,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "テレビ",
+     "read": "テレビ",
+     "pron": "テレビ",
+     "mora_size": 3
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "消し",
+     "read": "ケシ",
+     "pron": "ケシ’",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "お茶",
+     "read": "オチャ",
+     "pron": "オチャ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "飲む",
+     "read": "ノム",
+     "pron": "ノム",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-C-k2",
+   "feed": "雑誌を閉じて　目を閉じる",
+   "accent": {
+    "moras": [
+     "za",
+     "cl",
+     "shi",
+     "o",
+     "to",
+     "ji",
+     "te",
+     "me",
+     "o",
+     "to",
+     "ji",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "雑誌",
+     "read": "ザッシ",
+     "pron": "ザッシ",
+     "mora_size": 3
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "閉じ",
+     "read": "トジ",
+     "pron": "トジ",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "目",
+     "read": "メ",
+     "pron": "メ",
+     "mora_size": 1
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "閉じる",
+     "read": "トジル",
+     "pron": "トジル",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "A-C-k3",
+   "feed": "時計の針を　眺めてる",
+   "accent": {
+    "moras": [
+     "to",
+     "ke",
+     "e",
+     "no",
+     "ha",
+     "ri",
+     "o",
+     "na",
+     "ga",
+     "me",
+     "te",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 5,
+      "kernel": 4
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "時計",
+     "read": "トケイ",
+     "pron": "トケー",
+     "mora_size": 3
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "針",
+     "read": "ハリ",
+     "pron": "ハリ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "眺め",
+     "read": "ナガメ",
+     "pron": "ナガメ",
+     "mora_size": 3
+    },
+    {
+     "string": "てる",
+     "read": "テル",
+     "pron": "テル",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-D-k1",
+   "feed": "靴をそろえて　玄関へ",
+   "accent": {
+    "moras": [
+     "kU",
+     "tsu",
+     "o",
+     "so",
+     "ro",
+     "e",
+     "te",
+     "ge",
+     "N",
+     "ka",
+     "N",
+     "e"
+    ],
+    "hl": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 4,
+      "kernel": 3
+     },
+     {
+      "moras": 5,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "靴",
+     "read": "クツ",
+     "pron": "ク’ツ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "そろえ",
+     "read": "ソロエ",
+     "pron": "ソロエ",
+     "mora_size": 3
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "玄関",
+     "read": "ゲンカン",
+     "pron": "ゲンカン",
+     "mora_size": 4
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "A-D-k2",
+   "feed": "ポストの手紙を　取りに行く",
+   "accent": {
+    "moras": [
+     "po",
+     "sU",
+     "to",
+     "no",
+     "te",
+     "ga",
+     "mi",
+     "o",
+     "to",
+     "ri",
+     "ni",
+     "i",
+     "ku"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     0,
+     1
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 1
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 13
+   },
+   "frontend": [
+    {
+     "string": "ポスト",
+     "read": "ポスト",
+     "pron": "ポス’ト",
+     "mora_size": 3
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "手紙",
+     "read": "テガミ",
+     "pron": "テガミ",
+     "mora_size": 3
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "取り",
+     "read": "トリ",
+     "pron": "トリ",
+     "mora_size": 2
+    },
+    {
+     "string": "に",
+     "read": "ニ",
+     "pron": "ニ",
+     "mora_size": 1
+    },
+    {
+     "string": "行く",
+     "read": "イク",
+     "pron": "イク",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-D-k5",
+   "feed": "シャツのボタンを　留め直す",
+   "accent": {
+    "moras": [
+     "sha",
+     "tsu",
+     "no",
+     "bo",
+     "ta",
+     "N",
+     "o",
+     "to",
+     "me",
+     "na",
+     "o",
+     "su"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     1,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 5,
+      "kernel": 4
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "シャツ",
+     "read": "シャツ",
+     "pron": "シャツ",
+     "mora_size": 2
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "ボタン",
+     "read": "ボタン",
+     "pron": "ボタン",
+     "mora_size": 3
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "留め",
+     "read": "トメ",
+     "pron": "トメ",
+     "mora_size": 2
+    },
+    {
+     "string": "直す",
+     "read": "ナオス",
+     "pron": "ナオス",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "A-D-k6",
+   "feed": "メモをたたんで　ポケットへ",
+   "accent": {
+    "moras": [
+     "me",
+     "mo",
+     "o",
+     "ta",
+     "ta",
+     "N",
+     "de",
+     "po",
+     "ke",
+     "cl",
+     "to",
+     "e"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 5,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "メモ",
+     "read": "メモ",
+     "pron": "メモ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "たたん",
+     "read": "タタン",
+     "pron": "タタン",
+     "mora_size": 3
+    },
+    {
+     "string": "で",
+     "read": "デ",
+     "pron": "デ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "ポケット",
+     "read": "ポケット",
+     "pron": "ポケット",
+     "mora_size": 4
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "A-st1",
+   "feed": "夕方の道を歩く",
+   "accent": {
+    "moras": [
+     "yu",
+     "u",
+     "ga",
+     "ta",
+     "no",
+     "mi",
+     "chi",
+     "o",
+     "a",
+     "ru",
+     "ku"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 5,
+      "kernel": 5
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   },
+   "frontend": [
+    {
+     "string": "夕方",
+     "read": "ユウガタ",
+     "pron": "ユーガタ",
+     "mora_size": 4
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "道",
+     "read": "ミチ",
+     "pron": "ミチ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "歩く",
+     "read": "アルク",
+     "pron": "アルク",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "C-A-k1",
+   "feed": "雨の日は　傘をさして",
+   "accent": {
+    "moras": [
+     "a",
+     "me",
+     "no",
+     "hi",
+     "wa",
+     "ka",
+     "sa",
+     "o",
+     "sa",
+     "shi",
+     "te"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     0,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   },
+   "frontend": [
+    {
+     "string": "雨",
+     "read": "アメ",
+     "pron": "アメ",
+     "mora_size": 2
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "日",
+     "read": "ヒ",
+     "pron": "ヒ",
+     "mora_size": 1
+    },
+    {
+     "string": "は",
+     "read": "ハ",
+     "pron": "ワ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "傘",
+     "read": "カサ",
+     "pron": "カサ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "さし",
+     "read": "サシ",
+     "pron": "サシ",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "C-A-k2",
+   "feed": "にわへ　みずをまく",
+   "accent": {
+    "moras": [
+     "ni",
+     "wa",
+     "e",
+     "mi",
+     "zu",
+     "o",
+     "ma",
+     "ku"
+    ],
+    "hl": [
+     1,
+     1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1
+    ],
+    "trans": [
+     "|",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 1,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 2,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 8
+   },
+   "frontend": [
+    {
+     "string": "に",
+     "read": "ニ",
+     "pron": "ニ",
+     "mora_size": 1
+    },
+    {
+     "string": "わ",
+     "read": "ワ",
+     "pron": "ワ",
+     "mora_size": 1
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "みず",
+     "read": "ミズ",
+     "pron": "ミズ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "まく",
+     "read": "マク",
+     "pron": "マク",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "C-S-k1",
+   "feed": "信号が　青に変わる",
+   "accent": {
+    "moras": [
+     "shi",
+     "N",
+     "go",
+     "o",
+     "ga",
+     "a",
+     "o",
+     "ni",
+     "ka",
+     "wa",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 5,
+      "kernel": 5
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 11
+   },
+   "frontend": [
+    {
+     "string": "信号",
+     "read": "シンゴウ",
+     "pron": "シンゴー",
+     "mora_size": 4
+    },
+    {
+     "string": "が",
+     "read": "ガ",
+     "pron": "ガ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "青",
+     "read": "アオ",
+     "pron": "アオ",
+     "mora_size": 2
+    },
+    {
+     "string": "に",
+     "read": "ニ",
+     "pron": "ニ",
+     "mora_size": 1
+    },
+    {
+     "string": "変わる",
+     "read": "カワル",
+     "pron": "カワル",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "C-S-k2",
+   "feed": "踏切の　音が聞こえる",
+   "accent": {
+    "moras": [
+     "fu",
+     "mi",
+     "ki",
+     "ri",
+     "no",
+     "o",
+     "to",
+     "ga",
+     "kI",
+     "ko",
+     "e",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     1
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 5,
+      "kernel": 5
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "踏切",
+     "read": "フミキリ",
+     "pron": "フミキリ",
+     "mora_size": 4
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "音",
+     "read": "オト",
+     "pron": "オト",
+     "mora_size": 2
+    },
+    {
+     "string": "が",
+     "read": "ガ",
+     "pron": "ガ",
+     "mora_size": 1
+    },
+    {
+     "string": "聞こえる",
+     "read": "キコエル",
+     "pron": "キ’コエル",
+     "mora_size": 4
+    }
+   ]
+  },
+  {
+   "key": "D-st1",
+   "feed": "街の明かりが灯る頃",
+   "accent": {
+    "moras": [
+     "ma",
+     "chi",
+     "no",
+     "a",
+     "ka",
+     "ri",
+     "ga",
+     "to",
+     "mo",
+     "ru",
+     "ko",
+     "ro"
+    ],
+    "hl": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   },
+   "frontend": [
+    {
+     "string": "街",
+     "read": "マチ",
+     "pron": "マチ",
+     "mora_size": 2
+    },
+    {
+     "string": "の",
+     "read": "ノ",
+     "pron": "ノ",
+     "mora_size": 1
+    },
+    {
+     "string": "明かり",
+     "read": "アカリ",
+     "pron": "アカリ",
+     "mora_size": 3
+    },
+    {
+     "string": "が",
+     "read": "ガ",
+     "pron": "ガ",
+     "mora_size": 1
+    },
+    {
+     "string": "灯る",
+     "read": "トモル",
+     "pron": "トモル",
+     "mora_size": 3
+    },
+    {
+     "string": "頃",
+     "read": "コロ",
+     "pron": "コロ",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k2-lc1",
+   "feed": "外へ",
+   "accent": {
+    "moras": [
+     "so",
+     "to",
+     "e"
+    ],
+    "hl": [
+     1,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 3
+   },
+   "frontend": [
+    {
+     "string": "外",
+     "read": "ソト",
+     "pron": "ソト",
+     "mora_size": 2
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k2-lc2",
+   "feed": "駅まで",
+   "accent": {
+    "moras": [
+     "e",
+     "ki",
+     "ma",
+     "de"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 4
+   },
+   "frontend": [
+    {
+     "string": "駅",
+     "read": "エキ",
+     "pron": "エキ",
+     "mora_size": 2
+    },
+    {
+     "string": "まで",
+     "read": "マデ",
+     "pron": "マデ",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k2-lc3",
+   "feed": "街へ",
+   "accent": {
+    "moras": [
+     "ma",
+     "chi",
+     "e"
+    ],
+    "hl": [
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 3
+   },
+   "frontend": [
+    {
+     "string": "街",
+     "read": "マチ",
+     "pron": "マチ",
+     "mora_size": 2
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k2-lc4",
+   "feed": "庭へ",
+   "accent": {
+    "moras": [
+     "ni",
+     "wa",
+     "e"
+    ],
+    "hl": [
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 3
+   },
+   "frontend": [
+    {
+     "string": "庭",
+     "read": "ニワ",
+     "pron": "ニワ",
+     "mora_size": 2
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k2-v1",
+   "feed": "水を飲んでから　外へ",
+   "accent": {
+    "moras": [
+     "mi",
+     "zu",
+     "o",
+     "no",
+     "N",
+     "de",
+     "ka",
+     "ra",
+     "so",
+     "to",
+     "e"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 5,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 11
+   },
+   "frontend": [
+    {
+     "string": "水",
+     "read": "ミズ",
+     "pron": "ミズ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "飲ん",
+     "read": "ノン",
+     "pron": "ノン",
+     "mora_size": 2
+    },
+    {
+     "string": "で",
+     "read": "デ",
+     "pron": "デ",
+     "mora_size": 1
+    },
+    {
+     "string": "から",
+     "read": "カラ",
+     "pron": "カラ",
+     "mora_size": 2
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "外",
+     "read": "ソト",
+     "pron": "ソト",
+     "mora_size": 2
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    }
+   ]
+  },
+  {
+   "key": "A-1A-k1-v1",
+   "feed": "朝早く起きて　窓を開ける",
+   "accent": {
+    "moras": [
+     "a",
+     "sa",
+     "ha",
+     "ya",
+     "ku",
+     "o",
+     "kI",
+     "te",
+     "ma",
+     "do",
+     "o",
+     "a",
+     "ke",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 6,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 14
+   },
+   "frontend": [
+    {
+     "string": "朝",
+     "read": "アサ",
+     "pron": "アサ",
+     "mora_size": 2
+    },
+    {
+     "string": "早く",
+     "read": "ハヤク",
+     "pron": "ハヤク",
+     "mora_size": 3
+    },
+    {
+     "string": "起き",
+     "read": "オキ",
+     "pron": "オキ’",
+     "mora_size": 2
+    },
+    {
+     "string": "て",
+     "read": "テ",
+     "pron": "テ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "窓",
+     "read": "マド",
+     "pron": "マド",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "開ける",
+     "read": "アケル",
+     "pron": "アケル",
+     "mora_size": 3
+    }
+   ]
+  },
+  {
+   "key": "C-A-k2-v1",
+   "feed": "庭へ　みずをまく",
+   "accent": {
+    "moras": [
+     "ni",
+     "wa",
+     "e",
+     "mi",
+     "zu",
+     "o",
+     "ma",
+     "ku"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     0,
+     1,
+     1,
+     0,
+     1
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 2,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 8
+   },
+   "frontend": [
+    {
+     "string": "庭",
+     "read": "ニワ",
+     "pron": "ニワ",
+     "mora_size": 2
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "みず",
+     "read": "ミズ",
+     "pron": "ミズ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "まく",
+     "read": "マク",
+     "pron": "マク",
+     "mora_size": 2
+    }
+   ]
+  },
+  {
+   "key": "C-A-k2-v2",
+   "feed": "にわへ　みずをまく",
+   "accent": {
+    "moras": [
+     "ni",
+     "wa",
+     "e",
+     "mi",
+     "zu",
+     "o",
+     "ma",
+     "ku"
+    ],
+    "hl": [
+     1,
+     1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1
+    ],
+    "trans": [
+     "|",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 1,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 2,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 8
+   },
+   "frontend": [
+    {
+     "string": "に",
+     "read": "ニ",
+     "pron": "ニ",
+     "mora_size": 1
+    },
+    {
+     "string": "わ",
+     "read": "ワ",
+     "pron": "ワ",
+     "mora_size": 1
+    },
+    {
+     "string": "へ",
+     "read": "ヘ",
+     "pron": "エ",
+     "mora_size": 1
+    },
+    {
+     "string": "　",
+     "read": "、",
+     "pron": "、",
+     "mora_size": 0
+    },
+    {
+     "string": "みず",
+     "read": "ミズ",
+     "pron": "ミズ",
+     "mora_size": 2
+    },
+    {
+     "string": "を",
+     "read": "ヲ",
+     "pron": "ヲ",
+     "mora_size": 1
+    },
+    {
+     "string": "まく",
+     "read": "マク",
+     "pron": "マク",
+     "mora_size": 2
+    }
+   ]
+  }
+ ]
+}
