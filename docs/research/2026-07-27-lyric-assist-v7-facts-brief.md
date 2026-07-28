@@ -128,8 +128,9 @@
 **ファイル**: `/home/shuraba_p/projects/creative_manager/docs/research/2026-07-27-lyric-assist-mockups-v6.html`
 （単体で開けるHTML。読んでよい。**このファイル以外の設計docは読まないこと**＝経緯に引きずられる）
 
-**スクリーンショット**（レンダ済み・全部見ること）:
-`/tmp/claude-1000/-home-shuraba-p-projects-creative-manager/3e82f859-464a-41b2-beef-d4b0d626b784/scratchpad/v6_frame1.png` 〜 `v6_frame8.png`
+**スクリーンショット**（**設計論を除去した版**・全部見ること）:
+`/tmp/claude-1000/-home-shuraba-p-projects-creative-manager/3e82f859-464a-41b2-beef-d4b0d626b784/scratchpad/clean/v6c_frame1.png` 〜 `v6c_frame8.png`
+※旧版の `v6_frame*.png`（`clean/` の付かないもの）は**使わないこと**＝枠外の設計理由が写り込んでいる。
 
 **8枚の内訳**: 1=歌詞全体画面（素） 2=同（イントネーション切替） 3=初期状態3態
 4=句の編集画面（詞の空き・候補は順に並べる案） 5=同（候補を事実で区分する案）
