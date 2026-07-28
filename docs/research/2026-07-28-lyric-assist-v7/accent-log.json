@@ -1,0 +1,1607 @@
+{
+ "command": "/home/shuraba_p/projects/creative_manager/apps/audio/.venv/bin/python accent.py  (cwd=/home/shuraba_p/projects/creative_manager/apps/audio, stdin=1行1文)",
+ "ranAt": "2026-07-28T04:58:21.216Z",
+ "entries": [
+  {
+   "key": "A-1A-k1",
+   "input": "朝起きて　窓を開ける",
+   "output": {
+    "moras": [
+     "a",
+     "sa",
+     "o",
+     "ki",
+     "te",
+     "ma",
+     "do",
+     "o",
+     "a",
+     "ke",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 11
+   }
+  },
+  {
+   "key": "A-1A-k2",
+   "input": "水を飲んでから",
+   "output": {
+    "moras": [
+     "mi",
+     "zu",
+     "o",
+     "no",
+     "N",
+     "de",
+     "ka",
+     "ra"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 5,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 8
+   }
+  },
+  {
+   "key": "A-1A-k3",
+   "input": "鍵をかけて　外に出る",
+   "output": {
+    "moras": [
+     "ka",
+     "gi",
+     "o",
+     "ka",
+     "ke",
+     "te",
+     "so",
+     "to",
+     "ni",
+     "de",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 11
+   }
+  },
+  {
+   "key": "A-1A-k4",
+   "input": "バスを待って",
+   "output": {
+    "moras": [
+     "ba",
+     "su",
+     "o",
+     "ma",
+     "cl",
+     "te"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 6
+   }
+  },
+  {
+   "key": "A-1B-k1",
+   "input": "服をたたんで　棚に入れる",
+   "output": {
+    "moras": [
+     "fU",
+     "ku",
+     "o",
+     "ta",
+     "ta",
+     "N",
+     "de",
+     "ta",
+     "na",
+     "ni",
+     "i",
+     "re",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     1,
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 13
+   }
+  },
+  {
+   "key": "A-1S-k1",
+   "input": "今日の予定を　紙に書く",
+   "output": {
+    "moras": [
+     "kyo",
+     "o",
+     "no",
+     "yo",
+     "te",
+     "e",
+     "o",
+     "ka",
+     "mi",
+     "ni",
+     "ka",
+     "ku"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-1S-k2",
+   "input": "窓の外　道が見える",
+   "output": {
+    "moras": [
+     "ma",
+     "do",
+     "no",
+     "so",
+     "to",
+     "mi",
+     "chi",
+     "ga",
+     "mi",
+     "e",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   }
+  },
+  {
+   "key": "A-2A-k1",
+   "input": "夜が来て　窓を閉める",
+   "output": {
+    "moras": [
+     "yo",
+     "ru",
+     "ga",
+     "ki",
+     "te",
+     "ma",
+     "do",
+     "o",
+     "shi",
+     "me",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   }
+  },
+  {
+   "key": "A-2S-k1",
+   "input": "電気を消して　部屋を出る",
+   "output": {
+    "moras": [
+     "de",
+     "N",
+     "ki",
+     "o",
+     "ke",
+     "shI",
+     "te",
+     "he",
+     "ya",
+     "o",
+     "de",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-2S-k2",
+   "input": "傘を持って",
+   "output": {
+    "moras": [
+     "ka",
+     "sa",
+     "o",
+     "mo",
+     "cl",
+     "te"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     1,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 6
+   }
+  },
+  {
+   "key": "A-2S-k3",
+   "input": "ドアを閉めて　鍵をかける",
+   "output": {
+    "moras": [
+     "do",
+     "a",
+     "o",
+     "shi",
+     "me",
+     "te",
+     "ka",
+     "gi",
+     "o",
+     "ka",
+     "ke",
+     "ru"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-C-k1",
+   "input": "テレビを消して　お茶を飲む",
+   "output": {
+    "moras": [
+     "te",
+     "re",
+     "bi",
+     "o",
+     "ke",
+     "shI",
+     "te",
+     "o",
+     "cha",
+     "o",
+     "no",
+     "mu"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     1,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-C-k2",
+   "input": "雑誌を閉じて　目を閉じる",
+   "output": {
+    "moras": [
+     "za",
+     "cl",
+     "shi",
+     "o",
+     "to",
+     "ji",
+     "te",
+     "me",
+     "o",
+     "to",
+     "ji",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-C-k3",
+   "input": "時計の針を　眺めてる",
+   "output": {
+    "moras": [
+     "to",
+     "ke",
+     "e",
+     "no",
+     "ha",
+     "ri",
+     "o",
+     "na",
+     "ga",
+     "me",
+     "te",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 5,
+      "kernel": 4
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-D-k1",
+   "input": "靴をそろえて　玄関へ",
+   "output": {
+    "moras": [
+     "kU",
+     "tsu",
+     "o",
+     "so",
+     "ro",
+     "e",
+     "te",
+     "ge",
+     "N",
+     "ka",
+     "N",
+     "e"
+    ],
+    "hl": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "DOWN",
+     "|",
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 4,
+      "kernel": 3
+     },
+     {
+      "moras": 5,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-D-k2",
+   "input": "ポストの手紙を　取りに行く",
+   "output": {
+    "moras": [
+     "po",
+     "sU",
+     "to",
+     "no",
+     "te",
+     "ga",
+     "mi",
+     "o",
+     "to",
+     "ri",
+     "ni",
+     "i",
+     "ku"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     0,
+     1
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 1
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 13
+   }
+  },
+  {
+   "key": "A-D-k5",
+   "input": "シャツのボタンを　留め直す",
+   "output": {
+    "moras": [
+     "sha",
+     "tsu",
+     "no",
+     "bo",
+     "ta",
+     "N",
+     "o",
+     "to",
+     "me",
+     "na",
+     "o",
+     "su"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     1,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 5,
+      "kernel": 4
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-D-k6",
+   "input": "メモをたたんで　ポケットへ",
+   "output": {
+    "moras": [
+     "me",
+     "mo",
+     "o",
+     "ta",
+     "ta",
+     "N",
+     "de",
+     "po",
+     "ke",
+     "cl",
+     "to",
+     "e"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 5,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-st1",
+   "input": "夕方の道を歩く",
+   "output": {
+    "moras": [
+     "yu",
+     "u",
+     "ga",
+     "ta",
+     "no",
+     "mi",
+     "chi",
+     "o",
+     "a",
+     "ru",
+     "ku"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 5,
+      "kernel": 5
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   }
+  },
+  {
+   "key": "C-A-k1",
+   "input": "雨の日は　傘をさして",
+   "output": {
+    "moras": [
+     "a",
+     "me",
+     "no",
+     "hi",
+     "wa",
+     "ka",
+     "sa",
+     "o",
+     "sa",
+     "shi",
+     "te"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     1,
+     0,
+     0,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 2,
+      "kernel": 2
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   }
+  },
+  {
+   "key": "C-A-k2",
+   "input": "駅までの　道を歩く",
+   "output": {
+    "moras": [
+     "e",
+     "ki",
+     "ma",
+     "de",
+     "no",
+     "mi",
+     "chi",
+     "o",
+     "a",
+     "ru",
+     "ku"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 5,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 11
+   }
+  },
+  {
+   "key": "C-S-k1",
+   "input": "信号が　青に変わる",
+   "output": {
+    "moras": [
+     "shi",
+     "N",
+     "go",
+     "o",
+     "ga",
+     "a",
+     "o",
+     "ni",
+     "ka",
+     "wa",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     1,
+     0,
+     0,
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "DOWN",
+     "FLAT",
+     "|",
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 5,
+      "kernel": 5
+     },
+     {
+      "moras": 3,
+      "kernel": 1
+     },
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 11
+   }
+  },
+  {
+   "key": "C-S-k2",
+   "input": "踏切の　音が聞こえる",
+   "output": {
+    "moras": [
+     "fu",
+     "mi",
+     "ki",
+     "ri",
+     "no",
+     "o",
+     "to",
+     "ga",
+     "kI",
+     "ko",
+     "e",
+     "ru"
+    ],
+    "hl": [
+     0,
+     1,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     1
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 5,
+      "kernel": 5
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "D-st1",
+   "input": "街の明かりが灯る頃",
+   "output": {
+    "moras": [
+     "ma",
+     "chi",
+     "no",
+     "a",
+     "ka",
+     "ri",
+     "ga",
+     "to",
+     "mo",
+     "ru",
+     "ko",
+     "ro"
+    ],
+    "hl": [
+     0,
+     1,
+     0,
+     0,
+     1,
+     1,
+     1,
+     0,
+     1,
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|",
+     "UP",
+     "FLAT",
+     "FLAT",
+     "|",
+     "UP",
+     "DOWN",
+     "|",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 4,
+      "kernel": 4
+     },
+     {
+      "moras": 3,
+      "kernel": 2
+     },
+     {
+      "moras": 2,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 12
+   }
+  },
+  {
+   "key": "A-1A-k2-lc1",
+   "input": "外へ",
+   "output": {
+    "moras": [
+     "so",
+     "to",
+     "e"
+    ],
+    "hl": [
+     1,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 3
+   }
+  },
+  {
+   "key": "A-1A-k2-lc2",
+   "input": "駅まで",
+   "output": {
+    "moras": [
+     "e",
+     "ki",
+     "ma",
+     "de"
+    ],
+    "hl": [
+     1,
+     0,
+     0,
+     0
+    ],
+    "trans": [
+     "DOWN",
+     "FLAT",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 4,
+      "kernel": 1
+     }
+    ],
+    "mora_total": 4
+   }
+  },
+  {
+   "key": "A-1A-k2-lc3",
+   "input": "街へ",
+   "output": {
+    "moras": [
+     "ma",
+     "chi",
+     "e"
+    ],
+    "hl": [
+     0,
+     1,
+     0
+    ],
+    "trans": [
+     "UP",
+     "DOWN",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 2
+     }
+    ],
+    "mora_total": 3
+   }
+  },
+  {
+   "key": "A-1A-k2-lc4",
+   "input": "庭へ",
+   "output": {
+    "moras": [
+     "ni",
+     "wa",
+     "e"
+    ],
+    "hl": [
+     0,
+     1,
+     1
+    ],
+    "trans": [
+     "UP",
+     "FLAT",
+     "|"
+    ],
+    "phrases": [
+     {
+      "moras": 3,
+      "kernel": 3
+     }
+    ],
+    "mora_total": 3
+   }
+  }
+ ]
+}

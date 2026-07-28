@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作詞補助UI モック v7（判定材料・詞は全部ダミー）</title>
+<style>
+/* ============================================================
+   v7 共通CSS（工程0）。共通クラスは全て c- 接頭辞。
+   枚（sheet-*.js）が足してよいのは自分の枚id接頭辞のクラスだけ
+   （registerSheet が機械検査する）。共通部品の見た目を変えたい
+   ときはここを直さず工程0担当へ依頼すること。
+   例外的に接頭辞なしで残す3クラス:
+     .frame / .desc / .st … レンダ工程（render.mjs）が参照する枠・
+     枠外説明・判定札。この3つは配布スクショで非表示・除去される。
+   ============================================================ */
+:root{
+  --bg:#16181c; --card:#22252b; --line:#33373f; --fg:#e6e8ec; --muted:#9aa0aa;
+  --accent:#3a6df0; --mel:#7fc0e8; --fit-red:#e8533f; --fit-yellow:#e0a83c; --hl:#a58ee0;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 24px 60px;background:#0e1013;color:var(--fg);
+  font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:14px;line-height:1.55}
+h1{font-size:20px;margin:0 0 4px}
+.c-sub{color:var(--muted);font-size:12px;margin:0 0 26px;max-width:760px}
+.frames{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start}
+.frame{flex:0 0 auto;width:352px}
+.frame.wide{width:760px}
+.desc{color:var(--muted);font-size:12px;margin:10px 2px 0;line-height:1.6}
+.st{font-size:9px;color:#a99ad0;border:1px dashed #6b5f8a;border-radius:4px;padding:0 4px;white-space:nowrap}
+.c-fcap{font-size:15px;margin:0 0 8px;color:var(--fg)}
+.c-fcap-no{display:inline-block;background:var(--accent);color:#fff;border-radius:6px;
+  font-size:12px;padding:1px 7px;margin-right:8px;vertical-align:2px}
+
+/* ===== 電話枠 ===== */
+.c-ph{width:352px;background:var(--bg);border:1px solid #3c414a;border-radius:20px;
+  padding:12px 11px 10px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+.c-hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.c-back{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:5px 10px;font-size:13px;white-space:nowrap}
+.c-ttl{flex:1;background:#1b1e24;border:1px solid var(--line);border-radius:10px;
+  padding:5px 10px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-hbtn{background:var(--card);border:1px solid var(--accent);color:#9db8f7;border-radius:10px;
+  padding:5px 10px;font-size:12px;white-space:nowrap}
+.c-crumb{flex:1;background:#1b1e24;border:1px solid var(--line);border-radius:10px;
+  padding:5px 10px;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-seg{display:flex;gap:4px;background:#1b1e24;border:1px solid var(--line);border-radius:10px;
+  padding:3px;margin-bottom:8px}
+.c-seg span{flex:1;text-align:center;font-size:12px;color:var(--muted);padding:4px 0;border-radius:7px}
+.c-seg .c-seg-on{background:var(--accent);color:#fff}
+.c-legend{font-size:10.5px;color:var(--muted);margin:0 2px 8px}
+
+/* ===== セクション見出し ===== */
+.c-sec{display:flex;flex-wrap:wrap;align-items:center;gap:5px 7px;background:var(--card);
+  border:1px solid var(--line);border-radius:9px;padding:6px 9px;margin:12px 0 4px}
+.c-sec-kari{border-style:dashed;border-color:#59606c;background:#1c1f25}
+.c-grip{color:#5b616c;font-size:12px;letter-spacing:-2px}
+.c-sname{font-weight:600;font-size:13px;white-space:nowrap}
+.c-sbars{color:var(--muted);font-size:11px}
+.c-karichip{font-size:10px;color:#c9b27a;border:1px dashed #8a7a4d;border-radius:6px;padding:0 5px}
+.c-samechip{font-size:10px;color:#8fb8a8;border:1px solid #3d5a4f;border-radius:6px;padding:0 6px}
+.c-secbtn{margin-left:auto;font-size:10px;color:var(--muted);border:1px solid var(--line);
+  border-radius:7px;padding:1px 7px;white-space:nowrap}
+.c-partsep{border-top:1px dashed #454b56;margin:9px 2px 0;height:1px}
+
+/* ===== 句の行 ===== */
+.c-ku{position:relative;padding:6px 2px 7px;border-bottom:1px solid #1f2228}
+.c-noline{border-bottom:none}
+.c-ku-now{outline:1px solid var(--accent);border-radius:8px;background:rgba(58,109,240,.07)}
+.c-nowmark{position:absolute;left:-2px;top:4px;color:var(--accent);font-size:10px}
+.c-krow{display:flex;gap:6px}
+.c-kmain{flex:1;min-width:0}
+.c-kside{width:58px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;
+  padding-top:3px;font-size:10px;color:#6d7480}
+.c-melo{margin-bottom:3px}
+.c-melo svg{display:block}
+.c-melo-none{height:12px}
+.c-band{fill:rgba(79,168,224,.13);stroke:rgba(79,168,224,.30);stroke-width:.6}
+.c-nt{fill:var(--mel)}
+.c-ly{display:flex;align-items:center;flex-wrap:wrap;gap:2px;font-size:13.5px;min-height:20px}
+.c-ly-s{font-size:12px}
+.c-imi{font-size:10.5px;color:#7d8697;margin-top:2px}
+.c-dslot{display:inline-flex;align-items:center;border:1px dashed #565d69;border-radius:6px;
+  padding:2px 8px;color:var(--muted);font-size:11px;margin-left:4px}
+.c-fd{display:inline-block;width:7px;height:7px;border-radius:50%}
+.c-fd-r{background:var(--fit-red)}
+.c-fd-y{background:var(--fit-yellow)}
+
+/* 下段（時間揃えの枠・棒・文字）＝音符矩形と同じ座標式から置く */
+.c-fr{position:relative;height:20px;margin-top:1px}
+.c-fr .c-kb2{position:absolute;top:0;height:17px;border:1px solid #4d535d;background:#1a1d22;border-radius:3px}
+.c-fr .c-bar2{position:absolute;top:8px;height:2px;background:#7a828e;border-radius:1px}
+.c-tc{position:absolute;top:2px;text-align:center;font-size:12.5px;white-space:nowrap}
+.c-frlab{position:absolute;left:50%;transform:translateX(-50%);top:2px;font-size:10px;color:var(--muted);
+  background:rgba(22,24,28,.88);padding:0 6px;border-radius:4px}
+.c-fr-after{position:absolute;top:2px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+
+/* 印（規則関数からだけ出る。下線=文字側の印） */
+.c-mk-r{box-shadow:inset 0 -2px 0 var(--fit-red)}
+.c-mk-y{box-shadow:inset 0 -2px 0 var(--fit-yellow)}
+
+/* 点線の区間 */
+.c-zone{display:flex;align-items:center;gap:8px;border:1px dashed #565d69;border-radius:9px;
+  padding:12px 10px;margin:6px 0;color:var(--muted);font-size:11.5px}
+.c-zone-pos{margin-left:auto;color:#6d7480;font-size:10px}
+
+/* 追加操作・断片置き場 */
+.c-addrow{display:flex;gap:8px;margin:14px 0 4px}
+.c-addbtn{flex:1;text-align:center;border:1px dashed #565d69;border-radius:10px;
+  padding:9px 4px;color:var(--muted);font-size:12.5px}
+.c-stockhd{color:var(--muted);font-size:11px;margin:16px 2px 2px;border-top:1px solid var(--line);padding-top:10px}
+.c-stockku{background:#1a1d22;border:1px solid var(--line);border-radius:9px;padding:7px 8px;border-bottom:1px solid var(--line)}
+.c-placebtn{font-size:10.5px;color:#9db8f7;border:1px solid var(--accent);border-radius:7px;padding:1px 7px;margin-left:6px}
+.c-stockpos{margin-left:auto;color:#6d7480;font-size:10px}
+
+/* 再生バー */
+.c-playbar{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);margin-top:12px;padding-top:9px}
+.c-pb{min-width:42px;height:34px;border:1px solid var(--line);background:var(--card);border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--fg);padding:0 6px}
+.c-pb-play{background:var(--accent);border-color:var(--accent);min-width:50px}
+.c-pb-sp{margin-left:auto;border:none;background:none;color:var(--muted);min-width:auto}
+
+/* ===== 範囲の編集画面 ===== */
+.c-ghost{opacity:.45}
+.c-ghostlbl{font-size:10px;color:var(--muted);margin:8px 2px 0}
+.c-refrow{background:#181d1b;border:1px solid #2c3a34;border-radius:9px;padding:6px 8px}
+.c-target{border:1px solid var(--accent);border-radius:10px;padding:8px 8px 9px;margin:4px 0;background:#181c25}
+.c-fieldrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 4px}
+.c-field{border:1px solid var(--line);border-radius:10px;background:#1b1e24;padding:7px 8px;min-height:86px}
+.c-field h4{margin:0 0 5px;font-size:11px;color:var(--muted);font-weight:600}
+.c-field-fill{font-size:12.5px;color:var(--fg)}
+.c-field-empty{font-size:11px;color:#565d69}
+.c-field-auto{font-size:10px;color:#6d7480;margin-top:5px}
+.c-ops{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.c-op{border:1px solid var(--line);background:var(--card);border-radius:9px;
+  padding:5px 9px;font-size:11.5px;color:var(--fg)}
+.c-op-main{border-color:var(--accent);color:#9db8f7}
+
+/* 実PianoRoll断片（読み取り専用） */
+.c-pr{position:relative;clear:both;border:1px solid var(--line);border-radius:9px;height:104px;overflow:hidden;
+  background:repeating-linear-gradient(0deg,#191c21 0 13px,#1d2026 13px 26px)}
+.c-pr-bl{position:absolute;top:0;bottom:0;width:1px;background:#2b303a}
+.c-pr-n{position:absolute;height:12px;background:var(--mel);border-radius:3px;font-size:9px;
+  color:#123;text-align:center;line-height:12px;overflow:hidden}
+.c-pr-i{position:absolute;width:11px;height:11px;border-radius:50%;background:var(--fit-yellow);
+  color:#222;font-size:8px;line-height:11px;text-align:center;font-style:normal}
+.c-pr-i-r{background:var(--fit-red);color:#fff}
+.c-pr-empty{height:34px;border:1px dashed var(--line);border-radius:9px;display:flex;align-items:center;
+  justify-content:center;color:#565d69;font-size:11px}
+.c-prcap{font-size:9.5px;color:#6d7480;margin-top:3px}
+
+/* 高低線（読んだときの高低・2値）＋カナ行 */
+.c-cmp{position:relative;margin-top:7px}
+.c-cmp svg{position:absolute;left:0;top:0}
+.c-cmp .c-tc{height:19px;line-height:19px;font-size:13px}
+.c-cmp .c-kb2{position:absolute;height:17px;border:1px dashed #565d69;background:#1a1d22;border-radius:3px}
+.c-hl-guide{stroke:#3f454e;stroke-width:1;stroke-dasharray:2 3}
+.c-hl-line{stroke:var(--hl);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.c-hl-dot{fill:var(--hl)}
+.c-hl-phr{stroke:#7a828e;stroke-width:1.5;stroke-linecap:round}
+.c-hl-phrknob{fill:#7a828e}
+.c-cmplabel{font-size:10px;color:var(--fg);font-weight:600;margin:8px 2px 1px}
+.c-cmplsub{font-weight:400;color:var(--muted);margin-left:6px;font-size:9.5px}
+
+/* 候補シート・候補カード */
+.c-sheet{border:1px solid var(--line);border-top:2px solid #4a5160;border-radius:14px 14px 12px 12px;
+  background:#1d2026;margin-top:12px;padding:9px 9px 8px}
+.c-sheet h3{margin:0 0 7px;font-size:12px;color:var(--fg)}
+.c-sheet-mode{font-size:10px;color:var(--muted);font-weight:400;margin-left:6px}
+.c-cand{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:6px 8px;margin-bottom:6px}
+.c-cand-w{font-size:14px}
+.c-cand-mel{margin:2px 0}
+.c-cand-facts{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.c-fact{font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:7px;padding:0 5px}
+.c-fact-y{color:var(--fit-yellow);border-color:#6b5a34}
+.c-fact-r{color:var(--fit-red);border-color:#6b4034}
+.c-cand-dest{font-size:9.5px;color:#6d7480;margin-top:3px}
+.c-cgroup{font-size:11px;color:var(--muted);margin:9px 0 5px;border-bottom:1px solid var(--line);padding-bottom:2px}
+
+/* フォーム類 */
+.c-reqform,.c-planform{border:1px solid var(--line);border-radius:10px;background:#1b1e24;padding:8px 9px;margin-top:10px}
+.c-reqform h3{margin:0 0 6px;font-size:12px;color:var(--fg)}
+.c-formrow{display:flex;align-items:center;gap:7px;margin:6px 0;font-size:12px}
+.c-formrow label{color:var(--muted);font-size:11px;width:110px;flex:none}
+.c-fin{border:1px solid var(--line);background:#15181d;border-radius:6px;padding:2px 7px;
+  color:var(--fg);font-size:11.5px;flex:1;min-height:20px}
+.c-fin-s{flex:0 0 72px}
+.c-fin:empty{color:#565d69}
+.c-cond-x{color:#6d7480;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:0 6px}
+.c-req-empty{font-size:11px;color:var(--muted);border:1px dashed #565d69;border-radius:8px;padding:7px 8px;margin:6px 0}
+.c-pop{display:inline-flex;gap:5px;margin-top:6px}
+.c-pop span{font-size:10.5px;border:1px solid var(--line);background:var(--card);border-radius:7px;padding:2px 7px;color:var(--fg)}
+.c-pop-p1{border-color:var(--accent) !important;color:#9db8f7 !important}
+.c-inp{display:inline-block;min-width:62px;border:1px solid var(--accent);background:#1b2333;
+  border-radius:5px;padding:1px 6px;font-size:12.5px;color:#8a93a6;vertical-align:-2px}
+.c-inp i{font-style:normal;color:var(--fg)}
+
+/* 操作割当の注記（データの文字列をそのまま出す） */
+.c-opstable{white-space:pre-line;font-size:10.5px;color:var(--muted);border:1px solid var(--line);
+  border-radius:9px;padding:7px 9px;margin:8px 0;line-height:1.7}
+
+/* 枚7用のカード */
+.c-cfacts{margin-left:auto;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+
+/* インセット */
+.c-inset{background:var(--bg);border:1px solid #3c414a;border-radius:14px;padding:10px 11px;margin-top:14px}
+.c-inset h3{margin:0 0 7px;font-size:12px;color:var(--fg)}
+</style>
+</head>
+<body>
+
+<h1>作詞補助UI モック v7</h1>
+<p class="c-sub">判定材料・詞は全部ダミー（意味の薄い日常語の詰め物。作品ではありません）。
+メロの形は常に矩形（縮小されたピアノロール・矩形の横幅=音の長さ・横位置=リズム・縦位置=相対の音高）。
+読みの高低は高い/低いの2値（pyopenjtalk 実測の焼き込み）。幅350px級の電話枠・既存アプリの暗色調。</p>
+
+<div id="frames" class="frames"></div>
+
+<script src="data.js"></script>
+<script src="marks.js"></script>
+<script src="components.js"></script>
+
+<!-- ============================================================
+     工程1: 担当の枚の sheet-<枚id>.js をここに1行足すだけにする。
+     枚の中身は V7C.registerSheet() で登録する（書式は components.js 冒頭）。
+     このファイルの上の共通CSS・下の描画呼び出しは変更しない。
+     ============================================================ -->
+<script src="sheet-demo.js"></script>
+<script src="sheet-b1.js"></script>
+<script src="sheet-b2.js"></script>
+<script src="sheet-bon.js"></script>
+<script src="sheet-b3.js"></script>
+<script src="sheet-m7.js"></script>
+<script src="sheet-m8.js"></script>
+<script src="sheet-c4.js"></script>
+<script src="sheet-c5.js"></script>
+<script src="sheet-cboth.js"></script>
+<script src="sheet-cwide.js"></script>
+<script src="sheet-cmel.js"></script>
+<script src="sheet-creq.js"></script>
+
+<script>V7C.renderAll(document.getElementById("frames"));</script>
+</body>
+</html>
