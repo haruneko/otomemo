@@ -53,7 +53,8 @@ pnpm --filter @cm/api start      # "serving web from ..." / "host: 127.0.0.1" �
 ## 5. 自動起動・常駐（推奨：systemd --user）
 
 WSL は `systemd=true`。**`bash deploy/systemd/install.sh`** で per-service ユニットを導入：
-- **現状の実プロセスは2つ**：`cm-api`(:8787 単一オリジン＋reap/scheduler＝生成/継続調査/MIDI取込を消化) / `cm-search`(:8788 意味検索)。
+- **常駐の実プロセスは2つ**：`cm-api`(:8787 単一オリジン＋reap/scheduler＝生成/継続調査/MIDI取込を消化) / `cm-search`(:8788 意味検索)。
+  **常駐しないものが別に2つある（2026-07-29 追記＝architecture「配置」の訂正と同期）**：(a) `apps/audio/` の Python（日本語読み取り・mp3解析。api が必要時に spawn・専用venv・gitignore＝母艦専用）、(b) **VOICEVOX 歌声エンジン**（仮歌。api が必要時に起動・既定 127.0.0.1:50121・`CM_VOICEVOX_*`）。**どちらも systemd 未登録**＝箱の再起動後、初めて仮歌を鳴らすときだけ立ち上げ待ちが入る（常駐化は architecture「未決・要調査」）。
   ✅死にユニットは**剪定済**（2026-07-07・backlog D8）：`cm-worker.service` は削除・install.sh からも cm-worker/cm-music-mcp 参照を除去
   （現 `deploy/systemd/`＝cm-api/cm-search/cm-backup のみ。grep で worker/8790 参照ゼロを確認済 2026-07-13）。
   同日 install.sh 実行＝cm-api/cm-search/cm-backup.timer を `--user` enable＋linger 設定済（backlog D9）。

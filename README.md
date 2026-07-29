@@ -33,7 +33,7 @@
 | `apps/web` | React / Vite | スマホ優先 PWA |
 | `apps/worker` | Python / uv | **セマンティック検索（cm-search）専用**。※生成・リサーチ・MIDI取り込みは全て api(TypeScript/MCP)側に集約 |
 
-データは単一の SQLite（`data/cm.sqlite`、WAL）。TypeScript↔Python の境界は **DB のみ**（検索サーバが素材を読んで意味インデックスを張る）。ジョブは api(TypeScript) 内で完結する。
+データは単一の SQLite（`data/cm.sqlite`、WAL）。検索サーバ（cm-search）との境界は **DB のみ**（素材を読んで意味インデックスを張る）。音源解析・日本語読み取りの Python サイドカー（`apps/audio`・任意機能）と VOICEVOX（ガイドボーカル・任意機能）は、api が必要になった時に子プロセス／ローカルHTTPで使う＝常駐しない。ジョブは api(TypeScript) 内で完結する。
 
 ## 起動
 本番は api が web のビルド成果物も配信＝**外部公開は :8787 の1ポートだけ**（開発時は Vite）。
