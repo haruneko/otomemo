@@ -1606,6 +1606,98 @@
 .proll-lyric-actions button:disabled {
   opacity: 0.4;
 }
+/* ── #31 歌詞パネル（design §31-9・裁定 2026-07-30）＝常時は1行、書くときだけ開く ──
+   旧：常設6段（実測約220px）でスマホ（360×800）ではピアノロールが画面外へ出ていた。
+   1行は約40px＝タップで開く奥に表記欄・読みの様子・かなを消す・韻律チェックを畳んだ。 */
+.proll-lyric {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 4px 0;
+}
+.proll-lyric-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+}
+/* 1行そのものが開閉ボタン（行のどこを触っても開く＝親指で狙いやすい）。 */
+.proll-lyric-open {
+  flex: 1 1 auto;
+  min-width: 0; /* 句が長くても親幅を超えない＝下の省略が効く */
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: #1b1e23;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  text-align: left;
+}
+/* 句のテキスト＝1行に収め、あふれは省略（正データは奥の表記欄で全部見える）。 */
+.proll-lyric-oneline {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proll-lyric-line > button[aria-label="lyric-apply-reading"] {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.proll-lyric-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #1b1e23;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.proll-lyric-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  background: #16181c;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  line-height: 1.5;
+}
+/* 奥の段＝ふだん使わないもの（かなを消す・韻律チェック＋凡例）。 */
+.proll-lyric-more {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+}
+.proll-lyric-more button {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-lyric-more label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 /* ♪歌う＝VOICEVOX 試聴の入り口（アクセント色で「音が出る」ことを示す）。 */
 .proll-sing {
   background: var(--accent) !important;

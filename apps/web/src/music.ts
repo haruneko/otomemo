@@ -1765,6 +1765,16 @@ export {
  * ネタの content から歌詞の層（句）を取り出す（design #31-1）。
  * 形が違えば undefined＝壊れた content でも落ちない（content は素通しの JSON なので何が入っていてもよい）。
  */
+/**
+ * #31 (い-c)：カードの見出しに使う句の表記（design §31-9・裁定 2026-07-30）。
+ * 詞先で生まれたメロは title も text も持たないので、これが無いと一覧で「(無題)」しか読めない。
+ * 空白だけの句は見出しにしない（＝従来の「(無題)」に落ちる）。
+ */
+export function phraseLabelOf(content: unknown): string | undefined {
+  const text = lyricOf(content)?.phrases?.[0]?.text?.trim();
+  return text ? text : undefined;
+}
+
 export function lyricOf(content: unknown): import("./lyrics").LyricLayer | undefined {
   if (content && typeof content === "object") {
     const l = (content as { lyric?: import("./lyrics").LyricLayer }).lyric;

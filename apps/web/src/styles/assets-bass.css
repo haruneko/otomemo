@@ -409,6 +409,22 @@ article[aria-label="neta-card"].dragging {
 .mini-roll rect {
   fill: var(--k, var(--accent));
 }
+/* #31 (い-c)：句はあるが音符がまだ無いメロの絵の枠＝矩形を描く代わりに状況を1行（design §31-9）。
+   高さ・背景・角丸は .mini-roll と同値＝一覧のリズム（カードの背の高さ）を崩さない。 */
+.mini-roll-empty {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  margin: 6px 0 0;
+  padding: 0 8px;
+  background: #15171c;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* ④ section/song カードのレーン帯ミニ・タイムライン（どのパートがどの小節に入ってるか）。
    各レーンは編集画面と同じ種別色（--lc）で塗る＝単色オレンジの壁を避け、パートを見分ける。
    薄く小さく＝カード一覧のリズムを崩さない（メロ等の mini-roll と釣り合う高さ）。 */

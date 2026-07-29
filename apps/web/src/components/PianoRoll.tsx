@@ -44,6 +44,24 @@ const LENGTHS = [
   { label: "1", v: 4 },
 ];
 
+// 韻律チェック（印の表示）の覚え書き。**既定ON**＝キーが無ければ ON（design §31-9・裁定 §31-11 の16 (c)）。
+// 保存先は既存の流儀（localStorage・`cm.` 名前空間）。使えない環境（テスト等）は覚えないだけで既定ONのまま。
+const FIT_KEY = "cm.lyricFit";
+function readFitPref(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(FIT_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+function writeFitPref(on: boolean): void {
+  try {
+    globalThis.localStorage?.setItem(FIT_KEY, on ? "1" : "0");
+  } catch {
+    /* localStorage 不可環境＝覚えないだけ（既定ONに戻る） */
+  }
+}
+
 // 見た目=実音のピアノロール：音域は content に追従、ノートは実 start/dur のバーで忠実表示。
 // セルクリックで配置（同位置は置換）、ノートバークリックで削除。
 export function PianoRoll({
@@ -91,8 +109,12 @@ export function PianoRoll({
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
   const [lyricDraft, setLyricDraft] = useState(""); // 流し込む歌詞（かな・読み）。永続せずUIだけ
+  // #31 歌詞パネル（design §31-9・裁定 2026-07-30）：常時は歌詞1行だけ出し、書く/直すときにタップで開く。
+  const [panelOpen, setPanelOpen] = useState(false);
   // W-K2：歌詞×メロのアクセント整合ハイライト（既定ON・軽い凡例）。openReason=理由ポップを開くチップの index。
-  const [showFit, setShowFit] = useState(true);
+  // 裁定（§31-11 の16 (c)＝案B）：トグルは歌詞パネルの奥へ移し、**OFF を覚える**。
+  // 覚えないと「うるさいから消す→開き直すと復活→また奥へ潜る」が毎回になる（奥へ移すだけの案Aの弱点）。
+  const [showFit, setShowFit] = useState(readFitPref);
   const [openReason, setOpenReason] = useState<number | null>(null);
   // hits はノート列/歌詞が変わった時だけ再計算（純関数 analyzeLyricFit へ委譲）。歌詞なしは空 Map＝ゼロ影響。
   // 印（赤黄）の高低は句の読み（表記由来）から取る＝スライス2。句が無ければ従来どおり内蔵辞書。
@@ -299,7 +321,9 @@ export function PianoRoll({
         ? "読みが取れませんでした"
         : readMoras.length
           ? `読み：${readMoras.join("")}（${readMoras.length}音）`
-          : "読みを取ります"; // これから取る、の意味（押すまで機械は動かない＝右の「読みを反映」を押す）
+          // 文言裁定（§31-11 の16 (d)）：旧「読みを取ります」は宣言とも予告とも読めた＝機械が勝手に動くように読める。
+          // **まだ起きていないこと**が読める形へ（押すまで機械は動かない＝「読みを反映」を押す）。
+          : "まだ読みを取っていません";
 
   /**
    * 句と音符の関係の言い分け（design §31-5）。**字余りと「メロがまだ途中」は別のこと**（オーナー裁定「分ける」）。
@@ -315,8 +339,20 @@ export function PianoRoll({
         : status.kind === "字余り"
           ? `字余り${status.count}`
           : status.kind === "あと"
-            ? `あと${status.count}音`
+            // 文言裁定（§31-11 の16 (d)）：旧「あとN音」は主語が曖昧（詞が足りないのか音符が余っているのか）。
+            // **字余り／字足らず**は詩歌の対語（造語ではない）＝並べたときにどちらへ転んでいるか1語で読める。
+            ? `字足らず${status.count}`
             : "ちょうど";
+
+  /**
+   * 歌詞1行に出すもの（裁定 §31-11 の16 (b)＝案C）。
+   *
+   * **未反映のときだけ「読みを反映」を1行に出す。** 理由＝表記を1文字直すと控えが古くなり（`isReadingStale`）
+   * `readMoras` が空→`status` が null→**チップが消える**＝手が要る状態こそ画面から状況が消える（実測）。
+   * 5状態のうち人の手が要るのは「未反映」だけ（字余り・字足らず・メロが途中・メロなしは今どうなっているかの報告）。
+   */
+  const needsApply = !!phraseText.trim() && !!phrase && isReadingStale(phrase) && readState !== "busy";
+  const chipLabel = !phraseText.trim() ? "" : needsApply ? "まだ反映していません" : statusLabel;
 
   function addAt(pitch: number, step: number) {
     const start = step / SUBDIV - pre; // 先頭 pre*SUBDIV セルは負拍（弱起）
@@ -407,35 +443,90 @@ export function PianoRoll({
         />
       </div>
       {wired && (
-        // #31 スライス1：詞を書く欄（表記＝正データ）。読みは機械が取り、音符へは写すだけ（音符は増えない）。
-        // 既存のかな流し込み欄（下）はそのまま残す＝かな入力の口を1つも殺さない（後退ゼロ）。
-        <div className="proll-lyric-input" aria-label="lyric-phrase">
-          <div className="proll-lyric-row">
-            <span className="muted">歌詞</span>
-            <input
-              type="text"
-              aria-label="lyric-text"
-              placeholder="漢字仮名交じりでそのまま書く（読みは機械が取ります）"
-              value={phraseText}
-              onChange={(e) => setPhraseText(e.target.value)}
-            />
-          </div>
-          <div className="proll-lyric-actions">
-            <span className="muted" aria-label="lyric-reading-state">{readLabel}</span>
-            {statusLabel && (
-              /* 字余り／メロがまだ途中／あとN音／ちょうど。言うだけで、機械は詰めも削りもしない（design §31-5）。 */
-              <span className="muted proll-lyric-status" aria-label="lyric-phrase-status">{statusLabel}</span>
-            )}
+        // #31 歌詞パネル（design §31-9・裁定 2026-07-30）＝**常時は1行（約40px）**。
+        // 旧：常設6段（歌詞欄・読み行・取り直す・かな欄・流し込む/クリア・韻律トグル＝実測約220px）で
+        // スマホではピアノロールが画面外へ出ていた。書く/直すときだけ1行をタップして開く。
+        <div className="proll-lyric" aria-label="lyric-phrase">
+          <div className="proll-lyric-line">
             <button
               type="button"
-              aria-label="lyric-apply-reading"
-              disabled={!phraseText.trim() || readState === "busy"}
-              onClick={applyReading}
+              className="proll-lyric-open"
+              aria-label="lyric-line"
+              aria-expanded={panelOpen}
+              onClick={() => setPanelOpen((o) => !o)}
             >
-              {/* ボタン名はオーナー裁定（2026-07-29）。押すまで機械は読みを取りにも写しにも行かない。 */}
-              読みを反映
+              <span className={"proll-lyric-oneline" + (phraseText.trim() ? "" : " muted")}>
+                {/* 句のテキスト1行（あふれは CSS で省略）。空なら次にすることを書く。 */}
+                {phraseText.trim() || "歌詞を書く"}
+              </span>
+              {chipLabel && (
+                /* ちょうど／字余りN／字足らずN／メロがまだ途中／メロなし／まだ反映していません。
+                   言うだけで、機械は詰めも削りもしない（design §31-5）。 */
+                <span className="muted proll-lyric-status" aria-label="lyric-phrase-status">{chipLabel}</span>
+              )}
             </button>
+            {needsApply && !panelOpen && (
+              // 手が要る状態（未反映）だけ、1行のまま直せる口を出す（裁定 (b)＝案C）。
+              // パネルを開いているときは下の本体側に出す＝同じボタンを2つ置かない。
+              <button type="button" aria-label="lyric-apply-reading" onClick={applyReading}>
+                読みを反映
+              </button>
+            )}
           </div>
+          {panelOpen && (
+            <div className="proll-lyric-panel" aria-label="lyric-panel">
+              <textarea
+                aria-label="lyric-text"
+                rows={2}
+                placeholder="漢字仮名交じりでそのまま書く（読みは機械が取ります）"
+                value={phraseText}
+                onChange={(e) => setPhraseText(e.target.value)}
+              />
+              <div className="proll-lyric-actions">
+                <span className="muted" aria-label="lyric-reading-state">{readLabel}</span>
+                <button
+                  type="button"
+                  aria-label="lyric-apply-reading"
+                  disabled={!phraseText.trim() || readState === "busy"}
+                  onClick={applyReading}
+                >
+                  {/* ボタン名はオーナー裁定（2026-07-29）。押すまで機械は読みを取りにも写しにも行かない。 */}
+                  読みを反映
+                </button>
+              </div>
+              {hasLyric && (
+                // 奥の段＝ふだん使わないもの（かなを消す・韻律チェック）。文言は裁定 (d)。
+                <div className="proll-lyric-more">
+                  <button
+                    type="button"
+                    aria-label="clear-lyric"
+                    onClick={() => onChange(notes.map((n) => ({ ...n, syllable: undefined })))}
+                  >
+                    かなを消す
+                  </button>
+                  <label>
+                    <input
+                      type="checkbox"
+                      aria-label="lyric-fit-toggle"
+                      checked={showFit}
+                      onChange={(e) => {
+                        setShowFit(e.target.checked);
+                        writeFitPref(e.target.checked); // OFF を覚える（裁定 (c)＝案B）
+                        setOpenReason(null);
+                      }}
+                    />
+                    韻律チェック
+                  </label>
+                  {showFit && (
+                    <span className="proll-fit-legend muted">
+                      <span className="fit-red">赤=アクセント逆行</span>
+                      <span className="fit-yellow">黄=注意</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
       {enableLyric && mode === "lyric" && (
@@ -476,13 +567,16 @@ export function PianoRoll({
           )}
         </div>
       )}
-      {enableLyric && mode !== "lyric" && (
-        // 入力欄は1行フル幅（IMEキーボード表示中もロールと喧嘩しない）＝操作ボタンは下段に小さく。
+      {enableLyric && !wired && mode !== "lyric" && (
+        // かな欄＋「流し込む」＝**句の面が配線された画面からは退役**（design §31-5 の裁定・退役はパネル実装と同時）。
+        // 理由＝正データは句（表記）で、かなは仮歌のための写し＝口が2つあると「どちらが正か」を取り違える。
+        // また「流し込む」は音符を割る（`flowLyric`）＝既定で音符を割る先例はゼロ（調査の定石3）。
+        // ⚠ 割る操作を残すかどうかは研究の結論待ち（§31-5）＝残すならパネルの奥に明示操作＋確認つきで置く。
+        //    それまで配線された画面には割る口が無い（音符は増えない側に倒す）。
+        // 配線していない呼び側（Section の下ろし・骨格など）は**従来のまま**＝後退ゼロ。
         <div className="proll-lyric-input">
           <div className="proll-lyric-row">
-            {/* 詞を書く欄が出ているときだけ「かな」と呼び分ける（どちらが正データか取り違えないため）。
-                出ていない呼び側の見た目は従来のまま＝「歌詞」。 */}
-            <span className="muted">{wired ? "かな" : "歌詞"}</span>
+            <span className="muted">歌詞</span>
             <input
               type="text"
               aria-label="lyric-draft"
@@ -508,15 +602,17 @@ export function PianoRoll({
           </div>
         </div>
       )}
-      {/* W-K2：歌詞があれば韻律チェックのトグル＋軽い凡例（既定ON・機械は候補まで＝どぎつくしない）。 */}
-      {hasLyric && (
+      {/* W-K2：歌詞があれば韻律チェックのトグル＋軽い凡例（既定ON・機械は候補まで＝どぎつくしない）。
+          句の面が配線された画面ではこの行は出さない＝歌詞パネルの奥へ移した（裁定 §31-11 の16 (c)）。
+          配線していない呼び側は従来どおり常設＝後退ゼロ。 */}
+      {hasLyric && !wired && (
         <div className="proll-fit-toggle">
           <label>
             <input
               type="checkbox"
               aria-label="lyric-fit-toggle"
               checked={showFit}
-              onChange={(e) => { setShowFit(e.target.checked); setOpenReason(null); }}
+              onChange={(e) => { setShowFit(e.target.checked); writeFitPref(e.target.checked); setOpenReason(null); }}
             />
             韻律チェック
           </label>

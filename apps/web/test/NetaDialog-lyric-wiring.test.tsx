@@ -53,6 +53,15 @@ const melody: Neta = {
 };
 
 describe("NetaDialog → 歌詞（句）の受け渡し", () => {
+  /**
+   * 表記の入力欄を開いて返す（歌詞パネル・2026-07-30 の裁定 §31-11 の16）。
+   * 常時出ているのは歌詞1行だけで、表記欄はタップで開く奥にある。ここで見たいのは結線（受け渡し）なので開く。
+   */
+  const openLyric = async (): Promise<HTMLElement> => {
+    await userEvent.click(await screen.findByLabelText("lyric-line"));
+    return screen.getByLabelText("lyric-text");
+  };
+
   beforeEach(() => {
     localStorage.clear();
     updateNeta.mockClear();
@@ -62,12 +71,14 @@ describe("NetaDialog → 歌詞（句）の受け渡し", () => {
 
   it("メロのネタで詞を書く欄が出る（配線されている）", { timeout: 30_000 }, async () => {
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
-    expect(await screen.findByLabelText("lyric-text")).toBeInTheDocument();
+    // 常時は1行＝それ自体が配線の印。開けば表記欄が出る。
+    expect(await screen.findByLabelText("lyric-line")).toBeInTheDocument();
+    expect(await openLyric()).toBeInTheDocument();
   });
 
   it("詞を書くと content.lyric に句が保存される（閉じて開き直しても残る形）", { timeout: 30_000 }, async () => {
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
-    await userEvent.type(await screen.findByLabelText("lyric-text"), "雨の日は");
+    await userEvent.type(await openLyric(), "雨の日は");
     await userEvent.click(screen.getByLabelText("save-status"));
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());
     const content = updateNeta.mock.calls.at(-1)![1].content;
@@ -78,7 +89,7 @@ describe("NetaDialog → 歌詞（句）の受け渡し", () => {
 
   it("読みは1回まとめて取りに行き、音符のかなが読みどおりになる（音符は増えない）", { timeout: 30_000 }, async () => {
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
-    await userEvent.type(await screen.findByLabelText("lyric-text"), "雨の日は");
+    await userEvent.type(await openLyric(), "雨の日は");
     // 読み取りの契機は「読みを反映」だけ（2026-07-30 改訂・design §31-3(d)）＝押すまで機械は動かない。
     await userEvent.click(screen.getByLabelText("lyric-apply-reading"));
     await waitFor(() => expect(readings).toHaveBeenCalledTimes(1), { timeout: 15_000 });
@@ -94,7 +105,7 @@ describe("NetaDialog → 歌詞（句）の受け渡し", () => {
 
   it("歌詞を書かないメロは content に lyric キーが生えない（既存の保存と bit 一致）", { timeout: 30_000 }, async () => {
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
-    await screen.findByLabelText("lyric-text");
+    await screen.findByLabelText("lyric-line");
     await userEvent.type(screen.getByLabelText("title"), "あ"); // 歌詞以外を触って保存させる（触らないと保存自体を投げない）
     await userEvent.click(screen.getByLabelText("save-status"));
     await waitFor(() => expect(updateNeta).toHaveBeenCalled());

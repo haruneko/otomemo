@@ -11,7 +11,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { KindIcon } from "./KindIcon";
 import { Icon } from "./Icon";
 import { PrepStatus } from "../usePrepPending";
-import { buildPlayback, type PlaybackPlan, type PlaybackHandle } from "../music";
+import { buildPlayback, phraseLabelOf, type PlaybackPlan, type PlaybackHandle } from "../music";
 import { startPlayback } from "../playback";
 
 
@@ -37,7 +37,10 @@ export function NetaCard({
   onChat?: (neta: Neta) => void;
   onOpen?: (neta: Neta) => void;
 }) {
-  const label = neta.title ?? neta.text ?? "(無題)";
+  // #31 (い-c)：詞先で生まれたメロは title も text も持たない（句は content.lyric）＝「(無題)」だけの
+  // 読めないカードになる。**メロで両方空なら句の表記を見出しにする**（design §31-9・裁定 2026-07-30）。
+  // 人が付けた title は句より強い（勝手に置き換えない）。メロ以外・句なしは従来どおり。
+  const label = neta.title ?? neta.text ?? (neta.kind === "melody" ? phraseLabelOf(neta.content) : null) ?? "(無題)";
   const [gen, setGen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // LV2: 副アクション（複製/ライブラリへ/生成）は既定で畳む＝主要2つ(▶/相談)＋「…」に整理。

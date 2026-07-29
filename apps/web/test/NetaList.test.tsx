@@ -320,3 +320,32 @@ describe("NetaList", () => {
     spy.mockRestore();
   });
 });
+
+// #31 (い-c) 遅延生成の裁定（2026-07-30・design §31-9）：詞先で生まれるメロは title も text も持たない
+// （句は content.lyric にある）ので、見出しが「(無題)」になって**中身があるのにカードが読めない**。
+// 決め＝メロで title/text が空なら句の表記を見出しに使う（絵の枠の状況1行は MiniRoll 側＝同じ文字を2回出さない）。
+describe("NetaCard＝句だけのメロ（詞先）の見出し", () => {
+  const withPhrase = (text: string) => ({ notes: [], lyric: { phrases: [{ id: "p1", start: 0, beats: 4, text }] } });
+
+  it("title も text も無いメロは、句の表記を見出しに出す", () => {
+    render(<NetaCard neta={mk({ id: "L1", kind: "melody", title: null, text: null, content: withPhrase("時計の針が止まる") })} />);
+    expect(screen.getByText("時計の針が止まる")).toBeInTheDocument();
+    expect(screen.queryByText("(無題)")).not.toBeInTheDocument();
+  });
+
+  it("title があれば title が勝つ（人が付けた名前を句で上書きしない）", () => {
+    render(<NetaCard neta={mk({ id: "L2", kind: "melody", title: "Aメロ 案1", text: null, content: withPhrase("時計の針が止まる") })} />);
+    expect(screen.getByText("Aメロ 案1")).toBeInTheDocument();
+    expect(screen.queryByText("時計の針が止まる")).not.toBeInTheDocument();
+  });
+
+  it("句が無いメロは従来どおり「(無題)」", () => {
+    render(<NetaCard neta={mk({ id: "L3", kind: "melody", title: null, text: null, content: { notes: [] } })} />);
+    expect(screen.getByText("(無題)")).toBeInTheDocument();
+  });
+
+  it("メロ以外（bass）は句を見ない＝従来どおり「(無題)」", () => {
+    render(<NetaCard neta={mk({ id: "L4", kind: "bass", title: null, text: null, content: withPhrase("時計の針が止まる") })} />);
+    expect(screen.getByText("(無題)")).toBeInTheDocument();
+  });
+});

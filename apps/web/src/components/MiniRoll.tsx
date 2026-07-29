@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { notesForContent, beatsPerBar, programOf, isRelativeBass } from "../music";
+import { notesForContent, beatsPerBar, programOf, isRelativeBass, lyricOf } from "../music";
+import { effectiveReading, isReadingStale } from "@cm/music-core";
 import { api, type Neta, type CompositionNode } from "../api";
 
 // 画面に入ったカードだけプレビューを描画・取得する遅延マウント（perf 耳FB 2026-07-09）。
@@ -36,6 +37,27 @@ export function LazyPreview({ children, minHeight = 40 }: { children: ReactNode;
   );
 }
 
+/**
+ * #31 (い-c)：**句はあるが音符がまだ無いメロ**の絵の枠（design §31-9・裁定 2026-07-30）。
+ *
+ * 詞先の枠は「人が句を書いた瞬間に生まれる」＝生まれた直後は必ずこの状態になる。音符0個で `null` を返すままだと
+ * 中身（歌詞）があるのにカードが真っ白になる＝オーナーが「見た目には微妙」と言った実害そのもの。
+ * **出すのは状況だけ**＝句の文章はカードの見出し（`NetaList` の label）が受ける＝同じ文字を2回出さない。
+ * 音数は**控えが今の表記のものであるときだけ**出す（`isReadingStale`＝PianoRoll の読み行と同じ判断）。
+ * 句を持たない音符0個のネタは従来どおり何も描かない＝既存の音符0個50件（配置6件は全部 bass）の見えは1つも変わらない。
+ */
+function EmptyMelodyLine({ neta }: { neta: Neta }) {
+  if (neta.kind !== "melody") return null; // 詞を持つのはメロだけ（ハモに詞を書くかは裁定待ち＝§31-11 の6）
+  const phrase = lyricOf(neta.content)?.phrases?.[0];
+  if (!phrase?.text.trim()) return null;
+  const moras = isReadingStale(phrase) ? [] : effectiveReading(phrase);
+  return (
+    <p className="mini-roll-empty" aria-label="mini-preview-empty">
+      音符はまだ無い{moras.length ? ` ・ ${moras.length}音` : ""}
+    </p>
+  );
+}
+
 // #48: カードにメロ/コード/ベース/リズムの概形（小さなピアノロール）を出す。音楽以外は何も描かない。
 // notes を渡すと content の代わりにそれを描く（section/song ブロック＝合成した概形を出す用・#5）。
 export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import("../music").Note[] }) {
@@ -48,7 +70,7 @@ export function MiniRoll({ neta, notes: given }: { neta: Neta; notes?: import(".
   const notes = (given ?? notesForContent(neta.kind, neta.content, { key: neta.key ?? 0, program: programOf(neta.content), meter: neta.meter ?? undefined, ...(relPreview ? { chords: relPreview } : {}) })).filter(
     (n) => Number.isFinite(n.pitch) && Number.isFinite(n.start) && Number.isFinite(n.dur),
   );
-  if (!notes.length) return null;
+  if (!notes.length) return <EmptyMelodyLine neta={neta} />;
   const W = 160;
   const H = 30;
   const pad = 2;
