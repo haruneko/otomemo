@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { beatsPerBar, pitchName, pc, isBlack, scalePcSet, type Note } from "../music";
 import { previewNote } from "../audio";
-import { flowLyric, splitMora, setSyllable, nextNoteIndex, placeMoras, type LyricLayer } from "../lyrics";
+import { flowLyric, splitMora, setSyllable, nextNoteIndex, placeMoras, phraseStatus, type LyricLayer } from "../lyrics";
 // 控えが古いか／効いている読み＝music-core（web の lyrics.ts はまだ再輸出していないので直に取る）。
 import { effectiveReading, isReadingStale } from "@cm/music-core";
 import { api } from "../api";
@@ -63,6 +63,7 @@ export function PianoRoll({
   keyMode,
   lyric,
   onLyricChange,
+  bars,
 }: {
 
   notes: Note[];
@@ -84,6 +85,7 @@ export function PianoRoll({
   // 渡さない呼び側（Section の下ろし・骨格など既存の使い方）は従来と1つも変わらない＝後退ゼロ。
   lyric?: LyricLayer;
   onLyricChange?: (l: LyricLayer | undefined) => void;
+  bars?: number; // このメロの尺（小節数）。句の範囲の既定に使う＝エディタの表示尺を使わない（design §31-0）
 }) {
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
@@ -169,18 +171,26 @@ export function PianoRoll({
   const askedRef = useRef<string | null>(null); // 最後に読みを頼んだ表記（同じ表記を続けて頼まない）
 
   /**
-   * 表記を書き換える（句が無ければ作る・空にすれば句ごと消す）。
-   * **範囲の既定はそのメロの尺**（total＝弱起ぶん＋表示尺）であって音符の広がりではない（design §31-0 の守ること1）。
-   * 音符から導くと、音符が0個のメロで範囲が決まらない＝歌詞の置き場の裁定に引きずられる。
-   * ※ 尺が空（bars 未設定）でも beats（＝エディタの len。16拍の下限がある）が入るのでここは0にならない。
+   * 句の範囲の既定＝**そのメロの尺**（design §31-0 の守ること1）。
+   *
+   * エディタの表示尺（`total`）は使わない：`beats` には 16拍の下限があるので、2小節のメロでも範囲が16拍になり、
+   * 「範囲に1小節以上の空きがある」＝**何を書いても『メロがまだ途中』**になってしまう（実測で判明）。
+   * 尺は bars があればそれ、無ければ音符の終端を小節単位へ切り上げ、**下限は1小節**。
+   * 下限があるので**音符が0個でも範囲は0にならない**＝置き場の裁定（空のメロに詞を書く案）に引きずられない、
+   * という守ることの目的はこの式でも満たす。
    */
+  const phraseSpan = useMemo(() => {
+    if (bars && bars > 0) return bars * bpb;
+    const end = Math.max(0, ...notes.map((n) => n.start + n.dur));
+    return Math.max(bpb, Math.ceil(end / bpb) * bpb);
+  }, [bars, bpb, notes]);
   function setPhraseText(text: string) {
     if (!onLyricChange) return;
     const cur = lyricRef.current;
     const ps = cur?.phrases ?? [];
     if (!ps.length) {
       if (!text.trim()) return; // 空のまま触っただけ＝何も作らない
-      onLyricChange({ ...cur, phrases: [{ id: newPhraseId(), start: -pre, beats: total, text }] });
+      onLyricChange({ ...cur, phrases: [{ id: newPhraseId(), start: -pre, beats: phraseSpan + pre, text }] });
       return;
     }
     const next = ps.map((p, i) => (i === 0 ? { ...p, text } : p)).filter((p) => p.text.trim().length > 0);
@@ -272,6 +282,23 @@ export function PianoRoll({
         : readMoras.length
           ? `読み：${readMoras.join("")}（${readMoras.length}音）`
           : "読みを取り直します";
+
+  /**
+   * 句と音符の関係の言い分け（design §31-5）。**字余りと「メロがまだ途中」は別のこと**（オーナー裁定「分ける」）。
+   * 機械は詰めない・削らない・止めない＝ただ今どうなっているかを言うだけ。直すのは人。
+   */
+  const status = phrase && readMoras.length ? phraseStatus({ start: phrase.start, beats: phrase.beats }, readMoras.length, notes, { gapBeats: bpb }) : null;
+  const statusLabel = !status
+    ? ""
+    : status.kind === "メロなし"
+      ? "メロなし"
+      : status.kind === "メロが途中"
+        ? "メロがまだ途中"
+        : status.kind === "字余り"
+          ? `字余り${status.count}`
+          : status.kind === "あと"
+            ? `あと${status.count}音`
+            : "ちょうど";
 
   function addAt(pitch: number, step: number) {
     const start = step / SUBDIV - pre; // 先頭 pre*SUBDIV セルは負拍（弱起）
@@ -377,6 +404,10 @@ export function PianoRoll({
           </div>
           <div className="proll-lyric-actions">
             <span className="muted" aria-label="lyric-reading-state">{readLabel}</span>
+            {statusLabel && (
+              /* 字余り／メロがまだ途中／あとN音／ちょうど。言うだけで、機械は詰めも削りもしない（design §31-5）。 */
+              <span className="muted proll-lyric-status" aria-label="lyric-phrase-status">{statusLabel}</span>
+            )}
             <button
               type="button"
               aria-label="lyric-reading-refresh"

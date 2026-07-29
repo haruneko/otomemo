@@ -8,7 +8,8 @@
 // （「雨の日は」→4／正しくは5）。表記のモーラ数の正は pyopenjtalk＝`accent.ts` 側。
 // 注意（design #31-2）：`flowLyric` は**音符を作り替える**（モーラが多ければ音符を割る）。
 // 音符を変えずに読みを写すだけなら music-core の `placeMoras` を使う。
-export { splitMora, flowLyric } from "@cm/music-core";
+export { splitMora, flowLyric, placeMoras, notesInRange, phraseStatus, isKanaOnly } from "@cm/music-core";
+export type { LyricLayer, LyricPhrase, LyricReading, PhraseRange, PhraseStatus } from "@cm/music-core";
 
 /** api 側の音符の形（channel 等の追加フィールドを素通しさせるため index signature 付き）。 */
 export interface LNote {

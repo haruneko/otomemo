@@ -278,6 +278,31 @@ describe("purpose tool surface (#101)", () => {
     expect((back.content.notes as unknown[]).length).toBe(3); // read_neta で読み戻せる
   });
 
+  // スライス3（design #31-5）：句（歌詞の正データ）を持つメロでは、会話から歌詞を当てても音符を割らない。
+  // 割ると句の割付（範囲内へ頭から1対1）がずれ、次に開いたとき句の読みで上書きされて食い違う。
+  it("② set_lyric：句を持つメロでは音符を割らない（句が無いメロは従来どおり割る）", async () => {
+    const { client } = await connect();
+    const notes = [{ pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 1, dur: 1 }];
+
+    // 句が無いメロ＝従来どおり（モーラ3・音符2なので最長音符が割れて3音になる）＝後退ゼロ
+    const bare = JSON.parse(textOf(await client.callTool({ name: "capture", arguments: { kind: "melody", title: "句なし", content: { notes } } })));
+    const r1 = JSON.parse(textOf(await client.callTool({ name: "set_lyric", arguments: { id: bare.id, lyrics: "やまと" } })));
+    expect((r1.content.notes as unknown[]).length).toBe(3); // 割れた
+
+    // 句を持つメロ＝音符は増えない
+    const withPhrase = JSON.parse(textOf(await client.callTool({
+      name: "capture",
+      arguments: { kind: "melody", title: "句あり", content: { notes, lyric: { phrases: [{ id: "p1", start: 0, beats: 4, text: "山と" }] } } },
+    })));
+    const r2 = JSON.parse(textOf(await client.callTool({ name: "set_lyric", arguments: { id: withPhrase.id, lyrics: "やまと" } })));
+    const ns = r2.content.notes as { pitch: number; start: number; dur: number; syllable?: string }[];
+    expect(ns.length).toBe(2); // 割れない
+    expect(ns.map((n) => [n.pitch, n.start, n.dur])).toEqual([[60, 0, 1], [62, 1, 1]]); // 位置も長さも動かない
+    expect(ns.map((n) => n.syllable)).toEqual(["や", "ま"]); // 余ったモーラは書かない
+    expect(r2.content.lyric.phrases[0].text).toBe("山と"); // 歌詞の正データ（表記）は壊さない
+    expect(String(r2.注記)).toContain("音符は割らずに"); // 何が起きたかを言う
+  });
+
   it("② suggest_lyric_rhythm が歌詞→リズム型候補を返す（特殊拍を正しく扱う・WP-M5）", async () => {
     const { client } = await connect();
     const r = JSON.parse(textOf(await client.callTool({ name: "suggest_lyric_rhythm", arguments: { lyrics: "せーの" } })));

@@ -74,14 +74,16 @@ describe("PianoRoll：詞を書く入口（design §31-9）", () => {
     expect(l.phrases[0]!.text).toBe("雨");
     expect(l.phrases[0]!.id).toBeTruthy(); // 札＝表記を直しても直し・割付が剥がれないための不変キー
     expect(l.phrases[0]!.start).toBe(0);
-    expect(l.phrases[0]!.beats).toBe(16); // 尺（beats=16）。音符の広がり（5拍）ではない＝design §31-0 の守ること1
+    // 尺＝小節単位（音符は5拍→2小節=8拍へ切り上げ）。音符の広がり（5拍）そのものでも、
+    // エディタの表示尺（16拍の下限つき）でもない＝design §31-0 の守ること1。
+    expect(l.phrases[0]!.beats).toBe(8);
   });
 
   it("音符が1つも無くても句は作れる（範囲が0にならない＝置き場の裁定に依存しない）", async () => {
     render(<Harness notes0={[]} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨");
     expect(lyricJson()!.phrases[0]!.start).toBe(0);
-    expect(lyricJson()!.phrases[0]!.beats).toBe(16); // 音符0個でも範囲が0にならない
+    expect(lyricJson()!.phrases[0]!.beats).toBe(4); // 音符0個でも下限1小節＝範囲が0にならない
   });
 
   it("読みを取ると音符に読みが載る（漢字仮名交じりでも1字1音に化けない）", async () => {
@@ -270,5 +272,23 @@ describe("PianoRoll：印（赤黄）が句の読みから出る", () => {
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
     await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
     expect(document.querySelectorAll(".proll-fit-mark").length).toBe(0); // 凡例の .fit-red は数えない
+  });
+});
+
+// スライス3：字余りと「メロがまだ途中」を言い分ける（design §31-5）。
+describe("PianoRoll：句と音符の関係を言う", () => {
+  it("音符が5・モーラが5なら『ちょうど』と言う", async () => {
+    render(<Harness notes0={fiveNotes()} />);
+    await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toBeInTheDocument(), { timeout: 3000 });
+    expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("ちょうど");
+  });
+
+  it("音符が2・モーラが5なら『字余り3』と言う（機械は詰めない・音符も増やさない）", async () => {
+    render(<Harness notes0={[{ pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 1, dur: 1 }]} />);
+    await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toBeInTheDocument(), { timeout: 3000 });
+    expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("字余り3");
+    expect(notesJson()).toHaveLength(2); // 言うだけ＝音符は増えない
   });
 });

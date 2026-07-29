@@ -273,6 +273,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     enableLyric={isMelody}
                     lyric={p.lyric}
                     onLyricChange={p.setLyric}
+                    bars={p.neta.bars ?? undefined}
                     keyRoot={p.keyPc}
                     keyMode={p.mode}
                     mode={p.rollMode}

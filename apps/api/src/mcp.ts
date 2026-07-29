@@ -54,7 +54,7 @@ import { attachMelodyLenses } from "./music/melodyLensesReport"; // 候補レン
 import { attachSyncScore } from "./music/syncopationReport"; // シンコペ「ノリメーター」の生成側露出（WP-D2）
 import { attachStructureWarnings } from "./music/structureValidator"; // 生成後の構造バリデータ＝dur<=0/重複onset/範囲外を警告のみ添付（2026-07-15）
 import { attachHarmonicTension } from "./music/harmonicTensionReport"; // 和声張力カーブレンズの生成側露出（WP-C4）
-import { splitMora, flowLyric, type LNote } from "./lyric";
+import { splitMora, flowLyric, placeMoras, notesInRange, type LNote, type LyricPhrase } from "./lyric";
 import { planLyricMelody } from "./music/lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）
 import { accentsFromSyllables } from "./accent"; // W-K1 アクセント自動注入（pyopenjtalk・accents 未指定時に spawn 注入）
 import { singNeta, resolveSingBpm } from "./sing"; // W-K3 VOICEVOX 歌唱出口（メロ→wav）
@@ -950,9 +950,24 @@ export function buildMcpServer(core: Core, opts: { surface?: "chat" | "full" } =
       const content = (n.content ?? {}) as { notes?: unknown };
       const notes = Array.isArray(content.notes) ? (content.notes as LNote[]) : [];
       if (!notes.length) return err("このネタに notes がありません（melody を指定して）");
-      const flowed = flowLyric(notes, splitMora(lyrics));
-      const upd = core.updateNeta(id, { content: { ...content, notes: flowed } });
-      return upd ? ok(upd) : err("not found");
+      const moras = splitMora(lyrics);
+      // 句（歌詞の正データ）を持つメロでは**音符を割らない**（design #31-5）。
+      // 割ると句の割付（範囲内へ頭から1対1）がずれ、次に開いたとき句の読みで上書きされて食い違う。
+      // 句を持たないメロは従来どおり流し込む＝後退ゼロ。
+      const phrases = ((content as { lyric?: { phrases?: LyricPhrase[] } }).lyric?.phrases ?? []);
+      const covered = phrases.some((p) => notesInRange(notes, { start: p.start, beats: p.beats }).length > 0);
+      const next = covered
+        ? phrases.reduce((ns, p) => placeMoras(ns, moras, { start: p.start, beats: p.beats }), notes)
+        : flowLyric(notes, moras);
+      const upd = core.updateNeta(id, { content: { ...content, notes: next } });
+      if (!upd) return err("not found");
+      if (covered) {
+        return ok({
+          ...upd,
+          注記: "このメロには歌詞（句）があるので、音符は割らずにかなだけを載せました。歌詞そのものを直すなら句の表記（漢字仮名交じり）を変えてください。音符を歌詞に合わせて割るのは、編集画面の「合わせる」です。",
+        });
+      }
+      return ok(upd);
     },
   );
   // ② 歌詞↔メロ プロソディ（design #13b・規則表 R-01〜/A-01〜）＝分析と提案（生成本体はしない・候補まで）。
