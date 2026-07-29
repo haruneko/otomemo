@@ -17,6 +17,7 @@ import type {
 import { reapResults } from "./reaper";
 import { tickSchedules } from "./scheduler";
 import { now } from "./repo/util";
+import { meterInfo } from "./music/meter";
 import { AssetRepo, type Asset, type SongOverlay, type SongLoop } from "./repo/asset-repo";
 import { ScheduleRepo, type Schedule } from "./repo/schedule-repo";
 import { ChatRepo, type ChatMessage } from "./repo/chat-repo";
@@ -45,6 +46,29 @@ export type { Project } from "./repo/project-repo";
  * これが HTTP API ＝ MCP ツール ＝ 実装すべき操作の集合。
  * 消費者ロジック（reap=生成結果のネタ化）は reaper.ts に分離（design「アーキ是正 決定3」）。
  */
+/**
+ * 尺（bars）が空のまま作られるネタに、音符から尺を入れておく（design #31-0 の宿題）。
+ *
+ * なぜ要るか：歌詞の句は「そのメロの尺」を範囲の既定にする。尺が無いと音符の広がりに頼ることになり、
+ * 音符が0個のメロ（詞だけ先に書く場合）で範囲が決まらない。編集画面から保存したメロには尺が入るが、
+ * **生成・MCP・取込で作られたメロには入らない**（実測 39件中26件が空）。ここで揃える。
+ *
+ * 安全性：`bars` は**曲の中でのメロの尺には使われていない**（`sectionContext.ts` の childDur/contentDur は
+ * 音符だけを見る）。使うのは編集画面の表示尺と句の範囲だけ＝**配置も出音も動かない**。
+ * 明示された bars は尊重する（上書きしない）。音符を持たない kind（コード進行・テキスト等）は触らない。
+ */
+export function withDerivedBars(input: NetaInput): NetaInput {
+  if (input.bars != null) return input; // 呼び側が言っている尺が正
+  const notes = (input.content as { notes?: { start?: number; dur?: number }[] } | undefined)?.notes;
+  if (!Array.isArray(notes) || !notes.length) return input;
+  // 長さのある音符が1つも無ければ触らない（0小節を作らない）。
+  if (!notes.some((n) => (n.dur ?? 0) > 0)) return input;
+  // 弱起（負の start）だけで拍0までに終わるメロは end=0 になるが、尺は1小節と数える（0にしない）。
+  const end = Math.max(0, ...notes.map((n) => (n.start ?? 0) + (n.dur ?? 0)));
+  const bpb = meterInfo(input.meter).beatsPerBar;
+  return { ...input, bars: Math.max(1, Math.ceil(end / bpb - 1e-9)) };
+}
+
 export class Core {
   // 合成ルート（#6）：集約ごとの repo を保持。新コードは core.asset 等の名前空間APIを使える。
   // 既存の フラットAPI(core.addAsset 等) は下で repo へ委譲＝呼び出し側 無改修（回帰ゼロ）。
@@ -70,7 +94,8 @@ export class Core {
 
   // --- neta：データ系は NetaRepo へ委譲。createNeta(原子化+job_resultマーカー)/copyNeta(compose再帰)は
   //     集約跨ぎの orchestration なので Core 残置＝repo の primitive を組み合わせる（#6）---
-  createNeta(input: NetaInput): Neta {
+  createNeta(input0: NetaInput): Neta {
+    const input = withDerivedBars(input0);
     const id = randomUUID();
     const ts = now();
     // 原子化：neta 行＋タグ＋job_result マーカーを1トランザクションに（部分失敗で「マーカー無しネタ」が
