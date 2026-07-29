@@ -2,7 +2,7 @@ import type { Neta } from "../api";
 import { KIND_LABEL, kindColor, CONTAINER_KINDS } from "../kinds";
 import { MiniRoll, LazyPreview } from "./MiniRoll";
 
-// #5 PC右ペインの空状態を「次の一手」ハブに（正典 docs/research/2026-07-15-ui-design-proposals.md §5）。
+// #5 PC右ペインの空状態を「次の一手」ハブに（正典 docs/archive/2026-07-15-ui-design-proposals.md §5）。
 // 未選択時の mainpane（1280px の主戦場の6割）が一文＋ボタンだけ＝砂漠だったのを、実データ（最終更新／最近の更新）
 // で埋めて再開動線を最短化する。飾りでなくデータを出す＝「実データが主役」正典に沿う。新機能・新APIは足さない
 // （App が既に持つ items と既存コールバックだけで組む）。SP（mv-home）では mainpane 自体が非表示＝挙動不変。

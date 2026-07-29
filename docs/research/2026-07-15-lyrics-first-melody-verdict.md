@@ -1,7 +1,7 @@
 # 歌詞先行メロ生成＝Fable審査団の統合裁定（2026-07-15）
 
 **問い（オーナー）**：「歌詞に対してメロディを作るのを設計して難易度を測って」。
-**方法**：Fable 3体並列＝[設計A=既存V2拡張](2026-07-15-lyrics-first-melody-A.md)／[設計B=Orpheus型専用DP](2026-07-15-lyrics-first-melody-B.md)／[監査C=意地悪な実測](2026-07-15-lyrics-first-melody-C-audit.md)→本docで統合Fableが裁定。
+**方法**：Fable 3体並列＝[設計A=既存V2拡張](../archive/2026-07-15-lyrics-first-melody-A.md)／[設計B=Orpheus型専用DP](../archive/2026-07-15-lyrics-first-melody-B.md)／[監査C=意地悪な実測](2026-07-15-lyrics-first-melody-C-audit.md)→本docで統合Fableが裁定。
 
 ## 裁定（TL;DR）
 - **難易度の答え：使える版＝S+〜M（Opus 2〜3日級）。フルOrpheus型＝XLで「やらない」。**

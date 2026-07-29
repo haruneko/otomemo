@@ -178,7 +178,7 @@ async function engineUp(timeoutMs = 1500): Promise<boolean> {
   } catch { return false; }
 }
 
-// ── 歌わせる声の列挙（設計 docs/research/2026-07-17-voicevox-voice-selection.md ②） ────────────
+// ── 歌わせる声の列挙（設計 docs/archive/2026-07-17-voicevox-voice-selection.md ②） ────────────
 // engine 問い合わせを本命・curated をフォールバック。列挙のために engine を spawn しない（起きている時だけ ping→/singers）。
 // 声＝frame_decode スタイル id（声色）。type=sing の 6000（query 専用モデル）と talk は選択肢に出さない。
 export interface SingVoice { id: number; character: string; style: string }

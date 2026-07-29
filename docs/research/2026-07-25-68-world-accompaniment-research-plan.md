@@ -41,7 +41,7 @@ L4 の方式(a)（辞書に型追加→再seed・`2026-07-25-pattern-library-L4-
 |---|---|
 | 6/8 の生成グリッドは **1小節=12枠（16分基底）**。`stepsPerBar = beatsPerBar*4`＝6/8→12 | `apps/api/src/music/generate.ts:945` |
 | web エディタも同じ：`meterSteps` が 6/8→ stepsPerBar **12**・beatStep **6**（拍＝付点4分＝6枠） | `apps/web/src/components/ChordPatternEditor.tsx:134-141`（BassStepEditor/RhythmEditor も同関数） |
-| メロ側も 6/8 は「16分12枠を常時基底」へ統一済（8分6枠の二重グリッドは廃止決定） | `docs/research/2026-07-10-68-grid-unify-16th.md` |
+| メロ側も 6/8 は「16分12枠を常時基底」へ統一済（8分6枠の二重グリッドは廃止決定） | `docs/archive/2026-07-10-68-grid-unify-16th.md` |
 | **ドラム辞書は 6/8 を表現できる**：`grid: 16 \| 12`・`six8.ballad`（meter:"6/8", grid:12）が既在 | `apps/api/src/music/drumLibrary.ts:24,92` |
 | ただし seed が非4/4 を除外（L3 ピッカー 4/4 前提）＝裁定D の実体 | `apps/api/scripts/seed-pattern-library.ts:26,78` |
 | **コード伴奏辞書は grid:16 固定**（全型 4/4）＝6/8 型はスキーマ拡張が要る | `apps/api/src/music/chordLibrary.ts:37` |
@@ -260,7 +260,7 @@ Fable 監査（§8 手順）はこの 1–7 を判定基準として使う＝監
 - 語彙4doc（体裁の正準）：`docs/research/2026-07-22-piano-comping-vocabulary.md`（§0-1 記法・§1 型辞書・§3-3 場面）／
   `2026-07-22-guitar-comping-vocabulary.md`（§2 ストラム辞書・§5 アルペジオ）／`2026-07-14-bass-genre-vocabulary.md`
   （§0 記譜・キック絡み符号）／`2026-07-14-drum-pattern-genre-library.md`（§1 記譜規約・型16 six8.ballad・§9 選択表・§10 遷移）
-- 6/8 グリッド正準：`docs/research/2026-07-10-68-grid-unify-16th.md`（16分12枠常時基底）／`2026-07-10-68-sixteenth-runs-plan.md`
+- 6/8 グリッド正準：`docs/archive/2026-07-10-68-grid-unify-16th.md`（16分12枠常時基底）／`2026-07-10-68-sixteenth-runs-plan.md`
   （§2 16分の出所・改訂済doc）
 - 旋法・民族調の自前実測：`docs/research/2026-07-14-mode-usage-stats.md`（§1-2/§1-3）／`2026-07-06-vocaloid-folk-study.md`
   （i–♭VI–♭VII・V回避）／`2026-06-29-melody-corpus-and-deform.md`（:57 irish186・6/8=60件）

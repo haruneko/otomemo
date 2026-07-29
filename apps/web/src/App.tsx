@@ -190,7 +190,7 @@ export function App() {
   // トップの一覧(listNeta)は updated DESC の最新100件で頭打ち＝古い kind(analysis/study 等)がその窓から
   // 漏れるとクライアント集計では0件になり、絞る▾で非タップの「0件ゴースト」に化けてタップ不能だった
   // （＝古データの kind に絞り込めない）。実データ規模で破綻したため実在判定・件数とも facets へ移す（2026-07-15監査）。
-  // 正典 docs/research/2026-07-14-topview-redesign-fable.md は「クライアント集計」契約だが、その前提が
+  // 正典 docs/archive/2026-07-14-topview-redesign-fable.md は「クライアント集計」契約だが、その前提が
   // 実データ規模で崩れたのでここは facets に依る。facets は kindCounts で kind別件数を返す（GROUP BY・窓非依存）ので
   // バッジは正確な実数（旧「最新100件窓の best-effort」を解消）。限界：全プロジェクト横断・library除外＝
   // activeProject を絞らない（他器だけに在る kind も実在・件数に含む）。per-project の厳密件数が要るなら API に
@@ -530,7 +530,7 @@ export function App() {
           }
         >
         <aside className={"notebook" + (railOpen ? "" : " closed")} aria-label="notebook">
-          {/* ★トップ契約（再発防止の本体・正典＝docs/research/2026-07-14-topview-redesign-fable.md §2.2）：
+          {/* ★トップ契約（再発防止の本体・正典＝docs/archive/2026-07-14-topview-redesign-fable.md §2.2）：
               ファーストビューの固定行は6つだけ＝ヘッダ／器チップ／アクション行(＋作る/検索/絞る)／種別行(≤1)／
               つづき(≤1)／一覧ヘッダ。残り全部が一覧＝実データが主役。
               ・新 kind が増えた → 作成の棚(CreateShelf)にタイル+1のみ。トップの種別行にはそのkindのネタを

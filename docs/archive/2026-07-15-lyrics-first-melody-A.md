@@ -3,8 +3,8 @@
 - 作成: 2026-07-15（Fable設計・コード変更なし＝読みと設計のみ）
 - 位置づけ: design.md L623「② 歌詞↔メロ相互変換＝gen_melody に歌詞制約を追加」の設計具体化。並行して別路線（B=専用エンジン等）が検討されているうちの **A路線（genMotifMelodyV2 に歌詞制約を注入）** を担当。
 - 前提正典:
-  - 理論: [2026-07-14-jp-prosody-melody-rules.md](2026-07-14-jp-prosody-melody-rules.md)（M3＝Orpheus層分離: アクセント整合=硬い制約で遷移を刈る／和声・跳躍・音域=柔らかいコスト。R-01〜14歌詞→リズム型／A-01〜10整合）
-  - 本日の成果: [2026-07-15-kariuta-lyrics-craft.md](2026-07-15-kariuta-lyrics-craft.md)（K規則・V0〜V6評価器）・[2026-07-15-kariuta-accent-feasibility.md](2026-07-15-kariuta-accent-feasibility.md)（pyopenjtalk実測＝モーラ20/20・spawn 0.13〜0.23秒）
+  - 理論: [2026-07-14-jp-prosody-melody-rules.md](../research/2026-07-14-jp-prosody-melody-rules.md)（M3＝Orpheus層分離: アクセント整合=硬い制約で遷移を刈る／和声・跳躍・音域=柔らかいコスト。R-01〜14歌詞→リズム型／A-01〜10整合）
+  - 本日の成果: [2026-07-15-kariuta-lyrics-craft.md](../research/2026-07-15-kariuta-lyrics-craft.md)（K規則・V0〜V6評価器）・[2026-07-15-kariuta-accent-feasibility.md](../research/2026-07-15-kariuta-accent-feasibility.md)（pyopenjtalk実測＝モーラ20/20・spawn 0.13〜0.23秒）
   - 既存エンジン: design.md #12-M／#20・`apps/api/src/music/melodyCells.ts`（genMotifMelodyV2）・`packages/music-core/src/prosody.ts`（suggestLyricRhythm/analyzeLyricFit 実装済）
 - 思想整合: 機械は候補まで・複数案ばらつき・既定bit一致・骨格/表面の層分離。
 

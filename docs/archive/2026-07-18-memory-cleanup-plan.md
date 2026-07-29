@@ -22,7 +22,7 @@
 | F3 | コード進行エディタ#26 は**コミット済**（83e001f）。その後 #27 再生一本化(edb0214)・#28 曲編集縦セットリスト(ab3681f)・#29 ドラム表現力(752cb65他) も完了 | `git log` |
 | F4 | worker の `jobs.py`/`claude_prompt` は**完全消滅**。`apps/worker/src/cm_worker/` は db.py/search.py/serve.py＝cm-search のみ | `ls`＋`grep -rn claude_prompt apps/worker/src/`＝0件 |
 | F5 | `core.ts` は現在 **537行**（「神ファイル」ではない） | `wc -l apps/api/src/core.ts` |
-| F6 | `_audio_poc` は **`apps/audio` へ移動済**（2026-07-17・Option A実施済） | `ls apps/`＋`docs/research/2026-07-17-python-sidecar-layout.md` 冒頭の実施済注記 |
+| F6 | `_audio_poc` は **`apps/audio` へ移動済**（2026-07-17・Option A実施済） | `ls apps/`＋`docs/archive/2026-07-17-python-sidecar-layout.md` 冒頭の実施済注記 |
 | F7 | compose-quality-track の救出対象実測値は**docs/research に格納済**：強拍CT 90.8%・骨格粒度1.91拍・自己相関 lag8=31.7%/lag16=34.5%・overshoot 77% | `docs/research/melody-corpus-findings.md` L20,36,39,50,52 |
 | F8 | ジャーニー記録も格納済：`melody-design-journey.md`（仮説28+対処）・`melody-model-summary.md`・`skeleton-melody-musicology.md`・`consistency-review.md` すべて実在 | `ls docs/research/` |
 | F9 | **FMD は退役済**。`eval-models-learned.md` が「FMD⊥耳＝制御メロに不向き・退役」「MuPT perplexity 研究クローズ」まで記録済＝メモリ側の「FMD識別力◎・brush-up検証に使える」は**失効** | `docs/research/eval-models-learned.md` §1・★★訂正 |

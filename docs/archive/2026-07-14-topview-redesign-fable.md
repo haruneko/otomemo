@@ -1,8 +1,8 @@
 # トップ画面 抜本再設計 — ネタが主役・「作る/絞る」は扉の奥（2026-07-14・Fable）
 
 > 状態＝**設計提案（実装なし・モック有り）**。オーナー評「トップのファーストビューが情報過多」への回答。
-> 一次資料＝[2026-07-14-topview-inventory](2026-07-14-topview-inventory.md)（フォールド内タップ標的47・作成14＋フィルタ13＝27個57%が操作壁・実データはフォールド最下部に0.3枚・kind追加のたび両壁が恒久膨張・riff/section_inst実在0件が頻用と等価露出）＋実UIスクショ14枚＋`App.tsx`/`NetaList.tsx`/`kinds.ts` HEAD精読。
-> 過去研究＝[2026-07-02-card-and-create-ui-patterns](2026-07-02-card-and-create-ui-patterns.md)の未回収分（「一覧が主役」を今のkind数で再適用）を本設計で回収する。
+> 一次資料＝[2026-07-14-topview-inventory](../research/2026-07-14-topview-inventory.md)（フォールド内タップ標的47・作成14＋フィルタ13＝27個57%が操作壁・実データはフォールド最下部に0.3枚・kind追加のたび両壁が恒久膨張・riff/section_inst実在0件が頻用と等価露出）＋実UIスクショ14枚＋`App.tsx`/`NetaList.tsx`/`kinds.ts` HEAD精読。
+> 過去研究＝[2026-07-02-card-and-create-ui-patterns](../research/2026-07-02-card-and-create-ui-patterns.md)の未回収分（「一覧が主役」を今のkind数で再適用）を本設計で回収する。
 > **姉妹設計＝[2026-07-14-tinker-menu-redesign-fable](2026-07-14-tinker-menu-redesign-fable.md)（承認済・実装中）と同じ設計言語**＝棚＋引き出し・「増えてもハブ不変」の契約。アプリ全体が一つの思想に見えることを狙う。
 > **動くモック＝[2026-07-14-topview-redesign-mock.html](2026-07-14-topview-redesign-mock.html)**（単一ファイル・390px・Before/After切替・タップ/スクロール計・姉妹モックと同じ流儀＝並べて触れる）。
 

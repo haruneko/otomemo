@@ -63,7 +63,7 @@
 - ✅ **第8弾（最終）**：WP-E1(baf67c8+e76e735 感情17語→実在ノブ翻訳)・WP-M8(8ff2c04 独自性警告=除外ゲート+緑黄赤+check_originality)・WP-X4+web露出(5821d21+418b641+cd3ad44 ビルド3種+riff/管弦GEN_PARTS)・WP-M1b(a7951a5+9810801 輪郭DP-λ「かたち」・asc 0.00→0.82)
 - **＝WP17個＋派生4個 全消化（2026-07-14）**。最終検証=music-core 100/api 1081/web 548 全緑・tsc 0。api再起動済（旧tsx watch孤児2本も根絶）。
 - **残る派生（backlog級）**：velCurveのweb再生反映／調プラン適用のセクション列UI／メロ骨格の転調度数読み替え／ボカロ用プリセットボタン／prosodyのpyopenjtalk接続(R-09/A-06)／sectionNoriLensのanalyze結線
-- **［耳/手］＝[2026-07-14-ear-hand-checklist-wp-batch](2026-07-14-ear-hand-checklist-wp-batch.md) に一括**（セッションA〜F＋総合G1「一曲書く」）＝実装フェーズの出口はオーナーの耳
+- **［耳/手］＝[2026-07-14-ear-hand-checklist-wp-batch](../research/2026-07-14-ear-hand-checklist-wp-batch.md) に一括**（セッションA〜F＋総合G1「一曲書く」）＝実装フェーズの出口はオーナーの耳
 
 ## 推奨実行順（オーナー判断待ち→第1弾・第2弾は承認済で消化）
 

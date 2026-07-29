@@ -2,7 +2,7 @@
 
 このディレクトリは **本番 API が spawn する現役の Python スクリプト**と、**結線されていない実験/開発道具**が
 同居している。消す前に必ず下の「生死表」を見ること。（旧名 `_audio_poc/`＝"poc" は嘘だったので
-2026-07-17 に `apps/audio` へ移動し `apps/worker` と対称化。経緯＝`docs/research/2026-07-17-python-sidecar-layout.md`）
+2026-07-17 に `apps/audio` へ移動し `apps/worker` と対称化。経緯＝`docs/archive/2026-07-17-python-sidecar-layout.md`）
 
 `apps/worker` と同型の **uv プロジェクト**（`pyproject.toml` + `uv.lock`）。追跡するのは
 `*.py` / `pyproject.toml` / `uv.lock` だけ（＝ソースと依存宣言は版管理・巨大依存/生成物は `.gitignore`）。

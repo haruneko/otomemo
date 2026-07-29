@@ -193,7 +193,7 @@ peek（絶対に待たない・#24 の仮歌版）、歌う対象が無い面は
 previewNote（単発入力FB）は Transport 非使用の別プリミティブ＝対象外。
 
 **帰結**：カード▶の仮歌バグと FormStrip 遷移試聴の仮歌欠落（backlog）はこの一本化の副産物として解消。
-正典＝docs/research/2026-07-18-playback-path-unification.md（現状マップ・移行スライス S0〜S5・ガードレール）。
+正典＝docs/archive/2026-07-18-playback-path-unification.md（現状マップ・移行スライス S0〜S5・ガードレール）。
 ```
 
 ## 7. 残しておくもの（意図的スコープ外）

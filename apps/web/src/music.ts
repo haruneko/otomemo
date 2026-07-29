@@ -1598,7 +1598,7 @@ export function barBeat(beat: number, bpb: number): string {
 }
 
 // ── #27 再生経路の一本化（PlaybackPlan＋唯一の解決層）─────────────────────────
-// 正典＝docs/research/2026-07-18-playback-path-unification.md / design.md #27。
+// 正典＝docs/archive/2026-07-18-playback-path-unification.md / design.md #27。
 // ペイロード（notes/feel/compound/仮歌/mute）の手組みを各所から撤去し、ここ1箇所へ集約する（解決層）。
 // 駆動（ensure→playNotes）は playback.ts（駆動層）が唯一のチョークポイント。
 

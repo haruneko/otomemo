@@ -1,7 +1,7 @@
 import { KindTiles } from "./KindTiles";
 import { FILTER_KINDS } from "../kinds";
 
-// 絞る引き出し（トップ再設計 S2→S3・正典＝docs/research/2026-07-14-topview-redesign-fable.md §3.2/§10）。
+// 絞る引き出し（トップ再設計 S2→S3・正典＝docs/archive/2026-07-14-topview-redesign-fable.md §3.2/§10）。
 // アクション行の `絞る▾` で開くボトムシート。中身＝全種別の3列タイル格子（件数バッジ・件数降順）＋
 // 「まだ0件」ゾーン（破線ゴースト＝作ればトップに現れる）＋mood。棚(CreateShelf)と同じ3列格子で対にする。
 // 導出＝件数はクライアント集計(kindCounts)＝追加APIなし・露出∝実利用。state は App が唯一持つ。

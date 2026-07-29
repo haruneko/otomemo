@@ -1,4 +1,4 @@
-// #27 再生経路の一本化・駆動層（唯一のチョークポイント）。正典＝docs/research/2026-07-18-playback-path-unification.md §2.3。
+// #27 再生経路の一本化・駆動層（唯一のチョークポイント）。正典＝docs/archive/2026-07-18-playback-path-unification.md §2.3。
 // PlaybackPlan（解決層 music.ts）を受け、vocalMode に応じ ensure/peek→playNotes する。ここ以外から playNotes を
 // 直接呼ばない（S5 で敷居を敷く）。副作用＋module 内可変状態（wav キャッシュ・busy 通知・現行ハンドルレジストリ）。
 import { api } from "./api";

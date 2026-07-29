@@ -6,7 +6,7 @@
 （上位から下ろす・TDD・research doc 格納）に従って詰めること。
 
 **正典の所在**（本 doc は索引・監査であり正典ではない）：
-- 機能ロードマップの正典 = `docs/research/2026-07-07-next-dev-plan.md`（P0〜P4計画・25項目ギャップ表）
+- 機能ロードマップの正典 = `docs/archive/2026-07-07-next-dev-plan.md`（P0〜P4計画・25項目ギャップ表）
 - 保留タスクの正典 = `docs/backlog.md`
 - 実装現況の正準 = `docs/status.md`／設計決定ログ = `docs/design.md`
 
@@ -73,7 +73,7 @@
 2. ✅ **`docs/requirements.md` 本文**（L182/L193）にパッドステップ入力が残存 → 撤去注記（2026-07-04・ロール一本化）を本文2箇所に追記済。
 3. ✅ **`docs/design.md` 決定1**の「追い抜き完了までPythonドメイン(cm-music-mcp:8790)を消さない」条件付き記述 → S2で廃止完了・2プロセスの旨、完了注記を追記済。
 4. ✅ **MCPの旧ジョブ系ツール**：design.md 棚卸し「#101でCUT宣言したが並存（撤去未了）」→ **legacy維持を正式決定（chat面は非公開・full面はtest互換で当面残す／コード撤去はbacklog）**として design.md に明記済。
-5. ✅ **`docs/research/2026-07-07-next-dev-plan.md`** の「worker移植が残る」系の乖離指摘 → P0-d(commit 2bc0e8c)で他docは是正済＝計画doc側の指摘自体が解消の旨、是正済み注記を追記済。
+5. ✅ **`docs/archive/2026-07-07-next-dev-plan.md`** の「worker移植が残る」系の乖離指摘 → P0-d(commit 2bc0e8c)で他docは是正済＝計画doc側の指摘自体が解消の旨、是正済み注記を追記済。
 6. ✅ **（監査中に追加発見）`docs/status.md` L72** が「3プロセス／worker ヘッドレス live」のまま（同doc L24は撤去済と矛盾）→ 「2プロセス・worker撤去済・systemd未インストール」に是正済。
 
 ---

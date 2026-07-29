@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { frameDecodeVoices, listSingVoices, CURATED_SING_VOICES } from "../src/sing";
 
-// VOICEVOX 歌わせる声の列挙（設計 docs/research/2026-07-17-voicevox-voice-selection.md ②）。
+// VOICEVOX 歌わせる声の列挙（設計 docs/archive/2026-07-17-voicevox-voice-selection.md ②）。
 // engine 問い合わせを本命・curated をフォールバック。列挙のために engine を spawn しない（起きている時だけ ping→/singers）。
 // type=sing の 6000（query 専用モデル）と talk は声の選択肢に出さない＝frame_decode のみ。
 

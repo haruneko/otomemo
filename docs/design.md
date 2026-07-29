@@ -406,7 +406,7 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **段階(CP)＝✅実装済(2026-06-23)**：CP1 進行を抽象化(音色固定GM49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(music.ts) → CP3 エディタ(ChordPatternEditor＝hitsグリッド＋長さツール＋voicing＋voicing MiniRoll) → CP4 `genChordPattern`＋/gen/section 配線 → CP5 compositeNotes で section 進行に解決(パート毎 program・複数可)。api/web 緑。
 
 ### WP-X3 新レーン3種（対旋律 counter／リフ riff／セクション楽器 section_inst）
-正準相談メモ＝`docs/research/2026-07-14-wpx3-newlane-design-options.md`（§2「新kind追加の芋づる12-13箇所」チェックリスト・§8オーナー裁定＝1ネタ多声1レーン/伴奏先行/counter一級/案A反復）。生成の中身＝counter=`2026-07-14-countermelody-obbligato.md`／riff=`2026-07-14-riff-ostinato-design.md`／section_inst=`2026-07-14-horn-string-arranging.md`。
+正準相談メモ＝`docs/archive/2026-07-14-wpx3-newlane-design-options.md`（§2「新kind追加の芋づる12-13箇所」チェックリスト・§8オーナー裁定＝1ネタ多声1レーン/伴奏先行/counter一級/案A反復）。生成の中身＝counter=`2026-07-14-countermelody-obbligato.md`／riff=`2026-07-14-riff-ostinato-design.md`／section_inst=`2026-07-14-horn-string-arranging.md`。
 **レーン導出の注記（#14 補強）**：レーンは lane 列を持たず**子の kind から導出**（#14）。counter/riff/section_inst も一級 kind として `SECTION_LANES` に各1レーンを追加（chord_pattern の ord 2レーンハックは使わない＝1kind1レーン）。芋づるは §2 の12〜13箇所（kinds/theme/KindIcon/sectionLanes+LANE_COLOR+LANE_MIDI_NAME/MiniRoll/notesForContent/part分岐/useNetaEditor/KindEditorBody＋作成タイル/絞込）を全て手当てする（1つでも抜くと下流が黙って欠ける＝ede57f4の轍）。
 
 **レーンの表示/演奏有効化（#14 続・2026-07-15・オーナー要望「全員がフルセット使わない」）**：表示既定＝**中身のあるレーン＋定番4（コード/メロ/ベース/ドラム）**・他の空レーンは畳み「＋レーン」から出す。手動 show/hide/mute は section content（`lanes_shown`/`lanes_hidden`/`lanes_muted`・自由形＝api変更なし）に保存。**レーン契約＝新kindは既定畳み＝kind増でも使わない人の画面は増えない**（トップ契約/ハブ契約と同族）。ミュートは再生合成（`audibleChildren`）のみに効き**MIDI書き出しは常に全部入り**（UIに明示）。`lanes_muted`未設定＝従来bit一致・骨格/仮歌のミュートとは「どれかがミュートならミュート」で合成。純関数=sectionContext.ts（`laneVisible`/`visibleLanes`/`audibleChildren`）。
@@ -439,7 +439,7 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
   - **bit一致の約束**：`style` 未指定=keyboard・`strumMs` 未指定=0 で**既存出力と完全一致**（arpOctaves/arpReset と同じ「ノブ既定0でOFF」流儀）。roll は `style:"guitar" && strumMs>0 && tempo` の全条件成立時のみ発火＝新パラメータ既定では resolve の strum 分岐が旧コードパス（voiced を昇順 push→オンベース末尾追加）を**バイト単位で**通る。tempo を渡さない/未対応（プレビュー用 compositeNotes 呼び等）は roll 無し＝ストレート同時発音（bit一致）。
   - **MCP 露出（スライスB）**：`genChordPattern` は HTTP 専用だったのを `gen_chord_pattern` MCP ツールに露出（`gen_bass` 等の registerTool 慣行）。生成は voicing の既定値として `style`/`strumMs` を content に載せるだけ＝**実音化は web 側**という現行分業を維持（api は実音化しない）。既定（未指定）は content に style/strumMs キーを生やさない＝genChordPattern の既存出力と deepStrictEqual 一致。
   - **要耳較正（design 明記・後段でオーナー試聴）**：①`voiceGuitar` の register（top 磁石で 2oct 上下・GM ギターで妥当か）②7th/6th 色音の配置と 6声 cap の間引き順③`open` は guitar では現状 no-op（ギターは元来オープン＝二重に広げない判断）④`strumMs` の相場（10ms/弦＝研究doc §3.2・バラードは 20〜35ms）。今回はスコープ①voiceGuitar ②弦順ロールまで＝ストラム型プリセット/arp型ギター/カッティング（研究doc §2,4,5）は後段。
-- **決定：奏法UI＝三層のスライスA/B/D（2026-07-22・正典モック＝`docs/research/2026-07-22-performance-ui-mock.html`・設計＝`docs/research/2026-07-22-performance-ui-design-options.md`）**：上の `voicing.style`/`strumMs`（S1）とベース×ドラムノブ（実装済・UI未露出）を画面へ出す。**A=音色連動の既定（ゼロ操作）／B=CPエディタ第4行の微調整／D=ベース引き出しの「細かく」群**（C=聴いて選ぶトレイは S2 型辞書完成後の別スライス）。
+- **決定：奏法UI＝三層のスライスA/B/D（2026-07-22・正典モック＝`docs/archive/2026-07-22-performance-ui-mock.html`・設計＝`docs/archive/2026-07-22-performance-ui-design-options.md`）**：上の `voicing.style`/`strumMs`（S1）とベース×ドラムノブ（実装済・UI未露出）を画面へ出す。**A=音色連動の既定（ゼロ操作）／B=CPエディタ第4行の微調整／D=ベース引き出しの「細かく」群**（C=聴いて選ぶトレイは S2 型辞書完成後の別スライス）。
   - **`voicing.style` に `"auto"` を追加（既定の意味論）**：`"auto"`＝**レンダ時に program の GM ファミリから奏法を導出**（guitar 系 24–31→`guitar`／それ以外→`keyboard`）。auto の解決は実音化層＝`resolveChordPattern(content, chords, key, tempo?, program?)` に **program 引数**を最小結線で足す（tempo 結線と同じ流儀＝`notesForContent`/`compositeNotes`/`buildPlayback` がレンダ境界で program を渡す。`compositeNotes` は per-part の `programOf(content)` を、単体 `buildPlayback` は `programOf(neta.content)` を、`MiniRoll` は `programOf(neta.content)` を渡す）。パッド系の白玉化等は今回スコープ外＝ボイシングのみ。
   - **bit一致の約束（最重要）**：`style` **未指定＝keyboard＝従来と完全一致**（既存ネタ全部・1音も変えない）。auto の分岐は `v.style === "auto"` の時だけ発火し、解決後は `"keyboard"` or `"guitar"` として既存 `voiceChord`/roll 経路を**バイト単位で**通る（`"keyboard"` は `v.style==="guitar"` 分岐を外し `voiceToTop` へ＝undefined と同一出力）。program を渡しても style 無しなら resolve は不変。
   - **新規 chord_pattern ネタの UI 既定＝auto**：`emptyChordPattern()`（新規作成経路）の voicing 既定に `style:"auto"` を載せる＝新規ネタは「楽器を選べばその楽器らしく鳴る」。既存ネタ（style 無し）は触らない。
@@ -482,7 +482,7 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
   - **設計語 vs UI表示語（明文化）**：**「器・棚・机・レンズ」は design 内の設計語として存続**（データモデル/思想の語彙＝本 doc・要件では使い続ける）。ただし**UI 表示は一般語に写す**＝**器→プロジェクト・棚→一覧・机→骨格エディタ・レンズ→並べ替え**（候補トレイの並べ替え軸／SectionEditor の title 説明から「レンズ＝」を除く）。UI 上の「器（プロジェクト）」併記は**「プロジェクト」単独**へ統一（HomeHub/App/NetaList/ProjectScreen/Chat）。
   - **「じゃら〜ん」は design からも廃止**＝以後 UI 語としては「ストロークの速さ」を用いる（strumMs の段ラベル＝ロールの時間幅・0/8/14/25ms 不変。上の②③の「じゃら〜ん」表記はこの語に読み替え）。
   - **据置**（同基準でも触らない・triage 低群）：並5/直5・表面・アクセント逆行・白玉・2・4で抜く・接近音・骨格・ネタ/ネタ帳 等。SkeletonDesk の聴きレンズ2択ボタンは**ステージ別ラベル（畳み/実音 等）を表示＝「レンズ」の露出文字列は無し**（aria-label `desk-lens`/`lens-fold`/`lens-real` は A/B ゲートの固定識別子＝不変）。
-- **決定：伴奏パターンを「聴いて選ぶ」トレイ（スライスC・2026-07-22・正典モック＝`docs/research/2026-07-22-performance-ui-mock.html` Cタブ・研究doc①②③）**：S2 型辞書（chordLibrary 26型）を**名前で選ばせない**＝ジャンルchipで絞り耳で選ぶ。`gen_bass` style／`gen_drums` style（ジャンルchip前面・型直指定は「細かく」に沈める）と**同構造**。「候補まで機械・選ぶのは人間」の主動線に、伴奏パターンを載せる。
+- **決定：伴奏パターンを「聴いて選ぶ」トレイ（スライスC・2026-07-22・正典モック＝`docs/archive/2026-07-22-performance-ui-mock.html` Cタブ・研究doc①②③）**：S2 型辞書（chordLibrary 26型）を**名前で選ばせない**＝ジャンルchipで絞り耳で選ぶ。`gen_bass` style／`gen_drums` style（ジャンルchip前面・型直指定は「細かく」に沈める）と**同構造**。「候補まで機械・選ぶのは人間」の主動線に、伴奏パターンを載せる。
   - **api：候補を複数返す（`genChordPattern` に `variety?:number`＝既定1）**：`opts.variety>=2` かつ `pattern` が **ジャンル名/おまかせ**（＝`compTypeById` で解決しない）かつ 4/4系のとき、`pickCompTypes(genre, role, tempo, seed, n)` が**別々の型（distinct id）**を最大 n 件返し、既存 `GenResult.items`（配列契約）へ複数 item として載せる。各 item の `label`＝**型の日本語（型ID＋場面タグ `scenes`）**（単数経路の "コード楽器" とは別＝カードに型名/説明を出す）。**variety 未指定/1＝従来の単数経路（`compTypeById ?? pickCompType`）＝deepStrictEqual bit 一致**（多 frame×seed を機械証明）。型ID直指定＋variety>=2 は多分岐をスキップ（`compTypeById` が真）＝単数固定型 1件。
   - **`pickCompTypes` の候補母集団**：ジャンル名＝`GENRE_TABLE[genre]` の**全役割の型IDを union**（`role` 指定時はその役割の型を先頭に優先）→ distinct → **tempo 域で絞る**→ seed 起点の回転で最大 n 件（決定的）。おまかせ（`omakase`/`any`/`all`）＝**全 `COMP_TYPES` を role 適用可否（`CompType.roles`）＋tempo で絞る**（role/tempo 全体から）。`pickCompType`（単数）は不変＝bit 経路を汚さない。
   - **【E2E所見修正・2026-07-22】tempo 域内皆無＝空にしない**：当初「域内皆無＝空＝従来経路 fallback」だったが、実機E2Eで **section 既定 tempo120 のとき ballad(max95)/citypop(max115) が全滅→汎用1件に落ち「聴いて選ぶ」が成立しない**と判明。→ pickCompTypes は域内皆無のとき**ジャンル語彙をテンポ距離の近い順で提示**（安定ソート・同距離は元優先順・型は敷けば鳴る＝**要耳較正**）。単数経路 pickCompType（style ノブ）は従来どおり厳格（域外 null）＝不変。あわせて GENRE_TABLE 補充＝ballad に GT-BALLAD（弾き語り）・rock に genre:"rock" なのに表から漏れていたギター型（GT-DOWN4/8/16・GT-BACKBEAT）＝鍵盤/ギター混成の候補に。
@@ -529,7 +529,7 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **編集の家（web）**：`BassStepEditor` は現行6レーン（R/3/5/7/8/approach）を維持＝拡張語彙（2/6/クロマチック/next）は grid に現れないが pattern には**非破壊で保持**（範囲外音と同流儀）。フル度数編集 UI（「その他」レーン・next トグル）は**次スライス**（監査 B'3）＝今回は開ける・可視レーン編集・非破壊往復をテストで担保。
 - **境界（スコープ外・次スライス）**：ベース単体エディタへの「型から選ぶ ▸」帯（修理#1と同UI・工事順6）／相対を UI 既定へ昇格／BassStepEditor 度数語彙拡張（工事順7）／既定切替の裁定。**要耳較正**＝窓統一後の style 相対の鳴り（synth C2 基準・オーナー）。
 
-### H1/H2 残工事の一括裁定（修理#3・2026-07-22・正典＝`docs/research/2026-07-22-surgery-plan.md`＋監査 `2026-07-22-performance-editing-architecture-audit.md`／統一原理＝`2026-07-22-melody-pattern-thought-experiment.md`）
+### H1/H2 残工事の一括裁定（修理#3・2026-07-22・正典＝`docs/archive/2026-07-22-surgery-plan.md`＋監査 `2026-07-22-performance-editing-architecture-audit.md`／統一原理＝`2026-07-22-melody-pattern-thought-experiment.md`）
 修理#1/#2 が残した工事（監査 工事順6-7・feel の家 C-6・patternId 乖離 B-5・共有バッジ・管弦への帯誤適用）を一括裁定。
 鉄則は従来どおり**既定 bit 一致**。例外は②（相対 opt-in 出力の golden 更新）と③（feel 保持＝バグ修正）のみ＝下で個別に正当化。
 - **決定①：feel の家（C-6・バグ根治込み）**。`useNetaEditor.savePatch()` が content を既知キーで再構成するため
@@ -648,7 +648,7 @@ Fable 実機監査＝360px幅で16step グリッドの step13-15 が画面外・
 - **整列不変の担保**：右手/左手セルは同一 `.cp-cell`（Task1c 整列修正＝全セル厳密同幅を維持）。プレイヘッドは `BEAT_PX` とラベル offset を新値に更新＝拍頭一致を保つ。**実機実測で「1小節が360pxに収まる」「拍頭にプレイヘッド一致」「右手/左手列一致」を確認**（Playwright）。
 - **多小節（2小節=32step 等）は従来どおり横スクロール**（1画面に一望は不可＝許容）。タップ標的は 20→16px と小さくなる（密なステップグリッドの相場・オーナー了承）。
 
-### Task1f＝「パターンを選ぶ」帯の格下げ＝ライブラリから読み込む二次アクション（2026-07-23・オーナー裁定・正典＝`docs/research/2026-07-23-pattern-picker-demotion-plan.md` 案A）
+### Task1f＝「パターンを選ぶ」帯の格下げ＝ライブラリから読み込む二次アクション（2026-07-23・オーナー裁定・正典＝`docs/drafts/2026-07-23-pattern-picker-demotion-plan.md` 案A）
 両手グリッド（Task1c-e）で直接入力が完結したので、「パターンを選ぶ」帯は**本当にライブラリからパターンを丸ごと持ってきたい時だけの二次アクション**でよい（オーナー「マジのパターン選ぶやつ以外いらない」）。**器（`PatternPickerBar` の chip→候補→カード→▶試聴/適用）と L3 の候補取得/適用は完全不変＝bit 一致**。変えるのは**入口の格（配置・目立ち）と文言だけ**。
 - **`PatternPickerBar` に `variant` props（`"bar"`（現行）／`"link"`（格下げ小リンク））を追加**＝見出しレンダだけ分岐・body 共有。既定は呼び出し側が指定（`"bar"` を渡せば bit 一致の退避経路）。
 - **3エディタ（`ChordPatternEditor`/`BassStepEditor`/`RhythmEditor`）は `variant="link"` に揃える**＝設定行（`BarsControl` の行）の端に寄せた控えめなテキストリンク。押すと現行どおりその場で候補パネルを開く（body 不変）。「いま：<型>」表示は維持。
@@ -1026,7 +1026,7 @@ history・transport・ヘッダ/メタ/body/relations 描画）を抱える神�
 - **song が直接パートを持つか？→ 持たない**（sections-only）。全体ベース等の"通しパート"要求が出たら再検討（今は明快さ優先）。
 
 #### 曲フォーム（フォームストリップ＋分家モデル）
-正典＝`docs/research/2026-07-16-song-form-assembly.md`。「セクションを曲にする（アレンジ層）」の確定設計。**層は3層(project/song/section)のまま＝form は新実体を作らない**（form＝song の compose_edge の順序＋各 section の role タグの射影）。実装は段階＝**S1〜S4**（下記）。
+正典＝`docs/archive/2026-07-16-song-form-assembly.md`。「セクションを曲にする（アレンジ層）」の確定設計。**層は3層(project/song/section)のまま＝form は新実体を作らない**（form＝song の compose_edge の順序＋各 section の role タグの射影）。実装は段階＝**S1〜S4**（下記）。
 
 - **俯瞰＝フォームストリップ（S1・実装済 2026-07-16）**：song の小節グリッド→**カード列**（`FormStrip.tsx`・song kind 専用／section の小節グリッドは不変）。
   - **カードの情報**（"曲にする"に要る5点のうち S1 は3点）：**役割**（`role:` タグ→色/ラベル・無ければ無地）／**尺**（小節数＋概算秒。曲ヘッダに合計）／**レイヤ帯**（`SectionMini` 流用＝どのパートが鳴るか）。調バッジ・分家(A′)バッジは S2。
@@ -1055,7 +1055,7 @@ history・transport・ヘッダ/メタ/body/relations 描画）を抱える神�
 - **色SSOT**：kind→色は `kinds.kindColor(kind)`（chord系は --k-chord に畳む）に集約。ピッカー項目は各アイテムに自前の `--k` を設定（旧: 編集中 section の --k=橙 を継承してメロ概形が橙になるバグを是正）。
 - web271緑・実機で確認（favicon 200・パンくず・ピッカー色/密度/▶）。
 
-#### 決定：トップ画面 抜本再設計＝ネタが主役・「作る/絞る」は扉の奥（2026-07-14・正典＝`docs/research/2026-07-14-topview-redesign-fable.md`＋モック `2026-07-14-topview-redesign-mock.html`）
+#### 決定：トップ画面 抜本再設計＝ネタが主役・「作る/絞る」は扉の奥（2026-07-14・正典＝`docs/archive/2026-07-14-topview-redesign-fable.md`＋モック `2026-07-14-topview-redesign-mock.html`）
 上の「作成タイル(ホーム)」「絞り込みタイル」は kind 増加のたびフォールドに恒久1枠ずつ刺さり（WP-X3で作成6→9・絞込10→13）、実データがフォールド外へ押し出された（inventory §0＝タップ標的47・うち作成14＋絞込13＝壁27個57%・実データ0.3枚）。＝いじるメニューと同型の病理。主役を逆転する：**ファーストビューの主役＝実データ（つづき＋自分のネタ一覧）**、「作る/絞る」は扉の奥へ畳む。姉妹設計（いじる＝`TinkerSheet`）と同じ**棚＋引き出し**の設計言語で統一。
 - **トップ契約（固定サイズの不変条件・再発防止の本体＝App.tsx notebook 頭にコメントで明記）**：
   1. ファーストビューの固定行は**6つだけ**＝ヘッダ／器チップ／アクション行／種別行（≤1行）／つづき（≤1行）／一覧ヘッダ。残り全部が一覧＝実データ。
@@ -1120,7 +1120,7 @@ producer-consumer だったが、**worker が非稼働＝consumer 不在**で jo
 - **② 全体整合**：Section の `[✎通常][⌫消しゴム]` トグルを section-bars 行から**この共通 roll-toolbar（modes 左・いじる 右）へ移設**＝メロと横位置が一致。カード自動更新は既に `SectionMini` の dep を `[neta]` 化で解消済（MiniRoll.tsx）。
 - web262緑（PianoRoll 消すモード＝ノートtap削除/空セル無反応・Section いじる▾ は閉で隠れ開で生成/書出が出る）。実機E2E（Playwright・loopback）でメロ=3モード＋erasing描画・Section=いじる▾集約を確認。
 
-- **⑥ 「いじる」＝ハブ＋パーツ別引き出し（2026-07-14・器の再設計・正準＝`docs/research/2026-07-14-tinker-menu-redesign-fable.md`）**：⑤で器はボトムシート化したが中身は「フラット縦一列」のまま＝38コントロール・縦1756px が1シート同居し、WP群(ドラム/ベース型セレクタ4本42択)が生成ボタン列に割り込み主動線を分断（オーナー評「煩雑すぎてヤバい」）。→ 器の中を**二軸**で再構成する：**横軸＝パーツ**（メロ/ベース/ドラム/…＝増える唯一の軸）、**奥行き＝深さ**（おまかせ→型/プリセット→ノブ）。形は**ハブ（棚）＋引き出し**：
+- **⑥ 「いじる」＝ハブ＋パーツ別引き出し（2026-07-14・器の再設計・正準＝`docs/archive/2026-07-14-tinker-menu-redesign-fable.md`）**：⑤で器はボトムシート化したが中身は「フラット縦一列」のまま＝38コントロール・縦1756px が1シート同居し、WP群(ドラム/ベース型セレクタ4本42択)が生成ボタン列に割り込み主動線を分断（オーナー評「煩雑すぎてヤバい」）。→ 器の中を**二軸**で再構成する：**横軸＝パーツ**（メロ/ベース/ドラム/…＝増える唯一の軸）、**奥行き＝深さ**（おまかせ→型/プリセット→ノブ）。形は**ハブ（棚）＋引き出し**：
   - **ハブ**＝いじるを開いた最初の1画面（**スクロール0が契約**）。①横断設定「進行の色」(旋法chip 1行)②ヒーロー「☆おまかせで一式」(§4)③パーツタイル棚(3列・ホーム作成タイルと同じ言語=レーン色流用)④書き出し固定フッター。**タイル上ゾーンtap＝そのパーツをおまかせ生成**（現行2タップ主動線を死守）／**タイル下ゾーン(状態チップ)tap＝そのパーツの引き出しを開く**（設定の可視化と扉を兼ねる）。
   - **ハブ契約（不変条件・コードコメントに明記＝再発防止の本体）**：ハブに足してよいのは**新パーツのタイル+1のみ**。新ノブ/型は**そのパーツの引き出しの中**へ（前面はchip6±1・seg1行まで、超過は「細かく」へ沈める）。横断設定は旋法＋一式の2枠で打ち止め（3つ目は「共通」引き出し新設）。→ パーツが7→12に増えてもハブは無スクロールのまま。
   - **引き出し**＝パーツ別サブシート（ハブから遷移）。下端に「このパーツを生成」ボタンを固定＝往復スクロール根絶。メロ引き出し＝プリセット8＋🎲＋［＋保存］／**前面4ノブ**(細かさ/跳ね/駆け上がり/タメ)＋群アコーディオン5つ(残りノブを沈める)＋「メロを直す」(上/下ハモ・fit・診断＝メロ在時)。ドラム/ベース引き出し＝ジャンルchip前面＋フィルseg＋型直指定は「細かく」内。骨格引き出し＝構造chip。
@@ -1872,7 +1872,7 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 
 → **メロ×低音の声部進行レンズ（2026-07-09・理論不足総点検 #8・分析のみ）**。backlog和声③「完全に未監視」への回答。`analyzeVoiceLeading(upper, lower)`（voiceLeading.ts）＝並行完全5度/8度・直行(隠伏)5度/8度・声部交差を数え score(1-違反/機会) を返す**分析レンズ（生成非介入）**。`analyze question="voiceleading"`（MCP）＋ http `analyze_voiceleading`。bass 明示 or chords のルートを低域(36+pc)で代用。良し悪しの断は人間（機械は指摘まで＝設計思想）。
 
-→ **候補レンズ＝メロ候補の並べ替え眼鏡3種（WP-M3・2026-07-14）**。正典＝`docs/research/2026-07-14-research-to-implementation-plan.md` Tier1＋各研究doc（`2026-07-14-expectation-theory-melody.md`／`-earworm-hook-features.md`／`-singability-tessitura.md`）。
+→ **候補レンズ＝メロ候補の並べ替え眼鏡3種（WP-M3・2026-07-14）**。正典＝`docs/archive/2026-07-14-research-to-implementation-plan.md` Tier1＋各研究doc（`2026-07-14-expectation-theory-melody.md`／`-earworm-hook-features.md`／`-singability-tessitura.md`）。
 **思想（絶対）**：レンズは審判でない＝候補を弾かず・総合点で1本に潰さず、**選んだ軸で候補トレイを並べ替えるだけ**。レンズ未選択＝**生成順（既定 bit 一致）**。全レンズ**純TS・記号（半音move＋拍位置）のみで計算**（音源不要）＝`@cm/music-core/melodyLenses.ts`（`packages/music-core` に純関数、api/web が共有）。全レンズ headline score は**高い＝良い（上位）**に揃える。
 - **① 期待理論レンズ `expectationLens`**（M5）：句内ICカーブ（句頭=高IC／句中=順次で低IC／句末直前=こぶ／句末=低IC＝納得）への適合度 0..1。IC＝Schellenberg近接＋Narmour反転(gap-fill)の簡易サロゲート（句頭は境界=高IC固定）。句割りは休符(≥1拍)＋2小節上限で内部導出。高い＝目標カーブへ適合。
 - **② フック度レンズ `hookLens`**（M6）：F1内部反復/圧縮・F2輪郭コンヴェンショナリティ(弧)・F3局所勾配の希少度(一点際立ち)・F4順次率・F5音符密度・F6リズム規則性・F7フレーズ短さ・F8低サプライザル＋G1位置ゲート(chorus1.0/prechorus0.9/bridge0.8/verse0.7…)。**積型近似** score=position×compression×(0.7+0.3×distinctiveness)＝「大域平凡×局所一点」。反復は過剰で微減（天井）。
@@ -2318,7 +2318,7 @@ requirements「### 連想で引いて・選んで・手直しする」の設計�
   - **入口**：MCP `gen_bass` / HTTP `gen_bass` に `skeletonNetaId` を追加（gen_melody と同契約＝getNeta→kind="skeleton"検証→validateSkeletonContent→content を opts.skeleton へ）。返りに skeletonNetaId をエコー＝capture 後 `link(ベース, 骨格, "realized_from")` で紐付け。
 - **S4**：リズムパーツ層（L1/L2）。**S4-1＝L1 セクション割当ローテ DONE 2026-07-11（Task#7）**：下記【S4-1】。**S4-2＝L2 小節 placement＋採取＋インラインcustom DONE 2026-07-11（Task#8）**：下記【S4-2】。
 - **S5**：歌詞に乗せた再分割（骨格不変・表面のみ再抽選）＝Chatユースケース②と合流。最後。
-- **S6**：骨格の机＝セクション文脈IF（設計 2026-07-12・下記【S6】）。S1〜S4 の生成契約の上に乗る **web 側の器の再設計**＝S5 と独立・並行可。実装スライス D0〜D6 は `docs/research/2026-07-12-skeleton-desk-handoff.md`（Opus 委譲）。
+- **S6**：骨格の机＝セクション文脈IF（設計 2026-07-12・下記【S6】）。S1〜S4 の生成契約の上に乗る **web 側の器の再設計**＝S5 と独立・並行可。実装スライス D0〜D6 は `docs/archive/2026-07-12-skeleton-desk-handoff.md`（Opus 委譲）。
 - ノブ再編・旧経路撤去は S1-S3 の安定後に backlog「死にコード撤去」と合流。**→ J1〜J4 完了（2026-07-11〜12）**：J1=呼出グラフ全数調査（research doc）／J2a 3/4・6/4／J2b chordless／J2c fit useV2化／**J3 旧経路④撤去＝V2 一本化（下記【J3】）／J4 ③motifModel(genMotifMelody)撤去＋appoggiatura ノブ削除（下記【J4】・Task#16・api874緑）**。**倚音/掛留の三重実装（applyExpression④／V2 表情パス／genMotifMelody③）は ④撤去＋③撤去で V2 の表情パス（melodyCells.ts ~1200付近）に一元化＝完了**。旧経路撤去シリーズ #11（J1〜J4）はこれで完了。
 
   **【S4-1 リズムパーツ層 L1＝セクション割当ローテ】（設計 2026-07-11・Task#7）**
@@ -2423,7 +2423,7 @@ requirements「### 連想で引いて・選んで・手直しする」の設計�
 **維持（造語でない一般語＝改称しない）**：骨格／表面／ビート／コード／対位法／導出ベース／叩き台／窓／全終止・半終止。
 
 **動機**：S2 の SkeletonEditor は骨格を**単品**で編集する器＝伴奏文脈に対する対位法確認とセクション内試聴に向かない（オーナーの痛み）。骨格は「セクションの中で」書き・聴くものへ器を再設計する。
-**根拠（設計思考・動くモック付き）**＝`docs/research/2026-07-12-skeleton-if-redesign-memo.md`（机の本体設計）＋`docs/research/2026-07-12-desk-feel-seams-memo.md`（通しへ広げた時の縫い目監査4点）。**実装スライス（D0〜D6・Opus委譲）**＝`docs/research/2026-07-12-skeleton-desk-handoff.md`。**受け入れは全スライス2層**＝［機械］（実装役が自己完結＝TDD・bit一致・機構駆動の観測）＋［耳/手］（人間必須＝スマホ実機の試聴/触診・スライスごとに1〜3点へ的を絞ってオーナーに依頼）＝フィール/音楽の受け入れを機械に肩代わりさせない（オーナー方針 2026-07-12）。以下に出る**縫い目A〜E**ラベルは同memoの「発見した縫い目」節の見出し記号（A/B/C/E・Dは欠番）をそのまま踏襲した呼称。
+**根拠（設計思考・動くモック付き）**＝`docs/archive/2026-07-12-skeleton-if-redesign-memo.md`（机の本体設計）＋`docs/archive/2026-07-12-desk-feel-seams-memo.md`（通しへ広げた時の縫い目監査4点）。**実装スライス（D0〜D6・Opus委譲）**＝`docs/archive/2026-07-12-skeleton-desk-handoff.md`。**受け入れは全スライス2層**＝［機械］（実装役が自己完結＝TDD・bit一致・機構駆動の観測）＋［耳/手］（人間必須＝スマホ実機の試聴/触診・スライスごとに1〜3点へ的を絞ってオーナーに依頼）＝フィール/音楽の受け入れを機械に肩代わりさせない（オーナー方針 2026-07-12）。以下に出る**縫い目A〜E**ラベルは同memoの「発見した縫い目」節の見出し記号（A/B/C/E・Dは欠番）をそのまま踏襲した呼称。
 
 #### 決定事項（正典）
 - **「4つの画面」でなく「1つの机の4つの前景」**。セクション＝ループするベッド（伴奏スケッチ＝ドラム/コード/導出・明示ベース/コード楽器）を常に足元に敷き、①ビート ②コード ③骨格 ④表面 は同じタイムライン上の**前景切替**（ステージレール）。**ステージ切替で再生・ループ位置は維持**（前景切替の要）。①が空でも③は成立（ベッド最小形＝クリック＋コード）。
@@ -2464,7 +2464,7 @@ requirements「### 連想で引いて・選んで・手直しする」の設計�
 
 ## #21 コーパス遷移統計テーブル（WP-0・設計 2026-07-14）
 
-**正典**＝`docs/research/2026-07-14-corpus-db-diagnosis.md` §6.2 ＋ `docs/research/2026-07-14-skeleton-corpus-stats.md`（M2 実測・M1 仕様の穴6点）＋ `docs/research/2026-07-14-research-to-implementation-plan.md` Tier0 WP-0。
+**正典**＝`docs/research/2026-07-14-corpus-db-diagnosis.md` §6.2 ＋ `docs/research/2026-07-14-skeleton-corpus-stats.md`（M2 実測・M1 仕様の穴6点）＋ `docs/archive/2026-07-14-research-to-implementation-plan.md` Tier0 WP-0。
 
 **目的**：解析済コーパスを「生成の材料（辞書＋遷移統計）」として一級市民化する第一歩。POP909 骨格の**度数 n-gram（弱マルコフ材料）**とモチーフ**変換文法（M9）**を DB テーブルへ投入し、生成/検索から純関数で引ける。**リテラル旋律は非保存＝統計・度数・相対のみ（著作権セーフ）**。
 
@@ -2600,12 +2600,12 @@ requirements「### 連想で引いて・選んで・手直しする」の設計�
 
 **規律**：playNotes を直接呼んでよいのは playback.ts（と経由する useTransport）のみ。エディタ固有の重ね物（骨格耳・レンズ・自前プレイヘッド）は plan への後段デコレータとして各エディタに置く。vocalMode＝カード/エディタ/Chat保存済は ensure（待ちは busy 表示）、高速試聴（ピッカー/候補/toolカード）は peek（絶対に待たない・#24 の仮歌版）、歌う対象が無い面は off。previewNote（単発入力FB）は Transport 非使用の別プリミティブ＝対象外。
 
-**帰結**：カード▶の仮歌バグと FormStrip 遷移試聴の仮歌欠落（backlog）はこの一本化の副産物として解消。正典＝`docs/research/2026-07-18-playback-path-unification.md`（現状マップ・移行スライス S0〜S5・ガードレール G1 bit一致/G2 書き出し不変/G3 仮歌等値）。実装＝S1 純関数追加＋テスト → S2 driver → S3 エディタ切替(挙動不変) → S4 素通し9サイト移行(ここで両バグ解消) → S5 封鎖(playNotes を playback.ts 限定)＋実機検収。
+**帰結**：カード▶の仮歌バグと FormStrip 遷移試聴の仮歌欠落（backlog）はこの一本化の副産物として解消。正典＝`docs/archive/2026-07-18-playback-path-unification.md`（現状マップ・移行スライス S0〜S5・ガードレール G1 bit一致/G2 書き出し不変/G3 仮歌等値）。実装＝S1 純関数追加＋テスト → S2 driver → S3 エディタ切替(挙動不変) → S4 素通し9サイト移行(ここで両バグ解消) → S5 封鎖(playNotes を playback.ts 限定)＋実機検収。
 **取りこぼし是正（2026-07-18・実機で発覚）**：`playbackComposite` が**直下の melody 子しか歌い手に拾わない**＝song(kind=song)は `song→section→melody` の2段ネストで歌い手ゼロにフォールバック→**曲再生で歌わない**。修正＝任意深さの歌う melody を再帰で拾い、`compositeNotes` を位置/移調解決に再利用して muted+sungBy を付ける（G3-song テスト追加）。
 
 ## #28 曲編集画面＝縦セットリスト＋ヘッダミニマップ（2026-07-18・オーナー「推奨A」GO）
 
-**背景と是正**：曲編集（`kind=song`）は `FormStrip` で**横スクロールのカードストリップ**として出ていたが、正典 `docs/research/2026-07-16-song-form-assembly.md` §4.2 は「形＝**モバイルは縦**1列」と定めていた＝**実装が自分のスペックに違反**。本節はビュー層を縦セットリストへ作り替える＝発明でなく**仕様への復帰**。
+**背景と是正**：曲編集（`kind=song`）は `FormStrip` で**横スクロールのカードストリップ**として出ていたが、正典 `docs/archive/2026-07-16-song-form-assembly.md` §4.2 は「形＝**モバイルは縦**1列」と定めていた＝**実装が自分のスペックに違反**。本節はビュー層を縦セットリストへ作り替える＝発明でなく**仕様への復帰**。
 
 **この画面の仕事**（§4.1 の芯＝song は timeline でなく「役割の順序リスト」）：曲の設計図を一目で読む／並べ替え・反復・分家で構成を決める／セクションに潜る／継ぎ目で聴く。ミニDAWでなく**足場**。横ストリップの破綻＝実スケール（suggest_form 標準J-pop＝12〜13セクション）で390px縦画面はカード2.5枚＝**8割が画面外**、なのに下半分は毎回空白＝横の飢餓と縦の浪費が同居。謎バッジ「+5」・24pxに潰れた継ぎ目試聴・2.5枚窓で読めないエナジースカイライン、も横の帰結。
 
@@ -2617,9 +2617,9 @@ requirements「### 連想で引いて・選んで・手直しする」の設計�
 
 **畳み込む足場修正**（プレビュー掃除＋追加3点）：トランスポート下端固定（section/コード編集と同語彙）／song モードで死んでいる 鉛筆/消しゴム を隠す・いじる▾→書き出し（design L586: song の いじる は書き出しのみ）／key/tempo メタ重複解消（412px の 提案▾ 見切れも同時に解消）／段階・次の一手 を1行チップ化／追加導線は末尾1本／**分家・削除に取り消しトースト**（現行 `branchUnit`/削除は無確認・undo無し）。
 
-**リスク/範囲**：データ契約リスク0のビュー改修。触点＝`FormStrip.tsx`（units/前置和射影の再利用・dnd を縦戦略へ・分家 undo・非破壊 apply）／`SongStatus.tsx`（チップ化）／`SectionEditor.tsx`（song モードのツール隠し＋トランスポート）／`transport-cards.css`（strip→list）。**却下＝方向B「地図＋虫眼鏡」**（毎操作が選んでから・役割未設定だと地図が空帯で読めない）。正典・出典＝`docs/research/2026-07-16-song-form-assembly.md` §4.1/4.2＋モック `song-editor-redesign.html`＋実機観察 `song-editor-observations.md`。
+**リスク/範囲**：データ契約リスク0のビュー改修。触点＝`FormStrip.tsx`（units/前置和射影の再利用・dnd を縦戦略へ・分家 undo・非破壊 apply）／`SongStatus.tsx`（チップ化）／`SectionEditor.tsx`（song モードのツール隠し＋トランスポート）／`transport-cards.css`（strip→list）。**却下＝方向B「地図＋虫眼鏡」**（毎操作が選んでから・役割未設定だと地図が空帯で読めない）。正典・出典＝`docs/archive/2026-07-16-song-form-assembly.md` §4.1/4.2＋モック `song-editor-redesign.html`＋実機観察 `song-editor-observations.md`。
 
-## #29 表現力/ヒューマナイズの統一（ドラム・コード・ベース）（2026-07-18・スコープ確定→設計・正典＝docs/research/2026-07-18-drum-expressiveness-scope.md §8）
+## #29 表現力/ヒューマナイズの統一（ドラム・コード・ベース）（2026-07-18・スコープ確定→設計・正典＝docs/archive/2026-07-18-drum-expressiveness-scope.md §8）
 
 **背景**：humanize エンジン（部位別プロファイル・1/f・知覚較正済＝music-core:127-271）は完成済みだが、再生が `FeelCtx.part` を渡さず**全部位 default で休眠**。生成が書く per-hit ベロシティ `velCurve` と 12格子 `beatsPerStep` を web 再生（rhythmToNotes）が**捨てて/無視して**おり、フィルのクレッシェンドが平坦・シャッフル型が誤再生。編集UIは on/off しか無い。→「新機能」でなく**作ってある表現の回収＋露出**を3フェーズで。
 

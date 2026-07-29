@@ -518,7 +518,7 @@ return Array.from({length: d}, (_, k) => ({ ...note,
 ### 8-5. design.md へ貼る #29 ブロック（コピー用・design.md は本タスクでは触らない）
 
 ```markdown
-## #29 表現力/ヒューマナイズの統一（ドラム・コード・ベース）（2026-07-18・スコープ確定→設計・正典＝docs/research/2026-07-18-drum-expressiveness-scope.md §8）
+## #29 表現力/ヒューマナイズの統一（ドラム・コード・ベース）（2026-07-18・スコープ確定→設計・正典＝docs/archive/2026-07-18-drum-expressiveness-scope.md §8）
 
 **背景**：humanize エンジン（部位別プロファイル・1/f・知覚較正済＝music-core:127-271）は完成済みだが、再生が `FeelCtx.part` を渡さず**全部位 default で休眠**。生成が書く per-hit ベロシティ `velCurve` と 12格子 `beatsPerStep` を web 再生（rhythmToNotes）が**捨てて/無視して**おり、フィルのクレッシェンドが平坦・シャッフル型が誤再生。編集UIは on/off しか無い。→「新機能」でなく**作ってある表現の回収＋露出**を3フェーズで。
 

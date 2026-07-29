@@ -62,7 +62,7 @@ S1(6c1efc4)/S2(ede57f4,b741932)で骨格neta＋編集UIは動く。~~残＝S3群
   - ✅**#10 Note型一元化**：基本形 `Note={pitch,start,dur,vel?,syllable?}` を @cm/music-core に新設し SSOT 化。api の voiceLeading/phrase/voiceLeadingReport/evalMelody/melodyCells が import、chordDetect は `Note&{channel?}` 交差、web music.ts の Note は `extends CoreNote` へ。**派生は無理に統一せず残置**＝corpusBias/fit（start?/dur? 任意・fit は harmonize が import）。匿名インライン（generate.ts 等）は挙動不変優先で未着手＝#11 のノブ再編時に。
 - **音価(agogic)**：上の「音価バリエーション不足」項の(a)骨格に長音アンカー案は、骨格層ではdurを持たない設計（分割方式）にしたため**リズムパーツ層（S4）の長音パーツ**で実現する方針に変わった（design #20）。
 - **S4-2 L2 の web 小節ペイントUI（未実装・着手時Task化）**：S4-2（Task#8）で placement（小節ごとにパーツ名指し）＋custom（インラインパーツ）＋採取（extract_rhythm_part）は **api/MCP に実装済＝Claudeチャット経由で使える**が、web は L1 の rotate ピッカーのみ（現状維持）。bar 単位でパーツを塗る/採取ボタン→customに積む UI は大きいので送り。着手時は SectionEditor のメロ生成ノブ段に「小節×パーツ」グリッド＋「このメロから採取」を足す（design #20 S4-2 参照）。
-- **骨格の机**（『机』＝design #20 S6 の設計語。UI では骨格エディタ）**（design #20 S6・2026-07-12設計確定）から明示的に送った分**（**実装スライスD0〜D6は実装済＝2026-07-12全mainコミット**・handoff=`docs/research/2026-07-12-skeleton-desk-handoff.md`・以下は明示的に送った分＝着手したらTask化）：
+- **骨格の机**（『机』＝design #20 S6 の設計語。UI では骨格エディタ）**（design #20 S6・2026-07-12設計確定）から明示的に送った分**（**実装スライスD0〜D6は実装済＝2026-07-12全mainコミット**・handoff=`docs/archive/2026-07-12-skeleton-desk-handoff.md`・以下は明示的に送った分＝着手したらTask化）：
   - **B本格＝変更来歴の永続追跡**：コード区間→依存骨格接点の逆引きをDB/relationに持ち、共有 chord_progression の編集が**別セクション**の骨格対位を腐らせた時に波及通知（背骨レールの「B波及」バッジ含む）。机内のセッション内 stale（B-lite・D6）で価値を実測してから。realized_from 逆引きと同じ建付け。
   - **E＝曲レベル楽器の遷移試聴**：前セクション末小節→次セクション頭小節を鳴らす、セクション間の遷移試聴（縫い目E裁定）。机はセクション楽器＝曲レベルは別楽器（song エディタ側）・共有は transport/ループ選択/保存済みネタ（設計語：在庫）のみ（design S6 の線引き）。
   - **単品 SkeletonEditor の撤去/共通化判断**：机の実使用後。ロール部品の共用抽出（SkeletonRoll）と同時に。
@@ -170,7 +170,7 @@ J-POP特効＝サブドミナントマイナー(♭6→5)・偽終止の構成�
 - ✅**ノート編集の拡充**（2026-07-02 実装・design N1-N3・案A）：ロールに[描く]/[選ぶ]トグル＋タップ選択(複数)＋選択バー(複製/コピー/貼付/削除/←→↑↓nudge移動)。`noteEdit.ts`純ロジックTDD6・Undo自動連動・選択=黄枠。web227緑・Playwright実機OK。**残＝範囲マーキー・ドラッグ移動(v2)**。
 - **ベロシティ/強弱編集**（メロは今も一律100・`PianoRoll.tsx:22`「後回し」コメント／2026-07-21確認：**コード楽器・ドラムには縦ドラッグ=vel の強弱編集が既にある**＝`useHoldDrag.ts`／ChordPatternEditor／RhythmEditor。メロの PianoRoll だけ未＝この足場を流用可）：ロールで音符別 vel/音量カーブ。**humanize の土台**。
 ### B. 一曲に仕上げる
-- **曲フォーム組み立て**（設計確定＝`docs/research/2026-07-16-song-form-assembly.md`・design「#曲フォーム」)：S1フォームストリップ・S2分家＝実装済(2026-07-16)。残＝S3つなぎ結線（form/key/energy verb の UI 結線＋遷移試聴）・S4パーキング（セクション別テンポ/feel・variant のネタ一覧畳み・song undo/redo）。
+- **曲フォーム組み立て**（設計確定＝`docs/archive/2026-07-16-song-form-assembly.md`・design「#曲フォーム」)：S1フォームストリップ・S2分家＝実装済(2026-07-16)。残＝S3つなぎ結線（form/key/energy verb の UI 結線＋遷移試聴）・S4パーキング（セクション別テンポ/feel・variant のネタ一覧畳み・song undo/redo）。
 - **CoWガードの残経路＝applyLoopのみ**（S3-aでブロック削除・ピッカー/候補配置はガード済 2026-07-16）：右端ドラッグのループ伸ばし（applyLoop）だけ共有sectionでガード外。同種の辺操作＝guardAction流用で小さく塞げる。
 - **S3-b（design「#曲フォーム」より）**：境界の準備和音候補（gen_chords transition を分家コード子の末尾差し替え候補として出す＝コード子forkのUX設計が要る）・energyの生成既定結線（frame.section.energy へ渡す経路）・energy永続（song overlay に JSON 列＝loopの前例）。
 - **機械変奏の分家着地**（design「#曲フォーム」将来スライス①）：reshape/revise/emotion_shift/continue の出力を「分家として保存」する出口＝候補N→人が選ぶ→`variant_of` 付きで着地。motif-transform-stats の実測（ゆるい変奏60-73%・リズム保存）を既定パラメータの受け皿に。
@@ -211,7 +211,7 @@ J-POP特効＝サブドミナントマイナー(♭6→5)・偽終止の構成�
   ネット検索が要るなら MCP に research/web ツールを追加（要・到達/プライバシー判断）。
 
 ## 片付け（小〜中）
-- **FormStrip「つなぎを試聴（♪）」が仮歌(歌声)を通していない**（2026-07-17・F1網羅監査#5で発見）：`apps/web/src/components/FormStrip.tsx:269-272` は `compositeNotes`→`playNotes` のみで `getVocal`/`useVocalRender` を使わない＝メロを「歌声」に設定した section の遷移試聴で、その声パートが歌わず（フォールバック楽器 or 無音）鳴る。**表示でなく再生内容の欠落**（F1ローディング表示のスコープ外）。塞ぎ方＝`useVocalRender` を FormStrip に結線し `playNotes` に `vocal` を渡す（SectionEditor の再生経路が参照実装）。**→ design.md #27（再生経路一本化）の S4 で構造的帰結として解消予定＝独立パッチにしない**（正典 `docs/research/2026-07-18-playback-path-unification.md`）。
+- **FormStrip「つなぎを試聴（♪）」が仮歌(歌声)を通していない**（2026-07-17・F1網羅監査#5で発見）：`apps/web/src/components/FormStrip.tsx:269-272` は `compositeNotes`→`playNotes` のみで `getVocal`/`useVocalRender` を使わない＝メロを「歌声」に設定した section の遷移試聴で、その声パートが歌わず（フォールバック楽器 or 無音）鳴る。**表示でなく再生内容の欠落**（F1ローディング表示のスコープ外）。塞ぎ方＝`useVocalRender` を FormStrip に結線し `playNotes` に `vocal` を渡す（SectionEditor の再生経路が参照実装）。**→ design.md #27（再生経路一本化）の S4 で構造的帰結として解消予定＝独立パッチにしない**（正典 `docs/archive/2026-07-18-playback-path-unification.md`）。
 - ~~**Chat.tsx 旧ジョブ経路の死にコード撤去**~~ → ✅撤去済（2026-07-05・A案）。`runJob`/`handleConsult`/
   `waitForJob`/`finishWait`/`pick`/`applyProposal`/`saveRef`＋`ProposalCard`/`ProposalGroup`＋型＋`waitInfo`/
   `cancelWait`＋死にCSS を除去。承認/トレイ配送/待たずに戻る の **UX 契約は design.md「Chat 旧ジョブ流路を撤去」

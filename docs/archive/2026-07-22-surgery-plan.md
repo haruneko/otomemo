@@ -193,7 +193,7 @@ S7 のみ＝未知 prop は React が無視）。ゲートの発効＝両方着�
 ## 3. design.md 追記文案（そのまま貼れる形・修理#2 ブロックの直後に挿入）
 
 ```markdown
-### H1/H2 残工事の一括裁定（修理#3・2026-07-22・正典＝`docs/research/2026-07-22-surgery-plan.md`＋監査 `2026-07-22-performance-editing-architecture-audit.md`／統一原理＝`2026-07-22-melody-pattern-thought-experiment.md`）
+### H1/H2 残工事の一括裁定（修理#3・2026-07-22・正典＝`docs/archive/2026-07-22-surgery-plan.md`＋監査 `2026-07-22-performance-editing-architecture-audit.md`／統一原理＝`2026-07-22-melody-pattern-thought-experiment.md`）
 修理#1/#2 が残した工事（監査 工事順6-7・feel の家 C-6・patternId 乖離 B-5・共有バッジ・管弦への帯誤適用）を一括裁定。
 鉄則は従来どおり**既定 bit 一致**。例外は②（相対 opt-in 出力の golden 更新）と③（feel 保持＝バグ修正）のみ＝下で個別に正当化。
 - **決定①：feel の家（C-6・バグ根治込み）**。`useNetaEditor.savePatch()` が content を既知キーで再構成するため

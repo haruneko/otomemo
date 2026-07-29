@@ -1,7 +1,7 @@
 # 「いじる」メニュー抜本再設計 — パーツの棚＋引き出し（2026-07-14・Fable）
 
 > 状態＝**設計提案（実装なし・モック有り）**。オーナー評「（いじるメニューが）煩雑すぎてヤバい」への回答。
-> 一次資料＝[2026-07-14-tinker-menu-inventory](2026-07-14-tinker-menu-inventory.md)（38論理コントロール・タップ標的88・縦1756px=画面2.5枚・半年で18→38の2.1倍）＋実UIスクショ21枚＋`SectionEditor.tsx`/`useMelodyGen.tsx` HEAD精読。
+> 一次資料＝[2026-07-14-tinker-menu-inventory](../research/2026-07-14-tinker-menu-inventory.md)（38論理コントロール・タップ標的88・縦1756px=画面2.5枚・半年で18→38の2.1倍）＋実UIスクショ21枚＋`SectionEditor.tsx`/`useMelodyGen.tsx` HEAD精読。
 > 過去研究3本（[tinker-ux-redesign](2026-07-10-tinker-ux-redesign.md)/[param-clarity](2026-07-10-melody-param-clarity.md)/[menu-consolidation](2026-07-10-melody-menu-consolidation.md)）の未達分（前面4本・マイ設定）も本設計で回収する。
 > **動くモック＝[2026-07-14-tinker-menu-redesign-mock.html](2026-07-14-tinker-menu-redesign-mock.html)**（単一ファイル・390px・Before/After切替・スマホで指で試せる）。
 

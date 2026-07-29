@@ -82,7 +82,7 @@
 | 17 | 作業しながらの解説を厚めに。簡潔な完了報告だけでは薄い（本人評「もうちょい」） | feedback-explain-while-working | 残す。**Why欄の「設計を細かく詰めたい人」という推測参照を、引用ベースの表現（「理解が作業ペースに追いつくのが大事・『もうちょい』＝適度に厚く」）に一語修正**（#13の推測文削除と整合） |
 | 18 | 難しい判断・大量コードの抽象化＝Fable、それ以外＝Opus以下。Fableにもコードは自前で読ませる | feedback-delegate-to-cheaper-models | 現役・引用付き＝残す。**削除する3本から運用の学びを吸収**（§3-2に追記案）：①並行実装のstaging作法 ②実装者と別の独立監査役を立てると実際にブロッカーが見つかる ③歌詞の創作判断はFable指定（本人指示2026-07-15） |
 | 19 | スタックの起動・停止・e2eの回し方と、プロセスまわりの罠（子nodeがポート握る等） | reference-run-stack-and-e2e | 現役の一次資料＝残す。**削除するUI総点検メモから罠2行を吸収**（pkill -f の自己マッチexit 144・サンドボックスapiはapps/apiから起動）＋**「再起動はrestartスキルあり」を1行追記**（.claude/skills/restart 実在確認済み） |
-| 20 | 次の開発戦略＝生成器を増やすより足場。P2「自作曲の資産化→個人コーパス」が要石 | project-next-dev-plan-p0 | 戦略の芯（B型）は現役＝残す。**進捗記述を全部落として5行程度に**：芯＋正準ポインタ（`docs/research/2026-07-07-next-dev-plan.md`）＋**注意1行「計画doc冒頭の痛点リストは実装済で古い（2026-07-08実コード検証）。現況はTask/backlogが正準」**。ベロシティ編集OPEN等の個別項目は#29実装で一部消化済（git 752cb65/f315b7b）＝残タスク列挙はしない |
+| 20 | 次の開発戦略＝生成器を増やすより足場。P2「自作曲の資産化→個人コーパス」が要石 | project-next-dev-plan-p0 | 戦略の芯（B型）は現役＝残す。**進捗記述を全部落として5行程度に**：芯＋正準ポインタ（`docs/archive/2026-07-07-next-dev-plan.md`）＋**注意1行「計画doc冒頭の痛点リストは実装済で古い（2026-07-08実コード検証）。現況はTask/backlogが正準」**。ベロシティ編集OPEN等の個別項目は#29実装で一部消化済（git 752cb65/f315b7b）＝残タスク列挙はしない |
 | 21 | このプロジェクトが何か＝常時起動機で作る作曲支援ツール、という入口 | project-creative-manager | 12.7KBの2026年6月実装クロニクル（テスト数の変遷・監査3巡…）は**全部git logとdesign.mdで再現可能＝破棄**。**約6行に書き直す**：一言コンセプト（正準=requirements.md）＋アーキ一言（正準=architecture.md・作曲MCP＋薄いClaudeラッパー）＋母艦環境1行（GMKTec K8-Plus/WSL2/32GB）＋「進捗の正準はTask・backlog・git log。歴史スナップショット=docs/status.md（凍結）」 |
 
 ### 2-3. 統合する（11本 → 新設「トラック地図」1本）
@@ -182,7 +182,7 @@ metadata:
 top3が全部実装済だった）。backlog/designにも鮮度ズレの前科あり。
 
 **How to apply:** 誇張を計画に混ぜない。着手前に現物確認。検証責任の考え方は
-docs/research/2026-07-18-why-unread-code-worked.md と接続。
+docs/archive/2026-07-18-why-unread-code-worked.md と接続。
 ```
 
 `feedback-delegate-to-cheaper-models` への追記（末尾に節を足す）：

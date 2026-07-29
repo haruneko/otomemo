@@ -3,7 +3,7 @@ import { KindIcon } from "./KindIcon";
 import { Icon } from "./Icon";
 import { ImportPanel } from "./ImportPanel";
 
-// 作成の棚（トップ再設計 S2・正準＝docs/research/2026-07-14-topview-redesign-fable.md §3.1/§7）。
+// 作成の棚（トップ再設計 S2・正準＝docs/archive/2026-07-14-topview-redesign-fable.md §3.1/§7）。
 // ＝ホームの作成タイル（PARTS/BUILD_TEXT・同じ絵/順）＋取込を1つの**ボトムシート**に集約。姉妹の
 // TinkerSheet（いじる＝棚）と同じ設計言語。トップの `＋作る▾` 1ボタンで開く（トップから .create-tiles が消える）。
 // state/API は App が唯一持ち、当コンポは器（JSX）のみ＝タイルtap＝既存 createBlank/newSong をそのまま呼ぶ

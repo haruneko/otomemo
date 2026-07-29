@@ -5,7 +5,7 @@ import { useMelodyGen, MELODY_PRESETS, GEN_PARTS, RHYTHM_PART_UI, COMP_GENRE_CHI
 import type { ChordArg } from "../useMelodyGen";
 import type { Feel, Note } from "../music";
 
-// 「いじる」ボトムシートの中身（design #19 ⑥・正準＝docs/research/2026-07-14-tinker-menu-redesign-fable.md）。
+// 「いじる」ボトムシートの中身（design #19 ⑥・正準＝docs/archive/2026-07-14-tinker-menu-redesign-fable.md）。
 // ＝ハブ（パーツの棚・スクロール0）＋パーツ別引き出し。状態と送信ロジックは useMelodyGen(gen) が唯一持つ
 // ＝当コンポは器（JSX/CSS）のみ＝生成 payload は bit 一致（0/""非送信は genPart に閉じたまま）。
 //

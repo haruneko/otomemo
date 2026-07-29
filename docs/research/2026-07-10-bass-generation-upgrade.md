@@ -2,7 +2,7 @@
 
 目的＝`genBass`（`apps/api/src/music/generate.ts:919-953`）を「ドラムに噛む・音楽的なベースライン」へ強化するための理論裏取り。将来 `gen_bass` に**ドラムのステップ列（genDrums 出力＝16分グリッドの kick/snare lanes）を入力**として渡す前提。~~実装はしない＝調査とドキュメント化のみ~~ → **④の D/A+B/C は実装済（2026-07-10・design「gen_bass×ドラム結線」・テスト＝`apps/api/test/gen-bass-drums.test.ts`）**。最終更新 2026-07-10。
 
-姉妹doc：[2026-07-10-melody-groove-drum-interaction](2026-07-10-melody-groove-drum-interaction.md)（メロ×ドラム）。**本docは同じ設計原理を踏襲**＝①既定=係数0で従来bit一致②「揃えすぎ禁止」（Keil participatory discrepancies／phenomenal accent 理論、詳細は姉妹docの[②理論](2026-07-10-melody-groove-drum-interaction.md#-理論キーワード別各に出典url)）③ドラム content 無しなら全て無効。他関連：[2026-07-07-drums-bass-extraction-plan](2026-07-07-drums-bass-extraction-plan.md)（実録音からのベース抽出＝本docの「生成」の逆方向）・[sixteenth-rhythm](sixteenth-rhythm.md)（シンコペの2段モデル）。
+姉妹doc：[2026-07-10-melody-groove-drum-interaction](2026-07-10-melody-groove-drum-interaction.md)（メロ×ドラム）。**本docは同じ設計原理を踏襲**＝①既定=係数0で従来bit一致②「揃えすぎ禁止」（Keil participatory discrepancies／phenomenal accent 理論、詳細は姉妹docの[②理論](2026-07-10-melody-groove-drum-interaction.md#-理論キーワード別各に出典url)）③ドラム content 無しなら全て無効。他関連：[2026-07-07-drums-bass-extraction-plan](../archive/2026-07-07-drums-bass-extraction-plan.md)（実録音からのベース抽出＝本docの「生成」の逆方向）・[sixteenth-rhythm](sixteenth-rhythm.md)（シンコペの2段モデル）。
 
 ---
 
@@ -163,7 +163,7 @@ for each note n:
 3. **アプローチノートの音価/位置**＝beat4 の♩か、その裏の♪か。テンポ依存（速い曲は♪だと忙しい）。実機で耳確認。
 4. **交互ベース（R-5下）の判別**＝「図形の中の5度下は無害・持続の5度下は 6/4」の境界を実装でどう引くか（前後 onset 間隔で判定する素案だが要検証）。
 5. **音域窓の拡張（36..47→33..55）と synth の鳴り**＝web 側の音作りが C2 基準。G3 付近が痩せないか耳確認（[modeの結線教訓]＝品質変更後は耳確認必須）。
-6. **コーパス統計での既定値決め**＝自作/解析済み音源の demucs bass+drums stem（[2026-07-07-drums-bass-extraction-plan](2026-07-07-drums-bass-extraction-plan.md)＝追加コストゼロで取れる）から「ベース onset がキック step と共有される率」「2・4での発音率」「音価分布」を**統計のみ**抽出（リテラルなライン非保存）＝kickLock/snareGap の既定強度の実測根拠に。
+6. **コーパス統計での既定値決め**＝自作/解析済み音源の demucs bass+drums stem（[2026-07-07-drums-bass-extraction-plan](../archive/2026-07-07-drums-bass-extraction-plan.md)＝追加コストゼロで取れる）から「ベース onset がキック step と共有される率」「2・4での発音率」「音価分布」を**統計のみ**抽出（リテラルなライン非保存）＝kickLock/snareGap の既定強度の実測根拠に。
 7. **ゴーストノートの表現力**＝SF2/synth で vel 30-50 のベースがゴーストらしく鳴るか（減衰・ミュート感が無いと只の小さい音）。鳴らないなら実装しても無意味＝先に音を確認。
 8. **microtiming（ms オーダー）**＝本docはグリッド内配置のみ。ベースの humanize（キックに対し数ms遅らせる等、[MusicRadar 同上]の「few ticks later」）は humanize 器（[2026-07-09-brushup-audit-5areas](2026-07-09-brushup-audit-5areas.md) E）の守備範囲として分離。
 

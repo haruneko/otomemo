@@ -1,5 +1,5 @@
 // #27 再生経路の一本化・解決層（buildPlayback / playbackComposite / vocalJobsOf）の契約テスト。
-// 正典＝docs/research/2026-07-18-playback-path-unification.md §4 ガードレール。
+// 正典＝docs/archive/2026-07-18-playback-path-unification.md §4 ガードレール。
 //  G1 bit一致：歌わないソースは各サイトの手組みペイロードと深い等値・vocalJobs=[]。
 //  G2 書き出し不変：compositeNotes は muted/sungBy を一切含まない（playbackComposite とは別）。
 //  G3 仮歌等値：歌うフィクスチャで vocalJobsOf(plan.notes) が現行 singingJobs / 単体 buildVocalJob と等値。

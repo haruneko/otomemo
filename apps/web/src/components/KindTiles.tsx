@@ -10,7 +10,7 @@ function zeroHint(k: string): string {
     : `${label}：まだ0件（取込・解析で増えると現れる）`;
 }
 
-// 種別ミニタイル（トップ再設計 S3・正準＝docs/research/2026-07-14-topview-redesign-fable.md §10）。
+// 種別ミニタイル（トップ再設計 S3・正準＝docs/archive/2026-07-14-topview-redesign-fable.md §10）。
 // オーナーFB「作る側(タイル)に絵を寄せたい」を受け、種別フィルタを作成タイルと同じ視覚言語のミニタイル
 // （KindIcon絵柄・レーン色・角丸）へ。件数はタイル右上の**小バッジ**（未読バッジ隠喩）。
 // ・variant="row"  … トップの種別行（上位6・横スクロール1行固定・トップ契約§2.2）

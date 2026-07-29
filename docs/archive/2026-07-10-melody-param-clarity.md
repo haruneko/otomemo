@@ -154,7 +154,7 @@ web定数（state一括セット・**API不変**）。**「0=非送信でbit一�
 - **跳ねる**：`swing`0.6が主役（裏拍3連2/3）＋`push`0.3で軽いツッコミ＝前ノリのハネ。`density`0.5は詰めすぎず跳ねを聴かせる。
 - **走る**：`runs`0.7＋`density`0.8＝16分連続が主。`swing`ほぼ0（ハネると走りが濁る）＝ストレートで疾走。[melody-16th-scalar-run](2026-07-10-melody-16th-scalar-run.md) の同音潰れ対策が効く前提。
 - **きらきら**：`density`0.7＋`runs`0.5で細かく＋`foreground`0.5で跳躍/自由材料を混ぜ"上物"的な煌めき。`expression`0.4でわずかにタメ。
-- **歌もの**：`phrasing:symmetric` で問い→答えの2小節句＝歌の骨＋`hook`0.5/`articulation`0.4/`motifMode:preserve` で口ずさめる反復を"ほどよく"。`density`中庸で言葉が乗る隙間。根拠＝反復音フックは歌の記憶に効く（[motivic-repeated-note-melody](2026-07-10-motivic-repeated-note-melody.md)）。
+- **歌もの**：`phrasing:symmetric` で問い→答えの2小節句＝歌の骨＋`hook`0.5/`articulation`0.4/`motifMode:preserve` で口ずさめる反復を"ほどよく"。`density`中庸で言葉が乗る隙間。根拠＝反復音フックは歌の記憶に効く（[motivic-repeated-note-melody](../research/2026-07-10-motivic-repeated-note-melody.md)）。
 - **口ずさめる（フック）**：`hook`0.8を主役に**同音反復を強く保持**＋`articulation`0.6で連打が1本に潰れず粒立つ（micropause・`melodyCells.ts:1393`）＋`foreground`0.1で反復から離れさせない＝サビの記憶フック。**hook本領の`motifMode:preserve`併用**が要（`mcp.ts:521`）。
 
 ### 5.3 レイヤー扱い（プリセットに畳まない2本）
@@ -194,13 +194,13 @@ web定数（state一括セット・**API不変**）。**「0=非送信でbit一�
 - **API契約差分ゼロ**：`mcp.ts:521` schema／`melodyCells.ts` opts／`http.ts` 不変。変更は `SectionEditor.tsx` の表示・ラベル文言・web プリセット定数のみ（[tinker-ux-redesign](2026-07-10-tinker-ux-redesign.md)/[melody-menu-consolidation](2026-07-10-melody-menu-consolidation.md) と同じ鉄則）。
 - **既定bit一致**：値0のノブは非送信（§5）。プリセット「おまかせ」＝全OFF＝従来生成。
 - **先行docとの関係**：器＝[tinker-ux-redesign](2026-07-10-tinker-ux-redesign.md)（ボトムシート/候補視覚化/サイコロ）、二段化＝[melody-menu-consolidation](2026-07-10-melody-menu-consolidation.md)（基本4＋詳細＋counter3択）。**本doはその上に載る「言葉・分類・プリセット値」を確定**＝三者で「いじる」UXの言葉と器が揃う。
-- **hook/articulation の音楽的根拠**＝[motivic-repeated-note-melody](2026-07-10-motivic-repeated-note-melody.md)（反復音フック＝弧と別系統・Phase2動機保存）。プリセット「口ずさめる/歌もの」がその成果の出口。
+- **hook/articulation の音楽的根拠**＝[motivic-repeated-note-melody](../research/2026-07-10-motivic-repeated-note-melody.md)（反復音フック＝弧と別系統・Phase2動機保存）。プリセット「口ずさめる/歌もの」がその成果の出口。
 - **設計思想**：プリセット主役＝機械が"当たりの候補"を先に出す／サイコロ中心＝ばらつき／耳語ラベル＝作曲家に通る足場／モバイル一画面＝群折り畳み。ど真ん中。
 
 ## 8. 残課題（【要実機・耳】）
 - 段ラベル閾値・オノマトペ・**プリセット全7個の値**は音を聴いて較正（本doは素案）。
 - foreground↔hook の「上げ合ったら片方下げる」連動を入れるか（任意・§2）。
-- 「おまかせ」以外に**役割別プリセット**（verse/chorus）を足すか＝[section-role-framing](2026-07-10-section-role-framing.md) のrole別対応表と統合余地（別スコープ）。
+- 「おまかせ」以外に**役割別プリセット**（verse/chorus）を足すか＝[section-role-framing](../research/2026-07-10-section-role-framing.md) のrole別対応表と統合余地（別スコープ）。
 - ラベル改名の最終確定（走句→駆け上がり等）はオーナー承認待ち＝**言葉は本人に通るかが正**。
 </content>
 </invoke>
