@@ -59,6 +59,8 @@ function Harness({ notes0, lyric0 }: { notes0: Note[]; lyric0?: LyricLayer }) {
 }
 const lyricJson = (): LyricLayer | null => JSON.parse(screen.getByTestId("lyric-json").textContent!);
 const notesJson = (): Note[] => JSON.parse(screen.getByTestId("notes-json").textContent!);
+/** 「読みを反映」を押す＝読みを取って音符へ写す唯一の契機（2026-07-30 改訂・design §31-3(d)）。 */
+const applyReading = () => userEvent.click(screen.getByLabelText("lyric-apply-reading"));
 
 beforeEach(() => {
   readings.mockReset();
@@ -86,9 +88,18 @@ describe("PianoRoll：詞を書く入口（design §31-9）", () => {
     expect(lyricJson()!.phrases[0]!.beats).toBe(4); // 音符0個でも下限1小節＝範囲が0にならない
   });
 
-  it("読みを取ると音符に読みが載る（漢字仮名交じりでも1字1音に化けない）", async () => {
+  it("打っただけでは読みを頼まない＝機械は勝手に動かない（明示適用・2026-07-30 改訂）", async () => {
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await new Promise((r) => setTimeout(r, 800)); // 旧デバウンス（500ms）より長く待つ
+    expect(readings).not.toHaveBeenCalled();
+    expect(notesJson().every((n) => n.syllable === undefined)).toBe(true); // 音符も動かない
+  });
+
+  it("「読みを反映」を押すと音符に読みが載る（漢字仮名交じりでも1字1音に化けない）", async () => {
+    render(<Harness notes0={fiveNotes()} />);
+    await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(notesJson().map((n) => n.syllable)).toEqual(["あ", "め", "の", "ひ", "わ"]), { timeout: 3000 });
     // 控えは「この表記のもの」として句に残る＝表記を直したら使わない、が成り立つ
     expect(lyricJson()!.phrases[0]!.reading!.forText).toBe("雨の日は");
@@ -98,6 +109,7 @@ describe("PianoRoll：詞を書く入口（design §31-9）", () => {
     // モーラ5・音符2＝字余り。flowLyric（合わせる）なら音符が割れるが、詞を打っただけでは割れない。
     render(<Harness notes0={[{ pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 1, dur: 1 }]} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
     const ns = notesJson();
     expect(ns).toHaveLength(2); // 増えない
@@ -108,8 +120,9 @@ describe("PianoRoll：詞を書く入口（design §31-9）", () => {
   it("読みは句をまとめて1回だけ頼む（1句ずつ呼ばない）", async () => {
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(readings).toHaveBeenCalled(), { timeout: 3000 });
-    expect(readings).toHaveBeenCalledTimes(1); // 1文字ごとに呼ばない（打ち終わりを待ってから1回）
+    expect(readings).toHaveBeenCalledTimes(1); // 1文字ごとに呼ばない（押したときに1回）
     expect(readings).toHaveBeenCalledWith(["雨の日は"]); // 句の表記の配列＝まとめて渡す
   });
 
@@ -127,26 +140,40 @@ describe("PianoRoll：詞を書く入口（design §31-9）", () => {
     readings.mockRejectedValue(new Error("venv 無し"));
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(screen.getByLabelText("lyric-reading-state")).toHaveTextContent("読みが取れませんでした"), { timeout: 3000 });
     expect(lyricJson()!.phrases[0]!.text).toBe("雨の日は"); // 表記は消えない
     expect(notesJson().every((n) => n.syllable === undefined)).toBe(true); // 音符は触らない
     expect(notesJson()).toHaveLength(5);
   });
 
-  it("失敗したあと「読みを取り直す」で頼み直せる", async () => {
+  it("失敗したあと「読みを反映」を押し直せる", async () => {
     readings.mockRejectedValueOnce(new Error("venv 無し"));
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(screen.getByLabelText("lyric-reading-state")).toHaveTextContent("読みが取れませんでした"), { timeout: 3000 });
-    await userEvent.click(screen.getByLabelText("lyric-reading-refresh"));
+    await applyReading();
     await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
     expect(readings).toHaveBeenCalledTimes(2);
+  });
+
+  it("読みが同じままでも押せば音符へ写し直す（取り消しのあとに戻せる）", async () => {
+    const lyric0: LyricLayer = {
+      phrases: [{ id: "p1", start: 0, beats: 8, text: "雨の日は", reading: { forText: "雨の日は", ...AME } }],
+    };
+    render(<Harness notes0={fiveNotes()} lyric0={lyric0} />);
+    await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 }); // 開いた時点の写し
+    expect(readings).not.toHaveBeenCalled(); // 控えが新しい＝機械に聞き直さない
+    await applyReading();
+    await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
   });
 
   it("1句だけ読めなかった場合（results[i].error）も読みが取れませんでしたと出す・音符は触らない", async () => {
     readings.mockResolvedValue([{ words: [], moras: [], hl: null, breaks: [], error: "解析に失敗" }]);
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(screen.getByLabelText("lyric-reading-state")).toHaveTextContent("読みが取れませんでした"), { timeout: 3000 });
     expect(notesJson().every((n) => n.syllable === undefined)).toBe(true);
   });
@@ -212,6 +239,7 @@ describe("PianoRoll：打ったものが黙って消えない", () => {
 
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨");
+    await applyReading();
     await waitFor(() => expect(readings).toHaveBeenCalled(), { timeout: 3000 }); // 読み取りが走り出した
 
     // 返りを待つあいだに続きを打つ
@@ -261,6 +289,7 @@ describe("PianoRoll：印（赤黄）が句の読みから出る", () => {
     const descending: Note[] = [67, 65, 64, 62, 60].map((pitch, i) => ({ pitch, start: i, dur: 1 }));
     render(<Harness notes0={descending} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
     await waitFor(() => expect(document.querySelectorAll(".proll-fit-mark").length).toBeGreaterThan(0), { timeout: 3000 });
   });
@@ -270,6 +299,7 @@ describe("PianoRoll：印（赤黄）が句の読みから出る", () => {
     const along: Note[] = [60, 64, 64, 64, 64].map((pitch, i) => ({ pitch, start: i, dur: 1 }));
     render(<Harness notes0={along} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
     expect(document.querySelectorAll(".proll-fit-mark").length).toBe(0); // 凡例の .fit-red は数えない
   });
@@ -280,6 +310,7 @@ describe("PianoRoll：句と音符の関係を言う", () => {
   it("音符が5・モーラが5なら『ちょうど』と言う", async () => {
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toBeInTheDocument(), { timeout: 3000 });
     expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("ちょうど");
   });
@@ -287,6 +318,7 @@ describe("PianoRoll：句と音符の関係を言う", () => {
   it("音符が2・モーラが5なら『字余り3』と言う（機械は詰めない・音符も増やさない）", async () => {
     render(<Harness notes0={[{ pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 1, dur: 1 }]} />);
     await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await applyReading();
     await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toBeInTheDocument(), { timeout: 3000 });
     expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("字余り3");
     expect(notesJson()).toHaveLength(2); // 言うだけ＝音符は増えない

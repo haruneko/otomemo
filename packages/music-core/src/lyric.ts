@@ -125,7 +125,7 @@ export function moraLinesForDisplay(text: string): { line: string; n: number; un
 // 詞を打っただけで音符が割れてはいけない。読みを写すだけなら placeMoras（下）を使う。
 
 const MORA_FLOOR = 0.25; // 16分。これ以上は音符を分割しない
-const MELISMA = "ー";    // 余った音符に載せる母音継続（sing.ts と PianoRoll がこの文字を読む）
+const MELISMA = "ー";    // 母音継続（sing.ts と PianoRoll がこの文字を読む）。flowLyric の余り音符にだけ使う（placeMoras は書かない＝§31-2 契約3）
 
 /** flowLyric / placeMoras が触る音符の最小形（pitch 等の他フィールドは素通し）。 */
 export interface LyricNoteLike {
@@ -195,8 +195,11 @@ export function notesInRange<T extends { start: number }>(notes: readonly T[], r
  * 契約（テストで縛る・design §31-2）：
  *  1. 純関数・非破壊。返りから syllable を取り除くと入力と完全一致（数・順序・start・dur・pitch・vel）。
  *  2. 範囲外の音符は syllable も含めて一切触らない（他の句・手打ちかなを壊さない）。
- *  3. 範囲内の音符へ頭から1対1。音符が余れば「ー」（メリスマ）。**モーラが余れば書かない＝音符は増えない。**
- *     余りの数はここでは言わない（言い分けは phraseStatus が別に言う）。
+ *  3. 範囲内の音符へ頭から1対1。**音符が余っても書かない＝余り音符の syllable は空にする**（かなが空の
+ *     音符は仮歌の既定「ラ」で鳴る＝sing.ts の DEFAULT_MORA・2026-07-29 オーナー裁定）。**モーラが余れば
+ *     書かない＝音符は増えない。** 余りの数はここでは言わない（言い分けは phraseStatus が別に言う）。
+ *     旧契約（余り音符に「ー」を自動で書く）は 2026-07-30 に廃止＝「あとN音」表示と矛盾し、
+ *     詞モードの手打ちかなを写し直しで消していた（design §31-2 契約3 改訂）。
  *  4. 導出（表記→モーラ）／割付（この関数）／音符の作り替え（flowLyric）は別の段。
  *
  * moras が空＝読みがまだ無い（読み取り失敗を含む）とみなし、**何も書かない**（写しを消さない）。
@@ -211,7 +214,10 @@ export function placeMoras<T extends { start: number; syllable?: string }>(
   const order = notesInRange(notes, range);
   for (let i = 0; i < order.length; i++) {
     const ni = order[i]!;
-    out[ni] = { ...out[ni]!, syllable: i < moras.length ? moras[i]! : MELISMA } as T;
+    const nn = { ...out[ni]! } as T;
+    if (i < moras.length) nn.syllable = moras[i]!;
+    else delete (nn as { syllable?: string }).syllable; // 余り音符には書かない（契約3・仮歌は既定「ラ」）
+    out[ni] = nn;
   }
   return out;
 }

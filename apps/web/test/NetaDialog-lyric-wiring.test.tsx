@@ -79,6 +79,8 @@ describe("NetaDialog → 歌詞（句）の受け渡し", () => {
   it("読みは1回まとめて取りに行き、音符のかなが読みどおりになる（音符は増えない）", { timeout: 30_000 }, async () => {
     render(<NetaDialog neta={melody} onClose={vi.fn()} onChanged={vi.fn()} />);
     await userEvent.type(await screen.findByLabelText("lyric-text"), "雨の日は");
+    // 読み取りの契機は「読みを反映」だけ（2026-07-30 改訂・design §31-3(d)）＝押すまで機械は動かない。
+    await userEvent.click(screen.getByLabelText("lyric-apply-reading"));
     await waitFor(() => expect(readings).toHaveBeenCalledTimes(1), { timeout: 15_000 });
     expect(readings.mock.calls[0]![0]).toEqual(["雨の日は"]);
     await waitFor(() => expect(screen.getByLabelText("lyric-reading-state")).toHaveTextContent("読み：あめのひわ（5音）"), { timeout: 15_000 });

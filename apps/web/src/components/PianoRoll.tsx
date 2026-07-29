@@ -16,7 +16,8 @@ let noteClipboard: Note[] = [];
 // ⚠ 上位（docs/design.md #31・requirements「歌詞を書く」・architecture 同日追記）は**オーナー未レビュー**。
 //    歌詞の置き場も案(い)の**仮置き**＝確定ではない。ここで扱うのは音符を持つメロ自身の句だけなので、
 //    置き場がどの案に決まっても壊れない（design §31-0 の検算）。
-const READ_DEBOUNCE_MS = 500; // 打ち終わりを待ってから1回だけ読みを頼む（1文字ごとに Python を起こさない）
+// 読み取りの契機は「読みを反映」ボタンだけ（2026-07-30 改訂・design §31-3(d)）。
+// 旧：打鍵デバウンス 500ms の自動取得＝打っている最中に音符上のかなと仮歌が動いていた。
 
 /** 句の札（不変キー）。表記を直しても直し・割付が剥がれないために要る（design §31-1）。 */
 function newPhraseId(): string {
@@ -176,7 +177,6 @@ export function PianoRoll({
   const [readState, setReadState] = useState<"idle" | "busy" | "failed">("idle");
   const lyricRef = useRef(lyric);
   lyricRef.current = lyric; // 読み取りの返りは非同期で戻る＝そのときの最新の句へ書く
-  const askedRef = useRef<string | null>(null); // 最後に読みを頼んだ表記（同じ表記を続けて頼まない）
 
   /**
    * 句の範囲の既定＝**そのメロの尺**（design §31-0 の守ること1）。
@@ -218,7 +218,6 @@ export function PianoRoll({
     const ps = cur?.phrases ?? [];
     const targets = ps.map((p, i) => ({ p, i })).filter(({ p }) => p.text.trim().length > 0 && isReadingStale(p));
     if (!targets.length || !onLyricChange) return;
-    askedRef.current = JSON.stringify(targets.map((t) => t.p.text));
     setReadState("busy");
     try {
       const results = await api.readings(targets.map((t) => t.p.text)); // ★まとめて1回
@@ -247,21 +246,35 @@ export function PianoRoll({
     }
   }
 
-  // 表記が変わった（＝控えが古くなった）ら、打ち終わりを待って1回だけ読みを頼む。
-  const staleKey = JSON.stringify(phrases.filter((p) => p.text.trim().length > 0 && isReadingStale(p)).map((p) => p.text));
-  useEffect(() => {
-    if (!wired || staleKey === "[]") return;
-    if (askedRef.current === staleKey) return; // もう頼んだ表記（失敗のあとは「読みを取り直す」で頼み直す）
-    const t = setTimeout(() => void fetchReadings(), READ_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staleKey, wired]);
+  /**
+   * 「読みを反映」を押したときの1手（design §31-3(d)・2026-07-30 改訂）。
+   *
+   * 打鍵デバウンスでの自動取得はやめた＝**打っている最中に仮歌や音符上のかなが動かない**。
+   * 根拠＝歌詞入力UIの先例15種すべてが明示適用（`docs/research/2026-07-29-lyric-input-ui-survey.md` 定石2）。
+   * 控えが古ければ機械に聞き直し、新しければ聞かずに写すだけ（取り消しのあとに押せば戻る）。
+   */
+  function applyReading() {
+    appliedRef.current = ""; // 同じ読みでも写し直す（人が押したのだから何か起きるべき）
+    applyMorasToNotes(); // 控えが新しければこれだけで足りる（機械に聞き直さない）
+    void fetchReadings(); // 控えが古い句だけ聞き直す＝返ってきたら下の効果が写す
+  }
 
   // 読み（効いている値）を範囲内の音符へ写す。**音符は1つも増えも減りもしない**（placeMoras・design §31-2）。
-  // 音符を割るのは flowLyric＝下の「流し込む」を人が押したときだけ。控えが古ければ effectiveReading は空＝何も書かない。
+  // 音符を割るのは flowLyric＝「流し込む」を人が押したときだけ。控えが古ければ effectiveReading は空＝何も書かない。
   // 崩し候補のレビュー中（readOnly）は書かない：このとき notes は候補で onChange は元メロの setter＝
   // ここで書くと候補が元メロを上書きしてしまう（候補は「試聴して良ければ新ネタ」の道具＝元は不変）。
   const appliedRef = useRef<string>(""); // 最後に写した読み（同じものを写し直さない）
+  /** 句の読みを音符へ写す本体（効果からも「読みを反映」からも呼ぶ・同じ規則を2箇所に書かない）。 */
+  function applyMorasToNotes() {
+    if (!wired || readOnly || !phrases.length) return;
+    let next = notes;
+    for (const p of phrases) {
+      const moras = effectiveReading(p);
+      if (!moras.length) continue;
+      next = placeMoras(next, moras, { start: p.start, beats: p.beats });
+    }
+    if (next.some((n, i) => n.syllable !== notes[i]!.syllable)) onChange(next); // 変化が無ければ書かない
+  }
   useEffect(() => {
     if (!wired || readOnly || !phrases.length) return;
     // **音符の側だけが変わったときは写し直さない。** 写すのは句の読みが変わったときだけ。
@@ -272,13 +285,7 @@ export function PianoRoll({
     const key = JSON.stringify(phrases.map((p) => [p.id, p.start, p.beats, effectiveReading(p)]));
     if (key === appliedRef.current) return;
     appliedRef.current = key;
-    let next = notes;
-    for (const p of phrases) {
-      const moras = effectiveReading(p);
-      if (!moras.length) continue;
-      next = placeMoras(next, moras, { start: p.start, beats: p.beats });
-    }
-    if (next.some((n, i) => n.syllable !== notes[i]!.syllable)) onChange(next); // 変化が無ければ書かない＝繰り返さない
+    applyMorasToNotes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes, lyric, wired, readOnly]);
 
@@ -292,7 +299,7 @@ export function PianoRoll({
         ? "読みが取れませんでした"
         : readMoras.length
           ? `読み：${readMoras.join("")}（${readMoras.length}音）`
-          : "読みを取ります"; // これから取る、の意味（右の「読みを取り直す」ボタンと言葉が紛れないように）
+          : "読みを取ります"; // これから取る、の意味（押すまで機械は動かない＝右の「読みを反映」を押す）
 
   /**
    * 句と音符の関係の言い分け（design §31-5）。**字余りと「メロがまだ途中」は別のこと**（オーナー裁定「分ける」）。
@@ -421,14 +428,12 @@ export function PianoRoll({
             )}
             <button
               type="button"
-              aria-label="lyric-reading-refresh"
+              aria-label="lyric-apply-reading"
               disabled={!phraseText.trim() || readState === "busy"}
-              onClick={() => {
-                askedRef.current = null; // 同じ表記でももう一度頼む
-                void fetchReadings();
-              }}
+              onClick={applyReading}
             >
-              読みを取り直す
+              {/* ボタン名はオーナー裁定（2026-07-29）。押すまで機械は読みを取りにも写しにも行かない。 */}
+              読みを反映
             </button>
           </div>
         </div>

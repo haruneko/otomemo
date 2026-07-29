@@ -192,10 +192,12 @@ describe("placeMoras（音符を変えずに読みを音符へ写す）", () => 
     expect(out.map((n) => n.syllable)).toEqual(["う", "あ", "い"]); // 並びは入力のまま・値は時間順
   });
 
-  it("契約3：音符が余ればメリスマ「ー」", () => {
-    const notes = [N(0, 1), N(1, 1), N(2, 1)];
+  it("契約3：音符が余っても書かない＝余り音符の syllable は空になる（仮歌は既定「ラ」・2026-07-30 改訂）", () => {
+    // 旧契約はここに「ー」を書いた＝「あとN音」表示と矛盾し、詞モードの手打ちを写し直しで消していた
+    // （design §31-2 契約3 の改訂・根拠＝2026-07-29-lyric-editor-screen-design.md §2-4）。
+    const notes = [N(0, 1), N(1, 1, "旧"), N(2, 1, "ー")];
     const out = placeMoras(notes, ["あ"], range);
-    expect(out.map((n) => n.syllable)).toEqual(["あ", "ー", "ー"]);
+    expect(out.map((n) => n.syllable)).toEqual(["あ", undefined, undefined]);
   });
 
   it("契約3：モーラが余っても音符は増えない・余りはどこにも書かない", () => {
