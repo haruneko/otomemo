@@ -92,6 +92,10 @@
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
+/* かな以外が混ざる行＝音数でなく文字数。数えたのが別のものだと分かるよう控えめな色にする。 */
+.mora-count-chars {
+  color: var(--muted);
+}
 .mora-text {
   color: var(--muted);
   white-space: pre;

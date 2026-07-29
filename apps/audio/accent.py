@@ -5,8 +5,11 @@
   api 側 `apps/api/src/accent.ts`（audio-analyze.ts と同型の spawn ヘルパ）から叩かれ、
   `analyzeLyricFit(opts.accents)`（@cm/music-core prosody.ts）へ語ごとの核位置を供給する。
 - 入力: argv[1] にテキスト1本、または stdin に 1行1文。かな/漢字混在いずれも可（pyopenjtalk が読みを解決）。
+  **複数文はかならず stdin にまとめて渡すこと**＝1回あたりの時間のほとんどは Python の起動と辞書読み込み
+  （実測 2026-07-29・40文：まとめて1回 0.13秒／1文ずつ40回 3.21秒＝約24倍）。
 - 出力: JSON 配列（stdout）。各要素＝1文。TS 側が使う主フィールドは `phrases`（アクセント句ごとの
-  {moras, kernel}）。`moras`/`trans`/`hl`（デバッグ・可視化用）も併載。
+  {moras, kernel}）と `words`（語の列＝表層・読み・発音・モーラ数・品詞）。
+  `moras`/`trans`/`hl`（デバッグ・可視化用）も併載。
 - 依存: pyopenjtalk（MIT）＋同梱辞書 open_jtalk_dic（修正BSD・商用可）。PyTorch 不要・軽量（spawn 0.1〜0.2秒）。
 
 SSOT: モーラ分割の正典は Python（pyopenjtalk）。TS splitMora はかな読みが手元にある高速パス。
@@ -36,6 +39,33 @@ def parse_label(lab):
     f1 = int(f.group(1)) if f else None
     f2 = int(f.group(2)) if f else None
     return {"p": p, "a1": a1, "a2": a2, "f1": f1, "f2": f2}
+
+
+def words_of(text):
+    """語の列（run_frontend 由来）＝表層・読み・発音・モーラ数・品詞。
+
+    design #31-3(a)。`extract_fullcontext` は音素とアクセントしか返さないので、表記（漢字仮名交じり）から
+    かなを取る経路がこれまで無かった。ここで足す。**加工はしない**（「’」の除去や発音のかな片への割りは
+    TS 側でやる＝Python は pyopenjtalk の値をそのまま持ち帰る）。
+    - surface: 表記のその語ぶん（例「今日」）
+    - read:    読み（例「キョウ」）＝ふりがな表示用
+    - pron:    発音（例「キョー」・助詞「は」→「ワ」）＝音符と仮歌に載せる側
+    - mora_size: pyopenjtalk が数えたモーラ数＝TS 側の門番1（かな片の数と突き合わせる）
+    追加費用は実測 0.015ms/文（2026-07-29・40文×5周／同条件で extract_fullcontext は 0.054ms/文）
+    ＝1文ぶんの解析をもう一度やっても効かない。
+    """
+    out = []
+    for w in pyopenjtalk.run_frontend(text):
+        if not isinstance(w, dict):
+            continue  # 古い pyopenjtalk は文字列を返す＝語列は出せないので黙って空にする（呼び側は門番で落ちる）
+        out.append({
+            "surface": w.get("string", ""),
+            "read": w.get("read", ""),
+            "pron": w.get("pron", ""),
+            "mora_size": int(w.get("mora_size", 0) or 0),
+            "pos": w.get("pos", ""),
+        })
+    return out
 
 
 def extract(text):
@@ -97,6 +127,7 @@ def extract(text):
         "trans": trans,
         "phrases": phrases,
         "mora_total": len(moras),
+        "words": words_of(text),
     }
 
 
@@ -110,5 +141,5 @@ if __name__ == "__main__":
         try:
             out.append({"text": t, **extract(t)})
         except Exception as e:  # noqa: BLE001 一文の失敗で全滅させない（呼び側は fallback）
-            out.append({"text": t, "error": str(e), "phrases": [], "mora_total": 0})
+            out.append({"text": t, "error": str(e), "phrases": [], "mora_total": 0, "words": []})
     print(json.dumps(out, ensure_ascii=False))

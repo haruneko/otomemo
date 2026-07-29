@@ -162,6 +162,10 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
+// #31 スライス1：読み取りの返り（句1つぶん）。控える側（画面）が forText を付けて句へしまう
+// ＝表記を直したら控えは使わない、が成り立つ（design §31-3・music-core の LyricReading）。
+export type ReadingResult = Omit<import("@cm/music-core").LyricReading, "forText"> & { error?: string };
+
 export const api = {
   createNeta: (input: NetaInput) =>
     http<Neta>("/neta", { method: "POST", body: JSON.stringify(input) }),
@@ -341,6 +345,19 @@ export const api = {
   // fit_to_chords={notes,after}、analyze_fit={score,…}）ので呼び出し側でキャスト。
   music: <T = unknown>(op: string, body: Record<string, unknown>) =>
     http<T>(`/music/${op}`, { method: "POST", body: JSON.stringify(body) }),
+
+  // #31 スライス1（design §31-3(d)）：表記（漢字仮名交じり）→読み（かな・高低・語の列）。pyopenjtalk を api 側で回す。
+  // ⚠ 上位（design #31・requirements・architecture の 2026-07-29 追記）は**オーナー未レビュー**。
+  // **必ずまとめて1回で渡す。** 1回あたりの時間のほとんどは Python の起動と辞書読み込みで、
+  // 1句ずつ呼ぶと句の数だけ掛かる（実測 2026-07-29：40句を1句ずつ 5,407ms／まとめて1回 146ms）。
+  // 失敗の見分け：入力が変＝400／機械側が読めなかった（venv 無し・起動失敗・時間切れ）＝502。
+  // 502 のとき画面は「読みが取れませんでした」と出し、表記・割付・音符はそのままにする（印と高低は出さない）。
+  // 1句だけ解けなかった場合は投げずに results[i].error が立つ＝他の句は生きる。
+  readings: (texts: string[]) =>
+    http<{ results: ReadingResult[] }>("/music/reading", {
+      method: "POST",
+      body: JSON.stringify({ texts }),
+    }).then((r) => r.results),
 
   // 一式生成（決定的・純TS＝worker/クォータ不要）。frame(調/テンポ/拍子)から section＋各パートを
   // 即生成し compose して返す。旧カードの gen_* ジョブ経路（worker 依存でハング）の置き換え。

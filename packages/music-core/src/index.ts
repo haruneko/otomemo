@@ -17,6 +17,11 @@ export interface Note {
 // 歌詞↔メロ プロソディ（WP-M5・design #13b）＝モーラ分割/リズム型候補/アクセント整合の純関数。
 export * from "./prosody";
 
+// 歌詞（句）のデータの形と、音符へ読みを写す純関数（design #31・作詞補助 スライス1〜3）。
+// ⚠ 上位の設計はオーナー未レビュー・歌詞の置き場は未裁定（詳細は lyric.ts の先頭）。
+// web `lyrics.ts` と api `lyric.ts` に2本ずつあった splitMora/flowLyric はここへ寄せ、両側は re-export。
+export * from "./lyric";
+
 // メロ候補の並べ替えレンズ3種（WP-M3・design #12-M「候補レンズ」）＝純TS・記号のみ・音源不要。
 // api/web が @cm/music-core から引く（voiceLeading 分析レンズと同格の共有純関数）。
 export * from "./melodyLenses";

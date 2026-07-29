@@ -36,8 +36,24 @@ import {
   type PlaybackPlan,
 } from "./music";
 import { skeletonPlaybackNotes } from "./skeletonEdit";
+import type { LyricLayer } from "./lyrics";
 import { useVocalRender } from "./useVocal";
 import { useCowGuard } from "./useCowGuard";
+
+// #31 スライス1（design §31-7）：content から歌詞の層（句）を読む。feelOf（music.ts:22）と同じ形。
+// ⚠ 上位（design #31・requirements・architecture の 2026-07-29 追記）は**オーナー未レビュー**。
+//    歌詞の置き場も案(い)の仮置き＝確定ではない。ここは「メロ自身の content を素通しする」だけなので
+//    置き場がどの案に決まっても変わらない（design §31-0 の検算）。
+// 中身の形は見ない（feelOf と同じ）＝知らないキーが入っていても捨てずに持ち回る。
+// ※ design は lyricOf を music.ts に置くと書いているが、今回の担当ファイルの外なのでここに置いた。
+//    music.ts へ移すなら import 面だけの移動で済む（やり残しとして申し送り）。
+export function lyricOf(content: unknown): LyricLayer | undefined {
+  if (content && typeof content === "object") {
+    const l = (content as { lyric?: LyricLayer }).lyric;
+    if (l && typeof l === "object") return l;
+  }
+  return undefined;
+}
 
 // 仮歌ジョブ（再生キー＋声）を組む純関数。key に声(speaker)を含める＝声を変えたら別 wav。
 // 含めないと古い声の wav キャッシュが再利用され「声を変えても反映されない」（2026-07-17 バグ・SectionEditor は
@@ -146,6 +162,12 @@ export function useNetaEditor(
   // C-6「feel の家」（修理#3 決定①）：跳ね/人間味を単体ネタでも見て・触って・保存で落とさない。
   // 初期＝content.feel（生成が刻んだ feel）。savePatch が chordPat 系以外の再構成で feel を落とす非対称バグの根治。
   const [feel, setFeel] = useState<Feel | undefined>(() => feelOf(neta.content));
+  // #31 スライス1（design §31-7）「歌詞の家」＝句（漢字仮名交じりの表記）はメロの content.lyric に持つ。
+  // feel と同じ理由でここに置く：savePatch が content をキー決め打ちで作り直すため、載せないと
+  // 音符を1つ動かした数秒後の自動保存で歌詞が消える。未設定は undefined＝保存でキーを生やさない（bit一致）。
+  // ※ Undo/Redo の snapshot には**入れていない**（title/text と同じ扱い＝文字入力1打ずつを履歴に積まない）。
+  //    オーナーの裁定待ち＝申し送りに残す。
+  const [lyric, setLyric] = useState<LyricLayer | undefined>(() => lyricOf(neta.content));
   // 骨格（design #20 S2）：ブレークポイント列 tones/bass ＋句 phrases。合成では無音・単体は白玉/対位法プレビュー。
   const skel0 = isSkeleton(neta.content) ? neta.content : null;
   const [tones, setTones] = useState<SkeletonBreakpoint[]>(skel0?.tones ?? []);
@@ -331,7 +353,9 @@ export function useNetaEditor(
       // 現行 byte 一致（program は feel より前＝現行の並びを保つ）。feel は S3 の透過（両0/未指定はキー無し＝bit）。
       return { content: { mode: "relative", steps: bassSteps, pattern: bassPattern, ...(bassPatternId ? { patternId: bassPatternId } : {}), ...(bassPatternEdited ? { patternEdited: true } : {}), program, ...(feel ? { feel } : {}) }, key, mode, tempo, meter, bars: Math.max(1, Math.round(bassSteps / 16)) };
     // meter は単体パートでも保存＝roll のグリッドと MIDI 拍子ヘッダに効く（container 限定を解消・監査 MB-05）。
-    if (isMelody || isBass || isCounter || isRiff) return { content: { notes, program, ...singContent(), ...(feel ? { feel } : {}) }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
+    // #31 スライス1：歌詞の層（句）も feel と同じ流儀で透過（`lyric?{lyric}:{}`＝未設定はキーを生やさない＝bit一致）。
+    // 歌詞を持たない既存メロの content は1バイトも変わらない。持つメロは音符を動かしても句が落ちない（design §31-7）。
+    if (isMelody || isBass || isCounter || isRiff) return { content: { notes, program, ...singContent(), ...(feel ? { feel } : {}), ...(lyric ? { lyric } : {}) }, key, mode, tempo, meter, bars: Math.ceil(len / bpb) };
     if (isSkel) {
       // 骨格＝ブレークポイント列（dur無し）。bass/phrases は空なら省く。preview_chords は導出ベースの源として保持。
       const content: SkeletonContent & { preview_chords?: ChordEntry[]; feel?: Feel } = { bars: skelBars, tones };
@@ -560,6 +584,8 @@ export function useNetaEditor(
     key, setKey, mode, setMode, meter, setMeter, tempo, setTempo, program, setProgram, sing, setSing,
     singSpeaker, setSingSpeaker, singVoices,
     notes, setNotes, chords, setChords, rhythm, setRhythm, chordPat, setChordPat, feel, setFeel,
+    lyric, setLyric, // #31 スライス1：句（表記）。PianoRoll の表記欄がこれを読み書きする（配線は KindEditorBody 側）
+
     bassPattern, setBassPattern, bassSteps, setBassSteps, bassMode, setBassMode,
     bassPatternId, bassPatternEdited, applyBassPattern, // S7：相対ビート型の来歴／（改）／帯適用
 

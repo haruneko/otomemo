@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { useDismiss } from "../useDismiss";
 import { api } from "../api";
 import { Icon } from "./Icon";
-import { moraLines } from "../lyrics";
+import { moraLinesForDisplay, type LyricLayer } from "../lyrics";
 import { PianoRoll } from "./PianoRoll";
 import { BassStepEditor } from "./BassStepEditor";
 import { ChordEditor } from "./ChordEditor";
@@ -27,6 +27,10 @@ export interface KindEditorBodyProps {
   // 状態と setter（親所有）
   notes: Note[];
   setNotes: (n: Note[]) => void;
+  // #31 スライス1（design §31-7・⚠オーナー未レビュー）：歌詞の層（句）。親（NetaDialog→useNetaEditor）が持ち、
+  // メロのときだけ PianoRoll の表記欄へ渡す。両方揃った呼び側でだけ欄が出る（PianoRoll の wired）。
+  lyric?: LyricLayer;
+  setLyric?: (l: LyricLayer | undefined) => void;
   chordPat: ChordPatternContent;
   setChordPat: (c: ChordPatternContent) => void;
   chords: ChordEntry[];
@@ -267,6 +271,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                     low={isBass ? 28 : undefined}
                     high={isBass ? 55 : undefined}
                     enableLyric={isMelody}
+                    lyric={p.lyric}
+                    onLyricChange={p.setLyric}
                     keyRoot={p.keyPc}
                     keyMode={p.mode}
                     mode={p.rollMode}
@@ -331,9 +337,16 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           <textarea aria-label="text" placeholder={TEXT_PLACEHOLDER[p.neta.kind]} value={p.text} onChange={(e) => p.setText(e.target.value)} />
           {p.neta.kind === "lyric" && p.text.trim() && (
             <div className="mora-panel" aria-label="mora">
-              {moraLines(p.text).map((m, i) => (
+              {/* かな以外が混ざる行に音数を出すと嘘になる（漢字が1字1音に化ける＝「雨の日は」が4）。
+                  その行は音数でなく文字数を出す＝design §31-4 の線。どちらを出すかの判断は moraLinesForDisplay が持つ。 */}
+              {moraLinesForDisplay(p.text).map((m, i) => (
                 <div key={i} className="mora-line">
-                  <span className="mora-count">{m.count}</span>
+                  <span
+                    className={m.unit === "音" ? "mora-count" : "mora-count mora-count-chars"}
+                    title={m.unit === "音" ? undefined : "かな以外が混ざる行は音数を数えられません（文字数を出しています）"}
+                  >
+                    {m.unit === "音" ? m.n : `${m.n}字`}
+                  </span>
                   <span className="mora-text">{m.line || "　"}</span>
                 </div>
               ))}

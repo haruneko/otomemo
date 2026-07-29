@@ -1,13 +1,28 @@
 import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { beatsPerBar, pitchName, pc, isBlack, scalePcSet, type Note } from "../music";
 import { previewNote } from "../audio";
-import { flowLyric, splitMora, setSyllable, nextNoteIndex } from "../lyrics";
+import { flowLyric, splitMora, setSyllable, nextNoteIndex, placeMoras, type LyricLayer } from "../lyrics";
+// 控えが古いか／効いている読み＝music-core（web の lyrics.ts はまだ再輸出していないので直に取る）。
+import { effectiveReading, isReadingStale } from "@cm/music-core";
+import { api } from "../api";
 import { computeLyricHits, sylFitClass } from "../lyricFit";
 import { nudgeNotes, duplicateSel, deleteSel, copySel, pasteNotes } from "../noteEdit";
 import { NoteValuePicker } from "./NoteValuePicker";
 
 // ノート編集のクリップボード（モジュール保持＝別ネタへも貼れる・design N1）。
 let noteClipboard: Note[] = [];
+
+// #31 スライス1（design §31-9）：詞を書く入口はメロ編集画面の中に置く（新しい画面は足さない＝スライス5の領分）。
+// ⚠ 上位（docs/design.md #31・requirements「歌詞を書く」・architecture 同日追記）は**オーナー未レビュー**。
+//    歌詞の置き場も案(い)の**仮置き**＝確定ではない。ここで扱うのは音符を持つメロ自身の句だけなので、
+//    置き場がどの案に決まっても壊れない（design §31-0 の検算）。
+const READ_DEBOUNCE_MS = 500; // 打ち終わりを待ってから1回だけ読みを頼む（1文字ごとに Python を起こさない）
+
+/** 句の札（不変キー）。表記を直しても直し・割付が剥がれないために要る（design §31-1）。 */
+function newPhraseId(): string {
+  const c = globalThis.crypto as { randomUUID?: () => string } | undefined;
+  return c?.randomUUID ? c.randomUUID() : `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
 
 const CELL_PX = 12; // .proll-cell の幅。1拍=SUBDIV*CELL_PX で playhead を px 配置（横スクロール追従）。
 const KEY_PX = 40; // .proll-key の幅
@@ -46,6 +61,8 @@ export function PianoRoll({
   meter,
   keyRoot,
   keyMode,
+  lyric,
+  onLyricChange,
 }: {
 
   notes: Note[];
@@ -63,6 +80,10 @@ export function PianoRoll({
   readOnly?: boolean; // 候補レビュー中は編集不可（クリックで足さない）
   keyRoot?: number; // P0-a 調の主音(0-11)。指定時、行を調内音でハイライト＝「外し音を避ける」足場。
   keyMode?: string; // "major"/"minor"（既定=major）。短調は自然的短音階で判定。
+  // #31 スライス1：歌詞の層（句）。**両方**渡した呼び側だけ「詞を書く欄」が出る。
+  // 渡さない呼び側（Section の下ろし・骨格など既存の使い方）は従来と1つも変わらない＝後退ゼロ。
+  lyric?: LyricLayer;
+  onLyricChange?: (l: LyricLayer | undefined) => void;
 }) {
   const [noteLen, setNoteLen] = useState(1);
   const [dotted, setDotted] = useState(false); // 付点：選択音価を ×1.5（6/8 の付点四分=1.5拍 等）
@@ -132,6 +153,124 @@ export function PianoRoll({
   const steps = total * SUBDIV;
   const bpb = beatsPerBar(meter); // 1小節の拍数（6/8=3・4/4=4）
   const barStep = SUBDIV * bpb; // 1小節ぶんの step 数（小節線・小節数の単位）
+
+  // ── #31 スライス1：詞を書く（句）──────────────────────────────────────────────
+  // 芯（design §31-0）：歌詞の正データは**漢字仮名交じりの表記**で、句としてメロの content.lyric に持つ。
+  // かな（Note.syllable）は仮歌のための写し。句の範囲にある音符では句の読みが正／覆われていない音符では
+  // 従来どおり Note.syllable が正＝既存のかな入力の口（下の流し込み欄・詞モード・set_lyric）は1つも殺さない。
+  const wired = enableLyric && !!onLyricChange; // 句の面が配線されている呼び側だけ欄を出す
+  const phrases = lyric?.phrases ?? [];
+  const phrase = phrases[0]; // スライス1は1メロ1句（句を切る/足すのは後のスライス）
+  const phraseText = phrase?.text ?? "";
+  const [readState, setReadState] = useState<"idle" | "busy" | "failed">("idle");
+  const lyricRef = useRef(lyric);
+  lyricRef.current = lyric; // 読み取りの返りは非同期で戻る＝そのときの最新の句へ書く
+  const askedRef = useRef<string | null>(null); // 最後に読みを頼んだ表記（同じ表記を続けて頼まない）
+
+  /**
+   * 表記を書き換える（句が無ければ作る・空にすれば句ごと消す）。
+   * **範囲の既定はそのメロの尺**（total＝弱起ぶん＋表示尺）であって音符の広がりではない（design §31-0 の守ること1）。
+   * 音符から導くと、音符が0個のメロで範囲が決まらない＝歌詞の置き場の裁定に引きずられる。
+   * ※ 尺が空（bars 未設定）でも beats（＝エディタの len。16拍の下限がある）が入るのでここは0にならない。
+   */
+  function setPhraseText(text: string) {
+    if (!onLyricChange) return;
+    const cur = lyricRef.current;
+    const ps = cur?.phrases ?? [];
+    if (!ps.length) {
+      if (!text.trim()) return; // 空のまま触っただけ＝何も作らない
+      onLyricChange({ ...cur, phrases: [{ id: newPhraseId(), start: -pre, beats: total, text }] });
+      return;
+    }
+    const next = ps.map((p, i) => (i === 0 ? { ...p, text } : p)).filter((p) => p.text.trim().length > 0);
+    onLyricChange(next.length ? { ...cur!, phrases: next } : undefined); // 空の句は残さない
+  }
+
+  /**
+   * 表記から読みを取る。**必ずまとめて1回**（1句ずつ頼むと Python の起動と辞書読み込みが句の数だけ掛かる
+   * ＝実測 40句を1句ずつ 5,407ms／まとめて1回 146ms）。
+   * 失敗しても表記・音符はそのまま＝「読みが取れませんでした」と出すだけ（誤った高低を機械の顔で通さない）。
+   */
+  async function fetchReadings() {
+    const cur = lyricRef.current;
+    const ps = cur?.phrases ?? [];
+    const targets = ps.map((p, i) => ({ p, i })).filter(({ p }) => p.text.trim().length > 0 && isReadingStale(p));
+    if (!targets.length || !onLyricChange) return;
+    askedRef.current = JSON.stringify(targets.map((t) => t.p.text));
+    setReadState("busy");
+    try {
+      const results = await api.readings(targets.map((t) => t.p.text)); // ★まとめて1回
+      // **待っているあいだに人が打っている**かもしれない＝上で掴んだ古い句へ書き戻すと打った文字が消える。
+      // 最新の句を読み直し、札（id）で照合して、頼んだときから表記が変わっていない句にだけ控えを付ける。
+      const latest = lyricRef.current;
+      const lps = latest?.phrases ?? [];
+      if (!lps.length) return; // 待っているあいだに句ごと消された＝書き戻さない
+      const next = [...lps];
+      let failed = false;
+      targets.forEach((t, k) => {
+        const r = results[k];
+        if (!r || r.error) {
+          failed = true; // 1句だけの失敗＝その句に読みを付けないだけ（他の句は生きる）
+          return;
+        }
+        const j = next.findIndex((p) => p.id === t.p.id);
+        if (j < 0) return; // その句が消えた
+        if (next[j]!.text !== t.p.text) return; // 打ち直された＝この読みはもう古い（次の頼みが走る）
+        next[j] = { ...next[j]!, reading: { forText: t.p.text, words: r.words, moras: r.moras, hl: r.hl, breaks: r.breaks } };
+      });
+      setReadState(failed ? "failed" : "idle");
+      onLyricChange({ ...latest!, phrases: next });
+    } catch {
+      setReadState("failed");
+    }
+  }
+
+  // 表記が変わった（＝控えが古くなった）ら、打ち終わりを待って1回だけ読みを頼む。
+  const staleKey = JSON.stringify(phrases.filter((p) => p.text.trim().length > 0 && isReadingStale(p)).map((p) => p.text));
+  useEffect(() => {
+    if (!wired || staleKey === "[]") return;
+    if (askedRef.current === staleKey) return; // もう頼んだ表記（失敗のあとは「読みを取り直す」で頼み直す）
+    const t = setTimeout(() => void fetchReadings(), READ_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staleKey, wired]);
+
+  // 読み（効いている値）を範囲内の音符へ写す。**音符は1つも増えも減りもしない**（placeMoras・design §31-2）。
+  // 音符を割るのは flowLyric＝下の「流し込む」を人が押したときだけ。控えが古ければ effectiveReading は空＝何も書かない。
+  // 崩し候補のレビュー中（readOnly）は書かない：このとき notes は候補で onChange は元メロの setter＝
+  // ここで書くと候補が元メロを上書きしてしまう（候補は「試聴して良ければ新ネタ」の道具＝元は不変）。
+  const appliedRef = useRef<string>(""); // 最後に写した読み（同じものを写し直さない）
+  useEffect(() => {
+    if (!wired || readOnly || !phrases.length) return;
+    // **音符の側だけが変わったときは写し直さない。** 写すのは句の読みが変わったときだけ。
+    // これをやらないと、人が詞モードで打ったかなを機械が黙って上書きし、取り消し（Undo）も打ち消され、
+    // 共有されたメロは開いただけで書き換え扱いになって「分家しますか」が出る（独立監査 2026-07-29 実害2）。
+    // ※音符を足したときに読みが広がり直さないのは承知のうえ＝人の手直しを守る側に倒した。
+    //   音符と読みの対応を人が動かせるようにするのはスライス4の領分（design §31-6）。
+    const key = JSON.stringify(phrases.map((p) => [p.id, p.start, p.beats, effectiveReading(p)]));
+    if (key === appliedRef.current) return;
+    appliedRef.current = key;
+    let next = notes;
+    for (const p of phrases) {
+      const moras = effectiveReading(p);
+      if (!moras.length) continue;
+      next = placeMoras(next, moras, { start: p.start, beats: p.beats });
+    }
+    if (next.some((n, i) => n.syllable !== notes[i]!.syllable)) onChange(next); // 変化が無ければ書かない＝繰り返さない
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notes, lyric, wired, readOnly]);
+
+  // 読みの様子（UI に出す言葉＝design §31-5 の語彙。比喩・造語は作らない）。
+  const readMoras = phrase && !isReadingStale(phrase) ? effectiveReading(phrase) : [];
+  const readLabel = !phraseText.trim()
+    ? ""
+    : readState === "busy"
+      ? "読みを取っています"
+      : readState === "failed"
+        ? "読みが取れませんでした"
+        : readMoras.length
+          ? `読み：${readMoras.join("")}（${readMoras.length}音）`
+          : "読みを取り直します";
 
   function addAt(pitch: number, step: number) {
     const start = step / SUBDIV - pre; // 先頭 pre*SUBDIV セルは負拍（弱起）
@@ -221,6 +360,36 @@ export function PianoRoll({
           onToggleDotted={() => setDotted((d) => !d)}
         />
       </div>
+      {wired && (
+        // #31 スライス1：詞を書く欄（表記＝正データ）。読みは機械が取り、音符へは写すだけ（音符は増えない）。
+        // 既存のかな流し込み欄（下）はそのまま残す＝かな入力の口を1つも殺さない（後退ゼロ）。
+        <div className="proll-lyric-input" aria-label="lyric-phrase">
+          <div className="proll-lyric-row">
+            <span className="muted">歌詞</span>
+            <input
+              type="text"
+              aria-label="lyric-text"
+              placeholder="漢字仮名交じりでそのまま書く（読みは機械が取ります）"
+              value={phraseText}
+              onChange={(e) => setPhraseText(e.target.value)}
+            />
+          </div>
+          <div className="proll-lyric-actions">
+            <span className="muted" aria-label="lyric-reading-state">{readLabel}</span>
+            <button
+              type="button"
+              aria-label="lyric-reading-refresh"
+              disabled={!phraseText.trim() || readState === "busy"}
+              onClick={() => {
+                askedRef.current = null; // 同じ表記でももう一度頼む
+                void fetchReadings();
+              }}
+            >
+              読みを取り直す
+            </button>
+          </div>
+        </div>
+      )}
       {enableLyric && mode === "lyric" && (
         // 詞モード＝1音ずつリタッチ：固定入力バー（音符タップ→編集→確定で次へ）。一括は「流し込む」（他モード）と分業。
         <div className="proll-lyric-retouch" aria-label="lyric-retouch">
@@ -263,7 +432,9 @@ export function PianoRoll({
         // 入力欄は1行フル幅（IMEキーボード表示中もロールと喧嘩しない）＝操作ボタンは下段に小さく。
         <div className="proll-lyric-input">
           <div className="proll-lyric-row">
-            <span className="muted">歌詞</span>
+            {/* 詞を書く欄が出ているときだけ「かな」と呼び分ける（どちらが正データか取り違えないため）。
+                出ていない呼び側の見た目は従来のまま＝「歌詞」。 */}
+            <span className="muted">{wired ? "かな" : "歌詞"}</span>
             <input
               type="text"
               aria-label="lyric-draft"

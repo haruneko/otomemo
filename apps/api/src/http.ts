@@ -64,6 +64,7 @@ import { getChatSession, stopChatSession } from "./chat-session";
 import { beginTurn, pushTurnEvent, endTurn, attachTurn, isTurnLive, DONE } from "./chat-live";
 import { killJobProc } from "./job-procs";
 import { rankRecommendations } from "./music/recommend";
+import { extractReadings, READING_MAX_TEXTS, READING_MAX_CHARS } from "./accent"; // 表記→読み（#31 スライス1）
 
 // 一覧(GET /neta)は巨大content を落として初回ロードを軽くする。study(共通進行1000超)や analysis(生MIR配列)は
 // 1件で数百KB＝89件で~2MB がモバイル初期表示に丸ごと乗って重かった。閾値超は content:null にし、開いた時に
@@ -374,6 +375,29 @@ export function buildHttp(core: Core): FastifyInstance {
           return suggestClicheLines(cs, { key: typeof b.key === "number" ? b.key : undefined, mode: md, role: typeof b.role === "string" ? b.role : undefined, melody: Array.isArray(b.melody) ? b.melody : undefined, max: typeof b.max === "number" ? b.max : undefined });
         }
         case "find_progressions": return findProgressions(core, { tags: b.tags, like: b.like, limit: b.limit });
+        // 表記（漢字仮名交じり）→ 読み（#31 スライス1・design §31-3(d)・⚠オーナー未レビュー）。
+        // 画面が句の表記を送り、語の列・モーラ列・高低を受け取る。**複数句は必ずまとめて送ること**
+        // ＝1回あたりの時間のほとんどが Python の起動と辞書読み込み（実測 40句：まとめて 0.13秒／1句ずつ 3.21秒）。
+        //
+        // 失敗の返し分けがこの case の肝。下の catch は投げられたものを**全部 400**にするので、
+        // 読み取りの機械側（venv 無し・起動失敗・時間切れ・JSON が取れない）が転んだのをそこへ流すと、
+        // 画面は「入力が変」と区別できず「読みが取れませんでした」の出し分けができない。
+        // ＝**この case の中で 502 を返し、外へ throw しない**。入力が変なときだけ 400。
+        case "reading": {
+          const texts = b.texts;
+          if (!Array.isArray(texts) || texts.some((t: unknown) => typeof t !== "string"))
+            return reply.code(400).send({ error: "texts(string[]) が必要" });
+          if (texts.length > READING_MAX_TEXTS)
+            return reply.code(400).send({ error: `texts は ${READING_MAX_TEXTS} 件まで` });
+          const chars = (texts as string[]).reduce((s, t) => s + t.length, 0);
+          if (chars > READING_MAX_CHARS)
+            return reply.code(400).send({ error: `表記は合計 ${READING_MAX_CHARS} 字まで` });
+          try {
+            return { results: await extractReadings(texts as string[]) };
+          } catch (e) {
+            return reply.code(502).send({ error: `読みが取れませんでした: ${(e as Error).message}` });
+          }
+        }
         default: return reply.code(404).send({ error: `unknown music op: ${op}` });
       }
     } catch (e) {
