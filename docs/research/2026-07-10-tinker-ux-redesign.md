@@ -1,5 +1,6 @@
 # 「いじる」機能のUX再設計提案（2026-07-10）
 
+> **（2026-07-29 注記）後継＝[2026-07-14-tinker-menu-redesign-fable](2026-07-14-tinker-menu-redesign-fable.md)**（同じ「いじる」メニューの抜本再設計。README 索引がデザイン正典に指定＝「パーツの棚＋引き出し」）。本docは前段の提案として保存。
 > 状態＝**設計提案（実装なし）**。対象＝`apps/web/src/components/SectionEditor.tsx`（生成/加工/書き出しの「いじる▾」メニュー）＋候補パネル（`reshape-bar`）。
 > 起点＝オーナー（作曲家・修羅場P・**モバイル主体**）の明言「今のUXはかなり悪い」。
 > 主動線＝**速く候補を見て・聴いて・選ぶ**。設計思想＝機械は候補/選択肢まで・仕上げは人間／改善は選択肢・ばらつき・足場に振る／モバイル一画面ずつ（[[project-design-philosophy-options-not-finished]]）。
