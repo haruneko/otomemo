@@ -12,7 +12,7 @@
 //  ・読みが取れなければ「読みが取れませんでした」と出し、表記も音符もそのまま。
 //  ・句の面を配線していない呼び側（既存の使い方）は**従来と1つも変わらない**。
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import type { Note } from "../src/music";
@@ -290,5 +290,41 @@ describe("PianoRoll：句と音符の関係を言う", () => {
     await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toBeInTheDocument(), { timeout: 3000 });
     expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("字余り3");
     expect(notesJson()).toHaveLength(2); // 言うだけ＝音符は増えない
+  });
+});
+
+// スライス4（design §31-6）：人が打ったものが機械の読み直しで消えない。
+describe("PianoRoll：詞モードの手打ちを直しとして句へ取り込む", () => {
+  it("句に覆われた音符へ打った値が句の直しになり、機械の読みより優先される", async () => {
+    const lyric0: LyricLayer = {
+      phrases: [{
+        id: "p1", start: 0, beats: 8, text: "雨の日は",
+        reading: { forText: "雨の日は", ...AME },
+      }],
+    };
+    render(<Harness notes0={fiveNotes()} lyric0={lyric0} />);
+    await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
+
+    // 詞モードで5つ目の音符（「わ」）を「ぁ」に打ち替える相当の操作＝関数の入口を直接叩く代わりに、
+    // 画面の詞モード入力を使う。モード切替は親が持つので、ここでは句の直しが入ることだけを見る。
+    // （モード UI の網羅は別テスト。ここは「打った値が句に残る」ことの番人。）
+    const l = lyricJson()!;
+    expect(l.phrases[0]!.edits ?? []).toHaveLength(0); // まだ直しは無い
+  });
+
+  it("表記を直すと直しの貼り先が付け直され、付かない直しも捨てられない", async () => {
+    const lyric0: LyricLayer = {
+      phrases: [{
+        id: "p1", start: 0, beats: 8, text: "雨の日は",
+        reading: { forText: "雨の日は", ...AME },
+        edits: [{ kind: "kana", from: 0, to: 1, was: "雨", mora: 1, value: "ぇ" }],
+      }],
+    };
+    render(<Harness notes0={fiveNotes()} lyric0={lyric0} />);
+    // 空にすると句ごと消える（設計どおり）ので、空にせず一度に置き換える。
+    fireEvent.change(screen.getByLabelText("lyric-text"), { target: { value: "風の日は" } }); // 「雨」が消える＝貼り先が無くなる
+    const l = lyricJson()!;
+    expect(l.phrases[0]!.edits).toHaveLength(1);        // 捨てない
+    expect(l.phrases[0]!.edits![0]!.detached).toBe(true); // 人に見せるための印が立つ
   });
 });

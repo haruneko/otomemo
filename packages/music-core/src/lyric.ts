@@ -232,8 +232,14 @@ export function noteHighLow<T extends { start: number }>(
 ): (0 | 1 | null)[] {
   const out: (0 | 1 | null)[] = notes.map(() => null);
   for (const p of phrases ?? []) {
-    const hl = readingOf(p)?.hl; // 控えが古ければ readingOf が undefined＝この句は分からない扱い
-    if (!hl) continue;
+    const r = readingOf(p); // 控えが古ければ undefined＝この句は分からない扱い
+    if (!r) continue;
+    // 人の直しを重ねた高低（読みを直した語は「分からない」・高低を直したモーラはその値）。
+    // 語に属さないモーラの位置は effectiveReading と同じ組み方で揃える必要があるが、
+    // 高低は語単位でしか分からないので、語の並びぶんだけを順に並べる（余りは null）。
+    const info = effectiveWordInfo(p, r);
+    const hl: (0 | 1 | null)[] = info.flatMap((w) => w.hl);
+    if (!hl.length) continue;
     const order = notesInRange(notes, { start: p.start, beats: p.beats });
     for (let i = 0; i < order.length; i++) out[order[i]!] = i < hl.length ? hl[i]! : null;
   }
@@ -313,11 +319,192 @@ export function readingOf(phrase: LyricPhrase): LyricReading | undefined {
 /**
  * 効いている読み（モーラのかな列）＝placeMoras・仮歌が読む値。控えが古ければ空。
  *
- * ⚠ スライス1では**人の直し（edits）はまだ適用しない**（直しを書く口が画面にまだ無い＝edits は常に空）。
- *    適用はスライス4（design §31-6）。関数の名前と口はここで確定させ、呼び側を後から書き換えないで済むようにする。
+ * **人の直しが機械の読み取りより上**（architecture 2026-07-29・design §31-6）。
+ * 機械が読みを引き直しても直しは消えない＝直しは reading に焼かず、ここで重ねる。
+ *  ・kind:"read"（語単位）＝その語のモーラ列を、直した読みを割り直したもので置き換える。
+ *  ・kind:"kana"（モーラ単位）＝その1モーラだけ差し替える（仮歌の崩し「思いわ」等）。
+ * 語のモーラ数が変わりうるので、必ず語の順に組み直す（添字の付け替えを呼び側にさせない）。
  */
 export function effectiveReading(phrase: LyricPhrase): string[] {
   const r = readingOf(phrase);
   if (!r) return [];
-  return r.moras.map((m) => m.kana);
+  const live = liveEdits(phrase, r);
+  if (!live.length) return r.moras.map((m) => m.kana);
+
+  const byWord = morasByWord(r);
+  const readOf = new Map<number, string>();     // 語番号 → 直した読み
+  const kanaOf = new Map<string, string>();     // `語番号:モーラ番号` → 直したかな
+  for (const { edit, word } of live) {
+    if (edit.kind === "read" && typeof edit.value === "string") readOf.set(word, edit.value);
+    if (edit.kind === "kana" && typeof edit.value === "string" && edit.mora != null) kanaOf.set(`${word}:${edit.mora}`, edit.value);
+  }
+
+  const out: string[] = [];
+  // 語に属さないモーラ（word=-1）は元の位置のまま残す＝語の切れ目が取れない区間を落とさない。
+  const orphan = r.moras.map((m, i) => (m.word < 0 ? i : -1)).filter((i) => i >= 0);
+  let orphanAt = 0;
+  const flush = (before: number) => {
+    while (orphanAt < orphan.length && orphan[orphanAt]! < before) {
+      const at = orphan[orphanAt++]!;
+      out.push(r.moras[at]!.kana);
+    }
+  };
+  for (let w = 0; w < r.words.length; w++) {
+    const idx = byWord[w] ?? [];
+    flush(idx.length ? idx[0]! : Number.MAX_SAFE_INTEGER);
+    const replaced = readOf.get(w);
+    const base = replaced != null ? splitMora(replaced) : idx.map((i) => r.moras[i]!.kana);
+    base.forEach((kana, mi) => out.push(kanaOf.get(`${w}:${mi}`) ?? kana));
+  }
+  flush(Number.MAX_SAFE_INTEGER);
+  return out;
+}
+
+/**
+ * 語ごとの「効いているモーラ数」と「高低が分かるか」。noteHighLow が使う（design §31-6）。
+ * 読みを手で直した語は、機械がその語の高低を作り直せない＝**高低は分からない**（印を出さない）。
+ */
+function effectiveWordInfo(phrase: LyricPhrase, r: LyricReading): { count: number; hl: (0 | 1 | null)[] }[] {
+  const live = liveEdits(phrase, r);
+  const byWord = morasByWord(r);
+  const readOf = new Map<number, string>();
+  const hlOf = new Map<string, 0 | 1>();
+  for (const { edit, word } of live) {
+    if (edit.kind === "read" && typeof edit.value === "string") readOf.set(word, edit.value);
+    if (edit.kind === "hl" && (edit.value === 0 || edit.value === 1) && edit.mora != null) hlOf.set(`${word}:${edit.mora}`, edit.value);
+  }
+  return r.words.map((_w, i) => {
+    const idx = byWord[i] ?? [];
+    const replaced = readOf.get(i);
+    const count = replaced != null ? splitMora(replaced).length : idx.length;
+    const hl: (0 | 1 | null)[] = [];
+    for (let m = 0; m < count; m++) {
+      const hand = hlOf.get(`${i}:${m}`);
+      if (hand != null) { hl.push(hand); continue; }
+      // 読みを手で直した語は機械の高低を当てられない＝分からない（§31-11 の裁定待ち7の当面の形）
+      hl.push(replaced != null ? null : (r.hl?.[idx[m] ?? -1] ?? null));
+    }
+    return { count, hl };
+  });
+}
+
+// ── §7 人の直し（design §31-6 スライス4） ───────────────────────────────────────
+//
+// 芯＝**機械の値と人の直しを別々に持ち、効いている値は「機械の読み＋人の直し」で導く**。
+// 直しを読みそのものへ焼くと、表記を直して読みを引き直したときに人の直しが消える。
+// architecture「人の手直しが機械の読み取りより上」の実装。
+
+/** 語の並びを表記の文字位置へ当てる。見つからない語は null（表層が表記と揃わない場合＝空白/記号の食い違い）。 */
+export function wordSpans(text: string, words: readonly { surface: string }[]): ({ from: number; to: number } | null)[] {
+  let cursor = 0;
+  return words.map((w) => {
+    if (!w.surface) return null;
+    const at = text.indexOf(w.surface, cursor);
+    if (at < 0) return null;
+    cursor = at + w.surface.length;
+    return { from: at, to: at + w.surface.length };
+  });
+}
+
+/**
+ * 直しの貼り先＝語の番号を決める（design §31-6 の付け直し3通り）。
+ *  ① 同じ位置に同じ文字列がある → そのまま
+ *  ② 位置はずれたが、句の中にその文字列がちょうど1つだけある → そこへ
+ *  ③ 見つからない・2つ以上ある → null（＝人に見せる。**黙って捨てない・黙って別の語に付けない**）
+ */
+export function resolveEditWord(
+  text: string,
+  spans: readonly ({ from: number; to: number } | null)[],
+  edit: LyricEdit,
+): number | null {
+  const exact = spans.findIndex((s) => s && s.from === edit.from && s.to === edit.to && text.slice(s.from, s.to) === edit.was);
+  if (exact >= 0) return exact;
+  const hits = spans
+    .map((s, i) => (s && text.slice(s.from, s.to) === edit.was ? i : -1))
+    .filter((i) => i >= 0);
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/**
+ * 表記を直したあと、直しの貼り先を付け直す（純関数）。付かなかった直しには `detached` を立てて**残す**。
+ * 既に detached の直しは、付け先が復活すれば付き直る（人が表記を戻した場合）。
+ */
+export function reattachEdits(phrase: LyricPhrase, text: string): LyricEdit[] | undefined {
+  const edits = phrase.edits;
+  if (!edits?.length) return edits;
+  const words = phrase.reading?.words ?? [];
+  const spans = wordSpans(text, words);
+  const next = edits.map((e) => {
+    const wi = resolveEditWord(text, spans, e);
+    if (wi == null) return { ...e, detached: true as const };
+    const s = spans[wi]!;
+    const { detached: _drop, ...rest } = e;
+    return { ...rest, from: s.from, to: s.to };
+  });
+  return next;
+}
+
+/** 語ごとのモーラ添字の並び（reading.moras の word 欄から作る）。 */
+function morasByWord(r: LyricReading): number[][] {
+  const out: number[][] = r.words.map(() => []);
+  r.moras.forEach((m, i) => { if (m.word >= 0 && m.word < out.length) out[m.word]!.push(i); });
+  return out;
+}
+
+/** 効いている直しだけを、語番号つきで取り出す（detached と付け先不明は落とす）。 */
+function liveEdits(phrase: LyricPhrase, r: LyricReading): { edit: LyricEdit; word: number }[] {
+  const spans = wordSpans(phrase.text, r.words);
+  const out: { edit: LyricEdit; word: number }[] = [];
+  for (const e of phrase.edits ?? []) {
+    if (e.detached) continue;
+    const wi = resolveEditWord(phrase.text, spans, e);
+    if (wi != null) out.push({ edit: e, word: wi });
+  }
+  return out;
+}
+
+/** この句で人の直しが1つでも効いているか（出所表示＝design §31-3(e) の accentSource:"hand"）。 */
+export function hasHandEdit(phrase: LyricPhrase): boolean {
+  const r = readingOf(phrase);
+  return !!r && liveEdits(phrase, r).length > 0;
+}
+
+/**
+ * 「この音符に載るかなを、この文字にしたい」を人の直し1件に変える（design §31-6 の最後の項）。
+ *
+ * 音符→モーラは placeMoras と同じ1対1、モーラ→語は控えの word 欄で辿る。
+ * 語の切れ目が取れない区間（word=-1）や、モーラが尽きた先（メリスマ）には直しを作れない＝null。
+ * 呼び側（画面）は null なら従来どおり `Note.syllable` へ直書きする＝句の無いメロの詞モードは変わらない。
+ */
+export function kanaEditForNote<T extends { start: number }>(
+  phrase: LyricPhrase,
+  notes: readonly T[],
+  noteIdx: number,
+  kana: string,
+): LyricEdit | null {
+  const r = readingOf(phrase);
+  if (!r) return null;
+  const order = notesInRange(notes, { start: phrase.start, beats: phrase.beats });
+  const at = order.indexOf(noteIdx);
+  if (at < 0) return null; // この句に覆われていない音符
+
+  // 効いている読みの並びで数える（読みを直した語があるとモーラ数が変わるため）。
+  const info = effectiveWordInfo(phrase, r);
+  let cursor = 0;
+  for (let w = 0; w < info.length; w++) {
+    const n = info[w]!.count;
+    if (at < cursor + n) {
+      const span = wordSpans(phrase.text, r.words)[w];
+      if (!span) return null; // 語を表記の上に置けない＝貼り先を作れない
+      return { kind: "kana", from: span.from, to: span.to, was: phrase.text.slice(span.from, span.to), mora: at - cursor, value: kana };
+    }
+    cursor += n;
+  }
+  return null; // モーラが尽きた先（メリスマ）
+}
+
+/** 同じ貼り先の古い直しを落として1件足す（同じモーラを2回直したら後が勝つ）。 */
+export function upsertEdit(edits: readonly LyricEdit[] | undefined, add: LyricEdit): LyricEdit[] {
+  const same = (e: LyricEdit) => e.kind === add.kind && e.from === add.from && e.to === add.to && e.mora === add.mora;
+  return [...(edits ?? []).filter((e) => !same(e)), add];
 }

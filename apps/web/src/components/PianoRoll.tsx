@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { beatsPerBar, pitchName, pc, isBlack, scalePcSet, type Note } from "../music";
 import { previewNote } from "../audio";
-import { flowLyric, splitMora, setSyllable, nextNoteIndex, placeMoras, phraseStatus, type LyricLayer } from "../lyrics";
+import { flowLyric, splitMora, setSyllable, nextNoteIndex, placeMoras, phraseStatus, kanaEditForNote, upsertEdit, reattachEdits, type LyricLayer } from "../lyrics";
 // 控えが古いか／効いている読み＝music-core（web の lyrics.ts はまだ再輸出していないので直に取る）。
 import { effectiveReading, isReadingStale } from "@cm/music-core";
 import { api } from "../api";
@@ -118,6 +118,14 @@ export function PianoRoll({
   /** 入力中の値を対象音符へ確定（空=クリア・「ー」=メリスマ可）。advance=true なら時間順で次の音符へフォーカス。 */
   function lyrCommit(advance: boolean) {
     if (lyrTarget == null || lyrTarget >= notes.length) return;
+    // 句に覆われた音符へ打った値は**直しとして句へ取り込む**（design §31-6）。
+    // 直書きだけだと、機械が読みを写し直した瞬間に消える＝人が打ったものが黙って捨てられる。
+    const cur = lyricRef.current;
+    const p0 = cur?.phrases?.[0];
+    const edit = p0 && lyrVal.trim() ? kanaEditForNote(p0, notes, lyrTarget, lyrVal.trim()) : null;
+    if (edit && onLyricChange) {
+      onLyricChange({ ...cur!, phrases: cur!.phrases.map((p, i) => (i === 0 ? { ...p, edits: upsertEdit(p.edits, edit) } : p)) });
+    }
     const updated = setSyllable(notes, lyrTarget, lyrVal);
     if ((notes[lyrTarget]!.syllable ?? "") !== (updated[lyrTarget]!.syllable ?? "")) onChange(updated);
     if (!advance) return;
@@ -193,7 +201,10 @@ export function PianoRoll({
       onLyricChange({ ...cur, phrases: [{ id: newPhraseId(), start: -pre, beats: phraseSpan + pre, text }] });
       return;
     }
-    const next = ps.map((p, i) => (i === 0 ? { ...p, text } : p)).filter((p) => p.text.trim().length > 0);
+    // 表記が変わると直しの貼り先がずれる＝付け直す（付かなかった直しは捨てずに残る＝design §31-6）。
+    const next = ps
+      .map((p, i) => (i === 0 ? { ...p, text, edits: reattachEdits(p, text) } : p))
+      .filter((p) => p.text.trim().length > 0);
     onLyricChange(next.length ? { ...cur!, phrases: next } : undefined); // 空の句は残さない
   }
 

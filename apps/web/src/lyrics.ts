@@ -23,6 +23,11 @@ export {
   isReadingStale,
   readingOf,
   effectiveReading,
+  hasHandEdit,
+  reattachEdits,
+  kanaEditForNote,
+  upsertEdit,
+  wordSpans,
 } from "@cm/music-core";
 export type { LyricLayer, LyricPhrase, LyricReading, LyricEdit, PhraseRange, PhraseStatus } from "@cm/music-core";
 

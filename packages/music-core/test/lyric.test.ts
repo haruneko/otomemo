@@ -3,6 +3,10 @@ import {
   splitMora,
   isKanaOnly,
   noteHighLow,
+  hasHandEdit,
+  kanaEditForNote,
+  upsertEdit,
+  reattachEdits,
   moraLinesForDisplay,
   moraLines,
   flowLyric,
@@ -442,5 +446,154 @@ describe("noteHighLow（音符ごとの読みの高低・印の元になる値�
   it("句が無ければ全部分からない", () => {
     expect(noteHighLow(notes, undefined)).toEqual([null, null, null, null]);
     expect(noteHighLow(notes, [])).toEqual([null, null, null, null]);
+  });
+});
+
+// ── スライス4：人の直しが機械の読み取りより上（design §31-6） ────────────────────────
+describe("人の直し（edits）", () => {
+  // 「今日は雨」＝機械の読み キョー(2)/ワ(1)/アメ(2)。人が「今日」を「こんにち」に直す等を試す。
+  const reading = {
+    forText: "今日は雨",
+    words: [
+      { surface: "今日", read: "キョウ", pron: "キョー", moraCount: 2 },
+      { surface: "は", read: "ハ", pron: "ワ", moraCount: 1 },
+      { surface: "雨", read: "アメ", pron: "アメ", moraCount: 2 },
+    ],
+    moras: [
+      { kana: "きょ", word: 0 }, { kana: "ー", word: 0 },
+      { kana: "わ", word: 1 },
+      { kana: "あ", word: 2 }, { kana: "め", word: 2 },
+    ],
+    hl: [0, 1, 1, 1, 0] as (0 | 1)[],
+    breaks: [],
+  };
+  const P = (edits?: unknown[]) => ({ id: "p1", start: 0, beats: 8, text: "今日は雨", reading, ...(edits ? { edits } : {}) } as never);
+
+  it("直しが無ければ機械の読みそのまま", () => {
+    expect(effectiveReading(P())).toEqual(["きょ", "ー", "わ", "あ", "め"]);
+    expect(hasHandEdit(P())).toBe(false);
+  });
+
+  it("読みを語ごと直せる（モーラ数が変わっても後ろがずれない）", () => {
+    const e = [{ kind: "read", from: 0, to: 2, was: "今日", value: "こんにち" }];
+    expect(effectiveReading(P(e))).toEqual(["こ", "ん", "に", "ち", "わ", "あ", "め"]);
+    expect(hasHandEdit(P(e))).toBe(true);
+  });
+
+  it("音符に載るかなを1モーラだけ差し替えられる（仮歌の崩し）", () => {
+    const e = [{ kind: "kana", from: 3, to: 4, was: "雨", mora: 1, value: "ぇ" }];
+    expect(effectiveReading(P(e))).toEqual(["きょ", "ー", "わ", "あ", "ぇ"]);
+  });
+
+  it("高低を1モーラだけ反転できる", () => {
+    const notes = [0, 1, 2, 3, 4].map((i) => ({ start: i, pitch: 60 }));
+    expect(noteHighLow(notes, [P() as never])).toEqual([0, 1, 1, 1, 0]);
+    const e = [{ kind: "hl", from: 0, to: 2, was: "今日", mora: 0, value: 1 }];
+    expect(noteHighLow(notes, [P(e) as never])).toEqual([1, 1, 1, 1, 0]);
+  });
+
+  it("読みを手で直した語は高低が分からない扱いになる（機械が作り直せないので印を出さない）", () => {
+    const notes = [0, 1, 2, 3, 4, 5, 6].map((i) => ({ start: i, pitch: 60 }));
+    const e = [{ kind: "read", from: 0, to: 2, was: "今日", value: "こんにち" }];
+    // 直した語の4モーラは null、後ろの語は機械の高低のまま
+    expect(noteHighLow(notes, [P(e) as never])).toEqual([null, null, null, null, 1, 1, 0]);
+  });
+
+  it("機械が読みを引き直しても直しは消えない（直しは reading に焼かない）", () => {
+    const e = [{ kind: "kana", from: 3, to: 4, was: "雨", mora: 1, value: "ぇ" }];
+    const refreshed = { ...(P(e) as Record<string, unknown>), reading: { ...reading } } as never;
+    expect(effectiveReading(refreshed)).toEqual(["きょ", "ー", "わ", "あ", "ぇ"]);
+  });
+
+  it("控えが古ければ直しも効かない（表記を直した直後は何も出さない）", () => {
+    const e = [{ kind: "kana", from: 3, to: 4, was: "雨", mora: 1, value: "ぇ" }];
+    const stale = { ...(P(e) as Record<string, unknown>), text: "今日は雪" } as never;
+    expect(effectiveReading(stale)).toEqual([]);
+  });
+});
+
+describe("直しの付け直し（表記を変えたとき・design §31-6 の3通り）", () => {
+  const reading = {
+    forText: "雨と雪",
+    words: [
+      { surface: "雨", read: "アメ", pron: "アメ", moraCount: 2 },
+      { surface: "と", read: "ト", pron: "ト", moraCount: 1 },
+      { surface: "雪", read: "ユキ", pron: "ユキ", moraCount: 2 },
+    ],
+    moras: [{ kana: "あ", word: 0 }, { kana: "め", word: 0 }, { kana: "と", word: 1 }, { kana: "ゆ", word: 2 }, { kana: "き", word: 2 }],
+    hl: null,
+    breaks: [],
+  };
+  const P = (edits: unknown[]) => ({ id: "p1", start: 0, beats: 8, text: "雨と雪", reading, edits } as never);
+
+  it("① 同じ位置に同じ文字列があればそのまま", () => {
+    const e = [{ kind: "read", from: 2, to: 3, was: "雪", value: "ゆき" }];
+    const out = reattachEdits(P(e), "雨と雪")![0]!;
+    expect([out.from, out.to]).toEqual([2, 3]);
+    expect(out.detached).toBeUndefined();
+  });
+
+  it("② 位置がずれても句の中に1つだけあればそこへ付け直す", () => {
+    const e = [{ kind: "read", from: 2, to: 3, was: "雪", value: "ゆき" }];
+    // 前に文字を足して位置がずれた場合（reading は古いままでも語の表層で探せる）
+    const moved = reattachEdits({ ...(P(e) as Record<string, unknown>), reading } as never, "雨と雪")!;
+    expect(moved[0]!.detached).toBeUndefined();
+  });
+
+  it("③ 見つからなければ捨てずに detached を立てる（黙って捨てない・黙って別の語に付けない）", () => {
+    const e = [{ kind: "read", from: 2, to: 3, was: "雪", value: "ゆき" }];
+    const out = reattachEdits(P(e), "雨と風")!;
+    expect(out).toHaveLength(1); // 残る
+    expect(out[0]!.detached).toBe(true);
+  });
+
+  it("直しが無ければ何もしない", () => {
+    expect(reattachEdits({ id: "p1", start: 0, beats: 8, text: "雨" } as never, "雨")).toBeUndefined();
+  });
+});
+
+describe("kanaEditForNote（音符のかな手打ちを直し1件に変える）", () => {
+  const reading = {
+    forText: "今日は雨",
+    words: [
+      { surface: "今日", read: "キョウ", pron: "キョー", moraCount: 2 },
+      { surface: "は", read: "ハ", pron: "ワ", moraCount: 1 },
+      { surface: "雨", read: "アメ", pron: "アメ", moraCount: 2 },
+    ],
+    moras: [{ kana: "きょ", word: 0 }, { kana: "ー", word: 0 }, { kana: "わ", word: 1 }, { kana: "あ", word: 2 }, { kana: "め", word: 2 }],
+    hl: null,
+    breaks: [],
+  };
+  const phrase = { id: "p1", start: 0, beats: 8, text: "今日は雨", reading } as never;
+  const notes = [0, 1, 2, 3, 4, 5].map((i) => ({ start: i }));
+
+  it("5つ目の音符＝「雨」の2モーラ目を直す（貼り先は語の文字位置）", () => {
+    expect(kanaEditForNote(phrase, notes, 4, "ぇ")).toEqual({ kind: "kana", from: 3, to: 4, was: "雨", mora: 1, value: "ぇ" });
+  });
+
+  it("1つ目の音符＝「今日」の1モーラ目", () => {
+    expect(kanaEditForNote(phrase, notes, 0, "こ")).toEqual({ kind: "kana", from: 0, to: 2, was: "今日", mora: 0, value: "こ" });
+  });
+
+  it("モーラが尽きた先（メリスマ）には直しを作らない", () => {
+    expect(kanaEditForNote(phrase, notes, 5, "あ")).toBeNull();
+  });
+
+  it("句に覆われていない音符には直しを作らない（句の無いメロの詞モードは従来どおり）", () => {
+    expect(kanaEditForNote({ ...(phrase as Record<string, unknown>), start: 10, beats: 4 } as never, notes, 0, "あ")).toBeNull();
+  });
+
+  it("作った直しは effectiveReading に効く（往復）", () => {
+    const e = kanaEditForNote(phrase, notes, 4, "ぇ")!;
+    const p2 = { ...(phrase as Record<string, unknown>), edits: upsertEdit(undefined, e) } as never;
+    expect(effectiveReading(p2)).toEqual(["きょ", "ー", "わ", "あ", "ぇ"]);
+  });
+
+  it("同じモーラを2回直したら後が勝つ（直しが溜まらない）", () => {
+    const a = kanaEditForNote(phrase, notes, 4, "ぇ")!;
+    const b = kanaEditForNote(phrase, notes, 4, "ぉ")!;
+    const list = upsertEdit(upsertEdit(undefined, a), b);
+    expect(list).toHaveLength(1);
+    expect(list[0]!.value).toBe("ぉ");
   });
 });
