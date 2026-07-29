@@ -203,7 +203,8 @@ export interface OpennessReport {
   v2dur: number | null; // V2 開口度×音価の順位相関（正＝長い音ほど開いた母音）
   apexIdx: number; // 最高音の note index（-1=不明）
 }
-export interface FitReport { score: number; hits: FitHit[]; contour: Rel[]; melodyDir: Dir[]; openness: OpennessReport }
+// contour の null＝「読みの高低が分からない区間」（noteHl を渡したときだけ出る）。分からない所では印を出さない。
+export interface FitReport { score: number; hits: FitHit[]; contour: (Rel | null)[]; melodyDir: Dir[]; openness: OpennessReport }
 export interface FitNote { pitch: number; syllable?: string; start?: number; dur?: number }
 
 // ── §4 母音開口度メトリクス（L1 §2.1/§4・V1 頂点開口度／V2 開口度×音高・音価相関） ──────────
@@ -324,6 +325,20 @@ function buildContour(syllables: string[], accents?: AccentEntry[]): Rel[] {
   return rel.slice(0, n - 1);
 }
 
+/**
+ * 音符ごとの高低（0/1/null）→ 隣接音符の朗読関係列（長さ n-1）。
+ * どちらかが null＝分からない対は null＝**印を出さない**（機械が黙って断定しない）。
+ */
+function hlToContour(noteHl: (0 | 1 | null)[], n: number): (Rel | null)[] {
+  const out: (Rel | null)[] = [];
+  for (let i = 0; i + 1 < n; i++) {
+    const a = noteHl[i], b = noteHl[i + 1];
+    if (a == null || b == null) { out.push(null); continue; }
+    out.push(a === b ? "FLAT" : a === 0 ? "UP" : "DOWN");
+  }
+  return out;
+}
+
 function dirOf(a: number, b: number): Dir {
   return b > a ? "+" : b < a ? "-" : "0";
 }
@@ -331,10 +346,17 @@ function dirOf(a: number, b: number): Dir {
 /** 既存メロ×歌詞のアクセント整合レポート（A-01〜05/07）。hits は UI が赤/黄でハイライト＝ユーザー握りつぶし可。 */
 export function analyzeLyricFit(
   notes: FitNote[],
-  opts: { accents?: AccentEntry[]; meter?: string } = {},
+  opts: { accents?: AccentEntry[]; meter?: string; noteHl?: (0 | 1 | null)[] } = {},
 ): FitReport {
   const syllables = notes.map((n) => n.syllable ?? "");
-  const contour = buildContour(syllables, opts.accents);
+  // 高低の出どころは3つ。上ほど信用できる。
+  //  ① noteHl＝表記から取った読みの高低（音符ごと・pyopenjtalk 由来。design §31-3）
+  //  ② accents＝呼び側が明示した語アクセント
+  //  ③ 内蔵辞書（9語だけ・下がり目を持つのは3語）＝ほぼ何も当たらない保険
+  // ①が来ている音符では、その区間を①で置き換える。分からない所（null）は印を出さない。
+  const contour: (Rel | null)[] = opts.noteHl?.length
+    ? hlToContour(opts.noteHl, notes.length)
+    : buildContour(syllables, opts.accents);
   const melodyDir: Dir[] = [];
   for (let i = 0; i + 1 < notes.length; i++) melodyDir.push(dirOf(notes[i]!.pitch, notes[i + 1]!.pitch));
 
@@ -343,7 +365,8 @@ export function analyzeLyricFit(
   const pairs = Math.max(1, notes.length - 1);
 
   for (let i = 0; i < contour.length && i < melodyDir.length; i++) {
-    const rel = contour[i]!, dir = melodyDir[i]!;
+    const rel = contour[i], dir = melodyDir[i]!;
+    if (rel == null) continue; // 読みの高低が分からない区間＝印を出さない
     let ruleId: string | null = null;
     if (rel === "DOWN" && dir === "+") ruleId = "A-01";
     else if (rel === "DOWN" && dir === "0") ruleId = "A-02";

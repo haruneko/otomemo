@@ -158,3 +158,41 @@ describe("opennessSeq / opennessReport（V1/V2・母音設計メトリクス）"
     expect(r.v2pitch).toBeNull();
   });
 });
+
+// ── スライス2：印（赤黄）の高低を表記から取った読みで出す（design §31-3） ────────────────
+// これまでの高低は9語だけの内蔵辞書由来で、下がり目を持つのは「はし/そら/ゆめ」の3語だけ＝
+// 一番効く印（読みが下がる所をメロが上がって裏切る＝A-01）が、辞書に無い語ではそもそも出なかった。
+import { analyzeLyricFit as fit } from "../src/prosody";
+
+describe("analyzeLyricFit の noteHl（表記から取った高低を音符ごとに渡す）", () => {
+  const N = (pitch: number, i: number, syllable?: string) => ({ pitch, start: i, dur: 1, syllable });
+
+  it("辞書に無い語でも、読みが下がる所をメロが上げれば赤が出る（A-01）", () => {
+    // 「とけい」＝内蔵辞書に無い。読みの高低 [0,1,1] のあと下がる…を模して [1,0] で作る。
+    const notes = [N(60, 0, "と"), N(67, 1, "け")]; // メロは上がる（60→67）
+    const withHl = fit(notes, { noteHl: [1, 0] }); // 読みは下がる
+    expect(withHl.hits.some((h) => h.ruleId === "A-01" && h.severity === "red")).toBe(true);
+    // 同じ音符・同じかなでも、高低を渡さなければ辞書に無いので何も当たらない
+    const without = fit(notes);
+    expect(without.hits.some((h) => h.ruleId === "A-01")).toBe(false);
+  });
+
+  it("分からない区間（null）では印を出さない＝機械が黙って断定しない", () => {
+    const notes = [N(60, 0, "あ"), N(67, 1, "め"), N(60, 2, "の")];
+    const r = fit(notes, { noteHl: [1, null, 0] });
+    // 1つ目と2つ目のあいだ、2つ目と3つ目のあいだ、どちらも片方が null＝印なし
+    expect(r.hits.filter((h) => h.ruleId.startsWith("A-0") && h.ruleId !== "A-07")).toEqual([]);
+    expect(r.contour).toEqual([null, null]);
+  });
+
+  it("noteHl を渡さなければ従来と完全に同じ（既存の呼び側に影響ゼロ）", () => {
+    const notes = [N(60, 0, "は"), N(64, 1, "し"), N(62, 2, "が"), N(67, 3, "あ")];
+    expect(fit(notes, {})).toEqual(fit(notes));
+    expect(fit(notes, { noteHl: [] })).toEqual(fit(notes)); // 空配列＝渡していないのと同じ扱い
+  });
+
+  it("読みが平らな所でメロが大きく跳べば注意が出る（A-05・高低が表記由来でも効く）", () => {
+    const notes = [N(60, 0, "や"), N(72, 1, "ま")];
+    expect(fit(notes, { noteHl: [1, 1] }).hits.some((h) => h.ruleId === "A-05")).toBe(true);
+  });
+});

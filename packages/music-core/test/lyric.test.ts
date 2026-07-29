@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   splitMora,
   isKanaOnly,
+  noteHighLow,
   moraLinesForDisplay,
   moraLines,
   flowLyric,
@@ -401,5 +402,45 @@ describe("moraLinesForDisplay（画面に出す数＝音数か文字数か）", 
 
   it("空行でも落ちない", () => {
     expect(moraLinesForDisplay("")).toEqual([{ line: "", n: 0, unit: "音" }]);
+  });
+});
+
+describe("noteHighLow（音符ごとの読みの高低・印の元になる値）", () => {
+  const R = (hl: (0 | 1)[] | null) => ({
+    forText: "あめのひは",
+    words: [{ surface: "あめのひは", read: "アメノヒハ", pron: "アメノヒワ", moraCount: 5 }],
+    moras: ["あ", "め", "の", "ひ", "わ"].map((kana) => ({ kana, word: 0 })),
+    hl,
+    breaks: [],
+  });
+  const P = (over: Record<string, unknown> = {}) => ({
+    id: "p1", start: 0, beats: 4, text: "あめのひは", reading: R([1, 0, 0, 0, 1]), ...over,
+  });
+  const notes = [0, 1, 2, 3].map((i) => ({ start: i, pitch: 60 + i }));
+
+  it("範囲内の音符へ頭から1対1（placeMoras と同じ規則）", () => {
+    expect(noteHighLow(notes, [P()])).toEqual([1, 0, 0, 0]);
+  });
+
+  it("句に覆われていない音符は分からない（null）", () => {
+    expect(noteHighLow(notes, [P({ start: 2, beats: 2 })])).toEqual([null, null, 1, 0]);
+  });
+
+  it("モーラが尽きた先（メリスマ）は分からない＝そこに印を出さない", () => {
+    const many = [0, 1, 2, 3, 4, 5, 6].map((i) => ({ start: i, pitch: 60 }));
+    expect(noteHighLow(many, [P({ beats: 8 })])).toEqual([1, 0, 0, 0, 1, null, null]);
+  });
+
+  it("控えが古ければ（表記を直した直後）全部分からない＝古い高低で印を出さない", () => {
+    expect(noteHighLow(notes, [P({ text: "そらのひは" })])).toEqual([null, null, null, null]);
+  });
+
+  it("高低が取れなかった句（門番が落とした）は分からない＝読みはあっても印は出さない", () => {
+    expect(noteHighLow(notes, [P({ reading: R(null) })])).toEqual([null, null, null, null]);
+  });
+
+  it("句が無ければ全部分からない", () => {
+    expect(noteHighLow(notes, undefined)).toEqual([null, null, null, null]);
+    expect(noteHighLow(notes, [])).toEqual([null, null, null, null]);
   });
 });

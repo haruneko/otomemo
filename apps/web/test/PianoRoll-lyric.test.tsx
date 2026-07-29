@@ -249,3 +249,26 @@ describe("PianoRoll：打ったものが黙って消えない", () => {
     expect(notesJson()[0]!.syllable).toBe("て");
   });
 });
+
+// スライス2の結線：句の読み（表記由来）が実際に画面の印まで届いているか。
+// テストが緑でも結線されていないことがある（このリポジトリで実際にあった）ので、
+// 部品の番人とは別に、画面に印が出るところまで見る。
+describe("PianoRoll：印（赤黄）が句の読みから出る", () => {
+  it("読みが上がる所をメロが下げていれば、その音符に印が付く", async () => {
+    // AME の高低は [0,1,1,1,1]＝1つ目→2つ目で上がる。メロを下げて裏切らせる。
+    const descending: Note[] = [67, 65, 64, 62, 60].map((pitch, i) => ({ pitch, start: i, dur: 1 }));
+    render(<Harness notes0={descending} />);
+    await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
+    await waitFor(() => expect(document.querySelectorAll(".proll-fit-mark").length).toBeGreaterThan(0), { timeout: 3000 });
+  });
+
+  it("読みとメロが噛み合っていれば印は出ない", async () => {
+    // 高低 [0,1,1,1,1] に沿って上げてから保つ＝裏切らない
+    const along: Note[] = [60, 64, 64, 64, 64].map((pitch, i) => ({ pitch, start: i, dur: 1 }));
+    render(<Harness notes0={along} />);
+    await userEvent.type(screen.getByLabelText("lyric-text"), "雨の日は");
+    await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
+    expect(document.querySelectorAll(".proll-fit-mark").length).toBe(0); // 凡例の .fit-red は数えない
+  });
+});

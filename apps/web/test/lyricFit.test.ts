@@ -33,3 +33,41 @@ describe("lyricFit：hits→クラス付与（W-K2 web配線）", () => {
     expect(map.size).toBe(0);
   });
 });
+
+// スライス2：句を渡すと高低が表記由来になる（design §31-3）。
+// これまでは9語の内蔵辞書だけが頼りで、下がり目を持つのは「はし/そら/ゆめ」の3語＝
+// それ以外の語では一番効く印（読みが下がる所をメロが上げる）が出なかった。
+describe("computeLyricHits：句を渡すと印が表記由来の高低で出る", () => {
+  const notes = [
+    { pitch: 60, start: 0, dur: 1, syllable: "と" },
+    { pitch: 67, start: 1, dur: 1, syllable: "け" }, // メロは上がる
+  ];
+  // 「とけい」は内蔵辞書に無い語。読みの高低は下がる（1→0）＝メロと逆＝赤が出るべき。
+  const phrases = [{
+    id: "p1", start: 0, beats: 4, text: "時計",
+    reading: {
+      forText: "時計",
+      words: [{ surface: "時計", read: "トケイ", pron: "トケー", moraCount: 3 }],
+      moras: [{ kana: "と", word: 0 }, { kana: "け", word: 0 }],
+      hl: [1, 0] as (0 | 1)[],
+      breaks: [],
+    },
+  }];
+
+  it("句を渡さなければ（従来の呼び方）辞書に無い語なので何も当たらない", () => {
+    const m = computeLyricHits(notes);
+    expect([...m.values()].some((h) => h.ruleId === "A-01")).toBe(false);
+  });
+
+  it("句を渡すと読みの下がり目をメロが裏切っている所に赤が出る", () => {
+    const m = computeLyricHits(notes, phrases);
+    const hit = m.get(1);
+    expect(hit?.ruleId).toBe("A-01");
+    expect(hit?.severity).toBe("red");
+  });
+
+  it("表記を直した直後（控えが古い）は印を出さない＝古い高低で断定しない", () => {
+    const stale = [{ ...phrases[0]!, text: "時計の針" }]; // reading.forText と食い違う
+    expect([...computeLyricHits(notes, stale).values()].some((h) => h.ruleId === "A-01")).toBe(false);
+  });
+});

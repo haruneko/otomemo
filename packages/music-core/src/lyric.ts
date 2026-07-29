@@ -216,6 +216,30 @@ export function placeMoras<T extends { start: number; syllable?: string }>(
   return out;
 }
 
+/**
+ * 音符ごとの読みの高低（0=低・1=高・null=分からない）。**印（赤黄）の元になる値**（design §31-3）。
+ *
+ * 割付は `placeMoras` と同じ規則＝範囲内の音符へ頭から1対1。ここがずれると、
+ * 音符に載っているかなと、その音符に当てる高低が食い違う（＝嘘の印が出る）ので、
+ * **必ず `notesInRange` を通す**（1対1の規則をこの1本に閉じ込める）。
+ *
+ * null を返すのは「分からない」＝ 句に覆われていない音符／控えが古い／高低が取れなかった（門番が落とした）／
+ * モーラが尽きた先（メリスマ）。**分からない所では印を出さない**＝機械が黙って断定しないため。
+ */
+export function noteHighLow<T extends { start: number }>(
+  notes: readonly T[],
+  phrases: readonly LyricPhrase[] | undefined,
+): (0 | 1 | null)[] {
+  const out: (0 | 1 | null)[] = notes.map(() => null);
+  for (const p of phrases ?? []) {
+    const hl = readingOf(p)?.hl; // 控えが古ければ readingOf が undefined＝この句は分からない扱い
+    if (!hl) continue;
+    const order = notesInRange(notes, { start: p.start, beats: p.beats });
+    for (let i = 0; i < order.length; i++) out[order[i]!] = i < hl.length ? hl[i]! : null;
+  }
+  return out;
+}
+
 // ── §5 字余りとメロが途中の言い分け（design §31-5 phraseStatus） ────────────────
 
 /**

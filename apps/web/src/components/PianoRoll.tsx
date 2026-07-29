@@ -92,7 +92,8 @@ export function PianoRoll({
   const [showFit, setShowFit] = useState(true);
   const [openReason, setOpenReason] = useState<number | null>(null);
   // hits はノート列/歌詞が変わった時だけ再計算（純関数 analyzeLyricFit へ委譲）。歌詞なしは空 Map＝ゼロ影響。
-  const hitMap = useMemo(() => computeLyricHits(notes), [notes]);
+  // 印（赤黄）の高低は句の読み（表記由来）から取る＝スライス2。句が無ければ従来どおり内蔵辞書。
+  const hitMap = useMemo(() => computeLyricHits(notes, lyric?.phrases), [notes, lyric]);
   const hasLyric = useMemo(() => notes.some((n) => n.syllable), [notes]);
   // ノート編集（design N1・案A）：選択(index集合)・貼付arm。描く に戻ったら選択解除。
   const [selected, setSelected] = useState<Set<number>>(new Set());
