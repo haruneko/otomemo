@@ -60,7 +60,7 @@
 
 | 項目 | 内容 | 出典URL | 設計含意 |
 |---|---|---|---|
-| Prosody（強弱音節整合） | 強拍に強音節、弱拍に弱音節を合わせ「言語の自然な形を保つ」という原則（Pat Pattison） | https://www.patpattison.com/language-and-songwriting | 英語版アクセント整合原則。日本語では [jp-prosody-melody-rules](2026-07-14-jp-prosody-melody-rules.md) のアクセント整合(A-01〜10)が相当し、Otomemoは既に**「硬い制約にはしない」と裁定済み**（実メロのアクセント厳密一致は31.7%しかない、[lyrics-first-melody-verdict](2026-07-15-lyrics-first-melody-verdict.md)）。英語圏の理論もこの裁定の傍証として使える（「自然な形を保つ」＝完全一致ではなくガイドライン） |
+| Prosody（強弱音節整合） | 強拍に強音節、弱拍に弱音節を合わせ「言語の自然な形を保つ」という原則（Pat Pattison） | https://www.patpattison.com/language-and-songwriting | 英語版アクセント整合原則。日本語では [jp-prosody-melody-rules](2026-07-14-jp-prosody-melody-rules.md) のアクセント整合(A-01〜10)が相当し、Otomemoは既に**「硬い制約にはしない」と裁定済み**（実メロのアクセント厳密一致は31.7%しかない、[lyrics-first-melody-verdict](../archive/2026-07-15-lyrics-first-melody-verdict.md)）。英語圏の理論もこの裁定の傍証として使える（「自然な形を保つ」＝完全一致ではなくガイドライン） |
 | 強勢/非強勢音節の役割分担 | 強勢＝高・大・長で名詞/動詞/形容詞が担う、非強勢＝冠詞・前置詞・接続詞が担う | https://lyricassistant.com/syllable-counts-stress-make-lines-singable-without-math-trauma/ | 品詞ベースで強勢/非強勢を機械的に推定できる可能性を示唆（英語）。日本語では助詞を強拍に置かない、というOtomemoの既存所見（[kariuta-lyrics-craft](2026-07-15-kariuta-lyrics-craft.md)）と同型の発想 |
 | meter（韻律格） | iambic（弱強＝上昇調・明るい印象）とtrochaic（強弱＝下降調・憂鬱な印象）を感情に合わせて選ぶ | https://literarydevices.net/mastering-poetry-meter-how-to-read-and-write-rhythmic-verse | 日本語には韻律格の概念自体が薄い（アクセント言語であり強勢言語ではない）。直接移植は不可、参考程度 |
 | rhyme types（韻の型） | perfect（完全韻）/family/additive-subtractive/assonance/consonance を使い分け緊張と安定を演出 | https://www.tunedly.com/blog/understanding-rhyme-types-for-better-songwriting.html | 日本語の「韻」は母音一致が基本で英語ほど型が細分化されない。ただし「完全韻を多用しすぎない」という下記のover-rhyming警告は日本語でも成立しうる観点 |
@@ -113,7 +113,7 @@
 ### 3軸が独立に一致した「筋の確実な柱」
 
 1. **音数割付（モーラ/音節カウント）** — 軸①（モーラカウンター・定番フレーム）／軸②（syllable counter・SongPad/RHYMEBOOK）／軸③（アマチュアの困りごと：音数合わせの反復）の3軸すべてで最頻出。Otomemoは `analyzeMoras`/`suggestLyricRhythm` で**既に土台を持つ**。
-2. **アクセント/prosody整合** — 軸①（ピッチアクセント4型可視化・OJAD）／軸②（Pat Pattisonの強弱整合）／軸③（pitch accent言語のICPhS研究・言語学的強勢規則学習）で三重に一致。Otomemoは既に実装・裁定済み（**硬い制約にせず検査/ランキング**、[lyrics-first-melody-verdict](2026-07-15-lyrics-first-melody-verdict.md)）＝この裁定が3軸の知見とも整合していたことが今回のサーベイで確認できた。
+2. **アクセント/prosody整合** — 軸①（ピッチアクセント4型可視化・OJAD）／軸②（Pat Pattisonの強弱整合）／軸③（pitch accent言語のICPhS研究・言語学的強勢規則学習）で三重に一致。Otomemoは既に実装・裁定済み（**硬い制約にせず検査/ランキング**、[lyrics-first-melody-verdict](../archive/2026-07-15-lyrics-first-melody-verdict.md)）＝この裁定が3軸の知見とも整合していたことが今回のサーベイで確認できた。
 3. **ロングトーン向き母音** — 軸①（え/う高音向き・いは喉詰まり）／軸②（open vowel/front-back vowel）／軸③（長音への母音選択戦略）で三重に一致。Otomemoは既に独自の実測知見を持つ（[kariuta-lyrics-craft](2026-07-15-kariuta-lyrics-craft.md)）が、う段の扱いに軸①との食い違いがあり要すり合わせ（上表参照）。
 4. **言い換え候補（音数を保った類義語提示）** — 軸①（sakushi）／軸②（「同義語5個が欲しい」という直接の不満の声）／軸③（アマチュアの困りごと：音数合わせの反復）で三重に一致。**3軸で最も支持の厚い未実装機能**。実装は類語辞書＋`analyzeMoras`のモーラ数フィルタで、既存の土台からの距離が近い。
 5. **俯瞰ビュー（フォーム構成を見る画面）** — 軸①（構成別テーマ統一・視点ブレ検出は構成全体を見て初めて可能）／軸②（RHYMEBOOKの構成ビルダー）で一致。Otomemoには既に `SectionEditor` があるが、**歌詞編集と統合されているかは別問題**（後述の穴と表裏）。

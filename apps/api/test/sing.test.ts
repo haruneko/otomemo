@@ -122,7 +122,7 @@ describe("notesToScore の音域処理（B2・輪郭保存）", () => {
 
 // #13c 句頭子音カウントイン：先頭休符をテンポ非依存の時間床（SING_LEAD_REST_SEC）付きに。
 // 母音頭の手前に置かれる子音（VOICEVOX 実測）が速いテンポで先頭休符から溢れないよう前余白を確保。
-// 正典＝docs/research/2026-07-16-vocal-consonant-countin.md §3.4/§7 F1b。
+// 正典＝docs/archive/2026-07-16-vocal-consonant-countin.md §3.4/§7 F1b。
 describe("notesToScore の先頭休符 時間床（#13c カウントイン）", () => {
   const framesOf = (beats: number, spb: number) => Math.max(1, Math.round(beats * spb * FPS));
 

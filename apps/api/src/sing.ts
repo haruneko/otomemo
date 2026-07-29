@@ -18,7 +18,7 @@ const VV_URL = process.env.CM_VOICEVOX_URL ?? `http://127.0.0.1:${VV_PORT}`;
 const SING_SPEAKER = 6000; // 歌声モデル（波音リツ・query 用）＝L4 実測で歌声は 6000 の1体のみ
 const DEFAULT_FRAME_DECODE = 3009; // 声色（synth 用）既定＝波音リツ frame_decode
 export const FPS = 93.75; // フレームレート = 24000 / 256（L4 実測）
-// #13c 句頭子音カウントイン（2026-07-16・正典＝docs/research/2026-07-16-vocal-consonant-countin.md §3.4）。
+// #13c 句頭子音カウントイン（2026-07-16・正典＝docs/archive/2026-07-16-vocal-consonant-countin.md §3.4）。
 // 先頭休符のテンポ非依存な時間床（秒）。VOICEVOX は子音を母音頭の手前（先頭休符の後半）に置く（実測 §1）。
 // 0.25拍だけだと速いテンポで子音がはみ出す（bpm140=107ms＜子音上限 sh≈128ms）ので、先頭休符を
 // 「0.25拍 と この床 の大きい方」にする＝速いテンポでも子音ぶんの前余白を確保。**耳で聴いて増減する定数

@@ -69,7 +69,7 @@ export interface VocalPlay {
   gain?: number;
 }
 
-// #13c 句頭子音カウントイン一般式（純関数・Tone非依存・TDD／2026-07-16・正典＝docs/research/2026-07-16-vocal-consonant-countin.md §3.1）。
+// #13c 句頭子音カウントイン一般式（純関数・Tone非依存・TDD／2026-07-16・正典＝docs/archive/2026-07-16-vocal-consonant-countin.md §3.1）。
 // VOICEVOX は母音頭をノート境界に、子音をその手前（先頭休符/前ノート）に置く（実測 §1）。旧式は offset で
 // 先頭休符を丸ごと飛ばし母音頭から鳴らす＝**先頭句の子音を切っていた**。新式＝母音頭をターゲット拍に載せつつ、
 // 余地がある限り offset=0＝先頭休符（後半に子音が居る）ごと鳴らす：
@@ -1167,7 +1167,7 @@ export async function playNotes(
   const spb = 60 / bpm;
   const totalBeats = notes.reduce((m, n) => Math.max(m, n.start + n.dur), 0);
   let loopStartBeat = opts.loop ? opts.loop.startBeat : 0;
-  // #13c 句頭子音カウントイン（2026-07-16・正典＝docs/research/2026-07-16-vocal-consonant-countin.md）。
+  // #13c 句頭子音カウントイン（2026-07-16・正典＝docs/archive/2026-07-16-vocal-consonant-countin.md）。
   // 仮歌があるとき（非ループ）だけ、子音の前余白ぶん（＝各 vocal の leadRest の最大）を**全パートに一律**
   // 上乗せする単一スカラ。job/フックへは漏らさず playNotes 内に閉じ込める＝複数 Section/メロレーン/弱起でも
   // 全 vocal が同じシフト S を共有し相対時刻不変（doc §4）。ループは 0（毎周の無音挿入でシームレス性を壊さない）。

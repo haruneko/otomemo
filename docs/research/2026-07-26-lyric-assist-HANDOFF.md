@@ -138,7 +138,7 @@
 
 既存の作詞支援研究（背景・下敷き）:
 - `docs/research/2026-07-19-lyric-support-synthesis.md` — 作詞支援の思想裁定（客観層=診断/調査型が正当・所有感の要は作者の手番）
-- `docs/research/2026-07-15-lyrics-first-melody-verdict.md` — 詞先メロ既決（減量版採用）
+- `docs/archive/2026-07-15-lyrics-first-melody-verdict.md` — 詞先メロ既決（減量版採用）
 - `docs/research/2026-07-15-kariuta-lyrics-craft.md` — 仮歌書法 K-01〜26
 - `docs/research/README.md` — 研究索引（全docのグループ別一覧）
 
