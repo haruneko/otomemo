@@ -122,7 +122,9 @@ export type ReadingResult = Omit<LyricReading, "forText"> & { error?: string };
 
 const HOLE = /＿+/;              // 穴＝「＿」1個以上（design §31-3(b)）
 const DEVOICE = /’/g;            // 無声化の印。読みにも仮歌にも要らないので落とす
-const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufeff]/g; // 改行以外の制御文字＝1行1文の約束を壊すので落とす
+// 改行以外の制御文字＝1行1文の約束を壊すので落とす。改行（\n・\r）は下の split が行の切れ目として扱う。
+// eslint-disable-next-line no-control-regex -- 制御文字を落とすのが目的の正規表現＝制御文字が入るのは意図的
+const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufeff]/g;
 const NOT_KANA = /[^\p{Script=Hiragana}\p{Script=Katakana}ーｰ]/gu;
 
 /** カタカナ1文字→ひらがな（analyzeMoras の toHira と同じ範囲）。 */
@@ -134,7 +136,7 @@ const toHira = (s: string) => s.replace(/[ァ-ヶ]/g, (c) => String.fromCodePoin
  */
 export function splitFragments(text: string): string[] {
   return text
-    .split(/\r?\n/)
+    .split(/\r\n|[\r\n]/) // 単独の \r（旧Mac改行）も行の切れ目として扱う＝断片に改行を残さない
     .flatMap((line) => line.split(HOLE))
     .map((f) => f.replace(CONTROL, "").trim())
     .filter((f) => f.length > 0);

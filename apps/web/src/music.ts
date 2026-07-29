@@ -1760,3 +1760,15 @@ export {
   primeSf2, probeSoundFont, resolveSF2Ctor, setActiveSoundFont, setMixVolume, subscribeSfLoading,
   subscribeSfPreparing, velToMidi, vocalSourceSchedule,
 } from "./audio";
+
+/**
+ * ネタの content から歌詞の層（句）を取り出す（design #31-1）。
+ * 形が違えば undefined＝壊れた content でも落ちない（content は素通しの JSON なので何が入っていてもよい）。
+ */
+export function lyricOf(content: unknown): import("./lyrics").LyricLayer | undefined {
+  if (content && typeof content === "object") {
+    const l = (content as { lyric?: import("./lyrics").LyricLayer }).lyric;
+    if (l && typeof l === "object") return l;
+  }
+  return undefined;
+}

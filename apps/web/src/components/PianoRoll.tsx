@@ -281,7 +281,7 @@ export function PianoRoll({
         ? "読みが取れませんでした"
         : readMoras.length
           ? `読み：${readMoras.join("")}（${readMoras.length}音）`
-          : "読みを取り直します";
+          : "読みを取ります"; // これから取る、の意味（右の「読みを取り直す」ボタンと言葉が紛れないように）
 
   /**
    * 句と音符の関係の言い分け（design §31-5）。**字余りと「メロがまだ途中」は別のこと**（オーナー裁定「分ける」）。
@@ -515,7 +515,7 @@ export function PianoRoll({
       {/* 理由（ⓘタップで開く一行説明）＝音符側の情報アイコンに移設したので、ポップは在り処が分かる in-flow バナーで。 */}
       {showFit && openReason != null && hitMap.get(openReason) && (
         <div className="proll-fit-reason" role="tooltip" onClick={() => setOpenReason(null)}>
-          <b>{notes[openReason]?.syllable}</b>　{hitMap.get(openReason)!.ruleId}：{hitMap.get(openReason)!.note}
+          <b>{notes[openReason]?.syllable}</b>{"　"}{hitMap.get(openReason)!.ruleId}：{hitMap.get(openReason)!.note}
         </div>
       )}
       {/* 選択バー（選ぶモード）：複製/コピー/貼付/削除＋nudge移動（design N1）。 */}

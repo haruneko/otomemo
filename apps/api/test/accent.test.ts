@@ -255,3 +255,15 @@ py("extractReadings（実機・pyopenjtalk）", () => {
     }
   }, 30_000);
 });
+
+describe("splitFragments：改行の扱い（断片に改行を残さない＝accent.py は1行1文で読む）", () => {
+  it("単独の \\r（旧Mac改行）も行の切れ目として扱う", () => {
+    expect(splitFragments("雨の日は\rくつが濡れる")).toEqual(["雨の日は", "くつが濡れる"]);
+  });
+
+  it("\\n・\\r\\n・\\r が混ざっても断片に改行が1つも残らない", () => {
+    const frags = splitFragments("あ\nい\r\nう\rえ");
+    expect(frags).toEqual(["あ", "い", "う", "え"]);
+    expect(frags.every((f) => !/[\r\n]/.test(f))).toBe(true);
+  });
+});

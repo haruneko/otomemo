@@ -37,6 +37,8 @@ import {
 } from "./music";
 import { skeletonPlaybackNotes } from "./skeletonEdit";
 import type { LyricLayer } from "./lyrics";
+import { lyricOf } from "./music";
+export { lyricOf }; // 置き場は music.ts（design #31-1）。ここは既存の import 元を壊さないための再輸出。
 import { useVocalRender } from "./useVocal";
 import { useCowGuard } from "./useCowGuard";
 
@@ -45,15 +47,6 @@ import { useCowGuard } from "./useCowGuard";
 //    歌詞の置き場も案(い)の仮置き＝確定ではない。ここは「メロ自身の content を素通しする」だけなので
 //    置き場がどの案に決まっても変わらない（design §31-0 の検算）。
 // 中身の形は見ない（feelOf と同じ）＝知らないキーが入っていても捨てずに持ち回る。
-// ※ design は lyricOf を music.ts に置くと書いているが、今回の担当ファイルの外なのでここに置いた。
-//    music.ts へ移すなら import 面だけの移動で済む（やり残しとして申し送り）。
-export function lyricOf(content: unknown): LyricLayer | undefined {
-  if (content && typeof content === "object") {
-    const l = (content as { lyric?: LyricLayer }).lyric;
-    if (l && typeof l === "object") return l;
-  }
-  return undefined;
-}
 
 // 仮歌ジョブ（再生キー＋声）を組む純関数。key に声(speaker)を含める＝声を変えたら別 wav。
 // 含めないと古い声の wav キャッシュが再利用され「声を変えても反映されない」（2026-07-17 バグ・SectionEditor は

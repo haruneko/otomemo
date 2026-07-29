@@ -120,7 +120,7 @@ describe("PianoRoll：詞を書く入口（design §31-9）", () => {
     render(<Harness notes0={fiveNotes()} lyric0={lyric0} />);
     // 控えの forText が今の表記と違う＝古い。読みは音符へ写らない（音符は手つかず）。
     expect(notesJson().every((n) => n.syllable === undefined)).toBe(true);
-    expect(screen.getByLabelText("lyric-reading-state")).toHaveTextContent("読みを取り直します");
+    expect(screen.getByLabelText("lyric-reading-state")).toHaveTextContent("読みを取ります");
   });
 
   it("読みが取れなければ「読みが取れませんでした」と出し、表記も音符もそのまま", async () => {
