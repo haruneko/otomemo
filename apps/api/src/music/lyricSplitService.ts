@@ -7,7 +7,8 @@ import { RHYTHM16_DATA } from "./motifModelData";
 
 // プルダウンで組む＝有効な組み合わせ＝候補集合そのもの（監査D）。分解と局所照合のため全候補を返す
 // （上限つき）。リスト表示側で上位だけ見せるのは画面の仕事。notesAfter も同梱＝適用は照合した候補から。
-const MAX_RETURN = 150; // 返す候補の上限（研究：字余り3で数百＝ここで頭打ち＝truncated で知らせる）
+const MAX_RETURN = 600; // 返す候補の上限（字余り3で全532＝丸ごと入る。超えたら truncated＝UIは組み立てで適用可）
+const CORE_LIMIT = 800; // コア側の候補上限（MAX_RETURN より大きく取り、事実順の頭を確実に含める）
 const CORPUS = (pat: string): number | undefined => RHYTHM16_DATA[pat];
 
 export interface SplitRequest {
@@ -58,7 +59,7 @@ export function splitCandidatesForApi(body: SplitRequest): SplitResponse {
   const r = splitCandidates(notes, moras, range, meter, {
     corpus: CORPUS,
     words: body.words,
-    limit: 200,
+    limit: CORE_LIMIT,
   });
 
   // 全候補を返す（上限つき）＝プルダウン分解と局所照合のため。事実順に詰めて MAX_RETURN で頭打ち。

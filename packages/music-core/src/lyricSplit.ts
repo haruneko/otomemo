@@ -71,6 +71,50 @@ export interface SplitOptions {
 type Frag = [number, number]; // [startSlot, endSlot)
 
 /**
+ * 選んだ割り方（splits＝音符ごとに足す絶対slot）を音符列に適用して割った後の音符を作る純関数。
+ * **端点を保持**＝先頭断片の start は元の start・末尾断片の end は元の end（内部境界だけ格子）＝
+ * 格子外の音符（MIDI取込等）を割っても頭と尻のタイミングが動かない（監査 Bug5）。
+ * かなは範囲内音符へ1対1で写す（placeMoras）。候補生成でも、UIが任意の選択を適用するときでも同じ関数を通す
+ * ＝返却候補の上限で切れても、合計が合う選択なら適用できる（監査 Bug1）。
+ */
+export function assembleSplitNotes<T extends LyricNoteLike>(
+  notes: readonly T[],
+  kana: readonly string[],
+  range: PhraseRange,
+  meter: SplitMeter,
+  splits: readonly { noteIndex: number; slot: number }[],
+): T[] {
+  const gpb = Math.max(1, Math.floor(meter.gridPerBeat));
+  const bpb = Math.max(1, Math.floor(meter.beatsPerBar));
+  const originBeat = Math.floor((range.start + EPS) / bpb) * bpb;
+  const bySrc = new Map<number, number[]>();
+  for (const s of splits) {
+    const arr = bySrc.get(s.noteIndex);
+    if (arr) arr.push(s.slot);
+    else bySrc.set(s.noteIndex, [s.slot]);
+  }
+  const out: T[] = [];
+  for (let i = 0; i < notes.length; i++) {
+    const src = notes[i]!;
+    const adds = bySrc.get(i);
+    if (!adds || adds.length === 0) { out.push({ ...src }); continue; }
+    const endBeat = src.start + src.dur;
+    const onsetBeats: number[] = [src.start]; // 先頭は元の start をそのまま（格子に丸めない）
+    for (const slot of adds.slice().sort((a, b) => a - b)) {
+      const bt = originBeat + slot / gpb;
+      if (bt > (onsetBeats[onsetBeats.length - 1] ?? -Infinity) + EPS && bt < endBeat - EPS) onsetBeats.push(bt);
+    }
+    for (let o = 0; o < onsetBeats.length; o++) {
+      const start = onsetBeats[o]!;
+      const next = o + 1 < onsetBeats.length ? onsetBeats[o + 1]! : endBeat; // 末尾は元の end をそのまま
+      out.push({ ...src, start, dur: next - start });
+    }
+  }
+  out.sort((x, y) => x.start - y.start);
+  return placeMoras(out, kana, range);
+}
+
+/**
  * 字余りの句に対して「音楽的に成立する割り方」の候補を出す（採用は人＝適用は呼び側）。
  * notes は句を含む全音符（範囲外は素通し）。moras は句のモーラ列（かな＋kind）。
  * 余りモーラ k = moras 数 − 範囲内音符数。k<=0（余っていない）なら候補は空。
@@ -166,7 +210,10 @@ export function splitCandidates<T extends LyricNoteLike>(
 
   const noteSlot = order.map((ni) => toSlot(notes[ni]!.start));
   const noteLen = order.map((ni) => Math.max(1, Math.round(notes[ni]!.dur * gpb)));
-  const perNote = order.map((_, i) => enumNote(noteSlot[i]!, noteLen[i]!));
+  // 割り位置は範囲末を越えて置かない（監査 Bug4＝範囲外の新onsetがモーラを1つ奪って字余りが直らない）。
+  const rangeEndSlot = toSlot(range.start + range.beats);
+  const splitLen = order.map((_, i) => Math.max(1, Math.min(noteSlot[i]! + noteLen[i]!, rangeEndSlot) - noteSlot[i]!));
+  const perNote = order.map((_, i) => enumNote(noteSlot[i]!, splitLen[i]!));
   const endIdx = protectEnd ? order.length - 1 : -1;
 
   // ── 段2：句全体で合計 j = k をDFS（句末は既定 j=0・C-4）──
@@ -208,25 +255,8 @@ export function splitCandidates<T extends LyricNoteLike>(
       if (arr) arr.push(s.slot);
       else bySrc.set(s.noteIndex, [s.slot]);
     }
-    const out: T[] = [];
-    for (let i = 0; i < notes.length; i++) {
-      const src = notes[i]!;
-      const adds = bySrc.get(i);
-      if (!adds || adds.length === 0) {
-        out.push({ ...src });
-        continue;
-      }
-      const startSlot = toSlot(src.start);
-      const endSlot = startSlot + Math.max(1, Math.round(src.dur * gpb));
-      const onsets = [startSlot, ...adds].sort((x, y) => x - y);
-      for (let o = 0; o < onsets.length; o++) {
-        const sSlot = onsets[o]!;
-        const eSlot = o + 1 < onsets.length ? onsets[o + 1]! : endSlot;
-        out.push({ ...src, start: originBeat + sSlot / gpb, dur: (eSlot - sSlot) / gpb });
-      }
-    }
-    out.sort((x, y) => x.start - y.start);
-    const notesAfter = placeMoras(out, kanaList, range);
+    // 割った後の音符＝共通の純関数で作る（端点保持・監査 Bug5／任意選択の適用にも同じ関数を使う・Bug1）。
+    const notesAfter = assembleSplitNotes(notes, kanaList, range, meter, splits);
 
     // 事実（範囲内音符で計算）
     const idx = notesInRange(notesAfter, range);
@@ -251,29 +281,31 @@ export function splitCandidates<T extends LyricNoteLike>(
       if (words && m > 0 && words[m] !== undefined && words[m] === words[m - 1]) wordBoundaryHit = true;
     }
 
-    // C-6：4/4・16分・コーパスありのときだけ既出照合
+    // C-6：4/4・16分・コーパスありのときだけ既出照合。**範囲に丸ごと入る小節だけ**照合する
+    // （監査 歪み1＝弱起や部分小節を1小節扱いすると、範囲外の onset が抜けた架空の小節の頻度を返してしまう）。
     let corpusKnown: boolean | null = null;
     let corpusFreq = 0;
     if (backedByCorpus && opts.corpus) {
       const firstBar = Math.floor((range.start + EPS) / bpb);
       const lastBar = Math.ceil((range.start + range.beats - EPS) / bpb) - 1;
-      corpusKnown = true;
+      let looked = 0;
+      let allKnown = true;
       for (let bar = firstBar; bar <= lastBar; bar++) {
+        const barStart = bar * bpb;
+        if (barStart < range.start - EPS || barStart + bpb > range.start + range.beats + EPS) continue; // 部分小節は照合しない
         const grid = new Array(cells).fill(".");
         let any = false;
         for (const i of idx) {
           const s = toSlot(notesAfter[i]!.start) - (bar - firstBar) * cells;
-          if (s >= 0 && s < cells) {
-            grid[s] = "x";
-            any = true;
-          }
+          if (s >= 0 && s < cells) { grid[s] = "x"; any = true; }
         }
         if (!any) continue; // onset の無い小節は照合対象から外す
-        const pat = grid.join("");
-        const freq = opts.corpus(pat);
-        if (freq === undefined) corpusKnown = false;
+        looked++;
+        const freq = opts.corpus(grid.join(""));
+        if (freq === undefined) allKnown = false;
         else corpusFreq += freq;
       }
+      corpusKnown = looked > 0 ? allKnown : null; // 丸ごと入る小節が無ければ裏取り対象外
     }
 
     return {

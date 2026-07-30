@@ -285,13 +285,15 @@ export function PianoRoll({
     void fetchReadings(); // 控えが古い句だけ聞き直す＝返ってきたら下の効果が写す
   }
 
-  // メロが変わったら組みかけの割り方候補は腐る＝無効化（監査 穴E）。適用時も applySplit が消す。
-  useEffect(() => { setSplitData(null); }, [notes]);
+  // メロが変わったら組みかけの割り方候補は腐る＝無効化＋世代を進める（飛んでいる旧リクエストを捨てる・監査 Bug2）。
+  const splitReqRef = useRef(0);
+  useEffect(() => { splitReqRef.current++; setSplitData(null); }, [notes]);
 
   // 案A＝音符を割る候補を取りに行く（字余りのときだけ）。コーパスの裏取りは api が持つのでサーバ経由。
   // **機械は割らない・出すだけ**＝返った候補から人が選んで applySplit で適用する（既定は何もしない）。
   async function fetchSplitCandidates() {
     if (!phrase || !readMoras.length) return;
+    const reqId = ++splitReqRef.current; // この取得の世代。返るまでにメロが変わったら（useEffect が++）捨てる。
     setSplitState("busy");
     setSplitData(null);
     try {
@@ -301,10 +303,11 @@ export function PianoRoll({
         range: { start: phrase.start, beats: phrase.beats },
         meter: { beatsPerBar: bpb, gridPerBeat: SUBDIV }, // 4/4=4・16分=4。非4/4は裏取り無効（正直ラベル）
       });
+      if (splitReqRef.current !== reqId) return; // 途中でメロが変わった＝古い候補は捨てる（編集の巻き戻し防止）
       setSplitData(res);
       setSplitState("idle");
     } catch {
-      setSplitState("error");
+      if (splitReqRef.current === reqId) setSplitState("error");
     }
   }
 
@@ -566,6 +569,7 @@ export function PianoRoll({
                   {splitData && (
                     <LyricSplitComposer
                       origNotes={notes}
+                      moras={readMoras}
                       range={{ start: phrase!.start, beats: phrase!.beats }}
                       meter={{ beatsPerBar: bpb, gridPerBeat: SUBDIV }}
                       data={splitData}

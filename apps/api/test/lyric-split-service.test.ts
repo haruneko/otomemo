@@ -10,8 +10,8 @@ describe("splitCandidatesForApi：コーパス注入と整形", () => {
     const r = splitCandidatesForApi({ notes, reading: ["あ", "い", "う", "え", "お", "か"], range, meter });
     expect(r.backedByCorpus).toBe(true);
     expect(r.candidates.length).toBeGreaterThan(0);
-    // プルダウン分解のため全候補を返す（上限150で頭打ち）。
-    expect(r.candidates.length).toBeLessThanOrEqual(150);
+    // プルダウン分解のため全候補を返す（上限600で頭打ち）。
+    expect(r.candidates.length).toBeLessThanOrEqual(600);
     // index は candidates の範囲内・2軸とも全候補を指す
     expect(r.byFacts).toHaveLength(r.candidates.length);
     expect(r.byPreference).toHaveLength(r.candidates.length);

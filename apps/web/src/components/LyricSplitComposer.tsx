@@ -3,6 +3,7 @@
 // 開時1回を局所照合）／初期は全「割らない」＝機械は事前選択しない（頻度は事実なので「多い形を入れる」ボタン）／
 // 位置が複数あるときは小図で見分け／到達不能・促音/語境界警告・非4/4縮退を引き継ぐ。
 import { useMemo, useState } from "react";
+import { assembleSplitNotes } from "@cm/music-core";
 import type { Note } from "../music";
 import type { SplitCandidatesResponse, SplitCandidateDTO } from "../api";
 import {
@@ -21,9 +22,10 @@ function localFig(startSlot: number, lenSlots: number, addedSlots: number[]): st
 }
 
 export function LyricSplitComposer({
-  origNotes, range, meter, data, onApply,
+  origNotes, moras, range, meter, data, onApply,
 }: {
   origNotes: Note[];
+  moras: string[]; // 句のかな列（範囲内音符へ1対1で写す＝適用時の組み立てに要る）
   range: { start: number; beats: number };
   meter: { beatsPerBar: number; gridPerBeat: number };
   data: SplitCandidatesResponse;
@@ -31,6 +33,8 @@ export function LyricSplitComposer({
 }) {
   const gpb = meter.gridPerBeat;
   const bpb = meter.beatsPerBar;
+  // slot の原点＝句頭が属する小節の頭（コアと同じ基準＝弱起でも図と位置がズレない・監査 Bug3）。
+  const originBeat = Math.floor((range.start + 1e-6) / bpb) * bpb;
   const inRangeIdx = useMemo(() => {
     const end = range.start + range.beats;
     return origNotes.map((n, i) => ({ n, i })).filter(({ n }) => n.start >= range.start && n.start < end)
@@ -44,15 +48,32 @@ export function LyricSplitComposer({
   const [sel, setSel] = useState<Map<number, string>>(() => new Map(inRangeIdx.map((i) => [i, ""])));
 
   const added = selectionAdded(options, sel);
-  const matched = added === k ? matchCandidate(data.candidates, inRangeIdx, sel) : null;
+  const matched = added === k ? matchCandidate(data.candidates, inRangeIdx, sel) : null; // 事実表示用（頻度など）
   const remaining = k - added;
+
+  // 選んだ割り方（splits）＝プルダウンの各 option の slots を集める。
+  const selectedSplits = useMemo(() => {
+    const out: { noteIndex: number; slot: number }[] = [];
+    for (const idx of inRangeIdx) {
+      const opt = (options.get(idx) ?? []).find((o) => o.key === (sel.get(idx) ?? ""));
+      for (const slot of opt?.slots ?? []) out.push({ noteIndex: idx, slot });
+    }
+    return out;
+  }, [options, sel, inRangeIdx]);
+
+  // 適用は「合計が余りに一致」していれば可＝返却候補の上限で切れても組み立てで適用できる（監査 Bug1）。
+  const applicable = added === k && remaining === 0;
+  const doApply = () => onApply(assembleSplitNotes(origNotes, moras, range, meter, selectedSplits) as Note[]);
+  // 組んだ形の図＝matched があればその notesAfter、無ければ組み立てて作る（頻度未取得でも図と適用は出る）。
+  const previewNotes = matched ? matched.notesAfter
+    : applicable ? assembleSplitNotes(origNotes, moras, range, meter, selectedSplits) : [];
 
   const setOne = (idx: number, key: string) => setSel((prev) => new Map(prev).set(idx, key));
   const loadSelection = (cand: SplitCandidateDTO) => setSel(candidateToSelection(cand, inRangeIdx));
 
   // 割れる音符（選択肢が2つ以上）だけプルダウンを出す＝スマホ幅で音符数ぶん並べない（監査2）。
   const splittable = inRangeIdx.filter((idx) => (options.get(idx)?.length ?? 0) > 1);
-  const noteBeat = (idx: number) => (Math.floor(origNotes[idx]!.start) % bpb) + 1; // 小節内の拍番号（1..bpb）
+  const noteBeat = (idx: number) => ((Math.floor(origNotes[idx]!.start) % bpb) + bpb) % bpb + 1; // 小節内の拍番号（弱起の負剰余対策・監査 Bug3）
 
   if (data.candidates.length === 0) {
     return (
@@ -79,7 +100,7 @@ export function LyricSplitComposer({
       <div className="split-dropdowns">
         {splittable.map((idx) => {
           const opts = options.get(idx)!;
-          const startSlot = Math.round(origNotes[idx]!.start * gpb);
+          const startSlot = Math.round((origNotes[idx]!.start - originBeat) * gpb); // 原点相対（監査 Bug3）
           const lenSlots = Math.max(1, Math.round(origNotes[idx]!.dur * gpb));
           const dupCount = new Map<number, number>();
           for (const o of opts) dupCount.set(o.added, (dupCount.get(o.added) ?? 0) + 1);
@@ -98,16 +119,15 @@ export function LyricSplitComposer({
         })}
       </div>
 
-      {/* 組んだ形の図＋残り＋適用。 */}
+      {/* 組んだ形の図＋残り＋適用。適用は「ちょうど」なら常に可（返却上限で切れても組み立てる・Bug1）。 */}
       <div className="split-preview">
         <span className="split-fig" aria-label="split-figure">
-          {(matched ? onsetFigure(matched.notesAfter, origStarts, range, gpb, bpb)
-            : []).map((c, i) => <span key={i} className={`fig-${c}`}>{CELL_CHAR[c]}</span>)}
+          {onsetFigure(previewNotes, origStarts, range, gpb, bpb).map((c, i) => <span key={i} className={`fig-${c}`}>{CELL_CHAR[c]}</span>)}
         </span>
         <span className="muted" aria-label="split-remaining">
-          {remaining > 0 ? `残り：あと${remaining}` : remaining < 0 ? `割りすぎ：${-remaining}多い` : matched ? "ちょうど" : "この形は候補にありません"}
+          {remaining > 0 ? `残り：あと${remaining}` : remaining < 0 ? `割りすぎ：${-remaining}多い` : "ちょうど"}
         </span>
-        <button type="button" aria-label="split-apply" disabled={!matched} onClick={() => matched && onApply(matched.notesAfter)}>
+        <button type="button" aria-label="split-apply" disabled={!applicable} onClick={doApply}>
           この形にする
         </button>
       </div>
