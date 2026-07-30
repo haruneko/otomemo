@@ -1980,6 +1980,13 @@
   color: #fff;
   border-color: var(--accent);
 }
+/* 詞モード＝文字ラベル「1音ずつ」（§31-11 の16 (a)・案B）。アイコン3つの 14px 横 padding は文字だと広すぎるので詰める＝360px 幅で他ボタンと同居させる。 */
+.proll-modes button.mode-lyric {
+  padding: 4px 8px;
+  font-size: 0.74rem;
+  min-width: 0;
+  white-space: nowrap;
+}
 /* 選択バー（複製/コピー/貼付/削除＋nudge）。 */
 .proll-selbar {
   display: flex;

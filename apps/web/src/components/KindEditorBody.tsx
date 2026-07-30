@@ -183,10 +183,11 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                       <button type="button" aria-label="mode-erase" title="消す（タップで削除）" className={p.rollMode === "erase" ? "on" : ""} onClick={() => p.setRollMode("erase")}>
                         <Icon name="eraser" size={18} />
                       </button>
-                      {/* 詞＝歌詞リタッチ（メロのみ）：音符タップで syllable 編集・確定で次へ。ノート編集は無効化＝タップ競合の構造的解消。 */}
+                      {/* 詞＝歌詞リタッチ（メロのみ）：音符タップで syllable 編集・確定で次へ。ノート編集は無効化＝タップ競合の構造的解消。
+                          ラベルは文字「1音ずつ」＝スマホでは title が出ず用が読めない穴を塞ぐ（§31-11 の16 (a)・案B）。 */}
                       {isMelody && (
-                        <button type="button" aria-label="mode-lyric" title="詞（音符タップで歌詞を編集）" className={p.rollMode === "lyric" ? "on" : ""} onClick={() => p.setRollMode("lyric")}>
-                          詞
+                        <button type="button" aria-label="mode-lyric" title="1音ずつ歌詞を直す（音符をタップ）" className={"mode-lyric" + (p.rollMode === "lyric" ? " on" : "")} onClick={() => p.setRollMode("lyric")}>
+                          1音ずつ
                         </button>
                       )}
                     </div>
