@@ -19,8 +19,8 @@ import { useState } from "react";
 import type { Note } from "../src/music";
 import type { LyricLayer } from "../src/lyrics";
 
-const { readings } = vi.hoisted(() => ({ readings: vi.fn() }));
-vi.mock("../src/api", () => ({ api: { readings } }));
+const { readings, splitCandidates } = vi.hoisted(() => ({ readings: vi.fn(), splitCandidates: vi.fn() }));
+vi.mock("../src/api", () => ({ api: { readings, splitCandidates } }));
 
 import { PianoRoll } from "../src/components/PianoRoll";
 
@@ -77,6 +77,7 @@ const lyricInput = async (): Promise<HTMLElement> => {
 beforeEach(() => {
   readings.mockReset();
   readings.mockResolvedValue([AME]);
+  splitCandidates.mockReset();
 });
 
 describe("PianoRoll：詞を書く入口（design §31-9）", () => {
@@ -360,6 +361,64 @@ describe("PianoRoll：句と音符の関係を言う", () => {
     await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toBeInTheDocument(), { timeout: 3000 });
     expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("字余り3");
     expect(notesJson()).toHaveLength(2); // 言うだけ＝音符は増えない
+  });
+});
+
+// 案A＝音符を割って合わせる候補（design §31-5・2026-07-30c オーナー裁定）。機械は割らず候補を出す・選ぶのは人。
+describe("PianoRoll：音符を割る候補（案A）", () => {
+  const twoNotes = () => [{ pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 1, dur: 1 }];
+  const fakeResp = {
+    backedByCorpus: true,
+    truncated: false,
+    candidates: [
+      { notesAfter: [
+        { pitch: 60, start: 0, dur: 0.5, syllable: "あ" }, { pitch: 60, start: 0.5, dur: 0.5, syllable: "め" },
+        { pitch: 62, start: 1, dur: 0.34, syllable: "の" }, { pitch: 62, start: 1.34, dur: 0.33, syllable: "ひ" },
+        { pitch: 62, start: 1.67, dur: 0.33, syllable: "わ" },
+      ], splitCount: 2, addedOnsets: 3, corpusKnown: true, corpusFreq: 40, cv: 0.5, phraseEndRatio: 1, syncPerBar: 0, specialBeatHit: false, wordBoundaryHit: false },
+    ],
+    byFacts: [0],
+    byPreference: [0],
+  };
+
+  const toOverflow = async () => {
+    render(<Harness notes0={twoNotes()} />);
+    await userEvent.type((await lyricInput()), "雨の日は");
+    await applyReading();
+    await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("字余り3"), { timeout: 3000 });
+  };
+
+  it("字余りのときだけ「合わせる」が出て、押すと候補を取りに行く（機械は勝手に割らない）", async () => {
+    splitCandidates.mockResolvedValue(fakeResp);
+    await toOverflow();
+    expect(notesJson()).toHaveLength(2); // ここまで音符は増えていない
+    await userEvent.click(screen.getByLabelText("fetch-split-candidates"));
+    await waitFor(() => expect(splitCandidates).toHaveBeenCalledTimes(1));
+    // まとめて渡す形＝notes・reading・range・meter
+    const arg = splitCandidates.mock.calls[0]![0];
+    expect(arg.reading).toEqual(["あ", "め", "の", "ひ", "わ"]);
+    expect(arg.meter).toMatchObject({ beatsPerBar: 4, gridPerBeat: 4 });
+    // 候補を見せても、選ぶまでは音符は変わらない（既定は何もしない）
+    expect(notesJson()).toHaveLength(2);
+  });
+
+  it("候補を選ぶと音符が割れて字余りが収まる（適用は人・onChange 経由）", async () => {
+    splitCandidates.mockResolvedValue(fakeResp);
+    await toOverflow();
+    await userEvent.click(screen.getByLabelText("fetch-split-candidates"));
+    await waitFor(() => expect(screen.getByLabelText("apply-split-0")).toBeInTheDocument());
+    await userEvent.click(screen.getByLabelText("apply-split-0"));
+    expect(notesJson()).toHaveLength(5); // 2→5＝割れた
+    expect(notesJson().map((n) => n.syllable)).toEqual(["あ", "め", "の", "ひ", "わ"]);
+  });
+
+  it("字余りでないときは「合わせる」を出さない", async () => {
+    splitCandidates.mockResolvedValue(fakeResp);
+    render(<Harness notes0={fiveNotes()} />);
+    await userEvent.type((await lyricInput()), "雨の日は");
+    await applyReading();
+    await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("ちょうど"), { timeout: 3000 });
+    expect(screen.queryByLabelText("fetch-split-candidates")).toBeNull();
   });
 });
 

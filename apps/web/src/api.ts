@@ -166,6 +166,27 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 // ＝表記を直したら控えは使わない、が成り立つ（design §31-3・music-core の LyricReading）。
 export type ReadingResult = Omit<import("@cm/music-core").LyricReading, "forText"> & { error?: string };
 
+// 音符を割る候補（案A・design §31-5）。notesAfter を適用すれば音符が割れて字余りが収まる。
+export interface SplitCandidateDTO {
+  notesAfter: { pitch: number; start: number; dur: number; syllable?: string }[];
+  splitCount: number;
+  addedOnsets: number;
+  corpusKnown: boolean | null;
+  corpusFreq: number;
+  cv: number;
+  phraseEndRatio: number;
+  syncPerBar: number;
+  specialBeatHit: boolean;
+  wordBoundaryHit: boolean;
+}
+export interface SplitCandidatesResponse {
+  backedByCorpus: boolean;
+  truncated: boolean;
+  candidates: SplitCandidateDTO[];
+  byFacts: number[];
+  byPreference: number[];
+}
+
 export const api = {
   createNeta: (input: NetaInput) =>
     http<Neta>("/neta", { method: "POST", body: JSON.stringify(input) }),
@@ -358,6 +379,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ texts }),
     }).then((r) => r.results),
+
+  // 音符を割る候補提示版（案A・design §31-5）。コーパス（実在性の裏取り）は api が持つのでここを叩く。
+  // 返りは2軸（事実順・好ましさ順）の上位。適用は人＝候補の notesAfter をそのまま onChange に渡す。
+  splitCandidates: (body: {
+    notes: { pitch: number; start: number; dur: number; syllable?: string }[];
+    reading: string[];
+    range: { start: number; beats: number };
+    meter: { beatsPerBar: number; gridPerBeat: number; tempo?: number };
+    words?: number[];
+  }) =>
+    http<SplitCandidatesResponse>("/music/split-candidates", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   // 一式生成（決定的・純TS＝worker/クォータ不要）。frame(調/テンポ/拍子)から section＋各パートを
   // 即生成し compose して返す。旧カードの gen_* ジョブ経路（worker 依存でハング）の置き換え。

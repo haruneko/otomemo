@@ -1743,6 +1743,75 @@
   align-items: center;
   gap: 4px;
 }
+/* 案A＝音符を割って合わせる候補（design §31-5）。字余りのときだけ出る・人が選んで適用。 */
+.proll-lyric-split {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+}
+.proll-lyric-split > button {
+  align-self: flex-start;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-lyric-split > button:disabled {
+  opacity: 0.6;
+}
+.split-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.split-axis {
+  display: flex;
+  gap: 4px;
+}
+.split-axis button {
+  padding: 3px 8px;
+  font-size: 0.74rem;
+  background: #23262b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.split-axis button.on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.split-note {
+  font-size: 0.72rem;
+}
+.split-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 156px;
+  overflow-y: auto;
+}
+.split-list button {
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  font-size: 0.76rem;
+  background: #23262b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.split-list button:hover {
+  border-color: var(--accent);
+}
 /* ♪歌う＝VOICEVOX 試聴の入り口（アクセント色で「音が出る」ことを示す）。 */
 .proll-sing {
   background: var(--accent) !important;
