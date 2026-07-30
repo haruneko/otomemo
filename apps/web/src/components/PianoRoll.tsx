@@ -297,11 +297,15 @@ export function PianoRoll({
     setSplitState("busy");
     setSplitData(null);
     try {
+      // 語境界（モーラ→語id）＝「語の途中で割れる」警告の素。読みの moras と数が合うときだけ渡す（監査 歪み2）。
+      const rmoras = phrase.reading?.moras;
+      const words = rmoras && rmoras.length === readMoras.length ? rmoras.map((m) => m.word) : undefined;
       const res = await api.splitCandidates({
         notes,
         reading: readMoras,
         range: { start: phrase.start, beats: phrase.beats },
         meter: { beatsPerBar: bpb, gridPerBeat: SUBDIV }, // 4/4=4・16分=4。非4/4は裏取り無効（正直ラベル）
+        words,
       });
       if (splitReqRef.current !== reqId) return; // 途中でメロが変わった＝古い候補は捨てる（編集の巻き戻し防止）
       setSplitData(res);
