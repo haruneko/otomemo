@@ -65,6 +65,7 @@ import { beginTurn, pushTurnEvent, endTurn, attachTurn, isTurnLive, DONE } from 
 import { killJobProc } from "./job-procs";
 import { rankRecommendations } from "./music/recommend";
 import { extractReadings, READING_MAX_TEXTS, READING_MAX_CHARS } from "./accent"; // 表記→読み（#31 スライス1）
+import { splitCandidatesForApi } from "./music/lyricSplitService"; // 音符を割る候補提示版＝コーパス注入（#31 §31-5・案A）
 
 // 一覧(GET /neta)は巨大content を落として初回ロードを軽くする。study(共通進行1000超)や analysis(生MIR配列)は
 // 1件で数百KB＝89件で~2MB がモバイル初期表示に丸ごと乗って重かった。閾値超は content:null にし、開いた時に
@@ -396,6 +397,14 @@ export function buildHttp(core: Core): FastifyInstance {
             return { results: await extractReadings(texts as string[]) };
           } catch (e) {
             return reply.code(502).send({ error: `読みが取れませんでした: ${(e as Error).message}` });
+          }
+        }
+        // 音符を割る候補提示版（案A・design §31-5）。コーパス（RHYTHM16）は api だけが持つ＝ここで注入。
+        case "split-candidates": {
+          try {
+            return splitCandidatesForApi(b as Parameters<typeof splitCandidatesForApi>[0]);
+          } catch (e) {
+            return reply.code(400).send({ error: (e as Error).message });
           }
         }
         default: return reply.code(404).send({ error: `unknown music op: ${op}` });
