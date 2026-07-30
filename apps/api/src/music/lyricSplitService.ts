@@ -5,7 +5,9 @@
 import { splitCandidates, analyzeMoras, type Note, type Mora } from "@cm/music-core";
 import { RHYTHM16_DATA } from "./motifModelData";
 
-const TOP_N = 8; // 各軸で見せる上限（研究：数百出るが画面は上位だけ）
+// プルダウンで組む＝有効な組み合わせ＝候補集合そのもの（監査D）。分解と局所照合のため全候補を返す
+// （上限つき）。リスト表示側で上位だけ見せるのは画面の仕事。notesAfter も同梱＝適用は照合した候補から。
+const MAX_RETURN = 150; // 返す候補の上限（研究：字余り3で数百＝ここで頭打ち＝truncated で知らせる）
 const CORPUS = (pat: string): number | undefined => RHYTHM16_DATA[pat];
 
 export interface SplitRequest {
@@ -18,6 +20,7 @@ export interface SplitRequest {
 
 interface CandidateDTO {
   notesAfter: Note[];
+  splits: { noteIndex: number; slot: number }[]; // 追加onset（音符ごとの割り方＝プルダウン分解の素）
   splitCount: number;
   addedOnsets: number;
   corpusKnown: boolean | null;
@@ -58,16 +61,15 @@ export function splitCandidatesForApi(body: SplitRequest): SplitResponse {
     limit: 200,
   });
 
-  // 2軸の上位を統合（重複なし・見せる分だけ notesAfter を運ぶ）。
-  const pick = new Set<number>();
-  for (const i of r.byFacts.slice(0, TOP_N)) pick.add(i);
-  for (const i of r.byPreference.slice(0, TOP_N)) pick.add(i);
-  const chosen = [...pick];
-  const remap = new Map(chosen.map((orig, idx) => [orig, idx]));
-  const candidates: CandidateDTO[] = chosen.map((orig) => {
+  // 全候補を返す（上限つき）＝プルダウン分解と局所照合のため。事実順に詰めて MAX_RETURN で頭打ち。
+  const order = r.byFacts.slice(0, MAX_RETURN);
+  const truncated = r.truncated || r.byFacts.length > MAX_RETURN;
+  const remap = new Map(order.map((orig, idx) => [orig, idx]));
+  const candidates: CandidateDTO[] = order.map((orig) => {
     const c = r.candidates[orig]!;
     return {
       notesAfter: c.notesAfter as Note[],
+      splits: c.splits,
       splitCount: c.splitCount,
       addedOnsets: c.addedOnsets,
       corpusKnown: c.corpusKnown,
@@ -82,5 +84,5 @@ export function splitCandidatesForApi(body: SplitRequest): SplitResponse {
   const byFacts = r.byFacts.filter((i) => remap.has(i)).map((i) => remap.get(i)!);
   const byPreference = r.byPreference.filter((i) => remap.has(i)).map((i) => remap.get(i)!);
 
-  return { backedByCorpus: r.backedByCorpus, truncated: r.truncated, candidates, byFacts, byPreference };
+  return { backedByCorpus: r.backedByCorpus, truncated, candidates, byFacts, byPreference };
 }

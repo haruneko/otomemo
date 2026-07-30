@@ -10,15 +10,20 @@ describe("splitCandidatesForApi：コーパス注入と整形", () => {
     const r = splitCandidatesForApi({ notes, reading: ["あ", "い", "う", "え", "お", "か"], range, meter });
     expect(r.backedByCorpus).toBe(true);
     expect(r.candidates.length).toBeGreaterThan(0);
-    // 見せる分は上限（各軸 top8 の統合）
-    expect(r.candidates.length).toBeLessThanOrEqual(16);
-    // index は candidates の範囲内
+    // プルダウン分解のため全候補を返す（上限150で頭打ち）。
+    expect(r.candidates.length).toBeLessThanOrEqual(150);
+    // index は candidates の範囲内・2軸とも全候補を指す
+    expect(r.byFacts).toHaveLength(r.candidates.length);
+    expect(r.byPreference).toHaveLength(r.candidates.length);
     for (const i of [...r.byFacts, ...r.byPreference]) {
       expect(i).toBeGreaterThanOrEqual(0);
       expect(i).toBeLessThan(r.candidates.length);
     }
-    // 実データ RHYTHM16 で既出判定が動く（corpusKnown が boolean で埋まる）
-    for (const c of r.candidates) expect(typeof c.corpusKnown).toBe("boolean");
+    // 各候補に splits（音符ごとの割り方）が付く＝プルダウン分解の素
+    for (const c of r.candidates) {
+      expect(typeof c.corpusKnown).toBe("boolean"); // 実データ RHYTHM16 で既出判定が動く
+      expect(Array.isArray(c.splits)).toBe(true);
+    }
   });
 
   it("余っていなければ候補は空", () => {

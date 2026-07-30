@@ -364,18 +364,23 @@ describe("PianoRoll：句と音符の関係を言う", () => {
   });
 });
 
-// 案A＝音符を割って合わせる候補（design §31-5・2026-07-30c オーナー裁定）。機械は割らず候補を出す・選ぶのは人。
-describe("PianoRoll：音符を割る候補（案A）", () => {
+// 案A＝音符を割る（プルダウン組み合わせ・design §31-5・2026-07-30c 裁定＋監査）。機械は割らず割り方を出す・組むのは人。
+describe("PianoRoll：音符を割る（案A・プルダウン組み合わせ）", () => {
   const twoNotes = () => [{ pitch: 60, start: 0, dur: 1 }, { pitch: 62, start: 1, dur: 1 }];
+  // 字余り3＝音符0を4分割（+3）した1候補。splits＝足したonset・notesAfter＝割った後。
   const fakeResp = {
     backedByCorpus: true,
     truncated: false,
     candidates: [
-      { notesAfter: [
-        { pitch: 60, start: 0, dur: 0.5, syllable: "あ" }, { pitch: 60, start: 0.5, dur: 0.5, syllable: "め" },
-        { pitch: 62, start: 1, dur: 0.34, syllable: "の" }, { pitch: 62, start: 1.34, dur: 0.33, syllable: "ひ" },
-        { pitch: 62, start: 1.67, dur: 0.33, syllable: "わ" },
-      ], splitCount: 2, addedOnsets: 3, corpusKnown: true, corpusFreq: 40, cv: 0.5, phraseEndRatio: 1, syncPerBar: 0, specialBeatHit: false, wordBoundaryHit: false },
+      {
+        notesAfter: [
+          { pitch: 60, start: 0, dur: 0.25, syllable: "あ" }, { pitch: 60, start: 0.25, dur: 0.25, syllable: "め" },
+          { pitch: 60, start: 0.5, dur: 0.25, syllable: "の" }, { pitch: 60, start: 0.75, dur: 0.25, syllable: "ひ" },
+          { pitch: 62, start: 1, dur: 1, syllable: "わ" },
+        ],
+        splits: [{ noteIndex: 0, slot: 1 }, { noteIndex: 0, slot: 2 }, { noteIndex: 0, slot: 3 }],
+        splitCount: 1, addedOnsets: 3, corpusKnown: true, corpusFreq: 40, cv: 0.5, phraseEndRatio: 4, syncPerBar: 0, specialBeatHit: false, wordBoundaryHit: false,
+      },
     ],
     byFacts: [0],
     byPreference: [0],
@@ -388,28 +393,51 @@ describe("PianoRoll：音符を割る候補（案A）", () => {
     await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("字余り3"), { timeout: 3000 });
   };
 
-  it("字余りのときだけ「合わせる」が出て、押すと候補を取りに行く（機械は勝手に割らない）", async () => {
+  it("字余りのときだけ「合わせる」が出て、押すと割り方を取りに行く（機械は勝手に割らない）", async () => {
     splitCandidates.mockResolvedValue(fakeResp);
     await toOverflow();
     expect(notesJson()).toHaveLength(2); // ここまで音符は増えていない
     await userEvent.click(screen.getByLabelText("fetch-split-candidates"));
     await waitFor(() => expect(splitCandidates).toHaveBeenCalledTimes(1));
-    // まとめて渡す形＝notes・reading・range・meter
     const arg = splitCandidates.mock.calls[0]![0];
     expect(arg.reading).toEqual(["あ", "め", "の", "ひ", "わ"]);
     expect(arg.meter).toMatchObject({ beatsPerBar: 4, gridPerBeat: 4 });
-    // 候補を見せても、選ぶまでは音符は変わらない（既定は何もしない）
+    // 割り方を見せても、組んで適用するまで音符は変わらない（既定は何もしない）
     expect(notesJson()).toHaveLength(2);
   });
 
-  it("候補を選ぶと音符が割れて字余りが収まる（適用は人・onChange 経由）", async () => {
+  it("初期は全「割らない」＝合計が足りず適用できない（機械は事前選択しない）", async () => {
     splitCandidates.mockResolvedValue(fakeResp);
     await toOverflow();
     await userEvent.click(screen.getByLabelText("fetch-split-candidates"));
-    await waitFor(() => expect(screen.getByLabelText("apply-split-0")).toBeInTheDocument());
-    await userEvent.click(screen.getByLabelText("apply-split-0"));
+    await waitFor(() => expect(screen.getByLabelText("split-apply")).toBeInTheDocument());
+    expect(screen.getByLabelText("split-apply")).toBeDisabled();
+    expect(screen.getByLabelText("split-remaining").textContent).toContain("あと3");
+  });
+
+  it("『実曲でいちばん多い形を入れる』で組み上がり、適用すると音符が割れる（適用は人）", async () => {
+    splitCandidates.mockResolvedValue(fakeResp);
+    await toOverflow();
+    await userEvent.click(screen.getByLabelText("fetch-split-candidates"));
+    await waitFor(() => expect(screen.getByLabelText("split-seed-common")).toBeInTheDocument());
+    await userEvent.click(screen.getByLabelText("split-seed-common")); // 頻度ボタンで組む
+    await waitFor(() => expect(screen.getByLabelText("split-apply")).toBeEnabled());
+    expect(screen.getByLabelText("split-remaining").textContent).toContain("ちょうど");
+    await userEvent.click(screen.getByLabelText("split-apply"));
     expect(notesJson()).toHaveLength(5); // 2→5＝割れた
     expect(notesJson().map((n) => n.syllable)).toEqual(["あ", "め", "の", "ひ", "わ"]);
+  });
+
+  it("音符ごとのプルダウンで割れる音符（1拍目）を選べる", async () => {
+    splitCandidates.mockResolvedValue(fakeResp);
+    await toOverflow();
+    await userEvent.click(screen.getByLabelText("fetch-split-candidates"));
+    await waitFor(() => expect(screen.getByLabelText("split-note-0")).toBeInTheDocument());
+    // 句末（音符1）は割れないのでプルダウンが出ない
+    expect(screen.queryByLabelText("split-note-1")).toBeNull();
+    // 1拍目を4つに割る（+3）を選ぶ＝ちょうどになる
+    await userEvent.selectOptions(screen.getByLabelText("split-note-0"), "1,2,3");
+    await waitFor(() => expect(screen.getByLabelText("split-apply")).toBeEnabled());
   });
 
   it("字余りでないときは「合わせる」を出さない", async () => {

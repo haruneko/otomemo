@@ -169,6 +169,7 @@ export type ReadingResult = Omit<import("@cm/music-core").LyricReading, "forText
 // 音符を割る候補（案A・design §31-5）。notesAfter を適用すれば音符が割れて字余りが収まる。
 export interface SplitCandidateDTO {
   notesAfter: { pitch: number; start: number; dur: number; syllable?: string }[];
+  splits: { noteIndex: number; slot: number }[]; // 追加onset（音符ごとの割り方＝プルダウン分解の素）
   splitCount: number;
   addedOnsets: number;
   corpusKnown: boolean | null;

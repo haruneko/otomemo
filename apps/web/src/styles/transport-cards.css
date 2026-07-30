@@ -1812,6 +1812,80 @@
 .split-list button:hover {
   border-color: var(--accent);
 }
+/* プルダウン組み合わせ（案A・監査 2026-07-30c）。 */
+.split-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.split-seed {
+  align-self: flex-start;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  background: #23262b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.split-dropdowns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.split-drop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+.split-drop select {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 0.78rem;
+  font-family: inherit;
+  background: #23262b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.split-preview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.split-preview button {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+.split-preview button:disabled {
+  opacity: 0.5;
+  background: #2b2f36;
+  color: var(--fg);
+  border-color: var(--line);
+}
+/* 割り図＝●元onset・○足したonset・·無し。等幅で拍が縦に揃う。 */
+.split-fig {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  letter-spacing: 1px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.split-fig .fig-orig { color: var(--fg); }
+.split-fig .fig-added { color: var(--accent); font-weight: 700; }
+.split-fig .fig-none { color: #555; }
+.split-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.split-meta { font-size: 0.72rem; }
+.split-warn { font-size: 0.72rem; color: #e0a53a; }
 /* ♪歌う＝VOICEVOX 試聴の入り口（アクセント色で「音が出る」ことを示す）。 */
 .proll-sing {
   background: var(--accent) !important;

@@ -4,7 +4,8 @@ import { previewNote } from "../audio";
 import { flowLyric, splitMora, setSyllable, nextNoteIndex, placeMoras, phraseStatus, kanaEditForNote, upsertEdit, reattachEdits, type LyricLayer } from "../lyrics";
 // 控えが古いか／効いている読み＝music-core（web の lyrics.ts はまだ再輸出していないので直に取る）。
 import { effectiveReading, isReadingStale } from "@cm/music-core";
-import { api, type SplitCandidatesResponse, type SplitCandidateDTO } from "../api";
+import { api, type SplitCandidatesResponse } from "../api";
+import { LyricSplitComposer } from "./LyricSplitComposer";
 import { computeLyricHits, sylFitClass } from "../lyricFit";
 import { nudgeNotes, duplicateSel, deleteSel, copySel, pasteNotes } from "../noteEdit";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -119,7 +120,6 @@ export function PianoRoll({
   // 案A＝音符を割る候補提示版（design §31-5）。字余りのとき「合わせる」で候補を取り、人が選んで適用。
   const [splitData, setSplitData] = useState<SplitCandidatesResponse | null>(null);
   const [splitState, setSplitState] = useState<"idle" | "busy" | "error">("idle");
-  const [splitAxis, setSplitAxis] = useState<"facts" | "preference">("facts");
   // hits はノート列/歌詞が変わった時だけ再計算（純関数 analyzeLyricFit へ委譲）。歌詞なしは空 Map＝ゼロ影響。
   // 印（赤黄）の高低は句の読み（表記由来）から取る＝スライス2。句が無ければ従来どおり内蔵辞書。
   const hitMap = useMemo(() => computeLyricHits(notes, lyric?.phrases), [notes, lyric]);
@@ -285,6 +285,9 @@ export function PianoRoll({
     void fetchReadings(); // 控えが古い句だけ聞き直す＝返ってきたら下の効果が写す
   }
 
+  // メロが変わったら組みかけの割り方候補は腐る＝無効化（監査 穴E）。適用時も applySplit が消す。
+  useEffect(() => { setSplitData(null); }, [notes]);
+
   // 案A＝音符を割る候補を取りに行く（字余りのときだけ）。コーパスの裏取りは api が持つのでサーバ経由。
   // **機械は割らない・出すだけ**＝返った候補から人が選んで applySplit で適用する（既定は何もしない）。
   async function fetchSplitCandidates() {
@@ -299,28 +302,17 @@ export function PianoRoll({
         meter: { beatsPerBar: bpb, gridPerBeat: SUBDIV }, // 4/4=4・16分=4。非4/4は裏取り無効（正直ラベル）
       });
       setSplitData(res);
-      setSplitAxis("facts");
       setSplitState("idle");
     } catch {
       setSplitState("error");
     }
   }
 
-  // 選んだ候補を適用＝音符が割れて字余りが収まる（適用は人・確認つき）。onChange 経由＝Undo/Redo が効く。
-  function applySplit(cand: SplitCandidateDTO) {
-    onChange(cand.notesAfter);
+  // 選んだ形を適用＝音符が割れて字余りが収まる（適用は人）。onChange 経由＝Undo/Redo が効く。
+  function applySplit(notesAfter: Note[]) {
+    onChange(notesAfter);
     setSplitData(null);
     setSplitState("idle");
-  }
-
-  // 候補1つを1行に要約（添える事実を言葉に・点数は出さない）。
-  function splitCandidateLabel(cand: SplitCandidateDTO, backed: boolean): string {
-    const parts = [`${cand.splitCount}箇所を割る`];
-    if (backed) parts.push(cand.corpusKnown ? "実曲によくある形" : "実曲では珍しい形");
-    else parts.push("拍の重みからの提案");
-    if (cand.specialBeatHit) parts.push("促音が拍頭");
-    if (cand.wordBoundaryHit) parts.push("語の途中で割れる");
-    return parts.join("・");
   }
 
   // 読み（効いている値）を範囲内の音符へ写す。**音符は1つも増えも減りもしない**（placeMoras・design §31-2）。
@@ -558,51 +550,27 @@ export function PianoRoll({
                   流し込む
                 </button>
               </div>
-              {/* 案A＝音符を割って合わせる候補（design §31-5）。**字余りのときだけ**出す。
-                  機械は割らない・候補を出すだけ＝人が選んで適用（既定は何もしない）。点数で1本化しない＝
-                  事実基準／好ましさ基準の2並びで見せる（研究 §3-4）。 */}
+              {/* 案A＝音符を割って合わせる（design §31-5）。**字余りのときだけ**出す。機械は割らない・
+                  割り方を候補として出すだけ＝人がプルダウンで組んで適用（既定は何もしない・監査 2026-07-30c）。 */}
               {status?.kind === "字余り" && (
-                <div className="proll-lyric-split" aria-label="lyric-split">
+                <div className="proll-lyric-split">
                   <button
                     type="button"
                     aria-label="fetch-split-candidates"
                     disabled={splitState === "busy"}
                     onClick={() => void fetchSplitCandidates()}
                   >
-                    {splitState === "busy" ? "候補を出しています…" : `音符を割って合わせる（字余り${status.count}）`}
+                    {splitState === "busy" ? "割り方を出しています…" : `音符を割って合わせる（字余り${status.count}）`}
                   </button>
-                  {splitState === "error" && <span className="muted">候補が出せませんでした</span>}
+                  {splitState === "error" && <span className="muted">割り方が出せませんでした</span>}
                   {splitData && (
-                    splitData.candidates.length === 0 ? (
-                      <span className="muted">割って収まる形が見つかりませんでした</span>
-                    ) : (
-                      <div className="split-candidates">
-                        <div className="split-axis" role="tablist" aria-label="split-order">
-                          <button type="button" role="tab" aria-selected={splitAxis === "facts"} className={splitAxis === "facts" ? "on" : ""} onClick={() => setSplitAxis("facts")}>
-                            事実で並べる
-                          </button>
-                          <button type="button" role="tab" aria-selected={splitAxis === "preference"} className={splitAxis === "preference" ? "on" : ""} onClick={() => setSplitAxis("preference")}>
-                            よくある順
-                          </button>
-                        </div>
-                        {!splitData.backedByCorpus && (
-                          <span className="muted split-note">この拍子は実曲統計の裏がまだ＝拍の重みからの提案です</span>
-                        )}
-                        <ul className="split-list">
-                          {(splitAxis === "facts" ? splitData.byFacts : splitData.byPreference).map((ci) => {
-                            const cand = splitData.candidates[ci]!;
-                            return (
-                              <li key={ci}>
-                                <button type="button" aria-label={`apply-split-${ci}`} onClick={() => applySplit(cand)}>
-                                  {splitCandidateLabel(cand, splitData.backedByCorpus)}
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                        {splitData.truncated && <span className="muted split-note">ほかにも候補があります（上位だけ表示）</span>}
-                      </div>
-                    )
+                    <LyricSplitComposer
+                      origNotes={notes}
+                      range={{ start: phrase!.start, beats: phrase!.beats }}
+                      meter={{ beatsPerBar: bpb, gridPerBeat: SUBDIV }}
+                      data={splitData}
+                      onApply={applySplit}
+                    />
                   )}
                 </div>
               )}
