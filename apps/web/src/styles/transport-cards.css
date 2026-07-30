@@ -1360,6 +1360,13 @@
 }
 .proll-wrap {
   display: grid;
+  /* 暗黙の列を**必ず器の幅に収める**（2026-07-30b 実機実測で発見した既存の崩れの修理）。
+     これが無いと暗黙列が max-content ＝**ロールの内在幅**になり、兄弟の行（モード行・歌詞行・
+     歌詞パネル・詞モードのバー）まで一緒に広がって画面外へ出る。360px 実測＝長いメロを開くと
+     行が幅578pxになり右端597px＝**画面外237pxは body がスクロールしないので触れない**。
+     minmax(0,1fr) で列を器（322px）に固定＝ロールは自前の overflow-x:auto で内部スクロール
+     （scrollWidth 1768 は保たれる）。狭いメロでは元から起きていなかった＝挙動が揃う。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   min-width: 0;
 }
@@ -1636,6 +1643,13 @@
   font: inherit;
   text-align: left;
 }
+/* 状態チップ（ちょうど／字余りN／字足らずN／まだ反映していません 等）＝**折り返させない**。
+   句が長いとチップが「ちょ／うど」と2行に割れて読めなくなる（360px 実測 2026-07-30b）。
+   縮むのは句のテキスト側（下の .proll-lyric-oneline が省略を持つ）。 */
+.proll-lyric-status {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 /* 句のテキスト＝1行に収め、あふれは省略（正データは奥の表記欄で全部見える）。 */
 .proll-lyric-oneline {
   flex: 1 1 auto;
@@ -1674,6 +1688,37 @@
   padding: 6px 8px;
   font: inherit;
   line-height: 1.5;
+}
+/* かな（仮歌の写し）の口＝奥に置く（オーナー裁定 2026-07-30b「奥でいい」）。入力欄は伸ばす。 */
+.proll-lyric-kana {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+}
+.proll-lyric-kana input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: #16181c;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+.proll-lyric-kana button {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  background: #2b2f36;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.proll-lyric-kana button:disabled {
+  opacity: 0.4;
 }
 /* 奥の段＝ふだん使わないもの（かなを消す・韻律チェック＋凡例）。 */
 .proll-lyric-more {

@@ -235,13 +235,26 @@ describe("PianoRoll：句の面を配線していない呼び側は従来どお�
     expect(readings).not.toHaveBeenCalled();
   });
 
-  // 2026-07-30 改訂（design §31-5 の裁定・退役は歌詞パネルの実装と同時）：
-  // かな欄＋「流し込む」は**句の面が配線された画面からは退役**。正データは句（表記）で、かなは仮歌のための写し
-  // ＝口が2つあると「どちらが正か」を取り違える。配線していない呼び側は従来のまま＝後退ゼロ。
-  it("配線した画面ではかな欄と「流し込む」を出さない（退役）", async () => {
+  // 2026-07-30b オーナー裁定（design §31-5）：かな欄＋「流し込む」は**消さない・歌詞パネルの奥に置く**。
+  // 原文＝07-29「流し込みも歌詞入力もあまり使わないから**奥でいい**」→ 07-30b「パネルの奥に戻す」。
+  // 一度これを消して「退役」と書いたのは誤りだった＝**音符を割る唯一の口（flowLyric）が配線画面から消えていた**。
+  it("配線した画面では、かな欄と「流し込む」は常設から消え、パネルの奥にある", async () => {
     render(<Harness notes0={fiveNotes()} />);
-    expect(screen.queryByLabelText("lyric-draft")).toBeNull();
+    expect(screen.queryByLabelText("lyric-draft")).toBeNull(); // 畳んでいるうちは出ない
     expect(screen.queryByLabelText("flow-lyric")).toBeNull();
+    await userEvent.click(screen.getByLabelText("lyric-line")); // 開く
+    expect(screen.getByLabelText("lyric-draft")).toBeInTheDocument();
+    expect(screen.getByLabelText("flow-lyric")).toBeInTheDocument();
+  });
+
+  it("パネルの奥の「流し込む」は配線画面でも効く（音符を割る口が消えていない）", async () => {
+    render(<Harness notes0={[{ pitch: 60, start: 0, dur: 2 }]} />);
+    await userEvent.click(screen.getByLabelText("lyric-line"));
+    await userEvent.type(screen.getByLabelText("lyric-draft"), "あめ");
+    await userEvent.click(screen.getByLabelText("flow-lyric"));
+    const ns = notesJson();
+    expect(ns).toHaveLength(2); // 1音符が2モーラぶんに割れる＝これが flowLyric の役
+    expect(ns.map((n) => n.syllable)).toEqual(["あ", "め"]);
   });
 
   it("配線していない呼び側では、かな欄と「流し込む」は従来どおり残る", async () => {

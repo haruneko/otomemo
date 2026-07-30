@@ -494,8 +494,30 @@ export function PianoRoll({
                   読みを反映
                 </button>
               </div>
+              {/* かな（仮歌の写し）の口＝**奥に置く**（オーナー裁定 2026-07-30b「あまり使わないから奥でいい」→
+                  「パネルの奥に戻す」・design §31-5）。一度これを消したのは誤りだった＝**消さずに奥**。
+                  正データは上の表記欄（句）で、こちらは音符に載るかな＝「かな」と呼び分ける。
+                  「流し込む」は音符を割る（`flowLyric`）唯一の口＝配線画面でもここから使える。 */}
+              <div className="proll-lyric-kana">
+                <span className="muted">かな</span>
+                <input
+                  type="text"
+                  aria-label="lyric-draft"
+                  placeholder="かな（読み）を入力→流し込む"
+                  value={lyricDraft}
+                  onChange={(e) => setLyricDraft(e.target.value)}
+                />
+                <button
+                  type="button"
+                  aria-label="flow-lyric"
+                  disabled={!notes.length || splitMora(lyricDraft).length === 0}
+                  onClick={() => onChange(flowLyric(notes, splitMora(lyricDraft)))}
+                >
+                  流し込む
+                </button>
+              </div>
               {hasLyric && (
-                // 奥の段＝ふだん使わないもの（かなを消す・韻律チェック）。文言は裁定 (d)。
+                // 奥の段＝ふだん使わないもの（かなを消す・韻律チェック）。文言は §31-11 の16 (d)。
                 <div className="proll-lyric-more">
                   <button
                     type="button"
@@ -568,12 +590,10 @@ export function PianoRoll({
         </div>
       )}
       {enableLyric && !wired && mode !== "lyric" && (
-        // かな欄＋「流し込む」＝**句の面が配線された画面からは退役**（design §31-5 の裁定・退役はパネル実装と同時）。
-        // 理由＝正データは句（表記）で、かなは仮歌のための写し＝口が2つあると「どちらが正か」を取り違える。
-        // また「流し込む」は音符を割る（`flowLyric`）＝既定で音符を割る先例はゼロ（調査の定石3）。
-        // ⚠ 割る操作を残すかどうかは研究の結論待ち（§31-5）＝残すならパネルの奥に明示操作＋確認つきで置く。
-        //    それまで配線された画面には割る口が無い（音符は増えない側に倒す）。
-        // 配線していない呼び側（Section の下ろし・骨格など）は**従来のまま**＝後退ゼロ。
+        // かな欄＋「流し込む」＝配線された画面では**常設から外して歌詞パネルの奥へ移した**（上のパネル内）。
+        // オーナー裁定 2026-07-30b＝「あまり使わないから奥でいい」→「パネルの奥に戻す」（design §31-5）。
+        // **消してはいない**＝一度消したのは私の誤りで、割る口（`flowLyric`）が配線画面から失われていた。
+        // 配線していない呼び側（Section の下ろし・骨格など）は**従来どおり常設**＝後退ゼロ。
         <div className="proll-lyric-input">
           <div className="proll-lyric-row">
             <span className="muted">歌詞</span>
