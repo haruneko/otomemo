@@ -22,6 +22,9 @@ export * from "./prosody";
 // web `lyrics.ts` と api `lyric.ts` に2本ずつあった splitMora/flowLyric はここへ寄せ、両側は re-export。
 export * from "./lyric";
 
+// 案A＝音符を割る「候補提示版」（design #31 §31-5・2026-07-30c 採用）＝純TS・コーパスは注入。
+export * from "./lyricSplit";
+
 // メロ候補の並べ替えレンズ3種（WP-M3・design #12-M「候補レンズ」）＝純TS・記号のみ・音源不要。
 // api/web が @cm/music-core から引く（voiceLeading 分析レンズと同格の共有純関数）。
 export * from "./melodyLenses";
