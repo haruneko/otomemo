@@ -95,6 +95,48 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
     } finally { setBusy(false); }
   }
 
+  // メロにする＝曲の句（□/詞先の下書き）から**メロを作って配置し、曲側からは外す**（(い-c) 遅延生成でメロ化）。
+  // ＝詞先→曲先の橋。失敗したら作った実体を消す（孤児を作らない）。
+  async function makeMelody(row: OverviewRow) {
+    const sec = sections[row.sectionIndex];
+    if (!sec) return;
+    setBusy(true);
+    let created: string | null = null;
+    try {
+      const songFresh = await api.getNeta(songNetaId);
+      const songContent: { lyric?: { phrases: { id: string; start: number; beats: number; text: string }[] } } =
+        JSON.parse(JSON.stringify(songFresh?.content ?? {}));
+      const phrase = songContent.lyric?.phrases[row.phraseIndex];
+      if (!phrase) { setBusy(false); return; }
+      const relPos = Math.max(0, phrase.start - sec.startBeat); // 曲拍→セクション内相対拍
+      const melody = await api.createNeta({
+        kind: "melody", scope: "project",
+        content: { notes: [], lyric: { phrases: [{ ...phrase, start: 0 }] } },
+      });
+      created = melody.id;
+      await api.placeChild(sec.netaId, melody.id, relPos, 999);
+      songContent.lyric!.phrases.splice(row.phraseIndex, 1); // 曲側から外す（メロへ移った）
+      const nextSong = songContent.lyric!.phrases.length ? songContent : { ...songContent, lyric: undefined };
+      await api.updateNeta(songNetaId, { content: nextSong });
+      await refetch();
+    } catch {
+      if (created) { try { await api.deleteNeta(created); } catch { /* 掃除失敗は握りつぶす */ } }
+    } finally { setBusy(false); }
+  }
+
+  // 曲の□/下書きを消す（メロは触らない）。
+  async function deleteHole(row: OverviewRow) {
+    setBusy(true);
+    try {
+      const fresh = await api.getNeta(songNetaId);
+      const content: { lyric?: { phrases: unknown[] } } = JSON.parse(JSON.stringify(fresh?.content ?? {}));
+      content.lyric?.phrases.splice(row.phraseIndex, 1);
+      const next = content.lyric?.phrases.length ? content : { ...content, lyric: undefined };
+      await api.updateNeta(songNetaId, { content: next });
+      await refetch();
+    } finally { setBusy(false); }
+  }
+
   const bySection = new Map<number, OverviewRow[]>();
   for (const r of rows) { const a = bySection.get(r.sectionIndex) ?? []; a.push(r); bySection.set(r.sectionIndex, a); }
 
@@ -163,6 +205,13 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
                       )}
                     </div>
                     {!isEditing && parts.facts && factChips(r.facts).map((c, i) => <span key={i} className="lo-fact muted">{c}</span>)}
+                    {/* 曲が持つ句（□/詞先の下書き）だけ＝メロにする（詞先→曲先の橋）と消す。 */}
+                    {!isEditing && r.netaId === songNetaId && (
+                      <span className="lo-row-actions">
+                        <button type="button" className="lo-mk-melody" aria-label={`lo-make-melody-${r.phraseIndex}`} title="この句からメロを作る（詞先→曲先）" onClick={() => void makeMelody(r)}>メロにする</button>
+                        <button type="button" className="lo-del-hole" aria-label={`lo-del-${r.phraseIndex}`} title="この穴を消す" onClick={() => void deleteHole(r)}>×</button>
+                      </span>
+                    )}
                   </div>
                 );
               })}

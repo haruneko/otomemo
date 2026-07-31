@@ -2544,3 +2544,7 @@
   min-width: 120px;
   background: #16181d;
 }
+/* #31 スライス5：曲の句（□/下書き）の行アクション＝メロにする（詞先→曲先の橋）・消す。控えめに。 */
+.lo-row-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.lo-mk-melody { font-size: 0.7rem; color: #8aa; background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+.lo-del-hole { font-size: 0.85rem; color: #889; background: none; border: none; padding: 0 4px; line-height: 1; }
