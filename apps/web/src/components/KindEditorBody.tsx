@@ -87,6 +87,7 @@ export interface KindEditorBodyProps {
   onChanged?: () => void;
   onOpenNeta?: (n: Neta) => void; // Section のブロックタップ→子ネタを開く（潜る）
   onOpenSkeletonDesk?: (t: import("./SkeletonDesk").SkeletonDeskTarget) => void; // #20 S6：骨格ブロック→机
+  onOpenLyricOverview?: (songNetaId: string) => void; // #31 スライス5：曲→歌詞を通しで読む面
   flush?: () => Promise<void>; // 未保存ぶんを確定（♪歌う前に歌詞をDBへ反映＝サーバは保存済contentを歌う）
   cow?: import("../useCowGuard").CowGuard; // CoW ガード（S2 Fix C）＝section 直接保存の安全弁（未指定＝従来どおり）
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
@@ -332,6 +333,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           onChanged={p.onChanged}
           onOpenNeta={p.onOpenNeta}
           onOpenSkeletonDesk={p.onOpenSkeletonDesk}
+          onOpenLyricOverview={p.onOpenLyricOverview}
           cow={p.cow}
         />
       ) : (

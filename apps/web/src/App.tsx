@@ -33,6 +33,7 @@ const ProjectScreen = lazy(() => import("./components/ProjectScreen").then((m) =
 // #20 S6骨格の机：骨格ブロック→全画面の机（ベッド上で編集・レンズA/B）。二次画面＝遅延ロード。
 const SkeletonDesk = lazy(() => import("./components/SkeletonDesk").then((m) => ({ default: m.SkeletonDesk })));
 import type { SkeletonDeskTarget } from "./components/SkeletonDesk";
+const LyricOverview = lazy(() => import("./components/LyricOverview").then((m) => ({ default: m.LyricOverview }))); // #31 スライス5：歌詞を通しで読む面（全画面）
 import { projectTag } from "./project";
 
 const ACTIVE_PROJECT_KEY = "cm-active-project";
@@ -76,6 +77,7 @@ export function App() {
   const [navStack, setNavStack] = useState<Neta[]>([]);
   // #20 S6骨格の机：骨格ブロック→全画面の机（active の SectionEditor の上に載る焦点）。
   const [deskTarget, setDeskTarget] = useState<SkeletonDeskTarget | null>(null);
+  const [lyricViewTarget, setLyricViewTarget] = useState<{ songNetaId: string } | null>(null); // #31 スライス5：通しで読む面
   // 一覧(GET /neta)は巨大content(study/analysis 等)を content:null に落として初回ロードを軽くしている。
   // エディタは全文が要る(StudyView=content.common / AnalysisWorkbench=content.raw)ので、開く時に content が
   // 欠けていれば /neta/:id で取り直す。小さい music content は一覧にも載っているので追加取得は起きない。
@@ -104,6 +106,7 @@ export function App() {
     // 作る棚/絞る引き出し＝ボトムシートも1レイヤ（従来対象外で、SPの戻るがアプリを抜けるバグだった）。
     if (shelfOpen) { setShelfOpen(false); return true; }
     if (filterDrawerOpen) { setFilterDrawerOpen(false); return true; }
+    if (lyricViewTarget) { setLyricViewTarget(null); return true; } // #31 スライス5：通しで読む面を最上層として戻るで閉じる
     if (deskTarget) { closeDesk(); return true; } // #20 S6：机を1レイヤとして戻るで閉じる（下の SectionEditor へ）
     if (navStack.length) {
       const parent = navStack[navStack.length - 1]!;
@@ -125,7 +128,7 @@ export function App() {
   //   バグがあった（監査 BUG-1）。bool の armed にしたので瞬間的な 0→再オープンでも壊れない。
   const anyOpen =
     trayOpen || chatOpen || shelfOpen || filterDrawerOpen ||
-    !!deskTarget || navStack.length > 0 || !!active || projectView;
+    !!lyricViewTarget || !!deskTarget || navStack.length > 0 || !!active || projectView;
   const anyOpenRef = useRef(false); anyOpenRef.current = anyOpen;
   const closeTopRef = useRef(closeTop); closeTopRef.current = closeTop;
   const armedRef = useRef(false); // guard を1件積んでいるか
@@ -715,7 +718,10 @@ export function App() {
         </aside>
         <section className="mainpane" aria-label="mainpane">
           <Suspense fallback={<div className="mainpane-empty"><p className="muted">読み込み中…</p></div>}>
-          {deskTarget ? (
+          {lyricViewTarget ? (
+            // #31 スライス5：歌詞を通しで読む面（全画面）。骨格の机と同格の最上層。
+            <LyricOverview songNetaId={lyricViewTarget.songNetaId} onClose={() => setLyricViewTarget(null)} />
+          ) : deskTarget ? (
             // #20 S6骨格の机（全画面）。開いている間は下の SectionEditor はアンマウント相当（handoff §2.2）。
             <SkeletonDesk
               key={`${deskTarget.skelNetaId}@${deskTarget.skelPosition}`}
@@ -771,6 +777,7 @@ export function App() {
               onForked={(branch) => { setActive(branch); void reload(); }} /* 分家に載せ替え（navStack=親はそのまま・key変化で分家を再初期化） */
               onOpenNeta={drillNeta} /* Section のブロックタップ→子ネタへ潜る */
               onOpenSkeletonDesk={(t) => setDeskTarget(t)} /* #20 S6：骨格ブロック→机（全画面） */
+              onOpenLyricOverview={(id) => setLyricViewTarget({ songNetaId: id })} /* #31 スライス5：曲→歌詞を通しで読む面 */
               activeProject={activeProject || undefined} /* Task1i：PatternImportDialog の Source（プロジェクト軸）絞りへ */
               onClose={() => {
                 if (navStack.length) {
@@ -807,7 +814,7 @@ export function App() {
       </DndContext>
       {/* Fable UX監査⑤：ネタを開いている間（active＝NetaDialog/AnalysisWorkbench/StudyView）は FAB を隠す
           ＝エディタの「左手」ボタンやプレビューを覆わない。既存の「オーバーレイ中は隠す」条項に !active を1つ足す最小工事。 */}
-      {!active && !chatOpen && !deskTarget && !shelfOpen && !filterDrawerOpen && (
+      {!active && !chatOpen && !deskTarget && !lyricViewTarget && !shelfOpen && !filterDrawerOpen && (
         <button
           className="chat-bubble"
           aria-label="chat"

@@ -15,6 +15,7 @@ export function NetaDialog({
   onChanged,
   onOpenNeta,
   onOpenSkeletonDesk,
+  onOpenLyricOverview,
   reloadSignal,
   parentId,
   onForked,
@@ -25,6 +26,7 @@ export function NetaDialog({
   onChanged?: () => void;
   onOpenNeta?: (n: Neta) => void; // Section のブロックタップ→子ネタを開く（潜る）
   onOpenSkeletonDesk?: (t: import("./SkeletonDesk").SkeletonDeskTarget) => void; // #20 S6：骨格ブロック→机
+  onOpenLyricOverview?: (songNetaId: string) => void; // #31 スライス5：曲→歌詞を通しで読む面
   reloadSignal?: number; // D&D配置などの外部更新でSectionEditorを再読込
   parentId?: string; // CoW（S2）：どの親から潜ったか＝共有子の分家先。未指定＝ガード無し。
   onForked?: (branch: Neta) => void; // CoW：「この曲だけ変える」で分家に載せ替えた時、親がエディタを分家へ。
@@ -154,7 +156,7 @@ export function NetaDialog({
         text={ed.text} setText={ed.setText}
         keyPc={ed.key} mode={ed.mode} tempo={ed.tempo} meter={ed.meter} program={ed.program} title={ed.title}
         flush={ed.flush}
-        reloadSignal={reloadSignal} onChanged={onChanged} onOpenNeta={onOpenNeta} onOpenSkeletonDesk={onOpenSkeletonDesk}
+        reloadSignal={reloadSignal} onChanged={onChanged} onOpenNeta={onOpenNeta} onOpenSkeletonDesk={onOpenSkeletonDesk} onOpenLyricOverview={onOpenLyricOverview}
         cow={ed.cow} /* CoW ガード（S2 Fix C）＝section の bars/レーン設定の直接保存も安全弁を通す */
         tp={{ lineRef: ed.tp.lineRef, scrollerRef: ed.tp.scrollerRef, beatRef: ed.tp.beatRef, playing: ed.tp.playing }}
         activeProject={activeProject} /* Task1i：PatternImportDialog の Source 絞りへ下ろす（純追加） */

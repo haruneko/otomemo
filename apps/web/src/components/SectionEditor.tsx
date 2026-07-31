@@ -61,6 +61,7 @@ export function SectionEditor({
   onChanged,
   onOpenNeta,
   onOpenSkeletonDesk,
+  onOpenLyricOverview,
   title,
   cow,
 }: {
@@ -74,6 +75,8 @@ export function SectionEditor({
   onOpenNeta?: (n: Neta) => void; // ブロックタップ→子ネタを編集画面で開く（潜る）
   // #20 S6骨格の机：骨格ブロックタップ→机（全画面）で開く。未指定＝従来どおり onOpenNeta（潜る）。
   onOpenSkeletonDesk?: (t: SkeletonDeskTarget) => void;
+  // #31 スライス5：曲（song）→歌詞を通しで読む面（全画面）。
+  onOpenLyricOverview?: (songNetaId: string) => void;
   // CoW ガード（S2 Fix C）＝共有 section の bars/レーン設定（直接 updateNeta）も安全弁を通す。
   // NetaDialog(useNetaEditor) と同一インスタンス＝決定はエディタセッションで1つ。未指定＝従来どおり（bit-safe）。
   cow?: CowGuard;
@@ -444,6 +447,13 @@ export function SectionEditor({
             </div>
             <span className="tb-divider" aria-hidden="true" />
           </>
+        )}
+        {/* #31 スライス5：曲のとき「歌詞を通しで読む」入口（全画面へ）。骨格の机と同格の全画面。 */}
+        {isSong && onOpenLyricOverview && (
+          <button type="button" className="tb-tool" aria-label="open-lyric-overview" title="歌詞を曲全体で通しで読む・推敲する"
+            onClick={() => onOpenLyricOverview(neta.id)}>
+            <Icon name="wand" size={16} /> 歌詞を通しで読む
+          </button>
         )}
         <div className="assign-wrap" ref={toolsRef}>
           <button
