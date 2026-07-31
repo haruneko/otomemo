@@ -97,7 +97,8 @@ export function collectLyricRows(comp: CompositionNode | null | undefined): Over
         const nextRel = node.children.length
           ? Math.max(...node.children.map((c) => c.position + childDur(c.node, cbpb)))
           : cbpb;
-        sections[myIndex]!.nextBeat = nextRel;
+        // ＋句を足すの配置は次の小節頭へ丸める（新句が小節の途中から始まらない・遅延生成の配置精緻化）。
+        sections[myIndex]!.nextBeat = nextRel > 0 ? Math.ceil((nextRel - 1e-6) / cbpb) * cbpb : cbpb;
         sections[myIndex]!.endBar = Math.max(sections[myIndex]!.startBar, barOf(baseBeat + nextRel - 1e-6, bpb));
       }
     }
@@ -113,7 +114,7 @@ function sectionLabel(node: CompositionNode): string {
   return info?.label ?? node.neta.title ?? "セクション";
 }
 
-/** 子の尺（拍）＝メロは音符の最遠端／入れ子は再帰（SectionMini.durOf と同旨・尺手当ては別途）。 */
+/** 子の尺（拍）。音符0個でも句があればその尺を尊重（尺手当て・sectionContext.leafDur と同旨）。句なしは1小節。 */
 function childDur(node: CompositionNode, bpb: number): number {
   const k = node.neta.kind;
   if (k === "section" || k === "song") {
@@ -121,5 +122,7 @@ function childDur(node: CompositionNode, bpb: number): number {
     return kids.length ? Math.max(...kids.map((c) => c.position + childDur(c.node, bpb))) : bpb;
   }
   const ns = notesForContent(k, node.neta.content);
-  return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : bpb;
+  if (ns.length) return Math.max(...ns.map((n) => n.start + n.dur));
+  const phrases = lyricOf(node.neta.content)?.phrases;
+  return phrases?.length ? Math.max(...phrases.map((p) => p.start + p.beats)) : bpb;
 }

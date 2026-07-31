@@ -356,3 +356,17 @@ describe("audibleChildren / laneOfChild（レーンミュート＝再生のみ�
     expect(audible).not.toContain(cp0); // 楽器1は外れる
   });
 });
+
+// #31 スライス5：尺手当て＝音符0個でも句があればその尺を尊重（句なしは従来どおり1小節＝bit一致）。
+describe("尺手当て（音符0個メロの尺）", () => {
+  const ctx = { BPB: 4 } as SectionCtx;
+  it("句なしの音符0個ネタは従来どおり1小節（BPB）＝bit一致（既存の音符0個ネタは不変）", () => {
+    expect(contentDur(ctx, "melody", { notes: [] })).toBe(4);
+    expect(childDur(ctx, child("melody", 0, { notes: [] }))).toBe(4);
+  });
+  it("句ありの音符0個ネタ（(い-c) 遅延生成）は句の尺を尊重＝1小節に潰れない", () => {
+    const c = { notes: [], lyric: { phrases: [{ id: "p", start: 0, beats: 8, text: "夜が明けるまで" }] } };
+    expect(contentDur(ctx, "melody", c)).toBe(8); // 2小節ぶんの句
+    expect(childDur(ctx, child("melody", 0, c))).toBe(8);
+  });
+});

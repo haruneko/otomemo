@@ -8,6 +8,7 @@ import {
   melodyPlacementShift,
   chordsOf,
   isSkeleton,
+  lyricOf,
   type ChordEntry,
   type Note,
 } from "./music";
@@ -70,6 +71,17 @@ export function audibleChildren(ctx: SectionCtx, muted: readonly string[]): Chil
   });
 }
 
+// leaf の尺（拍）。実音があればその長さ。**音符0個でも句（content.lyric）があればその尺を尊重**
+// ＝(い-c) 遅延生成で生まれる「音符0個・句あり」メロが1小節に潰れず正しい尺で数えられる（#31 スライス5 尺手当て）。
+// **句なしの音符0個ネタは従来どおり ctx.BPB**（既存の音符0個50件＝全部句なし bass は1件も挙動が変わらない＝bit一致）。
+function leafDur(ctx: SectionCtx, kind: string, content: unknown): number {
+  const ns = notesForContent(kind, content);
+  if (ns.length) return Math.max(...ns.map((n) => n.start + n.dur));
+  const phrases = lyricOf(content)?.phrases;
+  if (phrases?.length) return Math.max(...phrases.map((p) => p.start + p.beats));
+  return ctx.BPB;
+}
+
 // 子の実長（拍）。ネストした section/song＝中身の実長（子を再帰で畳む）＝1小節固定でなく本当の尺（評価修正A）。
 export function childDur(ctx: SectionCtx, c: Child): number {
   const k = c.node.neta.kind;
@@ -77,15 +89,13 @@ export function childDur(ctx: SectionCtx, c: Child): number {
     const kids = c.node.children ?? [];
     return kids.length ? Math.max(...kids.map((kc) => kc.position + childDur(ctx, kc))) : ctx.BPB;
   }
-  const ns = notesForContent(k, c.node.neta.content);
-  return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : ctx.BPB;
+  return leafDur(ctx, k, c.node.neta.content);
 }
 
-// 置くネタ自体の尺（leaf は実音の長さ・未知は1小節）。配置/ループの尺重複ガードに使う。
+// 置くネタ自体の尺（leaf は実音の長さ・句あり音符0個は句の尺・未知は1小節）。配置/ループの尺重複ガードに使う。
 export function contentDur(ctx: SectionCtx, kind: string, content: unknown): number {
   if (kind === "section" || kind === "song") return ctx.BPB; // ネストは picker では稀・保守的に1小節扱い
-  const ns = notesForContent(kind, content);
-  return ns.length ? Math.max(...ns.map((n) => n.start + n.dur)) : ctx.BPB;
+  return leafDur(ctx, kind, content);
 }
 
 // ②文脈系：この進行にメロ。section のコード進行を1本に連結（各コード子を**配置位置(拍)ぶん**オフセット）。
