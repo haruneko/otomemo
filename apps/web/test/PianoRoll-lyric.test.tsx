@@ -243,7 +243,8 @@ describe("PianoRoll：句の面を配線していない呼び側は従来どお�
     render(<Harness notes0={fiveNotes()} />);
     expect(screen.queryByLabelText("lyric-draft")).toBeNull(); // 畳んでいるうちは出ない
     expect(screen.queryByLabelText("flow-lyric")).toBeNull();
-    await userEvent.click(screen.getByLabelText("lyric-line")); // 開く
+    await userEvent.click(screen.getByLabelText("lyric-line")); // パネルを開く
+    await userEvent.click(screen.getByText(/そのほか/)); // 「そのほか」の奥を開く
     expect(screen.getByLabelText("lyric-draft")).toBeInTheDocument();
     expect(screen.getByLabelText("flow-lyric")).toBeInTheDocument();
   });
@@ -251,6 +252,7 @@ describe("PianoRoll：句の面を配線していない呼び側は従来どお�
   it("パネルの奥の「流し込む」は配線画面でも効く（音符を割る口が消えていない）", async () => {
     render(<Harness notes0={[{ pitch: 60, start: 0, dur: 2 }]} />);
     await userEvent.click(screen.getByLabelText("lyric-line"));
+    await userEvent.click(screen.getByText(/そのほか/)); // 「そのほか」の奥を開く
     await userEvent.type(screen.getByLabelText("lyric-draft"), "あめ");
     await userEvent.click(screen.getByLabelText("flow-lyric"));
     const ns = notesJson();
@@ -346,12 +348,12 @@ describe("PianoRoll：印（赤黄）が句の読みから出る", () => {
 
 // スライス3：字余りと「メロがまだ途中」を言い分ける（design §31-5）。
 describe("PianoRoll：句と音符の関係を言う", () => {
-  it("音符が5・モーラが5なら『ちょうど』と言う", async () => {
+  it("音符が5・モーラが5なら『過不足なし』と言う", async () => {
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type((await lyricInput()), "雨の日は");
     await applyReading();
     await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toBeInTheDocument(), { timeout: 3000 });
-    expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("ちょうど");
+    expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("過不足なし");
   });
 
   it("音符が2・モーラが5なら『字余り3』と言う（機械は詰めない・音符も増やさない）", async () => {
@@ -422,7 +424,7 @@ describe("PianoRoll：音符を割る（案A・プルダウン組み合わせ）
     await waitFor(() => expect(screen.getByLabelText("split-seed-common")).toBeInTheDocument());
     await userEvent.click(screen.getByLabelText("split-seed-common")); // 頻度ボタンで組む
     await waitFor(() => expect(screen.getByLabelText("split-apply")).toBeEnabled());
-    expect(screen.getByLabelText("split-remaining").textContent).toContain("ちょうど");
+    expect(screen.getByLabelText("split-remaining").textContent).toContain("過不足なし");
     await userEvent.click(screen.getByLabelText("split-apply"));
     expect(notesJson()).toHaveLength(5); // 2→5＝割れた
     expect(notesJson().map((n) => n.syllable)).toEqual(["あ", "め", "の", "ひ", "わ"]);
@@ -432,6 +434,7 @@ describe("PianoRoll：音符を割る（案A・プルダウン組み合わせ）
     splitCandidates.mockResolvedValue(fakeResp);
     await toOverflow();
     await userEvent.click(screen.getByLabelText("fetch-split-candidates"));
+    await userEvent.click(await screen.findByText(/拍ごとに細かく変える/)); // 拍プルダウンは畳んである＝開く
     await waitFor(() => expect(screen.getByLabelText("split-note-0")).toBeInTheDocument());
     // 句末（音符1）は割れないのでプルダウンが出ない
     expect(screen.queryByLabelText("split-note-1")).toBeNull();
@@ -445,7 +448,7 @@ describe("PianoRoll：音符を割る（案A・プルダウン組み合わせ）
     render(<Harness notes0={fiveNotes()} />);
     await userEvent.type((await lyricInput()), "雨の日は");
     await applyReading();
-    await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("ちょうど"), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status").textContent).toBe("過不足なし"), { timeout: 3000 });
     expect(screen.queryByLabelText("fetch-split-candidates")).toBeNull();
   });
 });
@@ -529,8 +532,8 @@ describe("PianoRoll：歌詞は常時1行、書くときだけ開く", () => {
     expect(screen.getByLabelText("lyric-apply-reading")).toBeInTheDocument();
     expect(screen.getByLabelText("lyric-phrase-status")).toHaveTextContent("まだ反映していません");
     await userEvent.click(screen.getByLabelText("lyric-apply-reading"));
-    // 反映が済んだら1行からボタンは消え、チップは今の状況（音符5・モーラ5＝ちょうど）に変わる
-    await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toHaveTextContent("ちょうど"), { timeout: 3000 });
+    // 反映が済んだら1行からボタンは消え、チップは今の状況（音符5・モーラ5＝過不足なし）に変わる
+    await waitFor(() => expect(screen.getByLabelText("lyric-phrase-status")).toHaveTextContent("過不足なし"), { timeout: 3000 });
     expect(screen.queryByLabelText("lyric-apply-reading")).toBeNull();
   });
 
@@ -557,6 +560,7 @@ describe("PianoRoll：歌詞は常時1行、書くときだけ開く", () => {
     await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 }); // かなが載る＝トグルが出る条件
     expect(screen.queryByLabelText("lyric-fit-toggle")).toBeNull(); // 常設からは消えている
     await userEvent.click(screen.getByLabelText("lyric-line"));
+    await userEvent.click(screen.getByText(/そのほか/)); // 「そのほか」の奥を開く
     const toggle = screen.getByLabelText("lyric-fit-toggle"); // パネルの奥にある
     expect(toggle).toBeChecked(); // 既定ON＝機械の助言は黙って消さない
     await userEvent.click(toggle);
@@ -566,6 +570,7 @@ describe("PianoRoll：歌詞は常時1行、書くときだけ開く", () => {
     render(<Harness notes0={fiveNotes()} lyric0={lyric0} />);
     await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
     await userEvent.click(screen.getByLabelText("lyric-line"));
+    await userEvent.click(screen.getByText(/そのほか/)); // 「そのほか」の奥を開く
     expect(screen.getByLabelText("lyric-fit-toggle")).not.toBeChecked(); // 覚えている
     localStorage.removeItem("cm.lyricFit"); // 後のテストへ漏らさない
   });
@@ -578,6 +583,7 @@ describe("PianoRoll：歌詞は常時1行、書くときだけ開く", () => {
     await waitFor(() => expect(notesJson()[0]!.syllable).toBe("あ"), { timeout: 3000 });
     expect(screen.queryByLabelText("clear-lyric")).toBeNull(); // 畳んでいるうちは出ない
     await userEvent.click(screen.getByLabelText("lyric-line"));
+    await userEvent.click(screen.getByText(/そのほか/)); // 「そのほか」の奥を開く
     const clear = screen.getByLabelText("clear-lyric");
     expect(clear).toHaveTextContent("かなを消す");
     await userEvent.click(clear);

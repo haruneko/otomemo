@@ -50,6 +50,8 @@ export function LyricSplitComposer({
 
   // 選択＝音符index→option.key。初期は全「割らない」（機械は事前選択しない＝監査5）。
   const [sel, setSel] = useState<Map<number, string>>(() => new Map(inRangeIdx.map((i) => [i, ""])));
+  // 拍ごとのプルダウンは従＝既定で畳む（主動線は上の候補リスト・初見レビュー 2026-07-30）。
+  const [dropsOpen, setDropsOpen] = useState(false);
 
   const added = selectionAdded(options, sel);
   const matched = added === k ? matchCandidate(data.candidates, inRangeIdx, sel) : null; // 事実表示用（頻度など）
@@ -103,46 +105,64 @@ export function LyricSplitComposer({
         </button>
       )}
 
-      {/* 音符ごとのプルダウン（割れる音符だけ）。位置違いは option の小図で見分ける。 */}
-      <div className="split-dropdowns">
-        {splittable.map((idx) => {
-          const opts = options.get(idx)!;
-          const startSlot = Math.round((origNotes[idx]!.start - originBeat) * gpb); // 原点相対（監査 Bug3）
-          const lenSlots = Math.max(1, Math.round(origNotes[idx]!.dur * gpb));
-          const dupCount = new Map<number, number>();
-          for (const o of opts) dupCount.set(o.added, (dupCount.get(o.added) ?? 0) + 1);
-          return (
-            <label key={idx} className="split-drop">
-              <span className="muted">{noteBeat(idx)}拍目</span>
-              <select aria-label={`split-note-${idx}`} value={sel.get(idx) ?? ""} onChange={(e) => setOne(idx, e.target.value)}>
-                {opts.map((o) => (
-                  <option key={o.key} value={o.key}>
-                    {optionLabel(o)}{o.added > 0 && (dupCount.get(o.added) ?? 0) > 1 ? `（${localFig(startSlot, lenSlots, o.slots)}）` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-          );
-        })}
-      </div>
-
-      {/* 組んだ形の図（メロ概形）＋残り＋適用。適用は過不足なしなら常に可（返却上限で切れても組み立てる・Bug1）。 */}
+      {/* 組んだ形の図（メロ概形）＝上に置く。残り／適用は最下部へ（選ぶ→決める・初見レビュー 2026-07-30）。 */}
       <div className="split-preview" aria-label="split-figure">
         <SplitRoll notesAfter={previewNotes} origStarts={origStarts} range={range} meter={meter} lo={lo} hi={hi} variant="preview" />
-        <span className="muted" aria-label="split-remaining">
-          {remaining > 0 ? `残り：あと${remaining}` : remaining < 0 ? `割りすぎ：${-remaining}多い` : "ちょうど"}
-        </span>
-        <button type="button" aria-label="split-apply" disabled={!applicable} onClick={doApply}>
-          この形で音符を割る
-        </button>
       </div>
       {matched?.specialBeatHit && <span className="muted split-warn">促音（っ）が拍の頭に来ています</span>}
       {matched?.wordBoundaryHit && <span className="muted split-warn">語の途中で割れています</span>}
       {!data.backedByCorpus && <span className="muted split-note">この拍子は既存曲の集計がないため、拍の強弱からの候補です</span>}
 
-      {/* 候補リスト（2軸・上位）＝メロ概形つきで一望。タップでプルダウンに読み込む（ゼロから組まない）。 */}
+      {/* 候補リスト（2軸・上位）＝主動線。タップでプルダウンに読み込む（ゼロから組まない）。 */}
       <SplitList data={data} origStarts={origStarts} range={range} meter={meter} lo={lo} hi={hi} onPick={loadSelection} />
       {data.truncated && <span className="muted split-note">ほかにも割り方があります（上位だけ表示）</span>}
+
+      {/* 音符ごとのプルダウン（割れる音符だけ）＝従＝既定で畳む。位置違いは option の小図で見分ける。 */}
+      {splittable.length > 0 && (
+        <div className="split-dropdowns-fold">
+          <button
+            type="button"
+            className="split-fold-toggle"
+            aria-expanded={dropsOpen}
+            onClick={() => setDropsOpen((o) => !o)}
+          >
+            {dropsOpen ? "▾" : "▸"} 拍ごとに細かく変える
+          </button>
+          {dropsOpen && (
+            <div className="split-dropdowns">
+              {splittable.map((idx) => {
+                const opts = options.get(idx)!;
+                const startSlot = Math.round((origNotes[idx]!.start - originBeat) * gpb); // 原点相対（監査 Bug3）
+                const lenSlots = Math.max(1, Math.round(origNotes[idx]!.dur * gpb));
+                const dupCount = new Map<number, number>();
+                for (const o of opts) dupCount.set(o.added, (dupCount.get(o.added) ?? 0) + 1);
+                return (
+                  <label key={idx} className="split-drop">
+                    <span className="muted">{noteBeat(idx)}拍目</span>
+                    <select aria-label={`split-note-${idx}`} value={sel.get(idx) ?? ""} onChange={(e) => setOne(idx, e.target.value)}>
+                      {opts.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {optionLabel(o)}{o.added > 0 && (dupCount.get(o.added) ?? 0) > 1 ? `（${localFig(startSlot, lenSlots, o.slots)}）` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 確定＋残り＝最下部（候補リストと拍プルダウンより下）。適用は過不足なしなら常に可（Bug1）。 */}
+      <div className="split-confirm">
+        <span className="muted" aria-label="split-remaining">
+          {remaining > 0 ? `残り：あと${remaining}` : remaining < 0 ? `割りすぎ：${-remaining}多い` : "過不足なし"}
+        </span>
+        <button type="button" aria-label="split-apply" disabled={!applicable} onClick={doApply}>
+          この形で音符を割る
+        </button>
+      </div>
     </div>
   );
 }

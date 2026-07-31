@@ -186,8 +186,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                       {/* 詞＝歌詞リタッチ（メロのみ）：音符タップで syllable 編集・確定で次へ。ノート編集は無効化＝タップ競合の構造的解消。
                           ラベルは文字「1音ずつ」＝スマホでは title が出ず用が読めない穴を塞ぐ（§31-11 の16 (a)・案B）。 */}
                       {isMelody && (
-                        <button type="button" aria-label="mode-lyric" title="1音ずつ歌詞を直す（音符をタップ）" className={"mode-lyric" + (p.rollMode === "lyric" ? " on" : "")} onClick={() => p.setRollMode("lyric")}>
-                          1音ずつ
+                        <button type="button" aria-label="mode-lyric" title="歌詞を直す（音符をタップ）" className={"mode-lyric" + (p.rollMode === "lyric" ? " on" : "")} onClick={() => p.setRollMode("lyric")}>
+                          歌詞
                         </button>
                       )}
                     </div>
@@ -200,10 +200,10 @@ export function KindEditorBody(p: KindEditorBodyProps) {
                             className={"tb-tool tools-btn" + (toolsOpen ? " on" : "")}
                             aria-label="tools"
                             aria-expanded={toolsOpen}
-                            title="このメロをいじる（崩す・調推定・似たメロ・移調）"
+                            title="このメロのツール（崩す・調推定・似たメロ・移調）"
                             onClick={() => setToolsOpen((v) => !v)}
                           >
-                            <Icon name="wand" size={16} /> いじる ▾
+                            <Icon name="wand" size={16} /> ツール ▾
                           </button>
                           {toolsOpen && (
                             <div className="assign-menu to-right tools-menu" aria-label="tools-menu">

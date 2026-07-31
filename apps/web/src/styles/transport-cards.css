@@ -1377,6 +1377,16 @@
   font-size: 0.75rem;
   color: var(--muted);
 }
+/* 主従（Fableレビュー④・CSSのみ）：動作（描く/選ぶ/消す/歌詞を直す＝.proll-modes）が主、
+   音の長さ（.proll-tools）は従。下段の音価ボタンを一回り小さく・少し退かせ、形で主従を示す（機能は不変）。 */
+.proll-tools .len.glyph {
+  min-height: 26px;
+  padding: 2px 6px;
+  opacity: 0.9;
+}
+.proll-tools .len.glyph.on {
+  opacity: 1; /* 選択中の音価は退かせない（今どれか分かるべき） */
+}
 /* 音符イラストのボタン（音価/付点）：SVGを中央に・高さ揃え。 */
 .len.glyph {
   display: inline-flex;
@@ -1643,12 +1653,29 @@
   font: inherit;
   text-align: left;
 }
-/* 状態チップ（ちょうど／字余りN／字足らずN／まだ反映していません 等）＝**折り返させない**。
+/* 状態チップ（過不足なし／字余りN／字足らずN／まだ反映していません 等）＝**折り返させない**。
    句が長いとチップが「ちょ／うど」と2行に割れて読めなくなる（360px 実測 2026-07-30b）。
    縮むのは句のテキスト側（下の .proll-lyric-oneline が省略を持つ）。 */
 .proll-lyric-status {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+/* 字余りチップ＝割る機能への入口（Fableレビュー②）。押せることが分かる下線＋アクセント寄せ。 */
+.proll-lyric-status-action {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: color-mix(in srgb, var(--accent) 55%, var(--fg));
+}
+.proll-lyric-status-action:hover {
+  color: var(--accent);
+}
+/* 開閉の向き（▾/▴）＝行がタップで開く手がかり（Fableレビュー①）。右端に小さく。 */
+.proll-lyric-caret {
+  flex: 0 0 auto;
+  margin-left: auto; /* テキスト/チップの右端へ押し出す＝行末に常設 */
+  font-size: 0.72rem;
+  opacity: 0.7;
 }
 /* 句のテキスト＝1行に収め、あふれは省略（正データは奥の表記欄で全部見える）。 */
 .proll-lyric-oneline {
@@ -1720,7 +1747,35 @@
 .proll-lyric-kana button:disabled {
   opacity: 0.4;
 }
-/* 奥の段＝ふだん使わないもの（かなを消す・韻律チェック＋凡例）。 */
+/* 「そのほか」の奥＝ふだん使わないもの（かな欄＋音符に割り当てる・かなを消す・アクセントの印）を畳む。 */
+.proll-lyric-more-fold {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.proll-lyric-more-toggle {
+  align-self: flex-start;
+  padding: 3px 8px;
+  font-size: 0.78rem;
+  background: #23262b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.proll-lyric-more-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* 畳みの中では上境界線が重なる＝内側のかな欄／奥の段の border-top は消す。 */
+.proll-lyric-more-body .proll-lyric-kana,
+.proll-lyric-more-body .proll-lyric-more {
+  border-top: none;
+  padding-top: 0;
+}
+/* 奥の段＝ふだん使わないもの（かなを消す・アクセントの印＋凡例）。 */
 .proll-lyric-more {
   display: flex;
   align-items: center;
@@ -1855,7 +1910,32 @@
   flex-wrap: wrap;
   gap: 6px 10px;
 }
-.split-preview button {
+/* 拍ごとの微調整＝従＝既定で畳む（▸/▾）。トグルは控えめ・中身はプルダウン群。 */
+.split-fold-toggle {
+  align-self: flex-start;
+  padding: 3px 8px;
+  font-size: 0.76rem;
+  background: #23262b;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.split-dropdowns-fold {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* 確定＋残り＝最下部（選ぶ→決める）。残りは左・確定はアクセント色で右へ。 */
+.split-confirm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.split-confirm button {
+  margin-left: auto;
   padding: 4px 10px;
   font-size: 0.78rem;
   background: var(--accent);
@@ -1863,7 +1943,7 @@
   border: 1px solid var(--accent);
   border-radius: 6px;
 }
-.split-preview button:disabled {
+.split-confirm button:disabled {
   opacity: 0.5;
   background: #2b2f36;
   color: var(--fg);
@@ -1975,6 +2055,24 @@
   border-radius: 8px;
   background: #15171b;
   position: relative; /* #58 プレイヘッドの基準（コンテンツと一緒にスクロール） */
+}
+/* 空の格子ヒント（Fableレビュー③）＝描く道具で音符0のときだけ中央に薄く。tap を塞がない。 */
+.proll-empty-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+  max-width: calc(100% - 24px);
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  white-space: nowrap;
+  text-align: center;
 }
 .proll-playhead {
   position: absolute;
@@ -2124,7 +2222,7 @@
 /* 詞モード＝文字ラベル「1音ずつ」（§31-11 の16 (a)・案B）。アイコン3つの 14px 横 padding は文字だと広すぎるので詰める＝360px 幅で他ボタンと同居させる。 */
 .proll-modes button.mode-lyric {
   padding: 4px 8px;
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   min-width: 0;
   white-space: nowrap;
 }

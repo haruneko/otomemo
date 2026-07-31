@@ -451,11 +451,11 @@ export function SectionEditor({
             className={"tb-tool tools-btn" + (toolsOpen ? " on" : "")}
             aria-label="tools"
             aria-expanded={toolsOpen}
-            title={isSong ? "曲を書き出す（MIDI・パート別MIDI）" : "この進行をいじる（生成・ハモリ・書き出し）"}
+            title={isSong ? "曲を書き出す（MIDI・パート別MIDI）" : "この進行のツール（生成・ハモリ・書き出し）"}
             onClick={() => setToolsOpen((v) => !v)}
           >
             {/* #28 song の「いじる」は書き出しのみ（design L586）＝ラベルを 書き出し に。section は従来どおり いじる。 */}
-            <Icon name="wand" size={16} /> {isSong ? "書き出し ▾" : "いじる ▾"}
+            <Icon name="wand" size={16} /> {isSong ? "書き出し ▾" : "ツール ▾"}
           </button>
           {toolsOpen && <div className="tools-backdrop" aria-hidden="true" onClick={() => setToolsOpen(false)} />}
           {toolsOpen && (

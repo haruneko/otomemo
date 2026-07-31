@@ -165,7 +165,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
     <>
       <div className="sheet-head">
         <span className="sheet-grab" aria-hidden="true" />
-        <span className="sheet-title">いじる</span>
+        <span className="sheet-title">ツール</span>
         <button type="button" className="sheet-close" aria-label="close-tools" onClick={onClose}>✕</button>
       </div>
       {!isSong && (

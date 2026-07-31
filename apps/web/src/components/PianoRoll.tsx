@@ -112,6 +112,8 @@ export function PianoRoll({
   const [lyricDraft, setLyricDraft] = useState(""); // 流し込む歌詞（かな・読み）。永続せずUIだけ
   // #31 歌詞パネル（design §31-9・裁定 2026-07-30）：常時は歌詞1行だけ出し、書く/直すときにタップで開く。
   const [panelOpen, setPanelOpen] = useState(false);
+  // かな欄＋音符に割り当てる／かなを消す／アクセントの印は「そのほか」の奥＝既定で畳む（初見レビュー 2026-07-30）。
+  const [moreOpen, setMoreOpen] = useState(false);
   // W-K2：歌詞×メロのアクセント整合ハイライト（既定ON・軽い凡例）。openReason=理由ポップを開くチップの index。
   // 裁定（§31-11 の16 (c)＝案B）：トグルは歌詞パネルの奥へ移し、**OFF を覚える**。
   // 覚えないと「うるさいから消す→開き直すと復活→また奥へ潜る」が毎回になる（奥へ移すだけの案Aの弱点）。
@@ -139,6 +141,8 @@ export function PianoRoll({
   const [lyrTarget, setLyrTarget] = useState<number | null>(null);
   const [lyrVal, setLyrVal] = useState("");
   const lyrInputRef = useRef<HTMLInputElement>(null);
+  // 字余りチップから「音符を割って合わせる」ボタンまで導く（Fableレビュー②）＝直通の scrollIntoView 先。
+  const splitBtnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (mode !== "lyric") setLyrTarget(null); // 詞モードを離れたら編集対象を解除
   }, [mode]);
@@ -315,6 +319,18 @@ export function PianoRoll({
     }
   }
 
+  /**
+   * 字余りチップ→割る機能への直通（Fableレビュー②）。パネルを開き、割るボタンまでスクロールして見せる。
+   * 機械は割らない＝導くだけ（人が候補を選んで適用）。他状態のチップは従来どおり非対話。
+   */
+  function openToSplit() {
+    setPanelOpen(true);
+    // パネルは次の描画で出る＝2フレーム待ってから割るボタンへ寄せる（jsdom 等では scrollIntoView 無しでも安全）。
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => splitBtnRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" })),
+    );
+  }
+
   // 選んだ形を適用＝音符が割れて字余りが収まる（適用は人）。onChange 経由＝Undo/Redo が効く。
   function applySplit(notesAfter: Note[]) {
     onChange(notesAfter);
@@ -383,7 +399,8 @@ export function PianoRoll({
             // 文言裁定（§31-11 の16 (d)）：旧「あとN音」は主語が曖昧（詞が足りないのか音符が余っているのか）。
             // **字余り／字足らず**は詩歌の対語（造語ではない）＝並べたときにどちらへ転んでいるか1語で読める。
             ? `字足らず${status.count}`
-            : "ちょうど";
+            // 主語のない「ちょうど」は何が過不足ないのか読めない＝一般語へ（Fableレビュー⑤・割る画面と統一）。
+            : "過不足なし";
 
   /**
    * 歌詞1行に出すもの（裁定 §31-11 の16 (b)＝案C）。
@@ -500,11 +517,35 @@ export function PianoRoll({
                 {/* 句のテキスト1行（あふれは CSS で省略）。空なら次にすることを書く。 */}
                 {phraseText.trim() || "歌詞を書く"}
               </span>
-              {chipLabel && (
-                /* ちょうど／字余りN／字足らずN／メロがまだ途中／メロなし／まだ反映していません。
-                   言うだけで、機械は詰めも削りもしない（design §31-5）。 */
-                <span className="muted proll-lyric-status" aria-label="lyric-phrase-status">{chipLabel}</span>
-              )}
+              {chipLabel &&
+                /* 過不足なし／字余りN／字足らずN／メロがまだ途中／メロなし／まだ反映していません。
+                   言うだけで、機械は詰めも削りもしない（design §31-5）。
+                   字余りのときだけ、チップ自身を割る機能への入口にする（Fableレビュー②・他状態は非対話）。 */
+                (status?.kind === "字余り" ? (
+                  <span
+                    className="muted proll-lyric-status proll-lyric-status-action"
+                    aria-label="lyric-phrase-status"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation(); // 行の開閉トグルへ伝えない＝開くだけ（トグルで閉じない）
+                      openToSplit();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openToSplit();
+                      }
+                    }}
+                  >
+                    {chipLabel}
+                  </span>
+                ) : (
+                  <span className="muted proll-lyric-status" aria-label="lyric-phrase-status">{chipLabel}</span>
+                ))}
+              {/* 行がタップで開くことの手がかり＝右端に開閉の向き（開いている＝▴／閉じている＝▾）。常設。 */}
+              <span className="proll-lyric-caret muted" aria-hidden="true">{panelOpen ? "▴" : "▾"}</span>
             </button>
             {needsApply && !panelOpen && (
               // 手が要る状態（未反映）だけ、1行のまま直せる口を出す（裁定 (b)＝案C）。
@@ -535,34 +576,14 @@ export function PianoRoll({
                   読みを反映
                 </button>
               </div>
-              {/* かな（仮歌の写し）の口＝**奥に置く**（オーナー裁定 2026-07-30b「あまり使わないから奥でいい」→
-                  「パネルの奥に戻す」・design §31-5）。一度これを消したのは誤りだった＝**消さずに奥**。
-                  正データは上の表記欄（句）で、こちらは音符に載るかな＝「かな」と呼び分ける。
-                  「流し込む」は音符を割る（`flowLyric`）唯一の口＝配線画面でもここから使える。 */}
-              <div className="proll-lyric-kana">
-                <span className="muted">かな</span>
-                <input
-                  type="text"
-                  aria-label="lyric-draft"
-                  placeholder="かな（読み）を入力→流し込む"
-                  value={lyricDraft}
-                  onChange={(e) => setLyricDraft(e.target.value)}
-                />
-                <button
-                  type="button"
-                  aria-label="flow-lyric"
-                  disabled={!notes.length || splitMora(lyricDraft).length === 0}
-                  onClick={() => onChange(flowLyric(notes, splitMora(lyricDraft)))}
-                >
-                  流し込む
-                </button>
-              </div>
               {/* 案A＝音符を割って合わせる（design §31-5）。**字余りのときだけ**出す。機械は割らない・
-                  割り方を候補として出すだけ＝人がプルダウンで組んで適用（既定は何もしない・監査 2026-07-30c）。 */}
+                  割り方を候補として出すだけ＝人がプルダウンで組んで適用（既定は何もしない・監査 2026-07-30c）。
+                  字余りチップからの直通先（openToSplit）なので「そのほか」の奥には入れない＝開いたら見える。 */}
               {status?.kind === "字余り" && (
                 <div className="proll-lyric-split">
                   <button
                     type="button"
+                    ref={splitBtnRef}
                     aria-label="fetch-split-candidates"
                     disabled={splitState === "busy"}
                     onClick={() => void fetchSplitCandidates()}
@@ -582,37 +603,73 @@ export function PianoRoll({
                   )}
                 </div>
               )}
-              {hasLyric && (
-                // 奥の段＝ふだん使わないもの（かなを消す・韻律チェック）。文言は §31-11 の16 (d)。
-                <div className="proll-lyric-more">
-                  <button
-                    type="button"
-                    aria-label="clear-lyric"
-                    onClick={() => onChange(notes.map((n) => ({ ...n, syllable: undefined })))}
-                  >
-                    かなを消す
-                  </button>
-                  <label>
-                    <input
-                      type="checkbox"
-                      aria-label="lyric-fit-toggle"
-                      checked={showFit}
-                      onChange={(e) => {
-                        setShowFit(e.target.checked);
-                        writeFitPref(e.target.checked); // OFF を覚える（裁定 (c)＝案B）
-                        setOpenReason(null);
-                      }}
-                    />
-                    韻律チェック
-                  </label>
-                  {showFit && (
-                    <span className="proll-fit-legend muted">
-                      <span className="fit-red">赤=アクセント逆行</span>
-                      <span className="fit-yellow">黄=注意</span>
-                    </span>
-                  )}
-                </div>
-              )}
+              {/* 「そのほか」の奥＝ふだん使わないもの（かな欄＋音符に割り当てる・かなを消す・アクセントの印）。
+                  既定で畳む（初見レビュー 2026-07-30＝読み と かな の二度手間感を畳んで解消）。機能は殺さない。
+                  かな欄の「音符に割り当てる」は音符を割る（`flowLyric`）唯一の口＝配線画面でもここから使える。 */}
+              <div className="proll-lyric-more-fold">
+                <button
+                  type="button"
+                  className="proll-lyric-more-toggle"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen((o) => !o)}
+                >
+                  そのほか {moreOpen ? "▾" : "▸"}
+                </button>
+                {moreOpen && (
+                  <div className="proll-lyric-more-body">
+                    {/* かな（仮歌の写し）の口。正データは上の表記欄（句）で、こちらは音符に載るかな。 */}
+                    <div className="proll-lyric-kana">
+                      <span className="muted">かな</span>
+                      <input
+                        type="text"
+                        aria-label="lyric-draft"
+                        placeholder="かな（読み）を入力→音符に割り当てる"
+                        value={lyricDraft}
+                        onChange={(e) => setLyricDraft(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        aria-label="flow-lyric"
+                        disabled={!notes.length || splitMora(lyricDraft).length === 0}
+                        onClick={() => onChange(flowLyric(notes, splitMora(lyricDraft)))}
+                      >
+                        音符に割り当てる
+                      </button>
+                    </div>
+                    {hasLyric && (
+                      <div className="proll-lyric-more">
+                        <button
+                          type="button"
+                          aria-label="clear-lyric"
+                          onClick={() => onChange(notes.map((n) => ({ ...n, syllable: undefined })))}
+                        >
+                          かなを消す
+                        </button>
+                        <label>
+                          <input
+                            type="checkbox"
+                            aria-label="lyric-fit-toggle"
+                            checked={showFit}
+                            onChange={(e) => {
+                              setShowFit(e.target.checked);
+                              writeFitPref(e.target.checked); // OFF を覚える（裁定 (c)＝案B）
+                              setOpenReason(null);
+                            }}
+                          />
+                          アクセントの印を表示
+                        </label>
+                        {/* 凡例＝トグルの直下（印が出る場所の近く）。 */}
+                        {showFit && (
+                          <span className="proll-fit-legend muted">
+                            <span className="fit-red">赤=アクセント逆行</span>
+                            <span className="fit-yellow">黄=注意</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -744,6 +801,11 @@ export function PianoRoll({
           ref={playheadRef}
           style={{ left: `calc(${KEY_PX}px + var(--phb, 0) * ${SUBDIV * CELL_PX}px)` }}
         />
+        {/* 空の格子＝入口の手がかり（Fableレビュー③）。描く道具で音符が0のときだけ薄く重ねる（tap を塞がない）。
+            1つでも音符が入ったら消える／候補レビュー中（readOnly）は出さない。 */}
+        {notes.length === 0 && mode === "draw" && !readOnly && (
+          <div className="proll-empty-hint" aria-hidden="true">タップで音符を置く（いまの道具：描く）</div>
+        )}
         {pitches.map((p) => {
           // P0-a：調が分かっている時だけ、行を「主音/調内/調外」で色分け（未指定＝従来どおり無着色）。
           const scaleCls = scalePcs

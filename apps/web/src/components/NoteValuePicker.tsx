@@ -10,7 +10,7 @@ export function NoteValuePicker({
   dotted,
   onChange,
   onToggleDotted,
-  label = "長さ(分)", // 全エディタ統一（数字16/8/4/2/1=分音符）。ChordEditor は拍/小節なので「長さ」。
+  label = "音の長さ", // 全エディタ統一（数字16/8/4/2/1=分音符）。ChordEditor は拍/小節なので「長さ」。
 }: {
   options: { label: string; v: number }[];
   value: number;
