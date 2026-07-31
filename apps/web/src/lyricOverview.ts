@@ -9,9 +9,10 @@ import { effectiveReading, isReadingStale, phraseStatus, readingOf } from "@cm/m
 
 export interface OverviewSection {
   label: string; // セクション見出し（役割ラベル or タイトル）
-  netaId: string; // セクションの neta id（＋句を足す＝ここに配置する）
+  netaId: string; // セクションの neta id（メロの配置先）
   nextBeat: number; // セクション内の次の配置拍（末尾＝既存の子の最遠端）
   meter: string | null;
+  startBeat: number; // セクションの曲通し開始拍（□の穴を曲へ置くときの基準）
   startBar: number; // 曲通しの小節番号（1始まり）
   endBar: number;
 }
@@ -89,7 +90,7 @@ export function collectLyricRows(comp: CompositionNode | null | undefined): Over
       let myIndex = curSection;
       if (k === "section") {
         myIndex = sections.length;
-        sections.push({ label: sectionLabel(node), netaId: node.neta.id, nextBeat: 0, meter: node.neta.meter ?? null, startBar: barOf(baseBeat, bpb), endBar: barOf(baseBeat, bpb) });
+        sections.push({ label: sectionLabel(node), netaId: node.neta.id, nextBeat: 0, meter: node.neta.meter ?? null, startBeat: baseBeat, startBar: barOf(baseBeat, bpb), endBar: barOf(baseBeat, bpb) });
       }
       for (const c of node.children) walk(c.node, baseBeat + c.position, cbpb, myIndex);
       if (k === "section") {
@@ -105,6 +106,23 @@ export function collectLyricRows(comp: CompositionNode | null | undefined): Over
     // その他 kind（chord/bass/rhythm/skeleton 等）は歌詞面に出さない＝素通し。
   };
   walk(comp, 0, rootBpb, -1);
+
+  // 曲が持つ句（□の穴・詞先の下書き）を併合（2026-07-31 裁定＝曲が歌詞の穴・下書きを持てる）。
+  // text 空＝□の穴／text あり＝詞先の下書き。位置（曲通し拍）で、それを含むセクションへ入れる。
+  const songPhrases = lyricOf(comp.neta.content)?.phrases ?? [];
+  songPhrases.forEach((p, pi) => {
+    const startBar = barOf(p.start, rootBpb);
+    let si = -1;
+    for (let i = 0; i < sections.length; i++) if (sections[i]!.startBar <= startBar) si = i; // 手前の最後のセクション
+    if (si === -1 && sections.length) si = 0;
+    rows.push({
+      sectionIndex: si, netaId: comp.neta.id, phraseIndex: pi,
+      text: p.text, kana: null, hl: null, startBar, notes: [],
+      facts: p.text.trim() ? {} : { noLyric: true },
+    });
+  });
+  // 曲持ち＋メロ持ちを時間順に（安定ソート＝同拍は挿入順＝メロが先）。
+  rows.sort((a, b) => a.startBar - b.startBar);
   return { sections, rows };
 }
 

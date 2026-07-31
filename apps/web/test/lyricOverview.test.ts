@@ -79,6 +79,30 @@ describe("collectLyricRows：曲の句を時間順に集める", () => {
     expect(rows[0]!.facts.noLyric).toBe(true);
   });
 
+  it("曲が持つ句（□の穴・詞先の下書き）をメロ持ちの句と時間順に併合する（2026-07-31 裁定）", () => {
+    const song: CompositionNode = {
+      neta: neta({ id: "song", kind: "song", title: "テスト曲",
+        content: { lyric: { phrases: [
+          { id: "h1", start: 0, beats: 4, text: "" },        // □の穴（イントロ位置）
+          { id: "d1", start: 4, beats: 4, text: "詞だけ先に" }, // 詞先の下書き（Aメロ位置・メロまだ無い）
+        ] } } }),
+      children: [
+        { position: 0, ord: 0, node: section("s-intro", "intro", { position: 0, node: melodyWithPhrase("m1", "あさ") }) },
+        { position: 4, ord: 1, node: section("s-a", "verse") },
+      ],
+    };
+    const { rows } = collectLyricRows(song);
+    // 時間順：イントロ(1小節)=メロ「あさ」＋□の穴／Aメロ(2小節)=詞先「詞だけ先に」
+    const texts = rows.map((r) => r.text);
+    expect(texts).toContain("あさ");
+    expect(texts).toContain("詞だけ先に");
+    // □の穴＝text 空・詞なしの事実・曲が持ち主
+    const hole = rows.find((r) => r.text === "" && r.netaId === "song");
+    expect(hole?.facts.noLyric).toBe(true);
+    // 詞先の下書きも曲が持ち主（メロではない）
+    expect(rows.find((r) => r.text === "詞だけ先に")?.netaId).toBe("song");
+  });
+
   it("空/未定義は空の結果（落ちない）", () => {
     expect(collectLyricRows(null)).toEqual({ sections: [], rows: [] });
   });

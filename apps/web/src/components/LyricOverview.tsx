@@ -41,16 +41,14 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
   const [comp, setComp] = useState<CompositionNode | null>(null);
   const [parts, setParts] = useState<Parts>(readParts);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [editing, setEditing] = useState<{ netaId: string; phraseIndex: number } | null>(null); // 表記のインライン編集中
+  const [editing, setEditing] = useState<{ netaId: string; phraseIndex: number } | null>(null); // □/表記のインライン編集中
   const [draft, setDraft] = useState("");
-  const [adding, setAdding] = useState<number | null>(null); // ＋句を足す中のセクションindex
-  const [addDraft, setAddDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const editRef = useRef<HTMLTextAreaElement | null>(null);
 
   const refetch = () => api.getComposition(songNetaId).then((c) => setComp(c)).catch(() => setComp(null));
   useEffect(() => { let live = true; void api.getComposition(songNetaId).then((c) => live && setComp(c)).catch(() => live && setComp(null)); return () => { live = false; }; }, [songNetaId]);
-  useEffect(() => { if (editing || adding !== null) editRef.current?.focus(); }, [editing, adding]);
+  useEffect(() => { if (editing) editRef.current?.focus(); }, [editing]);
 
   const { sections, rows } = useMemo(() => collectLyricRows(comp), [comp]);
   const setPart = (k: keyof Parts, v: boolean) => {
@@ -61,7 +59,8 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
   const anyOptional = parts.yomi || parts.pitch || parts.melody;
   const title = comp?.neta.title || "この曲";
 
-  // 既存句の表記を保存（空にしたら句を消す＝PianoRoll と同じ約束）。phraseIndex=-1＝詞なしメロへ句を新設。
+  // 句の表記を保存。**空にしても消さず□（プレイスホルダ）として残す**（2026-07-31 裁定＝四角い穴を開けて埋める）。
+  // phraseIndex=-1＝詞なしメロへ句を新設。曲の句（netaId=曲）もメロの句も同じ経路（updateNeta content.lyric）。
   async function saveText(netaId: string, phraseIndex: number, text: string) {
     setBusy(true);
     try {
@@ -69,11 +68,9 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
       const content: { notes?: unknown; lyric?: { phrases: { id: string; start: number; beats: number; text: string }[] } } =
         JSON.parse(JSON.stringify(fresh?.content ?? {}));
       const layer = content.lyric ?? { phrases: [] };
-      const t = text.trim();
-      if (phraseIndex >= 0) {
-        if (!t) layer.phrases.splice(phraseIndex, 1); // 空＝句ごと消す
-        else layer.phrases[phraseIndex] = { ...layer.phrases[phraseIndex]!, text };
-      } else if (t) {
+      if (phraseIndex >= 0 && layer.phrases[phraseIndex]) {
+        layer.phrases[phraseIndex] = { ...layer.phrases[phraseIndex]!, text }; // 空＝□のまま（消さない）
+      } else if (phraseIndex < 0) {
         layer.phrases.push({ id: newPhraseId(), start: 0, beats: beatsPerBar(fresh?.meter), text });
       }
       content.lyric = layer.phrases.length ? layer : undefined;
@@ -82,24 +79,20 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
     } finally { setBusy(false); setEditing(null); setDraft(""); }
   }
 
-  // ＋句を足す＝(い-c) 遅延生成：メロ作成＋配置を1操作。失敗したら作った実体を消す（孤児を作らない）。
-  async function addPhrase(sec: OverviewSection, text: string) {
-    const t = text.trim();
-    if (!t) { setAdding(null); setAddDraft(""); return; }
+  // ＋ここに歌詞＝**曲に□の穴（text 空の句）を開ける**（メロは作らない＝(い-c) は穴に適用しない・メロ化は後段）。
+  // 曲が歌詞の穴・下書きを持つ（2026-07-31 裁定）。開けた□はそのまま残り、タップで埋めると文字になる。
+  async function addHole(sec: OverviewSection) {
     setBusy(true);
-    let created: string | null = null;
     try {
-      const bpb = beatsPerBar(sec.meter);
-      const melody = await api.createNeta({
-        kind: "melody", scope: "project",
-        content: { notes: [], lyric: { phrases: [{ id: newPhraseId(), start: 0, beats: bpb, text }] } },
-      });
-      created = melody.id;
-      await api.placeChild(sec.netaId, melody.id, sec.nextBeat, 999);
+      const fresh = await api.getNeta(songNetaId);
+      const content: { lyric?: { phrases: { id: string; start: number; beats: number; text: string }[] } } =
+        JSON.parse(JSON.stringify(fresh?.content ?? {}));
+      const layer = content.lyric ?? { phrases: [] };
+      layer.phrases.push({ id: newPhraseId(), start: sec.startBeat, beats: beatsPerBar(fresh?.meter), text: "" });
+      content.lyric = layer;
+      await api.updateNeta(songNetaId, { content });
       await refetch();
-    } catch {
-      if (created) { try { await api.deleteNeta(created); } catch { /* 掃除の失敗は握りつぶす（本エラーを優先） */ } }
-    } finally { setBusy(false); setAdding(null); setAddDraft(""); }
+    } finally { setBusy(false); }
   }
 
   const bySection = new Map<number, OverviewRow[]>();
@@ -158,7 +151,9 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
                         : (
                           <button type="button" className="lo-text-btn" aria-label={`lo-edit-row-${r.netaId}-${r.phraseIndex}`}
                             onClick={() => { setEditing({ netaId: r.netaId, phraseIndex: r.phraseIndex }); setDraft(r.text); }}>
-                            <span className="lo-text">{r.text.trim() || "（詞なし・タップで書く）"}</span>
+                            {r.text.trim()
+                              ? <span className="lo-text">{r.text}</span>
+                              : <span className="lo-box" aria-label="lo-hole">▭ ここに歌詞</span>}
                           </button>
                         )}
                       {!isEditing && parts.yomi && r.kana && <span className="lo-yomi muted">{r.kana}</span>}
@@ -171,11 +166,9 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
                   </div>
                 );
               })}
-              {/* ＋句を足す＝(い-c) 遅延生成（確定で生む）。 */}
+              {/* ＋ここに歌詞＝曲に□の穴を開ける（メロは作らない・タップで埋める）。 */}
               <div className="lo-add">
-                {adding === si
-                  ? editorBar(addDraft, setAddDraft, () => void addPhrase(sec, addDraft), () => { setAdding(null); setAddDraft(""); }, "ここに詞を書く（Enterで生まれる）")
-                  : <button type="button" className="lo-add-btn" aria-label={`lo-add-${si}`} onClick={() => { setAdding(si); setAddDraft(""); }}>＋ 句を足す</button>}
+                <button type="button" className="lo-add-btn" aria-label={`lo-add-${si}`} onClick={() => void addHole(sec)}>＋ ここに歌詞</button>
               </div>
             </section>
           ))

@@ -2531,3 +2531,16 @@
 .lo-add-btn { font-size: 0.8rem; color: #8aa; background: none; border: 1px dashed var(--line); border-radius: 6px; padding: 4px 10px; }
 .lo-hint { padding: 12px 14px; }
 .lo-body[aria-busy="true"] { opacity: 0.6; pointer-events: none; }
+/* #31 スライス5：□ プレイスホルダ（曲が持つ歌詞の穴・詞先の下書き前）。文字だけの一覧に四角く並ぶ。 */
+.lo-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.92rem;
+  color: #7a8290;
+  border: 1px dashed #4a5160;
+  border-radius: 6px;
+  padding: 5px 12px;
+  min-width: 120px;
+  background: #16181d;
+}
