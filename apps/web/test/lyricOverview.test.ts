@@ -49,6 +49,10 @@ describe("collectLyricRows：曲の句を時間順に集める", () => {
     // 読み（控えが今の表記＝有効）
     expect(rows[0]!.kana).toBe("あい");
     expect(rows[0]!.hl).toEqual([0, 1]);
+    // ＋句を足す（遅延生成）に要る＝各セクションの netaId と次の配置拍
+    expect(sections[0]!.netaId).toBe("s-intro");
+    expect(sections[1]!.netaId).toBe("s-a");
+    expect(sections[1]!.nextBeat).toBeGreaterThan(0); // 末尾＝既存の子の最遠端
   });
 
   it("字余り（モーラ2・音符…）を事実として出す", () => {

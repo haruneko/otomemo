@@ -2524,3 +2524,10 @@
 .lo-melody { display: block; width: 160px; max-width: 100%; }
 .lo-melody .mini-roll { height: 26px; }
 .lo-fact { flex: 0 0 auto; font-size: 0.7rem; padding: 1px 6px; border: 1px solid var(--line); border-radius: 8px; align-self: center; }
+/* #31 スライス5：通しで読む面の編集（表記インライン・＋句を足す）。 */
+.lo-text-btn { display: block; width: 100%; text-align: left; background: none; border: none; padding: 0; color: inherit; cursor: text; }
+.lo-edit { width: 100%; font-size: 1.02rem; line-height: 1.5; font-family: inherit; padding: 4px 6px; background: #15171c; color: var(--fg); border: 1px solid var(--accent); border-radius: 5px; resize: none; box-sizing: border-box; }
+.lo-add { padding: 3px 14px 8px 44px; }
+.lo-add-btn { font-size: 0.8rem; color: #8aa; background: none; border: 1px dashed var(--line); border-radius: 6px; padding: 4px 10px; }
+.lo-hint { padding: 12px 14px; }
+.lo-body[aria-busy="true"] { opacity: 0.6; pointer-events: none; }

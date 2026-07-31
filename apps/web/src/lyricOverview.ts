@@ -9,6 +9,9 @@ import { effectiveReading, isReadingStale, phraseStatus, readingOf } from "@cm/m
 
 export interface OverviewSection {
   label: string; // セクション見出し（役割ラベル or タイトル）
+  netaId: string; // セクションの neta id（＋句を足す＝ここに配置する）
+  nextBeat: number; // セクション内の次の配置拍（末尾＝既存の子の最遠端）
+  meter: string | null;
   startBar: number; // 曲通しの小節番号（1始まり）
   endBar: number;
 }
@@ -86,15 +89,16 @@ export function collectLyricRows(comp: CompositionNode | null | undefined): Over
       let myIndex = curSection;
       if (k === "section") {
         myIndex = sections.length;
-        sections.push({ label: sectionLabel(node), startBar: barOf(baseBeat, bpb), endBar: barOf(baseBeat, bpb) });
+        sections.push({ label: sectionLabel(node), netaId: node.neta.id, nextBeat: 0, meter: node.neta.meter ?? null, startBar: barOf(baseBeat, bpb), endBar: barOf(baseBeat, bpb) });
       }
       for (const c of node.children) walk(c.node, baseBeat + c.position, cbpb, myIndex);
       if (k === "section") {
-        // セクション末＝子の最遠端で endBar を確定。
-        const end = node.children.length
-          ? Math.max(...node.children.map((c) => baseBeat + c.position + childDur(c.node, cbpb)))
-          : baseBeat + cbpb;
-        sections[myIndex]!.endBar = Math.max(sections[myIndex]!.startBar, barOf(end - 1e-6, bpb));
+        // セクション末＝子の最遠端（配置拍は section 内相対）で endBar と nextBeat を確定。
+        const nextRel = node.children.length
+          ? Math.max(...node.children.map((c) => c.position + childDur(c.node, cbpb)))
+          : cbpb;
+        sections[myIndex]!.nextBeat = nextRel;
+        sections[myIndex]!.endBar = Math.max(sections[myIndex]!.startBar, barOf(baseBeat + nextRel - 1e-6, bpb));
       }
     }
     // その他 kind（chord/bass/rhythm/skeleton 等）は歌詞面に出さない＝素通し。
