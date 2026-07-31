@@ -30,6 +30,7 @@ export interface OverviewRow {
 export interface OverviewData {
   sections: OverviewSection[];
   rows: OverviewRow[];
+  songNextBeat: number; // 曲の末尾拍（＋パートを足す＝ここへ新セクションを置く）
 }
 
 const barOf = (beat: number, bpb: number) => Math.floor(beat / bpb) + 1; // 拍→小節番号（1始まり）
@@ -41,7 +42,7 @@ const barOf = (beat: number, bpb: number) => Math.floor(beat / bpb) + 1; // 拍�
 export function collectLyricRows(comp: CompositionNode | null | undefined): OverviewData {
   const sections: OverviewSection[] = [];
   const rows: OverviewRow[] = [];
-  if (!comp) return { sections, rows };
+  if (!comp) return { sections, rows, songNextBeat: 0 };
   const rootBpb = beatsPerBar(comp.neta.meter);
 
   // メロ1つ分の行を足す（絶対拍 base ＝ そのメロの開始拍）。
@@ -123,7 +124,12 @@ export function collectLyricRows(comp: CompositionNode | null | undefined): Over
   });
   // 曲持ち＋メロ持ちを時間順に（安定ソート＝同拍は挿入順＝メロが先）。
   rows.sort((a, b) => a.startBar - b.startBar);
-  return { sections, rows };
+  // 曲の末尾拍（＝＋パートを足す先）。子の最遠端を次の小節頭へ丸め。
+  const songEnd = (comp.children ?? []).length
+    ? Math.max(...(comp.children ?? []).map((c) => c.position + childDur(c.node, rootBpb)))
+    : 0;
+  const songNextBeat = Math.ceil((songEnd - 1e-6) / rootBpb) * rootBpb;
+  return { sections, rows, songNextBeat: songNextBeat > 0 ? songNextBeat : 0 };
 }
 
 /** セクション見出しの言葉＝役割ラベル（無ければタイトル）。 */

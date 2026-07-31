@@ -104,6 +104,6 @@ describe("collectLyricRows：曲の句を時間順に集める", () => {
   });
 
   it("空/未定義は空の結果（落ちない）", () => {
-    expect(collectLyricRows(null)).toEqual({ sections: [], rows: [] });
+    expect(collectLyricRows(null)).toEqual({ sections: [], rows: [], songNextBeat: 0 });
   });
 });

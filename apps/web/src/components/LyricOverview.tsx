@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type CompositionNode, type Neta } from "../api";
 import { beatsPerBar } from "../music";
+import { roleInfo, ROLE_KEYS } from "../formStrip";
 import { collectLyricRows, type OverviewRow, type OverviewSection } from "../lyricOverview";
 import { MiniRoll } from "./MiniRoll";
 
@@ -44,13 +45,14 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
   const [editing, setEditing] = useState<{ netaId: string; phraseIndex: number } | null>(null); // □/表記のインライン編集中
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [partMenu, setPartMenu] = useState(false); // ＋パートを足すの役割メニュー
   const editRef = useRef<HTMLTextAreaElement | null>(null);
 
   const refetch = () => api.getComposition(songNetaId).then((c) => setComp(c)).catch(() => setComp(null));
   useEffect(() => { let live = true; void api.getComposition(songNetaId).then((c) => live && setComp(c)).catch(() => live && setComp(null)); return () => { live = false; }; }, [songNetaId]);
   useEffect(() => { if (editing) editRef.current?.focus(); }, [editing]);
 
-  const { sections, rows } = useMemo(() => collectLyricRows(comp), [comp]);
+  const { sections, rows, songNextBeat } = useMemo(() => collectLyricRows(comp), [comp]);
   const setPart = (k: keyof Parts, v: boolean) => {
     const next = { ...parts, [k]: v };
     setParts(next);
@@ -134,6 +136,23 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
       const next = content.lyric?.phrases.length ? content : { ...content, lyric: undefined };
       await api.updateNeta(songNetaId, { content: next });
       await refetch();
+    } finally { setBusy(false); }
+  }
+
+  // ＋パートを足す＝**新しいセクション（Aメロ/Bメロ…）を曲の末尾に開ける**（穴の粒度 曲＞セクション＞句）。
+  // ＝歌詞を入れる前に「置き場」を用意する。失敗したら作った実体を消す（孤児を作らない）。
+  async function addSection(role: string) {
+    setPartMenu(false);
+    setBusy(true);
+    let created: string | null = null;
+    try {
+      const song = await api.getNeta(songNetaId);
+      const sec = await api.createNeta({ kind: "section", scope: "project", meter: song?.meter ?? undefined, tags: [`role:${role}`], content: {} });
+      created = sec.id;
+      await api.placeChild(songNetaId, sec.id, songNextBeat, 999);
+      await refetch();
+    } catch {
+      if (created) { try { await api.deleteNeta(created); } catch { /* 掃除失敗は握りつぶす */ } }
     } finally { setBusy(false); }
   }
 
@@ -222,7 +241,21 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
             </section>
           ))
         )}
-        {comp && sections.length > 0 && rows.length === 0 && <p className="muted lo-hint">このセクションに「＋句を足す」で詞を書けます。</p>}
+        {/* ＋パートを足す＝新しいセクション（Aメロ/Bメロ…）を曲に開ける＝歌詞を入れる置き場を作る。 */}
+        {comp && (
+          <div className="lo-add-part">
+            <button type="button" className="lo-add-part-btn" aria-label="lo-add-part" onClick={() => setPartMenu((v) => !v)}>＋ パートを足す</button>
+            {partMenu && (
+              <div className="lo-part-menu" aria-label="lo-part-menu">
+                {ROLE_KEYS.map((role) => (
+                  <button type="button" key={role} aria-label={`lo-part-${role}`} onClick={() => void addSection(role)}>
+                    {roleInfo(role)?.label ?? role}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

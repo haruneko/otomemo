@@ -2548,3 +2548,9 @@
 .lo-row-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
 .lo-mk-melody { font-size: 0.7rem; color: #8aa; background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
 .lo-del-hole { font-size: 0.85rem; color: #889; background: none; border: none; padding: 0 4px; line-height: 1; }
+/* #31 スライス5：＋パートを足す（新セクションの置き場を開ける）。 */
+.lo-add-part { padding: 16px 14px 40px; border-top: 1px solid var(--line); }
+.lo-add-part-btn { font-size: 0.86rem; color: var(--fg); background: #23262b; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; }
+.lo-part-menu { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.lo-part-menu button { font-size: 0.8rem; color: var(--fg); background: #2b2f36; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+.lo-part-menu button:hover { border-color: var(--accent); }
