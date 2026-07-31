@@ -1869,22 +1869,20 @@
   color: var(--fg);
   border-color: var(--line);
 }
-/* 割り図＝●元onset・○足したonset・·無し。等幅で拍が縦に揃う。 */
-.split-fig {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  letter-spacing: 1px;
-  font-size: 0.82rem;
-  white-space: nowrap;
+/* 割り図＝メロの概形（SVG・MiniRoll と同じ矩形DNA）。青=元の音符／黄=割って足した頭＋縦ティック。 */
+.split-roll {
+  display: block;
+  background: #15171c;
+  border-radius: 4px;
 }
-.split-fig .fig-orig { color: var(--fg); }
-.split-fig .fig-added { color: var(--accent); font-weight: 700; }
-.split-fig .fig-none { color: #555; }
+.split-list .split-roll { height: 30px; flex: 1 1 auto; min-width: 0; } /* リスト行＝図を全幅・幅を揃える */
+.split-preview .split-roll { width: 100%; height: 44px; } /* 組んだ形＝輪郭を広く見る */
 .split-list button {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.split-meta { font-size: 0.72rem; }
+.split-meta { font-size: 0.72rem; flex: 0 0 96px; text-align: right; white-space: nowrap; } /* 幅固定＝図幅が行間で揃う */
 .split-warn { font-size: 0.72rem; color: #e0a53a; }
 /* ♪歌う＝VOICEVOX 試聴の入り口（アクセント色で「音が出る」ことを示す）。 */
 .proll-sing {

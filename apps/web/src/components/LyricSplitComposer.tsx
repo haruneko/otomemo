@@ -7,13 +7,11 @@ import { assembleSplitNotes } from "@cm/music-core";
 import type { Note } from "../music";
 import type { SplitCandidatesResponse, SplitCandidateDTO } from "../api";
 import {
-  onsetFigure, decomposeOptions, matchCandidate, selectionAdded, candidateToSelection, optionLabel,
-  type Cell,
+  decomposeOptions, matchCandidate, selectionAdded, candidateToSelection, optionLabel,
 } from "../lyricSplitCompose";
+import { SplitRoll } from "./SplitRoll";
 
-const CELL_CHAR: Record<Cell, string> = { orig: "●", added: "○", none: "·" };
-
-/** 音符ローカルの割り図（●=頭・○=足す・·=無）＝プルダウンの位置違いを見分ける小図。 */
+/** 音符ローカルの割り図（●=頭・○=足す・·=無）＝プルダウンの `<option>` 内でだけ使う小図（HTML の option に SVG は入らない）。 */
 function localFig(startSlot: number, lenSlots: number, addedSlots: number[]): string {
   const cells: string[] = [];
   const add = new Set(addedSlots);
@@ -41,6 +39,12 @@ export function LyricSplitComposer({
       .sort((a, b) => a.n.start - b.n.start || a.i - b.i).map(({ i }) => i);
   }, [origNotes, range.start, range.beats]);
   const origStarts = useMemo(() => inRangeIdx.map((i) => origNotes[i]!.start), [inRangeIdx, origNotes]);
+  const origInRange = useMemo(() => inRangeIdx.map((i) => origNotes[i]!), [inRangeIdx, origNotes]);
+  // ピッチの正規化は句で1回＝全候補で輪郭を揃える（動くのは足した頭の位置だけ・設計統合）。
+  const [lo, hi] = useMemo(() => {
+    const ps = origInRange.map((n) => n.pitch).filter(Number.isFinite);
+    return ps.length ? [Math.min(...ps), Math.max(...ps)] : [0, 1];
+  }, [origInRange]);
   const options = useMemo(() => decomposeOptions(data.candidates, inRangeIdx), [data.candidates, inRangeIdx]);
   const k = data.candidates[0]?.addedOnsets ?? 0; // 余りモーラ数（全候補で同じ）
 
@@ -64,9 +68,11 @@ export function LyricSplitComposer({
   // 適用は「合計が余りに一致」していれば可＝返却候補の上限で切れても組み立てで適用できる（監査 Bug1）。
   const applicable = added === k && remaining === 0;
   const doApply = () => onApply(assembleSplitNotes(origNotes, moras, range, meter, selectedSplits) as Note[]);
-  // 組んだ形の図＝matched があればその notesAfter、無ければ組み立てて作る（頻度未取得でも図と適用は出る）。
+  // 組んだ形の図＝matched があればその notesAfter、組み上がっていれば組み立てて作る。まだ何も選んでいない
+  // ときは「割らない形（元のメロ）」を出す＝空箱でなく現状が見える（事実表示・事前選択ではない・設計統合）。
   const previewNotes = matched ? matched.notesAfter
-    : applicable ? assembleSplitNotes(origNotes, moras, range, meter, selectedSplits) : [];
+    : applicable ? assembleSplitNotes(origNotes, moras, range, meter, selectedSplits)
+    : origInRange;
 
   const setOne = (idx: number, key: string) => setSel((prev) => new Map(prev).set(idx, key));
   const loadSelection = (cand: SplitCandidateDTO) => setSel(candidateToSelection(cand, inRangeIdx));
@@ -90,9 +96,10 @@ export function LyricSplitComposer({
     <div className="split-composer" aria-label="lyric-split">
       {/* 機械の事前選択はしない＝頻度は事実なのでボタンで（「おすすめ」等の判断語は使わない・監査5）。 */}
       {topFreq > 0 && (
+        // 回数は下のリスト側だけに出す＝上下の「◯回」二重を解消（Fable監査・オーナー折衷＝ボタンは残す）。
         <button type="button" className="split-seed" aria-label="split-seed-common"
           onClick={() => loadSelection(data.candidates[data.byPreference[0]!]!)}>
-          実曲でいちばん多い形を入れる（{topFreq}回）
+          既存曲でいちばん多い形を入れる
         </button>
       )}
 
@@ -119,34 +126,32 @@ export function LyricSplitComposer({
         })}
       </div>
 
-      {/* 組んだ形の図＋残り＋適用。適用は「ちょうど」なら常に可（返却上限で切れても組み立てる・Bug1）。 */}
-      <div className="split-preview">
-        <span className="split-fig" aria-label="split-figure">
-          {onsetFigure(previewNotes, origStarts, range, gpb, bpb).map((c, i) => <span key={i} className={`fig-${c}`}>{CELL_CHAR[c]}</span>)}
-        </span>
+      {/* 組んだ形の図（メロ概形）＋残り＋適用。適用は過不足なしなら常に可（返却上限で切れても組み立てる・Bug1）。 */}
+      <div className="split-preview" aria-label="split-figure">
+        <SplitRoll notesAfter={previewNotes} origStarts={origStarts} range={range} meter={meter} lo={lo} hi={hi} variant="preview" />
         <span className="muted" aria-label="split-remaining">
           {remaining > 0 ? `残り：あと${remaining}` : remaining < 0 ? `割りすぎ：${-remaining}多い` : "ちょうど"}
         </span>
         <button type="button" aria-label="split-apply" disabled={!applicable} onClick={doApply}>
-          この形にする
+          この形で音符を割る
         </button>
       </div>
       {matched?.specialBeatHit && <span className="muted split-warn">促音（っ）が拍の頭に来ています</span>}
       {matched?.wordBoundaryHit && <span className="muted split-warn">語の途中で割れています</span>}
-      {!data.backedByCorpus && <span className="muted split-note">この拍子は実曲統計の裏がまだ＝拍の重みからの提案です</span>}
+      {!data.backedByCorpus && <span className="muted split-note">この拍子は既存曲の集計がないため、拍の強弱からの候補です</span>}
 
-      {/* 候補リスト（2軸・上位）＝図つきで一望。タップでプルダウンに読み込む（ゼロから組まない）。 */}
-      <SplitList data={data} origStarts={origStarts} range={range} gpb={gpb} bpb={bpb} onPick={loadSelection} />
+      {/* 候補リスト（2軸・上位）＝メロ概形つきで一望。タップでプルダウンに読み込む（ゼロから組まない）。 */}
+      <SplitList data={data} origStarts={origStarts} range={range} meter={meter} lo={lo} hi={hi} onPick={loadSelection} />
       {data.truncated && <span className="muted split-note">ほかにも割り方があります（上位だけ表示）</span>}
     </div>
   );
 }
 
 function SplitList({
-  data, origStarts, range, gpb, bpb, onPick,
+  data, origStarts, range, meter, lo, hi, onPick,
 }: {
   data: SplitCandidatesResponse; origStarts: number[]; range: { start: number; beats: number };
-  gpb: number; bpb: number; onPick: (c: SplitCandidateDTO) => void;
+  meter: { beatsPerBar: number; gridPerBeat: number }; lo: number; hi: number; onPick: (c: SplitCandidateDTO) => void;
 }) {
   const [axis, setAxis] = useState<"facts" | "preference">("facts");
   const order = (axis === "facts" ? data.byFacts : data.byPreference).slice(0, 8);
@@ -154,18 +159,17 @@ function SplitList({
     <div className="split-candidates">
       <div className="split-axis" role="tablist" aria-label="split-order">
         <button type="button" role="tab" aria-selected={axis === "facts"} className={axis === "facts" ? "on" : ""} onClick={() => setAxis("facts")}>割り方が少ない順</button>
-        <button type="button" role="tab" aria-selected={axis === "preference"} className={axis === "preference" ? "on" : ""} onClick={() => setAxis("preference")}>実曲に多い順</button>
+        <button type="button" role="tab" aria-selected={axis === "preference"} className={axis === "preference" ? "on" : ""} onClick={() => setAxis("preference")}>既存曲に多い順</button>
       </div>
       <ul className="split-list">
         {order.map((ci) => {
           const c = data.candidates[ci]!;
-          const cells = onsetFigure(c.notesAfter, origStarts, range, gpb, bpb);
           return (
             <li key={ci}>
               <button type="button" aria-label={`split-pick-${ci}`} onClick={() => onPick(c)}>
-                <span className="split-fig">{cells.map((cl, i) => <span key={i} className={`fig-${cl}`}>{CELL_CHAR[cl]}</span>)}</span>
+                <SplitRoll notesAfter={c.notesAfter} origStarts={origStarts} range={range} meter={meter} lo={lo} hi={hi} variant="row" />
                 <span className="split-meta muted">
-                  {data.backedByCorpus ? (c.corpusKnown ? `実曲に${c.corpusFreq}回` : "実曲では珍しい") : "拍の重みから"}
+                  {data.backedByCorpus ? (c.corpusKnown ? `既存曲に${c.corpusFreq}回` : "既存曲では珍しい") : "拍の重みから"}
                 </span>
               </button>
             </li>

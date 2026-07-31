@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   onsetFigure, decomposeOptions, matchCandidate, selectionAdded, candidateToSelection, optionLabel,
+  splitRollGeom,
 } from "../src/lyricSplitCompose";
 import type { SplitCandidateDTO } from "../src/api";
 
@@ -79,6 +80,44 @@ describe("candidateToSelection：候補→選択（リスト/おすすめの読�
     expect(sel.get(0)).toBe("2");
     expect(sel.get(1)).toBe("6");
     expect(sel.get(3)).toBe("");
+  });
+});
+
+describe("splitRollGeom：割り方をメロ概形の座標へ", () => {
+  const meter = { beatsPerBar: 4, gridPerBeat: 4 };
+  // 音符0を2つに割った後（start 0/0.5・同高）＋残り。元start=0,1,2,3。
+  const notesAfter = [
+    { start: 0, dur: 0.5, pitch: 60 }, { start: 0.5, dur: 0.5, pitch: 60 },
+    { start: 1, dur: 1, pitch: 62 }, { start: 2, dur: 1, pitch: 64 }, { start: 3, dur: 1, pitch: 67 },
+  ];
+  it("元onset=青・足したonset=isAdded、で onsetFigure の分類と1対1一致する", () => {
+    const g = splitRollGeom(notesAfter, [0, 1, 2, 3], { start: 0, beats: 4 }, meter, 60, 67);
+    // slot0=元, slot2(0.5拍)=足した, slot4/8/12=元
+    const added = g.rects.filter((r) => r.isAdded).map((r) => r.x);
+    expect(added).toEqual([2]); // 0.5拍=slot2 だけが足した頭
+    // onsetFigure の added セルと一致
+    const cells = onsetFigure(notesAfter, [0, 1, 2, 3], { start: 0, beats: 4 }, 4, 4);
+    const figAdded = cells.map((c, i) => (c === "added" ? i : -1)).filter((i) => i >= 0);
+    expect(added).toEqual(figAdded);
+  });
+  it("拍格子＝小節線と拍線をスロットで返す（4/4は16スロット・拍ごと）", () => {
+    const g = splitRollGeom(notesAfter, [0, 1, 2, 3], { start: 0, beats: 4 }, meter, 60, 67);
+    expect(g.total).toBe(16);
+    expect(g.barLines).toContain(0);
+    expect(g.barLines).toContain(16);
+    expect(g.beatLines).toEqual([4, 8, 12]); // 拍頭（小節線を除く）
+  });
+  it("ピッチは lo/hi で正規化（低=0・高=1・同高は中央0.5）", () => {
+    const g = splitRollGeom(notesAfter, [0, 1, 2, 3], { start: 0, beats: 4 }, meter, 60, 67);
+    expect(g.rects[0]!.frac).toBeCloseTo(0, 6); // pitch60=lo
+    expect(g.rects.at(-1)!.frac).toBeCloseTo(1, 6); // pitch67=hi
+    const flat = splitRollGeom([{ start: 0, dur: 1, pitch: 60 }], [0], { start: 0, beats: 4 }, meter, 60, 60);
+    expect(flat.rects[0]!.frac).toBeCloseTo(0.5, 6); // 同高は中央
+  });
+  it("非有限ノートは除外（一覧白画面の履歴＝リスト内SVGでは死活）", () => {
+    const bad = [{ start: 0, dur: 1, pitch: NaN }, { start: 1, dur: 1, pitch: 62 }];
+    const g = splitRollGeom(bad, [0, 1], { start: 0, beats: 4 }, meter, 60, 62);
+    expect(g.rects).toHaveLength(1);
   });
 });
 

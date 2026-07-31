@@ -132,3 +132,61 @@ export function optionLabel(opt: SplitOption): string {
   if (opt.added === 0) return "割らない";
   return `${opt.added + 1}つに割る`;
 }
+
+// ── SplitRoll＝割り方を「メロの概形」で描く幾何（design §31-5・2026-07-31 設計ワークフロー統合）──
+// ASCII の ●○· を捨て、MiniRoll と同じ矩形DNA（pitch×time）＋ドラムの拍格子で描く。
+// 時間軸は onsetFigure と同じ originBeat 基準の等尺＝全候補で拍列が縦に揃う。ピッチは句で1回正規化。
+// 元onsetと足したonsetの分類は onsetFigure と同一述語（テストで1対1一致を縛れる）。
+
+export interface SplitRollRect {
+  x: number; // 開始スロット（0..total・originBeat 相対）
+  w: number; // スロット幅（次onsetまで／音符の残り）
+  frac: number; // ピッチの縦位置 0..1（0=低・1=高）
+  isAdded: boolean; // 割って足した頭か（true＝黄＋ティック）
+}
+export interface SplitRollGeom {
+  total: number; // 1行の総スロット数（bars×bpb×gpb）
+  rects: SplitRollRect[]; // 範囲内音符（時間順）
+  barLines: number[]; // 小節線のスロット位置
+  beatLines: number[]; // 拍線のスロット位置（小節線と重ならないもの）
+}
+
+/**
+ * 割った後の音符を SplitRoll の描画座標へ変換する純関数。lo/hi は句のピッチ範囲（origNotes から1回算出して配る
+ * ＝候補ごとに再正規化しない＝輪郭が全候補で揃い、動くのは足した頭の位置だけになる）。
+ */
+export function splitRollGeom(
+  notesAfter: readonly { start: number; dur: number; pitch: number }[],
+  origStarts: readonly number[],
+  range: { start: number; beats: number },
+  meter: { beatsPerBar: number; gridPerBeat: number },
+  lo: number,
+  hi: number,
+): SplitRollGeom {
+  const gpb = Math.max(1, Math.floor(meter.gridPerBeat));
+  const bpb = Math.max(1, Math.floor(meter.beatsPerBar));
+  const cellsPerBar = bpb * gpb;
+  const originBeat = Math.floor((range.start + 1e-6) / bpb) * bpb;
+  const bars = Math.max(1, Math.ceil((range.start + range.beats - originBeat - 1e-6) / bpb));
+  const total = bars * cellsPerBar;
+  const toSlot = (beat: number) => Math.round((beat - originBeat) * gpb);
+  const orig = new Set(origStarts.map((s) => Math.round(s * gpb)));
+  const end = range.start + range.beats;
+
+  const rects: SplitRollRect[] = [];
+  for (const n of notesAfter) {
+    if (!(n.start >= range.start - 1e-6 && n.start < end - 1e-6)) continue;
+    if (!Number.isFinite(n.pitch) || !Number.isFinite(n.start) || !Number.isFinite(n.dur)) continue;
+    const x = toSlot(n.start);
+    const w = Math.max(1, Math.round(n.dur * gpb));
+    const frac = hi > lo ? (n.pitch - lo) / (hi - lo) : 0.5; // 単音/同高は中央（MiniRoll と同旨）
+    rects.push({ x, w, frac, isAdded: !orig.has(Math.round(n.start * gpb)) });
+  }
+  const barLines: number[] = [];
+  const beatLines: number[] = [];
+  for (let s = 0; s <= total; s += gpb) {
+    if (s % cellsPerBar === 0) barLines.push(s);
+    else beatLines.push(s);
+  }
+  return { total, rects, barLines, beatLines };
+}
