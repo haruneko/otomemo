@@ -2558,3 +2558,8 @@
 .lo-section-move { display: inline-flex; gap: 2px; margin-left: auto; }
 .lo-section-move button { font-size: 0.9rem; line-height: 1; color: var(--fg); background: #2b2f36; border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; }
 .lo-section-move button:disabled { opacity: 0.3; }
+/* #31 スライス5：パートを看板式で並べ替え（見出しを長押しでドラッグ）。 */
+.lo-section-head { cursor: grab; touch-action: none; user-select: none; }
+.lo-section-head:active { cursor: grabbing; }
+.lo-drag-grip { color: #667; font-size: 0.9rem; margin-right: 2px; }
+.lo-section.dragging { background: #1b1e24; border-radius: 8px; }

@@ -4,12 +4,31 @@
 // 「読む面」だが打てる（推敲でその場に直す）＝既存句はインライン編集・詞なし位置には句を書ける／
 // セクション末の「＋句を足す」は(い-c)遅延生成＝メロ作成＋配置を1操作・確定で生む・失敗で孤児を作らない。
 // コンセプト死守：機械は音韻/イントネーションまで・意味/感情は人・点数を付けない・表記は常に読める。
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { api, type CompositionNode, type Neta } from "../api";
 import { beatsPerBar } from "../music";
 import { roleInfo, ROLE_KEYS, stripPositions } from "../formStrip";
 import { collectLyricRows, type OverviewRow, type OverviewSection } from "../lyricOverview";
 import { MiniRoll } from "./MiniRoll";
+
+// パート＝ソート可能な看板カード。**見出し（看板）を長押しでつまんで上下にドラッグ**して並べ替える（dnd-kit）。
+function SortableSection({ id, label, bars, children }: { id: string; label: string; bars: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : undefined };
+  return (
+    <section ref={setNodeRef} style={style} className={"lo-section" + (isDragging ? " dragging" : "")}>
+      <div className="lo-section-head" aria-label={`lo-section-head-${id}`} {...attributes} {...listeners}>
+        <span className="lo-drag-grip" aria-hidden="true" title="長押しで動かす">⠿</span>
+        <span className="lo-section-label">{label}</span>
+        <span className="lo-section-bars muted">{bars}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
 
 const PARTS_KEY = "cm-lyric-view-parts";
 interface Parts { yomi: boolean; pitch: boolean; melody: boolean; facts: boolean; bar: boolean }
@@ -139,15 +158,21 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
     } finally { setBusy(false); }
   }
 
-  // パートを並べ替える（↑/↓）＝セクションの順を入れ替え、position を前置和で振り直す（FormStrip と同じ射影）。
-  // ＝末尾に足したAメロ/Bメロを Cメロ の前へ動かせる（曲＝順に並ぶセクション）。
-  async function moveSection(index: number, dir: -1 | 1) {
-    const target = index + dir;
-    if (target < 0 || target >= sections.length) return;
+  // パートの並べ替え＝**看板（見出し）を長押しでつまんで上下にドラッグ**（dnd-kit・FormStrip と同じ操作）。
+  // タップ長押し(TouchSensor delay250)で発火＝行のタップ編集と競合しない。順を入れ替え position を前置和で振り直す。
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  );
+  async function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = sections.findIndex((s) => s.netaId === active.id);
+    const to = sections.findIndex((s) => s.netaId === over.id);
+    if (from < 0 || to < 0) return;
     setBusy(true);
     try {
-      const ordered = sections.map((s) => ({ netaId: s.netaId, dur: Math.max(beatsPerBar(s.meter), s.nextBeat || 0) }));
-      [ordered[index], ordered[target]] = [ordered[target]!, ordered[index]!];
+      const ordered = arrayMove(sections.map((s) => ({ netaId: s.netaId, dur: Math.max(beatsPerBar(s.meter), s.nextBeat || 0) })), from, to);
       const positions = stripPositions(ordered.map((s) => s.dur));
       // placeChild は追加（compose_edge は同 child を複数置ける）＝先に既存の配置を全部消してから振り直す。
       for (const s of ordered) await api.removeChild(songNetaId, s.netaId);
@@ -212,17 +237,11 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
         ) : sections.length === 0 ? (
           <p className="muted lo-empty">この曲にはまだセクションがありません。</p>
         ) : (
-          sections.map((sec, si) => (
-            <section key={si} className="lo-section">
-              <div className="lo-section-head">
-                <span className="lo-section-label">{sec.label}</span>
-                <span className="lo-section-bars muted">{sec.startBar === sec.endBar ? `${sec.startBar}小節` : `${sec.startBar}–${sec.endBar}小節`}</span>
-                {/* パートの並べ替え＝末尾に足したパートを狙った位置へ動かす。 */}
-                <span className="lo-section-move">
-                  <button type="button" aria-label={`lo-move-up-${si}`} title="このパートを上へ" disabled={si === 0} onClick={() => void moveSection(si, -1)}>↑</button>
-                  <button type="button" aria-label={`lo-move-down-${si}`} title="このパートを下へ" disabled={si === sections.length - 1} onClick={() => void moveSection(si, 1)}>↓</button>
-                </span>
-              </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void onDragEnd(e)}>
+          <SortableContext items={sections.map((s) => s.netaId)} strategy={verticalListSortingStrategy}>
+          {sections.map((sec, si) => (
+            <SortableSection key={sec.netaId} id={sec.netaId} label={sec.label}
+              bars={sec.startBar === sec.endBar ? `${sec.startBar}小節` : `${sec.startBar}–${sec.endBar}小節`}>
               {(bySection.get(si) ?? []).map((r, ri) => {
                 const isEditing = editing && editing.netaId === r.netaId && editing.phraseIndex === r.phraseIndex;
                 return (
@@ -260,8 +279,10 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
               <div className="lo-add">
                 <button type="button" className="lo-add-btn" aria-label={`lo-add-${si}`} onClick={() => void addHole(sec)}>＋ ここに歌詞</button>
               </div>
-            </section>
-          ))
+            </SortableSection>
+          ))}
+          </SortableContext>
+          </DndContext>
         )}
         {/* ＋パートを足す＝新しいセクション（Aメロ/Bメロ…）を曲に開ける＝歌詞を入れる置き場を作る。 */}
         {comp && (
