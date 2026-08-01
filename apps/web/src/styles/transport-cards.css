@@ -2554,3 +2554,7 @@
 .lo-part-menu { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .lo-part-menu button { font-size: 0.8rem; color: var(--fg); background: #2b2f36; border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
 .lo-part-menu button:hover { border-color: var(--accent); }
+/* #31 スライス5：パートの並べ替え（↑/↓）。 */
+.lo-section-move { display: inline-flex; gap: 2px; margin-left: auto; }
+.lo-section-move button { font-size: 0.9rem; line-height: 1; color: var(--fg); background: #2b2f36; border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; }
+.lo-section-move button:disabled { opacity: 0.3; }

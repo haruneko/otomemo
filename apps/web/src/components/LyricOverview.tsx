@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type CompositionNode, type Neta } from "../api";
 import { beatsPerBar } from "../music";
-import { roleInfo, ROLE_KEYS } from "../formStrip";
+import { roleInfo, ROLE_KEYS, stripPositions } from "../formStrip";
 import { collectLyricRows, type OverviewRow, type OverviewSection } from "../lyricOverview";
 import { MiniRoll } from "./MiniRoll";
 
@@ -139,6 +139,23 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
     } finally { setBusy(false); }
   }
 
+  // パートを並べ替える（↑/↓）＝セクションの順を入れ替え、position を前置和で振り直す（FormStrip と同じ射影）。
+  // ＝末尾に足したAメロ/Bメロを Cメロ の前へ動かせる（曲＝順に並ぶセクション）。
+  async function moveSection(index: number, dir: -1 | 1) {
+    const target = index + dir;
+    if (target < 0 || target >= sections.length) return;
+    setBusy(true);
+    try {
+      const ordered = sections.map((s) => ({ netaId: s.netaId, dur: Math.max(beatsPerBar(s.meter), s.nextBeat || 0) }));
+      [ordered[index], ordered[target]] = [ordered[target]!, ordered[index]!];
+      const positions = stripPositions(ordered.map((s) => s.dur));
+      // placeChild は追加（compose_edge は同 child を複数置ける）＝先に既存の配置を全部消してから振り直す。
+      for (const s of ordered) await api.removeChild(songNetaId, s.netaId);
+      for (let i = 0; i < ordered.length; i++) await api.placeChild(songNetaId, ordered[i]!.netaId, positions[i]!, i);
+      await refetch();
+    } finally { setBusy(false); }
+  }
+
   // ＋パートを足す＝**新しいセクション（Aメロ/Bメロ…）を曲の末尾に開ける**（穴の粒度 曲＞セクション＞句）。
   // ＝歌詞を入れる前に「置き場」を用意する。失敗したら作った実体を消す（孤児を作らない）。
   async function addSection(role: string) {
@@ -200,6 +217,11 @@ export function LyricOverview({ songNetaId, onClose }: { songNetaId: string; onC
               <div className="lo-section-head">
                 <span className="lo-section-label">{sec.label}</span>
                 <span className="lo-section-bars muted">{sec.startBar === sec.endBar ? `${sec.startBar}小節` : `${sec.startBar}–${sec.endBar}小節`}</span>
+                {/* パートの並べ替え＝末尾に足したパートを狙った位置へ動かす。 */}
+                <span className="lo-section-move">
+                  <button type="button" aria-label={`lo-move-up-${si}`} title="このパートを上へ" disabled={si === 0} onClick={() => void moveSection(si, -1)}>↑</button>
+                  <button type="button" aria-label={`lo-move-down-${si}`} title="このパートを下へ" disabled={si === sections.length - 1} onClick={() => void moveSection(si, 1)}>↓</button>
+                </span>
               </div>
               {(bySection.get(si) ?? []).map((r, ri) => {
                 const isEditing = editing && editing.netaId === r.netaId && editing.phraseIndex === r.phraseIndex;
