@@ -109,7 +109,12 @@ export class Core {
   }
 
   /** ネタを複製（既定 project へ・子孫も deep copy）。library を使う＝project にコピー（元は不変）。
-   * section/song は子(compose_edge)も再帰コピー。同じ子の使い回し(#54)はメモで1コピー＝関係を保つ。 */
+   * section/song は子(compose_edge)も再帰コピー。同じ子の使い回し(#54)はメモで1コピー＝関係を保つ。
+   * **複製元への繋がり＝`relation_edge(copy_of)` を新→元へ1本（design §31-10 スライス6）**：2番は複製で作る
+   * （requirements「歌詞を書く／分かれることを防がない」）ので、防がない代わりに「どれの複製か」だけ残して
+   * コピーと比較を強くする。**`vary` の `variant_of`（同じものとして育てる＝変化が及ぶ宣言）とは別の種類**＝
+   * copy_of は「別物にした」という出自の記録だけで、元を直しても及ばない（copyNeta の振る舞いは不変）。
+   * 深いコピーでは**コピーした各ネタから元の各ネタへ**張る＝1番と2番をパーツ単位で突き合わせられる。 */
   copyNeta(id: string, scope: "project" | "library" = "project"): Neta | null {
     const memo = new Map<string, string>(); // 元id→コピーid（共有childは1回・循環も安全に止まる）
     const copyRec = (srcId: string): string | null => {
@@ -132,6 +137,7 @@ export class Core {
         tags: src.tags.filter((t) => t !== "取込"), // ライブラリ由来マーカーは引き継がない
       });
       memo.set(srcId, made.id);
+      this.relation.link(made.id, srcId, "copy_of"); // 出自＝新→元（元は無傷・逆引きで「この元の複製たち」）
       for (const e of this.compose.childEdges(srcId)) {
         const childNew = copyRec(e.child_id);
         if (childNew) this.compose.placeChild(made.id, childNew, e.position, e.ord);

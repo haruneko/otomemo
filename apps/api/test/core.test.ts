@@ -199,6 +199,34 @@ describe("scope: project / library 分離", () => {
     expect([...childIds][0]).not.toBe(mel.id); // 子もコピー（元 mel ではない）
     expect(core.getNeta(mel.id)!.scope).toBe("library"); // 元は不変
   });
+
+  // 2番＝複製の受け皿（design §31-10 スライス6）：複製は「別物にする」ままだが、元へ辿る道だけ残す
+  // ＝`copy_of`（新→元）。vary の variant_of（同じものとして育てる）とは**別の種類**＝混ぜない。
+  it("copyNeta：複製元への繋がり copy_of を新→元へ1本残す（variant_of は張らない・元は無傷）", () => {
+    const src = core.createNeta({ kind: "melody", title: "1番Aメロ", content: { notes: [{ pitch: 60, start: 0, dur: 1 }] } });
+    const copy = core.copyNeta(src.id)!;
+    expect(core.getRelations(copy.id)).toContainEqual({ to: src.id, type: "copy_of" });
+    // 分家ではない＝variant_of は張らない（「同じものとして育てる」宣言をしない）
+    expect(core.getRelations(copy.id).some((r) => r.type === "variant_of")).toBe(false);
+    // 元は無傷＝outgoing は増えない（逆引きで辿る）
+    expect(core.getRelations(src.id)).toEqual([]);
+    expect(core.getBacklinks(src.id, "copy_of")).toContainEqual({ from: copy.id, type: "copy_of" });
+    // 既存の複製の振る舞いは不変
+    expect(copy.content).toEqual(src.content);
+    expect(copy.id).not.toBe(src.id);
+  });
+
+  it("copyNeta：deep copy した子からも元の子へ copy_of（1番/2番をパーツ単位で突き合わせられる）", () => {
+    const sec = core.createNeta({ kind: "section", title: "Aメロ" });
+    const mel = core.createNeta({ kind: "melody", title: "m" });
+    core.placeChild(sec.id, mel.id, 0, 0);
+    core.placeChild(sec.id, mel.id, 4, 1); // 共有childは1コピー＝辺は2本でも copy_of は1本
+    const copy = core.copyNeta(sec.id)!;
+    expect(core.getRelations(copy.id)).toContainEqual({ to: sec.id, type: "copy_of" });
+    const childCopyId = core.getComposition(copy.id)!.children[0]!.node.neta.id;
+    expect(core.getRelations(childCopyId)).toContainEqual({ to: mel.id, type: "copy_of" });
+    expect(core.getBacklinks(mel.id, "copy_of").length).toBe(1);
+  });
 });
 
 describe("edges: compose (DAG) + relation", () => {
