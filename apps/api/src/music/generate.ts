@@ -27,7 +27,7 @@ import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBre
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
-import { type LyricMelodyPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）
+import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
 import { pitchAt, analyzeVoiceLeading, voiceLeadingPenalty, leadingTonePenalty } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）＋候補選別への声部進行減点（PAC/IAC結線・2026-07-22）
 import { resolveLowerVoice } from "./voiceLeadingReport"; // 実効下声の解決（候補非依存＝候補ループ外で1回）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
@@ -778,10 +778,18 @@ export function genLyricMelodyCandidates(
   for (const c of cands) { if (picked.length >= k) break; if (picked.every((p) => melodySimilarity(p.notes, c.notes) < CAND_SIM_MAX)) picked.push(c); }
   for (const c of cands) { if (picked.length >= k) break; if (!picked.includes(c)) picked.push(c); }
   const base = (f.mood ? f.mood + "歌詞メロ" : "歌詞メロ");
+  // 詞先で作ったメロは**歌詞を持って生まれる**（design §31-1・スライス7）＝候補の content に句を載せる。
+  // 正データは表記（漢字仮名交じり）＝行の原文そのまま／範囲は V2 へ渡した句割りと同じ拍。
+  // 音符は1つも変わらない（載せるのは歌詞の層だけ）。計画が空＝キーを生やさない＝従来の content と同じ形。
+  const layer = lyricLayerOfPlan(plan);
   return {
     items: picked.map((c, i) => ({
       kind: "melody",
-      content: c.feel ? { notes: c.notes, feel: c.feel } : { notes: c.notes },
+      content: {
+        notes: c.notes,
+        ...(c.feel ? { feel: c.feel } : {}),
+        ...(layer ? { lyric: layer } : {}),
+      },
       label: `${base}案${i + 1}`.slice(0, 24),
       meta: { lyricFit: { score: round3(c.score), a01Head: c.a01Head, a01Total: c.a01Total, red: c.red, yellow: c.yellow, onsetMatch: c.onsetMatch } },
     })),

@@ -96,6 +96,46 @@ describe("gen_melody(lyrics) MCP e2e", () => {
   });
 });
 
+// ── スライス7（design §31-10）＝詞先メロが句を持って生まれる／音符数が変わる新挙動は既定OFF ──
+describe("スライス7：詞先生成の返り content に句が載る", () => {
+  it("候補ごとに content.lyric.phrases＝行の表記・範囲は句割りと一致（音符は変わらない）", () => {
+    const plan = planLyricMelody(["しずむゆうひが", "うみをそめる"], { bars: 4, beatsPerBar: 4 });
+    const res = genLyricMelodyCandidates(frame, chords, { useV2: true, plan, n: 6, k: 2 });
+    for (const it of res.items) {
+      const c = it.content as { notes: unknown[]; lyric?: { phrases: { text: string; start: number; beats: number }[] } };
+      expect(c.lyric?.phrases.map((p) => p.text)).toEqual(["しずむゆうひが", "うみをそめる"]);
+      expect(c.lyric?.phrases.map((p) => p.start)).toEqual(plan.phrases.map((p) => p.startBeat));
+      expect(c.notes.length).toBe(plan.onsetTotal); // 句が載っても音符は変わらない
+    }
+  });
+});
+
+describe("スライス7：音符数が変わる新挙動は既定OFF（耳で確かめてから既定を反転）", () => {
+  it("gen_melody(lyrics) の既定＝従来の数え方（っ/ー は音符を立てない・表記は字のまま）", async () => {
+    const { client } = await connect();
+    const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, chords, lyrics: "がっこうへ\nそーらへ" } })));
+    const legacy = planLyricMelody(["がっこうへ", "そーらへ"], { bars: 4, beatsPerBar: 4 });
+    expect(legacy.onsetTotal).toBe(7); // が,こ,う,へ / そ,ら,へ
+    for (const it of out.items) expect(it.content.notes.length).toBe(7);
+    expect(out.lyricPlan.standSpecialMoras).toBe(false);
+    expect(out.lyricPlan.readingSource).toBe("none");
+  });
+  it("standSpecialMoras=true＝「っ」「ー」にも音符が立つ（§31-8 裁定・opt-in）", async () => {
+    const { client } = await connect();
+    const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, chords, lyrics: "がっこうへ\nそーらへ", standSpecialMoras: true } })));
+    for (const it of out.items) expect(it.content.notes.length).toBe(9); // が,っ,こ,う,へ / そ,ー,ら,へ
+    expect(out.lyricPlan.standSpecialMoras).toBe(true);
+  });
+  it("readLyrics=true＝表記から読みを取る（pyopenjtalk 未導入なら従来へ落ちて壊れない）", async () => {
+    const { client } = await connect();
+    const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, chords, lyrics: "君の名前を", readLyrics: true } })));
+    expect(out.items.length).toBeGreaterThan(0);
+    expect(["pyopenjtalk", "failed"]).toContain(out.lyricPlan.readingSource); // 取れたか・取れず従来へ落ちたか
+    const n = out.items[0].content.notes.length;
+    expect(n).toBe(out.lyricPlan.readingSource === "pyopenjtalk" ? 7 : 5); // きみのなまえを(7) / 表記5字のまま
+  });
+});
+
 describe("CHAT_VERBS 整合（gen_melody は既存 verb＝新 verb 名を足していない）", () => {
   it("歌詞先行は新規 verb 名(gen_lyric_melody)を作らず既存 gen_melody への lyrics オプションで実装", () => {
     expect(CHAT_VERB_NAMES).not.toContain("gen_lyric_melody");

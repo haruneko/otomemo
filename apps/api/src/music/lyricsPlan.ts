@@ -2,7 +2,7 @@
 // 正典＝docs/research/2026-07-15-lyrics-first-melody-{verdict,A}.md。純関数（pyopenjtalk spawn は呼び側 async＝
 // ここへは抽出済みデータ or かなテキストだけ渡す）。音数厳密一致は buildPartVariant（rhythmParts.custom+placement）が担う。
 // 思想：機械は候補まで・既定 bit一致（未注入＝従来）。アクセントは hard にしない＝ここでは音数/句割りのみ（採点は呼び側）。
-import { analyzeMoras } from "@cm/music-core";
+import { analyzeMoras, type LyricLayer } from "@cm/music-core";
 import { type RhythmPartsOpt } from "./rhythmParts";
 
 // 各行の計画サマリ（診断/UI 表示用）。
@@ -27,6 +27,10 @@ export interface LyricMelodyPlan {
 
 // モーラ role：実音（onset）になるのは normal / 撥音ん。長音ー＝tie（直前へ延長・新アタック無）／促音っ＝rest（詰め）。
 // ＝suggestLyricRhythm(prosody.ts) の roleOf と同規約。tie/rest はグリッド上の音符を立てない＝音数から外れる（A-doc §3.1）。
+//
+// **⚠ これは裁定に反する側（design §31-8）**：オーナー裁定は「っ」「ー」にも**音符を立てる**。
+// スライス7で `standSpecialMoras` を足して裁定どおりに数えられるようにしたが、**生成される音符数が変わる**ので
+// **既定は従来（この関数）のまま＝耳で確かめてから既定を反転する**（design §31-10 スライス7・backlog の耳確認）。
 function isOnsetMora(kind: string): boolean {
   return kind === "normal" || kind === "hatsuon";
 }
@@ -81,31 +85,46 @@ function layoutOnsets(count: number, bars: number, barLen: number): { patterns: 
  * 歌詞（改行＝行/句）→ V2 注入計画（phrases＋rhythmParts＋syllables）。純関数・決定的。
  * bars=セクション小節数（frame 由来）。beatsPerBar=V2 の barLen（4/4→4・3/4→3・6/4→6）。
  * 未指定/空歌詞＝空計画（呼び側は注入しない＝bit一致）。
+ *
+ * **スライス7（design §31-10）で足した2つの opt-in＝どちらも既定OFF＝未指定なら従来と bit 一致**：
+ *  ・`readings`＝行ごとの読み（かな）。**呼び側が先に解く**（pyopenjtalk は api の非同期＝この関数は同期のまま）。
+ *    渡された行はモーラを**読みから**数える＝表記（漢字仮名交じり）が正データという確定に合う。
+ *    未指定/空文字の行は従来どおり**表記の字をそのまま**数える（＝漢字は1字1音に化ける・後退ゼロ）。
+ *  ・`standSpecialMoras`＝「っ」「ー」にも音符を立てる（§31-8 のオーナー裁定）。
+ *  **どちらも生成される音符数が変わる**ので、既定は従来のまま＝耳で確かめてから既定を反転する。
  */
-export function planLyricMelody(rawLines: string[], opts: { bars: number; beatsPerBar?: number }): LyricMelodyPlan {
+export function planLyricMelody(
+  rawLines: string[],
+  opts: { bars: number; beatsPerBar?: number; readings?: (string | undefined)[]; standSpecialMoras?: boolean },
+): LyricMelodyPlan {
   const barLen = Math.max(1, Math.round(opts.beatsPerBar ?? 4));
   const bars = Math.max(1, Math.round(opts.bars));
+  const stand = opts.standSpecialMoras === true;
   const warnings: string[] = [];
-  const lines = rawLines.map((s) => s.trim()).filter((s) => s.length > 0);
+  // 表記と読みは同じ並びで持ち回る（空行は表記側で落ちる＝読みも一緒に落ちる）。読みが無い行は表記で数える。
+  const lines = rawLines
+    .map((s, i) => ({ text: s.trim(), kana: (opts.readings?.[i] ?? "").trim() }))
+    .filter((l) => l.text.length > 0);
   const empty: LyricMelodyPlan = { phrases: [], rhythmParts: {}, syllables: [], lineHeadNoteIdx: [], lines: [], warnings, onsetTotal: 0 };
   if (!lines.length) return empty;
 
   // 行数 > 小節数：隣接行を統合して bars グループへ（各句≥1小節を保つ＝phrases 契約）。句割りは行と一致しなくなる＝警告。
-  let groups: string[] = lines;
+  let groups = lines;
   if (lines.length > bars) {
     warnings.push(`行数(${lines.length}) > 小節数(${bars}) のため隣接行を統合（句割りは行と不一致）`);
-    const g: string[] = Array.from({ length: bars }, () => "");
+    const g = Array.from({ length: bars }, () => ({ text: "", kana: "" }));
     for (let i = 0; i < lines.length; i++) {
       const gi = Math.min(bars - 1, Math.floor((i * bars) / lines.length));
-      g[gi] = g[gi] ? g[gi] + lines[i]! : lines[i]!;
+      g[gi]!.text += lines[i]!.text;
+      g[gi]!.kana += lines[i]!.kana || lines[i]!.text; // 読みが取れた行と取れない行が混ざっても数えられる
     }
     groups = g;
   }
 
-  // グループごとにモーラ→オンセット。
-  const perGroup = groups.map((text) => {
-    const moras = analyzeMoras(text);
-    const onsetKana = moras.filter((m) => isOnsetMora(m.kind)).map((m) => m.kana);
+  // グループごとにモーラ→オンセット。数える対象＝読み（あれば）／無ければ表記そのもの（従来）。
+  const perGroup = groups.map(({ text, kana }) => {
+    const moras = analyzeMoras(kana || text);
+    const onsetKana = moras.filter((m) => stand || isOnsetMora(m.kind)).map((m) => m.kana);
     return { text, moraCount: moras.length, onsetKana };
   });
 
@@ -149,5 +168,24 @@ export function planLyricMelody(rawLines: string[], opts: { bars: number; beatsP
     lines: linesOut,
     warnings,
     onsetTotal: syllables.length,
+  };
+}
+
+/**
+ * 計画 → 句（`content.lyric` に載せる層・design §31-1／スライス7）。
+ * 詞先で作ったメロは**歌詞を持って生まれる**＝開いたときに表記がそこにある（正データは表記・かなは仮歌の写し）。
+ * 行1つ＝句1つ（行を統合したときは統合後の表記）。範囲は V2 へ渡した句割りと同じ拍＝音符と句がずれない。
+ * 読みの控え（`reading`）は載せない＝控えは表記に対する `forText` 判定つき（§31-1）で、
+ * 画面が開いたときに取り直す（古い控えを配って回らない）。空計画＝undefined＝content にキーを生やさない。
+ */
+export function lyricLayerOfPlan(plan: LyricMelodyPlan): LyricLayer | undefined {
+  if (!plan.lines.length) return undefined;
+  return {
+    phrases: plan.lines.map((l, i) => ({
+      id: `p${i + 1}`, // 札は content の中でだけ一意（画面が足す句は別の採番＝衝突しない）
+      start: plan.phrases[i]?.startBeat ?? 0,
+      beats: plan.phrases[i]?.beats ?? 0,
+      text: l.text,
+    })),
   };
 }

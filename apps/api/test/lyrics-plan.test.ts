@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planLyricMelody } from "../src/music/lyricsPlan";
+import { planLyricMelody, lyricLayerOfPlan } from "../src/music/lyricsPlan";
 import { analyzeMoras } from "@cm/music-core";
 import { partPatternOnsets } from "../src/music/rhythmParts";
 
@@ -91,5 +91,68 @@ describe("空/未指定＝空計画（呼び側は注入しない＝bit一致）
   it("空歌詞＝phrases 空", () => {
     expect(planLyricMelody([], { bars: 4 }).phrases).toEqual([]);
     expect(planLyricMelody(["  ", ""], { bars: 4 }).phrases).toEqual([]);
+  });
+});
+
+// ── スライス7（design §31-10）＝表記にそろえる。**新挙動はどちらも音符数が変わる＝既定OFFのopt-in**。
+// 耳で確かめてから既定を反転する（design §31-10 スライス7・backlog の耳確認リスト）。
+describe("スライス7：読み（かな）を受け取る＝表記のモーラ数が正しくなる（既定OFF）", () => {
+  const kanji = ["君の名前を", "空に描く"];
+  const yomi = ["きみのなまえを", "そらにえがく"];
+  it("readings 未指定＝従来（表記の字をそのまま数える＝漢字は1字1音）", () => {
+    const p = planLyricMelody(kanji, { bars: 4, beatsPerBar: 4 });
+    expect(p.onsetTotal).toBe(onsetCount("君の名前を") + onsetCount("空に描く")); // 5+4＝化けたまま（従来の姿）
+  });
+  it("readings を渡すと読みでモーラを数える（音数が変わる＝opt-in の理由）", () => {
+    const p = planLyricMelody(kanji, { bars: 4, beatsPerBar: 4, readings: yomi });
+    expect(p.onsetTotal).toBe(7 + 6); // きみのなまえを(7)＋そらにえがく(6)＝表記のままなら 5+4=9 だった
+    expect(p.syllables.join("")).toBe("きみのなまえをそらにえがく");
+    expect(p.lines.map((l) => l.text)).toEqual(kanji); // 表示は表記のまま（正データは表記）
+    expect(p.lines[0]!.moraCount).toBe(7);
+  });
+  it("readings は行と同じ並び（空行は表記側で落ちる＝読みも一緒に落ちる）", () => {
+    const p = planLyricMelody(["", "君の名前を", "  "], { bars: 2, beatsPerBar: 4, readings: ["", "きみのなまえを", ""] });
+    expect(p.lines.length).toBe(1);
+    expect(p.syllables.join("")).toBe("きみのなまえを");
+  });
+  it("読みが取れなかった行（空文字/undefined）は表記で数える＝落ちない", () => {
+    const p = planLyricMelody(kanji, { bars: 4, beatsPerBar: 4, readings: ["きみのなまえを", ""] });
+    expect(p.onsetTotal).toBe(7 + onsetCount("空に描く"));
+  });
+});
+
+describe("スライス7：「っ」「ー」に音符を立てる（§31-8 裁定・既定OFF）", () => {
+  it("standSpecialMoras=true＝全モーラが音符を持つ（総モーラ数＝音数）", () => {
+    const on = { bars: 1, beatsPerBar: 4, standSpecialMoras: true } as const;
+    expect(planLyricMelody(["そーらへ"], on).onsetTotal).toBe(4); // そ,ー,ら,へ
+    expect(planLyricMelody(["がっこう"], on).onsetTotal).toBe(4); // が,っ,こ,う
+    expect(planLyricMelody(["きゃっと"], on).onsetTotal).toBe(3); // きゃ,っ,と（拗音は1モーラのまま）
+    expect(planLyricMelody(["がっこうへ"], { bars: 2, beatsPerBar: 4, standSpecialMoras: true }).syllables.join("")).toBe("がっこうへ");
+  });
+  it("standSpecialMoras=true では onsetCount＝moraCount（#13d の受け入れ条件の数え方が っ/ー 込みになる）", () => {
+    const p = planLyricMelody(["そーらへ", "がっこう"], { bars: 4, beatsPerBar: 4, standSpecialMoras: true });
+    for (const l of p.lines) expect(l.onsetCount).toBe(l.moraCount);
+    expect(p.onsetTotal).toBe(p.lines.reduce((s, l) => s + l.moraCount, 0));
+  });
+  it("既定（未指定/false）＝従来と bit 一致", () => {
+    const lines = ["そーらへゆく", "がっこうへ", "ほんとうにきみは"];
+    const base = JSON.stringify(planLyricMelody(lines, { bars: 4, beatsPerBar: 4 }));
+    expect(JSON.stringify(planLyricMelody(lines, { bars: 4, beatsPerBar: 4, standSpecialMoras: false }))).toBe(base);
+    expect(JSON.stringify(planLyricMelody(lines, { bars: 4, beatsPerBar: 4, readings: undefined }))).toBe(base);
+  });
+});
+
+describe("スライス7：計画→句（content.lyric に載せる形）", () => {
+  it("行1つ＝句1つ・start/beats は句割りと一致・表記が text", () => {
+    const p = planLyricMelody(["しずむゆうひが", "うみをそめる"], { bars: 4, beatsPerBar: 4 });
+    const layer = lyricLayerOfPlan(p)!;
+    expect(layer.phrases.length).toBe(2);
+    expect(layer.phrases.map((ph) => ph.text)).toEqual(["しずむゆうひが", "うみをそめる"]);
+    expect(layer.phrases.map((ph) => ph.start)).toEqual(p.phrases.map((ph) => ph.startBeat));
+    expect(layer.phrases.map((ph) => ph.beats)).toEqual(p.phrases.map((ph) => ph.beats));
+    expect(new Set(layer.phrases.map((ph) => ph.id)).size).toBe(2); // 札は句ごとに別
+  });
+  it("空計画＝句なし（undefined＝content にキーを生やさない）", () => {
+    expect(lyricLayerOfPlan(planLyricMelody([], { bars: 4 }))).toBeUndefined();
   });
 });
