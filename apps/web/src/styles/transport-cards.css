@@ -2393,6 +2393,14 @@
 .pp-icon-btn { display: inline-flex; align-items: center; justify-content: center; background: var(--card, #22252b); border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 6px; color: var(--muted); cursor: pointer; }
 .pp-icon-btn:hover { color: inherit; border-color: var(--muted); }
 .pp-icon-btn svg { flex: none; display: block; }
+/* Task1L＝案C：空グリッドのときだけグリッド直下に出るゴーストCTA（白紙の一歩）。破線＋淡色＝「まだ何も無い面」の相場
+   （FilterDrawer の 0件ゴーストと同じ視覚言語）。1つでも置けば消える＝作業中は一切占有しない。
+   縦積み＋max-width:100% で 390px 幅でもはみ出さない（文言は折返し可）。 */
+.pattern-ghost { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 8px; border: 1px dashed var(--line, #ddd); border-radius: 8px; color: var(--muted); min-width: 0; }
+.pp-ghost-cta { display: inline-flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%; background: none; border: none; padding: 4px 8px; border-radius: 6px; color: inherit; font-size: 0.78rem; cursor: pointer; }
+.pp-ghost-cta:hover { color: var(--fg, inherit); }
+.pp-ghost-cta svg { flex: none; display: block; }
+.pp-ghost-hint { font-size: 0.68rem; color: var(--muted); text-align: center; }
 /* ゾーンの小見出し（いつ弾く／響き）。 */
 .cp-zlabel { font-size: 0.68rem; color: var(--muted); margin: 0 0 6px; }
 /* Task1c 両手一体グリッド（一枚容器・同一ステップ列を共有）＝上帯:右手／破線／下帯:左手。

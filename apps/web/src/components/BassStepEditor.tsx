@@ -288,6 +288,22 @@ export function BassStepEditor({
           })}
         </div>
       </div>
+      {/* Task1L 案C：空グリッド（段に1つも打点が無い）のゴーストCTA＝白紙の一歩。1つ置けば消える。
+          置き場は bass-grid の**直下の兄弟**（容器内オーバーレイにしない＝横スクロールで流れない／
+          ラッパを足すと chat.css の `.editor-body .bass-step .bass-grid` flex 子構造を崩す）。
+          非表示条件は入口と同じ＝compound meter（6/8系）ではゴーストも出さない。 */}
+      {!isCompoundMeter(meter) && pattern.length === 0 && (
+        <PatternImportControl
+          variant="ghost"
+          kind="bass"
+          fallbackName="おまかせ"
+          contentFilter={(n) => (n.content as { mode?: string } | null)?.mode === "relative"}
+          activeProject={activeProject}
+          onApply={applyPattern}
+          onAudition={auditionPattern}
+          onClose={() => ppPlay.current?.stop()}
+        />
+      )}
       {pop && (
         <>
           <div className="ext-pop-backdrop" aria-hidden="true" onClick={() => setPop(null)} />

@@ -303,6 +303,19 @@ export function RhythmEditor({
           })}
         </div>
       ))}
+      {/* Task1L 案C：空グリッド（全レーンに打点ゼロ）のゴーストCTA＝白紙の一歩。1打でも置けば消える。
+          置き場はレーン群の直下（オーバーレイにしない＝横スクロール/クランプの地雷を踏まない）。 */}
+      {rhythm.lanes.every((l) => l.hits.length === 0) && (
+        <PatternImportControl
+          variant="ghost"
+          kind="rhythm"
+          fallbackName="おまかせ"
+          activeProject={activeProject}
+          onApply={applyPattern}
+          onAudition={auditionPattern}
+          onClose={() => ppPlay.current?.stop()}
+        />
+      )}
       <p className="muted rhythm-hint">
         タップ＝置く/消す ・ 打点を長押し→ <b>上下＝強さ</b>（弱く/普通/強く）・ <b>左右＝連打</b>（2連/3連） ・ 横スワイプ＝スクロール
       </p>

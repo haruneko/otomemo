@@ -22,6 +22,7 @@ export function PatternImportControl({
   activeProject,
   contentFilter,
   onClose,
+  variant = "icon",
 }: {
   kind: string; // 開いたエディタの kind（固定）。PatternImportDialog の母集団 kind 絞りへ。
   fallbackName: string; // title/patternId 欠落時のカード名。
@@ -31,8 +32,44 @@ export function PatternImportControl({
   activeProject?: string; // Task1i：Source（プロジェクト軸）絞りをダイアログへ下ろす（純追加）。
   contentFilter?: (n: Neta) => boolean; // bass relative 番兵など母集団の追加フィルタ。
   onClose?: () => void; // 閉じる時の後始末（各エディタの ppPlay.stop＝試聴の停止）。純追加・省略可。
+  // Task1L（案C）：入口の見せ方だけを切り替える。"icon"＝既定＝設定行の小アイコンボタン（Task1j＝現行 DOM と bit 一致）。
+  // "ghost"＝空グリッド時だけ出す薄い誘導CTA（文言つき）。**body（dialog・onPick/onPreview/onClose の配線）は共有**＝
+  // 取得/適用/試聴のロジックには一切触れない（計画 §5 の大原則）。
+  variant?: "icon" | "ghost";
 }) {
   const [open, setOpen] = useState(false);
+  // 器＝取込ダイアログ。variant によらず同一（＝「ライブラリから1件選んで今のグリッドへ流し込む」動作は1つだけ）。
+  const dialog = open && (
+    <PatternImportDialog
+      kind={kind}
+      fallbackName={fallbackName}
+      contentFilter={contentFilter}
+      activeProject={activeProject}
+      onPreview={(n) => onAudition(n.content)}
+      onPick={(n) => {
+        onApply(n.content);
+        setOpen(false);
+      }}
+      onClose={() => {
+        onClose?.();
+        setOpen(false);
+      }}
+    />
+  );
+  // 案C＝空グリッドのゴーストCTA。**aria-label は `pattern-ghost*` と別名**にする＝設定行の入口が握る
+  // `pattern-picker`/`pattern-picker-toggle` の一意性を壊さない（両方が同時に居る場面があるため／計画 §6 地雷）。
+  if (variant === "ghost") {
+    return (
+      <div className="pattern-ghost" aria-label="pattern-ghost">
+        <button type="button" className="pp-ghost-cta" aria-label="pattern-ghost-cta" onClick={() => setOpen(true)}>
+          <Icon name="import" size={16} />
+          <span>ライブラリから読み込む</span>
+        </button>
+        <span className="pp-ghost-hint">またはタップして自分で置く</span>
+        {dialog}
+      </div>
+    );
+  }
   return (
     <div className="pattern-picker pp-link" aria-label="pattern-picker">
       {/* 入口＝ライブラリアイコン（積み重なったコレクション）**単体のボタン**（オーナーFB「アイコンだけで」）。
@@ -51,23 +88,7 @@ export function PatternImportControl({
           いま：{nowLabel}
         </span>
       )}
-      {open && (
-        <PatternImportDialog
-          kind={kind}
-          fallbackName={fallbackName}
-          contentFilter={contentFilter}
-          activeProject={activeProject}
-          onPreview={(n) => onAudition(n.content)}
-          onPick={(n) => {
-            onApply(n.content);
-            setOpen(false);
-          }}
-          onClose={() => {
-            onClose?.();
-            setOpen(false);
-          }}
-        />
-      )}
+      {dialog}
     </div>
   );
 }

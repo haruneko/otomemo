@@ -349,6 +349,9 @@ export function ChordPatternEditor({
   const rollChords = previewChords?.length ? previewChords : previewChordsForKey(keyPc ?? 0);
   const rollNotes = notesForContent("chord_pattern", { ...pattern, voicing: { ...v, top }, program }, { key: keyPc ?? 0, chords: rollChords, program });
   const roll = voicingRollRects(rollNotes, pattern.steps);
+  // Task1L 案C：空グリッドのゴーストCTA。空＝右手 hit が無く、かつ左手も鳴らない（lh 未定義 or custom で hit 無し）。
+  //   preset（root/root5/oct）は hit 無しでも実音化される＝「空」ではない＝誘導を出さない。
+  const gridEmpty = pattern.hits.length === 0 && (!pattern.lh || (pattern.lh.mode === "custom" && !pattern.lh.hits?.length));
 
   return (
     <div className="cp-editor">
@@ -488,6 +491,22 @@ export function ChordPatternEditor({
           </div>
         )}
       </div>
+      {/* Task1L 案C：空グリッドのゴーストCTA＝白紙の一歩（「ライブラリから読み込む／またはタップして自分で置く」）。
+          1つでも置けば消える＝作業中は邪魔しない。設定行の入口（アイコン）は常設のまま＝後から差し替えも効く。
+          置き場は cp-grid の**直下の兄弟**（容器内オーバーレイにしない）＝cp-grid は横スクロール容器ゆえ
+          内側 absolute はスクロールで流れ、外側にラッパを足すとモバイルの flex 高さ（chat.css）を崩す。
+          非表示条件は入口と同じ＝showPicker=false（管弦）ではゴーストも出さない。 */}
+      {showPicker && gridEmpty && (
+        <PatternImportControl
+          variant="ghost"
+          kind="chord_pattern"
+          fallbackName="コード楽器"
+          activeProject={activeProject}
+          onApply={applyPattern}
+          onAudition={auditionPattern}
+          onClose={() => ppPlay.current?.stop()}
+        />
+      )}
       {guitarResolved && (
         <p className="cp-hint">ストローク向き＝表拍D・裏Uが自動既定・タップで入替。アップは軽く・上位の弦だけ鳴る。</p>
       )}
