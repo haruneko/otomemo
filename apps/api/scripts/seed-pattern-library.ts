@@ -39,7 +39,10 @@ export function seedPatternLibrary(core: Core): SeedCounts {
   for (const t of COMP_TYPES) {
     // 拍子＝grid で判定（16=4/4・12=6/8 world68・裁定D 2026-07-25）。genChordPattern stepsPerBar が meter に追従。
     const meter = t.grid === 12 ? "6/8" : "4/4";
-    const frame: Frame = { key: 0, meter, bars: 1, tempo: t.tempoMin, section: { role: t.roles[0] } };
+    // アレンジS1 contract④（2026-08-02）：複数小節テンプレは**サイクル1周ぶん**を seed（2小節型＝bars2＝steps32）。
+    //   1小節型は従来どおり bars:1＝ネタの bars 欄は書かない（既存 seed と同形＝差分ゼロ）。
+    const tBars = t.bars ?? 1;
+    const frame: Frame = { key: 0, meter, bars: tBars, tempo: t.tempoMin, section: { role: t.roles[0] } };
     const content = genChordPattern(frame, seed, { pattern: t.id }).items[0]!.content;
     core.createNeta(withLib({
       kind: "chord_pattern",
@@ -48,6 +51,7 @@ export function seedPatternLibrary(core: Core): SeedCounts {
       key: 0,
       meter,
       tempo: t.tempoMin,
+      ...(tBars > 1 ? { bars: tBars } : {}),
       // L4トラックA（2026-07-25）：genre は単数フィールド＋coGenres（横串 co-tag）ぶんも genre タグ展開。
       tags: [`genre:${t.genre}`, ...(t.coGenres ?? []).map((g) => `genre:${g}`), ...t.roles.map((r) => `scene:${r}`), tempoTag(t.tempoMin, t.tempoMax), `pat:${t.id}`],
     }));

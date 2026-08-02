@@ -954,9 +954,22 @@ export function genChordPattern(
   const steps = bars * stepsPerBar;
   // 選ばれた CompType から content（mode/voicing/steps/hits/lh）を組み立てる純関数（単数/複数で共有）。
   const buildCompContent = (compType: CompType) => {
-    // 型の RH 16セルを各小節へ敷き hits 化（vel 層＋S3 dir 込み）。mode/voicing は型の既定。
+    // アレンジS1 contract④（2026-08-02・design「### アレンジS1＝写像規則の契約」）：**サイクル（型の bars）単位**の
+    //   タイル張り＋セクション末で切り詰め。cycleSteps=stepsPerBar×(型 bars)。1小節型（bars 未指定）は
+    //   cycleSteps=stepsPerBar かつ steps がその倍数＝従来の「小節ごとに敷く」と完全一致（bit 一致）。
+    //   切り詰め規則：はみ出す hit（step>=steps）は落とす／末尾を跨ぐ hit は dur を詰める（2小節型×7小節＝3周＋前半1小節）。
+    const cycleSteps = stepsPerBar * (compType.bars ?? 1);
+    const clampHits = <T extends { step: number; dur: number }>(src: T[]): T[] => {
+      const out: T[] = [];
+      for (const h of src) {
+        if (h.step >= steps) continue; // 末尾からはみ出す hit は落とす
+        out.push(h.step + h.dur <= steps ? h : { ...h, dur: steps - h.step }); // 跨ぐ hit は dur を詰める
+      }
+      return out;
+    };
+    // 型の RH（grid×bars セル）をサイクルごとに敷き hits 化（vel 層＋S3 dir 込み）。mode/voicing は型の既定。
     const hits: { step: number; dur: number; vel?: number; dir?: "D" | "U" }[] = [];
-    for (let bar = 0; bar < bars; bar++) for (const h of compHitsForBar(compType.rh, bar * stepsPerBar)) hits.push(h);
+    for (let base = 0; base < steps; base += cycleSteps) for (const h of clampHits(compHitsForBar(compType.rh, base))) hits.push(h);
     // style は guitar のみ content に載せる（opts.style が明示ならそれが勝つ）。strumMs は opts 優先→型の相場。
     const effStyle = opts?.style ?? (compType.style === "guitar" ? "guitar" : undefined);
     const effStrumMs = opts?.strumMs ?? compType.strumMs;
@@ -964,12 +977,13 @@ export function genChordPattern(
     //   web voiceChord を voiceToTop 経路へ乗せる（7th 復活・RH C4-C5・LH 分離）。top 無しだと旧 tones 経路
     //   （anchor=CHORD_BASE=48）で鳴り RH 1oct 低下＋7th 全落ちになるレンダバグの根治。keyboard 判定は lh 配線
     //   と同条件（effStyle も compType.style も guitar でない）。ギター型は voiceGuitar が内部で top を補う＝積まない＝出力不変。
+    //   アレンジS1：型が top を明示していればそれを使う（organ_punch 等の高域指定＝研究doc §2.1）。未指定は 72 で不変。
     const isKeyboard = effStyle !== "guitar" && compType.style !== "guitar";
     const voicing = {
       tones: ["R", "3", "5"],
       openClose: compType.openClose ?? "close",
       octave: 0,
-      ...(isKeyboard ? { top: 72 } : {}),
+      ...(isKeyboard ? { top: compType.top ?? 72 } : {}),
       ...(compType.powerChord ? { powerChord: true } : {}),
       ...(effStyle != null ? { style: effStyle } : {}),
       ...(effStrumMs != null ? { strumMs: effStrumMs } : {}),
@@ -978,13 +992,19 @@ export function genChordPattern(
     //   guitar 型は lh を出さない（ギターに左手レーンは無い）。effStyle が guitar 上書きなら lh を載せない。
     // 型IDの残留（修理#1・監査違反③）：採用後の content から「どの型で生まれたか」を辿れるよう patternId を刻む。
     //   単数経路・variety 複数経路の両方が buildCompContent 経由＝両方に載る。従来経路（compType 未解決）は通らない＝bit一致。
+    // アレンジS1：program（GM音色・オルガン型のみ）と followChords（contract③のフラグ）を content へ透過。
+    //   どちらも型が持つ時だけキーを生やす＝既存45型の content は完全に不変（bit 一致）。
+    //   followChords の**実音化は web resolveChordPattern の担当**＝api は運ぶだけ（分業維持・design）。
     const content: {
       mode: CompMode; voicing: typeof voicing; steps: number;
-      hits: typeof hits; patternId: string; lh?: { mode: "custom"; hits: { step: number; dur: number; deg: string }[] };
+      hits: typeof hits; patternId: string; program?: number; followChords?: true;
+      lh?: { mode: "custom"; hits: { step: number; dur: number; deg: string }[] };
     } = { mode: compType.mode, voicing, steps, hits, patternId: compType.id };
+    if (compType.program != null) content.program = compType.program;
+    if (compType.followChords) content.followChords = true;
     if (effStyle !== "guitar" && compType.style !== "guitar" && compType.lh) {
       const lhHits: { step: number; dur: number; deg: string }[] = [];
-      for (let bar = 0; bar < bars; bar++) for (const h of compLhHitsForBar(compType.lh, bar * stepsPerBar)) lhHits.push(h);
+      for (let base = 0; base < steps; base += cycleSteps) for (const h of clampHits(compLhHitsForBar(compType.lh, base))) lhHits.push(h);
       content.lh = { mode: "custom", hits: lhHits };
     }
     return content;

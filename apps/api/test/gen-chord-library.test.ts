@@ -15,13 +15,13 @@ const J = (x: unknown) => JSON.stringify(x);
 const SEEDS = [1, 2, 3, 5, 42];
 
 describe("辞書の健全性（純データ）", () => {
-  it("45型・RH は grid セル（16=4/4・12=6/8 world68）・tempoMin<=tempoMax・ID 一意", () => {
-    expect(COMP_TYPES.length).toBe(45); // 35（L4トラックA）＋ world68 chord10（裁定D 2026-07-25）＝45
+  it("50型・RH は grid×bars セル（16=4/4・12=6/8 world68）・tempoMin<=tempoMax・ID 一意", () => {
+    expect(COMP_TYPES.length).toBe(50); // 45（L4トラックA35＋world68 10）＋ アレンジS1 オルガン5型（2026-08-02）
     const ids = new Set<string>();
     for (const t of COMP_TYPES) {
       expect(t.grid === 16 || t.grid === 12, t.id).toBe(true);
-      expect(t.rh.length, t.id).toBe(t.grid); // 4/4=16・6/8=12
-      if (t.lh) expect(t.lh.length, t.id).toBe(t.grid);
+      expect(t.rh.length, t.id).toBe(t.grid * (t.bars ?? 1)); // 4/4=16・6/8=12（bars:2 は倍＝contract④）
+      if (t.lh) expect(t.lh.length, t.id).toBe(t.grid * (t.bars ?? 1));
       expect(t.tempoMin, t.id).toBeLessThanOrEqual(t.tempoMax);
       expect(ids.has(t.id), `dup ${t.id}`).toBe(false);
       ids.add(t.id);
@@ -187,12 +187,12 @@ describe("(L0) keyboard 型の buildCompContent は voicing.top=72 を積む／g
       expect(v.top, id).toBe(72);
     }
   });
-  it("全鍵盤型（style!=='guitar'）が top===72／全ギター型は top を持たない（voiceGuitar 経路のまま）", () => {
+  it("全鍵盤型（style!=='guitar'）が top===72（型の top 上書きが在ればそれ）／全ギター型は top を持たない（voiceGuitar 経路のまま）", () => {
     for (const t of COMP_TYPES) {
       const meter = t.grid === 12 ? "6/8" : "4/4"; // world68 も型 grid に合う拍子で敷く
       const v = voicingOf(genChordPattern({ bars: 1, meter }, 7, { pattern: t.id }));
       if (t.style === "guitar") expect("top" in v, `${t.id} guitar は top なし`).toBe(false);
-      else expect(v.top, `${t.id} keyboard は top=72`).toBe(72);
+      else expect(v.top, `${t.id} keyboard は top=${t.top ?? 72}`).toBe(t.top ?? 72); // 型の top 未指定＝72（L0 既定）
     }
   });
   it("variety 複数経路（ballad×3）も各候補の鍵盤型に top=72 が載る", () => {
@@ -363,6 +363,144 @@ describe("(w68) world68 chord＝6/8 枠で12セル・4/4枠では従来経路（
       const r = genChordPattern({ bars: 2, meter: "6/8" }, seed, { pattern: "PB-WHOLE" });
       expect(J(r), `#${seed}`).toBe(J(genChordPattern({ bars: 2, meter: "6/8" }, seed)));
     }
+  });
+});
+
+// ── アレンジS1（2026-08-02・design「### アレンジS1＝写像規則の契約」）─────────────────
+//  contract④＝複数小節テンプレ（CompType.bars?:1|2・rh/lh は grid×bars セル）＝サイクル単位のタイル張り＋
+//  セクション末で切り詰め（はみ出す hit は落とす・跨ぐ hit は dur を詰める）。1小節型は挙動不変（bit一致）。
+describe("(S1-④) 複数小節テンプレ＝サイクル単位のタイル張り＋セクション末で切り詰め", () => {
+  type H = { step: number; dur: number; vel?: number };
+  const hitsOf = (bars: number, id: string): H[] => contentOf(genChordPattern({ bars, meter: "4/4" }, 1, { pattern: id })).hits as H[];
+  const lhOf = (bars: number, id: string): { step: number; dur: number; deg: string }[] =>
+    (contentOf(genChordPattern({ bars, meter: "4/4" }, 1, { pattern: id })) as unknown as { lh?: { hits: { step: number; dur: number; deg: string }[] } }).lh?.hits ?? [];
+
+  it("辞書：bars 未指定型は bars キーを生やさない／2小節型は bars=2・rh 32セル", () => {
+    for (const t of COMP_TYPES) {
+      if (t.bars == null) expect("bars" in t, `${t.id} は bars キーを生やさない`).toBe(false);
+      else expect(t.bars === 1 || t.bars === 2, `${t.id} bars は 1|2`).toBe(true);
+    }
+    const t2 = compTypeById("OG-PAD2")!;
+    expect(t2.bars).toBe(2);
+    expect(t2.rh.length).toBe(32); // grid16 × bars2
+    expect(t2.lh!.length).toBe(32);
+  });
+
+  it("2小節型×2小節＝1周ぶんそのまま（切り詰め無し・step+dur は steps 内）", () => {
+    const h = hitsOf(2, "OG-PAD2");
+    expect(contentOf(genChordPattern({ bars: 2, meter: "4/4" }, 1, { pattern: "OG-PAD2" })).steps).toBe(32);
+    // OG-PAD2 rh＝1小節目頭に白玉（2小節目 step8 まで保持）→ step24 で声部が動く（弱打・小節末まで）。
+    expect(h.map((x) => x.step)).toEqual([0, 24]);
+    expect(h[0]!.dur).toBe(24); // 1小節目頭から2小節目の中ほどまでタイ（跨ぎ保持＝organ の no-lift 近似）
+    expect(h[1]!.dur).toBe(8);
+    expect(Math.max(...h.map((x) => x.step + x.dur))).toBe(32);
+  });
+
+  it("2小節型×4小節＝サイクル（32step）単位で2周＝2周目は step+32 の同型", () => {
+    const h = hitsOf(4, "OG-PAD2");
+    expect(h.map((x) => x.step)).toEqual([0, 24, 32, 56]);
+    expect(h.map((x) => x.dur)).toEqual([24, 8, 24, 8]);
+    // lh も同じサイクルで敷かれる
+    expect(lhOf(4, "OG-PAD2").map((x) => x.step)).toEqual([0, 24, 32, 56]);
+  });
+
+  it("2小節型×1小節＝末尾で切り詰め（跨ぐ hit は dur を詰める・はみ出す hit は落とす）", () => {
+    const h = hitsOf(1, "OG-PAD2");
+    expect(contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: "OG-PAD2" })).steps).toBe(16);
+    expect(h.map((x) => x.step)).toEqual([0]); // step24 は steps(16) の外＝落とす
+    expect(h[0]!.dur).toBe(16); // 本来 dur24＝末尾を跨ぐ→16 へ詰める
+    const lh = lhOf(1, "OG-PAD2");
+    expect(lh.map((x) => x.step)).toEqual([0]);
+    expect(lh[0]!.dur).toBe(16);
+  });
+
+  it("2小節型×7小節＝3周＋前半1小節ぶん（全 hit が steps 内・最後の周は前半だけ）", () => {
+    const h = hitsOf(7, "OG-PAD2"); // steps=112・サイクル32＝3周(0/32/64)＋96 から前半1小節
+    expect(h.map((x) => x.step)).toEqual([0, 24, 32, 56, 64, 88, 96]);
+    for (const x of h) expect(x.step + x.dur, `step${x.step}`).toBeLessThanOrEqual(112);
+    expect(h.at(-1)!.dur).toBe(16); // 96 の白玉は本来 dur24→末尾 112 で詰める
+  });
+
+  it("(回帰) 1小節型は挙動不変＝各小節へ compHitsForBar をそのまま並べたもの（bars=1/2/3/7）", () => {
+    for (const t of COMP_TYPES.filter((x) => (x.bars ?? 1) === 1 && x.grid === 16)) {
+      for (const bars of [1, 2, 3, 7]) {
+        const want: H[] = [];
+        for (let b = 0; b < bars; b++) for (const x of compHitsForBar(t.rh, b * 16)) want.push(x as H);
+        expect(J(hitsOf(bars, t.id)), `${t.id}×${bars}小節`).toBe(J(want));
+      }
+    }
+  });
+
+  it("6/8（grid12）も同じ規則＝world68 の1小節型は 12step ごとにタイル（bars=5）", () => {
+    const c = contentOf(genChordPattern({ bars: 5, meter: "6/8" }, 1, { pattern: "w68-ch-drone5" }));
+    expect(c.steps).toBe(60);
+    expect(c.hits.map((h) => h.step)).toEqual([0, 6, 12, 18, 24, 30, 36, 42, 48, 54]);
+  });
+});
+
+// contract③＝followChords（api は content へ運ぶだけ＝実音化は web resolveChordPattern の担当）。
+describe("(S1-③) followChords＝型のフラグを content へ透過（api は運ぶだけ）", () => {
+  const cont = (id: string, meter = "4/4") => contentOf(genChordPattern({ bars: 2, meter }, 1, { pattern: id })) as unknown as { followChords?: true };
+  it("白玉パッド型（OG-PAD/OG-PAD2/OG-SOUL）は content.followChords===true", () => {
+    for (const id of ["OG-PAD", "OG-PAD2", "OG-SOUL"]) expect(cont(id).followChords, id).toBe(true);
+  });
+  it("短打ち型・既存型は followChords キーを生やさない（bit一致）", () => {
+    for (const id of ["OG-STAB", "OG-PUNCH", "PB-WHOLE", "GT-FOLK8", "w68-ch-pad"]) {
+      const meter = id.startsWith("w68") ? "6/8" : "4/4";
+      expect("followChords" in cont(id, meter), id).toBe(false);
+    }
+  });
+  it("従来経路（pattern 未指定/未知）も followChords 無し", () => {
+    for (const r of [genChordPattern({ bars: 2, meter: "4/4" }, 3), genChordPattern({ bars: 2, meter: "4/4" }, 3, { pattern: "NOPE-XX" })]) {
+      expect("followChords" in (r.items[0]!.content as object)).toBe(false);
+    }
+  });
+});
+
+// 語彙帳の初期オルガン型（research/2026-08-02-organ-piano-backing-vocabulary.md §2.1/§3）。
+describe("(S1-語彙) オルガン5型＝16分グリッドで表せる型だけ（CC 前提型は入れない）", () => {
+  const ORGAN = ["OG-PAD", "OG-PAD2", "OG-STAB", "OG-SOUL", "OG-PUNCH"];
+  const GENRES = ["ballad", "rock", "citypop", "dance", "anison", "gospel", "jazz", "folk", "funk", "reggae", "pop", "metal"];
+  it("5型が解決・style keyboard・grid16・roles/tempo 健全・genre は既存語彙", () => {
+    for (const id of ORGAN) {
+      const t = compTypeById(id)!;
+      expect(t, id).toBeTruthy();
+      expect(t.style, id).toBe("keyboard");
+      expect(t.grid, id).toBe(16);
+      expect(t.roles.length, id).toBeGreaterThan(0);
+      expect(t.tempoMin, id).toBeLessThanOrEqual(t.tempoMax);
+      expect(GENRES, id).toContain(t.genre);
+      expect(t.scenes.length, id).toBeGreaterThan(0);
+    }
+  });
+  it("CC が型の定義そのものの型（drawbar/leslie/gliss/shake）は棚に載せない（design 裁定）", () => {
+    for (const t of COMP_TYPES) expect(/DRAWBAR|LESLIE|GLISS|SHAKE/i.test(t.id), t.id).toBe(false);
+  });
+  it("OG-PUNCH＝高域指定（voicing.top>72）／他のオルガン型は既定 top=72", () => {
+    const topOf = (id: string) => (contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: id })).voicing as unknown as { top?: number }).top;
+    expect(topOf("OG-PUNCH")).toBeGreaterThan(72);
+    for (const id of ["OG-PAD", "OG-PAD2", "OG-SOUL"]) expect(topOf(id), id).toBe(72);
+  });
+  it("オルガン型は content.program に GM オルガン（0-based 16-20）／既存型は program キー無し", () => {
+    for (const id of ORGAN) {
+      const p = (contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: id })) as unknown as { program?: number }).program;
+      expect(p, id).toBeGreaterThanOrEqual(16);
+      expect(p, id).toBeLessThanOrEqual(20);
+    }
+    for (const id of ["PB-WHOLE", "GT-FOLK8"]) {
+      expect("program" in (contentOf(genChordPattern({ bars: 1, meter: "4/4" }, 1, { pattern: id })) as object), id).toBe(false);
+    }
+  });
+  it("OG-* は GENRE_TABLE 非登録＝単数 pick 経路に出ない（L4トラックA と同流儀＝既存の出音不変）", () => {
+    const picked = new Set<string>();
+    for (const g of GENRES) for (const role of ["intro", "verse", "prechorus", "chorus", "bridge", "interlude", "outro"] as const) {
+      for (const seed of SEEDS) { const t = pickCompType(g, role, undefined, seed); if (t) picked.add(t.id); }
+    }
+    for (const id of ORGAN) expect(picked.has(id), `${id} は単数pickで出ない`).toBe(false);
+  });
+  it("おまかせ（omakase）候補には出る＝S1 の試聴口は塞がない", () => {
+    const all = pickCompTypes("omakase", undefined, undefined, 0, COMP_TYPES.length).map((t) => t.id);
+    for (const id of ORGAN) expect(all, id).toContain(id);
   });
 });
 

@@ -508,10 +508,10 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **コード入力/section UX（CV・✅実装済）**：ChordEditor＝start自動フロー(順番)・長さボタン・ピアノロール表示・合計尺。SectionEditor＝レーン層モデル順(進行→メロ→コード楽器→ベース→リズム→section)・**占有セルのみ配置不可**(別小節は自由)。トグル/構成音の選択色＝OFF地色付与で是正(E2E)。
 
 ### 楽器アレンジの打ち込み助け＝計画確定（2026-08-02 オーナー裁定・正準）
-上の「前景/背景の判別軸」の続き＝**枠（何を作らないか）は確定済み・ここは「何を作るか」の確定**。出自＝白紙計画 `docs/archive/2026-08-02-arrange-midi-help-cleanroom-plan.md`（アプリのコード/docs/git を一切読ませない Fable 3案→敵対検分→統合）に対する 2026-08-02 のオーナー裁定。研究の正準＝`docs/research/2026-08-02-organ-piano-backing-vocabulary.md`（オルガン9型・ピアノ8型のプリミティブ＋ジャンル×楽器の語彙表・CC11/Leslie/ドローバー）／`docs/research/2026-08-02-riff-structure-and-variation.md`（リフの和声4型＝移調/固定/ペダル/微調整・楽器イディオム・変換カタログ＋類似度ガードレール）。
+上の「前景/背景の判別軸」の続き＝**枠（何を作らないか）は確定済み・ここは「何を作るか」の確定**。出自＝白紙計画 `docs/archive/2026-08-02-arrange-midi-help-cleanroom-plan.md`（アプリのコード/docs/git を一切読ませない Fable 3案→敵対検分→統合）に対する 2026-08-02 のオーナー裁定。研究の正準＝`docs/research/2026-08-02-organ-piano-backing-vocabulary.md`（オルガン8型・ピアノ8型（実測＝計16型）のプリミティブ＋ジャンル×楽器の語彙表・CC11/Leslie/ドローバー）／`docs/research/2026-08-02-riff-structure-and-variation.md`（リフの和声4型＝移調/固定/ペダル/微調整・楽器イディオム・変換カタログ＋類似度ガードレール）。
 
 **採用＝統合案「語彙帳＋配札」**。骨格5点：
-1. **語彙帳（土台）**＝コード非依存の奏法テンプレ棚。**初期コンテンツ＝一般奏法語彙**（研究2本のオルガン9型/ピアノ8型・タグ＝奏法名/リズム密度/音域/エネルギー）。**育て方＝他者実データ（POP909 等）からの統計**（下記・著作権注記）。
+1. **語彙帳（土台）**＝コード非依存の奏法テンプレ棚。**初期コンテンツ＝一般奏法語彙**（研究2本のオルガン8型/ピアノ8型・タグ＝奏法名/リズム密度/音域/エネルギー）。**育て方＝他者実データ（POP909 等）からの統計**（下記・著作権注記）。
 2. **写像試聴**＝テンプレを今の曲のコード/キー/テンポへ当てはめて、主旋律と一緒に鳴らす。候補は常に「その曲の文脈で」聴く。採用はパターン単位差し替えのみ。
 3. **配札・ピン留め**＝候補を数枚配る→試聴→ピン/捨てる→ピンを種に再配札。**ランキングしない**（正解を機械が決めない）。
 4. **軸指定の再配札**＝惜しい候補の救済＝「もっと薄く／低く／開いて」等の**注文チップ**で軸を保った再配札（研究docの保存軸×破壊軸＋類似度ガードレール）。「趣の完全保存」は狙わない。
@@ -535,12 +535,25 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
 - **後段**＝セクション一括下敷き（枝7）／器楽ソロ・副次リード（枝1）。
 
 **既存足場との対応（`docs/archive/2026-08-02-arrange-midi-help-cleanroom-plan.md` §B の要約＝ゼロからではない。実コードでの精査は着手時）**：
-- **語彙帳** ≒ パターンライブラリアーク（L0-L3 実装済＝ネタ帳ライブラリ扱い・タグ・Section選択画面と共用）＋伴奏型辞書26型（chordLibrary）＋「聴いて選ぶ」トレイ（伴奏・演奏アークC）。
+- **語彙帳** ≒ パターンライブラリアーク（L0-L3 実装済＝ネタ帳ライブラリ扱い・タグ・Section選択画面と共用）＋伴奏型辞書45型（起草時「26」は初版の数字・実測45）（chordLibrary）＋「聴いて選ぶ」トレイ（伴奏・演奏アークC）。
 - **S1 写像** ＝ `resolveChordPattern` の延長線（相対パターン→実音化の機構が既にある）。**オルガン語彙の CC11/Leslie は現行 content スキーマに無い＝拡張の要設計**（backlog 修理#3送り分「CC11可否要調査」と合流）。
 - **配札・ピン** ≒ 候補トレイ（`useMelodyGen` の候補N提示→採用）。「ピンを種に再配札」の世代管理だけ新規。
 - **軸指定の再配札** ≒ `vary`/`reshape` verb＋backlog「機械変奏の分家着地」＋`motif-transform-stats` 実測（ゆるい変奏60-73%）が受け皿。
 - **リフ雛形** ＝ `gen_riff` verb が既に存在（中身と和声4型との距離は着手時に実コードで精査）。
 - **落とした要素の足場は使わない**＝`extract_rhythm_part` を和声パターンへ広げる案（採取）と `melody_similarity`/`find_similar` 由来の手癖距離（鏡）は、枝4/枝6 の裁定により**本計画の射程外**。
+
+### アレンジS1＝写像規則の契約（2026-08-02 設計・実コード精査済み）
+上の計画確定節の S1（写像＋試聴＋採用）を実コード精査（api/web/研究doc の3面）で具体化した契約。精査の結論＝**「写像」の大半は既にある**：実音化の SSOT は web `resolveChordPattern`（`apps/web/src/music.ts:882`）1本で、テンション（`voiceToTop` が `QUALITY_INTERVALS` 全音を積む）・分数コード（strum/ロールで最低音追加＝決定B）・つんのめり解決は既決。**足りないのは次の2契約＋試聴の1機構**。
+
+- **分業は維持**＝api はテンプレ(content)のみ・実音化は web（再生/書き出し時に毎回進行を引く）。採用＝**content 差し替えで相対のまま持つ**（系統A流儀・Undo=Snapshot）。この構造ゆえ**枝5（進行変更→自動で当て直し）は追加実装ゼロで構造が満たす**。
+- **contract③＝`ChordPatternContent.followChords?: true`**（additive・未指定＝キーを生やさない＝既存全ネタ bit一致）。真のとき、hit の鳴っている間にコード境界（`chords[]` の変わり目）を跨いだら**境界で音を切り、残り長さを新コードで再ボイシングして置き直す**（vel 同値）。これが「白玉テンプレ×2拍替わりコード」の規則＝現行はアタック時点のコード固定で2つ目のコードが鳴らない（実測確認済み）。つんのめり判定は最初のアタックにのみ適用・再ボイシング音には適用しない。オルガンの no-lift（切らずに指替え）は再アタックで近似（試聴音源に投資しない＝枝3と整合）。genSectionInst pad の「コード境界を hit 境界にする」方式（`generate.ts:1502-1533`）が先例。**LH も対象**＝`resolveLh` の custom hits（型辞書の LH は custom として content 化される）は hit 開始時点のコード固定なので、followChords 時は同じ境界分割で度数を再解決する（R＝新コードのルートに追従）。preset（root/root5/oct）は既に anchor＝コードチェンジで再ボイシング＝対象外（レビューで発見した整合ギャップ 2026-08-02＝RHだけ追従しLHが旧ルートに残ると濁る）。
+- **contract④＝複数小節テンプレ**：`CompType.bars?: 1|2`（既定1・省略時キー無し）。rh/lh は `grid×bars` セル（32/24）を許容（現行は 16/12 以外 throw＝全45型が1小節固定を実測確認）。`buildCompContent` は**サイクル（bars）単位のタイル張り**とし、セクション末で切り詰め（はみ出す hit は落とす・跨ぐ hit は dur を詰める）＝「2小節型×7小節」の規則。content 側は既存 `steps` 表現で足りる＝スキーマ変更不要。
+- **語彙帳の初期オルガン型＝16分グリッドで表現できる型だけ入れる**：`organ_pad`（followChords 白玉）・`organ_stab`（裏拍短打ち）・`organ_punch`（高域短コード＝voicing.top/octave で音域指定）系。**CC が型の定義そのものの型（organ_drawbar/organ_leslie_swell/organ_gliss/organ_shake）は S1 に入れない＝劣化コピーで棚に載せない**。CC11/Leslie/CC64 のスキーマ拡張は backlog「CC11可否要調査」（修理#3送り分）と合流して後段判断。※研究doc実測＝オルガンは**8型**（計画確定節の「9型」は誤記）・piano 側8型は既存 KEYBOARD_TYPES と重複が大きい＝データ化はオルガン中心＋差分のみ。
+- **文脈試聴（web の新機構・S1の再生系本体）**：現状の候補/パターン試聴は単体音ワンショットのみ（`auditionPattern`/`auditionCandidate`＝`kind:"notes"`・loop 無し）。S1 は**候補 content を仮想子としてセクション可聴合成（`kind:"tree"`・`audibleChildren`）へオーバーレイし、`startPlayback` の既存 `loop` を付けて鳴らす**＝「主旋律と一緒にループ試聴」。入口は既存 `PatternImportDialog`（＋ゴーストCTA）を使い回す。
+  - **実装（2026-08-02・TDD 済み）＝`apps/web/src/contextAudition.ts`（純関数 `contextAuditionPlan`）**。「オーバーレイ」の実体は**足す**でなく**差し替え**＝いま編集中のコード楽器ネタ（`childNetaId`）の content を候補 content に置換して合成する（足すと現行の伴奏と候補が二重に鳴る）。レーンミュートは `sctx.audibleChildren` で `getPlan` と同じく尊重するが、**▶を押した当人（編集中ネタ）だけはミュート中でも必ず鳴らす**（押した意図＝この音を聴きたい）。`loop={startBeat:0,endBeat:セクション総拍}`（総拍＝`SectionEditor` の `BARS×BPB` と同式＝`neta.bars`(下限8)と中身の実尺の長い方）。
+  - **配線＝props1本（新しいグローバル状態も context API も作らない）**。コード楽器エディタは `SectionEditor` の子ではない（セクションから**潜って**開く別画面＝`NetaDialog`）ので、文脈は React の親子では降りてこない。よって `NetaDialog` が**既存 prop の `parentId`**（navStack の直上＝潜り元）から `api.getComposition` を1回引き、`{section, children, childNetaId}` を `auditionCtx` として `KindEditorBody`→`ChordPatternEditor` へ下ろす（`activeProject` と同じ流儀）。
+  - **フォールバック（従来のワンショット＝挙動不変）**＝`auditionCtx` 未配線（トップから開いた／取得失敗）／セクションに子が無い／**編集中ネタがそのセクションに配置されていない**。ベース/ドラムエディタは `auditionCtx` を受け取らない＝S1 スコープ外＝bit 一致。
+- **S1 でやらない（発見済みの隣接バグ・別修理）**：(i) `voiceGuitar` の6声間引きがテンション過多（13th等）で7音に破れる (ii) LH 度数トークンが R/3/5/7/8 限定で未知度数がサイレント根音化——いずれも guitar/LH 側＝S1（keyboard オルガン中心）の径路外。backlog へ記載し S1 に混ぜない。
 
 ### ベースの相対パターン昇格（修理#2・2026-07-22・正典＝`docs/research/2026-07-22-performance-editing-architecture-audit.md` H2/推奨差分2＝工事順3-5）
 - **問題（監査 H2・違反②）**：伴奏系4kindのうちベースだけが**絶対 notes 焼き込みの例外**＝genBass が bassLibrary の度数 DSL（相対）で組んだ型を**出力直前に実音化して捨て**、web に既存の相対受け皿（`RelativeBassContent`＋`resolveRelativeBass`＋`BassStepEditor`＝#bass S2）へ繋いでいなかった（「相対の材料は上流・受け皿は下流・両方あるのに中間で絶対化」）。→ 相対で生むと**パターンがネタに常在し、ベースエディタで再編集できる**（鳴らし方がネタに住む＝H1×H2）。

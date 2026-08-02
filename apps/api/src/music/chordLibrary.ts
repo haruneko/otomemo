@@ -35,7 +35,16 @@ export interface CompType {
   genre: string; // ballad/rock/citypop/dance/anison/gospel/jazz/folk/funk/reggae/pop/metal
   coGenres?: string[]; // L4トラックA（2026-07-25）：併記ジャンルタグ（横串 co-tag・データ欄のみ）。消費者は seed の genre タグ展開だけ＝生成器 GENRE_TABLE 経路は不変（出音・選抜に無影響）。
   scenes: string; // 場面タグ（日本語・監査用 SSOT）
-  grid: 16 | 12; // 4/4=16（1小節16分）／6/8=12（1小節12・world68・裁定D 2026-07-25）。grid=セル数＝genChordPattern stepsPerBar と一致必須。
+  grid: 16 | 12; // 4/4=16（1小節16分）／6/8=12（1小節12・world68・裁定D 2026-07-25）。grid=1小節のセル数＝genChordPattern stepsPerBar と一致必須。
+  // アレンジS1 contract④（2026-08-02・design「### アレンジS1＝写像規則の契約」）：複数小節テンプレ。
+  //   省略＝1小節（キーを生やさない＝既存45型は形も出力も不変）。rh/lh のセル数＝grid×bars（32/24 を許容）。
+  //   buildCompContent は**サイクル（bars）単位**でタイル張りし、セクション末で切り詰める。
+  bars?: 1 | 2;
+  // アレンジS1 contract③：保持音がコード境界を跨いだら境界で切って再ボイシング（白玉×2拍替わり）。
+  //   api は content へ透過するだけ＝実音化は web resolveChordPattern の担当（分業維持）。省略＝キー無し。
+  followChords?: true;
+  top?: number; // voicing.top の型別上書き（未指定＝L0 既定の72＝C5目安）。organ_punch 等の高域指定用。
+  program?: number; // GM音色（0-based・content.program へ透過）。オルガン型＝16-20。未指定＝content に program を載せない（既存型 bit 一致）。
   tempoMin: number; tempoMax: number;
   mode: CompMode;
   style: CompStyle; // keyboard/guitar（voicing.style の既定＝guitar のみ content に載せる）
@@ -118,18 +127,26 @@ export function compLhHitsForBar(cells: CompLhCell[], base: number): { step: num
   return hits;
 }
 
-// 型ファクトリ。RH は 16セル（4/4）or 12セル（6/8・world68）。grid はセル数で判定。LH は任意（RH と同 grid）。
+// 型ファクトリ。RH は grid×bars セル＝16/12（1小節・既定）or 32/24（2小節・contract④）。grid はセル数÷bars で判定。
+//   LH は任意（RH と同じセル数）。bars/followChords/top/program は指定時のみキーを生やす（既存型の形は不変）。
 const T = (t: {
   id: string; genre: string; coGenres?: string[]; scenes: string; tempoMin: number; tempoMax: number; mode: CompMode; style: CompStyle;
   roles: Role[]; rh: string; lh?: string; strumMs?: number; powerChord?: boolean; openClose?: "open" | "close";
+  bars?: 1 | 2; followChords?: true; top?: number; program?: number;
 }): CompType => {
   const rh = parseCompRh(t.rh);
-  if (rh.length !== 16 && rh.length !== 12) throw new Error(`chordLibrary: ${t.id} のRHは16/12セルでない（${rh.length}）`);
-  const grid = rh.length as 16 | 12;
+  const nb = t.bars ?? 1; // テンプレのサイクル長（小節）
+  if (rh.length !== 16 * nb && rh.length !== 12 * nb) throw new Error(`chordLibrary: ${t.id} のRHは${16 * nb}/${12 * nb}セルでない（${rh.length}）`);
+  const grid = (rh.length / nb) as 16 | 12;
   const lh = t.lh ? parseCompLh(t.lh) : undefined;
-  if (lh && lh.length !== grid) throw new Error(`chordLibrary: ${t.id} のLHは${grid}セルでない（${lh.length}）`);
+  if (lh && lh.length !== grid * nb) throw new Error(`chordLibrary: ${t.id} のLHは${grid * nb}セルでない（${lh.length}）`);
   return {
-    id: t.id, genre: t.genre, coGenres: t.coGenres, scenes: t.scenes, grid, tempoMin: t.tempoMin, tempoMax: t.tempoMax,
+    id: t.id, genre: t.genre, coGenres: t.coGenres, scenes: t.scenes, grid,
+    ...(t.bars != null ? { bars: t.bars } : {}),
+    ...(t.followChords ? { followChords: true as const } : {}),
+    ...(t.top != null ? { top: t.top } : {}),
+    ...(t.program != null ? { program: t.program } : {}),
+    tempoMin: t.tempoMin, tempoMax: t.tempoMax,
     mode: t.mode, style: t.style, strumMs: t.strumMs, powerChord: t.powerChord, openClose: t.openClose,
     roles: t.roles, rh, lh, rhPattern: t.rh, lhPattern: t.lh,
   };
@@ -246,7 +263,43 @@ const WORLD68_TYPES: CompType[] = [
     rh: "A A A A A A | A A A A A A" }),
 ];
 
-export const COMP_TYPES: CompType[] = [...KEYBOARD_TYPES, ...GUITAR_TYPES, ...WORLD68_TYPES];
+// ── エレキオルガン（ハモンド系）5型（アレンジS1・2026-08-02・正典＝design「### アレンジS1＝写像規則の契約」／
+//    研究doc research/2026-08-02-organ-piano-backing-vocabulary.md §2.1 の奏法プリミティブ＋§3 のジャンル表） ──
+//  方針（design 裁定）：**16分グリッドで表現できる型だけ**入れる。CC が型の定義そのものの型
+//    （organ_drawbar＝ドローバー登録／organ_leslie_swell＝Leslie速度＋CC11／organ_gliss／organ_shake）は
+//    劣化コピーで棚に載せない＝CC11/Leslie のスキーマ拡張（backlog「CC11可否要調査」）と合流して後段判断。
+//  オルガンは velocity 非感応（§1.1・表情は CC11）＝vel 層は「アクセント記号＝譜面上の意図」程度に留め、
+//    白玉は followChords（contract③）で**コード境界ごとに再ボイシング**＝no-lift（切らずに指替え）の再アタック近似。
+//  program＝GM 0-based（16=Drawbar Organ / 18=Rock Organ）。genSectionInst の content.program と同流儀
+//    （web ChordPatternContent.program が受け皿＝既存前例あり）。**要耳較正**。
+//  GENRE_TABLE には**登録しない**（L4トラックA 新21型と同流儀）＝単数 pick 経路の出音は据え置き。
+//    露出は「型ID直指定／おまかせ候補（pickCompTypes omakase）／ライブラリ seed のタグ棚」の3口。
+const ORGAN_TYPES: CompType[] = [
+  // §3.1 ロック／§3.6 バラード：白玉パッド主体（歪み前提で音数少なめ・コード変化点だけ声部移動）。
+  T({ id: "OG-PAD", genre: "rock", coGenres: ["ballad", "pop"], scenes: "オルガン白玉パッド（下敷き・コード追従）", tempoMin: 60, tempoMax: 140,
+    mode: "strum", style: "keyboard", followChords: true, program: 16, roles: ["intro", "verse", "prechorus", "chorus", "bridge", "outro"],
+    rh: "A - - - | - - - - | - - - - | - - - -", lh: "R - - - | - - - - | - - - - | - - - -" }),
+  // §3.2 ポップス：薄く敷くパッド＋トップノートが動く。**2小節サイクル**＝1小節目の保持を2小節目の中ほどまで
+  //   引っ張り（no-lift 近似）、後半で声部を動かす（弱打で置き直す）＝contract④ の実例。
+  T({ id: "OG-PAD2", genre: "pop", coGenres: ["citypop"], scenes: "オルガンパッド2小節（後半で声部が動く）", tempoMin: 70, tempoMax: 130,
+    mode: "strum", style: "keyboard", bars: 2, followChords: true, program: 16, roles: ["verse", "prechorus", "chorus", "outro"],
+    rh: "A - - - | - - - - | - - - - | - - - - | - - - - | - - - - | o - - - | - - - -",
+    lh: "R - - - | - - - - | - - - - | - - - - | - - - - | - - - - | 5 - - - | - - - -" }),
+  // §3.3 ファンク：裏拍ショット（ホーン的 shots）。密集4音・高め音域・短ゲート（dur1＝スタッカート）。
+  T({ id: "OG-STAB", genre: "funk", coGenres: ["citypop"], scenes: "オルガン裏拍ショット（ホーン的スタブ）", tempoMin: 90, tempoMax: 130,
+    mode: "strum", style: "keyboard", top: 76, program: 18, roles: ["verse", "chorus", "interlude"],
+    rh: ". . > . | . . A . | . A . . | . . > ." }),
+  // §3.4 ソウル/R&B：「敷き（白玉）と挿し（スタブ）」の二層運用を1レーンで表現（前半保持→裏で短く挿す）。
+  T({ id: "OG-SOUL", genre: "gospel", coGenres: ["citypop"], scenes: "ソウル/R&B（敷きと挿しの二層）", tempoMin: 70, tempoMax: 110,
+    mode: "strum", style: "keyboard", followChords: true, program: 16, roles: ["verse", "prechorus", "chorus", "bridge"],
+    rh: "A - - - | - - - - | - - > . | . . A .", lh: "R - - - | - - - - | 5 - - - | - - - -" }),
+  // §3.7 ゴスペル／ワーシップ：高域のパンチコード（シンコペした短い挿し）。top で音域を上げる（voicing.top）。
+  T({ id: "OG-PUNCH", genre: "gospel", scenes: "ゴスペル高域パンチコード（裏拍の短い挿し）", tempoMin: 70, tempoMax: 140,
+    mode: "strum", style: "keyboard", top: 84, program: 18, roles: ["chorus", "bridge", "interlude"],
+    rh: ". . > . | . > . . | . . > . | > . . ." }),
+];
+
+export const COMP_TYPES: CompType[] = [...KEYBOARD_TYPES, ...GUITAR_TYPES, ...WORLD68_TYPES, ...ORGAN_TYPES];
 
 export function compTypeById(id: string): CompType | undefined { return COMP_TYPES.find((t) => t.id === id); }
 

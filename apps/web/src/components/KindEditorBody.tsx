@@ -93,6 +93,9 @@ export interface KindEditorBodyProps {
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
   tp: { lineRef: any; scrollerRef: any; beatRef: any; playing: boolean };
   activeProject?: string; // Task1i：Source（プロジェクト軸）絞りのため 3エディタ→PatternImportDialog へ下ろす（純追加）。
+  // アレンジS1「文脈試聴」：親セクションの文脈（NetaDialog が parentId から1回引く）。コード楽器エディタの
+  // ▶試聴だけがこれで「セクション合成のループ試聴」へ格上げされる。未配線＝従来のワンショット（純追加）。
+  auditionCtx?: import("../contextAudition").ContextAuditionCtx | null;
 }
 
 export function KindEditorBody(p: KindEditorBodyProps) {
@@ -290,7 +293,7 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           )}
         </div>
       ) : p.flags.isChordPat || p.flags.isSectionInst ? ( // 管弦(section_inst・WP-X3c)も進行追従の多声＝ChordPatternEditor を共有
-        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} showPicker={p.flags.isChordPat} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} activeProject={p.activeProject} />
+        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} showPicker={p.flags.isChordPat} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} activeProject={p.activeProject} auditionCtx={p.auditionCtx} />
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />
       ) : isRhythm ? (

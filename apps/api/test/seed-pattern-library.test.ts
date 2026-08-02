@@ -126,6 +126,38 @@ describe("(w68) world68 が 6/8・genre:world68・scene タグで seed される
   });
 });
 
+// ── アレンジS1（2026-08-02）：オルガン型（2小節テンプレ／followChords／program）が seed ネタへ載る ──
+//   content は zod では素通し（schemas.ts content: z.unknown()）＝新キーが DB 往復で欠けないことの確認も兼ねる。
+describe("(S1) オルガン型が seed され 2小節テンプレ/followChords が DB 往復で保持される", () => {
+  it("OG-PAD2＝bars2・steps32・followChords・program／OG-PAD＝1小節16step（bars 欄は書かない）", () => {
+    const core = freshCore();
+    seedPatternLibrary(core);
+    const [n] = core.listNeta({ scope: "library", tags: ["pat:OG-PAD2"], limit: 10 });
+    expect(n, "OG-PAD2 seeded").toBeTruthy();
+    expect(n!.kind).toBe("chord_pattern");
+    expect(n!.bars).toBe(2); // 2小節型はネタの尺も2小節
+    const c = n!.content as { steps: number; followChords?: true; program?: number; hits: { step: number; dur: number }[]; patternId?: string };
+    expect(c.steps).toBe(32);
+    expect(c.followChords).toBe(true); // contract③ フラグが往復で残る
+    expect(c.program).toBe(16); // GM 0-based 16=Drawbar Organ
+    expect(c.patternId).toBe("OG-PAD2");
+    expect(Math.max(...c.hits.map((h) => h.step + h.dur))).toBe(32); // 2小節ぶん敷かれている
+
+    const [p] = core.listNeta({ scope: "library", tags: ["pat:OG-PAD"], limit: 10 });
+    expect((p!.content as { steps: number }).steps).toBe(16);
+    expect(p!.bars).toBeNull(); // 1小節型は従来どおり bars を書かない（既存 seed と同形）
+    expect(p!.tags).toContain("genre:rock");
+    expect(p!.tags.some((t) => t.startsWith("scene:"))).toBe(true);
+  });
+  it("オルガン5型が全て seed される（pat: タグで解決）", () => {
+    const core = freshCore();
+    seedPatternLibrary(core);
+    for (const id of ["OG-PAD", "OG-PAD2", "OG-STAB", "OG-SOUL", "OG-PUNCH"]) {
+      expect(core.listNeta({ scope: "library", tags: [`pat:${id}`], limit: 10 }).length, id).toBe(1);
+    }
+  });
+});
+
 describe("(c) 冪等＝2回実行で件数が変わらない", () => {
   it("再 seed で総数不変・旧 seed を削除して再投入", () => {
     const core = freshCore();

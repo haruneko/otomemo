@@ -920,6 +920,195 @@ describe("music", () => {
       const kbPlain = { ...kbU, hits: [{ step: 0, dur: 8 }] };
       expect(resolveChordPattern(kbU, chords, 0, 120)).toEqual(resolveChordPattern(kbPlain, chords, 0, 120));
     });
+
+    // ── アレンジS1 contract③ followChords（発音中のコード境界で切り、残りを新コードで再ボイシング）──
+    // 正準＝docs/design.md「アレンジS1＝写像規則の契約」。未指定＝キーを生やさない＝既存全ネタと bit 一致。
+    describe("followChords (アレンジS1 contract③)", () => {
+      const C0: import("../src/music").ChordEntry = { root: 0, quality: "", start: 0, dur: 2 };
+      const G2: import("../src/music").ChordEntry = { root: 7, quality: "", start: 2, dur: 2 };
+      const GonB2: import("../src/music").ChordEntry = { root: 7, quality: "", start: 2, dur: 2, bass: 11 };
+      const pad = (over: Partial<import("../src/music").ChordPatternContent> = {}): import("../src/music").ChordPatternContent =>
+        ({ mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 16, hits: [{ step: 0, dur: 16 }], ...over });
+
+      it("(a) followChords 未指定＝実装前の出力と JSON 完全一致（代表5パターン・bit）", () => {
+        // golden＝contract③ 実装前の resolveChordPattern 出力そのもの（キーを生やさない鉄則の機械証明）。
+        const pads = resolveChordPattern(pad(), [C0, G2], 0);
+        expect(JSON.stringify(pads)).toBe('[{"pitch":48,"start":0,"dur":4},{"pitch":52,"start":0,"dur":4},{"pitch":55,"start":0,"dur":4}]');
+        const comp = resolveChordPattern(
+          { mode: "strum", voicing: { tones: [], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 8 }, { step: 8, dur: 8, vel: 112 }], lh: { mode: "root5" } },
+          [C0, GonB2], 0,
+        );
+        expect(JSON.stringify(comp)).toBe('[{"pitch":55,"start":0,"dur":2},{"pitch":64,"start":0,"dur":2},{"pitch":72,"start":0,"dur":2},{"pitch":62,"start":2,"dur":2,"vel":112},{"pitch":67,"start":2,"dur":2,"vel":112},{"pitch":71,"start":2,"dur":2,"vel":112},{"pitch":59,"start":2,"dur":2,"vel":112},{"pitch":36,"start":0,"dur":2,"vel":106},{"pitch":43,"start":0,"dur":2,"vel":106},{"pitch":43,"start":2,"dur":2,"vel":106},{"pitch":50,"start":2,"dur":2,"vel":106}]');
+        const arp = resolveChordPattern(
+          { mode: "arp", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, arpDir: "up" }, steps: 16, hits: [0, 2, 4, 6].map((s) => ({ step: s, dur: 2 })) },
+          [C0, G2], 0,
+        );
+        expect(JSON.stringify(arp)).toBe('[{"pitch":48,"start":0,"dur":0.5},{"pitch":52,"start":0.5,"dur":0.5},{"pitch":55,"start":1,"dur":0.5},{"pitch":48,"start":1.5,"dur":0.5}]');
+        const synced = resolveChordPattern(pad({ steps: 32, hits: [{ step: 14, dur: 4 }] }), [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }], 0);
+        expect(JSON.stringify(synced)).toBe('[{"pitch":43,"start":3.5,"dur":1},{"pitch":47,"start":3.5,"dur":1},{"pitch":50,"start":3.5,"dur":1}]');
+        const guitar = resolveChordPattern(
+          { mode: "strum", voicing: { tones: [], openClose: "close", octave: 0, top: 72, style: "guitar", strumMs: 20 }, steps: 16, hits: [{ step: 0, dur: 16 }] },
+          [C0, G2], 0, 120,
+        );
+        expect(JSON.stringify(guitar)).toBe('[{"pitch":48,"start":0,"dur":4},{"pitch":55,"start":0.04,"dur":4},{"pitch":60,"start":0.08,"dur":4},{"pitch":64,"start":0.12,"dur":4},{"pitch":67,"start":0.16,"dur":4},{"pitch":72,"start":0.2,"dur":4}]');
+      });
+
+      it("(b) 白玉1小節×2拍替わり＝境界で切って後半を新コードで再ボイシング", () => {
+        const notes = resolveChordPattern(pad({ followChords: true }), [C0, G2], 0);
+        const seg1 = notes.filter((n) => n.start === 0);
+        const seg2 = notes.filter((n) => n.start === 2);
+        expect(notes.length).toBe(6); // 3声×2セグメント
+        expect(seg1.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([48, 52, 55]); // C E G
+        expect(seg1.every((n) => n.dur === 2)).toBe(true); // 境界(2拍)で切れる
+        expect(seg2.map((n) => n.pitch).sort((a, b) => a - b)).toEqual([43, 47, 50]); // G B D（anchor 最寄り）
+        expect(seg2.every((n) => n.dur === 2)).toBe(true); // 残り長さ＝元の音の終わりまで
+      });
+
+      it("(b') 境界が複数なら境界数ぶん分割（2拍白玉×4分替わり＝4セグメント）", () => {
+        const chords = [
+          { root: 0, quality: "", start: 0, dur: 1 }, { root: 5, quality: "", start: 1, dur: 1 },
+          { root: 7, quality: "", start: 2, dur: 1 }, { root: 9, quality: "m", start: 3, dur: 1 },
+        ];
+        const notes = resolveChordPattern(pad({ followChords: true, hits: [{ step: 0, dur: 16, vel: 90 }] }), chords, 0);
+        const starts = [...new Set(notes.map((n) => n.start))].sort((a, b) => a - b);
+        expect(starts).toEqual([0, 1, 2, 3]);
+        expect(notes.every((n) => n.dur === 1)).toBe(true);
+        expect(notes.every((n) => n.vel === 90)).toBe(true); // vel は元 hit と同値
+      });
+
+      it("(c) 同一コードが続く境界では切らない（無駄な再アタックを作らない）", () => {
+        const same = [{ root: 0, quality: "", start: 0, dur: 2 }, { root: 0, quality: "", start: 2, dur: 2 }];
+        const notes = resolveChordPattern(pad({ followChords: true }), same, 0);
+        expect(notes.length).toBe(3);
+        expect(notes.every((n) => n.start === 0 && n.dur === 4)).toBe(true);
+        // 「切らない」出力は followChords 無しの出力と完全一致
+        expect(JSON.stringify(notes)).toBe(JSON.stringify(resolveChordPattern(pad(), same, 0)));
+      });
+
+      it("(c') 同一コードを挟んで先に進む＝変わる境界だけで切る（C C G ＝2セグメント）", () => {
+        const chords = [
+          { root: 0, quality: "", start: 0, dur: 1 }, { root: 0, quality: "", start: 1, dur: 1 },
+          { root: 7, quality: "", start: 2, dur: 2 },
+        ];
+        const notes = resolveChordPattern(pad({ followChords: true }), chords, 0);
+        expect([...new Set(notes.map((n) => n.start))].sort((a, b) => a - b)).toEqual([0, 2]);
+        expect(notes.filter((n) => n.start === 0).every((n) => n.dur === 2)).toBe(true);
+        expect(notes.filter((n) => n.start === 2).every((n) => n.dur === 2)).toBe(true);
+      });
+
+      it("(c'') 同一ルート/質でもオンベースが違えば別コード＝切る（C → C/E）", () => {
+        const chords = [{ root: 0, quality: "", start: 0, dur: 2 }, { root: 0, quality: "", start: 2, dur: 2, bass: 4 }];
+        const notes = resolveChordPattern(pad({ followChords: true }), chords, 0);
+        expect([...new Set(notes.map((n) => n.start))].sort((a, b) => a - b)).toEqual([0, 2]);
+        expect(Math.min(...notes.filter((n) => n.start === 2).map((n) => n.pitch)) % 12).toBe(4); // E が最低音
+      });
+
+      it("(d) 分数コード：セグメントごとに最低音が追従（無いセグメントには足さない）", () => {
+        const notes = resolveChordPattern(pad({ followChords: true }), [C0, GonB2], 0);
+        const seg1 = notes.filter((n) => n.start === 0);
+        const seg2 = notes.filter((n) => n.start === 2);
+        expect(seg1.length).toBe(3); // C はオンベース無し＝足さない
+        expect(seg2.length).toBe(4); // G/B ＝voicing 3声＋最低音 B
+        const low2 = Math.min(...seg2.map((n) => n.pitch));
+        expect(((low2 % 12) + 12) % 12).toBe(11); // B が最低音
+        expect(low2).toBeLessThan(Math.min(...seg2.filter((n) => n.pitch !== low2).map((n) => n.pitch)));
+        // 逆向き（分数→素）＝2つ目のセグメントには足さない
+        const rev = resolveChordPattern(pad({ followChords: true }), [{ root: 0, quality: "", start: 0, dur: 2, bass: 4 }, G2], 0);
+        expect(rev.filter((n) => n.start === 0).length).toBe(4);
+        expect(rev.filter((n) => n.start === 2).length).toBe(3);
+      });
+
+      it("(e) arp モードでは followChords があっても不変（bit）", () => {
+        const base = { mode: "arp" as const, voicing: { tones: ["R", "3", "5"] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0, arpDir: "up" as const }, steps: 16, hits: [{ step: 0, dur: 8 }, { step: 8, dur: 8 }] };
+        expect(JSON.stringify(resolveChordPattern({ ...base, followChords: true }, [C0, G2], 0)))
+          .toBe(JSON.stringify(resolveChordPattern(base, [C0, G2], 0)));
+      });
+
+      it("(e') ギター弦順ロール／アップストローク経路では無効（当面・bit）", () => {
+        const roll = { mode: "strum" as const, voicing: { tones: [] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0, top: 72, style: "guitar" as const, strumMs: 20 }, steps: 16, hits: [{ step: 0, dur: 16 }] };
+        expect(JSON.stringify(resolveChordPattern({ ...roll, followChords: true }, [C0, G2], 0, 120)))
+          .toBe(JSON.stringify(resolveChordPattern(roll, [C0, G2], 0, 120)));
+        const up = { ...roll, voicing: { ...roll.voicing, strumMs: 0 }, hits: [{ step: 0, dur: 16, dir: "U" as const }] };
+        expect(JSON.stringify(resolveChordPattern({ ...up, followChords: true }, [C0, G2], 0, 120)))
+          .toBe(JSON.stringify(resolveChordPattern(up, [C0, G2], 0, 120)));
+      });
+
+      it("(f) つんのめり hit と共存＝先取り済みの境界では切らない", () => {
+        const chords = [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 7, quality: "", start: 4, dur: 4 }];
+        const content = pad({ steps: 32, hits: [{ step: 14, dur: 4 }], followChords: true }); // 3.5拍から1拍＝4拍を跨ぐ
+        const notes = resolveChordPattern(content, chords, 0);
+        // 先取りで既に G＝境界(4拍)で切る理由が無い＝followChords 無しと bit 一致
+        expect(JSON.stringify(notes)).toBe(JSON.stringify(resolveChordPattern(pad({ steps: 32, hits: [{ step: 14, dur: 4 }] }), chords, 0)));
+        expect(notes.every((n) => n.start === 3.5 && n.dur === 1)).toBe(true);
+      });
+
+      it("(f') つんのめりの先＝さらに変わる境界では切る（先取りは最初のアタックのみ）", () => {
+        // C(0-4) F(4-1) G(5-3)。step14=3.5拍から2拍（3.5→5.5）。先取り＝4拍の F。境界5拍で G へ切り替え。
+        const chords = [
+          { root: 0, quality: "", start: 0, dur: 4 }, { root: 5, quality: "", start: 4, dur: 1 },
+          { root: 7, quality: "", start: 5, dur: 3 },
+        ];
+        const notes = resolveChordPattern(pad({ steps: 32, hits: [{ step: 14, dur: 8 }], followChords: true }), chords, 0);
+        const s1 = notes.filter((n) => n.start === 3.5), s2 = notes.filter((n) => n.start === 5);
+        expect(s1.length).toBe(3);
+        expect(s1.every((n) => n.dur === 1.5)).toBe(true); // 3.5→5拍
+        expect(new Set(s1.map((n) => ((n.pitch % 12) + 12) % 12))).toEqual(new Set([5, 9, 0])); // F A C（先取り）
+        expect(s2.every((n) => n.dur === 0.5)).toBe(true); // 5→5.5拍
+        expect(new Set(s2.map((n) => ((n.pitch % 12) + 12) % 12))).toEqual(new Set([7, 11, 2])); // G B D
+        expect(notes.filter((n) => n.start === 4).length).toBe(0); // 先取り済みの4拍では切らない
+      });
+
+      it("(g) 音の開始/終端ちょうどのコード境界では切らない（開区間・端数）", () => {
+        // 境界が hit の start(2拍) と end(4拍) にぴったり＝跨いでいない＝分割ゼロ＝bit 一致
+        const chords = [{ root: 0, quality: "", start: 0, dur: 2 }, { root: 7, quality: "", start: 2, dur: 2 }, { root: 5, quality: "", start: 4, dur: 2 }];
+        const c = pad({ steps: 32, hits: [{ step: 8, dur: 8 }] }); // 2拍から2拍＝2→4
+        expect(JSON.stringify(resolveChordPattern({ ...c, followChords: true }, chords, 0)))
+          .toBe(JSON.stringify(resolveChordPattern(c, chords, 0)));
+      });
+
+      it("(h) 左手(lh)は followChords でも従来どおり（既に anchor 再ボイシング）＝右手だけ増える", () => {
+        const base = { mode: "strum" as const, voicing: { tones: [] as ("R" | "3" | "5" | "7")[], openClose: "close" as const, octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 16 }], lh: { mode: "root" as const } };
+        const plain = resolveChordPattern(base, [C0, G2], 0);
+        const follow = resolveChordPattern({ ...base, followChords: true }, [C0, G2], 0);
+        const lhOf = (ns: import("../src/music").Note[]) => JSON.stringify(ns.filter((n) => n.vel === 106));
+        expect(lhOf(follow)).toBe(lhOf(plain)); // LH 部分は不変
+        expect(follow.filter((n) => n.vel !== 106).length).toBe(plain.filter((n) => n.vel !== 106).length * 2); // RH が2セグメントへ
+      });
+
+      // ── 追補（2026-08-02 レビュー）：型辞書の LH は content.lh={mode:"custom"} で運ばれる＝hit 開始時点の
+      //    コード固定だと「RH は追従・LH の白玉Rは旧ルート」で濁る。custom も同じ境界分割の対象。
+      const lhWhole = (over: Partial<import("../src/music").ChordPatternContent> = {}): import("../src/music").ChordPatternContent =>
+        ({ mode: "strum", voicing: { tones: [], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 16 }],
+          lh: { mode: "custom", hits: [{ step: 0, dur: 16, deg: "R" }] }, ...over });
+      const lhOnly = (ns: import("../src/music").Note[]) => ns.filter((n) => n.vel === 106);
+
+      it("(i) custom LH 白玉R×2拍替わり＝LH も境界で切れて新ルートへ追従（RH と切れ目が揃う）", () => {
+        const notes = resolveChordPattern(lhWhole({ followChords: true }), [C0, G2], 0);
+        const lh = lhOnly(notes);
+        expect(lh.map((n) => [n.pitch, n.start, n.dur])).toEqual([[36, 0, 2], [43, 2, 2]]); // C2→G2（左手窓 36..48）
+        // RH の切れ目と同じ拍で切れている（濁りの解消＝そもそもの狙い）
+        expect([...new Set(notes.map((n) => n.start))].sort((a, b) => a - b)).toEqual([0, 2]);
+      });
+
+      it("(i') custom LH の度数はセグメントごとに再解決（5度・vel は全セグメント同値）", () => {
+        const c = lhWhole({ followChords: true, lh: { mode: "custom", hits: [{ step: 0, dur: 16, deg: "5", vel: 90 }] } });
+        const lh = resolveChordPattern(c, [C0, { root: 9, quality: "m", start: 2, dur: 2 }], 0).filter((n) => n.vel === 90);
+        expect(lh.map((n) => [n.pitch, n.start, n.dur])).toEqual([[43, 0, 2], [45 + 7 - 12, 2, 2]]); // C の5度=G2(43)／Am の5度=E2(40)
+      });
+
+      it("(ii) followChords 無しの custom LH は従来出力と JSON 一致（bit）", () => {
+        const lh = lhOnly(resolveChordPattern(lhWhole(), [C0, G2], 0));
+        expect(JSON.stringify(lh)).toBe('[{"pitch":36,"start":0,"dur":4,"vel":106}]'); // 実装前の golden＝1音のまま
+      });
+
+      it("(iii) preset 経路（root/root5/oct）は followChords が有っても出力不変（既に anchor 再ボイシング）", () => {
+        for (const mode of ["root", "root5", "oct"] as const) {
+          const base = lhWhole({ lh: { mode } });
+          expect(JSON.stringify(lhOnly(resolveChordPattern({ ...base, followChords: true }, [C0, G2], 0))))
+            .toBe(JSON.stringify(lhOnly(resolveChordPattern(base, [C0, G2], 0))));
+        }
+      });
+    });
   });
 
   describe("playback scheduling (#57)", () => {

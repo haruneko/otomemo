@@ -8,6 +8,7 @@ import { EditorHeader } from "./EditorHeader";
 import { RelationsPanel } from "./RelationsPanel";
 import { CowPrompt } from "./CowPrompt";
 import { api, type Neta } from "../api";
+import type { ContextAuditionCtx } from "../contextAudition";
 
 export function NetaDialog({
   neta,
@@ -50,6 +51,26 @@ export function NetaDialog({
       alive = false;
     };
   }, [neta.id]);
+  // アレンジS1「文脈試聴」（design「### アレンジS1＝写像規則の契約」）：コード楽器を**セクションから潜って**開いた
+  // ときだけ、親セクションの合成文脈（子ツリー＋key/mode/tempo/meter/レーンミュート）を1回引いて下ろす。
+  // 親は既存 prop の parentId（navStack の直上＝潜り元）＝新しいグローバル状態も context API も作らない。
+  // 失敗/未提供/トップ開き（parentId 無し）＝null のまま＝▶は従来のワンショット試聴（純追加・bit一致）。
+  const [auditionCtx, setAuditionCtx] = useState<ContextAuditionCtx | null>(null);
+  useEffect(() => {
+    if (!parentId || !f.isChordPat) {
+      setAuditionCtx(null);
+      return;
+    }
+    let alive = true;
+    Promise.resolve(api.getComposition?.(parentId))
+      .then((node) => {
+        if (alive && node) setAuditionCtx({ section: node.neta, children: node.children, childNetaId: neta.id });
+      })
+      .catch(() => null); // 引けない＝文脈なし＝ワンショットへ穏当に縮退
+    return () => {
+      alive = false;
+    };
+  }, [parentId, neta.id, f.isChordPat]);
   // メインペーンの中身として描画（design #19：選択中netaの種類で中身が入れ替わる）。
   return (
     <div
@@ -160,6 +181,7 @@ export function NetaDialog({
         cow={ed.cow} /* CoW ガード（S2 Fix C）＝section の bars/レーン設定の直接保存も安全弁を通す */
         tp={{ lineRef: ed.tp.lineRef, scrollerRef: ed.tp.scrollerRef, beatRef: ed.tp.beatRef, playing: ed.tp.playing }}
         activeProject={activeProject} /* Task1i：PatternImportDialog の Source 絞りへ下ろす（純追加） */
+        auditionCtx={auditionCtx} /* アレンジS1：コード楽器の▶試聴をセクション文脈のループ試聴へ格上げ（純追加） */
       />
       {f.isMusic && (
         <TransportBar

@@ -670,6 +670,12 @@ export interface ChordPatternContent {
   lh?: ChordLhContent; // S3 左手土台（keyboard 解決時のみ実音化・未定義＝左手なし＝bit一致）
   patternId?: string; // 修理#1（監査違反③）：適用した型辞書ID（来歴・選び直しの現在型ハイライト）。未指定＝素の手編集/従来ネタ＝bit一致
   patternEdited?: true; // 修理#3 決定④：patternId 持ちネタを手編集した印（帯「いま：<型>（改）」）。patternId が在る時だけ付与＝patternId 無しネタは不変＝bit一致
+  // アレンジS1 contract③（2026-08-02・正典＝design「アレンジS1＝写像規則の契約」）：発音中の音がコード境界を
+  // 跨いだら**境界で切り、残り長さを新コードで再ボイシングして置き直す**（白玉テンプレ×2拍替わりコードの規則。
+  // 現行はアタック時点のコード固定＝2つ目のコードが鳴らない）。未指定＝キーを生やさない＝既存全ネタと bit 一致。
+  // strum のみ（arp／ギター弦順ロール・アップストロークは当面無効＝S1 はオルガン/keyboard の strum 中心）。
+  // オルガンの no-lift（切らずに指替え）は再アタックで近似＝試聴音源に投資しない（枝3と整合）。
+  followChords?: true;
 }
 const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
 // #29 P2 コード楽器の3値ベロシティ語彙（普通=vel 省略→下流 vel??100）。耳較正で調整可＝保存データは実値なので既存不変。
@@ -824,9 +830,28 @@ function lhModePitches(mode: "root" | "root5" | "oct", rootPc: number): number[]
   if (mode === "oct") return [base, base + 12];
   return [base];
 }
+// LH の1音のピッチ＝度数をコードに当てて左手窓へ収める（custom 経路の共通部＝セグメントごとに呼ぶ）。
+function lhPitchFor(deg: string, ch: ChordEntry | null, key: number): number {
+  const rootPc = ch ? ((ch.root % 12) + 12) % 12 : ((key % 12) + 12) % 12;
+  const quality = ch ? ch.quality : "";
+  let pitch = lhBand(rootPc) + degreeInterval(deg, quality);
+  if (deg !== "R" && deg !== "5" && deg !== "8") {
+    // LIL ガード：色音(3/7 等＝非 R/5/8)は C3(48)未満で濁る＝1oct 上げる。
+    while (pitch < LH_HI) pitch += 12;
+  } else {
+    // L0（案A・研究doc 2026-07-22-pattern-quality-root-cause §3・H-e）：構造音 R/5/8 が LH 窓上限(C3=48)を
+    //   超えたら 1oct 下げて LH 窓（C2-C3）へ fold。従来は上方向無制限で 5度/8va が root の上に積まれ
+    //   RH 最上声と同音衝突していた（R は常に lhBand<48＝fold 発火せず不変＝bit 一致）。
+    while (pitch > LH_HI) pitch -= 12;
+  }
+  return pitch;
+}
 // content.lh を進行に当てて左手 notes へ。preset＝小節頭(16step)＋コードチェンジを anchor に白玉。
 // custom＝hits を度数解決（LIL ガード：色音が C3 未満なら 1oct 上げ）。呼び出しは keyboard 解決時のみ。
-function resolveLh(lh: ChordLhContent, steps: number, chords: ChordEntry[], key: number): Note[] {
+// followChords（S1 contract③・design 2026-08-02 追記「LH も対象」）＝custom hits にも RH と同じ境界分割を
+// 適用し、各セグメントで度数を再解決（R＝新コードのルートへ追従）。RH だけ追従して LH が旧ルートに残ると濁る。
+// preset は既に anchor＝コードチェンジで再ボイシング＝対象外。未指定＝custom も従来と bit 一致（分割を通さない）。
+function resolveLh(lh: ChordLhContent, steps: number, chords: ChordEntry[], key: number, followChords = false): Note[] {
   const k = ((key % 12) + 12) % 12;
   const out: Note[] = [];
   if (lh.mode === "custom") {
@@ -836,20 +861,12 @@ function resolveLh(lh: ChordLhContent, steps: number, chords: ChordEntry[], key:
       const dur = Math.round(Math.max(1, h.dur) * BASS_STEP_TO_BEAT * 1000) / 1000;
       if (dur <= 0) continue;
       const ch = bassChordAt(start, chords);
-      const rootPc = ch ? ((ch.root % 12) + 12) % 12 : k;
-      const quality = ch ? ch.quality : "";
       const deg = h.deg ?? "R";
-      let pitch = lhBand(rootPc) + degreeInterval(deg, quality);
-      if (deg !== "R" && deg !== "5" && deg !== "8") {
-        // LIL ガード：色音(3/7 等＝非 R/5/8)は C3(48)未満で濁る＝1oct 上げる。
-        while (pitch < LH_HI) pitch += 12;
-      } else {
-        // L0（案A・研究doc 2026-07-22-pattern-quality-root-cause §3・H-e）：構造音 R/5/8 が LH 窓上限(C3=48)を
-        //   超えたら 1oct 下げて LH 窓（C2-C3）へ fold。従来は上方向無制限で 5度/8va が root の上に積まれ
-        //   RH 最上声と同音衝突していた（R は常に lhBand<48＝fold 発火せず不変＝bit 一致）。
-        while (pitch > LH_HI) pitch -= 12;
-      }
-      out.push({ pitch, start, dur, vel: h.vel ?? LH_VEL });
+      const vel = h.vel ?? LH_VEL;
+      // 分割は RH と同じ chordSegments（同一コード判定＝bass 込みの sig）＝RH と切れ目が揃う。
+      // ※LH は白玉＝つんのめり先取りの対象外＝先頭セグメントのコードは start 時点のまま（従来どおり）。
+      const segs = followChords ? chordSegments(start, dur, ch, chords, k) : [{ start, dur, ch }];
+      for (const sg of segs) out.push({ pitch: lhPitchFor(deg, sg.ch, k), start: sg.start, dur: sg.dur, vel });
     }
     return out;
   }
@@ -875,6 +892,35 @@ function resolveLh(lh: ChordLhContent, steps: number, chords: ChordEntry[], key:
   return out;
 }
 
+// ── アレンジS1 contract③ followChords ＝発音中のコード境界で音を切り分ける（正準＝design「アレンジS1」）──
+// 1音（start..start+dur）を、跨いだコード境界で複数セグメントへ割る。境界＝chords[] 各エントリの開始拍のうち
+// **開区間 (start, start+dur)** に入るもの（音の頭/終端ぴったりは跨いでいない＝切らない）。
+// 実際にコードが変わる境界だけ切る＝解決した (root, quality, bass) が現セグメントと同一なら通過（同一コード連打の
+// progression で無駄な再アタックを作らない）。極小セグメント（<1e-6 拍）は作らない＝元の音を削らず通過。
+// 先頭セグメントのコードは呼び出し側が渡す（＝つんのめり先取り済みのコード。先取りは最初のアタックのみに適用）。
+function chordSegments(start: number, dur: number, firstCh: ChordEntry | null, chords: ChordEntry[], key: number): { start: number; dur: number; ch: ChordEntry | null }[] {
+  const end = Math.round((start + dur) * 1000) / 1000;
+  const k = ((key % 12) + 12) % 12;
+  // 同一コード判定＝実音化に効く3要素だけ（start/dur は無関係）。null＝キーの根音・質なし。
+  const sig = (c: ChordEntry | null) =>
+    c ? `${((Math.round(c.root) % 12) + 12) % 12}|${c.quality}|${c.bass != null ? ((Math.round(c.bass) % 12) + 12) % 12 : "-"}` : `${k}||-`;
+  const bounds = [...new Set(chords.map((c) => Math.round(c.start * 1000) / 1000))]
+    .filter((b) => b > start + 1e-9 && b < end - 1e-9)
+    .sort((a, b) => a - b);
+  const segs = [{ start, dur, ch: firstCh }];
+  for (const b of bounds) {
+    const cur = segs[segs.length - 1]!;
+    const curDur = Math.round((b - cur.start) * 1000) / 1000;
+    const newDur = Math.round((end - b) * 1000) / 1000;
+    if (curDur < 1e-6 || newDur < 1e-6) continue; // 端数＝切らない（極小セグメントを作らない）
+    const ch = bassChordAt(b, chords);
+    if (sig(ch) === sig(cur.ch)) continue; // コードが実際には変わらない境界＝切らない
+    cur.dur = curDur;
+    segs.push({ start: b, dur: newDur, ch });
+  }
+  return segs;
+}
+
 // コード楽器パターンをコードに当てて実音 notes へ（strum=和音ブロック／arp=構成音を巡回）。相対型＝進行に解決。
 // tempo（BPM）＝弦順ロール（style:"guitar"＋strum＋strumMs>0）の ms→拍換算に使う。未指定/無効なら roll 無し
 // （＝ストレート同時発音＝bit一致）＝レンダ境界（buildPlayback）でテンポが既知の場所からのみ流す（feel 層と同流儀）。
@@ -887,6 +933,9 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
   const strumMs = v.strumMs ?? 0;
   const rollActive = v.style === "guitar" && mode === "strum" && strumMs > 0 && typeof tempo === "number" && Number.isFinite(tempo) && tempo > 0;
   const rollBeatPerVoice = rollActive ? (strumMs * tempo!) / 60000 : 0; // ms→拍＝ms/1000 × BPM/60
+  // contract③ followChords（S1）：strum の素経路のみ。arp／ギター弦順ロール／アップストロークでは無効
+  // （当面＝S1 はオルガン/keyboard の strum 中心。keyboard に弦順ロールは発火しない）。
+  const followChords = content?.followChords === true && mode !== "arp" && !rollActive;
   const out: Note[] = [];
   let arpIdx = 0, arpGrp = -1; // arpGrp＝arpReset の区切り番号（変わったら arpIdx を頭へ戻す）
   for (let h = 0; h < hits.length; h++) {
@@ -942,21 +991,32 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
         out.push({ pitch: p, start: st, dur, ...velSpread });
       });
     } else {
-      for (const p of voiced) out.push({ pitch: p, start, dur, ...velSpread });
-      // 分数コード（決定B）：strum はオンベースを voicing の下に1音足す＝最低音が bass に。
-      if (ch && ch.bass != null) {
-        const bpc = ((ch.bass % 12) + 12) % 12;
-        const lowest = Math.min(...voiced);
-        let bp = Math.floor(lowest / 12) * 12 + bpc;
-        while (bp >= lowest) bp -= 12; // 確実にコードより下へ
-        out.push({ pitch: bp, start, dur, ...velSpread });
+      // 素の strum（keyboard 全般＋ギターのダウン・ロール無し）＝和音ブロック。
+      // contract③ followChords：跨いだコード境界で切り、残り長さを新コードで再ボイシングして置き直す。
+      // 未指定＝1セグメント＝従来と同一の (start, dur, ch)＝bit 一致。
+      const segs = followChords ? chordSegments(start, dur, ch, chords, key) : [{ start, dur, ch }];
+      for (let si = 0; si < segs.length; si++) {
+        const sg = segs[si]!;
+        // 先頭セグメントは既算出の voiced をそのまま使う（voiceChord は純関数＝再計算しても同値・無駄を省く）。
+        const sVoiced = si === 0 ? voiced : voiceChord(sg.ch ? sg.ch.root : ((key % 12) + 12) % 12, sg.ch ? sg.ch.quality : "", v);
+        for (const p of sVoiced) out.push({ pitch: p, start: sg.start, dur: sg.dur, ...velSpread });
+        // 分数コード（決定B）：strum はオンベースを voicing の下に1音足す＝最低音が bass に。
+        // followChords ではセグメントごとに追従（新コードに bass が無ければ足さない）。
+        if (sg.ch && sg.ch.bass != null) {
+          const bpc = ((sg.ch.bass % 12) + 12) % 12;
+          const lowest = Math.min(...sVoiced);
+          let bp = Math.floor(lowest / 12) * 12 + bpc;
+          while (bp >= lowest) bp -= 12; // 確実にコードより下へ
+          out.push({ pitch: bp, start: sg.start, dur: sg.dur, ...velSpread });
+        }
       }
     }
   }
   // 左手（S3）：resolved style が keyboard のときだけ content.lh を実音化して土台を足す（guitar は無視）。
   // lh 未定義＝何も足さない＝bit一致。LH は白玉＝strum ロールの対象外。
   if (content?.lh && v.style !== "guitar") {
-    out.push(...resolveLh(content.lh, content?.steps ?? 16, chords, key));
+    // contract③ 追補：custom LH も境界で切って度数を再解決（followChords 時のみ・preset は元から追従）。
+    out.push(...resolveLh(content.lh, content?.steps ?? 16, chords, key, followChords));
   }
   return out;
 }

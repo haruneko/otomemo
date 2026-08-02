@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, type Ref, useRef, useState } from "
 import { type ChordPatternContent, type ChordLhContent, type ChordEntry, type PlaybackHandle, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, notesForContent, buildPlayback, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
 import { previewNote } from "../audio";
 import { startPlayback } from "../playback";
+import { contextAuditionPlan, type ContextAuditionCtx } from "../contextAudition";
 import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -170,6 +171,7 @@ export function ChordPatternEditor({
   playheadRef,
   scrollerRef,
   activeProject,
+  auditionCtx,
 }: {
   pattern: ChordPatternContent;
   onChange: (p: ChordPatternContent) => void;
@@ -182,6 +184,10 @@ export function ChordPatternEditor({
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
   activeProject?: string; // Task1i：Source（プロジェクト軸）絞りを PatternImportDialog へ下ろす（純追加）。
+  // アレンジS1「文脈試聴」（design「### アレンジS1＝写像規則の契約」）：このネタが置かれているセクションの文脈
+  // （親セクション＋子配置＋自分の id）。**あるときだけ**▶試聴が「候補で差し替えたセクション合成のループ再生」へ
+  // 格上げされる。未配線（単体で開いた／ベース・ドラム経由）＝従来のワンショット試聴のまま＝bit一致。
+  auditionCtx?: ContextAuditionCtx | null;
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
   const ppPlay = useRef<PlaybackHandle | null>(null);
@@ -190,6 +196,13 @@ export function ChordPatternEditor({
   // 試聴＝ネタ preview_chords（あれば）or プレビュー進行に当てて resolveChordPattern で実音化（tempo/program 込み）。
   const auditionPattern = (content: unknown) => {
     ppPlay.current?.stop();
+    // S1 文脈試聴：セクション文脈があれば「編集中ネタを候補で差し替えたセクション合成」をループ再生
+    //   ＝主旋律と一緒に鳴る（design「文脈試聴」）。文脈が無い（単体編集・未配置）＝null＝下のワンショットへ。
+    const ctxPlan = auditionCtx ? contextAuditionPlan(auditionCtx, content) : null;
+    if (ctxPlan) {
+      void startPlayback(ctxPlan.plan, { vocalMode: "peek", loop: ctxPlan.loop }).then((h) => { ppPlay.current = h; });
+      return;
+    }
     const chords = previewChords?.length ? previewChords : previewChordsForKey(keyPc ?? 0);
     const ns = notesForContent("chord_pattern", content, { key: keyPc ?? 0, chords, tempo, program: program ?? (content as ChordPatternContent).program });
     if (ns.length) void startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: tempo ?? 120, program }), { vocalMode: "peek" }).then((h) => { ppPlay.current = h; });
