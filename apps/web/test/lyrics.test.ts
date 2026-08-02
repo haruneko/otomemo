@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitMora, moraLines, setSyllable, nextNoteIndex } from "../src/lyrics";
+import { splitMora, moraLines, setSyllable, nextNoteIndex, prevNoteIndex } from "../src/lyrics";
 import type { Note } from "../src/music";
 
 describe("lyrics mora", () => {
@@ -18,7 +18,7 @@ describe("lyrics mora", () => {
 });
 
 // 詞モード（1音ずつリタッチ・PianoRoll 歌詞編集モードの純ロジック）。
-describe("setSyllable / nextNoteIndex（詞モード）", () => {
+describe("setSyllable / nextNoteIndex / prevNoteIndex（詞モードの送りバー ◀▶）", () => {
   const N = (start: number, syllable?: string): Note => ({ pitch: 60, start, dur: 1, syllable });
 
   it("setSyllable：対象だけ差し替え・非破壊（他ノート/元配列は不変）", () => {
@@ -53,5 +53,30 @@ describe("setSyllable / nextNoteIndex（詞モード）", () => {
     expect(nextNoteIndex(notes, 1)).toBeNull();
     expect(nextNoteIndex(notes, -1)).toBeNull();
     expect(nextNoteIndex(notes, 9)).toBeNull();
+  });
+
+  // ◀（確定して前の音符へ）＝誤送りからの復帰（design §31-9・§31-11 の16 (a)＝候補2）。
+  it("prevNoteIndex：時間順（start昇順）で前の音符の配列インデックス", () => {
+    // 配列順は時間順と違う（[2拍, 0拍, 1拍]）→ 2拍(idx0)の前は 1拍(idx2)、1拍の前は 0拍(idx1)。
+    const notes = [N(2), N(0), N(1)];
+    expect(prevNoteIndex(notes, 0)).toBe(2);
+    expect(prevNoteIndex(notes, 2)).toBe(1);
+    expect(prevNoteIndex(notes, 1)).toBeNull(); // 先頭＝前なし
+  });
+
+  it("prevNoteIndex：同時刻は配列順・範囲外は null", () => {
+    const notes = [N(0), N(0)];
+    expect(prevNoteIndex(notes, 1)).toBe(0);
+    expect(prevNoteIndex(notes, 0)).toBeNull();
+    expect(prevNoteIndex(notes, -1)).toBeNull();
+    expect(prevNoteIndex(notes, 9)).toBeNull();
+  });
+
+  it("prevNoteIndex と nextNoteIndex は逆向きで往復する（◀▶の対称）", () => {
+    const notes = [N(2), N(0), N(1)];
+    for (const i of [0, 1, 2]) {
+      const nx = nextNoteIndex(notes, i);
+      if (nx != null) expect(prevNoteIndex(notes, nx)).toBe(i);
+    }
   });
 });

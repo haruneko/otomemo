@@ -44,9 +44,24 @@ export function setSyllable(notes: Note[], idx: number, val: string): Note[] {
  * 詞モードの「確定で次の音符へ自動フォーカス」＝連続リタッチの足。
  */
 export function nextNoteIndex(notes: { start: number }[], idx: number): number | null {
+  return stepNoteIndex(notes, idx, 1);
+}
+
+/**
+ * 時間順で idx の「前の音符」の配列インデックスを返す。無ければ null。
+ * 詞モードの ◀（確定して前へ）＝**誤って送ってしまったときの復帰**（design §31-9・§31-11 の16 (a)＝候補2）。
+ */
+export function prevNoteIndex(notes: { start: number }[], idx: number): number | null {
+  return stepNoteIndex(notes, idx, -1);
+}
+
+/** 時間順（start昇順・同時は配列順）に並べ、idx から dir（±1）だけ動いた先の配列インデックス。端は null。 */
+function stepNoteIndex(notes: { start: number }[], idx: number, dir: 1 | -1): number | null {
   if (idx < 0 || idx >= notes.length) return null;
   const order = notes.map((_, i) => i).sort((a, b) => notes[a]!.start - notes[b]!.start || a - b);
   const pos = order.indexOf(idx);
-  if (pos < 0 || pos + 1 >= order.length) return null;
-  return order[pos + 1]!;
+  if (pos < 0) return null;
+  const to = pos + dir;
+  if (to < 0 || to >= order.length) return null;
+  return order[to]!;
 }

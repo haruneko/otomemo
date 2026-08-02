@@ -2028,6 +2028,15 @@
   color: #fff;
   border-color: var(--accent);
 }
+/* 送り（◀▶）は矢印1文字＝幅を詰める。360px で「◀｜音名・拍｜かな｜▶｜✕」が1行に収まること。 */
+.proll-lyric-retouch button[aria-label="syllable-prev"],
+.proll-lyric-retouch button[aria-label="syllable-commit"] {
+  padding: 4px 9px;
+}
+/* 先頭の音符では ◀ が効かない＝押せないことを見て分かる形にする（消さない＝並びが揺れない）。 */
+.proll-lyric-retouch button:disabled {
+  opacity: 0.4;
+}
 /* 詞モードで編集中の音符＝白枠（選択の黄枠と区別・1つだけ）。 */
 .proll-note.lyr-edit {
   outline: 2px solid #f0f2f5;

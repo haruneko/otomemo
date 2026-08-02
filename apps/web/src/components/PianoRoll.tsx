@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { beatsPerBar, pitchName, pc, isBlack, scalePcSet, type Note } from "../music";
 import { previewNote } from "../audio";
-import { flowLyric, splitMora, setSyllable, nextNoteIndex, placeMoras, phraseStatus, kanaEditForNote, upsertEdit, reattachEdits, type LyricLayer } from "../lyrics";
+import { flowLyric, splitMora, setSyllable, nextNoteIndex, prevNoteIndex, placeMoras, phraseStatus, kanaEditForNote, upsertEdit, reattachEdits, type LyricLayer } from "../lyrics";
 // 控えが古いか／効いている読み＝music-core（web の lyrics.ts はまだ再輸出していないので直に取る）。
 import { effectiveReading, isReadingStale } from "@cm/music-core";
 import { api, type SplitCandidatesResponse } from "../api";
@@ -141,13 +141,28 @@ export function PianoRoll({
   const [lyrTarget, setLyrTarget] = useState<number | null>(null);
   const [lyrVal, setLyrVal] = useState("");
   const lyrInputRef = useRef<HTMLInputElement>(null);
+  // 編集中の音符の矩形＝画面外なら自動で追う（送りバーで送り続けると対象がロールの外へ出ていく）。
+  const lyrNoteRef = useRef<HTMLButtonElement>(null);
   // 字余りチップから「音符を割って合わせる」ボタンまで導く（Fableレビュー②）＝直通の scrollIntoView 先。
   const splitBtnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (mode !== "lyric") setLyrTarget(null); // 詞モードを離れたら編集対象を解除
   }, [mode]);
-  /** 入力中の値を対象音符へ確定（空=クリア・「ー」=メリスマ可）。advance=true なら時間順で次の音符へフォーカス。 */
-  function lyrCommit(advance: boolean) {
+  useEffect(() => {
+    if (mode !== "lyric" || lyrTarget == null) return;
+    // 対象が変わったら、その音符が見えていなければ寄せる（block:"nearest"＝見えているときは動かさない）。
+    // jsdom には scrollIntoView が無い環境があるので存在を確かめてから呼ぶ（?. の二段）。
+    const id = requestAnimationFrame(() =>
+      lyrNoteRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest", inline: "center" }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [mode, lyrTarget]);
+  /**
+   * 入力中の値を対象音符へ確定（空=クリア・「ー」=メリスマ可）。
+   * `dir` ＝確定したあとどこへ行くか：`1`=時間順で次へ（▶）／`-1`=前へ（◀・誤送りの復帰）／`0`=動かない。
+   * 端（次/前が無い）＝▶は編集終了・◀は動かない（ボタン自体が disabled なので通常は届かない）。
+   */
+  function lyrCommit(dir: 1 | -1 | 0) {
     if (lyrTarget == null || lyrTarget >= notes.length) return;
     // 句に覆われた音符へ打った値は**直しとして句へ取り込む**（design §31-6）。
     // 直書きだけだと、機械が読みを写し直した瞬間に消える＝人が打ったものが黙って捨てられる。
@@ -159,10 +174,10 @@ export function PianoRoll({
     }
     const updated = setSyllable(notes, lyrTarget, lyrVal);
     if ((notes[lyrTarget]!.syllable ?? "") !== (updated[lyrTarget]!.syllable ?? "")) onChange(updated);
-    if (!advance) return;
-    const nx = nextNoteIndex(notes, lyrTarget);
+    if (!dir) return;
+    const nx = dir === 1 ? nextNoteIndex(notes, lyrTarget) : prevNoteIndex(notes, lyrTarget);
     if (nx == null) {
-      setLyrTarget(null); // 最後の音符＝編集終了
+      if (dir === 1) setLyrTarget(null); // 最後の音符＝編集終了（◀は先頭で止まるだけ）
       return;
     }
     setLyrTarget(nx);
@@ -438,7 +453,7 @@ export function PianoRoll({
     if (mode === "lyric") {
       // 詞モード＝ノートは消さない（作成/移動/削除を無効化＝タップ競合の構造的解消）。
       // 別の音符をタップ＝入力中の値を先に確定してから対象を切替（打った値を失わない）。
-      if (lyrTarget != null && lyrTarget !== gi) lyrCommit(false);
+      if (lyrTarget != null && lyrTarget !== gi) lyrCommit(0);
       setLyrTarget(gi);
       setLyrVal(target.syllable ?? "");
       // rAF で確実にフォーカス（onChange 由来の再レンダ後でも input は同一要素）。
@@ -675,34 +690,66 @@ export function PianoRoll({
         </div>
       )}
       {enableLyric && mode === "lyric" && (
-        // 詞モード＝1音ずつリタッチ：固定入力バー（音符タップ→編集→確定で次へ）。一括は「流し込む」（他モード）と分業。
+        // 詞モード＝1音ずつリタッチ：固定入力バー（音符タップ→編集→▶で次へ）。一括は「流し込む」（他モード）と分業。
+        // 送りバー＝「◀｜音名・拍｜かな｜▶｜✕」（オーナー裁定 2026-08-02＝候補2・design §31-9・§31-11 の16 (a)）。
+        // **バーのボタンが正の口・物理キーは近道**＝Enter/Tab=▶・Shift+Enter/Shift+Tab=◀・Esc=✕。
+        // キーの無い環境（スマホ）で機能が欠けないよう、同じ動詞に二つの引き金を置く形にしてある。
         <div className="proll-lyric-retouch" aria-label="lyric-retouch">
-          <span className="muted">詞</span>
           {lyrTarget == null || lyrTarget >= notes.length ? (
-            <span className="muted lyr-hint">音符をタップして歌詞を編集</span>
+            <>
+              <span className="muted">詞</span>
+              {/* 押した直後にバー自身が手順を名乗る＝説明が title 属性だけ（スマホでは出ない）の穴を塞ぐ。 */}
+              <span className="muted lyr-hint">音符をタップ→かなを打つ→Enterか▶で次へ</span>
+            </>
           ) : (
             <>
+              <button
+                type="button"
+                aria-label="syllable-prev"
+                title="確定して前の音符へ（Shift+Enter）"
+                disabled={prevNoteIndex(notes, lyrTarget) == null}
+                onClick={() => lyrCommit(-1)}
+              >
+                ◀
+              </button>
               <span className="lyr-pos">{noteName(notes[lyrTarget]!.pitch)}・{notes[lyrTarget]!.start}拍</span>
               <input
                 ref={lyrInputRef}
                 type="text"
                 aria-label="syllable-input"
+                enterKeyHint="next"
                 placeholder="かな（空=消す・ー=のばす）"
                 value={lyrVal}
                 onChange={(e) => setLyrVal(e.target.value)}
                 onKeyDown={(e) => {
-                  // IME 変換確定の Enter では送らない（isComposing ガード）＝日本語入力で誤送を防ぐ。
-                  if (e.key === "Enter" && !(e.nativeEvent as KeyboardEvent).isComposing) lyrCommit(true);
+                  // IME 変換確定の Enter/Tab では送らない（isComposing ガード）＝日本語入力で誤送を防ぐ。
+                  if ((e.nativeEvent as KeyboardEvent).isComposing) return;
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault(); // Tab の既定のフォーカス移動を止める＝バーから出ていかない
+                    lyrCommit(e.shiftKey ? -1 : 1);
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    lyrCommit(0); // 打ちかけを確定してから閉じる（失わない）
+                    setLyrTarget(null);
+                  }
                 }}
               />
-              <button type="button" aria-label="syllable-commit" onClick={() => lyrCommit(true)}>
-                確定→次
+              <button
+                type="button"
+                aria-label="syllable-commit"
+                title="確定して次の音符へ（Enter）"
+                onClick={() => lyrCommit(1)}
+              >
+                ▶
               </button>
               <button
                 type="button"
                 aria-label="syllable-close"
+                title="編集を終える（Esc）"
                 onClick={() => {
-                  lyrCommit(false); // 打ちかけを確定してから閉じる（失わない）
+                  lyrCommit(0); // 打ちかけを確定してから閉じる（失わない）
                   setLyrTarget(null);
                 }}
               >
@@ -865,6 +912,8 @@ export function PianoRoll({
                   <button
                     key={gi}
                     type="button"
+                    // 詞モードで編集中の音符だけ ref を持つ＝送りで対象が画面外へ出たら寄せる（上の useEffect）。
+                    ref={mode === "lyric" && lyrTarget === gi ? lyrNoteRef : undefined}
                     aria-label={`note-${p}-${n.start}`}
                     className={
                       "proll-note" +

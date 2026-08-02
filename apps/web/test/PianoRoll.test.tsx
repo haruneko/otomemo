@@ -110,7 +110,8 @@ describe("PianoRoll", () => {
     );
     // 流し込み行は詞モード中は出ない（リタッチバーに切替・分業）
     expect(screen.queryByLabelText("lyric-draft")).toBeNull();
-    expect(screen.getByLabelText("lyric-retouch")).toHaveTextContent("音符をタップして歌詞を編集");
+    // 未選択のバーは手順を自分で名乗る（説明が title だけ＝スマホで出ない穴を塞ぐ・§31-11 の16 (a)）
+    expect(screen.getByLabelText("lyric-retouch")).toHaveTextContent("音符をタップ→かなを打つ→Enterか▶で次へ");
     await userEvent.click(screen.getByLabelText("note-60-0"));
     expect(onChange).not.toHaveBeenCalled(); // 削除しない（ノート編集無効化）
     expect(screen.getByLabelText("syllable-input")).toHaveValue("あ");

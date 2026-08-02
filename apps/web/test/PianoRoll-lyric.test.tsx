@@ -47,12 +47,12 @@ const fiveNotes = (): Note[] =>
   [0, 1, 2, 3, 4].map((i) => ({ pitch: 60 + i, start: i, dur: 1 }));
 
 /** 親が notes と lyric を持つ形（実機＝useNetaEditor の state と同じ持ち方）。 */
-function Harness({ notes0, lyric0 }: { notes0: Note[]; lyric0?: LyricLayer }) {
+function Harness({ notes0, lyric0, mode }: { notes0: Note[]; lyric0?: LyricLayer; mode?: "draw" | "lyric" }) {
   const [notes, setNotes] = useState<Note[]>(notes0);
   const [lyric, setLyric] = useState<LyricLayer | undefined>(lyric0);
   return (
     <>
-      <PianoRoll notes={notes} onChange={setNotes} enableLyric beats={16} lyric={lyric} onLyricChange={setLyric} />
+      <PianoRoll notes={notes} onChange={setNotes} enableLyric beats={16} lyric={lyric} onLyricChange={setLyric} mode={mode} />
       <pre data-testid="lyric-json">{JSON.stringify(lyric ?? null)}</pre>
       <pre data-testid="notes-json">{JSON.stringify(notes)}</pre>
     </>
@@ -588,5 +588,117 @@ describe("PianoRoll：歌詞は常時1行、書くときだけ開く", () => {
     expect(clear).toHaveTextContent("かなを消す");
     await userEvent.click(clear);
     await waitFor(() => expect(notesJson().every((n) => n.syllable === undefined)).toBe(true));
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// 詞モードの送りバー（design §31-9・オーナー裁定 2026-08-02＝§31-11 の16 (a)＝候補2）。
+// 「◀｜音名・拍｜かな｜▶｜✕」。**バーのボタンが正の口・物理キーは近道**＝キーの無い環境で機能が欠けない。
+// キー＝Enter/Tab=▶・Shift+Enter/Shift+Tab=◀・Esc=✕（IME 変換中は送らない）。
+// ───────────────────────────────────────────────────────────────────
+describe("PianoRoll：詞モードの送りバー（◀▶✕）", () => {
+  /** 3音（ド・レ・ミ＝0/1/2拍）にかなが載った状態。時間順の送りを見るのに使う。 */
+  const threeNotes = (): Note[] => [
+    { pitch: 60, start: 0, dur: 1, syllable: "あ" },
+    { pitch: 62, start: 1, dur: 1, syllable: "い" },
+    { pitch: 64, start: 2, dur: 1, syllable: "う" },
+  ];
+  const tapNote = (label: string) => userEvent.click(screen.getByLabelText(label));
+  const input = () => screen.getByLabelText("syllable-input") as HTMLInputElement;
+
+  it("バーは「◀｜音名・拍｜かな｜▶｜✕」の5つ＝送りは画面のボタンで足りる（キー無しでも欠けない）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-62-1");
+    expect(screen.getByLabelText("syllable-prev")).toHaveTextContent("◀");
+    expect(screen.getByLabelText("lyric-retouch")).toHaveTextContent("D4・1拍");
+    expect(input()).toHaveValue("い");
+    expect(screen.getByLabelText("syllable-commit")).toHaveTextContent("▶");
+    expect(screen.getByLabelText("syllable-close")).toHaveTextContent("✕");
+  });
+
+  it("かな欄は enterKeyHint=\"next\"＝スマホIMEの確定キー自体が「次へ」と名乗る", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-60-0");
+    expect(input()).toHaveAttribute("enterKeyHint", "next");
+  });
+
+  it("▶＝確定して次の音符へ（旧「確定→次」の後継）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-60-0");
+    await userEvent.clear(input());
+    await userEvent.type(input(), "か");
+    await userEvent.click(screen.getByLabelText("syllable-commit"));
+    expect(notesJson()[0]!.syllable).toBe("か"); // 確定した
+    expect(input()).toHaveValue("い"); // 次（1拍）へ移った
+  });
+
+  it("◀＝確定して前の音符へ（誤って送ってしまったときの復帰）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-64-2");
+    await userEvent.clear(input());
+    await userEvent.type(input(), "え");
+    await userEvent.click(screen.getByLabelText("syllable-prev"));
+    expect(notesJson()[2]!.syllable).toBe("え"); // 打った値は確定してから戻る
+    expect(input()).toHaveValue("い"); // 前（1拍）へ戻った
+    expect(screen.getByLabelText("lyric-retouch")).toHaveTextContent("D4・1拍");
+  });
+
+  it("先頭の音符では ◀ は押せない（並びは揺らさず、効かないことだけ見せる）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-60-0");
+    expect(screen.getByLabelText("syllable-prev")).toBeDisabled();
+    await tapNote("note-62-1");
+    expect(screen.getByLabelText("syllable-prev")).toBeEnabled();
+  });
+
+  it("Enter=▶・Shift+Enter=◀（物理キーは同じ動詞への近道）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-60-0");
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(input()).toHaveValue("い"); // 次へ
+    fireEvent.keyDown(input(), { key: "Enter", shiftKey: true });
+    expect(input()).toHaveValue("あ"); // 前へ戻った
+  });
+
+  it("Tab=▶・Shift+Tab=◀（既定のフォーカス移動は止める＝バーから出ていかない）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-62-1");
+    const fwd = fireEvent.keyDown(input(), { key: "Tab", cancelable: true });
+    expect(fwd).toBe(false); // preventDefault された＝フォーカスは飛ばない
+    expect(input()).toHaveValue("う");
+    const back = fireEvent.keyDown(input(), { key: "Tab", shiftKey: true, cancelable: true });
+    expect(back).toBe(false);
+    expect(input()).toHaveValue("い");
+  });
+
+  it("Esc=✕＝打ちかけを確定してから閉じる（打ったものを失わない）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-62-1");
+    await userEvent.clear(input());
+    await userEvent.type(input(), "ぬ");
+    fireEvent.keyDown(input(), { key: "Escape" });
+    expect(notesJson()[1]!.syllable).toBe("ぬ"); // 確定してから
+    expect(screen.queryByLabelText("syllable-input")).toBeNull(); // 閉じた
+    expect(screen.getByLabelText("lyric-retouch")).toHaveTextContent("音符をタップ→かなを打つ→Enterか▶で次へ");
+  });
+
+  it("IME 変換中の Enter では送らない（日本語入力の誤送を防ぐ・既存の流儀を維持）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-60-0");
+    await userEvent.clear(input());
+    await userEvent.type(input(), "か");
+    fireEvent.keyDown(input(), { key: "Enter", isComposing: true });
+    expect(input()).toHaveValue("か"); // 送っていない＝まだ0拍の編集中
+    expect(screen.getByLabelText("lyric-retouch")).toHaveTextContent("C4・0拍");
+  });
+
+  it("✕ で閉じても打った値は残る（バーのボタン側も同じ約束）", async () => {
+    render(<Harness notes0={threeNotes()} mode="lyric" />);
+    await tapNote("note-64-2");
+    await userEvent.clear(input());
+    await userEvent.type(input(), "ぽ");
+    await userEvent.click(screen.getByLabelText("syllable-close"));
+    expect(notesJson()[2]!.syllable).toBe("ぽ");
+    expect(screen.queryByLabelText("syllable-input")).toBeNull();
   });
 });
