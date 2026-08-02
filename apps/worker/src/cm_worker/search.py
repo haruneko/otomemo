@@ -40,31 +40,57 @@ def _root_label(r) -> str:
     return str(r)
 
 
+def _lyric_text(c: dict) -> str:
+    """句の表記（content.lyric.phrases[].text）を並べる（design §31-10 スライス5）。
+
+    詞先で生まれるメロは title も text も持たず、歌詞は句にしか無い＝ここを拾わないと
+    「書いた言葉」で二度と探せない。曲コンテナ（kind=song）の□/下書きも同じ形なので kind を問わない。
+    """
+    ly = c.get("lyric")
+    if not isinstance(ly, dict):
+        return ""
+    out = []
+    for p in ly.get("phrases") or []:
+        if not isinstance(p, dict):
+            continue
+        t = p.get("text")
+        if isinstance(t, str) and t.strip():
+            out.append(t.strip())
+    return " ".join(out)
+
+
 def _content_text(kind: str, content: str | None) -> str:
-    """音楽netaの content を検索可能な文字列にする（メロ→音名 / コード→記号 / リズム→パターン）。"""
+    """音楽netaの content を検索可能な文字列にする（メロ→音名 / コード→記号 / リズム→パターン / 句→表記）。"""
     if not content:
         return ""
     try:
         c = json.loads(content)
     except Exception:  # noqa: BLE001
         return ""
+    if not isinstance(c, dict):
+        return ""
+    parts: list[str] = []
     if kind == "melody":
-        return " ".join(_note_name(int(n["pitch"])) for n in c.get("notes") or [] if "pitch" in n)
-    if kind in ("chord", "chord_progression"):
-        return " ".join(
-            f"{_root_label(ch.get('root', ''))}{ch.get('quality', '')}" for ch in c.get("chords") or []
+        parts.append(
+            " ".join(_note_name(int(n["pitch"])) for n in c.get("notes") or [] if "pitch" in n)
         )
-    if kind == "rhythm":
+    elif kind in ("chord", "chord_progression"):
+        parts.append(
+            " ".join(
+                f"{_root_label(ch.get('root', ''))}{ch.get('quality', '')}"
+                for ch in c.get("chords") or []
+            )
+        )
+    elif kind == "rhythm":
         r = c.get("rhythm") or {}
         steps = int(r.get("steps", 16))
-        out = []
         for la in r.get("lanes") or []:
             hits = set(la.get("hits") or [])
             pat = "".join("x" if s in hits else "." for s in range(steps))
             if "x" in pat:
-                out.append(f"{la.get('name', '')}:{pat}")
-        return " ".join(out)
-    return ""
+                parts.append(f"{la.get('name', '')}:{pat}")
+    parts.append(_lyric_text(c))
+    return " ".join(p for p in parts if p)
 
 
 def _text_of(row: sqlite3.Row) -> str:

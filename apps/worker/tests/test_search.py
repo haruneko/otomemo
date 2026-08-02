@@ -106,6 +106,31 @@ def test_content_text_makes_music_searchable():
     )
 
 
+def test_content_text_includes_lyric_phrases():
+    """詞先メロは title も text も持たない＝句の表記が索引に入らないと言葉で探せない（design §31-10 スライス5）。"""
+    from cm_worker.search import _content_text
+
+    mel = _content_text(
+        "melody",
+        '{"notes":[{"pitch":60,"start":0,"dur":1}],'
+        '"lyric":{"phrases":[{"id":"p1","start":0,"beats":4,"text":"きみのこえだけがのこる"},'
+        '{"id":"p2","start":4,"beats":4,"text":"よるがあける"}]}}',
+    )
+    assert "きみのこえだけがのこる" in mel
+    assert "よるがあける" in mel
+    assert "C4" in mel  # 音名の索引は落とさない
+
+    # 曲コンテナ（content.lyric だけ持つ＝□/下書き）も同じく拾う
+    song = _content_text(
+        "song", '{"lyric":{"phrases":[{"id":"p1","start":0,"beats":4,"text":"かえりみち"}]}}'
+    )
+    assert "かえりみち" in song
+
+    # 空の句・壊れた形で落ちない
+    assert _content_text("song", '{"lyric":{"phrases":[{"id":"p1","text":""}]}}') == ""
+    assert _content_text("melody", '{"notes":[],"lyric":null}') == ""
+
+
 def test_search_empty(tmp_path):
     db = str(tmp_path / "t.sqlite")
     conn = connect(db)
