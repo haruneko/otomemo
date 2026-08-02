@@ -770,6 +770,11 @@ Fable 実機監査＝360px幅で16step グリッドの step13-15 が画面外・
 - **drum roles の機械導出**（plan §5）＝**GENRE_TABLE 逆引き（既存5ジャンルの全役割 union）を初期値**に、4件目標へ本計画で上書き（halftime.basic に verse・ballad.soft16 に chorus・halftime.ballad に verse 等）。roles は**seed の scene タグ SSOT**。
 - **【GENRE_TABLE 据え置き＝生成器出音不変】**：新21型は chord/bass/drum いずれの `GENRE_TABLE` にも登録しない＝`pickCompType`/`pickBassType`/`pickBeatPattern`（生成器第二経路）は既存型のみを従来と同一 ID で返す（bit 一致）。`coGenres`/`roles`/drum `genres` co-tag の**唯一の消費者は seed のタグ組み立て**＝生成・出音・型選抜に一切影響しない。`roles`＝ライブラリ scene タグの SSOT で GENRE_TABLE とは独立。
 - **耳確認待ち（機械は content/タグ/件数まで保証）**：GT-MUTE8 のミュート近似・DN-GATE16/DN-PAD4 のシンセ近似・vel/strumMs・VR kickRel・ED-GATE8 の裏長め＝プローブ束で採否（研究doc §6 手順6）。
+- **【実施決定ブロック（2026-08-02）＝受け入れ監査→再seed→18セル実測まで完了】**
+  - **独立監査（裏取り式）の結論＝OK 21／要修正 0／落とす 0**：全21型が現行トークン語彙・16セル・T/L ファクトリ検証に載る。リテラル転写疑いなし（出典は piano/guitar 語彙docの一般定石のみ）。唯一の実装フラグ（BL-ARPUP 末尾10度＝`3`が低位置へ折れる）は上記フォールバック譜 R-5-8 で解決済み・テストが pitches [36,43,48] の厳密上行を検証。roles の doc相違2件（halftime.ballad+verse／ballad.soft16+chorus）は**実装が正**（ballad×rhythm 4件目標の充足に必要・研究docは経緯ゆえ遡及修正しない）。
+  - **再seed実施（冪等）**：`CM_DB=data/cm.sqlite npx tsx scripts/seed-pattern-library.ts`＝旧118削除→118投入（chord 45・bass 42・drum 31）。
+  - **18セル実測＝全セル4件以上達成**（実DBのタグ集合 `lib:factory`+`genre:`+`scene:`+kind で計数）：ballad/vocarock/edm × verse/chorus × chord_pattern/bass/rhythm＝**18/18セルが4件以上**（vocarock verse rhythm と edm chorus rhythm は5件・他は4件）。L4計画 §1 の「18セル全て4件未達」を解消。
+  - **オーナー裁定＝耳確認プローブはポップス/ボカロック優先**（細部よしなに）：束の順序＝(a) バラード/ポップス系（PB-*4・BL-*3・ballad.rim8/soft16・halftime.ballad・beat8.ride）→(b) ボカロック系（GT-MUTE8・AN-SYNC・VR-*2＋co-tag妥当性・特に dbeat.basic のパンク色）→(c) EDM系（**後回し可・落とさない**＝DN-*3・ED-GATE8・four.edm16/clapride）。プローブは1回に束ねる（型ごと個別依頼しない）。
 
 #### Task2/L4 裁定D＝6/8 無国籍民族調（world68）実装スライス（2026-07-25・正典＝`docs/research/2026-07-25-68-world-accompaniment-vocabulary.md` 26型）
 オーナー裁定D の上書き工事＝**chord/bass 辞書の grid:12 対応＋world68 型26個の追加＋seed の 6/8 解禁**。辞書件数＝**chord 35→45（+world68 10）・bass 34→42（+8）・drum 24→32（+8）**。**4/4 既存型は bit 一致**（grid 既定16・steps=bars×16 のまま・全既存スイート緑）。
