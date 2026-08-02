@@ -28,9 +28,8 @@ export interface LyricMelodyPlan {
 // モーラ role：実音（onset）になるのは normal / 撥音ん。長音ー＝tie（直前へ延長・新アタック無）／促音っ＝rest（詰め）。
 // ＝suggestLyricRhythm(prosody.ts) の roleOf と同規約。tie/rest はグリッド上の音符を立てない＝音数から外れる（A-doc §3.1）。
 //
-// **⚠ これは裁定に反する側（design §31-8）**：オーナー裁定は「っ」「ー」にも**音符を立てる**。
-// スライス7で `standSpecialMoras` を足して裁定どおりに数えられるようにしたが、**生成される音符数が変わる**ので
-// **既定は従来（この関数）のまま＝耳で確かめてから既定を反転する**（design §31-10 スライス7・backlog の耳確認）。
+// **この数え方で確定**（2026-08-02 オーナー裁定・design §31-8）＝旧裁定「『っ』『ー』にも音符を立てる」はオーナー自身が
+// 撤回した（原文「促音伸ばし音はいらない、打ち込むときに工夫するので」）。一度入れた opt-in `standSpecialMoras` は同日撤去。
 function isOnsetMora(kind: string): boolean {
   return kind === "normal" || kind === "hatsuon";
 }
@@ -86,20 +85,18 @@ function layoutOnsets(count: number, bars: number, barLen: number): { patterns: 
  * bars=セクション小節数（frame 由来）。beatsPerBar=V2 の barLen（4/4→4・3/4→3・6/4→6）。
  * 未指定/空歌詞＝空計画（呼び側は注入しない＝bit一致）。
  *
- * **スライス7（design §31-10）で足した2つの opt-in＝どちらも既定OFF＝未指定なら従来と bit 一致**：
+ * **スライス7（design §31-10）で足した opt-in＝既定OFF＝未指定なら従来と bit 一致**：
  *  ・`readings`＝行ごとの読み（かな）。**呼び側が先に解く**（pyopenjtalk は api の非同期＝この関数は同期のまま）。
  *    渡された行はモーラを**読みから**数える＝表記（漢字仮名交じり）が正データという確定に合う。
  *    未指定/空文字の行は従来どおり**表記の字をそのまま**数える（＝漢字は1字1音に化ける・後退ゼロ）。
- *  ・`standSpecialMoras`＝「っ」「ー」にも音符を立てる（§31-8 のオーナー裁定）。
- *  **どちらも生成される音符数が変わる**ので、既定は従来のまま＝耳で確かめてから既定を反転する。
+ *  **生成される音符数が変わる**ので、既定は従来のまま＝耳で確かめてから既定を反転する。
  */
 export function planLyricMelody(
   rawLines: string[],
-  opts: { bars: number; beatsPerBar?: number; readings?: (string | undefined)[]; standSpecialMoras?: boolean },
+  opts: { bars: number; beatsPerBar?: number; readings?: (string | undefined)[] },
 ): LyricMelodyPlan {
   const barLen = Math.max(1, Math.round(opts.beatsPerBar ?? 4));
   const bars = Math.max(1, Math.round(opts.bars));
-  const stand = opts.standSpecialMoras === true;
   const warnings: string[] = [];
   // 表記と読みは同じ並びで持ち回る（空行は表記側で落ちる＝読みも一緒に落ちる）。読みが無い行は表記で数える。
   const lines = rawLines
@@ -124,7 +121,7 @@ export function planLyricMelody(
   // グループごとにモーラ→オンセット。数える対象＝読み（あれば）／無ければ表記そのもの（従来）。
   const perGroup = groups.map(({ text, kana }) => {
     const moras = analyzeMoras(kana || text);
-    const onsetKana = moras.filter((m) => stand || isOnsetMora(m.kind)).map((m) => m.kana);
+    const onsetKana = moras.filter((m) => isOnsetMora(m.kind)).map((m) => m.kana);
     return { text, moraCount: moras.length, onsetKana };
   });
 

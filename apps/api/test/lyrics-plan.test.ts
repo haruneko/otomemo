@@ -121,23 +121,17 @@ describe("スライス7：読み（かな）を受け取る＝表記のモーラ
   });
 });
 
-describe("スライス7：「っ」「ー」に音符を立てる（§31-8 裁定・既定OFF）", () => {
-  it("standSpecialMoras=true＝全モーラが音符を持つ（総モーラ数＝音数）", () => {
-    const on = { bars: 1, beatsPerBar: 4, standSpecialMoras: true } as const;
-    expect(planLyricMelody(["そーらへ"], on).onsetTotal).toBe(4); // そ,ー,ら,へ
-    expect(planLyricMelody(["がっこう"], on).onsetTotal).toBe(4); // が,っ,こ,う
-    expect(planLyricMelody(["きゃっと"], on).onsetTotal).toBe(3); // きゃ,っ,と（拗音は1モーラのまま）
-    expect(planLyricMelody(["がっこうへ"], { bars: 2, beatsPerBar: 4, standSpecialMoras: true }).syllables.join("")).toBe("がっこうへ");
+describe("§31-8：「っ」「ー」に音符は立てない＝オーナー裁定で確定（2026-08-02）", () => {
+  it("長音ー=直前へ延長・促音っ=詰め＝音符を立てない（音数＝オンセット数）", () => {
+    const on = { bars: 1, beatsPerBar: 4 } as const;
+    expect(planLyricMelody(["そーらへ"], on).onsetTotal).toBe(3); // そ,ら,へ（ー は立てない）
+    expect(planLyricMelody(["がっこう"], on).onsetTotal).toBe(3); // が,こ,う（っ は立てない）
+    expect(planLyricMelody(["きゃっと"], on).onsetTotal).toBe(2); // きゃ,と（拗音は1モーラ・っ は立てない）
+    expect(planLyricMelody(["がっこうへ"], { bars: 2, beatsPerBar: 4 }).syllables.join("")).toBe("がこうへ");
   });
-  it("standSpecialMoras=true では onsetCount＝moraCount（#13d の受け入れ条件の数え方が っ/ー 込みになる）", () => {
-    const p = planLyricMelody(["そーらへ", "がっこう"], { bars: 4, beatsPerBar: 4, standSpecialMoras: true });
-    for (const l of p.lines) expect(l.onsetCount).toBe(l.moraCount);
-    expect(p.onsetTotal).toBe(p.lines.reduce((s, l) => s + l.moraCount, 0));
-  });
-  it("既定（未指定/false）＝従来と bit 一致", () => {
+  it("読みの指定が無ければ従来と bit 一致（数え方の旗は存在しない）", () => {
     const lines = ["そーらへゆく", "がっこうへ", "ほんとうにきみは"];
     const base = JSON.stringify(planLyricMelody(lines, { bars: 4, beatsPerBar: 4 }));
-    expect(JSON.stringify(planLyricMelody(lines, { bars: 4, beatsPerBar: 4, standSpecialMoras: false }))).toBe(base);
     expect(JSON.stringify(planLyricMelody(lines, { bars: 4, beatsPerBar: 4, readings: undefined }))).toBe(base);
   });
 });

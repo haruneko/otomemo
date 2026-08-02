@@ -110,21 +110,14 @@ describe("スライス7：詞先生成の返り content に句が載る", () => 
   });
 });
 
-describe("スライス7：音符数が変わる新挙動は既定OFF（耳で確かめてから既定を反転）", () => {
+describe("スライス7：読みを取る新挙動は既定OFF（耳で確かめてから既定を反転）", () => {
   it("gen_melody(lyrics) の既定＝従来の数え方（っ/ー は音符を立てない・表記は字のまま）", async () => {
     const { client } = await connect();
     const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, chords, lyrics: "がっこうへ\nそーらへ" } })));
     const legacy = planLyricMelody(["がっこうへ", "そーらへ"], { bars: 4, beatsPerBar: 4 });
     expect(legacy.onsetTotal).toBe(7); // が,こ,う,へ / そ,ら,へ
     for (const it of out.items) expect(it.content.notes.length).toBe(7);
-    expect(out.lyricPlan.standSpecialMoras).toBe(false);
     expect(out.lyricPlan.readingSource).toBe("none");
-  });
-  it("standSpecialMoras=true＝「っ」「ー」にも音符が立つ（§31-8 裁定・opt-in）", async () => {
-    const { client } = await connect();
-    const out = JSON.parse(textOf(await client.callTool({ name: "gen_melody", arguments: { frame, chords, lyrics: "がっこうへ\nそーらへ", standSpecialMoras: true } })));
-    for (const it of out.items) expect(it.content.notes.length).toBe(9); // が,っ,こ,う,へ / そ,ー,ら,へ
-    expect(out.lyricPlan.standSpecialMoras).toBe(true);
   });
   it("readLyrics=true＝表記から読みを取る（pyopenjtalk 未導入なら従来へ落ちて壊れない）", async () => {
     const { client } = await connect();
