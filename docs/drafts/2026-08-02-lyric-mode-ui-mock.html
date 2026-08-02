@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>詞モードUI候補モック（Otomemo メロディ編集）</title>
+<style>
+  /* ==== 実機のテーマ変数（apps/web/src/styles/base.css より模写）==== */
+  :root {
+    --bg: #16181c;
+    --card: #22252b;
+    --line: #33373f;
+    --fg: #e6e8ec;
+    --muted: #9aa0aa;
+    --accent: #3a6df0;
+    --k: #4fa8e0; /* melody kind色（theme.ts） */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px;
+    background: #0d0f12; color: var(--fg);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 14px;
+  }
+  h1 { font-size: 1.05rem; margin: 0 0 4px; }
+  .page-note { font-size: 0.78rem; color: var(--muted); margin: 0 0 16px; max-width: 980px; line-height: 1.6; }
+  .lane-title { font-size: 0.92rem; margin: 22px 0 8px; padding-left: 2px; border-left: 3px solid var(--accent); padding-left: 8px; }
+  .lane-title .cost { color: var(--muted); font-weight: 400; font-size: 0.78rem; margin-left: 8px; }
+  .frames { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+
+  .frame { width: 360px; flex: 0 0 360px; }
+  .frame-head { font-size: 0.78rem; color: var(--muted); margin: 0 0 6px; line-height: 1.5; min-height: 3.2em; }
+  .frame-head b { color: var(--fg); }
+  .phone {
+    width: 360px; background: var(--bg);
+    border: 1px solid #3a3f49; border-radius: 14px;
+    padding: 10px 8px; box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px;
+    display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0;
+  }
+  .card-title { font-size: 0.75rem; color: var(--muted); margin: 0 0 2px; }
+  .annot { font-size: 0.72rem; color: #d9b26a; margin-top: 6px; line-height: 1.55; }
+  .annot::before { content: "※ "; }
+
+  /* ==== roll-toolbar / proll-modes（transport-cards.css 模写）==== */
+  .roll-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .proll-modes { display: flex; gap: 4px; margin-bottom: 4px; }
+  .proll-modes button {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; padding: 4px 14px; font-size: 0.8rem;
+    background: #2b2f36; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+  }
+  .proll-modes button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .proll-modes button.mode-lyric { padding: 4px 8px; font-size: 0.7rem; min-width: 0; white-space: nowrap; }
+  .tb-divider { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
+  .tb-tool {
+    font-size: 0.78rem; padding: 4px 10px; background: #2b2f36; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; cursor: pointer;
+  }
+
+  /* ==== 音価ピッカー（.proll-tools .len.glyph）==== */
+  .proll-tools { display: flex; gap: 4px; align-items: center; font-size: 0.75rem; color: var(--muted); }
+  .proll-tools .len {
+    background: #2b2f36; color: var(--fg); border: 1px solid var(--line);
+    border-radius: 5px; padding: 2px 6px; font-size: 0.8rem;
+    min-height: 26px; opacity: 0.9; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .proll-tools .len.on { background: var(--accent); color: #fff; border-color: var(--accent); opacity: 1; }
+
+  /* ==== 歌詞1行（.proll-lyric-line）==== */
+  .proll-lyric-line { display: flex; align-items: center; gap: 6px; min-height: 34px; }
+  .proll-lyric-open {
+    flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px; background: #1b1e23; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 6px; font: inherit; text-align: left; cursor: pointer;
+  }
+  .proll-lyric-oneline { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .proll-lyric-status { flex: 0 0 auto; white-space: nowrap; font-size: 0.78rem; }
+  .proll-lyric-caret { flex: 0 0 auto; margin-left: auto; font-size: 0.72rem; opacity: 0.7; }
+  .muted { color: var(--muted); }
+
+  /* 候補3：歌詞行の右端の小ボタン「1音直す」 */
+  .lyr-fix-btn {
+    flex: 0 0 auto; height: 28px; padding: 0 10px; font-size: 0.75rem;
+    background: #2b2f36; color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; white-space: nowrap; cursor: pointer;
+  }
+  .lyr-fix-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ==== 詞モード固定バー（.proll-lyric-retouch）==== */
+  .proll-lyric-retouch {
+    display: flex; align-items: center; gap: 6px; margin: 4px 0; padding: 5px 8px;
+    background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; font-size: 0.82rem;
+  }
+  .proll-lyric-retouch .lyr-hint { font-size: 0.78rem; }
+  .proll-lyric-retouch .lyr-pos { flex: 0 0 auto; font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+  .proll-lyric-retouch input {
+    flex: 1 1 auto; min-width: 0; width: 40px; background: #15171b; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 0.82rem;
+  }
+  .proll-lyric-retouch button {
+    flex: 0 0 auto; padding: 4px 10px; font-size: 0.8rem;
+    background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+  }
+  .proll-lyric-retouch button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .retouch-2row { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; padding: 5px 8px;
+    background: #1b1e23; border: 1px solid var(--line); border-radius: 8px; }
+  .retouch-2row .row { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; }
+  .retouch-2row .row input {
+    flex: 1 1 auto; min-width: 0; width: 40px; background: #15171b; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 0.78rem;
+  }
+  .retouch-2row .row button {
+    flex: 0 0 auto; padding: 4px 10px; font-size: 0.8rem;
+    background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+  }
+  .retouch-2row .row button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* 候補4：かなチップ帯 */
+  .mora-strip { display: flex; gap: 4px; overflow-x: auto; padding: 2px 0; }
+  .mora-chip {
+    flex: 0 0 auto; min-width: 26px; padding: 3px 7px; font-size: 0.8rem; text-align: center;
+    background: #2b2f36; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+  }
+  .mora-chip.editing { background: var(--fg); color: #15171b; border-color: var(--fg); font-weight: 700; }
+  .mora-chip.edited { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--k); }
+
+  /* ==== ピアノロール（.proll 模写・16分=12px・行14px）==== */
+  .proll { overflow: auto; max-height: 56vh; border: 1px solid var(--line); border-radius: 8px; background: #15171b; position: relative; }
+  .proll-row { display: flex; min-width: max-content; }
+  .proll-key {
+    width: 40px; height: 14px; flex: 0 0 auto; position: sticky; left: 0; z-index: 4;
+    font-size: 8px; line-height: 14px; text-align: right; padding-right: 3px;
+    border: 1px solid #24272e; user-select: none;
+  }
+  .proll-key.white { background: #d7dae0; color: #2a2d33; }
+  .proll-key.black { background: #2a2d33; color: #9aa0aa; }
+  .proll-lane { display: flex; position: relative; }
+  .proll-cell { width: 12px; height: 14px; flex: 0 0 auto; border-right: 1px solid #1e2127; border-bottom: 1px solid #1e2127; background: #1b1e23; padding: 0; }
+  .proll-cell.beat { border-left: 1px solid #3a3f49; }
+  .proll-cell.bar { border-left: 2px solid #5b6270; }
+  .proll-row.blackrow .proll-cell { background: #14171b; }
+  .proll-note {
+    position: absolute; top: 1px; height: 12px; min-width: 4px;
+    background: var(--k); border: 1px solid #95cbec; border-radius: 2px; z-index: 2;
+    display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap;
+    font-size: 9px; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,0.9), 0 0 1px rgba(0,0,0,0.9);
+    user-select: none;
+  }
+  .proll-note.lyr-edit { outline: 2px solid #f0f2f5; outline-offset: -1px; z-index: 3; filter: brightness(1.12); }
+
+  svg { display: block; }
+</style>
+</head>
+<body>
+<h1>詞モードUI候補モック（メロディ編集・360px実機風）</h1>
+<p class="page-note">
+  前提の補正：モード行4つ目の現ラベルは「歌詞」（title="歌詞を直す（音符をタップ）"）＝直上に常設の歌詞1行（句の面）があり、「歌詞」の口が2つ並ぶのが現状。
+  例のメロ＝「とけいのはり」6音・2小節。配色・寸法は実CSS（transport-cards.css / base.css）から模写。黄色の注記＝モックでは動かない仕様の説明。
+</p>
+
+<!-- ============ 候補1 ============ -->
+<div class="lane-title">【候補1】現状維持＋説明増補（ベースライン）<span class="cost">費用感＝極小（文言2か所＋属性1つ）</span></div>
+<div class="frames">
+
+  <div class="frame" id="f1a">
+    <div class="frame-head"><b>候補1-A：詞モードに入った直後（未選択）</b><br>配置は一切不変。ヒント文言だけ増補＝作法（タップ→かな→確定で次）を1行で読める化。</div>
+    <div class="phone"><div class="card">
+      <div class="card-title">メロディ「サビ」</div>
+      <div class="roll-toolbar">
+        <div class="proll-modes">
+          <button class="ic-draw"></button>
+          <button class="ic-select"></button>
+          <button class="ic-erase"></button>
+          <button class="mode-lyric on">歌詞</button>
+        </div>
+        <span class="tb-divider"></span>
+        <button class="tb-tool">ツール ▾</button>
+      </div>
+      <div class="proll-tools" data-lenrow></div>
+      <div class="proll-lyric-line">
+        <div class="proll-lyric-open">
+          <span class="proll-lyric-oneline">時計の針</span>
+          <span class="proll-lyric-status muted">過不足なし</span>
+          <span class="proll-lyric-caret muted">▾</span>
+        </div>
+      </div>
+      <div class="proll-lyric-retouch">
+        <span class="muted">詞</span>
+        <span class="muted lyr-hint">音符をタップ→かなを打つ→確定で次の音符へ</span>
+      </div>
+      <div class="proll" data-roll data-edit="-1"></div>
+      <div class="annot">title「1音ずつ直す（音符をタップ→かな→確定で次へ）」に更新（スマホ非表示は割り切り）。モード行の「歌詞」の名はそのまま＝歌詞行との二口も残る。</div>
+    </div></div>
+  </div>
+
+  <div class="frame" id="f1b">
+    <div class="frame-head"><b>候補1-B：音符をタップした後（選択中）</b><br>バーは現行構成のまま。input に enterKeyHint="next"＝スマホIMEの確定キーが「次へ」になる。</div>
+    <div class="phone"><div class="card">
+      <div class="card-title">メロディ「サビ」</div>
+      <div class="roll-toolbar">
+        <div class="proll-modes">
+          <button class="ic-draw"></button>
+          <button class="ic-select"></button>
+          <button class="ic-erase"></button>
+          <button class="mode-lyric on">歌詞</button>
+        </div>
+        <span class="tb-divider"></span>
+        <button class="tb-tool">ツール ▾</button>
+      </div>
+      <div class="proll-tools" data-lenrow></div>
+      <div class="proll-lyric-line">
+        <div class="proll-lyric-open">
+          <span class="proll-lyric-oneline">時計の針</span>
+          <span class="proll-lyric-status muted">過不足なし</span>
+          <span class="proll-lyric-caret muted">▾</span>
+        </div>
+      </div>
+      <div class="proll-lyric-retouch">
+        <span class="muted">詞</span>
+        <span class="lyr-pos">E4・2拍</span>
+        <input type="text" value="い">
+        <button class="primary">確定→次</button>
+        <button>✕</button>
+      </div>
+      <div class="proll" data-roll data-edit="2"></div>
+      <div class="annot">enterKeyHint="next" のみが挙動追加。「押す前に読めない」穴と歌詞二口は現状維持のside。</div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ============ 候補2 ============ -->
+<div class="lane-title">【候補2】改名＋表計算式送りバー<span class="cost">費用感＝小（バー1か所＋onKeyDown＋改名）</span></div>
+<div class="frames">
+
+  <div class="frame" id="f2a">
+    <div class="frame-head"><b>候補2-A：詞モードに入った直後（未選択）</b><br>名を「1音ずつ」に戻す＝直上の歌詞行（句の面）と役割が名前で割れる。幅CSSは据置。</div>
+    <div class="phone"><div class="card">
+      <div class="card-title">メロディ「サビ」</div>
+      <div class="roll-toolbar">
+        <div class="proll-modes">
+          <button class="ic-draw"></button>
+          <button class="ic-select"></button>
+          <button class="ic-erase"></button>
+          <button class="mode-lyric on">1音ずつ</button>
+        </div>
+        <span class="tb-divider"></span>
+        <button class="tb-tool">ツール ▾</button>
+      </div>
+      <div class="proll-tools" data-lenrow></div>
+      <div class="proll-lyric-line">
+        <div class="proll-lyric-open">
+          <span class="proll-lyric-oneline">時計の針</span>
+          <span class="proll-lyric-status muted">過不足なし</span>
+          <span class="proll-lyric-caret muted">▾</span>
+        </div>
+      </div>
+      <div class="proll-lyric-retouch">
+        <span class="muted">詞</span>
+        <span class="muted lyr-hint">音符をタップ→かなを打つ→Enterか▶で次へ</span>
+      </div>
+      <div class="proll" data-roll data-edit="-1"></div>
+      <div class="annot">design に一文「バーのボタンが正・キーは近道」＝物理キーとの両立の作法を閉じる。</div>
+    </div></div>
+  </div>
+
+  <div class="frame" id="f2b">
+    <div class="frame-head"><b>候補2-B：選択中＝◀▶送りバー</b><br>「確定→次」は「▶」に吸収（押す＝確定して次）。「◀」＝確定して前へ（誤送り復帰）。対象音符はハイライト＋自動スクロール追従。</div>
+    <div class="phone"><div class="card">
+      <div class="card-title">メロディ「サビ」</div>
+      <div class="roll-toolbar">
+        <div class="proll-modes">
+          <button class="ic-draw"></button>
+          <button class="ic-select"></button>
+          <button class="ic-erase"></button>
+          <button class="mode-lyric on">1音ずつ</button>
+        </div>
+        <span class="tb-divider"></span>
+        <button class="tb-tool">ツール ▾</button>
+      </div>
+      <div class="proll-tools" data-lenrow></div>
+      <div class="proll-lyric-line">
+        <div class="proll-lyric-open">
+          <span class="proll-lyric-oneline">時計の針</span>
+          <span class="proll-lyric-status muted">過不足なし</span>
+          <span class="proll-lyric-caret muted">▾</span>
+        </div>
+      </div>
+      <div class="proll-lyric-retouch">
+        <button>◀</button>
+        <span class="lyr-pos">E4・2拍</span>
+        <input type="text" value="い">
+        <button class="primary">▶</button>
+        <button>✕</button>
+      </div>
+      <div class="proll" data-roll data-edit="2"></div>
+      <div class="annot">キー定義：Enter/Tab=▶・Shift+Enter/Shift+Tab=◀・Esc=✕（preventDefault・isComposingガード維持）。enterKeyHint="next"。</div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ============ 候補3 ============ -->
+<div class="lane-title">【候補3】入口を歌詞行の隣へ移設<span class="cost">費用感＝中（ボタン移設＋モード抜け結線＋テスト入口変更）</span></div>
+<div class="frames">
+
+  <div class="frame" id="f3a">
+    <div class="frame-head"><b>候補3-A：押す前（通常時）</b><br>モード行は「描く／選ぶ／消す」の3つに戻る。常設歌詞行の右端に「1音直す」＝歌詞の用が集まる場所＝文脈が説明を兼ねる。</div>
+    <div class="phone"><div class="card">
+      <div class="card-title">メロディ「サビ」</div>
+      <div class="roll-toolbar">
+        <div class="proll-modes">
+          <button class="ic-draw on"></button>
+          <button class="ic-select"></button>
+          <button class="ic-erase"></button>
+        </div>
+        <span class="tb-divider"></span>
+        <button class="tb-tool">ツール ▾</button>
+      </div>
+      <div class="proll-tools" data-lenrow></div>
+      <div class="proll-lyric-line">
+        <div class="proll-lyric-open">
+          <span class="proll-lyric-oneline">時計の針</span>
+          <span class="proll-lyric-status muted">過不足なし</span>
+          <span class="proll-lyric-caret muted">▾</span>
+        </div>
+        <button class="lyr-fix-btn">1音直す</button>
+      </div>
+      <div class="proll" data-roll data-edit="-1"></div>
+      <div class="annot">タップ1回で詞モード＋固定バー出現＝入口はボタン・1タップ維持。弱点＝先例15種で0種の配置（drafts doc §件1(a)）。</div>
+    </div></div>
+  </div>
+
+  <div class="frame" id="f3b">
+    <div class="frame-head"><b>候補3-B：押した後（詞モード中）</b><br>バーは現行のまま（候補2の◀▶と併用可）。✕の右に「終わる」＝描くモードへ戻る抜け口（入口が遠くなるぶんの補い）。</div>
+    <div class="phone"><div class="card">
+      <div class="card-title">メロディ「サビ」</div>
+      <div class="roll-toolbar">
+        <div class="proll-modes">
+          <button class="ic-draw"></button>
+          <button class="ic-select"></button>
+          <button class="ic-erase"></button>
+        </div>
+        <span class="tb-divider"></span>
+        <button class="tb-tool">ツール ▾</button>
+      </div>
+      <div class="proll-tools" data-lenrow></div>
+      <div class="proll-lyric-line">
+        <div class="proll-lyric-open">
+          <span class="proll-lyric-oneline">時計の針</span>
+          <span class="proll-lyric-status muted">過不足なし</span>
+          <span class="proll-lyric-caret muted">▾</span>
+        </div>
+        <button class="lyr-fix-btn on">1音直す</button>
+      </div>
+      <div class="proll-lyric-retouch">
+        <span class="muted">詞</span>
+        <span class="lyr-pos">E4・2拍</span>
+        <input type="text" value="い">
+        <button class="primary">確定→次</button>
+        <button>✕</button>
+        <button>終わる</button>
+      </div>
+      <div class="proll" data-roll data-edit="2"></div>
+      <div class="annot">モード行に「歌詞」が無い＝押す前から歌詞の用は歌詞行に集約・title不要。</div>
+    </div></div>
+  </div>
+</div>
+
+<!-- ============ 候補4 ============ -->
+<div class="lane-title">【候補4】かなチップ帯＋まとめ打ち<span class="cost">費用感＝中〜大（チップ描画＋index対応＋自動スクロール＋分配upsert）</span></div>
+<div class="frames">
+
+  <div class="frame" id="f4a">
+    <div class="frame-head"><b>候補4：詞モード中（編集対象＝「は」）</b><br>バー2段化（+約40px）。上段＝句のかなチップ帯：タップで任意音符へ（Tab連打の上位互換）。下段＝現行バー＋まとめ打ち。</div>
+    <div class="phone"><div class="card">
+      <div class="card-title">メロディ「サビ」</div>
+      <div class="roll-toolbar">
+        <div class="proll-modes">
+          <button class="ic-draw"></button>
+          <button class="ic-select"></button>
+          <button class="ic-erase"></button>
+          <button class="mode-lyric on">かな直し</button>
+        </div>
+        <span class="tb-divider"></span>
+        <button class="tb-tool">ツール ▾</button>
+      </div>
+      <div class="proll-tools" data-lenrow></div>
+      <div class="proll-lyric-line">
+        <div class="proll-lyric-open">
+          <span class="proll-lyric-oneline">時計の針</span>
+          <span class="proll-lyric-status muted">過不足なし</span>
+          <span class="proll-lyric-caret muted">▾</span>
+        </div>
+      </div>
+      <div class="retouch-2row">
+        <div class="mora-strip">
+          <span class="mora-chip edited">と</span>
+          <span class="mora-chip edited">け</span>
+          <span class="mora-chip">い</span>
+          <span class="mora-chip">の</span>
+          <span class="mora-chip editing">は</span>
+          <span class="mora-chip">り</span>
+        </div>
+        <div class="row">
+          <span class="lyr-pos muted">E4・4拍</span>
+          <input type="text" placeholder="かな（続けて打つと次の音符へも配る）">
+          <button class="primary">確定→次</button>
+          <button>✕</button>
+        </div>
+      </div>
+      <div class="proll" data-roll data-edit="4"></div>
+      <div class="annot">編集中チップ＝塗り反転／手直し済み＝下線。複数モーラ入力は splitMora で時間順に分配（例「はりを」→は・り・を）。1モーラ＝現行と同一・空=消す・「ー」=のばす据置。デスクトップは←/→でチップ移動。名は「1音ずつ」だと嘘になるため「かな直し」等＝改名（候補2）同梱が前提。</div>
+    </div></div>
+  </div>
+</div>
+
+<p class="page-note" style="margin-top:22px">
+  併用の目安：2+3・2+4は併用可。1→2→4は積み上げ導入できる（3のみ配置変更＝可逆だが別枠）。
+  「押す前に読めるか」の埋まり＝1:埋まらず／2:名で識別／3:文脈で用まで／4:入った後の理解が最強。
+</p>
+
+<script>
+// ── モード行のアイコン（KindEditorBody.tsx の SVG を模写）──
+const drawSvg = '<svg width="18" height="18" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75L3 17.25zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>';
+const selSvg = '<svg width="18" height="18" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3.5 3"/></svg>';
+const eraseSvg = '<svg width="18" height="18" viewBox="0 0 24 24"><path d="M16.24 3.56a2 2 0 0 1 2.83 0l1.37 1.37a2 2 0 0 1 0 2.83L10.9 17.3H6.7l-2.13-2.13a2 2 0 0 1 0-2.83l11.67-8.78z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 21h14" stroke="currentColor" stroke-width="2"/></svg>';
+document.querySelectorAll('.ic-draw').forEach(b => b.innerHTML = drawSvg);
+document.querySelectorAll('.ic-select').forEach(b => b.innerHTML = selSvg);
+document.querySelectorAll('.ic-erase').forEach(b => b.innerHTML = eraseSvg);
+
+// ── 音価ピッカー行 ──
+document.querySelectorAll('[data-lenrow]').forEach(row => {
+  row.innerHTML = '長さ '
+    + '<button class="len">2分</button>'
+    + '<button class="len on">♩</button>'
+    + '<button class="len">♪</button>'
+    + '<button class="len">♬</button>'
+    + '<button class="len">付点</button>';
+});
+
+// ── ピアノロール描画（16分=12px・行14px・2小節4/4）──
+const ROWS = [
+  ["A4","white"],["G#4","black"],["G4","white"],["F#4","black"],
+  ["E4","white"],["D#4","black"],["D4","white"],["C#4","black"],["C4","white"]
+];
+// メロ「とけいのはり」：[行index, 開始セル(16分), 長さセル]
+const NOTES = [
+  { row: 8, start: 0,  len: 4, syl: "と" },
+  { row: 6, start: 4,  len: 4, syl: "け" },
+  { row: 4, start: 8,  len: 4, syl: "い" },
+  { row: 2, start: 12, len: 4, syl: "の" },
+  { row: 4, start: 16, len: 4, syl: "は" },
+  { row: 6, start: 20, len: 8, syl: "り" },
+];
+const CELLS = 32; // 2小節 × 4拍 × 4
+document.querySelectorAll('[data-roll]').forEach(roll => {
+  const editIdx = parseInt(roll.dataset.edit, 10);
+  ROWS.forEach(([name, wb], ri) => {
+    const row = document.createElement('div');
+    row.className = 'proll-row' + (wb === 'black' ? ' blackrow' : '');
+    const key = document.createElement('div');
+    key.className = 'proll-key ' + wb;
+    key.textContent = name;
+    row.appendChild(key);
+    const lane = document.createElement('div');
+    lane.className = 'proll-lane';
+    for (let c = 0; c < CELLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'proll-cell' + (c % 16 === 0 ? ' bar' : c % 4 === 0 ? ' beat' : '');
+      lane.appendChild(cell);
+    }
+    NOTES.forEach((n, ni) => {
+      if (n.row !== ri) return;
+      const note = document.createElement('div');
+      note.className = 'proll-note' + (ni === editIdx ? ' lyr-edit' : '');
+      note.style.left = (n.start * 12) + 'px';
+      note.style.width = (n.len * 12 - 2) + 'px';
+      note.textContent = n.syl;
+      lane.appendChild(note);
+    });
+    row.appendChild(lane);
+    roll.appendChild(row);
+  });
+});
+</script>
+</body>
+</html>
