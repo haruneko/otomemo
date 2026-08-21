@@ -18,8 +18,8 @@ otomemo の伴奏が弱い → phrase_maker（Python 試作・ルール/物理�
 - テスト＝music-core 244 / api 1562 緑・typecheck clean。
 
 ## 次の一手（順序厳守・慌てない）
-1. **フィルの呼び方（kind 選択）を最小で決める**＝どの型をいつ出すか。**硬化させない**（利用の中で決まる）。位置はセクション cue・弾き方はレシピ。
-2. **その後に結線**＝物理フィル（`fillNotes`＝絶対qb/GM番号）を **web の実レンダ（Tone.js／MIDI 書き出し）へ流す**＝アプリ本体で実際に鳴るようにする。**1 を飛ばして 2 を先にやると捨て配線**（2026-08-21 の反省）。
+1. **✅完了（2026-08-21・裁定B）フィルの呼び方（kind 選択）を最小で決めた**＝cue.aim でプール分け（up＝buildup/gallop/snare_roll/_32/herta・down＝tom_descent/triplet_cascade/offbeat_syncopated・未指定＝全10型＝従来 bit 一致）・プール内は seed・**明示 fillKind＞プリセット**・intensity は型選択に使わない（二重掛け回避）。選抜 kind は `rhythm.fillKind` に自己記述。**硬化させない初期割り当て**（利用で微調整）。正典＝design §2106(d)。実装＝`buildPhysicalFill`（apps/api）。テスト＝`drum-physical-fill.test.ts`（aim プール5本追加・全緑1567）。
+2. **← 次はここ：結線**＝物理フィル（`fillNotes`＝絶対qb/GM番号・`fillBar`・`fillKind`）を **web の実レンダ（Tone.js／MIDI 書き出し）へ流す**＝アプリ本体で実際に鳴るようにする。**1 を飛ばさず済んだ**ので捨て配線にならない。
 3. 使えるようになって初めて価値が出る（実際の利用の中で）。抽象 A/B ゲート（辞書より良いか等）は置かない。
 
 先送り（捨てない）＝計画 §7（ベース/コードの描く口・曲レイヤー・break 本実装・キメ・参照運搬・小節/レーン別案の残り・cue 配置 UI 等）。

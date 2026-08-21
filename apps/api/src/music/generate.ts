@@ -1602,7 +1602,7 @@ const GM = { Kick: 36, Snare: 38, HiHat: 42, OpenHat: 46 };
 // fillNotes/fillBar＝M2「物理フィル」opt-in の note レベル出力（絶対 qb・GM番号）。旧 consumer は無視＝bit 安全
 // （velCurve と同流儀）。fillStyle!=="physical" では**一切載らない**＝従来 grid 経路と DrumContent が deep-equal。
 type PhysFillNote = { beat: number; midi: number; velocity: number };
-type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[]; patternId?: string; fillNotes?: PhysFillNote[]; fillBar?: number } };
+type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[]; patternId?: string; fillNotes?: PhysFillNote[]; fillBar?: number; fillKind?: string } };
 // fillStyle="physical"＝M2 phrase_maker フィル（qb・三連/32分/フラム保持）を fillNotes に載せる opt-in。
 // 未指定/"grid"＝従来 applyDrumFill（step-grid）＝bit 一致。fillKind/fillLength は物理フィルのみ有効。
 export interface DrumsGenOpts { style?: string; fill?: number | string; fillStyle?: "grid" | "physical"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar" }
@@ -1623,7 +1623,7 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
     const N = Math.max(1, Math.min(MAX_BARS, f.bars ?? 4));
     const fb = fillCue ? fillCue.bar : (N >= 2 ? N - 2 : 0);
     const inten01 = fillCue ? (fillCue.intensity ?? 0.5) : (typeof opts!.fill === "number" ? opts!.fill : 0.5);
-    const phys = buildPhysicalFill(base, f, fb, inten01, seed ?? 0, opts);
+    const phys = buildPhysicalFill(base, f, fb, inten01, seed ?? 0, opts, fillCue?.aim);
     if (phys) base = phys; // 物理フィル失敗（拍子非対応/範囲外）は付与せず＝grid も敷かない（opt-in 実験枠）
   } else if (fillCue) {
     // cue.bar＝フィル本体の開始小節（§2-3）／cue.intensity(0..1)→既存 F型選抜経路（未指定＝0.5 の中庸）。
@@ -1780,10 +1780,15 @@ function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, s
 // 物理フィル（M2・opt-in）：phrase_maker の placeFill を呼び、フィル本体＋着地を絶対 qb の note 列に。
 //   base grid lanes は touch しない＝fillNotes/fillBar を additive に載せるだけ（旧 consumer は無視＝bit 安全）。
 //   拍子は 4/4・3/4・6/8 のみ対応（FillMeter）。非対応拍子・範囲外は null（＝物理フィル無し）。
-//   kind＝opts.fillKind（未指定＝seed 決定的に選抜）／length＝opts.fillLength（既定 "bar"）／
-//   intensity＝0..1 を subtle/medium/flashy に量子化。着地が section を越える（landingBar>=N）なら着地は打たない
-//   （次セクション bar0 の land が担う＝cue 経路と同流儀）。
-function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, inten01: number, seed: number, opts?: DrumsGenOpts): DrumContent | null {
+//   kind＝opts.fillKind（明示ノブ＞プリセット）→ 無ければ cue.aim でプール分けし seed で選抜（裁定B・
+//   2026-08-21）：aim:up＝上昇/駆動プール／aim:down＝下降プール／未指定＝全10型（＝従来の純ランダムと bit 一致）。
+//   intensity は型選択に使わない＝二重掛け回避（intensity は下の subtle/medium/flashy＝フィル内部の強弱/密度のみ）。
+//   プール＝硬化させない（利用の中で微調整・design §2106）。選抜 kind は rhythm.fillKind に自己記述（step2 結線で型名が要る・patternId 前例）。
+//   length＝opts.fillLength（既定 "bar"）／intensity＝0..1 を subtle/medium/flashy に量子化。着地が section を
+//   越える（landingBar>=N）なら着地は打たない（次セクション bar0 の land が担う＝cue 経路と同流儀）。
+const AIM_POOL_UP = ["buildup", "gallop", "snare_roll", "snare_roll_32", "herta"]; // 上昇/駆動
+const AIM_POOL_DOWN = ["tom_descent", "triplet_cascade", "offbeat_syncopated"]; // 下降
+function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, inten01: number, seed: number, opts?: DrumsGenOpts, aim?: "up" | "down"): DrumContent | null {
   const f = normalizeFrame(frame);
   const N = Math.max(1, Math.min(MAX_BARS, f.bars ?? 4));
   if (!Number.isInteger(fillBar) || fillBar < 0 || fillBar >= N) return null;
@@ -1791,7 +1796,9 @@ function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, int
   if (!sym) return null; // 対応拍子のみ（それ以外は物理フィル非対応）
   const fm = fillMeter(sym);
   const intensity = inten01 < 0.34 ? "subtle" : inten01 < 0.67 ? "medium" : "flashy";
-  const kind = opts?.fillKind && FILL_KINDS.includes(opts.fillKind) ? opts.fillKind : FILL_KINDS[new Rng(seed).next() * FILL_KINDS.length | 0]!;
+  // 明示ノブ＞プリセット。プール＝aim で分岐（未指定＝FILL_KINDS＝従来の選抜式と同一＝bit 一致）。
+  const pool = aim === "up" ? AIM_POOL_UP : aim === "down" ? AIM_POOL_DOWN : FILL_KINDS;
+  const kind = opts?.fillKind && FILL_KINDS.includes(opts.fillKind) ? opts.fillKind : pool[new Rng(seed).next() * pool.length | 0]!;
   const length = opts?.fillLength ?? "bar";
   let p: ReturnType<typeof placeFill>;
   try { p = placeFill(fillBar, 0.0, length, intensity, kind, fm); } catch { return null; }
@@ -1799,7 +1806,7 @@ function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, int
   const landingBar = Math.round(p.landingQb / fm.qbeatsPerBar);
   const evs: FillEvent[] = landingBar < N ? [...p.events, ...p.landing] : p.events;
   const fillNotes: PhysFillNote[] = evs.map((e) => ({ beat: e.beat, midi: FILL_GM[e.voice], velocity: e.velocity }));
-  return { rhythm: { ...base.rhythm, fillNotes, fillBar } };
+  return { rhythm: { ...base.rhythm, fillNotes, fillBar, fillKind: kind } };
 }
 
 // S2 land 消費（カスケード §3-1）：導出された bar0 land を crash+kick で着地音として乗せる（applyDrumFill の landing 節と同じ音・暫定）。

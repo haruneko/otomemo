@@ -60,3 +60,42 @@ describe("物理フィル配線（M2）", () => {
     expect(notes).toStrictEqual(expected);
   });
 });
+
+describe("物理フィル kind選択＝aimプール分け（裁定B・2026-08-21）", () => {
+  const UP = ["buildup", "gallop", "snare_roll", "snare_roll_32", "herta"];
+  const DOWN = ["tom_descent", "triplet_cascade", "offbeat_syncopated"];
+  const ALL = [...UP, ...DOWN, "flam_accents", "sixteenth_groove"];
+  const kindOf = (aim: "up" | "down" | undefined, seed: number) => {
+    const cue: DerivedCue[] = [{ bar: 1, kind: "fill", intensity: 0.5, ...(aim ? { aim } : {}) }];
+    return (rh(genDrums({ ...DF, section: { cues: cue } }, seed, { fillStyle: "physical" })).fillKind);
+  };
+
+  it("選抜 kind を rhythm.fillKind に自己記述する（物理経路・opt-in）", () => {
+    expect(kindOf("up", 1)).toBeTypeOf("string");
+    expect(ALL).toContain(kindOf("up", 1));
+  });
+
+  it("aim:up は必ず上昇/駆動プールから選ばれる（全 seed で下降型は出ない）", () => {
+    for (let s = 0; s < 40; s++) expect(UP).toContain(kindOf("up", s));
+  });
+
+  it("aim:down は必ず下降プールから選ばれる（全 seed で上昇型は出ない）", () => {
+    for (let s = 0; s < 40; s++) expect(DOWN).toContain(kindOf("down", s));
+  });
+
+  it("aim 未指定＝全10型プール（＝従来の純ランダムと同一の選抜＝bit 一致）", () => {
+    // aim 無しは pool=FILL_KINDS なので選抜式が現行と同一。fillNotes が fillKind 明示無しの現行出力と一致。
+    const cue: DerivedCue[] = [{ bar: 1, kind: "fill", intensity: 0.5 }];
+    const withAim = genDrums({ ...DF, section: { cues: cue } }, 5, { fillStyle: "physical" });
+    const chosen = rh(withAim).fillKind!;
+    const explicit = genDrums({ ...DF, section: { cues: cue } }, 5, { fillStyle: "physical", fillKind: chosen });
+    expect(rh(withAim).fillNotes).toStrictEqual(rh(explicit).fillNotes);
+    expect(ALL).toContain(chosen);
+  });
+
+  it("fillKind 明示は aim プールより優先（明示ノブ＞プリセット）", () => {
+    const cue: DerivedCue[] = [{ bar: 1, kind: "fill", intensity: 0.5, aim: "up" }];
+    // 下降型を明示 → up プール外でも明示が勝つ
+    expect(rh(genDrums({ ...DF, section: { cues: cue } }, 3, { fillStyle: "physical", fillKind: "tom_descent" })).fillKind).toBe("tom_descent");
+  });
+});
