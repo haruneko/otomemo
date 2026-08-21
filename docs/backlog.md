@@ -432,3 +432,6 @@ worker pytest 8緑（先に赤→緑・`test_content_text_includes_lyric_phrases
 **やる時期**：スライス5と同じ回が自然（生まれ始める前に索引を直す）。design §31-10 スライス5 に紐づけて起票する。
 
 </details>
+
+## phrase_maker取り込み：文脈依存ヒューマナイズ（M2以降）
+現行グルーヴ＝声部別の一律固定オフセット＋ガウス揺れ＝**近似**。本来のもたり/突っ込みは身体・文脈から起きる＝**位置依存**（小節内位置・フィル前後・セクション役割・強拍/弱拍）。`groove` を「位置→オフセット」の関数へ育てる（perVoice 固定はその特殊解）。適用点は feel 層一箇所のまま・schema は additive で吸収。正準の設計は design「フィール層分離」＋M0契約（drafts→archive）。

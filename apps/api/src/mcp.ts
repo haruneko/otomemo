@@ -239,6 +239,17 @@ const frameSchema = z
         seedMotif: z.array(z.object({ pitch: z.number(), start: z.number().optional(), dur: z.number().optional() })).optional().describe("前セクションの代表モチーフ（実音ノート列）。渡すと先頭ブロックがこの動機を種に再展開＝verse↔chorus のモチーフ共有"),
         prevEndPitch: z.number().optional().describe("前セクション最終音のMIDI番号（骨格開始音の近傍＝接続を滑らかに）"),
         energy: z.number().min(0).max(1).optional().describe("0..1。明示時のみ density/registerShift のプリセットを線形スケール（0.5=既定値）。曲全体アークの自動適用はしない"),
+        cues: z
+          .array(
+            z.object({
+              bar: z.number().int().min(0).describe("セクション相対の小節番号（0始まり）。fill では『フィル本体の開始小節』"),
+              kind: z.enum(["fill", "build", "break", "land"]).describe("合図の種類。fill=末尾フィル／land=導出専用の着地（通常は自動）"),
+              intensity: z.number().min(0).max(1).optional().describe("0..1。fill の派手さ（→フィル型選抜）。未指定＝各演奏者の既定（0.5相当）"),
+              aim: z.enum(["up", "down"]).optional().describe("狙いの向き（駆け上がり/下降）。未指定＝演奏者任せ"),
+            }),
+          )
+          .optional()
+          .describe("セクションの薄い合図（カスケード §3-1・案C）。fill＝末尾フィル（bar＝フィル本体開始小節・intensity＝派手さ）＝ドラム/ベースが位置と強さを解決。**越境＝次セクション頭に着地させたい時は最終小節(bars-1)に fill を置く**（bars-2 に置くとセクション内で着地）。**build/break は受理するが現状は鳴りが変わらない**（初期は全演奏者が無視）。land は導出専用（通常は自動生成・人は書かない）。未指定＝従来動作(bit一致)"),
       })
       .optional()
       .describe("セクション役割文脈（2026-07-10）。role を書くだけで役割別プリセットが効く。未指定＝従来動作"),

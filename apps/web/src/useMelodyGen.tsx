@@ -12,6 +12,7 @@ import {
   type Note,
   type PlaybackHandle,
 } from "./music";
+import { deriveCues, type Cue } from "@cm/music-core"; // カスケード合図の透過（§2-3・保存land破棄＋範囲外無視）
 import { startPlayback } from "./playback";
 import { spanOverlaps, type Lane, type Child } from "./components/sectionLanes";
 import { fetchLibraryPatternNetas } from "./components/patternLibrary";
@@ -321,7 +322,12 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // セクション役割（2026-07-10・design#12-M）：Section ネタ tags の `role:` を frame.section.role へ（無ければ渡さない＝従来）。
       const roleTag = (neta.tags ?? []).find((t) => t.startsWith("role:"))?.slice(5);
       const frame: Record<string, unknown> = { key: keyPc, meter: liveMeter, tempo, bars: BARS, mode: secMode };
-      if (roleTag) frame.section = { role: roleTag };
+      // カスケード合図の透過（S1/S2・案C）：編集中セクション content.cues（人が書いた Cue[]）を deriveCues で導出
+      //   （保存 land 破棄・範囲外無視）して frame.section.cues（DerivedCue[]）へ載せる＝ドラム/ベースが位置と強さを解決。
+      //   前セクションの越境 land はサーバ配布（/gen/section prevSection）側の管掌＝ここは単体セクションの透過に留める。未指定＝従来 bit 一致。
+      const rawCues = (neta.content as { cues?: Cue[] } | null | undefined)?.cues;
+      const derivedCues = Array.isArray(rawCues) && rawCues.length ? deriveCues([{ cues: rawCues, bars: BARS }], 0) : [];
+      if (roleTag || derivedCues.length) frame.section = { ...(roleTag ? { role: roleTag } : {}), ...(derivedCues.length ? { cues: derivedCues } : {}) };
       if (voice) frame.voice_profile = voice; // 声種プロファイル（WP-M4）：""=未送信＝従来 bit 一致。指定時のみ音域窓＋歌唱難度レンズが追従。
       if (palette) frame.palette = palette; // 旋法パレット（WP-C1）：""=未送信＝従来 bit 一致。gen_chords/melody/bass が frame.palette で追従。
       const body: Record<string, unknown> = {

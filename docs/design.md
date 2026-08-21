@@ -2103,6 +2103,17 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **副次バグの自動解消**（監査③-5/⑥）：backbeat の16分丸め照合が sw≥0.75 で抜ける／corpusTypicality ランクが swing 量で系統的に歪む（ノブ×評価の結託）／編集の非可逆・quantize不能／採譜側(audio-drums)との二重規格——**全て「notes は常にストレート」で消える**。「notes は常にストレート格子」を**契約として明文化**し fit/reshape/complete_melody 等 notes 再入力経路で担保（⑥-10）。
 - **暫定対症修正の撤去**：直前コミット `10c01b7` の swing 衝突ガード（SWING_ROOM=0.4＝「直後に16分がある8分裏は跳ねない」）は偶然ジャズ「走句ストレート」の粗い近似だが**層が誤り**＝Stage 3 で撤去。
 
+### 3層カスケード・ブリーフィング（曲/セクション/ネタ・案C・2026-08-21 S0＝型と規則の凍結）
+正典化＝`docs/drafts/2026-08-21-arrange-data-locus.md`（案C裁定）・`2026-08-20-phrasemaker-M0-contract.md`・`2026-08-21-cascade-briefing-implementation.md`。S0 は**型と規則の凍結のみ**（実消費は M1 のレシピ resolve から。cues 未指定＝従来 bit 一致・additive）。
+
+- **(a) フィール層分離への追補＝レシピ由来グルーヴ（M0契約 §1）**：ドラム等のレシピは「声部別グルーヴ（系統オフセット＋揺れ）」を**演奏側パラメータ**として持つ。resolve が返す notes・skeleton は**ストレート厳守**（上の「notes は常にストレート格子」契約と同型）で、グルーヴは再生／MIDI 書き出しの境界で feel 層が**非破壊**に適用する。レシピが在るトラックは**レシピの声部別グルーヴが権威**（全体 `HUMANIZE_PROFILES` は非レシピ音のフォールバック）。既定は適用 ON・ユーザーは OFF／クオンタイズ／つまみで介入できる。**二重掛け禁止＝グルーヴの適用点は feel 層の一箇所に限る**（上の feel 層分離「二重適用しない」の延長）。
+
+- **(b) 3層モデルの一枚絵＋カスケード規則**：**曲**＝セクションが持てない構造（フォーム順・キー計画・エネルギー山谷・「これがラスサビ」）／**セクション**＝ネタが持てない構造（役割・境界の合図＝フィル/ビルド/ブレイク・レイヤー抜き差し）／**ネタ**＝各トラックの弾き方の語彙（骨・つまみ・groove・seed＝演奏者）。演奏時に各層を **ctx 1枚**へ畳んで各レシピ（演奏者）へ push で配る（指揮者の頭脳・問い合わせ口・聴き合いループは作らない）。**統合規則は1本＝内側優先スコープ**（セクション＞曲＝#169「明示ノブ＞role プリセット＞既定」の1段上版）。横断契約は薄い2本＝**skeleton は下から上**（実音の噛み合い）・**cues は上から下**（構造/意図）で1本化しない。**曲レイヤーは実装丸ごと後回し**（outer スロットと merge 規則だけ凍結・実データ供給はしない＝ラスサビは当面 vary で回避）。将来結線時の戒め＝**データを敷くだけ**で `deriveCues` を「曲の意図から合図を生成する頭脳」にしない（energy 山谷→cue の変換は suggest_* 側＝人が採用して初めてデータになる）。
+
+- **合図(cues)の型と規則（S0 凍結・`packages/music-core/src/cues.ts`）**：`Cue = {bar, kind:"fill"|"build"|"break", intensity?, aim?}`＝人が書ける＝**保存可**（section ネタ content の additive フィールド・`z.unknown()` 素通し＝DB スキーマ変更なし）。`DerivedCue = Cue | {bar, kind:"land"}`＝**land は導出専用**（人は書かない・保存されていても捨てる）。純関数2つ＝`mergeCues(outer, inner)`（同 bar は内側が丸ごと勝つ・bar で dedup・安定 sort）／`deriveCues(sections, i)`（保存 land 破棄＋範囲外 `bar>=bars` 無視＋前セクション最終小節 `bar===bars-1` の fill から当該 bar0 へ **land を越境導出**）。**越境規約**＝fill の bar＝フィル本体の開始小節・`bar===bars-1`＝越境（着地は次セクション bar0）／`bar<=bars-2`＝内部着地。**知らない kind は黙って無視**（additive の要）・`knobs.respondToCues=false` のトラックは cues を読まない。神化回避の機械判定＝**`Cue` のフィールド集合を型スナップショットで凍結**（楽器追加で差分ゼロ＝「楽器が増えてもセクションのスキーマが1バイトも動かない」）。
+
+- **(c) resolve 置き場＝`packages/music-core`**（api/web 共有・applyFeel 単一実装の前例。cues の型と純関数・RNG ソルト表も同居）。署名＝`resolve(recipe, ctx) -> {notes, skeleton, groove}`・`ctx = {meter, tempo, bars, key?, chords?, sectionRole?, slashBass?, cues?: DerivedCue[]}`（cues は sectionRole と同席・additive）。**RNG ソルト表（凍結・M0契約 §4・`rngSalt.ts`）**＝役割別固定ソルト（kick=+11…altTake=+43・`new Rng(seed+salt)`）。**注記＝`fill=+37` は将来枠＝現行 fill は生 seed**（`resolveFillType`/`resolveBassFill`）＝この定数はレシピ resolve 実装時に使う。
+
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 

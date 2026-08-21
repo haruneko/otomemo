@@ -25,7 +25,7 @@ import {
 import { genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, scalePitchList, loadSkeletonModel, genSkeletonFromModel, type BarRhythmModel, type MoveModel, type SkeletonModel, type SkelContour } from "./melodyCells";
 import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, explicitBassSegments, foldBassPitch, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
-import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）
+import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
 import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
 import { pitchAt, analyzeVoiceLeading, voiceLeadingPenalty, leadingTonePenalty } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）＋候補選別への声部進行減点（PAC/IAC結線・2026-07-22）
@@ -70,6 +70,7 @@ export interface SectionContext {
   seedMotif?: { pitch: number; start?: number; dur?: number }[]; // 前セクションの代表モチーフ（実音）。extractMotif16→V2 opts.seedMotif
   prevEndPitch?: number; // 前セクション最終音（骨格開始音の近傍候補＝genSkeletonFromModel opts.start へ）
   energy?: number; // 0..1。未指定＝role の既定値をそのまま。明示時のみ density/registerShift を線形スケール（0.5=表の値）。
+  cues?: DerivedCue[]; // セクションの薄い合図（カスケード §2-1/§3-1・案C）。fill/build/break/land・楽器非依存・**導出済み**(deriveCues 通過後)が届く。各生成器は自分の語彙で解決（知らない kind は無視）。**未指定＝従来 bit 一致**（cue 経路が発火しない）。
 }
 
 // voice_profile 指定時の音域窓中心（tpBase）。窓 [tpBase-5, tpBase+12] が [low, falsettoTop] に収まるよう、
@@ -158,6 +159,22 @@ function normalizeSection(section?: SectionContext | null): SectionContext | und
   }
   if (typeof section.prevEndPitch === "number" && Number.isFinite(section.prevEndPitch)) out.prevEndPitch = section.prevEndPitch;
   if (typeof section.energy === "number" && Number.isFinite(section.energy)) out.energy = Math.max(0, Math.min(1, section.energy));
+  // カスケード合図（cues＝§3-1）：**導出済み** DerivedCue[] が届く（deriveCues 通過後）。ここは軽い健全化だけ＝
+  //   bar が有限非負・kind が文字列のものを保持（未知 kind も保持＝additive／知らない kind は各生成器が無視）。
+  //   intensity は 0..1 クランプ（resolveFillType と同じ）。**cues 不在＝out.cues 不在＝従来 bit 一致**。
+  if (Array.isArray(section.cues)) {
+    const cs = (section.cues as unknown[]).filter(
+      (c): c is { bar: number; kind: string; intensity?: number; aim?: string } =>
+        !!c && typeof c === "object" && Number.isFinite((c as { bar?: number }).bar) && (c as { bar: number }).bar >= 0 && typeof (c as { kind?: unknown }).kind === "string",
+    );
+    if (cs.length)
+      out.cues = cs.map((c) => ({
+        bar: Math.trunc(c.bar),
+        kind: c.kind,
+        ...(typeof c.intensity === "number" && Number.isFinite(c.intensity) ? { intensity: Math.max(0, Math.min(1, c.intensity)) } : {}),
+        ...(c.aim === "up" || c.aim === "down" ? { aim: c.aim } : {}),
+      })) as DerivedCue[];
+  }
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -1163,8 +1180,12 @@ export function genBass(
       }
     };
     // fill（末尾1つ手前の小節）：型ID/数値を解決し当該小節だけ fill セルへ差替え（bars>=2・6-8はフィル対象外＝除外）。
-    const fillBar = opts?.fill != null && bars >= 2 && !compound ? bars - 2 : -1;
-    const bf: BassFill | null = fillBar >= 0 ? resolveBassFill(opts!.fill!, seed ?? 42) : null;
+    // セクション合図（カスケード §3-1）：cue 有→fill 位置＝cue.bar・強さ＝cue.intensity(0..1)→resolveBassFill／**cue 無→現行式(bars-2)＝bit 一致**。
+    const relFillCue = f.section?.cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
+    const cueFillBar = relFillCue != null && !compound && relFillCue.bar >= 0 && relFillCue.bar < bars ? relFillCue.bar : -1;
+    const fillBar = cueFillBar >= 0 ? cueFillBar : (opts?.fill != null && bars >= 2 && !compound ? bars - 2 : -1);
+    const fillVal: number | string | undefined = cueFillBar >= 0 ? (relFillCue!.intensity ?? 0.5) : opts?.fill;
+    const bf: BassFill | null = fillBar >= 0 ? resolveBassFill(fillVal!, seed ?? 42) : null;
     for (let bar = 0; bar < bars; bar++) cellsToSteps(bar === fillBar && bf ? bf.cells : styleType.cells, bar);
     const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 42); // 相対 content にも feel を載せる（絶対と対称・applyFeelEnsemble が消費）
     // patternId＝base 型 id を刻む（修理#3・S1・design 決定②）。fill 差替えでも base 型 id を維持（ドラム applyDrumFill 継承と同流儀）。
@@ -1310,8 +1331,27 @@ export function genBass(
   // --- F: セクション末フィル（WP-B1・fill 指定・4/4系のみ・bars>=2）：末尾の1つ手前の小節(bars-2)を
   //   フィル型（駆け上がり/下がり）で置換＝句末の橋渡し。R> は次小節(bars-1)頭のルートへ先取り着地。
   //   全後処理の最後＝approach/snareGap/skeleton に乱されない（型格子を正準に保つ）。**fill 未指定=OFF=従来 bit 一致**。
+  // セクション合図（カスケード §3-1）：cue 有→fill 位置＝cue.bar（強さ＝cue.intensity(0..1)→resolveBassFill）／**cue 無→現行式(bars-2)＝一切触れない＝bit 一致**。
+  const fillCue = f.section?.cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
   const fillOpt = opts?.fill;
-  if (fillOpt != null && info.grouping !== "compound" && bars >= 2) {
+  if (fillCue != null && info.grouping !== "compound" && fillCue.bar >= 0 && fillCue.bar < bars) {
+    // ── 新経路（cue 有）：fill セルを cue.bar に差替（越境＝bar===bars-1 も内部処理は同じ・land は次セクションで鳴る） ──
+    const bf: BassFill | null = resolveBassFill(fillCue.intensity ?? 0.5, seed ?? 42);
+    if (bf) {
+      const fs = fillCue.bar * perBar, fe = fs + perBar;
+      const kept: typeof notes = [];
+      for (const n of notes) {
+        if (n.start >= fs - 1e-9 && n.start < fe - 1e-9) continue;
+        if (n.start < fs - 1e-9 && n.start + n.dur > fs + 1e-9) n.dur = round3(fs - n.start);
+        kept.push(n);
+      }
+      const filled = realizeBassGrid(bf.cells, fs, perBar, total, rootAtBeat, rootAtBeat(fe));
+      notes.length = 0;
+      notes.push(...kept, ...filled);
+      notes.sort((a, b) => a.start - b.start);
+    }
+  } else if (fillOpt != null && info.grouping !== "compound" && bars >= 2) {
+    // ── 現行式（cue 不在）＝bars-2 固定＝bit 一致 ──
     const bf: BassFill | null = resolveBassFill(fillOpt, seed ?? 42);
     if (bf) {
       const fs = (bars - 2) * perBar, fe = fs + perBar; // フィル小節の範囲［fs,fe)
@@ -1567,7 +1607,20 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
   const f = normalizeFrame(frame);
   // ベース1小節（or 定型型）content を決める。style 未指定＝従来経路（bit 一致）。
   let base: DrumContent = opts?.style != null ? (resolveStyleContent(f, opts.style, seed ?? 0) ?? defaultDrumBar(f, seed)) : defaultDrumBar(f, seed);
-  if (opts?.fill != null) { const filled = applyDrumFill(base, f, opts.fill, seed ?? 0); if (filled) base = filled; }
+  // セクションの合図（カスケード §3-1）＝additive ガード分岐。**cue 有→新経路／cue 無→現行式そのまま＝bit 一致**（cue 経路が発火しない）。
+  const cues = f.section?.cues;
+  const fillCue = cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
+  if (fillCue) {
+    // cue.bar＝フィル本体の開始小節（§2-3）／cue.intensity(0..1)→既存 F型選抜経路（未指定＝0.5 の中庸）。
+    //   着地は fillStart+ft.bars（越境＝bar>=N は着地を打たない＝次セクション bar0 の land が担う・deriveCues 由来）。
+    const filled = applyDrumFill(base, f, fillCue.intensity ?? 0.5, seed ?? 0, { fillStart: fillCue.bar });
+    if (filled) base = filled;
+  } else if (opts?.fill != null) {
+    // ── 現行式（cue 不在）＝一切触れない＝bit 一致 ──
+    const filled = applyDrumFill(base, f, opts.fill, seed ?? 0); if (filled) base = filled;
+  }
+  // S2 land 消費（越境＝前セクション末フィルの着地）：導出された bar0 land を crash+kick で鳴らす（applyDrumFill landing 節と同じ音・暫定）。
+  if (cues?.some((c) => c.kind === "land" && c.bar === 0)) base = applyLandBar0(base);
   return withBarsWarning({ items: [{ kind: "rhythm", content: base, label: "ドラム" }], edges: [] }, frame);
 }
 
@@ -1652,7 +1705,9 @@ function resolveStyleContent(frame: Frame, style: string, seed: number): DrumCon
 
 // フィル挿入：base(1小節 or 型)を frame.bars 本へタイル＋末尾の遷移小節へフィル型＋着地(次小節頭 crash+kick)。
 // フィルグリッドと base グリッドが不一致（例 shuffle三連 base×16格子フィル）や小節数不足なら null（＝フィル無し）。
-function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, seed: number): DrumContent | null {
+// place（カスケード S1）：cue 由来のフィル位置を明示指定＝フィル本体の開始小節を place.fillStart に置く。
+//   **place 未指定＝現行の N-1 アンカー経路に一切触れない＝bit 一致**（下の分岐参照）。越境（着地が N 以上）は着地を打たない。
+function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, seed: number, place?: { fillStart: number }): DrumContent | null {
   const f = normalizeFrame(frame);
   const compound = meterInfo(f.meter).grouping === "compound";
   const grid = base.rhythm.steps / base.rhythm.bars; // base の1小節step数
@@ -1660,9 +1715,18 @@ function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, s
   const ft: FillType | null = resolveFillType(fill, compound, seed);
   if (!ft || ft.grid !== grid) return null; // グリッド不一致＝二重格子は不可
   const N = Math.max(1, Math.min(MAX_BARS, f.bars ?? 4)); // 生成小節数（既定4・16小節ビルド build.big.16bar は着地込み17小節要）。f.bars は normalizeFrame で既に MAX_BARS 制限済
-  if (N < ft.bars + 1) return null; // 着地(次小節)の余地が要る＝最低 fillbars+1 小節
-  const fillStart = N - 1 - ft.bars; // フィル本体の先頭小節
-  const landingBar = N - 1;
+  let fillStart: number, landingBar: number;
+  if (place) {
+    // ── cue 経路（新）：フィル本体を cue.bar に置く。本体がセクションに収まらなければ null。着地＝本体直後（N 以上＝越境＝下で打たない）。 ──
+    fillStart = place.fillStart;
+    if (fillStart < 0 || fillStart + ft.bars > N) return null;
+    landingBar = fillStart + ft.bars;
+  } else {
+    // ── 現行式（cue 不在）＝N-1 アンカー＝bit 一致 ──
+    if (N < ft.bars + 1) return null; // 着地(次小節)の余地が要る＝最低 fillbars+1 小節
+    fillStart = N - 1 - ft.bars; // フィル本体の先頭小節
+    landingBar = N - 1;
+  }
   // base の1小節ぶん（bar0）のレーンを取り出す（2小節型は bar0 のみ反復単位に）。
   type Pair = { midi: number; pairs: { step: number; vel: number }[] };
   const map = new Map<string, Pair>();
@@ -1679,8 +1743,10 @@ function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, s
   const off = fillStart * grid;
   for (const l of ft.lanes) l.hits.forEach((s, i) => add(l.name, l.midi, off + s, l.velCurve[i] ?? l.velCurve[l.velCurve.length - 1] ?? 100));
   // 着地（次小節頭＝landingBar step0）。crashKick=crash+kick／crashOnly=crash／rideKick=ride+kick／silent=無し。
+  //   越境（landingBar>=N＝cue 経路でフィルが最終小節＝bars-1）は**このセクション内では着地を打たない**＝次セクション bar0 の land が担う（§2-3・裁定4）。
+  //   現行式（place 不在）は landingBar=N-1<N ゆえ常に true＝従来どおり着地する＝bit 一致。
   const lstep = landingBar * grid;
-  if (ft.landing !== "silent") {
+  if (landingBar < N && ft.landing !== "silent") {
     if (ft.landing === "rideKick") add("Ride", DRUM.Ride, lstep, 90); else add("Crash", DRUM.Crash, lstep, 120);
     if (ft.landing !== "crashOnly") add("Kick", DRUM.Kick, lstep, 118);
   }
@@ -1694,4 +1760,28 @@ function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, s
   });
   // 型IDの残留（修理#1）：style+fill でも base（型経路）の patternId を継承（fill だけ＝base=default＝patternId 無し）。
   return { rhythm: { steps: N * grid, bars: N, beatsPerStep: base.rhythm.beatsPerStep, lanes, ...(base.rhythm.patternId != null ? { patternId: base.rhythm.patternId } : {}) } };
+}
+
+// S2 land 消費（カスケード §3-1）：導出された bar0 land を crash+kick で着地音として乗せる（applyDrumFill の landing 節と同じ音・暫定）。
+//   既存 lanes は保持し、bar0 step0 に Crash(120)+Kick(118) を追加（同 step の既存 vel は land が上書き）。cue の land が在る時のみ呼ばれる＝bit 一致は不関与。
+function applyLandBar0(base: DrumContent): DrumContent {
+  const grid = base.rhythm.steps / base.rhythm.bars;
+  if (!Number.isInteger(grid) || grid <= 0) return base;
+  type Pair = { midi: number; pairs: { step: number; vel: number }[] };
+  const map = new Map<string, Pair>();
+  for (const l of base.rhythm.lanes) map.set(l.name, { midi: l.midi, pairs: l.hits.map((s, i) => ({ step: s, vel: l.velCurve?.[i] ?? l.vel })) });
+  const add = (name: string, midi: number, step: number, vel: number) => {
+    const e = map.get(name) ?? map.set(name, { midi, pairs: [] }).get(name)!;
+    e.pairs.push({ step, vel });
+  };
+  add("Crash", DRUM.Crash, 0, 120); // applyDrumFill の crashKick 着地と同値
+  add("Kick", DRUM.Kick, 0, 118);
+  const lanes: OutLane[] = [...map.entries()].map(([name, e]) => {
+    const uniq = [...new Map(e.pairs.map((p) => [p.step, p.vel])).entries()].sort((a, b) => a[0] - b[0]); // 同 step は後勝ち＝land が上書き
+    const hits = uniq.map((u) => u[0]);
+    const vels = uniq.map((u) => u[1]);
+    const allSame = vels.every((v) => v === vels[0]);
+    return allSame ? { name, midi: e.midi, hits, vel: vels[0] ?? 100 } : { name, midi: e.midi, hits, vel: Math.max(...vels), velCurve: vels };
+  });
+  return { rhythm: { ...base.rhythm, lanes } };
 }

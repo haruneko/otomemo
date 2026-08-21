@@ -36,6 +36,15 @@ export * from "./syncopation";
 // 役割別の目標帯へ適合score・モーダルループで自動降格。純TS・度数+品質+key のみ・音源不要（メロレンズと同格）。
 export * from "./harmonicTension";
 
+// カスケード・ブリーフィング S0（案C・2026-08-21）＝セクションの「薄い合図」cues の型と純関数
+// （mergeCues＝内側優先・deriveCues＝越境 land 導出）。resolve 置き場＝music-core（api/web 共有・
+// cues 型と純関数も同居＝M0契約 §3）。M1 まで実消費されない＝既存挙動は不変（additive）。
+export * from "./cues";
+
+// レシピ resolve 用 RNG ソルト表（凍結・M0契約 §4）。役割別固定ソルト（kick=+11…altTake=+43）。
+// fill=+37 は将来枠＝現行 fill は生 seed（レシピ resolve 実装時に使う）。
+export * from "./rngSalt";
+
 /** ピッチクラス(0-11)の音名。旧 web `PITCH_NAMES` / api `KEY_NAMES` の同一配列を1本化。
  *  型は既存に合わせ `string[]`（web の `PITCH_NAMES.indexOf(root: string)` 等の互換のため as const にしない）。 */
 export const PITCH_NAMES: string[] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
