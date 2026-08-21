@@ -268,7 +268,13 @@ export interface RhythmContent {
   beatsPerStep?: number; // #29 P0 1step=何拍か（自己記述の格子解像度）。未指定=0.25（16分）。1/3=三連12格子（shuffle 型）
   patternId?: string; // 修理#1（監査違反③）：適用した定型ビート型ID（来歴・選び直しの現在型ハイライト）。未指定＝手編集/従来ネタ＝bit一致
   patternEdited?: true; // 修理#3 決定④：patternId 持ちネタを手編集した印（帯「いま：<型>（改）」）。patternId が在る時だけ付与＝patternId 無しネタは不変＝bit一致
+  // 物理フィル（M2・phrase_maker 移植）：fillBar の grid は空けられ、フィルは note レベル(絶対qb・GM番号)で
+  // ここに載る（api buildPhysicalFill）。未指定＝従来 grid のみ＝bit 一致。rhythmToNotes が再生/MIDI へ重畳。
+  fillNotes?: { beat: number; midi: number; velocity: number }[]; // beat=セクション先頭からの絶対qb（Note.start と同単位）・velocity 0..127
+  fillBar?: number; // フィルが占める小節（0-based・grid を空けた小節）
+  fillKind?: string; // 選抜されたフィル型（来歴・cue.aim プール／明示 fillKind）
 }
+const FILL_NOTE_DUR = 0.1; // 物理フィル note の公称長（qb）。ドラムは one-shot＝再生は固定長・MIDI 用に短く。
 
 // #29 P0 拍値の丸め（syncopation.ts と同式）＝小節末の累積ドリフト抑制。
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
@@ -324,7 +330,7 @@ export function rhythmOf(content: unknown): RhythmContent {
 
 export function rhythmToNotes(r: RhythmContent): Note[] {
   const bps = snapBps(r.beatsPerStep); // 未指定→0.25（現行 step/4 と同値＝bit）
-  return r.lanes.flatMap((l) =>
+  const grid = r.lanes.flatMap((l) =>
     l.hits.flatMap((step, i) => {
       const v = l.velCurve?.[i] ?? drumVel(l.midi, l.vel); // #29 P0 velCurve 回収（フィル/ビルドのクレッシェンド復活）
       const note: Note = {
@@ -348,6 +354,13 @@ export function rhythmToNotes(r: RhythmContent): Note[] {
       }));
     }),
   );
+  // 物理フィル（M2）：fillNotes を note レベルで重畳（beat=絶対qb＝Note.start と同単位で 1:1）。
+  // fillBar の grid は api 側で空けられている＝二重打ちしない。未指定/空＝grid のみ＝従来 bit 一致（additive）。
+  if (!r.fillNotes || r.fillNotes.length === 0) return grid;
+  const fill: Note[] = r.fillNotes.map((fn) => ({
+    pitch: fn.midi, start: round3(fn.beat), dur: FILL_NOTE_DUR, drum: true, vel: fn.velocity, kit: r.kit,
+  }));
+  return grid.concat(fill);
 }
 
 // #29 P0 リズムセルの実効ベロシティ（velCurve 優先・無ければ vel/GM 既定）＝濃淡描画と3値編集の SSOT。

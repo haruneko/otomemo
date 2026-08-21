@@ -20,16 +20,28 @@ describe("物理フィル配線（M2）", () => {
     expect(rh(baseCue).fillNotes).toBeUndefined();
   });
 
-  it("fillStyle:\"physical\" で fillNotes/fillBar が載る（grid lanes は素の base のまま）", () => {
-    const bare = genDrums(DF, 7); // フィル無しの素 base
+  it("fillStyle:\"physical\" で N小節へ展開＋fillNotes/fillBar/fillKind が載る（fillBar は grid を空ける）", () => {
+    const bare = genDrums(DF, 7); // フィル無しの素 base（1小節）
     const phys = genDrums(DF, 7, { fill: 0.5, fillStyle: "physical", fillKind: "tom_descent" });
     const br = rh(bare), pr = rh(phys);
     expect(pr.fillNotes).toBeDefined();
     expect(pr.fillNotes!.length).toBeGreaterThan(0);
     expect(pr.fillBar).toBe(2); // bars=4 → N-2
-    // 物理経路は grid lanes を一切触らない＝素 base の lanes と一致（フィルは fillNotes に分離）
-    expect(pr.lanes).toStrictEqual(br.lanes);
-    // 全 note が GM ドラム番号
+    expect(pr.fillKind).toBe("tom_descent");
+    // グリッドは N=4 小節へ展開（セクション合成はタイルしないので content が自己完結）。
+    const grid = br.steps / br.bars; // base の1小節step数
+    expect(pr.bars).toBe(4);
+    expect(pr.steps).toBe(4 * grid);
+    // fillBar(=2) の grid は空ける＝どの lane も step∈[2*grid,3*grid) に hit を持たない（フィルは fillNotes 側）。
+    for (const l of pr.lanes) for (const h of (l as { hits: number[] }).hits) expect(h >= 2 * grid && h < 3 * grid).toBe(false);
+    // 非フィル小節(0,1,3)は base bar0 groove がタイルされる＝bar1 は base+grid。
+    const baseHitsByName = new Map(br.lanes.map((l) => [(l as { name: string }).name, (l as { hits: number[] }).hits]));
+    for (const l of pr.lanes) {
+      const nm = (l as { name: string }).name, hits = (l as { hits: number[] }).hits;
+      const b0 = baseHitsByName.get(nm) ?? [];
+      for (const s of b0) { expect(hits).toContain(s); expect(hits).toContain(grid + s); expect(hits).toContain(3 * grid + s); }
+    }
+    // 全 fill note が GM ドラム番号
     const gm = new Set(Object.values(GM_NOTE));
     for (const n of pr.fillNotes!) expect(gm.has(n.midi)).toBe(true);
   });

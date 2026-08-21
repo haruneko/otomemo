@@ -99,6 +99,29 @@ describe("music", () => {
     ]);
   });
 
+  it("物理フィル（M2）：fillNotes を絶対qbで重畳・fillNotes 無し/空は grid のみ（additive・bit）", () => {
+    const gridOnly = { steps: 16, bars: 1, lanes: [{ name: "Kick", midi: 36, hits: [0, 8] }] };
+    const bare = rhythmToNotes(gridOnly);
+    expect(rhythmToNotes({ ...gridOnly, fillNotes: [] })).toEqual(bare); // 空=従来と同一
+    const withFill = rhythmToNotes({
+      ...gridOnly,
+      fillBar: 2,
+      fillNotes: [
+        { beat: 8.0, midi: 50, velocity: 90 }, // tom_hi @ bar2 頭
+        { beat: 8.5, midi: 47, velocity: 100 }, // tom_mid
+        { beat: 12.0, midi: 49, velocity: 120 }, // crash 着地 @ bar3 頭
+      ],
+    });
+    // grid ノートは不変で残り、fill ノートが末尾に絶対qbで足される。
+    expect(withFill.slice(0, bare.length)).toEqual(bare);
+    const fill = withFill.slice(bare.length);
+    expect(fill).toEqual([
+      { pitch: 50, start: 8, dur: 0.1, drum: true, vel: 90 },
+      { pitch: 47, start: 8.5, dur: 0.1, drum: true, vel: 100 },
+      { pitch: 49, start: 12, dur: 0.1, drum: true, vel: 120 },
+    ]);
+  });
+
   it("#84 S4 hihat is quieter than kick by default velocity; lane.vel overrides", () => {
     const notes = rhythmToNotes({
       steps: 16,

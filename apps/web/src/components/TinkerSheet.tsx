@@ -377,6 +377,10 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               <option value="build.big.16bar">溜め16小節（大サビ前）</option>
             </select>
           </label>
+          <label className="knob-row" aria-label="drum-fill-physical">
+            <span className="knob-name">物理フィル<small>タム回し/32分/フラムを本物の粒で（実験）</small></span>
+            <input type="checkbox" checked={gen.drumFillPhysical} onChange={(e) => gen.setDrumFillPhysical(e.target.checked)} />
+          </label>
         </>}
       </div>
       <div className="tk-drawer-foot">

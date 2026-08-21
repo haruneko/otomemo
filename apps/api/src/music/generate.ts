@@ -1802,11 +1802,29 @@ function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, int
   const length = opts?.fillLength ?? "bar";
   let p: ReturnType<typeof placeFill>;
   try { p = placeFill(fillBar, 0.0, length, intensity, kind, fm); } catch { return null; }
-  // 着地の越境判定（landingQb を小節 index に）：>=N なら着地は打たない。
+  // 着地の越境判定（landingQb を小節 index に）：>=N なら着地は打たない（次セクション bar0 の land が担う）。
   const landingBar = Math.round(p.landingQb / fm.qbeatsPerBar);
   const evs: FillEvent[] = landingBar < N ? [...p.events, ...p.landing] : p.events;
   const fillNotes: PhysFillNote[] = evs.map((e) => ({ beat: e.beat, midi: FILL_GM[e.voice], velocity: e.velocity }));
-  return { rhythm: { ...base.rhythm, fillNotes, fillBar, fillKind: kind } };
+  // ── グリッドを N 小節へ展開（applyDrumFill と同モデル：base bar0 groove をタイル・fillBar は空ける） ──
+  //   セクション合成はタイルしない（compositeNotes は content の実尺をそのまま置く）ので、物理フィルも
+  //   grid 経路と同じく **N 小節の自己完結 content** を返す必要がある（fillBar だけ grid を敷かず fillNotes に委ねる）。
+  const grid = base.rhythm.steps / base.rhythm.bars;
+  if (!Number.isInteger(grid) || grid <= 0) return null;
+  const baseBar0 = base.rhythm.lanes.map((l) => {
+    const pairs = l.hits.map((s, i) => ({ s, v: l.velCurve?.[i] ?? l.vel })).filter((x) => x.s < grid);
+    return { name: l.name, midi: l.midi, pairs };
+  });
+  const lanes: OutLane[] = baseBar0.map((l) => {
+    const pairs: { step: number; vel: number }[] = [];
+    for (let b = 0; b < N; b++) { if (b === fillBar) continue; for (const p0 of l.pairs) pairs.push({ step: b * grid + p0.s, vel: p0.v }); }
+    pairs.sort((a, b) => a.step - b.step);
+    const hits = pairs.map((x) => x.step);
+    const vels = pairs.map((x) => x.vel);
+    const allSame = vels.every((v) => v === vels[0]);
+    return allSame ? { name: l.name, midi: l.midi, hits, vel: vels[0] ?? 100 } : { name: l.name, midi: l.midi, hits, vel: Math.max(...vels), velCurve: vels };
+  });
+  return { rhythm: { steps: N * grid, bars: N, beatsPerStep: base.rhythm.beatsPerStep, lanes, fillNotes, fillBar, fillKind: kind, ...(base.rhythm.patternId != null ? { patternId: base.rhythm.patternId } : {}) } };
 }
 
 // S2 land 消費（カスケード §3-1）：導出された bar0 land を crash+kick で着地音として乗せる（applyDrumFill の landing 節と同じ音・暫定）。

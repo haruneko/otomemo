@@ -315,7 +315,9 @@ export function buildHttp(core: Core): FastifyInstance {
         case "gen_drums": { // WP-D1：style(型ID/ジャンル)＋fill(0..1/型ID)＝定型ビート＋フィル。未指定=従来 bit 一致。
           const dstyle = typeof b.style === "string" ? b.style : undefined;
           const dfill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
-          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null ? { style: dstyle, fill: dfill } : undefined);
+          const dfillStyle = b.fillStyle === "physical" || b.fillStyle === "grid" ? b.fillStyle : undefined; // M2 物理フィル（任意・未指定=grid=従来）
+          const dfillKind = typeof b.fillKind === "string" ? b.fillKind : undefined;
+          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null || dfillStyle != null ? { style: dstyle, fill: dfill, fillStyle: dfillStyle, fillKind: dfillKind } : undefined);
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
           return res;
         }
@@ -417,7 +419,7 @@ export function buildHttp(core: Core): FastifyInstance {
   // gen→compose ワンショット（dogfood P4）：コードを土台に各パートを生成→ネタ化→section に合成、を1コール。
   // 「叩き台を一発で組む」。決定的(seed)。返り＝section ネタ＋合成木。全部 project・tags:["生成"]。
   app.post("/gen/section", async (req) => {
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical"; fillKind?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
     const frame = b.frame ?? {};
     // カスケード合図の配布（design 306「配り役」と同型＝feel と同じ様式で全生成器へ同じ1枚を配る）。
     //   body.cues＝このセクションの人が書いた合図（Cue[]）。deriveCues で導出（保存 land 破棄・範囲外無視・越境 land 導出）して
@@ -448,7 +450,10 @@ export function buildHttp(core: Core): FastifyInstance {
     // 依存順＝rhythm→bass→melody（design「gen_bass×ドラム結線」＋「gen_melody×ベース結線」＋「gen_melody×ドラム結線」）：
     // ドラムをベースとメロへ・生成済みベースをメロへ渡す。配置(ord)は従来の 進行→楽器→メロ→ベース→リズム のまま。
     // ドラム定型ビート＋フィル（WP-D1）：body.drums:{style,fill}＝未指定は従来 bit 一致。bass/melody へ渡す依存順は不変。
-    const dOpts = b.drums && (b.drums.style != null || b.drums.fill != null) ? { style: b.drums.style, fill: b.drums.fill } : undefined;
+    //   fillStyle:"physical"（M2 phrase_maker 物理フィル・任意）＝fillNotes を note レベルで載せ N 小節へ展開（fillKind 明示は任意・未指定=cue.aim プール選抜）。未指定=従来 grid=bit 一致。
+    const dOpts = b.drums && (b.drums.style != null || b.drums.fill != null || b.drums.fillStyle != null)
+      ? { style: b.drums.style, fill: b.drums.fill, fillStyle: b.drums.fillStyle, fillKind: b.drums.fillKind }
+      : undefined;
     // セクション共有 feel（S4・swing-feel-layer-audit Stage 4「全トラック同一ワープ」）：body.feel:{swing,humanize} を
     // melody/bass/chord_pattern へ同一透過＝メロ・ベース・コード楽器が同じノリで跳ねる。未指定=undefined=各生成器へ渡らず従来 bit 一致。
     const feelOpt = b.feel && (b.feel.swing != null || b.feel.humanize != null) ? { swing: b.feel.swing, humanize: b.feel.humanize } : undefined;
