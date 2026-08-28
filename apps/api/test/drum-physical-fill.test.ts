@@ -32,27 +32,52 @@ describe("物理フィル配線（M2）", () => {
     const grid = br.steps / br.bars; // base の1小節step数
     expect(pr.bars).toBe(4);
     expect(pr.steps).toBe(4 * grid);
-    // fillBar(=2) の grid は空ける＝どの lane も step∈[2*grid,3*grid) に hit を持たない（フィルは fillNotes 側）。
-    for (const l of pr.lanes) for (const h of (l as { hits: number[] }).hits) expect(h >= 2 * grid && h < 3 * grid).toBe(false);
+    // phrase_maker apply_fills 準拠：空けるのは **フィル span [startQb, landingQb) と着地頭** だけ。
+    //   既定＝末尾1拍（beat 3.0・length "beat"）＝span は bar2 の4拍目のみ。span 外のグルーヴは fillBar 内でも鳴る。
+    const bps = pr.beatsPerStep ?? 0.25;
+    const spanFrom = 2 * 4 + 3, spanTo = 2 * 4 + 4; // qb
+    for (const l of pr.lanes) for (const h of (l as { hits: number[] }).hits) {
+      const qb = h * bps;
+      expect(qb >= spanFrom && qb <= spanTo).toBe(false); // span 内＋着地頭は空く
+    }
+    // fillBar でも span 前（1〜3拍目）のグルーヴは生きている＝丸ごと消さない（旧実装の誤りの回帰ガード）。
+    const inFillBarBefore = pr.lanes.some((l) => (l as { hits: number[] }).hits.some((h) => h >= 2 * grid && h * bps < spanFrom));
+    expect(inFillBarBefore).toBe(true);
     // 非フィル小節(0,1,3)は base bar0 groove がタイルされる＝bar1 は base+grid。
     const baseHitsByName = new Map(br.lanes.map((l) => [(l as { name: string }).name, (l as { hits: number[] }).hits]));
     for (const l of pr.lanes) {
       const nm = (l as { name: string }).name, hits = (l as { hits: number[] }).hits;
       const b0 = baseHitsByName.get(nm) ?? [];
-      for (const s of b0) { expect(hits).toContain(s); expect(hits).toContain(grid + s); expect(hits).toContain(3 * grid + s); }
+      for (const s of b0) { expect(hits).toContain(s); expect(hits).toContain(grid + s); }
+      // bar3 は着地頭(step0)だけ span 扱いで空く＝それ以外は生きる。
+      for (const s of b0) if (s > 0) expect(hits).toContain(3 * grid + s);
     }
     // 全 fill note が GM ドラム番号
     const gm = new Set(Object.values(GM_NOTE));
     for (const n of pr.fillNotes!) expect(gm.has(n.midi)).toBe(true);
   });
 
-  it("fillNotes が phrase_maker placeFill と忠実一致（tom_descent・medium・bar・4/4・bar2）", () => {
-    const phys = genDrums(DF, 7, { fill: 0.5, fillStyle: "physical", fillKind: "tom_descent" });
+  it("fillNotes が phrase_maker placeFill と忠実一致（明示 length/beat＝ノブが素通しされる）", () => {
+    const phys = genDrums(DF, 7, { fill: 0.5, fillStyle: "physical", fillKind: "tom_descent", fillLength: "bar", fillBeat: 0 });
     const notes = rh(phys).fillNotes!;
-    // intensity 0.5→medium、length "bar"、fillBar=2 → placeFill(2,0,"bar","medium","tom_descent")
     const p = placeFill(2, 0.0, "bar", "medium", "tom_descent", fillMeter("4/4"));
     const expected = [...p.events, ...p.landing].map((e) => ({ beat: e.beat, midi: GM_NOTE[e.voice], velocity: e.velocity }));
     expect(notes).toStrictEqual(expected);
+  });
+
+  // 既定＝phrase_maker の常用形（generate.py `_kinds_tour_fills`）＝小節の**最後の1拍**。
+  //   旧既定（beat 0.0 × "bar"＝小節まるごと）は源流に無い極端形で、耳判定で「退屈・成立してない」と却下された。
+  it("既定の開始拍/長さ＝末尾1拍（buildup と flashy だけ2拍＝room を取る）", () => {
+    const med = rh(genDrums(DF, 7, { fill: 0.5, fillStyle: "physical", fillKind: "tom_descent" })).fillNotes!;
+    const pMed = placeFill(2, 3.0, "beat", "medium", "tom_descent", fillMeter("4/4"));
+    expect(med).toStrictEqual([...pMed.events, ...pMed.landing].map((e) => ({ beat: e.beat, midi: GM_NOTE[e.voice], velocity: e.velocity })));
+    // buildup は medium でも2拍（room）／flashy はどの型でも2拍
+    const bu = rh(genDrums(DF, 7, { fill: 0.5, fillStyle: "physical", fillKind: "buildup" })).fillNotes!;
+    const pBu = placeFill(2, 2.0, "2beat", "medium", "buildup", fillMeter("4/4"));
+    expect(bu).toStrictEqual([...pBu.events, ...pBu.landing].map((e) => ({ beat: e.beat, midi: GM_NOTE[e.voice], velocity: e.velocity })));
+    const fl = rh(genDrums(DF, 7, { fill: 0.9, fillStyle: "physical", fillKind: "tom_descent" })).fillNotes!;
+    const pFl = placeFill(2, 2.0, "2beat", "flashy", "tom_descent", fillMeter("4/4"));
+    expect(fl).toStrictEqual([...pFl.events, ...pFl.landing].map((e) => ({ beat: e.beat, midi: GM_NOTE[e.voice], velocity: e.velocity })));
   });
 
   it("cue.intensity → 強度量子化（0.2=subtle / 0.5=medium / 0.9=flashy）", () => {
@@ -66,7 +91,7 @@ describe("物理フィル配線（M2）", () => {
   it("最終小節フィル＝着地は越境（landing 打たない）", () => {
     // fillBar=3（bars=4 の最終小節）・length "bar" → landing は bar4＝section 外 → fillNotes に crash+kick 着地無し
     const cue: DerivedCue[] = [{ bar: 3, kind: "fill", intensity: 0.5 }];
-    const notes = rh(genDrums({ ...DF, section: { cues: cue } }, 7, { fillStyle: "physical", fillKind: "snare_roll" })).fillNotes!;
+    const notes = rh(genDrums({ ...DF, section: { cues: cue } }, 7, { fillStyle: "physical", fillKind: "snare_roll", fillLength: "bar", fillBeat: 0 })).fillNotes!;
     const p = placeFill(3, 0.0, "bar", "medium", "snare_roll", fillMeter("4/4"));
     const expected = p.events.map((e) => ({ beat: e.beat, midi: GM_NOTE[e.voice], velocity: e.velocity })); // landing 無し
     expect(notes).toStrictEqual(expected);

@@ -1605,7 +1605,7 @@ type PhysFillNote = { beat: number; midi: number; velocity: number };
 type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[]; patternId?: string; fillNotes?: PhysFillNote[]; fillBar?: number; fillKind?: string } };
 // fillStyle="physical"＝M2 phrase_maker フィル（qb・三連/32分/フラム保持）を fillNotes に載せる opt-in。
 // 未指定/"grid"＝従来 applyDrumFill（step-grid）＝bit 一致。fillKind/fillLength は物理フィルのみ有効。
-export interface DrumsGenOpts { style?: string; fill?: number | string; fillStyle?: "grid" | "physical"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar" }
+export interface DrumsGenOpts { style?: string; fill?: number | string; fillStyle?: "grid" | "physical"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number }
 
 /** GMバックビートを生成（WP-D1 で style/fill ノブ追加・**opts 無し/両ノブ未指定は従来と bit 一致**）。
  * style=型ID or ジャンル名→定型ビートライブラリで realize。fill=0..1 or 型ID→末尾遷移小節へフィル挿入＋着地。 */
@@ -1799,9 +1799,14 @@ function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, int
   // 明示ノブ＞プリセット。プール＝aim で分岐（未指定＝FILL_KINDS＝従来の選抜式と同一＝bit 一致）。
   const pool = aim === "up" ? AIM_POOL_UP : aim === "down" ? AIM_POOL_DOWN : FILL_KINDS;
   const kind = opts?.fillKind && FILL_KINDS.includes(opts.fillKind) ? opts.fillKind : pool[new Rng(seed).next() * pool.length | 0]!;
-  const length = opts?.fillLength ?? "bar";
+  // 開始拍/長さ＝phrase_maker の常用形（generate.py `_kinds_tour_fills`）＝**小節の最後の1拍**（beat 3.0・length "beat"）。
+  //   buildup は "room" が要る＝2拍前から（同 py の分岐）。flashy も溜めを取って2拍。明示ノブ＞既定。
+  //   旧既定（beat 0.0 × length "bar"）は「小節まるごとグルーヴ消去」＝最も極端な形で、常用形ではなかった。
+  const wantsRoom = kind === "buildup" || intensity === "flashy";
+  const length = opts?.fillLength ?? (wantsRoom ? "2beat" : "beat");
+  const startBeat = opts?.fillBeat ?? Math.max(0, fm.beatUnits - (wantsRoom ? 2 : 1));
   let p: ReturnType<typeof placeFill>;
-  try { p = placeFill(fillBar, 0.0, length, intensity, kind, fm); } catch { return null; }
+  try { p = placeFill(fillBar, startBeat, length, intensity, kind, fm); } catch { return null; }
   // 着地の越境判定（landingQb を小節 index に）：>=N なら着地は打たない（次セクション bar0 の land が担う）。
   const landingBar = Math.round(p.landingQb / fm.qbeatsPerBar);
   const evs: FillEvent[] = landingBar < N ? [...p.events, ...p.landing] : p.events;
@@ -1815,9 +1820,15 @@ function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, int
     const pairs = l.hits.map((s, i) => ({ s, v: l.velCurve?.[i] ?? l.vel })).filter((x) => x.s < grid);
     return { name: l.name, midi: l.midi, pairs };
   });
+  // phrase_maker `apply_fills` 準拠：グルーヴを消すのは **[startQb, landingQb) の範囲＋着地頭** だけ。
+  //   小節を丸ごと空けるのは移植の誤り（源流はフィル span 外のキック/ハットを鳴らし続ける）。
+  //   step→qb は grid と同単位（beatsPerStep×step＝Note.start＝FillEvent.beat）。
+  const bpsGrid = base.rhythm.beatsPerStep ?? 0.25;
+  const EPS = 1e-6;
+  const covered = (qb: number) => (qb >= p.startQb - EPS && qb < p.landingQb - EPS) || (landingBar < N && Math.abs(qb - p.landingQb) < EPS);
   const lanes: OutLane[] = baseBar0.map((l) => {
     const pairs: { step: number; vel: number }[] = [];
-    for (let b = 0; b < N; b++) { if (b === fillBar) continue; for (const p0 of l.pairs) pairs.push({ step: b * grid + p0.s, vel: p0.v }); }
+    for (let b = 0; b < N; b++) for (const p0 of l.pairs) { const step = b * grid + p0.s; if (covered(step * bpsGrid)) continue; pairs.push({ step, vel: p0.v }); }
     pairs.sort((a, b) => a.step - b.step);
     const hits = pairs.map((x) => x.step);
     const vels = pairs.map((x) => x.vel);
