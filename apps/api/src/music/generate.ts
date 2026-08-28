@@ -1786,8 +1786,23 @@ function applyDrumFill(base: DrumContent, frame: Frame, fill: number | string, s
 //   プール＝硬化させない（利用の中で微調整・design §2106）。選抜 kind は rhythm.fillKind に自己記述（step2 結線で型名が要る・patternId 前例）。
 //   length＝opts.fillLength（既定 "bar"）／intensity＝0..1 を subtle/medium/flashy に量子化。着地が section を
 //   越える（landingBar>=N）なら着地は打たない（次セクション bar0 の land が担う＝cue 経路と同流儀）。
-const AIM_POOL_UP = ["buildup", "gallop", "snare_roll", "snare_roll_32", "herta"]; // 上昇/駆動
-const AIM_POOL_DOWN = ["tom_descent", "triplet_cascade", "offbeat_syncopated"]; // 下降
+// 型プール（2026-08-29・耳判定で再編）。**方向を持つ型＋どちらにも付く中立型**の二層。
+//   中立（flam_accents / sixteenth_groove）は初版でどちらのプールにも入っておらず、aim 指定時に
+//   10型中2型が**永久に出ない**穴になっていた（＝「型の種類が少ない」の一因）。
+//   snare_roll_32（32分連打）は耳判定で却下＝既定プールから外す。明示 fillKind でのみ到達（捨てない）。
+const AIM_NEUTRAL = ["flam_accents", "sixteenth_groove"]; // 方向を持たない＝up/down どちらにも付く
+const AIM_POOL_UP = ["buildup", "gallop", "snare_roll", "herta", ...AIM_NEUTRAL]; // 上昇/駆動
+const AIM_POOL_DOWN = ["tom_descent", "triplet_cascade", "offbeat_syncopated", ...AIM_NEUTRAL]; // 下降
+const DEFAULT_POOL = ["snare_roll", "tom_descent", "triplet_cascade", "herta", "gallop", "offbeat_syncopated", "buildup", ...AIM_NEUTRAL]; // aim 未指定＝却下型を除く全型
+
+// 型ごとの既定の長さ（2026-08-29・耳判定＋源流 generate.py:DEMOS 由来）。
+//   **連打型（roll/herta/flam）は自己相似で1拍でも成立する**が、**図形型（gallop/offbeat）は
+//   図形が1回しか出ず拍として成立しない**（耳判定「連打でないのはリズムとして成立してない」）。
+//   → 図形型は2拍取る。源流の musical デモも triplet_cascade=2beat・tom_descent=half_bar/bar と
+//   型ごとに長さを変えていた（一律 "beat" は tour デモ＝機械的な全型巡回の値）。**硬化させない**。
+const KIND_LENGTH: Record<string, "beat" | "2beat"> = {
+  gallop: "2beat", offbeat_syncopated: "2beat", buildup: "2beat", sixteenth_groove: "2beat",
+};
 function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, inten01: number, seed: number, opts?: DrumsGenOpts, aim?: "up" | "down"): DrumContent | null {
   const f = normalizeFrame(frame);
   const N = Math.max(1, Math.min(MAX_BARS, f.bars ?? 4));
@@ -1797,12 +1812,12 @@ function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, int
   const fm = fillMeter(sym);
   const intensity = inten01 < 0.34 ? "subtle" : inten01 < 0.67 ? "medium" : "flashy";
   // 明示ノブ＞プリセット。プール＝aim で分岐（未指定＝FILL_KINDS＝従来の選抜式と同一＝bit 一致）。
-  const pool = aim === "up" ? AIM_POOL_UP : aim === "down" ? AIM_POOL_DOWN : FILL_KINDS;
+  const pool = aim === "up" ? AIM_POOL_UP : aim === "down" ? AIM_POOL_DOWN : DEFAULT_POOL;
   const kind = opts?.fillKind && FILL_KINDS.includes(opts.fillKind) ? opts.fillKind : pool[new Rng(seed).next() * pool.length | 0]!;
   // 開始拍/長さ＝phrase_maker の常用形（generate.py `_kinds_tour_fills`）＝**小節の最後の1拍**（beat 3.0・length "beat"）。
   //   buildup は "room" が要る＝2拍前から（同 py の分岐）。flashy も溜めを取って2拍。明示ノブ＞既定。
   //   旧既定（beat 0.0 × length "bar"）は「小節まるごとグルーヴ消去」＝最も極端な形で、常用形ではなかった。
-  const wantsRoom = kind === "buildup" || intensity === "flashy";
+  const wantsRoom = KIND_LENGTH[kind] === "2beat" || intensity === "flashy";
   const length = opts?.fillLength ?? (wantsRoom ? "2beat" : "beat");
   const startBeat = opts?.fillBeat ?? Math.max(0, fm.beatUnits - (wantsRoom ? 2 : 1));
   let p: ReturnType<typeof placeFill>;

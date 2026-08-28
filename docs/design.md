@@ -2119,6 +2119,10 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
   - **消す範囲**＝`[startQb, landingQb)` と**着地頭だけ**（源流 `fills.py:apply_fills` と同じ）。フィル区間の外は、フィル小節の中でもグルーヴを鳴らし続ける。**小節を丸ごと空けない**。
   - **既定の開始拍/長さ**＝**小節の最後の1拍**（`beat = beatUnits-1`・`length "beat"`）。`buildup` と `intensity flashy` だけ溜めを取って2拍（`beat = beatUnits-2`・`length "2beat"`）。これは源流 `generate.py:_kinds_tour_fills` の常用形（`# last beat of the bar` / `# buildup wants room`）をそのまま採った既定＝**硬化させない**（利用の中で微調整）。
   - **ノブの露出**＝`DrumsGenOpts.fillLength` は内部にあったが到達口が無く固定値だった。`fillLength`（beat/2beat/half_bar/bar・数値も可）と `fillBeat`（小節内の開始拍）を `/music/gen_drums` から渡せるようにした。**明示ノブ＞既定**。
+  - **(f-2) 型ごとの長さ＋プール再編（2026-08-29・耳判定2巡目）**：一律「末尾1拍」も粗すぎた。耳判定＝「32分連打は無し／連打でない型はリズムとして成立していない＝選び方が変／型の種類が少ない」。
+    - **長さは型ごと**（`KIND_LENGTH`）：**連打型（snare_roll/herta/flam_accents）は自己相似で1拍でも成立**するが、**図形型（gallop/offbeat_syncopated/sixteenth_groove/buildup）は図形が1回しか出ず拍にならない** → 2拍取る。源流 `generate.py:DEMOS` も型ごとに長さを変えていた（一律 "beat" は `_kinds_tour_fills`＝機械的な全型巡回の値であって musical デモの値ではない）。
+    - **プール＝方向を持つ型＋中立型の二層**：初版は `flam_accents` / `sixteenth_groove` がどちらの aim プールにも入っておらず、**aim 指定時に10型中2型が永久に出ない**穴だった（「型の種類が少ない」の直接原因のひとつ）。中立型として両プールへ。到達可能数＝up 6／down 6／aim 無し 9。
+    - **`snare_roll_32` は既定プールから降ろす**（耳判定で却下）。**削除はしない**＝明示 `fillKind` でのみ到達（捨てない）。
   - 未了＝**ヒューマナイズ**。`humanizeFill.ts`（移植済み・md5 seed／Python 一致検証済み）は生成経路から呼ばれておらず、`fillNotes` は完全クオンタイズで鳴る。B1 裁定（ノリ＝演奏レイヤー・スコア非焼込）に従うなら結線先は feel/演奏レイヤー側＝**別件として残す**（焼き込みで済ませない）。
 
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）

@@ -99,9 +99,12 @@ describe("物理フィル配線（M2）", () => {
 });
 
 describe("物理フィル kind選択＝aimプール分け（裁定B・2026-08-21）", () => {
-  const UP = ["buildup", "gallop", "snare_roll", "snare_roll_32", "herta"];
-  const DOWN = ["tom_descent", "triplet_cascade", "offbeat_syncopated"];
-  const ALL = [...UP, ...DOWN, "flam_accents", "sixteenth_groove"];
+  // 2026-08-29 再編：方向を持つ型＋中立型（どちらにも付く）。snare_roll_32 は耳判定で既定プールから除外。
+  const NEUTRAL = ["flam_accents", "sixteenth_groove"];
+  const UP = ["buildup", "gallop", "snare_roll", "herta", ...NEUTRAL];
+  const DOWN = ["tom_descent", "triplet_cascade", "offbeat_syncopated", ...NEUTRAL];
+  const DEFAULT_POOL = [...new Set([...UP, ...DOWN])];
+  const ALL = [...DEFAULT_POOL, "snare_roll_32"];
   const kindOf = (aim: "up" | "down" | undefined, seed: number) => {
     const cue: DerivedCue[] = [{ bar: 1, kind: "fill", intensity: 0.5, ...(aim ? { aim } : {}) }];
     return (rh(genDrums({ ...DF, section: { cues: cue } }, seed, { fillStyle: "physical" })).fillKind);
@@ -120,14 +123,38 @@ describe("物理フィル kind選択＝aimプール分け（裁定B・2026-08-21
     for (let s = 0; s < 40; s++) expect(DOWN).toContain(kindOf("down", s));
   });
 
-  it("aim 未指定＝全10型プール（＝従来の純ランダムと同一の選抜＝bit 一致）", () => {
-    // aim 無しは pool=FILL_KINDS なので選抜式が現行と同一。fillNotes が fillKind 明示無しの現行出力と一致。
+  it("aim 未指定＝却下型を除く全型プール（選抜 kind と明示指定の出力が一致）", () => {
     const cue: DerivedCue[] = [{ bar: 1, kind: "fill", intensity: 0.5 }];
     const withAim = genDrums({ ...DF, section: { cues: cue } }, 5, { fillStyle: "physical" });
     const chosen = rh(withAim).fillKind!;
     const explicit = genDrums({ ...DF, section: { cues: cue } }, 5, { fillStyle: "physical", fillKind: chosen });
     expect(rh(withAim).fillNotes).toStrictEqual(rh(explicit).fillNotes);
-    expect(ALL).toContain(chosen);
+    expect(DEFAULT_POOL).toContain(chosen);
+  });
+
+  // 耳判定（2026-08-29）：32分連打は却下＝どの既定プールからも出ない。明示 fillKind でのみ到達（捨てない）。
+  it("snare_roll_32 は既定プールから出ない／明示すれば出る", () => {
+    for (let s = 0; s < 60; s++) for (const aim of ["up", "down", undefined] as const) expect(kindOf(aim, s)).not.toBe("snare_roll_32");
+    expect(rh(genDrums(DF, 1, { fillStyle: "physical", fill: 0.5, fillKind: "snare_roll_32" })).fillKind).toBe("snare_roll_32");
+  });
+
+  // 初版の穴＝中立型が両プールから漏れ、aim 指定時に永久に出なかった（「型の種類が少ない」の一因）。
+  it("中立型（flam_accents / sixteenth_groove）が up/down 双方で選ばれうる", () => {
+    for (const aim of ["up", "down"] as const) {
+      const seen = new Set<string>();
+      for (let s = 0; s < 80; s++) seen.add(kindOf(aim, s)!);
+      for (const n of NEUTRAL) expect(seen).toContain(n);
+    }
+  });
+
+  // 図形型（1回しか出ないと拍として成立しない）は既定で2拍取る＝耳判定「連打でないのは成立してない」。
+  it("図形型（gallop / offbeat_syncopated）の既定長は2拍・連打型は1拍", () => {
+    const span = (kind: string) => {
+      const n = rh(genDrums(DF, 7, { fillStyle: "physical", fill: 0.5, fillKind: kind })).fillNotes!;
+      return Math.max(...n.map((x) => x.beat)) - Math.min(...n.map((x) => x.beat));
+    };
+    for (const k of ["gallop", "offbeat_syncopated"]) expect(span(k)).toBeGreaterThan(1);
+    for (const k of ["snare_roll", "herta", "flam_accents"]) expect(span(k)).toBeLessThanOrEqual(1);
   });
 
   it("fillKind 明示は aim プールより優先（明示ノブ＞プリセット）", () => {
