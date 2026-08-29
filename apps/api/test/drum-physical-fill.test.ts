@@ -202,3 +202,69 @@ describe("3/4 のドラム格子（単純拍子3拍）", () => {
     expect(r.beatsPerStep).toBe(0.25);
   });
 });
+
+// 身体シミュレータ経路（M3・2026-08-29）＝fillStyle:"body"。型辞書を引かずに毎回 DP で解く。
+describe("身体シミュレータ経路（fillStyle:\"body\"）", () => {
+  const DFB = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+
+  it("既定＝bit 一致：body を指定しない限り従来出力に触らない", () => {
+    expect(genDrums(DFB, 7, { fill: 0.5 })).toStrictEqual(genDrums(DFB, 7, { fill: 0.5, fillStyle: "grid" }));
+    expect(rh(genDrums(DFB, 7, { fill: 0.5 })).fillNotes).toBeUndefined();
+  });
+
+  it("body で fillNotes が載り、fillKind は \"body\"（型名ではない＝辞書を引いていない）", () => {
+    const r = rh(genDrums(DFB, 7, { fill: 0.6, fillStyle: "body" }));
+    expect(r.fillNotes!.length).toBeGreaterThan(0);
+    expect(r.fillKind).toBe("body");
+    expect(r.bars).toBe(4);
+  });
+
+  it("seed ごとに別の解＝型の在庫という上限が無い", () => {
+    const sigs = new Set<string>();
+    for (let s = 0; s < 12; s++) sigs.add(JSON.stringify(rh(genDrums(DFB, s, { fill: 0.6, fillStyle: "body" })).fillNotes));
+    expect(sigs.size).toBeGreaterThan(6); // 10型の辞書では出せない多様性
+  });
+
+  it("4/4・3/4・6/8 のいずれでも解ける（16分定規の格子）", () => {
+    for (const [meter, tempo] of [["4/4", 120], ["3/4", 100], ["6/8", 70]] as const) {
+      const r = rh(genDrums({ ...DFB, meter, tempo }, 3, { fill: 0.6, fillStyle: "body" }));
+      expect(r.fillKind).toBe("body");
+      expect(r.fillNotes!.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("三連格子（shuffle 型）には付けない＝定規が違うので解かない（黙って歪めない）", () => {
+    const r = rh(genDrums(DFB, 3, { style: "shuffle.basic", fill: 0.6, fillStyle: "body" }));
+    expect(r.fillNotes).toBeUndefined(); // フィル無しで返る（三連へ無理やり乗せない）
+  });
+
+  it("bodyDrummer:\"none\"＝統計を使わない純物理（ペダルハットが出ない）", () => {
+    const withPrior = rh(genDrums(DFB, 4, { fill: 0.6, fillStyle: "body" })).fillNotes!;
+    const noPrior = rh(genDrums(DFB, 4, { fill: 0.6, fillStyle: "body", bodyDrummer: "none" })).fillNotes!;
+    expect(noPrior).not.toStrictEqual(withPrior);
+    expect(noPrior.some((n) => n.midi === GM_NOTE.phh)).toBe(false);
+  });
+
+  // つまみは「必ず毎回変える」ものではない（短い span では最適解が動かないこともある）。
+  // 効いていることの証明＝**複数 seed のうち少なくとも1つで解が変わる**（形の辞書ではなくコストへの効き）。
+  it("意図つまみ（行き先/忙しさ）が解に効く", () => {
+    const of = (o: Record<string, unknown>, seed: number) =>
+      JSON.stringify(rh(genDrums(DFB, seed, { fill: 0.6, fillStyle: "body", fillLength: "bar", ...o })).fillNotes);
+    let depthDiff = 0, densDiff = 0;
+    for (let s = 0; s < 4; s++) { // 1小節フィルは DP で ~100ms/本＝seed 数は控えめに
+      if (of({ bodyDepth: 0.8 }, s) !== of({}, s)) depthDiff++;
+      // 忙しさ(dense)は**純物理のときだけ効く**：GMD prior 下では骨外の密度もバウンスの
+      // 引き込みも実測カーブが担うので dense 項が評価されない（源流どおり＝仕様）。
+      if (of({ bodyDensity: 1.8, bodyDrummer: "none" }, s) !== of({ bodyDrummer: "none" }, s)) densDiff++;
+    }
+    expect(depthDiff).toBeGreaterThan(0);
+    expect(densDiff).toBeGreaterThan(0);
+  });
+
+  it("フィル span の外はグルーヴが生きている（apply_fills 準拠・physical と同じ規約）", () => {
+    const r = rh(genDrums(DFB, 7, { fill: 0.6, fillStyle: "body" }));
+    const grid = r.steps / r.bars!;
+    const inFillBar = r.lanes.some((l) => (l as { hits: number[] }).hits.some((h) => h >= 2 * grid && h < 3 * grid));
+    expect(inFillBar).toBe(true);
+  });
+});

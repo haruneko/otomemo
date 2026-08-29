@@ -26,7 +26,7 @@ import { genMotifMelodyV2, completeMelody, extractMotif16, loadMotifModel16, sca
 import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBreakpoints, explicitBassSegments, foldBassPitch, type SkeletonContent } from "./skeletonNeta"; // 骨格層の一級化（design #20）
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
-import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
+import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
 import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
 import { pitchAt, analyzeVoiceLeading, voiceLeadingPenalty, leadingTonePenalty } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）＋候補選別への声部進行減点（PAC/IAC結線・2026-07-22）
@@ -1605,7 +1605,12 @@ type PhysFillNote = { beat: number; midi: number; velocity: number };
 type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[]; patternId?: string; fillNotes?: PhysFillNote[]; fillBar?: number; fillKind?: string } };
 // fillStyle="physical"＝M2 phrase_maker フィル（qb・三連/32分/フラム保持）を fillNotes に載せる opt-in。
 // 未指定/"grid"＝従来 applyDrumFill（step-grid）＝bit 一致。fillKind/fillLength は物理フィルのみ有効。
-export interface DrumsGenOpts { style?: string; fill?: number | string; fillStyle?: "grid" | "physical"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number }
+export interface DrumsGenOpts { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string;
+  fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number;
+  /** body エンジンの意図つまみ（行き先/忙しさ/クレッシェンド/末尾の紐）。未指定＝プリセット。 */
+  bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number;
+  /** GMD テクスチャ prior のドラマー。"none" で統計を使わない純物理。未指定＝既定ドラマー。 */
+  bodyDrummer?: string }
 
 /** GMバックビートを生成（WP-D1 で style/fill ノブ追加・**opts 無し/両ノブ未指定は従来と bit 一致**）。
  * style=型ID or ジャンル名→定型ビートライブラリで realize。fill=0..1 or 型ID→末尾遷移小節へフィル挿入＋着地。 */
@@ -1616,15 +1621,17 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
   // セクションの合図（カスケード §3-1）＝additive ガード分岐。**cue 有→新経路／cue 無→現行式そのまま＝bit 一致**（cue 経路が発火しない）。
   const cues = f.section?.cues;
   const fillCue = cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
-  const physical = opts?.fillStyle === "physical"; // M2 opt-in（未指定/"grid"＝従来経路＝bit 一致）
+  const physical = opts?.fillStyle === "physical" || opts?.fillStyle === "body"; // M2 opt-in（未指定/"grid"＝従来経路＝bit 一致）。"body"＝身体シミュレータ経路（M3）
   if (physical && (fillCue || opts?.fill != null)) {
     // ── 物理フィル経路（M2・opt-in）：phrase_maker のフィルを note レベル(qb)で fillNotes に載せる。
     //    grid lanes は不変＝旧 consumer は fillNotes を無視＝bit 安全。fillBar でその小節のミュートを指示。 ──
     const N = Math.max(1, Math.min(MAX_BARS, f.bars ?? 4));
     const fb = fillCue ? fillCue.bar : (N >= 2 ? N - 2 : 0);
     const inten01 = fillCue ? (fillCue.intensity ?? 0.5) : (typeof opts!.fill === "number" ? opts!.fill : 0.5);
-    const phys = buildPhysicalFill(base, f, fb, inten01, seed ?? 0, opts, fillCue?.aim);
-    if (phys) base = phys; // 物理フィル失敗（拍子非対応/範囲外）は付与せず＝grid も敷かない（opt-in 実験枠）
+    const phys = opts!.fillStyle === "body"
+      ? buildBodyFill(base, f, fb, inten01, seed ?? 0, opts)
+      : buildPhysicalFill(base, f, fb, inten01, seed ?? 0, opts, fillCue?.aim);
+    if (phys) base = phys; // フィル失敗（拍子非対応/格子不一致/範囲外）は付与せず＝grid も敷かない（opt-in 実験枠）
   } else if (fillCue) {
     // cue.bar＝フィル本体の開始小節（§2-3）／cue.intensity(0..1)→既存 F型選抜経路（未指定＝0.5 の中庸）。
     //   着地は fillStart+ft.bars（越境＝bar>=N は着地を打たない＝次セクション bar0 の land が担う・deriveCues 由来）。
@@ -1874,6 +1881,82 @@ function buildPhysicalFill(base: DrumContent, frame: Frame, fillBar: number, int
     return allSame ? { name: l.name, midi: l.midi, hits, vel: vels[0] ?? 100 } : { name: l.name, midi: l.midi, hits, vel: Math.max(...vels), velCurve: vels };
   });
   return { rhythm: { steps: N * grid, bars: N, beatsPerStep: base.rhythm.beatsPerStep, lanes, fillNotes, fillBar, fillKind: kind, ...(base.rhythm.patternId != null ? { patternId: base.rhythm.patternId } : {}) } };
+}
+
+// ── 身体シミュレータ経路（M3・2026-08-29）＝phrase_maker `bodyfill.py` の忠実移植を呼ぶ ──
+//   物理フィル（fills.py の固定10型）と違い、**型を引かずに毎回 DP で解く**：グルーヴが手を置いて
+//   いった位置から、キットの地形と手の速度/連打限界を通って、crash+kick の着地まで、両手が辿れる
+//   いちばん安いパスを探す。だから「型の種類」という上限が無い（＝耳判定「型の種類が少ない」の根本解）。
+//   骨（skeleton）＝いま鳴っているグルーヴそのものを引用する＝フィルが曲から浮かない。
+function buildBodyFill(base: DrumContent, frame: Frame, fillBar: number, inten01: number, seed: number, opts?: DrumsGenOpts): DrumContent | null {
+  const f = normalizeFrame(frame);
+  const N = Math.max(1, Math.min(MAX_BARS, f.bars ?? 4));
+  if (!Number.isInteger(fillBar) || fillBar < 0 || fillBar >= N) return null;
+  const sym = f.meter === "6/8" ? "6/8" : f.meter === "3/4" ? "3/4" : f.meter === "4/4" ? "4/4" : null;
+  if (!sym) return null;
+  const fm = fillMeter(sym);
+  const grid = base.rhythm.steps / base.rhythm.bars;
+  if (!Number.isInteger(grid) || grid <= 0) return null;
+  // 身体シミュレータのスロットは 0.25qb 固定（16分定規）。三連格子（shuffle 型＝beatsPerStep=1/3）は
+  // 定規が違うので解けない＝付与しない（源流も第一増分では三連スロットを持たない）。
+  const bps = base.rhythm.beatsPerStep ?? 0.25;
+  if (Math.abs(bps - 0.25) > 1e-9) return null;
+  if (Math.abs(grid * bps - fm.qbeatsPerBar) > 1e-6) return null; // 1小節の尺が合わない格子は弾く
+
+  // 骨＝base グルーヴ bar0 の引用。onset＝鳴っている位置・accent＝スネア（バックビート）と小節頭・
+  //   kick＝キックの位置（足のアンカー）。これが「譜面自身のリズムを引用する」§1.4.1 の入力。
+  const onsets = new Set<number>();
+  const accents = new Set<number>([0]);
+  const kicks = new Set<number>();
+  for (const l of base.rhythm.lanes) for (const st of l.hits) {
+    if (st >= grid) continue;
+    onsets.add(st);
+    if (l.name === "Snare") accents.add(st);
+    if (l.name === "Kick") kicks.add(st);
+  }
+  const rhythmSpec: BodyRhythmSpec = {
+    grid, onsets: [...onsets].sort((a, b) => a - b),
+    accents: [...accents].sort((a, b) => a - b), kick: [...kicks].sort((a, b) => a - b),
+  };
+
+  const intensity = inten01 < 0.34 ? "subtle" : inten01 < 0.67 ? "medium" : "flashy";
+  // 既定は2拍（アークが降りる余地が要る＝1拍だと図形が立たない＝耳判定 §2106(f-2) と同じ理由）。
+  const length = opts?.fillLength ?? "2beat";
+  const startBeat = opts?.fillBeat ?? Math.max(0, fm.beatUnits - 2);
+  const drummer = opts?.bodyDrummer ?? GMD_PRIOR_DEFAULT;
+  const prior = drummer === "none" ? null : (GMD_PRIORS[drummer] ?? null);
+
+  let p: ReturnType<typeof planBodyFill>;
+  try {
+    p = planBodyFill({
+      rhythm: rhythmSpec, bar: fillBar, beat: startBeat, length, intensity, meter: fm,
+      tempo: Math.max(20, Math.round(f.tempo ?? 120)), seedSalt: seed, prior,
+      depth: opts?.bodyDepth, density: opts?.bodyDensity,
+      crescendo: opts?.bodyCrescendo, tailAnchor: opts?.bodyTailAnchor,
+    });
+  } catch { return null; }
+
+  const landingBar = Math.round(p.landingQb / fm.qbeatsPerBar);
+  const evs: FillEvent[] = landingBar < N ? [...p.events, ...p.landing] : p.events;
+  const fillNotes: PhysFillNote[] = evs.map((e) => ({ beat: e.beat, midi: FILL_GM[e.voice], velocity: e.velocity }));
+
+  // グリッド展開＝物理フィルと同じ規約（apply_fills 準拠：span と着地頭だけ空ける）。
+  const EPS = 1e-6;
+  const covered = (qb: number) => (qb >= p.startQb - EPS && qb < p.landingQb - EPS) || (landingBar < N && Math.abs(qb - p.landingQb) < EPS);
+  const baseBar0 = base.rhythm.lanes.map((l) => ({
+    name: l.name, midi: l.midi,
+    pairs: l.hits.map((st, i) => ({ s: st, v: l.velCurve?.[i] ?? l.vel })).filter((x) => x.s < grid),
+  }));
+  const lanes: OutLane[] = baseBar0.map((l) => {
+    const pairs: { step: number; vel: number }[] = [];
+    for (let b = 0; b < N; b++) for (const p0 of l.pairs) { const step = b * grid + p0.s; if (covered(step * bps)) continue; pairs.push({ step, vel: p0.v }); }
+    pairs.sort((a, b) => a.step - b.step);
+    const hits = pairs.map((x) => x.step);
+    const vels = pairs.map((x) => x.vel);
+    const allSame = vels.every((v) => v === vels[0]);
+    return allSame ? { name: l.name, midi: l.midi, hits, vel: vels[0] ?? 100 } : { name: l.name, midi: l.midi, hits, vel: Math.max(...vels), velCurve: vels };
+  });
+  return { rhythm: { steps: N * grid, bars: N, beatsPerStep: base.rhythm.beatsPerStep, lanes, fillNotes, fillBar, fillKind: "body", ...(base.rhythm.patternId != null ? { patternId: base.rhythm.patternId } : {}) } };
 }
 
 // S2 land 消費（カスケード §3-1）：導出された bar0 land を crash+kick で着地音として乗せる（applyDrumFill の landing 節と同じ音・暫定）。

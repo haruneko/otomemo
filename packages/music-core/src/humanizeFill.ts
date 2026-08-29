@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 // md5（純 TS・RFC 1321）。stable_seed 用に先頭 8 hex（=32bit）だけ使う。
 // ---------------------------------------------------------------------------
-function md5(input: string): string {
+export function md5Hex(input: string): string {
   // UTF-8 バイト列へ
   const bytes: number[] = [];
   for (let i = 0; i < input.length; i++) {
@@ -71,7 +71,7 @@ function md5(input: string): string {
 
 /** phrase_maker stable_seed：int(md5(s)[:8],16)（builtin hash() 不使用）。 */
 export function stableSeed(s: string): number {
-  return parseInt(md5(s).slice(0, 8), 16);
+  return parseInt(md5Hex(s).slice(0, 8), 16);
 }
 
 // ---------------------------------------------------------------------------

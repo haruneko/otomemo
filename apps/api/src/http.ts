@@ -315,12 +315,13 @@ export function buildHttp(core: Core): FastifyInstance {
         case "gen_drums": { // WP-D1：style(型ID/ジャンル)＋fill(0..1/型ID)＝定型ビート＋フィル。未指定=従来 bit 一致。
           const dstyle = typeof b.style === "string" ? b.style : undefined;
           const dfill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
-          const dfillStyle = b.fillStyle === "physical" || b.fillStyle === "grid" ? b.fillStyle : undefined; // M2 物理フィル（任意・未指定=grid=従来）
+          const dfillStyle = b.fillStyle === "physical" || b.fillStyle === "grid" || b.fillStyle === "body" ? b.fillStyle : undefined; // body＝身体シミュレータ（M3） // M2 物理フィル（任意・未指定=grid=従来）
           const dfillKind = typeof b.fillKind === "string" ? b.fillKind : undefined;
           const FL_NAMES = ["beat", "2beat", "half_bar", "bar"] as const;
           const dfillLength = typeof b.fillLength === "number" ? b.fillLength : (FL_NAMES as readonly string[]).includes(b.fillLength) ? b.fillLength as (typeof FL_NAMES)[number] : undefined; // 物理フィルの長さ（beat/2beat/half_bar/bar・未指定=型と強度で既定）
           const dfillBeat = typeof b.fillBeat === "number" ? b.fillBeat : undefined; // 物理フィルの開始拍（小節内・未指定=末尾から逆算）
-          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null || dfillStyle != null ? { style: dstyle, fill: dfill, fillStyle: dfillStyle, fillKind: dfillKind, fillLength: dfillLength, fillBeat: dfillBeat } : undefined);
+          const num = (x: unknown) => (typeof x === "number" ? x : undefined);
+          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null || dfillStyle != null ? { style: dstyle, fill: dfill, fillStyle: dfillStyle, fillKind: dfillKind, fillLength: dfillLength, fillBeat: dfillBeat, bodyDepth: num(b.bodyDepth), bodyDensity: num(b.bodyDensity), bodyCrescendo: num(b.bodyCrescendo), bodyTailAnchor: num(b.bodyTailAnchor), bodyDrummer: typeof b.bodyDrummer === "string" ? b.bodyDrummer : undefined } : undefined);
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
           return res;
         }
