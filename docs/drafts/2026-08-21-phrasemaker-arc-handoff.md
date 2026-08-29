@@ -14,7 +14,7 @@ otomemo の伴奏が弱い → phrase_maker（Python 試作・ルール/物理�
 
 ## 実装済み・コミット済み（main 直・全緑・bit 一致で既存不変）
 - **`a74363b`**：S0（`packages/music-core/cues.ts`＝Cue/DerivedCue/mergeCues/deriveCues・`rngSalt.ts`）＋ S1/S2（generate.ts で cue.bar 駆動 fill・/gen/section で deriveCues 配布・land）＋ 仕様整合＋ design.md §2106 に 3 層カスケード正準昇格。
-- **`97520a4`**：M2 フィル蒸留＝phrase_maker `fills.py` 型10種（tom_descent/triplet_cascade/snare_roll/herta/gallop/buildup 等）＋`humanize.py` を TS 移植（`drumFill.ts`・`humanizeFill.ts`）。忠実度データ検証済（363 配置 event 一致＋humanize 1e-9・CPython MT19937/銀行丸め）。`generate.ts` に `fillStyle:"physical"` を additive 分岐（既定 "grid"＝従来 bit 一致）。**`bodyfill.py` は死にコード＝移植対象でなかった**。
+- **`97520a4`**：M2 フィル蒸留＝phrase_maker `fills.py` 型10種（tom_descent/triplet_cascade/snare_roll/herta/gallop/buildup 等）＋`humanize.py` を TS 移植（`drumFill.ts`・`humanizeFill.ts`）。忠実度データ検証済（363 配置 event 一致＋humanize 1e-9・CPython MT19937/銀行丸め）。`generate.ts` に `fillStyle:"physical"` を additive 分岐（既定 "grid"＝従来 bit 一致）。~~`bodyfill.py` は死にコード＝移植対象でなかった~~ ← **この記述は誤り（2026-08-29 訂正）**。`bodyfill.py`（676行＝fills.py 429行より大きい・fills/ で最大のモジュール）は **`fill_engine="body"` の opt-in 代替エンジン**で、`generate.py` のデモから参照されていないだけ。中身＝キット座標・打面の高さ・リバウンド係数・手の連打レート上限・移動速度から「両手が辿れる最も安い経路」を解く**打撃経済の物理生成**（＝phrase_maker の芯＝`docs/CONCEPT.md`「身体性シミュレータ」そのもの）。M2 が移植したのは `fills.py` の**固定10型の辞書**だけで、**この身体シミュレーションは未移植**。「型の種類が少ない」（耳判定 2026-08-29）の根本解＝辞書を増やすのではなく生成器を持ってくる、という道がここに在る。関連する未決＝B3（bodyfill が読む GMD 由来ドラマー別テーブルの持ち込み可否＝物理コア本体は宣言定数なので B3 とは別物）／計画 §既知の未達（bodyfill の 0.25 格子に三連スロット無し・実フィルの35%が三連）。
 - テスト＝music-core 244 / api 1562 緑・typecheck clean。
 
 ## 次の一手（順序厳守・慌てない）

@@ -163,3 +163,42 @@ describe("物理フィル kind選択＝aimプール分け（裁定B・2026-08-21
     expect(rh(genDrums({ ...DF, section: { cues: cue } }, 3, { fillStyle: "physical", fillKind: "tom_descent" })).fillKind).toBe("tom_descent");
   });
 });
+
+// 3/4 のグルーヴ格子（2026-08-29・耳判定「3/4だけ変」の回帰ガード）。
+// 旧実装は 4/4 の16格子を 3拍へ引き伸ばし、1step=3/16拍・1小節=3.008拍・バックビートが
+// 0.75/2.26拍という非拍位置に落ちていた。3/4 は 12格子（16分×3拍）で beatsPerStep=0.25。
+describe("3/4 のドラム格子（単純拍子3拍）", () => {
+  const r34 = (seed: number, style?: string) =>
+    rh(genDrums({ meter: "3/4", bars: 1, mood: "明るい", tempo: 100 } as never, seed, style ? { style } : undefined));
+
+  it("12格子・beatsPerStep=0.25・1小節ぴったり3拍（引き伸ばさない）", () => {
+    for (const seed of [0, 2, 5, 9]) {
+      const r = r34(seed);
+      expect(r.steps).toBe(12);
+      expect(r.beatsPerStep).toBe(0.25);
+      expect(r.steps * r.beatsPerStep!).toBe(3); // 3.008 に膨らまない
+    }
+  });
+
+  it("全打点が16分格子（0.25拍）の上に乗る＝非拍位置に落ちない", () => {
+    for (const seed of [0, 2, 5, 9]) {
+      const r = r34(seed);
+      for (const l of r.lanes) for (const h of (l as { hits: number[] }).hits) {
+        expect(h).toBeLessThan(12);
+        expect(Number.isInteger(h * r.beatsPerStep! * 4)).toBe(true);
+      }
+    }
+  });
+
+  it("4/4 型を 3/4 に当てない（型が無いので既定グルーヴへ落とす）", () => {
+    const r = r34(2, "beat8.basic");
+    expect(r.steps).toBe(12); // 16格子の 4/4 型が漏れてこない
+    expect((r as { patternId?: string }).patternId).toBeUndefined();
+  });
+
+  it("4/4 は従来どおり16格子（この修正で触っていない＝bit 一致）", () => {
+    const r = rh(genDrums({ meter: "4/4", bars: 1, mood: "明るい", tempo: 100 } as never, 2));
+    expect(r.steps).toBe(16);
+    expect(r.beatsPerStep).toBe(0.25);
+  });
+});

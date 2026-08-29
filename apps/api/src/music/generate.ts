@@ -1663,6 +1663,25 @@ function defaultDrumBar(frame: Frame, seed?: number | null): DrumContent {
     // C④ step↔拍を自己記述（hits は0..steps-1の16分グリッド index、beatsPerStep で拍へ変換可）。
     return { rhythm: { steps: 12, bars: 1, beatsPerStep: round3(beatsPerBar(f.meter) / 12), lanes: cl } };
   }
+  // 3/4（単純拍子・3拍＝12格子=16分×3）。**4/4 の16格子を流用してはいけない**：1step=3/16拍という
+  //   拍にも三連にも乗らない格子へ引き伸ばされ、バックビートが 0.75/2.26 拍という非拍位置に落ちる
+  //   （1小節の合計も round3 で 3.008 拍に膨らむ）＝耳判定「3/4だけ変」の真因（2026-08-29）。
+  //   定型＝1拍目キック・2/3拍目バックビート（ワルツ／3拍子ロックの芯）。
+  if (meterInfo(f.meter).beatsPerBar === 3) {
+    const k3 = new Set<number>([0]);
+    const sn3 = new Set<number>();
+    let hat3: number[];
+    let hv3 = 55;
+    if (sparse) { sn3.add(8); hat3 = [0, 4, 8]; hv3 = 45; } // 静かな3拍子：3拍目だけ・ハットは4分
+    else if (busy) { sn3.add(4); sn3.add(8); k3.add(rng.choice([6, 7])); hat3 = Array.from({ length: 12 }, (_, i) => i); hv3 = 42; } // 16分ハット
+    else { sn3.add(4); sn3.add(8); k3.add(rng.choice([6, 10])); hat3 = [0, 2, 4, 6, 8, 10]; } // 王道＝8分ハット＋2/3拍バックビート
+    const cl3 = [
+      { name: "Kick", midi: GM.Kick, hits: [...k3].sort((a, b) => a - b), vel: 115 },
+      { name: "Snare", midi: GM.Snare, hits: [...sn3].sort((a, b) => a - b), vel: 105 },
+      { name: "HiHat", midi: GM.HiHat, hits: hat3, vel: hv3 },
+    ];
+    return { rhythm: { steps: 12, bars: 1, beatsPerStep: round3(3 / 12), lanes: cl3 } };
+  }
   const kick = new Set<number>([0]);
   const snare = new Set<number>();
   let hihat: number[];
@@ -1712,6 +1731,10 @@ function resolveStyleContent(frame: Frame, style: string, seed: number): DrumCon
   // 拍子ゲート：6/8(compound)は 6/8 型のみ（4/4 型を指定されても six8.ballad へ差替）／4/4 で 6/8 型は使わない。
   if (compound && pat.meter !== "6/8") pat = beatPatternById("six8.ballad")!;
   if (!compound && pat.meter === "6/8") return null;
+  // 拍数ゲート（2026-08-29）：型は 4/4(4拍) と 6/8(3拍=2付点) しか無い。3/4 のフレームに 4/4 型を
+  //   当てると beatsPerStep=3/16 へ引き伸ばされ、拍に乗らない格子になる（3/4 だけ変だった真因）。
+  //   3/4 用の型が出来るまでは null を返して defaultDrumBar（12格子の正しい3拍）へ落とす。
+  if (!compound && meterInfo(f.meter).beatsPerBar !== 4) return null;
   const beatsPerStep = round3(beatsPerBar(f.meter) / pat.grid);
   const lanes: OutLane[] = pat.lanes.map((l) => ({ name: l.name, midi: l.midi, hits: [...l.hits], vel: l.vel }));
   // 型IDの残留（修理#1・監査違反③）：解決した型を content に刻む（未解決＝defaultDrumBar 経路は載せない＝bit一致）。
