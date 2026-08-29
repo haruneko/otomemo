@@ -494,6 +494,13 @@ export function SectionEditor({
           {gen.fitReport} <span className="muted">（タップで消す）</span>
         </p>
       )}
+      {/* サーバ meta.warnings の通知（オーナー裁定・2026-08-29）：fitReport と同じ「非ブロック・タップで消す」作法。
+          例＝body フィルが解けず型辞書へ黙って落ちたとき（fillEngine が要求と食い違う）。 */}
+      {gen.genWarning && (
+        <p className="fit-report" aria-label="gen-warning" onClick={() => gen.setGenWarning(null)}>
+          {gen.genWarning} <span className="muted">（タップで消す）</span>
+        </p>
+      )}
       {/* 「歌声を作っています…」段落は撤去（表示を下端トランスポートに一本化・設計2026-07-17）。msg 報告は残す。 */}
       {vocal.msg && (
         <p className="fit-report" aria-label="sing-report" onClick={() => vocal.setMsg(null)}>

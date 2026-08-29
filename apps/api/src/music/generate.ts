@@ -1602,7 +1602,10 @@ const GM = { Kick: 36, Snare: 38, HiHat: 42, OpenHat: 46 };
 // fillNotes/fillBar＝M2「物理フィル」opt-in の note レベル出力（絶対 qb・GM番号）。旧 consumer は無視＝bit 安全
 // （velCurve と同流儀）。fillStyle!=="physical" では**一切載らない**＝従来 grid 経路と DrumContent が deep-equal。
 type PhysFillNote = { beat: number; midi: number; velocity: number };
-type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[]; patternId?: string; fillNotes?: PhysFillNote[]; fillBar?: number; fillKind?: string }; feel?: Feel };
+// fillEngine＝実際にフィルを作った経路の自己記述（オーナー裁定・2026-08-29）。"physical"/"body" opt-in
+//   経路でしか載らない（grid 経路・フィル無しはキーを生やさない＝従来 bit 一致）。body 要求が解けず
+//   型辞書へ落ちたときも "physical" が入るので、要求と食い違ったことが content 自身から後からでも分かる。
+type DrumContent = { rhythm: { steps: number; bars: number; beatsPerStep: number; lanes: OutLane[]; patternId?: string; fillNotes?: PhysFillNote[]; fillBar?: number; fillKind?: string; fillEngine?: "grid" | "physical" | "body" }; feel?: Feel };
 // fillStyle="physical"＝M2 phrase_maker フィル（qb・三連/32分/フラム保持）を fillNotes に載せる opt-in。
 // 未指定/"grid"＝従来 applyDrumFill（step-grid）＝bit 一致。fillKind/fillLength は物理フィルのみ有効。
 export interface DrumsGenOpts { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string;
@@ -1625,6 +1628,9 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
   const cues = f.section?.cues;
   const fillCue = cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
   const physical = opts?.fillStyle === "physical" || opts?.fillStyle === "body"; // M2 opt-in（未指定/"grid"＝従来経路＝bit 一致）。"body"＝身体シミュレータ経路（M3）
+  // オーナー裁定（2026-08-29）＝「生成する」を頼んだのに解けず型辞書へ落ちたら黙らない。
+  // fillEngine＝content 自身が「実際にフィルを作ったのはどの経路か」を語る（前例＝patternId/fillKind と同じ自己記述の作法）。
+  let fellBackToTemplate = false;
   if (physical && (fillCue || opts?.fill != null)) {
     // ── 物理フィル経路（M2・opt-in）：phrase_maker のフィルを note レベル(qb)で fillNotes に載せる。
     //    grid lanes は不変＝旧 consumer は fillNotes を無視＝bit 安全。fillBar でその小節のミュートを指示。 ──
@@ -1634,11 +1640,22 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
     // body の定規は16分（0.25qb）と三連（1/3qb・shuffle 系）の2本（2026-08-29 三連増分）。
     // それ以外の格子は**黙って歪めない**が「何も起きない」も困る＝**型辞書経路へ落とす**
     // （選ばれた型名が fillKind に出るので取り違えない）。
-    const phys = opts!.fillStyle === "body"
-      ? (buildBodyFill(base, f, fb, inten01, seed ?? 0, opts)
-        ?? buildPhysicalFill(base, f, fb, inten01, seed ?? 0, opts, fillCue?.aim))
-      : buildPhysicalFill(base, f, fb, inten01, seed ?? 0, opts, fillCue?.aim);
-    if (phys) base = phys; // フィル失敗（拍子非対応/格子不一致/範囲外）は付与せず＝grid も敷かない（opt-in 実験枠）
+    let phys: DrumContent | null;
+    if (opts!.fillStyle === "body") {
+      phys = buildBodyFill(base, f, fb, inten01, seed ?? 0, opts);
+      if (!phys) { // body が解けなかった＝利用者へ黙って型辞書へ落とす（オーナー裁定：ここを通知する）
+        fellBackToTemplate = true;
+        phys = buildPhysicalFill(base, f, fb, inten01, seed ?? 0, opts, fillCue?.aim);
+      }
+    } else {
+      phys = buildPhysicalFill(base, f, fb, inten01, seed ?? 0, opts, fillCue?.aim);
+    }
+    if (phys) {
+      // fillEngine＝要求(fillStyle)ではなく実際に作った経路。body 要求が解けて body で作れたときだけ "body"、
+      // 型辞書経路（物理フィル opt-in の既定）を通ったときは "physical"。
+      const fillEngine: "physical" | "body" = opts!.fillStyle === "body" && !fellBackToTemplate ? "body" : "physical";
+      base = { ...phys, rhythm: { ...phys.rhythm, fillEngine } };
+    }
   } else if (fillCue) {
     // cue.bar＝フィル本体の開始小節（§2-3）／cue.intensity(0..1)→既存 F型選抜経路（未指定＝0.5 の中庸）。
     //   着地は fillStart+ft.bars（越境＝bar>=N は着地を打たない＝次セクション bar0 の land が担う・deriveCues 由来）。
@@ -1657,7 +1674,19 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
   const humDefault = opts?.fillStyle === "body" ? 0.25 : undefined;
   const feel = buildFeel(opts?.swing, opts?.humanize ?? humDefault, seed ?? 0);
   if (feel) base = { ...base, feel };
-  return withBarsWarning({ items: [{ kind: "rhythm", content: base, label: "ドラム" }], edges: [] }, frame);
+  const res: GenResult = withBarsWarning({ items: [{ kind: "rhythm", content: base, label: "ドラム" }], edges: [] }, frame);
+  // MCP（Chat 入口）からも聞こえるように meta.warnings へ積む（UI 側の表示はこれを読んで出す）。
+  //   **落ち先で場合分けする**：型辞書に落ちた（＝別物だが鳴る）と、型辞書でも作れなかった（＝何も鳴らない）は
+  //   利用者にとって別の出来事。後者に「テンプレートから選択しました」と言うのは嘘になる（5/4・7/8 など
+  //   物理フィル自体が非対応の拍子で実際に起きる）。**通知が嘘をつくのがいちばん悪い**ので分ける。
+  if (fellBackToTemplate) {
+    const madeFill = (base.rhythm.fillNotes?.length ?? 0) > 0;
+    const w = madeFill
+      ? "生成できなかったのでテンプレートから選択しました"
+      : "この拍子ではフィルを作れませんでした（フィル無しで生成しています）";
+    res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), w] };
+  }
+  return res;
 }
 
 // 従来の densityBias 経路（sparse/busy 分岐）＝**opts 無しの既定**（bit 一致の本体）。返りは content（inner）。

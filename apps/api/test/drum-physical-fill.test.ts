@@ -374,3 +374,70 @@ describe("ドラムのノリ（content.feel・演奏レイヤー）", () => {
     expect((c.rhythm as { feel?: unknown }).feel).toBeUndefined();
   });
 });
+
+// fillEngine と meta.warnings（オーナー裁定・2026-08-29）：body を頼んで解けなかったときは黙って
+// 型辞書へ落ちずに知らせる。content 自身の自己記述（fillEngine）＋ meta.warnings（MCP からも聞こえる）の二重化。
+describe("body フォールバックの通知（fillEngine / meta.warnings）", () => {
+  // shuffle（三連格子）で fillBeat をあえて三連スロットに乗らない位置(1.5拍)へ明示指定＝body の DP が
+  // 解けない現実的なケース（4/4・shuffle.basic 自体は通常 body で解ける＝三連スロット非対応ではなく
+  // 「その開始拍は三連格子に乗らない」という現実の失敗理由）。
+  const UNSOLVABLE = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+  const unsolvableOpts = { style: "shuffle.basic", fill: 0.6, fillStyle: "body" as const, fillBeat: 1.5 };
+
+  it("body が解けない格子では型辞書へ落ち、fillEngine=\"physical\" と meta.warnings にオーナー指定の文言が載る", () => {
+    const r = genDrums(UNSOLVABLE, 7, unsolvableOpts);
+    const rhythm = rh(r);
+    expect(rhythm.fillNotes!.length).toBeGreaterThan(0); // 型辞書経路で何かは作られている
+    expect((r.items[0]!.content as { rhythm: { fillEngine?: string } }).rhythm.fillEngine).toBe("physical");
+    expect(r.meta?.warnings).toContain("生成できなかったのでテンプレートから選択しました");
+  });
+
+  it("body で解けたときは fillEngine=\"body\"・meta.warnings は載らない", () => {
+    const DFB = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+    const r = genDrums(DFB, 7, { fill: 0.6, fillStyle: "body" });
+    expect((r.items[0]!.content as { rhythm: { fillEngine?: string } }).rhythm.fillEngine).toBe("body");
+    expect(r.meta?.warnings).toBeUndefined();
+  });
+
+  it("fillStyle:\"physical\"（型辞書を最初から要求）では fillEngine=\"physical\"・warnings は載らない", () => {
+    const r = genDrums(DF, 7, { fill: 0.5, fillStyle: "physical", fillKind: "tom_descent" });
+    expect((r.items[0]!.content as { rhythm: { fillEngine?: string } }).rhythm.fillEngine).toBe("physical");
+    expect(r.meta?.warnings).toBeUndefined();
+  });
+
+  it("fillStyle 未指定/\"grid\" では fillEngine キー自体を生やさない（従来 bit 一致を壊さない）", () => {
+    const r = genDrums(DF, 7, { fill: 0.5 });
+    expect((r.items[0]!.content as { rhythm: { fillEngine?: string } }).rhythm.fillEngine).toBeUndefined();
+  });
+});
+
+// 通知の正確さ（2026-08-29）。**通知が嘘をつくのがいちばん悪い**ので、落ち先で文言を分ける。
+// 型辞書に落ちた＝別物だが鳴る／型辞書でも作れなかった＝何も鳴らない、は利用者にとって別の出来事。
+describe("フォールバック通知は落ち先で言い分ける", () => {
+  const warns = (frame: Record<string, unknown>, opts: Record<string, unknown>) =>
+    (genDrums(frame as never, 3, opts as never) as { meta?: { warnings?: string[] } }).meta?.warnings ?? [];
+  const F4 = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+
+  it("型辞書へ落ちた（フィルは鳴る）＝「テンプレートから選択しました」", () => {
+    const w = warns(F4, { style: "shuffle.basic", fill: 0.6, fillStyle: "body", fillBeat: 1.5 });
+    expect(w.join("")).toContain("テンプレートから選択");
+    // 実際にフィルが鳴っていること＝「選択した」が嘘でないこと
+    const r = rh(genDrums(F4 as never, 3, { style: "shuffle.basic", fill: 0.6, fillStyle: "body", fillBeat: 1.5 } as never));
+    expect(r.fillNotes!.length).toBeGreaterThan(0);
+  });
+
+  it("型辞書でも作れなかった（何も鳴らない）＝「選択しました」と言わない", () => {
+    for (const meter of ["5/4", "7/8"]) {
+      const w = warns({ ...F4, meter }, { fill: 0.6, fillStyle: "body" });
+      expect(w.join("")).toContain("フィルを作れませんでした");
+      expect(w.join("")).not.toContain("テンプレートから選択"); // 嘘をつかない
+      const r = rh(genDrums({ ...F4, meter } as never, 3, { fill: 0.6, fillStyle: "body" } as never));
+      expect(r.fillNotes ?? []).toHaveLength(0); // 実際に鳴っていない
+    }
+  });
+
+  it("正常に解けたときは何も言わない（黙って良い顔もしないが、要らない通知も出さない）", () => {
+    expect(warns(F4, { style: "shuffle.basic", fill: 0.6, fillStyle: "body" })).toHaveLength(0);
+    expect(warns(F4, { style: "beat8.basic", fill: 0.6, fillStyle: "body" })).toHaveLength(0);
+  });
+});

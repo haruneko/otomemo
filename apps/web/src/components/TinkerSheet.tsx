@@ -378,11 +378,11 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
             </select>
           </label>
           <label className="knob-row" aria-label="drum-fill-style">
-            <span className="knob-name">フィルの作り方<small>格子／型辞書／その場で解く</small></span>
+            <span className="knob-name">フィルの作り方<small>型から選ぶか、生成するか</small></span>
             <select value={gen.drumFillStyle} onChange={(e) => gen.setDrumFillStyle(e.target.value as "" | "physical" | "body")}>
-              <option value="">格子（従来）</option>
-              <option value="physical">型辞書（タム回し/フラムを本物の粒で）</option>
-              <option value="body">解いて作る（両手の動きから）</option>
+              <option value="">型から選ぶ（従来）</option>
+              <option value="physical">型から選ぶ（32分・フラムも）</option>
+              <option value="body">生成する（毎回ちがう）</option>
             </select>
           </label>
           {gen.drumFillStyle === "body" && <>
@@ -395,12 +395,12 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               </select>
             </label>
             <label className="knob-row" aria-label="drum-body-drummer">
-              <span className="knob-name">手触り<small>実ドラマーの統計を混ぜるか</small></span>
+              <span className="knob-name">実ドラマーの癖<small>どの人の統計を使うか</small></span>
               <select value={gen.drumBodyDrummer} onChange={(e) => gen.setDrumBodyDrummer(e.target.value)}>
                 <option value="">おまかせ</option>
                 <option value="drummer1">フラム多め</option>
                 <option value="drummer7">フラム少なめ</option>
-                <option value="none">統計なし（物理だけ）</option>
+                <option value="none">使わない（物理だけ）</option>
               </select>
             </label>
           </>}

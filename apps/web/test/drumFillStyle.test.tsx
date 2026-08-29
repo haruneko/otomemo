@@ -104,3 +104,43 @@ describe("ドラム『フィルの作り方』3択→ gen_drums payload", () => 
     expect(api.music).not.toHaveBeenCalled();
   });
 });
+
+// meta.warnings の通知（オーナー裁定・2026-08-29）：body フィルが解けず型辞書へ黙って落ちたときなど、
+// サーバが meta.warnings に積んだ文言を利用者へ見せる。既存の gen.fitReport と同じ「非ブロック・タップで消す」作法
+// （SectionEditor.tsx で <p className="fit-report"> として表示）を通す口として genWarning を検証する。
+describe("meta.warnings → gen.genWarning（サーバの通知を黙って捨てない）", () => {
+  beforeEach(() => { vi.clearAllMocks(); api.listNeta.mockResolvedValue([]); });
+
+  it("応答に meta.warnings が載っていたら genWarning に文言が入る", async () => {
+    api.music.mockResolvedValue({
+      items: [{ kind: "rhythm", content: { rhythm: { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [], fillEngine: "physical" } } }],
+      meta: { warnings: ["生成できなかったのでテンプレートから選択しました"] },
+    });
+    const { result } = renderHook(() => useMelodyGen(makeCtx()));
+    expect(result.current.genWarning).toBeNull();
+    act(() => { result.current.setDrumFill(0.6); result.current.setDrumFillStyle("body"); });
+    await act(async () => { await result.current.genPart(GEN_DRUMS); });
+    expect(result.current.genWarning).toBe("生成できなかったのでテンプレートから選択しました");
+  });
+
+  it("meta.warnings が無い（従来どおり）応答では genWarning は null のまま", async () => {
+    api.music.mockResolvedValue({ items: [{ kind: "rhythm", content: { rhythm: { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [] } } }] });
+    const { result } = renderHook(() => useMelodyGen(makeCtx()));
+    act(() => { result.current.setDrumFill(0.6); result.current.setDrumFillStyle("body"); });
+    await act(async () => { await result.current.genPart(GEN_DRUMS); });
+    expect(result.current.genWarning).toBeNull();
+  });
+
+  it("setGenWarning(null) で消せる（fitReport と同じタップで消す作法）", async () => {
+    api.music.mockResolvedValue({
+      items: [{ kind: "rhythm", content: { rhythm: { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [] } } }],
+      meta: { warnings: ["生成できなかったのでテンプレートから選択しました"] },
+    });
+    const { result } = renderHook(() => useMelodyGen(makeCtx()));
+    act(() => { result.current.setDrumFill(0.6); result.current.setDrumFillStyle("body"); });
+    await act(async () => { await result.current.genPart(GEN_DRUMS); });
+    expect(result.current.genWarning).not.toBeNull();
+    act(() => { result.current.setGenWarning(null); });
+    expect(result.current.genWarning).toBeNull();
+  });
+});

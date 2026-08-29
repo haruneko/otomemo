@@ -174,6 +174,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [keptCids, setKeptCids] = useState<Set<number>>(new Set());
   const candId = useRef(0);
   const [genBusy, setGenBusy] = useState(false);
+  // サーバ応答 meta.warnings の器（オーナー裁定・2026-08-29）。非 null＝ダイアログを開く。閉じたら null に戻す。
+  const [genWarning, setGenWarning] = useState<string | null>(null);
   const [density, setDensity] = useState(0.5); // メロの細かさ 0=疎〜1=細かい（耳FB 2026-07-08）
   const [swing, setSwing] = useState(0); // メロの跳ね 0=ストレート〜1=シャッフル
   const [expression, setExpression] = useState(0); // メロの表情 0=素直〜1=もたれ(強拍に倚音/掛留)（Step1 2026-07-09）
@@ -407,7 +409,10 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         body.pattern = compStyle || "omakase";
         body.variety = 4;
       }
-      const r = await api.music<{ items: { kind: string; content: unknown; label?: string; meta?: CandMeta }[] }>(part.op, body);
+      const r = await api.music<{ items: { kind: string; content: unknown; label?: string; meta?: CandMeta }[]; meta?: { warnings?: string[] } }>(part.op, body);
+      // meta.warnings＝サーバが黙らず伝える非ブロック警告（例：body フィルが解けず型辞書へ落ちた・bars 上限クランプ）。
+      // オーナー裁定（2026-08-29）：UI で一切読んでいなかったのを直す＝ダイアログで利用者へ見せる（App.tsx の設定ダイアログと同じ作法）。
+      if (r.meta?.warnings?.length) setGenWarning(r.meta.warnings.join("\n"));
       // コード楽器は複数候補を全件トレイへ積む（先頭＝kind差替 or append／以降＝append）。他パーツは従来どおり先頭1件。
       if (part.op === "gen_chord_pattern") {
         (r.items ?? []).forEach((it, i) => pushCand({ kind: it.kind, content: it.content, label: it.label, meta: it.meta }, (opts?.append ?? false) || i > 0));
@@ -632,6 +637,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   return {
     // 候補トレイ状態
     cands, displayCands, lensAxis, setLensAxis, keptCids, genBusy,
+    genWarning, setGenWarning, // サーバ meta.warnings の通知（例：body フィルが解けず型辞書へ落ちた）
     // ノブ状態＋setter（JSX が select/segRow/sliderRow で直に使う）
     density, setDensity, swing, setSwing, expression, setExpression, runs, setRuns, push, setPush,
     foreground, setForeground, breathe, setBreathe, humanize, setHumanize, hook, setHook,

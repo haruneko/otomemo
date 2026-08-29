@@ -2115,6 +2115,20 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **(c) resolve 置き場＝`packages/music-core`**（api/web 共有・applyFeel 単一実装の前例。cues の型と純関数・RNG ソルト表も同居）。署名＝`resolve(recipe, ctx) -> {notes, skeleton, groove}`・`ctx = {meter, tempo, bars, key?, chords?, sectionRole?, slashBass?, cues?: DerivedCue[]}`（cues は sectionRole と同席・additive）。**RNG ソルト表（凍結・M0契約 §4・`rngSalt.ts`）**＝役割別固定ソルト（kick=+11…altTake=+43・`new Rng(seed+salt)`）。**注記＝`fill=+37` は将来枠＝現行 fill は生 seed**（`resolveFillType`/`resolveBassFill`）＝この定数はレシピ resolve 実装時に使う。
 - **(d) 物理フィルの kind 選択＝cue.aim でプール分け（裁定B・2026-08-21・`buildPhysicalFill`）**：物理フィル（M2・fillStyle:"physical"）の型は **明示ノブ `fillKind` ＞ プリセット**（#169 の順）。プリセット＝**cue.aim で型プールを分け、プール内は seed で選抜**：**方向を持つ型＋どちらにも付く中立型 `{flam_accents, sixteenth_groove}` の二層**で組む＝`aim:"up"`＝上昇/駆動プール `{buildup, gallop, snare_roll, herta}`＋中立（計6型）／`aim:"down"`＝下降プール `{tom_descent, triplet_cascade, offbeat_syncopated}`＋中立（計5型）／**aim 未指定＝`DEFAULT_POOL`＝9型**（＝上の全部＋中立。`snare_roll_32` だけは既定プールに載せない＝下の (f-2)）。**aim 未指定でも「従来の純ランダム」と選抜結果は一致しない**（プールが 10→9 型に変わっている＝bit 一致は放棄済み・opt-in 経路なので既定出力には影響しない）。**`intensity` は型選択に使わない＝二重掛け回避**（intensity は subtle/medium/flashy＝フィル内部の強弱/密度のみ）。**プールは硬化させない**（利用の中で微調整する初期割り当て＝1:1 固定テーブルは置かない）。選抜 kind は `rhythm.fillKind` に自己記述（patternId 前例・step2 の実レンダ/MIDI 結線で型名が要る）。**位置＝cue（bar）・向き＝cue（aim）・弾き方＝レシピ、を分離したまま**（cue は薄い合図のまま・型辞書は語彙）。
 - **(e) 物理フィルの結線（step2 完了・2026-08-21）＝再生/MIDI へ流す**：`buildPhysicalFill` は grid 経路（`applyDrumFill`）と同じく **N 小節へ展開**した自己完結 content を返す（base bar0 groove をタイル・`bars=N`/`steps=N*grid`）＝**セクション合成はタイルしない**（`compositeNotes` は content の実尺をそのまま置く）ので、物理フィルも N 小節で自己完結させる必要がある。web `rhythmToNotes`（api/web 両再生・MIDI 書き出しが収束する単一変換点）が `r.fillNotes`（絶対 qb＝`Note.start` と同単位で 1:1）をドラムノートに重畳＝**再生（Tone.js）と MIDI 書き出しの両方で鳴る/書ける**。`fillNotes` 無し/空＝grid のみ＝従来 bit 一致（additive）。到達口＝`/music/gen_drums`・MCP `gen_drums`・`/gen/section`（body `drums.fillStyle:"physical"`＋任意 `fillKind`）。web UI＝TinkerSheet ドラム引き出し「細かく」内の**「フィルの作り方」3択 select**（`格子（従来）`＝未送信／`型辞書`＝`fillStyle:"physical"`／`解いて作る`＝`fillStyle:"body"`＝M3・下の (g)）。**フィルが立っている時だけ送信・既定＝格子＝従来 bit 一致**。`body` を選んだ時だけ意図つまみの select が2つ出る＝**フィルの行き先**（おまかせ／上る＝`bodyDepth:-0.3`／落とす＝`bodyDepth:0.8`）と**手触り**（おまかせ／フラム多め＝`drummer1`／フラム少なめ＝`drummer7`／統計なし＝`bodyDrummer:"none"` の純物理）。**生の数値ノブは出さない**＝つまみの意味（行き先・手触り）で選ばせて内部値は UI が持つ。**耳＝実際の作曲で使う中で採否**（抽象 A/B ゲートは置かない）。
+  - **(i) 文言とフォールバック通知（2026-08-29・オーナー裁定）**：
+    - **UI 文言**＝「解いて作る」は**ソルバー用語で利用者の言葉ではない**ので **「生成する」** へ（オーナーの言葉）。
+      3択は `型から選ぶ（従来）` / `型から選ぶ（32分・フラムも）` / `生成する（毎回ちがう）`＝**①②は在庫から選び、
+      ③だけが作っている**という対比を文言で立てる。「手触り」→ **「実ドラマーの癖」**（小見出し「どの人の統計を使うか」）。
+      理由＝あのつまみは手触りを調整していない。**どのドラマーの統計を使うか／使わないかの選択**であって、
+      混ぜ具合のような連続量ではない＝**無い機能を名前で匂わせない**（選択肢の「使わない（物理だけ）」も同じ理由で度合い語を避ける）。
+    - **`rhythm.fillEngine`（`"grid"|"physical"|"body"`）＝実際にフィルを作った経路の自己記述**（要求 `fillStyle` ではない）。
+      前例＝`patternId` / `fillKind`。要求と食い違ったことが content を見れば後からでも分かる。従来経路はキーを生やさない＝bit 一致。
+    - **フォールバック通知＝`meta.warnings`**（`withBarsWarning` と同形）。**UI だけに出すのでは不十分**＝MCP（Chat 入口）からも
+      同じことが起きるので、通知は API 側に置き web はそれを表示するだけ（web は従来 `meta.warnings` を一切読んでいなかった＝経路も新設）。
+      web の表示は既存の `fitReport`（非ブロック・タップで消す）と同じ作法に載せる＝新しい流儀を持ち込まない。
+    - **落ち先で言い分ける**：型辞書に落ちた（別物だが鳴る）＝「生成できなかったのでテンプレートから選択しました」／
+      型辞書でも作れなかった（何も鳴らない・5/4 や 7/8 など物理フィル非対応の拍子で実際に起きる）＝
+      「この拍子ではフィルを作れませんでした（フィル無しで生成しています）」。**通知が嘘をつくのがいちばん悪い**。
 - **(f) 物理フィルの置き方＝源流 `apply_fills` 準拠へ修正（2026-08-29・オーナー耳判定の差し戻し）**：step2 の初版は「**フィル小節を丸ごと空けて**、`placeFill(fillBar, 0.0, "bar", …)` の裸のフィルを1小節鳴らす」形だった。これは phrase_maker に**存在しない極端形**で、耳判定で「退屈・音楽的に成立していない」と却下された（比較対象の grid 経路 `FILL_TYPES` は、たとえば `fill.snare.1beat` が HiHat/Kick を3拍鳴らしたまま4拍目だけスネアという形＝**グルーヴ継続が前提**）。修正3点：
   - **消す範囲**＝`[startQb, landingQb)` と**着地頭だけ**（源流 `fills.py:apply_fills` と同じ）。フィル区間の外は、フィル小節の中でもグルーヴを鳴らし続ける。**小節を丸ごと空けない**。
   - **既定の開始拍/長さ**＝**小節の最後の1拍**（`beat = beatUnits-1`・`length "beat"`）。`buildup` と `intensity flashy` だけ溜めを取って2拍（`beat = beatUnits-2`・`length "2beat"`）。これは源流 `generate.py:_kinds_tour_fills` の常用形（`# last beat of the bar` / `# buildup wants room`）をそのまま採った既定＝**硬化させない**（利用の中で微調整）。
@@ -2134,6 +2148,11 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
     - **コスト**＝1本あたり 17ms（1拍）/ 41ms（2拍）/ 99ms（1小節）＝生成呼び出しとしては許容、ホットループには置かない。
   - **(h) ノリの結線＝ヒューマナイズは feel 層へ（2026-08-29・B1 裁定どおりに着地）**：`genDrums` が `content.feel`（`buildFeel(swing, humanize, seed)`）を出すようになり、`DrumsGenOpts` に `humanize?` / `swing?` が生えた（genMelody / genBass / genChordPattern と**同一の buildFeel 契約**）。**未指定＝feel キーを生やさない＝従来 bit 一致**。`fillStyle:"body"` のときだけ `humanize` の既定が **0.25**＝**人が叩いた経路（両手の物理を解いた結果）を完全クオンタイズで鳴らすのは筋が悪い**から（0.25 は feel 層自身が「実測 SD の基準」と定義する値＝でたらめな数ではない。**硬化させない**＝明示ノブが勝つ）。**スコア（`rhythm` / `fillNotes`）はストレートのまま**＝B1 裁定（ノリ＝演奏レイヤー・スコア非焼込）を守り、適用は**再生と MIDI 書き出しの境界で `applyFeelEnsemble` が一度だけ**行う（「グルーヴの適用点は feel 層の一箇所に限る」＝(a) の二重掛け禁止）。移植済みの `humanizeFill.ts`（md5 seed・Python 一致検証済み）は**生成経路からは呼ばない**＝焼き込みで済ませない。
     - **半分残っている**（黙って良い顔をしない）：`/gen/section` の**セクション共有 feel（body `feel:{swing,humanize}`）はドラムに配っていない**（melody / bass / chord_pattern のみ）。加えて web `feelOfTree` は**最初に見つかった feel を木全体へ当てる** v1 仕様なので、セクション合成では**子の順序次第でドラムの feel が効いたり、逆にドラムの feel が他パートへ漏れたり**する。これは feel 層 v1 の既存制約（backlog の「トラック別 feel」）だが、**ドラムが自前の feel を持つようになった今、非対称が実際に鳴って見える**ようになった＝解消はセクション共有 feel のドラム配布と `feelOfTree` のトラック別解決を一緒にやる。
+    - **裁定（2026-08-29・オーナー「フィールは仕方ないかな」）＝セクション合成の feel 非対称は当面このまま**。
+      ドラムが feel を持つようになった結果、`feelOfTree` の first-wins（最初に見つかった feel を木全体へ当てる v1）が
+      **子の順序次第でドラムの揺れを消したり他パートへ漏らしたりする**＝単体再生と合成再生で聞こえが変わりうる。
+      直すには per-section／per-track の feel 適用（範囲付き feel＝backlog の大改修）が要り、**いま払う価値は無い**という判断。
+      **穴として承知の上で残す**＝後から「知らなかった」にしない。気になったら backlog の per-section feel を上げる。
 
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
