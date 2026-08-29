@@ -22,6 +22,11 @@ const GOLDEN: {
   {"kind": "plain", "drummer": null, "meter": "4/4", "length": "2beat", "intensity": "subtle", "salt": 7, "tempo": 128, "depth": null, "density": null, "crescendo": null, "tail": null, "ev": [[8.0, "kick", 38], [8.0, "tom_lo", 52], [8.5, "snare", 53], [9.0, "tom_lo", 73], [9.5, "kick", 72], [9.5, "tom_mid", 86]], "hands": ["F", "R", "L", "R", "F", "R"]},
   {"kind": "plain", "drummer": null, "meter": "4/4", "length": "2beat", "intensity": "medium", "salt": 7, "tempo": 128, "depth": null, "density": null, "crescendo": null, "tail": null, "ev": [[8.0, "kick", 60], [8.0, "tom_lo", 74], [8.5, "tom_mid", 78], [9.0, "tom_lo", 97], [9.5, "floor", 108], [9.5, "kick", 94]], "hands": ["F", "R", "L", "R", "R", "F"]},
   {"kind": "plain", "drummer": null, "meter": "4/4", "length": "2beat", "intensity": "flashy", "salt": 7, "tempo": 128, "depth": null, "density": null, "crescendo": null, "tail": null, "ev": [[8.0, "kick", 82], [8.0, "tom_lo", 96], [8.5, "tom_lo", 99], [9.0, "floor", 116], [9.25, "floor", 112], [9.5, "floor", 124], [9.5, "kick", 110], [9.75, "snare", 119], [9.875, "snare", 107]], "hands": ["F", "R", "L", "R", "L", "R", "F", "L", "L"]},
+  // 3/4・6/8 のゴールデン（受け入れ監査「穴埋め」・2026-08-29 追加）：既存10件は 4/4 のみだった。
+  // python bodyfill.py を実行し出力をそのまま焼き込み（bar=2/beat=0/length=beat/intensity=medium/salt=7/tempo=128・
+  // 既存 plain 系エントリと同条件、meter だけ差し替え）。既存10件は不変（このエントリは追記のみ）。
+  {"kind": "plain", "drummer": null, "meter": "3/4", "length": "beat", "intensity": "medium", "salt": 7, "tempo": 128, "depth": null, "density": null, "crescendo": null, "tail": null, "ev": [[6.0, "kick", 60], [6.0, "snare", 74], [6.5, "tom_lo", 97]], "hands": ["F", "R", "R"]},
+  {"kind": "plain", "drummer": null, "meter": "6/8", "length": "beat", "intensity": "medium", "salt": 7, "tempo": 128, "depth": null, "density": null, "crescendo": null, "tail": null, "ev": [[6.0, "kick", 60], [6.0, "snare", 74], [6.5, "tom_hi", 81], [7.0, "floor", 105]], "hands": ["F", "R", "L", "R"]},
 ];
 
 describe("身体シミュレータ＝phrase_maker bodyfill.py の忠実移植", () => {
@@ -98,5 +103,72 @@ describe("身体シミュレータ＝phrase_maker bodyfill.py の忠実移植", 
     expect(p.trace.nFlams).toBe(0);
     expect(p.trace.nPedalHh).toBe(0);
     expect(p.events.some((e) => e.voice === "phh")).toBe(false);
+  });
+});
+
+// ===========================================================================
+// 三連スロット（sub=1/3qb）＝2026-08-29 の新規増分（源流 bodyfill.py に無い・移植ではない）。
+// shuffle 系グルーヴ（1拍3分割）でも身体シミュレータが解けるようにする。
+// 物理（連打レート上限・リバウンド窓）は**秒**で効くので、スロット幅が変わっても
+// 判定は秒ベースのまま正しいこと＝ここが検証の芯。
+describe("三連スロット（sub=1/3）", () => {
+  const T = 1 / 3;
+  const mkOpts = (over: object = {}) => ({
+    rhythm: { grid: 12, onsets: [0, 2, 4, 6, 8, 10], accents: [0, 6], kick: [0, 6] },
+    bar: 2, beat: 0, length: "2beat" as const, intensity: "medium", meter: fillMeter("4/4"),
+    tempo: 120, seedSalt: 5, prior: null, sub: T, ...over,
+  });
+
+  it("既存の 0.25 格子は sub を明示しても1ビットも変わらない（additive の証明）", () => {
+    const base = {
+      rhythm: { grid: 16, onsets: [0, 2, 4, 6, 8, 10, 12, 14], accents: [0, 4, 8, 12], kick: [0, 6, 8] },
+      bar: 2, beat: 0, length: "bar" as const, intensity: "flashy", meter: fillMeter("4/4"),
+      tempo: 120, seedSalt: 9, prior: null,
+    };
+    expect(planBodyFill({ ...base, sub: 0.25 })).toStrictEqual(planBodyFill(base));
+  });
+
+  it("三連格子で解け、全打点が 1/6qb 格子に乗る（主格子 1/3＋バウンスの半スロット）", () => {
+    for (let salt = 0; salt < 10; salt++) {
+      const p = planBodyFill(mkOpts({ seedSalt: salt }));
+      expect(p.events.length).toBeGreaterThan(0);
+      for (const e of p.events) {
+        const k = e.beat * 6; // 1/6qb 単位
+        expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-4);
+      }
+    }
+  });
+
+  it("同じ入力は何度呼んでも同じ（決定論は三連でも保たれる）", () => {
+    expect(planBodyFill(mkOpts()).events).toStrictEqual(planBodyFill(mkOpts()).events);
+  });
+
+  it("物理法則：三連でも同じ手の3連続は無い", () => {
+    for (let salt = 0; salt < 25; salt++) {
+      const p = planBodyFill(mkOpts({ seedSalt: salt, length: "bar", intensity: "flashy", tempo: 160 }));
+      const hs = p.trace.handSeq;
+      for (let i = 2; i < hs.length; i++) expect(hs[i] === hs[i - 1] && hs[i - 1] === hs[i - 2]).toBe(false);
+    }
+  });
+
+  it("物理は秒で効く：スロット実時間が伸び、遅テンポではバウンス窓が閉じる", () => {
+    const fast = planBodyFill(mkOpts({ tempo: 120 }));
+    expect(fast.trace.slotMs).toBeCloseTo(166.67, 2); // (1/3)×(60/120)＝16分の4/3倍
+    expect(fast.trace.bouncePlayable).toBe(true); // 半スロット＝1/6qb＝83ms は窓内
+    const slow = planBodyFill(mkOpts({ tempo: 60 }));
+    expect(slow.trace.bouncePlayable).toBe(false); // 167ms＞130ms＝ダブルは物理的に打てない
+    expect(slow.trace.nBounces).toBe(0);
+  });
+
+  it("seed が違えば三連でも別の解が出る", () => {
+    const seqs = new Set([1, 2, 3, 4, 5, 6].map((s) =>
+      JSON.stringify(planBodyFill(mkOpts({ seedSalt: s, length: "bar", intensity: "flashy" })).trace.drumSeq)));
+    expect(seqs.size).toBeGreaterThan(1);
+  });
+
+  it("対応外の定規は黙って歪めず投げる（0.25/1/3 以外・スロットが割り切れない長さ）", () => {
+    expect(() => planBodyFill(mkOpts({ sub: 0.2 }))).toThrow();
+    // 6/8 の付点拍（1.5qb）は 1/3 で割り切れない＝三連定規は要らない（八分3つ＝0.25 格子で既に表せる）
+    expect(() => planBodyFill(mkOpts({ meter: fillMeter("6/8"), length: "beat" }))).toThrow();
   });
 });

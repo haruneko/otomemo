@@ -295,3 +295,41 @@ describe("skeleton music routes (#20 S2)", () => {
     expect(up.json().status).toBe("queued");
   });
 });
+
+// ②③④是正（2026-08-29・受け入れ監査）：humanize/swing/body系ノブが HTTP から genDrums へ到達すること
+// （②）と、/gen/section の drums opts が "body" を落とさず fillLength/fillBeat/body系ノブも通ること（④）。
+describe("HTTP経路のドラムノブ到達（②④是正の回帰）", () => {
+  it("POST /music/gen_drums：humanize:0 明示で fillStyle:body の既定humanize(0.25)が切れる（②）", async () => {
+    const withDefault = await app.inject({
+      method: "POST", url: "/music/gen_drums",
+      payload: { frame: { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 }, seed: 7, fill: 0.6, fillStyle: "body" },
+    });
+    const zeroed = await app.inject({
+      method: "POST", url: "/music/gen_drums",
+      payload: { frame: { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 }, seed: 7, fill: 0.6, fillStyle: "body", humanize: 0 },
+    });
+    expect((withDefault.json().items[0].content as { feel?: { humanize?: number } }).feel?.humanize).toBe(0.25);
+    expect((zeroed.json().items[0].content as { feel?: unknown }).feel).toBeUndefined();
+  });
+
+  it("POST /music/gen_drums：明示 humanize/swing が既定より優先される（②）", async () => {
+    const r = await app.inject({
+      method: "POST", url: "/music/gen_drums",
+      payload: { frame: { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 }, seed: 7, fill: 0.6, fillStyle: "body", humanize: 0.9, swing: 0.3 },
+    });
+    const feel = (r.json().items[0].content as { feel?: { humanize?: number; swing?: number } }).feel;
+    expect(feel?.humanize).toBe(0.9);
+    expect(feel?.swing).toBe(0.3);
+  });
+
+  it("POST /gen/section：drums.fillStyle:\"body\" が型で弾かれず M3 経路へ到達する（④）", async () => {
+    const r = await app.inject({
+      method: "POST", url: "/gen/section",
+      payload: { frame: { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 }, parts: ["rhythm"], seed: 7, drums: { fill: 0.6, fillStyle: "body" } },
+    });
+    expect(r.statusCode).toBe(200);
+    const { composition } = r.json();
+    const rhythmChild = composition.children.find((c: any) => c.node.neta.kind === "rhythm");
+    expect((rhythmChild!.node.neta.content as { rhythm: { fillKind?: string } }).rhythm.fillKind).toBe("body");
+  });
+});

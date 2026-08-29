@@ -117,6 +117,35 @@ describe("mcp tool layer", () => {
     });
     expect(JSON.parse(textOf(emo))[0]).toMatchObject({ root: 0, quality: "m" });
   });
+
+  // ③是正（2026-08-29・受け入れ監査）：gen_drums の fillStyle enum が "body"(M3・身体シミュレータ) を弾いていて、
+  // MCP（Chat入口＝このアプリのアーキ根幹）から M3 に到達できなかった。"body" を通し、body系/humanize/swing の
+  // ノブも生成結果へ届くこと（=素通しでなく genDrums へ実際に渡っている）を確認する。
+  it("gen_drums：fillStyle:\"body\"（M3）が MCP から呼べる＋body系/humanize/swingノブが結線される（③是正）", async () => {
+    const { client } = await connect();
+    const frame = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+    const body = JSON.parse(textOf(await client.callTool({
+      name: "gen_drums", arguments: { frame, seed: 7, fill: 0.6, fillStyle: "body" },
+    })));
+    const rhythm = body.items[0].content.rhythm;
+    expect(rhythm.fillKind).toBe("body"); // enum で弾かれず M3 経路へ到達
+    expect(body.items[0].content.feel?.humanize).toBe(0.25); // body 既定 humanize
+
+    // humanize:0 明示で既定が切れる（buildFeel の 0=無効 契約が MCP からも成立）
+    const zeroed = JSON.parse(textOf(await client.callTool({
+      name: "gen_drums", arguments: { frame, seed: 7, fill: 0.6, fillStyle: "body", humanize: 0 },
+    })));
+    expect(zeroed.items[0].content.feel).toBeUndefined();
+
+    // bodyDepth ノブが実際に解へ効く（未指定と明示で結果が変わる＝素通しでなく結線されている証拠）
+    const a = JSON.parse(textOf(await client.callTool({
+      name: "gen_drums", arguments: { frame, seed: 3, fill: 0.9, fillStyle: "body" },
+    })));
+    const b = JSON.parse(textOf(await client.callTool({
+      name: "gen_drums", arguments: { frame, seed: 3, fill: 0.9, fillStyle: "body", bodyDepth: 0.05, bodyDensity: 0.1 },
+    })));
+    expect(JSON.stringify(a.items[0].content.rhythm.fillNotes)).not.toBe(JSON.stringify(b.items[0].content.rhythm.fillNotes));
+  });
 });
 
 // #101 目的ツール面（10 thin verbs）。機械動作名(39)を目的語へ畳む。既存39は残置(additive)、チャットは --tools で10だけ見る。

@@ -321,7 +321,12 @@ export function buildHttp(core: Core): FastifyInstance {
           const dfillLength = typeof b.fillLength === "number" ? b.fillLength : (FL_NAMES as readonly string[]).includes(b.fillLength) ? b.fillLength as (typeof FL_NAMES)[number] : undefined; // 物理フィルの長さ（beat/2beat/half_bar/bar・未指定=型と強度で既定）
           const dfillBeat = typeof b.fillBeat === "number" ? b.fillBeat : undefined; // 物理フィルの開始拍（小節内・未指定=末尾から逆算）
           const num = (x: unknown) => (typeof x === "number" ? x : undefined);
-          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null || dfillStyle != null ? { style: dstyle, fill: dfill, fillStyle: dfillStyle, fillKind: dfillKind, fillLength: dfillLength, fillBeat: dfillBeat, bodyDepth: num(b.bodyDepth), bodyDensity: num(b.bodyDensity), bodyCrescendo: num(b.bodyCrescendo), bodyTailAnchor: num(b.bodyTailAnchor), bodyDrummer: typeof b.bodyDrummer === "string" ? b.bodyDrummer : undefined } : undefined);
+          // ②是正（2026-08-29・受け入れ監査）：humanize/swing を読んでいなかった＝DrumsGenOpts.humanize の
+          // 「明示ノブが既定に勝つ」「humanize:0 で切れる」契約が関数レベルでしか成立せず、HTTP からは
+          // body 経路の既定 humanize 0.25（fillStyle:"body"）を切る手段が無かった。bodyDepth 等と同じ流儀で読む。
+          const dhumanize = num(b.humanize);
+          const dswing = num(b.swing);
+          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null || dfillStyle != null || dhumanize != null || dswing != null ? { style: dstyle, fill: dfill, fillStyle: dfillStyle, fillKind: dfillKind, fillLength: dfillLength, fillBeat: dfillBeat, bodyDepth: num(b.bodyDepth), bodyDensity: num(b.bodyDensity), bodyCrescendo: num(b.bodyCrescendo), bodyTailAnchor: num(b.bodyTailAnchor), bodyDrummer: typeof b.bodyDrummer === "string" ? b.bodyDrummer : undefined, humanize: dhumanize, swing: dswing } : undefined);
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
           return res;
         }
@@ -423,7 +428,10 @@ export function buildHttp(core: Core): FastifyInstance {
   // gen→compose ワンショット（dogfood P4）：コードを土台に各パートを生成→ネタ化→section に合成、を1コール。
   // 「叩き台を一発で組む」。決定的(seed)。返り＝section ネタ＋合成木。全部 project・tags:["生成"]。
   app.post("/gen/section", async (req) => {
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical"; fillKind?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
+    // ④是正（2026-08-29・受け入れ監査）：fillStyle 型注釈が "grid"|"physical" のままで、実行時は "body"(M3) が
+    // キャストを通じて素通りしていた（型の嘘）。実態＝DrumsGenOpts.fillStyle に合わせ "body" を追加し、
+    // fillLength/fillBeat/body系ノブも body?.drums 経由で受けて落とさず渡す。
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
     const frame = b.frame ?? {};
     // カスケード合図の配布（design 306「配り役」と同型＝feel と同じ様式で全生成器へ同じ1枚を配る）。
     //   body.cues＝このセクションの人が書いた合図（Cue[]）。deriveCues で導出（保存 land 破棄・範囲外無視・越境 land 導出）して
@@ -455,8 +463,14 @@ export function buildHttp(core: Core): FastifyInstance {
     // ドラムをベースとメロへ・生成済みベースをメロへ渡す。配置(ord)は従来の 進行→楽器→メロ→ベース→リズム のまま。
     // ドラム定型ビート＋フィル（WP-D1）：body.drums:{style,fill}＝未指定は従来 bit 一致。bass/melody へ渡す依存順は不変。
     //   fillStyle:"physical"（M2 phrase_maker 物理フィル・任意）＝fillNotes を note レベルで載せ N 小節へ展開（fillKind 明示は任意・未指定=cue.aim プール選抜）。未指定=従来 grid=bit 一致。
-    const dOpts = b.drums && (b.drums.style != null || b.drums.fill != null || b.drums.fillStyle != null)
-      ? { style: b.drums.style, fill: b.drums.fill, fillStyle: b.drums.fillStyle, fillKind: b.drums.fillKind }
+    const dOpts = b.drums && (b.drums.style != null || b.drums.fill != null || b.drums.fillStyle != null
+      || b.drums.fillLength != null || b.drums.fillBeat != null || b.drums.bodyDepth != null || b.drums.bodyDensity != null
+      || b.drums.bodyCrescendo != null || b.drums.bodyTailAnchor != null || b.drums.bodyDrummer != null)
+      ? {
+        style: b.drums.style, fill: b.drums.fill, fillStyle: b.drums.fillStyle, fillKind: b.drums.fillKind,
+        fillLength: b.drums.fillLength, fillBeat: b.drums.fillBeat, bodyDepth: b.drums.bodyDepth, bodyDensity: b.drums.bodyDensity,
+        bodyCrescendo: b.drums.bodyCrescendo, bodyTailAnchor: b.drums.bodyTailAnchor, bodyDrummer: b.drums.bodyDrummer,
+      }
       : undefined;
     // セクション共有 feel（S4・swing-feel-layer-audit Stage 4「全トラック同一ワープ」）：body.feel:{swing,humanize} を
     // melody/bass/chord_pattern へ同一透過＝メロ・ベース・コード楽器が同じノリで跳ねる。未指定=undefined=各生成器へ渡らず従来 bit 一致。

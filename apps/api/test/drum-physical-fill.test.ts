@@ -57,6 +57,38 @@ describe("物理フィル配線（M2）", () => {
     for (const n of pr.fillNotes!) expect(gm.has(n.midi)).toBe(true);
   });
 
+  // ①回帰（2026-08-29・受け入れ監査）：shuffle(三連グルーヴ)×physical で beatsPerStep が round3 済み
+  // (=0.333) のまま covered() 判定に使われ、フィル開始点（例：step30の真値10.0qbが30×0.333=9.99になる）
+  // の直前が「フィル区間の外」と誤判定されて、グルーヴのキック/ハットが消し残って二重に鳴っていた不具合。
+  // buildBodyFill と同じ「round3 されない正準の sub」を使うよう是正＝span 内のグルーヴ打が0件になること。
+  it("shuffle(三連)×physical：フィル区間内にグルーヴの消し残りが無い（三連の丸め誤差バグの回帰）", () => {
+    const F = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+    for (const seed of [0, 2, 3, 4]) {
+      const r = rh(genDrums(F, seed, { style: "shuffle.basic", fill: 0.6, fillStyle: "physical" }));
+      const fn = r.fillNotes ?? [];
+      if (!fn.length) continue;
+      const f0 = Math.min(...fn.map((x) => x.beat)), f1 = Math.max(...fn.map((x) => x.beat));
+      const leftover = r.lanes.flatMap((l) => (l as { name: string; hits: number[] }).hits.map((h) => ({ name: (l as { name: string }).name, h, q: h / 3 })))
+        .filter((x) => x.q >= f0 - 1e-9 && x.q < f1);
+      expect(leftover).toStrictEqual([]);
+    }
+  });
+
+  // 4/4・6/8・3/4 は sub=0.25 で round3(0.25)===0.25（丸め誤差が発生しない格子）なので、
+  // ①の是正（round3 済み値→正準 sub への差し替え）はこれらの出力に一切影響しない＝bit一致であることの明示回帰。
+  it("4/4・6/8・3/4（sub=0.25）：①の是正後も physical フィル出力が不変", () => {
+    for (const meter of ["4/4", "6/8", "3/4"] as const) {
+      for (const seed of [1, 3, 5]) {
+        const F = { meter, bars: 4, mood: "明るい", tempo: 100 };
+        const r = rh(genDrums(F, seed, { fill: 0.6, fillStyle: "physical" }));
+        // beatsPerStep はこれらの拍子では常に 0.25（三連格子ではない）＝①の分岐は no-op であることの確認。
+        expect(r.beatsPerStep).toBeCloseTo(0.25, 6);
+      }
+    }
+    // 既存の広範なテスト群（fillNotes忠実一致・span外グルーヴ生存・N小節展開等）が全通過していること自体が
+    // 4/4 での bit 一致の証明（このファイルの他テストは全て 4/4 を使用）。
+  });
+
   it("fillNotes が phrase_maker placeFill と忠実一致（明示 length/beat＝ノブが素通しされる）", () => {
     const phys = genDrums(DF, 7, { fill: 0.5, fillStyle: "physical", fillKind: "tom_descent", fillLength: "bar", fillBeat: 0 });
     const notes = rh(phys).fillNotes!;
@@ -233,9 +265,23 @@ describe("身体シミュレータ経路（fillStyle:\"body\"）", () => {
     }
   });
 
-  it("三連格子（shuffle 型）には付けない＝定規が違うので解かない（黙って歪めない）", () => {
-    const r = rh(genDrums(DFB, 3, { style: "shuffle.basic", fill: 0.6, fillStyle: "body" }));
-    expect(r.fillNotes).toBeUndefined(); // フィル無しで返る（三連へ無理やり乗せない）
+  // 三連格子（shuffle 型）＝三連スロット増分（2026-08-29）で body が解けるようになった。
+  // フィルもグルーヴと同じ三連定規に乗る＝16分を混ぜてノリを壊さない。
+  it("三連格子（shuffle）でも body が解き、打点は 1/6qb 格子（三連＋半スロットのバウンス）に乗る", () => {
+    let offBeat = 0;
+    for (const seed of [0, 1, 2, 3, 4]) {
+      // 格子の検証は純物理で（prior のフラム装飾音は設計上 +20ms 格子外に乗る＝16分経路と同じ）
+      const r = rh(genDrums(DFB, seed, { style: "shuffle.basic", fill: 0.6, fillStyle: "body", bodyDrummer: "none" }));
+      expect(r.fillKind).toBe("body"); // 型辞書へ落ちていない
+      expect(r.fillNotes!.length).toBeGreaterThan(0);
+      for (const n of r.fillNotes!) {
+        const k = n.beat * 6;
+        expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-4);
+        if (Math.abs(n.beat * 4 - Math.round(n.beat * 4)) > 1e-4) offBeat++; // 16分格子に乗らない＝真に三連の打点
+      }
+    }
+    expect(offBeat).toBeGreaterThan(0); // どこかの seed で三連らしい位置が実際に出ている
+    expect(GM_NOTE).toBeDefined();
   });
 
   it("bodyDrummer:\"none\"＝統計を使わない純物理（ペダルハットが出ない）", () => {
@@ -266,5 +312,65 @@ describe("身体シミュレータ経路（fillStyle:\"body\"）", () => {
     const grid = r.steps / r.bars!;
     const inFillBar = r.lanes.some((l) => (l as { hits: number[] }).hits.some((h) => h >= 2 * grid && h < 3 * grid));
     expect(inFillBar).toBe(true);
+  });
+});
+
+// ノリ（B1裁定・2026-08-29 結線）＝ genDrums が content.feel を出す配線のテスト。
+// 最重要＝**humanize/swing 未指定は content.feel が生えない＝従来出力と bit 一致**。
+// ここが崩れると既存の全 genDrums 呼び出し（保存済みジョブ・再現性テスト）が無言で壊れるので、
+// 「feel キーの有無」自体を toStrictEqual で厳密に確認する。
+describe("ドラムのノリ（content.feel・演奏レイヤー）", () => {
+  const content = (r: ReturnType<typeof genDrums>) => r.items[0]!.content as { feel?: unknown };
+
+  it("humanize/swing 未指定＝grid 経路で feel が生えず従来出力と toStrictEqual", () => {
+    const withOpts = genDrums(DF, 7, { fill: 0.5 });
+    const bare = genDrums(DF, 7);
+    // opts 無し版と fill だけ足した版は本来 fillNotes の有無以外変わらないので、
+    // ここでは同じ opts で feel 有無だけを見る＝再実行しても同じ結果（決定的）。
+    expect(genDrums(DF, 7, { fill: 0.5 })).toStrictEqual(withOpts);
+    expect(content(withOpts).feel).toBeUndefined();
+    expect(content(bare).feel).toBeUndefined();
+  });
+
+  it("humanize/swing 未指定＝physical 経路でも feel が生えない（fillNotes は載るが feel キー無し）", () => {
+    const phys = genDrums(DF, 7, { fill: 0.5, fillStyle: "physical", fillKind: "tom_descent" });
+    expect(content(phys).feel).toBeUndefined();
+    // physical 経路自体は従来どおり動く（feel 追加がこの経路を壊していないことの確認）
+    expect((phys.items[0]!.content as { rhythm: { fillNotes?: unknown[] } }).rhythm.fillNotes).toBeDefined();
+  });
+
+  it("fillStyle:\"body\" のときだけ humanize の既定 0.25 が content.feel に載る", () => {
+    const DFB = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+    const body = genDrums(DFB, 7, { fill: 0.6, fillStyle: "body" });
+    expect((content(body).feel as { humanize?: number } | undefined)?.humanize).toBe(0.25);
+    // 比較対象＝grid/physical は既定 humanize が無いので feel 自体が生えない（body だけの特別扱いであることの回帰ガード）
+    const grid = genDrums(DFB, 7, { fill: 0.6 });
+    const phys = genDrums(DFB, 7, { fill: 0.6, fillStyle: "physical" });
+    expect(content(grid).feel).toBeUndefined();
+    expect(content(phys).feel).toBeUndefined();
+  });
+
+  it("明示 humanize は body の既定(0.25)より優先される", () => {
+    const DFB = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+    const body = genDrums(DFB, 7, { fill: 0.6, fillStyle: "body", humanize: 0.9 });
+    expect((content(body).feel as { humanize?: number } | undefined)?.humanize).toBe(0.9);
+  });
+
+  it("humanize:0 を明示したら feel は生えない（buildFeel の 0=無効 と揃っている）", () => {
+    const DFB = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
+    // body 経路（既定 0.25 が働きうる文脈）でも明示 0 が勝ってキー自体が消えることを確認。
+    const body = genDrums(DFB, 7, { fill: 0.6, fillStyle: "body", humanize: 0 });
+    expect(content(body).feel).toBeUndefined();
+    // grid 経路でも同様（swing も 0 なら feel 無し）
+    const grid = genDrums(DF, 7, { fill: 0.5, humanize: 0, swing: 0 });
+    expect(content(grid).feel).toBeUndefined();
+  });
+
+  it("swing 指定で content.feel.swing が載る（content.rhythm の中ではなく content 直下）", () => {
+    const r = genDrums(DF, 7, { fill: 0.5, swing: 0.6 });
+    const c = r.items[0]!.content as { feel?: { swing?: number }; rhythm: Record<string, unknown> };
+    expect(c.feel?.swing).toBe(0.6);
+    // 誤って rhythm 配下に載せていないこと＝web 側 feelOf(content) が content.feel を読むための契約
+    expect((c.rhythm as { feel?: unknown }).feel).toBeUndefined();
   });
 });

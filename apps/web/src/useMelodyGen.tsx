@@ -208,9 +208,15 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // drumFill=0..1(0=OFF=未送信) or ビルドアップ型ID(build.*・WP-X4)＝密度倍加/vel漸増/末尾ギャップの遷移テンプレ。
   const [drumStyle, setDrumStyle] = useState<string>("");
   const [drumFill, setDrumFill] = useState<number | string>(0);
-  // 物理フィル（M2・phrase_maker 移植・任意）：ON でフィルを note レベル(三連/32分/フラム保持)に置換＝fillStyle:"physical" を送る。
-  //   OFF（既定）＝従来の定型ビート格子フィル＝bit 一致。フィルが立っている時だけ効く（強さ/ビルドアップと併用）。
-  const [drumFillPhysical, setDrumFillPhysical] = useState<boolean>(false);
+  // フィルの作り方（M2/M3・phrase_maker 移植・任意）。フィルが立っている時だけ効く。
+  //   ""     ＝格子（既定・従来の定型ビート格子フィル＝bit 一致・未送信）
+  //   physical＝型辞書（fills.py の固定10型を note レベルで）
+  //   body    ＝解いて作る（bodyfill.py の身体シミュレータ＝両手の経路を毎回 DP で解く）
+  const [drumFillStyle, setDrumFillStyle] = useState<"" | "physical" | "body">("");
+  // body エンジンの狙い（型を足さずにコストの形だけ変える）。""＝おまかせ＝プリセット。
+  const [drumBodyAim, setDrumBodyAim] = useState<"" | "up" | "down">("");
+  // body の手触り＝GMD テクスチャ統計のドラマー。"none"＝統計なしの純物理。""＝既定ドラマー。
+  const [drumBodyDrummer, setDrumBodyDrummer] = useState<string>("");
   // ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、bassFill=0..1(0=OFF=未送信)。
   const [bassStyle, setBassStyle] = useState<string>("");
   const [bassFill, setBassFill] = useState<number>(0);
@@ -369,8 +375,16 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         // 数値=強度(0=OFF)／文字列=ビルドアップ型ID(build.*)。0/""=未送信＝従来 bit 一致。
         const fillSet = typeof drumFill === "number" ? drumFill > 0 : !!drumFill;
         if (fillSet) body.fill = drumFill;
-        // 物理フィル（M2）：フィルが立っている時だけ fillStyle:"physical" を送る（OFF/未指定=grid=従来 bit 一致）。
-        if (fillSet && drumFillPhysical) body.fillStyle = "physical";
+        // フィルの作り方（M2/M3）：フィルが立っている時だけ送る（未指定=grid=従来 bit 一致）。
+        if (fillSet && drumFillStyle) {
+          body.fillStyle = drumFillStyle;
+          if (drumFillStyle === "body") {
+            // 行き先＝アークの到達点。上る(-0.3)は crash へ駆け上がるタム回し・落とす(+0.8)はフロアへ。
+            if (drumBodyAim === "up") body.bodyDepth = -0.3;
+            else if (drumBodyAim === "down") body.bodyDepth = 0.8;
+            if (drumBodyDrummer) body.bodyDrummer = drumBodyDrummer;
+          }
+        }
       }
       // ベース表面化（design #20 S3c）：骨格の明示ベース区間を gen_bass が差し替える（明示無し=root導出=従来）。
       if (part.op === "gen_bass" && opts?.skeletonNetaId) body.skeletonNetaId = opts.skeletonNetaId;
@@ -624,7 +638,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     articulation, setArticulation, flow, setFlow, pickup, setPickup,
     phrasing, setPhrasing, form, setForm, skelForm, setSkelForm, counter, setCounter, finest, setFinest, voice, setVoice, palette, setPalette,
     rhythmParts, toggleRhythmPart, // リズムパーツ層 L1（design #20 S4-1）
-    drumStyle, setDrumStyle, drumFill, setDrumFill, drumFillPhysical, setDrumFillPhysical, // ドラム定型ビート＋フィル（WP-D1）＋物理フィル（M2）
+    drumStyle, setDrumStyle, drumFill, setDrumFill, // ドラム定型ビート＋フィル（WP-D1）
+    drumFillStyle, setDrumFillStyle, drumBodyAim, setDrumBodyAim, drumBodyDrummer, setDrumBodyDrummer, // フィルの作り方＝格子/型辞書/解いて作る（M2/M3）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）

@@ -377,10 +377,33 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               <option value="build.big.16bar">溜め16小節（大サビ前）</option>
             </select>
           </label>
-          <label className="knob-row" aria-label="drum-fill-physical">
-            <span className="knob-name">物理フィル<small>タム回し/32分/フラムを本物の粒で（実験）</small></span>
-            <input type="checkbox" checked={gen.drumFillPhysical} onChange={(e) => gen.setDrumFillPhysical(e.target.checked)} />
+          <label className="knob-row" aria-label="drum-fill-style">
+            <span className="knob-name">フィルの作り方<small>格子／型辞書／その場で解く</small></span>
+            <select value={gen.drumFillStyle} onChange={(e) => gen.setDrumFillStyle(e.target.value as "" | "physical" | "body")}>
+              <option value="">格子（従来）</option>
+              <option value="physical">型辞書（タム回し/フラムを本物の粒で）</option>
+              <option value="body">解いて作る（両手の動きから）</option>
+            </select>
           </label>
+          {gen.drumFillStyle === "body" && <>
+            <label className="knob-row" aria-label="drum-body-aim">
+              <span className="knob-name">フィルの行き先<small>駆け上がるか、落とすか</small></span>
+              <select value={gen.drumBodyAim} onChange={(e) => gen.setDrumBodyAim(e.target.value as "" | "up" | "down")}>
+                <option value="">おまかせ</option>
+                <option value="up">上る（クラッシュへ駆け上がる）</option>
+                <option value="down">落とす（フロアタムへ）</option>
+              </select>
+            </label>
+            <label className="knob-row" aria-label="drum-body-drummer">
+              <span className="knob-name">手触り<small>実ドラマーの統計を混ぜるか</small></span>
+              <select value={gen.drumBodyDrummer} onChange={(e) => gen.setDrumBodyDrummer(e.target.value)}>
+                <option value="">おまかせ</option>
+                <option value="drummer1">フラム多め</option>
+                <option value="drummer7">フラム少なめ</option>
+                <option value="none">統計なし（物理だけ）</option>
+              </select>
+            </label>
+          </>}
         </>}
       </div>
       <div className="tk-drawer-foot">

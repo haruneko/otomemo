@@ -76,7 +76,7 @@
 
 ### M2：ドラム本実装（蒸留）
 - **Scope（現況＝2026-08-21 更新）**：
-  - **フィル蒸留＝完了・コミット済み（`97520a4`）**：phrase_maker `fills.py` の型10種（snare_roll/tom_descent/triplet_cascade/herta/gallop/buildup 等）＋`humanize.py` を TS 移植（`packages/music-core/drumFill.ts`・`humanizeFill.ts`）。**`bodyfill.py`（物理DP）は phrase_maker 実パイプライン未使用の死にコードと判明＝移植対象ではなかった**（旧記述「bodyfill 系物理生成」は誤り）。忠実度はデータで検証済み（363 配置を event 単位で一致＋humanize 1e-9・CPython MT19937/銀行丸めまで）＝**三連フィル未対応の旧懸念は解消**（triplet_cascade を含む）。既定 `fillStyle:"grid"`＝従来 applyDrumFill＝bit 一致。
+  - **フィル蒸留＝完了・コミット済み（`97520a4`）**：phrase_maker `fills.py` の型10種（snare_roll/tom_descent/triplet_cascade/herta/gallop/buildup 等）＋`humanize.py` を TS 移植（`packages/music-core/drumFill.ts`・`humanizeFill.ts`）。~~`bodyfill.py`（物理DP）は死にコード＝移植対象ではなかった~~ **← この判定は誤り（2026-08-29 訂正・M3 で移植済み）**：デモ `generate.py` から参照されていないだけの `fill_engine="body"` opt-in エンジンで、676行＝fills/ 最大のモジュール（＝phrase_maker の芯「身体性シミュレータ」そのもの）。正典＝design §2106(g)。忠実度はデータで検証済み（363 配置を event 単位で一致＋humanize 1e-9・CPython MT19937/銀行丸めまで）＝**三連フィル未対応の旧懸念は解消**（triplet_cascade を含む）。既定 `fillStyle:"grid"`＝従来 applyDrumFill＝bit 一致。
   - **残り（未実装）**：① **物理フィルを実際に鳴らす結線**（`fillNotes`＝絶対qb/GM番号 を web の実レンダ〈Tone.js／MIDI 書き出し〉へ流す）。② **フィルの呼び方＝kind 選択**（どの型をいつ出すか）＝**最小にとどめ固定しない**（利用の中で決まる＝硬化させない）。位置はセクション cue・弾き方はレシピ。③ その他のつまみ蒸留（ゴースト＝レーン分割・押し引き・ハット開閉勾配・熱量）＋小節単位の別案（io-map 裁定#7）＋build/break の楽器別解決（カスケード S3）。
   - **順序の鉄則（2026-08-21 の反省）**：①結線は ②（呼び方）が最小でも決まってから。呼び方が未決のままレンダだけ繋ぐと捨て配線になる。
 - **Done**：物理フィルが**アプリ本体で実際に鳴る**（cue から呼べる＋cue 無し自動フォールバック・4/4）／他つまみが効く。ゴールデン回帰でスナップショット固定（**耳合格ゲートは置かない**＝下記受け入れ）。
@@ -141,7 +141,7 @@ B1(裁定済) 案C(裁定済) ─→ M0(契約凍結＋S0 cues型/規則) ─→
 | break の楽器別解決＋意味論（「足す方向」原則との緊張） | カスケード §3-1/§7-3 | M2（実音で確認） |
 | キメ（kind:"kime"＋縦格子）・モチーフ回想（ref＝ネタID参照） | カスケード §5 S3 | 必要になった項目から additive |
 | リタルダンド（越境の同族・テンポは feel/再生層とも重なる） | カスケード §7-6 | 実需要が来た時 |
-| 三連フィル（0.25 格子に三連スロット無し） | 申し送り・M2 | M2 で「直すか既知の限界か」を spec に明記 |
+| ~~三連フィル（0.25 格子に三連スロット無し）~~ **消化済み 2026-08-29** | M3 | 三連スロットを新設（源流に無い増分）＝定規を16分/三連の2本に。物理判定は元々秒基準ゆえ不変。正典＝design §2106(g)。残＝三連固有の統計（backlog） |
 | 文脈依存ヒューマナイズ（位置依存のもたり/突っ込み） | M0契約 §7 | M2 以降・backlog |
 | 「素で書き出す」トグル（MIDI） | B1(b) | backlog の nicety |
 | フォールバック位置知識の1箇所化リファクタ（genDrums/genBass の重複） | カスケード §4 | cue 経路が本線になった後・挙動同一で |

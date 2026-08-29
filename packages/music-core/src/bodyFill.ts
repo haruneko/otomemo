@@ -48,13 +48,21 @@ const V_MAX = 8.0; // 限界の到達速度（u/s）＝これを超える移動�
 const RATE_BURST = 10.0; // 片手の瞬間連打レート（hits/s）＝3連打まで
 const BOUNCE_LO_S = 0.035; // リバウンド窓（秒）＝この中でしかダブルは打てない
 const BOUNCE_HI_S = 0.130;
-const BOUNCE_QB = 0.125; // 2打目（バウンス）は実際の +1/32 スロットに乗る
+// バウンス（ダブルの2打目）は**半スロット**後に乗る（16分定規なら +1/32＝0.125qb）。
+// 定数でなく sub/2 で持つ＝三連定規（sub=1/3）でも同じ物理が半スロット（1/6qb）で成り立つ。
 const HAND_VEL: Record<string, number> = { R: +4, L: -4 }; // 利き手の非対称
 
 const FLAM_GRACE_S = 0.020; // フラムの装飾音のずらし幅（秒・prior 経路のみ）
 const GHOST_CAP = 0.85; // 足ゴーストのスロットあたり確率の上限
 
 const SUB = 0.25; // スロット間隔（4分音符=1 の単位）＝16分格子（両拍子とも）
+// 三連スロット（1拍3分割）＝2026-08-29 の新規増分。源流 bodyfill.py には無い（実フィルの35%が三連
+// なのに源流の定規は16分だけだった）。DP・物理判定は元々スロット幅を秒に換算して効かせているので、
+// 定規を差し替えるだけで同じ身体法則が成り立つ。**混在格子（16分と三連を同じフィル内で混ぜる）は
+// やらない**：フィルは「いま鳴っているグルーヴの引用」なので定規はグルーヴのものを1本だけ使う。
+// 混ぜるには最小公倍の 1/12qb 格子が要り、隣接スロットの連打判定（lag==1＝バースト）が
+// 粗い格子上の実際の連打を表さなくなる＝物理の意味が壊れる。
+const SUB_TRIPLET = 1 / 3;
 
 // 決定論：整数量子化と md5
 const Q = 1000; // コスト→整数マイクロ単位
@@ -128,13 +136,13 @@ function priorDensity(frac: number, prior: GmdPrior): number {
 // ===========================================================================
 /** span のスロットごとの、譜面リズムの引用。 */
 export interface BodySkeleton { onset: boolean[]; accent: boolean[]; kick: boolean[] }
-/** 1小節ぶんの譜面（step は 0.25qb 定規＝スロットと同じ物差し）。 */
+/** 1小節ぶんの譜面（step はスロットと同じ物差し＝16分なら 0.25qb・三連なら 1/3qb）。 */
 export interface BodyRhythmSpec { grid: number; onsets: number[]; accents?: number[]; kick?: number[] }
 
 /** 譜面1小節を span のスロットへ写す。sheet step と slot は同じ定規なので写像は恒等。 */
-export function skeletonFromSpec(rhythm: BodyRhythmSpec, meter: FillMeter, bar: number, startQb: number, nSlots: number): BodySkeleton {
-  const grid = rhythm.grid || Math.round(meter.qbeatsPerBar / SUB);
-  const startStep = Math.round((startQb - bar * meter.qbeatsPerBar) / SUB);
+export function skeletonFromSpec(rhythm: BodyRhythmSpec, meter: FillMeter, bar: number, startQb: number, nSlots: number, sub: number = SUB): BodySkeleton {
+  const grid = rhythm.grid || Math.round(meter.qbeatsPerBar / sub);
+  const startStep = Math.round((startQb - bar * meter.qbeatsPerBar) / sub);
   const onsetSteps = new Set(rhythm.onsets ?? []);
   const accentSteps = new Set(rhythm.accents ?? []);
   const kickSteps = new Set(rhythm.kick ?? []);
@@ -196,11 +204,12 @@ export interface BodyTrace {
 export function planEvents(
   startQb: number, nSlots: number, skel: BodySkeleton, cfg: IntensityCfg, intent: Intent,
   tempo: number, seedSalt: number, habit: Map<string, number> | null,
-  prior: GmdPrior | null, tailAnchor: number,
+  prior: GmdPrior | null, tailAnchor: number, sub: number = SUB,
 ): { events: FillEvent[]; hands: string[]; trace: BodyTrace } {
   const beatDur = 60.0 / tempo;
-  const slotS = SUB * beatDur;
-  const bounceS = BOUNCE_QB * beatDur;
+  const slotS = sub * beatDur;
+  const bounceQb = sub / 2; // ダブルの2打目は半スロット後（16分定規＝0.125qb・三連定規＝1/6qb）
+  const bounceS = bounceQb * beatDur;
   const bouncePlayable = BOUNCE_LO_S <= bounceS && bounceS <= BOUNCE_HI_S;
 
   const { depth, gamma, c_miss: cMiss, c_add: cAdd, dense } = intent;
@@ -409,14 +418,14 @@ export function planEvents(
     if (isChild) {
       const pv = parentVel.get(`${slot}:${drum}:${hlabel}`) ?? base;
       vel = clampv(pv - 12.0 * (1.0 / REBOUND[drum]!));
-      off = slot * SUB + BOUNCE_QB;
+      off = slot * sub + bounceQb;
     } else if (isFlamGrace) {
       vel = clampv(base - 15);
-      off = slot * SUB + graceQb;
+      off = slot * sub + graceQb;
     } else {
       vel = clampv(base);
       parentVel.set(`${slot}:${drum}:${hlabel}`, vel);
-      off = slot * SUB;
+      off = slot * sub;
     }
     events.push({ beat: round6(startQb + off), voice: drum as DrumVoice, velocity: vel });
     hands.push(hlabel);
@@ -429,7 +438,7 @@ export function planEvents(
     kickSlots.add(i);
     const frac = nSlots ? i / nSlots : 1.0;
     const baseKv = prior !== null ? priorVel(frac, cfg, prior) : energy(frac, cfg);
-    events.push({ beat: round6(startQb + i * SUB), voice: "kick", velocity: clampv(baseKv - 10) });
+    events.push({ beat: round6(startQb + i * sub), voice: "kick", velocity: clampv(baseKv - 10) });
     hands.push("F");
   }
 
@@ -437,12 +446,12 @@ export function planEvents(
   //      スロットごとの md5 抽選（RNG 不使用）。ゴーストキックは構造キックの位置を避ける
   //      （右足を二度使わない）。ペダルハットは空いている左足＝何とも衝突しない。 ----
   if (prior !== null) {
-    const gkP = Math.min(GHOST_CAP, (prior.ghost_kick_per_qb ?? 0) * SUB);
-    const phP = Math.min(GHOST_CAP, (prior.pedal_hh_per_qb ?? 0) * SUB);
+    const gkP = Math.min(GHOST_CAP, (prior.ghost_kick_per_qb ?? 0) * sub);
+    const phP = Math.min(GHOST_CAP, (prior.pedal_hh_per_qb ?? 0) * sub);
     const gkVel = pyRound(prior.ghost_kick_vel ?? 45.0);
     const phVel = pyRound(prior.pedal_hh_vel ?? 40.0);
     for (let i = 0; i < nSlots; i++) {
-      const off = i * SUB;
+      const off = i * sub;
       if (!kickSlots.has(i)) {
         const d = Number(md5Int(`${seedSalt}:gkick:${i}`) % 10000n) / 10000.0;
         if (d < gkP) { events.push({ beat: round6(startQb + off), voice: "kick", velocity: clampv(gkVel) }); hands.push("F"); }
@@ -469,7 +478,7 @@ export function planEvents(
 
   let nFlams = 0;
   for (const hl of slotHands.values()) if (hl.length >= 2) nFlams++;
-  const kickBeats = new Set([...kickSlots].map((i) => round6(startQb + i * SUB)));
+  const kickBeats = new Set([...kickSlots].map((i) => round6(startQb + i * sub)));
   const trace: BodyTrace = {
     nSlots, nHits: chosen.hits.length, candidates: pool.length, bestCost: c0,
     drumSeq: chosen.hits.filter(([, , , c]) => !c).map(([, d]) => d),
@@ -507,6 +516,8 @@ export interface BodyFillOpts {
   crescendo?: number;
   /** 0..1 ＝末尾の連打をスネアの引力に潰させず、行き先のタムに留める紐。 */
   tailAnchor?: number;
+  /** スロット定規（qb）。0.25＝16分（既定・源流と同じ）／1/3＝三連（shuffle 系）。他は投げる。 */
+  sub?: number;
 }
 
 /**
@@ -535,11 +546,25 @@ export function planBodyFill(o: BodyFillOpts): BodyFillPlacement {
   const lengthQb = units * o.meter.qbPerUnit;
   const startQb = o.meter.toQb(o.bar, o.beat);
   const landingQb = startQb + lengthQb;
-  const nSlots = Math.max(1, Math.round(lengthQb / SUB));
+  // 定規は2本だけ（16分/三連）。呼び手の丸め誤差（round3 の 0.333 等）は正準値へ寄せる＝
+  // スロット位置の計算は常に厳密な 0.25 / 1/3 で行う（黙って歪んだ格子を敷かない）。
+  const sub = o.sub === undefined || Math.abs(o.sub - SUB) < 1e-3 ? SUB
+    : Math.abs(o.sub - SUB_TRIPLET) < 1e-3 ? SUB_TRIPLET
+    : null;
+  if (sub === null) throw new Error(`unsupported slot sub ${o.sub}（0.25 か 1/3 のみ）`);
+  if (sub !== SUB) {
+    // 三連定規は span がスロットで割り切れる時だけ引ける（例：6/8 の付点拍 1.5qb は不可＝
+    // そもそも付点拍の3分割は八分＝0.25 格子で既に表せるので三連定規の出番ではない）。
+    const raw = lengthQb / sub;
+    if (Math.abs(raw - Math.round(raw)) > 1e-6) throw new Error(`length ${lengthQb}qb は三連スロットで割り切れない`);
+    const rawStart = (startQb - o.bar * o.meter.qbeatsPerBar) / sub;
+    if (Math.abs(rawStart - Math.round(rawStart)) > 1e-6) throw new Error(`beat ${o.beat} は三連スロットに乗らない`);
+  }
+  const nSlots = Math.max(1, Math.round(lengthQb / sub));
 
-  const skel = skeletonFromSpec(o.rhythm, o.meter, o.bar, startQb, nSlots);
+  const skel = skeletonFromSpec(o.rhythm, o.meter, o.bar, startQb, nSlots, sub);
   const { events, hands, trace } = planEvents(
-    startQb, nSlots, skel, cfg, intent, o.tempo, o.seedSalt, o.habit ?? null, o.prior ?? null, tailAnchor);
+    startQb, nSlots, skel, cfg, intent, o.tempo, o.seedSalt, o.habit ?? null, o.prior ?? null, tailAnchor, sub);
 
   const landing: FillEvent[] = (o.resolve ?? true)
     ? [{ beat: round6(landingQb), voice: "crash", velocity: cfg.land_crash },
