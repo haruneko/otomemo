@@ -129,7 +129,7 @@ describe("mcp tool layer", () => {
     })));
     const rhythm = body.items[0].content.rhythm;
     expect(rhythm.fillKind).toBe("body"); // enum で弾かれず M3 経路へ到達
-    expect(body.items[0].content.feel?.humanize).toBe(0.25); // body 既定 humanize
+    expect(body.items[0].content.feel?.humanize).toBe(0.5); // body 既定 humanize（耳判定 2026-08-30 で 0.25→0.5）
 
     // humanize:0 明示で既定が切れる（buildFeel の 0=無効 契約が MCP からも成立）
     const zeroed = JSON.parse(textOf(await client.callTool({

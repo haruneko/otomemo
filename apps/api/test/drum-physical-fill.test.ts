@@ -339,10 +339,10 @@ describe("ドラムのノリ（content.feel・演奏レイヤー）", () => {
     expect((phys.items[0]!.content as { rhythm: { fillNotes?: unknown[] } }).rhythm.fillNotes).toBeDefined();
   });
 
-  it("fillStyle:\"body\" のときだけ humanize の既定 0.25 が content.feel に載る", () => {
+  it("fillStyle:\"body\" のときだけ humanize の既定 0.5 が content.feel に載る", () => {
     const DFB = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
     const body = genDrums(DFB, 7, { fill: 0.6, fillStyle: "body" });
-    expect((content(body).feel as { humanize?: number } | undefined)?.humanize).toBe(0.25);
+    expect((content(body).feel as { humanize?: number } | undefined)?.humanize).toBe(0.5);
     // 比較対象＝grid/physical は既定 humanize が無いので feel 自体が生えない（body だけの特別扱いであることの回帰ガード）
     const grid = genDrums(DFB, 7, { fill: 0.6 });
     const phys = genDrums(DFB, 7, { fill: 0.6, fillStyle: "physical" });
@@ -350,7 +350,7 @@ describe("ドラムのノリ（content.feel・演奏レイヤー）", () => {
     expect(content(phys).feel).toBeUndefined();
   });
 
-  it("明示 humanize は body の既定(0.25)より優先される", () => {
+  it("明示 humanize は body の既定(0.5)より優先される", () => {
     const DFB = { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 };
     const body = genDrums(DFB, 7, { fill: 0.6, fillStyle: "body", humanize: 0.9 });
     expect((content(body).feel as { humanize?: number } | undefined)?.humanize).toBe(0.9);

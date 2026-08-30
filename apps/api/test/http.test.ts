@@ -299,7 +299,7 @@ describe("skeleton music routes (#20 S2)", () => {
 // ②③④是正（2026-08-29・受け入れ監査）：humanize/swing/body系ノブが HTTP から genDrums へ到達すること
 // （②）と、/gen/section の drums opts が "body" を落とさず fillLength/fillBeat/body系ノブも通ること（④）。
 describe("HTTP経路のドラムノブ到達（②④是正の回帰）", () => {
-  it("POST /music/gen_drums：humanize:0 明示で fillStyle:body の既定humanize(0.25)が切れる（②）", async () => {
+  it("POST /music/gen_drums：humanize:0 明示で fillStyle:body の既定humanize(0.5)が切れる（②）", async () => {
     const withDefault = await app.inject({
       method: "POST", url: "/music/gen_drums",
       payload: { frame: { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 }, seed: 7, fill: 0.6, fillStyle: "body" },
@@ -308,7 +308,7 @@ describe("HTTP経路のドラムノブ到達（②④是正の回帰）", () => 
       method: "POST", url: "/music/gen_drums",
       payload: { frame: { meter: "4/4", bars: 4, mood: "明るい", tempo: 120 }, seed: 7, fill: 0.6, fillStyle: "body", humanize: 0 },
     });
-    expect((withDefault.json().items[0].content as { feel?: { humanize?: number } }).feel?.humanize).toBe(0.25);
+    expect((withDefault.json().items[0].content as { feel?: { humanize?: number } }).feel?.humanize).toBe(0.5);
     expect((zeroed.json().items[0].content as { feel?: unknown }).feel).toBeUndefined();
   });
 

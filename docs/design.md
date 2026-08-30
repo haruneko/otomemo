@@ -2115,6 +2115,16 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **(c) resolve 置き場＝`packages/music-core`**（api/web 共有・applyFeel 単一実装の前例。cues の型と純関数・RNG ソルト表も同居）。署名＝`resolve(recipe, ctx) -> {notes, skeleton, groove}`・`ctx = {meter, tempo, bars, key?, chords?, sectionRole?, slashBass?, cues?: DerivedCue[]}`（cues は sectionRole と同席・additive）。**RNG ソルト表（凍結・M0契約 §4・`rngSalt.ts`）**＝役割別固定ソルト（kick=+11…altTake=+43・`new Rng(seed+salt)`）。**注記＝`fill=+37` は将来枠＝現行 fill は生 seed**（`resolveFillType`/`resolveBassFill`）＝この定数はレシピ resolve 実装時に使う。
 - **(d) 物理フィルの kind 選択＝cue.aim でプール分け（裁定B・2026-08-21・`buildPhysicalFill`）**：物理フィル（M2・fillStyle:"physical"）の型は **明示ノブ `fillKind` ＞ プリセット**（#169 の順）。プリセット＝**cue.aim で型プールを分け、プール内は seed で選抜**：**方向を持つ型＋どちらにも付く中立型 `{flam_accents, sixteenth_groove}` の二層**で組む＝`aim:"up"`＝上昇/駆動プール `{buildup, gallop, snare_roll, herta}`＋中立（計6型）／`aim:"down"`＝下降プール `{tom_descent, triplet_cascade, offbeat_syncopated}`＋中立（計5型）／**aim 未指定＝`DEFAULT_POOL`＝9型**（＝上の全部＋中立。`snare_roll_32` だけは既定プールに載せない＝下の (f-2)）。**aim 未指定でも「従来の純ランダム」と選抜結果は一致しない**（プールが 10→9 型に変わっている＝bit 一致は放棄済み・opt-in 経路なので既定出力には影響しない）。**`intensity` は型選択に使わない＝二重掛け回避**（intensity は subtle/medium/flashy＝フィル内部の強弱/密度のみ）。**プールは硬化させない**（利用の中で微調整する初期割り当て＝1:1 固定テーブルは置かない）。選抜 kind は `rhythm.fillKind` に自己記述（patternId 前例・step2 の実レンダ/MIDI 結線で型名が要る）。**位置＝cue（bar）・向き＝cue（aim）・弾き方＝レシピ、を分離したまま**（cue は薄い合図のまま・型辞書は語彙）。
 - **(e) 物理フィルの結線（step2 完了・2026-08-21）＝再生/MIDI へ流す**：`buildPhysicalFill` は grid 経路（`applyDrumFill`）と同じく **N 小節へ展開**した自己完結 content を返す（base bar0 groove をタイル・`bars=N`/`steps=N*grid`）＝**セクション合成はタイルしない**（`compositeNotes` は content の実尺をそのまま置く）ので、物理フィルも N 小節で自己完結させる必要がある。web `rhythmToNotes`（api/web 両再生・MIDI 書き出しが収束する単一変換点）が `r.fillNotes`（絶対 qb＝`Note.start` と同単位で 1:1）をドラムノートに重畳＝**再生（Tone.js）と MIDI 書き出しの両方で鳴る/書ける**。`fillNotes` 無し/空＝grid のみ＝従来 bit 一致（additive）。到達口＝`/music/gen_drums`・MCP `gen_drums`・`/gen/section`（body `drums.fillStyle:"physical"`＋任意 `fillKind`）。web UI＝TinkerSheet ドラム引き出し「細かく」内の**「フィルの作り方」3択 select**（`格子（従来）`＝未送信／`型辞書`＝`fillStyle:"physical"`／`解いて作る`＝`fillStyle:"body"`＝M3・下の (g)）。**フィルが立っている時だけ送信・既定＝格子＝従来 bit 一致**。`body` を選んだ時だけ意図つまみの select が2つ出る＝**フィルの行き先**（おまかせ／上る＝`bodyDepth:-0.3`／落とす＝`bodyDepth:0.8`）と**手触り**（おまかせ／フラム多め＝`drummer1`／フラム少なめ＝`drummer7`／統計なし＝`bodyDrummer:"none"` の純物理）。**生の数値ノブは出さない**＝つまみの意味（行き先・手触り）で選ばせて内部値は UI が持つ。**耳＝実際の作曲で使う中で採否**（抽象 A/B ゲートは置かない）。
+  - **(j) 耳判定の決着（2026-08-30・オーナー試聴）＝辞書と生成は併存／ノリ既定は 0.5**：
+    - **「辞書は辞書の良さがありそう」「生成も良いよ」＝両方採る。**これは実装計画 B6（「レシピが drumLibrary の型を
+      吸収するか併存か」）の裁定でもある＝**吸収しない・併存が確定**。型辞書（`fillStyle:"physical"`・phrase_maker の
+      固定10型）と生成器（`fillStyle:"body"`・身体シミュレータ）は**別の道具として並べる**＝UI の3択がそのまま正準。
+      「生成のほうが上位互換だから辞書を畳む」はしない。
+    - **ノリの既定＝0.5**（最大±8.5ms・実効2.3ms）。初版 0.25（±4ms＝feel 層の「実測 SD の基準」）は、
+      試聴で**ノリ無しとの差が判別できなかった**（オーナー「ノリはわかんない、8かな」）。
+      **判別できなかったという事実込みの暫定値＝硬化させない**（明示ノブが常に勝つ・使う中で寄せ直す）。
+      型辞書/格子の経路には既定を入れない＝従来の性格を変えない。
+    - **三連（シャッフル）のフィルは耳で通った**＝M3 の三連増分は採用。
   - **(i) 文言とフォールバック通知（2026-08-29・オーナー裁定）**：
     - **UI 文言**＝「解いて作る」は**ソルバー用語で利用者の言葉ではない**ので **「生成する」** へ（オーナーの言葉）。
       3択は `型から選ぶ（従来）` / `型から選ぶ（32分・フラムも）` / `生成する（毎回ちがう）`＝**①②は在庫から選び、

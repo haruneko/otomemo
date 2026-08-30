@@ -1670,8 +1670,11 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
   // ノリ（B1裁定・2026-08-29 結線）：**スコアはストレートのまま**、揺れは content.feel＝演奏レイヤーへ載せる
   //   （genMelody/genBass と同じ buildFeel 契約・再生/書き出しで applyFeelEnsemble が消費する）。
   //   身体シミュレータ経路は既定で humanize を入れる＝人が叩いた経路を完全クオンタイズで鳴らすのは筋が悪い。
-  //   0.25 は feel 層自身の「実測 SD の基準」＝でたらめな数ではない。**硬化させない**（明示ノブが勝つ）。
-  const humDefault = opts?.fillStyle === "body" ? 0.25 : undefined;
+  //   **0.5（最大±8.5ms・実効2.3ms）＝耳判定 2026-08-30 で採った値**。初版は feel 層の「実測 SD の基準」である
+  //   0.25（最大±4ms）だったが、試聴でオーナーが「わかんない、8かな」＝0.25 と無しの差が判別できず 0.5 を選んだ。
+  //   **判別できなかったという事実込みの暫定値＝硬化させない**（明示ノブが常に勝つ・使う中で寄せ直す）。
+  //   型辞書/格子の経路は既定を入れない＝従来の性格を変えない（「辞書は辞書の良さがある」＝耳判定で併存が確定）。
+  const humDefault = opts?.fillStyle === "body" ? 0.5 : undefined;
   const feel = buildFeel(opts?.swing, opts?.humanize ?? humDefault, seed ?? 0);
   if (feel) base = { ...base, feel };
   const res: GenResult = withBarsWarning({ items: [{ kind: "rhythm", content: base, label: "ドラム" }], edges: [] }, frame);
