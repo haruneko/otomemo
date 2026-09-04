@@ -13,7 +13,7 @@ type Lane = { name: string; midi: number; hits: number[]; vel: number; velCurve?
 type Rhythm = { steps: number; bars: number; beatsPerStep: number; lanes: Lane[] };
 const rh = (r: ReturnType<typeof genDrums>): Rhythm => (r.items[0]!.content as { rhythm: Rhythm }).rhythm;
 const lane = (r: Rhythm, name: string) => r.lanes.find((l) => l.name === name);
-const bassNotes = (r: ReturnType<typeof genBass>) => (r.items[0]!.content as { notes: { pitch: number; start: number; dur: number }[] }).notes;
+const bassNotes = (r: ReturnType<typeof genBass>) => (r.items[0]!.content as { notes: { pitch: number; start: number; dur: number; vel?: number }[] }).notes;
 const j = (x: unknown) => JSON.stringify(x);
 // section.cues を frame に載せた変種を作る（DerivedCue[] は resolve 境界＝導出済みが届く）。
 const withCues = (frame: Record<string, unknown>, cues: DerivedCue[]) => ({ ...frame, section: { ...((frame.section as object) ?? {}), cues } });
@@ -138,6 +138,33 @@ describe("カスケード S1/S2＝cue 配線（最重要＝cues 未指定は従�
       const internal = rh(genDrums(withCues(DF, [{ bar: 2, kind: "fill", intensity: 0.6 }]), 7));
       expect(j(cross)).not.toBe(j(internal));
     });
+
+    it("ベース：bar0 land 消費＝頭ノートがルートへ差し替わり velocity が強くなる", () => {
+      const withLand = bassNotes(genBass(withCues(BF, [{ bar: 0, kind: "land" }]) as never, chords, 5, null));
+      const head = withLand.find((n) => Math.abs(n.start) < 1e-9)!;
+      expect(head.pitch).toBe(36); // chords の root=0(C) → bassPcToWindow(0)=36(C2)
+      expect(head.vel).toBeGreaterThan(100); // 通常ベースの既定(vel フィールド無し=100相当)より明確に強い
+      // land 無しでは vel フィールドが立たない（land が音を変えたことの裏取り＝bit で異なる）。
+      const noLand = bassNotes(genBass(BF, chords, 5, null));
+      expect(noLand.find((n) => Math.abs(n.start) < 1e-9)!.vel).toBeUndefined();
+      expect(j(withLand)).not.toBe(j(noLand));
+    });
+  });
+
+  // ── respondToCues（既定 true・裁定6）＝false ならこのトラックは cues を一切読まない ──
+  describe("respondToCues:false＝cues があっても従来と bit 一致（そのトラックだけ合図に乗らない自由）", () => {
+    it("ベース：fill cue 有りでも respondToCues:false＝cues 無しと同一出力", () => {
+      const cues: DerivedCue[] = [{ bar: 1, kind: "fill", intensity: 0.7 }];
+      const withOff = genBass(withCues(BF, cues) as never, chords, 5, null, { respondToCues: false });
+      const noCues = genBass(BF, chords, 5, null);
+      expect(withOff).toStrictEqual(noCues);
+    });
+
+    it("ベース：land cue 有りでも respondToCues:false＝cues 無しと同一出力", () => {
+      const withOff = genBass(withCues(BF, [{ bar: 0, kind: "land" }]) as never, chords, 5, null, { respondToCues: false });
+      const noCues = genBass(BF, chords, 5, null);
+      expect(withOff).toStrictEqual(noCues);
+    });
   });
 
   // ── B. 配布の1枚性（/gen/section が deriveCues→frame.section.cues で全生成器へ配る・S2 end-to-end） ──
@@ -158,6 +185,24 @@ describe("カスケード S1/S2＝cue 配線（最重要＝cues 未指定は従�
       expect(res.statusCode).toBe(200);
       const r = rhythmOf(res.json().composition);
       expect(r.lanes.find((l) => l.name === "Crash")!.hits).toContain(0);
+    });
+
+    it("prevSection.cues に末フィル（bar=bars-1）＝ドラムとベースが同じ land に噛み合う（bar0＝crash+kick かつ ベース頭がルート強打）", async () => {
+      const bassOf = (composition: any) => {
+        const child = composition.children.find((c: any) => c.node.neta.kind === "bass");
+        return (child.node.neta.content as { notes: { pitch: number; start: number; dur: number; vel?: number }[] }).notes;
+      };
+      const res = await app.inject({
+        method: "POST", url: "/gen/section",
+        payload: { frame: { meter: "4/4", bars: 4, key: 0 }, parts: ["rhythm", "bass"], seed: 7, prevSection: { cues: [{ bar: 3, kind: "fill" }], bars: 4 } },
+      });
+      expect(res.statusCode).toBe(200);
+      const composition = res.json().composition;
+      const r = rhythmOf(composition);
+      expect(r.lanes.find((l) => l.name === "Crash")!.hits).toContain(0); // ドラム＝着地シンバル
+      const bass = bassOf(composition);
+      const head = bass.find((n: { start: number }) => Math.abs(n.start) < 1e-9)!;
+      expect(head.vel).toBeGreaterThan(100); // ベース＝bar0 頭がルート強打（land）
     });
 
     it("cues 未指定の /gen/section rhythm は従来（land 無し）＝Crash が居ない＝bit 一致の担保", async () => {

@@ -1104,6 +1104,9 @@ function parseDrums(drums?: DrumsInput | null): { steps: number; bps: number; ki
 //   → **33..48（A1..C3）へ是正**。★意図的 bit 破壊：ルート/5度/oct の絶対配置が下方シフト＝旧出力と不一致
 //   （A/A#/B ルートは1oct 下がり・高ルートの 5度上/oct は窓上端48で刈られ root 集中）。耳確認は[耳/手]。
 export const BASS_LO = 33, BASS_HI = 48;
+// land 着地の velocity（カスケード §3-1「bar0 頭ルート・vel 強」）。melodyCells の強アクセント上限(118)と
+// ドラム land の crash(120)/kick(118) に揃え、通常ベースの既定100より明確に強く鳴らす。
+const BASS_LAND_VEL = 118;
 // pc(0..11) を窓 [BASS_LO,BASS_HI] の最下オクターブへ写す（旧 36+pc の 36..47 張り付きに代わる低域化）。
 // 例：C(pc0)→36(C2 据え置き)・G(pc7)→43(G2)・A(pc9)→33(A1 で1oct 降下)・B(pc11)→35(B1)。
 function bassPcToWindow(pc: number): number { return BASS_LO + ((((pc % 12) - BASS_LO) % 12) + 12) % 12; }
@@ -1120,10 +1123,13 @@ export function genBass(
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[],
   seed?: number | null,
   drums?: DrumsInput | null,
-  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean },
+  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean; respondToCues?: boolean },
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
+  // カスケード応答つまみ（respondToCues・既定 true・裁定6）：false ならこのトラックは ctx.cues を一切読まない
+  //   （genDrums と同じ「cue 有→新経路／無→現行式」の入口をここで1本化・以降の fill/land 判定は全てこの cues 経由）。
+  const cues = opts?.respondToCues === false ? undefined : f.section?.cues;
   const bars = barsOf(f);
   const info = meterInfo(f.meter); // 6/8 一級（メロと拍子を揃える）
   const bassFigs = info.grouping === "compound" ? COMPOUND_BASS_FIGS : BASS_FIGS;
@@ -1147,7 +1153,7 @@ export function genBass(
     ? ((): BassType | null => { const t = bassTypeById(opts.style) ?? pickBassType(opts.style, f.section?.role, f.tempo, seed ?? 42); return t && t.grid === styleGrid ? t : null; })()
     : null;
   const bias = densityBias(f.mood ?? "", f.tempo);
-  const notes: { pitch: number; start: number; dur: number }[] = [];
+  const notes: { pitch: number; start: number; dur: number; vel?: number }[] = [];
   // ドラム結線のゲート：drums content が無ければ全ノブ無効＝従来経路（鉄則）。
   const dr = parseDrums(drums);
   // 上限クランプ 0.85（B1 実測＝share→1.0 は非実在）。負(逆相)は 8分裏配置ゆえユニゾン化せず -1 まで許容。
@@ -1182,7 +1188,7 @@ export function genBass(
     };
     // fill（末尾1つ手前の小節）：型ID/数値を解決し当該小節だけ fill セルへ差替え（bars>=2・6-8はフィル対象外＝除外）。
     // セクション合図（カスケード §3-1）：cue 有→fill 位置＝cue.bar・強さ＝cue.intensity(0..1)→resolveBassFill／**cue 無→現行式(bars-2)＝bit 一致**。
-    const relFillCue = f.section?.cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
+    const relFillCue = cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
     const cueFillBar = relFillCue != null && !compound && relFillCue.bar >= 0 && relFillCue.bar < bars ? relFillCue.bar : -1;
     const fillBar = cueFillBar >= 0 ? cueFillBar : (opts?.fill != null && bars >= 2 && !compound ? bars - 2 : -1);
     const fillVal: number | string | undefined = cueFillBar >= 0 ? (relFillCue!.intensity ?? 0.5) : opts?.fill;
@@ -1333,7 +1339,7 @@ export function genBass(
   //   フィル型（駆け上がり/下がり）で置換＝句末の橋渡し。R> は次小節(bars-1)頭のルートへ先取り着地。
   //   全後処理の最後＝approach/snareGap/skeleton に乱されない（型格子を正準に保つ）。**fill 未指定=OFF=従来 bit 一致**。
   // セクション合図（カスケード §3-1）：cue 有→fill 位置＝cue.bar（強さ＝cue.intensity(0..1)→resolveBassFill）／**cue 無→現行式(bars-2)＝一切触れない＝bit 一致**。
-  const fillCue = f.section?.cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
+  const fillCue = cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
   const fillOpt = opts?.fill;
   if (fillCue != null && info.grouping !== "compound" && fillCue.bar >= 0 && fillCue.bar < bars) {
     // ── 新経路（cue 有）：fill セルを cue.bar に差替（越境＝bar===bars-1 も内部処理は同じ・land は次セクションで鳴る） ──
@@ -1367,6 +1373,18 @@ export function genBass(
       notes.push(...kept, ...filled);
       notes.sort((a, b) => a.start - b.start);
     }
+  }
+
+  // --- G: S2 land 消費（カスケード §3-1・ドラム applyLandBar0 と同じ位置づけ）：越境（前セクション末フィル）の
+  //   着地＝bar0 頭をルート音・強い velocity で。既存の bar0 頭ノートがあればピッチ/velを差し替え、無ければ1音足す
+  //   （着地点を欠かさない）。bass notes は vel 省略時 downstream 既定100（melodyCells の n.vel??100 と同型）＝
+  //   land の時だけ明示付与＝**land 無し（cues 不在/respondToCues:false 含む）は notes に vel フィールドが一切増えず bit 一致**。
+  if (cues?.some((c) => c.kind === "land" && c.bar === 0)) {
+    const rootPitch = bassPcToWindow(rootAtBeat(0));
+    const head = notes.find((n) => Math.abs(n.start) < 1e-9);
+    if (head) { head.pitch = rootPitch; head.vel = BASS_LAND_VEL; }
+    else notes.unshift({ pitch: rootPitch, start: 0, dur: Math.min(perBar, total), vel: BASS_LAND_VEL });
+    notes.sort((a, b) => a.start - b.start);
   }
 
   if (notes.length === 0) notes.push({ pitch: 36, start: 0, dur: 1 });

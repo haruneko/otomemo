@@ -285,7 +285,9 @@ export function buildHttp(core: Core): FastifyInstance {
           // WP-B1：style(型ID/ジャンル名)／fill(0..1 or 型ID) 透過。未指定=従来 bit 一致。
           const style = typeof b.style === "string" ? b.style : undefined;
           const fill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
-          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true, swing: num(b.swing), humanize: num(b.humanize), relative: b.relative === true }); // S4：swing/humanize=feel 添付（未指定=従来）／修理#2：relative=相対パターン出力（style時のみ・未指定=絶対=bit一致）
+          // カスケード応答つまみ（respondToCues・既定 true）：明示 false のときだけ opts へ渡す＝未指定は genBass 側既定(true)のまま＝bit 一致。
+          const respondToCues = b.respondToCues === false ? false : undefined;
+          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true, swing: num(b.swing), humanize: num(b.humanize), relative: b.relative === true, respondToCues }); // S4：swing/humanize=feel 添付（未指定=従来）／修理#2：relative=相対パターン出力（style時のみ・未指定=絶対=bit一致）
           // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
           attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
@@ -431,7 +433,7 @@ export function buildHttp(core: Core): FastifyInstance {
     // ④是正（2026-08-29・受け入れ監査）：fillStyle 型注釈が "grid"|"physical" のままで、実行時は "body"(M3) が
     // キャストを通じて素通りしていた（型の嘘）。実態＝DrumsGenOpts.fillStyle に合わせ "body" を追加し、
     // fillLength/fillBeat/body系ノブも body?.drums 経由で受けて落とさず渡す。
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
     const frame = b.frame ?? {};
     // カスケード合図の配布（design 306「配り役」と同型＝feel と同じ様式で全生成器へ同じ1枚を配る）。
     //   body.cues＝このセクションの人が書いた合図（Cue[]）。deriveCues で導出（保存 land 破棄・範囲外無視・越境 land 導出）して
