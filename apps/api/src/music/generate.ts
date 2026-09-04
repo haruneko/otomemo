@@ -1627,7 +1627,7 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
   // セクションの合図（カスケード §3-1）＝additive ガード分岐。**cue 有→新経路／cue 無→現行式そのまま＝bit 一致**（cue 経路が発火しない）。
   const cues = f.section?.cues;
   const fillCue = cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
-  const physical = opts?.fillStyle === "physical" || opts?.fillStyle === "body"; // M2 opt-in（未指定/"grid"＝従来経路＝bit 一致）。"body"＝身体シミュレータ経路（M3）
+  const physical = opts?.fillStyle === "physical" || opts?.fillStyle === "body"; // M2 opt-in（未指定/"grid"＝従来経路＝bit 一致）。"body"＝身体シミュレータ経路（M2 の続き）
   // オーナー裁定（2026-08-29）＝「生成する」を頼んだのに解けず型辞書へ落ちたら黙らない。
   // fillEngine＝content 自身が「実際にフィルを作ったのはどの経路か」を語る（前例＝patternId/fillKind と同じ自己記述の作法）。
   let fellBackToTemplate = false;

@@ -315,7 +315,7 @@ export function buildHttp(core: Core): FastifyInstance {
         case "gen_drums": { // WP-D1：style(型ID/ジャンル)＋fill(0..1/型ID)＝定型ビート＋フィル。未指定=従来 bit 一致。
           const dstyle = typeof b.style === "string" ? b.style : undefined;
           const dfill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
-          const dfillStyle = b.fillStyle === "physical" || b.fillStyle === "grid" || b.fillStyle === "body" ? b.fillStyle : undefined; // body＝身体シミュレータ（M3） // M2 物理フィル（任意・未指定=grid=従来）
+          const dfillStyle = b.fillStyle === "physical" || b.fillStyle === "grid" || b.fillStyle === "body" ? b.fillStyle : undefined; // body＝身体シミュレータ（M2 の続き＝ドラム本実装の増分。計画の M3 は「ベース」なので番号を混ぜない） // M2 物理フィル（任意・未指定=grid=従来）
           const dfillKind = typeof b.fillKind === "string" ? b.fillKind : undefined;
           const FL_NAMES = ["beat", "2beat", "half_bar", "bar"] as const;
           const dfillLength = typeof b.fillLength === "number" ? b.fillLength : (FL_NAMES as readonly string[]).includes(b.fillLength) ? b.fillLength as (typeof FL_NAMES)[number] : undefined; // 物理フィルの長さ（beat/2beat/half_bar/bar・未指定=型と強度で既定）
