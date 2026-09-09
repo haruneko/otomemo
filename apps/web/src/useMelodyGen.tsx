@@ -231,6 +231,10 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [bassSnareGap, setBassSnareGap] = useState<number>(0); // 2・4で抜く 0..1（スネア頭で音価を切る）。0=OFF。
   const [bassApproach, setBassApproach] = useState<number>(0); // 接近音 0..1（チェンジ直前を半音/全音接近）。0=OFF。
   const [bassSlash, setBassSlash] = useState<boolean>(false); // 分数の低音（chord.bass をアンカーに伝播）。false=OFF。
+  // 錨と間の分業（M3-3a・design.md 追補 (k)）：キックに必ずルートの錨を置き、間のリフは書き換えない。
+  //   kickLock（確率でキック共有率を近づける）とは排他。ドラムが要る。false=未送信=従来 bit 一致。
+  const [bassAnchor, setBassAnchor] = useState<boolean>(false);
+  const [bassAnchorRest, setBassAnchorRest] = useState<boolean>(false); // 案B＝拍頭でない無音キックはベースを休む
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
   // P4：プリセット主役。選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）。
   const [preset, setPreset] = useState<string>("");
@@ -314,7 +318,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // ノブ（drum fill／bass fill・kickLock・snareGap・approach・分数／骨格ベース表面化）が立っている時だけ生成器へ。
       // 既定（おまかせ・ノブ無し）はライブラリ検索＝seed 未投入なら候補0＝空トレイ（従来の域外と同じ・エラーにしない）。
       const drumsWantsGen = typeof drumFill === "number" ? drumFill > 0 : !!drumFill;
-      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash;
+      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash || bassAnchor;
       const libKind =
         part.op === "gen_chord_pattern" ? "chord_pattern"
         : part.op === "gen_drums" && !drumsWantsGen ? "rhythm"
@@ -397,11 +401,14 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         // ベース×ドラムノブ（スライスD）：0/false＝未送信＝bit一致。kickLock/snareGap/approach はドラム入力が要る＝
         // ドラム在時のみ drums を渡す（melody と同流儀・全係数0で drums 付きでも従来 bit 一致＝design 鉄則）。
         const bassDrums = ctx.sectionDrums();
-        if (bassDrums && (bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0)) body.drums = bassDrums;
+        if (bassDrums && (bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassAnchor)) body.drums = bassDrums;
         if (bassKickLock !== 0) body.kickLock = bassKickLock;
         if (bassSnareGap > 0) body.snareGap = bassSnareGap;
         if (bassApproach > 0) body.approach = bassApproach;
         if (bassSlash) body.slashBass = true;
+        // 錨と間の分業（M3-3a）：ドラムのキックに必ずルートの錨を置く。ドラムが要る（api 側でも no-drums で通知）。
+        if (bassAnchor) body.anchorLock = true;
+        if (bassAnchor && bassAnchorRest) body.anchorRestOnSyncopatedKick = true;
       }
       // コード楽器＝伴奏パターン（chord_pattern・スライスC）：ジャンルchip(compStyle) を pattern へ、variety で別々の型を複数取る。
       //   ""＝おまかせ＝omakase 番兵（role/tempo 全体から）。型ID直指定は api 側で単数固定（compTypeById が真＝variety 無視）。
@@ -649,6 +656,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
+    bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, // 錨と間の分業（M3-3a）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,

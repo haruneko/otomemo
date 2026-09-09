@@ -416,7 +416,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE"];
   const bassDrawer = (
     <>
-      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); })}
+      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">ベースのジャンル</div>
         <div className="tk-palette" aria-label="bass-genre">
@@ -488,7 +488,27 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               ))}
             </span>
           </div>
-          <p className="tk-drawnote">ドラムが居る時だけ上3つ（キック/2・4/接近）が効きます。分数の低音は単独で効きます。</p>
+          {/* 錨と間の分業（M3-3a・design.md 追補 (k)）＝キックに必ずルートを置き、間のリフは書き換えない。
+              「キックに合わせる」（確率）とは別物なので同じ畳みの中で並べる。ONの時だけ案B の1行が出る。 */}
+          <div className="knob-seg" aria-label="bass-anchor">
+            <span className="knob-name">キックにルートを置く<small>間のリフはそのまま残す</small></span>
+            <span className="seg-ctl">
+              {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.bassAnchor === v ? " on" : "")} aria-label={`bass-anchor-${v ? "on" : "off"}`} aria-pressed={gen.bassAnchor === v} onClick={() => gen.setBassAnchor(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
+          {gen.bassAnchor && (
+            <div className="knob-seg" aria-label="bass-anchor-rest">
+              <span className="knob-name">裏キックは休む<small>拍頭でないキックにはベースを置かない</small></span>
+              <span className="seg-ctl">
+                {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
+                  <button key={lab} type="button" className={"seg-b" + (gen.bassAnchorRest === v ? " on" : "")} aria-label={`bass-anchor-rest-${v ? "on" : "off"}`} aria-pressed={gen.bassAnchorRest === v} onClick={() => gen.setBassAnchorRest(v)}>{lab}</button>
+                ))}
+              </span>
+            </div>
+          )}
+          <p className="tk-drawnote">ドラムが居る時だけ上3つ（キック/2・4/接近）と「キックにルートを置く」が効きます。分数の低音は単独で効きます。「キックにルートを置く」は「キックに合わせる」より優先されます。</p>
         </>}
       </div>
       <div className="tk-drawer-foot">

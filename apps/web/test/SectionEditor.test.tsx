@@ -1486,4 +1486,52 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     await userEvent.click(screen.getByLabelText("tools"));
     expect(screen.queryByLabelText("drawer-chordinst")).toBeNull(); // 進行が無い＝タイル非表示
   });
+
+  // ── 到達口④＝web TinkerSheet（M3-3a・design.md 追補 (k)「作ったのに触れないノブは硬化する」） ──
+  it("T4' 錨と間の分業＝『キックにルートを置く』ONで body.anchorLock が飛ぶ（OFF は未送信＝bit一致）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine")); // 「細かく（ドラム絡み・分数）」を開く
+    // 案B の行は ON にするまで出ない（つまみが増えたことを畳んだまま見せない）
+    expect(screen.queryByLabelText("bass-anchor-rest-on")).toBeNull();
+    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    await userEvent.click(screen.getByLabelText("bass-anchor-rest-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_bass"); // ノブが立っている＝ライブラリでなく生成器を叩く
+    expect(body.anchorLock).toBe(true);
+    expect(body.anchorRestOnSyncopatedKick).toBe(true);
+  });
+
+  it("T4'' 錨 OFF（既定）は anchorLock を送らない＝従来 bit 一致", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("bass-fill-0.2")); // 既存ノブ（フィル）だけ立てて生成器経路へ
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect("anchorLock" in body).toBe(false);
+    expect("anchorRestOnSyncopatedKick" in body).toBe(false);
+  });
 });
