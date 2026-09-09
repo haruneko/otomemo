@@ -14,6 +14,8 @@
 // ヒューマナイズ（相関 Breath＋voice別オフセット）は決定論の都合で別モジュール（humanizeFill.ts）。
 // 本モジュールは純関数・決定的（乱数/Date 不使用）。
 
+import { validateLimbEvents, type LimbResult } from "./verify/limbs";
+
 // ---------------------------------------------------------------------------
 // GM ドラムマップ・四肢割当・ノート長（gen2 gm.py の忠実コピー）
 // ---------------------------------------------------------------------------
@@ -350,37 +352,11 @@ export function positionOk(p: FillPlacement, reqBar: number, reqBeat: number, ep
 // ---------------------------------------------------------------------------
 // 四肢検証（gen2 validate.py の忠実移植）
 // ---------------------------------------------------------------------------
-export interface LimbResult { ok: boolean; problems: string[]; maxSimul: number }
-
-function round4(x: number): number { return Math.round(x * 1e4) / 1e4; }
-
+// M4 で判定本体を `verify/limbs.ts` の `validateLimbEvents` へ切り出した（グルーヴ全体へ一般化）。
+// ここは FillEvent → 汎用イベントの薄い変換だけ＝グループ化・丸め・メッセージ文字列は不変
+// （既存の呼び出し側の挙動＝bit 一致を壊さない）。
 export function validateLimbs(events: FillEvent[], eps = 1e-6): LimbResult {
-  // group_by_beat：key=round(beat/eps)*eps
-  const groups = new Map<number, FillEvent[]>();
-  for (const e of events) {
-    const key = Math.round(e.beat / eps) * eps;
-    (groups.get(key) ?? groups.set(key, []).get(key)!).push(e);
-  }
-  const keys = [...groups.keys()].sort((a, b) => a - b);
-  const problems: string[] = [];
-  let maxSimul = 0;
-  for (const beat of keys) {
-    const grp = groups.get(beat)!;
-    const voices = grp.map((e) => e.voice);
-    const limbs = voices.map((v) => LIMB[v]);
-    const rf = limbs.filter((l) => l === "RF").length;
-    const lf = limbs.filter((l) => l === "LF").length;
-    const hand = limbs.filter((l) => l === "HAND").length;
-    const total = grp.length;
-    maxSimul = Math.max(maxSimul, total);
-    const b = round4(beat);
-    if (total > 4) problems.push(`beat ${b}: ${total} simultaneous voices > 4 (${voices.join(",")})`);
-    if (rf > 1) problems.push(`beat ${b}: ${rf} kick voices (need 1 right foot) ${voices.join(",")}`);
-    if (lf > 1) problems.push(`beat ${b}: ${lf} pedal-hat voices (need 1 left foot) ${voices.join(",")}`);
-    if (hand > 2) problems.push(`beat ${b}: ${hand} hand voices > 2 hands ${voices.join(",")}`);
-    if (new Set(voices).size !== voices.length) problems.push(`beat ${b}: duplicate voice at same instant ${voices.join(",")}`);
-  }
-  return { ok: problems.length === 0, problems, maxSimul };
+  return validateLimbEvents(events.map((e) => ({ at: e.beat, voice: e.voice, limb: LIMB[e.voice] })), eps);
 }
 
 // ---------------------------------------------------------------------------

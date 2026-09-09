@@ -59,6 +59,12 @@ export * from "./anchorLock";
 export * from "./drumFill";
 export * from "./humanizeFill";
 
+// 横断の検証器（M4・計画 §5-2 M4／§6-4「検証器の作法」）＝gate/byConstruction/diagnostic を戻り値の型で
+// 分け、被覆率で空虚さを自己診断する。band_overlap（gap>0 がゲート・overlap_frac は診断）・四肢衝突の
+// グルーヴ全体版・パート被覆率・microtiming_structural（診断）・決定論の grep 番人。**観測専用**＝生成経路
+// には触らない（既存の出音は 1bit も変わらない）。
+export * from "./verify/index";
+
 /** ピッチクラス(0-11)の音名。旧 web `PITCH_NAMES` / api `KEY_NAMES` の同一配列を1本化。
  *  型は既存に合わせ `string[]`（web の `PITCH_NAMES.indexOf(root: string)` 等の互換のため as const にしない）。 */
 export const PITCH_NAMES: string[] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
