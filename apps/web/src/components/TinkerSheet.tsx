@@ -416,7 +416,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE"];
   const bassDrawer = (
     <>
-      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); gen.setBassChordFollow(false); })}
+      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); gen.setBassChordFollow(false); gen.setBassGrammar(""); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">ベースのジャンル</div>
         <div className="tk-palette" aria-label="bass-genre">
@@ -498,6 +498,18 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               ))}
             </span>
           </div>
+          {/* リフ文法（M3-3c）＝錨の「体」＝間に鳴るリフの型。ONの時だけ出す（畳んだまま増やさない）。
+              ジャンル型（上のパレット）を選んでいる時はそちらが体になるので、この行は効かない。 */}
+          {gen.bassAnchor && (
+            <div className="knob-seg" aria-label="bass-grammar">
+              <span className="knob-name">間のリフ<small>錨の間に鳴る型（ジャンル型を選ぶとそちらが優先）</small></span>
+              <span className="seg-ctl">
+                {([["ペダル", "pedal_answer"], ["ギャロップ", "gallop_pedal"], ["オクターブ", "octave_call_response"]] as [string, string][]).map(([lab, v]) => (
+                  <button key={v} type="button" className={"seg-b" + ((gen.bassGrammar || "pedal_answer") === v ? " on" : "")} aria-label={`bass-grammar-${v}`} aria-pressed={(gen.bassGrammar || "pedal_answer") === v} onClick={() => gen.setBassGrammar(v)}>{lab}</button>
+                ))}
+              </span>
+            </div>
+          )}
           {gen.bassAnchor && (
             <div className="knob-seg" aria-label="bass-anchor-rest">
               <span className="knob-name">裏キックは休む<small>拍頭でないキックにはベースを置かない</small></span>

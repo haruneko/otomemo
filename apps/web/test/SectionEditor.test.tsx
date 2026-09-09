@@ -1512,6 +1512,32 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(op).toBe("gen_bass"); // ノブが立っている＝ライブラリでなく生成器を叩く
     expect(body.anchorLock).toBe(true);
     expect(body.anchorRestOnSyncopatedKick).toBe(true);
+    expect("anchorGrammar" in body).toBe(false); // 文法は既定（pedal_answer）＝未送信＝3a と同じ体
+  });
+
+  // ── 到達口④＝web TinkerSheet（M3-3c・リフ文法＝錨の体） ──
+  it("T4c 間のリフ＝文法を選ぶと body.anchorGrammar が飛ぶ（錨 OFF の間は行が出ない・既定は未送信）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
+    expect(screen.queryByLabelText("bass-grammar-gallop_pedal")).toBeNull(); // 錨 OFF の間は畳んだまま
+    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    await userEvent.click(screen.getByLabelText("bass-grammar-gallop_pedal"));
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.anchorLock).toBe(true);
+    expect(body.anchorGrammar).toBe("gallop_pedal");
   });
 
   // ── 到達口④＝web TinkerSheet（M3-3b・コード追従の5ガード） ──

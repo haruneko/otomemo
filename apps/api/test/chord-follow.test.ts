@@ -78,13 +78,26 @@ describe("gate＝既定は 1bit も変わらない（新ノブの鉄則・計画
     expect(content({ respondToCues: false }, 7, f2)).toEqual(content({ chordFollow: false, respondToCues: false }, 7, f2));
   });
 
-  it("経路が立たない時は黙って落とさず理由を返す（no-chords / compound-meter）", () => {
-    const noCh = gen({ chordFollow: true }, 42, FRAME, [], DR) as { chordFollowFallback?: string };
-    expect(noCh.chordFollowFallback).toBe("no-chords");
-    const six = gen({ chordFollow: true }, 42, { bars: 2, meter: "6/8", key: 0 }) as { chordFollowFallback?: string };
-    expect(six.chordFollowFallback).toBe("compound-meter");
-    // 立ったときは理由が付かない＝「立たなかった」と嘘をつかない
-    expect((gen({ chordFollow: true }) as { chordFollowFallback?: string }).chordFollowFallback).toBeUndefined();
+  it("経路が立たない時は黙って落とさず **meta.warnings** で言う（落ち先で言い分ける）", () => {
+    // 通知は meta.warnings（2026-08-29 裁定）＝web/MCP が読む唯一の口。独自キーは無言になる。
+    const warns = (r: unknown) => ((r as { meta?: { warnings?: string[] } }).meta?.warnings ?? []);
+    const noCh = warns(gen({ chordFollow: true }, 42, FRAME, [], DR));
+    expect(noCh.join("|")).toMatch(/コードが無い/);
+    const six = warns(gen({ chordFollow: true }, 42, { bars: 2, meter: "6/8", key: 0 }));
+    expect(six.join("|")).toMatch(/複合拍子/);
+    expect(noCh.join("|")).not.toEqual(six.join("|")); // 落ち先を言い分けている（同じ文言で誤魔化さない）
+    // 立ったときは何も言わない＝「立たなかった」と嘘をつかない
+    expect(warns(gen({ chordFollow: true }))).toEqual([]);
+    // 独自キーは生やさない（web が読まない場所に通知を置かない）
+    expect("chordFollowFallback" in (gen({ chordFollow: true }, 42, FRAME, [], DR) as object)).toBe(false);
+  });
+
+  it("骨格が明示したベース音は書き換えず、そう告げる（道具が作者を上書きしない）", () => {
+    const skeleton = { bars: 4, bass: [{ start: 0, pitch: 45 }, { start: 2, pitch: 45 }] } as never; // 明示点2つ＝区間 [0,2)
+    const r = gen({ chordFollow: true, skeleton });
+    const ns = (r.items[0]!.content as Content).notes;
+    expect(ns.find((n) => Math.abs(n.start) < 1e-9)!.pitch).toBe(45); // 人が書いた音がそのまま残る
+    expect(((r as { meta?: { warnings?: string[] } }).meta?.warnings ?? []).join("|")).toMatch(/骨格で明示したベース音/);
   });
 
   it("新経路を使ったときだけ engine が刻まれる（M0契約 §2）", () => {

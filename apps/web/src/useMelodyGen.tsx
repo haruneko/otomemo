@@ -236,6 +236,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [bassAnchor, setBassAnchor] = useState<boolean>(false);
   const [bassAnchorRest, setBassAnchorRest] = useState<boolean>(false); // 案B＝拍頭でない無音キックはベースを休む
   const [bassChordFollow, setBassChordFollow] = useState<boolean>(false); // M3-3b＝コード追従の5ガード（approach と排他）
+  const [bassGrammar, setBassGrammar] = useState<string>(""); // M3-3c＝anchorLock の体に敷くリフ文法（""＝既定 pedal_answer）
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
   // P4：プリセット主役。選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）。
   const [preset, setPreset] = useState<string>("");
@@ -410,6 +411,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         // 錨と間の分業（M3-3a）：ドラムのキックに必ずルートの錨を置く。ドラムが要る（api 側でも no-drums で通知）。
         if (bassAnchor) body.anchorLock = true;
         if (bassAnchor && bassAnchorRest) body.anchorRestOnSyncopatedKick = true;
+        // リフ文法（M3-3c）：錨の体。""＝既定（pedal_answer）＝未送信＝従来と同じ体。
+        if (bassAnchor && bassGrammar) body.anchorGrammar = bassGrammar;
         // コード追従の5ガード（M3-3b）：リズムは動かさず音高だけを進行へ写す。ドラムは要らない（コードだけで立つ）。
         if (bassChordFollow) body.chordFollow = true;
       }
@@ -661,6 +664,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, // 錨と間の分業（M3-3a）
     bassChordFollow, setBassChordFollow, // コード追従の5ガード（M3-3b）
+    bassGrammar, setBassGrammar, // リフ文法（M3-3c）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,

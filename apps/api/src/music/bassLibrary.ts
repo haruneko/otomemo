@@ -180,21 +180,118 @@ export function resolveBassFill(fill: number | string, seed: number): BassFill |
   return use[((seed % use.length) + use.length) % use.length] ?? null;
 }
 
-// ── grammar セル（M3-3a・anchorLock の「体」の既定・design.md 追補 (k)） ─────────────────
-// 出所＝phrase_maker `experiments/bass_rock_riff/riff.py:17-38 _PEDAL_ANSWER`（2小節の CALL/RESPONSE）。
-// 源流はルートペダル＋ペンタ答句＝(step, kind, deg, anchor, role) のタプル列。ここでは otomemo の
-// 度数×16分格子（BassCell）へ落とし、**anchorLock が体として使う最小限だけ**を置く。
+// ── リフ文法辞書（M3-3c・grammar セル3型・design.md 追補 (k)「grammar セル3型は bassLibrary に
+//    anchor/role 注記付きで追加」） ─────────────────────────────────────────────
+// 出所＝phrase_maker `experiments/bass_rock_riff/riff.py:17-88`（`GRAMMARS`＝3文法・各2小節のオスティナート）。
+//   `_PEDAL_ANSWER`（`:17-38`）／`_gallop_pedal()`（`:41-63`）／`_OCTAVE_CALL_RESPONSE`（`:66-85`）。
 //
-// ⚠ **これは 3c への引き渡し前の暫定**：grammar セル3型（pedal_answer / gallop_pedal /
-//    octave_call_response）を **anchor/role 注記つきで `BASS_TYPES` へ正式登録するのは 3c の担当**
-//    （計画 §5-2 M3 Scope）。ここに置いてあるのは「style 未指定時に anchorLock が敷く体」が要るからで、
-//    辞書 API（bassTypeById / pickBassType）には**わざと載せていない**＝既定の型選択は 1bit も変わらない。
+// **なぜ BassType（33型）と別の棚なのか**：源流のオンセットは `(step, kind, deg, anchor, role)` の5つ組で、
+//   `BassCell` では **anchor（不可侵の頭）と role（head/pedal/answer/octave/blue/climb/pickup/dead）が表せない**。
+//   その2つこそが錨と間の分業（anchorLock）とコード追従（chord_follow の「頭は必ずコードトーン」）が読む情報
+//   ＝落とすと知識が消える。よって**注記を持つ別の棚**に置き、`cells`（BassCell 化）を派生として持つ。
+// **既存の型の出音は変えない**：`BASS_TYPES` にも `pickBassType` のジャンル候補にも**入れない**＝
+//   ジャンル名/型ID からの既定の型選抜は 1bit も変わらない（追加のみ・辞書 API は `bassGrammarById`）。
 //
-// 源流の 32 step を2小節へ割った（`chord_follow._bar_cells` と同じ割り方）：
-//   bar1（CALL）  ＝ 0 head / 2 pedal / 3 ghost / 4 pedal / 6 pedal / 8 head / 10 pedal / 12 pedal / 14 pickup(5)
-//   bar2（RESPONSE）＝ 0 head / 2 pedal / 4 pedal / 6 pedal / 8 head / 10 answer(b7) / 11 ghost / 12 answer(5) / 14 answer(4)
-// ghost（x）は realizeBassGrid と同じく休符扱い（bass の vel はスコープ外＝正典 §8）。
-export const BASS_GRAMMAR_PEDAL_ANSWER: BassCell[][] = [
-  parseBassPattern("R . R x | R . R . | R . R . | R . 5 ."),
-  parseBassPattern("R . R . | R . R . | R . b7 x | 5 . 4 ."),
-];
+// ゴースト（x）は realizeBassGrid と同じく休符扱い（bass の vel はスコープ外＝正典 §8）＝`cells` では ghost。
+
+/** リフ onset の rhythmic kind（源流 `riff.py` の4種）＝music-core `AnchorKind` と同じ語彙。 */
+export type BassGrammarKind = "accent" | "note" | "ghost" | "dead";
+
+/** 文法の1オンセット（源流の5つ組そのまま。`deg` だけ otomemo の度数トークンへ写した）。 */
+export interface BassGrammarOnset {
+  /** 小節内 step（0..15） */
+  step: number;
+  kind: BassGrammarKind;
+  /** 度数トークン（DEGREE_SEMI のキー。源流の半音値 0/5/6/7/10/12/1 に対応） */
+  deg: string;
+  /** 不可侵の頭か（源流 anchor＝発散させない印） */
+  anchor: boolean;
+  /** 役割（head/pedal/answer/octave/root/blue/climb/pickup/dead） */
+  role: string;
+}
+
+export interface BassGrammarType {
+  id: string;
+  /** 出所（源流のファイル:行）＝数値の出所を引く（計画 §6-4 #11） */
+  source: string;
+  /** 小節数（源流は全て2小節のオスティナート） */
+  bars: number;
+  /** 小節ごとのオンセット列（step 昇順） */
+  onsets: BassGrammarOnset[][];
+  /** 派生＝度数×16分格子（既存の realize 経路が読める形。ghost は休符扱い） */
+  cells: BassCell[][];
+}
+
+/** 源流の半音度数 → otomemo の度数トークン（DEGREE_SEMI の逆写像・リフ語彙のぶんだけ）。 */
+const GRAMMAR_DEG: Record<number, string> = { 0: "R", 1: "b2", 5: "4", 6: "b5", 7: "5", 10: "b7", 12: "8" };
+
+/** オンセット列（2小節ぶん）→ BassCell[16]×2。**リズムは源流のまま**＝写すのは表現形式だけ。 */
+function grammarCells(onsets: BassGrammarOnset[][]): BassCell[][] {
+  return onsets.map((bar) => {
+    const cells: BassCell[] = Array.from({ length: 16 }, () => ({ kind: "rest" }) as BassCell);
+    for (const o of bar) {
+      // `next:false` まで含めて `parseBassPattern` の出力と**同じ形**にする（3a の暫定譜と構造ごと一致＝出音不変）。
+      cells[o.step] = o.kind === "ghost" || o.kind === "dead" ? { kind: "ghost" } : { kind: "on", deg: o.deg, next: false };
+    }
+    return cells;
+  });
+}
+
+/** タプル列（源流の書き方のまま）→ 2小節のオンセット列。step 16 以上は2小節目へ（源流 `_bar_cells` と同じ割り方）。 */
+function grammar(id: string, source: string, raw: [number, BassGrammarKind, number, boolean, string][]): BassGrammarType {
+  const bars: BassGrammarOnset[][] = [[], []];
+  for (const [step, kind, deg, anchor, role] of [...raw].sort((a, b) => a[0] - b[0])) {
+    const bi = step < 16 ? 0 : 1;
+    const tok = GRAMMAR_DEG[deg];
+    if (tok === undefined) throw new Error(`bassLibrary: ${id} に未知の度数 ${deg}`);
+    bars[bi]!.push({ step: step - bi * 16, kind, deg: tok, anchor, role });
+  }
+  return { id, source, bars: 2, onsets: bars, cells: grammarCells(bars) };
+}
+
+// ① ルートペダル＋ペンタ答句（源流 `_PEDAL_ANSWER`）。bar1＝ルートペダルのグルーヴ（palm-mute・ゴースト16分・
+//    答句への pickup）／bar2＝ペンタの答句リック（b7→5→4→ループでRへ解決）。
+const G_PEDAL_ANSWER = grammar("pedal_answer", "phrase_maker experiments/bass_rock_riff/riff.py:17-38 (_PEDAL_ANSWER)", [
+  [0, "accent", 0, true, "head"], [2, "note", 0, false, "pedal"], [3, "ghost", 0, false, "dead"],
+  [4, "note", 0, false, "pedal"], [6, "note", 0, false, "pedal"], [8, "accent", 0, true, "head"],
+  [10, "note", 0, false, "pedal"], [12, "note", 0, false, "pedal"], [14, "note", 7, false, "pickup"],
+  [16, "accent", 0, true, "head"], [18, "note", 0, false, "pedal"], [20, "note", 0, false, "pedal"],
+  [22, "note", 0, false, "pedal"], [24, "accent", 0, true, "head"], [26, "note", 10, false, "answer"],
+  [27, "ghost", 10, false, "dead"], [28, "note", 7, false, "answer"], [30, "note", 5, false, "answer"],
+]);
+
+// ② ギャロップ（源流 `_gallop_pedal()`＝8分＋16分×2 を8拍ぶん・小節1末にブルーノート・小節2末に半音クライム）。
+//    源流は生成関数だが**出力は固定**なので展開して置く（生成の手続きは知識ではない）。
+const G_GALLOP_PEDAL = grammar("gallop_pedal", "phrase_maker experiments/bass_rock_riff/riff.py:41-63 (_gallop_pedal)", [
+  [0, "accent", 0, true, "head"], [2, "note", 0, false, "pedal"], [3, "note", 0, false, "pedal"],
+  [4, "note", 0, false, "head"], [6, "note", 0, false, "pedal"], [7, "note", 0, false, "pedal"],
+  [8, "note", 0, false, "head"], [10, "note", 0, false, "pedal"], [11, "note", 0, false, "pedal"],
+  [12, "note", 0, false, "head"], [14, "note", 7, false, "answer"], [15, "note", 6, false, "blue"],
+  [16, "accent", 0, true, "head"], [18, "note", 0, false, "pedal"], [19, "note", 0, false, "pedal"],
+  [20, "note", 0, false, "head"], [22, "note", 0, false, "pedal"], [23, "note", 0, false, "pedal"],
+  [24, "note", 0, false, "head"], [26, "note", 0, false, "pedal"], [27, "note", 0, false, "pedal"],
+  [28, "note", 0, false, "head"], [30, "note", 10, false, "climb"], [31, "note", 1, true, "climb"],
+]);
+
+// ③ オクターブの呼応（源流 `_OCTAVE_CALL_RESPONSE`）。bar1＝CALL（ルート/オクターブの弦跳び stab）／
+//    bar2＝RESPONSE（b7 とブルー b5 を足す）。**オクターブ往復＝レジスタの動き**が知識の芯。
+const G_OCTAVE_CALL_RESPONSE = grammar("octave_call_response", "phrase_maker experiments/bass_rock_riff/riff.py:66-85 (_OCTAVE_CALL_RESPONSE)", [
+  [0, "accent", 0, true, "head"], [2, "note", 12, false, "octave"], [4, "note", 0, false, "root"],
+  [6, "note", 12, false, "octave"], [8, "accent", 0, true, "head"], [10, "note", 12, false, "octave"],
+  [11, "ghost", 0, false, "dead"], [12, "note", 7, false, "answer"], [14, "note", 12, false, "octave"],
+  [16, "accent", 0, true, "head"], [18, "note", 12, false, "octave"], [20, "note", 0, false, "root"],
+  [22, "note", 10, false, "answer"], [24, "accent", 0, true, "head"], [26, "note", 12, false, "octave"],
+  [28, "note", 6, false, "blue"], [30, "note", 0, false, "root"],
+]);
+
+/** リフ文法辞書（3型）。**純データ**＝生成器はここから読むだけ（drumLibrary/bassLibrary と同じ流儀）。 */
+export const BASS_GRAMMARS: BassGrammarType[] = [G_PEDAL_ANSWER, G_GALLOP_PEDAL, G_OCTAVE_CALL_RESPONSE];
+
+/** 辞書 API（id で引く）。未知＝null（呼び手が既定へ落とす）。 */
+export function bassGrammarById(id?: string | null): BassGrammarType | null {
+  if (!id) return null;
+  return BASS_GRAMMARS.find((g) => g.id === id) ?? null;
+}
+
+/** anchorLock が style 未指定のときに敷く体の既定＝`pedal_answer`（design.md 追補 (k)）。 */
+export const BASS_GRAMMAR_DEFAULT_ID = "pedal_answer";

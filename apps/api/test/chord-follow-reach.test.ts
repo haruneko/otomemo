@@ -40,9 +40,38 @@ describe("到達口①＝/music/gen_bass（HTTP）", () => {
     expect("engine" in c).toBe(false);
   });
 
-  it("経路が立たない時は理由が返る（no-chords）＝黙って落とさない", async () => {
+  it("経路が立たない時は **meta.warnings** で HTTP 応答に届く（web が読む口・独自キーは無言）", async () => {
     const r = await app.inject({ method: "POST", url: "/music/gen_bass", payload: { frame: FRAME, seed: 42, drums: DR, chordFollow: true } });
-    expect((r.json() as { chordFollowFallback?: string }).chordFollowFallback).toBe("no-chords");
+    const j = r.json() as { meta?: { warnings?: string[] }; chordFollowFallback?: string };
+    expect((j.meta?.warnings ?? []).join("|")).toMatch(/コードが無い/);
+    expect("chordFollowFallback" in j).toBe(false);
+  });
+
+  it("**最終出力（HTTP 応答の content）に対して**5ガードが成り立つ（純関数の出口だけで満足しない）", async () => {
+    // fill/land/skeleton など後段の上書きがあっても①②が破れないこと＝監査の指摘（轍2）への実測。
+    const payload = { frame: { ...FRAME, bars: 4, section: { role: "chorus", cues: [{ kind: "land", bar: 0 }] } }, chords: [
+      { root: 9, quality: "min", start: 0, dur: 4 }, { root: 5, quality: "maj", start: 4, dur: 4 },
+      { root: 7, quality: "7", start: 8, dur: 4 }, { root: 2, quality: "m7", start: 12, dur: 4 },
+    ], seed: 42, drums: DR, style: "CP-WALK", fill: 0.8, chordFollow: true };
+    const r = await app.inject({ method: "POST", url: "/music/gen_bass", payload });
+    const notes = (r.json() as { items: { content: { notes: Note[] } }[] }).items[0]!.content.notes;
+    const TONES: Record<string, number[]> = { min: [0, 3, 7], maj: [0, 4, 7], "7": [0, 4, 7, 10], m7: [0, 3, 7, 10] };
+    const SCALE: Record<string, number[]> = { min: [0, 2, 3, 5, 7, 8, 10], maj: [0, 2, 4, 5, 7, 9, 11], "7": [0, 2, 4, 5, 7, 9, 10], m7: [0, 2, 3, 5, 7, 8, 10] };
+    const chOf = (t: number) => payload.chords.find((c) => c.start <= t + 1e-9 && t < c.start + c.dur)!;
+    const pc = (p: number) => ((p % 12) + 12) % 12;
+    let heads = 0, unresolved = 0;
+    notes.forEach((n, i) => {
+      const c = chOf(n.start);
+      const tone = TONES[c.quality]!.some((t) => pc(c.root + t) === pc(n.pitch));
+      if (Math.abs(n.start - Math.round(n.start)) < 1e-9) { heads++; expect(tone, `head@${n.start} pitch=${n.pitch} ${c.quality}`).toBe(true); } // ①
+      const inScale = tone || SCALE[c.quality]!.some((t) => pc(c.root + t) === pc(n.pitch));
+      const nxt = notes[i + 1];
+      if (!inScale && !(nxt && Math.abs(n.pitch - nxt.pitch) === 1)) unresolved++;                                                             // ②
+      expect(n.pitch).toBeGreaterThanOrEqual(33);                                                                                              // ④
+      expect(n.pitch).toBeLessThanOrEqual(48);
+    });
+    expect(heads).toBeGreaterThan(8); // 分母が空でない
+    expect(unresolved).toBe(0);
   });
 });
 
