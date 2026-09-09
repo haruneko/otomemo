@@ -1514,6 +1514,49 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(body.anchorRestOnSyncopatedKick).toBe(true);
   });
 
+  // ── 到達口④＝web TinkerSheet（M3-3b・コード追従の5ガード） ──
+  it("T4b コード追従＝『コードに合わせ直す』ONで body.chordFollow が飛ぶ", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine")); // 「細かく（ドラム絡み・分数）」を開く
+    await userEvent.click(screen.getByLabelText("bass-chordfollow-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_bass"); // ノブが立っている＝ライブラリでなく生成器を叩く
+    expect(body.chordFollow).toBe(true);
+  });
+
+  it("T4b' コード追従 OFF（既定）は chordFollow を送らない＝従来 bit 一致", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("bass-fill-0.2")); // 既存ノブだけ立てて生成器経路へ
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect("chordFollow" in body).toBe(false);
+  });
+
   it("T4'' 錨 OFF（既定）は anchorLock を送らない＝従来 bit 一致", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });

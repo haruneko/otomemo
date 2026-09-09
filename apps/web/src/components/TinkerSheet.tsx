@@ -416,7 +416,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE"];
   const bassDrawer = (
     <>
-      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); })}
+      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); gen.setBassChordFollow(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">ベースのジャンル</div>
         <div className="tk-palette" aria-label="bass-genre">
@@ -508,7 +508,17 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               </span>
             </div>
           )}
-          <p className="tk-drawnote">ドラムが居る時だけ上3つ（キック/2・4/接近）と「キックにルートを置く」が効きます。分数の低音は単独で効きます。「キックにルートを置く」は「キックに合わせる」より優先されます。</p>
+          {/* コード追従の5ガード（M3-3b・design.md 追補 (k)）＝リズムは動かさず音高だけをコードへ寄せ直す。
+              「接近」（確率で1音だけ接近音にする）の上位互換なので、ONの間は「接近」は当たらない。 */}
+          <div className="knob-seg" aria-label="bass-chordfollow">
+            <span className="knob-name">コードに合わせ直す<small>リズムはそのまま・音だけコードへ</small></span>
+            <span className="seg-ctl">
+              {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.bassChordFollow === v ? " on" : "")} aria-label={`bass-chordfollow-${v ? "on" : "off"}`} aria-pressed={gen.bassChordFollow === v} onClick={() => gen.setBassChordFollow(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
+          <p className="tk-drawnote">ドラムが居る時だけ上3つ（キック/2・4/接近）と「キックにルートを置く」が効きます。分数の低音は単独で効きます。「キックにルートを置く」は「キックに合わせる」より優先されます。「コードに合わせ直す」はコードだけで効き、ONの間は「接近」より優先されます。</p>
         </>}
       </div>
       <div className="tk-drawer-foot">

@@ -1,0 +1,728 @@
+{
+ "approaches": [
+  11,
+  23,
+  35,
+  47
+ ],
+ "case": {
+  "bars_per_chord": 1.0,
+  "grammar": "gallop_pedal",
+  "id": "gallop_pedal__amfcg__loopA",
+  "loop": true,
+  "progression": "Am F C G"
+ },
+ "expected": [
+  {
+   "anchor": true,
+   "kind": "accent",
+   "pitch": 33,
+   "role": "head",
+   "role_before": "head",
+   "step": 0,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 2,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 3,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "head",
+   "role_before": "head",
+   "step": 4,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 6,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 7,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "head",
+   "role_before": "head",
+   "step": 8,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 10,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 11,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "head",
+   "role_before": "head",
+   "step": 12,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 40,
+   "role": "answer",
+   "role_before": "answer",
+   "step": 14,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 30,
+   "role": "approach",
+   "role_before": "blue",
+   "step": 15,
+   "strong": false
+  },
+  {
+   "anchor": true,
+   "kind": "accent",
+   "pitch": 29,
+   "role": "head",
+   "role_before": "head",
+   "step": 16,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 18,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 19,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "head",
+   "role_before": "head",
+   "step": 20,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 22,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 23,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "head",
+   "role_before": "head",
+   "step": 24,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 26,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 27,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "head",
+   "role_before": "head",
+   "step": 28,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 38,
+   "role": "climb",
+   "role_before": "climb",
+   "step": 30,
+   "strong": false
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 37,
+   "role": "approach",
+   "role_before": "climb",
+   "step": 31,
+   "strong": false
+  },
+  {
+   "anchor": true,
+   "kind": "accent",
+   "pitch": 36,
+   "role": "head",
+   "role_before": "head",
+   "step": 32,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 34,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 35,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "head",
+   "role_before": "head",
+   "step": 36,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 38,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 39,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "head",
+   "role_before": "head",
+   "step": 40,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 42,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 43,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "head",
+   "role_before": "head",
+   "step": 44,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 43,
+   "role": "answer",
+   "role_before": "answer",
+   "step": 46,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 32,
+   "role": "approach",
+   "role_before": "blue",
+   "step": 47,
+   "strong": false
+  },
+  {
+   "anchor": true,
+   "kind": "accent",
+   "pitch": 31,
+   "role": "head",
+   "role_before": "head",
+   "step": 48,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 50,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 51,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "head",
+   "role_before": "head",
+   "step": 52,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 54,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 55,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "head",
+   "role_before": "head",
+   "step": 56,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 58,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "pedal",
+   "role_before": "pedal",
+   "step": 59,
+   "strong": false
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "head",
+   "role_before": "head",
+   "step": 60,
+   "strong": true
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 40,
+   "role": "climb",
+   "role_before": "climb",
+   "step": 62,
+   "strong": false
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 34,
+   "role": "approach",
+   "role_before": "climb",
+   "step": 63,
+   "strong": false
+  }
+ ],
+ "input": {
+  "cells": [
+   [
+    {
+     "anchor": true,
+     "deg": 0,
+     "kind": "accent",
+     "role": "head",
+     "step": 0
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 2
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 3
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "head",
+     "step": 4
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 6
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 7
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "head",
+     "step": 8
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 10
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 11
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "head",
+     "step": 12
+    },
+    {
+     "anchor": false,
+     "deg": 7,
+     "kind": "note",
+     "role": "answer",
+     "step": 14
+    },
+    {
+     "anchor": false,
+     "deg": 6,
+     "kind": "note",
+     "role": "blue",
+     "step": 15
+    }
+   ],
+   [
+    {
+     "anchor": true,
+     "deg": 0,
+     "kind": "accent",
+     "role": "head",
+     "step": 0
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 2
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 3
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "head",
+     "step": 4
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 6
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 7
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "head",
+     "step": 8
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 10
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "pedal",
+     "step": 11
+    },
+    {
+     "anchor": false,
+     "deg": 0,
+     "kind": "note",
+     "role": "head",
+     "step": 12
+    },
+    {
+     "anchor": false,
+     "deg": 10,
+     "kind": "note",
+     "role": "climb",
+     "step": 14
+    },
+    {
+     "anchor": true,
+     "deg": 1,
+     "kind": "note",
+     "role": "climb",
+     "step": 15
+    }
+   ]
+  ],
+  "high_limit": 60,
+  "loop": true,
+  "low_limit": 28,
+  "reg_hi": 59,
+  "reg_lo": 28,
+  "segs": [
+   {
+    "bass_pc": null,
+    "chord_tones": [
+     0,
+     3,
+     7
+    ],
+    "length_steps": 16,
+    "quality": "min",
+    "root_pc": 9,
+    "scale": [
+     0,
+     2,
+     3,
+     5,
+     7,
+     8,
+     10
+    ],
+    "start_step": 0
+   },
+   {
+    "bass_pc": null,
+    "chord_tones": [
+     0,
+     4,
+     7
+    ],
+    "length_steps": 16,
+    "quality": "maj",
+    "root_pc": 5,
+    "scale": [
+     0,
+     2,
+     4,
+     5,
+     7,
+     9,
+     11
+    ],
+    "start_step": 16
+   },
+   {
+    "bass_pc": null,
+    "chord_tones": [
+     0,
+     4,
+     7
+    ],
+    "length_steps": 16,
+    "quality": "maj",
+    "root_pc": 0,
+    "scale": [
+     0,
+     2,
+     4,
+     5,
+     7,
+     9,
+     11
+    ],
+    "start_step": 32
+   },
+   {
+    "bass_pc": null,
+    "chord_tones": [
+     0,
+     4,
+     7
+    ],
+    "length_steps": 16,
+    "quality": "maj",
+    "root_pc": 7,
+    "scale": [
+     0,
+     2,
+     4,
+     5,
+     7,
+     9,
+     11
+    ],
+    "start_step": 48
+   }
+  ],
+  "steps_per_bar": 16,
+  "total_steps": 64
+ },
+ "metrics": {
+  "boundary_ok": 4,
+  "boundary_total": 4,
+  "non_integ": 0,
+  "passing": 4,
+  "strong_hit": 16,
+  "strong_rate": 1.0,
+  "strong_total": 16,
+  "unplayable": 0
+ }
+}

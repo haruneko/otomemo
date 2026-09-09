@@ -53,6 +53,11 @@ export * from "./engineVersion";
 // 参照値の突き合わせ＝tools/py-parity/。既定挙動は不変（opt-in 経路 anchorLock からのみ消費される）。
 export * from "./anchorLock";
 
+// コード追従（M3-3b）＝phrase_maker chord_follow の5ガード＋層B クオリティ表（25）。リズムは触らず音高だけを
+// コードへ写す。参照値の突き合わせ＝tools/py-parity/cases-chord-follow/。既定挙動は不変（opt-in 経路 chordFollow
+// からのみ消費される）。
+export * from "./chordFollow";
+
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python
 // 互換 MT19937 の相関 Breath）。既定挙動は不変（本モジュールは opt-in 経路からのみ消費される）。

@@ -235,6 +235,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   //   kickLock（確率でキック共有率を近づける）とは排他。ドラムが要る。false=未送信=従来 bit 一致。
   const [bassAnchor, setBassAnchor] = useState<boolean>(false);
   const [bassAnchorRest, setBassAnchorRest] = useState<boolean>(false); // 案B＝拍頭でない無音キックはベースを休む
+  const [bassChordFollow, setBassChordFollow] = useState<boolean>(false); // M3-3b＝コード追従の5ガード（approach と排他）
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
   // P4：プリセット主役。選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）。
   const [preset, setPreset] = useState<string>("");
@@ -318,7 +319,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // ノブ（drum fill／bass fill・kickLock・snareGap・approach・分数／骨格ベース表面化）が立っている時だけ生成器へ。
       // 既定（おまかせ・ノブ無し）はライブラリ検索＝seed 未投入なら候補0＝空トレイ（従来の域外と同じ・エラーにしない）。
       const drumsWantsGen = typeof drumFill === "number" ? drumFill > 0 : !!drumFill;
-      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash || bassAnchor;
+      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash || bassAnchor || bassChordFollow;
       const libKind =
         part.op === "gen_chord_pattern" ? "chord_pattern"
         : part.op === "gen_drums" && !drumsWantsGen ? "rhythm"
@@ -409,6 +410,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         // 錨と間の分業（M3-3a）：ドラムのキックに必ずルートの錨を置く。ドラムが要る（api 側でも no-drums で通知）。
         if (bassAnchor) body.anchorLock = true;
         if (bassAnchor && bassAnchorRest) body.anchorRestOnSyncopatedKick = true;
+        // コード追従の5ガード（M3-3b）：リズムは動かさず音高だけを進行へ写す。ドラムは要らない（コードだけで立つ）。
+        if (bassChordFollow) body.chordFollow = true;
       }
       // コード楽器＝伴奏パターン（chord_pattern・スライスC）：ジャンルchip(compStyle) を pattern へ、variety で別々の型を複数取る。
       //   ""＝おまかせ＝omakase 番兵（role/tempo 全体から）。型ID直指定は api 側で単数固定（compTypeById が真＝variety 無視）。
@@ -657,6 +660,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, // 錨と間の分業（M3-3a）
+    bassChordFollow, setBassChordFollow, // コード追従の5ガード（M3-3b）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,

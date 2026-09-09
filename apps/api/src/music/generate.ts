@@ -28,6 +28,7 @@ import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
 import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, type AnchorOnset, type AnchorSeg } from "@cm/music-core"; // M3-3a＝錨と間の分業（_lock_bass_roots_to_sheet 忠実移植）。opt-in `anchorLock` 経路でのみ消費＝既定は bit 一致。
+import { applyChordFollow, QUALITY_INTERVALS as CF_QUALITY_INTERVALS, type CfLineOnset, type CfSeg } from "@cm/music-core"; // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
 import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
 import { pitchAt, analyzeVoiceLeading, voiceLeadingPenalty, leadingTonePenalty } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）＋候補選別への声部進行減点（PAC/IAC結線・2026-07-22）
@@ -1124,7 +1125,7 @@ export function genBass(
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[],
   seed?: number | null,
   drums?: DrumsInput | null,
-  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean }, // anchorLock=錨と間の分業（M3-3a・第三経路・既定OFF＝未指定は bit 一致・kickLock と排他・style と併用）／anchorRestOnSyncopatedKick=案B つまみ（拍頭でない無音キックはベースを休む）
+  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean; chordFollow?: boolean }, // anchorLock=錨と間の分業（M3-3a・第三経路・既定OFF＝未指定は bit 一致・kickLock と排他・style と併用）／anchorRestOnSyncopatedKick=案B つまみ（拍頭でない無音キックはベースを休む）／chordFollow=コード追従の5ガード（M3-3b・approach ノブと排他・既定OFF）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
@@ -1180,6 +1181,21 @@ export function genBass(
     : !Number.isInteger(anchorScale) || anchorScale < 1 ? "drum-grid-mismatch"
     : null;
   const anchorPath = anchorWanted && anchorFallback === null;
+  // 錨（anchorLock が置いたルート）の start＝3b の chord_follow が**触らない**印（構造的契約が勝つ）。
+  const anchorStarts = new Set<number>();
+
+  // --- コード追従（M3-3b・`chordFollow`・design.md 追補 (k)）の成立条件 ---
+  //   源流＝phrase_maker `bass_rock_riff/chords/chord_follow.py` の5ガード（①強拍コードトーン強制②弱拍のスケール
+  //   整合③区間末の接近音化④演奏域⑤リズム不変）＋層B 25 クオリティ表（`core/chordlib.py:118-171`）。
+  //   **既定 OFF＝この経路は一切立たない＝従来と 1bit も変わらない**。既存 `approach` ノブの上位互換＝**排他**
+  //   （両方来たら chordFollow が勝ち approach は当てない＝二重に接近音を作らない）。
+  //   立つ条件＝コードが在る（写す先が無いと何も決まらない）／4/4系（16分格子の拍頭判定＝源流と同じ `step%4`）。
+  const cfWanted = opts?.chordFollow === true;
+  const cfFallback: string | null = !cfWanted ? null
+    : info.grouping === "compound" ? "compound-meter"
+    : (chords?.length ?? 0) === 0 ? "no-chords"
+    : null;
+  const cfPath = cfWanted && cfFallback === null;
 
   // --- 相対パターン昇格（修理#2・2026-07-22・H2・監査 §4 B'2）：opts.relative=true で **実音化せず相対 content を出す**。
   //   style 型経路のみ対応（BassCell→BassStep 直写像＝realizeBassGrid を web resolveRelativeBass へ移送）。fill も BassCell ゆえ
@@ -1282,7 +1298,9 @@ export function genBass(
       const written = (writtenSteps.get(o.step) ?? ANCHOR_GRID) * slot;
       const dur = Math.min(written, cap, gap);
       if (dur <= 0) continue;
-      notes.push({ pitch: Math.max(BASS_LO, Math.min(BASS_HI, o.pitch)), start: round3(t), dur: round3(dur) });
+      const st = round3(t);
+      if (o.anchor) anchorStarts.add(st); // 3b が写し直さない印（錨は構造的契約）
+      notes.push({ pitch: Math.max(BASS_LO, Math.min(BASS_HI, o.pitch)), start: st, dur: round3(dur) });
     }
   } else if (styleType) {
     // --- Sty: ジャンル型ライブラリ（WP-B1）：型の16分格子を各小節へ敷き、度数→実音（低域窓）へ写像。
@@ -1359,7 +1377,7 @@ export function genBass(
 
   // --- C: アプローチノート（approach>0・4/4系のみ）：チェンジ直前の最後のオンセットを接近音→次ルート着地。
   // 弱拍・短音価・チェンジ1.5拍以内に限定（out-of-key 露出ガード）。独立 Rng＝他段の列を乱さない。
-  if (approach > 0 && info.grouping !== "compound" && notes.length > 0) {
+  if (approach > 0 && !cfPath && info.grouping !== "compound" && notes.length > 0) { // cfPath＝chordFollow と排他（上位互換が勝つ）
     const aRng = new Rng((seed ?? 42) + 101);
     for (const c of chords ?? []) {
       const cs = Number(c.start ?? 0);
@@ -1374,6 +1392,38 @@ export function genBass(
       if (aRng.next() >= approach) continue;
       const target = bassPcToWindow(slashBass && c.bass != null ? normRoot(c.bass) : normRoot(c.root ?? 0)); // beat1=ターゲット（次ルート／分数時は次低音・低域窓）
       n.pitch = Math.max(BASS_LO, Math.min(BASS_HI, aRng.choice([target - 1, target + 1, target - 2]))); // 半音下/上・全音下
+    }
+  }
+
+  // --- C': コード追従の5ガード（M3-3b・chordFollow・4/4系＋コード有りのみ）：**onset は1つも動かさず**
+  //   （⑤リフ崩壊の禁止）、音高だけをコードへ写し直す。①拍頭は必ずコードトーン②それ以外はそのコードの
+  //   スケール（層B 25 クオリティ）③各コード区間の最後の自由音は次ルートへの導音④低域窓の内側。
+  //   錨（anchorLock）が置いた音は**触らない**＝構造的契約が上位。RNG 不消費＝seed に依らない。
+  if (cfPath && notes.length > 0) {
+    const SLOT = 0.25; // 16分＝拍の1/4（otomemo の start は拍単位）＝源流の16分格子と同じ刻み
+    const stepOf = (t: number): number => Math.round(t / SLOT);
+    // コード区間（源流 `chord_follow.Segment`）。tones は otomemo の QUALITY_INTERVALS を正とする（表を二重に持たない）。
+    const cfSegs: CfSeg[] = (chords ?? []).map((c) => {
+      const st = stepOf(Number(c.start ?? 0));
+      const len = Math.max(1, stepOf(Number(c.dur ?? 0)));
+      const q = c.quality ?? "";
+      return {
+        chord: {
+          rootPc: normRoot(c.root ?? 0), quality: q,
+          bassPc: slashBass && c.bass != null ? normRoot(c.bass) : null,
+          tones: CF_QUALITY_INTERVALS[q] ?? CF_QUALITY_INTERVALS[""]!,
+        },
+        startStep: st, lengthSteps: len,
+      };
+    }).sort((a, b) => a.startStep - b.startStep);
+    if (cfSegs.length > 0) {
+      const line: CfLineOnset[] = notes.map((n) => {
+        const step = stepOf(n.start);
+        const strong = step % 4 === 0; // 拍頭（源流 `gstep % 4 == 0`）
+        return { step, pitch: n.pitch, strong, head: strong, anchor: anchorStarts.has(n.start) };
+      });
+      const cf = applyChordFollow(line, cfSegs, { lo: BASS_LO, hi: BASS_HI }, false); // loop=false＝セクションは輪にしない
+      for (let i = 0; i < notes.length; i++) notes[i]!.pitch = cf.pitches[i]!;
     }
   }
 
@@ -1475,10 +1525,11 @@ export function genBass(
   // engineVersion（M0契約 §2・design.md 追補 (k)）：**phrase_maker 由来の新経路を実際に使ったときだけ**
   //   content に `engine:{version}` を載せる。既定経路はキーを生やさない＝従来 content 形＝bit 一致。
   const baseContent = feel ? { notes, feel } : { notes };
-  const content = anchorPath ? { ...baseContent, engine: { version: PM_ENGINE_VERSION } } : baseContent;
+  const content = (anchorPath || cfPath) ? { ...baseContent, engine: { version: PM_ENGINE_VERSION } } : baseContent;
   const out = withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
   // フォールバック通知（2026-08-29 オーナー裁定「黙って落とさない」）：anchorLock を頼まれたのに経路が立たなかった理由。
   if (anchorFallback) (out as GenResult & { anchorLockFallback?: string }).anchorLockFallback = anchorFallback;
+  if (cfFallback) (out as GenResult & { chordFollowFallback?: string }).chordFollowFallback = cfFallback;
   // relative 要求だが style 経路でない（fig/kick／6-8／skeleton 明示ベース）＝絶対のままフォールバック（escape hatch・報告用）。
   if (wantRelative) {
     (out as GenResult & { relativeFallback?: string }).relativeFallback =
