@@ -17,3 +17,6 @@ export * from "./limbs";
 export * from "./coverage";
 export * from "./microtiming";
 export * from "./nondeterminism";
+// fretboard ＝指板の到達可能性（M3-3e）。ギター gen2 の自前 DP を弦数・調弦・重みで一般化＝4弦ベースにも
+//   6弦ギターにも同じ1本。**検証器**（gate＝到達不能0／diagnostic＝弾きにくさ）＝生成の主導権は握らない。
+export * from "./fretboard";
