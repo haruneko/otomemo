@@ -442,3 +442,4 @@ worker pytest 8緑（先に赤→緑・`test_content_text_includes_lyric_phrases
 - **三連フィル固有の統計**：GMD prior（打圧/密度カーブ）は**16分フィルから採った統計**を三連フィルにも
   そのまま当てている。order-0 の輪郭なので破綻はしないが、三連固有の統計を採るならデータ側の増分が要る。
   （三連スロットそのものは 2026-08-29 に実装済み＝design §2106(g)）
+- **`QUALITY_INTERVALS["11"]` の avoid note（2026-09-09・phrase_maker 移行計画 R2 で発見・本アーク外）**：`packages/music-core/src/index.ts:98` の `"11"`＝`[0,4,7,10,2,5]` は長3度(4)と ♮11(5) が半音でぶつかる（ドミナント 11th は3度を落として sus 化が定型。phrase_maker の `piano/gen2/chordlib.py:100`・`core/chordlib.py:131` も同じ癖）。直すと `11` を選んだ既存ネタの出音が変わる**意図的 bit 破壊＝耳確認が要る**ので、移行アークの検証器（avoid note ゲート＝生成器のボイシングのみに適用）で機械的に直さず、ここに置く。
