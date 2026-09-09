@@ -1,0 +1,397 @@
+{
+ "case": {
+  "accents": [],
+  "bars_per_chord": 0.5,
+  "grammar": "gallop_pedal",
+  "id": "gallop_pedal__fast__ksynco__restA",
+  "kick": [
+   0,
+   6,
+   10,
+   14
+  ],
+  "progression": "C Am F G",
+  "rest_on_syncopated_kick": false
+ },
+ "expected": [
+  {
+   "anchor": true,
+   "kind": "accent",
+   "pitch": 36,
+   "role": "head",
+   "step": 0
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "step": 2
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "step": 3
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "head",
+   "step": 4
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 36,
+   "role": "head",
+   "step": 6
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 36,
+   "role": "pedal",
+   "step": 7
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "head",
+   "step": 8
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 33,
+   "role": "head",
+   "step": 10
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "pedal",
+   "step": 11
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 33,
+   "role": "head",
+   "step": 12
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 45,
+   "role": "head",
+   "step": 14
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 38,
+   "role": "blue",
+   "step": 15
+  },
+  {
+   "anchor": true,
+   "kind": "accent",
+   "pitch": 29,
+   "role": "head",
+   "step": 16
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "step": 18
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "step": 19
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "head",
+   "step": 20
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 29,
+   "role": "head",
+   "step": 22
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 29,
+   "role": "pedal",
+   "step": 23
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "head",
+   "step": 24
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 31,
+   "role": "head",
+   "step": 26
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "pedal",
+   "step": 27
+  },
+  {
+   "anchor": false,
+   "kind": "note",
+   "pitch": 31,
+   "role": "head",
+   "step": 28
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 43,
+   "role": "head",
+   "step": 30
+  },
+  {
+   "anchor": true,
+   "kind": "note",
+   "pitch": 31,
+   "role": "climb",
+   "step": 31
+  }
+ ],
+ "input": {
+  "accents": [],
+  "kick": [
+   0,
+   6,
+   10,
+   14
+  ],
+  "n_bars": 2,
+  "onsets": [
+   {
+    "anchor": true,
+    "kind": "accent",
+    "pitch": 36,
+    "role": "head",
+    "step": 0
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 36,
+    "role": "pedal",
+    "step": 2
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 36,
+    "role": "pedal",
+    "step": 3
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 36,
+    "role": "head",
+    "step": 4
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 36,
+    "role": "pedal",
+    "step": 6
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 36,
+    "role": "pedal",
+    "step": 7
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 33,
+    "role": "head",
+    "step": 8
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 33,
+    "role": "pedal",
+    "step": 10
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 33,
+    "role": "pedal",
+    "step": 11
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 33,
+    "role": "head",
+    "step": 12
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 40,
+    "role": "answer",
+    "step": 14
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 38,
+    "role": "blue",
+    "step": 15
+   },
+   {
+    "anchor": true,
+    "kind": "accent",
+    "pitch": 29,
+    "role": "head",
+    "step": 16
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 29,
+    "role": "pedal",
+    "step": 18
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 29,
+    "role": "pedal",
+    "step": 19
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 29,
+    "role": "head",
+    "step": 20
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 29,
+    "role": "pedal",
+    "step": 22
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 29,
+    "role": "pedal",
+    "step": 23
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 31,
+    "role": "head",
+    "step": 24
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 31,
+    "role": "pedal",
+    "step": 26
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 31,
+    "role": "pedal",
+    "step": 27
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 31,
+    "role": "head",
+    "step": 28
+   },
+   {
+    "anchor": false,
+    "kind": "note",
+    "pitch": 40,
+    "role": "climb",
+    "step": 30
+   },
+   {
+    "anchor": true,
+    "kind": "note",
+    "pitch": 31,
+    "role": "climb",
+    "step": 31
+   }
+  ],
+  "reg_hi": 59,
+  "reg_lo": 28,
+  "rest_on_syncopated_kick": false,
+  "segs": [
+   {
+    "length_steps": 8,
+    "quality": "maj",
+    "root_pc": 0,
+    "start_step": 0
+   },
+   {
+    "length_steps": 8,
+    "quality": "min",
+    "root_pc": 9,
+    "start_step": 8
+   },
+   {
+    "length_steps": 8,
+    "quality": "maj",
+    "root_pc": 5,
+    "start_step": 16
+   },
+   {
+    "length_steps": 8,
+    "quality": "maj",
+    "root_pc": 7,
+    "start_step": 24
+   }
+  ],
+  "steps_per_bar": 16,
+  "total_steps": 32
+ }
+}

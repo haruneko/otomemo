@@ -45,6 +45,14 @@ export * from "./cues";
 // fill=+37 は将来枠＝現行 fill は生 seed（レシピ resolve 実装時に使う）。
 export * from "./rngSalt";
 
+// phrase_maker 由来エンジンの版（M0契約 §2 `engine:{version}`）。**新経路使用時のみ** content に載せる＝
+// 既定経路はキーを生やさない＝bit 一致（design.md 追補 (k)）。
+export * from "./engineVersion";
+
+// 錨と間の分業（M3-3a）＝phrase_maker `_lock_bass_roots_to_sheet` の忠実移植（純関数・決定的）。
+// 参照値の突き合わせ＝tools/py-parity/。既定挙動は不変（opt-in 経路 anchorLock からのみ消費される）。
+export * from "./anchorLock";
+
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python
 // 互換 MT19937 の相関 Breath）。既定挙動は不変（本モジュールは opt-in 経路からのみ消費される）。
