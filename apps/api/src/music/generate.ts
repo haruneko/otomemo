@@ -27,6 +27,7 @@ import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBre
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
+import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, type AnchorOnset, type AnchorSeg } from "@cm/music-core"; // M3-3a＝錨と間の分業（_lock_bass_roots_to_sheet 忠実移植）。opt-in `anchorLock` 経路でのみ消費＝既定は bit 一致。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
 import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
 import { pitchAt, analyzeVoiceLeading, voiceLeadingPenalty, leadingTonePenalty } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）＋候補選別への声部進行減点（PAC/IAC結線・2026-07-22）
@@ -34,7 +35,7 @@ import { resolveLowerVoice } from "./voiceLeadingReport"; // 実効下声の解�
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
 import { beatPatternById, pickBeatPattern, resolveFillType, DRUM, type OutLane, type FillType } from "./drumLibrary"; // ドラム定型ビート＋フィル語彙（WP-D1）
-import { bassTypeById, pickBassType, resolveBassFill, DEGREE_SEMI, type BassCell, type BassType, type BassFill } from "./bassLibrary"; // ベース定型型＋フィル語彙（WP-B1）
+import { bassTypeById, pickBassType, resolveBassFill, DEGREE_SEMI, BASS_GRAMMAR_PEDAL_ANSWER, type BassCell, type BassType, type BassFill } from "./bassLibrary"; // ベース定型型＋フィル語彙（WP-B1）
 import { compTypeById, pickCompType, pickCompTypes, compHitsForBar, compLhHitsForBar, type CompType, type CompMode } from "./chordLibrary"; // 伴奏パターン型辞書（chordLibrary・S2/S3・2026-07-22）
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
@@ -1123,7 +1124,7 @@ export function genBass(
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[],
   seed?: number | null,
   drums?: DrumsInput | null,
-  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean; respondToCues?: boolean },
+  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean }, // anchorLock=錨と間の分業（M3-3a・第三経路・既定OFF＝未指定は bit 一致・kickLock と排他・style と併用）／anchorRestOnSyncopatedKick=案B つまみ（拍頭でない無音キックはベースを休む）
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
@@ -1163,6 +1164,23 @@ export function genBass(
   // A/A' キック骨格＝4/4系のみ・ドラムの1小節長が拍子と一致する時のみ（6/8 は push/swing と同じ除外方針）。
   const kickPath = !!dr && kickLock !== 0 && info.grouping !== "compound" && Math.abs(dr.steps * dr.bps - perBar) < 1e-6;
 
+  // --- 錨と間の分業（M3-3a・第三経路 `anchorLock`・design.md 追補 (k)）の成立条件 ---
+  //   源流＝phrase_maker `ensemble.py:1111-1179 _lock_bass_roots_to_sheet`（4/4 のみ・16分格子）。
+  //   **既定 OFF（未指定/false）＝この経路は一切立たない＝従来と 1bit も変わらない**（新ノブの鉄則）。
+  //   立つ条件＝ドラム content が在る（錨の位置はドラムの骨から来る＝描く口は開けない・io-map 裁定#2/#5）／
+  //   4/4系（6/8 の `_sheet_line` 一般化は本段の Scope 外）／ドラム1小節が拍子の1小節と同尺／
+  //   ドラム格子が16分格子へ整数倍で写せる（8分格子=8step なら ×2）。**立たなかったら黙って落とさず理由を返す**。
+  const ANCHOR_GRID = 16; // 体（style 型／grammar セル）の格子＝1小節16分
+  const anchorWanted = opts?.anchorLock === true;
+  const anchorScale = dr ? ANCHOR_GRID / dr.steps : 0; // ドラム step → 16分格子 の倍率
+  const anchorFallback: string | null = !anchorWanted ? null
+    : !dr ? "no-drums"
+    : info.grouping === "compound" ? "compound-meter"
+    : Math.abs(dr.steps * dr.bps - perBar) >= 1e-6 ? "drum-bar-mismatch"
+    : !Number.isInteger(anchorScale) || anchorScale < 1 ? "drum-grid-mismatch"
+    : null;
+  const anchorPath = anchorWanted && anchorFallback === null;
+
   // --- 相対パターン昇格（修理#2・2026-07-22・H2・監査 §4 B'2）：opts.relative=true で **実音化せず相対 content を出す**。
   //   style 型経路のみ対応（BassCell→BassStep 直写像＝realizeBassGrid を web resolveRelativeBass へ移送）。fill も BassCell ゆえ
   //   同時対応（末尾1つ手前の小節を fill 型セルへ差替え）。**escape hatch**＝skeleton 明示ベース／6-8／style 未指定（fig/kick 経路）は
@@ -1170,7 +1188,7 @@ export function genBass(
   //   合奏層ノブ（kickLock/snareGap/approach）は絶対空間の後処理＝相対 style 経路では非適用（H2＝道具の効果は型格子に既に刻まれている）。
   const wantRelative = opts?.relative === true;
   const skelHasBass = (opts?.skeleton?.bass?.length ?? 0) > 0;
-  if (wantRelative && styleType && !skelHasBass) {
+  if (wantRelative && styleType && !skelHasBass && !anchorPath) {
     const grid = styleType.cells.length; // 16（4/4）or 12（6/8・world68）＝1小節のセル数
     const pattern: { step: number; degree: string; dur: number; next?: boolean }[] = [];
     // BassCell[grid セル]（1小節）→ BassStep[]。on=発音（続く tie を音価に足す）／rest/ghost/tie(消費済)=スキップ。
@@ -1203,7 +1221,70 @@ export function genBass(
     return withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
   }
 
-  if (styleType) {
+  if (anchorPath) {
+    // --- Anc: 錨と間の分業（M3-3a）＝phrase_maker `_lock_bass_roots_to_sheet` の忠実移植を通す第三経路。
+    //   ①体＝style 型の16分格子（style 未指定なら grammar セル既定＝pedal_answer 相当の2小節 CALL/RESPONSE）を敷く。
+    //   ②ドラムのキック step ごとに、(a) 既にルート級なら音域そのまま錨へ昇格／(b) 非ルートなら最寄りレジスタの
+    //      ルートへ上書き／(c) 休符なら低域ルートを新規挿入。**キックでないセル（リフ本体）は1つも書き換えない。**
+    //   ③コードは **step 粒度** で読む（`chordAt(t)` を Math.floor せずに呼ぶ＝1拍1コードでも古いルートを掴まない）。
+    //      既存 `rootAtBeat`（拍量子化）は触らない＝style/fig/kick 経路の bit 一致を守る。
+    //   RNG は一切消費しない（源流も決定的）＝seed に依らず骨が安定する。 ---
+    const slot = perBar / ANCHOR_GRID;          // 16分1スロットの拍長（4/4=0.25）
+    const totalSteps = bars * ANCHOR_GRID;
+    // step 粒度のコード読み（③）。chordAt に小数 t をそのまま渡す＝拍で丸めない。
+    const rootAtStep = (g: number): number => { const ch = chordAt(g * slot, chords); return ch ? normRoot(ch.root ?? 0) : (f.key ?? 0); };
+    // 連続する同ルートを1区間へ畳んで AnchorSeg 列に（移植関数の chord_at と otomemo の chordAt が同じ答を返す形）。
+    const segs: AnchorSeg[] = [];
+    for (let g = 0; g < totalSteps; g++) {
+      const pc = rootAtStep(g);
+      const last = segs[segs.length - 1];
+      if (last && last.rootPc === pc) last.lengthSteps++;
+      else segs.push({ rootPc: pc, startStep: g, lengthSteps: 1 });
+    }
+    // 体＝style 型（1小節16セル）or grammar セル既定（2小節を交替）。
+    const bodyCellsAt = (bar: number): BassCell[] => styleType ? styleType.cells : BASS_GRAMMAR_PEDAL_ANSWER[bar % BASS_GRAMMAR_PEDAL_ANSWER.length]!;
+    const body: AnchorOnset[] = [];
+    const writtenSteps = new Map<number, number>(); // step → 書かれた音価（スロット数・tie 連結）
+    for (let bar = 0; bar < bars; bar++) {
+      const cells = bodyCellsAt(bar);
+      let i = 0;
+      while (i < ANCHOR_GRID) {
+        const c = cells[i];
+        if (c?.kind === "on") {
+          let run = 1;
+          while (i + run < ANCHOR_GRID && cells[i + run]!.kind === "tie") run++; // 続く tie を音価に足す（realizeBassGrid と同規則）
+          const g = bar * ANCHOR_GRID + i;
+          const rootPc = c.next ? rootAtStep(Math.min((bar + 1) * ANCHOR_GRID, totalSteps - 1)) : rootAtStep(g); // R>/8>＝次小節頭のルート
+          const semi = DEGREE_SEMI[c.deg ?? "R"] ?? 0;
+          body.push({ step: g, kind: "note", anchor: false, role: "figure", deg: c.deg ?? "R", pitch: pmClamp(bassPcToWindow(rootPc) + semi, BASS_LO, BASS_HI) });
+          writtenSteps.set(g, run);
+          i += run;
+        } else i++; // rest/ghost/tie(消費済)＝発音しない（ghost は bass の vel がスコープ外ゆえ休符扱い＝正典 §8）
+      }
+    }
+    // キック step をドラム格子から16分格子へ（8分格子=8step なら ×2）。空キックは移植関数側の fallback [0,4,8,12]。
+    const kick16 = dr!.kick.map((s) => s * anchorScale).filter((s) => Number.isInteger(s) && s < ANCHOR_GRID);
+    // アクセントは M3 では持たない（otomemo の skeleton は kick/snare のみ＝M0契約 §5-2）＝空で渡す。
+    const locked = lockBassRootsToSheet(body, segs, {
+      stepsPerBar: ANCHOR_GRID, nBars: bars, kick: kick16, accents: [],
+      restOnSyncopatedKick: opts?.anchorRestOnSyncopatedKick === true, lo: BASS_LO, hi: BASS_HI, rootDeg: "R",
+    });
+    // 実音化：start＝step×スロット・dur＝「書かれた音価」を次オンセット/小節末/曲末で切る（レガート・重なりを作らない）。
+    //   挿入した錨（体に無い step）は「書かれた音価」を持たないので小節末までを上限にする。
+    const ons = locked.onsets;
+    for (let i = 0; i < ons.length; i++) {
+      const o = ons[i]!;
+      const t = o.step * slot;
+      if (t >= total - 1e-9) continue;
+      const bar = Math.floor(o.step / ANCHOR_GRID);
+      const cap = Math.min((bar + 1) * perBar, total) - t;                       // 小節末（realizeBassGrid と同じ上限）
+      const gap = (i + 1 < ons.length ? ons[i + 1]!.step * slot : total) - t;    // 次オンセットまで
+      const written = (writtenSteps.get(o.step) ?? ANCHOR_GRID) * slot;
+      const dur = Math.min(written, cap, gap);
+      if (dur <= 0) continue;
+      notes.push({ pitch: Math.max(BASS_LO, Math.min(BASS_HI, o.pitch)), start: round3(t), dur: round3(dur) });
+    }
+  } else if (styleType) {
     // --- Sty: ジャンル型ライブラリ（WP-B1）：型の16分格子を各小節へ敷き、度数→実音（低域窓）へ写像。
     //   R>/8>（next）は次小節頭のルート基準＝先取り着地。ゴースト(x)は bass が vel 未対応ゆえ休符扱い（正典 §8）。
     //   kickLock kickPath より優先＝キック絡み（型メタ）と kickLock を二重適用しない（排他）。 ---
@@ -1391,11 +1472,18 @@ export function genBass(
   // フィール層（S4・2026-07-22）：swing/humanize を notes に焼かず content.feel へ（genMelody と同契約＝同 buildFeel）。
   // 未指定/0＝undefined＝feel キー無し＝従来 content 形（bit一致）。web applyFeelEnsemble が part=bass プロファイルで消費。
   const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 42);
-  const out = withBarsWarning({ items: [{ kind: "bass", content: feel ? { notes, feel } : { notes }, label: "ベース" }], edges: [] }, frame);
+  // engineVersion（M0契約 §2・design.md 追補 (k)）：**phrase_maker 由来の新経路を実際に使ったときだけ**
+  //   content に `engine:{version}` を載せる。既定経路はキーを生やさない＝従来 content 形＝bit 一致。
+  const baseContent = feel ? { notes, feel } : { notes };
+  const content = anchorPath ? { ...baseContent, engine: { version: PM_ENGINE_VERSION } } : baseContent;
+  const out = withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
+  // フォールバック通知（2026-08-29 オーナー裁定「黙って落とさない」）：anchorLock を頼まれたのに経路が立たなかった理由。
+  if (anchorFallback) (out as GenResult & { anchorLockFallback?: string }).anchorLockFallback = anchorFallback;
   // relative 要求だが style 経路でない（fig/kick／6-8／skeleton 明示ベース）＝絶対のままフォールバック（escape hatch・報告用）。
   if (wantRelative) {
     (out as GenResult & { relativeFallback?: string }).relativeFallback =
-      info.grouping === "compound" ? "compound-meter" : skelHasBass ? "skeleton-explicit-bass" : !styleType ? "no-style-pattern" : "unknown";
+      anchorPath ? "anchor-lock" // 錨の情報は相対パターンに載らない＝絶対で返す（design.md 追補 (k)）
+      : info.grouping === "compound" ? "compound-meter" : skelHasBass ? "skeleton-explicit-bass" : !styleType ? "no-style-pattern" : "unknown";
   }
   return out;
 }

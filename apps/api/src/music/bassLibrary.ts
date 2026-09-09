@@ -179,3 +179,22 @@ export function resolveBassFill(fill: number | string, seed: number): BassFill |
   const use = pool.length ? pool : BASS_FILLS;
   return use[((seed % use.length) + use.length) % use.length] ?? null;
 }
+
+// ── grammar セル（M3-3a・anchorLock の「体」の既定・design.md 追補 (k)） ─────────────────
+// 出所＝phrase_maker `experiments/bass_rock_riff/riff.py:17-38 _PEDAL_ANSWER`（2小節の CALL/RESPONSE）。
+// 源流はルートペダル＋ペンタ答句＝(step, kind, deg, anchor, role) のタプル列。ここでは otomemo の
+// 度数×16分格子（BassCell）へ落とし、**anchorLock が体として使う最小限だけ**を置く。
+//
+// ⚠ **これは 3c への引き渡し前の暫定**：grammar セル3型（pedal_answer / gallop_pedal /
+//    octave_call_response）を **anchor/role 注記つきで `BASS_TYPES` へ正式登録するのは 3c の担当**
+//    （計画 §5-2 M3 Scope）。ここに置いてあるのは「style 未指定時に anchorLock が敷く体」が要るからで、
+//    辞書 API（bassTypeById / pickBassType）には**わざと載せていない**＝既定の型選択は 1bit も変わらない。
+//
+// 源流の 32 step を2小節へ割った（`chord_follow._bar_cells` と同じ割り方）：
+//   bar1（CALL）  ＝ 0 head / 2 pedal / 3 ghost / 4 pedal / 6 pedal / 8 head / 10 pedal / 12 pedal / 14 pickup(5)
+//   bar2（RESPONSE）＝ 0 head / 2 pedal / 4 pedal / 6 pedal / 8 head / 10 answer(b7) / 11 ghost / 12 answer(5) / 14 answer(4)
+// ghost（x）は realizeBassGrid と同じく休符扱い（bass の vel はスコープ外＝正典 §8）。
+export const BASS_GRAMMAR_PEDAL_ANSWER: BassCell[][] = [
+  parseBassPattern("R . R x | R . R . | R . R . | R . 5 ."),
+  parseBassPattern("R . R . | R . R . | R . b7 x | 5 . 4 ."),
+];
