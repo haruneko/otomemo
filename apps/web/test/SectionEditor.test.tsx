@@ -1515,6 +1515,32 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect("anchorGrammar" in body).toBe(false); // 文法は既定（pedal_answer）＝未送信＝3a と同じ体
   });
 
+  // ── 到達口④＝web TinkerSheet（M3-3d・JZ-WALK＝型直指定の畳みからだけ選べる opt-in） ──
+  it("T4d ウォーキング＝型直指定で JZ-WALK を選ぶと body.style で飛ぶ（ジャンル chip には出ない）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    // ジャンル chip（前面）には出ない＝耳未判定の試作を既定の道に置かない
+    expect(screen.queryByLabelText("bass-genre-JZ-WALK")).toBeNull();
+    await userEvent.click(screen.getByLabelText("group-bassfine")); // 「細かく（型直指定）」を開く
+    const sel = screen.getByLabelText("bass-style").querySelector("select") as HTMLSelectElement; // aria-label は label 側
+    await userEvent.selectOptions(sel, "JZ-WALK");
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_bass");
+    expect(body.style).toBe("JZ-WALK");
+  });
+
   // ── 到達口④＝web TinkerSheet（M3-3c・リフ文法＝錨の体） ──
   it("T4c 間のリフ＝文法を選ぶと body.anchorGrammar が飛ぶ（錨 OFF の間は行が出ない・既定は未送信）", async () => {
     music.mockReset();

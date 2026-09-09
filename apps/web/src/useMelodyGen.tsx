@@ -320,7 +320,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // ノブ（drum fill／bass fill・kickLock・snareGap・approach・分数／骨格ベース表面化）が立っている時だけ生成器へ。
       // 既定（おまかせ・ノブ無し）はライブラリ検索＝seed 未投入なら候補0＝空トレイ（従来の域外と同じ・エラーにしない）。
       const drumsWantsGen = typeof drumFill === "number" ? drumFill > 0 : !!drumFill;
-      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash || bassAnchor || bassChordFollow;
+      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash || bassAnchor || bassChordFollow || bassStyle === "JZ-WALK";
+      // ↑ JZ-WALK（M3-3d）はネタ帳ライブラリに無い**生成器だけの型**（毎回解く・相対パターンでもない）＝
+      //   ここに入れないと web からはライブラリ検索に落ちて**候補0＝何も起きない**（＝触れないノブ＝硬化）。
       const libKind =
         part.op === "gen_chord_pattern" ? "chord_pattern"
         : part.op === "gen_drums" && !drumsWantsGen ? "rhythm"

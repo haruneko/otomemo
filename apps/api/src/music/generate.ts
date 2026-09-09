@@ -29,6 +29,7 @@ import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpe
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
 import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, type AnchorOnset, type AnchorSeg } from "@cm/music-core"; // M3-3a＝錨と間の分業（_lock_bass_roots_to_sheet 忠実移植）。opt-in `anchorLock` 経路でのみ消費＝既定は bit 一致。
 import { applyChordFollow, QUALITY_INTERVALS as CF_QUALITY_INTERVALS, type CfLineOnset, type CfSeg } from "@cm/music-core"; // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
+import { buildWalkingLine, WALK_COMPOUND_SLOT_STEPS, JZ_WALK_ID, type WalkSegment } from "@cm/music-core"; // M3-3d＝JZ-WALK（walking v2 の候補生成＋v3 の規則3本・乱数は決定的規則へ置換）。**耳未判定**＝style 名指しの opt-in。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
 import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
 import { pitchAt, analyzeVoiceLeading, voiceLeadingPenalty, leadingTonePenalty } from "./voiceLeading"; // 対位バイアス＝評価器と同じ低音標本化を生成側でも使う（design「gen_melody×ベース結線」）＋候補選別への声部進行減点（PAC/IAC結線・2026-07-22）
@@ -1204,6 +1205,20 @@ export function genBass(
     : null;
   const cfPath = cfWanted && cfFallback === null;
 
+  // --- ウォーキングベース `JZ-WALK`（M3-3d・design.md 追補 (k)）の成立条件 ---
+  //   源流＝phrase_maker `bass_walking/v2`（候補生成）＋`v3` の規則3本（禁則音程／跳躍後の順次回復／
+  //   同方向連続跳躍の禁止）を制約として。**乱数は決定的規則へ置換**（データ一致は主張しない＝計画 §6-2）。
+  //   ⚠ **耳未判定**（v3 は打ち切られた枝＝規則は耳の言葉から出ているが効いたことは未確認）＝
+  //   **style を名指しした時だけ立つ**（ジャンル名からの型選抜には入れない＝既定では絶対に立たない）。
+  //   立つ条件＝コードが在る／単純拍子（拍ごとに1歩）または 6/8（付点拍＋ピックアップ＝スロット 0,2,6,8）。
+  const walkWanted = (opts?.style ?? "") === JZ_WALK_ID;
+  const walkCompound = info.grouping === "compound" && Math.abs(bpb - 3) < 1e-9; // 6/8 のみ（9/8・12/8 は格子が無い）
+  const walkFallback: string | null = !walkWanted ? null
+    : (chords?.length ?? 0) === 0 ? "no-chords"
+    : (info.grouping === "compound" && !walkCompound) ? "meter-unsupported"
+    : null;
+  const walkPath = walkWanted && walkFallback === null;
+
   // --- 相対パターン昇格（修理#2・2026-07-22・H2・監査 §4 B'2）：opts.relative=true で **実音化せず相対 content を出す**。
   //   style 型経路のみ対応（BassCell→BassStep 直写像＝realizeBassGrid を web resolveRelativeBass へ移送）。fill も BassCell ゆえ
   //   同時対応（末尾1つ手前の小節を fill 型セルへ差替え）。**escape hatch**＝skeleton 明示ベース／6-8／style 未指定（fig/kick 経路）は
@@ -1244,7 +1259,43 @@ export function genBass(
     return withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
   }
 
-  if (anchorPath) {
+  if (walkPath) {
+    // --- Wlk: JZ-WALK＝歩くスロット（単純拍子＝拍ごと／6/8＝16分格子の 0,2,6,8）にコード区間を敷き、
+    //   v2 の弧（ガイドトーンを通す跳躍）を v3 の規則の中で組む。**RNG 不消費**＝seed は弧の向きにだけ効く。
+    //   音価＝次のスロットまで（歩き＝切れ目なく続く）。窓は既存と同じ [BASS_LO,BASS_HI]。 ---
+    const cell = perBar / (walkCompound ? 12 : 1);                      // 6/8＝12セル格子／単純拍子＝拍そのもの
+    const slotTimes: number[] = [];
+    for (let bar = 0; bar < bars; bar++) {
+      const base = bar * perBar;
+      if (walkCompound) { for (const st of WALK_COMPOUND_SLOT_STEPS) slotTimes.push(base + st * cell); }
+      else { for (const sl of info.slots) slotTimes.push(base + sl.pos); }
+    }
+    const times = slotTimes.filter((t) => t < total - 1e-9).sort((a, b) => a - b);
+    // スロット→コード（step 粒度で読む＝拍で丸めない）。同じコードが続くところを1区間へ畳む。
+    const segsW: WalkSegment[] = [];
+    const chordOfSlot = times.map((t) => {
+      const c = chordAt(t, chords);
+      const q = c?.quality ?? "";
+      return {
+        rootPc: normRoot(c?.root ?? f.key ?? 0), quality: q,
+        bassPc: slashBass && c?.bass != null ? normRoot(c.bass) : null,
+        tones: CF_QUALITY_INTERVALS[q] ?? CF_QUALITY_INTERVALS[""]!,
+      };
+    });
+    for (const ch of chordOfSlot) {
+      const last = segsW[segsW.length - 1];
+      if (last && last.chord.rootPc === ch.rootPc && last.chord.quality === ch.quality && (last.chord.bassPc ?? null) === (ch.bassPc ?? null)) {
+        (last as { slots: number }).slots++;
+      } else segsW.push({ chord: ch, slots: 1 });
+    }
+    const walk = buildWalkingLine(segsW, { lo: BASS_LO, hi: BASS_HI }, seed ?? 42);
+    for (let i = 0; i < times.length; i++) {
+      const t = times[i]!;
+      const dur = (i + 1 < times.length ? times[i + 1]! : total) - t;
+      if (dur <= 0) continue;
+      notes.push({ pitch: Math.max(BASS_LO, Math.min(BASS_HI, walk.pitches[i]!)), start: round3(t), dur: round3(dur) });
+    }
+  } else if (anchorPath) {
     // --- Anc: 錨と間の分業（M3-3a）＝phrase_maker `_lock_bass_roots_to_sheet` の忠実移植を通す第三経路。
     //   ①体＝style 型の16分格子（style 未指定なら grammar セル既定＝pedal_answer 相当の2小節 CALL/RESPONSE）を敷く。
     //   ②ドラムのキック step ごとに、(a) 既にルート級なら音域そのまま錨へ昇格／(b) 非ルートなら最寄りレジスタの
@@ -1543,7 +1594,7 @@ export function genBass(
   // engineVersion（M0契約 §2・design.md 追補 (k)）：**phrase_maker 由来の新経路を実際に使ったときだけ**
   //   content に `engine:{version}` を載せる。既定経路はキーを生やさない＝従来 content 形＝bit 一致。
   const baseContent = feel ? { notes, feel } : { notes };
-  const content = (anchorPath || cfPath) ? { ...baseContent, engine: { version: PM_ENGINE_VERSION } } : baseContent;
+  const content = (anchorPath || cfPath || walkPath) ? { ...baseContent, engine: { version: PM_ENGINE_VERSION } } : baseContent;
   const out = withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
   // フォールバック通知（2026-08-29 オーナー裁定「黙って落とさない」）：anchorLock を頼まれたのに経路が立たなかった理由。
   if (anchorFallback) (out as GenResult & { anchorLockFallback?: string }).anchorLockFallback = anchorFallback;
@@ -1555,6 +1606,8 @@ export function genBass(
   // 骨格が明示したベース音は人が書いた音＝写し直さない（黙って残すのでなく、そう言う）。
   if (cfPath && skeletonStarts.size > 0) bassWarn.push(`骨格で明示したベース音 ${skeletonStarts.size} 個は書き換えていません（人が書いた音を優先しました）`);
   // 未知の文法 ID を渡された（＝既定 pedal_answer を敷いた）。
+  if (walkFallback === "no-chords") bassWarn.push("コードが無いのでウォーキングベース（JZ-WALK）は作れません（従来どおり生成しました）");
+  if (walkFallback === "meter-unsupported") bassWarn.push(`この拍子（${info.meter}）ではウォーキングベース（JZ-WALK）に対応していません（従来どおり生成しました）`);
   if (anchorPath && grammarFallback === "unknown-grammar") bassWarn.push(`知らないリフ文法（${opts?.anchorGrammar}）なので既定（${BASS_GRAMMAR_DEFAULT_ID}）で生成しました`);
   if (bassWarn.length) { const o = out as GenResult; o.meta = { ...(o.meta ?? {}), warnings: [...(o.meta?.warnings ?? []), ...bassWarn] }; }
   // relative 要求だが style 経路でない（fig/kick／6-8／skeleton 明示ベース）＝絶対のままフォールバック（escape hatch・報告用）。

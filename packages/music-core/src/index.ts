@@ -58,6 +58,10 @@ export * from "./anchorLock";
 // からのみ消費される）。
 export * from "./chordFollow";
 
+// ウォーキングベース JZ-WALK（M3-3d）＝phrase_maker walking v2 の候補生成に v3 の規則3本を制約として課し、
+// 乱数タイブレークを決定的規則へ置換したもの。**耳未判定**＝style を名指しした時だけ立つ opt-in。
+export * from "./walkingBass";
+
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python
 // 互換 MT19937 の相関 Breath）。既定挙動は不変（本モジュールは opt-in 経路からのみ消費される）。

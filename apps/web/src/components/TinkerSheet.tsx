@@ -413,7 +413,8 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   );
 
   // ---- ベース引き出し（型chip化・design §2.4）----
-  const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE"];
+  // JZ-WALK（M3-3d）はジャンル chip からは出ない（**耳未判定**＝名指しした時だけ立つ opt-in）。型直指定の畳みにだけ置く。
+  const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE", "JZ-WALK"];
   const bassDrawer = (
     <>
       {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); gen.setBassChordFollow(false); gen.setBassGrammar(""); })}
@@ -433,7 +434,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
             ))}
           </span>
         </div>
-        {gacc("bassfine", "細かく（型直指定）", "10型")}
+        {gacc("bassfine", "細かく（型直指定）", "11型")}
         {openGroups.bassfine && (
           <label className="knob-row" aria-label="bass-style">
             <span className="knob-name">型直指定</span>
@@ -449,6 +450,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               <option value="ED-OFFBEAT">オフビート</option>
               <option value="ED-SUSTAIN">ロー持続</option>
               <option value="VR-8DRIVE">高速8分ドライブ</option>
+              <option value="JZ-WALK">ウォーキング（試作・耳未判定）</option>
             </select>
           </label>
         )}
