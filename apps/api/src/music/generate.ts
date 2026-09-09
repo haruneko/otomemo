@@ -1171,20 +1171,31 @@ export function genBass(
   //   **既定 OFF（未指定/false）＝この経路は一切立たない＝従来と 1bit も変わらない**（新ノブの鉄則）。
   //   立つ条件＝ドラム content が在る（錨の位置はドラムの骨から来る＝描く口は開けない・io-map 裁定#2/#5）／
   //   4/4系（6/8 の `_sheet_line` 一般化は本段の Scope 外）／ドラム1小節が拍子の1小節と同尺／
-  //   ドラム格子が16分格子へ整数倍で写せる（8分格子=8step なら ×2）。**立たなかったら黙って落とさず理由を返す**。
+  //   ドラム格子が16分格子へ整数倍で写せる（8分格子=8step なら ×2）／**ドラムにキックが在る**（`no-kick`＝
+  //   源流の空キック fallback `[0,4,8,12]` は「RhythmSpec 未指定＝おまかせ」の意味だが、otomemo のドラム content は
+  //   「このドラムにキックは無い」の意味＝架空の4つ打ちに錨を打つと「キックにルートを置く」が嘘になる・2026-09-10 監査 中②）／
+  //   **骨格が明示したベース区間が無い**（`skeleton-explicit-bass`＝人が書いた音は道具が上書きしない＝後段 E が
+  //   錨を必ず上書きするので「全キック step にルート錨」が保てない＝design.md 追補 (k) の列挙どおり fallback・同 中②/重大②）。
+  //   **立たなかったら黙って落とさず理由を返す**（下の `meta.warnings`）。
   const ANCHOR_GRID = 16; // 体（style 型／grammar セル）の格子＝1小節16分
   const anchorWanted = opts?.anchorLock === true;
   const anchorScale = dr ? ANCHOR_GRID / dr.steps : 0; // ドラム step → 16分格子 の倍率
+  const skelHasBass = (opts?.skeleton?.bass?.length ?? 0) > 0; // 骨格の明示ベース区間（段 E が表面化する＝人が書いた音）
   const anchorFallback: string | null = !anchorWanted ? null
     : !dr ? "no-drums"
     : info.grouping === "compound" ? "compound-meter"
     : Math.abs(dr.steps * dr.bps - perBar) >= 1e-6 ? "drum-bar-mismatch"
     : !Number.isInteger(anchorScale) || anchorScale < 1 ? "drum-grid-mismatch"
+    : dr.kick.length === 0 ? "no-kick"
+    : skelHasBass ? "skeleton-explicit-bass"
     : null;
   const anchorPath = anchorWanted && anchorFallback === null;
   // 錨（anchorLock が置いたルート＝キック step の音）の start＝3b の chord_follow が**触らない**印
   //   （構造的契約が上位）。**キック由来の錨だけ**＝文法辞書の `anchor` 注記（不可侵の頭）とは別物。
   const anchorStarts = new Set<number>();
+  // 錨の契約（「全キック step にルート錨」）を**後段の処理を全部通したあとで実測する**ための台帳＝start → ルート pc。
+  //   後段（フィル等）が錨を差し替えたら黙って通さず数えて告げる（2026-09-10 監査 中①）。
+  const anchorRootPc = new Map<number, number>();
   // 骨格（skeleton）が明示したベース音の start＝**人が書いた音**＝chordFollow は写し直さない（道具が作者を上書きしない）。
   const skeletonStarts = new Set<number>();
   // 体に敷くリフ文法（M3-3c・辞書＝bassLibrary の `BASS_GRAMMARS`）。未指定＝既定 `pedal_answer`（追補 (k)）。
@@ -1225,7 +1236,6 @@ export function genBass(
   //   絶対のまま（下でフォールバック理由 relativeFallback を添付＝報告用）。**relative 未指定/false＝従来の絶対 notes＝bit 一致**。
   //   合奏層ノブ（kickLock/snareGap/approach）は絶対空間の後処理＝相対 style 経路では非適用（H2＝道具の効果は型格子に既に刻まれている）。
   const wantRelative = opts?.relative === true;
-  const skelHasBass = (opts?.skeleton?.bass?.length ?? 0) > 0;
   if (wantRelative && styleType && !skelHasBass && !anchorPath) {
     const grid = styleType.cells.length; // 16（4/4）or 12（6/8・world68）＝1小節のセル数
     const pattern: { step: number; degree: string; dur: number; next?: boolean }[] = [];
@@ -1361,7 +1371,7 @@ export function genBass(
       const dur = Math.min(written, cap, gap);
       if (dur <= 0) continue;
       const st = round3(t);
-      if (kickSet.has(o.step % ANCHOR_GRID)) anchorStarts.add(st); // 3b が写し直さない印＝キック由来の錨だけ
+      if (kickSet.has(o.step % ANCHOR_GRID)) { anchorStarts.add(st); anchorRootPc.set(st, normRoot(o.pitch)); } // 3b が写し直さない印＝キック由来の錨だけ（＋契約の実測台帳）
       notes.push({ pitch: Math.max(BASS_LO, Math.min(BASS_HI, o.pitch)), start: st, dur: round3(dur) });
     }
   } else if (styleType) {
@@ -1448,6 +1458,10 @@ export function genBass(
       for (let i = 0; i < notes.length; i++) { if (notes[i]!.start < cs - 1e-6) idx = i; else break; } // notes は昇順
       if (idx < 0) continue;
       const n = notes[idx]!;
+      // 錨（anchorLock がキック step に置いたルート）は接近音にしない＝**順序で守る**（2026-09-10 監査 中①：
+      //   併用すると「全キック step に必ずルート錨」が実測で黙って破れていた）。chordFollow が錨を触らないのと同じ立場＝
+      //   構造的契約が後処理より上位。anchorLock を使っていなければ `anchorStarts` は空＝**従来と 1bit も変わらない**。
+      if (anchorStarts.has(n.start)) continue;
       const pos = n.start % perBar;
       const strong = Number.isInteger(pos) && pos % 2 === 0; // 4/4 の 1・3拍頭＝強拍
       if (strong || n.dur > 1 + 1e-6 || cs - n.start > 1.5 + 1e-6) continue;
@@ -1503,6 +1517,7 @@ export function genBass(
   // セクション合図（カスケード §3-1）：cue 有→fill 位置＝cue.bar（強さ＝cue.intensity(0..1)→resolveBassFill）／**cue 無→現行式(bars-2)＝一切触れない＝bit 一致**。
   const fillCue = cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
   const fillOpt = opts?.fill;
+  let fillReplacedBar: number | null = null; // 実際にフィルへ差し替えた小節（錨の契約が破れた理由を言い当てるため・監査 中①）
   if (fillCue != null && info.grouping !== "compound" && fillCue.bar >= 0 && fillCue.bar < bars) {
     // ── 新経路（cue 有）：fill セルを cue.bar に差替（越境＝bar===bars-1 も内部処理は同じ・land は次セクションで鳴る） ──
     const bf: BassFill | null = resolveBassFill(fillCue.intensity ?? 0.5, seed ?? 42);
@@ -1518,6 +1533,7 @@ export function genBass(
       notes.length = 0;
       notes.push(...kept, ...filled);
       notes.sort((a, b) => a.start - b.start);
+      fillReplacedBar = fillCue.bar;
     }
   } else if (fillOpt != null && info.grouping !== "compound" && bars >= 2) {
     // ── 現行式（cue 不在）＝bars-2 固定＝bit 一致 ──
@@ -1534,6 +1550,7 @@ export function genBass(
       notes.length = 0;
       notes.push(...kept, ...filled);
       notes.sort((a, b) => a.start - b.start);
+      fillReplacedBar = bars - 2;
     }
   }
 
@@ -1596,11 +1613,19 @@ export function genBass(
   const baseContent = feel ? { notes, feel } : { notes };
   const content = (anchorPath || cfPath || walkPath) ? { ...baseContent, engine: { version: PM_ENGINE_VERSION } } : baseContent;
   const out = withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
-  // フォールバック通知（2026-08-29 オーナー裁定「黙って落とさない」）：anchorLock を頼まれたのに経路が立たなかった理由。
-  if (anchorFallback) (out as GenResult & { anchorLockFallback?: string }).anchorLockFallback = anchorFallback;
   // 通知は **`meta.warnings`** に載せる（2026-08-29 オーナー裁定・web と MCP はここしか読まない＝独自キーは無言になる）。
   //   **落ち先で言い分ける**＝「何が起きなかったか」を利用者の言葉で（通知が嘘をつくのがいちばん悪い）。
   const bassWarn: string[] = [];
+  // anchorLock（M3-3a・「キックにルートを置く」）を頼まれたのに経路が立たなかった＝落ち先ごとに言い分ける
+  //   （2026-09-10 監査 重大①＝トップレベル独自キーは web も /gen/section も読まないので**完全に無言**だった。
+  //    3b の `chordFollowFallback` を `bae525a` で meta.warnings へ移したのと同じ形＝独自キーは残さない）。
+  const ANCHOR_LABEL = "「キックにルートを置く」";
+  if (anchorFallback === "no-drums") bassWarn.push(`ドラムが無いので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
+  if (anchorFallback === "compound-meter") bassWarn.push(`6/8 など複合拍子では${ANCHOR_LABEL}に対応していません（従来どおり生成しました）`);
+  if (anchorFallback === "drum-bar-mismatch") bassWarn.push(`ドラムの1小節の長さが拍子（${info.meter}）と合わないので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
+  if (anchorFallback === "drum-grid-mismatch") bassWarn.push(`ドラムの刻みが16分の格子に写せないので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
+  if (anchorFallback === "no-kick") bassWarn.push(`ドラムにキックが無いので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
+  if (anchorFallback === "skeleton-explicit-bass") bassWarn.push(`骨格でベースを明示しているので${ANCHOR_LABEL}は当てていません（人が書いた音を優先しました）`);
   if (cfFallback === "no-chords") bassWarn.push("コードが無いので「コードに合わせ直す」は当てていません（従来どおり生成しました）");
   if (cfFallback === "compound-meter") bassWarn.push("6/8 など複合拍子では「コードに合わせ直す」に対応していません（従来どおり生成しました）");
   // 骨格が明示したベース音は人が書いた音＝写し直さない（黙って残すのでなく、そう言う）。
@@ -1609,6 +1634,21 @@ export function genBass(
   if (walkFallback === "no-chords") bassWarn.push("コードが無いのでウォーキングベース（JZ-WALK）は作れません（従来どおり生成しました）");
   if (walkFallback === "meter-unsupported") bassWarn.push(`この拍子（${info.meter}）ではウォーキングベース（JZ-WALK）に対応していません（従来どおり生成しました）`);
   if (anchorPath && grammarFallback === "unknown-grammar") bassWarn.push(`知らないリフ文法（${opts?.anchorGrammar}）なので既定（${BASS_GRAMMAR_DEFAULT_ID}）で生成しました`);
+  // 錨の契約の**実測**（2026-09-10 監査 中①）：後段（フィル等）を全部通したあとで「キック step にルート錨が残っているか」を
+  //   数え、欠けたら数と理由を告げる。`approach` は上で錨を避けるようにしたので通常はここに来ない＝**残るのはフィル**
+  //   （フィルは「その小節を別の音形に差し替える」道具なので排他にはせず、破れた事実を言う）。anchorLock 未使用なら台帳が
+  //   空＝ループは 0 回＝**従来と 1bit も変わらない**。
+  if (anchorPath && anchorRootPc.size > 0) {
+    let broken = 0, brokenOutsideFill = 0;
+    for (const [t, pc] of anchorRootPc) {
+      const n = notes.find((x) => Math.abs(x.start - t) < 1e-9);
+      if (n && normRoot(n.pitch) === pc) continue;
+      broken++;
+      if (fillReplacedBar === null || Math.floor(t / perBar + 1e-9) !== fillReplacedBar) brokenOutsideFill++;
+    }
+    if (broken > 0 && brokenOutsideFill === 0) bassWarn.push(`フィルを入れた ${fillReplacedBar! + 1} 小節目は音形ごと差し替わるので、その小節のキックにはルートの錨が残っていません（${broken} 個）`);
+    else if (broken > 0) bassWarn.push(`キックに置いたルートの錨のうち ${broken} 個は、後の処理で別の音に入れ替わりました`);
+  }
   if (bassWarn.length) { const o = out as GenResult; o.meta = { ...(o.meta ?? {}), warnings: [...(o.meta?.warnings ?? []), ...bassWarn] }; }
   // relative 要求だが style 経路でない（fig/kick／6-8／skeleton 明示ベース）＝絶対のままフォールバック（escape hatch・報告用）。
   if (wantRelative) {

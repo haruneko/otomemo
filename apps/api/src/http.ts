@@ -488,13 +488,19 @@ export function buildHttp(core: Core): FastifyInstance {
     // melody/bass/chord_pattern へ同一透過＝メロ・ベース・コード楽器が同じノリで跳ねる。未指定=undefined=各生成器へ渡らず従来 bit 一致。
     const feelOpt = b.feel && (b.feel.swing != null || b.feel.humanize != null) ? { swing: b.feel.swing, humanize: b.feel.humanize } : undefined;
     const drums = want.has("rhythm") ? genDrums(genFrame, b.seed, dOpts).items[0]!.content : undefined;
-    const bassContent = want.has("bass") ? (genBass(genFrame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(b.bass ?? {}), ...feelOpt } : b.bass).items[0]!.content as { notes: { pitch: number; start: number; dur: number }[]; feel?: unknown }) : undefined;
+    // 生成器の非ブロック通知（`meta.warnings`）は**応答へ素通しする**（2026-08-29 オーナー裁定「黙って落とさない」）。
+    //   ここまで /gen/section は `{section, composition}` しか返しておらず、ベースの通知（錨が立たなかった／コード追従が
+    //   立たなかった等）が**丸ごと消えていた**＝到達口4口のうち1口が無言（2026-09-10 監査 重大①）。additive なキー追加。
+    const genWarnings: string[] = [];
+    const bassRes = want.has("bass") ? genBass(genFrame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(b.bass ?? {}), ...feelOpt } : b.bass) : undefined;
+    if (bassRes?.meta?.warnings?.length) genWarnings.push(...bassRes.meta.warnings);
+    const bassContent = bassRes ? (bassRes.items[0]!.content as { notes: { pitch: number; start: number; dur: number }[]; feel?: unknown }) : undefined;
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
     if (want.has("chord_pattern")) place("chord_pattern", genChordPattern(genFrame, b.seed, feelOpt).items[0]!.content, "コード楽器");
     if (want.has("melody")) place("melody", genMelody(genFrame, chords, b.seed, { useV2: true, bass: bassContent?.notes, counter: b.melody?.counter, drums: drums as Parameters<typeof genBass>[3], drumLock: b.melody?.drumLock, backbeat: b.melody?.backbeat, converse: b.melody?.converse, ...(feelOpt ?? {}) }).items[0]!.content, "メロ"); // V2化(2026-07-09)＋対位＋ドラム＋共有feel（melody.*/feel 未指定=従来 bit 一致）
     if (want.has("bass")) place("bass", bassContent, "ベース");
     if (want.has("rhythm")) place("rhythm", drums, "ドラム");
-    return { section: core.getNeta(section.id), composition: core.getComposition(section.id) };
+    return { section: core.getNeta(section.id), composition: core.getComposition(section.id), ...(genWarnings.length ? { warnings: genWarnings } : {}) };
   });
 
   // メロ連想 retrieval（S4c）：notes か neta id を渡すと、scope(既定 library) の近いメロを返す。

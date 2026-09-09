@@ -87,11 +87,113 @@ describe("engineVersion＝新経路使用時のみ content に engine:{version}�
   it("anchorLock を頼んでも経路が立たなければ engine を載せず、理由を返す（黙って落とさない）", () => {
     const noDrums = genBass(BF, CHORDS, 3, null, { anchorLock: true });
     expect("engine" in content(noDrums)).toBe(false);
-    expect((noDrums as { anchorLockFallback?: string }).anchorLockFallback).toBe("no-drums");
+    // 通知の口＝**meta.warnings**（2026-08-29 裁定・2026-09-10 監査 重大①でトップレベル独自キーから移した）。
+    expect(noDrums.meta?.warnings).toEqual(["ドラムが無いので「キックにルートを置く」は当てていません（従来どおり生成しました）"]);
+    expect("anchorLockFallback" in noDrums).toBe(false); // 独自キーは残さない（3c `bae525a` と同じ形）
     const compound = genBass({ meter: "6/8", bars: 4 }, CHORDS, 3, DR, { anchorLock: true });
-    expect((compound as { anchorLockFallback?: string }).anchorLockFallback).toBe("compound-meter");
-    // 経路が立たなかった時は従来経路の出力そのもの＝bit 一致
-    expect(noDrums).toStrictEqual({ ...genBass(BF, CHORDS, 3, null, {}), anchorLockFallback: "no-drums" });
+    expect(compound.meta?.warnings?.[0]).toContain("6/8 など複合拍子");
+    // 経路が立たなかった時の**出音**は従来経路そのもの＝bit 一致（通知は meta にしか載らない）
+    expect(content(noDrums).notes).toStrictEqual(content(genBass(BF, CHORDS, 3, null, {})).notes);
+  });
+});
+
+// ── 落ち先の言い分け（2026-09-10 監査 重大①＝「通知が嘘をつくのがいちばん悪い」） ─────────
+describe("フォールバック通知＝落ち先ごとに文言が違い、meta.warnings に載る（gate）", () => {
+  const w = (r: ReturnType<typeof genBass>) => r.meta?.warnings ?? [];
+  const noKick: DrumsInput = { rhythm: { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [
+    { name: "Snare", midi: 38, hits: [4, 12] }, { name: "HiHat", midi: 42, hits: [0, 2, 4, 6, 8, 10, 12, 14] } ] } };
+  const drum12: DrumsInput = { rhythm: { steps: 12, bars: 1, beatsPerStep: 1 / 3, lanes: [{ name: "Kick", midi: 36, hits: [0, 6] }] } };
+  const drumHalfBar: DrumsInput = { rhythm: { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [{ name: "Kick", midi: 36, hits: [0, 8] }] } };
+  const SKEL = { bars: 2, bass: [{ pitch: 40, start: 0 }, { pitch: null, start: 2 }] } as never;
+
+  const cases: [string, ReturnType<typeof genBass>, string][] = [
+    ["no-drums", genBass(BF, CHORDS, 3, null, { anchorLock: true }), "ドラムが無いので"],
+    ["compound-meter", genBass({ meter: "6/8", bars: 4 }, CHORDS, 3, DR, { anchorLock: true }), "複合拍子"],
+    ["drum-bar-mismatch", genBass({ meter: "3/4", bars: 4 }, CHORDS, 3, drumHalfBar, { anchorLock: true }), "1小節の長さが拍子"],
+    ["drum-grid-mismatch", genBass(BF, CHORDS, 3, drum12, { anchorLock: true }), "16分の格子に写せない"],
+    ["no-kick", genBass(BF, CHORDS, 3, noKick, { anchorLock: true }), "キックが無いので"],
+    ["skeleton-explicit-bass", genBass(BF, CHORDS, 3, DR, { anchorLock: true, skeleton: SKEL }), "骨格でベースを明示"],
+  ];
+  for (const [name, res, phrase] of cases) {
+    it(`${name}＝理由に応じた文言が meta.warnings に1本載る`, () => {
+      expect(w(res).some((s) => s.includes(phrase)), `${name}: ${JSON.stringify(w(res))}`).toBe(true);
+      expect("engine" in content(res)).toBe(false); // 立っていないのだから engine は刻まない
+    });
+  }
+  it("文言は落ち先ごとに全部違う（言い分けの実測＝「していないのに言う」も取り違えも無い）", () => {
+    const msgs = cases.map(([, res]) => w(res).find((s) => s.includes("キックにルートを置く"))!);
+    expect(msgs.every((m) => typeof m === "string")).toBe(true);
+    expect(new Set(msgs).size).toBe(cases.length);
+  });
+  it("経路が立った時は通知を出さない（黙るべき時に黙る）", () => {
+    expect(w(genBass(BF, CHORDS, 3, DR, { anchorLock: true }))).toEqual([]);
+  });
+  it("anchorLock を頼んでいなければ通知も meta も生えない（既定 bit 一致）", () => {
+    expect(genBass(BF, CHORDS, 3, null, {}).meta).toBeUndefined();
+  });
+
+  // 中②＝キックレーンが無いドラム：架空の4つ打ちに錨を打たず、出音は従来どおり（＋告知）。
+  it("キックの無いドラムでは錨を打たない＝出音は anchorLock 未指定と bit 一致", () => {
+    expect(content(genBass(BF, CHORDS, 3, noKick, { anchorLock: true })).notes)
+      .toStrictEqual(content(genBass(BF, CHORDS, 3, noKick, {})).notes);
+  });
+  // 重大②＝骨格明示ベース：錨経路を立てず（＝黙って契約が破れない）、出音は従来の骨格表面化どおり。
+  it("骨格が明示したベースが在る時は錨経路を立てない＝出音は anchorLock 未指定と bit 一致", () => {
+    expect(content(genBass(BF, CHORDS, 3, DR, { anchorLock: true, skeleton: SKEL })).notes)
+      .toStrictEqual(content(genBass(BF, CHORDS, 3, DR, { skeleton: SKEL })).notes);
+  });
+});
+
+// ── 中①＝隣のノブと併用したときの錨の契約（design 追補 (k-3)） ────────────────────
+describe("後処理との併用＝approach は錨を避け、fill は破れを数えて告げる（gate）", () => {
+  const KICK = [0, 6, 8, 14];
+  const rootPcAt = (t: number) => CHORDS.filter((c) => c.start <= t + 1e-9).pop()!.root;
+  // 全キック step にルートの錨が残っているか（残っていない start を返す）。
+  const breaks = (ns: Note[], bars = 4): number[] => {
+    const bad: number[] = [];
+    for (let bar = 0; bar < bars; bar++) for (const k of KICK) {
+      const t = bar * 4 + k * 0.25;
+      const n = ns.find((x) => Math.abs(x.start - t) < 1e-9);
+      if (!n || ((n.pitch % 12) + 12) % 12 !== rootPcAt(t)) bad.push(t);
+    }
+    return bad;
+  };
+  it("陽性対照：anchorLock 単独なら錨は1つも破れない", () => {
+    expect(breaks(notesOf(genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true })))).toEqual([]);
+  });
+  it("approach:0.9 と併用しても錨は1つも破れない（順序で守る）＋余計な通知を出さない", () => {
+    const r = genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true, approach: 0.9 });
+    expect(breaks(notesOf(r))).toEqual([]);
+    expect(r.meta?.warnings ?? []).toEqual([]);
+  });
+  it("approach は anchorLock 無しでは従来どおり効く（陰性対照＝「守った」が「殺した」ではない）", () => {
+    const a = notesOf(genBass(BF, CHORDS, 3, drums(KICK), { approach: 0.9 }));
+    const b = notesOf(genBass(BF, CHORDS, 3, drums(KICK), {}));
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+  });
+  it("fill と併用すると錨は破れる＝その事実を数と小節つきで meta.warnings に載せる（黙って壊さない）", () => {
+    const r = genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true, fill: 0.7 });
+    const bad = breaks(notesOf(r));
+    expect(bad.length).toBeGreaterThan(0); // フィル小節は音形ごと差し替わる＝契約は保てない
+    const msg = (r.meta?.warnings ?? []).find((s) => s.includes("フィル"));
+    expect(msg).toBeTruthy();
+    expect(msg).toContain(`（${bad.length} 個）`); // 実測した数を言う＝通知が嘘をつかない
+    expect(msg).toContain("3 小節目"); // bars=4 → フィルは bars-2 ＝ 3小節目
+    expect(bad.every((t) => Math.floor(t / 4) === 2)).toBe(true); // 破れはフィル小節の中だけ
+  });
+});
+
+// ── 中④＝anchorLock 経路そのものの seed 非依存を不変条件として置く ────────────────
+describe("anchorLock 経路は seed に依存しない＝決定的（gate・監査 中④）", () => {
+  it("style 未指定：seed を変えても出力が 1bit も変わらない（RNG を消費しない）", () => {
+    const outs = [1, 2, 7, 42, 999, 12345].map((s) => JSON.stringify(notesOf(genBass(BF, CHORDS, s, DR, { anchorLock: true }))));
+    expect(new Set(outs).size).toBe(1);
+  });
+  it("style 型ID・案B・文法を指定しても seed 非依存（体が固定される経路はすべて）", () => {
+    for (const o of [{ style: "RK-8ROOT" }, { anchorRestOnSyncopatedKick: true }, { anchorGrammar: "gallop_pedal" }]) {
+      const outs = [1, 4, 99].map((s) => JSON.stringify(notesOf(genBass(BF, CHORDS, s, DR, { anchorLock: true, ...o }))));
+      expect(new Set(outs).size, JSON.stringify(o)).toBe(1);
+    }
   });
 });
 

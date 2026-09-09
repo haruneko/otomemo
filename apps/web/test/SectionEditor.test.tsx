@@ -1515,6 +1515,52 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect("anchorGrammar" in body).toBe(false); // 文法は既定（pedal_answer）＝未送信＝3a と同じ体
   });
 
+  // ── 到達口④の通知（2026-09-10 監査 重大①＝ここが完全に無言だった） ──
+  it("T4e 錨が立たなかった通知（meta.warnings）が実際に画面へ出る＝『何も起きず何も言わない』を潰す", async () => {
+    music.mockReset();
+    // ドラムの無いセクションで「キックにルートを置く」を ON にしたときにサーバが返す形そのもの。
+    const WARN = "ドラムが無いので「キックにルートを置く」は当てていません（従来どおり生成しました）";
+    music.mockResolvedValue({ items: [], meta: { warnings: [WARN] } });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
+    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    // 実 DOM に文言が出る（＝aria-label で掴めて、中身が落ち先を言い分けた文章になっている）
+    const el = await screen.findByLabelText("gen-warning");
+    expect(el.textContent).toContain("ドラムが無いので");
+    expect(el.textContent).toContain("キックにルートを置く");
+  });
+
+  it("T4e' 通知が無いときは gen-warning を出さない（陰性対照＝出っぱなしにしない）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
+    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    expect(screen.queryByLabelText("gen-warning")).toBeNull();
+  });
+
   // ── 到達口④＝web TinkerSheet（M3-3d・JZ-WALK＝型直指定の畳みからだけ選べる opt-in） ──
   it("T4d ウォーキング＝型直指定で JZ-WALK を選ぶと body.style で飛ぶ（ジャンル chip には出ない）", async () => {
     music.mockReset();

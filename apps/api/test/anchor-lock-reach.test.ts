@@ -45,9 +45,19 @@ describe("到達口①＝/music/gen_bass（HTTP）", () => {
     expect("engine" in c).toBe(false);
   });
 
-  it("経路が立たない時は理由が返る（no-drums）＝黙って落とさない", async () => {
+  it("経路が立たない時は理由が meta.warnings で返る（no-drums）＝黙って落とさない", async () => {
     const r = await app.inject({ method: "POST", url: "/music/gen_bass", payload: { frame: FRAME, chords: CHORDS, seed: 42, anchorLock: true } });
-    expect((r.json() as { anchorLockFallback?: string }).anchorLockFallback).toBe("no-drums");
+    const j = r.json() as { meta?: { warnings?: string[] }; anchorLockFallback?: string };
+    expect(j.meta?.warnings?.[0]).toContain("ドラムが無いので");
+    expect("anchorLockFallback" in j).toBe(false); // 独自キーは残さない（3c と同じ形・監査 重大①）
+  });
+
+  it("落ち先ごとに文言が違う（6/8＝複合拍子／キックレーン無し）", async () => {
+    const compound = await app.inject({ method: "POST", url: "/music/gen_bass", payload: { frame: { ...FRAME, meter: "6/8" }, chords: CHORDS, seed: 42, drums: DR, anchorLock: true } });
+    expect((compound.json() as { meta?: { warnings?: string[] } }).meta?.warnings?.[0]).toContain("複合拍子");
+    const noKick: DrumsInput = { rhythm: { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [{ name: "Snare", midi: 38, hits: [4, 12] }] } };
+    const nk = await app.inject({ method: "POST", url: "/music/gen_bass", payload: { frame: FRAME, chords: CHORDS, seed: 42, drums: noKick, anchorLock: true } });
+    expect((nk.json() as { meta?: { warnings?: string[] } }).meta?.warnings?.[0]).toContain("キックが無いので");
   });
 });
 
@@ -81,6 +91,13 @@ describe("到達口②＝MCP gen_bass", () => {
     const b = await call({ anchorLock: true, anchorRestOnSyncopatedKick: true });
     expect(b.items[0]!.content.notes).toEqual(direct({ anchorLock: true, anchorRestOnSyncopatedKick: true }).notes);
     expect(b.items[0]!.content.notes.length).toBeLessThan(a.items[0]!.content.notes.length);
+  });
+  it("経路が立たなかった通知が MCP の戻り JSON（meta.warnings）に載る＝Chat 入口でも黙らない", async () => {
+    const client = await connect();
+    const r = await client.callTool({ name: "gen_bass", arguments: { frame: FRAME, chords: CHORDS, seed: 42, anchorLock: true } }); // drums 無し
+    const j = JSON.parse(textOf(r)) as { meta?: { warnings?: string[] }; anchorLockFallback?: string };
+    expect(j.meta?.warnings?.[0]).toContain("ドラムが無いので");
+    expect("anchorLockFallback" in j).toBe(false);
   });
 });
 
@@ -120,6 +137,21 @@ describe("到達口③＝/gen/section（body.bass 素通し）", () => {
     const off = (genBass(frame, chords, seed, drums, { anchorLock: true }).items[0]!.content as { notes: Note[] }).notes;
     expect(bass.notes).toEqual(on);
     expect(on.length).toBeLessThanOrEqual(off.length); // 案B は錨を増やさない（減るか同じ）
+  });
+
+  it("経路が立たなかった通知が /gen/section の応答にも残る（監査 重大①＝ここで丸ごと消えていた）", async () => {
+    // parts に drums を入れない＝ドラムが作られない＝anchorLock は no-drums で落ちる。
+    const r = await app.inject({ method: "POST", url: "/gen/section", payload: { frame: { bars: 2, meter: "4/4", key: 0 }, seed: 42, parts: ["chords", "bass"], bass: { anchorLock: true } } });
+    expect(r.statusCode).toBe(200);
+    const j = r.json() as { warnings?: string[]; composition: { children: { node: { neta: { kind: string; content: Record<string, unknown> } } }[] } };
+    expect(j.warnings?.some((w) => w.includes("ドラムが無いので")), JSON.stringify(j.warnings)).toBe(true);
+    const bass = j.composition.children.find((c) => c.node.neta.kind === "bass")!.node.neta.content;
+    expect("engine" in bass).toBe(false); // 通知どおり経路は立っていない
+  });
+
+  it("通知が無いときは warnings キー自体を生やさない（従来応答形＝回帰）", async () => {
+    const r = await app.inject({ method: "POST", url: "/gen/section", payload: { frame: { bars: 2, meter: "4/4", key: 0 }, seed: 42, parts: ["chords", "bass", "drums"], bass: { anchorLock: true } } });
+    expect("warnings" in (r.json() as object)).toBe(false);
   });
 
   it("bass ノブ未指定は従来と bit 一致（回帰・engine キーも生えない）", async () => {
