@@ -155,6 +155,57 @@ export class PyRandom {
   }
 
   uniform(lo: number, hi: number): number { return lo + (hi - lo) * this.random(); }
+
+  /**
+   * CPython Random.choices（Lib/random.py 3.12 と同じ手順）。
+   * 重み無し＝population[floor(random() * n)]。重み有り＝左から累積（itertools.accumulate）→
+   * bisect_right(cum, random() * total, 0, n-1)。gauss は計画で不要（feel 層送り）なので持たない。
+   */
+  choices<T>(
+    population: readonly T[],
+    opts: { weights?: readonly number[]; cumWeights?: readonly number[]; k?: number } = {},
+  ): T[] {
+    const n = population.length;
+    const k = opts.k ?? 1;
+    const out: T[] = [];
+    let cum = opts.cumWeights;
+    if (cum === undefined) {
+      if (opts.weights === undefined) {
+        for (let i = 0; i < k; i++) out.push(population[Math.floor(this.random() * n)]!);
+        return out;
+      }
+      const acc: number[] = [];
+      let s = 0;
+      opts.weights.forEach((w, i) => { s = i === 0 ? w : s + w; acc.push(s); });
+      cum = acc;
+    } else if (opts.weights !== undefined) {
+      throw new TypeError("Cannot specify both weights and cumulative weights");
+    }
+    if (cum.length !== n) throw new RangeError("The number of weights does not match the population");
+    const total = cum[n - 1]!;
+    if (!(total > 0)) throw new RangeError("Total of weights must be greater than zero");
+    if (!Number.isFinite(total)) throw new RangeError("Total of weights must be finite");
+    const hi = n - 1;
+    for (let i = 0; i < k; i++) {
+      const x = this.random() * total;
+      let lo = 0, h = hi; // bisect_right(cum, x, 0, hi)
+      while (lo < h) { const mid = (lo + h) >> 1; if (x < cum[mid]!) h = mid; else lo = mid + 1; }
+      out.push(population[lo]!);
+    }
+    return out;
+  }
+
+  /** CPython getstate()[1] 相当＝624 語＋index の 625 要素（gauss_next は持たない）。 */
+  getState(): number[] { return [...this.mt, this.mti]; }
+
+  /** CPython setstate() 相当。getState() の戻り値（または Python の state[1]）を受ける。 */
+  setState(state: readonly number[]): void {
+    if (state.length !== N + 1) throw new RangeError(`state length must be ${N + 1}`);
+    const idx = state[N]!;
+    if (!(idx >= 0 && idx <= N)) throw new RangeError("invalid state index");
+    for (let i = 0; i < N; i++) this.mt[i] = state[i]! >>> 0;
+    this.mti = idx;
+  }
 }
 
 // ---------------------------------------------------------------------------
