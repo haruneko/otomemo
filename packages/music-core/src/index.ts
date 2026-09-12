@@ -62,6 +62,11 @@ export * from "./chordFollow";
 // 乱数タイブレークを決定的規則へ置換したもの。**耳未判定**＝style を名指しした時だけ立つ opt-in。
 export * from "./walkingBass";
 
+// ギター（M5）＝phrase_maker ギター gen2 のリフ文法3型・chordtheory・コード追従（撤去済みのアプローチ分岐は落とした）・
+// 譜のキックへの chug ロック（ヒット単位のボイシング切替＝ChordHit.voice）。相対形のまま＝音高は実音化で出す。
+// 参照値＝tools/py-parity/cases-guitar/。既定挙動は不変（opt-in 経路 guitarRiff からのみ消費）。
+export * from "./guitarRiff";
+
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python
 // 互換 MT19937 の相関 Breath）。既定挙動は不変（本モジュールは opt-in 経路からのみ消費される）。
