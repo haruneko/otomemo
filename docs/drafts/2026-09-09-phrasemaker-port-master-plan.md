@@ -736,7 +736,7 @@ M3(ベース本体：3g py-parity → 3a…) ─→ M5(ギター) ─→ M6a(裁
 7. **到達口**＝`/music/gen_bass`・MCP `gen_bass`・`/gen/section`・web seg の4口から `anchorLock:true` が届くこと（受け入れ監査は別の人が抜き打ちで）。
 
 ### §11-4 着手と同時にやる1回きりの作業
-- `experiments/quality_eval/` と `data/quarantine/` の保全コピー（otomemo 外）。
+- ✅ `experiments/quality_eval/` と `data/quarantine/` の保全コピー（otomemo 外）＝**2026-09-10 実施**（受け入れ監査 中⑤で未実施を指摘されて消化）。置き場＝`~/backup/phrase_maker-quality_eval-2026-09-10/`（`quality_eval` 403MB・788 ファイル／`quarantine` 182MB・8,677 ファイル＝計 585MB・`cp -a`・ファイル数を照合済み）。**otomemo リポジトリの中には置かない**＝他者コーパス由来（GMD 等）が混じるため（著作権の硬い線＝統計のみ・リテラルは持たない）。
 - 引き継ぎ書（`2026-08-21-phrasemaker-arc-handoff.md:16-17`）のマイルストーン表を §5-1 の割りへ更新。
 - research README の当該行に「訂正注記＝本計画 §3-2 参照」を追記。
 - `PM_ENGINE_VERSION` を `rngSalt.ts` の隣に置く。
