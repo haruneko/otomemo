@@ -1,0 +1,1065 @@
+{
+ "case": {
+  "accents": [],
+  "beats_per_chord": 4.0,
+  "grammar": "gallop",
+  "id": "gallop__altered__kdense",
+  "kick": [
+   0,
+   3,
+   6,
+   8,
+   11,
+   14
+  ],
+  "progression": "Bdim Caug E7 Am"
+ },
+ "expected": [
+  {
+   "anchor": true,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "chug",
+   "start": 0.0,
+   "step": 0,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "pedal",
+   "start": 0.2,
+   "step": 2,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "chug",
+   "start": 0.30000000000000004,
+   "step": 3,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "head",
+   "start": 0.4,
+   "step": 4,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "chug",
+   "start": 0.6000000000000001,
+   "step": 6,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "pedal",
+   "start": 0.7000000000000001,
+   "step": 7,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "chug",
+   "start": 0.8,
+   "step": 8,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "pedal",
+   "start": 1.0,
+   "step": 10,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "chug",
+   "start": 1.1,
+   "step": 11,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "head",
+   "start": 1.2000000000000002,
+   "step": 12,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 0,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 47,
+   "role": "chug",
+   "start": 1.4000000000000001,
+   "step": 14,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 0,
+   "deg": 6,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 50,
+   "role": "blue",
+   "start": 1.5,
+   "step": 15,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "chug",
+   "start": 1.6,
+   "step": 16,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "pedal",
+   "start": 1.8,
+   "step": 18,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "chug",
+   "start": 1.9000000000000001,
+   "step": 19,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "head",
+   "start": 2.0,
+   "step": 20,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "chug",
+   "start": 2.2,
+   "step": 22,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "pedal",
+   "start": 2.3000000000000003,
+   "step": 23,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "chug",
+   "start": 2.4000000000000004,
+   "step": 24,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "pedal",
+   "start": 2.6,
+   "step": 26,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "chug",
+   "start": 2.7,
+   "step": 27,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "head",
+   "start": 2.8000000000000003,
+   "step": 28,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 1,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "chug",
+   "start": 3.0,
+   "step": 30,
+   "strong": true,
+   "voic": [
+    0,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 1,
+   "deg": 1,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 48,
+   "role": "climb",
+   "start": 3.1,
+   "step": 31,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "chug",
+   "start": 3.2,
+   "step": 32,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "pedal",
+   "start": 3.4000000000000004,
+   "step": 34,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "chug",
+   "start": 3.5,
+   "step": 35,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "head",
+   "start": 3.6,
+   "step": 36,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "chug",
+   "start": 3.8000000000000003,
+   "step": 38,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "pedal",
+   "start": 3.9000000000000004,
+   "step": 39,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "chug",
+   "start": 4.0,
+   "step": 40,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "pedal",
+   "start": 4.2,
+   "step": 42,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "chug",
+   "start": 4.3,
+   "step": 43,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "head",
+   "start": 4.4,
+   "step": 44,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 2,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 40,
+   "role": "chug",
+   "start": 4.6000000000000005,
+   "step": 46,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 2,
+   "deg": 6,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "blue",
+   "start": 4.7,
+   "step": 47,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "chug",
+   "start": 4.800000000000001,
+   "step": 48,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "pedal",
+   "start": 5.0,
+   "step": 50,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "chug",
+   "start": 5.1000000000000005,
+   "step": 51,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "head",
+   "start": 5.2,
+   "step": 52,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "chug",
+   "start": 5.4,
+   "step": 54,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "pedal",
+   "start": 5.5,
+   "step": 55,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "chug",
+   "start": 5.6000000000000005,
+   "step": 56,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "pedal",
+   "start": 5.800000000000001,
+   "step": 58,
+   "strong": false,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "chug",
+   "start": 5.9,
+   "step": 59,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": false,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.11050000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "head",
+   "start": 6.0,
+   "step": 60,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 3,
+   "deg": 0,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "chug",
+   "start": 6.2,
+   "step": 62,
+   "strong": true,
+   "voic": [
+    0,
+    7,
+    12
+   ],
+   "voicing": [
+    0,
+    7,
+    12
+   ]
+  },
+  {
+   "anchor": true,
+   "chord_idx": 3,
+   "deg": 1,
+   "dur": 0.05525000000000001,
+   "kind": "note",
+   "pitch": 45,
+   "role": "climb",
+   "start": 6.300000000000001,
+   "step": 63,
+   "strong": true,
+   "voic": [
+    0
+   ],
+   "voicing": [
+    0
+   ]
+  }
+ ],
+ "input": {
+  "chords": [
+   {
+    "bass_pc": 11,
+    "name": "Bdim",
+    "pedal_pc": 11,
+    "perfect_fifth": false,
+    "quality": "dim",
+    "root_pc": 11,
+    "scale_pcs": [
+     0,
+     2,
+     4,
+     5,
+     7,
+     9,
+     11
+    ],
+    "tone_pcs": [
+     2,
+     5,
+     11
+    ]
+   },
+   {
+    "bass_pc": 0,
+    "name": "Caug",
+    "pedal_pc": 0,
+    "perfect_fifth": false,
+    "quality": "aug",
+    "root_pc": 0,
+    "scale_pcs": [
+     0,
+     2,
+     4,
+     6,
+     8,
+     10
+    ],
+    "tone_pcs": [
+     0,
+     4,
+     8
+    ]
+   },
+   {
+    "bass_pc": 4,
+    "name": "E7",
+    "pedal_pc": 4,
+    "perfect_fifth": true,
+    "quality": "7",
+    "root_pc": 4,
+    "scale_pcs": [
+     1,
+     2,
+     4,
+     6,
+     8,
+     9,
+     11
+    ],
+    "tone_pcs": [
+     2,
+     4,
+     8,
+     11
+    ]
+   },
+   {
+    "bass_pc": 9,
+    "name": "Am",
+    "pedal_pc": 9,
+    "perfect_fifth": true,
+    "quality": "m",
+    "root_pc": 9,
+    "scale_pcs": [
+     0,
+     2,
+     4,
+     5,
+     7,
+     9,
+     11
+    ],
+    "tone_pcs": [
+     0,
+     4,
+     9
+    ]
+   }
+  ],
+  "n_bars": 4,
+  "palm_gate": 0.65,
+  "step_dur": 0.1,
+  "steps_per_chord": 16,
+  "tempo": 150,
+  "total_steps": 64
+ }
+}
