@@ -28,7 +28,8 @@ import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
 import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, type AnchorOnset, type AnchorSeg } from "@cm/music-core"; // M3-3a＝錨と間の分業（_lock_bass_roots_to_sheet 忠実移植）。opt-in `anchorLock` 経路でのみ消費＝既定は bit 一致。
-import { applyChordFollow, QUALITY_INTERVALS as CF_QUALITY_INTERVALS, type CfLineOnset, type CfSeg } from "@cm/music-core"; // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
+import { applyChordFollow, QUALITY_INTERVALS as CF_QUALITY_INTERVALS, type CfLineOnset, type CfSeg } from "@cm/music-core";
+import { guitarGrammarById, GUITAR_GRAMMAR_IDS, buildGuitarSkeleton, lockGuitarChugToSheet, gtrOnsetsToHits, realizeGuitarRiff, fretboardGate, TUNING_GUITAR6 } from "@cm/music-core"; // M5＝ギター型（opt-in `guitarRiff` 経路でのみ消費＝既定は bit 一致）。 // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
 import { buildWalkingLine, WALK_COMPOUND_SLOT_STEPS, JZ_WALK_ID, type WalkSegment } from "@cm/music-core"; // M3-3d＝JZ-WALK（walking v2 の候補生成＋v3 の規則3本・乱数は決定的規則へ置換）。**耳未判定**＝style 名指しの opt-in。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
 import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
@@ -961,7 +962,16 @@ export function genFromEssence(
 export function genChordPattern(
   frame?: Frame | null,
   seed?: number | null,
-  opts?: { style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number } | null,
+  opts?: {
+    style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number;
+    // M5 ギター型（phrase_maker ギター gen2 移植・**既定 OFF**＝どれも未指定なら下の従来経路と 1bit も変わらない）：
+    //   guitarRiff＝リフ文法3型（power_chug/pedal_answer/gallop）を相対形の hits（ChordHit.voice/riff 注記）で返す／
+    //   anchorLock＝譜（drums）のキック step に POWER8 の刻みを必ず置く（_lock_guitar_chug_to_sheet）／
+    //   guitarShape＝音高を「手の形」ソルバで出す（**耳未判定の試作**・重みは otomemo 仮置き）／
+    //   drums＝キックの出所／chords＝進行（api は音を返さないが、進行があれば実音化して検算し通知する＝5f）。
+    guitarRiff?: string; anchorLock?: boolean; guitarShape?: boolean; drums?: DrumsInput | null;
+    chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[] | null;
+  } | null,
 ): GenResult {
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 5);
@@ -973,6 +983,78 @@ export function genChordPattern(
   const bars = barsOf(f);
   const stepsPerBar = Math.round(info.beatsPerBar * 4); // 16分グリッド：4/4=16, 6/8=12, 3/4=12
   const steps = bars * stepsPerBar;
+  // --- M5 ギター型（計画 §5-2 M5・design.md 追補 (k)）----------------------------------------------------------
+  //   **相対形のまま**（ギター型に絶対 notes を載せない）：ヒット単位のボイシングは `ChordHit.voice`（mono/power/power8）、
+  //   コード追従が読む注記は `ChordHit.riff`（kind/deg/role/anchor/strong）に additive で載せ、音高は web の実音化が
+  //   music-core `realizeGuitarRiff` で出す（api と同じ1本）。立たない時は黙って落とさず `meta.warnings` で言い分ける。
+  const gtrWarn: string[] = [];
+  const attachGtrWarn = (r: GenResult): GenResult => (gtrWarn.length ? { ...r, meta: { ...(r.meta ?? {}), warnings: [...(r.meta?.warnings ?? []), ...gtrWarn] } } : r);
+  const GTR_LOCK = "「キックに刻みを揃える」";
+  const GTR_SHAPE = "「手の形で弾く」";
+  if (opts?.guitarRiff == null && (opts?.anchorLock === true || opts?.guitarShape === true)) {
+    gtrWarn.push(`ギターのリフ文法を選んだ時だけ${opts?.anchorLock === true ? GTR_LOCK : GTR_SHAPE}が効きます（従来どおり生成しました）`);
+  }
+  if (opts?.guitarRiff != null) {
+    const grammar = guitarGrammarById(opts.guitarRiff);
+    if (!grammar) gtrWarn.push(`知らないギターのリフ文法（${opts.guitarRiff}）なので従来どおり生成しました（選べるのは ${GUITAR_GRAMMAR_IDS.join(" / ")}）`);
+    else if (info.grouping === "compound" || stepsPerBar !== 16) gtrWarn.push(`この拍子（${info.meter}）ではギターのリフ文法に対応していません（4/4 のみ・従来どおり生成しました）`);
+    else {
+      let onsets = buildGuitarSkeleton(grammar, steps);
+      // 5a 譜のキックへの chug ロック（成立条件は genBass の anchorLock と同じ並び・落ち先ごとに言い分ける）。
+      let lockKick: number[] | null = null;
+      if (opts.anchorLock === true) {
+        const dr = parseDrums(opts.drums);
+        const scale = dr ? 16 / dr.steps : 0;
+        const fb = !dr ? `ドラムが無いので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
+          : Math.abs(dr.steps * dr.bps - info.beatsPerBar) >= 1e-6 ? `ドラムの1小節の長さが拍子（${info.meter}）と合わないので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
+          : !Number.isInteger(scale) || scale < 1 ? `ドラムの刻みが16分の格子に写せないので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
+          : dr.kick.length === 0 ? `ドラムにキックが無いので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
+          : null;
+        if (fb) gtrWarn.push(fb);
+        else {
+          lockKick = dr!.kick.map((k) => k * scale);
+          // accents は常に空＝otomemo のドラム content は kick/snare のみ（M3 の決定2を引き継ぐ）＝アクセント権限の一本化で
+          //   文法のアクセントは note へ均される（源流どおり）。
+          onsets = lockGuitarChugToSheet(onsets, { totalSteps: steps, kick: lockKick, accents: [], palmGate: grammar.palmGate }).onsets;
+        }
+      }
+      const pitchEngine = opts.guitarShape === true ? "handshape" as const : "chordfollow" as const;
+      const content = {
+        mode: "strum" as CompMode,
+        voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, style: "guitar" as const },
+        steps,
+        hits: gtrOnsetsToHits(onsets),
+        guitarRiff: { grammar: grammar.id, pitch: pitchEngine, ...(lockKick ? { anchorLock: true as const } : {}), ...(pitchEngine === "handshape" ? { seed: seed ?? 5 } : {}) },
+        engine: { version: PM_ENGINE_VERSION },
+      };
+      const finalContent = withFeel(content);
+      // 契約の**実測**は最終出力に対して（監査の教訓＝後段が黙って契約を破らないか）：全小節の全キック step に錨の POWER 形が在るか。
+      if (lockKick) {
+        let broken = 0;
+        for (let b = 0; b < bars; b++) for (const k of lockKick) {
+          const h = finalContent.hits.find((x) => x.step === b * 16 + k);
+          if (!h || !h.riff.anchor || h.voice === "mono") broken++;
+        }
+        if (broken > 0) gtrWarn.push(`キックに揃えた刻みのうち ${broken} 個が最終出力で欠けています`);
+      }
+      // 5f 進行が来ていれば、web と同じ実音化で検算して告げる（音は返さない＝相対形のまま）。
+      const cs = (opts.chords ?? []).filter((x) => x && x.root != null);
+      if (cs.length > 0) {
+        const chordAtStep = (step: number) => {
+          const beat = step * 0.25;
+          return cs.find((x) => (x.start ?? 0) <= beat + 1e-9 && beat < (x.start ?? 0) + (x.dur ?? 4) - 1e-9) ?? cs[cs.length - 1]!;
+        };
+        const real = realizeGuitarRiff(finalContent.hits, { chordAtStep: (s) => { const x = chordAtStep(s); return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 });
+        if (real.report.layerBQualities.length) gtrWarn.push(`ギターの表に無いコード（${real.report.layerBQualities.join("・")}）はベースと同じ教科書スケールで代用しました`);
+        if (real.report.unknownQualities.length) gtrWarn.push(`知らないコードの種類（${real.report.unknownQualities.join("・")}）はメジャーとして弾きます`);
+        if (real.report.shape && real.report.shape.emptyLayers > 0) gtrWarn.push(`${GTR_SHAPE}で押さえ方が見つからない音が ${real.report.shape.emptyLayers} 個あり、その音はコード追従の音高にしました`);
+        if (real.report.shape && real.report.shape.tier > 0) gtrWarn.push(`${GTR_SHAPE}で手の移動が間に合わない所があったので、移動の速さの制限を${real.report.shape.tier === 1 ? "2倍に緩めました" : "外しました"}`);
+        const fg = fretboardGate(real.notes.map((n) => n.pitch), TUNING_GUITAR6);
+        if (!fg.pass) gtrWarn.push(`6弦ギターで押さえられない音が ${fg.problems.length} 個あります`);
+      }
+      return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: `ギターのリフ（${grammar.id}）` }], edges: [] });
+    }
+  }
   // 選ばれた CompType から content（mode/voicing/steps/hits/lh）を組み立てる純関数（単数/複数で共有）。
   const buildCompContent = (compType: CompType) => {
     // アレンジS1 contract④（2026-08-02・design「### アレンジS1＝写像規則の契約」）：**サイクル（型の bars）単位**の
@@ -1039,7 +1121,7 @@ export function genChordPattern(
   if (canLib && variety >= 2 && !compTypeById(opts!.pattern!)) {
     const types = pickCompTypes(opts!.pattern!, f.section?.role, f.tempo, seed ?? 5, variety).filter((ct) => ct.grid === stepsPerBar);
     if (types.length) {
-      return { items: types.map((ct) => ({ kind: "chord_pattern", content: withFeel(buildCompContent(ct)), label: `${ct.id} ${ct.scenes}` })), edges: [] };
+      return attachGtrWarn({ items: types.map((ct) => ({ kind: "chord_pattern", content: withFeel(buildCompContent(ct)), label: `${ct.id} ${ct.scenes}` })), edges: [] });
     }
   }
   // 伴奏パターン型辞書（chordLibrary・S2）：pattern=型ID or ジャンル名。4/4（16セル）＋6/8（12セル・world68）。
@@ -1049,7 +1131,7 @@ export function genChordPattern(
     : null;
   if (compType && compType.grid !== stepsPerBar) compType = null; // grid 不一致（4/4型を6/8枠へ等）は敷けない＝従来経路
   if (compType) {
-    return { items: [{ kind: "chord_pattern", content: withFeel(buildCompContent(compType)), label: "コード楽器" }], edges: [] };
+    return attachGtrWarn({ items: [{ kind: "chord_pattern", content: withFeel(buildCompContent(compType)), label: "コード楽器" }], edges: [] });
   }
   const bias = densityBias(f.mood ?? "", f.tempo);
   const per = bias.long >= 1.5 ? stepsPerBar : bias.busy >= 1.5 ? 2 : 4; // sparse=小節頭/busy=八分/既定=拍頭
@@ -1066,7 +1148,7 @@ export function genChordPattern(
     ...(opts?.strumMs != null ? { strumMs: opts.strumMs } : {}),
   };
   const content = { mode, voicing, steps, hits };
-  return { items: [{ kind: "chord_pattern", content: withFeel(content), label: "コード楽器" }], edges: [] };
+  return attachGtrWarn({ items: [{ kind: "chord_pattern", content: withFeel(content), label: "コード楽器" }], edges: [] });
 }
 
 // ドラム入力（genDrums content と同形）＝gen_bass のドラム結線用（design「gen_bass×ドラム結線」2026-07-10）。

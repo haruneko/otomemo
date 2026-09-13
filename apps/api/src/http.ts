@@ -349,7 +349,13 @@ export function buildHttp(core: Core): FastifyInstance {
           const cpVariety = typeof b.variety === "number" ? b.variety : undefined; // スライスC：候補を複数返す（既定1=単数=bit一致）
           const cpSwing = typeof b.swing === "number" ? b.swing : undefined; // S4：swing/humanize=feel 添付（未指定=従来 bit 一致）
           const cpHumanize = typeof b.humanize === "number" ? b.humanize : undefined;
-          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize } : undefined);
+          // M5 ギター型（既定 OFF）：guitarRiff＝リフ文法 ID／anchorLock＝キックに刻みを揃える（drums が要る）／
+          //   guitarShape＝手の形で弾く（耳未判定）／chords＝進行（検算して meta.warnings で告げる）。true/文字列のときだけ立つ。
+          const cpRiff = typeof b.guitarRiff === "string" && b.guitarRiff ? b.guitarRiff : undefined;
+          const cpAnchor = b.anchorLock === true ? true : undefined;
+          const cpShape = b.guitarShape === true ? true : undefined;
+          const cpGtr = cpRiff != null || cpAnchor != null || cpShape != null;
+          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null || cpGtr ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize, ...(cpGtr ? { guitarRiff: cpRiff, anchorLock: cpAnchor, guitarShape: cpShape, drums: b.drums, chords: asChords(b.chords) } : {}) } : undefined);
         }
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
@@ -443,7 +449,7 @@ export function buildHttp(core: Core): FastifyInstance {
     // ④是正（2026-08-29・受け入れ監査）：fillStyle 型注釈が "grid"|"physical" のままで、実行時は "body"(M3) が
     // キャストを通じて素通りしていた（型の嘘）。実態＝DrumsGenOpts.fillStyle に合わせ "body" を追加し、
     // fillLength/fillBeat/body系ノブも body?.drums 経由で受けて落とさず渡す。
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean; anchorGrammar?: string; chordFollow?: boolean }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean; anchorGrammar?: string; chordFollow?: boolean }; chord?: { guitarRiff?: string; anchorLock?: boolean; guitarShape?: boolean }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
     const frame = b.frame ?? {};
     // カスケード合図の配布（design 306「配り役」と同型＝feel と同じ様式で全生成器へ同じ1枚を配る）。
     //   body.cues＝このセクションの人が書いた合図（Cue[]）。deriveCues で導出（保存 land 破棄・範囲外無視・越境 land 導出）して
@@ -496,7 +502,15 @@ export function buildHttp(core: Core): FastifyInstance {
     if (bassRes?.meta?.warnings?.length) genWarnings.push(...bassRes.meta.warnings);
     const bassContent = bassRes ? (bassRes.items[0]!.content as { notes: { pitch: number; start: number; dur: number }[]; feel?: unknown }) : undefined;
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
-    if (want.has("chord_pattern")) place("chord_pattern", genChordPattern(genFrame, b.seed, feelOpt).items[0]!.content, "コード楽器");
+    // M5 ギター型（body.chord:{guitarRiff,anchorLock,guitarShape}）：生成済みドラムと進行を渡す。**body.chord 未指定＝従来の呼び出しそのまま＝bit 一致**。
+    const chordGtr = b.chord && (typeof b.chord.guitarRiff === "string" || b.chord.anchorLock === true || b.chord.guitarShape === true)
+      ? { guitarRiff: typeof b.chord.guitarRiff === "string" ? b.chord.guitarRiff : undefined, anchorLock: b.chord.anchorLock === true ? true : undefined, guitarShape: b.chord.guitarShape === true ? true : undefined }
+      : undefined;
+    if (want.has("chord_pattern")) {
+      const cpRes = chordGtr ? genChordPattern(genFrame, b.seed, { ...(feelOpt ?? {}), ...chordGtr, drums: drums as Parameters<typeof genBass>[3], chords }) : genChordPattern(genFrame, b.seed, feelOpt);
+      if (cpRes.meta?.warnings?.length) genWarnings.push(...cpRes.meta.warnings);
+      place("chord_pattern", cpRes.items[0]!.content, "コード楽器");
+    }
     if (want.has("melody")) place("melody", genMelody(genFrame, chords, b.seed, { useV2: true, bass: bassContent?.notes, counter: b.melody?.counter, drums: drums as Parameters<typeof genBass>[3], drumLock: b.melody?.drumLock, backbeat: b.melody?.backbeat, converse: b.melody?.converse, ...(feelOpt ?? {}) }).items[0]!.content, "メロ"); // V2化(2026-07-09)＋対位＋ドラム＋共有feel（melody.*/feel 未指定=従来 bit 一致）
     if (want.has("bass")) place("bass", bassContent, "ベース");
     if (want.has("rhythm")) place("rhythm", drums, "ドラム");
