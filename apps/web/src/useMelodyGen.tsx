@@ -225,6 +225,10 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // コード楽器（chord_pattern）の伴奏パターン型ライブラリ（スライスC「聴いて選ぶ」）：""=おまかせ(omakase＝role/tempo 全体から)。
   // ジャンル名(ballad/rock/citypop/dance/folk) or 型ID直指定。genPart(gen_chord_pattern) が variety と共に body.pattern へ流す。
   const [compStyle, setCompStyle] = useState<string>("");
+  // M5 ギター型（phrase_maker ギター gen2 移植）：""＝使わない（未送信＝従来 bit 一致）。立っている時はライブラリでなく生成器を叩く。
+  const [gtrRiff, setGtrRiff] = useState<string>(""); // リフ文法（power_chug/pedal_answer/gallop）
+  const [gtrAnchor, setGtrAnchor] = useState<boolean>(false); // キックに刻みを揃える（ドラムが要る）
+  const [gtrShape, setGtrShape] = useState<boolean>(false); // 手の形で弾く（耳未判定の試作）
   // ベース×ドラムノブ（奏法UIスライスD・design「gen_bass×ドラム結線」／slashBass）：UI未露出だった4ノブを「細かく（ドラム絡み）」群へ。
   // 全て 0/false＝未送信＝従来 bit 一致。kickLock/snareGap/approach はドラム在時のみ効く（API 挙動＝hint 文言で伝える）。
   const [bassKickLock, setBassKickLock] = useState<number>(0); // キックに噛む -1..1（負=逆相・キック裏8分）。0=OFF。
@@ -324,7 +328,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // ↑ JZ-WALK（M3-3d）はネタ帳ライブラリに無い**生成器だけの型**（毎回解く・相対パターンでもない）＝
       //   ここに入れないと web からはライブラリ検索に落ちて**候補0＝何も起きない**（＝触れないノブ＝硬化）。
       const libKind =
-        part.op === "gen_chord_pattern" ? "chord_pattern"
+        part.op === "gen_chord_pattern" && !gtrRiff ? "chord_pattern" // M5 ギター型はライブラリに無い＝生成器へ（入れないと触れないノブ）
         : part.op === "gen_drums" && !drumsWantsGen ? "rhythm"
         : part.op === "gen_bass" && !bassWantsGen ? "bass"
         : null;
@@ -423,6 +427,12 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       if (part.op === "gen_chord_pattern") {
         body.pattern = compStyle || "omakase";
         body.variety = 4;
+        // M5 ギター型：文法を選んだ時だけ送る（""＝未送信＝従来）。錨はドラムがあれば同送（無ければ api が理由を返す）。
+        if (gtrRiff) {
+          body.guitarRiff = gtrRiff;
+          if (gtrAnchor) { body.anchorLock = true; const d = ctx.sectionDrums(); if (d) body.drums = d; }
+          if (gtrShape) body.guitarShape = true;
+        }
       }
       const r = await api.music<{ items: { kind: string; content: unknown; label?: string; meta?: CandMeta }[]; meta?: { warnings?: string[] } }>(part.op, body);
       // meta.warnings＝サーバが黙らず伝える非ブロック警告（例：body フィルが解けず型辞書へ落ちた・bars 上限クランプ）。
@@ -663,6 +673,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     drumFillStyle, setDrumFillStyle, drumBodyAim, setDrumBodyAim, drumBodyDrummer, setDrumBodyDrummer, // フィルの作り方＝格子/型辞書/解いて作る（M2/M3）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
+    gtrRiff, setGtrRiff, gtrAnchor, setGtrAnchor, gtrShape, setGtrShape, // M5 ギター型（リフ文法・キックに刻み・手の形）
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, // 錨と間の分業（M3-3a）
     bassChordFollow, setBassChordFollow, // コード追従の5ガード（M3-3b）

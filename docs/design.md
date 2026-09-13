@@ -2256,6 +2256,24 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
         契約を守らせると道具の意味が消える。代わりに**全後処理を通したあとで契約を実測**し（キック step にルート錨が
         残っているか）、欠けた数と小節を `meta.warnings` に載せる。**実測してから言う**ので通知が嘘をつかない。
       - この実測は `anchorLock` 未使用なら台帳が空＝0 回のループ＝**既定の出音は 1bit も変わらない**。
+    - **(k-4) M5 ギターが着地した形（2026-09-13）**：
+      - **相対形のまま解いた**（ギター型に絶対 notes を載せない＝配置時の調の扱い `music.ts:1174-1183` に触れない）。
+        ヒット単位のボイシング（源流の MONO→POWER8 上書き）は **`ChordHit.voice?: "mono"|"power"|"power8"`**、コード追従が読む
+        注記は **`ChordHit.riff?: {kind,deg,role,anchor,strong}`**（`vel?`/`dir?` と同じ additive の前例）。content 側の印は
+        **`guitarRiff?: {grammar, pitch:"chordfollow"|"handshape", anchorLock?, seed?}`**＋`engine`＝**生えるのはギター経路だけ**。
+      - **音高は music-core `realizeGuitarRiff` の1本**＝web の `resolveChordPattern`（再生）と api の検算（通知）が同じ関数を呼ぶ。
+        api は音を返さない（分業維持）が、**進行を受け取れば実音化して検算し `meta.warnings` で告げる**（代用したコード表・知らない
+        コード・押さえられない音・手の形の緩和）。＝**MCP `gen_chord_pattern` に `chords`/`drums` を足した理由**（R1 の穴＝錨を置くには
+        キックが、検算には進行が要る）。
+      - **中身**＝5c リフ文法3型（power_chug/pedal_answer/gallop・役割注記つき）／5b chordtheory（**コードトーンは `QUALITY_INTERVALS` に
+        共通化・スケールはギター独自**＝m7=ドリアン等で層Bと違う＝楽器間で調律値を共有しない。ギター表に無いクオリティだけ層Bで代用し告げる）
+        ＋chordfollow（**撤去済みアプローチ分岐 `chordfollow.py:151-159` は翻訳前に落とした**）／5a chug ロック（昇格・MONO→POWER8・挿入・
+        アクセント権限の一本化・ghost/dead 不可侵。accents は常に空＝M3 の決定2を引き継ぐ）／5d フォーム DB（調弦から導出・B弦 +3・
+        `GAIN_SAFE_INTERVALS`）／5e 手の形は**枠のみ**（重み・定数は源流の値を持たない＝`SHAPE_WEIGHTS_OTOMEMO` は仮置き・**耳未判定＝opt-in**）。
+      - 到達口＝`/music/gen_chord_pattern`・MCP・`/gen/section`（`body.chord`）・web TinkerSheet コード楽器引き出し「ギターのリフ（試作）」
+        （**文法を選んだ時だけ生成器を叩く**＝ライブラリ検索へ落ちると触れないノブになる）。
+      - 受け入れ＝py-parity 90ケース＋クオリティ表 104件＋フォーム DB 4調弦（データ一致）／**返った content に対して**強拍 CT・非整合 0
+        （oracle は py-parity ダンプ＝生成器の表を使わない）・`fretboardGate`・錨の被覆率 1.0／変異検査（出力に注入）／摂動テスト（handshape 枠）。
 
 
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）

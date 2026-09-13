@@ -1675,4 +1675,49 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect("anchorLock" in body).toBe(false);
     expect("anchorRestOnSyncopatedKick" in body).toBe(false);
   });
+
+  // ── 到達口④＝web TinkerSheet コード楽器引き出し（M5 ギター型・「作ったのに触れないノブは硬化する」） ──
+  const chordSection = () => getComposition.mockResolvedValue({
+    neta: mk("s1", "section"),
+    children: [
+      { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 9, quality: "m", start: 0, dur: 4 }] } }), children: [] } },
+    ],
+  });
+  it("M5 ギターのリフ＝文法を選ぶと生成器（gen_chord_pattern）へ guitarRiff/anchorLock/guitarShape が飛ぶ（錨と手の形は文法を選ぶまで出ない）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    chordSection();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    await userEvent.click(screen.getByLabelText("group-compguitar"));
+    expect(screen.queryByLabelText("comp-guitar-anchor-on")).toBeNull();
+    await userEvent.selectOptions(within(screen.getByLabelText("comp-guitar-riff")).getByRole("combobox"), "gallop");
+    await userEvent.click(screen.getByLabelText("comp-guitar-anchor-on"));
+    await userEvent.click(screen.getByLabelText("comp-guitar-shape-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_chord_pattern"); // ライブラリ検索に落ちない
+    expect(body.guitarRiff).toBe("gallop");
+    expect(body.anchorLock).toBe(true);
+    expect(body.guitarShape).toBe(true);
+    expect(Array.isArray(body.chords)).toBe(true); // 進行も同送
+  });
+  it("M5 ギターのリフ未選択（既定）は guitarRiff 系を送らない＝従来どおりライブラリ経路", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    listNeta.mockReset();
+    listNeta.mockResolvedValue([]); // ライブラリ未投入＝空トレイ（従来の既定経路）
+    chordSection();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    // 既定はネタ帳ライブラリを引く（生成器を叩かない）＝ギター型の新キーはどこにも出ない
+    await waitFor(() => expect(listNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "chord_pattern", scope: "library" })));
+    expect(music).not.toHaveBeenCalled();
+  });
 });

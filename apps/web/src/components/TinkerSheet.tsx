@@ -545,7 +545,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   //   ジャンルchip→「候補を出す」で variety=4 の別々の型を候補トレイへ（cand-card＋▶試聴＋採用の既存動線）。
   const chordInstDrawer = (
     <>
-      {drawerHead("コード楽器", () => gen.setCompStyle(""))}
+      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setGtrRiff(""); gen.setGtrAnchor(false); gen.setGtrShape(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">伴奏のジャンル（型を名前で選ばず耳で選ぶ）</div>
         <div className="tk-palette" aria-label="comp-genre">
@@ -564,6 +564,35 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
             </select>
           </label>
         )}
+        {/* M5 ギター型（phrase_maker ギター gen2 移植）＝リフ文法を選んだ時だけ生成器を叩く。錨・手の形は文法を選ぶまで出さない。 */}
+        {gacc("compguitar", "ギターのリフ（試作）", "リフ文法・キックに刻み")}
+        {openGroups.compguitar && <>
+          <label className="knob-row" aria-label="comp-guitar-riff">
+            <span className="knob-name">リフ文法</span>
+            <select value={gen.gtrRiff} onChange={(e) => gen.setGtrRiff(e.target.value)}>
+              <option value="">—（使わない）</option>
+              <option value="power_chug">パワーコードの刻み</option>
+              <option value="pedal_answer">低音弦ペダル＋答え</option>
+              <option value="gallop">ギャロップ</option>
+            </select>
+          </label>
+          {gen.gtrRiff && <>
+            <div className="knob-seg" aria-label="comp-guitar-anchor">
+              <span className="knob-name">キックに刻みを揃える<small>キックの位置に必ずパワーコード</small></span>
+              <span className="seg-ctl">
+                <button type="button" className={"seg-b" + (!gen.gtrAnchor ? " on" : "")} aria-label="comp-guitar-anchor-off" aria-pressed={!gen.gtrAnchor} onClick={() => gen.setGtrAnchor(false)}>OFF</button>
+                <button type="button" className={"seg-b" + (gen.gtrAnchor ? " on" : "")} aria-label="comp-guitar-anchor-on" aria-pressed={gen.gtrAnchor} onClick={() => gen.setGtrAnchor(true)}>ON</button>
+              </span>
+            </div>
+            <div className="knob-seg" aria-label="comp-guitar-shape">
+              <span className="knob-name">手の形で弾く<small>試作・耳で未確認</small></span>
+              <span className="seg-ctl">
+                <button type="button" className={"seg-b" + (!gen.gtrShape ? " on" : "")} aria-label="comp-guitar-shape-off" aria-pressed={!gen.gtrShape} onClick={() => gen.setGtrShape(false)}>OFF</button>
+                <button type="button" className={"seg-b" + (gen.gtrShape ? " on" : "")} aria-label="comp-guitar-shape-on" aria-pressed={gen.gtrShape} onClick={() => gen.setGtrShape(true)}>ON</button>
+              </span>
+            </div>
+          </>}
+        </>}
       </div>
       <div className="tk-drawer-foot">
         <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_chord_pattern" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る（先に進行を置く）" : "候補を出す"} onClick={() => drawerGen("gen_chord_pattern")}>候補を出す</button>
