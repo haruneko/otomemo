@@ -70,6 +70,9 @@ export * from "./guitarRiff";
 export * from "./guitarForms";
 export * from "./guitarHandshape";
 export * from "./guitarRealize";
+// 鍵盤（M6a-6a）＝キックの隙間刺し（legacy rock_piano sheet 分岐と gesture_p11 build_rock を1本化）。
+// 参照値＝tools/py-parity/cases-key-stab/。既定挙動は不変（opt-in 経路 keyStab からのみ消費）。
+export * from "./keyStab";
 
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python
