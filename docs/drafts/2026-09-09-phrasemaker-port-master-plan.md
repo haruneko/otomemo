@@ -448,7 +448,12 @@ M3(ベース本体：3g py-parity → 3a…) ─→ M5(ギター) ─→ M6a(裁
 - **受け入れ**：`gate`＝データ一致（chug ロック・chordfollow）・強拍 CT・演奏可能・非整合音 0・bit 一致・摂動テスト（handshape 枠）。handshape 枠は耳未判定と明記して opt-in。
 - **撤退**：handshape 枠が摂動テストに落ちたら凍結。
 
-#### M6a 鍵盤・裁定不要の土台（**即着手可**）
+#### M6a 鍵盤の土台（**6a・6d は完了（機械）2026-09-13／6b は §8-3 の裁定待ち**）
+- **実施状況（2026-09-13・独立監査 `audit-m6a` で条件付き受け入れ）**：
+  - ✅ **6a 隙間刺し**＝`keyStab.ts`。位置と役割は py-parity 72件＋監査の乱択400件で源流2本と一致。**vel は源流と一致しない**（源流 legacy は 80/70・実装は錨 112 か省略＝web の既存 `CHORD_ACCENT` 由来＝発明の値。アクセントは常に空なので 112 は実際には出ない）＝design (k-5)。onsets を「キック∪スネア」と読んだのも実装側の判断（(k-5)）。
+  - ✅ **6d handmodel**＝`handModel.ts`・関数単位ゴールデン 8,000件超一致。pianoplayer 由来定数は **MIT**（監査が LICENSE と hand.py を一次確認）＝`NOTICE.md`。**生成器には未結線＝M6c 用の部品**（監査で正当と判定）。
+  - ⏸ **6b `band?:{bassTop}` 契約と低域譲りは未実施**＝下の Scope に書いてあるが **§8-3 のオーナー裁定そのもの**なので、機械が先に実装しない。**旧見出しの「即着手可」は 6b を含めた点で §8-3 と矛盾していた**（R2 面A の「M6a 即着手可」判定も同じ見落とし）。
+  - **Done のうち未達**＝「`band` の型スナップショットテストが緑」「bass 先行の `/gen/section` で低域衝突ゲートが opt-in 時に緑」の2項は 6b 依存＝裁定後。
 - **Scope**：6a **legacy sheet 分岐と `build_rock` を1本化して移す**（`onsets − kick` の相補刺し＋バックビート・空なら slot 6,14）／6b **`band?:{bassTop}` 契約の凍結**（型スナップショット凍結テスト・粒度＝セクション1個のスカラー＝源流の `bass_max` と同じ）＋低域譲り＝生成時に `ChordVoicing.floor?` へ焼く（opt-in・`voiceToTop` にクランプ1つ・**後からベースを変えても床は付いてこない＝作り直し**）／6d `handmodel`（データ一致・**pianoplayer のライセンス確認と `NOTICE.md` 帰属を着手前に**）。
 - **到達口**：`gen_chord_pattern`（HTTP/MCP）に `chords`（optional）と `band.bassTop` を足す／`/gen/section` に `chord:{...}` 枝を新設。
 - **Done**：`band` の型スナップショットテストが緑／bass 先行の `/gen/section` で低域衝突ゲート（`gap>0`）が opt-in 時に緑／`handmodel` ゴールデン一致／3スイート緑／engineVersion。
