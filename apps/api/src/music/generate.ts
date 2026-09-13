@@ -996,6 +996,14 @@ export function genChordPattern(
   const GTR_SHAPE = "「手の形で弾く」";
   const KEY_STAB = "「キックの隙間に刺す（鍵盤）」";
   const gtrWins = opts?.guitarRiff != null && guitarGrammarById(opts.guitarRiff) != null && info.grouping !== "compound" && stepsPerBar === 16;
+  // 型・ジャンル（pattern）と候補数（variety）は、ギターのリフ／鍵盤の隙間刺しが**立った時**は使わない＝黙って捨てず告げる
+  //   （2026-09-13 M6a 監査 中1。web は常に pattern=omakase＋variety=4 を送る＝"omakase" は「選んでいない」番兵なので型の通知は出さない）。
+  //   併用はしない：隙間刺し／リフは譜（ドラム）や文法から hits を決める別の型で、型辞書のリズムと重ねる意味が定義されていない。
+  const warnIgnoredCompOpts = (label: string): void => {
+    const p = typeof opts?.pattern === "string" && opts.pattern !== "" && opts.pattern !== "omakase" ? opts.pattern : null;
+    if (p) gtrWarn.push(`${label}を生成したので、選んだ型・ジャンル（${p}）は使っていません`);
+    if (typeof opts?.variety === "number" && opts.variety > 1) gtrWarn.push(`${label}は1通りだけなので、候補は ${opts.variety} 件でなく1件です`);
+  };
   if (opts?.keyStab === true && gtrWins) gtrWarn.push(`ギターのリフ文法を選んでいるので${KEY_STAB}は使っていません（ギターのリフを生成しました）`);
   if (opts?.guitarRiff == null && (opts?.anchorLock === true || opts?.guitarShape === true)) {
     gtrWarn.push(`ギターのリフ文法を選んだ時だけ${opts?.anchorLock === true ? GTR_LOCK : GTR_SHAPE}が効きます（従来どおり生成しました）`);
@@ -1057,6 +1065,7 @@ export function genChordPattern(
         const fg = fretboardGate(real.notes.map((n) => n.pitch), TUNING_GUITAR6);
         if (fg.detail.unreachable.length > 0) gtrWarn.push(`6弦ギターで押さえられない音が ${fg.problems.length} 個あります`);
       }
+      warnIgnoredCompOpts("ギターのリフ");
       return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: `ギターのリフ（${grammar.id}）` }], edges: [] });
     }
   }
@@ -1092,6 +1101,7 @@ export function genChordPattern(
         const onKick = finalContent.hits.filter((h) => kickSet.has(h.step % 16)).length;
         if (onKick > 0) gtrWarn.push(`${KEY_STAB}のうち ${onKick} 個が最終出力でキックと重なっています`);
       }
+      warnIgnoredCompOpts(KEY_STAB);
       return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: fallback ? "鍵盤の隙間刺し（2拍裏・4拍裏）" : "鍵盤の隙間刺し" }], edges: [] });
     }
   }

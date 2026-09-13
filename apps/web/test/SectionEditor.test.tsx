@@ -1541,6 +1541,25 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(el.textContent).toContain("キックにルートを置く");
   });
 
+  it("T4e'' 隙間刺し ON：web は型＋variety を同送し、それを使わなかった通知が画面に出る（2026-09-13 M6a 監査 中1）", async () => {
+    music.mockReset();
+    const WARN = "「キックの隙間に刺す（鍵盤）」は1通りだけなので、候補は 4 件でなく1件です";
+    music.mockResolvedValue({ items: [], meta: { warnings: [WARN] } });
+    chordSection();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    await userEvent.click(screen.getByLabelText("comp-key-stab-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(body.keyStab).toBe(true);
+    expect(body.variety).toBe(4); // 捨てられる入力が実際に飛んでいる＝通知が要る根拠
+    const el = await screen.findByLabelText("gen-warning");
+    expect(el.textContent).toContain("件でなく1件");
+  });
+
   it("T4e' 通知が無いときは gen-warning を出さない（陰性対照＝出っぱなしにしない）", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });
