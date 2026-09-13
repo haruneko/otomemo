@@ -29,6 +29,7 @@ import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpe
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
 import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, chordAtStep, type AnchorOnset, type AnchorSeg } from "@cm/music-core"; // M3-3a＝錨と間の分業（_lock_bass_roots_to_sheet 忠実移植）。opt-in `anchorLock` 経路でのみ消費＝既定は bit 一致。
 import { applyChordFollow, QUALITY_INTERVALS as CF_QUALITY_INTERVALS, type CfLineOnset, type CfSeg } from "@cm/music-core";
+import { keyStabSlots, keyStabHits } from "@cm/music-core"; // M6a-6a＝鍵盤の隙間刺し（opt-in `keyStab` 経路でのみ消費＝既定は bit 一致）。
 import { guitarGrammarById, GUITAR_GRAMMAR_IDS, buildGuitarSkeleton, lockGuitarChugToSheet, gtrOnsetsToHits, realizeGuitarRiff, fretboardGate, TUNING_GUITAR6 } from "@cm/music-core"; // M5＝ギター型（opt-in `guitarRiff` 経路でのみ消費＝既定は bit 一致）。 // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
 import { buildWalkingLine, WALK_COMPOUND_SLOT_STEPS, JZ_WALK_ID, type WalkSegment } from "@cm/music-core"; // M3-3d＝JZ-WALK（walking v2 の候補生成＋v3 の規則3本・乱数は決定的規則へ置換）。**耳未判定**＝style 名指しの opt-in。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
@@ -971,6 +972,8 @@ export function genChordPattern(
     //   drums＝キックの出所／chords＝進行（api は音を返さないが、進行があれば実音化して検算し通知する＝5f）。
     guitarRiff?: string; anchorLock?: boolean; guitarShape?: boolean; drums?: DrumsInput | null;
     chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[] | null;
+    // M6a-6a 鍵盤の隙間刺し（**既定 OFF**）：drums のキック以外の打点（スネア）に和音を刺す（キックだけなら 2拍裏・4拍裏）。drums が要る。
+    keyStab?: boolean;
   } | null,
 ): GenResult {
   const f = normalizeFrame(frame);
@@ -991,6 +994,9 @@ export function genChordPattern(
   const attachGtrWarn = (r: GenResult): GenResult => (gtrWarn.length ? { ...r, meta: { ...(r.meta ?? {}), warnings: [...(r.meta?.warnings ?? []), ...gtrWarn] } } : r);
   const GTR_LOCK = "「キックに刻みを揃える」";
   const GTR_SHAPE = "「手の形で弾く」";
+  const KEY_STAB = "「キックの隙間に刺す（鍵盤）」";
+  const gtrWins = opts?.guitarRiff != null && guitarGrammarById(opts.guitarRiff) != null && info.grouping !== "compound" && stepsPerBar === 16;
+  if (opts?.keyStab === true && gtrWins) gtrWarn.push(`ギターのリフ文法を選んでいるので${KEY_STAB}は使っていません（ギターのリフを生成しました）`);
   if (opts?.guitarRiff == null && (opts?.anchorLock === true || opts?.guitarShape === true)) {
     gtrWarn.push(`ギターのリフ文法を選んだ時だけ${opts?.anchorLock === true ? GTR_LOCK : GTR_SHAPE}が効きます（従来どおり生成しました）`);
   }
@@ -1051,6 +1057,40 @@ export function genChordPattern(
         if (!fg.pass) gtrWarn.push(`6弦ギターで押さえられない音が ${fg.problems.length} 個あります`);
       }
       return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: `ギターのリフ（${grammar.id}）` }], edges: [] });
+    }
+  }
+  // --- M6a-6a 鍵盤の隙間刺し（計画 §5-2 M6a・legacy rock_piano sheet 分岐＋gesture_p11 build_rock を1本化）------------
+  //   相対形（keyboard strum の hits）＝音高は web の既存 voiceToTop（top:72）。譜の onsets＝otomemo のドラムのキック∪スネア
+  //   （源流 RhythmSpec の b:/s: 行に相当・ハットは含めない）。accents は常に空（M3 の決定2を引き継ぐ）。
+  if (opts?.keyStab === true && !gtrWins) {
+    const dr = parseDrums(opts.drums);
+    const scale = dr ? 16 / dr.steps : 0;
+    const fb = info.grouping === "compound" || stepsPerBar !== 16 ? `この拍子（${info.meter}）では${KEY_STAB}に対応していません（4/4 のみ・従来どおり生成しました）`
+      : !dr ? `ドラムが無いので${KEY_STAB}は使えません（従来どおり生成しました）`
+      : Math.abs(dr.steps * dr.bps - info.beatsPerBar) >= 1e-6 ? `ドラムの1小節の長さが拍子（${info.meter}）と合わないので${KEY_STAB}は使えません（従来どおり生成しました）`
+      : !Number.isInteger(scale) || scale < 1 ? `ドラムの刻みが16分の格子に写せないので${KEY_STAB}は使えません（従来どおり生成しました）`
+      : null;
+    if (fb) gtrWarn.push(fb);
+    else {
+      const kick = dr!.kick.map((k) => k * scale);
+      const { slots, fallback } = keyStabSlots({ onsets: [...kick, ...dr!.snare.map((s) => s * scale)], kick, accents: [] });
+      if (fallback) gtrWarn.push(`ドラムにキック以外の打点（スネア）が無いので、${KEY_STAB}は2拍裏と4拍裏に刺しました`);
+      const content = {
+        mode: "strum" as CompMode,
+        voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 },
+        steps,
+        hits: keyStabHits(slots, bars, 112),
+        keyStab: fallback ? { fallback: true as const } : {},
+        engine: { version: PM_ENGINE_VERSION },
+      };
+      const finalContent = withFeel(content);
+      // 契約の実測（最終出力に対して）：隙間ありなら、どの hit もキックの step に重ならない。
+      if (!fallback) {
+        const kickSet = new Set(kick);
+        const onKick = finalContent.hits.filter((h) => kickSet.has(h.step % 16)).length;
+        if (onKick > 0) gtrWarn.push(`${KEY_STAB}のうち ${onKick} 個が最終出力でキックと重なっています`);
+      }
+      return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: fallback ? "鍵盤の隙間刺し（2拍裏・4拍裏）" : "鍵盤の隙間刺し" }], edges: [] });
     }
   }
   // 選ばれた CompType から content（mode/voicing/steps/hits/lh）を組み立てる純関数（単数/複数で共有）。
