@@ -76,6 +76,7 @@ const chordsSchema = z
       quality: z.string().optional().describe("コード品質（\"\"=メジャー, \"m\", \"7\", \"dim\" 等）"),
       start: z.number().optional().describe("開始位置。単位＝拍(beat)。0=曲頭、4/4なら0,4,8…"),
       dur: z.number().optional().describe("長さ。単位＝拍(beat)。1小節=拍子の拍数"),
+      bass: z.number().int().min(0).max(11).optional().describe("分数コードのベース音＝実音ピッチクラス0-11（C/E なら 4）。省略＝根音"),
     }),
   )
   .describe("コード進行（content.chords 形・各 root はその曲の実音ピッチクラス）");
