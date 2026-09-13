@@ -466,6 +466,11 @@ M3(ベース本体：3g py-parity → 3a…) ─→ M5(ギター) ─→ M6a(裁
 - **Done**：バンド（bass 先行）で低域衝突 0／別案で md5 相異／**ピアノの arc 定数を振ってもケルト出力が 1bit も変わらない**／engineVersion／3スイート緑。
 - **受け入れ**：`gate`＝`handframe` は `PyRandom.random()` で参照一致（`math.exp` ULP の反転は個別検分）・可弾（MaxPrac 逸脱 0）・片手 ≤4・out-of-chord 0・avoid note 0（生成器のボイシングのみ）・摂動テスト・変異検査（m1＝重みを全部同じに＝この段で有効）。耳＝作曲で。
 - **撤退＝プランB**：条件は §2-4 C。**その場合も M6a は TS**。
+- **判断チェックリスト①②の実測（2026-09-13・RNG spike `ee571ab`＋独立監査 `audit-m5-spike`）**：
+  - ① spike＝**緑**。CPython 3.12.13 と seed 10本×1万ドローで `random()`・`choices`（全形）・`getstate/setstate` が全一致。別 seed の抜き打ちと参照 JSON の焼き直しバイト一致も監査で確認。
+  - ② `handframe.py` の乱数は **`rng.random()` のみ**（`randint`/`randrange`/`shuffle`/`sample`/`choice`/`choices` は不使用）。seed は md5 先頭8桁＝2^32 未満＋32bit XOR＝**TS の対応範囲内**。`handmodel.py` は乱数不使用。
+  - **訂正＝「`gauss` は不要」は鍵盤では成り立たない**：`handframe_band.py` は `humanize=True`（既定・rock/pop も既定 True・`ensemble.py:2087` もこの既定）で `chord_attack.py:85,91` の `rng.gauss()` を1音2回使う。ただし**打鍵の揺れ専用の別の乱数の流れ**で本体と混ざらない＝**本体は Python と bit 一致、揺れは otomemo 側の乱数へ置換**（ms の揺れは feel 層・vel の揺れはデータ層＝6f の既決と整合）。`PyRandom` に `gauss` は足さない。
+  - 注意＝`PyRandom` は 2^32 以上・負数の seed を**例外なしで黙って丸める**（実測で0ドロー目から不一致）。移植経路では出ないが、入口で弾くガードを M6c で1つ置く。
 
 #### M7 ケルト（§8-1 の裁定後）
 - **Scope（ジグ）**：7a メロ側＝`phrase_plan` 層B を genMelody の新経路として（**既存 `style:"irish"` 統計との関係＝置換か上乗せかを先に決める**）＋リズム表（content）＋AA'BB' はセクション4つ／7b 伴奏側＝world68 の隣に `irish` タグの型（GENRE_TABLE 非登録）／7c 装飾・9/8・breath は対象外。
