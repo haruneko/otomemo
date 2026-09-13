@@ -73,6 +73,9 @@ export * from "./guitarRealize";
 // 鍵盤（M6a-6a）＝キックの隙間刺し（legacy rock_piano sheet 分岐と gesture_p11 build_rock を1本化）。
 // 参照値＝tools/py-parity/cases-key-stab/。既定挙動は不変（opt-in 経路 keyStab からのみ消費）。
 export * from "./keyStab";
+// 鍵盤（M6a-6d）＝手の物理モデル（phrase_maker fingersim/handmodel.py の忠実移植・土台のみ＝生成器に結線しない）。
+// 定数の出所＝NOTICE.md（pianoplayer MIT・Parncutt 1997）。参照値＝tools/py-parity/cases-handmodel/。
+export * from "./handModel";
 
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python
