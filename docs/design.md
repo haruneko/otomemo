@@ -2280,14 +2280,16 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
       - **譜の onsets の読み替え**＝otomemo のドラム content のキック∪スネア（源流 RhythmSpec の b:/s: 行に相当）。ハットは入れない
         （入れると8分ごとに刺さる＝源流の「キックの隙間＋バックビート」ではなくなる）。accents は常に空（M3 の決定2）。
       - **相対形のまま**＝keyboard strum の hits（voicing `top:72`＝既存 voiceToTop）＋印 `keyStab?: {fallback?}`＋`engine`。web の実音化は
-        **このキーで分岐しない**（既存経路で鳴る）。ボイシングと vel の細部（源流 80/70・音価 0.4 拍）は移さず、音価は 2 step（次の刺しと小節末で詰める）・
+        **このキーで分岐しない**（既存経路で鳴る）。ボイシングと vel の細部（源流 80/70・音価 0.4 拍）は移さず、音価は 2 step（次の刺し・**次のキック頭**・セクション末で詰める・最小 1 step）・
         anchor だけ vel 112。band の低域譲り（`lift_above`・LH 無発音）と build_rock ソロの LH ルートは移さない（前者は 6b＝§8-3 裁定待ち）。
       - 到達口＝`gen_chord_pattern` の `keyStab`（HTTP・MCP）・`/gen/section` の `body.chord.keyStab`・web TinkerSheet「キックの隙間に刺す（鍵盤）」
         （ON の時だけ生成器を叩きドラムを同送）。**M5 の `drums`/`chords` の口に相乗り**（口は増やしていない）。ギターのリフが勝つ。
       - **型・候補数とは併用しない（告げる）**＝隙間刺し／ギターのリフが**立った時**は `pattern`（型・ジャンル）と `variety`（候補数）を使わず1件を返し、
         `meta.warnings` に「選んだ型・ジャンル（…）は使っていません」「候補は N 件でなく1件です」を載せる（`pattern:"omakase"` は選んでいない番兵＝型の通知なし）。
         立たずに従来経路へ落ちた時は型を使うので告げない（2026-09-13 M6a 監査 中1＝web は常に pattern＋variety=4 を送るので黙って捨てていた）。
-      - 受け入れ＝**返った content に対して**キック重なり 0・被覆率 1.0・譜の外 0（oracle＝ドラム lanes から直接数える）／変異検査／落ち先ごとの通知。
+      - **「キックに重ならない」は鳴っている区間で見る**＝刺しの `[step, step+dur)` が自分より後のキック頭（小節線の向こうの次小節のキックを含む）を含まない
+        （2026-09-13 M6a 監査 軽微3＝スネア 15 の 2 step が次小節頭のキックまで鳴っていた。源流 legacy の 0.4 拍も掛かるが趣旨を優先）。
+      - 受け入れ＝**返った content に対して**キック重なり 0（打点・鳴る区間とも）・被覆率 1.0・譜の外 0（oracle＝ドラム lanes から直接数える）／変異検査／落ち先ごとの通知。
       - **6d 手の物理モデル**＝`handmodel.py` の忠実移植（music-core `handModel.ts`・関数単位ゴールデン）。**土台のみ＝生成器に結線しない**。
         定数の出所は NOTICE.md（pianoplayer＝MIT・Parncutt 1997）。`round(x, 4)` は `pyRoundDigits`（Python と同じ厳密値の半偶数丸め）。
 

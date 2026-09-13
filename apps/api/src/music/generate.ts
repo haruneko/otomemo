@@ -1090,7 +1090,7 @@ export function genChordPattern(
         mode: "strum" as CompMode,
         voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 },
         steps,
-        hits: keyStabHits(slots, bars, 112),
+        hits: keyStabHits(slots, bars, 112, 16, kick), // kick＝鳴る区間が次のキック頭に掛からないよう音価を詰める（M6a 監査 軽微3）
         keyStab: fallback ? { fallback: true as const } : {},
         engine: { version: PM_ENGINE_VERSION },
       };
