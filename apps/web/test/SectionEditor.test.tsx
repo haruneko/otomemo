@@ -1705,6 +1705,23 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(body.guitarShape).toBe(true);
     expect(Array.isArray(body.chords)).toBe(true); // 進行も同送
   });
+  it("M6a 鍵盤の隙間刺し＝ON で生成器（gen_chord_pattern）へ keyStab が飛ぶ（ライブラリに落ちない）・OFF に戻すと送らない", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    chordSection();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    expect(screen.getByLabelText("comp-key-stab-off").getAttribute("aria-pressed")).toBe("true"); // 既定 OFF
+    await userEvent.click(screen.getByLabelText("comp-key-stab-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_chord_pattern");
+    expect(body.keyStab).toBe(true);
+    expect("guitarRiff" in body).toBe(false);
+  });
   it("M5 ギターのリフ未選択（既定）は guitarRiff 系を送らない＝従来どおりライブラリ経路", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });

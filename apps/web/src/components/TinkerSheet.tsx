@@ -545,7 +545,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   //   ジャンルchip→「候補を出す」で variety=4 の別々の型を候補トレイへ（cand-card＋▶試聴＋採用の既存動線）。
   const chordInstDrawer = (
     <>
-      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setGtrRiff(""); gen.setGtrAnchor(false); gen.setGtrShape(false); })}
+      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setGtrRiff(""); gen.setGtrAnchor(false); gen.setGtrShape(false); gen.setCompKeyStab(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">伴奏のジャンル（型を名前で選ばず耳で選ぶ）</div>
         <div className="tk-palette" aria-label="comp-genre">
@@ -593,6 +593,14 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
             </div>
           </>}
         </>}
+        {/* M6a-6a 鍵盤の隙間刺し（phrase_maker legacy rock_piano／build_rock 移植）＝ON の時だけ生成器を叩きドラムを同送。 */}
+        <div className="knob-seg" aria-label="comp-key-stab">
+          <span className="knob-name">キックの隙間に刺す（鍵盤）<small>スネアの位置に和音・ドラムが要る</small></span>
+          <span className="seg-ctl">
+            <button type="button" className={"seg-b" + (!gen.compKeyStab ? " on" : "")} aria-label="comp-key-stab-off" aria-pressed={!gen.compKeyStab} onClick={() => gen.setCompKeyStab(false)}>OFF</button>
+            <button type="button" className={"seg-b" + (gen.compKeyStab ? " on" : "")} aria-label="comp-key-stab-on" aria-pressed={gen.compKeyStab} onClick={() => gen.setCompKeyStab(true)}>ON</button>
+          </span>
+        </div>
       </div>
       <div className="tk-drawer-foot">
         <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_chord_pattern" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る（先に進行を置く）" : "候補を出す"} onClick={() => drawerGen("gen_chord_pattern")}>候補を出す</button>

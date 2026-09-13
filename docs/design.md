@@ -2274,6 +2274,19 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
         （**文法を選んだ時だけ生成器を叩く**＝ライブラリ検索へ落ちると触れないノブになる）。
       - 受け入れ＝py-parity 90ケース＋クオリティ表 104件＋フォーム DB 4調弦（データ一致）／**返った content に対して**強拍 CT・非整合 0
         （oracle は py-parity ダンプ＝生成器の表を使わない）・`fretboardGate`・錨の被覆率 1.0／変異検査（出力に注入）／摂動テスト（handshape 枠）。
+    - **(k-5) M6a 鍵盤の土台のうち裁定不要の部分が着地した形（2026-09-13）**：
+      - **6a 隙間刺し**＝phrase_maker の legacy `rock_piano` sheet 分岐と gesture_p11 `build_rock` は同じ知識＝**1本**（music-core `keyStab.ts`）。
+        刺す位置＝譜の onsets − kick・accents は anchor・隙間が無ければ 16分 step 6,14。py-parity 72件で両源流と一致。
+      - **譜の onsets の読み替え**＝otomemo のドラム content のキック∪スネア（源流 RhythmSpec の b:/s: 行に相当）。ハットは入れない
+        （入れると8分ごとに刺さる＝源流の「キックの隙間＋バックビート」ではなくなる）。accents は常に空（M3 の決定2）。
+      - **相対形のまま**＝keyboard strum の hits（voicing `top:72`＝既存 voiceToTop）＋印 `keyStab?: {fallback?}`＋`engine`。web の実音化は
+        **このキーで分岐しない**（既存経路で鳴る）。ボイシングと vel の細部（源流 80/70・音価 0.4 拍）は移さず、音価は 2 step（次の刺しと小節末で詰める）・
+        anchor だけ vel 112。band の低域譲り（`lift_above`・LH 無発音）と build_rock ソロの LH ルートは移さない（前者は 6b＝§8-3 裁定待ち）。
+      - 到達口＝`gen_chord_pattern` の `keyStab`（HTTP・MCP）・`/gen/section` の `body.chord.keyStab`・web TinkerSheet「キックの隙間に刺す（鍵盤）」
+        （ON の時だけ生成器を叩きドラムを同送）。**M5 の `drums`/`chords` の口に相乗り**（口は増やしていない）。ギターのリフが勝つ。
+      - 受け入れ＝**返った content に対して**キック重なり 0・被覆率 1.0・譜の外 0（oracle＝ドラム lanes から直接数える）／変異検査／落ち先ごとの通知。
+      - **6d 手の物理モデル**＝`handmodel.py` の忠実移植（music-core `handModel.ts`・関数単位ゴールデン）。**土台のみ＝生成器に結線しない**。
+        定数の出所は NOTICE.md（pianoplayer＝MIT・Parncutt 1997）。`round(x, 4)` は `pyRoundDigits`（Python と同じ厳密値の半偶数丸め）。
 
 
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）

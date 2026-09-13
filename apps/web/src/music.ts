@@ -695,6 +695,9 @@ export interface ChordPatternContent {
   //   未指定＝キーを生やさない＝既存全ネタと bit 一致。
   guitarRiff?: { grammar: string; pitch: "chordfollow" | "handshape"; anchorLock?: true; seed?: number };
   engine?: { version: string };
+  // M6a-6a 鍵盤の隙間刺し（phrase_maker legacy rock_piano／build_rock 移植）の印。hits は keyboard strum の相対形＝実音化は既存経路のまま
+  //   （このキーでは分岐しない）。fallback＝スネアが無く 2拍裏・4拍裏に刺した。未指定＝キーを生やさない＝既存ネタと bit 一致。
+  keyStab?: { fallback?: true };
 }
 const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
 // #29 P2 コード楽器の3値ベロシティ語彙（普通=vel 省略→下流 vel??100）。耳較正で調整可＝保存データは実値なので既存不変。
