@@ -35,7 +35,8 @@ export interface GtrRealizeReport {
   /** otomemo でも知らないクオリティ（メジャー扱い） */
   unknownQualities: string[];
   /** handshape 使用時のみ */
-  shape?: { tier: 0 | 1 | 2; emptyLayers: number; layers: number };
+  /** totalCost＝ソルバの最小コスト（seed に依らない＝seed は同コストの解の選び分けだけ・2026-09-13 監査 軽微-4） */
+  shape?: { tier: 0 | 1 | 2; emptyLayers: number; layers: number; totalCost: number };
 }
 
 const ROOT_ROLES = new Set(["head", "pedal", "chug", "chord", "dead"]);
@@ -88,7 +89,7 @@ export function realizeGuitarRiff(hits: readonly GtrRealizeHit[], opts: GtrReali
     const dts = onsets.map((o, i) => (i === 0 ? 0 : (o.step - onsets[i - 1]!.step) * secPerStep));
     const sol = solveHandShapes(layers, dts, w, opts.physics ?? SHAPE_PHYSICS_OTOMEMO, { seed: opts.seed ?? 0, tuning: t, nodeBias: bias });
     sol.shapes.forEach((sh, i) => { if (sh) sounding[i] = shapePitches(sh, t); });
-    report.shape = { tier: sol.tier, emptyLayers: sol.empty.length, layers: layers.length };
+    report.shape = { tier: sol.tier, emptyLayers: sol.empty.length, layers: layers.length, totalCost: sol.totalCost };
   }
 
   const minDurBeats = 0.05 * tempo / 60;

@@ -88,6 +88,8 @@ export interface ShapeSolveResult {
 /**
  * 層状 Viterbi（源流 `shapeline.solve_shapes`＋`solve_with_tiers` の骨格）。
  * `nodeBias` は層と同形の追加節点コスト（文法 deg のバイアス）。同点は seed 由来の決定的タイブレーク。
+ * **seed は同コスト解の選び分けにしか効かない（意図どおり）**＝最小コストは seed 非依存・同点が無い入力では出力も同じ。
+ *   「seed を変えれば別案が出る」ノブではない（源流 handshape は knob=0 で乱数を作らない＝計画 §5-2 M5・負の知識13）。
  */
 export function solveHandShapes(
   layers: readonly (readonly HandShape[])[], dts: readonly number[], w: ShapeWeights, phys: ShapePhysics,
