@@ -1011,7 +1011,8 @@ export function genChordPattern(
       if (opts.anchorLock === true) {
         const dr = parseDrums(opts.drums);
         const scale = dr ? 16 / dr.steps : 0;
-        const fb = !dr ? `ドラムが無いので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
+        const fb = !dr && drumsSentButUnreadable(opts.drums) ? `${DRUMS_UNREADABLE}${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
+          : !dr ? `ドラムが無いので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
           : Math.abs(dr.steps * dr.bps - info.beatsPerBar) >= 1e-6 ? `ドラムの1小節の長さが拍子（${info.meter}）と合わないので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
           : !Number.isInteger(scale) || scale < 1 ? `ドラムの刻みが16分の格子に写せないので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
           : dr.kick.length === 0 ? `ドラムにキックが無いので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
@@ -1066,6 +1067,7 @@ export function genChordPattern(
     const dr = parseDrums(opts.drums);
     const scale = dr ? 16 / dr.steps : 0;
     const fb = info.grouping === "compound" || stepsPerBar !== 16 ? `この拍子（${info.meter}）では${KEY_STAB}に対応していません（4/4 のみ・従来どおり生成しました）`
+      : !dr && drumsSentButUnreadable(opts.drums) ? `${DRUMS_UNREADABLE}${KEY_STAB}は使えません（従来どおり生成しました）`
       : !dr ? `ドラムが無いので${KEY_STAB}は使えません（従来どおり生成しました）`
       : Math.abs(dr.steps * dr.bps - info.beatsPerBar) >= 1e-6 ? `ドラムの1小節の長さが拍子（${info.meter}）と合わないので${KEY_STAB}は使えません（従来どおり生成しました）`
       : !Number.isInteger(scale) || scale < 1 ? `ドラムの刻みが16分の格子に写せないので${KEY_STAB}は使えません（従来どおり生成しました）`
@@ -1221,6 +1223,12 @@ function parseDrums(drums?: DrumsInput | null): { steps: number; bps: number; ki
   };
   return { steps: Math.trunc(steps), bps, kick: laneOf(36, "Kick"), snare: laneOf(38, "Snare"), hihat: laneAll([42, 44, 46], ["HiHat", "OpenHat", "ClosedHat"]) };
 }
+// drums は送られているが parseDrums が読めない（steps/beatsPerStep/lanes の欠落・不正）＝「ドラムが無い」と言うと嘘になる
+//   （2026-09-13 M5 監査 軽微-1）。通知の落ち先を言い分けるためだけに使う（経路の判定は parseDrums のまま＝出音不変）。
+function drumsSentButUnreadable(drums?: DrumsInput | null): boolean {
+  return drums?.rhythm != null && parseDrums(drums) == null;
+}
+const DRUMS_UNREADABLE = "ドラムの形式が読めない（steps・beatsPerStep・lanes のどれかが無いか不正）ので";
 
 // ベース低域窓＋kickLock 動作点の実測較正（B1+D2＝docs/research/2026-07-14-stem-groove-measurements.md）。
 // 音域窓：自作曲 stem 実測 p5–p95=G1..A2（絶対上限F3）。旧 36..47(legacy)/33..55(kick経路) は上端が実曲より高い。
@@ -1302,6 +1310,7 @@ export function genBass(
   const anchorScale = dr ? ANCHOR_GRID / dr.steps : 0; // ドラム step → 16分格子 の倍率
   const skelHasBass = (opts?.skeleton?.bass?.length ?? 0) > 0; // 骨格の明示ベース区間（段 E が表面化する＝人が書いた音）
   const anchorFallback: string | null = !anchorWanted ? null
+    : !dr && drumsSentButUnreadable(drums) ? "drums-unreadable"
     : !dr ? "no-drums"
     : info.grouping === "compound" ? "compound-meter"
     : Math.abs(dr.steps * dr.bps - perBar) >= 1e-6 ? "drum-bar-mismatch"
@@ -1740,6 +1749,7 @@ export function genBass(
   //   （2026-09-10 監査 重大①＝トップレベル独自キーは web も /gen/section も読まないので**完全に無言**だった。
   //    3b の `chordFollowFallback` を `bae525a` で meta.warnings へ移したのと同じ形＝独自キーは残さない）。
   const ANCHOR_LABEL = "「キックにルートを置く」";
+  if (anchorFallback === "drums-unreadable") bassWarn.push(`${DRUMS_UNREADABLE}${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
   if (anchorFallback === "no-drums") bassWarn.push(`ドラムが無いので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
   if (anchorFallback === "compound-meter") bassWarn.push(`6/8 など複合拍子では${ANCHOR_LABEL}に対応していません（従来どおり生成しました）`);
   if (anchorFallback === "drum-bar-mismatch") bassWarn.push(`ドラムの1小節の長さが拍子（${info.meter}）と合わないので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
