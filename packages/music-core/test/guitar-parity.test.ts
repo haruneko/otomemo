@@ -35,7 +35,7 @@ function splitSym(sym: string): { root: number; quality: string; bass: number | 
 const sorted = (s: ReadonlySet<number>): number[] => [...s].sort((a, b) => a - b);
 
 function caseIds(): string[] {
-  return readdirSync(DIR).filter((f) => f.endsWith(".json") && f !== "index.json" && f !== "chordtheory.json").map((f) => f.slice(0, -5)).sort();
+  return readdirSync(DIR).filter((f) => f.endsWith(".json") && f !== "index.json" && f !== "chordtheory.json" && f !== "forms.json").map((f) => f.slice(0, -5)).sort();
 }
 const load = (id: string): PyCase => JSON.parse(readFileSync(DIR + id + ".json", "utf8")) as PyCase;
 

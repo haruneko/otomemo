@@ -124,6 +124,30 @@ def main():
         with open(os.path.join(OUT_DIR, case["id"] + ".json"), "w", encoding="utf-8") as fh:
             json.dump(dump_case(case), fh, ensure_ascii=False, indent=1, sort_keys=True)
             fh.write("\n")
+    # 5d フォーム DB（handshape.py:37-230＝Tuning からの導出・B弦補正・GAIN_SAFE_INTERVALS）。
+    #   重み・移動時間の定数は**焼かない**（5e は枠のみ＝移植しない）。導出規則だけを突き合わせる。
+    ENS.load_guitar_shape()
+    HS = sys.modules["g_handshape"]
+    tunings = {"standard": (40, 45, 50, 55, 59, 64), "dropD": (38, 45, 50, 55, 59, 64),
+               "bass4": (28, 33, 38, 43), "seven": (35, 40, 45, 50, 55, 59, 64)}
+    forms_out = {"source": "phrase_maker experiments/guitar/gen2/handshape.py:37-230 (Tuning / octave_corr / valid_root_strings / enumerate_shapes / GAIN_SAFE_INTERVALS)",
+                 "gain_safe": sorted(HS.GAIN_SAFE_INTERVALS), "fret_search_max": HS.FRET_SEARCH_MAX,
+                 "park_frets": list(HS.PARK_FRETS), "tunings": {}}
+    for tname, om in tunings.items():
+        t = HS.Tuning(name=tname, open_midi=om)
+        tf = {"open_midi": list(om), "intervals": list(t.intervals),
+              "octave_corr": [HS.octave_corr(t, s) for s in range(len(om))], "forms": {}}
+        for form in HS.ALL_FORMS:
+            shapes = HS.enumerate_shapes(form, t, HS.FRET_SEARCH_MAX)
+            tf["forms"][HS.FORM_NAMES[form]] = {
+                "valid_root_strings": list(HS.valid_root_strings(form, t)),
+                "gain_ok": HS.form_gain_ok(form, "high"),
+                "shapes": [[sh.base_string, sh.base_fret, list(HS.shape_pitches(sh, t))] for sh in shapes],
+            }
+        forms_out["tunings"][tname] = tf
+    with open(os.path.join(OUT_DIR, "forms.json"), "w", encoding="utf-8") as fh:
+        json.dump(forms_out, fh, ensure_ascii=False, indent=1, sort_keys=True)
+        fh.write("\n")
     with open(os.path.join(OUT_DIR, "index.json"), "w", encoding="utf-8") as fh:
         json.dump({"generated_by": "tools/py-parity/dump_guitar.py",
                    "source": "phrase_maker ensemble.py:2678-2740 _lock_guitar_chug_to_sheet + guitar/gen2/chords/chordfollow.py (build_skeleton / assign_pitches)",

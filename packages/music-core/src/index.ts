@@ -66,6 +66,10 @@ export * from "./walkingBass";
 // 譜のキックへの chug ロック（ヒット単位のボイシング切替＝ChordHit.voice）。相対形のまま＝音高は実音化で出す。
 // 参照値＝tools/py-parity/cases-guitar/。既定挙動は不変（opt-in 経路 guitarRiff からのみ消費）。
 export * from "./guitarRiff";
+// 5d フォーム DB（調弦から導出・B弦補正・GAIN_SAFE_INTERVALS）／5e 手の形の枠（耳未判定・opt-in・重みは移植しない）／実音化。
+export * from "./guitarForms";
+export * from "./guitarHandshape";
+export * from "./guitarRealize";
 
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python

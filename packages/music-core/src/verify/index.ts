@@ -20,3 +20,5 @@ export * from "./nondeterminism";
 // fretboard ＝指板の到達可能性（M3-3e）。ギター gen2 の自前 DP を弦数・調弦・重みで一般化＝4弦ベースにも
 //   6弦ギターにも同じ1本。**検証器**（gate＝到達不能0／diagnostic＝弾きにくさ）＝生成の主導権は握らない。
 export * from "./fretboard";
+// pcMembership ＝音高クラスの所属ゲート（M5＝強拍コードトーン・非整合音 0）。表を持たない＝許容集合は呼び手が別の出所から渡す。
+export * from "./pcMembership";
