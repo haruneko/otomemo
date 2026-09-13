@@ -24,8 +24,10 @@ export function pcMembershipGate(
     applied++;
     if (!allowed.has(((e.pitch % 12) + 12) % 12)) offending.push(e);
   }
-  return gate(id, offending.length === 0, coverageOf(applied, events.length), source,
-    offending.slice(0, 8).map((e) => `pitch=${e.pitch} start=${e.start} は許容 pc に無い`), { offending });
+  // 空の音列は合格にしない（2026-09-13 M5 監査 軽微-3）＝判定した音が0なら何も確かめていない。被覆率0として申告する。
+  const empty = events.length === 0;
+  return gate(id, !empty && offending.length === 0, coverageOf(applied, events.length), source,
+    empty ? ["音が0個＝何も判定していない（被覆率0・空虚）"] : offending.slice(0, 8).map((e) => `pitch=${e.pitch} start=${e.start} は許容 pc に無い`), { offending });
 }
 
 /** 許容集合の大きさ（12音中の割合の平均）＝ゲートが緩すぎないかの自己診断。 */

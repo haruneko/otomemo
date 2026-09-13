@@ -1055,7 +1055,7 @@ export function genChordPattern(
         if (real.report.shape && real.report.shape.emptyLayers > 0) gtrWarn.push(`${GTR_SHAPE}で押さえ方が見つからない音が ${real.report.shape.emptyLayers} 個あり、その音はコード追従の音高にしました`);
         if (real.report.shape && real.report.shape.tier > 0) gtrWarn.push(`${GTR_SHAPE}で手の移動が間に合わない所があったので、移動の速さの制限を${real.report.shape.tier === 1 ? "2倍に緩めました" : "外しました"}`);
         const fg = fretboardGate(real.notes.map((n) => n.pitch), TUNING_GUITAR6);
-        if (!fg.pass) gtrWarn.push(`6弦ギターで押さえられない音が ${fg.problems.length} 個あります`);
+        if (fg.detail.unreachable.length > 0) gtrWarn.push(`6弦ギターで押さえられない音が ${fg.problems.length} 個あります`);
       }
       return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: `ギターのリフ（${grammar.id}）` }], edges: [] });
     }

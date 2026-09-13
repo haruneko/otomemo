@@ -180,10 +180,12 @@ export function solveFingering(pitches: readonly number[], t: Tuning): Fingering
  */
 export function fretboardGate(pitches: readonly number[], t: Tuning): GateVerdict<{ unreachable: readonly number[]; tuning: string }> {
   const sol = solveFingering(pitches, t);
-  const problems = sol.unreachable.map((i) => `note#${i} pitch=${pitches[i]} は ${t.name} のどの弦でも押さえられない`);
+  // 空の音列は合格にしない（2026-09-13 M5 監査 軽微-3）＝被覆率0（空虚）として申告する。
+  const empty = pitches.length === 0;
+  const problems = empty ? ["音が0個＝何も判定していない（被覆率0・空虚）"] : sol.unreachable.map((i) => `note#${i} pitch=${pitches[i]} は ${t.name} のどの弦でも押さえられない`);
   return gate(
     `fretboard_reachable:${t.name}`,
-    sol.unreachable.length === 0,
+    !empty && sol.unreachable.length === 0,
     coverageOf(pitches.length, pitches.length),
     t.source,
     problems,
