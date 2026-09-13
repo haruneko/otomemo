@@ -27,7 +27,7 @@ import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBre
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
-import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, type AnchorOnset, type AnchorSeg } from "@cm/music-core"; // M3-3a＝錨と間の分業（_lock_bass_roots_to_sheet 忠実移植）。opt-in `anchorLock` 経路でのみ消費＝既定は bit 一致。
+import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, chordAtStep, type AnchorOnset, type AnchorSeg } from "@cm/music-core"; // M3-3a＝錨と間の分業（_lock_bass_roots_to_sheet 忠実移植）。opt-in `anchorLock` 経路でのみ消費＝既定は bit 一致。
 import { applyChordFollow, QUALITY_INTERVALS as CF_QUALITY_INTERVALS, type CfLineOnset, type CfSeg } from "@cm/music-core";
 import { guitarGrammarById, GUITAR_GRAMMAR_IDS, buildGuitarSkeleton, lockGuitarChugToSheet, gtrOnsetsToHits, realizeGuitarRiff, fretboardGate, TUNING_GUITAR6 } from "@cm/music-core"; // M5＝ギター型（opt-in `guitarRiff` 経路でのみ消費＝既定は bit 一致）。 // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
 import { buildWalkingLine, WALK_COMPOUND_SLOT_STEPS, JZ_WALK_ID, type WalkSegment } from "@cm/music-core"; // M3-3d＝JZ-WALK（walking v2 の候補生成＋v3 の規則3本・乱数は決定的規則へ置換）。**耳未判定**＝style 名指しの opt-in。
@@ -1040,11 +1040,9 @@ export function genChordPattern(
       // 5f 進行が来ていれば、web と同じ実音化で検算して告げる（音は返さない＝相対形のまま）。
       const cs = (opts.chords ?? []).filter((x) => x && x.root != null);
       if (cs.length > 0) {
-        const chordAtStep = (step: number) => {
-          const beat = step * 0.25;
-          return cs.find((x) => (x.start ?? 0) <= beat + 1e-9 && beat < (x.start ?? 0) + (x.dur ?? 4) - 1e-9) ?? cs[cs.length - 1]!;
-        };
-        const real = realizeGuitarRiff(finalContent.hits, { chordAtStep: (s) => { const x = chordAtStep(s); return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 });
+        // コードの引き当ては music-core `chordAtStep`（step 粒度・範囲外は最後のコード）の1本を使う（M4 番人＝verify-shared-single-impl）。
+        const csSegs: AnchorSeg[] = cs.map((x) => ({ rootPc: 0, startStep: (x.start ?? 0) * 4, lengthSteps: (x.dur ?? 4) * 4 }));
+        const real = realizeGuitarRiff(finalContent.hits, { chordAtStep: (s) => { const x = cs[csSegs.indexOf(chordAtStep(csSegs, s)!)]!; return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 });
         if (real.report.layerBQualities.length) gtrWarn.push(`ギターの表に無いコード（${real.report.layerBQualities.join("・")}）はベースと同じ教科書スケールで代用しました`);
         if (real.report.unknownQualities.length) gtrWarn.push(`知らないコードの種類（${real.report.unknownQualities.join("・")}）はメジャーとして弾きます`);
         if (real.report.shape && real.report.shape.emptyLayers > 0) gtrWarn.push(`${GTR_SHAPE}で押さえ方が見つからない音が ${real.report.shape.emptyLayers} 個あり、その音はコード追従の音高にしました`);
