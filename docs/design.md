@@ -2316,6 +2316,8 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
         ∪ b7（コードが長7度を持つ時は足さない）。オクターブはルートと同じ pc なので含まれる。
         移植関数には区間ごとの許容 pc を `AnchorSeg.stayPcs` で渡す（未指定＝{R, 5, b7}）。
       - **案B（`anchorRestOnSyncopatedKick`＝拍頭でない無音キックは休む）は `chord-change` のとき既定 ON**（調査 §5 案2）。明示の true/false が勝つ。
+        `chord-change` では案B が休ませるのは**滞在中のキックだけ**＝変わり目のキックは拍頭でなくても必ず挿す（契約①「変わり目は全部ルート」が上位）。
+        知らない厳しさの値は既定（`chord-change`）で生成して `meta.warnings`、anchorLock 無しで厳しさだけ渡されたら「効かない」を `meta.warnings`。
         `every-kick` のときの既定は従来どおり OFF（源流互換）。web/HTTP は明示の false を素通しする（未指定と区別する）。
       - **py-parity（源流 `_lock_bass_roots_to_sheet` との列一致 110件）は緑のまま**＝移植関数の既定は `every-kick`（源流の厳格モード）で、
         製品の genBass が `chord-change` を渡す。**忠実移植の証明は捨てない**（源流互換モードの記録として残す）。
