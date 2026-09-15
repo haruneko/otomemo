@@ -146,6 +146,9 @@ describe("フォールバック通知＝落ち先ごとに文言が違い、meta
 
 // ── 中①＝隣のノブと併用したときの錨の契約（design 追補 (k-3)） ────────────────────
 describe("後処理との併用＝approach は錨を避け、fill は破れを数えて告げる（gate）", () => {
+  // 「全キック step にルート」を数える検査なので源流互換モード（every-kick）で回す（2026-09-15 裁定による意図した変更）。
+  //   台帳（(k-3)）は「錨が置いた音が残っているか」を見る＝chord-change でも同じ仕組み（anchor-strictness.test.ts）。
+  const EK = { anchorStrictness: "every-kick" as const };
   const KICK = [0, 6, 8, 14];
   const rootPcAt = (t: number) => CHORDS.filter((c) => c.start <= t + 1e-9).pop()!.root;
   // 全キック step にルートの錨が残っているか（残っていない start を返す）。
@@ -159,10 +162,10 @@ describe("後処理との併用＝approach は錨を避け、fill は破れを�
     return bad;
   };
   it("陽性対照：anchorLock 単独なら錨は1つも破れない", () => {
-    expect(breaks(notesOf(genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true })))).toEqual([]);
+    expect(breaks(notesOf(genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true, ...EK })))).toEqual([]);
   });
   it("approach:0.9 と併用しても錨は1つも破れない（順序で守る）＋余計な通知を出さない", () => {
-    const r = genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true, approach: 0.9 });
+    const r = genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true, approach: 0.9, ...EK });
     expect(breaks(notesOf(r))).toEqual([]);
     expect(r.meta?.warnings ?? []).toEqual([]);
   });
@@ -172,7 +175,7 @@ describe("後処理との併用＝approach は錨を避け、fill は破れを�
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
   });
   it("fill と併用すると錨は破れる＝その事実を数と小節つきで meta.warnings に載せる（黙って壊さない）", () => {
-    const r = genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true, fill: 0.7 });
+    const r = genBass(BF, CHORDS, 3, drums(KICK), { anchorLock: true, fill: 0.7, ...EK });
     const bad = breaks(notesOf(r));
     expect(bad.length).toBeGreaterThan(0); // フィル小節は音形ごと差し替わる＝契約は保てない
     const msg = (r.meta?.warnings ?? []).find((s) => s.includes("フィル"));
@@ -232,9 +235,9 @@ function anchorCoverage(notes: Note[], kick: number[], bars: number): { total: n
 }
 
 describe("不変条件（INV）と被覆率（byConstruction・数値で出す）", () => {
-  it("INV1：全キック step にルート錨が乗る（案B OFF・被覆率=1）", () => {
+  it("INV1：every-kick（源流互換）では全キック step にルート錨が乗る（案B OFF・被覆率=1）", () => { // 2026-09-15 オーナー裁定（design.md 追補 (k-6)）で既定が「変わり目だけルート」に変わった＝全キックでルートを見るこの検査は源流互換モードで回す（裁定による意図した変更）
     const kick = [0, 6, 8, 14];
-    const n = notesOf(genBass(BF, CHORDS, 11, drums(kick), { anchorLock: true }));
+    const n = notesOf(genBass(BF, CHORDS, 11, drums(kick), { anchorLock: true, anchorStrictness: "every-kick" }));
     const cov = anchorCoverage(n, kick, 4);
     expect(cov.total).toBe(16); // 4小節 × キック4点
     expect(cov.hit).toBe(16);
@@ -244,8 +247,9 @@ describe("不変条件（INV）と被覆率（byConstruction・数値で出す�
   it("INV1'：case B（拍頭でない無音キックは休む）を入れると被覆率が下がる＝つまみが効いている", () => {
     // pedal_answer 既定の体で休符に当たるシンコペ step（5,9,13）をキックにする
     const kick = [0, 5, 9, 13];
-    const off = anchorCoverage(notesOf(genBass(BF, CHORDS, 11, drums(kick), { anchorLock: true })), kick, 4);
-    const on = anchorCoverage(notesOf(genBass(BF, CHORDS, 11, drums(kick), { anchorLock: true, anchorRestOnSyncopatedKick: true })), kick, 4);
+    // every-kick（源流互換・案B 既定 OFF）で比べる（裁定による意図した変更＝chord-change では案B が既定 ON）
+    const off = anchorCoverage(notesOf(genBass(BF, CHORDS, 11, drums(kick), { anchorLock: true, anchorStrictness: "every-kick" })), kick, 4);
+    const on = anchorCoverage(notesOf(genBass(BF, CHORDS, 11, drums(kick), { anchorLock: true, anchorStrictness: "every-kick", anchorRestOnSyncopatedKick: true })), kick, 4);
     expect(off.coverage).toBe(1);
     expect(on.coverage).toBeLessThan(1);
     expect(on.coverage).toBeGreaterThan(0);
@@ -300,8 +304,9 @@ describe("不変条件（INV）と被覆率（byConstruction・数値で出す�
 
   it("style と併用できる（体が style 型の格子に変わる）／kickLock とは排他（anchorLock が勝つ）", () => {
     const plain = notesOf(genBass(BF, CHORDS, 11, DR, { anchorLock: true }));
-    const styled = notesOf(genBass(BF, CHORDS, 11, DR, { anchorLock: true, style: "RK-GALLOP" }));
-    expect(styled.map((n) => n.start)).not.toEqual(plain.map((n) => n.start)); // 体が変わる＝併用が効いている
+    const styled = notesOf(genBass(BF, CHORDS, 11, DR, { anchorLock: true, style: "RK-GALLOP", anchorStrictness: "every-kick" })); // 被覆率=1 は源流互換モードで見る（裁定による意図した変更）
+    expect(styled.map((n) => n.start)).not.toEqual(notesOf(genBass(BF, CHORDS, 11, DR, { anchorLock: true, anchorStrictness: "every-kick" })).map((n) => n.start)); // 体が変わる＝併用が効いている
+    expect(plain.length).toBeGreaterThan(0);
     // kickLock を足しても anchorLock の出力は変わらない＝二重適用しない（排他）
     expect(genBass(BF, CHORDS, 11, DR, { anchorLock: true, kickLock: 0.8 })).toStrictEqual(genBass(BF, CHORDS, 11, DR, { anchorLock: true }));
     // style 型でも全キックに錨（被覆率=1）
@@ -313,7 +318,8 @@ describe("不変条件（INV）と被覆率（byConstruction・数値で出す�
 // ── ③ 変異検査（出力に故障を注入＝落ちる不変条件が1つ以上あること） ──────────────
 describe("変異検査（gate・§6-4 の 6＝この段で有効な変異は出力に注入する）", () => {
   const kick = [0, 6, 8, 14];
-  const base = () => notesOf(genBass(BF, CHORDS, 11, drums(kick), { anchorLock: true })).map((n) => ({ ...n }));
+  // INV1（全キックでルート）の変異検査は源流互換モードで（裁定による意図した変更。新しい契約の変異検査は anchor-strictness.test.ts）
+  const base = () => notesOf(genBass(BF, CHORDS, 11, drums(kick), { anchorLock: true, anchorStrictness: "every-kick" })).map((n) => ({ ...n }));
 
   it("陽性対照：無傷の出力は INV1（被覆率=1）を通る", () => {
     expect(anchorCoverage(base(), kick, 4).coverage).toBe(1);

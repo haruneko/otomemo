@@ -49,6 +49,8 @@ export interface AnchorSeg {
   rootPc: number;
   startStep: number;
   lengthSteps: number;
+  /** 滞在中のキックで据え置きを許す pc（絶対 pc）。strictness="chord-change" でだけ読む。未指定＝{R, 5, b7}（design.md 追補 (k-6)） */
+  stayPcs?: readonly number[];
 }
 
 export interface AnchorLockOpts {
@@ -59,6 +61,11 @@ export interface AnchorLockOpts {
   kick: number[];
   /** アクセント step。otomemo の skeleton は kick/snare のみ＝M3 では常に空（M0契約 §5-2） */
   accents?: number[];
+  /** 錨の厳しさ（design.md 追補 (k-6)・2026-09-15 オーナー裁定）。
+   *  "every-kick"（**既定＝源流 `_lock_bass_roots_to_sheet` そのまま**＝py-parity の対象）＝全キックでルート。
+   *  "chord-change"＝コード区間に入って最初のキック（変わり目）だけルート必須・滞在中のキックは体の音が stayPcs に入っていれば据え置き。
+   *  このとき案B は滞在中のキックだけを休ませる（変わり目は必ず挿す）。 */
+  strictness?: "every-kick" | "chord-change";
   /** 案B つまみ（源流 `bass_rest_on_syncopated_kick`）。既定 false＝挿入は全キックで起きる */
   restOnSyncopatedKick?: boolean;
   /** 低域窓 */
@@ -99,6 +106,8 @@ export interface AnchorLockReport {
   coverage: number;
   /** 分岐ごとの件数（(a)昇格 / (b)上書き / (c)挿入 / 案B で見送り） */
   promoted: number;
+  /** chord-change の滞在中キックで、体の許容音をそのまま錨にした数（every-kick では常に 0） */
+  kept: number;
   overwritten: number;
   inserted: number;
   skipped: number;
@@ -125,7 +134,9 @@ export function lockBassRootsToSheet(body: readonly AnchorOnset[], segs: AnchorS
   // 源流の `by_step` は**ループ前に1回**作る＝挿入した錨は後続の分岐から見えない。重複 step は後勝ち（dict 上書き）。
   const byStep = new Map<number, number>();
   onsets.forEach((o, i) => byStep.set(o.step, i));
-  const rep: AnchorLockReport = { kickSteps: 0, anchored: 0, coverage: 1, promoted: 0, overwritten: 0, inserted: 0, skipped: 0 };
+  const rep: AnchorLockReport = { kickSteps: 0, anchored: 0, coverage: 1, promoted: 0, kept: 0, overwritten: 0, inserted: 0, skipped: 0 };
+  const chordChange = opts.strictness === "chord-change";
+  let prevSeg: AnchorSeg | null = null; // 直前のキックが属したコード区間（sweep 順）＝違えば「変わり目」
 
   for (let bar = 0; bar < opts.nBars; bar++) {
     for (const k of K) {
@@ -134,6 +145,9 @@ export function lockBassRootsToSheet(body: readonly AnchorOnset[], segs: AnchorS
       if (!seg) continue;
       const rootPc = ((seg.rootPc % 12) + 12) % 12;
       const isAcc = accents.has(k);
+      const isChange = seg !== prevSeg;
+      prevSeg = seg;
+      const stay = seg.stayPcs ?? [rootPc, (rootPc + 7) % 12, (rootPc + 10) % 12];
       rep.kickSteps++;
       const i = byStep.get(gstep);
       if (i !== undefined) {
@@ -144,6 +158,12 @@ export function lockBassRootsToSheet(body: readonly AnchorOnset[], segs: AnchorS
           o.anchor = true;
           if (isAcc) o.kind = "accent";
           rep.promoted++;
+        } else if (chordChange && !isChange && stay.some((p) => ((p % 12) + 12) % 12 === ((o.pitch % 12) + 12) % 12)) {
+          // (k-6) 滞在中のキック×許容音＝音高もレジスタも据え置きで錨へ（上書きしない）
+          o.role = "head";
+          o.anchor = true;
+          if (isAcc) o.kind = "accent";
+          rep.kept++;
         } else {
           // (b) 非ルート＝ロックが勝つ＝元ピッチに最も近いレジスタのルートへ（同点は低い方）
           const rootLow = rootLowPitch(rootPc, opts.lo);
@@ -164,7 +184,7 @@ export function lockBassRootsToSheet(body: readonly AnchorOnset[], segs: AnchorS
       } else {
         // (c) 休符 step＝低域ルートの錨を新規挿入（案B＝拍頭/アクセント以外は見送り）
         const strong = gstep % 4 === 0;
-        if (opts.restOnSyncopatedKick && !(strong || isAcc)) { rep.skipped++; continue; }
+        if (opts.restOnSyncopatedKick && !(strong || isAcc) && !(chordChange && isChange)) { rep.skipped++; continue; }
         onsets.push({
           step: gstep, kind: isAcc ? "accent" : "note", anchor: true, role: "head",
           deg: rootDeg, strong, pitch: pmClamp(rootLowPitch(rootPc, opts.lo), opts.lo, opts.hi),

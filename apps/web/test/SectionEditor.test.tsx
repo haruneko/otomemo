@@ -1513,6 +1513,56 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(body.anchorLock).toBe(true);
     expect(body.anchorRestOnSyncopatedKick).toBe(true);
     expect("anchorGrammar" in body).toBe(false); // 文法は既定（pedal_answer）＝未送信＝3a と同じ体
+    expect("anchorStrictness" in body).toBe(false); // 厳しさは既定（変わり目だけ）＝未送信
+  });
+
+  it("T4k 錨の厳しさ（k-6・2026-09-15 裁定）＝既定『変わり目だけ』・案B 既定 ON／『全キック』と案B OFF を選ぶと明示で飛ぶ", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
+    expect(screen.queryByLabelText("bass-anchor-strict-every-kick")).toBeNull(); // ON にするまで出ない
+    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    expect(screen.getByLabelText("bass-anchor-strict-chord-change").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("bass-anchor-rest-on").getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const b1 = music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(b1.anchorRestOnSyncopatedKick).toBe(true);
+    expect("anchorStrictness" in b1).toBe(false);
+  });
+
+  it("T4k' 『全キック』と案B OFF を選ぶと anchorStrictness と明示の false が飛ぶ", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    getComposition.mockResolvedValue({
+      neta: mk("s1", "section"),
+      children: [
+        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
+      ],
+    });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
+    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    await userEvent.click(screen.getByLabelText("bass-anchor-strict-every-kick"));
+    await userEvent.click(screen.getByLabelText("bass-anchor-rest-off"));
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const b2 = music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(b2.anchorStrictness).toBe("every-kick");
+    expect(b2.anchorRestOnSyncopatedKick).toBe(false); // 明示の false（未指定と区別＝api 既定 ON に落ちない）
   });
 
   // ── 到達口④の通知（2026-09-10 監査 重大①＝ここが完全に無言だった） ──

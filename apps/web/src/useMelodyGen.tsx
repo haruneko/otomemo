@@ -240,7 +240,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // 錨と間の分業（M3-3a・design.md 追補 (k)）：キックに必ずルートの錨を置き、間のリフは書き換えない。
   //   kickLock（確率でキック共有率を近づける）とは排他。ドラムが要る。false=未送信=従来 bit 一致。
   const [bassAnchor, setBassAnchor] = useState<boolean>(false);
-  const [bassAnchorRest, setBassAnchorRest] = useState<boolean>(false); // 案B＝拍頭でない無音キックはベースを休む
+  const [bassAnchorRest, setBassAnchorRest] = useState<boolean>(true); // 案B＝拍頭でない無音キックはベースを休む（2026-09-15 裁定＝変わり目だけルートの既定に合わせて ON）
+  const [bassAnchorStrict, setBassAnchorStrict] = useState<"chord-change" | "every-kick">("chord-change"); // 錨の厳しさ（design.md 追補 (k-6)）
   const [bassChordFollow, setBassChordFollow] = useState<boolean>(false); // M3-3b＝コード追従の5ガード（approach と排他）
   const [bassGrammar, setBassGrammar] = useState<string>(""); // M3-3c＝anchorLock の体に敷くリフ文法（""＝既定 pedal_answer）
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
@@ -418,7 +419,10 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         if (bassSlash) body.slashBass = true;
         // 錨と間の分業（M3-3a）：ドラムのキックに必ずルートの錨を置く。ドラムが要る（api 側でも no-drums で通知）。
         if (bassAnchor) body.anchorLock = true;
-        if (bassAnchor && bassAnchorRest) body.anchorRestOnSyncopatedKick = true;
+        // 案B は api 側で既定 ON（chord-change）/OFF（every-kick）＝画面の値を常に明示で送る（false も未指定と区別）。
+        if (bassAnchor) body.anchorRestOnSyncopatedKick = bassAnchorRest;
+        // 錨の厳しさ：既定（変わり目だけ）は未送信＝api 既定と同じ。全キックの時だけ送る。
+        if (bassAnchor && bassAnchorStrict === "every-kick") body.anchorStrictness = "every-kick";
         // リフ文法（M3-3c）：錨の体。""＝既定（pedal_answer）＝未送信＝従来と同じ体。
         if (bassAnchor && bassGrammar) body.anchorGrammar = bassGrammar;
         // コード追従の5ガード（M3-3b）：リズムは動かさず音高だけを進行へ写す。ドラムは要らない（コードだけで立つ）。
@@ -680,7 +684,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     gtrRiff, setGtrRiff, gtrAnchor, setGtrAnchor, gtrShape, setGtrShape, // M5 ギター型（リフ文法・キックに刻み・手の形）
     compKeyStab, setCompKeyStab, // M6a-6a 鍵盤の隙間刺し
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
-    bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, // 錨と間の分業（M3-3a）
+    bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, bassAnchorStrict, setBassAnchorStrict, // 錨と間の分業（M3-3a）＋錨の厳しさ（k-6）
     bassChordFollow, setBassChordFollow, // コード追従の5ガード（M3-3b）
     bassGrammar, setBassGrammar, // リフ文法（M3-3c）
     detailsOpen, setDetailsOpen, preset, setPreset,

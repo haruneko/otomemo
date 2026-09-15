@@ -36,7 +36,7 @@ describe("到達口①＝/music/gen_bass（HTTP）", () => {
     const on = await app.inject({ method: "POST", url: "/music/gen_bass", payload: { frame: FRAME, chords: CHORDS, seed: 42, drums: DR, anchorLock: true, anchorRestOnSyncopatedKick: true } });
     const c = (on.json() as { items: { content: { notes: Note[] } }[] }).items[0]!.content;
     expect(c.notes).toEqual(direct({ anchorLock: true, anchorRestOnSyncopatedKick: true }).notes);
-    expect(c.notes.length).toBeLessThan(direct({ anchorLock: true }).notes.length); // つまみが実際に効いている
+    expect(c.notes.length).toBeLessThan(direct({ anchorLock: true, anchorRestOnSyncopatedKick: false }).notes.length); // つまみが実際に効いている（2026-09-15 裁定で chord-change は案B 既定 ON になった＝比較の相手は明示の false・裁定による意図した変更）
   });
 
   it("anchorLock 未指定＝従来経路（engine キー無し）＝回帰", async () => {
@@ -85,9 +85,9 @@ describe("到達口②＝MCP gen_bass", () => {
       const r = await client.callTool({ name: "gen_bass", arguments: { frame: FRAME, chords: CHORDS, seed: 42, drums: DR, ...args } });
       return JSON.parse(textOf(r)) as { items: { content: { notes: Note[]; engine?: { version: string } } }[] };
     };
-    const a = await call({ anchorLock: true });
+    const a = await call({ anchorLock: true, anchorRestOnSyncopatedKick: false }); // （2026-09-15 裁定で chord-change は案B 既定 ON になった＝比較の相手は明示の false・裁定による意図した変更）
     expect(a.items[0]!.content.engine?.version).toMatch(/^pm-/);
-    expect(a.items[0]!.content.notes).toEqual(direct({ anchorLock: true }).notes);
+    expect(a.items[0]!.content.notes).toEqual(direct({ anchorLock: true, anchorRestOnSyncopatedKick: false }).notes);
     const b = await call({ anchorLock: true, anchorRestOnSyncopatedKick: true });
     expect(b.items[0]!.content.notes).toEqual(direct({ anchorLock: true, anchorRestOnSyncopatedKick: true }).notes);
     expect(b.items[0]!.content.notes.length).toBeLessThan(a.items[0]!.content.notes.length);
@@ -108,14 +108,14 @@ describe("到達口③＝/gen/section（body.bass 素通し）", () => {
   it("bass.anchorLock が genBass まで届く（生成済みドラムのキックに錨が乗る）", async () => {
     const frame = { bars: 2, meter: "4/4", key: 0 };
     const seed = 42;
-    const r = await app.inject({ method: "POST", url: "/gen/section", payload: { frame, seed, parts: ["chords", "bass", "drums"], bass: { anchorLock: true } } });
+    const r = await app.inject({ method: "POST", url: "/gen/section", payload: { frame, seed, parts: ["chords", "bass", "drums"], bass: { anchorLock: true, anchorRestOnSyncopatedKick: false } } }); // 全キックに onset を見るので案B を明示 OFF（2026-09-15 裁定で chord-change は案B 既定 ON になった＝比較の相手は明示の false・裁定による意図した変更）
     expect(r.statusCode).toBe(200);
     const comp = r.json() as { composition: { children: { node: { neta: { kind: string; content: unknown } } }[] } };
     const bass = comp.composition.children.find((c) => c.node.neta.kind === "bass")!.node.neta.content as { notes: Note[]; engine?: { version: string } };
     expect(bass.engine?.version).toMatch(/^pm-/); // 新経路が実際に立った証拠
     const drums = genDrums(frame, seed).items[0]!.content as DrumsInput;
     const chords = (comp.composition.children.find((c) => c.node.neta.kind === "chord_progression")!.node.neta.content as { chords: { root: number; quality: string; start: number; dur: number }[] }).chords;
-    expect(bass.notes).toEqual((genBass(frame, chords, seed, drums, { anchorLock: true }).items[0]!.content as { notes: Note[] }).notes);
+    expect(bass.notes).toEqual((genBass(frame, chords, seed, drums, { anchorLock: true, anchorRestOnSyncopatedKick: false }).items[0]!.content as { notes: Note[] }).notes);
     // 全キック step にベースの onset が在る（錨＝byConstruction・被覆率は単体テスト側で数値化済み）
     const r2 = drums.rhythm!;
     const kickBeats = r2.lanes!.find((l) => l.midi === 36)!.hits!.map((s) => s * r2.beatsPerStep!);
@@ -134,7 +134,7 @@ describe("到達口③＝/gen/section（body.bass 素通し）", () => {
     const chords = (comp.composition.children.find((c) => c.node.neta.kind === "chord_progression")!.node.neta.content as { chords: { root: number; quality: string; start: number; dur: number }[] }).chords;
     // 案B ON の直呼びと一致し、かつ OFF の直呼びとは（このドラム骨で差が出るなら）別物であることを示す
     const on = (genBass(frame, chords, seed, drums, { anchorLock: true, anchorRestOnSyncopatedKick: true }).items[0]!.content as { notes: Note[] }).notes;
-    const off = (genBass(frame, chords, seed, drums, { anchorLock: true }).items[0]!.content as { notes: Note[] }).notes;
+    const off = (genBass(frame, chords, seed, drums, { anchorLock: true, anchorRestOnSyncopatedKick: false }).items[0]!.content as { notes: Note[] }).notes;
     expect(bass.notes).toEqual(on);
     expect(on.length).toBeLessThanOrEqual(off.length); // 案B は錨を増やさない（減るか同じ）
   });

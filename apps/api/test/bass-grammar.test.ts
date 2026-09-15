@@ -125,11 +125,13 @@ describe("文法を切り替えると体が変わる（ノブが実際に効い�
     expect(gp.length).toBeGreaterThan(pa.length); // ギャロップは密（8分＋16分×2）
   });
 
-  it("錨（キック step）はどの文法でもルートで、非キックのセルだけが文法ごとに違う＝分業が保たれる", () => {
+  it("錨（キック step）は every-kick（源流互換）ならどの文法でもルートで、非キックのセルだけが文法ごとに違う＝分業が保たれる", () => {
+    // 2026-09-15 オーナー裁定（design.md 追補 (k-6)）で既定は「変わり目だけルート」＝全キックでルートを数えるこの検査は
+    //   源流互換モードで回す（裁定による意図した変更。新しい契約の検査は anchor-strictness.test.ts）。
     const kickBeats = [0, 1.5, 2, 3.5];
     const rootAt = (t: number) => CHORDS.find((c) => c.start <= t && t < c.start + c.dur)!.root;
     for (const id of ["pedal_answer", "gallop_pedal", "octave_call_response"]) {
-      const ns = notesOf({ anchorLock: true, anchorGrammar: id });
+      const ns = notesOf({ anchorLock: true, anchorGrammar: id, anchorStrictness: "every-kick" });
       let covered = 0;
       for (let bar = 0; bar < 4; bar++) for (const kb of kickBeats) {
         const t = bar * 4 + kb;

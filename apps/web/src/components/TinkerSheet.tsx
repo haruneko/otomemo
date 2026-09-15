@@ -512,6 +512,17 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               </span>
             </div>
           )}
+          {/* 錨の厳しさ（design.md 追補 (k-6)・2026-09-15 裁定）＝既定は「変わり目だけ」。全キックは phrase_maker 源流と同じ。 */}
+          {gen.bassAnchor && (
+            <div className="knob-seg" aria-label="bass-anchor-strict">
+              <span className="knob-name">ルートを置くキック<small>変わり目だけ＝同じコードの間は5度・b7なども残す</small></span>
+              <span className="seg-ctl">
+                {([["変わり目だけ", "chord-change"], ["全キック", "every-kick"]] as [string, "chord-change" | "every-kick"][]).map(([lab, v]) => (
+                  <button key={v} type="button" className={"seg-b" + (gen.bassAnchorStrict === v ? " on" : "")} aria-label={`bass-anchor-strict-${v}`} aria-pressed={gen.bassAnchorStrict === v} onClick={() => gen.setBassAnchorStrict(v)}>{lab}</button>
+                ))}
+              </span>
+            </div>
+          )}
           {gen.bassAnchor && (
             <div className="knob-seg" aria-label="bass-anchor-rest">
               <span className="knob-name">裏キックは休む<small>拍頭でないキックにはベースを置かない</small></span>
