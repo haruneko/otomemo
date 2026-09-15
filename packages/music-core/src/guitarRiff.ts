@@ -433,9 +433,10 @@ export interface GtrHit { step: number; dur: number; vel: number; voice: GtrVoic
 
 const r3 = (x: number): number => Math.round(x * 1000) / 1000;
 
-export function gtrOnsetsToHits(onsets: readonly GtrOnset[]): GtrHit[] {
+/** `velOverride`＝kind ごとの vel の差し替え（2026-09-15 裁定「つまみで選ぶ」＝ghost の強さ）。未指定＝源流の velmap。 */
+export function gtrOnsetsToHits(onsets: readonly GtrOnset[], velOverride?: Partial<Record<GtrKind, number>>): GtrHit[] {
   return onsets.map((o) => ({
-    step: o.step, dur: r3(o.durSteps), vel: GTR_VEL[o.kind], voice: o.voicing,
+    step: o.step, dur: r3(o.durSteps), vel: velOverride?.[o.kind] ?? GTR_VEL[o.kind], voice: o.voicing,
     riff: { kind: o.kind, deg: o.deg, role: o.role, anchor: o.anchor, strong: o.strong },
   }));
 }

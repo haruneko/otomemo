@@ -556,7 +556,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   //   ジャンルchip→「候補を出す」で variety=4 の別々の型を候補トレイへ（cand-card＋▶試聴＋採用の既存動線）。
   const chordInstDrawer = (
     <>
-      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setGtrRiff(""); gen.setGtrAnchor(false); gen.setGtrShape(false); gen.setCompKeyStab(false); })}
+      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setGtrRiff(""); gen.setGtrAnchor(false); gen.setGtrShape(false); gen.setGtrPalmGate(null); gen.setGtrGhostVel(null); gen.setCompKeyStab(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">伴奏のジャンル（型を名前で選ばず耳で選ぶ）</div>
         <div className="tk-palette" aria-label="comp-genre">
@@ -600,6 +600,23 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               <span className="seg-ctl">
                 <button type="button" className={"seg-b" + (!gen.gtrShape ? " on" : "")} aria-label="comp-guitar-shape-off" aria-pressed={!gen.gtrShape} onClick={() => gen.setGtrShape(false)}>OFF</button>
                 <button type="button" className={"seg-b" + (gen.gtrShape ? " on" : "")} aria-label="comp-guitar-shape-on" aria-pressed={gen.gtrShape} onClick={() => gen.setGtrShape(true)}>ON</button>
+              </span>
+            </div>
+            {/* 刻みの音価のつまみ（2026-09-15 裁定「つまみで選ぶ」）＝既定は源流の値（8分の刻み≒8分音符の34%・ゴースト vel 46）。 */}
+            <div className="knob-seg" aria-label="comp-guitar-palm">
+              <span className="knob-name">刻みの短さ<small>既定＝パームミュート風に短く</small></span>
+              <span className="seg-ctl">
+                {([["既定", null], ["短く", 0.5], ["長め", 1]] as [string, number | null][]).map(([lab, v]) => (
+                  <button key={lab} type="button" className={"seg-b" + (gen.gtrPalmGate === v ? " on" : "")} aria-label={`comp-guitar-palm-${v ?? "default"}`} aria-pressed={gen.gtrPalmGate === v} onClick={() => gen.setGtrPalmGate(v)}>{lab}</button>
+                ))}
+              </span>
+            </div>
+            <div className="knob-seg" aria-label="comp-guitar-ghost">
+              <span className="knob-name">弱音の強さ<small>既定＝ゴーストは弱く（46）</small></span>
+              <span className="seg-ctl">
+                {([["既定", null], ["もっと弱く", 30], ["強め", 70]] as [string, number | null][]).map(([lab, v]) => (
+                  <button key={lab} type="button" className={"seg-b" + (gen.gtrGhostVel === v ? " on" : "")} aria-label={`comp-guitar-ghost-${v ?? "default"}`} aria-pressed={gen.gtrGhostVel === v} onClick={() => gen.setGtrGhostVel(v)}>{lab}</button>
+                ))}
               </span>
             </div>
           </>}

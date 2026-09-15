@@ -229,6 +229,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [gtrRiff, setGtrRiff] = useState<string>(""); // リフ文法（power_chug/pedal_answer/gallop）
   const [gtrAnchor, setGtrAnchor] = useState<boolean>(false); // キックに刻みを揃える（ドラムが要る）
   const [gtrShape, setGtrShape] = useState<boolean>(false); // 手の形で弾く（耳未判定の試作）
+  // 刻みの音価のつまみ（2026-09-15 裁定「つまみで選ぶ」）＝null＝既定（源流の値）＝未送信＝bit 一致。
+  const [gtrPalmGate, setGtrPalmGate] = useState<number | null>(null); // 刻みの短さ（0.1〜1）
+  const [gtrGhostVel, setGtrGhostVel] = useState<number | null>(null); // 弱音の強さ（1〜127）
   // M6a-6a 鍵盤の隙間刺し：false＝未送信＝従来 bit 一致。立っている時はライブラリでなく生成器を叩き、セクションのドラムを同送。
   const [compKeyStab, setCompKeyStab] = useState<boolean>(false);
   // ベース×ドラムノブ（奏法UIスライスD・design「gen_bass×ドラム結線」／slashBass）：UI未露出だった4ノブを「細かく（ドラム絡み）」群へ。
@@ -438,6 +441,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
           body.guitarRiff = gtrRiff;
           if (gtrAnchor) { body.anchorLock = true; const d = ctx.sectionDrums(); if (d) body.drums = d; }
           if (gtrShape) body.guitarShape = true;
+          if (gtrPalmGate != null) body.guitarPalmGate = gtrPalmGate;
+          if (gtrGhostVel != null) body.guitarGhostVel = gtrGhostVel;
         }
         // M6a-6a 鍵盤の隙間刺し：ON の時だけ送る（ドラムが無ければ api が理由を返す）。
         if (compKeyStab) { body.keyStab = true; const d = ctx.sectionDrums(); if (d) body.drums = d; }
@@ -681,7 +686,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     drumFillStyle, setDrumFillStyle, drumBodyAim, setDrumBodyAim, drumBodyDrummer, setDrumBodyDrummer, // フィルの作り方＝格子/型辞書/解いて作る（M2/M3）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
-    gtrRiff, setGtrRiff, gtrAnchor, setGtrAnchor, gtrShape, setGtrShape, // M5 ギター型（リフ文法・キックに刻み・手の形）
+    gtrRiff, setGtrRiff, gtrAnchor, setGtrAnchor, gtrShape, setGtrShape, gtrPalmGate, setGtrPalmGate, gtrGhostVel, setGtrGhostVel, // M5 ギター型（リフ文法・キックに刻み・手の形・刻みの音価のつまみ）
     compKeyStab, setCompKeyStab, // M6a-6a 鍵盤の隙間刺し
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, bassAnchorStrict, setBassAnchorStrict, // 錨と間の分業（M3-3a）＋錨の厳しさ（k-6）

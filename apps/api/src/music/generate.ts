@@ -971,6 +971,9 @@ export function genChordPattern(
     //   guitarShape＝音高を「手の形」ソルバで出す（**耳未判定の試作**・重みは otomemo 仮置き）／
     //   drums＝キックの出所／chords＝進行（api は音を返さないが、進行があれば実音化して検算し通知する＝5f）。
     guitarRiff?: string; anchorLock?: boolean; guitarShape?: boolean; drums?: DrumsInput | null;
+    //   guitarPalmGate＝刻みの短さ（palmGate を文法の値の代わりに・0.1〜1）／guitarGhostVel＝弱音（ghost）の vel（1〜127）。
+    //   **未指定＝源流の値＝1ビットも変わらない**（design.md 追補 (k-4)・2026-09-15 オーナー裁定「つまみで選ぶ」）。
+    guitarPalmGate?: number; guitarGhostVel?: number;
     chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[] | null;
     // M6a-6a 鍵盤の隙間刺し（**既定 OFF**）：drums のキック以外の打点（スネア）に和音を刺す（キックだけなら 2拍裏・4拍裏）。drums が要る。
     keyStab?: boolean;
@@ -1008,12 +1011,21 @@ export function genChordPattern(
   if (opts?.guitarRiff == null && (opts?.anchorLock === true || opts?.guitarShape === true)) {
     gtrWarn.push(`ギターのリフ文法を選んだ時だけ${opts?.anchorLock === true ? GTR_LOCK : GTR_SHAPE}が効きます（従来どおり生成しました）`);
   }
+  if (opts?.guitarRiff == null && opts?.guitarPalmGate != null) gtrWarn.push("ギターのリフ文法を選んだ時だけ「刻みの短さ」が効きます（従来どおり生成しました）");
+  if (opts?.guitarRiff == null && opts?.guitarGhostVel != null) gtrWarn.push("ギターのリフ文法を選んだ時だけ「弱音の強さ」が効きます（従来どおり生成しました）");
   if (opts?.guitarRiff != null) {
     const grammar = guitarGrammarById(opts.guitarRiff);
     if (!grammar) gtrWarn.push(`知らないギターのリフ文法（${opts.guitarRiff}）なので従来どおり生成しました（選べるのは ${GUITAR_GRAMMAR_IDS.join(" / ")}）`);
     else if (info.grouping === "compound" || stepsPerBar !== 16) gtrWarn.push(`この拍子（${info.meter}）ではギターのリフ文法に対応していません（4/4 のみ・従来どおり生成しました）`);
     else {
-      let onsets = buildGuitarSkeleton(grammar, steps);
+      // 刻みの音価のつまみ（未指定＝文法の palmGate・ghost vel 46＝源流値）。範囲外は丸めて告げる。
+      const pgRaw = opts.guitarPalmGate;
+      const palmGate = typeof pgRaw === "number" && Number.isFinite(pgRaw) ? Math.max(0.1, Math.min(1, pgRaw)) : grammar.palmGate;
+      if (typeof pgRaw === "number" && palmGate !== pgRaw) gtrWarn.push(`「刻みの短さ」は 0.1〜1 の範囲なので ${palmGate} に丸めました`);
+      const gvRaw = opts.guitarGhostVel;
+      const ghostVel = typeof gvRaw === "number" && Number.isFinite(gvRaw) ? Math.max(1, Math.min(127, Math.round(gvRaw))) : undefined;
+      if (typeof gvRaw === "number" && ghostVel !== gvRaw) gtrWarn.push(`「弱音の強さ」は 1〜127 の整数なので ${ghostVel ?? "既定"} に丸めました`);
+      let onsets = buildGuitarSkeleton(palmGate === grammar.palmGate ? grammar : { ...grammar, palmGate }, steps);
       // 5a 譜のキックへの chug ロック（成立条件は genBass の anchorLock と同じ並び・落ち先ごとに言い分ける）。
       let lockKick: number[] | null = null;
       if (opts.anchorLock === true) {
@@ -1030,7 +1042,7 @@ export function genChordPattern(
           lockKick = dr!.kick.map((k) => k * scale);
           // accents は常に空＝otomemo のドラム content は kick/snare のみ（M3 の決定2を引き継ぐ）＝アクセント権限の一本化で
           //   文法のアクセントは note へ均される（源流どおり）。
-          onsets = lockGuitarChugToSheet(onsets, { totalSteps: steps, kick: lockKick, accents: [], palmGate: grammar.palmGate }).onsets;
+          onsets = lockGuitarChugToSheet(onsets, { totalSteps: steps, kick: lockKick, accents: [], palmGate }).onsets;
         }
       }
       const pitchEngine = opts.guitarShape === true ? "handshape" as const : "chordfollow" as const;
@@ -1038,7 +1050,7 @@ export function genChordPattern(
         mode: "strum" as CompMode,
         voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, style: "guitar" as const },
         steps,
-        hits: gtrOnsetsToHits(onsets),
+        hits: gtrOnsetsToHits(onsets, ghostVel != null ? { ghost: ghostVel } : undefined),
         guitarRiff: { grammar: grammar.id, pitch: pitchEngine, ...(lockKick ? { anchorLock: true as const } : {}), ...(pitchEngine === "handshape" ? { seed: seed ?? 5 } : {}) },
         engine: { version: PM_ENGINE_VERSION },
       };
@@ -1329,6 +1341,13 @@ export function genBass(
     : skelHasBass ? "skeleton-explicit-bass"
     : null;
   const anchorPath = anchorWanted && anchorFallback === null;
+  // 錨の厳しさ（design.md 追補 (k-6)・2026-09-15 オーナー裁定「変わり目だけ必須」）。既定＝chord-change＝契約から選好へ。
+  //   every-kick＝源流 `_lock_bass_roots_to_sheet` そのまま（全キックでルート）。知らない値は既定で生成して告げる。
+  const strictRaw = opts?.anchorStrictness as string | undefined;
+  const anchorStrictness: "chord-change" | "every-kick" = strictRaw === "every-kick" ? "every-kick" : "chord-change";
+  const strictUnknown = strictRaw != null && strictRaw !== "every-kick" && strictRaw !== "chord-change";
+  // 案B の既定＝chord-change では ON（調査 §5 案2）・every-kick では OFF（源流互換）。明示の true/false が勝つ。
+  const anchorRest = typeof opts?.anchorRestOnSyncopatedKick === "boolean" ? opts.anchorRestOnSyncopatedKick : anchorStrictness === "chord-change";
   // 錨（anchorLock が置いたルート＝キック step の音）の start＝3b の chord_follow が**触らない**印
   //   （構造的契約が上位）。**キック由来の錨だけ**＝文法辞書の `anchor` 注記（不可侵の頭）とは別物。
   const anchorStarts = new Set<number>();
@@ -1341,13 +1360,6 @@ export function genBass(
   //   style 指定時は style 型の格子が体になる（文法は使わない）＝この解決は style 未指定のときだけ効く。
   const grammarType = bassGrammarById(opts?.anchorGrammar) ?? bassGrammarById(BASS_GRAMMAR_DEFAULT_ID)!;
   const grammarFallback: string | null = opts?.anchorGrammar && !bassGrammarById(opts.anchorGrammar) ? "unknown-grammar" : null;
-  // 錨の厳しさ（design.md 追補 (k-6)・2026-09-15 オーナー裁定「変わり目だけ必須」）。既定＝chord-change＝契約から選好へ。
-  //   every-kick＝源流 `_lock_bass_roots_to_sheet` そのまま（全キックでルート）。知らない値は既定で生成して告げる。
-  const strictRaw = opts?.anchorStrictness as string | undefined;
-  const anchorStrictness: "chord-change" | "every-kick" = strictRaw === "every-kick" ? "every-kick" : "chord-change";
-  const strictUnknown = strictRaw != null && strictRaw !== "every-kick" && strictRaw !== "chord-change";
-  // 案B の既定＝chord-change では ON（調査 §5 案2）・every-kick では OFF（源流互換）。明示の true/false が勝つ。
-  const anchorRest = typeof opts?.anchorRestOnSyncopatedKick === "boolean" ? opts.anchorRestOnSyncopatedKick : anchorStrictness === "chord-change";
 
   // --- コード追従（M3-3b・`chordFollow`・design.md 追補 (k)）の成立条件 ---
   //   源流＝phrase_maker `bass_rock_riff/chords/chord_follow.py` の5ガード（①強拍コードトーン強制②弱拍のスケール
@@ -1475,8 +1487,11 @@ export function genBass(
     // 連続する同じコード（ルート＋許容 pc）を1区間へ畳んで AnchorSeg 列に（移植関数の chord_at と otomemo の chordAt が同じ答を返す形）。
     //   ルートは同じで許容 pc だけ違う区間（C→C7 等）も分けるが、rootPc は同じなので every-kick の出音は従来と同じ。
     const segs: AnchorSeg[] = [];
+    let lastKey = "";
     for (let g = 0; g < totalSteps; g++) {
       const pc = rootAtStep(g);
+      const stayPcs = stayPcsAtStep(g);
+      const key = `${pc}|${stayPcs.join(",")}`;
       const last = segs[segs.length - 1];
       if (last && key === lastKey) last.lengthSteps++;
       else segs.push({ rootPc: pc, startStep: g, lengthSteps: 1, stayPcs });
@@ -1488,11 +1503,8 @@ export function genBass(
     const roleAt = (bar: number, step: number): string => styleType ? "figure"
       : (grammarType.onsets[bar % grammarType.onsets.length]!.find((o) => o.step === step)?.role ?? "figure");
     const body: AnchorOnset[] = [];
-    let lastKey = "";
     const writtenSteps = new Map<number, number>(); // step → 書かれた音価（スロット数・tie 連結）
     for (let bar = 0; bar < bars; bar++) {
-      const stayPcs = stayPcsAtStep(g);
-      const key = `${pc}|${stayPcs.join(",")}`;
       const cells = bodyCellsAt(bar);
       let i = 0;
       while (i < ANCHOR_GRID) {
@@ -1794,6 +1806,8 @@ export function genBass(
   // 未知の文法 ID を渡された（＝既定 pedal_answer を敷いた）。
   if (walkFallback === "no-chords") bassWarn.push("コードが無いのでウォーキングベース（JZ-WALK）は作れません（従来どおり生成しました）");
   if (walkFallback === "meter-unsupported") bassWarn.push(`この拍子（${info.meter}）ではウォーキングベース（JZ-WALK）に対応していません（従来どおり生成しました）`);
+  if (anchorPath && strictUnknown) bassWarn.push(`知らない錨の厳しさ（${strictRaw}）なので既定（変わり目のキックだけルート）で生成しました`);
+  if (!anchorWanted && strictRaw != null) bassWarn.push(`${ANCHOR_LABEL}を使う時だけ錨の厳しさ（${strictRaw}）が効きます（従来どおり生成しました）`);
   if (anchorPath && grammarFallback === "unknown-grammar") bassWarn.push(`知らないリフ文法（${opts?.anchorGrammar}）なので既定（${BASS_GRAMMAR_DEFAULT_ID}）で生成しました`);
   // 錨の契約の**実測**（2026-09-10 監査 中①）：後段（フィル等）を全部通したあとで「キック step にルート錨が残っているか」を
   //   数え、欠けたら数と理由を告げる。`approach` は上で錨を避けるようにしたので通常はここに来ない＝**残るのはフィル**
@@ -1806,8 +1820,6 @@ export function genBass(
       if (n && normRoot(n.pitch) === pc) continue;
       broken++;
       if (fillReplacedBar === null || Math.floor(t / perBar + 1e-9) !== fillReplacedBar) brokenOutsideFill++;
-  if (anchorPath && strictUnknown) bassWarn.push(`知らない錨の厳しさ（${strictRaw}）なので既定（変わり目のキックだけルート）で生成しました`);
-  if (!anchorWanted && strictRaw != null) bassWarn.push(`${ANCHOR_LABEL}を使う時だけ錨の厳しさ（${strictRaw}）が効きます（従来どおり生成しました）`);
     }
     if (broken > 0 && brokenOutsideFill === 0) bassWarn.push(`フィルを入れた ${fillReplacedBar! + 1} 小節目は音形ごと差し替わるので、その小節のキックにはルートの錨が残っていません（${broken} 個）`);
     else if (broken > 0) bassWarn.push(`キックに置いたルートの錨のうち ${broken} 個は、後の処理で別の音に入れ替わりました`);

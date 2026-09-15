@@ -1773,6 +1773,30 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(body.anchorLock).toBe(true);
     expect(body.guitarShape).toBe(true);
     expect(Array.isArray(body.chords)).toBe(true); // 進行も同送
+    expect("guitarPalmGate" in body).toBe(false); // 刻みの音価のつまみは既定＝未送信＝源流値（bit 一致）
+    expect("guitarGhostVel" in body).toBe(false);
+  });
+  it("刻みの音価のつまみ（2026-09-15 裁定「つまみで選ぶ」）＝選ぶと guitarPalmGate／guitarGhostVel が飛ぶ（リフ文法を選ぶまで出ない）", async () => {
+    music.mockReset();
+    music.mockResolvedValue({ items: [] });
+    chordSection();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    await userEvent.click(screen.getByLabelText("group-compguitar"));
+    expect(screen.queryByLabelText("comp-guitar-palm-1")).toBeNull();
+    await userEvent.selectOptions(within(screen.getByLabelText("comp-guitar-riff")).getByRole("combobox"), "power_chug");
+    expect(screen.getByLabelText("comp-guitar-palm-default").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByLabelText("comp-guitar-ghost-default").getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(screen.getByLabelText("comp-guitar-palm-1"));
+    await userEvent.click(screen.getByLabelText("comp-guitar-ghost-70"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
+    expect(op).toBe("gen_chord_pattern");
+    expect(body.guitarPalmGate).toBe(1);
+    expect(body.guitarGhostVel).toBe(70);
   });
   it("M6a 鍵盤の隙間刺し＝ON で生成器（gen_chord_pattern）へ keyStab が飛ぶ（ライブラリに落ちない）・OFF に戻すと送らない", async () => {
     music.mockReset();

@@ -357,8 +357,10 @@ export function buildHttp(core: Core): FastifyInstance {
           const cpAnchor = b.anchorLock === true ? true : undefined;
           const cpShape = b.guitarShape === true ? true : undefined;
           const cpKeyStab = b.keyStab === true ? true : undefined; // M6a-6a 鍵盤の隙間刺し（既定 OFF・drums が要る）
-          const cpGtr = cpRiff != null || cpAnchor != null || cpShape != null || cpKeyStab != null;
-          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null || cpGtr ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize, ...(cpGtr ? { guitarRiff: cpRiff, anchorLock: cpAnchor, guitarShape: cpShape, drums: b.drums, chords: asChords(b.chords), ...(cpKeyStab ? { keyStab: true } : {}) } : {}) } : undefined);
+          const cpPalm = typeof b.guitarPalmGate === "number" ? b.guitarPalmGate : undefined; // 刻みの短さ（2026-09-15 裁定・未指定＝源流値）
+          const cpGhostVel = typeof b.guitarGhostVel === "number" ? b.guitarGhostVel : undefined; // 弱音の強さ
+          const cpGtr = cpRiff != null || cpAnchor != null || cpShape != null || cpKeyStab != null || cpPalm != null || cpGhostVel != null;
+          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null || cpGtr ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize, ...(cpGtr ? { guitarRiff: cpRiff, anchorLock: cpAnchor, guitarShape: cpShape, drums: b.drums, chords: asChords(b.chords), ...(cpKeyStab ? { keyStab: true } : {}), ...(cpPalm != null ? { guitarPalmGate: cpPalm } : {}), ...(cpGhostVel != null ? { guitarGhostVel: cpGhostVel } : {}) } : {}) } : undefined);
         }
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
@@ -507,8 +509,8 @@ export function buildHttp(core: Core): FastifyInstance {
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
     // M5 ギター型（body.chord:{guitarRiff,anchorLock,guitarShape}）：生成済みドラムと進行を渡す。**body.chord 未指定＝従来の呼び出しそのまま＝bit 一致**。
     //   M6a-6a：body.chord.keyStab＝鍵盤の隙間刺し（生成済みドラムのキック∪スネアを譜として読む）。
-    const chordGtr = b.chord && (typeof b.chord.guitarRiff === "string" || b.chord.anchorLock === true || b.chord.guitarShape === true || b.chord.keyStab === true)
-      ? { guitarRiff: typeof b.chord.guitarRiff === "string" ? b.chord.guitarRiff : undefined, anchorLock: b.chord.anchorLock === true ? true : undefined, guitarShape: b.chord.guitarShape === true ? true : undefined, ...(b.chord.keyStab === true ? { keyStab: true } : {}) }
+    const chordGtr = b.chord && (typeof b.chord.guitarRiff === "string" || b.chord.anchorLock === true || b.chord.guitarShape === true || b.chord.keyStab === true || typeof b.chord.guitarPalmGate === "number" || typeof b.chord.guitarGhostVel === "number")
+      ? { guitarRiff: typeof b.chord.guitarRiff === "string" ? b.chord.guitarRiff : undefined, anchorLock: b.chord.anchorLock === true ? true : undefined, guitarShape: b.chord.guitarShape === true ? true : undefined, ...(b.chord.keyStab === true ? { keyStab: true } : {}), ...(typeof b.chord.guitarPalmGate === "number" ? { guitarPalmGate: b.chord.guitarPalmGate } : {}), ...(typeof b.chord.guitarGhostVel === "number" ? { guitarGhostVel: b.chord.guitarGhostVel } : {}) }
       : undefined;
     if (want.has("chord_pattern")) {
       const cpRes = chordGtr ? genChordPattern(genFrame, b.seed, { ...(feelOpt ?? {}), ...chordGtr, drums: drums as Parameters<typeof genBass>[3], chords }) : genChordPattern(genFrame, b.seed, feelOpt);
