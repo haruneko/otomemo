@@ -2167,6 +2167,8 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
   phrase_maker `ensemble.py:1111-1179 _lock_bass_roots_to_sheet`（＋6/8 の `:1372-1471 _sheet_line`）が持つ音楽知識を
   `genBass` の**第三経路**として additive に足す。既存 kickLock が「キック共有率を統計的に近づける」のに対し、
   こちらは**構造的な契約**＝「全キック step に必ずルート錨が乗り、錨の**間**のリフ本体は無傷で生きる」。
+  **→ 2026-09-15 オーナー裁定で既定を「変わり目は必ずルート・滞在中は構成音も可」へ弱めた（契約から選好への変更）＝下の (k-6)。
+  「全キック step にルート」は `anchorStrictness:"every-kick"`（源流互換モード）として残す。**
   - **経路の位置づけ＝`anchorLock`（既定 OFF・未指定は 1bit も変わらない）**。**`kickLock` とは排他**（型格子と確率ロックを
     二重適用しない＝上の style 経路と同じ理由）・**`style` とは併用**（style 型の16分格子がそのまま「体」になる）。
     分岐順＝`anchorLock` ＞ `style` ＞ `kickLock` ＞ 従来 fig 経路。
@@ -2274,6 +2276,13 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
         （**文法を選んだ時だけ生成器を叩く**＝ライブラリ検索へ落ちると触れないノブになる）。
       - 受け入れ＝py-parity 90ケース＋クオリティ表 104件＋フォーム DB 4調弦（データ一致）／**返った content に対して**強拍 CT・非整合 0
         （oracle は py-parity ダンプ＝生成器の表を使わない）・`fretboardGate`・錨の被覆率 1.0／変異検査（出力に注入）／摂動テスト（handshape 枠）。
+      - **刻みの音価のつまみ（2026-09-15 オーナー裁定「つまみで選ぶ」＝真因調査 `docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md` 案6）**：
+        `guitarPalmGate`（刻みの短さ＝音価の係数 palmGate を**文法の値の代わりに**使う・0.1〜1）と `guitarGhostVel`（弱音＝kind `ghost` の vel・1〜127）を
+        `genChordPattern` の設定に出す。**未指定＝源流の値**（palmGate＝power_chug 0.80／pedal_answer 0.85／gallop 0.65・ghost vel 46）＝**1ビットも変わらない**。
+        効くのは content の `hits[].dur`／`hits[].vel`（相対形のまま・web の実音化は hits の値をそのまま読む）＝chug ロック（5a）の音価の計算し直しにも同じ値を使う。
+        範囲外は丸めて `meta.warnings`、`guitarRiff` 無しで渡されたら「リフ文法を選んだ時だけ効く」を `meta.warnings`（落ち先ごとに文言）。
+        dead（vel 38）は対象外（裁定は「弱音の強さ＝ゴースト」）。到達口＝`/music/gen_chord_pattern`・MCP・`/gen/section`（`body.chord.guitarPalmGate/guitarGhostVel`）・web コード楽器引き出し。
+        **動きの無さの本体（固定表・変奏の不在）には効かない**＝表面のつまみ（調査 §3-4）。
     - **(k-5) M6a 鍵盤の土台のうち裁定不要の部分が着地した形（2026-09-13）**：
       - **6a 隙間刺し**＝phrase_maker の legacy `rock_piano` sheet 分岐と gesture_p11 `build_rock` は同じ知識＝**1本**（music-core `keyStab.ts`）。
         刺す位置＝譜の onsets − kick・accents は anchor・隙間が無ければ 16分 step 6,14。py-parity 72件で両源流と一致。
@@ -2292,6 +2301,29 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
       - 受け入れ＝**返った content に対して**キック重なり 0（打点・鳴る区間とも）・被覆率 1.0・譜の外 0（oracle＝ドラム lanes から直接数える）／変異検査／落ち先ごとの通知。
       - **6d 手の物理モデル**＝`handmodel.py` の忠実移植（music-core `handModel.ts`・関数単位ゴールデン）。**土台のみ＝生成器に結線しない**。
         定数の出所は NOTICE.md（pianoplayer＝MIT・Parncutt 1997）。`round(x, 4)` は `pyRoundDigits`（Python と同じ厳密値の半偶数丸め）。
+    - **(k-6) 錨の厳しさ＝「変わり目は必ず・滞在中は構成音も可」へ（2026-09-15 オーナー裁定・契約から選好への変更）**：
+      耳判定「必ずベースルートになるのは保守的と言うか固くない？」→ 真因調査（`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md` §2-1・§5 案2）→
+      裁定「変わり目だけ必須」。根拠＝源流ブレスト `phrase_maker/docs/poc/BRAINSTORM-bass-kick-lock.md` 案A（研究上の規則は「変わり目＝ルート・それ以外の強拍＝構成音」で、
+      「キック位置＝ルート」ではない。(b) 上書きは答句の 5度/b7 だけを選択的に潰す）。
+      - **これは契約の書き換え**：上の「全キック step に必ずルート錨」は **anchorLock の既定ではなくなる**。新しい契約は2本＝
+        **① コードの変わり目のキックは全部ルート**／**② 同じコードが続く間（滞在中）のキックの音は、そのコードの許容音**。
+      - **つまみ `anchorStrictness`**＝`"chord-change"`（**anchorLock 経路の既定**）／`"every-kick"`（源流互換＝従来の3分岐そのまま）。
+        anchorLock 自体は**既定 OFF のまま**＝anchorLock 未指定の出音は 1bit も変わらない。**anchorLock:true の出音は変わる**（それが裁定の中身）。
+      - **変わり目のキック**＝そのコード区間（同じコードが続く区間）に入って**最初のキック step**（区間頭ちょうどでなくてもよい＝区間頭にキックが無い譜でも各コードに1回はルートが乗る）。
+        それ以外のキックは**滞在中**。
+      - **滞在中のキックの分岐**：体の onset が**許容音**なら**音高もレジスタも据え置き**で錨へ昇格（(a) と同じ扱い＝上書きしない）。許容音でなければ (b) どおりルートへ上書き。
+        休符なら (c) どおりルートを挿入（案B が効けば休む）。**許容音**＝そのコードの構成音（`chordPcs`）∪ 5度（コードが b5/#5 を持ち完全5度を持たない時は足さない）
+        ∪ b7（コードが長7度を持つ時は足さない）。オクターブはルートと同じ pc なので含まれる。
+        移植関数には区間ごとの許容 pc を `AnchorSeg.stayPcs` で渡す（未指定＝{R, 5, b7}）。
+      - **案B（`anchorRestOnSyncopatedKick`＝拍頭でない無音キックは休む）は `chord-change` のとき既定 ON**（調査 §5 案2）。明示の true/false が勝つ。
+        `every-kick` のときの既定は従来どおり OFF（源流互換）。web/HTTP は明示の false を素通しする（未指定と区別する）。
+      - **py-parity（源流 `_lock_bass_roots_to_sheet` との列一致 110件）は緑のまま**＝移植関数の既定は `every-kick`（源流の厳格モード）で、
+        製品の genBass が `chord-change` を渡す。**忠実移植の証明は捨てない**（源流互換モードの記録として残す）。
+      - **後段の台帳（(k-3)）**は「キック step に置いた音の pc が最後まで残っているか」を見る＝滞在中の許容音もそのまま台帳に載る
+        （ルートかどうかではなく「錨が置いた音が崩れていないか」）。chordFollow が錨を写し直さない判定も同じ台帳を読む。
+      - 受け入れ＝**4口から返る content に対して** ①変わり目のキックは全部ルート ②滞在中のキックは許容音、の2本を assert／**被覆率**（変わり目キック数・滞在中キック数が
+        どちらも 0 でない）／**変異検査**（変わり目のキックを1つ非ルートに → ①が落ちる／滞在中のキックに非許容音 → ②が落ちる）。
+        `every-kick` は従来の INV1（全キックでルート・被覆率 1）で受ける。
 
 
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
