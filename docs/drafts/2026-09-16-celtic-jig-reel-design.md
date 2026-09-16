@@ -341,3 +341,8 @@
 **phrase_maker（`~/projects/phrase_maker/`・読むだけ）**：`docs/CONCEPT.md` §1〜§3・§6／`docs/research/celtic/01-jig-random-walk-diagnosis.md` §2-8／`02-reel-idioms.md` §2-7／`03-drive-meter-free-design.md` §1-5／`04-same-pitch-repetition.md` §1-2・§4-5／`05-axis-tone.md` §0-6／`docs/research/survey/01-irish-celtic.md` §1・§3-4／`experiments/celtic/gen2/LISTEN.md`／`docs/poc/AUDIT-jig-musical.md` §0／`AUDIT-reel-ornament-musical.md` §0・§7／`CRITIQUE-organ-celtic-round2.md` §2-4／`SPEC-celtic-anchor-axis-v3.md` §0-1／`SPEC-celtic-phrase-planner.md` §0-4／`SPEC-celtic-jig-flow-restore.md` §0-2。
 
 **外部**（調査 doc 経由・URL は調査 doc に記載）：tradschool（曲種・装飾・地域様式）／FolkWorks（曲種・句の型）／irishtune.info（リールの構造）／Soundbrenner（リールのリズム）／Phil Berthoud（弓づかい）／Wikipedia Double tonic・Reciting tone／Doherty 2022 JSMI（O'Neill's ジグの旋律構造）／folkies/oneill／adactio/TheSession-data／IrishMAN。
+
+## オーナー裁定（2026-09-16）
+1. **「骨格メロディの周りを回る」の読み＝骨格を置き、表面が回る**（先に骨格線を置き、軸の音へ2小節おきに帰る）。
+2. **耳で先に確かめる試作を作る**（(a) 軸の帰還あり/なし・(d) 音階内8分の羅列との差 から）。
+3. 残りの裁定（要件の文面・置き場・slur・音型統計の細かさ・試作の置き場・試聴の伴奏）は、オーナーに1件ずつ提示し直して確認中。
