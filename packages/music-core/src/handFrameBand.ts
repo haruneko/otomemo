@@ -32,10 +32,10 @@ export const HF_BAND_VEL_SD = 13.0;
 const VMIN = 24;
 const VMAX = 120;
 /**
- * 揺れ on のとき返す feel.humanize の値（和音パートのプロファイル）。耳A の音声づくりで、発音時刻のずれの
- * 大きさが試作 #1（平均 4.9ms）に近くなる値を実測で選んだ（S3 の記録）。
+ * 揺れ on のとき返す feel.humanize の値（和音パートのプロファイル・tempo つき）。耳A の音声づくりで、25 秒までの
+ * 全音の格子からのずれの平均が試作 #1（3.4ms）と同程度になる値を実測で選んだ（0.25→0.6ms・0.5→1.4ms・1.0→3.4ms・96bpm）。
  */
-export const HF_BAND_FEEL_HUMANIZE = 0.5;
+export const HF_BAND_FEEL_HUMANIZE = 1.0;
 
 const RH_CFG_BAND = {
   dyadOn: true, lambdaSkip: 0.3, lambdaInertia: 0.8, landingBonus: -0.2, landingOffstrong: 0.0,
