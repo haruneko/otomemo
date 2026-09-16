@@ -168,6 +168,12 @@ phrase_maker（同じオーナーの Python 試作・読むだけ）の「鍵盤
 - 契約テスト（赤）＝明示音の解決（§4-2）・`lh.hits[].oct`・deg `7`・未知 deg＝例外・既存 content の bit 一致（明示音なし＝従来）。
 - **実コードで確かめる項目**＝`steps` の上限とエディタ描画／`ChordHit` の既存フィールド名／`PyRandom` の所在と seed ガード（archive master plan :478）／feel 層の humanize プロファイルの形。
 - 耳＝なし。
+- **S0 完了（2026-09-17）**＝機械＝済／耳＝なし（この段は耳の点なし）。
+  - 上位設計＝`docs/design.md`「サステインペダル（CC64）の持ち方」を追補（`pedal?: {start,dur}[]` 拍・未指定は bit 一致・書き出し＝CC64・再生＝smplr 1.0.0 の `setCC` は音を保持しない事実を確認→再生直前に鳴る長さへ解決）。§2-3 表の「①長さの延長」は裁定で不採用。
+  - 基準音＝`packages/music-core/test/fixtures/handframe/`（`gen_reference.py`＋F-A `reference_half_mid.json` 243音・ペダル32／F-C `reference_bar_rounded_mid.json` 235音・ペダル16・秒・seed 1234）。2回生成で同一バイト。listen7 `work/*.mid`（揺れあり＝F-B）と音高・16分格子位置・音数・ペダル数が一致。F-B の mp3＝scratchpad `listen7/71_2beat_half_mid.mp3`（fixture にしない）。
+  - 契約テスト＝`packages/music-core/test/handframe-contract.todo.test.ts`（基準音の整合＝緑2・往復一致／明示音／ペダル保持／既存 bit 一致＝todo 13）。
+  - 実コード確認＝`ChordHit`＝`{step,dur,vel?,dir?}`（web `music.ts:669`）／**エディタの小節数は最大4**（`ChordPatternEditor.tsx:334` `BarsControl max={4}`）＝8小節128 steps は今のエディタで描けない見込み＝S4 で要確認（§4-3 (i)）／`PyRandom`＝`packages/music-core/src/humanizeFill.ts:87`／feel＝`{swing?, swingUnit?, humanize?}`（`packages/music-core/src/index.ts:172`）。
+  - 本書との食い違い＝**§3 (e)「区間をまたぐ音が無い」は試作 #1 では成り立たない**：同じコードが続く次の区間へは伸びる（F-A で48音）。成り立つのは「コードが替わる境界をまたがない」＝テストはこちらで固定。
 
 **S1 手の物理（`handmodel.py` 361行・乱数なし）**
 - テスト（赤）＝到達表（Parncutt 1997・pianoplayer 定数・`handmodel.py:10-22`）で既知の和音の `best_assignment`（F A C F・E G B E など）が Python と一致／届かない組は None／**重みを振ると出力が変わる**（検査係でない反証・診断）。NOTICE に pianoplayer（MIT）を再掲。
