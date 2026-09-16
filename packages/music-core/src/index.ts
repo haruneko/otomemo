@@ -61,6 +61,7 @@ export * from "./walkingBass";
 // 互換 MT19937 の相関 Breath）。既定挙動は不変（本モジュールは opt-in 経路からのみ消費される）。
 export * from "./drumFill";
 export * from "./humanizeFill";
+export * from "./jigMelody"; // ジグの主旋律（段1＝関数だけ・既存メロ生成とは別）
 
 // 横断の検証器（M4・計画 §5-2 M4／§6-4「検証器の作法」）＝gate/byConstruction/diagnostic を戻り値の型で
 // 分け、被覆率で空虚さを自己診断する。band_overlap（gap>0 がゲート・overlap_frac は診断）・四肢衝突の
