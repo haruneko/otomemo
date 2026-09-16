@@ -48,6 +48,8 @@ export * from "./rngSalt";
 // phrase_maker 由来エンジンの版（M0契約 §2 `engine:{version}`）。**新経路使用時のみ** content に載せる＝
 // 既定経路はキーを生やさない＝bit 一致（design.md 追補 (k)）。
 export * from "./engineVersion";
+export * from "./handFrameBand";
+export * from "./explicitNotes";
 
 // コードのスケール表と低域の畳み（JZ-WALK が使う部品）。2026-09-16 リフ撤去で anchorLock/chordFollow から移した。
 export * from "./chordScale";

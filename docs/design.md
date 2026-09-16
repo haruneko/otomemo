@@ -411,7 +411,7 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
   - resolve：各 hit の時刻のコードを取り、voicing で実音へ（strum=同時／arp=巡回）。
   - **和音パターンの明示の音（`notes?`・2026-09-17 追補・正典＝`docs/drafts/2026-09-16-handframe-evolution-design.md` §4-2）**＝ピアノ伴奏の生成器（手が届く2〜4音を打点ごとに決める）の音を、和音パターンの形のまま運ぶ additive の口。
     - **形**＝`ChordHit.notes?: { deg, oct, vel? }[]`（右手）／`lh.hits[].oct?: number`（左手 custom）。明示の音のある打点の `dur` は 16分の数の**端数を許す**（生成どおりの長さ＝×0.25 で拍・丸めない）。
-    - **実音化**＝`pitch = 48 + ルートの pc + 度数の半音 + 12×oct`。コード＝打点の時刻に鳴っているコード（先取りはしない）・無ければ調の主音と質なし。**明示の音のある打点は `voiceToTop`（案A＋B）もギターのボイシングも通さない**（mode/style に依らない・分数コードの低音も足さない）。音の強さ＝`note.vel ?? hit.vel`。`lh.hits[].oct` があるときは左手帯（C2–C3）と色音の持ち上げを掛けない。
+    - **実音化**＝`pitch = 48 + 調の主音 pc + (主音からルートへの上向きの半音 0..11) + 度数の半音 + 12×oct`（調＝C なら `48 + ルートの pc`。調を基準にするので、コードと調を一緒に移すと全音が同じ半音だけ動く＝形が崩れない）。コード＝打点の時刻に鳴っているコード（先取りはしない）・無ければ調の主音と質なし。**明示の音のある打点は `voiceToTop`（案A＋B）もギターのボイシングも通さない**（mode/style に依らない・分数コードの低音も足さない）。音の強さ＝`note.vel ?? hit.vel`。`lh.hits[].oct` があるときは左手帯（C2–C3）と色音の持ち上げを掛けない。
     - **度数の語彙**＝R/3/5/7＝質依存（7＝質の4番目の構成音が6度〜長7度のとき・三和音は短7度）、それ以外＝固定半音 `b2/#1/2/b3/M3/4/#4/b5/P5/#5/b6/6/#6/b7/#7`（ベースの語彙＋質に依らない長3度 `M3`・完全5度 `P5`）。**未知のトークン＝例外**（明示の音の経路だけ。既存の左手の度数の「未知＝根音」は不変）。
     - **写しと解決は `packages/music-core/src/explicitNotes.ts` に1本**（`pitchToExplicitNote`／`explicitNotePitch`／写し `handFrameToChordPattern`）＝api と web が同じ関数を使う＝往復一致を構造で取る。写しの出力＝`mode:"strum"`・`voicing.style:"keyboard"`・`program:0`・`followChords:true`・`pedal?`・来歴 `gen:{engine:"handframe",version,seed,level,preset,cellBeats}`。
     - **followChords**＝跨いだコードが替わる境界で切り、新しいコードで度数を解き直す（既存の規則と同じ）。進行・調を変えても度数で付いてくる。

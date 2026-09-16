@@ -2,7 +2,7 @@ import { Midi } from "@tonejs/midi";
 import { Chord as TonalChord, Note as TonalNote } from "tonal";
 // 不変の音楽知識（音名・コード品質→インターバル）は @cm/music-core が SSOT（負債D3・design 決定2b）。
 // PITCH_NAMES は re-export して既存の web import 面（useNetaEditor 等）を不変に保つ。
-import { PITCH_NAMES, QUALITY_INTERVALS, applyFeel, applyFeelByPart, type Feel, type HumanizePart, type HumanizeWarn, type Note as CoreNote } from "@cm/music-core";
+import { PITCH_NAMES, QUALITY_INTERVALS, explicitNotePitch, applyFeel, applyFeelByPart, type Feel, type HumanizePart, type HumanizeWarn, type Note as CoreNote } from "@cm/music-core";
 export { PITCH_NAMES, applyFeel, applyFeelByPart };
 export type { Feel, HumanizePart, HumanizeWarn };
 
@@ -666,13 +666,13 @@ export interface ChordVoicing {
   style?: "keyboard" | "guitar" | "auto"; // ボイシング奏法（2026-07-22 研究doc guitar-comping-vocabulary）。未指定＝keyboard＝現行 voiceToTop（不変）。guitar＝voiceGuitar（最低声=根音・3度1個・根音/5度重複・弦チューニング由来の度数分布）。auto＝レンダ時に program の GM ファミリから導出（guitar系24-31→guitar／他→keyboard・奏法UIスライスA/B）＝program 未知なら keyboard 相当。
   strumMs?: number; // 弦順ロールの1弦あたり時差（ms）。style:"guitar"＋mode:"strum"＋テンポ既知のとき和音内各声をダウン=低→高に strumMs ずつ決定的にずらす（研究doc §3）。既定/0＝時差なし＝全声同時（bit一致）。
 }
-export interface ChordHit { step: number; dur: number; vel?: number; dir?: "D" | "U" } // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）。S3 dir?=ギター×strum のストローク向き（D=ダウン低→高・U=アップ高→低の上位声・0.78×）。未指定=従来（=D 相当）＝bit一致。
+export interface ChordHit { step: number; dur: number; vel?: number; dir?: "D" | "U"; notes?: { deg: string; oct: number; vel?: number }[] } // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）。S3 dir?=ギター×strum のストローク向き（D=ダウン低→高・U=アップ高→低の上位声・0.78×）。未指定=従来（=D 相当）＝bit一致。
 // 左手（LH・S3・2026-07-22・研究doc piano §2）：コード楽器ネタに内蔵する左手土台。resolved style が keyboard の
 // ときだけ実音化（guitar は無視）。未定義＝左手なし＝既存全ネタと bit 一致。preset(root/root5/oct)＝RH の小節頭＋
 // コードチェンジを anchor に白玉（保守的既定）。custom＝hits を度数解決してそのまま（辞書由来）。
 export interface ChordLhContent {
   mode: "root" | "root5" | "oct" | "custom";
-  hits?: { step: number; dur: number; deg?: string; vel?: number }[]; // custom のみ（度数トークン R/5/8/3…）
+  hits?: { step: number; dur: number; deg?: string; vel?: number; oct?: number }[]; // custom のみ（度数トークン R/5/8/3…）。oct?＝明示の高さ（左手帯を掛けない・dur の端数可・design「和音パターンの明示の音」）
 }
 export interface ChordPatternContent {
   mode: ChordPatternMode;
@@ -882,6 +882,16 @@ function resolveLh(lh: ChordLhContent, steps: number, chords: ChordEntry[], key:
     const hits = [...(lh.hits ?? [])].sort((a, b) => a.step - b.step);
     for (const h of hits) {
       const start = Math.round(h.step * BASS_STEP_TO_BEAT * 1000) / 1000;
+      if (h.oct != null) {
+        // 明示の高さ：度数＋オクターブをそのまま実音へ（左手帯・色音の持ち上げなし）。未知の度数＝例外。
+        const eDur = h.dur * BASS_STEP_TO_BEAT;
+        if (!(eDur > 0)) continue;
+        const eCh = bassChordAt(start, chords);
+        const segs = followChords ? chordSegments(start, eDur, eCh, chords, k) : [{ start, dur: eDur, ch: eCh }];
+        const deg = h.deg ?? "R";
+        for (const sg of segs) out.push({ pitch: explicitNotePitch({ deg, oct: h.oct }, sg.ch ? sg.ch.root : k, sg.ch ? sg.ch.quality : "", k), start: sg.start, dur: sg.dur, vel: h.vel ?? LH_VEL });
+        continue;
+      }
       const dur = Math.round(Math.max(1, h.dur) * BASS_STEP_TO_BEAT * 1000) / 1000;
       if (dur <= 0) continue;
       const ch = bassChordAt(start, chords);
@@ -972,6 +982,23 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
     // #29 P2 このヒットのベロシティを全声部へ素通し。未指定なら条件 spread で vel キーを生やさない
     // （`vel: undefined` を作らない＝現行出力と deepStrictEqual 一致）。下流は既に n.vel??100。
     const velSpread = hits[h]!.vel != null ? { vel: hits[h]!.vel } : {};
+    // 明示の音（2026-09-17・design「和音パターンの明示の音」）：ある打点は voiceToTop/ギターのボイシングを通さず、
+    // 打点の時刻のコード（先取りなし）で度数＋オクターブを実音へ。dur は端数を許す（丸めない）。無い打点＝下の従来経路。
+    const explicit = hits[h]!.notes;
+    if (explicit && explicit.length) {
+      const eDur = hits[h]!.dur * BASS_STEP_TO_BEAT;
+      if (!(eDur > 0)) continue;
+      const eCh = bassChordAt(start, chords);
+      const segs = followChords ? chordSegments(start, eDur, eCh, chords, key) : [{ start, dur: eDur, ch: eCh }];
+      for (const sg of segs) {
+        for (const n of explicit) {
+          const pitch = explicitNotePitch(n, sg.ch ? sg.ch.root : ((key % 12) + 12) % 12, sg.ch ? sg.ch.quality : "", key);
+          const vel = n.vel ?? hits[h]!.vel;
+          out.push(vel != null ? { pitch, start: sg.start, dur: sg.dur, vel } : { pitch, start: sg.start, dur: sg.dur });
+        }
+      }
+      continue;
+    }
     // つんのめり(アンティシペーション)：裏拍始まりでダウンビートを跨いで伸びる音は、跨いだ先のダウンビートの
     // コードで解決する＝「音の終わる方の拍でコードを決める」＝シンコペ分だけコードが先取り（bass 側と同ロジック・
     // 2026-07-10 オーナーFB：コード楽器にだけ抜けていた）。ジャストの音は従来どおり start のコード。

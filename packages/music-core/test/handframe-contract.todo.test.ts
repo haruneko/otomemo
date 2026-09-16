@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { EXPLICIT_ROOT_REF, explicitNotePitch, pitchToExplicitNote, QUALITY_INTERVALS } from "../src/index";
 
 // ピアノ伴奏（phrase_maker 試作 #1）取り込み S0＝契約と基準音の固定。
 // 正典＝docs/drafts/2026-09-16-handframe-evolution-design.md §3・§4・§5 S0／docs/design.md「サステインペダル（CC64）の持ち方」。
@@ -52,20 +53,52 @@ describe("S0 基準音 fixture（phrase_maker 無しで読める）", () => {
   }
 });
 
-describe("S0 契約：往復一致（実装＝S4 で緑化）", () => {
-  // 生成器の絶対音 → 和音パターンの明示音 {deg, oct, vel}（music-core の逆写像）→ web resolveChordPattern の実音化 → 絶対音、が恒等。
-  //   骨子：F-A の各打点を chordsPerCell のコードで写し、解決した pitch/start/dur/vel が F-A と deepStrictEqual（同じ進行・同じ調）。
-  it.todo("F-A の全音：絶対音→明示音→実音化→絶対音 が恒等（pitch/start/dur/vel）");
-  it.todo("明示音の解決 pitch = rootRef(chordRoot)=48+pc ＋ degreeInterval(deg, quality) ＋ 12×oct（api/web 同一関数）");
-  it.todo("R/3/5/7 は質依存・それ以外はルートからの固定半音トークン（2/b3/4/#4/b5/#5/6/b7/#7/b2/#1/b6/#6）");
-  it.todo("未知の度数トークン＝例外（黙って根音にしない）／左手 deg に 7 を足す");
-  it.todo("lh.hits[].oct 指定時は左手帯と低音域ガードを適用しない（指定の高さのまま）");
-  it.todo("明示音のある打点は voiceToTop を通らない（明示音の無い打点だけ従来どおり）");
+describe("S4 契約：明示の音の写しと解決（music-core・api/web 共有）", () => {
+  // 全体の往復（写し→web resolveChordPattern→絶対音）は apps/web/test/handframe-roundtrip.test.ts。
+  const QUALS = Object.keys(QUALITY_INTERVALS);
+  it("全ての質×12のルート×C0〜C8：絶対音→明示の音→絶対音 が恒等", () => {
+    for (const q of QUALS) for (let root = 0; root < 12; root++) for (let p = 12; p <= 108; p++) {
+      const n = pitchToExplicitNote(p, root, q);
+      expect(Number.isInteger(n.oct)).toBe(true);
+      expect(explicitNotePitch(n, root, q)).toBe(p);
+    }
+  });
+  it("調を基準にしたルートの位置：調を変えると全ての音が同じ半音だけ動く", () => {
+    for (const q of QUALS) for (let root = 0; root < 12; root++) for (let k = 0; k < 12; k++) for (const p of [40, 55, 67, 80]) {
+      const n = pitchToExplicitNote(p, root, q, 0);
+      expect(explicitNotePitch(n, (root + k) % 12, q, k)).toBe(p + k);
+      expect(explicitNotePitch(pitchToExplicitNote(p, root, q, k), root, q, k)).toBe(p);
+    }
+  });
+  it("pitch = 48 + ルートの pc + 度数の半音 + 12×oct（調＝C）", () => {
+    expect(EXPLICIT_ROOT_REF).toBe(48);
+    expect(explicitNotePitch({ deg: "R", oct: 0 }, "F", "maj7")).toBe(53);
+    expect(explicitNotePitch({ deg: "7", oct: 1 }, "F", "maj7")).toBe(53 + 11 + 12);
+    expect(explicitNotePitch({ deg: "3", oct: -1 }, 9, "m7")).toBe(57 + 3 - 12);
+  });
+  it("R/3/5/7 は質依存・それ以外はルートからの固定半音", () => {
+    expect(pitchToExplicitNote(64, 0, "").deg).toBe("3");
+    expect(pitchToExplicitNote(63, 0, "m").deg).toBe("3");
+    expect(pitchToExplicitNote(64, 0, "m").deg).toBe("M3");
+    expect(pitchToExplicitNote(70, 0, "7").deg).toBe("7");
+    expect(pitchToExplicitNote(70, 0, "").deg).toBe("b7"); // 三和音に 7 は書かない
+    expect(pitchToExplicitNote(62, 0, "add9").deg).toBe("2"); // add9 の4番目は 7度ではない
+    expect(pitchToExplicitNote(66, 0, "").deg).toBe("#4");
+    // 同じトークンが進行に付いてくる：C の 3 → Cm では短3度
+    expect(explicitNotePitch({ deg: "3", oct: 0 }, 0, "m")).toBe(51);
+    for (const t of ["2", "b3", "4", "#4", "b5", "#5", "6", "b7", "#7", "b2", "#1", "b6", "#6", "M3", "P5"]) {
+      expect(explicitNotePitch({ deg: t, oct: 0 }, 0, "")).toBe(explicitNotePitch({ deg: t, oct: 0 }, 0, "m7b5"));
+    }
+  });
+  it("未知の度数トークン＝例外（黙って根音にしない）・oct は整数", () => {
+    expect(() => explicitNotePitch({ deg: "9", oct: 0 }, 0, "")).toThrow(/unknown degree/);
+    expect(() => explicitNotePitch({ deg: "R", oct: 0.5 }, 0, "")).toThrow();
+  });
+  // web の経路（voiceToTop を通らない・lh.hits[].oct は左手帯を掛けない）は web 側テストで確認。
 });
 
 describe("S0 契約：サステインペダル（CC64）の保持（実装＝S3〜S5 で緑化）", () => {
-  it.todo("生成器の pedal（秒）→ content.pedal {start,dur}（拍）→ 再び秒で F-A の pedal と一致");
-  it.todo("content.pedal は移調・写し・保存の往復で落ちない（additive・未知フィールド保持）");
+  // S4 で緑化＝apps/web/test/handframe-roundtrip.test.ts：生成器の pedal（秒）→ content.pedal（拍）→ 秒で一致／写し・JSON 保存・調の変更で落ちない。
   it.todo("MIDI 書き出し：pedal ありはノートのトラックに CC64 の 127/0 を down/up で書き、ノートの長さは延ばさない");
   it.todo("再生直前の解決：踏んでいる間に離鍵した音はペダルを離す時刻まで鳴る／同じ音高の踏み直しで前の音は止まる");
   // §3 (d)「F-C と F-A で出力が違う」は S3 で緑化＝test/handframe-band.test.ts へ移した。
@@ -73,5 +106,5 @@ describe("S0 契約：サステインペダル（CC64）の保持（実装＝S3�
 
 describe("S0 契約：既存 content の bit 一致（実装の各段で緑を維持）", () => {
   it.todo("pedal 未指定の content＝キーを生やさない＝再生スケジュール・MIDI 書き出しのバイト列が従来と一致");
-  it.todo("明示音の無い和音パターン＝resolveChordPattern の出力が従来と deepStrictEqual");
+  // 明示の音の無い和音パターン＝従来と一致：S4 で web の既存テスト（voicing-ab 金型・music.test）が無変更で緑＋handframe-roundtrip の「無い打点は従来どおり」。
 });
