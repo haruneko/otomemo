@@ -2326,6 +2326,44 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
       - 受け入れ＝**4口から返る content に対して** ①変わり目のキックは全部ルート ②滞在中のキックは許容音、の2本を assert／**被覆率**（変わり目キック数・滞在中キック数が
         どちらも 0 でない）／**変異検査**（変わり目のキックを1つ非ルートに → ①が落ちる／滞在中のキックに非許容音 → ②が落ちる）。
         `every-kick` は従来の INV1（全キックでルート・被覆率 1）で受ける。
+    - **(k-7) 繰り返しに変奏の層を足す（2026-09-16 オーナー裁定＝設計案 `docs/drafts/2026-09-15-riff-variation-layer-design.md` で実装）**：
+      耳判定「パームミュートみたいで動きがない／固い」→ 真因調査（`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md` 案1＝固定2小節の表・変奏の不在）→ 裁定。
+      ※設計案は (k-6) と書いていたが (k-6) は錨の厳しさが先に使ったので (k-7) とする。
+      - **置き場**＝music-core `riffVariation.ts` の純関数 `varyRiffTiles(tiles, opts)`（RNG/hash/時刻 不使用・入力を破壊しない）。
+        入力は表ではなく**役割つきオンセット列を反復単位（2小節＝32 step）で束ねた `RiffTile[]`**（`index` 0＝提示・`last`）。
+        ベースの錨経路（文法の体）とギターのリフ経路が同じ関数を呼ぶ。web は呼ばない（ギターは変奏済みの hits が content に載る）。
+      - **動かすのは答句だけ**＝`anchor:false` かつ role ∈ {pickup, answer, blue, climb}（ギターは `voicing:"mono"` も条件）。
+        octave/root（レジスタ往復）・head/pedal/chug/chord/dead は触らない（下の拡大・装飾の対象だけ例外）。**提示（index 0）は決して触らない**。
+        **保護する打点 `protectedSteps`（global step）**のセルは対象にしない・そこへ足さない・そこを消さない＝v1 は**全キック step**
+        （ベースは常に・ギターはロック中だけ）。錨が (b) で戻して変奏が黙って無駄になるのを避けるため（案2 の変わり目だけへ狭めるのは耳の後＝S6）。
+      - **変換＝登録口（レバー表）で持つ**＝`RIFF_VARIATION_LEVERS`（名前→純関数）＋段ごとのスケジュール表。**リズムの変奏は入れない**
+        （2026-09-16 裁定「リズムのずらしは研究を先に」）＝研究の結論が出たらレバーを1本登録しスケジュールに名前を足すだけ（additive）。
+        v1 のレバー（中身と強さはすべて**仮**＝耳で決める）：
+        - `sequence`（ゼクエンツ）＝答句の各セルをリフ語彙の階段 `[0,3,5,6,7,10,12]` 上で1段（端で止まる）。向き＝`(seed + index)` が奇数で上・偶数で下。
+          全セルが端で動けなければ `reselect` 部品（`[7,10,12,5]` を `seed mod 4` だけ回し、元と違う最初の値）で必ず1音は変える。
+        - `fragment`（断片化）＝小節ごとに答句の頭1セルだけ残し残りの答句を消す（間を作る）。ギターは同じ小節の残した頭より後の ghost/dead も消す。
+        - `expand`（拡大）＝反復単位の後半小節の答句の頭（無ければ最後の答句の頭）を含む拍の**直前1拍**の pedal/chug（kind note/accent・非 anchor・非保護）を
+          answer に変え、deg を階段で頭へ向かって1段ずつ近づける（ギターは voicing を mono に）。
+        - `ornament`（装飾・楽器別）＝ギター＝同じ頭の小節の ghost/dead（非保護）を外し、頭の1 step 前が空いて非保護なら ghost（deg 0・role dead・mono）を1つ足す／
+          ベース＝頭より前の最後の pedal（kind note・非 anchor・非保護・deg 0）を1オクターブ上（deg 12）へ。
+      - **3段のスケジュール（仮）**＝なし（0）＝何もしない／中（0.5）＝奇数・最後の単位に sequence／多め（1）＝奇数（最後でない）sequence＋ornament・
+        偶数≥2（最後でない）fragment・最後（index≥1）sequence＋expand＋ornament。**多めは中を含む**（入れ子）。反復単位が1枚しかない時は変奏の余地なし＝告げる。
+      - **順序＝変奏 → 錨 → 実音化 → 既存後処理 → 和音追従 → 最終出力で契約を実測**。ベース＝体を束ねて変奏 → deg→実音 → `lockBassRootsToSheet` → 以降既存。
+        ギター＝`buildGuitarSkeleton` の出力を束ねて変奏（音価は変奏後の並びで同じ規則で計算し直す）→ `lockGuitarChugToSheet` → hits。
+      - **打ち消しの実測（診断・ゲートにしない）**＝level>0 では同じ入力で level 0 も生成し、最終出力（ベース＝notes／ギター＝hits）が完全一致なら
+        `meta.warnings`「変奏（中／多め）は錨・和音追従に打ち消され、従来と同じ音になりました」（ギター＝「キックに揃えた刻み」に打ち消され…）。
+        ギターで進行が来ていれば検算の実音でも比べる。
+      - **つまみ**＝`riffVariation`（0／0.5／1・それ以外は最寄りへ丸めて告げる・未指定＝0＝**1bit も変わらない**）＋`riffVariationSteps:true`（なし／中／多めの3件を
+        items に・label「変奏なし（従来）」「変奏 中」「変奏 多め」・riffVariation と同時なら steps が勝ち告げる）。`anchorLock`（ベース）／`guitarRiff`（ギター）が
+        立った時だけ効く＝立たなければ「錨／リフ文法を選んだ時だけ効きます（従来どおり生成しました）」。ベースで style 型の体（役割注記なし）なら「変奏できません」を告げる。
+      - **seed**＝ベース錨経路は RNG 不消費で seed 非依存だったが、**level>0 では向きが seed で変わる**（意図した変更・level 0 は従来どおり seed 非依存）。
+      - **保存形**＝ギター＝`guitarRiff.variation: 0.5|1`（level 0 はキーを生やさない）／ベース＝`bassRiff: {grammar, variation}`（level>0 のみ・additive）。音符レーンは足さない。
+      - **到達口（4口）**＝HTTP `/music/gen_bass`・`/music/gen_chord_pattern`／MCP `gen_bass`・`gen_chord_pattern` の inputSchema／`/gen/section`（`body.bass.riffVariation`・
+        `body.chord.riffVariation` を素通し。**段は出せない**＝`riffVariationSteps` が来たら「セクション一括では段を並べられません。段は各パートの生成で」を warnings に載せ level 0）／
+        web TinkerSheet＝ベース引き出し（錨の下）とコード楽器引き出し（リフ文法の下）に「変奏を3段で並べる（なし／中／多め）」チェック（既定 OFF・トレイへ3件積む）。
+      - 受け入れ＝層単体（恒等・決定論・提示無傷・非対象無傷・語彙内・入れ子・保護 step 無傷＋各レバーの期待セル列＋変異検査）／**4口から返る content に対して**
+        既定 bit 一致・決定論・錨の契約の欠けが level 0 と同数・摂動（最終出力が変わる条件が存在）＋被覆率・打ち消し警告の整合／変異検査（層を恒等に → 摂動が落ちる）。
+        **形の要求（○個以上変わる）はゲートにしない**＝変化量は診断。
 
 
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
