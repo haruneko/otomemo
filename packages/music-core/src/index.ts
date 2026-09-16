@@ -76,6 +76,8 @@ export * from "./keyStab";
 // 鍵盤（M6a-6d）＝手の物理モデル（phrase_maker fingersim/handmodel.py の忠実移植・土台のみ＝生成器に結線しない）。
 // 定数の出所＝NOTICE.md（pianoplayer MIT・Parncutt 1997）。参照値＝tools/py-parity/cases-handmodel/。
 export * from "./handModel";
+// 繰り返しに変奏の層（design.md 追補 (k-7)）＝反復単位の答句に決定的な変換を当てる純関数。既定（level 0）は恒等。
+export * from "./riffVariation";
 
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python
