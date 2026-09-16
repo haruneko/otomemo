@@ -1722,14 +1722,42 @@ export interface DrumsGenOpts { style?: string; fill?: number | string; fillStyl
   bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number;
   /** GMD テクスチャ prior のドラマー。"none" で統計を使わない純物理。未指定＝既定ドラマー。 */
   bodyDrummer?: string;
+  /** 狙いの名前（design §2106(g-2)・2026-09-16 耳判定で「タム回し」だけ取り込み）。形の辞書ではなく意図つまみの値の束＝
+   *  body の DP が毎回解き直す。明示つまみが常に勝つ。未指定＝従来 bit 一致。 */
+  bodyAim?: BodyAim;
   /** ノリ（B1裁定＝演奏レイヤー・スコアに焼き込まない）。content.feel へ載せる＝genMelody/genBass と同契約。
    *  未指定＝feel キーを生やさない＝従来 bit 一致。body 経路だけ既定で humanize が入る。 */
   humanize?: number; swing?: number }
 
 /** GMバックビートを生成（WP-D1 で style/fill ノブ追加・**opts 無し/両ノブ未指定は従来と bit 一致**）。
  * style=型ID or ジャンル名→定型ビートライブラリで realize。fill=0..1 or 型ID→末尾遷移小節へフィル挿入＋着地。 */
-export function genDrums(frame?: Frame | null, seed?: number | null, opts?: DrumsGenOpts): GenResult {
+export type BodyAim = "tom_tumble";
+/** 源流 phrase_maker `ensemble.py` AIM_PRESETS["tom_tumble"]＝depth0.45/density0.9。試聴（2026-09-16）の条件＝
+ *  純物理（fill_prior 無し）・1小節・小節頭から次小節頭へ着地、も束に含める（耳が聞いたものを出す）。 */
+export const BODY_AIMS: Record<BodyAim, Pick<DrumsGenOpts, "bodyDepth" | "bodyDensity" | "bodyDrummer" | "fillLength" | "fillBeat">> = {
+  tom_tumble: { bodyDepth: 0.45, bodyDensity: 0.9, bodyDrummer: "none", fillLength: "bar", fillBeat: 0 },
+};
+const TOM_MIDI = new Set([41, 43, 45, 47, 48, 50]);
+
+export function genDrums(frame?: Frame | null, seed?: number | null, optsIn?: DrumsGenOpts): GenResult {
   const f = normalizeFrame(frame);
+  // 狙い（bodyAim）の解決：body 経路のときだけつまみの既定を差す（明示が勝つ）。それ以外は出音を変えず通知だけ。
+  const aimWarnings: string[] = [];
+  let opts = optsIn;
+  let aimApplied = false;
+  if (optsIn?.bodyAim != null) {
+    const preset = (BODY_AIMS as Record<string, (typeof BODY_AIMS)[BodyAim] | undefined>)[optsIn.bodyAim];
+    if (!preset) aimWarnings.push(`知らない狙い「${String(optsIn.bodyAim)}」は無視しました（使えるのは tom_tumble＝タム回しだけです）`);
+    else if (optsIn.fillStyle !== "body" || (optsIn.fill == null && !f.section?.cues?.some((c) => c.kind === "fill"))) {
+      aimWarnings.push("タム回しは「生成する」フィル（fillStyle: body）でフィルを入れるときだけ効きます（今回は使っていません）");
+    } else {
+      aimApplied = true;
+      opts = { ...optsIn };
+      for (const [k, v] of Object.entries(preset)) if ((opts as Record<string, unknown>)[k] == null) (opts as Record<string, unknown>)[k] = v;
+    }
+    const { bodyAim: _drop, ...rest } = opts!; void _drop;
+    opts = rest;
+  }
   // ベース1小節（or 定型型）content を決める。style 未指定＝従来経路（bit 一致）。
   let base: DrumContent = opts?.style != null ? (resolveStyleContent(f, opts.style, seed ?? 0) ?? defaultDrumBar(f, seed)) : defaultDrumBar(f, seed);
   // セクションの合図（カスケード §3-1）＝additive ガード分岐。**cue 有→新経路／cue 無→現行式そのまま＝bit 一致**（cue 経路が発火しない）。
@@ -1796,7 +1824,11 @@ export function genDrums(frame?: Frame | null, seed?: number | null, opts?: Drum
       ? "生成できなかったのでテンプレートから選択しました"
       : "この拍子ではフィルを作れませんでした（フィル無しで生成しています）";
     res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), w] };
+    if (aimApplied) aimWarnings.push("タム回しの狙いは使えませんでした（生成するフィルが解けなかったため）");
+  } else if (aimApplied && !(base.rhythm.fillNotes ?? []).some((n) => TOM_MIDI.has(n.midi))) {
+    aimWarnings.push("タムへ回る経路が解けませんでした（タムの無いフィルです）");
   }
+  if (aimWarnings.length) res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), ...aimWarnings] };
   return res;
 }
 

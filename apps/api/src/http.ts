@@ -330,7 +330,7 @@ export function buildHttp(core: Core): FastifyInstance {
           // body 経路の既定 humanize 0.25（fillStyle:"body"）を切る手段が無かった。bodyDepth 等と同じ流儀で読む。
           const dhumanize = num(b.humanize);
           const dswing = num(b.swing);
-          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null || dfillStyle != null || dhumanize != null || dswing != null ? { style: dstyle, fill: dfill, fillStyle: dfillStyle, fillKind: dfillKind, fillLength: dfillLength, fillBeat: dfillBeat, bodyDepth: num(b.bodyDepth), bodyDensity: num(b.bodyDensity), bodyCrescendo: num(b.bodyCrescendo), bodyTailAnchor: num(b.bodyTailAnchor), bodyDrummer: typeof b.bodyDrummer === "string" ? b.bodyDrummer : undefined, humanize: dhumanize, swing: dswing } : undefined);
+          const res = genDrums(b.frame, b.seed, dstyle != null || dfill != null || dfillStyle != null || dhumanize != null || dswing != null || b.bodyAim != null ? { style: dstyle, fill: dfill, fillStyle: dfillStyle, fillKind: dfillKind, fillLength: dfillLength, fillBeat: dfillBeat, bodyDepth: num(b.bodyDepth), bodyDensity: num(b.bodyDensity), bodyCrescendo: num(b.bodyCrescendo), bodyTailAnchor: num(b.bodyTailAnchor), bodyDrummer: typeof b.bodyDrummer === "string" ? b.bodyDrummer : undefined, bodyAim: typeof b.bodyAim === "string" ? (b.bodyAim as "tom_tumble") : undefined, humanize: dhumanize, swing: dswing } : undefined);
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
           return res;
         }
@@ -435,7 +435,7 @@ export function buildHttp(core: Core): FastifyInstance {
     // ④是正（2026-08-29・受け入れ監査）：fillStyle 型注釈が "grid"|"physical" のままで、実行時は "body"(M3) が
     // キャストを通じて素通りしていた（型の嘘）。実態＝DrumsGenOpts.fillStyle に合わせ "body" を追加し、
     // fillLength/fillBeat/body系ノブも body?.drums 経由で受けて落とさず渡す。
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean }; chord?: Record<string, unknown>; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean }; chord?: Record<string, unknown>; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string; bodyAim?: "tom_tumble" }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
     const frame = b.frame ?? {};
     // カスケード合図の配布（design 306「配り役」と同型＝feel と同じ様式で全生成器へ同じ1枚を配る）。
     //   body.cues＝このセクションの人が書いた合図（Cue[]）。deriveCues で導出（保存 land 破棄・範囲外無視・越境 land 導出）して
@@ -469,21 +469,23 @@ export function buildHttp(core: Core): FastifyInstance {
     //   fillStyle:"physical"（M2 phrase_maker 物理フィル・任意）＝fillNotes を note レベルで載せ N 小節へ展開（fillKind 明示は任意・未指定=cue.aim プール選抜）。未指定=従来 grid=bit 一致。
     const dOpts = b.drums && (b.drums.style != null || b.drums.fill != null || b.drums.fillStyle != null
       || b.drums.fillLength != null || b.drums.fillBeat != null || b.drums.bodyDepth != null || b.drums.bodyDensity != null
-      || b.drums.bodyCrescendo != null || b.drums.bodyTailAnchor != null || b.drums.bodyDrummer != null)
+      || b.drums.bodyCrescendo != null || b.drums.bodyTailAnchor != null || b.drums.bodyDrummer != null || b.drums.bodyAim != null)
       ? {
         style: b.drums.style, fill: b.drums.fill, fillStyle: b.drums.fillStyle, fillKind: b.drums.fillKind,
         fillLength: b.drums.fillLength, fillBeat: b.drums.fillBeat, bodyDepth: b.drums.bodyDepth, bodyDensity: b.drums.bodyDensity,
-        bodyCrescendo: b.drums.bodyCrescendo, bodyTailAnchor: b.drums.bodyTailAnchor, bodyDrummer: b.drums.bodyDrummer,
+        bodyCrescendo: b.drums.bodyCrescendo, bodyTailAnchor: b.drums.bodyTailAnchor, bodyDrummer: b.drums.bodyDrummer, bodyAim: b.drums.bodyAim,
       }
       : undefined;
     // セクション共有 feel（S4・swing-feel-layer-audit Stage 4「全トラック同一ワープ」）：body.feel:{swing,humanize} を
     // melody/bass/chord_pattern へ同一透過＝メロ・ベース・コード楽器が同じノリで跳ねる。未指定=undefined=各生成器へ渡らず従来 bit 一致。
     const feelOpt = b.feel && (b.feel.swing != null || b.feel.humanize != null) ? { swing: b.feel.swing, humanize: b.feel.humanize } : undefined;
-    const drums = want.has("rhythm") ? genDrums(genFrame, b.seed, dOpts).items[0]!.content : undefined;
+    const drumsRes = want.has("rhythm") ? genDrums(genFrame, b.seed, dOpts) : undefined;
+    const drums = drumsRes?.items[0]!.content;
     // 生成器の非ブロック通知（`meta.warnings`）は**応答へ素通しする**（2026-08-29 オーナー裁定「黙って落とさない」）。
     //   ここまで /gen/section は `{section, composition}` しか返しておらず、ベースの通知（錨が立たなかった／コード追従が
     //   立たなかった等）が**丸ごと消えていた**＝到達口4口のうち1口が無言（2026-09-10 監査 重大①）。additive なキー追加。
     const genWarnings: string[] = [];
+    if (drumsRes?.meta?.warnings?.length) genWarnings.push(...drumsRes.meta.warnings); // ドラムの通知も素通し（bodyAim §2106(g-2)）
     const bassRes = want.has("bass") ? genBass(genFrame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(b.bass ?? {}), ...feelOpt } : b.bass) : undefined;
     if (bassRes?.meta?.warnings?.length) genWarnings.push(...bassRes.meta.warnings);
     // 2026-09-16 外したつまみ（body.bass / body.chord）は黙って捨てず告げる（出音は従来経路のまま）。
