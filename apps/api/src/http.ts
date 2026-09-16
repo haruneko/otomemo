@@ -14,6 +14,8 @@ import {
   genSkeletonCandidates,
   genFromEssence,
   genChordPattern,
+  removedRiffKnobWarning,
+  withRemovedRiffKnobWarning,
   genBass,
   genCounter,
   genRiff,
@@ -287,19 +289,7 @@ export function buildHttp(core: Core): FastifyInstance {
           const fill = typeof b.fill === "number" || typeof b.fill === "string" ? b.fill : undefined;
           // カスケード応答つまみ（respondToCues・既定 true）：明示 false のときだけ opts へ渡す＝未指定は genBass 側既定(true)のまま＝bit 一致。
           const respondToCues = b.respondToCues === false ? false : undefined;
-          // M3-3a 錨と間の分業（design.md 追補 (k)）：anchorLock=第三経路（drums のキック step に必ずルート錨・
-          //   間のリフは無傷）／anchorRestOnSyncopatedKick=案B（拍頭でない無音キックはベースを休む）。
-          //   **未指定=false=従来 bit 一致**（true のときだけ opts へ立つ）。
-          const anchorLock = b.anchorLock === true ? true : undefined;
-          // 2026-09-15 (k-6)：案B は chord-change で既定 ON になった＝明示の false も素通しする（未指定と区別）。
-          const anchorRestOnSyncopatedKick = typeof b.anchorRestOnSyncopatedKick === "boolean" ? b.anchorRestOnSyncopatedKick : undefined;
-          const anchorStrictness = typeof b.anchorStrictness === "string" ? (b.anchorStrictness as "chord-change" | "every-kick") : undefined; // 錨の厳しさ（未知値は genBass が既定へ落として告げる）
-          // M3-3b コード追従の5ガード（design.md 追補 (k)）：chordFollow=強拍コードトーン強制＋弱拍のスケール整合＋
-          //   区間末の接近音化。**approach ノブとは排他**（chordFollow が勝つ）。未指定=false=従来 bit 一致。
-          const chordFollow = b.chordFollow === true ? true : undefined;
-          // M3-3c リフ文法（anchorLock の体）：文字列のときだけ渡す。未知IDは genBass 側で既定へ落ち理由が返る。
-          const anchorGrammar = typeof b.anchorGrammar === "string" && b.anchorGrammar ? b.anchorGrammar : undefined;
-          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true, swing: num(b.swing), humanize: num(b.humanize), relative: b.relative === true, respondToCues, anchorLock, anchorRestOnSyncopatedKick, anchorGrammar, anchorStrictness, chordFollow, ...(typeof b.riffVariation === "number" ? { riffVariation: b.riffVariation } : {}), ...(b.riffVariationSteps === true ? { riffVariationSteps: true } : {}) }); // (k-7) 変奏量／段（未指定=キーを渡さない=bit 一致）／S4：swing/humanize=feel 添付（未指定=従来）／修理#2：relative=相対パターン出力（style時のみ・未指定=絶対=bit一致）
+          const res = withRemovedRiffKnobWarning(genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true, swing: num(b.swing), humanize: num(b.humanize), relative: b.relative === true, respondToCues }), b, "bass"); // S4：swing/humanize=feel 添付（未指定=従来）／修理#2：relative=相対パターン出力（style時のみ・未指定=絶対=bit一致）／2026-09-16 外したつまみは告げる
           // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
           attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
@@ -351,18 +341,7 @@ export function buildHttp(core: Core): FastifyInstance {
           const cpVariety = typeof b.variety === "number" ? b.variety : undefined; // スライスC：候補を複数返す（既定1=単数=bit一致）
           const cpSwing = typeof b.swing === "number" ? b.swing : undefined; // S4：swing/humanize=feel 添付（未指定=従来 bit 一致）
           const cpHumanize = typeof b.humanize === "number" ? b.humanize : undefined;
-          // M5 ギター型（既定 OFF）：guitarRiff＝リフ文法 ID／anchorLock＝キックに刻みを揃える（drums が要る）／
-          //   guitarShape＝手の形で弾く（耳未判定）／chords＝進行（検算して meta.warnings で告げる）。true/文字列のときだけ立つ。
-          const cpRiff = typeof b.guitarRiff === "string" && b.guitarRiff ? b.guitarRiff : undefined;
-          const cpAnchor = b.anchorLock === true ? true : undefined;
-          const cpShape = b.guitarShape === true ? true : undefined;
-          const cpKeyStab = b.keyStab === true ? true : undefined; // M6a-6a 鍵盤の隙間刺し（既定 OFF・drums が要る）
-          const cpPalm = typeof b.guitarPalmGate === "number" ? b.guitarPalmGate : undefined; // 刻みの短さ（2026-09-15 裁定・未指定＝源流値）
-          const cpGhostVel = typeof b.guitarGhostVel === "number" ? b.guitarGhostVel : undefined; // 弱音の強さ
-          const cpRv = typeof b.riffVariation === "number" ? b.riffVariation : undefined; // (k-7) 変奏量
-          const cpRvSteps = b.riffVariationSteps === true ? true : undefined; // (k-7) 段
-          const cpGtr = cpRiff != null || cpAnchor != null || cpShape != null || cpKeyStab != null || cpPalm != null || cpGhostVel != null || cpRv != null || cpRvSteps != null;
-          return genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null || cpGtr ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize, ...(cpGtr ? { guitarRiff: cpRiff, anchorLock: cpAnchor, guitarShape: cpShape, drums: b.drums, chords: asChords(b.chords), ...(cpKeyStab ? { keyStab: true } : {}), ...(cpPalm != null ? { guitarPalmGate: cpPalm } : {}), ...(cpGhostVel != null ? { guitarGhostVel: cpGhostVel } : {}), ...(cpRv != null ? { riffVariation: cpRv } : {}), ...(cpRvSteps ? { riffVariationSteps: true } : {}) } : {}) } : undefined);
+          return withRemovedRiffKnobWarning(genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize } : undefined), b, "chord"); // 2026-09-16 外したつまみは告げる
         }
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
@@ -456,7 +435,7 @@ export function buildHttp(core: Core): FastifyInstance {
     // ④是正（2026-08-29・受け入れ監査）：fillStyle 型注釈が "grid"|"physical" のままで、実行時は "body"(M3) が
     // キャストを通じて素通りしていた（型の嘘）。実態＝DrumsGenOpts.fillStyle に合わせ "body" を追加し、
     // fillLength/fillBeat/body系ノブも body?.drums 経由で受けて落とさず渡す。
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean; anchorGrammar?: string; anchorStrictness?: "chord-change" | "every-kick"; chordFollow?: boolean; riffVariation?: number; riffVariationSteps?: boolean }; chord?: { guitarRiff?: string; anchorLock?: boolean; guitarShape?: boolean; keyStab?: boolean; guitarPalmGate?: number; guitarGhostVel?: number; riffVariation?: number; riffVariationSteps?: boolean }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean }; chord?: Record<string, unknown>; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
     const frame = b.frame ?? {};
     // カスケード合図の配布（design 306「配り役」と同型＝feel と同じ様式で全生成器へ同じ1枚を配る）。
     //   body.cues＝このセクションの人が書いた合図（Cue[]）。deriveCues で導出（保存 land 破棄・範囲外無視・越境 land 導出）して
@@ -505,28 +484,18 @@ export function buildHttp(core: Core): FastifyInstance {
     //   ここまで /gen/section は `{section, composition}` しか返しておらず、ベースの通知（錨が立たなかった／コード追従が
     //   立たなかった等）が**丸ごと消えていた**＝到達口4口のうち1口が無言（2026-09-10 監査 重大①）。additive なキー追加。
     const genWarnings: string[] = [];
-    // (k-7) 変奏の段はセクション一括では並べられない（1曲分の合成は各パート1件）＝告げて level 0 で作る。riffVariation は素通し。
-    const SECTION_NO_STEPS = "セクション一括では段を並べられません。段は各パートの生成で（変奏なしで作りました）";
-    let bassOpt = b.bass;
-    if (bassOpt?.riffVariationSteps != null) {
-      // steps:true の時だけ変奏量も捨てて level 0（chord 側の `!== true` と揃える＝2026-09-16 監査 中③：false でも捨てて黙っていた）。
-      const { riffVariationSteps: _s, riffVariation: _v, ...rest } = bassOpt;
-      bassOpt = _s === true || _v === undefined ? rest : { ...rest, riffVariation: _v };
-      if (_s === true) genWarnings.push(`ベース：${SECTION_NO_STEPS}`);
-    }
-    const bassRes = want.has("bass") ? genBass(genFrame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(bassOpt ?? {}), ...feelOpt } : bassOpt) : undefined;
+    const bassRes = want.has("bass") ? genBass(genFrame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(b.bass ?? {}), ...feelOpt } : b.bass) : undefined;
     if (bassRes?.meta?.warnings?.length) genWarnings.push(...bassRes.meta.warnings);
+    // 2026-09-16 外したつまみ（body.bass / body.chord）は黙って捨てず告げる（出音は従来経路のまま）。
+    const removedBass = want.has("bass") ? removedRiffKnobWarning(b.bass, "bass") : null;
+    if (removedBass) genWarnings.push(`ベース：${removedBass}`);
     const bassContent = bassRes ? (bassRes.items[0]!.content as { notes: { pitch: number; start: number; dur: number }[]; feel?: unknown }) : undefined;
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
-    // M5 ギター型（body.chord:{guitarRiff,anchorLock,guitarShape}）：生成済みドラムと進行を渡す。**body.chord 未指定＝従来の呼び出しそのまま＝bit 一致**。
-    //   M6a-6a：body.chord.keyStab＝鍵盤の隙間刺し（生成済みドラムのキック∪スネアを譜として読む）。
-    if (b.chord?.riffVariationSteps === true) genWarnings.push(`コード楽器：${SECTION_NO_STEPS}`);
-    const chordGtr = b.chord && (typeof b.chord.guitarRiff === "string" || b.chord.anchorLock === true || b.chord.guitarShape === true || b.chord.keyStab === true || typeof b.chord.guitarPalmGate === "number" || typeof b.chord.guitarGhostVel === "number" || typeof b.chord.riffVariation === "number")
-      ? { guitarRiff: typeof b.chord.guitarRiff === "string" ? b.chord.guitarRiff : undefined, anchorLock: b.chord.anchorLock === true ? true : undefined, guitarShape: b.chord.guitarShape === true ? true : undefined, ...(b.chord.keyStab === true ? { keyStab: true } : {}), ...(typeof b.chord.guitarPalmGate === "number" ? { guitarPalmGate: b.chord.guitarPalmGate } : {}), ...(typeof b.chord.guitarGhostVel === "number" ? { guitarGhostVel: b.chord.guitarGhostVel } : {}), ...(typeof b.chord.riffVariation === "number" && b.chord.riffVariationSteps !== true ? { riffVariation: b.chord.riffVariation } : {}) }
-      : undefined;
     if (want.has("chord_pattern")) {
-      const cpRes = chordGtr ? genChordPattern(genFrame, b.seed, { ...(feelOpt ?? {}), ...chordGtr, drums: drums as Parameters<typeof genBass>[3], chords }) : genChordPattern(genFrame, b.seed, feelOpt);
+      const cpRes = genChordPattern(genFrame, b.seed, feelOpt);
       if (cpRes.meta?.warnings?.length) genWarnings.push(...cpRes.meta.warnings);
+      const removedChord = removedRiffKnobWarning(b.chord, "chord");
+      if (removedChord) genWarnings.push(`コード楽器：${removedChord}`);
       place("chord_pattern", cpRes.items[0]!.content, "コード楽器");
     }
     if (want.has("melody")) place("melody", genMelody(genFrame, chords, b.seed, { useV2: true, bass: bassContent?.notes, counter: b.melody?.counter, drums: drums as Parameters<typeof genBass>[3], drumLock: b.melody?.drumLock, backbeat: b.melody?.backbeat, converse: b.melody?.converse, ...(feelOpt ?? {}) }).items[0]!.content, "メロ"); // V2化(2026-07-09)＋対位＋ドラム＋共有feel（melody.*/feel 未指定=従来 bit 一致）

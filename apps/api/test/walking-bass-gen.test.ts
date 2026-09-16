@@ -181,7 +181,7 @@ describe("到達口＝4口すべてから JZ-WALK が呼べる（style は既存
     const tool = (await client.listTools()).tools.find((t) => t.name === "gen_bass")!;
     const desc = (tool.inputSchema as { properties: Record<string, { description?: string }> }).properties.style!.description!;
     expect(desc).toMatch(/JZ-WALK/);
-    expect(desc).toMatch(/耳未判定/); // 型と実態がずれない＝「未確認」を隠さない
+    expect(desc).toMatch(/耳判定＝使える/); // 型と実態がずれない＝耳の判定（2026-09-13「使える」）を書く
     const res = await client.callTool({ name: "gen_bass", arguments: { frame: FRAME, chords: CHORDS, seed: 42, style: "JZ-WALK" } });
     const out = JSON.parse((res as { content: { text: string }[] }).content[0]!.text) as { items: { content: { notes: Note[] } }[] };
     expect(out.items[0]!.content.notes).toEqual(content({ style: "JZ-WALK" }).notes);

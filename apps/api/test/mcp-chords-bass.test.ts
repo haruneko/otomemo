@@ -20,9 +20,10 @@ beforeEach(async () => {
 });
 
 describe("MCP chords[].bass が届く", () => {
-  it("gen_chord_pattern / gen_bass の inputSchema の chords に bass がある", async () => {
+  // gen_chord_pattern の chords は 2026-09-16 のリフ撤去でギターの検算ごと外した（相対型は進行を受け取らない）＝gen_bass だけを見る。
+  it("gen_bass の inputSchema の chords に bass がある", async () => {
     const tools = (await cl.listTools()).tools;
-    for (const name of ["gen_chord_pattern", "gen_bass"]) {
+    for (const name of ["gen_bass"]) {
       const t = tools.find((x) => x.name === name)!;
       const item = (t.inputSchema.properties as Record<string, { items?: { properties?: Record<string, unknown> } }>).chords!.items!;
       expect(Object.keys(item.properties!)).toContain("bass");

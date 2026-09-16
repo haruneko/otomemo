@@ -27,11 +27,8 @@ import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBre
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
-import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, chordAtStep, chordPcs as anchorChordPcs, type AnchorOnset, type AnchorSeg } from "@cm/music-core"; // M3-3a＝錨と間の分業（_lock_bass_roots_to_sheet 忠実移植）。opt-in `anchorLock` 経路でのみ消費＝既定は bit 一致。
-import { applyChordFollow, QUALITY_INTERVALS as CF_QUALITY_INTERVALS, type CfLineOnset, type CfSeg } from "@cm/music-core";
-import { keyStabSlots, keyStabHits } from "@cm/music-core"; // M6a-6a＝鍵盤の隙間刺し（opt-in `keyStab` 経路でのみ消費＝既定は bit 一致）。
-import { varyRiffTiles, normalizeRiffVariationLevel, RIFF_TILE_STEPS, type RiffCell, type RiffTile, type RiffVariationLevel } from "@cm/music-core"; // 繰り返しに変奏の層（design.md 追補 (k-7)・opt-in `riffVariation` でのみ消費＝既定は bit 一致）
-import { guitarGrammarById, GUITAR_GRAMMAR_IDS, guitarRiffTiles, guitarSkeletonFromTiles, buildGuitarSkeleton, lockGuitarChugToSheet, gtrOnsetsToHits, realizeGuitarRiff, fretboardGate, TUNING_GUITAR6 } from "@cm/music-core"; // M5＝ギター型（opt-in `guitarRiff` 経路でのみ消費＝既定は bit 一致）。 // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
+import { PM_ENGINE_VERSION } from "@cm/music-core"; // engine 印（M0契約 §2）＝phrase_maker 由来の経路（JZ-WALK）を使った時だけ content に載る。
+import { QUALITY_INTERVALS as CF_QUALITY_INTERVALS } from "@cm/music-core"; // JZ-WALK のコード区間のコードトーン（otomemo の品質表が正）
 import { buildWalkingLine, WALK_COMPOUND_SLOT_STEPS, JZ_WALK_ID, type WalkSegment } from "@cm/music-core"; // M3-3d＝JZ-WALK（walking v2 の候補生成＋v3 の規則3本・乱数は決定的規則へ置換）。**耳未判定**＝style 名指しの opt-in。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
 import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
@@ -40,7 +37,7 @@ import { resolveLowerVoice } from "./voiceLeadingReport"; // 実効下声の解�
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
 import { beatPatternById, pickBeatPattern, resolveFillType, DRUM, type OutLane, type FillType } from "./drumLibrary"; // ドラム定型ビート＋フィル語彙（WP-D1）
-import { bassTypeById, pickBassType, resolveBassFill, DEGREE_SEMI, bassGrammarById, BASS_GRAMMAR_DEFAULT_ID, type BassCell, type BassType, type BassFill } from "./bassLibrary"; // ベース定型型＋フィル語彙（WP-B1）＋リフ文法辞書（M3-3c）
+import { bassTypeById, pickBassType, resolveBassFill, DEGREE_SEMI, type BassCell, type BassType, type BassFill } from "./bassLibrary"; // ベース定型型＋フィル語彙（WP-B1）
 import { compTypeById, pickCompType, pickCompTypes, compHitsForBar, compLhHitsForBar, type CompType, type CompMode } from "./chordLibrary"; // 伴奏パターン型辞書（chordLibrary・S2/S3・2026-07-22）
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
@@ -961,48 +958,39 @@ export function genFromEssence(
  * （現行分業を維持・api は実音化しない）。未指定は voicing にキーを生やさない＝従来出力と deepStrictEqual 一致。
  * opts.pattern＝伴奏パターン型辞書（chordLibrary・S2）：型ID直指定 or ジャンル名（役割/tempo で候補を絞り決定的1つ）。
  *   選ばれた型から content（mode/voicing/steps/hits）を組み立てる。**pattern 未指定/未解決/6-8系=従来経路＝bit 一致**。 */
+// 2026-09-16 撤去した「リフ」系のつまみ（オーナー裁定・docs/design.md 追補 (k) の撤去記録）。
+//   古い呼び出し（MCP・/music/gen_*・/gen/section）がまだ送ってきたら**黙って捨てず** meta.warnings で「外しました」と告げる。
+//   出音は従来経路のまま（つまみ未指定と 1bit も変わらない）。部位でキー名の意味が違う（anchorLock＝ベースの錨／ギターの刻み）。
+const REMOVED_RIFF_KNOBS: Record<"bass" | "chord", Record<string, string>> = {
+  bass: {
+    anchorLock: "キックにルートを置く", anchorRestOnSyncopatedKick: "裏キックは休む", anchorGrammar: "間のリフ（リフ文法）",
+    anchorStrictness: "ルートを置くキック", chordFollow: "コードに合わせ直す", riffVariation: "変奏", riffVariationSteps: "変奏を3段で並べる",
+  },
+  chord: {
+    guitarRiff: "ギターのリフ文法", anchorLock: "キックに刻みを揃える", guitarShape: "手の形で弾く", guitarPalmGate: "刻みの短さ",
+    guitarGhostVel: "弱音の強さ", riffVariation: "変奏", riffVariationSteps: "変奏を3段で並べる", keyStab: "キックの隙間に刺す（鍵盤）",
+  },
+};
+/** 外したつまみが送られてきたら、その名前を並べた通知文を返す（無ければ null）。 */
+export function removedRiffKnobWarning(src: unknown, part: "bass" | "chord"): string | null {
+  if (src == null || typeof src !== "object") return null;
+  const rec = src as Record<string, unknown>;
+  const names = Object.entries(REMOVED_RIFF_KNOBS[part]).filter(([k]) => rec[k] !== undefined).map(([, label]) => `「${label}」`);
+  return names.length ? `${names.join("")}は 2026-09-16 に外した機能なので使っていません（従来どおり生成しました）` : null;
+}
+/** 生成結果の meta.warnings に、外したつまみの通知を足す（無ければ結果をそのまま返す＝従来と同じ形）。 */
+export function withRemovedRiffKnobWarning<T extends GenResult>(res: T, src: unknown, part: "bass" | "chord"): T {
+  const w = removedRiffKnobWarning(src, part);
+  if (!w) return res;
+  res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), w] };
+  return res;
+}
+
 export function genChordPattern(
   frame?: Frame | null,
   seed?: number | null,
-  opts?: {
-    style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number;
-    // M5 ギター型（phrase_maker ギター gen2 移植・**既定 OFF**＝どれも未指定なら下の従来経路と 1bit も変わらない）：
-    //   guitarRiff＝リフ文法3型（power_chug/pedal_answer/gallop）を相対形の hits（ChordHit.voice/riff 注記）で返す／
-    //   anchorLock＝譜（drums）のキック step に POWER8 の刻みを必ず置く（_lock_guitar_chug_to_sheet）／
-    //   guitarShape＝音高を「手の形」ソルバで出す（**耳未判定の試作**・重みは otomemo 仮置き）／
-    //   drums＝キックの出所／chords＝進行（api は音を返さないが、進行があれば実音化して検算し通知する＝5f）。
-    guitarRiff?: string; anchorLock?: boolean; guitarShape?: boolean; drums?: DrumsInput | null;
-    //   guitarPalmGate＝刻みの短さ（palmGate を文法の値の代わりに・0.1〜1）／guitarGhostVel＝弱音（ghost）の vel（1〜127）。
-    //   **未指定＝源流の値＝1ビットも変わらない**（design.md 追補 (k-4)・2026-09-15 オーナー裁定「つまみで選ぶ」）。
-    guitarPalmGate?: number; guitarGhostVel?: number;
-    //   riffVariation＝繰り返しに変奏の層（design.md 追補 (k-7)・0/0.5/1・リフ文法の時だけ・未指定=0=bit 一致）／riffVariationSteps＝なし／中／多めの3件を items に。
-    riffVariation?: number; riffVariationSteps?: boolean;
-    chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[] | null;
-    // M6a-6a 鍵盤の隙間刺し（**既定 OFF**）：drums のキック以外の打点（スネア）に和音を刺す（キックだけなら 2拍裏・4拍裏）。drums が要る。
-    keyStab?: boolean;
-  } | null,
+  opts?: { style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number } | null,
 ): GenResult {
-  // 変奏の段（design.md 追補 (k-7)）＝なし／中／多めを同じ入力で3回生成して items に並べる。リフ文法が立たない時は1件（通知つき）。
-  if (opts?.riffVariationSteps === true) {
-    const { riffVariationSteps: _steps, riffVariation: rvIgnored, ...rest } = opts;
-    const r1 = genChordPattern(frame, seed, { ...rest, riffVariation: 0.5 });
-    const stepsWarn: string[] = rvIgnored != null ? [`変奏を段で並べるので、変奏量（${rvIgnored}）は使っていません`] : [];
-    if ((r1.items[0]!.content as { guitarRiff?: { variation?: number } }).guitarRiff?.variation == null) {
-      return stepsWarn.length ? { ...r1, meta: { ...(r1.meta ?? {}), warnings: [...(r1.meta?.warnings ?? []), ...stepsWarn] } } : r1;
-    }
-    const r0 = genChordPattern(frame, seed, rest);
-    const r2 = genChordPattern(frame, seed, { ...rest, riffVariation: 1 });
-    // 子の生成が言う「候補は N 件でなく1件」は段では嘘になる（3件返す）＝段の件数で言い直す。
-    const oneOnly = (w: string) => w.includes("候補は") && w.endsWith("件でなく1件です");
-    const ws = [...new Set([...(r0.meta?.warnings ?? []), ...(r1.meta?.warnings ?? []), ...(r2.meta?.warnings ?? []), ...stepsWarn])].filter((w) => !oneOnly(w));
-    if (typeof opts.variety === "number" && opts.variety > 1 && opts.variety !== 3) ws.push(`ギターのリフは変奏の段で並べるので、候補は ${opts.variety} 件でなく3件です`);
-    const out: GenResult = {
-      items: [{ ...r0.items[0]!, label: "変奏なし（従来）" }, { ...r1.items[0]!, label: "変奏 中" }, { ...r2.items[0]!, label: "変奏 多め" }],
-      edges: [],
-    };
-    if (ws.length) out.meta = { warnings: ws };
-    return out;
-  }
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 5);
   // フィール層（S4・2026-07-22）：swing/humanize を content.feel へ（genMelody/genBass と同契約＝同 buildFeel）。
@@ -1013,187 +1001,6 @@ export function genChordPattern(
   const bars = barsOf(f);
   const stepsPerBar = Math.round(info.beatsPerBar * 4); // 16分グリッド：4/4=16, 6/8=12, 3/4=12
   const steps = bars * stepsPerBar;
-  // --- M5 ギター型（計画 §5-2 M5・design.md 追補 (k)）----------------------------------------------------------
-  //   **相対形のまま**（ギター型に絶対 notes を載せない）：ヒット単位のボイシングは `ChordHit.voice`（mono/power/power8）、
-  //   コード追従が読む注記は `ChordHit.riff`（kind/deg/role/anchor/strong）に additive で載せ、音高は web の実音化が
-  //   music-core `realizeGuitarRiff` で出す（api と同じ1本）。立たない時は黙って落とさず `meta.warnings` で言い分ける。
-  const gtrWarn: string[] = [];
-  const attachGtrWarn = (r: GenResult): GenResult => (gtrWarn.length ? { ...r, meta: { ...(r.meta ?? {}), warnings: [...(r.meta?.warnings ?? []), ...gtrWarn] } } : r);
-  const GTR_LOCK = "「キックに刻みを揃える」";
-  const GTR_SHAPE = "「手の形で弾く」";
-  const KEY_STAB = "「キックの隙間に刺す（鍵盤）」";
-  const gtrWins = opts?.guitarRiff != null && guitarGrammarById(opts.guitarRiff) != null && info.grouping !== "compound" && stepsPerBar === 16;
-  // 型・ジャンル（pattern）と候補数（variety）は、ギターのリフ／鍵盤の隙間刺しが**立った時**は使わない＝黙って捨てず告げる
-  //   （2026-09-13 M6a 監査 中1。web は常に pattern=omakase＋variety=4 を送る＝"omakase" は「選んでいない」番兵なので型の通知は出さない）。
-  //   併用はしない：隙間刺し／リフは譜（ドラム）や文法から hits を決める別の型で、型辞書のリズムと重ねる意味が定義されていない。
-  const warnIgnoredCompOpts = (label: string): void => {
-    const p = typeof opts?.pattern === "string" && opts.pattern !== "" && opts.pattern !== "omakase" ? opts.pattern : null;
-    if (p) gtrWarn.push(`${label}を生成したので、選んだ型・ジャンル（${p}）は使っていません`);
-    if (typeof opts?.variety === "number" && opts.variety > 1) gtrWarn.push(`${label}は1通りだけなので、候補は ${opts.variety} 件でなく1件です`);
-  };
-  if (opts?.keyStab === true && gtrWins) gtrWarn.push(`ギターのリフ文法を選んでいるので${KEY_STAB}は使っていません（ギターのリフを生成しました）`);
-  if (opts?.guitarRiff == null && (opts?.anchorLock === true || opts?.guitarShape === true)) {
-    gtrWarn.push(`ギターのリフ文法を選んだ時だけ${opts?.anchorLock === true ? GTR_LOCK : GTR_SHAPE}が効きます（従来どおり生成しました）`);
-  }
-  if (opts?.guitarRiff == null && opts?.guitarPalmGate != null) gtrWarn.push("ギターのリフ文法を選んだ時だけ「刻みの短さ」が効きます（従来どおり生成しました）");
-  if (opts?.guitarRiff == null && opts?.guitarGhostVel != null) gtrWarn.push("ギターのリフ文法を選んだ時だけ「弱音の強さ」が効きます（従来どおり生成しました）");
-  // (k-7) 変奏量（未指定＝0＝この段は立たない＝bit 一致）。
-  const rvNorm = opts?.riffVariation != null ? normalizeRiffVariationLevel(opts.riffVariation) : { level: 0 as RiffVariationLevel, rounded: false };
-  if (opts?.riffVariation != null && rvNorm.rounded) gtrWarn.push(`変奏量は 0／0.5／1 のどれかなので ${rvNorm.level} に丸めました`);
-  if (rvNorm.level > 0 && !gtrWins) gtrWarn.push("ギターのリフ文法を選んだ時だけ「変奏」が効きます（従来どおり生成しました）");
-  if (opts?.guitarRiff != null) {
-    const grammar = guitarGrammarById(opts.guitarRiff);
-    if (!grammar) gtrWarn.push(`知らないギターのリフ文法（${opts.guitarRiff}）なので従来どおり生成しました（選べるのは ${GUITAR_GRAMMAR_IDS.join(" / ")}）`);
-    else if (info.grouping === "compound" || stepsPerBar !== 16) gtrWarn.push(`この拍子（${info.meter}）ではギターのリフ文法に対応していません（4/4 のみ・従来どおり生成しました）`);
-    else {
-      // 刻みの音価のつまみ（未指定＝文法の palmGate・ghost vel 46＝源流値）。範囲外は丸めて告げる。
-      const pgRaw = opts.guitarPalmGate;
-      const palmGate = typeof pgRaw === "number" && Number.isFinite(pgRaw) ? Math.max(0.1, Math.min(1, pgRaw)) : grammar.palmGate;
-      if (typeof pgRaw === "number" && palmGate !== pgRaw) gtrWarn.push(`「刻みの短さ」は 0.1〜1 の範囲なので ${palmGate} に丸めました`);
-      const gvRaw = opts.guitarGhostVel;
-      const ghostVel = typeof gvRaw === "number" && Number.isFinite(gvRaw) ? Math.max(1, Math.min(127, Math.round(gvRaw))) : undefined;
-      if (typeof gvRaw === "number" && ghostVel !== gvRaw) gtrWarn.push(`「弱音の強さ」は 1〜127 の整数なので ${ghostVel ?? "既定"} に丸めました`);
-      // 5a 譜のキックへの chug ロック（成立条件は genBass の anchorLock と同じ並び・落ち先ごとに言い分ける）。
-      //   (k-7) 変奏の層はロックの**前**に走り、ロックのキック step を保護するので、成立判定だけを先に行う（出音の順序は不変）。
-      let lockKick: number[] | null = null;
-      if (opts.anchorLock === true) {
-        const dr = parseDrums(opts.drums);
-        const scale = dr ? 16 / dr.steps : 0;
-        const fb = !dr && drumsSentButUnreadable(opts.drums) ? `${DRUMS_UNREADABLE}${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
-          : !dr ? `ドラムが無いので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
-          : Math.abs(dr.steps * dr.bps - info.beatsPerBar) >= 1e-6 ? `ドラムの1小節の長さが拍子（${info.meter}）と合わないので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
-          : !Number.isInteger(scale) || scale < 1 ? `ドラムの刻みが16分の格子に写せないので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
-          : dr.kick.length === 0 ? `ドラムにキックが無いので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
-          : null;
-        if (fb) gtrWarn.push(fb);
-        else lockKick = dr!.kick.map((k) => k * scale);
-      }
-      const gtrGrammar = palmGate === grammar.palmGate ? grammar : { ...grammar, palmGate };
-      let onsets = buildGuitarSkeleton(gtrGrammar, steps);
-      // (k-7) 変奏の層＝表を反復単位に束ねて変奏 → 骨へ戻す（音価は並び直した後で同じ規則）。保護＝ロック中の全キック step。
-      const riffLevel = rvNorm.level;
-      const riffTiles = riffLevel > 0 ? guitarRiffTiles(gtrGrammar, steps) : null;
-      if (riffTiles) {
-        const prot = new Set<number>();
-        if (lockKick) for (let b = 0; b < bars; b++) for (const k of lockKick) prot.add(b * 16 + k);
-        const varied = varyRiffTiles(riffTiles, { level: riffLevel, seed: seed ?? 5, protectedSteps: prot, instrument: "guitar" }).tiles;
-        onsets = guitarSkeletonFromTiles(varied, steps, palmGate);
-      }
-      if (lockKick) {
-        // accents は常に空＝otomemo のドラム content は kick/snare のみ（M3 の決定2を引き継ぐ）＝アクセント権限の一本化で
-        //   文法のアクセントは note へ均される（源流どおり）。
-        onsets = lockGuitarChugToSheet(onsets, { totalSteps: steps, kick: lockKick, accents: [], palmGate }).onsets;
-      }
-      const pitchEngine = opts.guitarShape === true ? "handshape" as const : "chordfollow" as const;
-      const content = {
-        mode: "strum" as CompMode,
-        voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, style: "guitar" as const },
-        steps,
-        hits: gtrOnsetsToHits(onsets, ghostVel != null ? { ghost: ghostVel } : undefined),
-        guitarRiff: { grammar: grammar.id, pitch: pitchEngine, ...(lockKick ? { anchorLock: true as const } : {}), ...(pitchEngine === "handshape" ? { seed: seed ?? 5 } : {}), ...(riffTiles ? { variation: riffLevel } : {}) },
-        engine: { version: PM_ENGINE_VERSION },
-      };
-      const finalContent = withFeel(content);
-      // 契約の**実測**は最終出力に対して（監査の教訓＝後段が黙って契約を破らないか）：全小節の全キック step に錨の POWER 形が在るか。
-      if (lockKick) {
-        let broken = 0;
-        for (let b = 0; b < bars; b++) for (const k of lockKick) {
-          const h = finalContent.hits.find((x) => x.step === b * 16 + k);
-          if (!h || !h.riff.anchor || h.voice === "mono") broken++;
-        }
-        if (broken > 0) gtrWarn.push(`キックに揃えた刻みのうち ${broken} 個が最終出力で欠けています`);
-      }
-      // 5f 進行が来ていれば、web と同じ実音化で検算して告げる（音は返さない＝相対形のまま）。
-      const cs = (opts.chords ?? []).filter((x) => x && x.root != null);
-      if (cs.length > 0) {
-        // コードの引き当ては music-core `chordAtStep`（step 粒度・範囲外は最後のコード）の1本を使う（M4 番人＝verify-shared-single-impl）。
-        const csSegs: AnchorSeg[] = cs.map((x) => ({ rootPc: 0, startStep: (x.start ?? 0) * 4, lengthSteps: (x.dur ?? 4) * 4 }));
-        const real = realizeGuitarRiff(finalContent.hits, { chordAtStep: (s) => { const x = cs[csSegs.indexOf(chordAtStep(csSegs, s)!)]!; return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 });
-        if (real.report.layerBQualities.length) gtrWarn.push(`ギターの表に無いコード（${real.report.layerBQualities.join("・")}）はベースと同じ教科書スケールで代用しました`);
-        if (real.report.unknownQualities.length) gtrWarn.push(`知らないコードの種類（${real.report.unknownQualities.join("・")}）はメジャーとして弾きます`);
-        if (real.report.shape && real.report.shape.emptyLayers > 0) gtrWarn.push(`${GTR_SHAPE}で押さえ方が見つからない音が ${real.report.shape.emptyLayers} 個あり、その音はコード追従の音高にしました`);
-        if (real.report.shape && real.report.shape.tier > 0) gtrWarn.push(`${GTR_SHAPE}で手の移動が間に合わない所があったので、移動の速さの制限を${real.report.shape.tier === 1 ? "2倍に緩めました" : "外しました"}`);
-        const fg = fretboardGate(real.notes.map((n) => n.pitch), TUNING_GUITAR6);
-        if (fg.detail.unreachable.length > 0) gtrWarn.push(`6弦ギターで押さえられない音が ${fg.problems.length} 個あります`);
-      }
-      // (k-7) 変奏の余地・打ち消しの実測（診断・ゲートにしない）＝同じ入力で level 0 を作り、hits か検算の実音が完全一致なら告げる。
-      if (riffTiles) {
-        const RV_LABEL = riffLevel === 1 ? "多め" : "中";
-        if (riffTiles.length < 2) gtrWarn.push(`2小節の繰り返しが1回分しかないので、変奏（${RV_LABEL}）の余地がありません（従来と同じ音です）`);
-        else {
-          const base = genChordPattern(frame, seed, { ...opts, riffVariation: undefined, riffVariationSteps: undefined });
-          const baseHits = (base.items[0]!.content as { hits: typeof finalContent.hits }).hits;
-          let same = JSON.stringify(baseHits) === JSON.stringify(finalContent.hits);
-          if (!same && cs.length > 0) {
-            const csSegs: AnchorSeg[] = cs.map((x) => ({ rootPc: 0, startStep: (x.start ?? 0) * 4, lengthSteps: (x.dur ?? 4) * 4 }));
-            const ro = { chordAtStep: (st: number) => { const x = cs[csSegs.indexOf(chordAtStep(csSegs, st)!)]!; return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 };
-            same = JSON.stringify(realizeGuitarRiff(baseHits, ro).notes) === JSON.stringify(realizeGuitarRiff(finalContent.hits, ro).notes);
-          }
-          // 真因の言い分け（2026-09-16 監査 中②）：変わった hit が全部「弱い位置の単音」（strong でない・単音・note・ペダル系でない）なら、
-          //   和音追従はその音を**隣の確定音の±2半音の中のスケール音**へ寄せる（源流 _snap_near）＝1段のずらしはほとんど同じ音に吸われる。
-          //   gallop の中（答句が 14/15/30 の16分裏だけ）は進行しだいでほぼ常にこれ＝構造的に効きにくい（強さの調整は耳の後＝S6）。
-          const weakOnly = same && pitchEngine === "chordfollow" && (() => {
-            const b = new Map(baseHits.map((h) => [h.step, JSON.stringify(h)]));
-            const diff = finalContent.hits.filter((h) => b.get(h.step) !== JSON.stringify(h));
-            return diff.length > 0 && baseHits.length === finalContent.hits.length
-              && diff.every((h) => !h.riff.strong && h.voice === "mono" && h.riff.kind === "note" && !["head", "pedal", "chug", "chord", "dead"].includes(h.riff.role));
-          })();
-          const why = weakOnly ? "（ずらした答句がどれも弱い位置の単音で、和音追従が隣の音の±2半音のスケール音へ寄せるため）" : "";
-          if (same) gtrWarn.push(`変奏（${RV_LABEL}）は${lockKick ? `${GTR_LOCK}・` : ""}和音追従に打ち消され、従来と同じ音になりました${why}`); // 落ち先ごと＝ロックしていない時にロックのせいにしない
-          else if (riffLevel === 1) {
-            // 段どうしの同一（2026-09-16 監査 重大①・ベースと対称）：多めが中と同じ hits なら告げる。
-            const mid = genChordPattern(frame, seed, { ...opts, riffVariation: 0.5, riffVariationSteps: undefined });
-            const midHits = (mid.items[0]!.content as { hits: typeof finalContent.hits }).hits;
-            let sameMid = JSON.stringify(midHits) === JSON.stringify(finalContent.hits);
-            if (!sameMid && cs.length > 0) {
-              const csSegs: AnchorSeg[] = cs.map((x) => ({ rootPc: 0, startStep: (x.start ?? 0) * 4, lengthSteps: (x.dur ?? 4) * 4 }));
-              const ro = { chordAtStep: (st: number) => { const x = cs[csSegs.indexOf(chordAtStep(csSegs, st)!)]!; return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 };
-              sameMid = JSON.stringify(realizeGuitarRiff(midHits, ro).notes) === JSON.stringify(realizeGuitarRiff(finalContent.hits, ro).notes);
-            }
-            if (sameMid) gtrWarn.push(`変奏（多め）は中と同じ音になりました（この文法・この長さでは、多めで足す断片化・広げ・ゴーストの付け外しが当たる所がありません）`);
-          }
-        }
-      }
-      warnIgnoredCompOpts("ギターのリフ");
-      return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: `ギターのリフ（${grammar.id}）` }], edges: [] });
-    }
-  }
-  // --- M6a-6a 鍵盤の隙間刺し（計画 §5-2 M6a・legacy rock_piano sheet 分岐＋gesture_p11 build_rock を1本化）------------
-  //   相対形（keyboard strum の hits）＝音高は web の既存 voiceToTop（top:72）。譜の onsets＝otomemo のドラムのキック∪スネア
-  //   （源流 RhythmSpec の b:/s: 行に相当・ハットは含めない）。accents は常に空（M3 の決定2を引き継ぐ）。
-  if (opts?.keyStab === true && !gtrWins) {
-    const dr = parseDrums(opts.drums);
-    const scale = dr ? 16 / dr.steps : 0;
-    const fb = info.grouping === "compound" || stepsPerBar !== 16 ? `この拍子（${info.meter}）では${KEY_STAB}に対応していません（4/4 のみ・従来どおり生成しました）`
-      : !dr && drumsSentButUnreadable(opts.drums) ? `${DRUMS_UNREADABLE}${KEY_STAB}は使えません（従来どおり生成しました）`
-      : !dr ? `ドラムが無いので${KEY_STAB}は使えません（従来どおり生成しました）`
-      : Math.abs(dr.steps * dr.bps - info.beatsPerBar) >= 1e-6 ? `ドラムの1小節の長さが拍子（${info.meter}）と合わないので${KEY_STAB}は使えません（従来どおり生成しました）`
-      : !Number.isInteger(scale) || scale < 1 ? `ドラムの刻みが16分の格子に写せないので${KEY_STAB}は使えません（従来どおり生成しました）`
-      : null;
-    if (fb) gtrWarn.push(fb);
-    else {
-      const kick = dr!.kick.map((k) => k * scale);
-      const { slots, fallback } = keyStabSlots({ onsets: [...kick, ...dr!.snare.map((s) => s * scale)], kick, accents: [] });
-      if (fallback) gtrWarn.push(`ドラムにキック以外の打点（スネア）が無いので、${KEY_STAB}は2拍裏と4拍裏に刺しました`);
-      const content = {
-        mode: "strum" as CompMode,
-        voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 },
-        steps,
-        hits: keyStabHits(slots, bars, 112, 16, kick), // kick＝鳴る区間が次のキック頭に掛からないよう音価を詰める（M6a 監査 軽微3）
-        keyStab: fallback ? { fallback: true as const } : {},
-        engine: { version: PM_ENGINE_VERSION },
-      };
-      const finalContent = withFeel(content);
-      // 契約の実測（最終出力に対して）：隙間ありなら、どの hit もキックの step に重ならない。
-      if (!fallback) {
-        const kickSet = new Set(kick);
-        const onKick = finalContent.hits.filter((h) => kickSet.has(h.step % 16)).length;
-        if (onKick > 0) gtrWarn.push(`${KEY_STAB}のうち ${onKick} 個が最終出力でキックと重なっています`);
-      }
-      warnIgnoredCompOpts(KEY_STAB);
-      return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: fallback ? "鍵盤の隙間刺し（2拍裏・4拍裏）" : "鍵盤の隙間刺し" }], edges: [] });
-    }
-  }
   // 選ばれた CompType から content（mode/voicing/steps/hits/lh）を組み立てる純関数（単数/複数で共有）。
   const buildCompContent = (compType: CompType) => {
     // アレンジS1 contract④（2026-08-02・design「### アレンジS1＝写像規則の契約」）：**サイクル（型の bars）単位**の
@@ -1260,7 +1067,7 @@ export function genChordPattern(
   if (canLib && variety >= 2 && !compTypeById(opts!.pattern!)) {
     const types = pickCompTypes(opts!.pattern!, f.section?.role, f.tempo, seed ?? 5, variety).filter((ct) => ct.grid === stepsPerBar);
     if (types.length) {
-      return attachGtrWarn({ items: types.map((ct) => ({ kind: "chord_pattern", content: withFeel(buildCompContent(ct)), label: `${ct.id} ${ct.scenes}` })), edges: [] });
+      return { items: types.map((ct) => ({ kind: "chord_pattern", content: withFeel(buildCompContent(ct)), label: `${ct.id} ${ct.scenes}` })), edges: [] };
     }
   }
   // 伴奏パターン型辞書（chordLibrary・S2）：pattern=型ID or ジャンル名。4/4（16セル）＋6/8（12セル・world68）。
@@ -1270,7 +1077,7 @@ export function genChordPattern(
     : null;
   if (compType && compType.grid !== stepsPerBar) compType = null; // grid 不一致（4/4型を6/8枠へ等）は敷けない＝従来経路
   if (compType) {
-    return attachGtrWarn({ items: [{ kind: "chord_pattern", content: withFeel(buildCompContent(compType)), label: "コード楽器" }], edges: [] });
+    return { items: [{ kind: "chord_pattern", content: withFeel(buildCompContent(compType)), label: "コード楽器" }], edges: [] };
   }
   const bias = densityBias(f.mood ?? "", f.tempo);
   const per = bias.long >= 1.5 ? stepsPerBar : bias.busy >= 1.5 ? 2 : 4; // sparse=小節頭/busy=八分/既定=拍頭
@@ -1287,7 +1094,7 @@ export function genChordPattern(
     ...(opts?.strumMs != null ? { strumMs: opts.strumMs } : {}),
   };
   const content = { mode, voicing, steps, hits };
-  return attachGtrWarn({ items: [{ kind: "chord_pattern", content: withFeel(content), label: "コード楽器" }], edges: [] });
+  return { items: [{ kind: "chord_pattern", content: withFeel(content), label: "コード楽器" }], edges: [] };
 }
 
 // ドラム入力（genDrums content と同形）＝gen_bass のドラム結線用（design「gen_bass×ドラム結線」2026-07-10）。
@@ -1322,12 +1129,6 @@ function parseDrums(drums?: DrumsInput | null): { steps: number; bps: number; ki
   };
   return { steps: Math.trunc(steps), bps, kick: laneOf(36, "Kick"), snare: laneOf(38, "Snare"), hihat: laneAll([42, 44, 46], ["HiHat", "OpenHat", "ClosedHat"]) };
 }
-// drums は送られているが parseDrums が読めない（steps/beatsPerStep/lanes の欠落・不正）＝「ドラムが無い」と言うと嘘になる
-//   （2026-09-13 M5 監査 軽微-1）。通知の落ち先を言い分けるためだけに使う（経路の判定は parseDrums のまま＝出音不変）。
-function drumsSentButUnreadable(drums?: DrumsInput | null): boolean {
-  return drums?.rhythm != null && parseDrums(drums) == null;
-}
-const DRUMS_UNREADABLE = "ドラムの形式が読めない（steps・beatsPerStep・lanes のどれかが無いか不正）ので";
 
 // ベース低域窓＋kickLock 動作点の実測較正（B1+D2＝docs/research/2026-07-14-stem-groove-measurements.md）。
 // 音域窓：自作曲 stem 実測 p5–p95=G1..A2（絶対上限F3）。旧 36..47(legacy)/33..55(kick経路) は上端が実曲より高い。
@@ -1337,8 +1138,6 @@ export const BASS_LO = 33, BASS_HI = 48;
 // land 着地の velocity（カスケード §3-1「bar0 頭ルート・vel 強」）。melodyCells の強アクセント上限(118)と
 // ドラム land の crash(120)/kick(118) に揃え、通常ベースの既定100より明確に強く鳴らす。
 const BASS_LAND_VEL = 118;
-// (k-7) 変奏の層が返す半音 → 度数トークン（リフ語彙の階段 [0,3,5,6,7,10,12] ＋文法にある b2）。DEGREE_SEMI の逆写像のうち使う分だけ。
-const RIFF_SEMI_TO_DEG: Record<number, string> = { 0: "R", 1: "b2", 3: "b3", 5: "4", 6: "b5", 7: "5", 10: "b7", 12: "8" };
 // pc(0..11) を窓 [BASS_LO,BASS_HI] の最下オクターブへ写す（旧 36+pc の 36..47 張り付きに代わる低域化）。
 // 例：C(pc0)→36(C2 据え置き)・G(pc7)→43(G2)・A(pc9)→33(A1 で1oct 降下)・B(pc11)→35(B1)。
 function bassPcToWindow(pc: number): number { return BASS_LO + ((((pc % 12) - BASS_LO) % 12) + 12) % 12; }
@@ -1355,30 +1154,8 @@ export function genBass(
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[],
   seed?: number | null,
   drums?: DrumsInput | null,
-  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean; anchorGrammar?: string; anchorStrictness?: "chord-change" | "every-kick"; chordFollow?: boolean; riffVariation?: number; riffVariationSteps?: boolean }, // riffVariation=変奏量（design.md 追補 (k-7)・0/0.5/1・anchorLock の文法の体にだけ効く・未指定=0=bit 一致）／riffVariationSteps=なし／中／多めの3件を items に／anchorStrictness=錨の厳しさ（design.md 追補 (k-6)・既定 chord-change＝変わり目だけルート必須／every-kick＝源流互換）／ anchorLock=錨と間の分業（M3-3a・第三経路・既定OFF＝未指定は bit 一致・kickLock と排他・style と併用）／anchorRestOnSyncopatedKick=案B つまみ（拍頭でない無音キックはベースを休む）／anchorGrammar=anchorLock の体に敷くリフ文法 ID（M3-3c・既定 pedal_answer・style 指定時は style が体）／chordFollow=コード追従の5ガード（M3-3b・approach ノブと排他・既定OFF）
+  opts?: { kickLock?: number; snareGap?: number; approach?: number; skeleton?: SkeletonContent; style?: string; fill?: number | string; slashBass?: boolean; swing?: number; humanize?: number; relative?: boolean; respondToCues?: boolean },
 ): GenResult {
-  // 変奏の段（design.md 追補 (k-7)）＝なし／中／多めを同じ入力で3回生成して items に並べる。変奏が立たない時は1件（通知つき）。
-  if (opts?.riffVariationSteps === true) {
-    const { riffVariationSteps: _steps, riffVariation: rvIgnored, ...rest } = opts;
-    const r1 = genBass(frame, chords, seed, drums, { ...rest, riffVariation: 0.5 });
-    const stepsWarn: string[] = [];
-    if (rvIgnored != null) stepsWarn.push(`変奏を段で並べるので、変奏量（${rvIgnored}）は使っていません`);
-    const addWarn = (r: GenResult, ws: string[]): GenResult => (ws.length ? { ...r, meta: { ...(r.meta ?? {}), warnings: [...(r.meta?.warnings ?? []), ...ws] } } : r);
-    if ((r1.items[0]!.content as { bassRiff?: unknown }).bassRiff == null) return addWarn(r1, stepsWarn); // 立たない＝1件（「だけ効く」の通知は r1 が持つ）
-    const r0 = genBass(frame, chords, seed, drums, rest);
-    const r2 = genBass(frame, chords, seed, drums, { ...rest, riffVariation: 1 });
-    const ws = [...new Set([...(r0.meta?.warnings ?? []), ...(r1.meta?.warnings ?? []), ...(r2.meta?.warnings ?? []), ...stepsWarn])];
-    const out: GenResult = {
-      items: [
-        { ...r0.items[0]!, label: "変奏なし（従来）" },
-        { ...r1.items[0]!, label: "変奏 中" },
-        { ...r2.items[0]!, label: "変奏 多め" },
-      ],
-      edges: [],
-    };
-    if (ws.length) out.meta = { warnings: ws };
-    return out;
-  }
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 42);
   // カスケード応答つまみ（respondToCues・既定 true・裁定6）：false ならこのトラックは ctx.cues を一切読まない
@@ -1417,75 +1194,10 @@ export function genBass(
   // A/A' キック骨格＝4/4系のみ・ドラムの1小節長が拍子と一致する時のみ（6/8 は push/swing と同じ除外方針）。
   const kickPath = !!dr && kickLock !== 0 && info.grouping !== "compound" && Math.abs(dr.steps * dr.bps - perBar) < 1e-6;
 
-  // --- 錨と間の分業（M3-3a・第三経路 `anchorLock`・design.md 追補 (k)）の成立条件 ---
-  //   源流＝phrase_maker `ensemble.py:1111-1179 _lock_bass_roots_to_sheet`（4/4 のみ・16分格子）。
-  //   **既定 OFF（未指定/false）＝この経路は一切立たない＝従来と 1bit も変わらない**（新ノブの鉄則）。
-  //   立つ条件＝ドラム content が在る（錨の位置はドラムの骨から来る＝描く口は開けない・io-map 裁定#2/#5）／
-  //   4/4系（6/8 の `_sheet_line` 一般化は本段の Scope 外）／ドラム1小節が拍子の1小節と同尺／
-  //   ドラム格子が16分格子へ整数倍で写せる（8分格子=8step なら ×2）／**ドラムにキックが在る**（`no-kick`＝
-  //   源流の空キック fallback `[0,4,8,12]` は「RhythmSpec 未指定＝おまかせ」の意味だが、otomemo のドラム content は
-  //   「このドラムにキックは無い」の意味＝架空の4つ打ちに錨を打つと「キックにルートを置く」が嘘になる・2026-09-10 監査 中②）／
-  //   **骨格が明示したベース区間が無い**（`skeleton-explicit-bass`＝人が書いた音は道具が上書きしない＝後段 E が
-  //   錨を必ず上書きするので「全キック step にルート錨」が保てない＝design.md 追補 (k) の列挙どおり fallback・同 中②/重大②）。
-  //   **立たなかったら黙って落とさず理由を返す**（下の `meta.warnings`）。
-  const ANCHOR_GRID = 16; // 体（style 型／grammar セル）の格子＝1小節16分
-  const anchorWanted = opts?.anchorLock === true;
-  const anchorScale = dr ? ANCHOR_GRID / dr.steps : 0; // ドラム step → 16分格子 の倍率
-  const skelHasBass = (opts?.skeleton?.bass?.length ?? 0) > 0; // 骨格の明示ベース区間（段 E が表面化する＝人が書いた音）
-  const anchorFallback: string | null = !anchorWanted ? null
-    : !dr && drumsSentButUnreadable(drums) ? "drums-unreadable"
-    : !dr ? "no-drums"
-    : info.grouping === "compound" ? "compound-meter"
-    : Math.abs(dr.steps * dr.bps - perBar) >= 1e-6 ? "drum-bar-mismatch"
-    : !Number.isInteger(anchorScale) || anchorScale < 1 ? "drum-grid-mismatch"
-    : dr.kick.length === 0 ? "no-kick"
-    : skelHasBass ? "skeleton-explicit-bass"
-    : null;
-  const anchorPath = anchorWanted && anchorFallback === null;
-  // 錨の厳しさ（design.md 追補 (k-6)・2026-09-15 オーナー裁定「変わり目だけ必須」）。既定＝chord-change＝契約から選好へ。
-  //   every-kick＝源流 `_lock_bass_roots_to_sheet` そのまま（全キックでルート）。知らない値は既定で生成して告げる。
-  const strictRaw = opts?.anchorStrictness as string | undefined;
-  const anchorStrictness: "chord-change" | "every-kick" = strictRaw === "every-kick" ? "every-kick" : "chord-change";
-  const strictUnknown = strictRaw != null && strictRaw !== "every-kick" && strictRaw !== "chord-change";
-  // 案B の既定＝chord-change では ON（調査 §5 案2）・every-kick では OFF（源流互換）。明示の true/false が勝つ。
-  const anchorRest = typeof opts?.anchorRestOnSyncopatedKick === "boolean" ? opts.anchorRestOnSyncopatedKick : anchorStrictness === "chord-change";
-  // 錨（anchorLock が置いたルート＝キック step の音）の start＝3b の chord_follow が**触らない**印
-  //   （構造的契約が上位）。**キック由来の錨だけ**＝文法辞書の `anchor` 注記（不可侵の頭）とは別物。
-  const anchorStarts = new Set<number>();
-  // 錨の契約（「全キック step にルート錨」）を**後段の処理を全部通したあとで実測する**ための台帳＝start → ルート pc。
-  //   後段（フィル等）が錨を差し替えたら黙って通さず数えて告げる（2026-09-10 監査 中①）。
-  const anchorRootPc = new Map<number, number>();
-  // 骨格（skeleton）が明示したベース音の start＝**人が書いた音**＝chordFollow は写し直さない（道具が作者を上書きしない）。
-  const skeletonStarts = new Set<number>();
-  // 体に敷くリフ文法（M3-3c・辞書＝bassLibrary の `BASS_GRAMMARS`）。未指定＝既定 `pedal_answer`（追補 (k)）。
-  //   style 指定時は style 型の格子が体になる（文法は使わない）＝この解決は style 未指定のときだけ効く。
-  const grammarType = bassGrammarById(opts?.anchorGrammar) ?? bassGrammarById(BASS_GRAMMAR_DEFAULT_ID)!;
-  const grammarFallback: string | null = opts?.anchorGrammar && !bassGrammarById(opts.anchorGrammar) ? "unknown-grammar" : null;
-  // 繰り返しに変奏の層（design.md 追補 (k-7)）：錨経路の**文法の体**にだけ効く（style 型の体は役割注記が無い＝変奏できない・告げる）。
-  //   未指定／0＝この段は一切立たない＝従来と 1bit も変わらない。変奏の中身・強さは「仮」（耳で決める）。
-  const rvNorm = opts?.riffVariation != null ? normalizeRiffVariationLevel(opts.riffVariation) : { level: 0 as RiffVariationLevel, rounded: false };
-  const riffLevel: RiffVariationLevel = rvNorm.level;
-  const varyBass = anchorPath && !styleType && riffLevel > 0;
-  let riffNoRoom = false;
-
-  // --- コード追従（M3-3b・`chordFollow`・design.md 追補 (k)）の成立条件 ---
-  //   源流＝phrase_maker `bass_rock_riff/chords/chord_follow.py` の5ガード（①強拍コードトーン強制②弱拍のスケール
-  //   整合③区間末の接近音化④演奏域⑤リズム不変）＋層B 25 クオリティ表（`core/chordlib.py:118-171`）。
-  //   **既定 OFF＝この経路は一切立たない＝従来と 1bit も変わらない**。既存 `approach` ノブの上位互換＝**排他**
-  //   （両方来たら chordFollow が勝ち approach は当てない＝二重に接近音を作らない）。
-  //   立つ条件＝コードが在る（写す先が無いと何も決まらない）／4/4系（16分格子の拍頭判定＝源流と同じ `step%4`）。
-  const cfWanted = opts?.chordFollow === true;
-  const cfFallback: string | null = !cfWanted ? null
-    : info.grouping === "compound" ? "compound-meter"
-    : (chords?.length ?? 0) === 0 ? "no-chords"
-    : null;
-  const cfPath = cfWanted && cfFallback === null;
-
   // --- ウォーキングベース `JZ-WALK`（M3-3d・design.md 追補 (k)）の成立条件 ---
   //   源流＝phrase_maker `bass_walking/v2`（候補生成）＋`v3` の規則3本（禁則音程／跳躍後の順次回復／
   //   同方向連続跳躍の禁止）を制約として。**乱数は決定的規則へ置換**（データ一致は主張しない＝計画 §6-2）。
-  //   ⚠ **耳未判定**（v3 は打ち切られた枝＝規則は耳の言葉から出ているが効いたことは未確認）＝
-  //   **style を名指しした時だけ立つ**（ジャンル名からの型選抜には入れない＝既定では絶対に立たない）。
+  //   耳判定＝「使える」（2026-09-13）。v3 は打ち切られた枝なので、今も**style を名指しした時だけ立つ**（ジャンル名からの型選抜には入れない＝既定では絶対に立たない）。
   //   立つ条件＝コードが在る／単純拍子（拍ごとに1歩）または 6/8（付点拍＋ピックアップ＝スロット 0,2,6,8）。
   const walkWanted = (opts?.style ?? "") === JZ_WALK_ID;
   const walkCompound = info.grouping === "compound" && Math.abs(bpb - 3) < 1e-9; // 6/8 のみ（9/8・12/8 は格子が無い）
@@ -1501,7 +1213,8 @@ export function genBass(
   //   絶対のまま（下でフォールバック理由 relativeFallback を添付＝報告用）。**relative 未指定/false＝従来の絶対 notes＝bit 一致**。
   //   合奏層ノブ（kickLock/snareGap/approach）は絶対空間の後処理＝相対 style 経路では非適用（H2＝道具の効果は型格子に既に刻まれている）。
   const wantRelative = opts?.relative === true;
-  if (wantRelative && styleType && !skelHasBass && !anchorPath) {
+  const skelHasBass = (opts?.skeleton?.bass?.length ?? 0) > 0;
+  if (wantRelative && styleType && !skelHasBass) {
     const grid = styleType.cells.length; // 16（4/4）or 12（6/8・world68）＝1小節のセル数
     const pattern: { step: number; degree: string; dur: number; next?: boolean }[] = [];
     // BassCell[grid セル]（1小節）→ BassStep[]。on=発音（続く tie を音価に足す）／rest/ghost/tie(消費済)=スキップ。
@@ -1569,124 +1282,6 @@ export function genBass(
       const dur = (i + 1 < times.length ? times[i + 1]! : total) - t;
       if (dur <= 0) continue;
       notes.push({ pitch: Math.max(BASS_LO, Math.min(BASS_HI, walk.pitches[i]!)), start: round3(t), dur: round3(dur) });
-    }
-  } else if (anchorPath) {
-    // --- Anc: 錨と間の分業（M3-3a）＝phrase_maker `_lock_bass_roots_to_sheet` の忠実移植を通す第三経路。
-    //   ①体＝style 型の16分格子（style 未指定なら grammar セル既定＝pedal_answer 相当の2小節 CALL/RESPONSE）を敷く。
-    //   ②ドラムのキック step ごとに、(a) 既にルート級なら音域そのまま錨へ昇格／(b) 非ルートなら最寄りレジスタの
-    //      ルートへ上書き／(c) 休符なら低域ルートを新規挿入。**キックでないセル（リフ本体）は1つも書き換えない。**
-    //   ③コードは **step 粒度** で読む（`chordAt(t)` を Math.floor せずに呼ぶ＝1拍1コードでも古いルートを掴まない）。
-    //      既存 `rootAtBeat`（拍量子化）は触らない＝style/fig/kick 経路の bit 一致を守る。
-    //   RNG は一切消費しない（源流も決定的）＝seed に依らず骨が安定する。 ---
-    const slot = perBar / ANCHOR_GRID;          // 16分1スロットの拍長（4/4=0.25）
-    const totalSteps = bars * ANCHOR_GRID;
-    // step 粒度のコード読み（③）。chordAt に小数 t をそのまま渡す＝拍で丸めない。
-    const rootAtStep = (g: number): number => { const ch = chordAt(g * slot, chords); return ch ? normRoot(ch.root ?? 0) : (f.key ?? 0); };
-    // (k-6) 滞在中のキックで据え置きを許す pc＝構成音 ∪ 5度（b5/#5 だけの和音には足さない）∪ b7（長7度を持つ和音には足さない）。
-    const stayPcsAtStep = (g: number): number[] => {
-      const ch = chordAt(g * slot, chords);
-      const r = rootAtStep(g);
-      const iv = new Set((ch ? anchorChordPcs(r, ch.quality ?? "") : [r]).map((p) => ((p - r) % 12 + 12) % 12));
-      if (iv.has(7) || !(iv.has(6) || iv.has(8))) iv.add(7);
-      if (!iv.has(11)) iv.add(10);
-      return [...iv].sort((a, b) => a - b).map((x) => (x + r) % 12);
-    };
-    // 連続する同じコード（ルート＋許容 pc）を1区間へ畳んで AnchorSeg 列に（移植関数の chord_at と otomemo の chordAt が同じ答を返す形）。
-    //   ルートは同じで許容 pc だけ違う区間（C→C7 等）も分けるが、rootPc は同じなので every-kick の出音は従来と同じ。
-    const segs: AnchorSeg[] = [];
-    let lastKey = "";
-    for (let g = 0; g < totalSteps; g++) {
-      const pc = rootAtStep(g);
-      const stayPcs = stayPcsAtStep(g);
-      const key = `${pc}|${stayPcs.join(",")}`;
-      const last = segs[segs.length - 1];
-      if (last && key === lastKey) last.lengthSteps++;
-      else segs.push({ rootPc: pc, startStep: g, lengthSteps: 1, stayPcs });
-      lastKey = key;
-    }
-    // 体＝style 型（1小節16セル）or リフ文法（2小節を交替＝辞書 `BASS_GRAMMARS`・M3-3c）。
-    // (k-7) 変奏の層＝体（文法の2小節）を反復単位に束ねて変奏し、小節ごとの BassCell＋役割へ戻す。錨の**前**。
-    //   保護する打点＝全キック step（錨が (b) で戻して変奏が黙って無駄になるのを避ける）。level 0 はこの段を通らない＝bit 一致。
-    const variedBars: { cells: BassCell[]; roles: Map<number, string> }[] | null = varyBass ? ((): { cells: BassCell[]; roles: Map<number, string> }[] => {
-      const nTiles = Math.ceil(bars / 2);
-      riffNoRoom = nTiles < 2;
-      const tiles: RiffTile[] = [];
-      for (let t = 0; t < nTiles; t++) {
-        const cells: RiffCell[] = [];
-        for (let lb = 0; lb < 2 && t * 2 + lb < bars; lb++) {
-          for (const o of grammarType.onsets[lb % grammarType.onsets.length]!) {
-            cells.push({ step: lb * ANCHOR_GRID + o.step, kind: o.kind, deg: DEGREE_SEMI[o.deg] ?? 0, anchor: o.anchor, role: o.role });
-          }
-        }
-        tiles.push({ index: t, last: t === nTiles - 1, cells });
-      }
-      const kickP = dr!.kick.map((s) => s * anchorScale).filter((s) => Number.isInteger(s) && s < ANCHOR_GRID);
-      const prot = new Set<number>();
-      for (let bar = 0; bar < bars; bar++) for (const k of kickP) prot.add(bar * ANCHOR_GRID + k);
-      const varied = varyRiffTiles(tiles, { level: riffLevel, seed: seed ?? 42, protectedSteps: prot, instrument: "bass" }).tiles;
-      const out: { cells: BassCell[]; roles: Map<number, string> }[] = [];
-      for (let bar = 0; bar < bars; bar++) {
-        const tile = varied[Math.floor(bar / 2)]!;
-        const lb = bar % 2;
-        const cells: BassCell[] = Array.from({ length: ANCHOR_GRID }, () => ({ kind: "rest" }) as BassCell);
-        const roles = new Map<number, string>();
-        for (const c of tile.cells) {
-          if (Math.floor(c.step / ANCHOR_GRID) !== lb) continue;
-          const st = c.step - lb * ANCHOR_GRID;
-          cells[st] = c.kind === "ghost" || c.kind === "dead" ? { kind: "ghost" } : { kind: "on", deg: RIFF_SEMI_TO_DEG[c.deg] ?? "R", next: false };
-          roles.set(st, c.role);
-        }
-        out.push({ cells, roles });
-      }
-      return out;
-    })() : null;
-    const bodyCellsAt = (bar: number): BassCell[] => variedBars ? variedBars[bar]!.cells : styleType ? styleType.cells : grammarType.cells[bar % grammarType.cells.length]!;
-    // 文法の役割注記（head/pedal/answer/octave/blue/climb/pickup）＝錨の分業が読む情報。step→role で引く。
-    const roleAt = (bar: number, step: number): string => variedBars ? (variedBars[bar]!.roles.get(step) ?? "figure") : styleType ? "figure"
-      : (grammarType.onsets[bar % grammarType.onsets.length]!.find((o) => o.step === step)?.role ?? "figure");
-    const body: AnchorOnset[] = [];
-    const writtenSteps = new Map<number, number>(); // step → 書かれた音価（スロット数・tie 連結）
-    for (let bar = 0; bar < bars; bar++) {
-      const cells = bodyCellsAt(bar);
-      let i = 0;
-      while (i < ANCHOR_GRID) {
-        const c = cells[i];
-        if (c?.kind === "on") {
-          let run = 1;
-          while (i + run < ANCHOR_GRID && cells[i + run]!.kind === "tie") run++; // 続く tie を音価に足す（realizeBassGrid と同規則）
-          const g = bar * ANCHOR_GRID + i;
-          const rootPc = c.next ? rootAtStep(Math.min((bar + 1) * ANCHOR_GRID, totalSteps - 1)) : rootAtStep(g); // R>/8>＝次小節頭のルート
-          const semi = DEGREE_SEMI[c.deg ?? "R"] ?? 0;
-          body.push({ step: g, kind: "note", anchor: false, role: roleAt(bar, i), deg: c.deg ?? "R", pitch: pmClamp(bassPcToWindow(rootPc) + semi, BASS_LO, BASS_HI) });
-          writtenSteps.set(g, run);
-          i += run;
-        } else i++; // rest/ghost/tie(消費済)＝発音しない（ghost は bass の vel がスコープ外ゆえ休符扱い＝正典 §8）
-      }
-    }
-    // キック step をドラム格子から16分格子へ（8分格子=8step なら ×2）。空キックは移植関数側の fallback [0,4,8,12]。
-    const kick16 = dr!.kick.map((s) => s * anchorScale).filter((s) => Number.isInteger(s) && s < ANCHOR_GRID);
-    const kickSet = new Set<number>(kick16.length > 0 ? kick16 : [0, 4, 8, 12]); // 空キックは移植関数側 fallback と同じ
-    // アクセントは M3 では持たない（otomemo の skeleton は kick/snare のみ＝M0契約 §5-2）＝空で渡す。
-    const locked = lockBassRootsToSheet(body, segs, {
-      stepsPerBar: ANCHOR_GRID, nBars: bars, kick: kick16, accents: [],
-      restOnSyncopatedKick: anchorRest, strictness: anchorStrictness, lo: BASS_LO, hi: BASS_HI, rootDeg: "R",
-    });
-    // 実音化：start＝step×スロット・dur＝「書かれた音価」を次オンセット/小節末/曲末で切る（レガート・重なりを作らない）。
-    //   挿入した錨（体に無い step）は「書かれた音価」を持たないので小節末までを上限にする。
-    const ons = locked.onsets;
-    for (let i = 0; i < ons.length; i++) {
-      const o = ons[i]!;
-      const t = o.step * slot;
-      if (t >= total - 1e-9) continue;
-      const bar = Math.floor(o.step / ANCHOR_GRID);
-      const cap = Math.min((bar + 1) * perBar, total) - t;                       // 小節末（realizeBassGrid と同じ上限）
-      const gap = (i + 1 < ons.length ? ons[i + 1]!.step * slot : total) - t;    // 次オンセットまで
-      const written = (writtenSteps.get(o.step) ?? ANCHOR_GRID) * slot;
-      const dur = Math.min(written, cap, gap);
-      if (dur <= 0) continue;
-      const st = round3(t);
-      if (kickSet.has(o.step % ANCHOR_GRID)) { anchorStarts.add(st); anchorRootPc.set(st, normRoot(o.pitch)); } // 3b が写し直さない印＝キック由来の錨だけ（＋契約の実測台帳）
-      notes.push({ pitch: Math.max(BASS_LO, Math.min(BASS_HI, o.pitch)), start: st, dur: round3(dur) });
     }
   } else if (styleType) {
     // --- Sty: ジャンル型ライブラリ（WP-B1）：型の16分格子を各小節へ敷き、度数→実音（低域窓）へ写像。
@@ -1763,7 +1358,7 @@ export function genBass(
 
   // --- C: アプローチノート（approach>0・4/4系のみ）：チェンジ直前の最後のオンセットを接近音→次ルート着地。
   // 弱拍・短音価・チェンジ1.5拍以内に限定（out-of-key 露出ガード）。独立 Rng＝他段の列を乱さない。
-  if (approach > 0 && !cfPath && info.grouping !== "compound" && notes.length > 0) { // cfPath＝chordFollow と排他（上位互換が勝つ）
+  if (approach > 0 && info.grouping !== "compound" && notes.length > 0) {
     const aRng = new Rng((seed ?? 42) + 101);
     for (const c of chords ?? []) {
       const cs = Number(c.start ?? 0);
@@ -1772,10 +1367,6 @@ export function genBass(
       for (let i = 0; i < notes.length; i++) { if (notes[i]!.start < cs - 1e-6) idx = i; else break; } // notes は昇順
       if (idx < 0) continue;
       const n = notes[idx]!;
-      // 錨（anchorLock がキック step に置いたルート）は接近音にしない＝**順序で守る**（2026-09-10 監査 中①：
-      //   併用すると「全キック step に必ずルート錨」が実測で黙って破れていた）。chordFollow が錨を触らないのと同じ立場＝
-      //   構造的契約が後処理より上位。anchorLock を使っていなければ `anchorStarts` は空＝**従来と 1bit も変わらない**。
-      if (anchorStarts.has(n.start)) continue;
       const pos = n.start % perBar;
       const strong = Number.isInteger(pos) && pos % 2 === 0; // 4/4 の 1・3拍頭＝強拍
       if (strong || n.dur > 1 + 1e-6 || cs - n.start > 1.5 + 1e-6) continue;
@@ -1814,7 +1405,6 @@ export function genBass(
         if (seg) {
           if (seg.pitch == null) continue; // 骨格ベース休符＝当該オンセットを鳴らさない
           n.pitch = Math.max(BASS_LO, Math.min(BASS_HI, foldBassPitch(seg.pitch, BASS_LO, BASS_HI))); // 明示ピッチを低域窓へ畳む
-          skeletonStarts.add(n.start); // 人が書いた音＝chordFollow（M3-3b）は書き換えない
         }
         // 休符区間へ食い込む dur は区間頭で切る（S3b と同思想・直前の音は休符頭で着地）。
         for (const r of rests) if (r.start > n.start + 1e-9 && r.start < n.start + n.dur - 1e-9) n.dur = round3(r.start - n.start);
@@ -1831,7 +1421,6 @@ export function genBass(
   // セクション合図（カスケード §3-1）：cue 有→fill 位置＝cue.bar（強さ＝cue.intensity(0..1)→resolveBassFill）／**cue 無→現行式(bars-2)＝一切触れない＝bit 一致**。
   const fillCue = cues?.find((c): c is Cue & { kind: "fill" } => c.kind === "fill");
   const fillOpt = opts?.fill;
-  let fillReplacedBar: number | null = null; // 実際にフィルへ差し替えた小節（錨の契約が破れた理由を言い当てるため・監査 中①）
   if (fillCue != null && info.grouping !== "compound" && fillCue.bar >= 0 && fillCue.bar < bars) {
     // ── 新経路（cue 有）：fill セルを cue.bar に差替（越境＝bar===bars-1 も内部処理は同じ・land は次セクションで鳴る） ──
     const bf: BassFill | null = resolveBassFill(fillCue.intensity ?? 0.5, seed ?? 42);
@@ -1847,7 +1436,6 @@ export function genBass(
       notes.length = 0;
       notes.push(...kept, ...filled);
       notes.sort((a, b) => a.start - b.start);
-      fillReplacedBar = fillCue.bar;
     }
   } else if (fillOpt != null && info.grouping !== "compound" && bars >= 2) {
     // ── 現行式（cue 不在）＝bars-2 固定＝bit 一致 ──
@@ -1864,7 +1452,6 @@ export function genBass(
       notes.length = 0;
       notes.push(...kept, ...filled);
       notes.sort((a, b) => a.start - b.start);
-      fillReplacedBar = bars - 2;
     }
   }
 
@@ -1881,120 +1468,24 @@ export function genBass(
   }
 
   if (notes.length === 0) notes.push({ pitch: 36, start: 0, dur: 1 });
-  // --- H: コード追従の5ガード（M3-3b・chordFollow・4/4系＋コード有りのみ）：**onset は1つも動かさず**
-  //   （⑤リフ崩壊の禁止）、音高だけをコードへ写し直す。①拍頭は必ずコードトーン②それ以外はそのコードの
-  //   スケール（層B 25 クオリティ）③各コード区間の最後の自由音は次ルートへの導音④低域窓の内側。
-  //   **置き場所＝全後処理の最後**（approach/snareGap/skeleton/fill/land の後）。前に置くと fill 小節や land が
-  //   あとから音高を上書きして「①②が成り立つ」という主張が**黙って破れる**（2026-09-09 監査の指摘）。
-  //   触らないもの＝(i) 錨（anchorLock がキック step に置いたルート＝構造的契約が上位）
-  //   (ii) 骨格が明示したベース音（人が書いた音＝道具が作者を上書きしない・warnings で告げる）。
-  //   RNG 不消費＝seed に依らない。
-  if (cfPath && notes.length > 0) {
-    const SLOT = 0.25; // 16分＝拍の1/4（otomemo の start は拍単位）＝源流の16分格子と同じ刻み
-    const stepOf = (t: number): number => Math.round(t / SLOT);
-    // コード区間（源流 `chord_follow.Segment`）。tones は otomemo の QUALITY_INTERVALS を正とする（表を二重に持たない）。
-    const cfSegs: CfSeg[] = (chords ?? []).map((c) => {
-      const st = stepOf(Number(c.start ?? 0));
-      const len = Math.max(1, stepOf(Number(c.dur ?? 0)));
-      const q = c.quality ?? "";
-      return {
-        chord: {
-          rootPc: normRoot(c.root ?? 0), quality: q,
-          bassPc: slashBass && c.bass != null ? normRoot(c.bass) : null,
-          tones: CF_QUALITY_INTERVALS[q] ?? CF_QUALITY_INTERVALS[""]!,
-        },
-        startStep: st, lengthSteps: len,
-      };
-    }).sort((a, b) => a.startStep - b.startStep);
-    if (cfSegs.length > 0) {
-      const line: CfLineOnset[] = notes.map((n) => {
-        const step = stepOf(n.start);
-        const strong = step % 4 === 0; // 拍頭（源流 `gstep % 4 == 0`）
-        // 錨＝キック step に置かれたルート（実際にルートであることまで見る＝fill が同じ位置に置いた別の音を錨と誤認しない）。
-        const isAnchor = anchorStarts.has(n.start) && anchorRootPc.get(n.start) === normRoot(n.pitch); // (k-6) 錨が置いた音（滞在中の許容音を含む）が崩れていなければ錨
-        return { step, pitch: n.pitch, strong, head: strong, anchor: isAnchor || skeletonStarts.has(n.start) };
-      });
-      const cf = applyChordFollow(line, cfSegs, { lo: BASS_LO, hi: BASS_HI }, false); // loop=false＝セクションは輪にしない
-      for (let i = 0; i < notes.length; i++) notes[i]!.pitch = cf.pitches[i]!;
-    }
-  }
-
   // フィール層（S4・2026-07-22）：swing/humanize を notes に焼かず content.feel へ（genMelody と同契約＝同 buildFeel）。
   // 未指定/0＝undefined＝feel キー無し＝従来 content 形（bit一致）。web applyFeelEnsemble が part=bass プロファイルで消費。
   const feel = buildFeel(opts?.swing, opts?.humanize, seed ?? 42);
   // engineVersion（M0契約 §2・design.md 追補 (k)）：**phrase_maker 由来の新経路を実際に使ったときだけ**
   //   content に `engine:{version}` を載せる。既定経路はキーを生やさない＝従来 content 形＝bit 一致。
   const baseContent = feel ? { notes, feel } : { notes };
-  const content0 = (anchorPath || cfPath || walkPath) ? { ...baseContent, engine: { version: PM_ENGINE_VERSION } } : baseContent;
-  // (k-7) 印＝level>0 で変奏を当てた時だけ（level 0／未指定はキーを生やさない＝既存 content と bit 一致）。
-  const content = varyBass ? { ...content0, bassRiff: { grammar: grammarType.id, variation: riffLevel } } : content0;
+  const content = walkPath ? { ...baseContent, engine: { version: PM_ENGINE_VERSION } } : baseContent;
   const out = withBarsWarning({ items: [{ kind: "bass", content, label: "ベース" }], edges: [] }, frame);
   // 通知は **`meta.warnings`** に載せる（2026-08-29 オーナー裁定・web と MCP はここしか読まない＝独自キーは無言になる）。
   //   **落ち先で言い分ける**＝「何が起きなかったか」を利用者の言葉で（通知が嘘をつくのがいちばん悪い）。
   const bassWarn: string[] = [];
-  // anchorLock（M3-3a・「キックにルートを置く」）を頼まれたのに経路が立たなかった＝落ち先ごとに言い分ける
-  //   （2026-09-10 監査 重大①＝トップレベル独自キーは web も /gen/section も読まないので**完全に無言**だった。
-  //    3b の `chordFollowFallback` を `bae525a` で meta.warnings へ移したのと同じ形＝独自キーは残さない）。
-  const ANCHOR_LABEL = "「キックにルートを置く」";
-  if (anchorFallback === "drums-unreadable") bassWarn.push(`${DRUMS_UNREADABLE}${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
-  if (anchorFallback === "no-drums") bassWarn.push(`ドラムが無いので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
-  if (anchorFallback === "compound-meter") bassWarn.push(`6/8 など複合拍子では${ANCHOR_LABEL}に対応していません（従来どおり生成しました）`);
-  if (anchorFallback === "drum-bar-mismatch") bassWarn.push(`ドラムの1小節の長さが拍子（${info.meter}）と合わないので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
-  if (anchorFallback === "drum-grid-mismatch") bassWarn.push(`ドラムの刻みが16分の格子に写せないので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
-  if (anchorFallback === "no-kick") bassWarn.push(`ドラムにキックが無いので${ANCHOR_LABEL}は当てていません（従来どおり生成しました）`);
-  if (anchorFallback === "skeleton-explicit-bass") bassWarn.push(`骨格でベースを明示しているので${ANCHOR_LABEL}は当てていません（人が書いた音を優先しました）`);
-  if (cfFallback === "no-chords") bassWarn.push("コードが無いので「コードに合わせ直す」は当てていません（従来どおり生成しました）");
-  if (cfFallback === "compound-meter") bassWarn.push("6/8 など複合拍子では「コードに合わせ直す」に対応していません（従来どおり生成しました）");
-  // 骨格が明示したベース音は人が書いた音＝写し直さない（黙って残すのでなく、そう言う）。
-  if (cfPath && skeletonStarts.size > 0) bassWarn.push(`骨格で明示したベース音 ${skeletonStarts.size} 個は書き換えていません（人が書いた音を優先しました）`);
-  // 未知の文法 ID を渡された（＝既定 pedal_answer を敷いた）。
   if (walkFallback === "no-chords") bassWarn.push("コードが無いのでウォーキングベース（JZ-WALK）は作れません（従来どおり生成しました）");
   if (walkFallback === "meter-unsupported") bassWarn.push(`この拍子（${info.meter}）ではウォーキングベース（JZ-WALK）に対応していません（従来どおり生成しました）`);
-  if (anchorPath && strictUnknown) bassWarn.push(`知らない錨の厳しさ（${strictRaw}）なので既定（変わり目のキックだけルート）で生成しました`);
-  if (!anchorWanted && strictRaw != null) bassWarn.push(`${ANCHOR_LABEL}を使う時だけ錨の厳しさ（${strictRaw}）が効きます（従来どおり生成しました）`);
-  // (k-7) 変奏の層の通知（落ち先ごと）。
-  const RV_LABEL = riffLevel === 1 ? "多め" : "中";
-  if (opts?.riffVariation != null && rvNorm.rounded) bassWarn.push(`変奏量は 0／0.5／1 のどれかなので ${riffLevel} に丸めました`);
-  if (riffLevel > 0 && !anchorWanted) bassWarn.push(`変奏は${ANCHOR_LABEL}（錨）を選んだ時だけ効きます（従来どおり生成しました）`);
-  else if (riffLevel > 0 && !anchorPath) bassWarn.push(`変奏は${ANCHOR_LABEL}（錨）が当たった時だけ効きます（従来どおり生成しました）`);
-  else if (riffLevel > 0 && styleType) bassWarn.push(`ジャンル型の体（${styleType.id}）には役割の注記が無いので変奏できません（従来どおり生成しました）`);
-  if (varyBass && riffNoRoom) bassWarn.push(`2小節の繰り返しが1回分しかないので、変奏（${RV_LABEL}）の余地がありません（従来と同じ音です）`);
-  else if (varyBass) {
-    // 打ち消しの実測（診断・ゲートにしない）＝同じ入力で level 0 を作り、最終出力が完全一致なら告げる。
-    const base = genBass(frame, chords, seed, drums, { ...opts, riffVariation: undefined, riffVariationSteps: undefined });
-    if (JSON.stringify((base.items[0]!.content as { notes: unknown }).notes) === JSON.stringify(notes)) {
-      bassWarn.push(`変奏（${RV_LABEL}）は錨・後段の処理に打ち消され、従来と同じ音になりました`);
-    } else if (riffLevel === 1) {
-      // 段どうしの同一（2026-09-16 監査 重大①）：多めが中と同じ音なら告げる（level 0 との比較だけでは黙っていた）。
-      //   多めで足す断片化・広げ・装飾が、この文法の形・この長さでは当たる所が無い（例：octave_call_response）。
-      const mid = genBass(frame, chords, seed, drums, { ...opts, riffVariation: 0.5, riffVariationSteps: undefined });
-      if (JSON.stringify((mid.items[0]!.content as { notes: unknown }).notes) === JSON.stringify(notes)) {
-        bassWarn.push(`変奏（多め）は中と同じ音になりました（この文法・この長さでは、多めで足す断片化・広げ・装飾が当たる所がありません）`);
-      }
-    }
-  }
-  if (anchorPath && grammarFallback === "unknown-grammar") bassWarn.push(`知らないリフ文法（${opts?.anchorGrammar}）なので既定（${BASS_GRAMMAR_DEFAULT_ID}）で生成しました`);
-  // 錨の契約の**実測**（2026-09-10 監査 中①）：後段（フィル等）を全部通したあとで「キック step にルート錨が残っているか」を
-  //   数え、欠けたら数と理由を告げる。`approach` は上で錨を避けるようにしたので通常はここに来ない＝**残るのはフィル**
-  //   （フィルは「その小節を別の音形に差し替える」道具なので排他にはせず、破れた事実を言う）。anchorLock 未使用なら台帳が
-  //   空＝ループは 0 回＝**従来と 1bit も変わらない**。
-  if (anchorPath && anchorRootPc.size > 0) {
-    let broken = 0, brokenOutsideFill = 0;
-    for (const [t, pc] of anchorRootPc) {
-      const n = notes.find((x) => Math.abs(x.start - t) < 1e-9);
-      if (n && normRoot(n.pitch) === pc) continue;
-      broken++;
-      if (fillReplacedBar === null || Math.floor(t / perBar + 1e-9) !== fillReplacedBar) brokenOutsideFill++;
-    }
-    if (broken > 0 && brokenOutsideFill === 0) bassWarn.push(`フィルを入れた ${fillReplacedBar! + 1} 小節目は音形ごと差し替わるので、その小節のキックにはルートの錨が残っていません（${broken} 個）`);
-    else if (broken > 0) bassWarn.push(`キックに置いたルートの錨のうち ${broken} 個は、後の処理で別の音に入れ替わりました`);
-  }
   if (bassWarn.length) { const o = out as GenResult; o.meta = { ...(o.meta ?? {}), warnings: [...(o.meta?.warnings ?? []), ...bassWarn] }; }
   // relative 要求だが style 経路でない（fig/kick／6-8／skeleton 明示ベース）＝絶対のままフォールバック（escape hatch・報告用）。
   if (wantRelative) {
     (out as GenResult & { relativeFallback?: string }).relativeFallback =
-      anchorPath ? "anchor-lock" // 錨の情報は相対パターンに載らない＝絶対で返す（design.md 追補 (k)）
-      : info.grouping === "compound" ? "compound-meter" : skelHasBass ? "skeleton-explicit-bass" : !styleType ? "no-style-pattern" : "unknown";
+      info.grouping === "compound" ? "compound-meter" : skelHasBass ? "skeleton-explicit-bass" : !styleType ? "no-style-pattern" : "unknown";
   }
   return out;
 }
