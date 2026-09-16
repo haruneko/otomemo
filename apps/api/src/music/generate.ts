@@ -1129,7 +1129,17 @@ export function genChordPattern(
             const ro = { chordAtStep: (st: number) => { const x = cs[csSegs.indexOf(chordAtStep(csSegs, st)!)]!; return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 };
             same = JSON.stringify(realizeGuitarRiff(baseHits, ro).notes) === JSON.stringify(realizeGuitarRiff(finalContent.hits, ro).notes);
           }
-          if (same) gtrWarn.push(`変奏（${RV_LABEL}）は${lockKick ? `${GTR_LOCK}・` : ""}和音追従に打ち消され、従来と同じ音になりました`); // 落ち先ごと＝ロックしていない時にロックのせいにしない
+          // 真因の言い分け（2026-09-16 監査 中②）：変わった hit が全部「弱い位置の単音」（strong でない・単音・note・ペダル系でない）なら、
+          //   和音追従はその音を**隣の確定音の±2半音の中のスケール音**へ寄せる（源流 _snap_near）＝1段のずらしはほとんど同じ音に吸われる。
+          //   gallop の中（答句が 14/15/30 の16分裏だけ）は進行しだいでほぼ常にこれ＝構造的に効きにくい（強さの調整は耳の後＝S6）。
+          const weakOnly = same && pitchEngine === "chordfollow" && (() => {
+            const b = new Map(baseHits.map((h) => [h.step, JSON.stringify(h)]));
+            const diff = finalContent.hits.filter((h) => b.get(h.step) !== JSON.stringify(h));
+            return diff.length > 0 && baseHits.length === finalContent.hits.length
+              && diff.every((h) => !h.riff.strong && h.voice === "mono" && h.riff.kind === "note" && !["head", "pedal", "chug", "chord", "dead"].includes(h.riff.role));
+          })();
+          const why = weakOnly ? "（ずらした答句がどれも弱い位置の単音で、和音追従が隣の音の±2半音のスケール音へ寄せるため）" : "";
+          if (same) gtrWarn.push(`変奏（${RV_LABEL}）は${lockKick ? `${GTR_LOCK}・` : ""}和音追従に打ち消され、従来と同じ音になりました${why}`); // 落ち先ごと＝ロックしていない時にロックのせいにしない
           else if (riffLevel === 1) {
             // 段どうしの同一（2026-09-16 監査 重大①・ベースと対称）：多めが中と同じ hits なら告げる。
             const mid = genChordPattern(frame, seed, { ...opts, riffVariation: 0.5, riffVariationSteps: undefined });

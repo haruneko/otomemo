@@ -205,3 +205,22 @@ describe("到達口③＝/gen/section（body.chord 素通し・段は出せな�
     expect(r.cp.guitarRiff).not.toHaveProperty("variation");
   });
 });
+
+// 2026-09-16 監査 中②：gallop の中が打ち消される真因（答句が全部弱い位置の単音＝和音追従が隣の音の±2半音へ寄せる）を通知が言い分ける。
+describe("監査 中②：gallop の中の打ち消しは理由つきで告げる", () => {
+  const WHY = "弱い位置の単音";
+  it("gallop・中・和音追従：打ち消された条件では理由が載り、手の形（別エンジン）や pedal_answer の打ち消しでは言わない", () => {
+    let gallopCancel = 0;
+    for (const cs of Object.values(PROGS)) for (const ds of ["beat8.basic", "four.rock", "beat16.ghost"]) for (const seed of [7, 42]) {
+      const drums = drumsOf(ds);
+      const g = genChordPattern(BF, seed, { guitarRiff: "gallop", drums, chords: cs, riffVariation: 0.5 });
+      if (g.meta?.warnings?.some((w) => w.includes(CANCEL))) {
+        gallopCancel++;
+        expect(g.meta!.warnings!.some((w) => w.includes(CANCEL) && w.includes(WHY))).toBe(true);
+      }
+      const hs = genChordPattern(BF, seed, { guitarRiff: "gallop", drums, chords: cs, riffVariation: 0.5, guitarShape: true });
+      expect(hs.meta?.warnings?.some((w) => w.includes(WHY)) ?? false).toBe(false);
+    }
+    expect(gallopCancel).toBeGreaterThan(0);
+  });
+});
