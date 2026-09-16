@@ -251,7 +251,7 @@ otomemo 側：
 - 体の文法辞書＝`apps/api/src/music/bassLibrary.ts:184-297`（`pedal_answer` `:254-262`・既定 `:297`）
 - ギター＝`packages/music-core/src/guitarRiff.ts:75-122`（3型）・`:224-226`（ゲート・vel）・`:251-273`（表の貼り付け）・`:303-344`（キックロック・`:332-336` アクセント均し）・`:390-426`（音高・`:401-403` パワーコードのルート追従）／`guitarRealize.ts:508-558`／`apps/web/src/music.ts:952-957`／`generate.ts:998-1070`（`:1019` ロックの条件）
 - ウォーキング＝`packages/music-core/src/walkingBass.ts:1-23,214`
-- 既存の研究・計画＝`docs/research/2026-08-02-riff-structure-and-variation.md`（A-3 `:43-60`・B-1 `:100-118`・B-6 `:167-173`）・`docs/research/2026-09-04-phrasemaker-bass-inventory.md:86-88,97,120-131,139`・`docs/drafts/2026-09-09-phrasemaker-port-master-plan.md:229`・`docs/design.md:2170-2200`（追補 (k) 錨の段落・窓の縮退の記述）・`docs/backlog.md:35,43`
+- 既存の研究・計画＝`docs/research/2026-08-02-riff-structure-and-variation.md`（A-3 `:43-60`・B-1 `:100-118`・B-6 `:167-173`）・`docs/research/2026-09-04-phrasemaker-bass-inventory.md:86-88,97,120-131,139`・`docs/archive/2026-09-09-phrasemaker-port-master-plan.md:229`・`docs/design.md:2170-2200`（追補 (k) 錨の段落・窓の縮退の記述）・`docs/backlog.md:35,43`
 - 実測＝scratchpad `rootcause/bass_measure.ts`（→ `bass_measure.out.md`／`.json`・63条件）・`guitar_measure.ts`（→ `guitar_measure.out.md`／`.json`・3文法×3進行×6条件）・`walk_measure.ts`（→ `walk_measure.out.md`）
 
 phrase_maker 側（読むだけ）：

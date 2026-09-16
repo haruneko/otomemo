@@ -1,4 +1,4 @@
-// 横断の検証器（M4）＝計画 `docs/drafts/2026-09-09-phrasemaker-port-master-plan.md` §5-2 M4・§6-4。
+// 横断の検証器（M4）＝計画 `docs/archive/2026-09-09-phrasemaker-port-master-plan.md` §5-2 M4・§6-4。
 // **観測するだけ**＝生成経路には一切触らない（既存の出音は 1bit も変えない）。
 //
 // 収録：

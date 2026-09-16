@@ -1,4 +1,14 @@
-# phrase_maker 取り込みアーク — 引き継ぎ書（最終更新 2026-09-13・生きている間は上書き可）
+# phrase_maker 取り込みアーク — 引き継ぎ書（最終更新 2026-09-16・**archive**）
+
+## 2026-09-16 決着（まずここ）＝リフ系を撤去してアークを閉じた
+- **オーナー耳「ギターもベースもリフじゃない・魂が抜けて無難」**（09-16）→ 第三者レビュー `2026-09-16-riff-arc-revert-review.md` の仕分け＋裁定で、
+  **M3 の錨・リフ文法・chordFollow／M5 ギター一式／M6a 隙間刺し・handModel／(k-6)(k-7) を撤去**（既定の出音は不変）。
+- **残った資産**＝ドラム M2（フィル・bodyFill・GMD prior）・カスケード合図 cues・**JZ-WALK**（耳「使える」・部品は `chordScale.ts`）・検証器 `verify/`（指板を含む）・
+  通知の口（`meta.warnings`・/gen/section の warnings）・MCP の `chords[].bass`・rngSalt/engineVersion/PyRandom。
+- **外した理由（負の知識）**＝design.md 追補 (k) の撤去記録。要旨＝キックに揃える規則は合奏の糊でリフではない／固定2小節の表を貼る方式はリフを作る仕組みではない／
+  耳の実績は評価単位を確かめる／別アークの計画はオーナーの課題（S2/S3）と接続してから走らせる／表を敷かず規則で選ぶ（JZ-WALK）が次の向き。
+- M6b・M6c・M7 と §8 の裁定4件は前提（鍵盤・リフの移植）が崩れた。アークの終わり方（打ち切りか）と S2/S3 へ戻る確認はオーナー未裁定＝backlog に残した。
+- 以下は 2026-09-13 時点の記録（撤去前）。
 
 新セッションはまず本書を読む。次に記憶 [[project-phrasemaker-port-arc]]。詳細は各 drafts と design §2106。
 
@@ -119,7 +129,7 @@ phrase_maker は開発停止・リポは残す（未 push は 2026-08-19 に pus
 
 **読み方の注意（硬化させない）**：これは4小節×3条件の試聴での判定。**錨の「要らない」は "全キックに必ずルート" という構造的な契約そのものへの評価**＝移植時に「統計的な傾き（従来 kickLock）より構造的な契約が上」とした前提（ベース棚卸し §3）が耳では支持されなかった、という事実。ただし錨は既定 OFF で既存の音は変わっていない。**撤去や作り直しは真因を見てから**（品質の苦情にアドホックな縮退を提案しない）。ギターの「動きがない」は、発散のつまみ `diverge` を M5 で移していない事実と関係しうる（未検証）。
 
-**真因調査と裁定（2026-09-15）**＝`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md`。固さの主因は錨でなく**体（固定2小節のペダル型の表・変奏なし）**、ギターも同根。源流のオーナーもベース単体には「微妙では？」を出していた（移植時の前提の読み違い）。裁定＝**錨は変わり目だけ必須／刻みの音価はつまみ／変奏は候補を段で出す**。案2（錨＝`anchorStrictness`・既定 chord-change／源流互換 every-kick で py-parity 110件は緑のまま）・案6（`guitarPalmGate`／`guitarGhostVel`）は実装済み（`74f1845`・`4f105be`）。**案1（変奏の層）も実装済み**（設計 `docs/drafts/2026-09-15-riff-variation-layer-design.md`・design (k-7)・`2671238`〜`d2aab8a`）＝なし／中／多めの3候補・音高と間だけ（オーナー裁定でリズム変換は入れず研究 `docs/research/2026-09-16-rhythmic-variation-in-riffs.md` を先に）。独立監査の重大1（多め＝中を黙る）・中4は是正済み。**ギター gallop の中は構造的に効きにくい**（答句が16分裏の弱い単音で和音追従が±2半音へ寄せる＝通知で告げる）。**試聴帳＝https://claude.ai/artifact/4Sn2eJrG3CPXAt4F9gbzn7 （判定は同ページ db `verdicts`・キー bass／guitar）＝オーナーの耳待ち**。
+**真因調査と裁定（2026-09-15）**＝`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md`。固さの主因は錨でなく**体（固定2小節のペダル型の表・変奏なし）**、ギターも同根。源流のオーナーもベース単体には「微妙では？」を出していた（移植時の前提の読み違い）。裁定＝**錨は変わり目だけ必須／刻みの音価はつまみ／変奏は候補を段で出す**。案2（錨＝`anchorStrictness`・既定 chord-change／源流互換 every-kick で py-parity 110件は緑のまま）・案6（`guitarPalmGate`／`guitarGhostVel`）は実装済み（`74f1845`・`4f105be`）。**案1（変奏の層）も実装済み**（設計 `docs/archive/2026-09-15-riff-variation-layer-design.md`・design (k-7)・`2671238`〜`d2aab8a`）＝なし／中／多めの3候補・音高と間だけ（オーナー裁定でリズム変換は入れず研究 `docs/research/2026-09-16-rhythmic-variation-in-riffs.md` を先に）。独立監査の重大1（多め＝中を黙る）・中4は是正済み。**ギター gallop の中は構造的に効きにくい**（答句が16分裏の弱い単音で和音追従が±2半音へ寄せる＝通知で告げる）。**試聴帳＝https://claude.ai/artifact/4Sn2eJrG3CPXAt4F9gbzn7 （判定は同ページ db `verdicts`・キー bass／guitar）＝オーナーの耳待ち**。
 
 **機械の残り＝なし（2026-09-13）**：M5・M6a の監査是正は `1752550`〜`5717c10` で完了（親が3スイートを実測＝music-core 872＋todo 8・api 1,753＋skip 1・web 1,314）。dist 焼き＋再起動済み。実機 api で錨（`engine` 刻印あり）・ドラム無しの通知・隙間刺しの「型と候補数を使っていない」通知・ギターのリフの4経路を叩いて確認済み。
 残タスクの全体像は `docs/backlog.md` とマスタープラン §5-2。

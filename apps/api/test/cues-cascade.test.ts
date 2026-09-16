@@ -6,7 +6,7 @@ import { buildHttp } from "../src/http";
 import { genDrums, genBass } from "../src/music/generate";
 import { deriveCues, type Cue, type DerivedCue } from "@cm/music-core";
 
-// カスケード・ブリーフィング S1/S2 の cue 配線テスト（設計＝docs/drafts/2026-08-21-cascade-briefing-implementation.md §5/§6・
+// カスケード・ブリーフィング S1/S2 の cue 配線テスト（設計＝docs/archive/2026-08-21-cascade-briefing-implementation.md §5/§6・
 // M0契約 §6⑤⑦）。最重要＝**cues 未指定なら従来と完全 bit 一致**（既存の音を1bitも変えない）。
 
 type Lane = { name: string; midi: number; hits: number[]; vel: number; velCurve?: number[] };

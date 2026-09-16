@@ -1,6 +1,6 @@
 // ウォーキングベース `JZ-WALK`（M3-3d）＝phrase_maker `bass_walking/v2/walking_v2.py`（候補生成）に
 //   `bass_walking/v3/walking_v3.py` の**規則3本**を制約として課し、**乱数タイブレークを決定的規則へ置換**したもの。
-// 正典＝docs/design.md §2106 追補 (k)／計画 docs/drafts/2026-09-09-phrasemaker-port-master-plan.md §5-2 M3・§6-2。
+// 正典＝docs/design.md §2106 追補 (k)／計画 docs/archive/2026-09-09-phrasemaker-port-master-plan.md §5-2 M3・§6-2。
 //
 // 耳判定＝「使える」（2026-09-13）。以下は実装時の注記（計画 §4-1・§3-2 (k)）：v3 の3規則は **v2 への耳のフィードバック（「wild / forbidden-sounding」＝
 //    `v3/LISTEN.md:3`）から出た言葉**だが、**v3 自体は耳で確認されていない**（ACCEPTANCE 無し・批評パネルが

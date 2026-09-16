@@ -2,7 +2,7 @@
 
 **作成: 2026-09-04。方法: `~/projects/phrase_maker` の実コード・ACCEPTANCE/LISTEN/STRESS・docs（CONCEPT/GAP-AUDIT/HANDOFF-NEXT）を全部読んで事実ベースで記録。実装は一切していない（調査のみ）。**
 文脈：phrase_maker 取り込みアーク（ドラム=M2 完了、次=M3 ベース）。「向こうに何があり、こちら（otomemo genBass）に何が無いか」を確定させる。
-比較先＝`apps/api/src/music/generate.ts` の `genBass`（1118行〜）・`apps/api/src/music/bassLibrary.ts`・`docs/design.md`「gen_bass×ドラム結線」・`docs/drafts/2026-08-20-phrasemaker-recipe-io-map.md` ベース列。
+比較先＝`apps/api/src/music/generate.ts` の `genBass`（1118行〜）・`apps/api/src/music/bassLibrary.ts`・`docs/design.md`「gen_bass×ドラム結線」・`docs/archive/2026-08-20-phrasemaker-recipe-io-map.md` ベース列。
 
 **教訓の適用（bodyfill 事故の再発防止）**：本稿では「デモ/パイプラインから呼ばれていない」ことと「移植対象でない」ことを峻別する。呼ばれ方は §1 の各行に明記し、死にコード認定は一切しない。
 
@@ -162,4 +162,4 @@ otomemo に**無い**知識＝上記 1・4（広語彙整合スケール）・5�
 - 奏法：`experiments/bass_expression/{engine,fret}.py`・`ACCEPTANCE.md`（FAIL版）・`render.py:57`（修正後の検証）
 - 分業の完成形：`experiments/ensemble/ensemble.py:1111`（`_lock_bass_roots_to_sheet`）・`:1372`（`_sheet_line`）
 - 思想・現在地：`docs/CONCEPT.md`・`docs/GAP-AUDIT.md`・`docs/HANDOFF-NEXT.md`
-- otomemo 側：`apps/api/src/music/generate.ts:1118`（genBass）・`apps/api/src/music/bassLibrary.ts`・`docs/design.md`「gen_bass×ドラム結線」・`docs/drafts/2026-08-20-phrasemaker-recipe-io-map.md`
+- otomemo 側：`apps/api/src/music/generate.ts:1118`（genBass）・`apps/api/src/music/bassLibrary.ts`・`docs/design.md`「gen_bass×ドラム結線」・`docs/archive/2026-08-20-phrasemaker-recipe-io-map.md`

@@ -1,4 +1,4 @@
-// レシピ resolve 用 RNG ソルト表（凍結・M0契約 §4）。正典＝docs/drafts/2026-08-20-phrasemaker-M0-contract.md §4。
+// レシピ resolve 用 RNG ソルト表（凍結・M0契約 §4）。正典＝docs/archive/2026-08-20-phrasemaker-M0-contract.md §4。
 //
 // 既存流儀＝`new Rng(seed + salt)`（apps/api の rng.ts mulberry32・generate.ts の seed+101、
 // melodyCells.ts の drumLock seed+61 と同型）。役割別に固定＝新つまみ＝新ソルト＝既存レシピの音に

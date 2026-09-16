@@ -1,6 +1,6 @@
 # リフの繰り返しにおけるリズムの変奏 — 要るか・入れるならどう入れるか（研究）
 
-調査日: 2026-09-16。依頼＝変奏の層の設計（`../drafts/2026-09-15-riff-variation-layer-design.md` §12・オーナー原文「リズムのずらしとか含めて必要なら研究してほしい」）。**コードは変えていません**。外部調査（出典 URL 付き）＋ otomemo 内の既存の仕組みとの重なり＋源流 phrase_maker の一次資料（読むだけ）＋文法表と7ドラム型の打点を突き合わせた机上の実測から成ります。他者の楽曲のリテラルなリズム・フレーズは持ち込んでいません（手法の説明と統計だけ）。
+調査日: 2026-09-16。依頼＝変奏の層の設計（`../archive/2026-09-15-riff-variation-layer-design.md` §12・オーナー原文「リズムのずらしとか含めて必要なら研究してほしい」）。**コードは変えていません**。外部調査（出典 URL 付き）＋ otomemo 内の既存の仕組みとの重なり＋源流 phrase_maker の一次資料（読むだけ）＋文法表と7ドラム型の打点を突き合わせた机上の実測から成ります。他者の楽曲のリテラルなリズム・フレーズは持ち込んでいません（手法の説明と統計だけ）。
 
 ## 0. 結論（15行）
 
@@ -233,7 +233,7 @@
 - 知覚（既存 doc 経由・再調査せず）: Witek 2014／Stupacher 2022／Sioros 2022／Matthews 2019＝`2026-07-14-syncopation-sweet-spot.md` の出典一覧
 
 **otomemo（行番号は 2026-09-16 main）**
-- 設計＝`../drafts/2026-09-15-riff-variation-layer-design.md`（§3 変換の語彙・§4 スケジュール・§6 順序・§12 問い・オーナー裁定）
+- 設計＝`../archive/2026-09-15-riff-variation-layer-design.md`（§3 変換の語彙・§4 スケジュール・§6 順序・§12 問い・オーナー裁定）
 - 真因＝`2026-09-15-anchor-rigidity-guitar-motion-rootcause.md`（§2-1 錨が触った数・§3-3 文法の構造・§3-4 音価）
 - 既存研究＝`2026-08-02-riff-structure-and-variation.md`（A-5・B-1・B-6）／`sixteenth-rhythm.md`／`2026-07-14-syncopation-sweet-spot.md`／`2026-07-14-motif-transform-stats.md:46-56,128-135`／`2026-07-14-riff-ostinato-design.md:15-22,42,60,162`／`2026-07-21-melody-note-value-and-harmonic-rhythm.md`／`2026-07-10-bass-generation-upgrade.md:22-48`／`2026-07-14-stem-groove-measurements.md` §1（自作曲＝完全ユニゾンは存在しない）／`2026-07-11-swing-feel-layer-audit.md`
 - 層＝`packages/music-core/src/riffVariation.ts:14-58`（型・保護）・`:94-179`（4レバーと登録表）・`:190-196`（スケジュール）／`syncopation.ts:63-66,127`

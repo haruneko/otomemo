@@ -1,7 +1,7 @@
 // カスケード・ブリーフィング S0＝型と規則の凍結（正典＝docs/design.md「3層カスケード」・
-// docs/drafts/2026-08-21-cascade-briefing-implementation.md §1-1/§2-2/§2-3・M0契約 §3-1）。
+// docs/archive/2026-08-21-cascade-briefing-implementation.md §1-1/§2-2/§2-3・M0契約 §3-1）。
 //
-// 思想（案C＝docs/drafts/2026-08-21-arrange-data-locus.md）：セクション＝**薄い合図**（cues＝位置＋
+// 思想（案C＝docs/archive/2026-08-21-arrange-data-locus.md）：セクション＝**薄い合図**（cues＝位置＋
 // 性格・楽器非依存）／トラック（レシピ）＝**弾き方の語彙**／resolve が合成。神化回避の機械判定＝
 // 「楽器が増えても `Cue` のフィールド集合は1バイトも動かない」（型スナップショットで凍結・§6-C）。
 //

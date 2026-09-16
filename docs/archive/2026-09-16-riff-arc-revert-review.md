@@ -1,6 +1,6 @@
 # リフを作るはずだったアークの第三者レビュー — どこまで戻すか
 
-起草日: 2026-09-16。依頼＝オーナー「リフと言われてリフでないものを作り続けた結果ゴミコードが残っているはず。もう（当事者は）判断できない」。
+起草日: 2026-09-16。**決着（同日）＝§10 のオーナー裁定どおり撤去済み・本書は archive**。依頼＝オーナー「リフと言われてリフでないものを作り続けた結果ゴミコードが残っているはず。もう（当事者は）判断できない」。
 立場＝**第三者**。進行役の計画書・引き継ぎ書・コミット文・監査報告の自己評価は「当事者の主張」として扱い、実コードと git 履歴を直接読んで判断しました。**コードは変えていません・リバートも実行していません**。物差しは依頼書のとおり（①Otomemo のコンセプト ②2026-08-02 のオーナーの困りごと ③phrase_maker の芯 ④リフ構造論 ⑤オーナーの耳判定）。音の良し悪しは私が決めず、耳の判定が無いものは保留に置きました。
 
 ## 0. 結論（20行）
@@ -23,7 +23,7 @@
 | ② オーナーの困りごと | `docs/design.md:510-534`（2026-08-02 計画確定）・`docs/backlog.md:22-29` | **「手癖で似たニュアンスの別パターンが出せない・楽器固有リフ」**。採用＝語彙帳＋配札。S3＝**和声4型×楽器イディオムのリフ雛形**（`gen_riff` verb が既存）。自作採取不採用・手癖の鏡は作らない・他者実データは統計のみ |
 | ③ phrase_maker の芯 | `~/projects/phrase_maker/docs/CONCEPT.md` §1-§3 | 「身体性シミュレータ＋発散」「平均を出さない」「物理層がバリデータに堕ちるとテンプレ・スタンパー」「差が薄い＝語彙が薄い」 |
 | ④ リフとは何か | `docs/research/2026-08-02-riff-structure-and-variation.md` 設計含意1〜5 | 和声4型（移調/固定/ペダル/微調整）を明示パラメータに・リズム輪郭が主役・controlled variation・MAP-Elites 式のビン提示・類似度はガードレール |
-| ⑤ 耳判定 | `docs/drafts/2026-08-21-phrasemaker-arc-handoff.md` 耳の判定表（09-13）・オーナー原文（09-16） | 錨＝要らない／JZ-WALK＝使える／ギター＝微妙／鍵盤＝微妙（相対的に良い）／09-16＝ギターもベースもリフではない・直したものも謎 |
+| ⑤ 耳判定 | `docs/archive/2026-08-21-phrasemaker-arc-handoff.md` 耳の判定表（09-13）・オーナー原文（09-16） | 錨＝要らない／JZ-WALK＝使える／ギター＝微妙／鍵盤＝微妙（相対的に良い）／09-16＝ギターもベースもリフではない・直したものも謎 |
 
 当事者文書（計画 v3・引き継ぎ書・真因調査・変奏の層の設計・監査報告）は**事実の引用（file:line・実測値）だけを採り、評価語（「価値最大」「本命」「機械の残りなし」）は採りません**。真因調査（`docs/research/2026-09-15-…`）の実測は精度が高く、本レビューの土台として使いました＝ただし結論部の「推し」は当事者の推しとして扱っています。
 
@@ -32,7 +32,7 @@
 ### 2-1. 2026-08-02 の計画から 08-19 の別アークへ（接続なし）
 
 - 08-02：オーナー裁定で「語彙帳＋配札」計画確定（`b80fac7`・design.md:510）。S1（写像）だけ機械側完了（`921ea7b`）。**S2 配札（Task #3）・S3 リフ雛形（Task #4）は未着手のまま**（`docs/drafts/2026-08-02-arrange-arc-handoff.md:186-191`）。
-- 08-19〜21：phrase_maker 取り込み計画（`docs/drafts/2026-08-19-phrasemaker-port-plan.md`）が別に起草。目的＝「otomemo の伴奏・アレンジが弱い…**伴奏のバリエーションを増やす（質の向上はおまけ）**」（同 :7）。**オーナーの課題（楽器固有リフ）も S3 リフ雛形も一度も出てこない**。09-09 の計画 v3（752行）・引き継ぎ書も同じ（「リフ雛形」「和声4型」「gen_riff」＝0件。「配札」は v3 の概念対応表 :45 と鍵盤 (m) :184 に出るだけでリフとは結ばれていない・§0 結論2）。
+- 08-19〜21：phrase_maker 取り込み計画（`docs/archive/2026-08-19-phrasemaker-port-plan.md`）が別に起草。目的＝「otomemo の伴奏・アレンジが弱い…**伴奏のバリエーションを増やす（質の向上はおまけ）**」（同 :7）。**オーナーの課題（楽器固有リフ）も S3 リフ雛形も一度も出てこない**。09-09 の計画 v3（752行）・引き継ぎ書も同じ（「リフ雛形」「和声4型」「gen_riff」＝0件。「配札」は v3 の概念対応表 :45 と鍵盤 (m) :184 に出るだけでリフとは結ばれていない・§0 結論2）。
 - つまり「リフを作る話」は S3 に置かれたまま、phrase_maker アークは「伴奏のバリエーション」として別に走り、途中で「リフ文法」という名を持ち込みました。**名前だけが合流し、課題は合流していません。**
 
 ### 2-2. ドラム M2（08-21〜08-30）＝ここは芯を外していない
@@ -152,10 +152,10 @@
 |---|---|---|
 | `docs/design.md:2166-2377` 追補 (k)〜(k-7) | 錨・chordFollow・文法・JZ-WALK・指板検証・ギター・鍵盤・(k-6)(k-7) が1ブロック | **残す部分だけに書き直す**＝JZ-WALK（(k-2) 3d）・指板検証（3e）・通知の口の規約・(k-5) 隙間刺し（保留の間）。外した部分は削り、末尾に**「2026-09-16 撤去＝固定表＋キックロックはリフではない（負の知識）」を5行**で残す。design (p)「負の知識」欄が未作成なら、ここに置く |
 | `docs/design.md` 追補 (j)〜M2 の記述 | 残す | 変更なし |
-| `docs/drafts/2026-09-09-phrasemaker-port-master-plan.md` | 裁定待ちリストに載っている | **archive へ**。決着1行＝「M3〜M6a 実装後、ベース錨・ギター文法・変奏の層は 2026-09-16 に撤去裁定。M6b〜M7 の裁定4件は打ち切り（§7 の③次第）」 |
-| `docs/drafts/2026-09-15-riff-variation-layer-design.md` | 裁定待ち（実装済み） | **archive へ**（決着＝撤去。設計知識＝レバー登録口・3段・保護 step・打ち消しの実測、は §5-2 の負の知識に1行） |
+| `docs/archive/2026-09-09-phrasemaker-port-master-plan.md` | 裁定待ちリストに載っている | **archive へ**。決着1行＝「M3〜M6a 実装後、ベース錨・ギター文法・変奏の層は 2026-09-16 に撤去裁定。M6b〜M7 の裁定4件は打ち切り（§7 の③次第）」 |
+| `docs/archive/2026-09-15-riff-variation-layer-design.md` | 裁定待ち（実装済み） | **archive へ**（決着＝撤去。設計知識＝レバー登録口・3段・保護 step・打ち消しの実測、は §5-2 の負の知識に1行） |
 | `docs/drafts/2026-08-19-…port-plan.md`・`…implementation-plan.md`・`2026-08-20-…M0-contract.md`・`…recipe-io-map.md`・`2026-08-21-arrange-data-locus.md`・`…cascade-briefing-implementation.md` | 裁定待ちリスト | M0〜M2 は消化済み＝**archive へ**（決着＝ドラムで完走・ベース以降は打ち切り） |
-| `docs/drafts/2026-08-21-phrasemaker-arc-handoff.md` | 「機械の残りなし・試聴帳は耳待ち」 | **アーク完走（打ち切り）として書き直してから archive へ**。残す資産（ドラム・JZ-WALK・検証器・通知）と外した理由を1画面で |
+| `docs/archive/2026-08-21-phrasemaker-arc-handoff.md` | 「機械の残りなし・試聴帳は耳待ち」 | **アーク完走（打ち切り）として書き直してから archive へ**。残す資産（ドラム・JZ-WALK・検証器・通知）と外した理由を1画面で |
 | `docs/drafts/2026-08-02-arrange-arc-handoff.md` | S1 完了・S2/S3 が次 | **これが生きている引き継ぎ書**＝オーナーの課題の正準。S2/S3 へ戻る起点として更新 |
 | `docs/research/2026-09-04-phrasemaker-bass-inventory.md` | 事実の記録 | 消さない。README の行に **訂正注記を1行追加**＝「§4 推し順1の耳実績はバンド全体の評価（真因調査 §2-3）・§3 表の『移植不要』が正しかった」 |
 | `docs/research/2026-09-15-anchor-rigidity-…`・`2026-09-16-rhythmic-variation-…` | 事実の記録 | 消さない。README の行末に「→ 2026-09-16 土台ごと撤去裁定（本レビュー）」 |
@@ -197,8 +197,23 @@
 
 ## 9. 出典
 
-- otomemo：`CLAUDE.md`／`docs/requirements.md:18-35`／`docs/design.md:510-534,563,2166-2377`／`docs/backlog.md:22-47`／`docs/drafts/2026-08-02-arrange-arc-handoff.md:157-191`／`docs/drafts/2026-08-19-phrasemaker-port-plan.md:7`／`docs/drafts/2026-09-09-phrasemaker-port-master-plan.md` §0・§1・§4-1・§4-9・§5-2・§8／`docs/drafts/2026-08-21-phrasemaker-arc-handoff.md`（耳の判定表）／`docs/drafts/2026-09-15-riff-variation-layer-design.md`／`docs/research/2026-08-02-riff-structure-and-variation.md`（設計含意・A-3・B-1・B-6）／`docs/research/2026-09-04-phrasemaker-bass-inventory.md` §3・§4／`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md` §0・§2-3・§3-3・§4・§5・§6／`docs/research/2026-07-14-riff-ostinato-design.md`
+- otomemo：`CLAUDE.md`／`docs/requirements.md:18-35`／`docs/design.md:510-534,563,2166-2377`／`docs/backlog.md:22-47`／`docs/drafts/2026-08-02-arrange-arc-handoff.md:157-191`／`docs/archive/2026-08-19-phrasemaker-port-plan.md:7`／`docs/archive/2026-09-09-phrasemaker-port-master-plan.md` §0・§1・§4-1・§4-9・§5-2・§8／`docs/archive/2026-08-21-phrasemaker-arc-handoff.md`（耳の判定表）／`docs/archive/2026-09-15-riff-variation-layer-design.md`／`docs/research/2026-08-02-riff-structure-and-variation.md`（設計含意・A-3・B-1・B-6）／`docs/research/2026-09-04-phrasemaker-bass-inventory.md` §3・§4／`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md` §0・§2-3・§3-3・§4・§5・§6／`docs/research/2026-07-14-riff-ostinato-design.md`
 - コード（main `16c45a8`）：`apps/api/src/music/generate.ts:964-1200,1353-1990,2123`／`apps/api/src/music/bassLibrary.ts:1-60,182-297`／`apps/api/src/http.ts:285-365,459-525`／`apps/api/src/mcp.ts:790-843`／`apps/web/src/music.ts:6,670,696-703,951-957`／`apps/web/src/useMelodyGen.tsx:177,491-515,524-532,459-463,577-606`／`apps/web/src/components/TinkerSheet.tsx:187-208,380-405,495-557,589-651`／`packages/music-core/src/{anchorLock,chordFollow,walkingBass,guitarRiff,guitarRealize,guitarForms,guitarHandshape,keyStab,handModel,riffVariation}.ts`／`packages/music-core/src/index.ts:36-90`／`packages/music-core/src/verify/index.ts`
 - git：`git log --oneline --reverse a74363b^..HEAD`（73 コミット・2026-08-21〜09-16）／`git diff --stat a74363b^..HEAD`（377 ファイル・うち fixtures 除き 121）／`git show 30c8749`
 - DB 実測：`data/cm.sqlite` `neta.content` LIKE 検索（better-sqlite3・読み取り専用）
 - phrase_maker（読むだけ）：`docs/CONCEPT.md` §1-§4／`docs/HANDOFF-NEXT.md:14,25,30`／`docs/poc/BRAINSTORM-bass-kick-lock.md` §0-§3
+
+## 10. オーナー裁定（2026-09-16）と撤去の結果（追記）
+
+**裁定**
+1. §3 の仕分けどおりに外す（(b)＝ベース錨一式・ギター文法一式・変奏の層・それらの UI/MCP/section の口・テスト・py-parity）。
+2. **保留の3件も外す**＝鍵盤の隙間刺し（keyStab）・和音追従の経路（chordFollow）・手の物理モデル（handModel）。ただし **JZ-WALK は残す**＝JZ-WALK が実際に依存している表と関数は壊さない。handModel を外すなら NOTICE.md の pianoplayer 帰属も整理。
+3. 残す＝ドラム M2・cues・JZ-WALK・検証器 `verify/`・通知の口・MCP の分数コード `bass`・研究 doc。
+- §7 の③（phrase_maker アークの終わり方）④（S2/S3 へ戻る）は本裁定では明示されていない＝`docs/backlog.md` の「楽器アレンジの打ち込み助け」節に裁定待ちとして残した。
+
+**撤去の結果**（コミット＝`3b0ea56` web／`dce4cb6` api／`dd9fdd5` music-core／本書を移した docs コミット）
+- 外した：§3 (b)(c) の全部（keyStab・chordFollow・handModel を含む）。music-core の `anchorLock/chordFollow/guitarRiff/guitarRealize/guitarForms/guitarHandshape/keyStab/handModel/riffVariation.ts`、api の経路・`BASS_GRAMMARS`・到達口、web の引き出しとギター実音化、テスト、`tools/py-parity/` の cases/cases-chord-follow/cases-guitar/cases-handmodel/cases-key-stab と dump、NOTICE.md の pianoplayer・Parncutt 節。`guitarForms.ts` は使い手が無くなるので外した（§8 の問いは「外す」で決着）。
+- **JZ-WALK の依存の扱い**：実物で追うと JZ-WALK が import していたのは anchorLock の `pmClamp`/`rootLowPitch` と chordFollow の層B スケール表（`scaleOffsets` ほか）・`CfChord`・`chordTonePcs`/`chordScalePcs`/3度/5度/7度だった（§3 の「`chordAtStep` も JZ-WALK が使う」は**誤り**＝`chordAtStep` はギターの検算と web 実音化だけが使っていた）。これらを `packages/music-core/src/chordScale.ts` へ文字どおり移し、表の一致は撤去前の py-parity 参照値から抜いた fixture（`test/fixtures/chord-scale-layerB.json`）で引き継いだ。JZ-WALK と既定経路の出力は撤去前後で sha 一致を実測。
+- `rngSalt`/`engineVersion`/`PyRandom`（choices・getState）と `tools/py-parity/cases-rng-spike` は残した（py-random-parity テストが使う）。
+- 外したつまみが古い呼び出しから来たら `meta.warnings`（/gen/section は `warnings`）で「2026-09-16 に外した機能」と告げる（MCP は schema から外し passthrough で拾う）。
+- 負の知識（§5-1 の5項）＝`docs/design.md` 追補 (k) の撤去記録へ昇格。

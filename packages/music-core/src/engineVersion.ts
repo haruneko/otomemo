@@ -1,5 +1,5 @@
 // phrase_maker 由来エンジンの版（M0契約 §2 `engine: { version: string }`／同 §3-2 の 3）。
-// 正典＝docs/drafts/2026-08-20-phrasemaker-M0-contract.md §2・§3-2 の 3／design.md 追補 (k)。
+// 正典＝docs/archive/2026-08-20-phrasemaker-M0-contract.md §2・§3-2 の 3／design.md 追補 (k)。
 //
 // なぜ刻むか：移植エンジンは**バッサリ更新していく**（旧レゾルバを残さない・告知機構も作らない）。
 // 版はゴールデン回帰と決定性の識別のためだけに残す＝「同一 (入力, seed, engineVersion) → 同一出力」の

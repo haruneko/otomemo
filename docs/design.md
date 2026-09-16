@@ -2104,7 +2104,7 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
 - **暫定対症修正の撤去**：直前コミット `10c01b7` の swing 衝突ガード（SWING_ROOM=0.4＝「直後に16分がある8分裏は跳ねない」）は偶然ジャズ「走句ストレート」の粗い近似だが**層が誤り**＝Stage 3 で撤去。
 
 ### 3層カスケード・ブリーフィング（曲/セクション/ネタ・案C・2026-08-21 S0＝型と規則の凍結）
-正典化＝`docs/drafts/2026-08-21-arrange-data-locus.md`（案C裁定）・`2026-08-20-phrasemaker-M0-contract.md`・`2026-08-21-cascade-briefing-implementation.md`。S0 は**型と規則の凍結のみ**（実消費は M1 のレシピ resolve から。cues 未指定＝従来 bit 一致・additive）。
+正典化＝`docs/archive/2026-08-21-arrange-data-locus.md`（案C裁定）・`2026-08-20-phrasemaker-M0-contract.md`・`2026-08-21-cascade-briefing-implementation.md`。S0 は**型と規則の凍結のみ**（実消費は M1 のレシピ resolve から。cues 未指定＝従来 bit 一致・additive）。
 
 - **(a) フィール層分離への追補＝レシピ由来グルーヴ（M0契約 §1）**：ドラム等のレシピは「声部別グルーヴ（系統オフセット＋揺れ）」を**演奏側パラメータ**として持つ。resolve が返す notes・skeleton は**ストレート厳守**（上の「notes は常にストレート格子」契約と同型）で、グルーヴは再生／MIDI 書き出しの境界で feel 層が**非破壊**に適用する。レシピが在るトラックは**レシピの声部別グルーヴが権威**（全体 `HUMANIZE_PROFILES` は非レシピ音のフォールバック）。既定は適用 ON・ユーザーは OFF／クオンタイズ／つまみで介入できる。**二重掛け禁止＝グルーヴの適用点は feel 層の一箇所に限る**（上の feel 層分離「二重適用しない」の延長）。
 
@@ -2163,218 +2163,45 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
       **子の順序次第でドラムの揺れを消したり他パートへ漏らしたりする**＝単体再生と合成再生で聞こえが変わりうる。
       直すには per-section／per-track の feel 適用（範囲付き feel＝backlog の大改修）が要り、**いま払う価値は無い**という判断。
       **穴として承知の上で残す**＝後から「知らなかった」にしない。気になったら backlog の per-section feel を上げる。
-- **(k) ベース M3 本体＝`anchorLock`（構造的ロック＝錨と間の分業）（2026-09-09・計画 `docs/drafts/2026-09-09-phrasemaker-port-master-plan.md` §3-2 (k)）**：
-  phrase_maker `ensemble.py:1111-1179 _lock_bass_roots_to_sheet`（＋6/8 の `:1372-1471 _sheet_line`）が持つ音楽知識を
-  `genBass` の**第三経路**として additive に足す。既存 kickLock が「キック共有率を統計的に近づける」のに対し、
-  こちらは**構造的な契約**＝「全キック step に必ずルート錨が乗り、錨の**間**のリフ本体は無傷で生きる」。
-  **→ 2026-09-15 オーナー裁定で既定を「変わり目は必ずルート・滞在中は構成音も可」へ弱めた（契約から選好への変更）＝下の (k-6)。
-  「全キック step にルート」は `anchorStrictness:"every-kick"`（源流互換モード）として残す。**
-  - **経路の位置づけ＝`anchorLock`（既定 OFF・未指定は 1bit も変わらない）**。**`kickLock` とは排他**（型格子と確率ロックを
-    二重適用しない＝上の style 経路と同じ理由）・**`style` とは併用**（style 型の16分格子がそのまま「体」になる）。
-    分岐順＝`anchorLock` ＞ `style` ＞ `kickLock` ＞ 従来 fig 経路。
-  - **体（＝錨を打ち込む先の格子）＝style 型の16分格子**。`style` 未指定時は **grammar セル既定（`pedal_answer` 相当・2小節
-    CALL/RESPONSE を小節交替）**を体にする（源流 `bass_rock_riff/riff.py:17-38 _PEDAL_ANSWER`）。grammar セル3型の
-    **辞書への正式登録は 3c**（本追補では anchorLock が体として要る最小の内部定義のみ）。
-  - **3分岐（源流 docstring どおり）**：小節ごとに各キック step `k`（global `gstep = bar*16 + k`）で、
-    **(a) 体の onset が既にルート級**（`pitch%12 === root_pc`）→ **音高もレジスタも据え置きで錨（head）へ昇格**
-    （オクターブの呼応が持つレジスタ往復を殺さない）／
-    **(b) 体の onset が非ルート**（5度/b7/blue 等）→ **ロックが勝つ**＝**元ピッチに最も近いレジスタのルート**へ上書き
-    （候補＝ルート低域音の 0/+12/−12・同点は低い方＝輪郭を保つ）／
-    **(c) 体が休符**（onset 無し）→ **低域ルートの錨を新規挿入**。
-    **キック step でない体のセル（octave/answer/pedal/pickup/climb/ghost）は1つも書き換えない**＝これが「リフ無傷」の定義。
-    最後に step 昇順へ並べ直す。**決定的＝RNG・hash・Date を一切使わない**（源流も同じ＝データ一致の取れる箇所）。
-  - **アクセントは M3 では持たない**。otomemo の skeleton は kick/snare のみ（M0 契約 §5-2）なので源流の accent 昇格は
-    「錨への昇格」までで止める。案B つまみ（源流 `bass_rest_on_syncopated_kick`）は **`strong`（`gstep%4===0`）のみ**で実装＝
-    **「拍頭でない無音キックはベースを休む」**（シンコペのキックはドラム単独で鳴らす）。**既定 OFF＝挿入は全キックで起きる**。
-    将来ドラム content が hit 別 vel を持ったら accents を導出する（backlog）。
-  - **錨のコード読みは step 粒度**＝`chordAt(t)` を `Math.floor` せずに呼ぶ読み手を anchorLock 経路の中に持つ
-    （1拍1コード＝`bars_per_chord<1` でも古いルートを掴まない）。**既存の `rootAtBeat`（`generate.ts:1140`・拍量子化）は触らない**
-    ＝style/fig/kick 経路の bit 一致を守る。
-  - **オクターブ選択は「最寄りのレジスタ」を音高距離で決める**（帯の下限で決め打ちしない＝`f2c3241` の −11 半音の教訓）。
-    低域窓は既存の `[BASS_LO,BASS_HI]=[33,48]` をそのまま使う（源流の窓 28..59 とは違うので、**窓は移植関数の引数**にして
-    py-parity では源流の窓を、製品では otomemo の窓を渡す＝同じ規則を2つの帯で動かす）。
-    **ただし otomemo の窓は 16 半音しかないので、この規則は 12 ルート中 4（pc=0,9,10,11）でしか2択にならない**
-    （2026-09-10 監査 中③・実測）。`rootLow(pc) = 33 + ((pc−33) mod 12)` が 37 以上になる pc=1..8 では
-    候補 `rootLow+12` が窓の上端 48 を超えて折り返され、**候補集合が1個へ縮退する**＝体のオンセットが窓の上端に居ても
-    錨は最下レジスタに落ちる。**これは規則の実装漏れではなく窓の幅の帰結**（規則は源流どおり音高距離で選んでいる）。
-    **窓は広げない**＝`[33,48]` は既存の全経路が共有する製品の帯で、ここだけ広げると既存の出音と揃わなくなる（変えるなら耳が要る＝backlog）。
-    実害の範囲＝(a) ルート級は据え置きなのでオクターブ奏法は無傷・効くのは (b) 非ルートセルがキックに当たった時のみ。
-    py-parity は源流の窓（28..59）で回るのでこの縮退はテストに映らない＝**この段落が実態の正準記述**。
-  - **`relative:true` との組み合わせ＝絶対で返す**＝相対パターンは「体」しか表現できず錨の情報が落ちるため。
-    返りに `relativeFallback:"anchor-lock"` を添えて理由を通知する（既存の escape hatch と同じ流儀）。
-    **anchorLock を要求したのに経路が立たなかった場合も黙って落とさず理由を告げる**（「フォールバックを通知する」＝
-    2026-08-29 オーナー裁定と同じ）。**通知の口は `meta.warnings`**（下の (k-2) 末尾＝トップレベル独自キーは web も
-    `/gen/section` も読まないので無言になる。2026-09-10 監査 重大①で `anchorLockFallback` キーは撤去した）。
-    **立たない理由は6つ**＝`no-drums`（ドラム content 無し）／`compound-meter`（6/8 等）／`drum-bar-mismatch`
-    （ドラム1小節長が拍子と不一致）／`drum-grid-mismatch`（ドラム格子が16分へ整数倍で写せない）／
-    **`no-kick`**（ドラムは在るがキックのヒットが空＝源流の空キック fallback `[0,4,8,12]` は「RhythmSpec 未指定＝おまかせ」の意味だが
-    otomemo のドラム content は「このドラムにキックは無い」の意味＝架空の4つ打ちに錨を打つと「キックにルートを置く」が嘘になる。
-    2026-09-10 監査 中②）／**`skeleton-explicit-bass`**（骨格が明示したベース区間が在る＝後段 E の表面化が錨を必ず上書きするので
-    「全キック step にルート錨」が保てない。**人が書いた音を道具が上書きしない**という 3c の原則が上位＝錨の側が降りる。
-    2026-09-10 監査 重大②）。**落ち先ごとに文言を言い分ける**。
-  - **engineVersion の置き場＝music-core 定数 `PM_ENGINE_VERSION`（`rngSalt.ts` の隣）**。**新経路を実際に使ったときだけ**
-    content に `engine:{version}` を載せる（M0 契約 §2 の形）。**既定経路はキーを生やさない＝bit 一致**。
-  - **到達口は4口すべて**＝`/music/gen_bass`・MCP `gen_bass`・`/gen/section`（`bass.*` 素通し）・web TinkerSheet
-    ベース引き出し「細かく（ドラム絡み・分数）」。**作ったのに触れないノブは硬化する**（(g) の受け入れ監査と同じ戒め）。
-  - **描く口は開けない**＝キックやアクセントを人が描く UI は将来枠のまま（io-map 裁定#2/#5）。錨の位置はドラムの骨から来る。
-  - **検証＝py-parity（データ一致）**：源流は RNG/hash を使わないので**参照値と列で突き合わせられる**。
-    `tools/py-parity/`＝Python dump スクリプト（venv と `sys.path` の順を焼く）＋ケース表 JSON をコミットし、
-    TS 側は同じ入力から同じ (step,pitch,kind,anchor,role) 列を出すことを `deepEqual` で固定する。
-    Python の負数 `%` と銀行家丸めの罠は既習（`pyRound`・`normRoot` を必ず経由）。
-    受け入れの型分けは3つ＝**`gate`**（データ一致・bit 一致・変異検査）／**`byConstruction`**（「全キックに錨」「非キックセル無傷」＝
-    構造上そうなるもの＝証拠に数えず**被覆率を数値で出す**）／**`diagnostic`**（それ以外）。**耳は作曲で**。
-  - **(k-2) 実装が着地した形（2026-09-10・3b/3c/3d/3e）**：
-    - **`chordFollow`（3b）＝コード追従の5ガード**（源流 `bass_rock_riff/chords/chord_follow.py`）を第4経路として additive。
-      ①拍頭（`step%4===0`）は必ずコードトーン②それ以外はそのコードのスケール（`core/chordlib.py` 層B 25 クオリティの
-      教科書モード ∪ コードトーン）③各コード区間の最後の自由音は次ルートへの導音（半音優先・必ず ±2 で解決）
-      ④低域窓の内側⑤**リズム格子は1つも書き換えない**。**`approach` ノブとは排他**（上位互換が勝つ）。
-      層B と otomemo の 34 クオリティは**重なる 26 キーでコードトーンがバイト一致**＝層Bが足すのは**スケール**だけ。
-      otomemo 固有の8キー（7sus4/69/m69/7#11/m11/m13/maj13/maj7#11）は同じ作り方でこちらが補い出所を区別する
-      （`scaleOrigin()`）。**`11` は層A/B とも正としない＝直さず同じ数値のまま運ぶ**（本アーク外・backlog）。
-      **置き場所＝全後処理の最後**（fill/land/skeleton の後）＝前に置くと後段の上書きで①②が黙って破れる。
-      **骨格が明示したベース音と錨は写し直さない**（人が書いた音・構造的契約が上位）。
-    - **リフ文法辞書（3c）**＝`riff.py` の3文法（pedal_answer / gallop_pedal / octave_call_response）を
-      **anchor/role 注記つきの別の棚**（`BASS_GRAMMARS`・`bassGrammarById`）として bassLibrary に置く。
-      `BassCell` では anchor（不可侵の頭）と role が表せない＝落とすと知識が消えるため。**`BASS_TYPES`・
-      ジャンル候補には入れない**（既存の型選抜は不変）。`anchorGrammar` ノブで選ぶ（未指定＝`pedal_answer`）。
-    - **`JZ-WALK`（3d）**＝walking v2 の候補生成に v3 の規則3本（禁則音程／跳躍後の順次回復／同方向連続跳躍の禁止）を
+- **(k) ベース／ギター／鍵盤の「リフ」系（M3〜M6a・2026-09-09〜16）＝2026-09-16 撤去（オーナー裁定）**：
+  phrase_maker 取り込みで足した **ベースの錨 `anchorLock`（(k-6) 厳しさ・案B・リフ文法3型 `BASS_GRAMMARS`）・コード追従 `chordFollow`・
+  ギターのリフ一式（`guitarRiff` 3型・chug ロック・手の形・フォーム DB・palmGate/ghostVel）・変奏の層 `riffVariation`（(k-7)）・
+  鍵盤の隙間刺し `keyStab`・手の物理モデル `handModel`** を、UI・HTTP・MCP・`/gen/section` の口、テスト、py-parity ダンプごと外した
+  （すべて opt-in だった＝**つまみ未指定の出音は撤去前と 1bit も変わらない**・保存ネタに該当キー 0 件）。
+  理由＝オーナーの耳「ギターもベースもリフじゃない・魂が抜けて無難」（09-16）。第三者レビュー
+  （`docs/archive/2026-09-16-riff-arc-revert-review.md`）の結論＝「リフ」の中身が 08-02 の課題（楽器固有のリフ・手癖を超える別パターン＝
+  S3 リフ雛形）から、phrase_maker の**合奏の糊（キックにルート／キックに刻み）＋固定2小節のペダル表**へすり替わり、
+  その上に弱め・つまみ・変奏をつぎはぎしていた。仕様本文は git 履歴（`5d60c37`〜`d2aab8a`）と archive の計画書が持つ。
+  - **負の知識（次にリフを作るときに踏まない）**：
+    1. **キックに揃える規則（錨・chug ロック）は合奏の糊であってリフではない**。耳＝「必ずルートは固い」。研究上も「キック位置＝ルート」の規則は無い
+       （「変わり目＝ルート・強拍＝構成音」）。
+    2. **固定2小節の表を貼る方式は、既存の型辞書（bassLibrary 33型）と同じ性質＝リフを"作る"仕組みではない**。源流も「grammar 表はわざとらしい／
+       収束の元」と自認。表の上に変奏の層を足しても、動かせる音が元から 10〜19% では差が出ない。
+    3. **移植の根拠にした耳の実績は、評価の単位（バンド全体／楽器単体）を確かめる**。「ロックとても良い」はベース単体の評価ではなかった。
+    4. **別アークの計画は、オーナーの課題の計画（S2 配札／S3 リフ雛形）と接続してから走らせる**。名前（リフ）だけ合流して課題が合流しなかった。
+    5. **「使える」と言われた JZ-WALK と「固い」と言われた錨の差＝表を敷かず規則で選ぶ／表を敷く**。次にリフを作るときの向き。
+    - 設計知識として拾える発想（負の知識ではない）＝変奏の層の「軸を1本だけ壊す・なし／中／多めの階段・保護 step・打ち消しの実測」（研究 2026-08-02 B-1/B-6 に沿う）。
+  - **外したつまみが古い呼び出しから届いたら告げる**＝`removedRiffKnobWarning`（generate.ts）。`/music/gen_bass`・`/music/gen_chord_pattern`・MCP `gen_bass`/`gen_chord_pattern`
+    （inputSchema は `z.object().passthrough()`＝schema からは外したが未知キーを落とさず拾う）は `meta.warnings`、`/gen/section` は `warnings` に
+    「ベース：／コード楽器：「…」は 2026-09-16 に外した機能なので使っていません（従来どおり生成しました）」。出音は従来経路のまま。
+  - **残したもの（同じアークの資産）**：ドラム M2（上の (d)〜(j)）・カスケード合図 cues・下の JZ-WALK・指板検証 `verify/`・通知の口・MCP `chords[].bass`。
+  - **(k-2) 残っている部品の形**：
+    - **`JZ-WALK`（3d・`packages/music-core/src/walkingBass.ts`）**＝walking v2 の候補生成に v3 の規則3本（禁則音程／跳躍後の順次回復／同方向連続跳躍の禁止）を
       制約として課し、**乱数を決定的規則へ置換**（接近音のスコア末尾＝候補ピッチ／自由選択＝窓の最低音／弧の向き＝seed の偶奇。
       **新ソルトは足さない**）。4/4 は1拍1歩・6/8 は 16分格子の (0,2,6,8)。**データ一致は主張しない**＝W1〜W5＋禁則0
-      （byConstruction・**被覆率を数値で出す**）＋回復率（diagnostic）＋摂動テストで受ける。**v3 は耳未判定**なので
-      **style を名指しした時だけ立つ opt-in**（ジャンル選抜に入れない・UI にも「試作・耳未判定」と書く）。
+      （byConstruction・**被覆率を数値で出す**）＋回復率（diagnostic）＋摂動テストで受ける。耳判定＝「使える」（2026-09-13）。
+      **style を名指しした時だけ立つ opt-in**（ジャンル選抜に入れない・UI は型直指定の「ウォーキング（試作）」）。立たない時は `meta.warnings`（コードが無い／対応しない拍子）。
+      使った時だけ content に `engine:{version}`（music-core `PM_ENGINE_VERSION`・M0 契約 §2）＝既定経路はキーを生やさない。
+      **部品の置き場**＝コードのスケール表（層B `core/chordlib.py:118-171`＋otomemo にしか無い8キーの補い）と低域の畳み（`pmClamp`/`rootLowPitch`）は
+      `packages/music-core/src/chordScale.ts`（撤去した chordFollow/anchorLock から JZ-WALK が import していた分だけを文字どおり移設・
+      表の検算＝`test/chord-scale.test.ts`＝撤去前の py-parity 参照値から抜いた fixture）。コードトーンは呼び手が otomemo の `QUALITY_INTERVALS` を渡す。
     - **指板検証（3e）**＝ギター gen2 の自前 DP を**弦数・調弦・重みを引数に取る形へ一般化**し `packages/music-core/src/verify/`
       へ（4弦ベース・6弦ギター・5弦ベース）。**検証器＝生成の主導権を握らない**（gate＝到達不能 0／diagnostic＝運指コスト・
-      ポジション移動・開放弦率＝**合否を持たない**）。生成へ噛ませたい時は `playable` 述語として窓に注入できる（既定は注入しない）。
+      ポジション移動・開放弦率＝**合否を持たない**）。生成へ噛ませたい時は `playable` 述語として窓に注入できる（既定は注入しない）＝楽器の身体性の足場。
     - **フォールバックの通知は `meta.warnings`**（2026-08-29 裁定）＝web と MCP はここしか読まない。**独自キーを新設しない**
-      （3a の `anchorLockFallback`／3b の初版はトップレベル独自キーで**無言**だった＝2026-09-09 監査の指摘）。
-      **落ち先で言い分ける**（コードが無い／複合拍子／知らない文法 ID／骨格の明示音は書き換えていない）。
+      （M3 初版はトップレベル独自キーで**無言**だった＝2026-09-09 監査の指摘）。**落ち先で言い分ける**。
       **`/gen/section` も応答に `warnings` を素通しする**（2026-09-10 監査 重大①＝それまで `{section, composition}` しか
       返しておらず、到達口4口のうち1口でベースの通知が丸ごと消えていた）。
-    - **(k-3) 後段の後処理と錨の契約（2026-09-10 監査 中①の決着）**：`anchorLock` の売りは「全キック step にルート錨」
-      という**構造的契約**なので、隣のノブを回しただけで黙って崩れてはいけない。二本立てで決着させた。
-      - **`approach` は錨を避ける**（順序で守る）＝接近音化の対象から錨の start を除外する。chordFollow が錨を写し直さないのと
-        同じ立場＝**構造的契約が後処理より上位**。これで `anchorLock`＋`approach` でも契約は保たれる（実測＝破れ 0）。
-      - **`fill` は排他にせず、破れた事実を数えて告げる**＝フィルは「その小節を別の音形へ差し替える」道具なので、
-        契約を守らせると道具の意味が消える。代わりに**全後処理を通したあとで契約を実測**し（キック step にルート錨が
-        残っているか）、欠けた数と小節を `meta.warnings` に載せる。**実測してから言う**ので通知が嘘をつかない。
-      - この実測は `anchorLock` 未使用なら台帳が空＝0 回のループ＝**既定の出音は 1bit も変わらない**。
-    - **(k-4) M5 ギターが着地した形（2026-09-13）**：
-      - **相対形のまま解いた**（ギター型に絶対 notes を載せない＝配置時の調の扱い `music.ts:1174-1183` に触れない）。
-        ヒット単位のボイシング（源流の MONO→POWER8 上書き）は **`ChordHit.voice?: "mono"|"power"|"power8"`**、コード追従が読む
-        注記は **`ChordHit.riff?: {kind,deg,role,anchor,strong}`**（`vel?`/`dir?` と同じ additive の前例）。content 側の印は
-        **`guitarRiff?: {grammar, pitch:"chordfollow"|"handshape", anchorLock?, seed?}`**＋`engine`＝**生えるのはギター経路だけ**。
-      - **音高は music-core `realizeGuitarRiff` の1本**＝web の `resolveChordPattern`（再生）と api の検算（通知）が同じ関数を呼ぶ。
-        api は音を返さない（分業維持）が、**進行を受け取れば実音化して検算し `meta.warnings` で告げる**（代用したコード表・知らない
-        コード・押さえられない音・手の形の緩和）。＝**MCP `gen_chord_pattern` に `chords`/`drums` を足した理由**（R1 の穴＝錨を置くには
-        キックが、検算には進行が要る）。
-      - **中身**＝5c リフ文法3型（power_chug/pedal_answer/gallop・役割注記つき）／5b chordtheory（**コードトーンは `QUALITY_INTERVALS` に
-        共通化・スケールはギター独自**＝m7=ドリアン等で層Bと違う＝楽器間で調律値を共有しない。ギター表に無いクオリティだけ層Bで代用し告げる）
-        ＋chordfollow（**撤去済みアプローチ分岐 `chordfollow.py:151-159` は翻訳前に落とした**）／5a chug ロック（昇格・MONO→POWER8・挿入・
-        アクセント権限の一本化・ghost/dead 不可侵。accents は常に空＝M3 の決定2を引き継ぐ）／5d フォーム DB（調弦から導出・B弦 +3・
-        `GAIN_SAFE_INTERVALS`）／5e 手の形は**枠のみ**（重み・定数は源流の値を持たない＝`SHAPE_WEIGHTS_OTOMEMO` は仮置き・**耳未判定＝opt-in**）。
-      - 到達口＝`/music/gen_chord_pattern`・MCP・`/gen/section`（`body.chord`）・web TinkerSheet コード楽器引き出し「ギターのリフ（試作）」
-        （**文法を選んだ時だけ生成器を叩く**＝ライブラリ検索へ落ちると触れないノブになる）。
-      - 受け入れ＝py-parity 90ケース＋クオリティ表 104件＋フォーム DB 4調弦（データ一致）／**返った content に対して**強拍 CT・非整合 0
-        （oracle は py-parity ダンプ＝生成器の表を使わない）・`fretboardGate`・錨の被覆率 1.0／変異検査（出力に注入）／摂動テスト（handshape 枠）。
-      - **刻みの音価のつまみ（2026-09-15 オーナー裁定「つまみで選ぶ」＝真因調査 `docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md` 案6）**：
-        `guitarPalmGate`（刻みの短さ＝音価の係数 palmGate を**文法の値の代わりに**使う・0.1〜1）と `guitarGhostVel`（弱音＝kind `ghost` の vel・1〜127）を
-        `genChordPattern` の設定に出す。**未指定＝源流の値**（palmGate＝power_chug 0.80／pedal_answer 0.85／gallop 0.65・ghost vel 46）＝**1ビットも変わらない**。
-        効くのは content の `hits[].dur`／`hits[].vel`（相対形のまま・web の実音化は hits の値をそのまま読む）＝chug ロック（5a）の音価の計算し直しにも同じ値を使う。
-        範囲外は丸めて `meta.warnings`、`guitarRiff` 無しで渡されたら「リフ文法を選んだ時だけ効く」を `meta.warnings`（落ち先ごとに文言）。
-        dead（vel 38）は対象外（裁定は「弱音の強さ＝ゴースト」）。到達口＝`/music/gen_chord_pattern`・MCP・`/gen/section`（`body.chord.guitarPalmGate/guitarGhostVel`）・web コード楽器引き出し。
-        **動きの無さの本体（固定表・変奏の不在）には効かない**＝表面のつまみ（調査 §3-4）。
-    - **(k-5) M6a 鍵盤の土台のうち裁定不要の部分が着地した形（2026-09-13）**：
-      - **6a 隙間刺し**＝phrase_maker の legacy `rock_piano` sheet 分岐と gesture_p11 `build_rock` は同じ知識＝**1本**（music-core `keyStab.ts`）。
-        刺す位置＝譜の onsets − kick・accents は anchor・隙間が無ければ 16分 step 6,14。py-parity 72件で両源流と一致。
-      - **譜の onsets の読み替え**＝otomemo のドラム content のキック∪スネア（源流 RhythmSpec の b:/s: 行に相当）。ハットは入れない
-        （入れると8分ごとに刺さる＝源流の「キックの隙間＋バックビート」ではなくなる）。accents は常に空（M3 の決定2）。
-      - **相対形のまま**＝keyboard strum の hits（voicing `top:72`＝既存 voiceToTop）＋印 `keyStab?: {fallback?}`＋`engine`。web の実音化は
-        **このキーで分岐しない**（既存経路で鳴る）。ボイシングと vel の細部（源流 80/70・音価 0.4 拍）は移さず、音価は 2 step（次の刺し・**次のキック頭**・セクション末で詰める・最小 1 step）・
-        anchor だけ vel 112。band の低域譲り（`lift_above`・LH 無発音）と build_rock ソロの LH ルートは移さない（前者は 6b＝§8-3 裁定待ち）。
-      - 到達口＝`gen_chord_pattern` の `keyStab`（HTTP・MCP）・`/gen/section` の `body.chord.keyStab`・web TinkerSheet「キックの隙間に刺す（鍵盤）」
-        （ON の時だけ生成器を叩きドラムを同送）。**M5 の `drums`/`chords` の口に相乗り**（口は増やしていない）。ギターのリフが勝つ。
-      - **型・候補数とは併用しない（告げる）**＝隙間刺し／ギターのリフが**立った時**は `pattern`（型・ジャンル）と `variety`（候補数）を使わず1件を返し、
-        `meta.warnings` に「選んだ型・ジャンル（…）は使っていません」「候補は N 件でなく1件です」を載せる（`pattern:"omakase"` は選んでいない番兵＝型の通知なし）。
-        立たずに従来経路へ落ちた時は型を使うので告げない（2026-09-13 M6a 監査 中1＝web は常に pattern＋variety=4 を送るので黙って捨てていた）。
-      - **「キックに重ならない」は鳴っている区間で見る**＝刺しの `[step, step+dur)` が自分より後のキック頭（小節線の向こうの次小節のキックを含む）を含まない
-        （2026-09-13 M6a 監査 軽微3＝スネア 15 の 2 step が次小節頭のキックまで鳴っていた。源流 legacy の 0.4 拍も掛かるが趣旨を優先）。
-      - 受け入れ＝**返った content に対して**キック重なり 0（打点・鳴る区間とも）・被覆率 1.0・譜の外 0（oracle＝ドラム lanes から直接数える）／変異検査／落ち先ごとの通知。
-      - **6d 手の物理モデル**＝`handmodel.py` の忠実移植（music-core `handModel.ts`・関数単位ゴールデン）。**土台のみ＝生成器に結線しない**。
-        定数の出所は NOTICE.md（pianoplayer＝MIT・Parncutt 1997）。`round(x, 4)` は `pyRoundDigits`（Python と同じ厳密値の半偶数丸め）。
-    - **(k-6) 錨の厳しさ＝「変わり目は必ず・滞在中は構成音も可」へ（2026-09-15 オーナー裁定・契約から選好への変更）**：
-      耳判定「必ずベースルートになるのは保守的と言うか固くない？」→ 真因調査（`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md` §2-1・§5 案2）→
-      裁定「変わり目だけ必須」。根拠＝源流ブレスト `phrase_maker/docs/poc/BRAINSTORM-bass-kick-lock.md` 案A（研究上の規則は「変わり目＝ルート・それ以外の強拍＝構成音」で、
-      「キック位置＝ルート」ではない。(b) 上書きは答句の 5度/b7 だけを選択的に潰す）。
-      - **これは契約の書き換え**：上の「全キック step に必ずルート錨」は **anchorLock の既定ではなくなる**。新しい契約は2本＝
-        **① コードの変わり目のキックは全部ルート**／**② 同じコードが続く間（滞在中）のキックの音は、そのコードの許容音**。
-      - **つまみ `anchorStrictness`**＝`"chord-change"`（**anchorLock 経路の既定**）／`"every-kick"`（源流互換＝従来の3分岐そのまま）。
-        anchorLock 自体は**既定 OFF のまま**＝anchorLock 未指定の出音は 1bit も変わらない。**anchorLock:true の出音は変わる**（それが裁定の中身）。
-      - **変わり目のキック**＝そのコード区間（同じコードが続く区間）に入って**最初のキック step**（区間頭ちょうどでなくてもよい＝区間頭にキックが無い譜でも各コードに1回はルートが乗る）。
-        それ以外のキックは**滞在中**。
-      - **滞在中のキックの分岐**：体の onset が**許容音**なら**音高もレジスタも据え置き**で錨へ昇格（(a) と同じ扱い＝上書きしない）。許容音でなければ (b) どおりルートへ上書き。
-        休符なら (c) どおりルートを挿入（案B が効けば休む）。**許容音**＝そのコードの構成音（`chordPcs`）∪ 5度（コードが b5/#5 を持ち完全5度を持たない時は足さない）
-        ∪ b7（コードが長7度を持つ時は足さない）。オクターブはルートと同じ pc なので含まれる。
-        移植関数には区間ごとの許容 pc を `AnchorSeg.stayPcs` で渡す（未指定＝{R, 5, b7}）。
-      - **案B（`anchorRestOnSyncopatedKick`＝拍頭でない無音キックは休む）は `chord-change` のとき既定 ON**（調査 §5 案2）。明示の true/false が勝つ。
-        `chord-change` では案B が休ませるのは**滞在中のキックだけ**＝変わり目のキックは拍頭でなくても必ず挿す（契約①「変わり目は全部ルート」が上位）。
-        知らない厳しさの値は既定（`chord-change`）で生成して `meta.warnings`、anchorLock 無しで厳しさだけ渡されたら「効かない」を `meta.warnings`。
-        `every-kick` のときの既定は従来どおり OFF（源流互換）。web/HTTP は明示の false を素通しする（未指定と区別する）。
-      - **py-parity（源流 `_lock_bass_roots_to_sheet` との列一致 110件）は緑のまま**＝移植関数の既定は `every-kick`（源流の厳格モード）で、
-        製品の genBass が `chord-change` を渡す。**忠実移植の証明は捨てない**（源流互換モードの記録として残す）。
-      - **後段の台帳（(k-3)）**は「キック step に置いた音の pc が最後まで残っているか」を見る＝滞在中の許容音もそのまま台帳に載る
-        （ルートかどうかではなく「錨が置いた音が崩れていないか」）。chordFollow が錨を写し直さない判定も同じ台帳を読む。
-      - 受け入れ＝**4口から返る content に対して** ①変わり目のキックは全部ルート ②滞在中のキックは許容音、の2本を assert／**被覆率**（変わり目キック数・滞在中キック数が
-        どちらも 0 でない）／**変異検査**（変わり目のキックを1つ非ルートに → ①が落ちる／滞在中のキックに非許容音 → ②が落ちる）。
-        `every-kick` は従来の INV1（全キックでルート・被覆率 1）で受ける。
-    - **(k-7) 繰り返しに変奏の層を足す（2026-09-16 オーナー裁定＝設計案 `docs/drafts/2026-09-15-riff-variation-layer-design.md` で実装）**：
-      耳判定「パームミュートみたいで動きがない／固い」→ 真因調査（`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md` 案1＝固定2小節の表・変奏の不在）→ 裁定。
-      ※設計案は (k-6) と書いていたが (k-6) は錨の厳しさが先に使ったので (k-7) とする。
-      - **置き場**＝music-core `riffVariation.ts` の純関数 `varyRiffTiles(tiles, opts)`（RNG/hash/時刻 不使用・入力を破壊しない）。
-        入力は表ではなく**役割つきオンセット列を反復単位（2小節＝32 step）で束ねた `RiffTile[]`**（`index` 0＝提示・`last`）。
-        ベースの錨経路（文法の体）とギターのリフ経路が同じ関数を呼ぶ。web は呼ばない（ギターは変奏済みの hits が content に載る）。
-      - **動かすのは答句だけ**＝`anchor:false` かつ role ∈ {pickup, answer, blue, climb}（ギターは `voicing:"mono"` も条件）。
-        octave/root（レジスタ往復）・head/pedal/chug/chord/dead は触らない（下の拡大・装飾の対象だけ例外）。**提示（index 0）は決して触らない**。
-        **保護する打点 `protectedSteps`（global step）**のセルは対象にしない・そこへ足さない・そこを消さない＝v1 は**全キック step**
-        （ベースは常に・ギターはロック中だけ）。錨が (b) で戻して変奏が黙って無駄になるのを避けるため（案2 の変わり目だけへ狭めるのは耳の後＝S6）。
-      - **変換＝登録口（レバー表）で持つ**＝`RIFF_VARIATION_LEVERS`（名前→純関数）＋段ごとのスケジュール表。**リズムの変奏は入れない**
-        （2026-09-16 裁定「リズムのずらしは研究を先に」）＝研究の結論が出たらレバーを1本登録しスケジュールに名前を足すだけ（additive）。
-        v1 のレバー（中身と強さはすべて**仮**＝耳で決める）：
-        - `sequence`（ゼクエンツ）＝答句の各セルをリフ語彙の階段 `[0,3,5,6,7,10,12]` 上で1段（端で止まる）。向き＝`(seed + index)` が奇数で上・偶数で下。
-          全セルが端で動けなければ `reselect` 部品（`[7,10,12,5]` を `seed mod 4` だけ回し、元と違う最初の値）で必ず1音は変える。
-        - `fragment`（断片化）＝小節ごとに答句の頭1セルだけ残し残りの答句を消す（間を作る）。ギターは同じ小節の残した頭より後の ghost/dead も消す。
-        - `expand`（拡大）＝反復単位の後半小節の答句の頭（無ければ最後の答句の頭）を含む拍の**直前1拍**の pedal/chug（kind note/accent・非 anchor・非保護）を
-          answer に変え、deg を階段で頭へ向かって1段ずつ近づける（ギターは voicing を mono に）。
-        - `ornament`（装飾・楽器別）＝ギター＝同じ頭の小節の ghost/dead（非保護）を外し、頭の1 step 前が空いて非保護なら ghost（deg 0・role dead・mono）を1つ足す／
-          ベース＝頭より前の最後の pedal（kind note・非 anchor・非保護・deg 0）を1オクターブ上（deg 12）へ。
-      - **3段のスケジュール（仮）**＝なし（0）＝何もしない／中（0.5）＝奇数・最後の単位に sequence／多め（1）＝奇数（最後でない）sequence＋ornament・
-        偶数≥2（最後でない）fragment・最後（index≥1）sequence＋expand＋ornament。**多めは中を含む**（入れ子）。反復単位が1枚しかない時は変奏の余地なし＝告げる。
-      - **順序＝変奏 → 錨 → 実音化 → 既存後処理 → 和音追従 → 最終出力で契約を実測**。ベース＝体を束ねて変奏 → deg→実音 → `lockBassRootsToSheet` → 以降既存。
-        ギター＝`buildGuitarSkeleton` の出力を束ねて変奏（音価は変奏後の並びで同じ規則で計算し直す）→ `lockGuitarChugToSheet` → hits。
-      - **打ち消しの実測（診断・ゲートにしない）**＝level>0 では同じ入力で level 0 も生成し、最終出力（ベース＝notes／ギター＝hits）が完全一致なら
-        `meta.warnings`「変奏（中／多め）は錨・和音追従に打ち消され、従来と同じ音になりました」（ギター＝「キックに揃えた刻み」に打ち消され…）。
-        ギターで進行が来ていれば検算の実音でも比べる。
-        **段どうしの同一も告げる**（2026-09-16 監査 重大①）＝多め（1）で level 0 とは違うが中（0.5）の最終出力と完全一致なら「変奏（多め）は中と同じ音になりました（この文法・この長さでは、
-        多めで足す断片化・広げ・装飾が当たる所がありません）」。実例＝ベース `octave_call_response`（拡大・装飾の当てどころの pedal が無い）は 4〜6小節でほぼ常に多め≡中。
-        段（steps）では3件の警告を和集合で `meta.warnings` に載せるので、同じ文言が届く。
-        **ギター gallop の中は構造的に効きにくい（2026-09-16 監査 中②で確認）**＝gallop の答句（step 14・15・30）は全部16分裏の単音（strong でない mono note）で、
-        和音追従（`assignGuitarPitches` の弱い位置の単音＝源流 `_snap_near`）は**隣の確定音（多くは次のルート）の±2半音の中のスケール音**へ寄せる。中の `sequence`（階段1段）は
-        deg 5〜12 の間を動くだけで窓の外に留まる＝ほとんど同じ音に吸われる。見えるのは今のコードと次のコードのルートが離れていて目標が窓に入る進行だけ
-        （実測：4/4×4〜8小節×3進行×6ドラム×4seed で、和音追従では IV-V-iii-vi 以外の2進行＝全件・IV-V-iii-vi＝0件が打ち消し）。欠陥ではなく「中の中身×実音化の規則」の組み合わせ。
-        中身・強さの入れ替えは耳の後（S6）＝ここでは変えない。その代わり、変わった hit が全部弱い位置の単音で和音追従（chordfollow）が打ち消した時は、通知に
-        「（ずらした答句がどれも弱い位置の単音で、和音追従が隣の音の±2半音のスケール音へ寄せるため）」を添える（手の形エンジンでは添えない）。多めは断片化・広げ・ゴーストで効く。
-      - **つまみ**＝`riffVariation`（0／0.5／1・それ以外は最寄りへ丸めて告げる・未指定＝0＝**1bit も変わらない**）＋`riffVariationSteps:true`（なし／中／多めの3件を
-        items に・label「変奏なし（従来）」「変奏 中」「変奏 多め」・riffVariation と同時なら steps が勝ち告げる）。`anchorLock`（ベース）／`guitarRiff`（ギター）が
-        立った時だけ効く＝立たなければ「錨／リフ文法を選んだ時だけ効きます（従来どおり生成しました）」。ベースで style 型の体（役割注記なし）なら「変奏できません」を告げる。
-      - **seed**＝ベース錨経路は RNG 不消費で seed 非依存だったが、**level>0 では向きが seed で変わる**（意図した変更・level 0 は従来どおり seed 非依存）。
-      - **保存形**＝ギター＝`guitarRiff.variation: 0.5|1`（level 0 はキーを生やさない）／ベース＝`bassRiff: {grammar, variation}`（level>0 のみ・additive）。音符レーンは足さない。
-      - **到達口（4口）**＝HTTP `/music/gen_bass`・`/music/gen_chord_pattern`／MCP `gen_bass`・`gen_chord_pattern` の inputSchema／`/gen/section`（`body.bass.riffVariation`・
-        `body.chord.riffVariation` を素通し。**段は出せない**＝`riffVariationSteps` が来たら「セクション一括では段を並べられません。段は各パートの生成で」を warnings に載せ level 0）／
-        web TinkerSheet＝ベース引き出し（錨の下）とコード楽器引き出し（リフ文法の下）に「変奏を3段で並べる（なし／中／多め）」の OFF/ON 2ボタン（既存のつまみと同じ作法・既定 OFF・トレイへ3件積む）。
-      - 受け入れ＝層単体（恒等・決定論・提示無傷・非対象無傷・語彙内・入れ子・保護 step 無傷＋各レバーの期待セル列＋変異検査）／**4口から返る content に対して**
-        既定 bit 一致・決定論・錨の契約の欠けが level 0 と同数・摂動（最終出力が変わる条件が存在）＋被覆率・打ち消し警告の整合／変異検査（層を恒等に → 摂動が落ちる）。
-        **形の要求（○個以上変わる）はゲートにしない**＝変化量は診断。
-
-
 ### 音楽MCPサービス（#86 Stage2 詳細・agentic Chat の根幹）
 **入口は Chat**（ユーザの主用途・ボタンは従）。Stage1 の口1（dispatch：consult→plan→gen_pair_rule）は「一発投げ」で動くが、Claude が**多段で推敲**（作る→`analyze_fit`で点検→外し音を直す→再点検→提示）はできない。それを可能にするのが口2＝MCP。加えて、実機で出た **param揺れ（Claudeが `key:"C"`/`time_signature` を自由形式で渡し子ジョブが落ちた）の根治**＝MCPの**厳密 inputSchema** が param 形を Claude に強制する。
 
