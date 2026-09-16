@@ -210,3 +210,47 @@ describe("到達口③＝/gen/section（body.bass 素通し・段は出せない
     expect(r.bass).toEqual(genBass(BF, r.chords, 42, r.drums, { anchorLock: true }).items[0]!.content);
   });
 });
+
+// ── 2026-09-16 監査 重大①：段どうしの同一（多め≡中）も告げる＝4口 ──
+const SAME_MID = "中と同じ音";
+describe("監査 重大①：多めが中と同じ音なら告げる（octave_call_response）", () => {
+  const OCR = { anchorLock: true, anchorGrammar: "octave_call_response" };
+  it("整合：level 0 と違い・中と完全一致 ⇔ 「中と同じ音」を告げる（63条件×文法3）", () => {
+    let hit = 0;
+    for (const grammar of ["pedal_answer", "gallop_pedal", "octave_call_response"]) for (const c of CONDS) {
+      const o = { anchorLock: true, anchorGrammar: grammar };
+      const r0 = genBass(BF, c.cs, c.seed, c.drums, o), r1 = genBass(BF, c.cs, c.seed, c.drums, { ...o, riffVariation: 0.5 }), r2 = genBass(BF, c.cs, c.seed, c.drums, { ...o, riffVariation: 1 });
+      const eq = JSON.stringify(notesOf(r2)) === JSON.stringify(notesOf(r1)) && JSON.stringify(notesOf(r2)) !== JSON.stringify(notesOf(r0));
+      if (eq) hit++;
+      expect(r2.meta?.warnings?.some((w) => w.includes(SAME_MID)) ?? false, `${grammar} ${c.name}`).toBe(eq);
+      expect(r1.meta?.warnings?.some((w) => w.includes(SAME_MID)) ?? false, `${grammar} ${c.name} 中は言わない`).toBe(false);
+    }
+    expect(hit).toBeGreaterThan(0);
+  });
+  it("到達口①HTTP：段で多め≡中なら meta.warnings に載る", async () => {
+    const app = buildHttp(new Core(openDb(":memory:"))); await app.ready();
+    const j = (await app.inject({ method: "POST", url: "/music/gen_bass", payload: { frame: BF, chords: CS, seed: 42, drums: D, ...OCR, riffVariationSteps: true } })).json() as { items: { content: { notes: Note[] } }[]; meta?: { warnings?: string[] } };
+    expect(j.items[2]!.content.notes).toEqual(j.items[1]!.content.notes);
+    expect(j.meta?.warnings?.some((w) => w.includes(SAME_MID))).toBe(true);
+    const one = (await app.inject({ method: "POST", url: "/music/gen_bass", payload: { frame: BF, chords: CS, seed: 42, drums: D, ...OCR, riffVariation: 1 } })).json() as { meta?: { warnings?: string[] } };
+    expect(one.meta?.warnings?.some((w) => w.includes(SAME_MID))).toBe(true);
+  });
+  it("到達口②MCP：callTool の返りに載る", async () => {
+    const server = buildMcpServer(new Core(openDb(":memory:")));
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "t", version: "0" });
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    const res = JSON.parse(((await client.callTool({ name: "gen_bass", arguments: { frame: BF, chords: CS, seed: 42, drums: D, ...OCR, riffVariationSteps: true } })) as { content: { text: string }[] }).content[0]!.text) as { meta?: { warnings?: string[] } };
+    expect(res.meta?.warnings?.some((w) => w.includes(SAME_MID))).toBe(true);
+  });
+  it("到達口③/gen/section：body.bass.riffVariation:1 で warnings に載る", async () => {
+    const app = buildHttp(new Core(openDb(":memory:"))); await app.ready();
+    const j = (await app.inject({ method: "POST", url: "/gen/section", payload: { frame: BF, seed: 42, parts: ["chords", "bass", "drums"], bass: { ...OCR, riffVariation: 1 } } })).json() as { composition: { children: { node: { neta: { kind: string; content: unknown } } }[] }; warnings?: string[] };
+    const kid = (k: string) => j.composition.children.find((c) => c.node.neta.kind === k)!.node.neta.content;
+    const cs = (kid("chord_progression") as { chords: Chord[] }).chords, dr = kid("rhythm") as DrumsInput;
+    const mid = notesOf(genBass(BF, cs, 42, dr, { ...OCR, riffVariation: 0.5 }));
+    const same = JSON.stringify((kid("bass") as { notes: Note[] }).notes) === JSON.stringify(mid);
+    expect(same).toBe(true); // この入力は多め≡中（前提が崩れたらテストを差し替える）
+    expect((j.warnings ?? []).some((w) => w.includes(SAME_MID))).toBe(true);
+  });
+});

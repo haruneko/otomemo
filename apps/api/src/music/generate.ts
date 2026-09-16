@@ -1130,6 +1130,18 @@ export function genChordPattern(
             same = JSON.stringify(realizeGuitarRiff(baseHits, ro).notes) === JSON.stringify(realizeGuitarRiff(finalContent.hits, ro).notes);
           }
           if (same) gtrWarn.push(`変奏（${RV_LABEL}）は${lockKick ? `${GTR_LOCK}・` : ""}和音追従に打ち消され、従来と同じ音になりました`); // 落ち先ごと＝ロックしていない時にロックのせいにしない
+          else if (riffLevel === 1) {
+            // 段どうしの同一（2026-09-16 監査 重大①・ベースと対称）：多めが中と同じ hits なら告げる。
+            const mid = genChordPattern(frame, seed, { ...opts, riffVariation: 0.5, riffVariationSteps: undefined });
+            const midHits = (mid.items[0]!.content as { hits: typeof finalContent.hits }).hits;
+            let sameMid = JSON.stringify(midHits) === JSON.stringify(finalContent.hits);
+            if (!sameMid && cs.length > 0) {
+              const csSegs: AnchorSeg[] = cs.map((x) => ({ rootPc: 0, startStep: (x.start ?? 0) * 4, lengthSteps: (x.dur ?? 4) * 4 }));
+              const ro = { chordAtStep: (st: number) => { const x = cs[csSegs.indexOf(chordAtStep(csSegs, st)!)]!; return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 };
+              sameMid = JSON.stringify(realizeGuitarRiff(midHits, ro).notes) === JSON.stringify(realizeGuitarRiff(finalContent.hits, ro).notes);
+            }
+            if (sameMid) gtrWarn.push(`変奏（多め）は中と同じ音になりました（この文法・この長さでは、多めで足す断片化・広げ・ゴーストの付け外しが当たる所がありません）`);
+          }
         }
       }
       warnIgnoredCompOpts("ギターのリフ");
@@ -1942,6 +1954,13 @@ export function genBass(
     const base = genBass(frame, chords, seed, drums, { ...opts, riffVariation: undefined, riffVariationSteps: undefined });
     if (JSON.stringify((base.items[0]!.content as { notes: unknown }).notes) === JSON.stringify(notes)) {
       bassWarn.push(`変奏（${RV_LABEL}）は錨・後段の処理に打ち消され、従来と同じ音になりました`);
+    } else if (riffLevel === 1) {
+      // 段どうしの同一（2026-09-16 監査 重大①）：多めが中と同じ音なら告げる（level 0 との比較だけでは黙っていた）。
+      //   多めで足す断片化・広げ・装飾が、この文法の形・この長さでは当たる所が無い（例：octave_call_response）。
+      const mid = genBass(frame, chords, seed, drums, { ...opts, riffVariation: 0.5, riffVariationSteps: undefined });
+      if (JSON.stringify((mid.items[0]!.content as { notes: unknown }).notes) === JSON.stringify(notes)) {
+        bassWarn.push(`変奏（多め）は中と同じ音になりました（この文法・この長さでは、多めで足す断片化・広げ・装飾が当たる所がありません）`);
+      }
     }
   }
   if (anchorPath && grammarFallback === "unknown-grammar") bassWarn.push(`知らないリフ文法（${opts?.anchorGrammar}）なので既定（${BASS_GRAMMAR_DEFAULT_ID}）で生成しました`);

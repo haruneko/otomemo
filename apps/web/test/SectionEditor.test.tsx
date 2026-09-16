@@ -1840,6 +1840,23 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(body.riffVariationSteps).toBe(true);
     await waitFor(() => expect(screen.getAllByLabelText("candidate-card")).toHaveLength(3));
   });
+  it("(k-7) 監査 重大①：段で多め≡中の通知（meta.warnings）が画面に出る＝3枚を並べても黙らない", async () => {
+    music.mockReset();
+    const WARN = "変奏（多め）は中と同じ音になりました（この文法・この長さでは、多めで足す断片化・広げ・装飾が当たる所がありません）";
+    music.mockResolvedValue({ ...stepItems("bass"), meta: { warnings: [WARN] } });
+    chordSection();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
+    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    await userEvent.click(screen.getByLabelText("bass-variation-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const el = await screen.findByLabelText("gen-warning");
+    expect(el.textContent).toContain("中と同じ音");
+  });
   it("M6a 鍵盤の隙間刺し＝ON で生成器（gen_chord_pattern）へ keyStab が飛ぶ（ライブラリに落ちない）・OFF に戻すと送らない", async () => {
     music.mockReset();
     music.mockResolvedValue({ items: [] });
