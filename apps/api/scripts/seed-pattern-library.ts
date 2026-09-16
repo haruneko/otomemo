@@ -85,7 +85,8 @@ export function seedPatternLibrary(core: Core): SeedCounts {
   //   genres は配列（co-tag 併記込み）＝genre タグは複数付く。bars=型の bars（amen/bossa=2）。
   for (const t of BEAT_PATTERNS) {
     // 4/4 と world68（6/8）を seed。それ以外の非4/4（six8.ballad 等）は L3 ピッカーが4/4前提ゆえスキップ（裁定D 2026-07-25＝world68 のみ 6/8 解禁）。
-    if (t.meter !== "4/4" && !t.genres.includes("world68")) continue;
+    // 2026-09-16 オーナー裁定＝オーナー自作の6拍子（genres:["owner"]）も棚に並べる。
+    if (t.meter !== "4/4" && !t.genres.includes("world68") && !t.genres.includes("owner")) continue;
     const frame: Frame = { key: 0, meter: t.meter, bars: t.bars, tempo: t.tempoMin };
     const content = genDrums(frame, seed, { style: t.id }).items[0]!.content;
     core.createNeta(withLib({
