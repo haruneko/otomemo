@@ -220,3 +220,17 @@ describe("(e) project scope の既存ネタには触らない", () => {
     expect(still[0]!.id).toBe(mine.id);
   });
 });
+
+// Task #5 入口一本化（design「アレンジS1＝写像規則の契約」節末尾の裁定・導線テスト問題3/4）：
+// ピッカーの検索はネタ名に当たる＝「オルガン」でオルガン型が全部見つかること（OG-SOUL/OG-PUNCH の脱落を塞ぐ）。
+describe("(og) オルガン型は表示名に「オルガン」を含む", () => {
+  it("OG-* の seed title が全件「オルガン」を含む（5型）", () => {
+    const core = freshCore();
+    seedPatternLibrary(core);
+    const og = core.listNeta({ scope: "library", kind: "chord_pattern", tags: ["lib:factory"], limit: 99999 }).filter((n) => (n.title ?? "").startsWith("OG-"));
+    expect(og.length).toBe(COMP_TYPES.filter((t) => t.id.startsWith("OG-")).length);
+    expect(og.length).toBeGreaterThanOrEqual(5);
+    expect(og.filter((n) => !(n.title ?? "").includes("オルガン")).map((n) => n.title)).toEqual([]);
+    expect(core.listNeta({ scope: "library", kind: "chord_pattern", limit: 99999 }).filter((n) => (n.title ?? "").includes("オルガン")).length).toBe(og.length);
+  });
+});

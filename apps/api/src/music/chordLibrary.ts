@@ -290,11 +290,11 @@ const ORGAN_TYPES: CompType[] = [
     mode: "strum", style: "keyboard", top: 76, program: 18, roles: ["verse", "chorus", "interlude"],
     rh: ". . > . | . . A . | . A . . | . . > ." }),
   // §3.4 ソウル/R&B：「敷き（白玉）と挿し（スタブ）」の二層運用を1レーンで表現（前半保持→裏で短く挿す）。
-  T({ id: "OG-SOUL", genre: "gospel", coGenres: ["citypop"], scenes: "ソウル/R&B（敷きと挿しの二層）", tempoMin: 70, tempoMax: 110,
+  T({ id: "OG-SOUL", genre: "gospel", coGenres: ["citypop"], scenes: "オルガン ソウル/R&B（敷きと挿しの二層）", tempoMin: 70, tempoMax: 110,
     mode: "strum", style: "keyboard", followChords: true, program: 16, roles: ["verse", "prechorus", "chorus", "bridge"],
     rh: "A - - - | - - - - | - - > . | . . A .", lh: "R - - - | - - - - | 5 - - - | - - - -" }),
   // §3.7 ゴスペル／ワーシップ：高域のパンチコード（シンコペした短い挿し）。top で音域を上げる（voicing.top）。
-  T({ id: "OG-PUNCH", genre: "gospel", scenes: "ゴスペル高域パンチコード（裏拍の短い挿し）", tempoMin: 70, tempoMax: 140,
+  T({ id: "OG-PUNCH", genre: "gospel", scenes: "オルガン ゴスペル高域パンチコード（裏拍の短い挿し）", tempoMin: 70, tempoMax: 140,
     mode: "strum", style: "keyboard", top: 84, program: 18, roles: ["chorus", "bridge", "interlude"],
     rh: ". . > . | . > . . | . . > . | > . . ." }),
 ];
