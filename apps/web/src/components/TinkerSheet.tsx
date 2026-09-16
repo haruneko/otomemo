@@ -388,10 +388,11 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
           {gen.drumFillStyle === "body" && <>
             <label className="knob-row" aria-label="drum-body-aim">
               <span className="knob-name">フィルの行き先<small>駆け上がるか、落とすか</small></span>
-              <select value={gen.drumBodyAim} onChange={(e) => gen.setDrumBodyAim(e.target.value as "" | "up" | "down")}>
+              <select value={gen.drumBodyAim} onChange={(e) => gen.setDrumBodyAim(e.target.value as "" | "up" | "down" | "tumble")}>
                 <option value="">おまかせ</option>
                 <option value="up">上る（クラッシュへ駆け上がる）</option>
                 <option value="down">落とす（フロアタムへ）</option>
+                <option value="tumble">タムを転がす（1小節）</option>
               </select>
             </label>
             <label className="knob-row" aria-label="drum-body-drummer">

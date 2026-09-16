@@ -79,6 +79,15 @@ describe("ドラム『フィルの作り方』3択→ gen_drums payload", () => 
     expect(body.bodyDepth).toBe(0.8);
   });
 
+  it("drumFillStyle=\"body\"＋行き先\"tumble\"＝bodyAim=tom_tumble を送り bodyDepth は送らない（§2106(g-2)）", async () => {
+    const { result } = renderHook(() => useMelodyGen(makeCtx()));
+    act(() => { result.current.setDrumFill(0.6); result.current.setDrumFillStyle("body"); result.current.setDrumBodyAim("tumble"); });
+    await act(async () => { await result.current.genPart(GEN_DRUMS); });
+    const body = api.music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.bodyAim).toBe("tom_tumble");
+    expect(body).not.toHaveProperty("bodyDepth");
+  });
+
   it("drumFillStyle=\"body\"＋手触り指定＝bodyDrummer を送る／おまかせ(\"\")は送らない", async () => {
     const { result } = renderHook(() => useMelodyGen(makeCtx()));
     act(() => { result.current.setDrumFill(0.6); result.current.setDrumFillStyle("body"); result.current.setDrumBodyDrummer("none"); });

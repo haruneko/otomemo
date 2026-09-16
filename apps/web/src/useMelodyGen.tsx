@@ -216,7 +216,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   //   body    ＝解いて作る（bodyfill.py の身体シミュレータ＝両手の経路を毎回 DP で解く）
   const [drumFillStyle, setDrumFillStyle] = useState<"" | "physical" | "body">("");
   // body エンジンの狙い（型を足さずにコストの形だけ変える）。""＝おまかせ＝プリセット。
-  const [drumBodyAim, setDrumBodyAim] = useState<"" | "up" | "down">("");
+  const [drumBodyAim, setDrumBodyAim] = useState<"" | "up" | "down" | "tumble">("");
   // body の手触り＝GMD テクスチャ統計のドラマー。"none"＝統計なしの純物理。""＝既定ドラマー。
   const [drumBodyDrummer, setDrumBodyDrummer] = useState<string>("");
   // ベース語彙のジャンル型ライブラリ（WP-B1・2026-07-14）：""=おまかせ(未送信＝従来 bit 一致)。style=型ID/ジャンル、bassFill=0..1(0=OFF=未送信)。
@@ -386,6 +386,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
             // 行き先＝アークの到達点。上る(-0.3)は crash へ駆け上がるタム回し・落とす(+0.8)はフロアへ。
             if (drumBodyAim === "up") body.bodyDepth = -0.3;
             else if (drumBodyAim === "down") body.bodyDepth = 0.8;
+            else if (drumBodyAim === "tumble") body.bodyAim = "tom_tumble"; // タムを転がす＝名前付きの狙い（design §2106(g-2)・つまみの束は api 側）
             if (drumBodyDrummer) body.bodyDrummer = drumBodyDrummer;
           }
         }
