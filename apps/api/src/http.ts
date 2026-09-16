@@ -299,7 +299,7 @@ export function buildHttp(core: Core): FastifyInstance {
           const chordFollow = b.chordFollow === true ? true : undefined;
           // M3-3c リフ文法（anchorLock の体）：文字列のときだけ渡す。未知IDは genBass 側で既定へ落ち理由が返る。
           const anchorGrammar = typeof b.anchorGrammar === "string" && b.anchorGrammar ? b.anchorGrammar : undefined;
-          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true, swing: num(b.swing), humanize: num(b.humanize), relative: b.relative === true, respondToCues, anchorLock, anchorRestOnSyncopatedKick, anchorGrammar, anchorStrictness, chordFollow }); // S4：swing/humanize=feel 添付（未指定=従来）／修理#2：relative=相対パターン出力（style時のみ・未指定=絶対=bit一致）
+          const res = genBass(b.frame, asChords(b.chords), b.seed, b.drums, { kickLock: num(b.kickLock), snareGap: num(b.snareGap), approach: num(b.approach), skeleton, style, fill, slashBass: b.slashBass === true, swing: num(b.swing), humanize: num(b.humanize), relative: b.relative === true, respondToCues, anchorLock, anchorRestOnSyncopatedKick, anchorGrammar, anchorStrictness, chordFollow, ...(typeof b.riffVariation === "number" ? { riffVariation: b.riffVariation } : {}), ...(b.riffVariationSteps === true ? { riffVariationSteps: true } : {}) }); // (k-7) 変奏量／段（未指定=キーを渡さない=bit 一致）／S4：swing/humanize=feel 添付（未指定=従来）／修理#2：relative=相対パターン出力（style時のみ・未指定=絶対=bit一致）
           // 対位法レポートの添付（design #20 S3d）：ベース候補=下声、骨格 tones=上声。骨格無し＝相手が無い＝スキップ。
           attachBassVoiceLeading(res, { skeleton, beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar });
           attachSyncScore(res, { beatsPerBar: meterInfo(b.frame?.meter).beatsPerBar, role: (b.frame as { section?: { role?: string } } | undefined)?.section?.role, tempo: typeof b.frame?.tempo === "number" ? b.frame.tempo : undefined }); // シンコペ ノリメーター（WP-D2）
@@ -454,7 +454,7 @@ export function buildHttp(core: Core): FastifyInstance {
     // ④是正（2026-08-29・受け入れ監査）：fillStyle 型注釈が "grid"|"physical" のままで、実行時は "body"(M3) が
     // キャストを通じて素通りしていた（型の嘘）。実態＝DrumsGenOpts.fillStyle に合わせ "body" を追加し、
     // fillLength/fillBeat/body系ノブも body?.drums 経由で受けて落とさず渡す。
-    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean; anchorGrammar?: string; anchorStrictness?: "chord-change" | "every-kick"; chordFollow?: boolean }; chord?: { guitarRiff?: string; anchorLock?: boolean; guitarShape?: boolean; keyStab?: boolean; guitarPalmGate?: number; guitarGhostVel?: number }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
+    const b = (req.body ?? {}) as { frame?: any; parts?: string[]; seed?: number; title?: string; tags?: string[]; bass?: { kickLock?: number; snareGap?: number; approach?: number; style?: string; fill?: number | string; respondToCues?: boolean; anchorLock?: boolean; anchorRestOnSyncopatedKick?: boolean; anchorGrammar?: string; anchorStrictness?: "chord-change" | "every-kick"; chordFollow?: boolean; riffVariation?: number; riffVariationSteps?: boolean }; chord?: { guitarRiff?: string; anchorLock?: boolean; guitarShape?: boolean; keyStab?: boolean; guitarPalmGate?: number; guitarGhostVel?: number; riffVariation?: number; riffVariationSteps?: boolean }; melody?: { counter?: number; drumLock?: number; backbeat?: number; converse?: number }; drums?: { style?: string; fill?: number | string; fillStyle?: "grid" | "physical" | "body"; fillKind?: string; fillLength?: number | "beat" | "2beat" | "half_bar" | "bar"; fillBeat?: number; bodyDepth?: number; bodyDensity?: number; bodyCrescendo?: number; bodyTailAnchor?: number; bodyDrummer?: string }; feel?: { swing?: number; humanize?: number }; cues?: Cue[]; prevSection?: { cues?: Cue[]; bars?: number } };
     const frame = b.frame ?? {};
     // カスケード合図の配布（design 306「配り役」と同型＝feel と同じ様式で全生成器へ同じ1枚を配る）。
     //   body.cues＝このセクションの人が書いた合図（Cue[]）。deriveCues で導出（保存 land 破棄・範囲外無視・越境 land 導出）して
@@ -503,7 +503,15 @@ export function buildHttp(core: Core): FastifyInstance {
     //   ここまで /gen/section は `{section, composition}` しか返しておらず、ベースの通知（錨が立たなかった／コード追従が
     //   立たなかった等）が**丸ごと消えていた**＝到達口4口のうち1口が無言（2026-09-10 監査 重大①）。additive なキー追加。
     const genWarnings: string[] = [];
-    const bassRes = want.has("bass") ? genBass(genFrame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(b.bass ?? {}), ...feelOpt } : b.bass) : undefined;
+    // (k-7) 変奏の段はセクション一括では並べられない（1曲分の合成は各パート1件）＝告げて level 0 で作る。riffVariation は素通し。
+    const SECTION_NO_STEPS = "セクション一括では段を並べられません。段は各パートの生成で（変奏なしで作りました）";
+    let bassOpt = b.bass;
+    if (bassOpt?.riffVariationSteps != null) {
+      const { riffVariationSteps: _s, riffVariation: _v, ...rest } = bassOpt;
+      bassOpt = rest;
+      if (_s === true) genWarnings.push(`ベース：${SECTION_NO_STEPS}`);
+    }
+    const bassRes = want.has("bass") ? genBass(genFrame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(bassOpt ?? {}), ...feelOpt } : bassOpt) : undefined;
     if (bassRes?.meta?.warnings?.length) genWarnings.push(...bassRes.meta.warnings);
     const bassContent = bassRes ? (bassRes.items[0]!.content as { notes: { pitch: number; start: number; dur: number }[]; feel?: unknown }) : undefined;
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
