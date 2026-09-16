@@ -353,3 +353,7 @@ export function applyFeelByPart<T extends { start: number; dur: number }>(
 }
 export * from "./bodyFill";
 export * from "./gmdPrior";
+
+// ピアノ伴奏（phrase_maker 試作 #1 取り込み S1）＝手の物理モデル（fingersim/handmodel.py の忠実移植・まだどこからも呼ばれない）。
+// 定数の出所＝NOTICE.md（pianoplayer MIT・Parncutt 1997）。参照値＝tools/py-parity/cases-handmodel/。
+export * from "./handModel";
