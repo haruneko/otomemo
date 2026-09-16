@@ -1487,90 +1487,11 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(screen.queryByLabelText("drawer-chordinst")).toBeNull(); // 進行が無い＝タイル非表示
   });
 
-  // ── 到達口④＝web TinkerSheet（M3-3a・design.md 追補 (k)「作ったのに触れないノブは硬化する」） ──
-  it("T4' 錨と間の分業＝『キックにルートを置く』ONで body.anchorLock が飛ぶ（OFF は未送信＝bit一致）", async () => {
+  // ── 通知の口＝サーバの meta.warnings を画面に出す（2026-08-29 裁定・2026-09-16 錨の撤去後は JZ-WALK の落ち先で検査） ──
+  it("T4e 経路が立たなかった通知（meta.warnings）が実際に画面へ出る＝『何も起きず何も言わない』を潰す", async () => {
     music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    getComposition.mockResolvedValue({
-      neta: mk("s1", "section"),
-      children: [
-        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
-      ],
-    });
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine")); // 「細かく（ドラム絡み・分数）」を開く
-    // 案B の行は ON にするまで出ない（つまみが増えたことを畳んだまま見せない）
-    expect(screen.queryByLabelText("bass-anchor-rest-on")).toBeNull();
-    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
-    await userEvent.click(screen.getByLabelText("bass-anchor-rest-on"));
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect(op).toBe("gen_bass"); // ノブが立っている＝ライブラリでなく生成器を叩く
-    expect(body.anchorLock).toBe(true);
-    expect(body.anchorRestOnSyncopatedKick).toBe(true);
-    expect("anchorGrammar" in body).toBe(false); // 文法は既定（pedal_answer）＝未送信＝3a と同じ体
-    expect("anchorStrictness" in body).toBe(false); // 厳しさは既定（変わり目だけ）＝未送信
-  });
-
-  it("T4k 錨の厳しさ（k-6・2026-09-15 裁定）＝既定『変わり目だけ』・案B 既定 ON／『全キック』と案B OFF を選ぶと明示で飛ぶ", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    getComposition.mockResolvedValue({
-      neta: mk("s1", "section"),
-      children: [
-        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
-      ],
-    });
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
-    expect(screen.queryByLabelText("bass-anchor-strict-every-kick")).toBeNull(); // ON にするまで出ない
-    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
-    expect(screen.getByLabelText("bass-anchor-strict-chord-change").getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByLabelText("bass-anchor-rest-on").getAttribute("aria-pressed")).toBe("true");
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const b1 = music.mock.calls[0]![1] as Record<string, unknown>;
-    expect(b1.anchorRestOnSyncopatedKick).toBe(true);
-    expect("anchorStrictness" in b1).toBe(false);
-    expect("riffVariationSteps" in b1).toBe(false); // (k-7) 変奏の段は既定 OFF＝未送信
-  });
-
-  it("T4k' 『全キック』と案B OFF を選ぶと anchorStrictness と明示の false が飛ぶ", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    getComposition.mockResolvedValue({
-      neta: mk("s1", "section"),
-      children: [
-        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
-      ],
-    });
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
-    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
-    await userEvent.click(screen.getByLabelText("bass-anchor-strict-every-kick"));
-    await userEvent.click(screen.getByLabelText("bass-anchor-rest-off"));
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const b2 = music.mock.calls[0]![1] as Record<string, unknown>;
-    expect(b2.anchorStrictness).toBe("every-kick");
-    expect(b2.anchorRestOnSyncopatedKick).toBe(false); // 明示の false（未指定と区別＝api 既定 ON に落ちない）
-  });
-
-  // ── 到達口④の通知（2026-09-10 監査 重大①＝ここが完全に無言だった） ──
-  it("T4e 錨が立たなかった通知（meta.warnings）が実際に画面へ出る＝『何も起きず何も言わない』を潰す", async () => {
-    music.mockReset();
-    // ドラムの無いセクションで「キックにルートを置く」を ON にしたときにサーバが返す形そのもの。
-    const WARN = "ドラムが無いので「キックにルートを置く」は当てていません（従来どおり生成しました）";
+    // 6/8 以外の複合拍子でウォーキングを選んだときにサーバが返す形そのもの。
+    const WARN = "この拍子（9/8）ではウォーキングベース（JZ-WALK）に対応していません（従来どおり生成しました）";
     music.mockResolvedValue({ items: [], meta: { warnings: [WARN] } });
     getComposition.mockResolvedValue({
       neta: mk("s1", "section"),
@@ -1582,33 +1503,13 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
-    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    await userEvent.click(screen.getByLabelText("bass-fill-0.2")); // 生成器を叩く既存ノブ
     await userEvent.click(screen.getByLabelText("gen-gen_bass"));
     await waitFor(() => expect(music).toHaveBeenCalled());
     // 実 DOM に文言が出る（＝aria-label で掴めて、中身が落ち先を言い分けた文章になっている）
     const el = await screen.findByLabelText("gen-warning");
-    expect(el.textContent).toContain("ドラムが無いので");
-    expect(el.textContent).toContain("キックにルートを置く");
-  });
-
-  it("T4e'' 隙間刺し ON：web は型＋variety を同送し、それを使わなかった通知が画面に出る（2026-09-13 M6a 監査 中1）", async () => {
-    music.mockReset();
-    const WARN = "「キックの隙間に刺す（鍵盤）」は1通りだけなので、候補は 4 件でなく1件です";
-    music.mockResolvedValue({ items: [], meta: { warnings: [WARN] } });
-    chordSection();
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
-    await userEvent.click(screen.getByLabelText("comp-key-stab-on"));
-    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect(body.keyStab).toBe(true);
-    expect(body.variety).toBe(4); // 捨てられる入力が実際に飛んでいる＝通知が要る根拠
-    const el = await screen.findByLabelText("gen-warning");
-    expect(el.textContent).toContain("件でなく1件");
+    expect(el.textContent).toContain("この拍子（9/8）では");
+    expect(el.textContent).toContain("JZ-WALK");
   });
 
   it("T4e' 通知が無いときは gen-warning を出さない（陰性対照＝出っぱなしにしない）", async () => {
@@ -1624,8 +1525,7 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
-    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    await userEvent.click(screen.getByLabelText("bass-fill-0.2")); // 生成器を叩く既存ノブ
     await userEvent.click(screen.getByLabelText("gen-gen_bass"));
     await waitFor(() => expect(music).toHaveBeenCalled());
     expect(screen.queryByLabelText("gen-warning")).toBeNull();
@@ -1645,7 +1545,7 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     await screen.findByLabelText("block-ch1@0");
     await userEvent.click(screen.getByLabelText("tools"));
     await userEvent.click(screen.getByLabelText("drawer-bass"));
-    // ジャンル chip（前面）には出ない＝耳未判定の試作を既定の道に置かない
+    // ジャンル chip（前面）には出ない＝名指しした時だけ立つ試作を既定の道に置かない
     expect(screen.queryByLabelText("bass-genre-JZ-WALK")).toBeNull();
     await userEvent.click(screen.getByLabelText("group-bassfine")); // 「細かく（型直指定）」を開く
     const sel = screen.getByLabelText("bass-style").querySelector("select") as HTMLSelectElement; // aria-label は label 側
@@ -1657,236 +1557,4 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(body.style).toBe("JZ-WALK");
   });
 
-  // ── 到達口④＝web TinkerSheet（M3-3c・リフ文法＝錨の体） ──
-  it("T4c 間のリフ＝文法を選ぶと body.anchorGrammar が飛ぶ（錨 OFF の間は行が出ない・既定は未送信）", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    getComposition.mockResolvedValue({
-      neta: mk("s1", "section"),
-      children: [
-        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
-      ],
-    });
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
-    expect(screen.queryByLabelText("bass-grammar-gallop_pedal")).toBeNull(); // 錨 OFF の間は畳んだまま
-    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
-    await userEvent.click(screen.getByLabelText("bass-grammar-gallop_pedal"));
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect(body.anchorLock).toBe(true);
-    expect(body.anchorGrammar).toBe("gallop_pedal");
-  });
-
-  // ── 到達口④＝web TinkerSheet（M3-3b・コード追従の5ガード） ──
-  it("T4b コード追従＝『コードに合わせ直す』ONで body.chordFollow が飛ぶ", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    getComposition.mockResolvedValue({
-      neta: mk("s1", "section"),
-      children: [
-        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
-      ],
-    });
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine")); // 「細かく（ドラム絡み・分数）」を開く
-    await userEvent.click(screen.getByLabelText("bass-chordfollow-on"));
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect(op).toBe("gen_bass"); // ノブが立っている＝ライブラリでなく生成器を叩く
-    expect(body.chordFollow).toBe(true);
-  });
-
-  it("T4b' コード追従 OFF（既定）は chordFollow を送らない＝従来 bit 一致", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    getComposition.mockResolvedValue({
-      neta: mk("s1", "section"),
-      children: [
-        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
-      ],
-    });
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("bass-fill-0.2")); // 既存ノブだけ立てて生成器経路へ
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect("chordFollow" in body).toBe(false);
-  });
-
-  it("T4'' 錨 OFF（既定）は anchorLock を送らない＝従来 bit 一致", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    getComposition.mockResolvedValue({
-      neta: mk("s1", "section"),
-      children: [
-        { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 0, quality: "", start: 0, dur: 4 }] } }), children: [] } },
-      ],
-    });
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("bass-fill-0.2")); // 既存ノブ（フィル）だけ立てて生成器経路へ
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect("anchorLock" in body).toBe(false);
-    expect("anchorRestOnSyncopatedKick" in body).toBe(false);
-  });
-
-  // ── 到達口④＝web TinkerSheet コード楽器引き出し（M5 ギター型・「作ったのに触れないノブは硬化する」） ──
-  const chordSection = () => getComposition.mockResolvedValue({
-    neta: mk("s1", "section"),
-    children: [
-      { position: 0, ord: 0, node: { neta: mk("ch1", "chord_progression", { content: { chords: [{ root: 9, quality: "m", start: 0, dur: 4 }] } }), children: [] } },
-    ],
-  });
-  it("M5 ギターのリフ＝文法を選ぶと生成器（gen_chord_pattern）へ guitarRiff/anchorLock/guitarShape が飛ぶ（錨と手の形は文法を選ぶまで出ない）", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    chordSection();
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
-    await userEvent.click(screen.getByLabelText("group-compguitar"));
-    expect(screen.queryByLabelText("comp-guitar-anchor-on")).toBeNull();
-    await userEvent.selectOptions(within(screen.getByLabelText("comp-guitar-riff")).getByRole("combobox"), "gallop");
-    await userEvent.click(screen.getByLabelText("comp-guitar-anchor-on"));
-    await userEvent.click(screen.getByLabelText("comp-guitar-shape-on"));
-    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect(op).toBe("gen_chord_pattern"); // ライブラリ検索に落ちない
-    expect(body.guitarRiff).toBe("gallop");
-    expect(body.anchorLock).toBe(true);
-    expect(body.guitarShape).toBe(true);
-    expect(Array.isArray(body.chords)).toBe(true); // 進行も同送
-    expect("guitarPalmGate" in body).toBe(false); // 刻みの音価のつまみは既定＝未送信＝源流値（bit 一致）
-    expect("guitarGhostVel" in body).toBe(false);
-    expect("riffVariationSteps" in body).toBe(false); // (k-7) 変奏の段は既定 OFF＝未送信
-  });
-  it("刻みの音価のつまみ（2026-09-15 裁定「つまみで選ぶ」）＝選ぶと guitarPalmGate／guitarGhostVel が飛ぶ（リフ文法を選ぶまで出ない）", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    chordSection();
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
-    await userEvent.click(screen.getByLabelText("group-compguitar"));
-    expect(screen.queryByLabelText("comp-guitar-palm-1")).toBeNull();
-    await userEvent.selectOptions(within(screen.getByLabelText("comp-guitar-riff")).getByRole("combobox"), "power_chug");
-    expect(screen.getByLabelText("comp-guitar-palm-default").getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByLabelText("comp-guitar-ghost-default").getAttribute("aria-pressed")).toBe("true");
-    await userEvent.click(screen.getByLabelText("comp-guitar-palm-1"));
-    await userEvent.click(screen.getByLabelText("comp-guitar-ghost-70"));
-    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect(op).toBe("gen_chord_pattern");
-    expect(body.guitarPalmGate).toBe(1);
-    expect(body.guitarGhostVel).toBe(70);
-  });
-  // (k-7) 繰り返しに変奏の層＝「変奏を3段で並べる（なし／中／多め）」＝ON で riffVariationSteps が飛び、返った3件をトレイに全部積む。
-  const stepItems = (kind: string) => ({ items: ["変奏なし（従来）", "変奏 中", "変奏 多め"].map((label, i) => ({ kind, content: kind === "bass" ? { notes: [{ pitch: 36 + i, start: 0, dur: 1 }] } : { mode: "strum", voicing: { tones: ["R"] }, steps: 16, hits: [{ step: i, dur: 1 }] }, label })) });
-  it("(k-7) ギター：リフ文法を選ぶまで出ない・既定 OFF・ON で riffVariationSteps が飛びカード3枚", async () => {
-    music.mockReset();
-    music.mockResolvedValue(stepItems("chord_pattern"));
-    chordSection();
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
-    await userEvent.click(screen.getByLabelText("group-compguitar"));
-    expect(screen.queryByLabelText("comp-guitar-variation-on")).toBeNull();
-    await userEvent.selectOptions(within(screen.getByLabelText("comp-guitar-riff")).getByRole("combobox"), "power_chug");
-    expect(screen.getByLabelText("comp-guitar-variation-off").getAttribute("aria-pressed")).toBe("true");
-    await userEvent.click(screen.getByLabelText("comp-guitar-variation-on"));
-    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    expect((music.mock.calls[0]![1] as Record<string, unknown>).riffVariationSteps).toBe(true);
-    await waitFor(() => expect(screen.getAllByLabelText("candidate-label").map((e) => e.textContent)).toEqual(["変奏なし（従来）", "変奏 中", "変奏 多め"]));
-  });
-  it("(k-7) ベース：錨 ON の時だけ出る・ON で riffVariationSteps が飛び、ベースも3件をトレイへ全部積む（従来は items[0] だけ）", async () => {
-    music.mockReset();
-    music.mockResolvedValue(stepItems("bass"));
-    chordSection();
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
-    expect(screen.queryByLabelText("bass-variation-on")).toBeNull();
-    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
-    expect(screen.getByLabelText("bass-variation-off").getAttribute("aria-pressed")).toBe("true");
-    await userEvent.click(screen.getByLabelText("bass-variation-on"));
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const body = music.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body.anchorLock).toBe(true);
-    expect(body.riffVariationSteps).toBe(true);
-    await waitFor(() => expect(screen.getAllByLabelText("candidate-card")).toHaveLength(3));
-  });
-  it("(k-7) 監査 重大①：段で多め≡中の通知（meta.warnings）が画面に出る＝3枚を並べても黙らない", async () => {
-    music.mockReset();
-    const WARN = "変奏（多め）は中と同じ音になりました（この文法・この長さでは、多めで足す断片化・広げ・装飾が当たる所がありません）";
-    music.mockResolvedValue({ ...stepItems("bass"), meta: { warnings: [WARN] } });
-    chordSection();
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-bass"));
-    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
-    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
-    await userEvent.click(screen.getByLabelText("bass-variation-on"));
-    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const el = await screen.findByLabelText("gen-warning");
-    expect(el.textContent).toContain("中と同じ音");
-  });
-  it("M6a 鍵盤の隙間刺し＝ON で生成器（gen_chord_pattern）へ keyStab が飛ぶ（ライブラリに落ちない）・OFF に戻すと送らない", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    chordSection();
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
-    expect(screen.getByLabelText("comp-key-stab-off").getAttribute("aria-pressed")).toBe("true"); // 既定 OFF
-    await userEvent.click(screen.getByLabelText("comp-key-stab-on"));
-    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
-    await waitFor(() => expect(music).toHaveBeenCalled());
-    const [op, body] = music.mock.calls[0] as [string, Record<string, unknown>];
-    expect(op).toBe("gen_chord_pattern");
-    expect(body.keyStab).toBe(true);
-    expect("guitarRiff" in body).toBe(false);
-  });
-  it("M5 ギターのリフ未選択（既定）は guitarRiff 系を送らない＝従来どおりライブラリ経路", async () => {
-    music.mockReset();
-    music.mockResolvedValue({ items: [] });
-    listNeta.mockReset();
-    listNeta.mockResolvedValue([]); // ライブラリ未投入＝空トレイ（従来の既定経路）
-    chordSection();
-    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
-    await screen.findByLabelText("block-ch1@0");
-    await userEvent.click(screen.getByLabelText("tools"));
-    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
-    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
-    // 既定はネタ帳ライブラリを引く（生成器を叩かない）＝ギター型の新キーはどこにも出ない
-    await waitFor(() => expect(listNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "chord_pattern", scope: "library" })));
-    expect(music).not.toHaveBeenCalled();
-  });
 });

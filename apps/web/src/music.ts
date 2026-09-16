@@ -3,7 +3,6 @@ import { Chord as TonalChord, Note as TonalNote } from "tonal";
 // 不変の音楽知識（音名・コード品質→インターバル）は @cm/music-core が SSOT（負債D3・design 決定2b）。
 // PITCH_NAMES は re-export して既存の web import 面（useNetaEditor 等）を不変に保つ。
 import { PITCH_NAMES, QUALITY_INTERVALS, applyFeel, applyFeelByPart, type Feel, type HumanizePart, type HumanizeWarn, type Note as CoreNote } from "@cm/music-core";
-import { realizeGuitarRiff } from "@cm/music-core"; // M5 ギター型の実音化（api の検算と同じ1本）
 export { PITCH_NAMES, applyFeel, applyFeelByPart };
 export type { Feel, HumanizePart, HumanizeWarn };
 
@@ -667,7 +666,7 @@ export interface ChordVoicing {
   style?: "keyboard" | "guitar" | "auto"; // ボイシング奏法（2026-07-22 研究doc guitar-comping-vocabulary）。未指定＝keyboard＝現行 voiceToTop（不変）。guitar＝voiceGuitar（最低声=根音・3度1個・根音/5度重複・弦チューニング由来の度数分布）。auto＝レンダ時に program の GM ファミリから導出（guitar系24-31→guitar／他→keyboard・奏法UIスライスA/B）＝program 未知なら keyboard 相当。
   strumMs?: number; // 弦順ロールの1弦あたり時差（ms）。style:"guitar"＋mode:"strum"＋テンポ既知のとき和音内各声をダウン=低→高に strumMs ずつ決定的にずらす（研究doc §3）。既定/0＝時差なし＝全声同時（bit一致）。
 }
-export interface ChordHit { step: number; dur: number; vel?: number; dir?: "D" | "U"; voice?: "mono" | "power" | "power8"; riff?: { kind: "accent" | "note" | "ghost" | "dead"; deg: number; role: string; anchor: boolean; strong: boolean } } // M5 voice?=ヒット単位のボイシング（ギター型のみ・MONO/R+5/R+5+8）／riff?=コード追従が読む注記。どちらも guitarRiff content にだけ生える＝既存ネタは不変（bit一致）。 // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）。S3 dir?=ギター×strum のストローク向き（D=ダウン低→高・U=アップ高→低の上位声・0.78×）。未指定=従来（=D 相当）＝bit一致。
+export interface ChordHit { step: number; dur: number; vel?: number; dir?: "D" | "U" } // dur=step数（1step=16分）。#29 P2 vel?=このヒットの全声部同値ベロシティ（未指定=普通→再生 vel??100）。S3 dir?=ギター×strum のストローク向き（D=ダウン低→高・U=アップ高→低の上位声・0.78×）。未指定=従来（=D 相当）＝bit一致。
 // 左手（LH・S3・2026-07-22・研究doc piano §2）：コード楽器ネタに内蔵する左手土台。resolved style が keyboard の
 // ときだけ実音化（guitar は無視）。未定義＝左手なし＝既存全ネタと bit 一致。preset(root/root5/oct)＝RH の小節頭＋
 // コードチェンジを anchor に白玉（保守的既定）。custom＝hits を度数解決してそのまま（辞書由来）。
@@ -690,14 +689,6 @@ export interface ChordPatternContent {
   // strum のみ（arp／ギター弦順ロール・アップストロークは当面無効＝S1 はオルガン/keyboard の strum 中心）。
   // オルガンの no-lift（切らずに指替え）は再アタックで近似＝試聴音源に投資しない（枝3と整合）。
   followChords?: true;
-  // M5 ギター型（phrase_maker ギター gen2 移植）：リフ文法の相対 hits（voice/riff 注記）を**進行に当てて** music-core
-  //   `realizeGuitarRiff` で実音化する印（api の検算と同じ1本）。pitch＝音高の出所（chordfollow／handshape＝耳未判定）。
-  //   未指定＝キーを生やさない＝既存全ネタと bit 一致。
-  guitarRiff?: { grammar: string; pitch: "chordfollow" | "handshape"; anchorLock?: true; seed?: number };
-  engine?: { version: string };
-  // M6a-6a 鍵盤の隙間刺し（phrase_maker legacy rock_piano／build_rock 移植）の印。hits は keyboard strum の相対形＝実音化は既存経路のまま
-  //   （このキーでは分岐しない）。fallback＝スネアが無く 2拍裏・4拍裏に刺した。未指定＝キーを生やさない＝既存ネタと bit 一致。
-  keyStab?: { fallback?: true };
 }
 const CHORD_BASE = 48; // C3 付近（voicing.octave=0 の基準）
 // #29 P2 コード楽器の3値ベロシティ語彙（普通=vel 省略→下流 vel??100）。耳較正で調整可＝保存データは実値なので既存不変。
@@ -948,14 +939,6 @@ function chordSegments(start: number, dur: number, firstCh: ChordEntry | null, c
 // （＝ストレート同時発音＝bit一致）＝レンダ境界（buildPlayback）でテンポが既知の場所からのみ流す（feel 層と同流儀）。
 // program＝voicing.style="auto" の奏法導出（GM ファミリ）に使う。未指定＝auto は keyboard 相当（bit一致）。
 export function resolveChordPattern(content: ChordPatternContent, chords: ChordEntry[] = [], key = 0, tempo?: number, program?: number): Note[] {
-  // M5 ギター型：content.guitarRiff が在る時だけ（既存ネタは通らない＝bit一致）。コードは step の拍で引く。
-  if (content?.guitarRiff) {
-    const gr = content.guitarRiff;
-    return realizeGuitarRiff(normHits(content.hits), {
-      chordAtStep: (s) => { const ch = bassChordAt(s * BASS_STEP_TO_BEAT, chords); return ch ? { root: ch.root, quality: ch.quality, bass: ch.bass ?? null } : null; },
-      keyPc: key, tempo, engine: gr.pitch === "handshape" ? "handshape" : "chordfollow", seed: gr.seed,
-    }).notes;
-  }
   const mode = content?.mode ?? "strum";
   const v = resolveAutoStyle(content?.voicing ?? { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, program);
   const hits = normHits(content?.hits).sort((a, b) => a.step - b.step);

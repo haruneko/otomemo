@@ -225,31 +225,12 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // コード楽器（chord_pattern）の伴奏パターン型ライブラリ（スライスC「聴いて選ぶ」）：""=おまかせ(omakase＝role/tempo 全体から)。
   // ジャンル名(ballad/rock/citypop/dance/folk) or 型ID直指定。genPart(gen_chord_pattern) が variety と共に body.pattern へ流す。
   const [compStyle, setCompStyle] = useState<string>("");
-  // M5 ギター型（phrase_maker ギター gen2 移植）：""＝使わない（未送信＝従来 bit 一致）。立っている時はライブラリでなく生成器を叩く。
-  const [gtrRiff, setGtrRiff] = useState<string>(""); // リフ文法（power_chug/pedal_answer/gallop）
-  const [gtrAnchor, setGtrAnchor] = useState<boolean>(false); // キックに刻みを揃える（ドラムが要る）
-  const [gtrShape, setGtrShape] = useState<boolean>(false); // 手の形で弾く（耳未判定の試作）
-  // 刻みの音価のつまみ（2026-09-15 裁定「つまみで選ぶ」）＝null＝既定（源流の値）＝未送信＝bit 一致。
-  const [gtrPalmGate, setGtrPalmGate] = useState<number | null>(null); // 刻みの短さ（0.1〜1）
-  const [gtrGhostVel, setGtrGhostVel] = useState<number | null>(null); // 弱音の強さ（1〜127）
-  // (k-7) 繰り返しに変奏の層＝「変奏を3段で並べる（なし／中／多め）」。false＝未送信＝従来 bit 一致。
-  const [gtrRiffSteps, setGtrRiffSteps] = useState<boolean>(false);
-  const [bassRiffSteps, setBassRiffSteps] = useState<boolean>(false);
-  // M6a-6a 鍵盤の隙間刺し：false＝未送信＝従来 bit 一致。立っている時はライブラリでなく生成器を叩き、セクションのドラムを同送。
-  const [compKeyStab, setCompKeyStab] = useState<boolean>(false);
   // ベース×ドラムノブ（奏法UIスライスD・design「gen_bass×ドラム結線」／slashBass）：UI未露出だった4ノブを「細かく（ドラム絡み）」群へ。
   // 全て 0/false＝未送信＝従来 bit 一致。kickLock/snareGap/approach はドラム在時のみ効く（API 挙動＝hint 文言で伝える）。
   const [bassKickLock, setBassKickLock] = useState<number>(0); // キックに噛む -1..1（負=逆相・キック裏8分）。0=OFF。
   const [bassSnareGap, setBassSnareGap] = useState<number>(0); // 2・4で抜く 0..1（スネア頭で音価を切る）。0=OFF。
   const [bassApproach, setBassApproach] = useState<number>(0); // 接近音 0..1（チェンジ直前を半音/全音接近）。0=OFF。
   const [bassSlash, setBassSlash] = useState<boolean>(false); // 分数の低音（chord.bass をアンカーに伝播）。false=OFF。
-  // 錨と間の分業（M3-3a・design.md 追補 (k)）：キックに必ずルートの錨を置き、間のリフは書き換えない。
-  //   kickLock（確率でキック共有率を近づける）とは排他。ドラムが要る。false=未送信=従来 bit 一致。
-  const [bassAnchor, setBassAnchor] = useState<boolean>(false);
-  const [bassAnchorRest, setBassAnchorRest] = useState<boolean>(true); // 案B＝拍頭でない無音キックはベースを休む（2026-09-15 裁定＝変わり目だけルートの既定に合わせて ON）
-  const [bassAnchorStrict, setBassAnchorStrict] = useState<"chord-change" | "every-kick">("chord-change"); // 錨の厳しさ（design.md 追補 (k-6)）
-  const [bassChordFollow, setBassChordFollow] = useState<boolean>(false); // M3-3b＝コード追従の5ガード（approach と排他）
-  const [bassGrammar, setBassGrammar] = useState<string>(""); // M3-3c＝anchorLock の体に敷くリフ文法（""＝既定 pedal_answer）
   const [detailsOpen, setDetailsOpen] = useState(false); // メロノブの詳細段（progressive disclosure）
   // P4：プリセット主役。選択中プリセット名（ハイライト用・手でノブを動かしたら "" へ）。
   const [preset, setPreset] = useState<string>("");
@@ -333,11 +314,11 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // ノブ（drum fill／bass fill・kickLock・snareGap・approach・分数／骨格ベース表面化）が立っている時だけ生成器へ。
       // 既定（おまかせ・ノブ無し）はライブラリ検索＝seed 未投入なら候補0＝空トレイ（従来の域外と同じ・エラーにしない）。
       const drumsWantsGen = typeof drumFill === "number" ? drumFill > 0 : !!drumFill;
-      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash || bassAnchor || bassChordFollow || bassStyle === "JZ-WALK";
+      const bassWantsGen = !!opts?.skeletonNetaId || bassFill > 0 || bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassSlash || bassStyle === "JZ-WALK";
       // ↑ JZ-WALK（M3-3d）はネタ帳ライブラリに無い**生成器だけの型**（毎回解く・相対パターンでもない）＝
       //   ここに入れないと web からはライブラリ検索に落ちて**候補0＝何も起きない**（＝触れないノブ＝硬化）。
       const libKind =
-        part.op === "gen_chord_pattern" && !gtrRiff && !compKeyStab ? "chord_pattern" // M5 ギター型はライブラリに無い＝生成器へ（入れないと触れないノブ）
+        part.op === "gen_chord_pattern" ? "chord_pattern"
         : part.op === "gen_drums" && !drumsWantsGen ? "rhythm"
         : part.op === "gen_bass" && !bassWantsGen ? "bass"
         : null;
@@ -418,48 +399,24 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         // ベース×ドラムノブ（スライスD）：0/false＝未送信＝bit一致。kickLock/snareGap/approach はドラム入力が要る＝
         // ドラム在時のみ drums を渡す（melody と同流儀・全係数0で drums 付きでも従来 bit 一致＝design 鉄則）。
         const bassDrums = ctx.sectionDrums();
-        if (bassDrums && (bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0 || bassAnchor)) body.drums = bassDrums;
+        if (bassDrums && (bassKickLock !== 0 || bassSnareGap > 0 || bassApproach > 0)) body.drums = bassDrums;
         if (bassKickLock !== 0) body.kickLock = bassKickLock;
         if (bassSnareGap > 0) body.snareGap = bassSnareGap;
         if (bassApproach > 0) body.approach = bassApproach;
         if (bassSlash) body.slashBass = true;
-        // 錨と間の分業（M3-3a）：ドラムのキックに必ずルートの錨を置く。ドラムが要る（api 側でも no-drums で通知）。
-        if (bassAnchor) body.anchorLock = true;
-        // 案B は api 側で既定 ON（chord-change）/OFF（every-kick）＝画面の値を常に明示で送る（false も未指定と区別）。
-        if (bassAnchor) body.anchorRestOnSyncopatedKick = bassAnchorRest;
-        // 錨の厳しさ：既定（変わり目だけ）は未送信＝api 既定と同じ。全キックの時だけ送る。
-        if (bassAnchor && bassAnchorStrict === "every-kick") body.anchorStrictness = "every-kick";
-        // リフ文法（M3-3c）：錨の体。""＝既定（pedal_answer）＝未送信＝従来と同じ体。
-        if (bassAnchor && bassGrammar) body.anchorGrammar = bassGrammar;
-        // (k-7) 変奏を3段で並べる：錨 ON の時だけ送る（api が3件を items で返す）。
-        if (bassAnchor && bassRiffSteps) body.riffVariationSteps = true;
-        // コード追従の5ガード（M3-3b）：リズムは動かさず音高だけを進行へ写す。ドラムは要らない（コードだけで立つ）。
-        if (bassChordFollow) body.chordFollow = true;
       }
       // コード楽器＝伴奏パターン（chord_pattern・スライスC）：ジャンルchip(compStyle) を pattern へ、variety で別々の型を複数取る。
       //   ""＝おまかせ＝omakase 番兵（role/tempo 全体から）。型ID直指定は api 側で単数固定（compTypeById が真＝variety 無視）。
       if (part.op === "gen_chord_pattern") {
         body.pattern = compStyle || "omakase";
         body.variety = 4;
-        // M5 ギター型：文法を選んだ時だけ送る（""＝未送信＝従来）。錨はドラムがあれば同送（無ければ api が理由を返す）。
-        if (gtrRiff) {
-          body.guitarRiff = gtrRiff;
-          if (gtrAnchor) { body.anchorLock = true; const d = ctx.sectionDrums(); if (d) body.drums = d; }
-          if (gtrShape) body.guitarShape = true;
-          if (gtrPalmGate != null) body.guitarPalmGate = gtrPalmGate;
-          if (gtrGhostVel != null) body.guitarGhostVel = gtrGhostVel;
-          if (gtrRiffSteps) body.riffVariationSteps = true; // (k-7) 変奏を3段で並べる
-        }
-        // M6a-6a 鍵盤の隙間刺し：ON の時だけ送る（ドラムが無ければ api が理由を返す）。
-        if (compKeyStab) { body.keyStab = true; const d = ctx.sectionDrums(); if (d) body.drums = d; }
       }
       const r = await api.music<{ items: { kind: string; content: unknown; label?: string; meta?: CandMeta }[]; meta?: { warnings?: string[] } }>(part.op, body);
       // meta.warnings＝サーバが黙らず伝える非ブロック警告（例：body フィルが解けず型辞書へ落ちた・bars 上限クランプ）。
       // オーナー裁定（2026-08-29）：UI で一切読んでいなかったのを直す＝ダイアログで利用者へ見せる（App.tsx の設定ダイアログと同じ作法）。
       if (r.meta?.warnings?.length) setGenWarning(r.meta.warnings.join("\n"));
       // コード楽器は複数候補を全件トレイへ積む（先頭＝kind差替 or append／以降＝append）。他パーツは従来どおり先頭1件。
-      // (k-7) ベースの変奏の段（riffVariationSteps）も3件すべてを積む。
-      if (part.op === "gen_chord_pattern" || (part.op === "gen_bass" && (r.items?.length ?? 0) > 1)) {
+      if (part.op === "gen_chord_pattern") {
         (r.items ?? []).forEach((it, i) => pushCand({ kind: it.kind, content: it.content, label: it.label, meta: it.meta }, (opts?.append ?? false) || i > 0));
       } else {
         const item = r.items?.[0];
@@ -693,12 +650,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     drumFillStyle, setDrumFillStyle, drumBodyAim, setDrumBodyAim, drumBodyDrummer, setDrumBodyDrummer, // フィルの作り方＝格子/型辞書/解いて作る（M2/M3）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
-    gtrRiff, setGtrRiff, gtrAnchor, setGtrAnchor, gtrShape, setGtrShape, gtrPalmGate, setGtrPalmGate, gtrGhostVel, setGtrGhostVel, gtrRiffSteps, setGtrRiffSteps, bassRiffSteps, setBassRiffSteps, // (k-7) 変奏の段／M5 ギター型（リフ文法・キックに刻み・手の形・刻みの音価のつまみ）
-    compKeyStab, setCompKeyStab, // M6a-6a 鍵盤の隙間刺し
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
-    bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, bassAnchorStrict, setBassAnchorStrict, // 錨と間の分業（M3-3a）＋錨の厳しさ（k-6）
-    bassChordFollow, setBassChordFollow, // コード追従の5ガード（M3-3b）
-    bassGrammar, setBassGrammar, // リフ文法（M3-3c）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ
     applyPreset, rollDice, segRow, sliderRow,

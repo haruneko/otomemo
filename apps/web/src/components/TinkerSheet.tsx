@@ -417,7 +417,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE", "JZ-WALK"];
   const bassDrawer = (
     <>
-      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); gen.setBassChordFollow(false); gen.setBassGrammar(""); gen.setBassRiffSteps(false); })}
+      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">ベースのジャンル</div>
         <div className="tk-palette" aria-label="bass-genre">
@@ -450,7 +450,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               <option value="ED-OFFBEAT">オフビート</option>
               <option value="ED-SUSTAIN">ロー持続</option>
               <option value="VR-8DRIVE">高速8分ドライブ</option>
-              <option value="JZ-WALK">ウォーキング（試作・耳未判定）</option>
+              <option value="JZ-WALK">ウォーキング（試作）</option>
             </select>
           </label>
         )}
@@ -490,71 +490,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               ))}
             </span>
           </div>
-          {/* 錨と間の分業（M3-3a・design.md 追補 (k)）＝キックに必ずルートを置き、間のリフは書き換えない。
-              「キックに合わせる」（確率）とは別物なので同じ畳みの中で並べる。ONの時だけ案B の1行が出る。 */}
-          <div className="knob-seg" aria-label="bass-anchor">
-            <span className="knob-name">キックにルートを置く<small>間のリフはそのまま残す</small></span>
-            <span className="seg-ctl">
-              {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
-                <button key={lab} type="button" className={"seg-b" + (gen.bassAnchor === v ? " on" : "")} aria-label={`bass-anchor-${v ? "on" : "off"}`} aria-pressed={gen.bassAnchor === v} onClick={() => gen.setBassAnchor(v)}>{lab}</button>
-              ))}
-            </span>
-          </div>
-          {/* リフ文法（M3-3c）＝錨の「体」＝間に鳴るリフの型。ONの時だけ出す（畳んだまま増やさない）。
-              ジャンル型（上のパレット）を選んでいる時はそちらが体になるので、この行は効かない。 */}
-          {gen.bassAnchor && (
-            <div className="knob-seg" aria-label="bass-grammar">
-              <span className="knob-name">間のリフ<small>錨の間に鳴る型（ジャンル型を選ぶとそちらが優先）</small></span>
-              <span className="seg-ctl">
-                {([["ペダル", "pedal_answer"], ["ギャロップ", "gallop_pedal"], ["オクターブ", "octave_call_response"]] as [string, string][]).map(([lab, v]) => (
-                  <button key={v} type="button" className={"seg-b" + ((gen.bassGrammar || "pedal_answer") === v ? " on" : "")} aria-label={`bass-grammar-${v}`} aria-pressed={(gen.bassGrammar || "pedal_answer") === v} onClick={() => gen.setBassGrammar(v)}>{lab}</button>
-                ))}
-              </span>
-            </div>
-          )}
-          {/* 錨の厳しさ（design.md 追補 (k-6)・2026-09-15 裁定）＝既定は「変わり目だけ」。全キックは phrase_maker 源流と同じ。 */}
-          {gen.bassAnchor && (
-            <div className="knob-seg" aria-label="bass-anchor-strict">
-              <span className="knob-name">ルートを置くキック<small>変わり目だけ＝同じコードの間は5度・b7なども残す</small></span>
-              <span className="seg-ctl">
-                {([["変わり目だけ", "chord-change"], ["全キック", "every-kick"]] as [string, "chord-change" | "every-kick"][]).map(([lab, v]) => (
-                  <button key={v} type="button" className={"seg-b" + (gen.bassAnchorStrict === v ? " on" : "")} aria-label={`bass-anchor-strict-${v}`} aria-pressed={gen.bassAnchorStrict === v} onClick={() => gen.setBassAnchorStrict(v)}>{lab}</button>
-                ))}
-              </span>
-            </div>
-          )}
-          {/* (k-7) 繰り返しに変奏の層＝なし／中／多めの3件を候補トレイに並べる（文法の体にだけ効く・中身は仮＝耳で選ぶ）。 */}
-          {gen.bassAnchor && (
-            <div className="knob-seg" aria-label="bass-variation">
-              <span className="knob-name">変奏を3段で並べる<small>なし／中／多め＝2回目以降の答えを変える</small></span>
-              <span className="seg-ctl">
-                {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
-                  <button key={lab} type="button" className={"seg-b" + (gen.bassRiffSteps === v ? " on" : "")} aria-label={`bass-variation-${v ? "on" : "off"}`} aria-pressed={gen.bassRiffSteps === v} onClick={() => gen.setBassRiffSteps(v)}>{lab}</button>
-                ))}
-              </span>
-            </div>
-          )}
-          {gen.bassAnchor && (
-            <div className="knob-seg" aria-label="bass-anchor-rest">
-              <span className="knob-name">裏キックは休む<small>拍頭でないキックにはベースを置かない</small></span>
-              <span className="seg-ctl">
-                {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
-                  <button key={lab} type="button" className={"seg-b" + (gen.bassAnchorRest === v ? " on" : "")} aria-label={`bass-anchor-rest-${v ? "on" : "off"}`} aria-pressed={gen.bassAnchorRest === v} onClick={() => gen.setBassAnchorRest(v)}>{lab}</button>
-                ))}
-              </span>
-            </div>
-          )}
-          {/* コード追従の5ガード（M3-3b・design.md 追補 (k)）＝リズムは動かさず音高だけをコードへ寄せ直す。
-              「接近」（確率で1音だけ接近音にする）の上位互換なので、ONの間は「接近」は当たらない。 */}
-          <div className="knob-seg" aria-label="bass-chordfollow">
-            <span className="knob-name">コードに合わせ直す<small>リズムはそのまま・音だけコードへ</small></span>
-            <span className="seg-ctl">
-              {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
-                <button key={lab} type="button" className={"seg-b" + (gen.bassChordFollow === v ? " on" : "")} aria-label={`bass-chordfollow-${v ? "on" : "off"}`} aria-pressed={gen.bassChordFollow === v} onClick={() => gen.setBassChordFollow(v)}>{lab}</button>
-              ))}
-            </span>
-          </div>
-          <p className="tk-drawnote">ドラムが居る時だけ上3つ（キック/2・4/接近）と「キックにルートを置く」が効きます。分数の低音は単独で効きます。「キックにルートを置く」は「キックに合わせる」より優先されます。「コードに合わせ直す」はコードだけで効き、ONの間は「接近」より優先されます。</p>
+          <p className="tk-drawnote">ドラムが居る時だけ上3つ（キック/2・4/接近）が効きます。分数の低音は単独で効きます。</p>
         </>}
       </div>
       <div className="tk-drawer-foot">
@@ -567,7 +503,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   //   ジャンルchip→「候補を出す」で variety=4 の別々の型を候補トレイへ（cand-card＋▶試聴＋採用の既存動線）。
   const chordInstDrawer = (
     <>
-      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setGtrRiff(""); gen.setGtrAnchor(false); gen.setGtrShape(false); gen.setGtrPalmGate(null); gen.setGtrGhostVel(null); gen.setGtrRiffSteps(false); gen.setCompKeyStab(false); })}
+      {drawerHead("コード楽器", () => gen.setCompStyle(""))}
       <div className="tk-drawer-body">
         <div className="tk-hublab">伴奏のジャンル（型を名前で選ばず耳で選ぶ）</div>
         <div className="tk-palette" aria-label="comp-genre">
@@ -586,68 +522,6 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
             </select>
           </label>
         )}
-        {/* M5 ギター型（phrase_maker ギター gen2 移植）＝リフ文法を選んだ時だけ生成器を叩く。錨・手の形は文法を選ぶまで出さない。 */}
-        {gacc("compguitar", "ギターのリフ（試作）", "リフ文法・キックに刻み")}
-        {openGroups.compguitar && <>
-          <label className="knob-row" aria-label="comp-guitar-riff">
-            <span className="knob-name">リフ文法</span>
-            <select value={gen.gtrRiff} onChange={(e) => gen.setGtrRiff(e.target.value)}>
-              <option value="">—（使わない）</option>
-              <option value="power_chug">パワーコードの刻み</option>
-              <option value="pedal_answer">低音弦ペダル＋答え</option>
-              <option value="gallop">ギャロップ</option>
-            </select>
-          </label>
-          {gen.gtrRiff && <>
-            {/* (k-7) 繰り返しに変奏の層＝なし／中／多めの3件を候補トレイに並べる（中身は仮＝耳で選ぶ）。 */}
-            <div className="knob-seg" aria-label="comp-guitar-variation">
-              <span className="knob-name">変奏を3段で並べる<small>なし／中／多め＝2回目以降の答えを変える</small></span>
-              <span className="seg-ctl">
-                <button type="button" className={"seg-b" + (!gen.gtrRiffSteps ? " on" : "")} aria-label="comp-guitar-variation-off" aria-pressed={!gen.gtrRiffSteps} onClick={() => gen.setGtrRiffSteps(false)}>OFF</button>
-                <button type="button" className={"seg-b" + (gen.gtrRiffSteps ? " on" : "")} aria-label="comp-guitar-variation-on" aria-pressed={gen.gtrRiffSteps} onClick={() => gen.setGtrRiffSteps(true)}>ON</button>
-              </span>
-            </div>
-            <div className="knob-seg" aria-label="comp-guitar-anchor">
-              <span className="knob-name">キックに刻みを揃える<small>キックの位置に必ずパワーコード</small></span>
-              <span className="seg-ctl">
-                <button type="button" className={"seg-b" + (!gen.gtrAnchor ? " on" : "")} aria-label="comp-guitar-anchor-off" aria-pressed={!gen.gtrAnchor} onClick={() => gen.setGtrAnchor(false)}>OFF</button>
-                <button type="button" className={"seg-b" + (gen.gtrAnchor ? " on" : "")} aria-label="comp-guitar-anchor-on" aria-pressed={gen.gtrAnchor} onClick={() => gen.setGtrAnchor(true)}>ON</button>
-              </span>
-            </div>
-            <div className="knob-seg" aria-label="comp-guitar-shape">
-              <span className="knob-name">手の形で弾く<small>試作・耳で未確認</small></span>
-              <span className="seg-ctl">
-                <button type="button" className={"seg-b" + (!gen.gtrShape ? " on" : "")} aria-label="comp-guitar-shape-off" aria-pressed={!gen.gtrShape} onClick={() => gen.setGtrShape(false)}>OFF</button>
-                <button type="button" className={"seg-b" + (gen.gtrShape ? " on" : "")} aria-label="comp-guitar-shape-on" aria-pressed={gen.gtrShape} onClick={() => gen.setGtrShape(true)}>ON</button>
-              </span>
-            </div>
-            {/* 刻みの音価のつまみ（2026-09-15 裁定「つまみで選ぶ」）＝既定は源流の値（8分の刻み≒8分音符の34%・ゴースト vel 46）。 */}
-            <div className="knob-seg" aria-label="comp-guitar-palm">
-              <span className="knob-name">刻みの短さ<small>既定＝パームミュート風に短く</small></span>
-              <span className="seg-ctl">
-                {([["既定", null], ["短く", 0.5], ["長め", 1]] as [string, number | null][]).map(([lab, v]) => (
-                  <button key={lab} type="button" className={"seg-b" + (gen.gtrPalmGate === v ? " on" : "")} aria-label={`comp-guitar-palm-${v ?? "default"}`} aria-pressed={gen.gtrPalmGate === v} onClick={() => gen.setGtrPalmGate(v)}>{lab}</button>
-                ))}
-              </span>
-            </div>
-            <div className="knob-seg" aria-label="comp-guitar-ghost">
-              <span className="knob-name">弱音の強さ<small>既定＝ゴーストは弱く（46）</small></span>
-              <span className="seg-ctl">
-                {([["既定", null], ["もっと弱く", 30], ["強め", 70]] as [string, number | null][]).map(([lab, v]) => (
-                  <button key={lab} type="button" className={"seg-b" + (gen.gtrGhostVel === v ? " on" : "")} aria-label={`comp-guitar-ghost-${v ?? "default"}`} aria-pressed={gen.gtrGhostVel === v} onClick={() => gen.setGtrGhostVel(v)}>{lab}</button>
-                ))}
-              </span>
-            </div>
-          </>}
-        </>}
-        {/* M6a-6a 鍵盤の隙間刺し（phrase_maker legacy rock_piano／build_rock 移植）＝ON の時だけ生成器を叩きドラムを同送。 */}
-        <div className="knob-seg" aria-label="comp-key-stab">
-          <span className="knob-name">キックの隙間に刺す（鍵盤）<small>スネアの位置に和音・ドラムが要る</small></span>
-          <span className="seg-ctl">
-            <button type="button" className={"seg-b" + (!gen.compKeyStab ? " on" : "")} aria-label="comp-key-stab-off" aria-pressed={!gen.compKeyStab} onClick={() => gen.setCompKeyStab(false)}>OFF</button>
-            <button type="button" className={"seg-b" + (gen.compKeyStab ? " on" : "")} aria-label="comp-key-stab-on" aria-pressed={gen.compKeyStab} onClick={() => gen.setCompKeyStab(true)}>ON</button>
-          </span>
-        </div>
       </div>
       <div className="tk-drawer-foot">
         <button type="button" className="tool-item primary tk-gen" aria-label="gen-gen_chord_pattern" disabled={gen.genBusy || !hasChords} title={!hasChords ? "コードが要る（先に進行を置く）" : "候補を出す"} onClick={() => drawerGen("gen_chord_pattern")}>候補を出す</button>
