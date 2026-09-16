@@ -460,3 +460,4 @@ worker pytest 8緑（先に赤→緑・`test_content_text_includes_lyric_phrases
   そのまま当てている。order-0 の輪郭なので破綻はしないが、三連固有の統計を採るならデータ側の増分が要る。
   （三連スロットそのものは 2026-08-29 に実装済み＝design §2106(g)）
 - **`QUALITY_INTERVALS["11"]` の avoid note（2026-09-09・phrase_maker 移行計画 R2 で発見・本アーク外）**：`packages/music-core/src/index.ts:98` の `"11"`＝`[0,4,7,10,2,5]` は長3度(4)と ♮11(5) が半音でぶつかる（ドミナント 11th は3度を落として sus 化が定型。phrase_maker の `piano/gen2/chordlib.py:100`・`core/chordlib.py:131` も同じ癖）。直すと `11` を選んだ既存ネタの出音が変わる**意図的 bit 破壊＝耳確認が要る**ので、移行アークの検証器（avoid note ゲート＝生成器のボイシングのみに適用）で機械的に直さず、ここに置く。
+- **feel 層 humanize の長さの詰めが和音の別の音まで切る（2026-09-17・ピアノ伴奏の耳A で発見）**：`packages/music-core/src/index.ts:309`（`applyFeel`）は humanize 後に全音を時刻順に並べ、各音を「次に始まるどの音」の始まりで切る＝1声前提。部位 `chords`（コード楽器）など和音を含む既存経路でも、伸ばした和音が次の打鍵で切れている可能性。直すと既存の出音が変わる（耳確認要）ので未修正。ピアノ伴奏は `Feel.keepDur` で回避済み。
