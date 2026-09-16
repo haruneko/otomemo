@@ -2,7 +2,7 @@
 //   `bass_walking/v3/walking_v3.py` の**規則3本**を制約として課し、**乱数タイブレークを決定的規則へ置換**したもの。
 // 正典＝docs/design.md §2106 追補 (k)／計画 docs/drafts/2026-09-09-phrasemaker-port-master-plan.md §5-2 M3・§6-2。
 //
-// ⚠ **耳未判定**（計画 §4-1・§3-2 (k)）：v3 の3規則は **v2 への耳のフィードバック（「wild / forbidden-sounding」＝
+// 耳判定＝「使える」（2026-09-13）。以下は実装時の注記（計画 §4-1・§3-2 (k)）：v3 の3規則は **v2 への耳のフィードバック（「wild / forbidden-sounding」＝
 //    `v3/LISTEN.md:3`）から出た言葉**だが、**v3 自体は耳で確認されていない**（ACCEPTANCE 無し・批評パネルが
 //    アーキを否定して打ち切り＝`CONCEPT.md:90`）。だから **opt-in（style を名指しした時だけ立つ）**で、
 //    ジャンル名からの型選抜には**入れない**。良し悪しは作曲で使って耳が決める。
@@ -22,8 +22,7 @@
 //       区間ごとに交互＝源流の「区間ごとに弧の向きを変える」意図はそのまま）。**新しいソルトは足さない**
 //       （M0契約 §4 のソルト表は凍結・walking は乱数を消したので不要）。
 
-import { pmClamp, rootLowPitch } from "./anchorLock";
-import { chordScalePcs, chordTonePcs, fifthSemitone, seventhSemitone, thirdSemitone, hasThird, type CfChord } from "./chordFollow";
+import { pmClamp, rootLowPitch, chordScalePcs, chordTonePcs, fifthSemitone, seventhSemitone, thirdSemitone, hasThird, type CfChord } from "./chordScale"; // 2026-09-16 撤去した anchorLock/chordFollow から JZ-WALK の使う分だけ移した
 
 /** v3 の規則3本（`walking_v3.py:68-71,86-104`）。**摂動テストのために値を外から振れる**（§6-4 #9）。 */
 export interface WalkRules {

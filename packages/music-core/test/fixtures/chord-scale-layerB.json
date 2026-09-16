@@ -1,0 +1,303 @@
+{
+ "source": "2026-09-16 リフ撤去の前に tools/py-parity/cases-chord-follow/*.json（phrase_maker experiments/core/chordlib.py 層B の SCALE を dump_chord_follow.py が源流から焼いた参照値・36 ケース）から (quality, tones) → scale を重複なく抜いたもの。JZ-WALK が使う表（chordScale.ts scaleOffsets）の移植の検算用",
+ "cases": [
+  {
+   "quality": "7#5",
+   "tones": [
+    0,
+    4,
+    8,
+    10
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10
+   ]
+  },
+  {
+   "quality": "7b5",
+   "tones": [
+    0,
+    4,
+    6,
+    10
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10
+   ]
+  },
+  {
+   "quality": "7b9",
+   "tones": [
+    0,
+    4,
+    7,
+    10,
+    1
+   ],
+   "scale": [
+    0,
+    1,
+    2,
+    4,
+    5,
+    7,
+    9,
+    10
+   ]
+  },
+  {
+   "quality": "add9",
+   "tones": [
+    0,
+    4,
+    7,
+    2
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    5,
+    7,
+    9,
+    11
+   ]
+  },
+  {
+   "quality": "aug",
+   "tones": [
+    0,
+    4,
+    8
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    6,
+    8,
+    10
+   ]
+  },
+  {
+   "quality": "dim7",
+   "tones": [
+    0,
+    3,
+    6,
+    9
+   ],
+   "scale": [
+    0,
+    2,
+    3,
+    5,
+    6,
+    8,
+    9,
+    11
+   ]
+  },
+  {
+   "quality": "dom7",
+   "tones": [
+    0,
+    4,
+    7,
+    10
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    5,
+    7,
+    9,
+    10
+   ]
+  },
+  {
+   "quality": "m6",
+   "tones": [
+    0,
+    3,
+    7,
+    9
+   ],
+   "scale": [
+    0,
+    2,
+    3,
+    5,
+    7,
+    9,
+    10
+   ]
+  },
+  {
+   "quality": "m7b5",
+   "tones": [
+    0,
+    3,
+    6,
+    10
+   ],
+   "scale": [
+    0,
+    1,
+    3,
+    5,
+    6,
+    8,
+    10
+   ]
+  },
+  {
+   "quality": "maj",
+   "tones": [
+    0,
+    4,
+    7
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    5,
+    7,
+    9,
+    11
+   ]
+  },
+  {
+   "quality": "maj7",
+   "tones": [
+    0,
+    4,
+    7,
+    11
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    5,
+    7,
+    9,
+    11
+   ]
+  },
+  {
+   "quality": "maj9",
+   "tones": [
+    0,
+    4,
+    7,
+    11,
+    2
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    5,
+    7,
+    9,
+    11
+   ]
+  },
+  {
+   "quality": "min",
+   "tones": [
+    0,
+    3,
+    7
+   ],
+   "scale": [
+    0,
+    2,
+    3,
+    5,
+    7,
+    8,
+    10
+   ]
+  },
+  {
+   "quality": "min7",
+   "tones": [
+    0,
+    3,
+    7,
+    10
+   ],
+   "scale": [
+    0,
+    2,
+    3,
+    5,
+    7,
+    8,
+    10
+   ]
+  },
+  {
+   "quality": "power",
+   "tones": [
+    0,
+    7
+   ],
+   "scale": [
+    0,
+    3,
+    5,
+    7,
+    10
+   ]
+  },
+  {
+   "quality": "sus2",
+   "tones": [
+    0,
+    2,
+    7
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    5,
+    7,
+    9,
+    11
+   ]
+  },
+  {
+   "quality": "sus4",
+   "tones": [
+    0,
+    5,
+    7
+   ],
+   "scale": [
+    0,
+    2,
+    4,
+    5,
+    7,
+    9,
+    11
+   ]
+  }
+ ]
+}

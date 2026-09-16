@@ -49,35 +49,12 @@ export * from "./rngSalt";
 // 既定経路はキーを生やさない＝bit 一致（design.md 追補 (k)）。
 export * from "./engineVersion";
 
-// 錨と間の分業（M3-3a）＝phrase_maker `_lock_bass_roots_to_sheet` の忠実移植（純関数・決定的）。
-// 参照値の突き合わせ＝tools/py-parity/。既定挙動は不変（opt-in 経路 anchorLock からのみ消費される）。
-export * from "./anchorLock";
-
-// コード追従（M3-3b）＝phrase_maker chord_follow の5ガード＋層B クオリティ表（25）。リズムは触らず音高だけを
-// コードへ写す。参照値の突き合わせ＝tools/py-parity/cases-chord-follow/。既定挙動は不変（opt-in 経路 chordFollow
-// からのみ消費される）。
-export * from "./chordFollow";
+// コードのスケール表と低域の畳み（JZ-WALK が使う部品）。2026-09-16 リフ撤去で anchorLock/chordFollow から移した。
+export * from "./chordScale";
 
 // ウォーキングベース JZ-WALK（M3-3d）＝phrase_maker walking v2 の候補生成に v3 の規則3本を制約として課し、
-// 乱数タイブレークを決定的規則へ置換したもの。**耳未判定**＝style を名指しした時だけ立つ opt-in。
+// 乱数タイブレークを決定的規則へ置換したもの。耳判定＝使える（2026-09-13）・style を名指しした時だけ立つ opt-in。
 export * from "./walkingBass";
-
-// ギター（M5）＝phrase_maker ギター gen2 のリフ文法3型・chordtheory・コード追従（撤去済みのアプローチ分岐は落とした）・
-// 譜のキックへの chug ロック（ヒット単位のボイシング切替＝ChordHit.voice）。相対形のまま＝音高は実音化で出す。
-// 参照値＝tools/py-parity/cases-guitar/。既定挙動は不変（opt-in 経路 guitarRiff からのみ消費）。
-export * from "./guitarRiff";
-// 5d フォーム DB（調弦から導出・B弦補正・GAIN_SAFE_INTERVALS）／5e 手の形の枠（耳未判定・opt-in・重みは移植しない）／実音化。
-export * from "./guitarForms";
-export * from "./guitarHandshape";
-export * from "./guitarRealize";
-// 鍵盤（M6a-6a）＝キックの隙間刺し（legacy rock_piano sheet 分岐と gesture_p11 build_rock を1本化）。
-// 参照値＝tools/py-parity/cases-key-stab/。既定挙動は不変（opt-in 経路 keyStab からのみ消費）。
-export * from "./keyStab";
-// 鍵盤（M6a-6d）＝手の物理モデル（phrase_maker fingersim/handmodel.py の忠実移植・土台のみ＝生成器に結線しない）。
-// 定数の出所＝NOTICE.md（pianoplayer MIT・Parncutt 1997）。参照値＝tools/py-parity/cases-handmodel/。
-export * from "./handModel";
-// 繰り返しに変奏の層（design.md 追補 (k-7)）＝反復単位の答句に決定的な変換を当てる純関数。既定（level 0）は恒等。
-export * from "./riffVariation";
 
 // ドラムフィル物理移植（M2）＝phrase_maker fills.py の忠実 TS 化（KINDS 10種・place_fill/apply_fills・
 // 四肢検証）。note レベル(qb)＝step-grid とは別レイヤー。ヒューマナイズは humanizeFill（md5 seed＋Python

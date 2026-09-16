@@ -1,6 +1,6 @@
 // 音高クラスの所属ゲート（M5 受け入れ＝「強拍コードトーン」「非整合音 0」）。
 // **表を持たない**（§6-4 #2 自己参照禁止）＝許容集合は呼び手が**生成器と別の出所**から渡す
-//   （テストは phrase_maker の py-parity ダンプ `cases-guitar/chordtheory.json` を oracle に使う）。
+//   （M5 当時の oracle＝py-parity ダンプ `cases-guitar/chordtheory.json` は 2026-09-16 リフ撤去でギターごと外した）。
 // 許容集合の空虚さは diagnostic で必ず出す（§6-4 #3＝12音中いくつ許しているか）。
 
 import { coverageOf, diagnostic, gate, type DiagnosticVerdict, type GateVerdict } from "./types";
