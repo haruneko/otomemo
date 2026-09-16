@@ -1737,6 +1737,14 @@ export type BodyAim = "tom_tumble";
 export const BODY_AIMS: Record<BodyAim, Pick<DrumsGenOpts, "bodyDepth" | "bodyDensity" | "bodyDrummer" | "fillLength" | "fillBeat">> = {
   tom_tumble: { bodyDepth: 0.45, bodyDensity: 0.9, bodyDrummer: "none", fillLength: "bar", fillBeat: 0 },
 };
+/** タム回しの「終わり方の軸」（design §(g-2) 追補・2026-09-17 耳判定「四連打はバリエーションの一つに」）。
+ *  1点つまみ（tailAnchor 既定0）は seed 1〜50 すべてで着地前スネア四連打へ収束した（源流も同じ）＝平均を出す。
+ *  質の違う3点を持ち seed で選ぶ。各点の打点は毎回 DP が解く（表ではない）。明示 bodyTailAnchor が勝つ。 */
+export const TOM_TUMBLE_ENDINGS: readonly { name: string; tailAnchor: number }[] = [
+  { name: "スネアへ戻って四連打", tailAnchor: 0 },
+  { name: "スネアのダブル→フロアで着地", tailAnchor: 0.6 },
+  { name: "フロアに留まって着地", tailAnchor: 1.0 },
+];
 const TOM_MIDI = new Set([41, 43, 45, 47, 48, 50]);
 
 export function genDrums(frame?: Frame | null, seed?: number | null, optsIn?: DrumsGenOpts): GenResult {
@@ -1754,6 +1762,9 @@ export function genDrums(frame?: Frame | null, seed?: number | null, optsIn?: Dr
       aimApplied = true;
       opts = { ...optsIn };
       for (const [k, v] of Object.entries(preset)) if ((opts as Record<string, unknown>)[k] == null) (opts as Record<string, unknown>)[k] = v;
+      if (optsIn.bodyAim === "tom_tumble" && opts.bodyTailAnchor == null) {
+        opts.bodyTailAnchor = TOM_TUMBLE_ENDINGS[Math.abs(Math.trunc(seed ?? 0)) % TOM_TUMBLE_ENDINGS.length]!.tailAnchor;
+      }
     }
     const { bodyAim: _drop, ...rest } = opts!; void _drop;
     opts = rest;

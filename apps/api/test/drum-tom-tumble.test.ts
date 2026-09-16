@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { genDrums } from "../src/music/generate";
+import { genDrums, TOM_TUMBLE_ENDINGS } from "../src/music/generate";
 import { openDb } from "../src/db";
 import { Core } from "../src/core";
 import { buildHttp } from "../src/http";
@@ -25,10 +25,33 @@ describe("bodyAim:tom_tumble（genDrums）", () => {
   it("タム回し＝既存つまみの1点（depth0.45/density0.9/純物理/1小節/頭から）と完全一致（4/4・3/4・6/8）", () => {
     for (const meter of ["4/4", "3/4", "6/8"]) for (const seed of [1, 2]) {
       const a = genDrums(F(meter), seed, { fill: 1, fillStyle: "body", bodyAim: "tom_tumble" });
-      expect(a).toStrictEqual(genDrums(F(meter), seed, { fill: 1, fillStyle: "body", ...TUMBLE }));
+      expect(a).toStrictEqual(genDrums(F(meter), seed, { fill: 1, fillStyle: "body", ...TUMBLE, bodyTailAnchor: TOM_TUMBLE_ENDINGS[Math.abs(Math.trunc(seed)) % 3]!.tailAnchor }));
       expect(rh(a).fillKind).toBe("body");
       expect(rh(a).fillNotes!.some((n) => TOMS.has(n.midi))).toBe(true);
       expect(a.meta?.warnings ?? []).toEqual([]);
+    }
+  });
+
+  it("終わり方の軸（§(g-2)追補）：seed 1〜50 で四連打も、四連打以外の終わり方も出る（割合は診断のみ・ゲートにしない）", () => {
+    const SN = new Set([38, 40]);
+    const kinds = new Map<string, number>();
+    for (let seed = 1; seed <= 50; seed++) {
+      const r = rh(genDrums(F("4/4"), seed, { fill: 1, fillStyle: "body", bodyAim: "tom_tumble" }));
+      // フィル小節（頭から1小節）の最終拍の手の打点（キック・着地を除く）
+      const end = Math.max(...r.fillNotes!.map((n) => n.beat));
+      const last = r.fillNotes!.filter((n) => n.beat >= end - 1 - 1e-6 && n.beat < end - 1e-6 && (SN.has(n.midi) || TOMS.has(n.midi)));
+      const tail4 = last.slice(-4);
+      const kind = tail4.length === 4 && tail4.every((n) => SN.has(n.midi)) ? "snare4" : last.map((n) => (SN.has(n.midi) ? "S" : "T")).join("");
+      kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+    }
+    console.log("[診断] タム回しの終わり方（seed1-50）", Object.fromEntries(kinds));
+    expect(kinds.get("snare4") ?? 0).toBeGreaterThan(0);
+    expect([...kinds.keys()].some((k) => k !== "snare4")).toBe(true);
+  });
+
+  it("軸は明示 bodyTailAnchor に負ける", () => {
+    for (const seed of [1, 2, 3]) {
+      expect(genDrums(F("4/4"), seed, { fill: 1, fillStyle: "body", bodyAim: "tom_tumble", bodyTailAnchor: 0 })).toStrictEqual(genDrums(F("4/4"), seed, { fill: 1, fillStyle: "body", ...TUMBLE, bodyTailAnchor: 0 }));
     }
   });
 
