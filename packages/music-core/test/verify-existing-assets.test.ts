@@ -20,7 +20,7 @@ describe("既存資産へ回す：drumLibrary の定型ビート（四肢ゲー�
   it("32型ぜんぶに四肢ゲートを当て、赤は診断として記録する（型は直さない）", async () => {
     const lib = await load(`${ROOT}/apps/api/src/music/drumLibrary.ts`);
     const beats = lib.BEAT_PATTERNS as Beat[];
-    expect(beats.length).toBe(32); // 資産の数（変わったらこの記録も見直す）
+    expect(beats.length).toBe(33); // 資産の数（変わったらこの記録も見直す）＝2026-09-16 オーナー自作の6拍子を追加で 32→33
 
     const verdicts = beats.map((b) => grooveLimbGate(b.lanes as GrooveLane[], `limbs.beat:${b.id}`));
     const failed = verdicts.filter((v) => !v.pass);
@@ -38,10 +38,12 @@ describe("既存資産へ回す：drumLibrary の定型ビート（四肢ゲー�
     expect(vacuous.map((v) => v.id)).toEqual([
       "limbs.beat:beat8.offbeat_hh", "limbs.beat:w68-dr-shaker",
       "limbs.beat:w68-dr-dumtek-a", "limbs.beat:w68-dr-dumtek-b", "limbs.beat:w68-dr-jigskel",
+      // 2026-09-16 オーナー自作の6拍子を追加：スネアとバスドラが同時に鳴らない型＝空虚（型は直さない・記録のみ）
+      "limbs.beat:owner.six8",
     ]);
     // 被覆率＝同時打点のある時刻の割合。0 なら「合格」は空虚なので、下限を明示して守る（§6-4 #7）。
     const s = coverageSummary(verdicts, "coverage.beats");
-    expect(s.value.checks).toBe(32);
+    expect(s.value.checks).toBe(33); // 2026-09-16 オーナー自作の6拍子を追加
     expect(s.value.meanFrac).toBeGreaterThan(0.3);
   });
 

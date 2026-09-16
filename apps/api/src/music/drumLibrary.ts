@@ -27,6 +27,7 @@ export interface BeatPattern {
   bars: number; // パターン自体の小節数（amen/bossa=2）
   tempoMin: number; tempoMax: number;
   genres: string[];
+  label?: string; // 表示名（任意・2026-09-16 オーナー自作の型で導入＝既存型は未設定のまま）
   roles?: Role[]; // L4トラックA（2026-07-25）：適用セクション（場面）。**seed の scene タグ SSOT** ＝genDrums/pickBeatPattern の GENRE_TABLE 経路とは独立（消費者は seed のみ＝生成器 bit 不変）。plan §5「GENRE_TABLE 逆引き初期値＋co-tag 上書き」。
   lanes: OutLane[]; // hits は 0..grid*bars-1 の絶対 step
 }
@@ -149,6 +150,13 @@ export const BEAT_PATTERNS: BeatPattern[] = [
   ] },
   { id: "w68-dr-full", meter: "6/8", grid: 12, bars: 1, tempoMin: 60, tempoMax: 132, genres: ["world68"], roles: ["chorus", "outro"], lanes: [
     L("Shaker", DRUM.Shaker, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 45), L("Tek", DRUM.SideStick, [2, 4, 8, 10], V.side), L("Dum", DRUM.TomFloor, [0, 6], 110),
+  ] },
+  // ── オーナー自作の6拍子（2026-09-16 裁定「足す」・原文＝docs/backlog.md 2026-09-13）──
+  //   原文：1文字＝8分・2小節（6/8×2）。sd: .x..x. ..x... ／ bd: x..x.. x...x.
+  //   12格子（16分基底）なので 8分 i 番目＝step 2i。原文どおりスネアとバスドラの2レーンのみ（他レーンは足さない）。
+  //   genres:"owner"＝GENRE_TABLE にも seed（4/4∪world68）にも載らない＝既存の選抜・出音に無影響。style=型ID で直接呼ぶ。
+  { id: "owner.six8", label: "6拍子（オーナー作）", meter: "6/8", grid: 12, bars: 2, tempoMin: 40, tempoMax: 180, genres: ["owner"], lanes: [
+    L("Snare", DRUM.Snare, [2, 8, 16], V.snare), L("Kick", DRUM.Kick, [0, 6, 12, 20], V.kick),
   ] },
 ];
 

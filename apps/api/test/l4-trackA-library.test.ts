@@ -26,7 +26,7 @@ describe("(1) 型数＋新21型の解決", () => {
   it("chord50・bass42・drum32（4/4 drum=23・裁定D で world68 追加後＋アレンジS1 オルガン5）", () => {
     expect(COMP_TYPES.length).toBe(50); // 35＋world68 10＋オルガン5（アレンジS1・2026-08-02）
     expect(BASS_TYPES.length).toBe(42); // 34＋world68 8
-    expect(BEAT_PATTERNS.length).toBe(32); // 24＋world68 8
+    expect(BEAT_PATTERNS.length).toBe(33); // 24＋world68 8＋owner.six8 1（2026-09-16 オーナー自作の6拍子を追加）
     expect(BEAT_PATTERNS.filter((p) => p.meter === "4/4").length).toBe(23); // six8.ballad+world68(6/8)を除く
   });
   it("新21型が compTypeById/bassTypeById/beatPatternById で全解決・ID 一意", () => {
@@ -38,7 +38,7 @@ describe("(1) 型数＋新21型の解決", () => {
     for (const arr of [COMP_TYPES.map((t) => t.id), BASS_TYPES.map((t) => t.id), BEAT_PATTERNS.map((p) => p.id)]) {
       expect(new Set(arr).size).toBe(arr.length);
     }
-    expect(allIds.length).toBe(50 + 42 + 32);
+    expect(allIds.length).toBe(50 + 42 + 33); // drum 32→33＝2026-09-16 オーナー自作の6拍子を追加
   });
   it("新chord9型に coGenres 欄（co-tag 型のみ）／新bass/drum roles が付く", () => {
     // co-tag を持つ新型：GT-MUTE8/AN-SYNC=vocarock, DN-*=edm。PB-* は coGenres 無し。
