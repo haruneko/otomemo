@@ -14,7 +14,8 @@ import { BEAT_PATTERNS } from "../src/music/drumLibrary";
 
 const freshCore = (): Core => new Core(openDb(":memory:"));
 // seed 対象 drum＝4/4 型 ∪ world68（6/8・裁定D 2026-07-25）。それ以外の非4/4（six8.ballad）は除外。
-const DRUMS_SEEDED = BEAT_PATTERNS.filter((t) => t.meter === "4/4" || t.genres.includes("world68"));
+// 2026-09-16 オーナー裁定＝オーナー自作の6拍子（genres:["owner"]）も棚に並べる。
+const DRUMS_SEEDED = BEAT_PATTERNS.filter((t) => t.meter === "4/4" || t.genres.includes("world68") || t.genres.includes("owner"));
 
 describe("(a) 3 kind のネタが型数ぶん作られる", () => {
   it("chord=全型・bass=全型・drum=4/4∪world68（six8.ballad 除外・裁定D 2026-07-25）", () => {
@@ -22,7 +23,7 @@ describe("(a) 3 kind のネタが型数ぶん作られる", () => {
     const r = seedPatternLibrary(core);
     expect(r.chord).toBe(COMP_TYPES.length); // 45（35＋world68 10）
     expect(r.bass).toBe(BASS_TYPES.length); // 42（34＋world68 8）
-    expect(r.drum).toBe(DRUMS_SEEDED.length); // 31（4/4 23＋world68 8）
+    expect(r.drum).toBe(DRUMS_SEEDED.length); // 32（4/4 23＋world68 8＋owner 1）
     expect(r.deleted).toBe(0); // 初回は旧 seed 無し
 
     // scope:"library"＋kind 別の件数が seed 数と一致。
@@ -86,6 +87,19 @@ describe("(b) タグが L1 SSOT どおり付く", () => {
     expect(tags).toContain("scene:intro");
     expect(tags).toContain("scene:verse");
     expect(n!.kind).toBe("rhythm");
+  });
+});
+
+// ── 2026-09-16 オーナー裁定：オーナー自作の6拍子（owner.six8）が棚に並ぶ ──
+describe("(owner) オーナー自作の6拍子が seed される", () => {
+  it("owner.six8 が drum として meter:6/8・pat タグ付きで seed される", () => {
+    const core = freshCore();
+    seedPatternLibrary(core);
+    const [dr] = core.listNeta({ scope: "library", tags: ["pat:owner.six8"], limit: 10 });
+    expect(dr, "owner.six8 seeded").toBeTruthy();
+    expect(dr!.kind).toBe("rhythm");
+    expect(dr!.meter).toBe("6/8");
+    expect(dr!.tags).toContain("genre:owner");
   });
 });
 
