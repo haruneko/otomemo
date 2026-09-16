@@ -204,6 +204,12 @@ describe("到達口③＝/gen/section（body.bass 素通し・段は出せない
     expect(r.bass).toEqual(genBass(BF, r.chords, 42, r.drums, { anchorLock: true, riffVariation: 1 }).items[0]!.content);
     expect(r.bass.bassRiff).toEqual({ grammar: "pedal_answer", variation: 1 });
   });
+  it("監査 中③：bass.riffVariationSteps:false なら riffVariation は捨てない（chord 側と同じ）", async () => {
+    const r = await get({ riffVariationSteps: false, riffVariation: 1 });
+    expect(r.bass.bassRiff).toEqual({ grammar: "pedal_answer", variation: 1 });
+    expect(r.bass).toEqual(genBass(BF, r.chords, 42, r.drums, { anchorLock: true, riffVariation: 1 }).items[0]!.content);
+    expect(r.warnings.some((w) => w.includes("セクション一括では段を並べられません"))).toBe(false);
+  });
   it("bass.riffVariationSteps は段を並べられないと告げ level 0 で作る", async () => {
     const r = await get({ riffVariationSteps: true, riffVariation: 1 });
     expect(r.warnings.some((w) => w.includes("セクション一括では段を並べられません"))).toBe(true);

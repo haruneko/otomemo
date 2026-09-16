@@ -509,8 +509,9 @@ export function buildHttp(core: Core): FastifyInstance {
     const SECTION_NO_STEPS = "セクション一括では段を並べられません。段は各パートの生成で（変奏なしで作りました）";
     let bassOpt = b.bass;
     if (bassOpt?.riffVariationSteps != null) {
+      // steps:true の時だけ変奏量も捨てて level 0（chord 側の `!== true` と揃える＝2026-09-16 監査 中③：false でも捨てて黙っていた）。
       const { riffVariationSteps: _s, riffVariation: _v, ...rest } = bassOpt;
-      bassOpt = rest;
+      bassOpt = _s === true || _v === undefined ? rest : { ...rest, riffVariation: _v };
       if (_s === true) genWarnings.push(`ベース：${SECTION_NO_STEPS}`);
     }
     const bassRes = want.has("bass") ? genBass(genFrame, chords, b.seed, drums as Parameters<typeof genBass>[3], feelOpt ? { ...(bassOpt ?? {}), ...feelOpt } : bassOpt) : undefined;
