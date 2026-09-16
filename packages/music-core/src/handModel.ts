@@ -10,6 +10,7 @@
 // 定数の出所（NOTICE.md）：FREST/WEIGHTS/BFACTOR と REACH の MaxPrac 列（(1,5) を除く）＝pianoplayer（Marco Musy）hand.py・MIT License。
 //   REACH の MinComf/MaxComf と REACH6 の補間列＝Parncutt et al. 1997 の模型に沿った phrase_maker の値。
 import { pyRound } from "./drumFill";
+import { pySum } from "./pyMath";
 
 export const PIANOPLAYER_ATTRIBUTION = "pianoplayer by Marco Musy, MIT License (https://github.com/marcomusy/pianoplayer) — see NOTICE.md";
 
@@ -114,9 +115,8 @@ export function assignmentCost(pairs: readonly (readonly [number, number])[], ha
     cost += WEAK.get(f)!;
     if (isBlackKeyPitch(p)) cost += 1.1 - BFACTOR[f - 1]!;
   }
-  let s = 0;
-  for (const [f, p] of pairs) s += p - orientedFrest(f, hand);
-  return [cost, s / n];
+  // 源流は組み込み sum()（3.12＝補償付き）＝pySum
+  return [cost, pySum(pairs.map(([f, p]) => p - orientedFrest(f, hand))) / n];
 }
 
 /** 源流 `best_assignment`（:98-121）。1〜4音を片手に置く最安の運指、置けなければ null。 */
@@ -207,9 +207,7 @@ export function thumbCrossSpan(hiFinger: number, _spanMode: SpanMode = "comfort"
 
 function anchorFromAssign(assign: Map<number, number>, hand: Hand): number {
   if (assign.size === 0) return 0.0;
-  let s = 0;
-  for (const [f, p] of assign) s += p - orientedFrest(f, hand);
-  return s / assign.size;
+  return pySum([...assign].map(([f, p]) => p - orientedFrest(f, hand))) / assign.size;
 }
 
 /** 源流 `free_finger_reach`（:224-263）。空いている指が押せる鍵（昇順）。空＝窓の枯渇。 */
