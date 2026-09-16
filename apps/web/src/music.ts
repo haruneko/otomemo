@@ -720,11 +720,14 @@ export function emptyChordPattern(): ChordPatternContent {
 // ルートのpcぶん上下した）。anchor=「大体の高さ」。open は1つおきに+12で広げる（スケッチ範囲）。
 // トップ狙い音（絶対）ベースのボイシング＝各コードで top に最寄りのコードトーンを最高声部にし、
 // 残りをその下へ密に積む（多少雑でOK＝厳密な最適配置は DAW 案件）。open は1つおきに+12で広げる。
-function voiceToTop(root: number, quality: string, powerChord: boolean, top: number, open: boolean): number[] {
+function voiceToTop(root: number, quality: string, powerChord: boolean, top: number, open: boolean, rhRootless = false): number[] {
   const r = (((Math.round(root) % 12) + 12) % 12);
   // 鳴る音はコードの質から自動（QUALITY_INTERVALS＝全コードトーン）。パワーコードは R+5 のみ。
   const ivals = powerChord ? [0, 7] : (QUALITY_INTERVALS[quality] ?? [0, 4, 7]);
-  const pcs = ivals.map((iv) => (((r + iv) % 12) + 12) % 12);
+  let pcs = ivals.map((iv) => (((r + iv) % 12) + 12) % 12);
+  // 案B（2026-09-16 耳裁定）：左手が R を弾く型で4音以上のコードなら右手からルートを抜く（抜いてからトップを選ぶ）。
+  // 三和音は2音になるのを避けて対象外。パワーコードも対象外。
+  if (rhRootless && !powerChord && pcs.length >= 4) pcs = pcs.filter((pc) => pc !== r);
   const nearest = (pc: number) => Math.round((top - pc) / 12) * 12 + pc; // pc を top 最寄りのオクターブへ
   // トップ＝top に一番近い実現ピッチを与える構成音（同距離は先勝ち＝細かい優先は DAW 案件）。
   let topPc = pcs[0]!, topPitch = nearest(pcs[0]!);
@@ -735,15 +738,23 @@ function voiceToTop(root: number, quality: string, powerChord: boolean, top: num
   const rest = [...pcs];
   rest.splice(rest.indexOf(topPc), 1); // トップに使った1音だけ除く
   const voices = [topPitch];
-  let lowest = topPitch;
+  // 案A（2026-09-16 耳裁定）：各音を「トップより下で最も近い位置」（トップから1オクターブ以内）へ＝密集形。
+  // 旧＝表の順に「現在の最低音の直下」へ積み、7th/テンションが右手最低へ落ちて濁った（研究doc organ-voicing-muddiness）。
   for (const pc of rest) {
-    let cand = Math.floor(lowest / 12) * 12 + pc;
-    while (cand >= lowest) cand -= 12; // 現在の最低音の直下へ（密に積む）
+    let cand = Math.floor(topPitch / 12) * 12 + pc;
+    while (cand >= topPitch) cand -= 12;
+    while (cand + 12 < topPitch) cand += 12;
     voices.push(cand);
-    lowest = cand;
   }
   voices.sort((a, b) => a - b);
   return open ? voices.map((p, i) => (i % 2 === 1 ? p + 12 : p)) : voices;
+}
+
+// 案B の発火条件：左手が R を弾くか（preset root/root5/oct、または custom hits に度数 R〈省略＝R〉）。
+function lhPlaysRoot(lh: ChordLhContent | undefined): boolean {
+  if (!lh) return false;
+  if (lh.mode !== "custom") return true;
+  return (lh.hits ?? []).some((h) => (h.deg ?? "R") === "R");
 }
 
 // ギター的ボイシング（style:"guitar"・研究doc 2026-07-22 §1）：鍵盤的クローズド積みでなく
@@ -781,9 +792,9 @@ function placeGuitar(r: number, offs: number[], top: number): number[] {
   return offs.map((o) => r + o + shift).sort((a, b) => a - b);
 }
 
-function voiceChord(root: number, quality: string, v: ChordVoicing): number[] {
+function voiceChord(root: number, quality: string, v: ChordVoicing, rhRootless = false): number[] {
   if (v.style === "guitar") return voiceGuitar(root, quality, v.powerChord === true, v.top ?? 72);
-  if (v.top != null) return voiceToTop(root, quality, v.powerChord === true, v.top, v.openClose === "open");
+  if (v.top != null) return voiceToTop(root, quality, v.powerChord === true, v.top, v.openClose === "open", rhRootless);
   const r = (((Math.round(root) % 12) + 12) % 12);
   const anchor = CHORD_BASE + (v.octave ?? 0) * 12;
   let d = (((r - anchor) % 12) + 12) % 12; // root を anchor の最寄りオクターブへ（anchor±6半音帯）
@@ -949,6 +960,8 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
   // contract③ followChords（S1）：strum の素経路のみ。arp／ギター弦順ロール／アップストロークでは無効
   // （当面＝S1 はオルガン/keyboard の strum 中心。keyboard に弦順ロールは発火しない）。
   const followChords = content?.followChords === true && mode !== "arp" && !rollActive;
+  // 案B（2026-09-16 耳裁定）：左手が R を弾く keyboard 解決時だけ右手のルートを省く（voiceToTop 内で4音以上に限る）。
+  const rhRootless = v.style !== "guitar" && lhPlaysRoot(content?.lh);
   const out: Note[] = [];
   let arpIdx = 0, arpGrp = -1; // arpGrp＝arpReset の区切り番号（変わったら arpIdx を頭へ戻す）
   for (let h = 0; h < hits.length; h++) {
@@ -968,7 +981,7 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
     const ch = bassChordAt(refBeat, chords);
     const root = ch ? ch.root : ((key % 12) + 12) % 12;
     const quality = ch ? ch.quality : "";
-    const voiced = voiceChord(root, quality, v);
+    const voiced = voiceChord(root, quality, v, rhRootless);
     if (mode === "arp") {
       // 向き（up=昇順／down=降順／updown=ピンポン）で拡張プール（voiced を下方へ arpOctaves 積み増し）を辿る。
       // 既定1oct＝プール＝voiced＝従来どおり（bit一致）。arpOctaves≥2 で複数オクターブを駆け上がる＝ハープ。
@@ -1011,7 +1024,7 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
       for (let si = 0; si < segs.length; si++) {
         const sg = segs[si]!;
         // 先頭セグメントは既算出の voiced をそのまま使う（voiceChord は純関数＝再計算しても同値・無駄を省く）。
-        const sVoiced = si === 0 ? voiced : voiceChord(sg.ch ? sg.ch.root : ((key % 12) + 12) % 12, sg.ch ? sg.ch.quality : "", v);
+        const sVoiced = si === 0 ? voiced : voiceChord(sg.ch ? sg.ch.root : ((key % 12) + 12) % 12, sg.ch ? sg.ch.quality : "", v, rhRootless);
         for (const p of sVoiced) out.push({ pitch: p, start: sg.start, dur: sg.dur, ...velSpread });
         // 分数コード（決定B）：strum はオンベースを voicing の下に1音足す＝最低音が bass に。
         // followChords ではセグメントごとに追従（新コードに bass が無ければ足さない）。

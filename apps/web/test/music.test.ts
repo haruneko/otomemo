@@ -961,7 +961,8 @@ describe("music", () => {
           { mode: "strum", voicing: { tones: [], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 8 }, { step: 8, dur: 8, vel: 112 }], lh: { mode: "root5" } },
           [C0, GonB2], 0,
         );
-        expect(JSON.stringify(comp)).toBe('[{"pitch":55,"start":0,"dur":2},{"pitch":64,"start":0,"dur":2},{"pitch":72,"start":0,"dur":2},{"pitch":62,"start":2,"dur":2,"vel":112},{"pitch":67,"start":2,"dur":2,"vel":112},{"pitch":71,"start":2,"dur":2,"vel":112},{"pitch":59,"start":2,"dur":2,"vel":112},{"pitch":36,"start":0,"dur":2,"vel":106},{"pitch":43,"start":0,"dur":2,"vel":106},{"pitch":43,"start":2,"dur":2,"vel":106},{"pitch":50,"start":2,"dur":2,"vel":106}]');
+        // 2026-09-16 耳裁定（案A＋B）による意図した変更：C 三和音 top72 が旧 G3 E4 C5 → 密集 E4 G4 C5（G の和音は不変）。
+        expect(JSON.stringify(comp)).toBe('[{"pitch":64,"start":0,"dur":2},{"pitch":67,"start":0,"dur":2},{"pitch":72,"start":0,"dur":2},{"pitch":62,"start":2,"dur":2,"vel":112},{"pitch":67,"start":2,"dur":2,"vel":112},{"pitch":71,"start":2,"dur":2,"vel":112},{"pitch":59,"start":2,"dur":2,"vel":112},{"pitch":36,"start":0,"dur":2,"vel":106},{"pitch":43,"start":0,"dur":2,"vel":106},{"pitch":43,"start":2,"dur":2,"vel":106},{"pitch":50,"start":2,"dur":2,"vel":106}]');
         const arp = resolveChordPattern(
           { mode: "arp", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, arpDir: "up" }, steps: 16, hits: [0, 2, 4, 6].map((s) => ({ step: s, dur: 2 })) },
           [C0, G2], 0,
