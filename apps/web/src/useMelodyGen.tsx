@@ -232,6 +232,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // 刻みの音価のつまみ（2026-09-15 裁定「つまみで選ぶ」）＝null＝既定（源流の値）＝未送信＝bit 一致。
   const [gtrPalmGate, setGtrPalmGate] = useState<number | null>(null); // 刻みの短さ（0.1〜1）
   const [gtrGhostVel, setGtrGhostVel] = useState<number | null>(null); // 弱音の強さ（1〜127）
+  // (k-7) 繰り返しに変奏の層＝「変奏を3段で並べる（なし／中／多め）」。false＝未送信＝従来 bit 一致。
+  const [gtrRiffSteps, setGtrRiffSteps] = useState<boolean>(false);
+  const [bassRiffSteps, setBassRiffSteps] = useState<boolean>(false);
   // M6a-6a 鍵盤の隙間刺し：false＝未送信＝従来 bit 一致。立っている時はライブラリでなく生成器を叩き、セクションのドラムを同送。
   const [compKeyStab, setCompKeyStab] = useState<boolean>(false);
   // ベース×ドラムノブ（奏法UIスライスD・design「gen_bass×ドラム結線」／slashBass）：UI未露出だった4ノブを「細かく（ドラム絡み）」群へ。
@@ -428,6 +431,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         if (bassAnchor && bassAnchorStrict === "every-kick") body.anchorStrictness = "every-kick";
         // リフ文法（M3-3c）：錨の体。""＝既定（pedal_answer）＝未送信＝従来と同じ体。
         if (bassAnchor && bassGrammar) body.anchorGrammar = bassGrammar;
+        // (k-7) 変奏を3段で並べる：錨 ON の時だけ送る（api が3件を items で返す）。
+        if (bassAnchor && bassRiffSteps) body.riffVariationSteps = true;
         // コード追従の5ガード（M3-3b）：リズムは動かさず音高だけを進行へ写す。ドラムは要らない（コードだけで立つ）。
         if (bassChordFollow) body.chordFollow = true;
       }
@@ -443,6 +448,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
           if (gtrShape) body.guitarShape = true;
           if (gtrPalmGate != null) body.guitarPalmGate = gtrPalmGate;
           if (gtrGhostVel != null) body.guitarGhostVel = gtrGhostVel;
+          if (gtrRiffSteps) body.riffVariationSteps = true; // (k-7) 変奏を3段で並べる
         }
         // M6a-6a 鍵盤の隙間刺し：ON の時だけ送る（ドラムが無ければ api が理由を返す）。
         if (compKeyStab) { body.keyStab = true; const d = ctx.sectionDrums(); if (d) body.drums = d; }
@@ -452,7 +458,8 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // オーナー裁定（2026-08-29）：UI で一切読んでいなかったのを直す＝ダイアログで利用者へ見せる（App.tsx の設定ダイアログと同じ作法）。
       if (r.meta?.warnings?.length) setGenWarning(r.meta.warnings.join("\n"));
       // コード楽器は複数候補を全件トレイへ積む（先頭＝kind差替 or append／以降＝append）。他パーツは従来どおり先頭1件。
-      if (part.op === "gen_chord_pattern") {
+      // (k-7) ベースの変奏の段（riffVariationSteps）も3件すべてを積む。
+      if (part.op === "gen_chord_pattern" || (part.op === "gen_bass" && (r.items?.length ?? 0) > 1)) {
         (r.items ?? []).forEach((it, i) => pushCand({ kind: it.kind, content: it.content, label: it.label, meta: it.meta }, (opts?.append ?? false) || i > 0));
       } else {
         const item = r.items?.[0];
@@ -686,7 +693,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     drumFillStyle, setDrumFillStyle, drumBodyAim, setDrumBodyAim, drumBodyDrummer, setDrumBodyDrummer, // フィルの作り方＝格子/型辞書/解いて作る（M2/M3）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
-    gtrRiff, setGtrRiff, gtrAnchor, setGtrAnchor, gtrShape, setGtrShape, gtrPalmGate, setGtrPalmGate, gtrGhostVel, setGtrGhostVel, // M5 ギター型（リフ文法・キックに刻み・手の形・刻みの音価のつまみ）
+    gtrRiff, setGtrRiff, gtrAnchor, setGtrAnchor, gtrShape, setGtrShape, gtrPalmGate, setGtrPalmGate, gtrGhostVel, setGtrGhostVel, gtrRiffSteps, setGtrRiffSteps, bassRiffSteps, setBassRiffSteps, // (k-7) 変奏の段／M5 ギター型（リフ文法・キックに刻み・手の形・刻みの音価のつまみ）
     compKeyStab, setCompKeyStab, // M6a-6a 鍵盤の隙間刺し
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     bassAnchor, setBassAnchor, bassAnchorRest, setBassAnchorRest, bassAnchorStrict, setBassAnchorStrict, // 錨と間の分業（M3-3a）＋錨の厳しさ（k-6）

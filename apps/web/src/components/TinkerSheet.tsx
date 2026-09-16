@@ -417,7 +417,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   const BASS_TYPES = ["RK-8ROOT", "RK-GALLOP", "BL-WHOLE", "BL-APPROACH", "CP-OCT8", "CP-WALK", "FK-ONE", "ED-OFFBEAT", "ED-SUSTAIN", "VR-8DRIVE", "JZ-WALK"];
   const bassDrawer = (
     <>
-      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); gen.setBassChordFollow(false); gen.setBassGrammar(""); })}
+      {drawerHead("ベース", () => { gen.setBassStyle(""); gen.setBassFill(0); gen.setBassKickLock(0); gen.setBassSnareGap(0); gen.setBassApproach(0); gen.setBassSlash(false); gen.setBassAnchor(false); gen.setBassAnchorRest(false); gen.setBassChordFollow(false); gen.setBassGrammar(""); gen.setBassRiffSteps(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">ベースのジャンル</div>
         <div className="tk-palette" aria-label="bass-genre">
@@ -523,6 +523,17 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               </span>
             </div>
           )}
+          {/* (k-7) 繰り返しに変奏の層＝なし／中／多めの3件を候補トレイに並べる（文法の体にだけ効く・中身は仮＝耳で選ぶ）。 */}
+          {gen.bassAnchor && (
+            <div className="knob-seg" aria-label="bass-variation">
+              <span className="knob-name">変奏を3段で並べる<small>なし／中／多め＝2回目以降の答えを変える</small></span>
+              <span className="seg-ctl">
+                {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
+                  <button key={lab} type="button" className={"seg-b" + (gen.bassRiffSteps === v ? " on" : "")} aria-label={`bass-variation-${v ? "on" : "off"}`} aria-pressed={gen.bassRiffSteps === v} onClick={() => gen.setBassRiffSteps(v)}>{lab}</button>
+                ))}
+              </span>
+            </div>
+          )}
           {gen.bassAnchor && (
             <div className="knob-seg" aria-label="bass-anchor-rest">
               <span className="knob-name">裏キックは休む<small>拍頭でないキックにはベースを置かない</small></span>
@@ -556,7 +567,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   //   ジャンルchip→「候補を出す」で variety=4 の別々の型を候補トレイへ（cand-card＋▶試聴＋採用の既存動線）。
   const chordInstDrawer = (
     <>
-      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setGtrRiff(""); gen.setGtrAnchor(false); gen.setGtrShape(false); gen.setGtrPalmGate(null); gen.setGtrGhostVel(null); gen.setCompKeyStab(false); })}
+      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setGtrRiff(""); gen.setGtrAnchor(false); gen.setGtrShape(false); gen.setGtrPalmGate(null); gen.setGtrGhostVel(null); gen.setGtrRiffSteps(false); gen.setCompKeyStab(false); })}
       <div className="tk-drawer-body">
         <div className="tk-hublab">伴奏のジャンル（型を名前で選ばず耳で選ぶ）</div>
         <div className="tk-palette" aria-label="comp-genre">
@@ -588,6 +599,14 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
             </select>
           </label>
           {gen.gtrRiff && <>
+            {/* (k-7) 繰り返しに変奏の層＝なし／中／多めの3件を候補トレイに並べる（中身は仮＝耳で選ぶ）。 */}
+            <div className="knob-seg" aria-label="comp-guitar-variation">
+              <span className="knob-name">変奏を3段で並べる<small>なし／中／多め＝2回目以降の答えを変える</small></span>
+              <span className="seg-ctl">
+                <button type="button" className={"seg-b" + (!gen.gtrRiffSteps ? " on" : "")} aria-label="comp-guitar-variation-off" aria-pressed={!gen.gtrRiffSteps} onClick={() => gen.setGtrRiffSteps(false)}>OFF</button>
+                <button type="button" className={"seg-b" + (gen.gtrRiffSteps ? " on" : "")} aria-label="comp-guitar-variation-on" aria-pressed={gen.gtrRiffSteps} onClick={() => gen.setGtrRiffSteps(true)}>ON</button>
+              </span>
+            </div>
             <div className="knob-seg" aria-label="comp-guitar-anchor">
               <span className="knob-name">キックに刻みを揃える<small>キックの位置に必ずパワーコード</small></span>
               <span className="seg-ctl">

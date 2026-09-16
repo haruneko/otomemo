@@ -1539,6 +1539,7 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     const b1 = music.mock.calls[0]![1] as Record<string, unknown>;
     expect(b1.anchorRestOnSyncopatedKick).toBe(true);
     expect("anchorStrictness" in b1).toBe(false);
+    expect("riffVariationSteps" in b1).toBe(false); // (k-7) 変奏の段は既定 OFF＝未送信
   });
 
   it("T4k' 『全キック』と案B OFF を選ぶと anchorStrictness と明示の false が飛ぶ", async () => {
@@ -1775,6 +1776,7 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(Array.isArray(body.chords)).toBe(true); // 進行も同送
     expect("guitarPalmGate" in body).toBe(false); // 刻みの音価のつまみは既定＝未送信＝源流値（bit 一致）
     expect("guitarGhostVel" in body).toBe(false);
+    expect("riffVariationSteps" in body).toBe(false); // (k-7) 変奏の段は既定 OFF＝未送信
   });
   it("刻みの音価のつまみ（2026-09-15 裁定「つまみで選ぶ」）＝選ぶと guitarPalmGate／guitarGhostVel が飛ぶ（リフ文法を選ぶまで出ない）", async () => {
     music.mockReset();
@@ -1797,6 +1799,46 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(op).toBe("gen_chord_pattern");
     expect(body.guitarPalmGate).toBe(1);
     expect(body.guitarGhostVel).toBe(70);
+  });
+  // (k-7) 繰り返しに変奏の層＝「変奏を3段で並べる（なし／中／多め）」＝ON で riffVariationSteps が飛び、返った3件をトレイに全部積む。
+  const stepItems = (kind: string) => ({ items: ["変奏なし（従来）", "変奏 中", "変奏 多め"].map((label, i) => ({ kind, content: kind === "bass" ? { notes: [{ pitch: 36 + i, start: 0, dur: 1 }] } : { mode: "strum", voicing: { tones: ["R"] }, steps: 16, hits: [{ step: i, dur: 1 }] }, label })) });
+  it("(k-7) ギター：リフ文法を選ぶまで出ない・既定 OFF・ON で riffVariationSteps が飛びカード3枚", async () => {
+    music.mockReset();
+    music.mockResolvedValue(stepItems("chord_pattern"));
+    chordSection();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    await userEvent.click(screen.getByLabelText("group-compguitar"));
+    expect(screen.queryByLabelText("comp-guitar-variation-on")).toBeNull();
+    await userEvent.selectOptions(within(screen.getByLabelText("comp-guitar-riff")).getByRole("combobox"), "power_chug");
+    expect(screen.getByLabelText("comp-guitar-variation-off").getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(screen.getByLabelText("comp-guitar-variation-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    expect((music.mock.calls[0]![1] as Record<string, unknown>).riffVariationSteps).toBe(true);
+    await waitFor(() => expect(screen.getAllByLabelText("candidate-label").map((e) => e.textContent)).toEqual(["変奏なし（従来）", "変奏 中", "変奏 多め"]));
+  });
+  it("(k-7) ベース：錨 ON の時だけ出る・ON で riffVariationSteps が飛び、ベースも3件をトレイへ全部積む（従来は items[0] だけ）", async () => {
+    music.mockReset();
+    music.mockResolvedValue(stepItems("bass"));
+    chordSection();
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={9} tempo={140} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-bass"));
+    await userEvent.click(screen.getByLabelText("group-bassdrumfine"));
+    expect(screen.queryByLabelText("bass-variation-on")).toBeNull();
+    await userEvent.click(screen.getByLabelText("bass-anchor-on"));
+    expect(screen.getByLabelText("bass-variation-off").getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(screen.getByLabelText("bass-variation-on"));
+    await userEvent.click(screen.getByLabelText("gen-gen_bass"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    const body = music.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.anchorLock).toBe(true);
+    expect(body.riffVariationSteps).toBe(true);
+    await waitFor(() => expect(screen.getAllByLabelText("candidate-card")).toHaveLength(3));
   });
   it("M6a 鍵盤の隙間刺し＝ON で生成器（gen_chord_pattern）へ keyStab が飛ぶ（ライブラリに落ちない）・OFF に戻すと送らない", async () => {
     music.mockReset();
