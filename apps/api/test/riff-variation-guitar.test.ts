@@ -109,6 +109,8 @@ describe("S3 ギター：最終出力で不変条件（×3段）", () => {
         const same = JSON.stringify(contentOf(r).hits) === JSON.stringify(contentOf(r0).hits)
           || JSON.stringify(realize(contentOf(r), c.cs)) === JSON.stringify(realize(contentOf(r0), c.cs));
         expect(r.meta?.warnings?.some((w) => w.includes(CANCEL) && w.includes(name)) ?? false, `${c.name} ${name}`).toBe(same);
+        // 落ち先ごとの文言：ロックしていない時にキックの刻みのせいにしない（試聴帳づくりで見つけた）
+        if (same) expect(r.meta!.warnings!.some((w) => w.includes(CANCEL) && w.includes("キックに刻みを揃える")), `${c.name} ${name} 文言`).toBe(c.lock);
       }
     }
   });

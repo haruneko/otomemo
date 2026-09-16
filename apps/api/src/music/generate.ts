@@ -1129,7 +1129,7 @@ export function genChordPattern(
             const ro = { chordAtStep: (st: number) => { const x = cs[csSegs.indexOf(chordAtStep(csSegs, st)!)]!; return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 };
             same = JSON.stringify(realizeGuitarRiff(baseHits, ro).notes) === JSON.stringify(realizeGuitarRiff(finalContent.hits, ro).notes);
           }
-          if (same) gtrWarn.push(`変奏（${RV_LABEL}）は${GTR_LOCK}・和音追従に打ち消され、従来と同じ音になりました`);
+          if (same) gtrWarn.push(`変奏（${RV_LABEL}）は${lockKick ? `${GTR_LOCK}・` : ""}和音追従に打ち消され、従来と同じ音になりました`); // 落ち先ごと＝ロックしていない時にロックのせいにしない
         }
       }
       warnIgnoredCompOpts("ギターのリフ");
