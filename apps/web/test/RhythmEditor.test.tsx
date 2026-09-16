@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
 import { RhythmEditor } from "../src/components/RhythmEditor";
 import { LONG_PRESS_MS } from "../src/useHoldDrag";
-import { useEditHistory } from "../src/history";
 import type { RhythmContent } from "../src/music";
 
 // 修理#3 決定④「（改）」帯（S5）＝apply で patternEdited が解除される流れを検証するため api/playback を stub。
@@ -294,52 +292,7 @@ describe("RhythmEditor 手編集の（改）フラグ（修理#3 決定④）", 
     expect(arg.patternId).toBe("four.rock");
   });
 
-  it("帯見出し＝patternEdited 有りで「いま：<型>（改）」／無しは型名のみ", () => {
-    const { rerender } = render(<RhythmEditor rhythm={withPid} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：four.rock");
-    rerender(<RhythmEditor rhythm={{ ...withPid, patternEdited: true }} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：four.rock（改）");
-  });
 
-  it("patternId 無しネタは（改）どころか「いま：」帯自体が出ない", () => {
-    render(<RhythmEditor rhythm={{ steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] }} onChange={vi.fn()} />);
-    expect(screen.queryByLabelText("pattern-now")).toBeNull();
-  });
 
-  it("apply（候補で置換）で patternEdited は自然消滅（（改）解除）", async () => {
-    // 候補＝patternId 有り・patternEdited 無しの rhythm（Task2/L3：出所はライブラリネタ＝listNeta）。
-    api.listNeta.mockResolvedValue([
-      { id: "r1", kind: "rhythm", title: "eight.beat", text: null, scope: "library", tags: [], key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "",
-        content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0, 4, 8, 12] }], patternId: "eight.beat" } } },
-    ]);
-    const user = userEvent.setup();
-
-    function Harness() {
-      const [r, setR] = useState<RhythmContent>({ ...withPid, patternEdited: true });
-      const hist = useEditHistory(r, setR, { resetKey: "x" });
-      return (
-        <>
-          <RhythmEditor rhythm={r} onChange={setR} meter="4/4" tempo={120} />
-          <button aria-label="undo" onClick={hist.undo}>undo</button>
-          <span aria-label="now">{screenNow(r)}</span>
-        </>
-      );
-    }
-    render(<Harness />);
-
-    // 初期は（改）付き。
-    expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：four.rock（改）");
-
-    await user.click(screen.getByLabelText("pattern-picker-toggle"));
-    await user.click(await screen.findByLabelText("import-pick-0"));
-
-    // patternId は差し替わり patternEdited は消える＝「（改）」解除。
-    expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：eight.beat");
-    expect(screen.getByLabelText("now").textContent).toBe("eight.beat");
-  });
 });
 
-// Harness 用の小ヘルパ（patternEdited の有無を可視化）。
-function screenNow(r: RhythmContent): string {
-  return (r.patternId ?? "none") + (r.patternEdited ? "-edited" : "");
-}

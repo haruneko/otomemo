@@ -778,7 +778,6 @@ export function App() {
               onOpenNeta={drillNeta} /* Section のブロックタップ→子ネタへ潜る */
               onOpenSkeletonDesk={(t) => setDeskTarget(t)} /* #20 S6：骨格ブロック→机（全画面） */
               onOpenLyricOverview={(id) => setLyricViewTarget({ songNetaId: id })} /* #31 スライス5：曲→歌詞を通しで読む面 */
-              activeProject={activeProject || undefined} /* Task1i：PatternImportDialog の Source（プロジェクト軸）絞りへ */
               onClose={() => {
                 if (navStack.length) {
                   // 潜っている途中＝親 Section に戻る（一覧に落とさない）。

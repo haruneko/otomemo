@@ -3,6 +3,7 @@ import { api, type Neta } from "./api";
 import { buildPlayback, type PlaybackHandle } from "./music";
 import { startPlayback } from "./playback";
 import type { Lane } from "./components/sectionLanes";
+import { contextAuditionPlan, type ContextAuditionCtx } from "./contextAudition";
 import type { PickerState } from "./components/PlacePicker";
 
 // SectionEditor の配置ピッカー（空セルタップ→ネタを選んで置く）の状態＋ハンドラをまとめたフック
@@ -25,7 +26,14 @@ export type PlacePickerCtx = {
   // compose 辺操作の CoW ガード実行子（S3-a）。共有 section への配置を「全部/この曲だけ(分家)/やめる」で守る。
   // 未指定＝従来どおり原本へ直接配置（FormStrip の song 経路・bit-safe）。返り false＝やめる（何も置かない）。
   runEdgeOp?: (op: (targetId: string) => Promise<void>) => Promise<boolean>;
+  // 文脈試聴（Task #5 入口一本化）：いまのセクション（ライブの調/拍子/尺/ミュート込み）と子配置を返す。
+  // 渡されたとき（SectionEditor）だけ▶が「そのセルに置いた状態のセクション全体をループ」になる。
+  // 未指定（FormStrip＝曲に section を置くピッカー）＝従来のワンショット。
+  auditionSection?: () => ContextAuditionCtx | null;
 };
+
+// ライブラリの型（scope:"library"）をピッカーに並べるレーンの kind（design「実装の細部（2026-09-16）」）。
+export const LIBRARY_PATTERN_KINDS: readonly string[] = ["chord_pattern", "bass", "rhythm"];
 
 export function usePlacePicker(ctx: PlacePickerCtx) {
   const { neta, keyPc, tempo, liveMeter } = ctx;
@@ -36,11 +44,20 @@ export function usePlacePicker(ctx: PlacePickerCtx) {
   const [pickerSource, setPickerSource] = useState<string>("");
   const [pickerOtherMeter, setPickerOtherMeter] = useState(false); // 拍子違いも出すか（既定=一致のみ・B）
   const previewPlay = useRef<PlaybackHandle | null>(null); // ピッカー項目の試聴（配置前に耳で確認）
+  const [pickerLib, setPickerLib] = useState<Neta[]>([]); // ライブラリの型（パターン系レーンのみ）
+  // いま鳴らしている項目（▶⇄■）。inContext＝主旋律と一緒のループ試聴か。
+  const [previewing, setPreviewing] = useState<{ id: string; inContext: boolean } | null>(null);
 
   async function openPicker(lane: Lane, position: number) {
     if (ctx.occupiedAt(lane, position)) return; // 既に埋まってる所には置かせない（CV3・占有セルのみ）
     // 自作ネタのみ取得（コーパス=libraryは直接選ばせない＝推薦経由・Phase2/#20）。
     const all = await api.listNeta({ scope: "project", limit: 2000 });
+    // ライブラリの口はこのピッカーの一本（2026-08-02 夕裁定）＝パターン系レーンは同 kind の型の棚も並べる。
+    const libKinds = lane.kinds.filter((k) => LIBRARY_PATTERN_KINDS.includes(k));
+    const lib = (
+      await Promise.all(libKinds.map((kind) => api.listNeta({ kind, scope: "library", limit: 500 }).catch(() => [] as Neta[])))
+    ).flat();
+    setPickerLib(lib);
     setPq("");
     setPickerSource(ctx.sectionProjects[0] ?? ""); // 既定＝この曲の器
     setPickerOtherMeter(false);
@@ -130,14 +147,31 @@ export function usePlacePicker(ctx: PlacePickerCtx) {
   // ピッカー項目の試聴＝配置前に耳で確認（相対bass/コード楽器は section の調で解決して鳴らす）。
   async function previewNeta(n: Neta) {
     previewPlay.current?.stop();
+    previewPlay.current = null;
+    if (previewing?.id === n.id) {
+      setPreviewing(null); // ■＝同じ項目をもう一度押したら止めるだけ
+      return;
+    }
+    // 文脈試聴：そのセル（レーン行・位置）に置いた状態のセクション全体をループ（主旋律と一緒）。
+    const sec = picker ? ctx.auditionSection?.() : null;
+    if (sec && picker) {
+      const { plan, loop } = contextAuditionPlan(sec, { neta: n, position: picker.position, ord: picker.lane.row ?? 0 });
+      setPreviewing({ id: n.id, inContext: true });
+      if (plan.notes.length) previewPlay.current = await startPlayback(plan, { vocalMode: "peek", loop });
+      return;
+    }
     // #27：解決層＋駆動層（peek＝待たない）。相対bass/コード楽器は section の調(n.key??keyPc)で解決。program は
     // ピッカーの progForKind で上書き（音色は配置先レーン基準）。feel/compound の欠落も buildPlayback で直る。
     const plan = buildPlayback({ kind: "neta", neta: { kind: n.kind, content: n.content, key: n.key ?? keyPc, mode: n.mode, tempo, meter: n.meter } });
+    setPreviewing({ id: n.id, inContext: false });
     if (plan.notes.length) previewPlay.current = await startPlayback({ ...plan, program: ctx.progForKind(n.kind) }, { vocalMode: "peek" });
   }
   // ピッカーを閉じたら試聴を止める（鳴りっぱなし防止）。
   useEffect(() => {
-    if (!picker) previewPlay.current?.stop();
+    if (!picker) {
+      previewPlay.current?.stop();
+      setPreviewing(null);
+    }
   }, [picker]);
   useEffect(() => () => previewPlay.current?.stop(), []);
 
@@ -147,6 +181,8 @@ export function usePlacePicker(ctx: PlacePickerCtx) {
     pickerSource, setPickerSource,
     pickerOtherMeter, setPickerOtherMeter,
     pickerRecs,
+    pickerLib,
+    previewing,
     openPicker, placeAt, createInLane, previewNeta,
   };
 }

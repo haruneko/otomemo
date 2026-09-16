@@ -1,8 +1,6 @@
-import { useRef, useState, type Ref } from "react";
-import { type BassStep, type BassDegree, type PlaybackHandle, isCompoundMeter, notesForContent, buildPlayback } from "../music";
+import { useState, type Ref } from "react";
+import { type BassStep, type BassDegree } from "../music";
 import { previewNote } from "../audio";
-import { startPlayback } from "../playback";
-import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
 import { Icon } from "./Icon";
@@ -73,47 +71,21 @@ export function BassStepEditor({
   onChange,
   steps,
   onStepsChange,
-  patternId,
-  patternEdited,
-  onApplyPattern,
   meter,
-  keyPc,
-  tempo,
-  program,
   playheadRef,
   scrollerRef,
-  activeProject,
 }: {
   pattern: BassStep[];
   onChange: (p: BassStep[]) => void;
   steps: number;
   onStepsChange: (steps: number) => void;
-  patternId?: string; // 適用した相対ビート型ID（帯「いま：<型>」）。手編集後は patternEdited で「（改）」（決定④）。
-  patternEdited?: boolean; // 手編集済みの印（帯見出しに「（改）」）。
-  onApplyPattern?: (c: { pattern: BassStep[]; steps: number; patternId?: string }) => void; // 帯の適用＝pattern/steps/patternId 置換＋（改）解除（親が snapshot 1操作で Undo）。
   meter?: string; // 拍子（compound=6/8系は帯非表示）。
   keyPc?: number; // 調（型試聴の度数→実音の tonic）。
   tempo?: number; // 型試聴の実音化テンポ。
   program?: number; // ベース音色（GM・試聴用・既定33）。
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
-  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りを PatternImportDialog へ下ろす（純追加）。
 }) {
-  const ppPlay = useRef<PlaybackHandle | null>(null);
-  // Task1g/Task1j：ライブラリから読み込む＝pick ダイアログ（PatternImportControl が入口ボタン＋開閉＋dialog を内包）。
-  // 母集団は bass の **相対 content のみ**（絶対 notes ネタは番兵 contentFilter で捨てる）。ここは apply/試聴だけ Control へ注入。
-  // 試聴＝度数を調(key)の tonic に当てて実音化（既存試聴の流儀・notesForContent("bass")）。
-  const auditionPattern = (content: unknown) => {
-    ppPlay.current?.stop();
-    const ns = notesForContent("bass", content, { key: keyPc ?? 0, meter: meter ?? undefined });
-    if (ns.length) void startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: tempo ?? 120, program: program ?? 33 }), { vocalMode: "peek" }).then((h) => { ppPlay.current = h; });
-  };
-  // 適用＝pattern/steps/patternId を親へ渡し置換＋（改）解除（親が snapshot 1操作で Undo に乗せる）。
-  const applyPattern = (content: unknown) => {
-    ppPlay.current?.stop();
-    const c = content as { pattern: BassStep[]; steps?: number; patternId?: string };
-    onApplyPattern?.({ pattern: c.pattern, steps: c.steps ?? steps, patternId: c.patternId });
-  };
   const [len, setLen] = useState(2); // 既定 8分
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 の付点音価に対応）
   const [eraseMode, setEraseMode] = useState(false); // M5 B3：描く/消すモード（他エディタと一貫）。
@@ -195,9 +167,6 @@ export function BassStepEditor({
 
   return (
     <div className="bass-step">
-      {/* Task1j：設定行（小節行）右端の「ライブラリから読み込む」ボタン（PatternImportControl が入口＋dialog を内包）。
-          compound meter（6/8系）は型ライブラリが4/4前提＝非表示（gen_bass の style も6-8は絶対フォールバック）。
-          nowLabel＝patternId（＋手編集後は「（改）」）。相対 content のみ（contentFilter 番兵）。 */}
       <div className="editor-setrow">
         {/* M5 B3：描く/消すモード（RhythmEditor と同じ proll-modes・Icon edit/eraser で3エディタ一貫）。 */}
         <div className="proll-modes" role="group" aria-label="bass-mode">
@@ -209,18 +178,6 @@ export function BassStepEditor({
           </button>
         </div>
         <BarsControl bars={bars} max={4} onChange={setBars} />
-        {!isCompoundMeter(meter) && (
-          <PatternImportControl
-            kind="bass"
-            fallbackName="おまかせ"
-            nowLabel={patternId ? patternId + (patternEdited ? "（改）" : "") : undefined}
-            contentFilter={(n) => (n.content as { mode?: string } | null)?.mode === "relative"}
-            activeProject={activeProject}
-            onApply={applyPattern}
-            onAudition={auditionPattern}
-            onClose={() => ppPlay.current?.stop()}
-          />
-        )}
       </div>
       <div className="bass-lens">
         <NoteValuePicker
@@ -288,22 +245,6 @@ export function BassStepEditor({
           })}
         </div>
       </div>
-      {/* Task1L 案C：空グリッド（段に1つも打点が無い）のゴーストCTA＝白紙の一歩。1つ置けば消える。
-          置き場は bass-grid の**直下の兄弟**（容器内オーバーレイにしない＝横スクロールで流れない／
-          ラッパを足すと chat.css の `.editor-body .bass-step .bass-grid` flex 子構造を崩す）。
-          非表示条件は入口と同じ＝compound meter（6/8系）ではゴーストも出さない。 */}
-      {!isCompoundMeter(meter) && pattern.length === 0 && (
-        <PatternImportControl
-          variant="ghost"
-          kind="bass"
-          fallbackName="おまかせ"
-          contentFilter={(n) => (n.content as { mode?: string } | null)?.mode === "relative"}
-          activeProject={activeProject}
-          onApply={applyPattern}
-          onAudition={auditionPattern}
-          onClose={() => ppPlay.current?.stop()}
-        />
-      )}
       {pop && (
         <>
           <div className="ext-pop-backdrop" aria-hidden="true" onClick={() => setPop(null)} />

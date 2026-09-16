@@ -396,6 +396,11 @@ export function SectionEditor({
     sectionProjects, progForKind,
     reload: load, onChanged, onOpenNeta,
     runEdgeOp, // ピッカー配置/新規作成の辺操作も CoW ガード（S3-a）
+    // Task #5 入口一本化：ピッカーの▶＝そのセルに置いた状態のセクション全体をループ（ライブの調/拍子/尺/ミュート/ノリ）。
+    auditionSection: () => ({
+      section: { ...neta, key: keyPc, tempo, meter: liveMeter ?? null, bars: BARS, content: { ...secContent, lanes_muted: lanesMuted, ...(secFeel ? { feel: secFeel } : {}) } },
+      children,
+    }),
   });
 
   // 合成：子を section の調へ移調（rhythm除く）＋位置オフセット（共有: compositeNotes）
@@ -814,6 +819,8 @@ export function SectionEditor({
           pickerOtherMeter={pk.pickerOtherMeter}
           setPickerOtherMeter={pk.setPickerOtherMeter}
           pickerRecs={pk.pickerRecs}
+          pickerLib={pk.pickerLib}
+          previewing={pk.previewing}
           placeAt={pk.placeAt}
           previewNeta={pk.previewNeta}
           createInLane={pk.createInLane}

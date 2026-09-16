@@ -401,14 +401,11 @@ describe("ChordPatternEditor Task1k 概形＝パッド整列ピアノロール",
 
 // S4（修理#3 決定③④）：showPicker ゲート（管弦への型誤適用を断つ）＋patternEdited（改）表示。
 describe("ChordPatternEditor S4 帯ゲート＋（改）フラグ", () => {
-  it("showPicker 未指定＝帯を描画（既定 true＝従来どおり＝bit一致）", () => {
-    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("pattern-picker")).toBeTruthy();
-  });
 
-  it("showPicker=false＝帯なし（section_inst＝コード楽器型の誤適用を断つ）", () => {
-    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} showPicker={false} />);
+  it("Task #5 入口一本化＝取込ボタン・ゴースト案内を出さない（空グリッドでも）", () => {
+    render(<ChordPatternEditor pattern={pat({ hits: [] })} onChange={vi.fn()} />);
     expect(screen.queryByLabelText("pattern-picker")).toBeNull();
+    expect(screen.queryByLabelText("pattern-ghost")).toBeNull();
   });
 
   it("patternId 有りネタの手編集→patternEdited:true 付与（来歴 patternId は保持）", async () => {
@@ -420,10 +417,6 @@ describe("ChordPatternEditor S4 帯ゲート＋（改）フラグ", () => {
     );
   });
 
-  it("帯 nowLabel＝patternEdited で「<型>（改）」表示", () => {
-    render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8", patternEdited: true })} onChange={vi.fn()} />);
-    expect(screen.getByLabelText("pattern-now").textContent).toContain("GT-FOLK8（改）");
-  });
 
   it("patternId 無しネタの手編集→patternEdited が生えない（bit一致）", async () => {
     const onChange = vi.fn();
@@ -443,21 +436,6 @@ describe("ChordPatternEditor S4 帯ゲート＋（改）フラグ", () => {
     expect(arg.patternId).toBe("GT-FOLK8");
   });
 
-  it("pick（ライブラリ content で置換）で patternEdited が消える／program は付与しない", async () => {
-    const onChange = vi.fn();
-    // Task1g：pick ダイアログはライブラリ全体（scope:"all"）を引く。タップ＝onPick→applyPattern(content)。
-    vi.mocked(api.listNeta).mockResolvedValue([
-      { id: "cp1", kind: "chord_pattern", title: "GT-FOLK8 弾き語り", text: null, scope: "library", tags: ["scene:verse"], key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "",
-        content: pat({ patternId: "GT-FOLK8", hits: [{ step: 0, dur: 8 }] }) },
-    ]);
-    render(<ChordPatternEditor pattern={pat({ patternId: "GT-FOLK8", patternEdited: true })} onChange={onChange} keyPc={0} />);
-    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await userEvent.click(await screen.findByLabelText("import-pick-0"));
-    const arg = onChange.mock.calls[0]![0] as ChordPatternContent;
-    expect("patternEdited" in arg).toBe(false); // 候補 content に無い＝自然消滅
-    expect("program" in arg).toBe(false); // 現ネタ program 無し＝メタ継承なし＝（改）と無関係
-    expect(arg.patternId).toBe("GT-FOLK8");
-  });
 });
 
 // Task1c（2026-07-23）：両手一体グリッドへ作り直し。並び順=パターン帯→小節→長さ→グリッド／右手↔破線↔左手を単一容器で
@@ -469,15 +447,12 @@ describe("ChordPatternEditor Task1c 両手一体グリッド", () => {
 
   // (a) DOM 縦順＝設定行[小節[−+] → ライブラリから読み込む(二次リンク・右端)] → 長さ(分) → 両手グリッド。
   //     Task1f：「パターンを選ぶ」帯は設定行の右端リンク（variant="link"）へ格下げ＝小節の後・設定行内に同居。
-  it("(a) DOM 縦順＝小節→ライブラリリンク→長さ→両手グリッド（Task1f 設定行配置）", () => {
+  it("(a) DOM 縦順＝小節→長さ→両手グリッド（取込入口は Task #5 で撤去）", () => {
     render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} />);
     const bars = screen.getByLabelText("bars-count");
-    const picker = screen.getByLabelText("pattern-picker"); // Task1f＝設定行の二次リンク
     const len = screen.getByLabelText("dotted"); // 長さツール（NoteValuePicker）
     const grid = screen.getByLabelText("two-hand-grid");
-    expect(picker.classList.contains("pp-link")).toBe(true); // 格下げ＝link variant
-    expect(follows(bars, picker)).toBe(true); // 設定行内で小節の右にリンク
-    expect(follows(picker, len)).toBe(true);
+    expect(follows(bars, len)).toBe(true);
     expect(follows(len, grid)).toBe(true);
   });
 

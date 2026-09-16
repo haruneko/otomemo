@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -168,84 +168,11 @@ describe("BassStepEditor (#bass S2 度数レーン×ステップ)", () => {
   });
 });
 
-// S7（修理#3 決定②④／Task2/L3）：「パターンを選ぶ」帯＝相対ビート型の入口をベースの家へ。
-// 出所＝listNeta を kind:"bass" scope:"library" で引く→相対 content のみ採用（mode!=="relative" は番兵で捨てる）→適用/（改）/compound 非表示。
-describe("BassStepEditor パターンを選ぶ帯（S7）", () => {
-  afterEach(() => vi.clearAllMocks());
-
-  // 相対 content の library ネタ（scope:"library"）を patternId 付きで返すヘルパ。
-  const relNeta = (id: string, pat: BassStep[] = [{ step: 0, degree: "R", dur: 4 }], tags: string[] = []) => ({
-    id, kind: "bass", title: id, text: null, scope: "library" as const, tags, key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "",
-    content: { mode: "relative", steps: 16, pattern: pat, patternId: id },
-  });
-
-  it("リンク→ダイアログ＝listNeta を kind:'bass' scope:'all' で引く（生成器は叩かない）", async () => {
-    api.listNeta.mockResolvedValue([relNeta("RK-8ROOT")]);
-    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
-    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await screen.findByLabelText("import-card-0");
-    expect(api.music).not.toHaveBeenCalled();
-    const q = api.listNeta.mock.calls[0]![0] as { kind: string; scope: string };
-    expect(q.kind).toBe("bass");
-    expect(q.scope).toBe("all"); // library（工場出荷）＋project（自作）を一括＝ライブラリを見せる
-  });
-
-  it("ジャンル絞り＝select で genre タグ一致だけ残す", async () => {
-    api.listNeta.mockResolvedValue([relNeta("RK-8ROOT", undefined, ["genre:rock"]), relNeta("BL-WHOLE", undefined, ["genre:ballad"])]);
-    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
-    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await screen.findByLabelText("import-card-1");
-    await userEvent.selectOptions(screen.getByLabelText("import-genre"), "rock");
-    expect(screen.getByLabelText("import-card-0").textContent).toContain("RK-8ROOT");
-    expect(screen.queryByLabelText("import-card-1")).toBeNull(); // ballad が消え1件
-  });
-
-  it("複数の相対ネタがそれぞれカードに並ぶ", async () => {
-    api.listNeta.mockResolvedValue([relNeta("RK-8ROOT"), relNeta("BL-WHOLE")]);
-    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
-    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await screen.findByLabelText("import-card-0");
-    expect(screen.getByLabelText("import-card-1")).toBeTruthy();
-    expect(screen.queryByLabelText("import-card-2")).toBeNull();
-  });
-
-  it("番兵＝mode!=='relative'（絶対 notes ネタ）候補は捨てる", async () => {
-    // 絶対 notes ネタ（相対エディタに混入する事故の口）は除外され相対だけ残る。
-    api.listNeta.mockResolvedValue([
-      { id: "abs", kind: "bass", title: "abs", text: null, scope: "library" as const, tags: [], key: 0, mode: null, tempo: null, meter: null, bars: null, mood: null, created: "", updated: "", content: { notes: [{ pitch: 40, start: 0, dur: 1 }] } },
-      relNeta("RK-8ROOT"),
-    ]);
-    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" />);
-    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await screen.findByLabelText("import-card-0");
-    expect(screen.getByLabelText("import-card-0").textContent).toContain("RK-8ROOT");
-    expect(screen.queryByLabelText("import-card-1")).toBeNull(); // 絶対は捨てられ相対1件のみ
-  });
-
-  it("タップ＝onApplyPattern に pattern/steps/patternId を渡す", async () => {
-    const pat: BassStep[] = [{ step: 0, degree: "R", dur: 4 }, { step: 8, degree: "5", dur: 4 }];
-    api.listNeta.mockResolvedValue([relNeta("RK-8ROOT", pat)]);
-    const onApplyPattern = vi.fn();
-    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} keyPc={0} meter="4/4" onApplyPattern={onApplyPattern} />);
-    await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-    await userEvent.click(await screen.findByLabelText("import-pick-0"));
-    expect(onApplyPattern).toHaveBeenCalledWith({ pattern: pat, steps: 16, patternId: "RK-8ROOT" });
-  });
-
-  it("帯見出し＝patternEdited 有りで「いま：<型>（改）」／無しは型名のみ", () => {
-    const { rerender } = render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} patternId="RK-8ROOT" />);
-    expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：RK-8ROOT");
-    rerender(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} patternId="RK-8ROOT" patternEdited />);
-    expect(screen.getByLabelText("pattern-now").textContent).toBe("いま：RK-8ROOT（改）");
-  });
-
-  it("patternId 無しネタは「いま：」帯見出しが出ない", () => {
-    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} />);
-    expect(screen.queryByLabelText("pattern-now")).toBeNull();
-  });
-
-  it("compound meter（6/8）は帯ごと非表示", () => {
-    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={12} onStepsChange={vi.fn()} meter="6/8" />);
+// Task #5 入口一本化（2026-08-02 夕裁定）：ライブラリの口はセクションの空きセル→ピッカーの一本＝エディタに取込入口は無い。
+describe("BassStepEditor 取込入口の撤去（Task #5）", () => {
+  it("取込ボタン・ゴースト案内を出さない", () => {
+    render(<BassStepEditor pattern={[]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} meter="4/4" />);
     expect(screen.queryByLabelText("pattern-picker")).toBeNull();
+    expect(screen.queryByLabelText("pattern-ghost")).toBeNull();
   });
 });

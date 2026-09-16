@@ -43,10 +43,6 @@ export interface KindEditorBodyProps {
   setBassSteps: (n: number) => void;
   bassMode: "absolute" | "relative";
   setBassMode: (m: "absolute" | "relative") => void;
-  // S7（修理#3 決定②④）：相対ビート型の来歴／（改）／帯の適用（BassStepEditor の「パターンを選ぶ」帯へ）。
-  bassPatternId?: string;
-  bassPatternEdited?: boolean;
-  onApplyBassPattern?: (c: { pattern: BassStep[]; steps: number; patternId?: string }) => void;
   rollMode: "draw" | "select" | "erase" | "lyric"; // lyric=詞モード（メロのみ・歌詞リタッチ）
   setRollMode: (v: "draw" | "select" | "erase" | "lyric") => void;
   // 骨格（design #20 S2）
@@ -92,10 +88,6 @@ export interface KindEditorBodyProps {
   cow?: import("../useCowGuard").CowGuard; // CoW ガード（S2 Fix C）＝section 直接保存の安全弁（未指定＝従来どおり）
   // useTransport の返り（プレイヘッド/スクロール/拍 ref）
   tp: { lineRef: any; scrollerRef: any; beatRef: any; playing: boolean };
-  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りのため 3エディタ→PatternImportDialog へ下ろす（純追加）。
-  // アレンジS1「文脈試聴」：親セクションの文脈（NetaDialog が parentId から1回引く）。コード楽器エディタの
-  // ▶試聴だけがこれで「セクション合成のループ試聴」へ格上げされる。未配線＝従来のワンショット（純追加）。
-  auditionCtx?: import("../contextAudition").ContextAuditionCtx | null;
 }
 
 export function KindEditorBody(p: KindEditorBodyProps) {
@@ -157,16 +149,12 @@ export function KindEditorBody(p: KindEditorBodyProps) {
               onChange={p.setBassPattern}
               steps={p.bassSteps}
               onStepsChange={p.setBassSteps}
-              patternId={p.bassPatternId}
-              patternEdited={p.bassPatternEdited}
-              onApplyPattern={p.onApplyBassPattern}
               meter={p.meter}
               keyPc={p.keyPc}
               tempo={p.tempo}
               program={p.program}
               playheadRef={tp.lineRef}
               scrollerRef={tp.scrollerRef}
-              activeProject={p.activeProject}
             />
           ) : (
             <>
@@ -293,11 +281,11 @@ export function KindEditorBody(p: KindEditorBodyProps) {
           )}
         </div>
       ) : p.flags.isChordPat || p.flags.isSectionInst ? ( // 管弦(section_inst・WP-X3c)も進行追従の多声＝ChordPatternEditor を共有
-        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} showPicker={p.flags.isChordPat} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} activeProject={p.activeProject} auditionCtx={p.auditionCtx} />
+        <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isChord ? (
         <ChordEditor chords={p.chords} onChange={p.setChords} beatRef={tp.beatRef} playing={tp.playing} meter={p.meter} />
       ) : isRhythm ? (
-        <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} tempo={p.tempo} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} activeProject={p.activeProject} />
+        <RhythmEditor rhythm={p.rhythm} onChange={p.setRhythm} meter={p.meter} tempo={p.tempo} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : p.flags.isSkel ? (
         <div className="melody-input">
           {/* 描く/選ぶ/消す（メロと同じモード流儀）。骨格の点は次点/句境界まで支配。 */}

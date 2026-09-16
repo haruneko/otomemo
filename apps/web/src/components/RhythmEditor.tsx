@@ -1,7 +1,6 @@
 import { type CSSProperties, type Ref, useEffect, useRef, useState } from "react";
 import {
   type RhythmContent,
-  type PlaybackHandle,
   DRUM_LABEL,
   DRUM_KITS,
   drumVel,
@@ -13,12 +12,8 @@ import {
   GHOST_VEL,
   ACCENT_BOOST,
   snapBps,
-  notesForContent,
-  buildPlayback,
 } from "../music";
 import { previewNote } from "../audio";
-import { startPlayback } from "../playback";
-import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
 import { DragHud } from "./DragHud";
 import { Icon } from "./Icon";
@@ -96,10 +91,8 @@ export function RhythmEditor({
   rhythm,
   onChange,
   meter,
-  tempo,
   playheadRef,
   scrollerRef,
-  activeProject,
 }: {
   rhythm: RhythmContent;
   onChange: (r: RhythmContent) => void;
@@ -107,24 +100,8 @@ export function RhythmEditor({
   tempo?: number; // 型試聴の実音化テンポ（修理#1「パターンを選ぶ」帯）
   playheadRef?: Ref<HTMLDivElement>; // #74 再生プレイヘッド
   scrollerRef?: Ref<HTMLDivElement>;
-  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りを PatternImportDialog へ下ろす（純追加）。
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter, rhythm.beatsPerStep);
-  const ppPlay = useRef<PlaybackHandle | null>(null);
-  // Task1g/Task1j：ライブラリから読み込む＝pick ダイアログ（PatternImportControl が入口ボタン＋開閉＋dialog を内包）。
-  // ここは apply/試聴だけ Control へ注入（apply/試聴は現行のまま＝bit一致）。
-  // 試聴＝ドラムは進行不要。rhythm content をそのまま鳴らす（notesForContent("rhythm")）。
-  const auditionPattern = (content: unknown) => {
-    ppPlay.current?.stop();
-    const ns = notesForContent("rhythm", content);
-    if (ns.length) void startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: tempo ?? 120 }), { vocalMode: "peek" }).then((h) => { ppPlay.current = h; });
-  };
-  // 適用＝候補 rhythm で置換（steps/lanes/patternId）。kit（音色）は現ネタを保持＝onChange で Undo に乗る。
-  const applyPattern = (content: unknown) => {
-    ppPlay.current?.stop();
-    const rc = (content as { rhythm: RhythmContent }).rhythm;
-    onChange({ ...rc, ...(rhythm.kit != null ? { kit: rhythm.kit } : {}) });
-  };
   // 手編集の共通 setter（修理#3 決定④）＝content の演奏内容（hits/vel/div/小節数）を変える系はここを通す。
   // patternId が在る時だけ patternEdited を立てる（来歴保持＋帯「いま：<型>（改）」）。patternId 無しネタは
   // 新キーが生えない＝bit 一致。kit（音色メタ）や applyPattern（置換）はこの setter を通さない＝（改）は付かない/消える。
@@ -250,17 +227,6 @@ export function RhythmEditor({
             </optgroup>
           </select>
         </label>
-        {/* Task1g/Task1j：設定行（rhythm-toolbar）右端の「ライブラリから読み込む」ボタン（PatternImportControl が入口＋dialog を内包）。
-            nowLabel＝patternId（＋手編集後は「（改）」）。 */}
-        <PatternImportControl
-          kind="rhythm"
-          fallbackName="おまかせ"
-          nowLabel={rhythm.patternId ? rhythm.patternId + (rhythm.patternEdited ? "（改）" : "") : undefined}
-          activeProject={activeProject}
-          onApply={applyPattern}
-          onAudition={auditionPattern}
-          onClose={() => ppPlay.current?.stop()}
-        />
       </div>
       <div
         className="proll-playhead"
@@ -303,19 +269,6 @@ export function RhythmEditor({
           })}
         </div>
       ))}
-      {/* Task1L 案C：空グリッド（全レーンに打点ゼロ）のゴーストCTA＝白紙の一歩。1打でも置けば消える。
-          置き場はレーン群の直下（オーバーレイにしない＝横スクロール/クランプの地雷を踏まない）。 */}
-      {rhythm.lanes.every((l) => l.hits.length === 0) && (
-        <PatternImportControl
-          variant="ghost"
-          kind="rhythm"
-          fallbackName="おまかせ"
-          activeProject={activeProject}
-          onApply={applyPattern}
-          onAudition={auditionPattern}
-          onClose={() => ppPlay.current?.stop()}
-        />
-      )}
       <p className="muted rhythm-hint">
         タップ＝置く/消す ・ 打点を長押し→ <b>上下＝強さ</b>（弱く/普通/強く）・ <b>左右＝連打</b>（2連/3連） ・ 横スワイプ＝スクロール
       </p>

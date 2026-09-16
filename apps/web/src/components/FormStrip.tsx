@@ -584,6 +584,8 @@ export function FormStrip({
           pickerOtherMeter={pk.pickerOtherMeter}
           setPickerOtherMeter={pk.setPickerOtherMeter}
           pickerRecs={pk.pickerRecs}
+          pickerLib={pk.pickerLib}
+          previewing={pk.previewing}
           placeAt={(n) => void placeInsert(n)}
           previewNeta={pk.previewNeta}
           createInLane={() => void createInsert()}

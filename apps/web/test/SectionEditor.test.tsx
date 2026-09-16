@@ -518,7 +518,7 @@ describe("SectionEditor (3-lane timeline)", () => {
   it("リズムを置く＝その小節に1つだけ（自動末尾充填はしない＝小節別に別パターンを置ける）", async () => {
     placeChild.mockClear(); // テスト間で mock.calls が累積するため（このテストの配置だけ数える）
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
-    listNeta.mockResolvedValue([mk("r", "rhythm", { title: "ドラム素材", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } })]);
+    listNeta.mockImplementation(async (q?: { scope?: string }) => (q?.scope === "library" ? [] : [mk("r", "rhythm", { title: "ドラム素材", content: { rhythm: { steps: 16, lanes: [{ name: "Kick", midi: 36, hits: [0] }] } } })]));
     placeChild.mockResolvedValue({ ok: true });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await userEvent.click(screen.getByLabelText("place-rhythm-1")); // 2小節目(position 4)に置く
@@ -570,7 +570,7 @@ describe("SectionEditor (3-lane timeline)", () => {
   });
   it("② コード楽器2レーンの空セルに置くと ord=1 で配置される", async () => {
     getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
-    listNeta.mockResolvedValue([mk("cp9", "chord_pattern", { title: "パッド素材" })]);
+    listNeta.mockImplementation(async (q?: { scope?: string }) => (q?.scope === "library" ? [] : [mk("cp9", "chord_pattern", { title: "パッド素材" })]));
     placeChild.mockResolvedValue({ ok: true });
     render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
     await screen.findByLabelText("timeline");
@@ -581,6 +581,28 @@ describe("SectionEditor (3-lane timeline)", () => {
     await waitFor(() => expect(screen.getByText("パッド素材")).toBeInTheDocument());
     await userEvent.click(screen.getByText("パッド素材"));
     expect(placeChild).toHaveBeenCalledWith("s1", "cp9", 0, 1); // ord=1＝2レーン目
+  });
+
+  it("Task #5 入口一本化：コード楽器レーンのピッカーに「ライブラリの型」が並び、置く＝コピーしてから配置", async () => {
+    placeChild.mockClear();
+    copyNeta.mockClear();
+    getComposition.mockResolvedValue({ neta: mk("s1", "section"), children: [] });
+    const lib = mk("og1", "chord_pattern", { title: "OG-SOUL オルガン ソウル", scope: "library", meter: "4/4" });
+    listNeta.mockImplementation(async (q?: { scope?: string; kind?: string }) =>
+      q?.scope === "library" ? (q.kind === "chord_pattern" ? [lib] : []) : [],
+    );
+    copyNeta.mockResolvedValue(mk("og1copy", "chord_pattern"));
+    placeChild.mockResolvedValue({ ok: true });
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("timeline");
+    await userEvent.click(screen.getByLabelText("add-lane"));
+    await userEvent.click(screen.getByLabelText("add-lane-chord_pattern"));
+    await userEvent.click(screen.getByLabelText("place-chord_pattern-0"));
+    expect(await screen.findByLabelText("picker-lib")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("picker-search"), "オルガン");
+    await userEvent.click(screen.getByLabelText("place-og1"));
+    await waitFor(() => expect(placeChild).toHaveBeenCalledWith("s1", "og1copy", 0, 0));
+    expect(copyNeta).toHaveBeenCalledWith("og1");
   });
 
   it("評価修正A: 既定は8小節（place-melody-7 まで／8は無い）", async () => {

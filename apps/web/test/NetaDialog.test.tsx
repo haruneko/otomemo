@@ -581,12 +581,12 @@ describe("NetaDialog S7 ベースの家（相対 bass）", () => {
     expect(await screen.findByLabelText("bass-R-0")).toBeTruthy(); // 相対グリッドへ
   });
 
-  it("管弦(section_inst)では「パターンを選ぶ」帯が消える（ゲート発効）／コード楽器では出る", () => {
+  it("Task #5 入口一本化＝管弦でもコード楽器でも取込入口は出ない（ライブラリの口はピッカーの一本）", () => {
     const cpContent = { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 4 }] };
     const { unmount } = render(<NetaDialog neta={{ ...neta, kind: "section_inst", text: null, content: cpContent }} onClose={vi.fn()} onChanged={vi.fn()} />);
     expect(screen.queryByLabelText("pattern-picker")).toBeNull(); // 管弦＝帯なし（型の誤適用を断つ）
     unmount();
     render(<NetaDialog neta={{ ...neta, kind: "chord_pattern", text: null, content: cpContent }} onClose={vi.fn()} onChanged={vi.fn()} />);
-    expect(screen.getByLabelText("pattern-picker")).toBeTruthy(); // コード楽器＝従来どおり帯あり
+    expect(screen.queryByLabelText("pattern-picker")).toBeNull(); // コード楽器も入口なし
   });
 });

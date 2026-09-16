@@ -1202,6 +1202,17 @@
   max-height: 50vh;
   overflow-y: auto;
 }
+/* Task #5 入口一本化：ライブラリの型の群＝自作と同じ縦グリッドに続けて並べる（見出しだけ足す）。 */
+.picker-lib {
+  display: contents;
+}
+.picker-lib > .picker-recs-head {
+  margin: 6px 0 0;
+}
+.picker-audition-status {
+  margin: 4px 0;
+  font-size: 0.78rem;
+}
 /* #55 ピッカーの候補をネタ帳カード風に：概形(MiniRoll)＋種類/mood/keyで見て選べる */
 /* リスト項目＝配置ボタン(picker-item-tap)＋試聴(picker-play)の横並び。枠は wrapper が持つ。 */
 .picker-item {
@@ -2371,36 +2382,9 @@
 /* コード楽器：コントロール群（枠の外）＋グリッド（横スクロール枠）を縦に。min-width:0 で
    子がビューポートを超えて広がらない＝モバイルで横はみ出さない。 */
 .cp-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-/* 「パターンを選ぶ ▸」帯（修理#1）＝型辞書の入口を単体エディタへ。既定閉のたたみ帯（コード楽器／ドラム共用）。 */
-.pattern-picker { border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 4px 6px; min-width: 0; }
-.pp-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; padding: 4px; font-size: 0.78rem; color: inherit; cursor: pointer; }
-.pp-now { color: var(--muted); font-size: 0.72rem; }
-.pp-body { display: flex; flex-direction: column; gap: 8px; padding: 6px 2px 2px; }
-.pp-genres { flex-wrap: wrap; }
-.pp-fetch { align-self: flex-start; padding: 4px 12px; border-radius: 6px; }
-.pp-cards { display: flex; flex-direction: column; gap: 6px; }
-.pp-card { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 1px solid var(--line, #eee); border-radius: 6px; flex-wrap: wrap; }
-.pp-card-name { font-weight: 600; font-size: 0.76rem; }
-.pp-card-scene { font-size: 0.7rem; flex: 1 1 auto; min-width: 0; }
-.pp-audition, .pp-apply { padding: 2px 10px; border-radius: 6px; }
 /* Task1f＝設定行（小節行）＝小節ステッパー＋二次リンクを1行に。モバイルで収まらなければ折返す（flex-wrap）。 */
 .editor-setrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .editor-setrow .bars-control { margin-bottom: 0; }
-/* Task1j＝「ライブラリから読み込む」入口＝ライブラリアイコン付きの控えめなボタン（PatternImportControl）。
-   設定行の右端に寄せる。二次アクションの範囲＝枠/背景を軽く（リンク下線はやめてボタン見た目に）。 */
-.pattern-picker.pp-link { border: none; padding: 0; margin-left: auto; display: flex; align-items: center; gap: 8px; }
-/* オーナーFB「アイコンだけで」＝ライブラリ取込は library アイコン単体の正方ボタン（文言は title/aria）。 */
-.pp-icon-btn { display: inline-flex; align-items: center; justify-content: center; background: var(--card, #22252b); border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 6px; color: var(--muted); cursor: pointer; }
-.pp-icon-btn:hover { color: inherit; border-color: var(--muted); }
-.pp-icon-btn svg { flex: none; display: block; }
-/* Task1L＝案C：空グリッドのときだけグリッド直下に出るゴーストCTA（白紙の一歩）。破線＋淡色＝「まだ何も無い面」の相場
-   （FilterDrawer の 0件ゴーストと同じ視覚言語）。1つでも置けば消える＝作業中は一切占有しない。
-   縦積み＋max-width:100% で 390px 幅でもはみ出さない（文言は折返し可）。 */
-.pattern-ghost { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 8px; border: 1px dashed var(--line, #ddd); border-radius: 8px; color: var(--muted); min-width: 0; }
-.pp-ghost-cta { display: inline-flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%; background: none; border: none; padding: 4px 8px; border-radius: 6px; color: inherit; font-size: 0.78rem; cursor: pointer; }
-.pp-ghost-cta:hover { color: var(--fg, inherit); }
-.pp-ghost-cta svg { flex: none; display: block; }
-.pp-ghost-hint { font-size: 0.68rem; color: var(--muted); text-align: center; }
 /* ゾーンの小見出し（いつ弾く／響き）。 */
 .cp-zlabel { font-size: 0.68rem; color: var(--muted); margin: 0 0 6px; }
 /* Task1c 両手一体グリッド（一枚容器・同一ステップ列を共有）＝上帯:右手／破線／下帯:左手。

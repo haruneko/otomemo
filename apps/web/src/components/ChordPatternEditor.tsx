@@ -1,9 +1,6 @@
-import { type CSSProperties, type ReactNode, type Ref, useRef, useState } from "react";
-import { type ChordPatternContent, type ChordLhContent, type ChordEntry, type PlaybackHandle, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, notesForContent, buildPlayback, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
+import { type CSSProperties, type ReactNode, type Ref, useState } from "react";
+import { type ChordPatternContent, type ChordLhContent, type ChordEntry, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, notesForContent, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
 import { previewNote } from "../audio";
-import { startPlayback } from "../playback";
-import { contextAuditionPlan, type ContextAuditionCtx } from "../contextAudition";
-import { PatternImportControl } from "./PatternImportControl";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
 import { Icon } from "./Icon";
@@ -164,14 +161,10 @@ export function ChordPatternEditor({
   onChange,
   meter,
   program,
-  tempo,
   keyPc,
   previewChords,
-  showPicker = true,
   playheadRef,
   scrollerRef,
-  activeProject,
-  auditionCtx,
 }: {
   pattern: ChordPatternContent;
   onChange: (p: ChordPatternContent) => void;
@@ -180,39 +173,10 @@ export function ChordPatternEditor({
   tempo?: number; // 型試聴の実音化＋候補フレームの tempo（修理#1「パターンを選ぶ」帯）
   keyPc?: number; // 調（型試聴のプレビュー進行の移調＋候補フレームの key）
   previewChords?: ChordEntry[]; // ネタ固有のプレビュー進行（あれば型試聴に使う・無ければ C→Am→F→G）
-  showPicker?: boolean; // 修理#3 決定③：「パターンを選ぶ ▸」帯の出し分け（既定 true＝従来描画＝bit一致）。管弦(section_inst)＝false で非表示（型の誤適用を断つ）。
   playheadRef?: Ref<HTMLDivElement>;
   scrollerRef?: Ref<HTMLDivElement>;
-  activeProject?: string; // Task1i：Source（プロジェクト軸）絞りを PatternImportDialog へ下ろす（純追加）。
-  // アレンジS1「文脈試聴」（design「### アレンジS1＝写像規則の契約」）：このネタが置かれているセクションの文脈
-  // （親セクション＋子配置＋自分の id）。**あるときだけ**▶試聴が「候補で差し替えたセクション合成のループ再生」へ
-  // 格上げされる。未配線（単体で開いた／ベース・ドラム経由）＝従来のワンショット試聴のまま＝bit一致。
-  auditionCtx?: ContextAuditionCtx | null;
 }) {
   const { stepsPerBar, beatStep } = meterSteps(meter);
-  const ppPlay = useRef<PlaybackHandle | null>(null);
-  // Task1g/Task1j：ライブラリから読み込む＝pick ダイアログ（PatternImportControl が入口ボタン＋開閉＋dialog を内包）。
-  // ここは applyPattern/auditionPattern（editor 固有＝content 形・再生文脈）だけを Control へ注入する（apply/試聴は現行のまま＝bit一致）。
-  // 試聴＝ネタ preview_chords（あれば）or プレビュー進行に当てて resolveChordPattern で実音化（tempo/program 込み）。
-  const auditionPattern = (content: unknown) => {
-    ppPlay.current?.stop();
-    // S1 文脈試聴：セクション文脈があれば「編集中ネタを候補で差し替えたセクション合成」をループ再生
-    //   ＝主旋律と一緒に鳴る（design「文脈試聴」）。文脈が無い（単体編集・未配置）＝null＝下のワンショットへ。
-    const ctxPlan = auditionCtx ? contextAuditionPlan(auditionCtx, content) : null;
-    if (ctxPlan) {
-      void startPlayback(ctxPlan.plan, { vocalMode: "peek", loop: ctxPlan.loop }).then((h) => { ppPlay.current = h; });
-      return;
-    }
-    const chords = previewChords?.length ? previewChords : previewChordsForKey(keyPc ?? 0);
-    const ns = notesForContent("chord_pattern", content, { key: keyPc ?? 0, chords, tempo, program: program ?? (content as ChordPatternContent).program });
-    if (ns.length) void startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo: tempo ?? 120, program }), { vocalMode: "peek" }).then((h) => { ppPlay.current = h; });
-  };
-  // 適用＝候補 content で置換（mode/voicing/steps/hits/lh/patternId）。program 等メタは現ネタを保持＝onChange で Undo に乗る。
-  const applyPattern = (content: unknown) => {
-    ppPlay.current?.stop();
-    const c = content as ChordPatternContent;
-    onChange({ ...c, ...(pattern.program != null ? { program: pattern.program } : {}) });
-  };
   const [len, setLen] = useState(4); // 各音の長さ（step数・既定=四分）
   const [dotted, setDotted] = useState(false); // 付点：音長×1.5（6/8 対応）
   // Task1c：「響き」を折りたたみへ降格（既定=閉）。前面は両手グリッドが主役＝響き7ノブは disclosure 内へ退避。
@@ -362,28 +326,12 @@ export function ChordPatternEditor({
   const rollChords = previewChords?.length ? previewChords : previewChordsForKey(keyPc ?? 0);
   const rollNotes = notesForContent("chord_pattern", { ...pattern, voicing: { ...v, top }, program }, { key: keyPc ?? 0, chords: rollChords, program });
   const roll = voicingRollRects(rollNotes, pattern.steps);
-  // Task1L 案C：空グリッドのゴーストCTA。空＝右手 hit が無く、かつ左手も鳴らない（lh 未定義 or custom で hit 無し）。
-  //   preset（root/root5/oct）は hit 無しでも実音化される＝「空」ではない＝誘導を出さない。
-  const gridEmpty = pattern.hits.length === 0 && (!pattern.lh || (pattern.lh.mode === "custom" && !pattern.lh.hits?.length));
 
   return (
     <div className="cp-editor">
-      {/* 設定行＝Task1c 並び順（ベースへ統一）：小節[−+] → ライブラリから読み込む（右端ボタン） → 長さ(分) → 両手グリッド。
-          Task1j：入口ボタン＋dialog は PatternImportControl が内包。showPicker=false（管弦=section_inst）で丸ごと非表示＝
-          コード楽器型の誤適用を断つ（決定③）。手編集済みは nowLabel に「（改）」を添える（決定④）。 */}
+      {/* 設定行＝小節[−+] → 長さ(分) → 両手グリッド。ライブラリの口はセクションの空きセル→ピッカーの一本（2026-08-02 夕裁定・Task #5）。 */}
       <div className="editor-setrow">
         <BarsControl bars={bars} max={4} onChange={(n) => editContent({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
-        {showPicker && (
-          <PatternImportControl
-            kind="chord_pattern"
-            fallbackName="コード楽器"
-            nowLabel={pattern.patternId != null ? pattern.patternId + (pattern.patternEdited ? "（改）" : "") : undefined}
-            activeProject={activeProject}
-            onApply={applyPattern}
-            onAudition={auditionPattern}
-            onClose={() => ppPlay.current?.stop()}
-          />
-        )}
       </div>
       {/* 長さツールはメロ編集(PianoRoll)と同じ proll-tools で包む＝見た目・選択表示を統一。右手/左手 hit の音長を共有。 */}
       <div className="proll-tools">
@@ -504,22 +452,6 @@ export function ChordPatternEditor({
           </div>
         )}
       </div>
-      {/* Task1L 案C：空グリッドのゴーストCTA＝白紙の一歩（「ライブラリから読み込む／またはタップして自分で置く」）。
-          1つでも置けば消える＝作業中は邪魔しない。設定行の入口（アイコン）は常設のまま＝後から差し替えも効く。
-          置き場は cp-grid の**直下の兄弟**（容器内オーバーレイにしない）＝cp-grid は横スクロール容器ゆえ
-          内側 absolute はスクロールで流れ、外側にラッパを足すとモバイルの flex 高さ（chat.css）を崩す。
-          非表示条件は入口と同じ＝showPicker=false（管弦）ではゴーストも出さない。 */}
-      {showPicker && gridEmpty && (
-        <PatternImportControl
-          variant="ghost"
-          kind="chord_pattern"
-          fallbackName="コード楽器"
-          activeProject={activeProject}
-          onApply={applyPattern}
-          onAudition={auditionPattern}
-          onClose={() => ppPlay.current?.stop()}
-        />
-      )}
       {guitarResolved && (
         <p className="cp-hint">ストローク向き＝表拍D・裏Uが自動既定・タップで入替。アップは軽く・上位の弦だけ鳴る。</p>
       )}

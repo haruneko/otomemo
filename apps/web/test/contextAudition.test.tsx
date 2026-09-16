@@ -1,196 +1,206 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, renderHook, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Neta } from "../src/api";
 
-// アレンジS1「文脈試聴」（正準＝docs/design.md「### アレンジS1＝写像規則の契約」の「文脈試聴」項）：
-//   現状の候補試聴は単体音ワンショット（kind:"notes"・loop 無し）。S1 は候補 content を
-//   **いま編集中のコード楽器ネタの差し替え**としてセクション可聴合成（kind:"tree"・audibleChildren）へ流し込み、
-//   startPlayback の既存 loop を付けて鳴らす＝「主旋律と一緒にループ試聴」。入口は既存 PatternImportDialog を使い回す。
-// 契約（このテストが正典の写し）：
-//  (a) セクション文脈あり＝▶で buildPlayback({kind:"tree", children:…差し替え済み…}) ＋ startPlayback に loop。
-//  (b) 文脈なし（auditionCtx 未配線 / このネタがセクションに居ない）＝従来のワンショット（kind:"notes"・loop 無し）。
-//  (c) ダイアログを閉じたら停止（既存 onClose→ppPlay.stop の流儀のまま）。
-//  (d) ベース/ドラムエディタ経由＝S1 スコープ外＝挙動不変（kind:"notes"・loop 無し）。
+// Task #5 入口一本化（正準＝docs/design.md「アレンジS1＝写像規則の契約」節末尾の裁定＋「実装の細部（2026-09-16）」）：
+//  (1) contextAuditionPlan＝仮想子の**追加**モード（空きセルに候補を置いた状態のセクション全体をループ）。
+//  (2) usePlacePicker＝パターン系レーン（chord_pattern/bass/rhythm）はライブラリの型も引く。
+//      ▶＝文脈（auditionSection）があれば tree＋loop、無ければ従来ワンショット。▶⇄■。
+//  (3) PlacePicker＝「ライブラリの型」群・検索はネタ名に当たる・試聴中の明示。
 
-const api = vi.hoisted(() => ({ listNeta: vi.fn(), music: vi.fn() }));
+const api = vi.hoisted(() => ({ listNeta: vi.fn(), recommend: vi.fn(), copyNeta: vi.fn(), placeChild: vi.fn() }));
 vi.mock("../src/api", () => ({ api }));
 vi.mock("../src/components/MiniRoll", () => ({ MiniRoll: () => <div data-testid="mini-roll" /> }));
 
-// 再生は鳴らさない（部分モック＝startPlayback だけ差し替え）。返るハンドルの stop で「閉じたら停止」を見る。
 const stop = vi.hoisted(() => vi.fn());
 const startPlayback = vi.hoisted(() => vi.fn(async (_plan: unknown, _opts?: unknown) => ({ stop })));
 vi.mock("../src/playback", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return { ...actual, startPlayback };
 });
-// music は部分モック＝buildPlayback だけ本物を包んで「渡された PlaybackSource」を記録する（実音化は本物）。
 vi.mock("../src/music", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return { ...actual, buildPlayback: vi.fn(actual.buildPlayback as (...a: unknown[]) => unknown) };
 });
 
-import { ChordPatternEditor } from "../src/components/ChordPatternEditor";
-import { BassStepEditor } from "../src/components/BassStepEditor";
-import { RhythmEditor } from "../src/components/RhythmEditor";
-import { buildPlayback, type ChordPatternContent, type PlaybackSource } from "../src/music";
+import { buildPlayback, type PlaybackSource } from "../src/music";
 import { contextAuditionPlan, type ContextAuditionCtx } from "../src/contextAudition";
+import { usePlacePicker, type PlacePickerCtx } from "../src/usePlacePicker";
+import { PlacePicker } from "../src/components/PlacePicker";
+import type { Lane } from "../src/components/sectionLanes";
 
 const bp = buildPlayback as unknown as ReturnType<typeof vi.fn>;
 const lastSource = (): PlaybackSource => bp.mock.calls[bp.mock.calls.length - 1]![0] as PlaybackSource;
 
 const mkNeta = (over: Partial<Neta> = {}): Neta => ({
   id: "n1", kind: "chord_pattern", title: "KB-PAD", text: null,
-  content: null, key: 0, mode: null, tempo: null, meter: null,
-  bars: null, mood: null, scope: "library", tags: [], created: "", updated: "", ...over,
+  content: null, key: null, mode: null, tempo: null, meter: null,
+  bars: null, mood: null, scope: "project", tags: [], created: "", updated: "", ...over,
 });
 
-// 候補（ライブラリのネタ）＝ダイアログに並ぶ1件。content が「差し替える中身」。
-const CAND_CONTENT = { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 4, dur: 4 }], patternId: "KB-STAB" };
-const candNeta = mkNeta({ id: "cand1", content: CAND_CONTENT });
-
-const pat = (over: Partial<ChordPatternContent> = {}): ChordPatternContent => ({
-  mode: "strum",
-  voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 },
-  steps: 16,
-  hits: [{ step: 0, dur: 4 }],
-  ...over,
-});
-
-// ── セクション文脈（api.getComposition の返りそのままの形）──
+const CAND_CONTENT = { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 4, dur: 4 }], patternId: "OG-STAB" };
+const cand = mkNeta({ id: "cand1", title: "OG-STAB オルガン裏拍", scope: "library", content: CAND_CONTENT, meter: "4/4" });
 const MELODY_CONTENT = { notes: [{ pitch: 72, start: 0, dur: 1 }] };
 const CHORDS_CONTENT = { chords: [{ root: 0, quality: "", start: 0, dur: 4 }, { root: 5, quality: "", start: 4, dur: 4 }] };
-const EDITING_CONTENT = { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, top: 72 }, steps: 16, hits: [{ step: 0, dur: 4 }] };
 
 const section = (over: Partial<Neta> = {}): Neta =>
-  mkNeta({ id: "sec1", kind: "section", title: "Aメロ", content: {}, key: 0, mode: "major", tempo: 100, meter: "4/4", bars: null, ...over });
-
+  mkNeta({ id: "sec1", kind: "section", title: "Aメロ", content: {}, key: 0, mode: "major", tempo: 100, meter: "4/4", ...over });
 const child = (neta: Neta, position = 0, ord = 0) => ({ position, ord, node: { neta, children: [] } });
-
 const ctx = (over: Partial<ContextAuditionCtx> = {}): ContextAuditionCtx => ({
   section: section(),
   children: [
     child(mkNeta({ id: "ch", kind: "chord_progression", content: CHORDS_CONTENT })),
     child(mkNeta({ id: "mel", kind: "melody", content: MELODY_CONTENT })),
-    child(mkNeta({ id: "n1", kind: "chord_pattern", content: EDITING_CONTENT })),
   ],
-  childNetaId: "n1",
   ...over,
 });
+const idOf = (c: { node: { neta: unknown } }) => (c.node.neta as { id?: string }).id;
 
-const openAndPreview = async () => {
-  await userEvent.click(screen.getByLabelText("pattern-picker-toggle"));
-  await userEvent.click(await screen.findByLabelText("import-preview-0"));
-};
+describe("(1) contextAuditionPlan＝空きセルに候補を仮想子として追加", () => {
+  beforeEach(() => vi.clearAllMocks());
 
-describe("S1 文脈試聴：contextAuditionPlan（純関数＝合成と loop の契約）", () => {
-  beforeEach(() => { vi.clearAllMocks(); api.listNeta.mockResolvedValue([candNeta]); });
-
-  it("(a) 編集中ネタ（childNetaId）の content だけが候補に差し替わり、他の子はそのまま", () => {
-    const got = contextAuditionPlan(ctx(), CAND_CONTENT);
+  it("既存の子はそのまま＋候補がレーン行(ord)・位置で1つ足される（tree）", () => {
+    const got = contextAuditionPlan(ctx(), { neta: cand, position: 4, ord: 1 });
     expect(got).not.toBeNull();
     const src = lastSource() as Extract<PlaybackSource, { kind: "tree" }>;
     expect(src.kind).toBe("tree");
-    expect(src.children).toHaveLength(3);
-    const byId = (id: string) => src.children.find((c) => (c.node.neta as { id?: string }).id === id)!;
-    expect(byId("n1").node.neta.content).toBe(CAND_CONTENT); // 差し替え（重ねではない＝伴奏が二重に鳴らない）
-    expect(byId("mel").node.neta.content).toBe(MELODY_CONTENT); // 主旋律はそのまま＝一緒に鳴る
-    expect(byId("ch").node.neta.content).toBe(CHORDS_CONTENT);
-    expect(src.key).toBe(0);
-    expect(src.mode).toBe("major");
+    expect(src.children.map(idOf)).toEqual(["ch", "mel", "cand1"]);
+    const v = src.children[2]!;
+    expect(v.position).toBe(4);
+    expect((v as { ord?: number }).ord).toBe(1);
+    expect(v.node.neta.content).toBe(CAND_CONTENT);
     expect(src.tempo).toBe(100);
     expect(src.meter).toBe("4/4");
   });
 
-  it("(a) loop＝0拍〜セクション総拍（既定8小節×4拍＝32拍）", () => {
-    expect(contextAuditionPlan(ctx(), CAND_CONTENT)!.loop).toEqual({ startBeat: 0, endBeat: 32 });
+  it("loop＝0拍〜セクション総拍（既定8小節＝32拍・bars=12 なら48拍）", () => {
+    expect(contextAuditionPlan(ctx(), { neta: cand, position: 0, ord: 0 })!.loop).toEqual({ startBeat: 0, endBeat: 32 });
+    expect(contextAuditionPlan(ctx({ section: section({ bars: 12 }) }), { neta: cand, position: 0, ord: 0 })!.loop.endBeat).toBe(48);
   });
 
-  it("(a) セクション尺は neta.bars と中身の長い方（bars=2 でも中身が8小節なら32拍のまま／bars=12 なら48拍）", () => {
-    expect(contextAuditionPlan(ctx({ section: section({ bars: 12 }) }), CAND_CONTENT)!.loop.endBeat).toBe(48);
-    expect(contextAuditionPlan(ctx({ section: section({ bars: 2 }) }), CAND_CONTENT)!.loop.endBeat).toBe(32);
-  });
-
-  it("(a) レーンミュートは尊重（melody ミュート＝合成から外れる）／ただし編集中ネタ自身は必ず鳴る", () => {
+  it("レーンミュートは尊重（melody ミュートで外れる）／候補はミュート中のレーンでも必ず鳴る", () => {
     const muted = ctx({ section: section({ content: { lanes_muted: ["melody", "chord_pattern"] } }) });
-    expect(contextAuditionPlan(muted, CAND_CONTENT)).not.toBeNull();
-    const src = lastSource() as Extract<PlaybackSource, { kind: "tree" }>;
-    const ids = src.children.map((c) => (c.node.neta as { id?: string }).id);
-    expect(ids).not.toContain("mel"); // ミュートしたレーンは鳴らさない（getPlan と同じ audibleChildren）
-    expect(ids).toContain("n1"); // ▶を押した候補だけは必ず鳴る
-    expect(src.children.find((c) => (c.node.neta as { id?: string }).id === "n1")!.node.neta.content).toBe(CAND_CONTENT);
+    contextAuditionPlan(muted, { neta: cand, position: 0, ord: 0 });
+    const ids = (lastSource() as Extract<PlaybackSource, { kind: "tree" }>).children.map(idOf);
+    expect(ids).not.toContain("mel");
+    expect(ids).toContain("cand1");
   });
 
-  it("(b) このネタがセクションに居ない／子が空＝null（＝呼び側はワンショットへフォールバック）", () => {
-    expect(contextAuditionPlan(ctx({ childNetaId: "zzz" }), CAND_CONTENT)).toBeNull();
-    expect(contextAuditionPlan(ctx({ children: [] }), CAND_CONTENT)).toBeNull();
+  it("子が空のセクションでも候補だけでループ試聴になる", () => {
+    const got = contextAuditionPlan(ctx({ children: [] }), { neta: cand, position: 0, ord: 0 });
+    expect(got).not.toBeNull();
+    expect((lastSource() as Extract<PlaybackSource, { kind: "tree" }>).children.map(idOf)).toEqual(["cand1"]);
   });
 });
 
-describe("S1 文脈試聴：ChordPatternEditor の▶（コード楽器エディタだけ格上げ）", () => {
-  beforeEach(() => { vi.clearAllMocks(); api.listNeta.mockResolvedValue([candNeta]); });
+const CP_LANE: Lane = { key: "chord_pattern2", label: "コード楽器2", kinds: ["chord_pattern"], row: 1 } as Lane;
+const MEL_LANE: Lane = { key: "melody", label: "メロ", kinds: ["melody"] } as Lane;
 
-  it("(a) 文脈あり＝kind:'tree'（差し替え済み）＋ startPlayback に loop が渡る", async () => {
-    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} meter="4/4" tempo={100} keyPc={0} auditionCtx={ctx()} />);
-    await openAndPreview();
+const hookCtx = (over: Partial<PlacePickerCtx> = {}): PlacePickerCtx => ({
+  neta: section(),
+  keyPc: 0,
+  tempo: 100,
+  liveMeter: "4/4",
+  occupiedAt: () => false,
+  overlapsOtherInLane: () => false,
+  contentDur: () => 4,
+  sectionProjects: [],
+  progForKind: () => undefined,
+  reload: async () => {},
+  ...over,
+});
+
+describe("(2) usePlacePicker＝ライブラリの型を引く・▶は文脈試聴", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.recommend.mockResolvedValue([]);
+    api.listNeta.mockImplementation(async (q: { scope?: string }) => (q.scope === "library" ? [cand] : []));
+  });
+
+  it("パターン系レーン＝同 kind の scope:library を引いて pickerLib に持つ", async () => {
+    const { result } = renderHook(() => usePlacePicker(hookCtx()));
+    await act(async () => { await result.current.openPicker(CP_LANE, 8); });
+    expect(api.listNeta).toHaveBeenCalledWith(expect.objectContaining({ kind: "chord_pattern", scope: "library" }));
+    expect(result.current.pickerLib.map((n) => n.id)).toEqual(["cand1"]);
+  });
+
+  it("メロのレーン＝ライブラリの型は引かない（おすすめ経路のまま）", async () => {
+    const { result } = renderHook(() => usePlacePicker(hookCtx()));
+    await act(async () => { await result.current.openPicker(MEL_LANE, 0); });
+    expect(api.listNeta).not.toHaveBeenCalledWith(expect.objectContaining({ scope: "library" }));
+    expect(result.current.pickerLib).toEqual([]);
+  });
+
+  it("文脈あり＝▶で tree（そのセルに置いた状態）＋loop・もう一度押すと停止（▶⇄■）", async () => {
+    const c = ctx();
+    const { result } = renderHook(() => usePlacePicker(hookCtx({ auditionSection: () => c })));
+    await act(async () => { await result.current.openPicker(CP_LANE, 8); });
+    await act(async () => { await result.current.previewNeta(cand); });
     const src = lastSource() as Extract<PlaybackSource, { kind: "tree" }>;
     expect(src.kind).toBe("tree");
-    expect(src.children.find((c) => (c.node.neta as { id?: string }).id === "n1")!.node.neta.content).toBe(CAND_CONTENT);
-    expect(startPlayback).toHaveBeenCalledTimes(1);
+    const v = src.children.find((x) => idOf(x) === "cand1")!;
+    expect([v.position, (v as { ord?: number }).ord]).toEqual([8, 1]);
     expect(startPlayback.mock.calls[0]![1]).toEqual({ vocalMode: "peek", loop: { startBeat: 0, endBeat: 32 } });
-  });
-
-  it("(b) 文脈なし（auditionCtx 未配線）＝従来のワンショット（kind:'notes'・loop 無し）", async () => {
-    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} meter="4/4" tempo={100} keyPc={0} />);
-    await openAndPreview();
-    const src = lastSource();
-    expect(src.kind).toBe("notes");
-    expect(startPlayback.mock.calls[0]![1]).toEqual({ vocalMode: "peek" }); // loop キーを生やさない＝bit一致
-  });
-
-  it("(b) 文脈はあるがこのネタがセクションに居ない＝ワンショットへフォールバック", async () => {
-    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} meter="4/4" tempo={100} keyPc={0} auditionCtx={ctx({ childNetaId: "zzz" })} />);
-    await openAndPreview();
-    expect(lastSource().kind).toBe("notes");
-    expect(startPlayback.mock.calls[0]![1]).toEqual({ vocalMode: "peek" });
-  });
-
-  it("(a) 別候補の▶＝前の試聴を止めてから鳴らす（既存の試聴ハンドル停止の流儀）", async () => {
-    api.listNeta.mockResolvedValue([candNeta, mkNeta({ id: "cand2", title: "KB-PUNCH", content: { ...CAND_CONTENT, patternId: "KB-PUNCH" } })]);
-    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} meter="4/4" tempo={100} keyPc={0} auditionCtx={ctx()} />);
-    await openAndPreview();
-    expect(stop).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByLabelText("import-preview-1"));
-    expect(stop).toHaveBeenCalledTimes(1);
-    expect(startPlayback).toHaveBeenCalledTimes(2);
-  });
-
-  it("(c) ダイアログを閉じたら停止する", async () => {
-    render(<ChordPatternEditor pattern={pat()} onChange={vi.fn()} meter="4/4" tempo={100} keyPc={0} auditionCtx={ctx()} />);
-    await openAndPreview();
-    await userEvent.click(screen.getByLabelText("close"));
+    expect(result.current.previewing).toEqual({ id: "cand1", inContext: true });
+    await act(async () => { await result.current.previewNeta(cand); });
     expect(stop).toHaveBeenCalled();
-    expect(screen.queryByLabelText("pattern-import")).toBeNull();
+    expect(result.current.previewing).toBeNull();
+    expect(startPlayback).toHaveBeenCalledTimes(1);
+  });
+
+  it("文脈なし（FormStrip 等）＝従来のワンショット（kind:'neta'・loop 無し）", async () => {
+    const { result } = renderHook(() => usePlacePicker(hookCtx()));
+    await act(async () => { await result.current.openPicker(CP_LANE, 0); });
+    await act(async () => { await result.current.previewNeta(cand); });
+    expect(lastSource().kind).toBe("neta");
+    expect(startPlayback.mock.calls[0]![1]).toEqual({ vocalMode: "peek" });
+    expect(result.current.previewing).toEqual({ id: "cand1", inContext: false });
   });
 });
 
-describe("(d) ベース/ドラムエディタ経由＝S1 スコープ外＝挙動不変", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
-
-  it("ベースの▶＝kind:'notes'・loop 無し", async () => {
-    api.listNeta.mockResolvedValue([mkNeta({ id: "b1", kind: "bass", content: { mode: "relative", steps: 16, pattern: [{ step: 0, degree: "R", dur: 4 }] } })]);
-    render(<BassStepEditor pattern={[{ step: 0, degree: "R", dur: 4 }]} onChange={vi.fn()} steps={16} onStepsChange={vi.fn()} meter="4/4" keyPc={0} tempo={100} />);
-    await openAndPreview();
-    expect(lastSource().kind).toBe("notes");
-    expect(startPlayback.mock.calls[0]![1]).toEqual({ vocalMode: "peek" });
+describe("(3) PlacePicker＝ライブラリの型の群・名前検索・試聴中の明示", () => {
+  const base = (over: Partial<Parameters<typeof PlacePicker>[0]> = {}) => ({
+    picker: { lane: CP_LANE, position: 0, all: [mkNeta({ id: "mine", title: "自作パッド", meter: "4/4" })] },
+    neta: section(),
+    liveTitle: "Aメロ",
+    BPB: 4,
+    keyPc: 0,
+    pq: "",
+    setPq: vi.fn(),
+    pickerSource: "",
+    setPickerSource: vi.fn(),
+    pickerOtherMeter: false,
+    setPickerOtherMeter: vi.fn(),
+    pickerRecs: [],
+    pickerLib: [cand, mkNeta({ id: "lib2", title: "KB-PAD 白玉", scope: "library", meter: "4/4" })],
+    previewing: null,
+    placeAt: vi.fn(),
+    previewNeta: vi.fn(),
+    createInLane: vi.fn(),
+    onClose: vi.fn(),
+    ...over,
   });
 
-  it("ドラムの▶＝kind:'notes'・loop 無し", async () => {
-    const rhythm = { steps: 16, bars: 1, beatsPerStep: 0.25, lanes: [{ name: "kick", midi: 36, hits: [0, 8] }] };
-    api.listNeta.mockResolvedValue([mkNeta({ id: "r1", kind: "rhythm", content: { rhythm } })]);
-    render(<RhythmEditor rhythm={rhythm} onChange={vi.fn()} meter="4/4" tempo={100} />);
-    await openAndPreview();
-    expect(lastSource().kind).toBe("notes");
-    expect(startPlayback.mock.calls[0]![1]).toEqual({ vocalMode: "peek" });
+  it("自作の下に「ライブラリの型」群が並び、タップで placeAt（置く経路は共通）", async () => {
+    const p = base();
+    render(<PlacePicker {...p} />);
+    expect(screen.getByLabelText("place-mine")).toBeTruthy();
+    expect(screen.getByLabelText("picker-lib")).toBeTruthy();
+    await userEvent.click(screen.getByLabelText("place-cand1"));
+    expect(p.placeAt).toHaveBeenCalledWith(cand);
+  });
+
+  it("検索はネタ名に当たる（「オルガン」で OG だけ残る）", () => {
+    render(<PlacePicker {...base({ pq: "オルガン" })} />);
+    expect(screen.getByLabelText("place-cand1")).toBeTruthy();
+    expect(screen.queryByLabelText("place-lib2")).toBeNull();
+  });
+
+  it("試聴中＝その行は■・「主旋律と一緒に試聴中」を出す", () => {
+    render(<PlacePicker {...base({ previewing: { id: "cand1", inContext: true } })} />);
+    expect(screen.getByLabelText("preview-cand1").textContent).toBe("■");
+    expect(screen.getByLabelText("preview-lib2").textContent).toBe("▶");
+    expect(screen.getByLabelText("picker-audition-status").textContent).toContain("主旋律と一緒に試聴中");
   });
 });

@@ -24,6 +24,8 @@ export function PlacePicker({
   pickerOtherMeter,
   setPickerOtherMeter,
   pickerRecs,
+  pickerLib = [],
+  previewing = null,
   placeAt,
   previewNeta,
   createInLane,
@@ -41,6 +43,8 @@ export function PlacePicker({
   pickerOtherMeter: boolean;
   setPickerOtherMeter: Dispatch<SetStateAction<boolean>>;
   pickerRecs: Neta[];
+  pickerLib?: Neta[]; // ライブラリの型（パターン系レーンのみ・2026-09-16 入口一本化）
+  previewing?: { id: string; inContext: boolean } | null; // いま試聴中の項目（▶⇄■）
   placeAt: (child: Neta) => void;
   previewNeta: (n: Neta) => void;
   createInLane: () => void;
@@ -57,6 +61,14 @@ export function PlacePicker({
     const d = Math.abs(fifthsPos(n.key) - fifthsPos(keyPc));
     return Math.min(d, 12 - d);
   };
+  const q = pq.toLowerCase();
+  const nameHit = (n: Neta) => (n.title ?? n.text ?? "").toLowerCase().includes(q); // 検索＝ネタ名
+  const playLabel = (n: Neta) => (previewing?.id === n.id ? "■" : "▶");
+  const playBtn = (n: Neta) => (
+    <button type="button" className="picker-play" aria-label={`preview-${n.id}`} title={previewing?.id === n.id ? "止める" : "試聴"} onClick={() => void previewNeta(n)}>{playLabel(n)}</button>
+  );
+  // ライブラリの型＝レーン・拍子一致・名前で絞る（器＝プロジェクトの絞りは棚に器が無いので効かせない）。
+  const libList = pickerLib.filter((n) => inLane(n.kind) && (pickerOtherMeter || sameMeter(n)) && nameHit(n));
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div className="dialog" role="dialog" aria-label="place-picker" onClick={(e) => e.stopPropagation()}>
@@ -86,7 +98,7 @@ export function PlacePicker({
           <input
             aria-label="picker-search"
             className="editor-tags"
-            placeholder="絞り込み…（曲名・アーティスト）"
+            placeholder="名前で絞り込み…"
             value={pq}
             onChange={(e) => setPq(e.target.value)}
           />
@@ -131,15 +143,19 @@ export function PlacePicker({
                     <MiniRoll neta={n} />
                     <span className="picker-rec-label">{n.title ?? n.text ?? "コーパス"}</span>
                   </button>
-                  <button type="button" className="picker-play" aria-label={`preview-${n.id}`} title="試聴" onClick={() => void previewNeta(n)}>▶</button>
+                  {playBtn(n)}
                 </div>
               ))}
             </div>
           </div>
         )}
+        {previewing?.inContext && (
+          <p className="muted picker-audition-status" aria-label="picker-audition-status" role="status">
+            ■ 主旋律と一緒に試聴中（このセルに置いた状態でループ）
+          </p>
+        )}
         <div className="picker-list">
           {(() => {
-            const q = pq.toLowerCase();
             const list = picker.all
               .filter(
                 (n) =>
@@ -148,10 +164,11 @@ export function PlacePicker({
                   n.scope !== "library" && // コーパスは直接出さない（推薦経由・Phase2）
                   (pickerSource === "" || netaProjects(n).includes(pickerSource)) && // A: 母集団を器で絞る
                   (pickerOtherMeter || sameMeter(n)) && // B: 拍子一致のみ（既定）
-                  (n.title ?? n.text ?? "").toLowerCase().includes(q),
+                  nameHit(n),
               )
               // B: 調が近い順→最近順（拍子は既に一致で絞れている）。
               .sort((a, b) => keyDist(a) - keyDist(b) || (b.created ?? "").localeCompare(a.created ?? ""));
+            if (list.length === 0 && libList.length > 0) return null; // 自作が無くても棚の型があれば案内は出さない
             if (list.length === 0)
               return <p className="muted">置ける{picker.lane.label}のネタがありません（元/拍子の条件を緩めるか、＋新規作成）</p>;
             return list.map((n) => (
@@ -169,10 +186,29 @@ export function PlacePicker({
                     </span>
                   </div>
                 </button>
-                <button type="button" className="picker-play" aria-label={`preview-${n.id}`} title="試聴" onClick={() => void previewNeta(n)}>▶</button>
+                {playBtn(n)}
               </div>
             ));
           })()}
+          {libList.length > 0 && (
+            <div className="picker-lib" aria-label="picker-lib">
+              <span className="picker-recs-head muted">ライブラリの型</span>
+              {libList.map((n) => (
+                <div key={n.id} className="picker-item" data-kind={n.kind} style={{ ["--k" as string]: kindColor(n.kind) }}>
+                  <button type="button" className="picker-item-tap" aria-label={`place-${n.id}`} onClick={() => void placeAt(n)}>
+                    <div className="picker-item-roll">
+                      <MiniRoll neta={n} />
+                    </div>
+                    <div className="picker-item-meta">
+                      <strong>{n.title ?? "(無題)"}</strong>
+                      <span className="muted">{KIND_LABEL[n.kind] ?? n.kind} · ライブラリ</span>
+                    </div>
+                  </button>
+                  {playBtn(n)}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
