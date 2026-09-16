@@ -31,7 +31,7 @@ import { lockBassRootsToSheet, pmClamp, PM_ENGINE_VERSION, chordAtStep, chordPcs
 import { applyChordFollow, QUALITY_INTERVALS as CF_QUALITY_INTERVALS, type CfLineOnset, type CfSeg } from "@cm/music-core";
 import { keyStabSlots, keyStabHits } from "@cm/music-core"; // M6a-6a＝鍵盤の隙間刺し（opt-in `keyStab` 経路でのみ消費＝既定は bit 一致）。
 import { varyRiffTiles, normalizeRiffVariationLevel, RIFF_TILE_STEPS, type RiffCell, type RiffTile, type RiffVariationLevel } from "@cm/music-core"; // 繰り返しに変奏の層（design.md 追補 (k-7)・opt-in `riffVariation` でのみ消費＝既定は bit 一致）
-import { guitarGrammarById, GUITAR_GRAMMAR_IDS, buildGuitarSkeleton, lockGuitarChugToSheet, gtrOnsetsToHits, realizeGuitarRiff, fretboardGate, TUNING_GUITAR6 } from "@cm/music-core"; // M5＝ギター型（opt-in `guitarRiff` 経路でのみ消費＝既定は bit 一致）。 // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
+import { guitarGrammarById, GUITAR_GRAMMAR_IDS, guitarRiffTiles, guitarSkeletonFromTiles, buildGuitarSkeleton, lockGuitarChugToSheet, gtrOnsetsToHits, realizeGuitarRiff, fretboardGate, TUNING_GUITAR6 } from "@cm/music-core"; // M5＝ギター型（opt-in `guitarRiff` 経路でのみ消費＝既定は bit 一致）。 // M3-3b＝chord_follow の5ガード＋層B クオリティ表。opt-in `chordFollow` 経路でのみ消費＝既定は bit 一致。
 import { buildWalkingLine, WALK_COMPOUND_SLOT_STEPS, JZ_WALK_ID, type WalkSegment } from "@cm/music-core"; // M3-3d＝JZ-WALK（walking v2 の候補生成＋v3 の規則3本・乱数は決定的規則へ置換）。**耳未判定**＝style 名指しの opt-in。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
 import { type LyricMelodyPlan, lyricLayerOfPlan } from "./lyricsPlan"; // 歌詞先行メロ計画（#13d WP-L0）＋計画→句（§31-1・スライス7）
@@ -975,11 +975,31 @@ export function genChordPattern(
     //   guitarPalmGate＝刻みの短さ（palmGate を文法の値の代わりに・0.1〜1）／guitarGhostVel＝弱音（ghost）の vel（1〜127）。
     //   **未指定＝源流の値＝1ビットも変わらない**（design.md 追補 (k-4)・2026-09-15 オーナー裁定「つまみで選ぶ」）。
     guitarPalmGate?: number; guitarGhostVel?: number;
+    //   riffVariation＝繰り返しに変奏の層（design.md 追補 (k-7)・0/0.5/1・リフ文法の時だけ・未指定=0=bit 一致）／riffVariationSteps＝なし／中／多めの3件を items に。
+    riffVariation?: number; riffVariationSteps?: boolean;
     chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[] | null;
     // M6a-6a 鍵盤の隙間刺し（**既定 OFF**）：drums のキック以外の打点（スネア）に和音を刺す（キックだけなら 2拍裏・4拍裏）。drums が要る。
     keyStab?: boolean;
   } | null,
 ): GenResult {
+  // 変奏の段（design.md 追補 (k-7)）＝なし／中／多めを同じ入力で3回生成して items に並べる。リフ文法が立たない時は1件（通知つき）。
+  if (opts?.riffVariationSteps === true) {
+    const { riffVariationSteps: _steps, riffVariation: rvIgnored, ...rest } = opts;
+    const r1 = genChordPattern(frame, seed, { ...rest, riffVariation: 0.5 });
+    const stepsWarn: string[] = rvIgnored != null ? [`変奏を段で並べるので、変奏量（${rvIgnored}）は使っていません`] : [];
+    if ((r1.items[0]!.content as { guitarRiff?: { variation?: number } }).guitarRiff?.variation == null) {
+      return stepsWarn.length ? { ...r1, meta: { ...(r1.meta ?? {}), warnings: [...(r1.meta?.warnings ?? []), ...stepsWarn] } } : r1;
+    }
+    const r0 = genChordPattern(frame, seed, rest);
+    const r2 = genChordPattern(frame, seed, { ...rest, riffVariation: 1 });
+    const ws = [...new Set([...(r0.meta?.warnings ?? []), ...(r1.meta?.warnings ?? []), ...(r2.meta?.warnings ?? []), ...stepsWarn])];
+    const out: GenResult = {
+      items: [{ ...r0.items[0]!, label: "変奏なし（従来）" }, { ...r1.items[0]!, label: "変奏 中" }, { ...r2.items[0]!, label: "変奏 多め" }],
+      edges: [],
+    };
+    if (ws.length) out.meta = { warnings: ws };
+    return out;
+  }
   const f = normalizeFrame(frame);
   const rng = new Rng(seed ?? 5);
   // フィール層（S4・2026-07-22）：swing/humanize を content.feel へ（genMelody/genBass と同契約＝同 buildFeel）。
@@ -1014,6 +1034,10 @@ export function genChordPattern(
   }
   if (opts?.guitarRiff == null && opts?.guitarPalmGate != null) gtrWarn.push("ギターのリフ文法を選んだ時だけ「刻みの短さ」が効きます（従来どおり生成しました）");
   if (opts?.guitarRiff == null && opts?.guitarGhostVel != null) gtrWarn.push("ギターのリフ文法を選んだ時だけ「弱音の強さ」が効きます（従来どおり生成しました）");
+  // (k-7) 変奏量（未指定＝0＝この段は立たない＝bit 一致）。
+  const rvNorm = opts?.riffVariation != null ? normalizeRiffVariationLevel(opts.riffVariation) : { level: 0 as RiffVariationLevel, rounded: false };
+  if (opts?.riffVariation != null && rvNorm.rounded) gtrWarn.push(`変奏量は 0／0.5／1 のどれかなので ${rvNorm.level} に丸めました`);
+  if (rvNorm.level > 0 && !gtrWins) gtrWarn.push("ギターのリフ文法を選んだ時だけ「変奏」が効きます（従来どおり生成しました）");
   if (opts?.guitarRiff != null) {
     const grammar = guitarGrammarById(opts.guitarRiff);
     if (!grammar) gtrWarn.push(`知らないギターのリフ文法（${opts.guitarRiff}）なので従来どおり生成しました（選べるのは ${GUITAR_GRAMMAR_IDS.join(" / ")}）`);
@@ -1026,8 +1050,8 @@ export function genChordPattern(
       const gvRaw = opts.guitarGhostVel;
       const ghostVel = typeof gvRaw === "number" && Number.isFinite(gvRaw) ? Math.max(1, Math.min(127, Math.round(gvRaw))) : undefined;
       if (typeof gvRaw === "number" && ghostVel !== gvRaw) gtrWarn.push(`「弱音の強さ」は 1〜127 の整数なので ${ghostVel ?? "既定"} に丸めました`);
-      let onsets = buildGuitarSkeleton(palmGate === grammar.palmGate ? grammar : { ...grammar, palmGate }, steps);
       // 5a 譜のキックへの chug ロック（成立条件は genBass の anchorLock と同じ並び・落ち先ごとに言い分ける）。
+      //   (k-7) 変奏の層はロックの**前**に走り、ロックのキック step を保護するので、成立判定だけを先に行う（出音の順序は不変）。
       let lockKick: number[] | null = null;
       if (opts.anchorLock === true) {
         const dr = parseDrums(opts.drums);
@@ -1039,12 +1063,23 @@ export function genChordPattern(
           : dr.kick.length === 0 ? `ドラムにキックが無いので${GTR_LOCK}は当てていません（リフはそのまま生成しました）`
           : null;
         if (fb) gtrWarn.push(fb);
-        else {
-          lockKick = dr!.kick.map((k) => k * scale);
-          // accents は常に空＝otomemo のドラム content は kick/snare のみ（M3 の決定2を引き継ぐ）＝アクセント権限の一本化で
-          //   文法のアクセントは note へ均される（源流どおり）。
-          onsets = lockGuitarChugToSheet(onsets, { totalSteps: steps, kick: lockKick, accents: [], palmGate }).onsets;
-        }
+        else lockKick = dr!.kick.map((k) => k * scale);
+      }
+      const gtrGrammar = palmGate === grammar.palmGate ? grammar : { ...grammar, palmGate };
+      let onsets = buildGuitarSkeleton(gtrGrammar, steps);
+      // (k-7) 変奏の層＝表を反復単位に束ねて変奏 → 骨へ戻す（音価は並び直した後で同じ規則）。保護＝ロック中の全キック step。
+      const riffLevel = rvNorm.level;
+      const riffTiles = riffLevel > 0 ? guitarRiffTiles(gtrGrammar, steps) : null;
+      if (riffTiles) {
+        const prot = new Set<number>();
+        if (lockKick) for (let b = 0; b < bars; b++) for (const k of lockKick) prot.add(b * 16 + k);
+        const varied = varyRiffTiles(riffTiles, { level: riffLevel, seed: seed ?? 5, protectedSteps: prot, instrument: "guitar" }).tiles;
+        onsets = guitarSkeletonFromTiles(varied, steps, palmGate);
+      }
+      if (lockKick) {
+        // accents は常に空＝otomemo のドラム content は kick/snare のみ（M3 の決定2を引き継ぐ）＝アクセント権限の一本化で
+        //   文法のアクセントは note へ均される（源流どおり）。
+        onsets = lockGuitarChugToSheet(onsets, { totalSteps: steps, kick: lockKick, accents: [], palmGate }).onsets;
       }
       const pitchEngine = opts.guitarShape === true ? "handshape" as const : "chordfollow" as const;
       const content = {
@@ -1052,7 +1087,7 @@ export function genChordPattern(
         voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0, style: "guitar" as const },
         steps,
         hits: gtrOnsetsToHits(onsets, ghostVel != null ? { ghost: ghostVel } : undefined),
-        guitarRiff: { grammar: grammar.id, pitch: pitchEngine, ...(lockKick ? { anchorLock: true as const } : {}), ...(pitchEngine === "handshape" ? { seed: seed ?? 5 } : {}) },
+        guitarRiff: { grammar: grammar.id, pitch: pitchEngine, ...(lockKick ? { anchorLock: true as const } : {}), ...(pitchEngine === "handshape" ? { seed: seed ?? 5 } : {}), ...(riffTiles ? { variation: riffLevel } : {}) },
         engine: { version: PM_ENGINE_VERSION },
       };
       const finalContent = withFeel(content);
@@ -1077,6 +1112,22 @@ export function genChordPattern(
         if (real.report.shape && real.report.shape.tier > 0) gtrWarn.push(`${GTR_SHAPE}で手の移動が間に合わない所があったので、移動の速さの制限を${real.report.shape.tier === 1 ? "2倍に緩めました" : "外しました"}`);
         const fg = fretboardGate(real.notes.map((n) => n.pitch), TUNING_GUITAR6);
         if (fg.detail.unreachable.length > 0) gtrWarn.push(`6弦ギターで押さえられない音が ${fg.problems.length} 個あります`);
+      }
+      // (k-7) 変奏の余地・打ち消しの実測（診断・ゲートにしない）＝同じ入力で level 0 を作り、hits か検算の実音が完全一致なら告げる。
+      if (riffTiles) {
+        const RV_LABEL = riffLevel === 1 ? "多め" : "中";
+        if (riffTiles.length < 2) gtrWarn.push(`2小節の繰り返しが1回分しかないので、変奏（${RV_LABEL}）の余地がありません（従来と同じ音です）`);
+        else {
+          const base = genChordPattern(frame, seed, { ...opts, riffVariation: undefined, riffVariationSteps: undefined });
+          const baseHits = (base.items[0]!.content as { hits: typeof finalContent.hits }).hits;
+          let same = JSON.stringify(baseHits) === JSON.stringify(finalContent.hits);
+          if (!same && cs.length > 0) {
+            const csSegs: AnchorSeg[] = cs.map((x) => ({ rootPc: 0, startStep: (x.start ?? 0) * 4, lengthSteps: (x.dur ?? 4) * 4 }));
+            const ro = { chordAtStep: (st: number) => { const x = cs[csSegs.indexOf(chordAtStep(csSegs, st)!)]!; return { root: x.root!, quality: x.quality ?? "", bass: x.bass ?? null }; }, keyPc: f.key ?? 0, tempo: f.tempo, engine: pitchEngine, seed: seed ?? 5 };
+            same = JSON.stringify(realizeGuitarRiff(baseHits, ro).notes) === JSON.stringify(realizeGuitarRiff(finalContent.hits, ro).notes);
+          }
+          if (same) gtrWarn.push(`変奏（${RV_LABEL}）は${GTR_LOCK}・和音追従に打ち消され、従来と同じ音になりました`);
+        }
       }
       warnIgnoredCompOpts("ギターのリフ");
       return attachGtrWarn({ items: [{ kind: "chord_pattern", content: finalContent, label: `ギターのリフ（${grammar.id}）` }], edges: [] });

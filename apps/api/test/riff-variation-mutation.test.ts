@@ -13,8 +13,9 @@ vi.mock("@cm/music-core", async (orig) => {
       : m.varyRiffTiles(t, mut.mode === "noprotect" ? { ...o, protectedSteps: new Set<number>() } : o),
   };
 });
-import { genBass } from "../src/music/generate";
-import { BF, CONDS, type Note } from "./fixtures/riffVariationConds";
+import { genBass, genChordPattern } from "../src/music/generate";
+import { realizeGuitarRiff, type GtrRealizeHit } from "@cm/music-core";
+import { BF, CONDS, PROGS, drumsOf, type Note, type Chord } from "./fixtures/riffVariationConds";
 
 const notesOf = (r: ReturnType<typeof genBass>) => (r.items[0]!.content as { notes: Note[] }).notes;
 function bassSweep() {
@@ -50,6 +51,46 @@ describe("変異検査：ベース（S2）", () => {
     const base = bassSweep();
     mut.mode = "noprotect";
     const s = bassSweep();
+    expect(s.symDiff).not.toBe(base.symDiff);
+  });
+});
+
+const GCONDS = ["power_chug", "pedal_answer", "gallop"].flatMap((g) => Object.values(PROGS).flatMap((cs) =>
+  ([["beat8.basic", 7], ["beat16.basic", 21], ["beat8.syncopated", 42]] as const).map(([ds, seed]) => ({ g, cs, drums: drumsOf(ds), seed }))));
+function guitarSweep() {
+  let changedCond = 0, cancel = 0, symDiff = 0;
+  for (const c of GCONDS) {
+    const o = { guitarRiff: c.g, anchorLock: true, drums: c.drums, chords: c.cs };
+    const ca = (x: Chord[], b: number) => x.find((y) => y.start <= b + 1e-9 && b < y.start + y.dur - 1e-9) ?? x[x.length - 1]!;
+    const real = (r: ReturnType<typeof genChordPattern>) => realizeGuitarRiff((r.items[0]!.content as { hits: GtrRealizeHit[] }).hits, { chordAtStep: (s) => ca(c.cs, s * 0.25), keyPc: 0, tempo: 120, engine: "chordfollow", seed: 5 }).notes;
+    const n0 = real(genChordPattern(BF, c.seed, o));
+    const r = genChordPattern(BF, c.seed, { ...o, riffVariation: 1 });
+    const n = real(r);
+    if (JSON.stringify(n) !== JSON.stringify(n0)) changedCond++;
+    if (r.meta?.warnings?.some((w) => w.includes("打ち消され"))) cancel++;
+    const key = (x: { pitch: number; start: number; dur: number }) => `${x.pitch}@${x.start}/${x.dur}`;
+    const a = new Set(n0.map(key)), b = new Set(n.map(key));
+    symDiff += [...b].filter((x) => !a.has(x)).length + [...a].filter((x) => !b.has(x)).length;
+  }
+  return { changedCond, cancel, symDiff };
+}
+
+describe("変異検査：ギター（S3・ロック中）", () => {
+  it("陽性対照：無傷なら摂動が存在する", () => {
+    const s = guitarSweep();
+    expect(s.changedCond).toBeGreaterThan(0);
+    expect(s.cancel).toBe(GCONDS.length - s.changedCond);
+  });
+  it("m-a 層を恒等に → 摂動が落ちる・全条件で打ち消し警告", () => {
+    mut.mode = "identity";
+    const s = guitarSweep();
+    expect(s.changedCond).toBe(0);
+    expect(s.cancel).toBe(GCONDS.length);
+  });
+  it("m-e 保護集合を空に → 診断（変わった音の総数）が動く", () => {
+    const base = guitarSweep();
+    mut.mode = "noprotect";
+    const s = guitarSweep();
     expect(s.symDiff).not.toBe(base.symDiff);
   });
 });

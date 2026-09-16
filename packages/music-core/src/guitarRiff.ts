@@ -23,6 +23,7 @@
 
 import { QUALITY_INTERVALS, canonicalQuality, normRoot } from "./index";
 import { scaleOffsets } from "./chordFollow";
+import type { RiffTile } from "./riffVariation";
 
 // ───────────────────────────── 5c リフ文法（役割注記つき） ─────────────────────────────
 
@@ -261,15 +262,44 @@ export function buildGuitarSkeleton(grammar: GtrGrammar, totalSteps: number): Gt
     }
   }
   // 源流 `rows.sort(key=gstep)`＝タイル順に積んでいるので既に昇順（安定）。
+  return gtrSkeletonFromRows(rows, totalSteps, grammar.palmGate);
+}
+
+/** 並んだ行（global step 昇順）→ 骨。音価は次の行までの間×kind のゲート×palmGate（`buildGuitarSkeleton` と同じ規則）。 */
+function gtrSkeletonFromRows(rows: readonly { g: number; cell: GtrCell }[], totalSteps: number, palmGate: number): GtrOnset[] {
   return rows.map((r, i) => {
     const nxt = i + 1 < rows.length ? rows[i + 1]!.g : totalSteps;
     const gap = nxt - r.g;
     return {
       step: r.g, kind: r.cell.kind, anchor: r.cell.anchor, role: r.cell.role, deg: r.cell.deg, voicing: r.cell.voicing,
       strong: r.cell.anchor || r.cell.kind === "accent" || r.g % 4 === 0,
-      durSteps: gap * GTR_GATE[r.cell.kind] * grammar.palmGate,
+      durSteps: gap * GTR_GATE[r.cell.kind] * palmGate,
     };
   });
+}
+
+/** 変奏の層（design.md 追補 (k-7)）へ渡す形＝文法を2小節の反復単位に束ねる（セクション末で欠けた単位は在るセルだけ）。 */
+export function guitarRiffTiles(grammar: GtrGrammar, totalSteps: number): RiffTile[] {
+  const pat = grammar.cells.map((x, i) => [x, i] as const).sort((a, b) => (a[0].step - b[0].step) || (a[1] - b[1])).map(([x]) => x);
+  const nTiles = Math.ceil(totalSteps / 32);
+  return Array.from({ length: nTiles }, (_, t) => ({
+    index: t, last: t === nTiles - 1,
+    cells: pat.filter((c) => t * 32 + c.step < totalSteps).map((c) => ({ step: c.step, kind: c.kind, deg: c.deg, anchor: c.anchor, role: c.role, voicing: c.voicing })),
+  }));
+}
+
+/** 変奏済みの反復単位 → 骨（音価は並び直した後で `buildGuitarSkeleton` と同じ規則で計算し直す）。 */
+export function guitarSkeletonFromTiles(tiles: readonly RiffTile[], totalSteps: number, palmGate: number): GtrOnset[] {
+  const rows: { g: number; cell: GtrCell }[] = [];
+  for (const t of tiles) {
+    for (const c of [...t.cells].sort((a, b) => a.step - b.step)) {
+      const g = t.index * 32 + c.step;
+      if (g >= totalSteps) continue;
+      rows.push({ g, cell: { step: c.step, kind: c.kind, deg: c.deg, anchor: c.anchor, role: c.role, voicing: c.voicing ?? "mono" } });
+    }
+  }
+  rows.sort((a, b) => a.g - b.g);
+  return gtrSkeletonFromRows(rows, totalSteps, palmGate);
 }
 
 // ───────────────────────────── 5a 譜のキックへの chug ロック ─────────────────────────────
