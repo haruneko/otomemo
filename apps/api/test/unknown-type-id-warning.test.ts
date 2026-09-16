@@ -70,3 +70,38 @@ describe("到達口", () => {
     expect((await call("gen_drums", { frame: FRAME, seed: 7, style: "XX-NOPE" })).meta?.warnings?.[0]).toContain(NF);
   });
 });
+
+// 2026-09-17 続き：fill に未知の型ID（文字列）を渡しても黙らない。数値の強さ・既知のフィル型ID（ビルドアップ build.* 含む）・fillStyle/bodyAim は通知しない。
+describe("フィルの未知の型ID", () => {
+  const NFF = "のフィルの型『XX-FILL』が見つからないので";
+  it("直呼び：ベース・ドラムとも告げる・出音は fill 未指定と同じ", () => {
+    const b = genBass(FRAME, CHORDS, 7, undefined, { style: "rock", fill: "XX-FILL" }) as Res;
+    expect(b.items).toStrictEqual((genBass(FRAME, CHORDS, 7, undefined, { style: "rock" }) as Res).items);
+    expect(b.meta?.warnings).toEqual([expect.stringMatching(/^ベースのフィルの型『XX-FILL』が見つからないので/)]);
+    const d = genDrums(FRAME, 7, { fill: "XX-FILL" }) as Res;
+    expect(d.items).toStrictEqual((genDrums(FRAME, 7, undefined) as Res).items);
+    expect(d.meta?.warnings).toEqual([expect.stringMatching(/^ドラムのフィルの型『XX-FILL』が見つからないので/)]);
+  });
+  it("未知ではない fill 系の指定は通知しない", () => {
+    for (const fill of [0, 0.3, 0.8, "FL-WALKUP"]) expect((genBass(FRAME, CHORDS, 7, undefined, { style: "rock", fill }) as Res).meta?.warnings ?? [], String(fill)).toEqual([]);
+    const F16 = { ...FRAME, bars: 16 };
+    for (const fill of [0.2, 0.8, "fill.tom.asc.half", "build.tight.4bar", "build.big.16bar"]) expect((genDrums(F16, 7, { fill }) as Res).meta?.warnings ?? [], String(fill)).not.toContainEqual(expect.stringContaining("見つからない"));
+    for (const fillStyle of ["grid", "physical", "body"] as const) expect((genDrums(FRAME, 7, { fill: 0.6, fillStyle, bodyAim: "tom_tumble" } as never) as Res).meta?.warnings ?? [], fillStyle).not.toContainEqual(expect.stringContaining("見つからない"));
+  });
+  it("到達口：HTTP・MCP・/gen/section", async () => {
+    const app = buildHttp(new Core(openDb(":memory:"))); await app.ready();
+    const post = async (op: string, p: object) => (await app.inject({ method: "POST", url: `/music/${op}`, payload: p })).json() as Res;
+    expect((await post("gen_bass", { frame: FRAME, chords: CHORDS, seed: 7, style: "rock", fill: "XX-FILL" })).meta?.warnings?.[0]).toContain(NFF);
+    expect((await post("gen_drums", { frame: FRAME, seed: 7, fill: "XX-FILL" })).meta?.warnings?.[0]).toContain(NFF);
+    const sec = (await app.inject({ method: "POST", url: "/gen/section", payload: { frame: FRAME, seed: 11, parts: ["bass", "rhythm"], bass: { fill: "XX-FILL" }, drums: { fill: "XX-FILL" } } })).json() as { warnings?: string[] };
+    expect(sec.warnings).toEqual(expect.arrayContaining([expect.stringContaining(`ベース${NFF}`), expect.stringContaining(`ドラム${NFF}`)]));
+    const server = buildMcpServer(new Core(openDb(":memory:")));
+    const [a, c] = InMemoryTransport.createLinkedPair();
+    const cl = new Client({ name: "t", version: "0" });
+    await Promise.all([server.connect(a), cl.connect(c)]);
+    const call = async (name: string, args: Record<string, unknown>): Promise<Res> =>
+      JSON.parse(((await cl.callTool({ name, arguments: args })).content as { text: string }[])[0]!.text) as Res;
+    expect((await call("gen_bass", { frame: FRAME, chords: CHORDS, seed: 7, style: "rock", fill: "XX-FILL" })).meta?.warnings?.[0]).toContain(NFF);
+    expect((await call("gen_drums", { frame: FRAME, seed: 7, fill: "XX-FILL" })).meta?.warnings?.[0]).toContain(NFF);
+  });
+});

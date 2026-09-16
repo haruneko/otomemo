@@ -36,8 +36,8 @@ import { pitchAt, analyzeVoiceLeading, voiceLeadingPenalty, leadingTonePenalty }
 import { resolveLowerVoice } from "./voiceLeadingReport"; // 実効下声の解決（候補非依存＝候補ループ外で1回）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
-import { beatPatternById, isKnownDrumStyle, pickBeatPattern, resolveFillType, DRUM, type OutLane, type FillType } from "./drumLibrary"; // ドラム定型ビート＋フィル語彙（WP-D1）
-import { bassTypeById, isKnownBassStyle, pickBassType, resolveBassFill, DEGREE_SEMI, type BassCell, type BassType, type BassFill } from "./bassLibrary"; // ベース定型型＋フィル語彙（WP-B1）
+import { beatPatternById, isKnownDrumStyle, isKnownDrumFill, pickBeatPattern, resolveFillType, DRUM, type OutLane, type FillType } from "./drumLibrary"; // ドラム定型ビート＋フィル語彙（WP-D1）
+import { bassTypeById, isKnownBassStyle, isKnownBassFill, pickBassType, resolveBassFill, DEGREE_SEMI, type BassCell, type BassType, type BassFill } from "./bassLibrary"; // ベース定型型＋フィル語彙（WP-B1）
 import { compTypeById, isKnownCompPattern, pickCompType, pickCompTypes, compHitsForBar, compLhHitsForBar, type CompType, type CompMode } from "./chordLibrary"; // 伴奏パターン型辞書（chordLibrary・S2/S3・2026-07-22）
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
@@ -989,7 +989,8 @@ export function withRemovedRiffKnobWarning<T extends GenResult>(res: T, src: unk
 // 未知の型ID（2026-09-17・backlog「黙って落ちる」修正）：pattern/style が型ID でもジャンル名でもおまかせ番兵でもないと
 //   従来経路へ落ちる（出音はそのまま）。**黙らず meta.warnings で落ち先を告げる**（部位名つき＝/gen/section でも誰の話か分かる）。
 //   既知の指定・未指定・空文字は何も足さない＝従来の形（bit 一致）。
-function withUnknownTypeWarning<T extends GenResult>(res: T, part: "コード楽器" | "ベース" | "ドラム", id: string | undefined, known: (s: string) => boolean): T {
+//   fill（ベース・ドラム）は文字列のときだけ型ID＝数値の強さは対象外（呼び出し側で文字列だけ渡す）。
+function withUnknownTypeWarning<T extends GenResult>(res: T, part: "コード楽器" | "ベース" | "ドラム" | "ベースのフィル" | "ドラムのフィル", id: string | undefined, known: (s: string) => boolean): T {
   if (id == null || known(id)) return res;
   const w = `${part}の型『${id}』が見つからないので、型を使わず従来どおり生成しました（型ID かジャンル名を確かめてください）`;
   res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), w] };
@@ -1173,7 +1174,8 @@ export function genBass(
   drums?: DrumsInput | null,
   opts?: Parameters<typeof genBassImpl>[4],
 ): GenResult {
-  return withUnknownTypeWarning(genBassImpl(frame, chords, seed, drums, opts), "ベース", opts?.style, (x) => x === JZ_WALK_ID || isKnownBassStyle(x));
+  const res = withUnknownTypeWarning(genBassImpl(frame, chords, seed, drums, opts), "ベース", opts?.style, (x) => x === JZ_WALK_ID || isKnownBassStyle(x));
+  return withUnknownTypeWarning(res, "ベースのフィル", typeof opts?.fill === "string" ? opts.fill : undefined, isKnownBassFill);
 }
 function genBassImpl(
   frame?: Frame | null,
@@ -1774,7 +1776,8 @@ export const TOM_TUMBLE_ENDINGS: readonly { name: string; tailAnchor: number }[]
 const TOM_MIDI = new Set([41, 43, 45, 47, 48, 50]);
 
 export function genDrums(frame?: Frame | null, seed?: number | null, optsIn?: DrumsGenOpts): GenResult {
-  return withUnknownTypeWarning(genDrumsImpl(frame, seed, optsIn), "ドラム", optsIn?.style, isKnownDrumStyle);
+  const res = withUnknownTypeWarning(genDrumsImpl(frame, seed, optsIn), "ドラム", optsIn?.style, isKnownDrumStyle);
+  return withUnknownTypeWarning(res, "ドラムのフィル", typeof optsIn?.fill === "string" ? optsIn.fill : undefined, isKnownDrumFill);
 }
 function genDrumsImpl(frame?: Frame | null, seed?: number | null, optsIn?: DrumsGenOpts): GenResult {
   const f = normalizeFrame(frame);

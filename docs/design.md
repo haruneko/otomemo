@@ -2157,6 +2157,7 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
       型ID（chordLibrary/bassLibrary/drumLibrary）でもジャンル名（別名含む）でもおまかせ番兵（`omakase`/`any`/`all`・コード楽器）でも `JZ-WALK`（ベース）でも空文字でもないとき、
       出音は従来経路のまま `meta.warnings` に「〈部位〉の型『…』が見つからないので、型を使わず従来どおり生成しました（型ID かジャンル名を確かめてください）」。
       既知・未指定は何も足さない（bit 一致）。MCP の `pattern`/`style` は `z.string()`＝スキーマで弾かず素通り→同じ通知。`/gen/section` は `warnings` へ流れる。
+      同じ作法で **`fill` の文字列（フィル型ID）** も：ベース＝`BASS_FILLS`・ドラム＝`FILL_TYPES`（build.* 含む）/`FILL_6_8` に無ければ「〈ベース／ドラム〉のフィルの型『…』が見つからないので…」。数値の強さ・`fillStyle`・`bodyAim` は対象外（出音は不変）。
 - **(f) 物理フィルの置き方＝源流 `apply_fills` 準拠へ修正（2026-08-29・オーナー耳判定の差し戻し）**：step2 の初版は「**フィル小節を丸ごと空けて**、`placeFill(fillBar, 0.0, "bar", …)` の裸のフィルを1小節鳴らす」形だった。これは phrase_maker に**存在しない極端形**で、耳判定で「退屈・音楽的に成立していない」と却下された（比較対象の grid 経路 `FILL_TYPES` は、たとえば `fill.snare.1beat` が HiHat/Kick を3拍鳴らしたまま4拍目だけスネアという形＝**グルーヴ継続が前提**）。修正3点：
   - **消す範囲**＝`[startQb, landingQb)` と**着地頭だけ**（源流 `fills.py:apply_fills` と同じ）。フィル区間の外は、フィル小節の中でもグルーヴを鳴らし続ける。**小節を丸ごと空けない**。
   - **既定の開始拍/長さ**＝**小節の最後の1拍**（`beat = beatUnits-1`・`length "beat"`）。`buildup` と `intensity flashy` だけ溜めを取って2拍（`beat = beatUnits-2`・`length "2beat"`）。これは源流 `generate.py:_kinds_tour_fills` の常用形（`# last beat of the bar` / `# buildup wants room`）をそのまま採った既定＝**硬化させない**（利用の中で微調整）。

@@ -175,6 +175,9 @@ export function pickBassType(genre: string, role: Role | undefined, tempo: numbe
   return pool[((seed % pool.length) + pool.length) % pool.length] ?? null;
 }
 
+// 未知判定（2026-09-17）：フィル型ID（BASS_FILLS）・空文字は既知。数値の強さは呼び出し側で対象外。
+export function isKnownBassFill(id: string): boolean { return id === "" || BASS_FILLS.some((f) => f.id === id); }
+
 // フィルを解決：型ID→固定／数値(0..1)→方向で選抜（<0.5=下降系・>=0.5=上昇系）。無ければ null。
 export function resolveBassFill(fill: number | string, seed: number): BassFill | null {
   if (typeof fill === "string") return BASS_FILLS.find((f) => f.id === fill) ?? null;

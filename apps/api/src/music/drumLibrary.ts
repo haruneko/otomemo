@@ -283,6 +283,9 @@ export function pickBeatPattern(genre: string, role: Role | undefined, tempo: nu
   return pool[((seed % pool.length) + pool.length) % pool.length] ?? null;
 }
 
+// 未知判定（2026-09-17）：フィル型ID（FILL_TYPES＝ビルドアップ build.* 含む・FILL_6_8）・空文字は既知。数値の強さは呼び出し側で対象外。
+export function isKnownDrumFill(id: string): boolean { return id === "" || id === FILL_6_8.id || FILL_TYPES.some((f) => f.id === id); }
+
 // フィルを解決：数値(0..1)→intensity で選抜／型ID→固定。compound は 6/8 フィル。無ければ null。
 export function resolveFillType(fill: number | string, compound: boolean, seed: number): FillType | null {
   if (compound) return FILL_6_8; // 6/8 は簡易フィル1本（D1 §8-5・当面）
