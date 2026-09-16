@@ -199,3 +199,9 @@
 ## 7. 出典（主要）
 
 `CLAUDE.md`／`docs/requirements.md:220-222`／`docs/design.md:507,510-534,545-560,817-827,2149,2166-2183`／`docs/backlog.md:22-69,325-327,387-393,447-456`／`docs/drafts/2026-08-02-arrange-arc-handoff.md`／`docs/drafts/README.md`／`docs/archive/README.md`／`docs/archive/2026-09-16-riff-arc-revert-review.md`／`docs/archive/2026-09-09-phrasemaker-port-master-plan.md` §3-1・§4-7・§8-A／`docs/archive/2026-08-21-phrasemaker-arc-handoff.md`／`docs/archive/2026-08-02-arrange-midi-help-cleanroom-plan.md`／`docs/research/README.md`／`docs/research/2026-09-16-phrasemaker-ideas-to-keep.md`／`docs/research/2026-09-16-phrasemaker-reselection.md`／`docs/research/2026-09-16-rhythmic-variation-in-riffs.md`／`docs/research/2026-09-15-anchor-rigidity-guitar-motion-rootcause.md`／`docs/research/2026-08-02-riff-structure-and-variation.md`／`docs/research/2026-08-02-organ-piano-backing-vocabulary.md`／`docs/research/2026-07-14-riff-ostinato-design.md`／`docs/research/2026-07-22-accompaniment-style-engines.md`／`docs/research/2026-07-25-68-world-research-findings.md`／`git log --oneline --since=2026-08-02`（81 本）／外部＝POP909 Dataset README https://github.com/music-x-lab/POP909-Dataset
+
+## オーナー裁定（2026-09-16）
+1. **着手順＝耳の基準線から**（今のオルガンの型・ポップス/ボカロックの型を聴いて「棚が静的」の中身を測る → 定義の1枚 → 配る仕組み → リフ雛形）。
+2. **入口一本化の統合工事（Task #5）＝今すぐ並行でやる**。
+3. **ケルトの範囲＝ジグとリールの両方**（推しは「ジグだけ」だったがオーナーが両方を選択。リールの耳は否定的・slur が課題＝調査で扱う）。
+4. **オーナー自作の6拍子ドラム＝型に足す**（推しは「足さない＝自作採取は不採用の既決に合わせる」だったがオーナーが「足す」を選択＝オーナーの裁定として記録。手癖を超える材料としての自作採取とは別に、オーナーが好みの型として棚に置く判断）。
