@@ -261,6 +261,11 @@ const GENRE_ALIAS: Record<string, string> = { pop: "jpop", vocaloid: "jpop", ido
 
 export function beatPatternById(id: string): BeatPattern | undefined { return BEAT_PATTERNS.find((p) => p.id === id); }
 
+// 未知判定（2026-09-17・黙って落ちる修正）：型ID・ジャンル名（別名含む）・空文字は「知っている指定」。
+export function isKnownDrumStyle(s: string): boolean {
+  return s === "" || !!beatPatternById(s) || GENRE_TABLE[GENRE_ALIAS[s] ?? s] != null;
+}
+
 // ジャンル名＋（frame の）役割/tempo/compound から候補型を絞り、seed で1つ選ぶ（決定的）。無ければ null。
 export function pickBeatPattern(genre: string, role: Role | undefined, tempo: number | undefined, compound: boolean, seed: number): BeatPattern | null {
   const g = GENRE_ALIAS[genre] ?? genre;

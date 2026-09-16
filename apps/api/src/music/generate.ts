@@ -36,9 +36,9 @@ import { pitchAt, analyzeVoiceLeading, voiceLeadingPenalty, leadingTonePenalty }
 import { resolveLowerVoice } from "./voiceLeadingReport"; // 実効下声の解決（候補非依存＝候補ループ外で1回）
 import { corpusTypicality } from "./evalMelody"; // P1 自己進化ループ：候補を"らしさ"(E-corpus)で並べる
 import { melodySimilarity } from "./similarity"; // P1：多様な top-k を選ぶ（似すぎを飛ばす）
-import { beatPatternById, pickBeatPattern, resolveFillType, DRUM, type OutLane, type FillType } from "./drumLibrary"; // ドラム定型ビート＋フィル語彙（WP-D1）
-import { bassTypeById, pickBassType, resolveBassFill, DEGREE_SEMI, type BassCell, type BassType, type BassFill } from "./bassLibrary"; // ベース定型型＋フィル語彙（WP-B1）
-import { compTypeById, pickCompType, pickCompTypes, compHitsForBar, compLhHitsForBar, type CompType, type CompMode } from "./chordLibrary"; // 伴奏パターン型辞書（chordLibrary・S2/S3・2026-07-22）
+import { beatPatternById, isKnownDrumStyle, pickBeatPattern, resolveFillType, DRUM, type OutLane, type FillType } from "./drumLibrary"; // ドラム定型ビート＋フィル語彙（WP-D1）
+import { bassTypeById, isKnownBassStyle, pickBassType, resolveBassFill, DEGREE_SEMI, type BassCell, type BassType, type BassFill } from "./bassLibrary"; // ベース定型型＋フィル語彙（WP-B1）
+import { compTypeById, isKnownCompPattern, pickCompType, pickCompTypes, compHitsForBar, compLhHitsForBar, type CompType, type CompMode } from "./chordLibrary"; // 伴奏パターン型辞書（chordLibrary・S2/S3・2026-07-22）
 
 // 度数 → (ルートpc, quality)。C基準（key=0）。
 const DIATONIC_MAJOR: Record<number, [number, string]> = {
@@ -986,7 +986,24 @@ export function withRemovedRiffKnobWarning<T extends GenResult>(res: T, src: unk
   return res;
 }
 
+// 未知の型ID（2026-09-17・backlog「黙って落ちる」修正）：pattern/style が型ID でもジャンル名でもおまかせ番兵でもないと
+//   従来経路へ落ちる（出音はそのまま）。**黙らず meta.warnings で落ち先を告げる**（部位名つき＝/gen/section でも誰の話か分かる）。
+//   既知の指定・未指定・空文字は何も足さない＝従来の形（bit 一致）。
+function withUnknownTypeWarning<T extends GenResult>(res: T, part: "コード楽器" | "ベース" | "ドラム", id: string | undefined, known: (s: string) => boolean): T {
+  if (id == null || known(id)) return res;
+  const w = `${part}の型『${id}』が見つからないので、型を使わず従来どおり生成しました（型ID かジャンル名を確かめてください）`;
+  res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), w] };
+  return res;
+}
+
 export function genChordPattern(
+  frame?: Frame | null,
+  seed?: number | null,
+  opts?: { style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number } | null,
+): GenResult {
+  return withUnknownTypeWarning(genChordPatternImpl(frame, seed, opts), "コード楽器", opts?.pattern, isKnownCompPattern);
+}
+function genChordPatternImpl(
   frame?: Frame | null,
   seed?: number | null,
   opts?: { style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number } | null,
@@ -1150,6 +1167,15 @@ export const KICK_LOCK_PRESETS = { weak: 0.6, strong: 0.8, max: 0.85 } as const;
  * research/2026-07-10-bass-generation-upgrade.md）。**drums 無し or 全係数0 は従来と bit 一致**（fig 経路温存＝
  * 第二経路の追加。melodyCells push/swing/humanize と同じ流儀＝係数0は段ごとスキップ・段は独立 seed 派生 Rng）。 */
 export function genBass(
+  frame?: Frame | null,
+  chords?: Parameters<typeof genBassImpl>[1],
+  seed?: number | null,
+  drums?: DrumsInput | null,
+  opts?: Parameters<typeof genBassImpl>[4],
+): GenResult {
+  return withUnknownTypeWarning(genBassImpl(frame, chords, seed, drums, opts), "ベース", opts?.style, (x) => x === JZ_WALK_ID || isKnownBassStyle(x));
+}
+function genBassImpl(
   frame?: Frame | null,
   chords?: { root?: number | string; quality?: string; start?: number; dur?: number; bass?: number }[],
   seed?: number | null,
@@ -1748,6 +1774,9 @@ export const TOM_TUMBLE_ENDINGS: readonly { name: string; tailAnchor: number }[]
 const TOM_MIDI = new Set([41, 43, 45, 47, 48, 50]);
 
 export function genDrums(frame?: Frame | null, seed?: number | null, optsIn?: DrumsGenOpts): GenResult {
+  return withUnknownTypeWarning(genDrumsImpl(frame, seed, optsIn), "ドラム", optsIn?.style, isKnownDrumStyle);
+}
+function genDrumsImpl(frame?: Frame | null, seed?: number | null, optsIn?: DrumsGenOpts): GenResult {
   const f = normalizeFrame(frame);
   // 狙い（bodyAim）の解決：body 経路のときだけつまみの既定を差す（明示が勝つ）。それ以外は出音を変えず通知だけ。
   const aimWarnings: string[] = [];

@@ -151,6 +151,11 @@ const GENRE_ALIAS: Record<string, string> = {
   soul: "funk", rnb: "funk", "r&b": "funk", slow: "ballad", jballad: "ballad",
 };
 
+// 未知判定（2026-09-17・黙って落ちる修正）：型ID・ジャンル名（別名含む）・空文字は「知っている指定」（JZ-WALK は呼び出し側で既知扱い）。
+export function isKnownBassStyle(s: string): boolean {
+  return s === "" || !!bassTypeById(s) || GENRE_TABLE[GENRE_ALIAS[s] ?? s] != null;
+}
+
 // ジャンル名＋役割/tempo→候補型を絞り seed で1つ選ぶ（決定的）。無ければ null（＝従来経路へフォールバック）。
 // テンポ指定時は**域内の型のみ**適格（正典 §6-6「テンポ域が合う型のみ提示」）＝域外の型はジャンル指定で選ばれない。
 //   域内が皆無なら null（域外を無理に選ばない）。テンポ未指定なら全候補から選ぶ。

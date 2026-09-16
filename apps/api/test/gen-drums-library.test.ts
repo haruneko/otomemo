@@ -45,9 +45,11 @@ describe("genDrums 定型ビート＋フィル（WP-D1）", () => {
     expect(lane(r2, "Snare")!.hits).toEqual([6]);
   });
 
-  it("未知 style は従来経路へフォールバック（bit 一致）", () => {
-    const a = JSON.stringify(genDrums({ meter: "4/4", mood: "明るい" }, 4));
-    expect(JSON.stringify(genDrums({ meter: "4/4", mood: "明るい" }, 4, { style: "nonexistent.pattern" }))).toBe(a);
+  it("未知 style は従来経路へフォールバック（出音 bit 一致・2026-09-17 から meta.warnings で告げる）", () => {
+    const a = JSON.stringify(genDrums({ meter: "4/4", mood: "明るい" }, 4).items);
+    const u = genDrums({ meter: "4/4", mood: "明るい" }, 4, { style: "nonexistent.pattern" });
+    expect(JSON.stringify(u.items)).toBe(a);
+    expect(u.meta?.warnings?.[0]).toContain("『nonexistent.pattern』が見つからない");
   });
 
   it("fill ON＝F型が境界小節に出現・他小節は base 不変・着地 crash+kick", () => {

@@ -70,7 +70,10 @@ describe("(a) pattern 未指定＝従来と bit 一致（鉄則）", () => {
       const base = J(genChordPattern(f, seed));
       expect(J(genChordPattern(f, seed, undefined)), `undef ${f.meter}#${seed}`).toBe(base);
       expect(J(genChordPattern(f, seed, {})), `空 ${f.meter}#${seed}`).toBe(base);
-      expect(J(genChordPattern(f, seed, { pattern: "NOPE-XX" })), `未知 ${f.meter}#${seed}`).toBe(base);
+      // 未知＝出音(items)は従来と完全一致・2026-09-17 から meta.warnings で落ち先を告げる（黙って落ちる修正）
+      const unk = genChordPattern(f, seed, { pattern: "NOPE-XX" });
+      expect(J(unk.items), `未知 ${f.meter}#${seed}`).toBe(J(genChordPattern(f, seed).items));
+      expect(unk.meta?.warnings?.[0]).toContain("『NOPE-XX』が見つからない");
     }
   });
   it("6/8・3/4（非4拍）は型ID を指定しても従来経路（bit 一致）", () => {

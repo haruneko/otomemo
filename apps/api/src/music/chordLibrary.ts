@@ -335,6 +335,13 @@ const GENRE_ALIAS: Record<string, string> = {
   punk: "metal", metalcore: "metal",
 };
 
+// 未知判定（2026-09-17・黙って落ちる修正）：型ID・ジャンル名（別名含む）・おまかせ番兵（omakase/any/all）・空文字は「知っている指定」。
+//   それ以外＝未知＝呼び出し側で meta.warnings に落ち先を告げる（出音の経路は変えない）。
+export function isKnownCompPattern(p: string): boolean {
+  if (p === "" || p === "omakase" || p === "any" || p === "all" || compTypeById(p)) return true;
+  return GENRE_TABLE[GENRE_ALIAS[p] ?? p] != null;
+}
+
 // ジャンル名＋役割/tempo→候補型を絞り seed で1つ選ぶ（決定的）。無ければ null（＝従来経路へフォールバック）。
 // テンポ指定時は**域内の型のみ**適格（bassLibrary pickBassType と同流儀）＝域外の型はジャンル指定で選ばれない。
 //   域内が皆無なら null（域外を無理に選ばない）。テンポ未指定なら全候補から選ぶ。

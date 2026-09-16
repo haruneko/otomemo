@@ -48,7 +48,10 @@ describe("(a) style/fill 未指定＝従来と bit 一致（鉄則）", () => {
     for (const f of frames) for (const seed of SEEDS) {
       const base = J(genBass(f, C1, seed));
       expect(J(genBass(f, C1, seed, undefined, {})), `空 ${f.meter}#${seed}`).toBe(base);
-      expect(J(genBass(f, C1, seed, undefined, { style: "NOPE-XX", fill: undefined })), `未知 ${f.meter}#${seed}`).toBe(base);
+      // 未知＝出音(items)は従来と完全一致・2026-09-17 から meta.warnings で落ち先を告げる（黙って落ちる修正）
+      const unk = genBass(f, C1, seed, undefined, { style: "NOPE-XX", fill: undefined });
+      expect(J(unk.items), `未知 ${f.meter}#${seed}`).toBe(J(genBass(f, C1, seed).items));
+      expect(unk.meta?.warnings?.at(-1)).toContain("『NOPE-XX』が見つからない");
     }
   });
 });
