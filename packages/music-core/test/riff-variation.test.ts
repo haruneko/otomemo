@@ -293,3 +293,22 @@ describe("⑨ 変異検査（検証器が本当に落ちるか）", () => {
     expect(nonTargetProblems(input, m, prot).length).toBeGreaterThan(0);
   });
 });
+
+// 2026-09-16 監査 中④：ギター装飾（ornament）が答句の頭の1 step 前へゴーストを足す判定に保護が効いているか。
+//   既存の固定入力（保護＝キック 0/4/8/12）には「頭の1つ前が保護」の形が無く、保護判定を外す変異が緑のまま通った。
+//   ここでは**入力で空いている step を全部保護**する＝足せる所が全部保護＝足したら必ず「保護 step に足された」になる形。
+describe("⑦' 保護 step 無傷：ギター装飾のゴーストは空いた保護 step に足さない（監査 中④）", () => {
+  for (const f of FIXTURES.filter((x) => x.instrument === "guitar")) {
+    it(`${f.name}：保護なしなら足される形がある／空き step を全部保護すると足さない`, () => {
+      const n = 4;
+      const input = tilesOf(f.cells, n);
+      const free = new Set<number>();
+      for (const t of input) for (let s = 0; s < 32; s++) if (!t.cells.some((c) => c.step === s)) free.add(t.index * 32 + s);
+      const addedGhosts = (out: RiffTile[]) => out.reduce((k, t, i) => k + t.cells.filter((c) => !input[i]!.cells.some((x) => x.step === c.step)).length, 0);
+      expect(addedGhosts(varyRiffTiles(input, opts(f, 1, 0)).tiles), "陽性対照：保護なしでゴーストが足される").toBeGreaterThan(0);
+      const out = varyRiffTiles(input, opts(f, 1, 0, free)).tiles;
+      expect(nonTargetProblems(input, out, free)).toEqual([]);
+      expect(addedGhosts(out)).toBe(0);
+    });
+  }
+});
