@@ -178,6 +178,7 @@ phrase_maker（同じオーナーの Python 試作・読むだけ）の「鍵盤
 **S1 手の物理（`handmodel.py` 361行・乱数なし）**
 - テスト（赤）＝到達表（Parncutt 1997・pianoplayer 定数・`handmodel.py:10-22`）で既知の和音の `best_assignment`（F A C F・E G B E など）が Python と一致／届かない組は None／**重みを振ると出力が変わる**（検査係でない反証・診断）。NOTICE に pianoplayer（MIT）を再掲。
 - 耳＝なし。
+- **S1 完了（2026-09-17）**＝機械＝済／耳＝なし。2026-09-16 に撤去した `handModel.ts`・関数単位ゴールデン（8,000 件超）・NOTICE の pianoplayer（MIT）/Parncutt 1997 を履歴（`4088f0a`/`8d332fa`）から戻した（焼き直しでゴールデンは1バイトも変わらず）。足したテスト＝F A C F／E G B E（左右）等が Python と一致・5音と2オクターブ超は届かない・薬指/小指の罰を重くすると割り当て/費用が変わる（診断）。
 
 **S2 エンジン本体（`handframe.py` 1,700行）**
 - テスト（赤）＝(i) M1 構成（全ノブ既定）で Python と bit 一致 (ii) `_RH_CFG_BAND` 構成で F-A の RH 音列と bit 一致 (iii) seed 決定論 (iv) 弧 ON の分岐は「OFF と 1bit も変わらない」ことだけ確認（ON の出力は基準無し・第2版）。
@@ -185,6 +186,11 @@ phrase_maker（同じオーナーの Python 試作・読むだけ）の「鍵盤
 - **規模の見張り**＝TS 1,900 行を超え始めたら「何を足したか」を書く（移植なので白紙の 400 行上限は撤回）。
 - 撤退基準①＝ULP/同順位で bit 一致が **2 セッション**取れないとき→bit 一致を捨て、**耳A を唯一のゲートにして進む**（止めない・耳が主）。
 - 耳＝なし（RH だけでは判定不能）。
+- **S2 完了（2026-09-17）**＝機械＝済／耳＝なし（耳A は S3 の後）。
+  - 移植＝`packages/music-core/src/handFrame.ts`（1,285 行・handframe.py の全部＝候補の列挙・上位 k からの抽選・掴み直し・経過音・本体ループ・診断の集計）＋`phraseArc.ts`（88 行・既定 OFF）＋`pyMath.ts`（163 行＝`math.exp` と `sum()` の写し）。見張りの 1,900 行は超えていない。index.ts からは未公開（S3 が music-core 内で使う）。
+  - 参照値＝`tools/py-parity/cases-handframe/`（`run_dump_handframe.sh`・phrase_maker 直下の venv）。18 ケース＝(i) 既定構成 4／(ii) `generate_handframe_band` が生成器へ渡す引数を横取りした右手・左手 9（F-A/F-C と同じ引数・種違い・ペダルなし・密度4・ジャズ進行）／弧 2（参考）／つまみの被覆 3。**notes・orn・diag まで全件一致**。F-A 243 音・F-C 235 音と音高・始まり・終わりも全件一致（音量は S3）。(iii) 種の決定論・(iv) 弧の係数 0＝弧なしと同一、も緑（`test/handframe-parity.test.ts`）。
+  - 個別検分の結論：**同順位の並びは決定的に効く**（score だけで並べると 10 本落ちる）→ Python のタプル比較を写した `pyCompare`＋安定ソートで一致。**`math.exp` の最後の桁は、V8 の `Math.exp` だと引数 71 件中 5 件ずれるが、この 18 ケースの出力には効かない**（戻しても緑）。それでも glibc の `exp`（表 2^(k/128)・5次多項式・FMA 版）を写した `pyExp` を使う＝乱数 30 万点で全件一致（倍々精度で正しく丸めても glibc 自体が 202 点で最近接でないので合わない・FMA なしの式だと 203 点ずれる）。前提＝基準を焼いた母艦（glibc 2.39・FMA 対応 CPU）。Python 3.12 の `sum()` は補償付き＝`pySum`（handModel の手首位置の平均も差し替え・ゴールデンは緑のまま）。
+  - 撤退基準①＝使っていない（1セッションで一致）。
 
 **S3 バンド包み＋セル分割（`handframe_band.py` 581行・§3）**
 - テスト（赤）＝§3-1 (a)〜(e)・L1〜L4 の掴み密度が単調（診断）・ペダル窓＝セル・LH 殻が床の上・音量の輪郭が Python と一致（F-A 全体と bit 一致）。ばらし＝Otomemo の Rng で vel を振り、ms は feel に載せる（Python と一致は要求しない・vel の分散が `vel_sd` と同程度＝診断）。
