@@ -129,6 +129,10 @@ describe("S3 ギター：段と通知", () => {
     expect(r.items[0]!.content).toStrictEqual(gen(c).items[0]!.content);
     expect(r.items[1]!.content).toStrictEqual(gen(c, { riffVariation: 0.5 }).items[0]!.content);
     expect(r.items[2]!.content).toStrictEqual(gen(c, { riffVariation: 1 }).items[0]!.content);
+    // web は常に variety=4 を送る＝段では「1件です」は嘘になるので3件で言い直す（実機で見つけた）
+    const v = gen(c, { riffVariationSteps: true, variety: 4 });
+    expect(v.meta?.warnings?.some((w) => w.includes("1件です"))).toBe(false);
+    expect(v.meta?.warnings?.some((w) => w.includes("4 件でなく3件"))).toBe(true);
   });
   it("リフ文法なしでは効かないと告げ、出音は従来／段でも1件", () => {
     const r = genChordPattern(BF, 3, { riffVariation: 1 });

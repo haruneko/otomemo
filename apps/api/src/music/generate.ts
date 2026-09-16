@@ -992,7 +992,10 @@ export function genChordPattern(
     }
     const r0 = genChordPattern(frame, seed, rest);
     const r2 = genChordPattern(frame, seed, { ...rest, riffVariation: 1 });
-    const ws = [...new Set([...(r0.meta?.warnings ?? []), ...(r1.meta?.warnings ?? []), ...(r2.meta?.warnings ?? []), ...stepsWarn])];
+    // 子の生成が言う「候補は N 件でなく1件」は段では嘘になる（3件返す）＝段の件数で言い直す。
+    const oneOnly = (w: string) => w.includes("候補は") && w.endsWith("件でなく1件です");
+    const ws = [...new Set([...(r0.meta?.warnings ?? []), ...(r1.meta?.warnings ?? []), ...(r2.meta?.warnings ?? []), ...stepsWarn])].filter((w) => !oneOnly(w));
+    if (typeof opts.variety === "number" && opts.variety > 1 && opts.variety !== 3) ws.push(`ギターのリフは変奏の段で並べるので、候補は ${opts.variety} 件でなく3件です`);
     const out: GenResult = {
       items: [{ ...r0.items[0]!, label: "変奏なし（従来）" }, { ...r1.items[0]!, label: "変奏 中" }, { ...r2.items[0]!, label: "変奏 多め" }],
       edges: [],
