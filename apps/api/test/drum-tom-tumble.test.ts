@@ -47,7 +47,7 @@ describe("bodyAim:tom_tumble（genDrums）", () => {
     console.log("[診断] タム回しの終わり方（seed1-50）", Object.fromEntries(kinds));
     expect(kinds.get("snare4") ?? 0).toBeGreaterThan(0);
     expect([...kinds.keys()].some((k) => k !== "snare4")).toBe(true);
-  });
+   }, 60_000); // 1本≈100ms×50＝全スイート並走時は既定5秒を超える
 
   it("軸は明示 bodyTailAnchor に負ける", () => {
     for (const seed of [1, 2, 3]) {
