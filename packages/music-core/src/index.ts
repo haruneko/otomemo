@@ -174,6 +174,7 @@ export type Feel = {
   swingUnit?: "eighth" | "sixteenth"; // 跳ねの単位（既定 eighth＝拍内の8分ペア／sixteenth＝8分内の16分ペア）
   humanize?: number;                  // 0..1（微小タイミング揺れ・velocity はデータ層＝ここでは扱わない）
   seed?: number;                      // humanize の決定的シード
+  keepDur?: boolean;                  // true＝humanize 後に「次の音の始まりで長さを詰める」をしない（和音を弾くピアノ伴奏用・2026-09-17）。未指定＝従来と bit 一致
 };
 // humanize 知覚較正（WP-D2・2026-07-14・研究 2026-07-14-humanize-perception-defaults.md §③⑥）。
 // 部位別 timing SD/系統オフセット/リミット（ms）。SD は「既定ノブ25%＝この値」の基準（ノブは線形スケール）。
@@ -305,7 +306,7 @@ export function applyFeel<T extends { start: number; dur: number }>(notes: reado
       }
     }
     out.sort((a, b) => a.start - b.start);
-    for (let i = 0; i + 1 < out.length; i++) { const g = out[i + 1]!.start - out[i]!.start; if (g > 0) out[i]!.dur = Math.min(out[i]!.dur, feelR3(g)); }
+    if (!feel.keepDur) for (let i = 0; i + 1 < out.length; i++) { const g = out[i + 1]!.start - out[i]!.start; if (g > 0) out[i]!.dur = Math.min(out[i]!.dur, feelR3(g)); }
   }
 
   return out;

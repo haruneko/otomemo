@@ -1,6 +1,7 @@
 // ピアノ伴奏（phrase_maker 試作 #1 取り込み S3）＝バンドの中のピアノとしてまとめる部分＋2拍替わりの区切り。
 // 正典＝docs/drafts/2026-09-16-handframe-evolution-design.md §3-1（テスト (a)〜(e)）・§5 S3。
 // 一致は「耳で合格した音を運べた証明」＝診断であって進捗ではない（進捗は耳A）。
+import { applyFeelByPart } from "../src/index";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -137,7 +138,7 @@ describe("段・揺れ・8分裏の単音（診断）", () => {
       const on = generateHandFrameBand(HALF_PROG, { ...DRY, seed, humanize: true });
       expect(on.notes.map((n) => [n[0], n[1], n[2], n[4]])).toEqual(off.notes.map((n) => [n[0], n[1], n[2], n[4]]));
       expect(on.pedals).toEqual(off.pedals);
-      expect(on.feel).toEqual({ humanize: expect.any(Number), seed });
+      expect(on.feel).toEqual({ humanize: expect.any(Number), seed, keepDur: true });
       expect(off.feel).toBeNull();
       const v = on.notes.filter((n) => n[4] === "R").map((n) => n[3]);
       const m = v.reduce((a, b) => a + b, 0) / v.length;
@@ -167,5 +168,25 @@ describe("段・揺れ・8分裏の単音（診断）", () => {
     expect(offbeat(off)).toBe(0);
     expect(off.pedals).toEqual(on.pedals);
     expect(off.diag.grabSlots).toEqual(on.diag.grabSlots);
+  });
+});
+
+describe("ピアノ伴奏に feel を掛けても音の長さは生成したとおり（耳A 2026-09-17「左手が抜ける」の修正）", () => {
+  it("返す feel は keepDur＝applyFeelByPart 後も各音の長さが元と一致・発音時刻だけ揺れる", () => {
+    for (const seed of [1234, 7, 2024]) {
+      const r = generateHandFrameBand(HALF_PROG, { tempo: 96, seed });
+      expect(r.feel).toMatchObject({ keepDur: true });
+      const notes = r.content.notes.map((n, i) => ({ ...n, id: i }));
+      const felt = applyFeelByPart(notes, r.feel, { tempo: 96 }, () => "chords");
+      const byId = new Map(felt.map((n) => [n.id, n]));
+      let moved = 0;
+      for (const n of notes) {
+        const f = byId.get(n.id)!;
+        expect(f.dur).toBe(n.dur);
+        expect(f.pitch).toBe(n.pitch);
+        if (f.start !== n.start) moved++;
+      }
+      expect(moved).toBeGreaterThan(0);
+    }
   });
 });

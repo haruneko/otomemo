@@ -228,3 +228,17 @@ describe("applyFeelByPart（部位別 feel・#29 P1）", () => {
     expect(asKick).toEqual(asKickDirect);
   });
 });
+
+describe("Feel.keepDur（ピアノ伴奏用・2026-09-17）", () => {
+  const chord = [0, 0, 0, 1, 1.5, 2, 2, 3].map((s, i) => ({ start: s, dur: 4, pitch: 60 + i }));
+  it("keepDur 無し＝従来どおり次の音の始まりで詰める（既存挙動の固定）", () => {
+    const out = applyFeel(chord, { humanize: 0.5, seed: 3 }, { tempo: 96, part: "chords" });
+    expect(out.some((n) => n.dur < 4)).toBe(true);
+  });
+  it("keepDur＝長さは入力のまま・時刻の揺れは keepDur 無しと同じ", () => {
+    const a = applyFeel(chord, { humanize: 0.5, seed: 3 }, { tempo: 96, part: "chords" });
+    const b = applyFeel(chord, { humanize: 0.5, seed: 3, keepDur: true }, { tempo: 96, part: "chords" });
+    expect(b.every((n) => n.dur === 4)).toBe(true);
+    expect(b.map((n) => [n.pitch, n.start])).toEqual(a.map((n) => [n.pitch, n.start]));
+  });
+});

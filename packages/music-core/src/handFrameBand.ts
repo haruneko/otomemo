@@ -426,7 +426,7 @@ export function generateHandFrameBandCells(cells: readonly { root: number | stri
   if (sustainPedal) content.pedal = pedals.map(([dn, up]) => ({ start: toBeats(dn), dur: toBeats(up) - toBeats(dn) }));
   return {
     cellBeats, notes, pedals, content,
-    feel: humanize ? { humanize: HF_BAND_FEEL_HUMANIZE, seed } : null,
+    feel: humanize ? { humanize: HF_BAND_FEEL_HUMANIZE, seed, keepDur: true } : null, // 長さは生成どおり（耳A 09-17）
     diag: {
       rh: rhRes.diag, lh: dlh, floor, bassMax, preset, level, lambdaSkip: dens.lambdaSkip, grabWScale: dens.grabWScale,
       grabSlots: [...dens.grabSlots], sustainPedal, humanize, offbeatSingles, nCells: nBars, onsets: [...container.onsets],
