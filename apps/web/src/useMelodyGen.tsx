@@ -9,6 +9,7 @@ import {
   skeletonPreviewNotes,
   isSkeleton,
   isRelativeBass,
+  feelOf,
   type Note,
   type PlaybackHandle,
 } from "./music";
@@ -225,6 +226,10 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   // コード楽器（chord_pattern）の伴奏パターン型ライブラリ（スライスC「聴いて選ぶ」）：""=おまかせ(omakase＝role/tempo 全体から)。
   // ジャンル名(ballad/rock/citypop/dance/folk) or 型ID直指定。genPart(gen_chord_pattern) が variety と共に body.pattern へ流す。
   const [compStyle, setCompStyle] = useState<string>("");
+  // ピアノ伴奏を生成する（試作・S5・opt-in・既定 OFF）：選ぶとネタ帳ライブラリでなく生成器へ。8分裏の単音・打鍵の揺れは既定 on。
+  const [compPiano, setCompPiano] = useState(false);
+  const [compPianoOffbeat, setCompPianoOffbeat] = useState(true);
+  const [compPianoHumanize, setCompPianoHumanize] = useState(true);
   // ベース×ドラムノブ（奏法UIスライスD・design「gen_bass×ドラム結線」／slashBass）：UI未露出だった4ノブを「細かく（ドラム絡み）」群へ。
   // 全て 0/false＝未送信＝従来 bit 一致。kickLock/snareGap/approach はドラム在時のみ効く（API 挙動＝hint 文言で伝える）。
   const [bassKickLock, setBassKickLock] = useState<number>(0); // キックに噛む -1..1（負=逆相・キック裏8分）。0=OFF。
@@ -318,7 +323,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       // ↑ JZ-WALK（M3-3d）はネタ帳ライブラリに無い**生成器だけの型**（毎回解く・相対パターンでもない）＝
       //   ここに入れないと web からはライブラリ検索に落ちて**候補0＝何も起きない**（＝触れないノブ＝硬化）。
       const libKind =
-        part.op === "gen_chord_pattern" ? "chord_pattern"
+        part.op === "gen_chord_pattern" && !compPiano ? "chord_pattern"
         : part.op === "gen_drums" && !drumsWantsGen ? "rhythm"
         : part.op === "gen_bass" && !bassWantsGen ? "bass"
         : null;
@@ -408,7 +413,13 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
       }
       // コード楽器＝伴奏パターン（chord_pattern・スライスC）：ジャンルchip(compStyle) を pattern へ、variety で別々の型を複数取る。
       //   ""＝おまかせ＝omakase 番兵（role/tempo 全体から）。型ID直指定は api 側で単数固定（compTypeById が真＝variety 無視）。
-      if (part.op === "gen_chord_pattern") {
+      if (part.op === "gen_chord_pattern" && compPiano) {
+        // ピアノ伴奏（試作）：進行（body.chords）に当てて種違いを4件。型の指定は使わない。
+        body.piano = true;
+        body.variety = 4;
+        if (!compPianoOffbeat) body.pianoOffbeatSingles = false;
+        if (!compPianoHumanize) body.pianoHumanize = false;
+      } else if (part.op === "gen_chord_pattern") {
         body.pattern = compStyle || "omakase";
         body.variety = 4;
       }
@@ -569,7 +580,9 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     const isRel = c.kind === "chord_pattern" || c.kind === "section_inst" || isRelativeBass(c.content);
     const chords = isRel ? ctx.sectionChords().map((ch) => ({ root: ch.root ?? 0, quality: ch.quality ?? "", start: ch.start ?? 0, dur: ch.dur ?? ctx.BPB })) : undefined;
     const ns = notesForContent(c.kind, c.content, isRel ? { key: keyPc, chords, tempo, program } : undefined);
-    if (ns.length) candPlay.current = await startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo, program }), { vocalMode: "peek" });
+    // ピアノ伴奏（試作）の候補は content の feel（打鍵の揺れ・長さを保つ keepDur）を載せて試聴する。keepDur の無い候補は従来どおり feel なし（bit 一致）。
+    const candFeel = isRel && feelOf(c.content)?.keepDur ? feelOf(c.content) : undefined;
+    if (ns.length) candPlay.current = await startPlayback(buildPlayback({ kind: "notes", notes: ns, tempo, program, ...(candFeel ? { feel: candFeel } : {}) }), { vocalMode: "peek" });
   }
   // position＝置くセクション内位置（拍）。既定 0＝従来（SectionEditor の呼び出しは引数無し＝bit一致）。
   // 骨格の机（D4）は焦点骨格の skelPosition を渡し、骨格が居る位置へ表面メロを置く（＝正しい配置）。
@@ -651,6 +664,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     drumFillStyle, setDrumFillStyle, drumBodyAim, setDrumBodyAim, drumBodyDrummer, setDrumBodyDrummer, // フィルの作り方＝格子/型辞書/解いて作る（M2/M3）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
+    compPiano, setCompPiano, compPianoOffbeat, setCompPianoOffbeat, compPianoHumanize, setCompPianoHumanize, // ピアノ伴奏を生成する（試作・S5）
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ

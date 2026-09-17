@@ -123,6 +123,7 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
       return { text: set ? [g, gen.bassFill > 0 ? "フィル" : ""].filter(Boolean).join("・") || "設定あり" : "おまかせ", set };
     }
     if (id === "chordinst") {
+      if (gen.compPiano) return { text: "ピアノ伴奏（試作）", set: true };
       const g = COMP_GENRE_CHIPS.find((c) => c.v === gen.compStyle)?.label ?? (gen.compStyle ? "型指定" : "");
       return { text: gen.compStyle ? g : "おまかせ", set: !!gen.compStyle };
     }
@@ -504,8 +505,35 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
   //   ジャンルchip→「候補を出す」で variety=4 の別々の型を候補トレイへ（cand-card＋▶試聴＋採用の既存動線）。
   const chordInstDrawer = (
     <>
-      {drawerHead("コード楽器", () => gen.setCompStyle(""))}
+      {drawerHead("コード楽器", () => { gen.setCompStyle(""); gen.setCompPiano(false); gen.setCompPianoOffbeat(true); gen.setCompPianoHumanize(true); })}
       <div className="tk-drawer-body">
+        <div className="knob-seg" aria-label="comp-piano">
+          <span className="knob-name">ピアノ伴奏を生成する（試作）<small>4拍子だけ・今の進行に合わせて新しく作る</small></span>
+          <span className="seg-ctl">
+            {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
+              <button key={lab} type="button" className={"seg-b" + (gen.compPiano === v ? " on" : "")} aria-label={`comp-piano-${v ? "on" : "off"}`} aria-pressed={gen.compPiano === v} onClick={() => gen.setCompPiano(v)}>{lab}</button>
+            ))}
+          </span>
+        </div>
+        {gen.compPiano && <>
+          <div className="knob-seg" aria-label="comp-piano-offbeat">
+            <span className="knob-name">8分裏の単音<small>和音の合間に単音を挟む</small></span>
+            <span className="seg-ctl">
+              {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.compPianoOffbeat === v ? " on" : "")} aria-label={`comp-piano-offbeat-${v ? "on" : "off"}`} aria-pressed={gen.compPianoOffbeat === v} onClick={() => gen.setCompPianoOffbeat(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
+          <div className="knob-seg" aria-label="comp-piano-humanize">
+            <span className="knob-name">打鍵の揺れ<small>発音のタイミングと強さのばらつき</small></span>
+            <span className="seg-ctl">
+              {([["OFF", false], ["ON", true]] as [string, boolean][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.compPianoHumanize === v ? " on" : "")} aria-label={`comp-piano-humanize-${v ? "on" : "off"}`} aria-pressed={gen.compPianoHumanize === v} onClick={() => gen.setCompPianoHumanize(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
+          <p className="tk-drawnote">「候補を出す」＝進行に合わせたピアノ伴奏が4つ並びます（下のジャンルは使いません）。</p>
+        </>}
         <div className="tk-hublab">伴奏のジャンル（型を名前で選ばず耳で選ぶ）</div>
         <div className="tk-palette" aria-label="comp-genre">
           {COMP_GENRE_CHIPS.map((c) => (

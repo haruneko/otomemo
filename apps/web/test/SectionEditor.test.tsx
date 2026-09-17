@@ -1467,6 +1467,26 @@ describe("スライスC：伴奏パターンを聴いて選ぶ（コード楽器
     expect(screen.getAllByLabelText("candidate-label").map((e) => e.textContent)).toEqual(["PB-WHOLE 白玉", "PB-ARP8 8分アルペジオ", "PB-ARP16 16分うねり"]);
   });
 
+  it("ピアノ伴奏を生成する（試作）ON＝ライブラリでなく生成器へ piano＋進行＋variety 4・つまみ OFF は false で届く", async () => {
+    music.mockResolvedValue({ items: [{ kind: "chord_pattern", label: "ピアノ伴奏（試作）1", content: { mode: "strum", voicing: { tones: ["R", "3", "5"], openClose: "close", octave: 0 }, steps: 16, hits: [] } }] });
+    getComposition.mockResolvedValue(withChords());
+    render(<SectionEditor neta={mk("s1", "section")} keyPc={0} tempo={120} />);
+    await screen.findByLabelText("block-ch1@0");
+    await userEvent.click(screen.getByLabelText("tools"));
+    await userEvent.click(screen.getByLabelText("drawer-chordinst"));
+    expect(screen.queryByLabelText("comp-piano-offbeat")).toBeNull(); // 既定 OFF＝下のつまみは出ない
+    await userEvent.click(screen.getByLabelText("comp-piano-on"));
+    await userEvent.click(screen.getByLabelText("comp-piano-humanize-off"));
+    await userEvent.click(screen.getByLabelText("gen-gen_chord_pattern"));
+    await waitFor(() => expect(music).toHaveBeenCalled());
+    expect(listNeta).not.toHaveBeenCalled();
+    const [op, body] = music.mock.calls[0]! as [string, Record<string, unknown>];
+    expect(op).toBe("gen_chord_pattern");
+    expect(body).toMatchObject({ piano: true, variety: 4, pianoHumanize: false, chords: [{ root: 0, quality: "", start: 0, dur: 4 }] });
+    expect("pianoOffbeatSingles" in body).toBe(false); // 既定 on は送らない
+    expect("pattern" in body).toBe(false);
+  });
+
   it("おまかせ（chip未選択）＝genre タグ無しで scope:library を引く（role/tempo 全体から）", async () => {
     listNeta.mockResolvedValue([cpNeta("PB-WHOLE", "白玉")]);
     getComposition.mockResolvedValue(withChords());
