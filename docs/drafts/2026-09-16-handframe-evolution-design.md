@@ -221,6 +221,11 @@ phrase_maker（同じオーナーの Python 試作・読むだけ）の「鍵盤
 - `gen_chord_pattern` の出どころに `handframe`（opt-in・既定 OFF）を足す→4枚＝seed 違い（段は L2 固定・第1版）→PlacePicker→文脈試聴（主旋律と一緒）→採用→進行を変えて追従→「配り直す」。**テスト緑≠結線保証＝実機で1回通す**（memory「結線は実機フローで確認」）。MIDI 書き出しでペダルの近似が DAW でどう聞こえるかも1回。
 - **耳B（主旋律つき・J-POP 2拍替わり進行・棚の型と並べる）**＝物差し＝採用率（そのまま貼る／ノリだけ直す／音符を書き換える／貼らない＋「自分では思いつかない置き方があったか」）。
 - 撤退基準③＝棚の型と同等以下→出どころを外す（additive・既定 OFF なので既存は不変）。
+- **S5 完了（2026-09-17）**＝機械＝済／実機＝api の一通りだけ／耳＝未（次は耳B）。上位設計＝`docs/design.md` のペダルの「運び方（web）」と明示の音の「入口」を追補。
+  - ペダル＝music-core `resolveSustainPedal`（窓の中で離鍵＝窓の終わりまで・同じ高さの弾き直しで止める・延ばすだけ）。web は `pedal` を持つ content の音にだけ保存しない印（窓の配列＋content 内の始まり）を付け、`playNotes` が feel の後に解く。書き出しはノートを延ばさず CC64 の 127/0（弱起シフト込み・トラック内で重なる窓は合わせる）。印が無ければ同じ配列・同じバイト列。
+  - 入口＝`gen_chord_pattern` の `piano:true`＋`chords`・`pianoOffbeatSingles`/`pianoHumanize`（既定 true）・`variety` で種違い（HTTP・MCP の inputSchema・`/gen/section` の `body.chord`）。4拍子以外・進行なし・例外＝従来の生成＋`meta.warnings`。web＝コード楽器の引き出し「ピアノ伴奏を生成する（試作）」ON/OFF と2つのつまみ（ON のときだけ出る）・候補の試聴は `keepDur` のある content だけ feel を載せる。
+  - 実機＝`restart.sh --build` 後、api に進行（Fmaj7｜G｜Em7｜Am7→G）で4件＝全打点に明示の音・ペダル 8 窓・feel（keepDur）・warnings なし。3/4 は warnings で落ち先を告げた。画面の操作・PlacePicker・文脈試聴・DAW での CC64 の聞こえは未確認（耳B と併せて）。
+  - 残る気づき：(1) 合成の再生（section）の feel は `feelOfTree` が最初に見つけた子の feel を全パートに掛ける＝ピアノ伴奏だけが feel を持つセクションでは、その揺れ（humanize 1）がメロ・ベース・ドラムにも掛かる／メロの feel が先にあると keepDur が効かず長さが詰まる（ペダルの窓の中は延びる）。(2) 「配り直す」・進行を変えての追従の実機確認は未。
 
 **受け入れの作法**＝機械のゲートは**診断**（bit 一致・往復一致・決定論・密度の単調性・低音域ガードの違反数・既存 bit 一致）。「間が良い」「静的でない」のような耳の観察は**機械の合否に硬化させない**。
 
