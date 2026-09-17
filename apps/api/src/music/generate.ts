@@ -27,7 +27,7 @@ import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBre
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
-import { PM_ENGINE_VERSION } from "@cm/music-core"; // engine 印（M0契約 §2）＝phrase_maker 由来の経路（JZ-WALK）を使った時だけ content に載る。
+import { PM_ENGINE_VERSION, handFrameToChordPattern } from "@cm/music-core"; // engine 印（M0契約 §2）＝phrase_maker 由来の経路（JZ-WALK）を使った時だけ content に載る。
 import { QUALITY_INTERVALS as CF_QUALITY_INTERVALS } from "@cm/music-core"; // JZ-WALK のコード区間のコードトーン（otomemo の品質表が正）
 import { buildWalkingLine, WALK_COMPOUND_SLOT_STEPS, JZ_WALK_ID, type WalkSegment } from "@cm/music-core"; // M3-3d＝JZ-WALK（walking v2 の候補生成＋v3 の規則3本・乱数は決定的規則へ置換）。**耳未判定**＝style 名指しの opt-in。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
@@ -997,12 +997,66 @@ function withUnknownTypeWarning<T extends GenResult>(res: T, part: "コード楽
   return res;
 }
 
+/** ピアノ伴奏の生成（S5・opt-in）の入口の値。piano 未指定＝従来と bit 一致。 */
+export interface PianoAccompOpts {
+  piano?: boolean;
+  /** 進行（拍）。ピアノ伴奏の生成だけが使う。 */
+  chords?: readonly { root?: number | string; quality?: string; start?: number; dur?: number }[] | null;
+  /** 8分裏の単音（既定 true） */
+  pianoOffbeatSingles?: boolean;
+  /** 打鍵の揺れ（強さのばらつき＋発音時刻のずれ・既定 true） */
+  pianoHumanize?: boolean;
+}
 export function genChordPattern(
   frame?: Frame | null,
   seed?: number | null,
-  opts?: { style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number } | null,
+  opts?: ({ style?: "keyboard" | "guitar"; strumMs?: number; pattern?: string; variety?: number; swing?: number; humanize?: number } & PianoAccompOpts) | null,
 ): GenResult {
+  if (opts?.piano === true) {
+    const p = genPianoAccomp(frame, seed, opts);
+    if ("items" in p) return p;
+    const { piano: _p, chords: _c, pianoOffbeatSingles: _o, pianoHumanize: _h, ...rest } = opts;
+    const res = genChordPattern(frame, seed, Object.values(rest).some((v) => v != null) ? rest : undefined);
+    res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), p.warning] };
+    return res;
+  }
   return withUnknownTypeWarning(genChordPatternImpl(frame, seed, opts), "コード楽器", opts?.pattern, isKnownCompPattern);
+}
+
+// ピアノ伴奏（phrase_maker 試作 #1 の移植・S5）＝4拍子だけ配る（オーナー裁定）。立たないときは理由を返し、呼び側が従来の経路へ落として告げる。
+//   返り＝写し（明示の音＋pedal）＋feel（打鍵の揺れ on のとき・keepDur 込み）。variety≥2＝種を1ずつ変えた n 件。
+const PIANO_FALLBACK = "従来のコード楽器の生成に切り替えました";
+function genPianoAccomp(frame: Frame | null | undefined, seed: number | null | undefined, opts: NonNullable<Parameters<typeof genChordPattern>[2]>): GenResult | { warning: string } {
+  const f = normalizeFrame(frame);
+  const info = meterInfo(f.meter);
+  if (info.grouping === "compound" || info.beatsPerBar !== 4) return { warning: `ピアノ伴奏の生成は4拍子だけです（拍子 ${f.meter}）。${PIANO_FALLBACK}` };
+  const total = barsOf(f) * 4;
+  const src = (opts.chords ?? [])
+    .filter((c) => c && c.root != null && typeof c.start === "number" && c.start < total)
+    .map((c) => ({ root: c.root!, quality: c.quality ?? "", start: Math.max(0, c.start!) }))
+    .sort((a, b) => a.start - b.start);
+  if (!src.length) return { warning: `ピアノ伴奏の生成にはコード進行が要ります。${PIANO_FALLBACK}` };
+  src[0]!.start = 0; // 頭にコードが無ければ最初のコードを頭から鳴らす
+  const band = src.map((c, i) => ({ root: c.root, quality: c.quality, beats: (src[i + 1]?.start ?? total) - c.start })).filter((c) => c.beats > 1e-9);
+  const variety = Math.max(1, Math.floor(opts.variety ?? 1));
+  const s0 = seed ?? 5;
+  const items: GenResult["items"] = [];
+  const warnings = new Set<string>();
+  try {
+    for (let i = 0; i < variety; i++) {
+      const r = handFrameToChordPattern(band, {
+        tempo: f.tempo ?? 120, seed: s0 + i, key: f.key ?? 0,
+        offbeatSingles: opts.pianoOffbeatSingles !== false, humanize: opts.pianoHumanize !== false,
+      });
+      if (r.warnings.length) warnings.add("2拍より短いコードは、2拍ごとの頭で鳴っているコードで弾きます");
+      const swing = buildFeel(opts.swing, 0)?.swing;
+      const feel = r.feel ? { ...r.feel, ...(swing ? { swing } : {}) } : buildFeel(opts.swing, 0);
+      items.push({ kind: "chord_pattern", content: feel ? { ...r.content, feel } : r.content, label: variety > 1 ? `ピアノ伴奏（試作）${i + 1}` : "ピアノ伴奏（試作）" });
+    }
+  } catch (e) {
+    return { warning: `ピアノ伴奏を生成できませんでした（${e instanceof Error ? e.message : String(e)}）。${PIANO_FALLBACK}` };
+  }
+  return warnings.size ? { items, edges: [], meta: { warnings: [...warnings] } } : { items, edges: [] };
 }
 function genChordPatternImpl(
   frame?: Frame | null,

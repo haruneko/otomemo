@@ -341,7 +341,9 @@ export function buildHttp(core: Core): FastifyInstance {
           const cpVariety = typeof b.variety === "number" ? b.variety : undefined; // スライスC：候補を複数返す（既定1=単数=bit一致）
           const cpSwing = typeof b.swing === "number" ? b.swing : undefined; // S4：swing/humanize=feel 添付（未指定=従来 bit 一致）
           const cpHumanize = typeof b.humanize === "number" ? b.humanize : undefined;
-          return withRemovedRiffKnobWarning(genChordPattern(b.frame, b.seed, cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize } : undefined), b, "chord"); // 2026-09-16 外したつまみは告げる
+          // ピアノ伴奏（S5・opt-in）：piano:true のときだけ進行と2つのつまみを渡す（未指定＝従来の呼び方＝bit 一致）。
+          const cpPiano = b.piano === true ? { piano: true, chords: asChords(b.chords), pianoOffbeatSingles: typeof b.pianoOffbeatSingles === "boolean" ? b.pianoOffbeatSingles : undefined, pianoHumanize: typeof b.pianoHumanize === "boolean" ? b.pianoHumanize : undefined } : null;
+          return withRemovedRiffKnobWarning(genChordPattern(b.frame, b.seed, cpPiano || cpPattern != null || cpStyle != null || cpStrumMs != null || cpVariety != null || cpSwing != null || cpHumanize != null ? { pattern: cpPattern, style: cpStyle, strumMs: cpStrumMs, variety: cpVariety, swing: cpSwing, humanize: cpHumanize, ...(cpPiano ?? {}) } : undefined), b, "chord"); // 2026-09-16 外したつまみは告げる
         }
         case "gen_named_progression": return genNamedProgression(b.name, b.frame);
         case "analyze_fit": return analyzeFit(asNotes(b.melody), asChords(b.chords), b.key);
@@ -494,7 +496,10 @@ export function buildHttp(core: Core): FastifyInstance {
     const bassContent = bassRes ? (bassRes.items[0]!.content as { notes: { pitch: number; start: number; dur: number }[]; feel?: unknown }) : undefined;
     if (want.has("chord_progression")) place("chord_progression", { chords }, "コード");
     if (want.has("chord_pattern")) {
-      const cpRes = genChordPattern(genFrame, b.seed, feelOpt);
+      // ピアノ伴奏（S5・opt-in）：body.chord.piano のときだけ、生成した進行を渡す（未指定＝従来の呼び方＝bit 一致）。
+      const bc = b.chord ?? {};
+      const cpPianoOpt = bc.piano === true ? { piano: true, chords, pianoOffbeatSingles: typeof bc.pianoOffbeatSingles === "boolean" ? bc.pianoOffbeatSingles : undefined, pianoHumanize: typeof bc.pianoHumanize === "boolean" ? bc.pianoHumanize : undefined } : null;
+      const cpRes = genChordPattern(genFrame, b.seed, cpPianoOpt ? { ...(feelOpt ?? {}), ...cpPianoOpt } : feelOpt);
       if (cpRes.meta?.warnings?.length) genWarnings.push(...cpRes.meta.warnings);
       const removedChord = removedRiffKnobWarning(b.chord, "chord");
       if (removedChord) genWarnings.push(`コード楽器：${removedChord}`);
