@@ -50,6 +50,7 @@ export * from "./rngSalt";
 export * from "./engineVersion";
 export * from "./handFrameBand";
 export * from "./explicitNotes";
+export * from "./sustainPedal";
 
 // コードのスケール表と低域の畳み（JZ-WALK が使う部品）。2026-09-16 リフ撤去で anchorLock/chordFollow から移した。
 export * from "./chordScale";
