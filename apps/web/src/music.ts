@@ -2,7 +2,7 @@ import { Midi } from "@tonejs/midi";
 import { Chord as TonalChord, Note as TonalNote } from "tonal";
 // 不変の音楽知識（音名・コード品質→インターバル）は @cm/music-core が SSOT（負債D3・design 決定2b）。
 // PITCH_NAMES は re-export して既存の web import 面（useNetaEditor 等）を不変に保つ。
-import { PITCH_NAMES, QUALITY_INTERVALS, explicitNotePitch, applyFeel, applyFeelByPart, type Feel, type HumanizePart, type HumanizeWarn, type Note as CoreNote } from "@cm/music-core";
+import { PITCH_NAMES, QUALITY_INTERVALS, explicitNotePitch, applyFeel, applyFeelByPart, mergePedalWindows, resolveSustainPedal, type PedalWindow, type Feel, type HumanizePart, type HumanizeWarn, type Note as CoreNote } from "@cm/music-core";
 export { PITCH_NAMES, applyFeel, applyFeelByPart };
 export type { Feel, HumanizePart, HumanizeWarn };
 
@@ -62,7 +62,11 @@ export interface Note extends CoreNote {
   sungBy?: { singer: string; speaker?: number }; // #27 再生経路の一本化: この音を「誰がどの声で歌うか」の印。
   // 再生用コンポジット解決（playbackComposite）が歌う子の melody ノートへ付ける（同時に muted:true）。vocalJobsOf が
   // これでグループし任意のノート切片（FormStrip 窓含む）から vocal job を再導出する。lens/muted と同型の再生用印＝保存 content には書かない。
+  pedal?: PedalMark; // サステインペダル（CC64・2026-09-17 S5）：pedal を持つ content の音にだけ付く再生/書き出し用の印＝保存しない。
 }
+// windows＝その content の窓（拍・content の頭＝0）を全音で共有する配列／at＝この音の content 内の始まり。
+// 位置ずらし・弱起・feel は start だけを動かすので、窓は「start − at」だけずらせば絶対時刻になる。
+export interface PedalMark { windows: readonly PedalWindow[]; at: number }
 
 // ミキサーのパート＝メロ/コード/ベース/ドラム（音量バランスと音割れ対策のパート別ゲイン・耳FB 2026-07-09）。
 export type MixPart = "melody" | "counter" | "chord" | "bass" | "drums";
@@ -1071,7 +1075,54 @@ export function resolveChordPattern(content: ChordPatternContent, chords: ChordE
     // contract③ 追補：custom LH も境界で切って度数を再解決（followChords 時のみ・preset は元から追従）。
     out.push(...resolveLh(content.lh, content?.steps ?? 16, chords, key, followChords));
   }
+  // サステインペダル（S5）：pedal を持つ content の音にだけ印を付ける（無い content＝何もしない＝bit 一致）。
+  const pedal = pedalWindowsOf(content);
+  return pedal ? out.map((n) => ({ ...n, pedal: { windows: pedal, at: n.start } })) : out;
+}
+function pedalWindowsOf(content: unknown): readonly PedalWindow[] | null {
+  const p = (content as { pedal?: unknown } | null)?.pedal;
+  if (!Array.isArray(p)) return null;
+  const ws = p.filter((w): w is PedalWindow => !!w && typeof w.start === "number" && typeof w.dur === "number" && w.dur > 0);
+  return ws.length ? ws : null;
+}
+/**
+ * 再生の直前にペダルを「鳴っている長さ」へ解く（design「サステインペダル（CC64）の持ち方」）。
+ * 窓の配列（content）ごとに、content 内の時刻（at）で resolveSustainPedal を掛け、延びた長さだけを戻す（start は felt のまま）。
+ * 印の付いた音が無ければ入力の配列をそのまま返す（bit 一致）。
+ */
+export function sustainPedalForPlayback(notes: Note[]): Note[] {
+  if (!notes.some((n) => n.pedal)) return notes;
+  const groups = new Map<readonly PedalWindow[], number[]>();
+  notes.forEach((n, i) => { if (!n.pedal) return; const g = groups.get(n.pedal.windows); if (g) g.push(i); else groups.set(n.pedal.windows, [i]); });
+  const out = notes.slice();
+  for (const [windows, idx] of groups) {
+    const rel = idx.map((i) => ({ pitch: notes[i]!.pitch, start: notes[i]!.pedal!.at, dur: notes[i]!.dur }));
+    resolveSustainPedal(rel, windows).forEach((r, j) => {
+      if (r.dur !== rel[j]!.dur) out[idx[j]!] = { ...notes[idx[j]!]!, dur: r.dur };
+    });
+  }
   return out;
+}
+/** 書き出し用：トラックの音（feel 前・弱起シフト後）からペダルの窓を絶対の拍へ戻し、重なりを合わせる。印が無ければ []。 */
+export function pedalWindowsForTrack(notes: readonly Note[]): PedalWindow[] {
+  const seen = new Map<readonly PedalWindow[], Set<number>>();
+  const all: PedalWindow[] = [];
+  for (const n of notes) {
+    if (!n.pedal) continue;
+    const off = n.start - n.pedal.at;
+    const key = Math.round(off * 1e6);
+    const s = seen.get(n.pedal.windows) ?? seen.set(n.pedal.windows, new Set()).get(n.pedal.windows)!;
+    if (s.has(key)) continue;
+    s.add(key);
+    for (const w of n.pedal.windows) all.push({ start: w.start + off, dur: w.dur });
+  }
+  return mergePedalWindows(all).map((w) => (w.start >= 0 ? w : { start: 0, dur: w.start + w.dur })).filter((w) => w.dur > 0);
+}
+function addPedalCC(track: { addCC: (o: { number: number; value: number; time: number }) => unknown }, notes: readonly Note[], spb: number): void {
+  for (const w of pedalWindowsForTrack(notes)) {
+    track.addCC({ number: 64, value: 1, time: w.start * spb });
+    track.addCC({ number: 64, value: 0, time: (w.start + w.dur) * spb });
+  }
 }
 
 // コード楽器 grid のセルタップ→hits の更新（純関数・契約テスト用）。
@@ -1474,6 +1525,7 @@ export function notesToMidi(
     const track = midi.addTrack(); // 純ドラムでない限りピッチ用トラック（空 notes でも従来通り1トラック出す）
     if (program !== undefined) track.instrument.number = program;
     addNotes(track, pitched);
+    addPedalCC(track, shiftNotes(notes.filter((n) => !n.drum), offset), spb); // CC64（印が無ければ何も書かない＝従来のバイト列）
   }
   if (drums.length) {
     const dtrack = midi.addTrack();
@@ -1565,6 +1617,7 @@ export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string 
     for (const n of clampNegativeStarts(shiftNotes(felted[ti]!, offset))) {
       track.addNote({ midi: n.pitch, time: n.start * spb, duration: n.dur * spb, velocity: (n.vel ?? 100) / 127 });
     }
+    if (!t.drum) addPedalCC(track, shiftNotes(t.notes, offset), spb); // CC64（feel は掛けない・印が無ければ従来のバイト列）
   });
   addLoopMarkers(midi, shiftLoop(loop, offset, bpb), meter);
   return midi.toArray();
