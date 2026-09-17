@@ -62,3 +62,12 @@ describe("#29 P1-4 NoriRow（跳ね＋人間味）", () => {
     expect(getByLabelText("nori-humanize-off").getAttribute("aria-pressed")).toBe("false");
   });
 });
+
+describe("NoriRow：行が触らない feel のキーを保つ（2026-09-17）", () => {
+  it("keepDur（長さを保つ指定）は保存し直しても落ちない", () => {
+    const onChange = vi.fn();
+    const { getByLabelText } = render(<NoriRow feel={{ humanize: 1, seed: 7, keepDur: true }} onChange={onChange} />);
+    fireEvent.click(getByLabelText("nori-humanize-weak"));
+    expect(onChange).toHaveBeenCalledWith({ humanize: 0.15, seed: 7, keepDur: true, swing: 0, swingUnit: undefined });
+  });
+});

@@ -62,10 +62,13 @@ export interface Note extends CoreNote {
   sungBy?: { singer: string; speaker?: number }; // #27 再生経路の一本化: この音を「誰がどの声で歌うか」の印。
   // 再生用コンポジット解決（playbackComposite）が歌う子の melody ノートへ付ける（同時に muted:true）。vocalJobsOf が
   // これでグループし任意のノート切片（FormStrip 窓含む）から vocal job を再導出する。lens/muted と同型の再生用印＝保存 content には書かない。
+  ownFeel?: OwnFeel; // 打鍵の揺れの印（2026-09-17・compositeNotes が付ける再生/書き出し用＝保存しない）。
   pedal?: PedalMark; // サステインペダル（CC64・2026-09-17 S5）：pedal を持つ content の音にだけ付く再生/書き出し用の印＝保存しない。
 }
 // windows＝その content の窓（拍・content の頭＝0）を全音で共有する配列／at＝この音の content 内の始まり。
 // 位置ずらし・弱起・feel は start だけを動かすので、窓は「start − at」だけずらせば絶対時刻になる。
+// 打鍵の揺れの印（2026-09-17 揺れはパートごと）＝そのトラックの content.feel の humanize/seed/keepDur。再生と書き出しの境界で使う＝保存しない。
+export interface OwnFeel { humanize: number; seed?: number; keepDur?: boolean }
 export interface PedalMark { windows: readonly PedalWindow[]; at: number }
 
 // ミキサーのパート＝メロ/コード/ベース/ドラム（音量バランスと音割れ対策のパート別ゲイン・耳FB 2026-07-09）。
@@ -93,12 +96,46 @@ export function humanizePartOf(n: Note): HumanizePart | undefined {
 }
 // アンサンブル feel 適用の単一入口（再生 audio.ts と MIDI 書き出し notesToMidi/tracksToMidi が共有）。
 // feel 無しは applyFeelByPart が入力そのまま返す＝bit 一致。humanize>0 のみ部位別プロファイルが起きる。
+// 2026-09-17 オーナー裁定（揺れはパートごと）：跳ね（swing/swingUnit）は feel（セクション側）を全音に共有、
+// 打鍵の揺れ（humanize/seed）と keepDur は音の ownFeel 印（そのトラックの content.feel）が勝つ。
+// 「実際に使う揺れの設定」ごとに組に分けて掛ける＝印が無い／セクション側と同じ設定の音だけなら1組＝従来と bit 一致。
 export function applyFeelEnsemble(
   notes: Note[],
   feel: Feel | null | undefined,
   ctx: { compound?: boolean; tempo?: number; onWarn?: (w: HumanizeWarn) => void },
 ): Note[] {
-  return applyFeelByPart(notes, feel, ctx, humanizePartOf);
+  if (!notes.some((n) => n.ownFeel)) return applyFeelByPart(notes, feel, ctx, humanizePartOf);
+  const base: Feel = feel ?? {};
+  const effective = (n: Note): Feel => {
+    const o = n.ownFeel;
+    if (!o) return base;
+    const f: Feel = { ...base, humanize: o.humanize, seed: o.seed ?? base.seed };
+    if (o.keepDur) f.keepDur = true; else delete f.keepDur;
+    return f;
+  };
+  const keyOf = (f: Feel) => `${f.humanize ?? 0}|${f.seed ?? ""}|${f.keepDur ? 1 : 0}`;
+  const groups = new Map<string, { feel: Feel; idx: number[]; notes: Note[] }>();
+  notes.forEach((n, i) => {
+    const f = effective(n);
+    const k = keyOf(f);
+    let g = groups.get(k);
+    if (!g) { g = { feel: f, idx: [], notes: [] }; groups.set(k, g); }
+    g.idx.push(i);
+    g.notes.push(n);
+  });
+  if (groups.size === 1 && groups.has(keyOf(base))) return applyFeelByPart(notes, feel, ctx, humanizePartOf); // 全音がセクション側と同じ＝従来経路
+  const out = new Array<Note>(notes.length);
+  for (const g of groups.values()) {
+    const felt = applyFeelByPart(g.notes, g.feel, ctx, humanizePartOf);
+    g.idx.forEach((orig, j) => { out[orig] = felt[j]!; });
+  }
+  return out;
+}
+// そのトラックの content.feel が打鍵の揺れ（humanize）を持てば、再生用の印にする（保存しない・pedal と同じ扱い）。
+export function ownFeelOf(content: unknown): OwnFeel | undefined {
+  const f = feelOf(content);
+  if (!f || typeof f.humanize !== "number") return undefined;
+  return { humanize: f.humanize, ...(f.seed != null ? { seed: f.seed } : {}), ...(f.keepDur ? { keepDur: true } : {}) };
 }
 
 // MIDIノート番号→音名（MIDI 60=C4）。負値も安全（(m%12+12)%12）。PITCH_NAMES は @cm/music-core。
@@ -1251,6 +1288,7 @@ export function compositeNotes(
     // ミキサーのパート＝kind から決定（コード楽器/riff/管弦→chord・rhythm→drums・bass→bass・counter→counter・他→melody）。
     const part: MixPart = kind === "bass" ? "bass" : kind === "rhythm" ? "drums" : kind === "chord_pattern" || kind === "riff" || kind === "section_inst" ? "chord" : kind === "counter" ? "counter" : "melody";
     // パートの音色（GM program）。bass=フィンガーベース・counter/管弦=ストリングス。他は content.program か既定0（riff/管弦 は content.program）。
+    const own = ownFeelOf(c.node.neta.content); // 揺れはパートごと（2026-09-17）＝自前の humanize を持つトラックだけ印
     const prog = isRhythm ? undefined : (programOf(c.node.neta.content) ?? (kind === "bass" ? 33 : kind === "counter" || kind === "section_inst" ? 48 : 0));
     if (kind === "bass" && isRelativeBass(c.node.neta.content)) {
       // 相対bass：section の調・コードで解決済み実音高なので、ここでは移調しない（position だけ）。
@@ -1260,6 +1298,7 @@ export function compositeNotes(
         start: n.start + c.position,
         program: prog,
         part,
+        ...(own ? { ownFeel: own } : {}),
       }));
     }
     if ((kind === "chord_pattern" || kind === "section_inst") && isChordPattern(c.node.neta.content)) {
@@ -1271,6 +1310,7 @@ export function compositeNotes(
         start: n.start + c.position,
         program: prog,
         part,
+        ...(own ? { ownFeel: own } : {}),
       }));
     }
     // メロは**旋法を保った相対移調**（短調メロ→section調号の相対短調等）。コード/ベース絶対は
@@ -1286,6 +1326,7 @@ export function compositeNotes(
       start: n.start + c.position,
       program: prog,
       part,
+      ...(own ? { ownFeel: own } : {}),
     }));
   });
 }

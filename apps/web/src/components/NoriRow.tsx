@@ -18,7 +18,7 @@ export function NoriRow({ feel, onChange }: { feel: Feel | undefined; onChange: 
   // 両0＝キー削除。それ以外＝seed/swingUnit は保存値を保持（UI では触らない・seed🎲は backlog）。
   const emit = (nextSwing: number, nextHum: number) => {
     if (nextSwing === 0 && nextHum === 0) { onChange(undefined); return; }
-    onChange({ swing: nextSwing, humanize: nextHum, seed: feel?.seed ?? 1, swingUnit: feel?.swingUnit });
+    onChange({ ...feel, swing: nextSwing, humanize: nextHum, seed: feel?.seed ?? 1, swingUnit: feel?.swingUnit }); // keepDur 等の行が触らないキーは保つ（2026-09-17）
   };
   const seg = humanizeSegOf(humanize);
   return (
