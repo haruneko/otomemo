@@ -421,6 +421,7 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
     - **既存は不変**＝`notes`／`oct` の無い打点は従来の経路そのまま（bit 一致）。人がエディタで足した打点（明示の音なし）は `voiceToTop` で鳴る。
     - **入口（2026-09-17 S5・opt-in・既定 OFF）**＝`gen_chord_pattern`（HTTP `/music/gen_chord_pattern`・MCP）に `piano: true`＋`chords`（進行・拍）で、この生成器の候補を返す。`pianoOffbeatSingles`（8分裏の単音）・`pianoHumanize`（打鍵の揺れ）＝boolean・既定 true。`variety`≥2＝種を1ずつ変えた候補を n 件。`/gen/section` は `body.chord.{piano, pianoOffbeatSingles, pianoHumanize}`（進行は生成したもの）。返り＝写しの content（明示の音＋`pedal`）＋`feel`（揺れ on のとき・`keepDur` 込み）。web＝コード楽器の引き出しの「ピアノ伴奏を生成する（試作）」（選ぶとネタ帳ライブラリでなく生成器へ・variety 4）。候補の試聴は `feel.keepDur` のある content だけ feel を掛ける（既存の候補の試聴は不変）。
       - **4拍子だけ**（オーナー裁定）。4拍子以外・進行が無い・生成が例外のときは従来の経路で生成し、`meta.warnings` に落ち先を告げる（`/gen/section` は `warnings`）。`piano` 未指定＝従来と bit 一致。
+- **編集画面の小節数（2026-09-17 オーナー裁定・和音パターン／相対ベース／ドラムの3エディタ共通）**：生成は最初からセクションの小節数ぶん（例 8小節）の内容を返すので、小節数ボタンの**上限は「4 と内容の小節数の大きい方」**（メロのロールと同じ決め方）。**縮めたら、はみ出した打点を内容から切る**（`/gen` の「セクション末で切り詰め」と同じ規則＝格子の外で始まる打点は落とし、跨ぐ打点は長さを格子の終わりまで詰める）。対象＝和音パターン（右手 `hits`・左手 `lh.hits`）／相対ベース（`pattern`）／ドラム（各レーンの `hits` と同順の `velCurve`・`divs`・物理フィルの `fillNotes`＝残らなければ `fillNotes`/`fillBar`/`fillKind` ごと外す）。純関数 `trimChordPatternSteps`／`trimBassPatternSteps`／`trimRhythmSteps`（`apps/web/src/music.ts`）。縮めない操作・内容は従来と同じ。メロ（ロール）は小節数を縮めても音符を画面に出し続ける別の作り（見えない音は無い）＝対象外。
 - **段階(CP)＝✅実装済(2026-06-23)**：CP1 進行を抽象化(音色固定GM49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(music.ts) → CP3 エディタ(ChordPatternEditor＝hitsグリッド＋長さツール＋voicing＋voicing MiniRoll) → CP4 `genChordPattern`＋/gen/section 配線 → CP5 compositeNotes で section 進行に解決(パート毎 program・複数可)。api/web 緑。
 
 ### WP-X3 新レーン3種（対旋律 counter／リフ riff／セクション楽器 section_inst）
@@ -2214,6 +2215,12 @@ capabilities × entities で自ずと決まる。**これがMCPツール＝HTTP 
       **子の順序次第でドラムの揺れを消したり他パートへ漏らしたりする**＝単体再生と合成再生で聞こえが変わりうる。
       直すには per-section／per-track の feel 適用（範囲付き feel＝backlog の大改修）が要り、**いま払う価値は無い**という判断。
       **穴として承知の上で残す**＝後から「知らなかった」にしない。気になったら backlog の per-section feel を上げる。
+    - **裁定の更新（2026-09-17・オーナー）＝跳ねはセクション共有・打鍵の揺れと長さを保つ指定はパートごと**（ピアノ伴奏が揺れ 1.0＋`keepDur` を持ち、上の非対称の実害が大きくなったため）。既決「ノリは演奏レイヤー・保存は各トラック・セクションは配り役・内側優先」の適用。
+      - **跳ね（`swing`・`swingUnit`）**＝従来どおり1つ（セクションの `content.feel` ＞ 子ツリーで最初に見つかった feel）を全パートへ。
+      - **打鍵の揺れ（`humanize`・`seed`）と `keepDur`**＝**そのトラックの `content.feel` が `humanize` を持てばそれ**（0 も「揺らさない」という指定として勝つ）＞ 上のセクション側の feel ＞ 無し。`keepDur` はトラック側の揺れを使うときはトラックの値、そうでなければセクション側の値。
+      - **仕組み**＝`compositeNotes` が、`humanize` を持つトラックの音に再生用の印 `ownFeel:{humanize, seed?, keepDur?}`（ペダルの印と同じく保存しない）を付け、`applyFeelEnsemble` が「実際に使う揺れの設定」ごとに分けて `applyFeelByPart` を掛ける。印が無い／セクション側と同じ設定の音は1つの組のまま＝**自前の揺れを持つトラックが無い合成は従来と bit 一致**。再生と MIDI 書き出しは同じ入口なので両方に効く。
+      - **出音が変わる範囲**＝自前の揺れがセクション側と違うトラック（例＝`/gen/section` のピアノ伴奏 1.0＋`keepDur` が先頭で、メロ・ベース 0.15・ドラム body 0.5 がそれに上書きされていた→各自の値で鳴る）。入れた後に耳で確かめる。
+      - **ノリ行の保存**は `keepDur` など行が触らない feel のキーを保つ（従来は `{swing,humanize,seed,swingUnit}` だけに作り直して落としていた）。
 - **(k) ベース／ギター／鍵盤の「リフ」系（M3〜M6a・2026-09-09〜16）＝2026-09-16 撤去（オーナー裁定）**：
   phrase_maker 取り込みで足した **ベースの錨 `anchorLock`（(k-6) 厳しさ・案B・リフ文法3型 `BASS_GRAMMARS`）・コード追従 `chordFollow`・
   ギターのリフ一式（`guitarRiff` 3型・chug ロック・手の形・フォーム DB・palmGate/ghostVel）・変奏の層 `riffVariation`（(k-7)）・
