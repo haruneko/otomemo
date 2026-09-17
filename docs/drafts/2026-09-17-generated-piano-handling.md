@@ -188,3 +188,10 @@ phrase_maker から移したピアノ伴奏の生成（耳で「試作と同じ�
 ## 9. 出典
 
 `CLAUDE.md`／`docs/requirements.md:18-31, 149, 223`／`docs/design.md:402-425（和音パターン・明示の音・入口）, 258-267（ペダル）, 518-560（統一原理・判別軸・アレンジ層計画・S1 契約）, 617-627（feel の家）, 2127-2134（フィール層分離）, 2143（内側優先）, 2210-2216（ドラムの feel・v1 制約の裁定）`／`docs/backlog.md:34（小節単位の別案）, 403（per-section feel）, 463（長さの詰め）`／`docs/drafts/2026-09-16-handframe-evolution-design.md`（§2-3・§4・§9・末尾の裁定と耳判定・S4/S5 の完了記録）／`docs/drafts/2026-09-16-next-work-list.md` 末尾（生成器を配る）／`docs/research/2026-09-16-phrasemaker-ideas-to-keep.md` §1-1・§2／`docs/archive/2026-08-20-phrasemaker-M0-contract.md:8-10`／`docs/archive/2026-08-21-phrasemaker-arc-handoff.md:42-43`／`docs/archive/2026-08-21-arrange-data-locus.md:88`／`docs/archive/2026-09-09-phrasemaker-port-master-plan.md` §1-3・§8-2／実コード＝`apps/web/src/components/ChordPatternEditor.tsx:97-106, 193, 334`・`apps/web/src/components/BarsControl.tsx`・`apps/web/src/components/SectionEditor.tsx:103, 418-420`・`apps/web/src/components/NoriRow.tsx:19-22`・`apps/web/src/music.ts:22-48, 96-103, 966-1080, 1196-1200`・`apps/api/src/music/generate.ts:1075`・`apps/web/src/useMelodyGen.tsx:342`・`packages/music-core/src/index.ts:180, 312`・`packages/music-core/src/explicitNotes.ts:87`。
+
+## オーナー裁定（2026-09-17）
+- **小節数を縮めても打点が残る不具合＝全部の内容で直す**（上限を内容の小節数に合わせ、縮めたらはみ出した打点を切る）。
+- **打鍵の揺れ＝パートごとに持つ**（跳ねはセクション共有・揺れと長さを保つ指定はパートごと）。今の音が変わるので、入れた後に耳で確かめる。
+- 「音符は毎回作る」との整合＝設計の言い方の整理なので機械で決定（推しどおり＝保存の形でなく性質の規則として設計に1行で言い直す）。
+- 生成したピアノ伴奏を開いたときの画面＝文字の説明では判断できないので、画面の見本を作って聞き直す。
+
