@@ -262,6 +262,9 @@
   - **MIDI 書き出し**＝ノートのトラックに `@tonejs/midi` の `track.addCC({ number: 64, value: 1 | 0, time })`（value は 0..1 正規化＝127/0）を down/up の2点で書く。**ノートの長さは延ばさない**（DAW が CC64 を解釈する）。弱起シフト（`prerollOffsetBeats`）はノートと同じだけずらす。feel（humanize/swing）はペダルに掛けない。取り込み（`midiToNotes`）は現状 CC を読まない＝ペダルは往復しない（取り込みへの対応は必要が出たとき）。
   - **再生（web）＝実コードで確認した事実**：再生は smplr 1.0.0 の `Soundfont2`（`audio.ts playEvent` が `inst.start({note,time,duration})`）。smplr の `setCC(64, v)` は **SFZ 系の `ccRange` による音源レイヤー選択にしか効かず、発音中の音を保持しない**（`smplr/dist/index.mjs` `setCC`/`matchesCc`）。Tone.js 側にも CC64 の解釈は無い。→ **対処＝再生の直前にだけペダルを「鳴っている長さ」に解決する**（MIDI の標準のサステイン規則：ペダルを踏んでいる間に離鍵した音は、ペダルを離す時刻まで鳴らす／同じ音高を踏み直したら前の音はそこで止める）。解決は web の再生スケジュールで行い、**content も書き出しも延ばした長さを持たない**（持つのは CC64 だけ）。解決関数は純関数でテスト可能に置く。
   - 合成再生（section/song）＝`compositeNotes` がパートの位置へずらすのと同じだけペダルもずらし、パート単位で解決（他パートの音にはペダルを掛けない）。
+  - **運び方（web・2026-09-17 S5）**＝content を音へ解く `resolveChordPattern` が、`pedal` のある content の音にだけ再生用の印 `Note.pedal = { windows, at }`（`windows`＝その content の窓の配列を全音で共有・`at`＝その音の content 内の格子の始まり）を付ける（`lens`/`muted` と同じ保存しない印・`pedal` の無い content の音には付かない＝bit 一致）。位置ずらし・弱起・feel は `start` だけを動かすので、窓は `at` との相対で読めば常に正しい。
+    - **再生**＝`playNotes` が feel を掛けた直後に `sustainPedalForPlayback`（純関数）で長さを解く。規則の本体は music-core `resolveSustainPedal`（離鍵が窓の中＝`窓の頭 < 離鍵 < 窓の終わり` なら窓の終わりまで鳴らす／同じ窓の配列を持つ同じ高さの次の打鍵で止める／延ばすだけで縮めない）。印の付いた音が1つも無ければ入力の配列をそのまま返す。
+    - **書き出し**＝`notesToMidi`／`tracksToMidi` がトラックの音（feel 前）から窓を拍の絶対時刻へ戻し（`start − at` だけずらす＋弱起のシフト）、トラック内で重なる窓は合わせて CC64 を書く。印が無ければ何も足さない＝バイト列は従来と一致。
 - **velocity**：ノート単位で持つ（default 100）。MIDI標準＆書き出しに要る"基盤データ"なのでフィールドは今持つ（コストほぼ0）。編集・ヒューマナイズUIは feature work（後）。
 - **マイクロタイミング（tick前後の補正）は今は持たない**：将来のヒューマナイズ機能用で、後から nullable な offset を足すだけ（データ移行不要＝後付けが安い）。
 - 判断則：**スキーマ変更は高い／機能追加は安い**。小さくMIDI標準で確実に要るものだけ今持つ（velocity）、純粋な将来機能＆後付け可能なものは後回し（micro-timing）。
@@ -416,6 +419,8 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
     - **写しと解決は `packages/music-core/src/explicitNotes.ts` に1本**（`pitchToExplicitNote`／`explicitNotePitch`／写し `handFrameToChordPattern`）＝api と web が同じ関数を使う＝往復一致を構造で取る。写しの出力＝`mode:"strum"`・`voicing.style:"keyboard"`・`program:0`・`followChords:true`・`pedal?`・来歴 `gen:{engine:"handframe",version,seed,level,preset,cellBeats}`。
     - **followChords**＝跨いだコードが替わる境界で切り、新しいコードで度数を解き直す（既存の規則と同じ）。進行・調を変えても度数で付いてくる。
     - **既存は不変**＝`notes`／`oct` の無い打点は従来の経路そのまま（bit 一致）。人がエディタで足した打点（明示の音なし）は `voiceToTop` で鳴る。
+    - **入口（2026-09-17 S5・opt-in・既定 OFF）**＝`gen_chord_pattern`（HTTP `/music/gen_chord_pattern`・MCP）に `piano: true`＋`chords`（進行・拍）で、この生成器の候補を返す。`pianoOffbeatSingles`（8分裏の単音）・`pianoHumanize`（打鍵の揺れ）＝boolean・既定 true。`variety`≥2＝種を1ずつ変えた候補を n 件。`/gen/section` は `body.chord.{piano, pianoOffbeatSingles, pianoHumanize}`（進行は生成したもの）。返り＝写しの content（明示の音＋`pedal`）＋`feel`（揺れ on のとき・`keepDur` 込み）。web＝コード楽器の引き出しの「ピアノ伴奏を生成する（試作）」（選ぶとネタ帳ライブラリでなく生成器へ・variety 4）。候補の試聴は `feel.keepDur` のある content だけ feel を掛ける（既存の候補の試聴は不変）。
+      - **4拍子だけ**（オーナー裁定）。4拍子以外・進行が無い・生成が例外のときは従来の経路で生成し、`meta.warnings` に落ち先を告げる（`/gen/section` は `warnings`）。`piano` 未指定＝従来と bit 一致。
 - **段階(CP)＝✅実装済(2026-06-23)**：CP1 進行を抽象化(音色固定GM49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(music.ts) → CP3 エディタ(ChordPatternEditor＝hitsグリッド＋長さツール＋voicing＋voicing MiniRoll) → CP4 `genChordPattern`＋/gen/section 配線 → CP5 compositeNotes で section 進行に解決(パート毎 program・複数可)。api/web 緑。
 
 ### WP-X3 新レーン3種（対旋律 counter／リフ riff／セクション楽器 section_inst）
