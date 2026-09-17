@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, type Ref, useState } from "react";
-import { type ChordPatternContent, type ChordLhContent, type ChordEntry, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, notesForContent, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram } from "../music";
+import { type ChordPatternContent, type ChordLhContent, type ChordEntry, applyCellTap, chordHitsWithVel, voicingPreviewPitches, pitchName, notesForContent, CHORD_ACCENT, CHORD_SOFT, isGuitarProgram, trimChordPatternSteps } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -331,7 +331,7 @@ export function ChordPatternEditor({
     <div className="cp-editor">
       {/* 設定行＝小節[−+] → 長さ(分) → 両手グリッド。ライブラリの口はセクションの空きセル→ピッカーの一本（2026-08-02 夕裁定・Task #5）。 */}
       <div className="editor-setrow">
-        <BarsControl bars={bars} max={4} onChange={(n) => editContent({ ...pattern, steps: Math.max(1, Math.min(4, n)) * stepsPerBar })} />
+        <BarsControl bars={bars} max={Math.max(4, bars)} onChange={(n) => editContent(trimChordPatternSteps(pattern, Math.max(1, Math.min(Math.max(4, bars), n)) * stepsPerBar))} />
       </div>
       {/* 長さツールはメロ編集(PianoRoll)と同じ proll-tools で包む＝見た目・選択表示を統一。右手/左手 hit の音長を共有。 */}
       <div className="proll-tools">

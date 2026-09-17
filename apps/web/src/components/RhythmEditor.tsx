@@ -12,6 +12,7 @@ import {
   GHOST_VEL,
   ACCENT_BOOST,
   snapBps,
+  trimRhythmSteps,
 } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
@@ -185,7 +186,7 @@ export function RhythmEditor({
   // 小節数（1〜4）。1小節=stepsPerBar（拍子依存：4/4=16, 6/8=12）。縮小は**非破壊**。
   const bars = Math.max(1, Math.round(rhythm.steps / stepsPerBar));
   function setBars(n: number) {
-    editContent({ ...rhythm, steps: Math.max(1, Math.min(4, n)) * stepsPerBar });
+    editContent(trimRhythmSteps(rhythm, Math.max(1, Math.min(Math.max(4, bars), n)) * stepsPerBar)); // 縮めたら外の打点を切る（2026-09-17）
   }
 
   return (
@@ -206,7 +207,7 @@ export function RhythmEditor({
             <Icon name="eraser" size={18} />
           </button>
         </div>
-        <BarsControl bars={bars} max={4} onChange={setBars} />
+        <BarsControl bars={bars} max={Math.max(4, bars)} onChange={setBars} />
         {/* ドラムキット（アコ/エレキ）選択＝GM bank128 preset。再生＆MIDI ch10 program に反映。 */}
         <label className="drum-kit-pick">
           キット

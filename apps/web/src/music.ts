@@ -1591,6 +1591,39 @@ export function partTracks(notes: Note[]): MidiTrackSpec[] {
   }
   return out;
 }
+// ── 小節数を縮めたら打点を切る（2026-09-17 オーナー裁定・design「編集画面の小節数」）──
+// /gen の「セクション末で切り詰め」と同じ規則＝格子の外で始まる打点は落とし、跨ぐ打点は長さを格子の終わりまで詰める。
+// 伸ばすとき（打点が全部格子の内側）は steps 以外を触らない。
+function trimHits<T extends { step: number; dur: number }>(hits: readonly T[], steps: number): T[] {
+  return hits.filter((h) => h.step < steps).map((h) => (h.step + h.dur > steps ? { ...h, dur: steps - h.step } : h));
+}
+export function trimChordPatternSteps(p: ChordPatternContent, steps: number): ChordPatternContent {
+  const out: ChordPatternContent = { ...p, steps, hits: trimHits(p.hits, steps) };
+  if (p.lh?.hits) out.lh = { ...p.lh, hits: trimHits(p.lh.hits, steps) };
+  return out;
+}
+export function trimBassPatternSteps(pattern: readonly BassStep[], steps: number): BassStep[] {
+  return trimHits(pattern, steps);
+}
+export function trimRhythmSteps(r: RhythmContent, steps: number): RhythmContent {
+  const bps = snapBps(r.beatsPerStep);
+  const lanes = r.lanes.map((l) => {
+    const keep = l.hits.map((h) => h < steps);
+    const lane: RhythmLane = { ...l, hits: l.hits.filter((_, i) => keep[i]) };
+    if (l.velCurve) lane.velCurve = l.velCurve.filter((_, i) => keep[i]);
+    if (l.divs) lane.divs = Object.fromEntries(Object.entries(l.divs).filter(([k]) => Number(k) < steps));
+    return lane;
+  });
+  const out: RhythmContent = { ...r, steps, lanes };
+  if (r.bars != null) out.bars = Math.max(1, Math.round((steps * bps) / 4));
+  if (r.fillNotes) {
+    const fill = r.fillNotes.filter((f) => f.beat < steps * bps - 1e-9);
+    if (fill.length) out.fillNotes = fill;
+    else { delete out.fillNotes; delete out.fillBar; delete out.fillKind; }
+  }
+  return out;
+}
+
 export function tracksToMidi(tracks: MidiTrackSpec[], bpm = 120, meter?: string | null, feel?: Feel | null, loop?: LoopSpec | null): Uint8Array {
   const midi = new Midi();
   midi.header.setTempo(bpm);

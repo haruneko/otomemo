@@ -1,5 +1,5 @@
 import { useState, type Ref } from "react";
-import { type BassStep, type BassDegree } from "../music";
+import { type BassStep, type BassDegree, trimBassPatternSteps } from "../music";
 import { previewNote } from "../audio";
 import { BarsControl } from "./BarsControl";
 import { NoteValuePicker } from "./NoteValuePicker";
@@ -91,8 +91,14 @@ export function BassStepEditor({
   const [eraseMode, setEraseMode] = useState(false); // M5 B3：描く/消すモード（他エディタと一貫）。
   const { stepsPerBar, beatStep } = meterSteps(meter); // M5 B1：拍子追従の小節線/拍線。
   const bars = Math.max(1, Math.round(steps / stepsPerBar));
-  // 小節数を変える：縮小は**非破壊**（範囲外の音は描画しないだけで保持・melodyと同じ）。
-  const setBars = (n: number) => onStepsChange(Math.max(1, Math.min(4, n)) * stepsPerBar);
+  // 小節数を変える（2026-09-17 オーナー裁定）：上限＝4 と内容の小節数の大きい方。縮めたら外の音を pattern から切る
+  // （従来は描画しないだけで保持＝見えない音が鳴り続けた）。
+  const setBars = (n: number) => {
+    const next = Math.max(1, Math.min(Math.max(4, bars), n)) * stepsPerBar;
+    const trimmed = trimBassPatternSteps(pattern, next);
+    if (trimmed.length !== pattern.length || trimmed.some((s, i) => s !== pattern[i])) onChange(trimmed);
+    onStepsChange(next);
+  };
 
   const startAt = (lane: BassLaneDegree, step: number) =>
     pattern.find((p) => p.step === step && p.degree === lane);
@@ -177,7 +183,7 @@ export function BassStepEditor({
             <Icon name="eraser" size={18} />
           </button>
         </div>
-        <BarsControl bars={bars} max={4} onChange={setBars} />
+        <BarsControl bars={bars} max={Math.max(4, bars)} onChange={setBars} />
       </div>
       <div className="bass-lens">
         <NoteValuePicker
