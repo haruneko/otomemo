@@ -64,6 +64,31 @@ describe("Python と bit 一致（揺れ off・8分裏 on）", () => {
   });
 });
 
+// 2026-09-18：画面の見本で「左手が右手と同じ高さに出ている」と見えた件の実測を固定する。
+// 実測の結論＝壊れていない。移植は試作 #1（基準音）と bit 一致で、その試作の時点から
+// 「左手の殻（3度と7度・_place_mid の中音域 52..72）」は「右手（根音+3度+5度+8va をベースの壁のすぐ上へ
+// 持ち上げた塊）」より上に出る＝手の呼び名が音域の上下と逆。役割の名前であって高さの名前ではない。
+// ここを動かすと耳で合格した音が変わるので、事実として固定しておき、変えるときは必ずこのテストが落ちる。
+describe("左手の殻と右手の音域（実測の固定・2026-09-18）", () => {
+  const range = (prog: BandChord[], hand: string) => {
+    const ps = generateHandFrameBand(prog, DRY).notes.filter((n) => n[4] === hand).map((n) => n[0]).sort((a, b) => a - b);
+    return { n: ps.length, lo: ps[0]!, hi: ps[ps.length - 1]!, mid: ps[Math.floor(ps.length / 2)]! };
+  };
+  it("2拍替わり＝左手の殻 60..71・右手 50..72（＝基準音と同じ＝試作 #1 と同じ）", () => {
+    expect(range(HALF_PROG, "L")).toEqual({ n: 64, lo: 60, hi: 71, mid: 67 });
+    expect(range(HALF_PROG, "R")).toEqual({ n: 179, lo: 50, hi: 72, mid: 59 });
+  });
+  it("1小節替わりも同じ音域", () => {
+    expect(range(BAR_PROG, "L")).toEqual({ n: 32, lo: 60, hi: 71, mid: 67 });
+    expect(range(BAR_PROG, "R")).toEqual({ n: 203, lo: 50, hi: 69, mid: 60 });
+  });
+  it("どちらの手もベースの壁（bassMax=48）より上に出る", () => {
+    for (const prog of [HALF_PROG, BAR_PROG]) {
+      for (const n of generateHandFrameBand(prog, DRY).notes) expect(n[0]).toBeGreaterThan(48);
+    }
+  });
+});
+
 describe("§3-1 (a)(d)(e)・ペダル窓・左手", () => {
   const r = generateHandFrameBand(HALF_PROG, DRY);
   const cellSec = (2 * 60) / 96;
