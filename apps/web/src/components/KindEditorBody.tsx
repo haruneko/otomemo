@@ -9,10 +9,12 @@ import { PianoRoll } from "./PianoRoll";
 import { BassStepEditor } from "./BassStepEditor";
 import { ChordEditor } from "./ChordEditor";
 import { ChordPatternEditor } from "./ChordPatternEditor";
+import { PianoAccompEditor, isGeneratedPiano } from "./PianoAccompEditor";
 import { RhythmEditor } from "./RhythmEditor";
 import { SectionEditor } from "./SectionEditor";
 import { SkeletonEditor } from "./SkeletonEditor";
 import type { Neta } from "../api";
+import type { Feel } from "@cm/music-core";
 import type { Note, ChordEntry, RhythmContent, BassStep, ChordPatternContent, SkeletonBreakpoint } from "../music";
 
 // 空 textarea の初手ガイド（design提案#6）：白紙の心細さを1行の例文プレースホルダで解消。
@@ -33,6 +35,7 @@ export interface KindEditorBodyProps {
   setLyric?: (l: LyricLayer | undefined) => void;
   chordPat: ChordPatternContent;
   setChordPat: (c: ChordPatternContent) => void;
+  setFeel?: (f: Feel | undefined) => void; // 画面 B：打鍵の揺れの切り替えで再生が読む feel も更新
   chords: ChordEntry[];
   setChords: (c: ChordEntry[]) => void;
   rhythm: RhythmContent;
@@ -280,6 +283,8 @@ export function KindEditorBody(p: KindEditorBodyProps) {
             </>
           )}
         </div>
+      ) : p.flags.isChordPat && isGeneratedPiano(p.chordPat) ? ( // 生成したピアノ伴奏＝画面 B（2026-09-23 裁定）
+        <PianoAccompEditor pattern={p.chordPat} onChange={p.setChordPat} onFeel={p.setFeel} meter={p.meter} program={p.program} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : p.flags.isChordPat || p.flags.isSectionInst ? ( // 管弦(section_inst・WP-X3c)も進行追従の多声＝ChordPatternEditor を共有
         <ChordPatternEditor pattern={p.chordPat} onChange={p.setChordPat} meter={p.meter} program={p.program} tempo={p.tempo} keyPc={p.keyPc} previewChords={(p.neta.content as { preview_chords?: ChordEntry[] } | null)?.preview_chords} playheadRef={tp.lineRef} scrollerRef={tp.scrollerRef} />
       ) : isChord ? (

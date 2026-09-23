@@ -2564,3 +2564,7 @@
 .lo-section-head:active { cursor: grabbing; }
 .lo-drag-grip { color: #667; font-size: 0.9rem; margin-right: 2px; }
 .lo-section.dragging { background: #1b1e24; border-radius: 8px; }
+/* 画面 B（生成したピアノ伴奏）：右手の単音は枠だけ＝和音（塗り）と見分ける */
+.pa-editor .cp-cell.rh.on.pa-single { background: color-mix(in srgb, var(--k-chord) 28%, #1b1e23); }
+.pa-editor .cp-cell { font-size: 9px; }
+.pa-actions { flex-wrap: wrap; gap: 8px; }

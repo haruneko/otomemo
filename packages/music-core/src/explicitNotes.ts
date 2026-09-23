@@ -88,6 +88,7 @@ export interface ExplicitChordPattern {
     engine: "handframe"; version: string; seed: number; level: number; preset: string; cellBeats: 2 | 4; register: "source" | "piano"; rhFrom?: number;
     /** 生成の設定（別案・弾き直しで同じ設定を使う） */ offbeatSingles: boolean; humanize: boolean;
     /** 人が決めた打点（画面 B・触ったときだけ） */ rhythm?: HandFrameRhythm;
+    /** 弾き直しの文脈＝生成に使った進行（長さつき）・テンポ・調 */ chords: BandChord[]; tempo: number; key: number;
   };
 }
 
@@ -136,6 +137,7 @@ export function handFrameToChordPattern(chords: readonly BandChord[], opts: Hand
     gen: {
       engine: "handframe", version: pmEngineTag().version, seed: opts.seed, level: opts.level ?? 2, preset: opts.preset ?? "mid", cellBeats, register: opts.register ?? "piano", ...(opts.rhFrom != null ? { rhFrom: opts.rhFrom } : {}),
       offbeatSingles: opts.offbeatSingles !== false, humanize: opts.humanize !== false, ...(opts.rhythm ? { rhythm: opts.rhythm } : {}),
+      chords: chords.map((c) => ({ root: c.root, quality: c.quality, beats: c.beats })), tempo: opts.tempo, key: opts.key ?? 0,
     },
   };
   if (r.content.pedal) content.pedal = r.content.pedal;
@@ -162,5 +164,27 @@ export function bandChordsFromProgression(
   src[0]!.start = 0; // 頭にコードが無ければ最初のコードを頭から鳴らす
   const band = src.map((c, i) => ({ root: c.root, quality: c.quality, beats: (src[i + 1]?.start ?? totalBeats) - c.start })).filter((c) => c.beats > 1e-9);
   return band.length ? band : null;
+}
+
+/** 画面 B の弾き直し：来歴（進行・テンポ・調・種・設定）から同じ生成器で作り直す。patch で種・設定・打点を変える。
+ *  rhythm:null＝人の指定を捨てて生成に戻す。feel＝揺れ on なら生成の feel（跳ねは元の content の値を保つ）。 */
+export function regenerateHandFrameContent<C extends ExplicitChordPattern & { feel?: Feel | null }>(
+  content: C,
+  patch: { seed?: number; rhFrom?: number | null; humanize?: boolean; offbeatSingles?: boolean; rhythm?: HandFrameRhythm | null } = {},
+): C {
+  const g = content.gen;
+  const rhythm = patch.rhythm === null ? undefined : patch.rhythm ?? g.rhythm;
+  const rhFrom = patch.rhFrom === null ? undefined : patch.rhFrom ?? g.rhFrom;
+  const r = handFrameToChordPattern(g.chords, {
+    tempo: g.tempo, key: g.key, seed: patch.seed ?? g.seed, level: g.level, preset: g.preset as HandFrameBandOptions["preset"],
+    register: g.register, ...(rhFrom != null ? { rhFrom } : {}),
+    humanize: patch.humanize ?? g.humanize, offbeatSingles: patch.offbeatSingles ?? g.offbeatSingles, ...(rhythm ? { rhythm } : {}),
+  });
+  const { feel: oldFeel, ...rest } = content;
+  const swing = oldFeel?.swing;
+  const feel = r.feel ? { ...r.feel, ...(swing ? { swing } : {}) } : swing ? { swing } : null;
+  const next = { ...rest, ...r.content } as unknown as C;
+  if (feel) (next as { feel?: Feel }).feel = feel;
+  return next;
 }
 

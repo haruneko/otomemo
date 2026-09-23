@@ -137,7 +137,7 @@ export function NetaDialog({
         skelChords={ed.skelChords} skelCounter={ed.skelCounter} setSkelCounter={ed.setSkelCounter}
         notes={ed.notes} setNotes={ed.setNotes}
         lyric={ed.lyric} setLyric={ed.setLyric}
-        chordPat={ed.chordPat} setChordPat={ed.setChordPat}
+        chordPat={ed.chordPat} setChordPat={ed.setChordPat} setFeel={ed.setFeel}
         chords={ed.chords} setChords={ed.setChords}
         rhythm={ed.rhythm} setRhythm={ed.setRhythm}
         bassPattern={ed.bassPattern} setBassPattern={ed.setBassPattern}

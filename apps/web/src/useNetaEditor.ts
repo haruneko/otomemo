@@ -41,6 +41,7 @@ import { lyricOf } from "./music";
 export { lyricOf }; // 置き場は music.ts（design #31-1）。ここは既存の import 元を壊さないための再輸出。
 import { useVocalRender } from "./useVocal";
 import { useCowGuard } from "./useCowGuard";
+import { chordsOfGen, isGeneratedPiano } from "./components/PianoAccompEditor";
 
 // #31 スライス1（design §31-7）：content から歌詞の層（句）を読む。feelOf（music.ts:22）と同じ形。
 // ⚠ 上位（design #31・requirements・architecture の 2026-07-29 追記）は**オーナー未レビュー**。
@@ -196,7 +197,7 @@ export function useNetaEditor(
   const playable = isRelBass
     ? resolveRelativeBass(bassPattern, [], key)
     : isChordPatLike
-      ? resolveChordPattern(chordPat, [], key, tempo, program) // 単体プレビュー＝key の tonic コードに解決（chord_pattern/管弦 共通・多声）。tempo/program＝ギター弦順ロール＋style:"auto" の奏法導出（bit一致=style無しなら不変）
+      ? resolveChordPattern(chordPat, isGeneratedPiano(chordPat) ? chordsOfGen(chordPat as unknown as Parameters<typeof chordsOfGen>[0]) : [], key, tempo, program) // 生成したピアノ伴奏は生成に使った進行で鳴らす（画面 B・tonic だと度数が別のコードに解ける）／他の単体プレビュー＝key の tonic コードに解決（chord_pattern/管弦 共通・多声）。tempo/program＝ギター弦順ロール＋style:"auto" の奏法導出（bit一致=style無しなら不変）
       : isSkel
         ? skeletonPlaybackNotes({ bars: skelBars, tones, bass: skelBass, phrases }, { counterpoint: skelCounter, chords: skelChords, beatsPerBar: bpb, melProgram: program }) // 骨格＝2声(対位法/実音)
         : isMelody || isBass || isCounter || isRiff

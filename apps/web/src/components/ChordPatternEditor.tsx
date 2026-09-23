@@ -129,7 +129,7 @@ const LENGTHS = [
 ];
 
 // 拍子→1小節step数（1step=16分）。4/4=16, 6/8=12, 3/4=12。複合(6/8系)はビート=6step。
-function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
+export function meterSteps(meter?: string): { stepsPerBar: number; beatStep: number } {
   const m = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(meter ?? "");
   const n = m ? Number(m[1]) : 4;
   const d = m ? Number(m[2]) : 4;

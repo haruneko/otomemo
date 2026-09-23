@@ -3,7 +3,7 @@
 // 契約：①往復一致（読み取ったマス目で弾き直すと完全一致）②指定どおりに鳴る（種類も）③変えた位置より前は変わらない。
 import { describe, expect, it } from "vitest";
 import { generateHandFrameBand, rhythmOfBand, type BandChord, type HandFrameBandOptions, type HandFrameRhythm } from "../src/handFrameBand";
-import { handFrameToChordPattern, rhythmOfExplicit } from "../src/explicitNotes";
+import { handFrameToChordPattern, regenerateHandFrameContent, rhythmOfExplicit } from "../src/explicitNotes";
 
 const ch = (root: string, quality: string, beats: number): BandChord => ({ root, quality, beats });
 const HALF: BandChord[] = Array.from({ length: 2 }, () => [ch("F", "maj7", 4), ch("G", "", 4), ch("E", "m7", 4), ch("A", "m7", 2), ch("G", "", 2)]).flat();
@@ -105,5 +105,34 @@ describe("②指定どおりに鳴る・③変えた位置より前は変わら�
     expect([...new Set(L.map((n) => stepOf(n.start)))]).toEqual([0, 6, 20]);
     for (const n of L) expect(n.pitch >= 48 && n.pitch <= 59).toBe(true);
     expect(L.filter((n) => stepOf(n.start) === 6).length).toBe(2);
+  });
+});
+
+describe("弾き直し（regenerateHandFrameContent＝web の画面 B が使う）", () => {
+  const made = handFrameToChordPattern(HALF, { ...BASE, key: 2 });
+  const content = { ...made.content, feel: { ...made.feel!, swing: 0.3 } };
+  it("来歴に進行・テンポ・調・設定が残る", () => {
+    expect(content.gen).toMatchObject({ chords: HALF, tempo: 96, key: 2, seed: 1234, humanize: true, offbeatSingles: true, register: "piano" });
+  });
+  it("読み取った打点で弾き直すと音は同じ（打点が来歴に載るだけ）", () => {
+    const again = regenerateHandFrameContent(content, { rhythm: rhythmOfExplicit(content) });
+    expect({ hits: again.hits, lh: again.lh, pedal: again.pedal, feel: again.feel }).toEqual({ hits: content.hits, lh: content.lh, pedal: content.pedal, feel: content.feel });
+    expect(again.gen.rhythm).toEqual(rhythmOfExplicit(content));
+  });
+  it("別案＝種を変えても人の打点は保つ", () => {
+    const r = rhythmOfExplicit(content);
+    r.rh = r.rh.filter((h) => h.step !== r.rh[3]!.step);
+    const edited = regenerateHandFrameContent(content, { rhythm: r });
+    const alt = regenerateHandFrameContent(edited, { seed: 1235 });
+    expect(rhythmOfExplicit(alt)).toEqual(r);
+    expect(alt.hits).not.toEqual(edited.hits);
+    expect(alt.gen.seed).toBe(1235);
+  });
+  it("生成に戻す＝人の打点を捨てる・揺れ off＝feel は跳ねだけ残る", () => {
+    const edited = regenerateHandFrameContent(content, { rhythm: { rh: [{ step: 0, kind: "grab" }], lh: [0] } });
+    const back = regenerateHandFrameContent(edited, { rhythm: null });
+    expect(back.gen.rhythm).toBeUndefined();
+    expect(back.hits).toEqual(content.hits);
+    expect(regenerateHandFrameContent(content, { humanize: false }).feel).toEqual({ swing: 0.3 });
   });
 });
