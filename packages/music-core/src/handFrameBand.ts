@@ -236,6 +236,10 @@ export function placeMid(pcs: readonly number[], center = 60, lo = 52, hi = 72):
 export const shellLift = (vd: HandFrameBar, bassMax: number): number[] =>
   liftAbove([...placeMid([vd.deg["3"]!, vd.deg["7"]!])].sort((a, b) => a - b), bassMax);
 
+/** 左手の殻を「ベースの壁から1オクターブ」[lo, lo+11] に置く（ピアノの常識的な置き方：左手が下・右手が上）。 */
+export const shellLow = (vd: HandFrameBar, lo: number): number[] =>
+  [vd.deg["3"]!, vd.deg["7"]!].map((pc) => lo + mod12(pc - lo)).sort((a, b) => a - b);
+
 export const bandRhVoicing = (vd: HandFrameBar, bassMax: number): number[] => {
   const d = vd.deg;
   return liftAbove([d.R!, d["3"]!, d["5"]!, d.R! + 12].sort((a, b) => a - b), bassMax).slice(0, 4);
@@ -342,6 +346,9 @@ export interface HandFrameBandOptions {
   /** 8分裏の単音。既定 on（試作 #1）。off＝器から8分裏の打点を消す（耳判定 09-17：別のバリエーションとして良い）。 */
   offbeatSingles?: boolean;
   lh?: "shell" | "tacet";
+  /** 両手の音域。"source"＝試作 #1 のまま（左手の殻が中音域・右手はベースの壁のすぐ上＝左右が重なる）。
+   *  "piano"＝左手の殻をベースの壁から1オクターブ [bassMax, bassMax+11]・右手はその上（左手が下・右手が上）。 */
+  register?: "source" | "piano";
   arc?: PhraseSpec | null;
   /** 器を差し替えるとき（既定＝試作 #1 の器） */
   containerText?: string;
@@ -364,7 +371,7 @@ export interface HandFrameBandResult {
 export function generateHandFrameBandCells(cells: readonly { root: number | string; quality: string }[], cellBeats: 2 | 4, opts: HandFrameBandOptions): HandFrameBandResult {
   const {
     tempo, seed, level = 2, preset = "mid", bassMax = 48, sustainPedal = true, humanize = true, offbeatSingles = true,
-    lh = "shell", arc = null,
+    lh = "shell", arc = null, register = "source",
   } = opts;
   if (cellBeats !== 2 && cellBeats !== 4) throw new Error(`generateHandFrameBandCells: cellBeats must be 2 or 4 (got ${cellBeats})`);
   if (!(tempo > 0)) throw new Error("generateHandFrameBandCells: tempo must be > 0");
@@ -374,7 +381,9 @@ export function generateHandFrameBandCells(cells: readonly { root: number | stri
   const vds = cells.map(bandChordMaterial);
   const toks = vds.map((v) => v.token);
   const nBars = vds.length;
-  const floor = Math.max(bassMax + HF_BAND_REG_GAP, HF_BAND_PIANO_FLOOR);
+  // 右手の下の壁：試作 #1 はベースの壁、ピアノの置き方は左手の殻の窓の上端
+  const rhWall = register === "piano" ? bassMax + 11 : bassMax;
+  const floor = Math.max(rhWall + HF_BAND_REG_GAP, HF_BAND_PIANO_FLOOR);
 
   const fullContainer = containerFromGridText(opts.containerText ?? HF_BAND_CONTAINER_TEXT[cellSteps]);
   if (fullContainer.grid !== cellSteps) throw new Error(`container grid ${fullContainer.grid} != cell steps ${cellSteps}`);
@@ -396,8 +405,8 @@ export function generateHandFrameBandCells(cells: readonly { root: number | stri
   }
 
   const rhRes = generateHandFrame(toks, vds, container, seed, {
-    hand: "R", bassMax, stepDur: sd, barDur: bd, grid, spanMode: "comfort", colourAllowed: vds.map((v) => v.colour), floor, arc,
-    voicingFn: (vd) => bandRhVoicing(vd, bassMax), grabPolicy: "sheet", structureSlots, accentTable, grabDur: ps.grabDur,
+    hand: "R", bassMax: rhWall, stepDur: sd, barDur: bd, grid, spanMode: "comfort", colourAllowed: vds.map((v) => v.colour), floor, arc,
+    voicingFn: (vd) => bandRhVoicing(vd, rhWall), grabPolicy: "sheet", structureSlots, accentTable, grabDur: ps.grabDur,
     grabWScale: dens.grabWScale, ...RH_CFG_BAND, lambdaSkip: dens.lambdaSkip, ...clash,
   });
   let rh = rhRes.notes;
@@ -407,7 +416,7 @@ export function generateHandFrameBandCells(cells: readonly { root: number | stri
   if (lh === "shell") {
     const r = generateHandFrame(toks, vds, container, seed, {
       hand: "L", bassMax, stepDur: sd, barDur: bd, grid, spanMode: "comfort",
-      voicingFn: (vd) => shellLift(vd, bassMax), structureOnly: true, holdAllReseed: true,
+      voicingFn: (vd) => (register === "piano" ? shellLow(vd, bassMax) : shellLift(vd, bassMax)), structureOnly: true, holdAllReseed: true,
     });
     lhNotes = r.notes;
     dlh = r.diag;

@@ -89,6 +89,25 @@ describe("左手の殻と右手の音域（実測の固定・2026-09-18）", () 
   });
 });
 
+// 2026-09-23：オーナー指示「ピアノの演奏として常識的なところに」＝register:"piano"（選択肢・耳待ち）。
+// 左手の殻＝ベースの壁から1オクターブ（C3〜B3）・右手はその上＝左手が下・右手が上。
+describe("両手の音域＝ピアノの置き方（register:\"piano\"）", () => {
+  const PIANO: HandFrameBandOptions = { ...DRY, register: "piano" };
+  for (const [name, prog] of [["2拍替わり", HALF_PROG], ["1小節替わり", BAR_PROG]] as const) {
+    it(`${name}：左手 48..59・右手は 59 以上`, () => {
+      const r = generateHandFrameBand(prog, PIANO);
+      const L = r.notes.filter((n) => n[4] === "L").map((n) => n[0]);
+      const R = r.notes.filter((n) => n[4] === "R").map((n) => n[0]);
+      expect(Math.min(...L)).toBe(48);
+      expect(Math.max(...L)).toBe(59);
+      expect(Math.min(...R)).toBeGreaterThanOrEqual(59);
+    });
+  }
+  it("既定（register 省略）は試作 #1 のまま", () => {
+    expect(generateHandFrameBand(HALF_PROG, DRY).notes).toEqual(generateHandFrameBand(HALF_PROG, { ...DRY, register: "source" }).notes);
+  });
+});
+
 describe("§3-1 (a)(d)(e)・ペダル窓・左手", () => {
   const r = generateHandFrameBand(HALF_PROG, DRY);
   const cellSec = (2 * 60) / 96;

@@ -421,6 +421,11 @@ authentic/plagal/half/deceptive/modal を判定するが **PAC(完全正格)/IAC
     - **既存は不変**＝`notes`／`oct` の無い打点は従来の経路そのまま（bit 一致）。人がエディタで足した打点（明示の音なし）は `voiceToTop` で鳴る。
     - **入口（2026-09-17 S5・opt-in・既定 OFF）**＝`gen_chord_pattern`（HTTP `/music/gen_chord_pattern`・MCP）に `piano: true`＋`chords`（進行・拍）で、この生成器の候補を返す。`pianoOffbeatSingles`（8分裏の単音）・`pianoHumanize`（打鍵の揺れ）＝boolean・既定 true。`variety`≥2＝種を1ずつ変えた候補を n 件。`/gen/section` は `body.chord.{piano, pianoOffbeatSingles, pianoHumanize}`（進行は生成したもの）。返り＝写しの content（明示の音＋`pedal`）＋`feel`（揺れ on のとき・`keepDur` 込み）。web＝コード楽器の引き出しの「ピアノ伴奏を生成する（試作）」（選ぶとネタ帳ライブラリでなく生成器へ・variety 4）。候補の試聴は `feel.keepDur` のある content だけ feel を掛ける（既存の候補の試聴は不変）。
       - **4拍子だけ**（オーナー裁定）。4拍子以外・進行が無い・生成が例外のときは従来の経路で生成し、`meta.warnings` に落ち先を告げる（`/gen/section` は `warnings`）。`piano` 未指定＝従来と bit 一致。
+    - **生成したピアノ伴奏の扱い（2026-09-17〜18 オーナー裁定・経緯＝`docs/archive/2026-09-17-generated-piano-handling.md`）**
+      - **何か**＝**差し替える候補**（背景・パターン単位で聴いて選ぶもの）であって、音符を1個ずつ直す譜ではない。動詞は「聴く・別案を出す・書き出す」。
+      - **編集画面（画面 A 採用）**＝明示の音を持つ内容を開いたら、升（マス目）の編集は閉じ、**実際に鳴る高さのピアノロールで閲覧**＋**別案**（種違い・8分裏の単音・打鍵の揺れ）＋MIDI 書き出し。左手に7度の段は足さない。「ふつうの和音パターンに戻す」口は需要が出てから。**未実装＝backlog**。
+      - **「毎回生成する」の定義（性質の規則）**＝生成した伴奏は、**進行・調を変えても付いてくる相対の形で持ち、来歴（種と設定）から配り直せる。音符を1個ずつ直す面は持たない。実音は保存しない。**（相対の譜の保存はこの規則の内側＝耳で選んだ候補が進行の編集で消えない点で「その場で毎回弾き直す」より優る）
+      - **両手の音域**＝既定は試作 #1 のまま（左手の殻が中音域・右手はベースの壁のすぐ上＝左右が重なる）。`register:"piano"`（左手の殻 `[bassMax, bassMax+11]`＝C3〜B3・右手の下の壁をその上端へ）を足し、耳の聴き比べ中（2026-09-23 オーナー指示「ピアノの演奏として常識的なところに」）。合格したら既定を切り替える。
 - **編集画面の小節数（2026-09-17 オーナー裁定・和音パターン／相対ベース／ドラムの3エディタ共通）**：生成は最初からセクションの小節数ぶん（例 8小節）の内容を返すので、小節数ボタンの**上限は「4 と内容の小節数の大きい方」**（メロのロールと同じ決め方）。**縮めたら、はみ出した打点を内容から切る**（`/gen` の「セクション末で切り詰め」と同じ規則＝格子の外で始まる打点は落とし、跨ぐ打点は長さを格子の終わりまで詰める）。対象＝和音パターン（右手 `hits`・左手 `lh.hits`）／相対ベース（`pattern`）／ドラム（各レーンの `hits` と同順の `velCurve`・`divs`・物理フィルの `fillNotes`＝残らなければ `fillNotes`/`fillBar`/`fillKind` ごと外す）。純関数 `trimChordPatternSteps`／`trimBassPatternSteps`／`trimRhythmSteps`（`apps/web/src/music.ts`）。縮めない操作・内容は従来と同じ。メロ（ロール）は小節数を縮めても音符を画面に出し続ける別の作り（見えない音は無い）＝対象外。
 - **段階(CP)＝✅実装済(2026-06-23)**：CP1 進行を抽象化(音色固定GM49・選択不可) → CP2 chord_pattern kind＋`resolveChordPattern`(music.ts) → CP3 エディタ(ChordPatternEditor＝hitsグリッド＋長さツール＋voicing＋voicing MiniRoll) → CP4 `genChordPattern`＋/gen/section 配線 → CP5 compositeNotes で section 進行に解決(パート毎 program・複数可)。api/web 緑。
 

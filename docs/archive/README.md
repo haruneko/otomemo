@@ -63,4 +63,4 @@
 - [2026-08-19-phrasemaker-port-plan](2026-08-19-phrasemaker-port-plan.md) ／ [2026-08-19-phrasemaker-port-implementation-plan](2026-08-19-phrasemaker-port-implementation-plan.md) ／ [2026-08-20-phrasemaker-M0-contract](2026-08-20-phrasemaker-M0-contract.md) ／ [2026-08-20-phrasemaker-recipe-io-map](2026-08-20-phrasemaker-recipe-io-map.md) — **phrase_maker 取り込みの初期計画・M0 契約・入出力モデル＝消化済み**（M0〜M2＝ドラムで完走・契約は design (a)〜(c) に昇格。ベース以降は v3 計画へ引き継がれ 2026-09-16 撤去）
 - [2026-08-21-arrange-data-locus](2026-08-21-arrange-data-locus.md) ／ [2026-08-21-cascade-briefing-implementation](2026-08-21-cascade-briefing-implementation.md) — **演奏レシピの持ち場（案C）とカスケード・ブリーフィング設計＝採用・実装済み**（cues S0〜S2・正準は design「3層カスケード・ブリーフィング」(b)(c)）
 - [2026-08-21-phrasemaker-arc-handoff](2026-08-21-phrasemaker-arc-handoff.md) — **phrase_maker 取り込みアークの引き継ぎ書＝閉じた（2026-09-16）**。冒頭に決着（残った資産・外した理由）。以下は 2026-09-13 時点の記録
-
+- [2026-09-17-generated-piano-handling](2026-09-17-generated-piano-handling.md) — **生成したピアノ伴奏の扱い＝決着（2026-09-17〜18・6件すべて推しどおり）**＝差し替える候補・画面 A（実際の高さで閲覧＋別案・升の編集は閉じる）・小節数は全内容で直す・揺れはパートごと・「毎回生成」は性質の規則。正準は design「和音パターンの明示の音」節。画面 A の実装は backlog
