@@ -333,6 +333,12 @@ export function scatterStrikeVelocity(notes: readonly HandFrameNote[], seed: num
 // ---------------------------------------------------------------------------
 // 本体（源流 generate_handframe_band :436-581）
 // ---------------------------------------------------------------------------
+/** 人が決めた打点（画面 B）。step＝先頭からの16分。rh＝右手の打点と種類（和音＝2音以上・単音＝1音）・lh＝左手を押さえる時。 */
+export interface HandFrameRhythm {
+  rh: { step: number; kind: "grab" | "single" }[];
+  lh: number[];
+}
+
 export interface HandFrameBandOptions {
   tempo: number;
   seed: number;
@@ -351,6 +357,8 @@ export interface HandFrameBandOptions {
   register?: "source" | "piano";
   /** "piano" のときの右手の下限（MIDI）。既定＝bassMax+12（C4）。オーナーが選べる段＝60/65/72。 */
   rhFrom?: number;
+  /** 人が決めた打点（画面 B）。あれば右手・左手ともこの位置にだけ・この種類で鳴らす（どの音かは機械）。 */
+  rhythm?: HandFrameRhythm | null;
   arc?: PhraseSpec | null;
   /** 器を差し替えるとき（既定＝試作 #1 の器） */
   containerText?: string;
@@ -406,10 +414,22 @@ export function generateHandFrameBandCells(cells: readonly { root: number | stri
     clash = { clashGuard: "held" };
   }
 
+  // 人が決めた打点を区切りごとの「位置→種類」に分ける（区切り＝cellSteps 個の16分）
+  const forcedOf = (items: readonly { step: number; kind: "grab" | "single" }[]) => {
+    const maps = Array.from({ length: nBars }, () => new Map<number, "grab" | "single">());
+    for (const { step, kind } of items) {
+      const c = Math.floor(step / cellSteps);
+      if (c >= 0 && c < nBars) maps[c]!.set(step - c * cellSteps, kind);
+    }
+    return maps;
+  };
+  const rhForced = opts.rhythm ? forcedOf(opts.rhythm.rh) : null;
+  const lhForced = opts.rhythm ? forcedOf(opts.rhythm.lh.map((step) => ({ step, kind: "grab" as const }))) : null;
+
   const rhRes = generateHandFrame(toks, vds, container, seed, {
     hand: "R", bassMax: rhWall, stepDur: sd, barDur: bd, grid, spanMode: "comfort", colourAllowed: vds.map((v) => v.colour), floor, arc,
     voicingFn: (vd) => bandRhVoicing(vd, rhWall), grabPolicy: "sheet", structureSlots, accentTable, grabDur: ps.grabDur,
-    grabWScale: dens.grabWScale, ...RH_CFG_BAND, lambdaSkip: dens.lambdaSkip, ...clash,
+    grabWScale: dens.grabWScale, ...RH_CFG_BAND, lambdaSkip: dens.lambdaSkip, ...clash, forced: rhForced,
   });
   let rh = rhRes.notes;
 
@@ -418,7 +438,7 @@ export function generateHandFrameBandCells(cells: readonly { root: number | stri
   if (lh === "shell") {
     const r = generateHandFrame(toks, vds, container, seed, {
       hand: "L", bassMax, stepDur: sd, barDur: bd, grid, spanMode: "comfort",
-      voicingFn: (vd) => (register === "piano" ? shellLow(vd, bassMax) : shellLift(vd, bassMax)), structureOnly: true, holdAllReseed: true,
+      voicingFn: (vd) => (register === "piano" ? shellLow(vd, bassMax) : shellLift(vd, bassMax)), structureOnly: true, holdAllReseed: true, forced: lhForced,
     });
     lhNotes = r.notes;
     dlh = r.diag;
@@ -450,3 +470,19 @@ export function generateHandFrameBand(chords: readonly BandChord[], opts: HandFr
   const { cellBeats, cells, warnings } = splitIntoCells(chords);
   return { ...generateHandFrameBandCells(cells, cellBeats, opts), warnings };
 }
+
+/** 生成した演奏から打点（画面 B のマス目）を読み取る。これを rhythm に渡して同じ種で弾き直すと完全に一致する。 */
+export function rhythmOfBand(r: Pick<HandFrameBandResult, "notes" | "content">): HandFrameRhythm {
+  const rh = new Map<number, number>();
+  const lh = new Set<number>();
+  r.content.notes.forEach((n, i) => {
+    const step = Math.round(n.start * 4);
+    if (r.notes[i]![4] === "L") lh.add(step);
+    else rh.set(step, (rh.get(step) ?? 0) + 1);
+  });
+  return {
+    rh: [...rh.entries()].sort((a, b) => a[0] - b[0]).map(([step, n]) => ({ step, kind: n >= 2 ? "grab" : "single" })),
+    lh: [...lh].sort((a, b) => a - b),
+  };
+}
+

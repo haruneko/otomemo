@@ -720,6 +720,10 @@ export interface HandFrameOptions<B extends HandFrameBar> {
   dyadBreak?: boolean;
   arc?: PhraseSpec | null;
   structureSlots?: readonly ReadonlySet<number>[] | null;
+  /** 人が決めた打点（画面 B・2026-09-23）。区切りごとに「打点の位置→種類」。null の区切り＝従来どおり。
+   *  Map のある区切り＝そこに無い位置は鳴らさない。各打点はまず従来どおり決め（乱数も従来どおり引く）、
+   *  同じ種類ならそのまま・違えば指定の種類の候補から選び直す＝読み取った指定で弾き直すと完全一致する。 */
+  forced?: readonly (ReadonlyMap<number, "grab" | "single"> | null)[] | null;
   accentTable?: ((slot: number, grid: number) => number) | null;
   grabDur?: DurClass;
   grabWScale?: number;
@@ -777,7 +781,7 @@ export function generateHandFrame<B extends HandFrameBar>(
     structureOnly = false, holdAllReseed = false, grabPolicy = "downbeat", dyadOn = false, lambdaSkip = 0.0,
     landingBonus = 0.0, landingOffstrong = 0.0, lineMotion = false, clashGuard = "off", clashRegions = null,
     motifBias = 0.0, dyadBreak = false, arc = null, structureSlots = null, accentTable = null, grabDur = TILL_NEXT,
-    grabWScale = 1.0, approachResolve = false, grabNoCluster = false, secondDyadCap = null,
+    grabWScale = 1.0, approachResolve = false, grabNoCluster = false, secondDyadCap = null, forced = null,
   } = opts;
   if (!Number.isInteger(seed) || seed < 0 || seed >= 2 ** 32) throw new RangeError(`generateHandFrame: seed must be an integer in [0, 2^32) (got ${seed})`);
   if (clashGuard !== "off" && clashGuard !== "held" && clashGuard !== "region") throw new Error(`clash_guard must be one of off/held/region, got ${String(clashGuard)}`);
@@ -876,11 +880,14 @@ export function generateHandFrame<B extends HandFrameBar>(
         spanB = hBar >= arc.spanStretchThresh ? "stretch" : "comfort";
       }
     }
-    for (let si = 0; si < onsets.length; si++) {
-      const slot = onsets[si]!;
-      if (structureOnly && slot !== 0) continue;
+    const forcedB = forced && b < forced.length ? forced[b] ?? null : null;
+    const slotsB = forcedB ? ascSet([...onsets, ...forcedB.keys()]) : onsets;
+    for (let si = 0; si < slotsB.length; si++) {
+      const slot = slotsB[si]!;
+      const want: "grab" | "single" | "none" | null = forcedB ? forcedB.get(slot) ?? "none" : null;
+      if (structureOnly && (forcedB ? want === "none" : slot !== 0)) continue;
       const t = bar0 + slot * stepDur;
-      const nextSlotT = si + 1 < onsets.length ? bar0 + onsets[si + 1]! * stepDur : boundaryT;
+      const nextSlotT = si + 1 < slotsB.length ? bar0 + slotsB[si + 1]! * stepDur : boundaryT;
       for (const [f, [, e]] of [...active]) if (e <= t + 1e-6) active.delete(f);
       {
         const amap = assignMap(frame);
@@ -900,7 +907,7 @@ export function generateHandFrame<B extends HandFrameBar>(
       }
 
       const prevFrame = frame;
-      const slotsToBoundary = onsets.length - si;
+      const slotsToBoundary = slotsB.length - si;
       let reseedWrist: number | null = null;
       if (slotsToBoundary <= 3 && b + 1 < nBars) {
         const nv = voicingOf(vds[b + 1]!);
@@ -929,8 +936,9 @@ export function generateHandFrame<B extends HandFrameBar>(
 
       const sheetGrab0 = grabPolicy === "sheet" && slot === 0 && ss.has(slot) && !isBoundary(b);
       let move: Move | null;
+      let candMoves: Move[] | null = null;
       let approachTargets: Set<number> | Map<number, number> | null = null;
-      if (slot === 0 && !sheetGrab0) {
+      if ((slot === 0 || (structureOnly && forcedB != null)) && !sheetGrab0) {
         const sheetSilent = grabPolicy === "sheet" && !isBoundary(b);
         if (grabPolicy === "offbeat" || grabPolicy === "rolling" || sheetSilent) {
           const gp = [...voicingOf(vd)].slice(0, 4);
@@ -947,9 +955,10 @@ export function generateHandFrame<B extends HandFrameBar>(
           slotLog.push([b, slot, aSlot, "silentRESEED", false, false]);
           appendTo(diag, "skeleton_log", [b, slot, "silentRESEED", 0]);
           if (motifBias > 0 && b < motifPeriod) writeSkeleton(b, slot, ["silentRESEED", 0]);
-          continue;
-        }
-        if (registerActive && regTarget != null) {
+          if (want == null || want === "none") continue;
+          // 人がこの打点を指定した＝掴み直した手でそのまま押さえる
+          move = reseedMove(frame, vd, bassMax, { voicingFn, holdAll: holdAllReseed, clashGuard, clashS, clashDiag: diag });
+        } else if (registerActive && regTarget != null) {
           const cands = reseedCandidates(frame, vd, bassMax, voicingFn, holdAllReseed, wideMotion && !holdAllReseed, clashGuard, clashS, diag,
             { regTarget, kReg: arc!.kReg, spanOverride: spanB, nOctaves: arc!.regOctaves });
           move = cands.length ? sampleTopk(cands, rng, 3, diag) : null;
@@ -967,7 +976,7 @@ export function generateHandFrame<B extends HandFrameBar>(
             if (motifTag === "SKIP") pSkip = Math.min(1.0, pSkip * (1 + MOTIF_GAMMA * motifBiasB));
             else pSkip = Math.max(0.0, pSkip * (1 - MOTIF_GAMMA * motifBiasB));
           }
-          if (skipRng.random() < pSkip) {
+          if (skipRng.random() < pSkip && (want == null || want === "none")) {
             events.push([SKIP, "", b, slot, []]);
             slotLog.push([b, slot, aSlot, "SKIP", false, false]);
             appendTo(diag, "skeleton_log", [b, slot, "SKIP", 0]);
@@ -977,7 +986,7 @@ export function generateHandFrame<B extends HandFrameBar>(
             continue;
           }
         }
-        if (approach && b + 1 < nBars && si === onsets.length - 1) {
+        if (approach && b + 1 < nBars && si === slotsB.length - 1) {
           const nvp = voicingOf(vds[b + 1]!);
           if (approachResolve) {
             const curCol = tension && colourAllowed && colourAllowed.length ? colourAllowed[b]! : vd.allowed;
@@ -987,7 +996,7 @@ export function generateHandFrame<B extends HandFrameBar>(
             approachTargets = approachTargetsOf(nvp);
           }
         }
-        const isLanding = si === onsets.length - 1 || (si + 1 < onsets.length && pyMod(onsets[si + 1]!, beatEvery) === 0);
+        const isLanding = si === slotsB.length - 1 || (si + 1 < slotsB.length && pyMod(slotsB[si + 1]!, beatEvery) === 0);
         slotIsLanding = isLanding;
         let dyadPrior = dyadOn && (prevWasBreak || isLanding || aSlot >= 0.7) ? DYAD_PRIOR_AMT : 0.0;
         let gw: number | null = null;
@@ -1008,12 +1017,39 @@ export function generateHandFrame<B extends HandFrameBar>(
           grabDur, grabNoCluster, secondDyadCap, secondDyadCount,
         };
         const moves = enumerateMoves(frame, vd, role, { bassMax, prevFinger, prevPitch, reseedWrist, slotsToBoundary, approachTargets, diag, m2 });
+        candMoves = moves;
         move = sampleTopk(moves, rng, 3, diag);
-        if (move == null) {
+        if (move == null && (want == null || want === "none")) {
           prevWasBreak = true;
           continue;
         }
       }
+
+      // 人が決めた打点（forced）との突き合わせ。同じ種類ならそのまま（＝往復一致）。
+      if (want != null && !structureOnly) {
+        if (want === "none") {
+          events.push([SKIP, "", b, slot, []]);
+          slotLog.push([b, slot, aSlot, "SKIP", false, false]);
+          repRun = 0; sfRun = 0;
+          prevWasBreak = true;
+          continue;
+        }
+        const kindOf = (m: Move): "grab" | "single" => (m.notes.length >= 2 ? "grab" : "single");
+        if (move == null || kindOf(move) !== want) {
+          const alt = candMoves ? candMoves.filter((m) => kindOf(m) === want) : [];
+          let pick = alt.length ? sampleTopk(alt, rng, 3, diag) : null;
+          if (pick == null && want === "grab") {
+            pick = reseedMove(frame, vd, bassMax, { voicingFn, holdAll: holdAllReseed, clashGuard, clashS, clashDiag: diag });
+          }
+          if (pick == null && want === "single") {
+            const src = move ?? reseedMove(frame, vd, bassMax, { voicingFn, holdAll: holdAllReseed, clashGuard, clashS, clashDiag: diag });
+            const top = [...src.notes].sort((x, y) => y[1] - x[1])[0]!;
+            pick = mkMove({ ...src, notes: [top], holds: src.holds.filter((f) => f === top[0]) });
+          }
+          move = pick!;
+        }
+      }
+      if (move == null) { prevWasBreak = true; continue; }
 
       if (move.kind === SHIFT || move.kind === LEAP) {
         inc(diag, "shifts_emitted");

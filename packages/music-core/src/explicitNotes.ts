@@ -6,7 +6,7 @@
 //   web（実音化）＝ explicitNotePitch（度数＋オクターブ→絶対音）
 // どちらも「その打点の時刻に鳴っているコード」のルートと質で解く。乱数・時刻は使わない。
 import { canonicalQuality, normRoot, QUALITY_INTERVALS } from "./index";
-import { generateHandFrameBand, splitIntoCells, type BandChord, type HandFrameBandOptions } from "./handFrameBand";
+import { generateHandFrameBand, splitIntoCells, type BandChord, type HandFrameBandOptions, type HandFrameRhythm } from "./handFrameBand";
 import { pmEngineTag } from "./engineVersion";
 import type { Feel } from "./index";
 
@@ -84,7 +84,11 @@ export interface ExplicitChordPattern {
   program: number;
   followChords: true;
   pedal?: { start: number; dur: number }[];
-  gen: { engine: "handframe"; version: string; seed: number; level: number; preset: string; cellBeats: 2 | 4; register: "source" | "piano"; rhFrom?: number };
+  gen: {
+    engine: "handframe"; version: string; seed: number; level: number; preset: string; cellBeats: 2 | 4; register: "source" | "piano"; rhFrom?: number;
+    /** 生成の設定（別案・弾き直しで同じ設定を使う） */ offbeatSingles: boolean; humanize: boolean;
+    /** 人が決めた打点（画面 B・触ったときだけ） */ rhythm?: HandFrameRhythm;
+  };
 }
 
 const toStep = (beats: number): number => {
@@ -131,8 +135,32 @@ export function handFrameToChordPattern(chords: readonly BandChord[], opts: Hand
     followChords: true,
     gen: {
       engine: "handframe", version: pmEngineTag().version, seed: opts.seed, level: opts.level ?? 2, preset: opts.preset ?? "mid", cellBeats, register: opts.register ?? "piano", ...(opts.rhFrom != null ? { rhFrom: opts.rhFrom } : {}),
+      offbeatSingles: opts.offbeatSingles !== false, humanize: opts.humanize !== false, ...(opts.rhythm ? { rhythm: opts.rhythm } : {}),
     },
   };
   if (r.content.pedal) content.pedal = r.content.pedal;
   return { content, feel: r.feel, warnings: r.warnings };
 }
+
+/** 和音パターンの形（明示の音）から打点（画面 B のマス目）を読み取る。rhythmOfBand と同じ結果（web が持つのはこちら）。 */
+export function rhythmOfExplicit(c: Pick<ExplicitChordPattern, "hits" | "lh">): HandFrameRhythm {
+  return {
+    rh: [...c.hits].sort((a, b) => a.step - b.step).map((h) => ({ step: h.step, kind: h.notes.length >= 2 ? "grab" : "single" })),
+    lh: [...new Set(c.lh.hits.map((h) => h.step))].sort((a, b) => a - b),
+  };
+}
+
+/** 進行（拍の位置つき）をピアノ伴奏の生成器の形（長さつき）にする。api と web の弾き直しで共有。無ければ null。 */
+export function bandChordsFromProgression(
+  chords: readonly { root?: number | string | null; quality?: string | null; start?: number | null }[] | null | undefined, totalBeats: number,
+): BandChord[] | null {
+  const src = (chords ?? [])
+    .filter((c) => c && c.root != null && typeof c.start === "number" && c.start < totalBeats)
+    .map((c) => ({ root: c.root!, quality: c.quality ?? "", start: Math.max(0, c.start!) }))
+    .sort((a, b) => a.start - b.start);
+  if (!src.length) return null;
+  src[0]!.start = 0; // 頭にコードが無ければ最初のコードを頭から鳴らす
+  const band = src.map((c, i) => ({ root: c.root, quality: c.quality, beats: (src[i + 1]?.start ?? totalBeats) - c.start })).filter((c) => c.beats > 1e-9);
+  return band.length ? band : null;
+}
+

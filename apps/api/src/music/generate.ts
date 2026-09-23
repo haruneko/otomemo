@@ -27,7 +27,7 @@ import { skeletonToV2Skel, skeletonRestMask, skeletonPhrasesToV2, skelArrayToBre
 import { type RhythmPartsOpt } from "./rhythmParts"; // リズムパーツ層 L1/L2（design #20 S4-1/S4-2）
 import { type Feel, resolveVoiceProfile, type VoiceProfile, type VoiceProfileSpec, analyzeLyricFit, type AccentEntry, type Cue, type DerivedCue } from "@cm/music-core"; // フィール層＝swing/humanize を content.feel に載せる／voice_profile 解決（WP-M4）／歌詞整合採点（#13d WP-L1）／カスケード合図（cues＝§3-1・DerivedCue は導出済み型）
 import { placeFill, fillMeter, GM_NOTE as FILL_GM, KIND_NAMES as FILL_KINDS, type FillEvent, planBodyFill, GMD_PRIORS, GMD_PRIOR_DEFAULT, type BodyRhythmSpec } from "@cm/music-core"; // M2＝phrase_maker フィル物理移植（fills.py 忠実）。opt-in「物理フィル」経路でのみ消費＝既定 grid 経路は bit 一致。
-import { PM_ENGINE_VERSION, handFrameToChordPattern } from "@cm/music-core"; // engine 印（M0契約 §2）＝phrase_maker 由来の経路（JZ-WALK）を使った時だけ content に載る。
+import { PM_ENGINE_VERSION, handFrameToChordPattern, bandChordsFromProgression } from "@cm/music-core"; // engine 印（M0契約 §2）＝phrase_maker 由来の経路（JZ-WALK）を使った時だけ content に載る。
 import { QUALITY_INTERVALS as CF_QUALITY_INTERVALS } from "@cm/music-core"; // JZ-WALK のコード区間のコードトーン（otomemo の品質表が正）
 import { buildWalkingLine, WALK_COMPOUND_SLOT_STEPS, JZ_WALK_ID, type WalkSegment } from "@cm/music-core"; // M3-3d＝JZ-WALK（walking v2 の候補生成＋v3 の規則3本・乱数は決定的規則へ置換）。**耳未判定**＝style 名指しの opt-in。
 import { flowLyric, type LNote } from "../lyric"; // 歌詞先行メロ（#13d）：候補への syllable 流し込み（音数一致で1:1）
@@ -1033,13 +1033,8 @@ function genPianoAccomp(frame: Frame | null | undefined, seed: number | null | u
   const info = meterInfo(f.meter);
   if (info.grouping === "compound" || info.beatsPerBar !== 4) return { warning: `ピアノ伴奏の生成は4拍子だけです（拍子 ${f.meter}）。${PIANO_FALLBACK}` };
   const total = barsOf(f) * 4;
-  const src = (opts.chords ?? [])
-    .filter((c) => c && c.root != null && typeof c.start === "number" && c.start < total)
-    .map((c) => ({ root: c.root!, quality: c.quality ?? "", start: Math.max(0, c.start!) }))
-    .sort((a, b) => a.start - b.start);
-  if (!src.length) return { warning: `ピアノ伴奏の生成にはコード進行が要ります。${PIANO_FALLBACK}` };
-  src[0]!.start = 0; // 頭にコードが無ければ最初のコードを頭から鳴らす
-  const band = src.map((c, i) => ({ root: c.root, quality: c.quality, beats: (src[i + 1]?.start ?? total) - c.start })).filter((c) => c.beats > 1e-9);
+  const band = bandChordsFromProgression(opts.chords, total);
+  if (!band) return { warning: `ピアノ伴奏の生成にはコード進行が要ります。${PIANO_FALLBACK}` };
   const variety = Math.max(1, Math.floor(opts.variety ?? 1));
   const s0 = seed ?? 5;
   const items: GenResult["items"] = [];
