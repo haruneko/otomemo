@@ -1006,6 +1006,8 @@ export interface PianoAccompOpts {
   pianoOffbeatSingles?: boolean;
   /** 打鍵の揺れ（強さのばらつき＋発音時刻のずれ・既定 true） */
   pianoHumanize?: boolean;
+  /** 右手の高さ＝右手の下限（MIDI）。60＝C4 から（既定）／72＝C5 から（2026-09-23 裁定）。 */
+  pianoRhFrom?: number;
 }
 export function genChordPattern(
   frame?: Frame | null,
@@ -1015,7 +1017,7 @@ export function genChordPattern(
   if (opts?.piano === true) {
     const p = genPianoAccomp(frame, seed, opts);
     if ("items" in p) return p;
-    const { piano: _p, chords: _c, pianoOffbeatSingles: _o, pianoHumanize: _h, ...rest } = opts;
+    const { piano: _p, chords: _c, pianoOffbeatSingles: _o, pianoHumanize: _h, pianoRhFrom: _r, ...rest } = opts;
     const res = genChordPattern(frame, seed, Object.values(rest).some((v) => v != null) ? rest : undefined);
     res.meta = { ...(res.meta ?? {}), warnings: [...(res.meta?.warnings ?? []), p.warning] };
     return res;
@@ -1047,6 +1049,7 @@ function genPianoAccomp(frame: Frame | null | undefined, seed: number | null | u
       const r = handFrameToChordPattern(band, {
         tempo: f.tempo ?? 120, seed: s0 + i, key: f.key ?? 0,
         offbeatSingles: opts.pianoOffbeatSingles !== false, humanize: opts.pianoHumanize !== false,
+        ...(opts.pianoRhFrom === 72 ? { rhFrom: 72 } : {}),
       });
       if (r.warnings.length) warnings.add("2拍より短いコードは、2拍ごとの頭で鳴っているコードで弾きます");
       const swing = buildFeel(opts.swing, 0)?.swing;

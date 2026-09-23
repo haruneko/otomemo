@@ -532,6 +532,14 @@ export function TinkerSheet({ gen, isSong, sectionChords, sectionBass, feel, onF
               ))}
             </span>
           </div>
+          <div className="knob-seg" aria-label="comp-piano-rh">
+            <span className="knob-name">右手の高さ<small>左手は C3〜B3 のまま</small></span>
+            <span className="seg-ctl">
+              {([["C4から", 60], ["C5から", 72]] as [string, 60 | 72][]).map(([lab, v]) => (
+                <button key={lab} type="button" className={"seg-b" + (gen.compPianoRhFrom === v ? " on" : "")} aria-label={`comp-piano-rh-${v}`} aria-pressed={gen.compPianoRhFrom === v} onClick={() => gen.setCompPianoRhFrom(v)}>{lab}</button>
+              ))}
+            </span>
+          </div>
           <p className="tk-drawnote">「候補を出す」＝進行に合わせたピアノ伴奏が4つ並びます（下のジャンルは使いません）。</p>
         </>}
         <div className="tk-hublab">伴奏のジャンル（型を名前で選ばず耳で選ぶ）</div>

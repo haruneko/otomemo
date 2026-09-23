@@ -62,13 +62,25 @@ describe("直呼び", () => {
   });
 });
 
+describe("右手の高さ（pianoRhFrom・2026-09-23 裁定）", () => {
+  it("72＝写しの rhFrom:72 と同じ・来歴に残る・未指定は C4 から（来歴に rhFrom なし）", () => {
+    const hi = genChordPattern(FRAME, 11, { piano: true, chords: CHORDS, pianoRhFrom: 72 });
+    const want = handFrameToChordPattern(BAND, { tempo: 96, seed: 11, key: 0, rhFrom: 72 });
+    expect((hi.items[0]!.content as { hits: unknown }).hits).toEqual(want.content.hits);
+    expect((hi.items[0]!.content as { gen: { rhFrom?: number; register: string } }).gen).toMatchObject({ rhFrom: 72, register: "piano" });
+    const lo = genChordPattern(FRAME, 11, { piano: true, chords: CHORDS });
+    expect((lo.items[0]!.content as { gen: { rhFrom?: number } }).gen.rhFrom).toBeUndefined();
+    expect((hi.items[0]!.content as { hits: unknown }).hits).not.toEqual((lo.items[0]!.content as { hits: unknown }).hits);
+  });
+});
+
 describe("到達口", () => {
   let app: FastifyInstance;
   beforeEach(async () => { app = buildHttp(new Core(openDb(":memory:"))); await app.ready(); });
 
   it("HTTP /music/gen_chord_pattern", async () => {
-    const r = (await app.inject({ method: "POST", url: "/music/gen_chord_pattern", payload: { frame: FRAME, seed: 11, chords: CHORDS, piano: true, pianoHumanize: false } })).json() as Res;
-    expect(r.items[0]!.content).toEqual(genChordPattern(FRAME, 11, { piano: true, chords: CHORDS, pianoHumanize: false }).items[0]!.content);
+    const r = (await app.inject({ method: "POST", url: "/music/gen_chord_pattern", payload: { frame: FRAME, seed: 11, chords: CHORDS, piano: true, pianoHumanize: false, pianoRhFrom: 72 } })).json() as Res;
+    expect(r.items[0]!.content).toEqual(genChordPattern(FRAME, 11, { piano: true, chords: CHORDS, pianoHumanize: false, pianoRhFrom: 72 }).items[0]!.content);
     expect(r.meta).toBeUndefined();
     const w = (await app.inject({ method: "POST", url: "/music/gen_chord_pattern", payload: { frame: { ...FRAME, meter: "3/4" }, seed: 11, chords: CHORDS, piano: true } })).json() as Res;
     expect(w.meta?.warnings?.[0]).toContain("4拍子");
@@ -80,7 +92,7 @@ describe("到達口", () => {
     const cl = new Client({ name: "t", version: "0" });
     await Promise.all([server.connect(a), cl.connect(b)]);
     const t = (await cl.listTools()).tools.find((x) => x.name === "gen_chord_pattern")!;
-    expect(Object.keys(t.inputSchema.properties as object)).toEqual(expect.arrayContaining(["piano", "pianoOffbeatSingles", "pianoHumanize", "chords"]));
+    expect(Object.keys(t.inputSchema.properties as object)).toEqual(expect.arrayContaining(["piano", "pianoOffbeatSingles", "pianoHumanize", "pianoRhFrom", "chords"]));
     const got = JSON.parse(((await cl.callTool({ name: "gen_chord_pattern", arguments: { frame: FRAME, seed: 11, chords: CHORDS, piano: true, pianoOffbeatSingles: false } })).content as { text: string }[])[0]!.text) as Res;
     expect(got.items[0]!.content).toEqual(genChordPattern(FRAME, 11, { piano: true, chords: CHORDS, pianoOffbeatSingles: false }).items[0]!.content);
     const w = JSON.parse(((await cl.callTool({ name: "gen_chord_pattern", arguments: { frame: { ...FRAME, meter: "6/8" }, seed: 11, chords: CHORDS, piano: true } })).content as { text: string }[])[0]!.text) as Res;

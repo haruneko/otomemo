@@ -21,7 +21,8 @@ const ch = (root: string, quality: string, beats: number): BandChord => ({ root,
 const HALF_PROG: BandChord[] = Array.from({ length: 4 }, () => [ch("F", "maj7", 4), ch("G", "", 4), ch("E", "m7", 4), ch("A", "m7", 2), ch("G", "", 2)]).flat();
 // 1小節に丸めた版＝Fmaj7｜G｜Em7｜Am7 を4回
 const BAR_PROG: BandChord[] = Array.from({ length: 4 }, () => [ch("F", "maj7", 4), ch("G", "", 4), ch("E", "m7", 4), ch("A", "m7", 4)]).flat();
-const DRY: HandFrameBandOptions = { tempo: 96, seed: 1234, humanize: false };
+const DRY: HandFrameBandOptions = { tempo: 96, seed: 1234, humanize: false, register: "source" }; // 試作 #1 の置き方＝Python の基準音と一致させる
+const DRY_PIANO: HandFrameBandOptions = { tempo: 96, seed: 1234, humanize: false }; // 既定（ピアノの置き方）
 
 const asRef = (notes: readonly (readonly [number, number, number, number, string, number])[]) =>
   notes.map(([pitch, start, end, vel, hand, cell]) => ({ pitch, start, end, vel, hand, cell }));
@@ -89,22 +90,29 @@ describe("左手の殻と右手の音域（実測の固定・2026-09-18）", () 
   });
 });
 
-// 2026-09-23：オーナー指示「ピアノの演奏として常識的なところに」＝register:"piano"（選択肢・耳待ち）。
-// 左手の殻＝ベースの壁から1オクターブ（C3〜B3）・右手はその上＝左手が下・右手が上。
-describe("両手の音域＝ピアノの置き方（register:\"piano\"）", () => {
-  const PIANO: HandFrameBandOptions = { ...DRY, register: "piano" };
+// 2026-09-23 オーナー裁定：左手の殻＝ベースの壁から1オクターブ（C3〜B3）が既定・右手の高さは選べる（C4／C5 から）。
+describe("両手の音域＝ピアノの置き方（既定）と右手の高さ", () => {
+  const span = (r: ReturnType<typeof generateHandFrameBand>, h: string) => {
+    const ps = r.notes.filter((n) => n[4] === h).map((n) => n[0]);
+    return { lo: Math.min(...ps), hi: Math.max(...ps) };
+  };
   for (const [name, prog] of [["2拍替わり", HALF_PROG], ["1小節替わり", BAR_PROG]] as const) {
-    it(`${name}：左手 48..59・右手は 59 以上`, () => {
-      const r = generateHandFrameBand(prog, PIANO);
-      const L = r.notes.filter((n) => n[4] === "L").map((n) => n[0]);
-      const R = r.notes.filter((n) => n[4] === "R").map((n) => n[0]);
-      expect(Math.min(...L)).toBe(48);
-      expect(Math.max(...L)).toBe(59);
-      expect(Math.min(...R)).toBeGreaterThanOrEqual(59);
+    it(`${name}：既定＝左手 48..59・右手は C4（60）から`, () => {
+      const r = generateHandFrameBand(prog, DRY_PIANO);
+      expect(span(r, "L")).toEqual({ lo: 48, hi: 59 });
+      expect(span(r, "R").lo).toBeGreaterThanOrEqual(59); // 掴んだ手の親指が B3 に届くことはある
     });
+    for (const from of [72]) {
+      it(`${name}：右手を ${from} からにすると右手の和音は ${from} 以上・左手は不変`, () => {
+        const r = generateHandFrameBand(prog, { ...DRY_PIANO, rhFrom: from });
+        expect(span(r, "L")).toEqual({ lo: 48, hi: 59 });
+        expect(span(r, "R").lo).toBeGreaterThanOrEqual(from - 1);
+        expect(span(r, "R").lo).toBeGreaterThan(span(generateHandFrameBand(prog, DRY_PIANO), "R").lo);
+      });
+    }
   }
-  it("既定（register 省略）は試作 #1 のまま", () => {
-    expect(generateHandFrameBand(HALF_PROG, DRY).notes).toEqual(generateHandFrameBand(HALF_PROG, { ...DRY, register: "source" }).notes);
+  it("rhFrom 60 は既定と同じ", () => {
+    expect(generateHandFrameBand(HALF_PROG, { ...DRY_PIANO, rhFrom: 60 }).notes).toEqual(generateHandFrameBand(HALF_PROG, DRY_PIANO).notes);
   });
 });
 

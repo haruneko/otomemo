@@ -84,7 +84,7 @@ export interface ExplicitChordPattern {
   program: number;
   followChords: true;
   pedal?: { start: number; dur: number }[];
-  gen: { engine: "handframe"; version: string; seed: number; level: number; preset: string; cellBeats: 2 | 4 };
+  gen: { engine: "handframe"; version: string; seed: number; level: number; preset: string; cellBeats: 2 | 4; register: "source" | "piano"; rhFrom?: number };
 }
 
 const toStep = (beats: number): number => {
@@ -130,7 +130,7 @@ export function handFrameToChordPattern(chords: readonly BandChord[], opts: Hand
     program: 0,
     followChords: true,
     gen: {
-      engine: "handframe", version: pmEngineTag().version, seed: opts.seed, level: opts.level ?? 2, preset: opts.preset ?? "mid", cellBeats,
+      engine: "handframe", version: pmEngineTag().version, seed: opts.seed, level: opts.level ?? 2, preset: opts.preset ?? "mid", cellBeats, register: opts.register ?? "piano", ...(opts.rhFrom != null ? { rhFrom: opts.rhFrom } : {}),
     },
   };
   if (r.content.pedal) content.pedal = r.content.pedal;

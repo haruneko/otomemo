@@ -230,6 +230,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
   const [compPiano, setCompPiano] = useState(false);
   const [compPianoOffbeat, setCompPianoOffbeat] = useState(true);
   const [compPianoHumanize, setCompPianoHumanize] = useState(true);
+  const [compPianoRhFrom, setCompPianoRhFrom] = useState<60 | 72>(60); // 右手の高さ＝C4 から（既定）／C5 から（2026-09-23 裁定）
   // ベース×ドラムノブ（奏法UIスライスD・design「gen_bass×ドラム結線」／slashBass）：UI未露出だった4ノブを「細かく（ドラム絡み）」群へ。
   // 全て 0/false＝未送信＝従来 bit 一致。kickLock/snareGap/approach はドラム在時のみ効く（API 挙動＝hint 文言で伝える）。
   const [bassKickLock, setBassKickLock] = useState<number>(0); // キックに噛む -1..1（負=逆相・キック裏8分）。0=OFF。
@@ -419,6 +420,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
         body.variety = 4;
         if (!compPianoOffbeat) body.pianoOffbeatSingles = false;
         if (!compPianoHumanize) body.pianoHumanize = false;
+        if (compPianoRhFrom !== 60) body.pianoRhFrom = compPianoRhFrom;
       } else if (part.op === "gen_chord_pattern") {
         body.pattern = compStyle || "omakase";
         body.variety = 4;
@@ -664,7 +666,7 @@ export function useMelodyGen(ctx: MelodyGenCtx) {
     drumFillStyle, setDrumFillStyle, drumBodyAim, setDrumBodyAim, drumBodyDrummer, setDrumBodyDrummer, // フィルの作り方＝格子/型辞書/解いて作る（M2/M3）
     bassStyle, setBassStyle, bassFill, setBassFill, // ベース定型型＋フィル（WP-B1）
     compStyle, setCompStyle, // コード楽器 伴奏パターン型（スライスC「聴いて選ぶ」）
-    compPiano, setCompPiano, compPianoOffbeat, setCompPianoOffbeat, compPianoHumanize, setCompPianoHumanize, // ピアノ伴奏を生成する（試作・S5）
+    compPiano, setCompPiano, compPianoOffbeat, setCompPianoOffbeat, compPianoHumanize, setCompPianoHumanize, compPianoRhFrom, setCompPianoRhFrom, // ピアノ伴奏を生成する（試作・S5）
     bassKickLock, setBassKickLock, bassSnareGap, setBassSnareGap, bassApproach, setBassApproach, bassSlash, setBassSlash, // ベース×ドラム「細かく」群（スライスD）
     detailsOpen, setDetailsOpen, preset, setPreset,
     // プリセット/サイコロ/描画ヘルパ

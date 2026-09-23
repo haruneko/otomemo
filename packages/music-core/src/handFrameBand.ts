@@ -346,9 +346,11 @@ export interface HandFrameBandOptions {
   /** 8分裏の単音。既定 on（試作 #1）。off＝器から8分裏の打点を消す（耳判定 09-17：別のバリエーションとして良い）。 */
   offbeatSingles?: boolean;
   lh?: "shell" | "tacet";
-  /** 両手の音域。"source"＝試作 #1 のまま（左手の殻が中音域・右手はベースの壁のすぐ上＝左右が重なる）。
-   *  "piano"＝左手の殻をベースの壁から1オクターブ [bassMax, bassMax+11]・右手はその上（左手が下・右手が上）。 */
+  /** 両手の音域。"piano"（既定・2026-09-23 裁定）＝左手の殻をベースの壁から1オクターブ [bassMax, bassMax+11]・右手はその上。
+   *  "source"＝試作 #1 のまま（左手の殻が中音域・右手はベースの壁のすぐ上＝左右が重なる）＝Python の基準音との一致用。 */
   register?: "source" | "piano";
+  /** "piano" のときの右手の下限（MIDI）。既定＝bassMax+12（C4）。オーナーが選べる段＝60/65/72。 */
+  rhFrom?: number;
   arc?: PhraseSpec | null;
   /** 器を差し替えるとき（既定＝試作 #1 の器） */
   containerText?: string;
@@ -371,7 +373,7 @@ export interface HandFrameBandResult {
 export function generateHandFrameBandCells(cells: readonly { root: number | string; quality: string }[], cellBeats: 2 | 4, opts: HandFrameBandOptions): HandFrameBandResult {
   const {
     tempo, seed, level = 2, preset = "mid", bassMax = 48, sustainPedal = true, humanize = true, offbeatSingles = true,
-    lh = "shell", arc = null, register = "source",
+    lh = "shell", arc = null, register = "piano",
   } = opts;
   if (cellBeats !== 2 && cellBeats !== 4) throw new Error(`generateHandFrameBandCells: cellBeats must be 2 or 4 (got ${cellBeats})`);
   if (!(tempo > 0)) throw new Error("generateHandFrameBandCells: tempo must be > 0");
@@ -382,7 +384,7 @@ export function generateHandFrameBandCells(cells: readonly { root: number | stri
   const toks = vds.map((v) => v.token);
   const nBars = vds.length;
   // 右手の下の壁：試作 #1 はベースの壁、ピアノの置き方は左手の殻の窓の上端
-  const rhWall = register === "piano" ? bassMax + 11 : bassMax;
+  const rhWall = register === "piano" ? Math.max(bassMax + 11, (opts.rhFrom ?? bassMax + 12) - 1) : bassMax;
   const floor = Math.max(rhWall + HF_BAND_REG_GAP, HF_BAND_PIANO_FLOOR);
 
   const fullContainer = containerFromGridText(opts.containerText ?? HF_BAND_CONTAINER_TEXT[cellSteps]);
